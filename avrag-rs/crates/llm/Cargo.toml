@@ -8,10 +8,13 @@ license.workspace = true
 [dependencies]
 contracts = { path = "../../../contracts" }
 anyhow = { workspace = true }
+async-stream = { workspace = true }
 async-trait = { workspace = true }
+futures = "0.3"
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util.workspace = true
 text-splitter = { workspace = true }

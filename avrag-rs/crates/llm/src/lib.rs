@@ -1,8 +1,13 @@
 pub mod client;
 pub mod embedding;
 pub mod planner;
+pub mod protocols;
+pub mod provider_profiles;
+pub mod providers;
 pub mod rate_limiter;
 pub mod reranker;
+pub mod route;
+pub mod schema;
 pub mod section_index;
 pub mod summary;
 pub mod synthesizer;
@@ -11,12 +16,28 @@ pub mod token_counter;
 pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
+pub use protocols::{
+    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, Protocol,
+};
+pub use provider_profiles::{
+    AuthStyle, ProtocolKind, ProviderProfile, PROVIDER_PROFILES, api_key_url_for_provider,
+    find_provider_profile,
+};
+pub use providers::Provider;
 pub use rate_limiter::{
     RateLimitError, RateLimiter, SharedRateLimiter, default_rpm_limit, default_tpm_limit,
     provider_defaults,
 };
 pub use reranker::{
     MultiModalRerankDocument, MultiModalRerankResult, RerankResult, RerankerClient,
+};
+pub use route::{
+    AnyRoute, Auth, DetectedProtocol, Endpoint, Framing, Route, RoutePatch,
+    build_openai_chat_route, build_route_from_config, detect_protocol,
+};
+pub use schema::{
+    FinishReason, GenerationOptions, LlmError, LlmEvent, LlmRequest, MessageRole, ModelLimits,
+    ToolChoice, ToolDefinition, Usage,
 };
 pub use section_index::{
     SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput, SectionIndexSection,
@@ -26,8 +47,6 @@ pub use summary::SummaryGenerator;
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 
-// TODO(write-mode): TenantContext and UsageObserver are WIP stubs for the
-// write-mode feature. These will be fully implemented when the feature lands.
 #[derive(Debug, Clone)]
 pub struct TenantContext {
     pub org_id: uuid::Uuid,
@@ -36,8 +55,6 @@ pub struct TenantContext {
 
 pub trait UsageObserver: Send + Sync {}
 
-/// Trait for LLM completion providers.
-/// Allows injecting mock/recording providers in tests.
 #[async_trait::async_trait]
 pub trait LlmProvider: Send + Sync {
     async fn complete(
@@ -59,7 +76,6 @@ pub trait LlmProvider: Send + Sync {
     }
 }
 
-/// Zero-cost wrapper: implement LlmProvider for LlmClient.
 #[async_trait::async_trait]
 impl LlmProvider for LlmClient {
     async fn complete(
@@ -80,7 +96,6 @@ impl LlmProvider for LlmClient {
     }
 }
 
-/// API dispatch style — determines request/response format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiStyle {
@@ -91,7 +106,6 @@ pub enum ApiStyle {
 }
 
 impl ApiStyle {
-    /// Parse from the string values used in env vars and config.
     pub fn from_config_str(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "openai" => Some(Self::OpenAi),
@@ -124,12 +138,8 @@ pub struct ModelProviderConfig {
     pub api_style: Option<ApiStyle>,
     pub dimensions: Option<usize>,
     pub enable_thinking: Option<bool>,
-    /// Whether to request prompt caching for this provider.
-    /// When true, adds `prompt_cache` to the request body.
     pub enable_cache: Option<bool>,
-    /// Requests-per-minute limit. `None` means use provider default.
     pub rpm_limit: Option<u32>,
-    /// Tokens-per-minute limit. `None` means use provider default.
     pub tpm_limit: Option<u32>,
 }
 
@@ -153,13 +163,11 @@ impl ModelProviderConfig {
         }
     }
 
-    /// Resolve the effective RPM limit, falling back to provider-specific defaults.
     pub fn effective_rpm_limit(&self) -> u32 {
         self.rpm_limit
             .unwrap_or_else(|| provider_defaults(&self.base_url).0)
     }
 
-    /// Resolve the effective TPM limit, falling back to provider-specific defaults.
     pub fn effective_tpm_limit(&self) -> u32 {
         self.tpm_limit
             .unwrap_or_else(|| provider_defaults(&self.base_url).1)

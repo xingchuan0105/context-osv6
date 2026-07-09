@@ -1,94 +1,24 @@
-use super::ChatMessage;
-use crate::ModelProviderConfig;
+//! OpenAI Chat Completions protocol (request + stream + Protocol impl).
+mod protocol;
+mod request;
+mod stream;
+mod types;
 
-pub(super) fn build_chat_completion_request_body(
-    config: &ModelProviderConfig,
-    messages: &[ChatMessage],
-    temperature: Option<f32>,
-    stream: bool,
-    json_mode: bool,
-    max_tokens: Option<u32>,
-) -> serde_json::Value {
-    let mut request_body = serde_json::json!({
-        "model": config.model,
-        "messages": messages
-            .iter()
-            .map(|m| {
-                let mut msg = serde_json::json!({ "role": m.role });
-                if let Some(ref parts) = m.multimodal_content {
-                    msg["content"] = serde_json::to_value(parts).unwrap_or_default();
-                } else {
-                    msg["content"] = serde_json::json!(m.content);
-                }
-                if let Some(ref name) = m.name {
-                    msg["name"] = serde_json::json!(name);
-                }
-                if let Some(ref tool_call_id) = m.tool_call_id {
-                    msg["tool_call_id"] = serde_json::json!(tool_call_id);
-                }
-                if let Some(ref tool_calls) = m.tool_calls {
-                    msg["tool_calls"] = tool_calls.clone();
-                }
-                if let Some(ref reasoning_content) = m.reasoning_content {
-                    msg["reasoning_content"] = serde_json::json!(reasoning_content);
-                }
-                msg
-            })
-            .collect::<Vec<_>>(),
-    });
+// Protocol impl is attached via the trait; keep the marker type public.
+pub use request::build_chat_completion_request_body;
+pub use types::{OpenAiChatProtocol, OpenAiChatState};
 
-    if let Some(temp) = temperature {
-        request_body["temperature"] = serde_json::json!(temp);
-    }
-    if let Some(max_tokens) = max_tokens {
-        request_body["max_tokens"] = serde_json::json!(max_tokens);
-    }
-    if let Some(enable_thinking) = config.enable_thinking {
-        let base = config.base_url.to_ascii_lowercase();
-        if base.contains("deepseek") {
-            let mut thinking = serde_json::json!({
-                "type": if enable_thinking { "enabled" } else { "disabled" },
-            });
-            if enable_thinking {
-                thinking["reasoning_effort"] = serde_json::json!("max");
-            }
-            request_body["thinking"] = thinking;
-        } else if base.contains("generativelanguage") || base.contains("googleapis.com") {
-            // Gemini OpenAI-compat rejects unknown `enable_thinking` (400 INVALID_ARGUMENT).
-        } else {
-            request_body["enable_thinking"] = serde_json::json!(enable_thinking);
-        }
-    }
-    if stream {
-        request_body["stream"] = serde_json::json!(true);
-        request_body["stream_options"] = serde_json::json!({
-            "include_usage": true,
-        });
-    }
-    if config.enable_cache == Some(true) {
-        request_body["prompt_cache"] = serde_json::json!(true);
-    }
-
-    // JSON Output (`response_format: json_object`) constrains the model to emit
-    // a valid JSON string, eliminating the code-block-on-synthesis failure mode
-    // at the API layer. Gated to OpenAI-compatible providers that honor this
-    // field (DeepSeek, SiliconFlow). The prompt must already contain "json" +
-    // a format example. See https://api-docs.deepseek.com/zh-cn/guides/json_mode
-    // and https://api-docs.siliconflow.cn/docs/api/chat-completions-post.
-    if json_mode {
-        let base = config.base_url.to_ascii_lowercase();
-        if base.contains("deepseek") || base.contains("siliconflow") {
-            request_body["response_format"] = serde_json::json!({ "type": "json_object" });
-        }
-    }
-
-    request_body
-}
+// Re-export parser / wire helpers for in-crate legacy callers (client stream path).
+pub(crate) use stream::ChatCompletionStreamParser;
+pub(crate) use types::ApiUsageRaw;
 
 #[cfg(test)]
 mod tests {
-    use super::build_chat_completion_request_body;
-    use crate::{ChatMessage, ModelProviderConfig};
+    use super::request::build_chat_completion_request_body;
+    use super::stream::ChatCompletionStreamParser;
+    use super::types::ApiUsageRaw;
+    use crate::schema::ChatMessage;
+    use crate::ModelProviderConfig;
 
     fn test_config(base_url: &str, enable_thinking: Option<bool>) -> ModelProviderConfig {
         ModelProviderConfig {
@@ -115,6 +45,7 @@ mod tests {
             false,
             false,
             None,
+            &[],
         );
 
         assert_eq!(body["thinking"]["type"], "disabled");
@@ -131,6 +62,7 @@ mod tests {
             false,
             false,
             None,
+            &[],
         );
 
         assert_eq!(body["thinking"]["type"], "enabled");
@@ -150,6 +82,7 @@ mod tests {
             false,
             false,
             None,
+            &[],
         );
 
         assert!(body.get("enable_thinking").is_none());
@@ -169,6 +102,7 @@ mod tests {
             false,
             false,
             None,
+            &[],
         );
 
         assert_eq!(body["enable_thinking"], false);
@@ -179,16 +113,30 @@ mod tests {
     fn request_includes_prompt_cache_when_enable_cache_is_true() {
         let mut config = test_config("https://api.deepseek.com", None);
         config.enable_cache = Some(true);
-        let body =
-            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false, false, None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            None,
+            false,
+            false,
+            None,
+            &[],
+        );
         assert_eq!(body["prompt_cache"], true);
     }
 
     #[test]
     fn request_omits_prompt_cache_when_enable_cache_is_none() {
         let config = test_config("https://api.deepseek.com", None);
-        let body =
-            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false, false, None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            None,
+            false,
+            false,
+            None,
+            &[],
+        );
         assert!(body.get("prompt_cache").is_none());
     }
 
@@ -218,7 +166,15 @@ mod tests {
             reasoning_content: None,
         };
 
-        let body = build_chat_completion_request_body(&config, &[msg1, msg2, msg3], None, false, false, None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[msg1, msg2, msg3],
+            None,
+            false,
+            false,
+            None,
+            &[],
+        );
 
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 3);
@@ -264,6 +220,7 @@ mod tests {
             false,
             false,
             None,
+            &[],
         );
 
         let messages = body["messages"].as_array().unwrap();
@@ -283,6 +240,7 @@ mod tests {
             false,
             true,
             None,
+            &[],
         );
         assert_eq!(body["response_format"]["type"], "json_object");
     }
@@ -297,14 +255,14 @@ mod tests {
             false,
             true,
             None,
+            &[],
         );
         assert_eq!(body["response_format"]["type"], "json_object");
     }
 
     #[test]
     fn json_mode_omitted_for_non_deepseek_providers() {
-        let config =
-            test_config("https://dashscope.aliyuncs.com/compatible-mode/v1", None);
+        let config = test_config("https://dashscope.aliyuncs.com/compatible-mode/v1", None);
         let body = build_chat_completion_request_body(
             &config,
             &[ChatMessage::user("return json")],
@@ -312,6 +270,7 @@ mod tests {
             false,
             true,
             None,
+            &[],
         );
         assert!(body.get("response_format").is_none());
     }
@@ -326,7 +285,157 @@ mod tests {
             false,
             false,
             None,
+            &[],
         );
         assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_accumulates_delta_content_and_usage() {
+        let mut parser =
+            ChatCompletionStreamParser::new("openai".to_string(), "gpt-test".to_string());
+        let mut observed = String::new();
+
+        parser
+            .feed_chunk(
+                br#"data: {"id":"chatcmpl-1","model":"gpt-stream","choices":[{"delta":{"content":"Hel"}}]}
+
+"#,
+                &mut |delta| observed.push_str(delta),
+                &mut |_| {},
+            )
+            .unwrap();
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"content":"lo"}}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}
+
+data: [DONE]
+
+"#,
+                &mut |delta| observed.push_str(delta),
+                &mut |_| {},
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |delta| observed.push_str(delta), &mut |_| {})
+            .unwrap();
+
+        assert_eq!(observed, "Hello");
+        assert_eq!(response.content, "Hello");
+        assert_eq!(response.model, "gpt-stream");
+        assert_eq!(response.usage.prompt_tokens, 12);
+        assert_eq!(response.usage.completion_tokens, 3);
+        assert_eq!(response.usage.total_tokens, 15);
+        assert_eq!(response.usage.provider, "openai");
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_handles_chunked_lines() {
+        let mut parser =
+            ChatCompletionStreamParser::new("openai".to_string(), "gpt-test".to_string());
+        let mut observed = String::new();
+
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"content":"A"#,
+                &mut |delta| observed.push_str(delta),
+                &mut |_| {},
+            )
+            .unwrap();
+        parser
+            .feed_chunk(
+                br#"B"}}]}
+
+data: [DONE]
+
+"#,
+                &mut |delta| observed.push_str(delta),
+                &mut |_| {},
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |delta| observed.push_str(delta), &mut |_| {})
+            .unwrap();
+        assert_eq!(observed, "AB");
+        assert_eq!(response.content, "AB");
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_rejects_empty_content_stream() {
+        let mut parser =
+            ChatCompletionStreamParser::new("openai".to_string(), "gpt-test".to_string());
+
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":0,"total_tokens":12}}
+
+data: [DONE]
+
+"#,
+                &mut |_delta| {},
+                &mut |_| {},
+            )
+            .unwrap();
+
+        let error = parser.finish(&mut |_delta| {}, &mut |_| {}).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Chat completion stream finished without content")
+        );
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_falls_back_to_reasoning_when_content_empty() {
+        let mut parser =
+            ChatCompletionStreamParser::new("deepseek".to_string(), "deepseek-chat".to_string());
+
+        let mut reasoning_observed = String::new();
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"reasoning_content":"Final answer from reasoning."}}]}
+
+data: [DONE]
+
+"#,
+                &mut |_delta| {},
+                &mut |delta| reasoning_observed.push_str(delta),
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |_delta| {}, &mut |delta| {
+                reasoning_observed.push_str(delta)
+            })
+            .unwrap();
+        assert_eq!(reasoning_observed, "Final answer from reasoning.");
+        assert_eq!(response.content, "Final answer from reasoning.");
+        assert_eq!(
+            response.reasoning_content.as_deref(),
+            Some("Final answer from reasoning.")
+        );
+    }
+
+    #[test]
+    fn usage_parses_cached_tokens_from_provider_fields() {
+        let raw: ApiUsageRaw = serde_json::from_str(
+            r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_cache_hit_tokens":8}"#,
+        )
+        .unwrap();
+        assert_eq!(raw.cached_token_count(), 8);
+
+        let raw2: ApiUsageRaw = serde_json::from_str(
+            r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":3}}"#,
+        )
+        .unwrap();
+        assert_eq!(raw2.cached_token_count(), 3);
+
+        let usage = raw.to_llm_usage("deepseek".to_string(), "model".to_string());
+        assert_eq!(usage.cached_tokens, 8);
     }
 }
