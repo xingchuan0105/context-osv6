@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn builtin_registry_has_all_atomic_tools() {
+    fn builtin_registry_has_all_builtin_skill_tools() {
         let reg = builtin_registry_cached();
         assert!(reg.contains("calculator"));
         assert!(reg.contains("code_interpreter"));

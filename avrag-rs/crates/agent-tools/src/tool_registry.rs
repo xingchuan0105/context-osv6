@@ -27,7 +27,7 @@ pub struct ToolDispatchContext<'a> {
     pub enforce_policy: bool,
 }
 
-/// Canonical tool execute entry used by ReActLoop (and atomic_tools shims).
+/// Canonical tool execute entry used by ReActLoop and all call sites.
 pub async fn dispatch_tool(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> ToolResult {
     let catalog = ToolCatalog::standard_cached();
     let Some(registered) = catalog.get(&call.tool) else {
@@ -184,6 +184,68 @@ impl OwnedToolDeps {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn call(tool: &str, args: serde_json::Value) -> ToolCall {
+        ToolCall {
+            tool: tool.into(),
+            version: "1.0".into(),
+            args,
+        }
+    }
+
+    fn ctx_permissive<'a>(
+        search: Option<&'a dyn avrag_search::SearchProvider>,
+    ) -> ToolDispatchContext<'a> {
+        ToolDispatchContext {
+            auth: None,
+            session_id: None,
+            doc_scope: &[],
+            search_provider: search,
+            rag_runtime: None,
+            chat_persistence: None,
+            enforce_policy: false,
+        }
+    }
+
+    fn ctx_enforced<'a>(
+        auth: Option<&'a contracts::auth_runtime::AuthContext>,
+        search: Option<&'a dyn avrag_search::SearchProvider>,
+    ) -> ToolDispatchContext<'a> {
+        ToolDispatchContext {
+            auth,
+            session_id: None,
+            doc_scope: &[],
+            search_provider: search,
+            rag_runtime: None,
+            chat_persistence: None,
+            enforce_policy: true,
+        }
+    }
+
+    struct FakeSearchProvider;
+
+    #[async_trait::async_trait]
+    impl avrag_search::SearchProvider for FakeSearchProvider {
+        async fn execute_search(
+            &self,
+            query: &str,
+            _vertical: Option<&str>,
+        ) -> anyhow::Result<avrag_search::SearchResponse> {
+            Ok(avrag_search::SearchResponse {
+                query_type: "test".into(),
+                sub_queries: vec![query.into()],
+                results: vec![avrag_search::SearchResult {
+                    title: format!("Result for {query}"),
+                    url: format!("https://example.com/search?q={query}"),
+                    snippet: "test snippet".into(),
+                    citation_index: Some(1),
+                }],
+                synthesized_answer: "test answer".into(),
+                llm_usage: None,
+            })
+        }
+    }
 
     #[test]
     fn rag_tool_classification() {
@@ -203,41 +265,116 @@ mod tests {
 
     #[tokio::test]
     async fn rag_without_runtime_is_not_implemented() {
-        let call = ToolCall {
-            tool: "dense_retrieval".into(),
-            version: "1.0".into(),
-            args: serde_json::json!({}),
-        };
-        let ctx = ToolDispatchContext {
-            auth: None,
-            session_id: None,
-            doc_scope: &[],
-            search_provider: None,
-            rag_runtime: None,
-            chat_persistence: None,
-            enforce_policy: false,
-        };
-        let result = dispatch_tool(&call, &ctx).await;
+        let result = dispatch_tool(&call("dense_retrieval", serde_json::json!({})), &ctx_permissive(None))
+            .await;
         assert_eq!(result.status, ToolStatus::NotImplemented);
     }
 
     #[tokio::test]
     async fn unknown_tool_is_not_implemented() {
-        let call = ToolCall {
-            tool: "no_such_tool".into(),
-            version: "1.0".into(),
-            args: serde_json::json!({}),
-        };
-        let ctx = ToolDispatchContext {
-            auth: None,
-            session_id: None,
-            doc_scope: &[],
-            search_provider: None,
-            rag_runtime: None,
-            chat_persistence: None,
-            enforce_policy: false,
-        };
-        let result = dispatch_tool(&call, &ctx).await;
+        let result =
+            dispatch_tool(&call("no_such_tool", serde_json::json!({})), &ctx_permissive(None)).await;
         assert_eq!(result.status, ToolStatus::NotImplemented);
+    }
+
+    #[tokio::test]
+    async fn calculator_via_dispatch_tool() {
+        let result = dispatch_tool(
+            &call("calculator", serde_json::json!({"expression": "1 + 2 * 3"})),
+            &ctx_permissive(None),
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Ok);
+        assert_eq!(result.data.unwrap()["result"].as_f64().unwrap(), 7.0);
+    }
+
+    #[tokio::test]
+    async fn enforcement_blocks_web_search_without_perm() {
+        let auth = contracts::auth_runtime::AuthContext::new(
+            contracts::auth_runtime::OrgId::new(uuid::Uuid::nil()),
+            contracts::auth_runtime::SubjectKind::User,
+        );
+        let result = dispatch_tool(
+            &call("web_search", serde_json::json!({"query": "test"})),
+            &ctx_enforced(Some(&auth), None),
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Error);
+        assert!(
+            result.data.unwrap()["error"]
+                .as_str()
+                .unwrap()
+                .contains("external network")
+        );
+    }
+
+    #[tokio::test]
+    async fn enforcement_allows_web_search_with_perm() {
+        let auth = contracts::auth_runtime::AuthContext::new(
+            contracts::auth_runtime::OrgId::new(uuid::Uuid::nil()),
+            contracts::auth_runtime::SubjectKind::User,
+        )
+        .grant("external_network");
+        let provider = FakeSearchProvider;
+        let result = dispatch_tool(
+            &call("web_search", serde_json::json!({"query": "test"})),
+            &ctx_enforced(Some(&auth), Some(&provider)),
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn permissive_path_allows_web_search_without_auth() {
+        let provider = FakeSearchProvider;
+        let result = dispatch_tool(
+            &call("web_search", serde_json::json!({"query": "test"})),
+            &ctx_permissive(Some(&provider)),
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn retry_succeeds_on_second_attempt() {
+        let counter = std::sync::Arc::new(AtomicUsize::new(0));
+        let c = counter.clone();
+        let policy = crate::capability::RetryPolicy {
+            max_retries: 3,
+            backoff_ms: 1,
+            backoff_multiplier: 1.0,
+            max_backoff_ms: 10,
+            idempotent: true,
+            idempotency_key_header: None,
+        };
+        let result = execute_with_retry(
+            move || {
+                let c = c.clone();
+                async move {
+                    let n = c.fetch_add(1, Ordering::SeqCst);
+                    if n == 0 {
+                        ToolResult {
+                            tool: "x".into(),
+                            version: "1.0".into(),
+                            status: ToolStatus::Error,
+                            data: Some(serde_json::json!({"error": "transient"})),
+                            trace: None,
+                        }
+                    } else {
+                        ToolResult {
+                            tool: "x".into(),
+                            version: "1.0".into(),
+                            status: ToolStatus::Ok,
+                            data: Some(serde_json::json!({"ok": true})),
+                            trace: None,
+                        }
+                    }
+                }
+            },
+            &policy,
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Ok);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 }
