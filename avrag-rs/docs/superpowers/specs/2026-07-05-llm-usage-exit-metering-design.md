@@ -12,7 +12,7 @@
 2. **数据源不一致** — 月度限额查 `usage_events`（估算 token），滚动窗口查 `llm_usage_events`（实际 token）。两表口径不同，同一用户的同一次 chat 请求在两表里的数值可能相差数倍。
 3. **enforcement 半开半关** — `enforcement_phase` 环境变量控制 `check_user_quota()` 的阻断，但 `QuotaManager::check_quota()`（`ensure_metric_quota` 内部）的滚动检查不受控，行为不一致。
 
-**目标**：在 LLM API 出口处统一、全量记录 token 消耗，以租户（org_id + user_id）为单位，实现真正的 5h/7d 硬限额阻断，消除两表口径差异。
+**目标**：在 LLM API 出口处统一、全量记录 token 消耗，以租户（owner_user_id + user_id）为单位，实现真正的 5h/7d 硬限额阻断，消除两表口径差异。
 
 ## 2. Architecture Overview
 
@@ -57,7 +57,7 @@ pub trait UsageObserver: Send + Sync {
 }
 
 pub struct TenantContext {
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub user_id: Uuid,        // Uuid::nil() if unknown (system tasks)
 }
 
@@ -150,7 +150,7 @@ bootstrap
   EmbeddingClient::new(config)     ← 无 observer
        │ 存储在 AppState / PgTaskProcessor / RagConfig
        │
-请求/任务到来（有 org_id, user_id）
+请求/任务到来（有 owner_user_id, user_id）
        │
        ├─ Agent 路径 (UnifiedAgent::run)
        │   unified/mod.rs L142-146 (chat), L207-208 (rag), L254-258 (search)
@@ -165,7 +165,7 @@ bootstrap
        │   → summary_generator 内部 LlmClient ← agent_llm client 需注入
        │
        ├─ Memory/Dream 路径 (ChatContext)
-       │   ChatContext 已有 AuthContext（org_id + user_id）
+       │   ChatContext 已有 AuthContext（owner_user_id + user_id）
        │   → memory_llm_client 在首次使用时 clone + inject
        │
        └─ RAG Query Embedding 路径 (RagRuntime)
@@ -267,7 +267,7 @@ chat/service.rs execute_chat_preflight()
 
 ```
 chat/service.rs execute_chat_preflight()
-  └─ QuotaManager::check_quota(org_id, user_id, "llm_input_tokens", estimated)
+  └─ QuotaManager::check_quota(owner_user_id, user_id, "llm_input_tokens", estimated)
        ├─ 读 llm_usage_events → 检查 5h 滚动 → 超限 → 429 usage_limit_exceeded
        ├─ 读 llm_usage_events → 检查 7d 滚动 → 超限 → 429 usage_limit_exceeded
        └─ 读 llm_usage_events → 检查月度硬限制 → 超限 → 429 quota_exceeded
@@ -289,7 +289,7 @@ chat/service.rs execute_chat_preflight()
    - 月度超限 → `quota_exceeded` + `Retry-After` header（已有）
 
 4. **Worker ingestion 预检**
-   - 在 `PgTaskProcessor::process()` 处理 pipeline 前，调用 `QuotaManager::check_quota(org_id, user_id, "embedding_tokens", estimated)`
+   - 在 `PgTaskProcessor::process()` 处理 pipeline 前，调用 `QuotaManager::check_quota(owner_user_id, user_id, "embedding_tokens", estimated)`
    - 超限 → 任务标记 `failed`，返回 `quota_exceeded`
    - `user_id` 为 `Uuid::nil()` 时（`requested_by` 缺失），跳过预检（系统任务不受限）
 
@@ -389,7 +389,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_usage_user_kind_time
 - `EmbeddingClient::with_observer()`: text path uses estimated_tokens; multimodal uses actual_tokens
 
 ### Integration Tests
-- End-to-end chat: verify `llm_usage_events` row with correct `org_id`, `user_id`, `usage_kind='chat'`, feature
+- End-to-end chat: verify `llm_usage_events` row with correct `owner_user_id`, `user_id`, `usage_kind='chat'`, feature
 - End-to-end ingestion: verify embedding usage recorded with `usage_kind='embedding_text'`
 - Quota boundary: exhaust 5h rolling window → HTTP 429 `usage_limit_exceeded`
 

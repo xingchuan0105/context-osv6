@@ -10,11 +10,11 @@ impl ChunkRepository {
             r#"
             select count(*)::bigint as task_count
             from document_cleanup_tasks
-            where org_id = $1
+            where owner_user_id = $1
               and document_id = $2
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(document_id)
         .fetch_one(tx.inner())
         .await?;
@@ -31,36 +31,36 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, workspace_id, status, object_path
+            select id, owner_user_id, workspace_id, status, object_path
             from documents
             where id = $1
-              and org_id = $2
+              and owner_user_id = $2
               and status in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         let Some(row) = row else {
             tx.commit().await?;
             return Ok(None);
         };
-        let org_id: Uuid = row.try_get("org_id")?;
+        let owner_user_id: Uuid = row.try_get("owner_user_id")?;
         let workspace_id: Uuid = row.try_get("workspace_id")?;
 
         let asset_rows = sqlx::query(
             r#"
             select storage_path
             from document_assets
-            where org_id = $1
+            where owner_user_id = $1
               and workspace_id = $2
               and document_id = $3
               and storage_path is not null
             order by created_at asc, asset_id asc
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(document_id)
         .fetch_all(tx.inner())
@@ -76,7 +76,7 @@ impl ChunkRepository {
             .map(str::to_string);
         let status_text: String = row.try_get("status")?;
         Ok(Some(DocumentCleanupTargets {
-            org_id,
+            owner_user_id,
             workspace_id,
             document_id: row.try_get("id")?,
             status: parse_document_status(&status_text),
@@ -100,58 +100,58 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select org_id, workspace_id
+            select owner_user_id, workspace_id
             from documents
             where id = $1
-              and org_id = $2
+              and owner_user_id = $2
               and status in ('deleting', 'deleted')
             for update
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         let Some(row) = row else {
             tx.commit().await?;
             return Ok(false);
         };
-        let org_id: Uuid = row.try_get("org_id")?;
+        let owner_user_id: Uuid = row.try_get("owner_user_id")?;
         let workspace_id: Uuid = row.try_get("workspace_id")?;
 
         sqlx::query(
-            "delete from document_multimodal_chunks where org_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_multimodal_chunks where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         sqlx::query(
-            "delete from document_assets where org_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_assets where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         sqlx::query(
-            "delete from document_blocks where org_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_blocks where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
-        sqlx::query("delete from chunks where org_id = $1 and document_id = $2")
-            .bind(org_id)
+        sqlx::query("delete from chunks where owner_user_id = $1 and document_id = $2")
+            .bind(owner_user_id)
             .bind(document_id)
             .execute(tx.inner())
             .await?;
         sqlx::query(
-            "delete from document_parse_runs where org_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_parse_runs where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
@@ -174,12 +174,12 @@ impl ChunkRepository {
                 deletion_error = null,
                 updated_at = now()
             where id = $1
-              and org_id = $2
+              and owner_user_id = $2
               and status in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .execute(tx.inner())
         .await?;
         tx.commit().await?;
@@ -219,7 +219,7 @@ impl ChunkRepository {
 }
 pub async fn insert_document_cleanup_task(
     tx: &mut PgConnection,
-    org_id: Uuid,
+    owner_user_id: Uuid,
     workspace_id: Uuid,
     document_id: Uuid,
     requested_by: Option<Uuid>,
@@ -230,9 +230,9 @@ pub async fn insert_document_cleanup_task(
     let file_size: i64 = row.try_get("file_size")?;
     let object_path: Option<String> = row.try_get("object_path")?;
     let status: String = row.try_get("status")?;
-    let idempotency_key = format!("document-cleanup:{org_id}:{document_id}");
+    let idempotency_key = format!("document-cleanup:{owner_user_id}:{document_id}");
     let payload = json!({
-        "org_id": org_id.to_string(),
+        "owner_user_id": owner_user_id.to_string(),
         "workspace_id": workspace_id.to_string(),
         "document_id": document_id.to_string(),
         "file_name": file_name,
@@ -245,13 +245,13 @@ pub async fn insert_document_cleanup_task(
     let result = sqlx::query(
         r#"
         insert into document_cleanup_tasks (
-            org_id, workspace_id, document_id, requested_by, idempotency_key, payload
+            owner_user_id, workspace_id, document_id, requested_by, idempotency_key, payload
         )
         values ($1, $2, $3, $4, $5, $6)
         on conflict (idempotency_key) do nothing
         "#,
     )
-    .bind(org_id)
+    .bind(owner_user_id)
     .bind(workspace_id)
     .bind(document_id)
     .bind(requested_by)

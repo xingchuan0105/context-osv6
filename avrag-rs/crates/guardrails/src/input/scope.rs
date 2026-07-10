@@ -89,7 +89,7 @@ mod tests {
     ) -> InputGuardContext<'_> {
         InputGuardContext {
             query,
-            org_id: Uuid::new_v4(),
+            owner_user_id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             doc_scope: Box::leak(doc_scope.into_boxed_slice()),
             workspace_id,

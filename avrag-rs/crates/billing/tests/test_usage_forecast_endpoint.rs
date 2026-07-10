@@ -57,8 +57,8 @@ async fn usage_forecast_aggregates_30d_token_usage_from_llm_usage_events() {
         .await
         .unwrap();
 
-    let (user_id, org_id) = seed_user_with_plan(&pool, "free").await;
-    seed_llm_usage_events(&pool, org_id, user_id, 3, 10_000).await;
+    let (user_id, owner_user_id) = seed_user_with_plan(&pool, "free").await;
+    seed_llm_usage_events(&pool, owner_user_id, user_id, 3, 10_000).await;
 
     // Sanity: aggregate the same SQL the handler uses. 3 days x 10K = 30K
     // total over the last 30 days. avg_daily = 30K / 30 = 1K.

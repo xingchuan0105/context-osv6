@@ -2,7 +2,7 @@ import { getApiBaseUrl, request } from "../http/request";
 
 export type ApiKeyRow = {
   id: string;
-  org_id: string;
+  owner_user_id: string;
   workspace_id: string;
   key_prefix: string;
   name: string;

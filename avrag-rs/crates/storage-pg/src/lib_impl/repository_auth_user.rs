@@ -8,7 +8,7 @@ impl AuthRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, org_id, workspace_id, key_prefix, name, permissions, rate_limit_rpm,
+            select id, owner_user_id, workspace_id, key_prefix, name, permissions, rate_limit_rpm,
                    expires_at, last_used_at, is_active, created_by, created_at, updated_at
             from api_keys
             where is_active = true
@@ -54,14 +54,14 @@ impl AuthRepository {
         let row = sqlx::query(
             r#"
             insert into api_keys (
-                org_id, workspace_id, key_hash, key_prefix, name, permissions, rate_limit_rpm, expires_at, created_by
+                owner_user_id, workspace_id, key_hash, key_prefix, name, permissions, rate_limit_rpm, expires_at, created_by
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            returning id, org_id, workspace_id, key_prefix, name, permissions, rate_limit_rpm,
+            returning id, owner_user_id, workspace_id, key_prefix, name, permissions, rate_limit_rpm,
                       expires_at, last_used_at, is_active, created_by, created_at, updated_at
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(workspace_id)
         .bind(key_hash)
         .bind(key_prefix)
@@ -109,7 +109,7 @@ impl AuthRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, org_id, user_id, event_type, title, body, data, read_at, created_at, updated_at
+            select id, owner_user_id, user_id, event_type, title, body, data, read_at, created_at, updated_at
             from notifications
             where user_id = $1
             order by created_at desc
@@ -155,39 +155,33 @@ impl AuthRepository {
     ) -> Result<NotificationRow, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
-        let row = insert_notification_row(tx.inner(), context.org_id().into_uuid(), params).await?;
+        let row = insert_notification_row(tx.inner(), context.user_id().into_uuid(), params).await?;
         tx.commit().await?;
         map_notification(row)
     }
 
     pub async fn create_notifications_for_all_users(
         &self,
-        org_id: OrgId,
+        owner_user_id: UserId,
         event_type: &str,
         title: &str,
         body: &str,
         data: serde_json::Value,
     ) -> Result<usize, PgStorageError> {
-        let context = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::System);
+        let context = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::System);
         let mut tx = self.pool.begin(&context).await?;
-        let users = sqlx::query("select id from users where org_id = $1")
-            .bind(org_id.into_uuid())
-            .fetch_all(tx.inner())
-            .await?;
-        let mut created = 0usize;
-        for row in users {
-            let user_id: Uuid = row.try_get("id")?;
-            let params = NotificationCreateParams {
-                user_id,
-                event_type: event_type.to_string(),
-                title: title.to_string(),
-                body: body.to_string(),
-                data: data.clone(),
-                channels: vec!["in_app".to_string()],
-            };
-            insert_notification_row(tx.inner(), org_id.into_uuid(), params).await?;
-            created += 1;
-        }
+        // Personal B2C: one account owner = one user id.
+        let user_id = owner_user_id.into_uuid();
+        let params = NotificationCreateParams {
+            user_id,
+            event_type: event_type.to_string(),
+            title: title.to_string(),
+            body: body.to_string(),
+            data: data.clone(),
+            channels: vec!["in_app".to_string()],
+        };
+        insert_notification_row(tx.inner(), user_id, params).await?;
+        let created = 1usize;
         tx.commit().await?;
         Ok(created)
     }
@@ -200,7 +194,7 @@ impl AuthRepository {
         set_current_role(tx.as_mut(), "super_admin").await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, workspace_id, permissions, created_by, expires_at, is_active, rate_limit_rpm
+            select id, owner_user_id, workspace_id, permissions, created_by, expires_at, is_active, rate_limit_rpm
             from api_keys
             where key_hash = $1
             limit 1
@@ -223,7 +217,7 @@ impl AuthRepository {
         }
 
         let id: Uuid = row.try_get("id")?;
-        let org_id: Uuid = row.try_get("org_id")?;
+        let owner_user_id: Uuid = row.try_get("owner_user_id")?;
         let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok().flatten();
         let permissions = contracts::normalize_api_key_permissions(
             &row
@@ -249,7 +243,7 @@ impl AuthRepository {
         tx.commit().await?;
         Ok(Some(ValidatedApiKey {
             id,
-            org_id: OrgId::from(org_id),
+            owner_user_id: UserId::from(owner_user_id),
             workspace_id,
             permissions,
             created_by,
@@ -265,7 +259,7 @@ impl AuthRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select user_id, org_id, expertise_domains, preferred_answer_style, frequently_asked_topics,
+            select user_id, owner_user_id, expertise_domains, preferred_answer_style, frequently_asked_topics,
                    custom_preferences, structured_profile, inferred_at, inference_version
             from user_profiles
             where user_id = $1
@@ -288,7 +282,7 @@ impl AuthRepository {
         sqlx::query(
             r#"
             insert into user_profiles (
-                user_id, org_id, expertise_domains, preferred_answer_style, frequently_asked_topics,
+                user_id, owner_user_id, expertise_domains, preferred_answer_style, frequently_asked_topics,
                 custom_preferences, structured_profile, inferred_at, inference_version
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -304,7 +298,7 @@ impl AuthRepository {
             "#,
         )
         .bind(profile.user_id)
-        .bind(profile.org_id.into_uuid())
+        .bind(profile.owner_user_id.into_uuid())
         .bind(serde_json::to_value(&profile.expertise_domains)?)
         .bind(&profile.preferred_answer_style)
         .bind(serde_json::to_value(&profile.frequently_asked_topics)?)

@@ -12,20 +12,20 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
+        // Global email uniqueness (B2C); match any existing account by email.
         let invited_user = sqlx::query(
-            "select id from users where org_id = $1 and lower(email) = lower($2) limit 1",
+            "select id from users where lower(email) = lower($1) limit 1",
         )
-        .bind(auth.org_id().into_uuid())
         .bind(&normalized_email)
         .fetch_optional(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
         let user_id = invited_user.and_then(|row| row.try_get::<Uuid, _>("id").ok());
         let existing = sqlx::query(
-            "select id from workspace_members where org_id = $1 and workspace_id = $2 and lower(email) = lower($3) limit 1",
+            "select id from workspace_members where owner_user_id = $1 and workspace_id = $2 and lower(email) = lower($3) limit 1",
         )
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .bind(&normalized_email)
         .fetch_optional(tx.as_mut())
@@ -42,12 +42,12 @@
                     invited_at = now(),
                     updated_at = now(),
                     accepted_at = null
-                where id = $1 and org_id = $2 and workspace_id = $3
+                where id = $1 and owner_user_id = $2 and workspace_id = $3
                 returning id, workspace_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
                 "#,
             )
             .bind(existing.try_get::<Uuid, _>("id").map_err(|error| AppError::internal(error.to_string()))?)
-            .bind(auth.org_id().into_uuid())
+            .bind(auth.user_id().into_uuid())
             .bind(workspace_id)
             .bind(user_id)
             .bind(access_level.as_db())
@@ -58,13 +58,13 @@
         } else {
             sqlx::query(
                 r#"
-                insert into workspace_members (id, org_id, workspace_id, user_id, email, access_level, invited_by, invite_status, invited_at, updated_at)
+                insert into workspace_members (id, owner_user_id, workspace_id, user_id, email, access_level, invited_by, invite_status, invited_at, updated_at)
                 values ($1, $2, $3, $4, $5, $6, $7, 'pending', now(), now())
                 returning id, workspace_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
                 "#,
             )
             .bind(Uuid::new_v4())
-            .bind(auth.org_id().into_uuid())
+            .bind(auth.user_id().into_uuid())
             .bind(workspace_id)
             .bind(user_id)
             .bind(&normalized_email)

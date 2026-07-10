@@ -6,20 +6,20 @@ use sea_query::{Iden, PostgresQueryBuilder, Query};
 pub enum Workspaces {
     Table,
     Id,
-    OrgId,
+    UserId,
     Title,
     UpdatedAt,
 }
 
 pub fn build_workspace_search_query(
-    org_id: Uuid,
+    owner_user_id: Uuid,
     title_filter: Option<&str>,
 ) -> String {
     let mut query = Query::select();
     query
         .columns([Workspaces::Id, Workspaces::Title, Workspaces::UpdatedAt])
         .from(Workspaces::Table)
-        .and_where(sea_query::Expr::col(Workspaces::OrgId).eq(org_id));
+        .and_where(sea_query::Expr::col(Workspaces::UserId).eq(owner_user_id));
 
     if let Some(title) = title_filter {
         query.and_where(sea_query::Expr::col(Workspaces::Title).like(format!("%{}%", title)));

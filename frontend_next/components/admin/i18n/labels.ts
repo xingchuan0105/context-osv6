@@ -36,7 +36,7 @@ export function planLabel(locale: UiLocale, plan: string) {
   }
 }
 
-export function orgStatusLabel(locale: UiLocale, blocked: boolean) {
+export function accountStatusLabel(locale: UiLocale, blocked: boolean) {
   return blocked
     ? adminText(locale, "admin.status.blocked")
     : adminText(locale, "admin.status.active");

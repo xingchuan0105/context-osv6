@@ -50,8 +50,8 @@ impl UsageLimitService {
             .map_err(|error| anyhow::anyhow!(error.to_string()))
     }
 
-    pub async fn get_user_usage(&self, org_id: Uuid, user_id: Uuid) -> Result<UsageLimitResponse> {
-        let _ = org_id;
+    pub async fn get_user_usage(&self, owner_user_id: Uuid, user_id: Uuid) -> Result<UsageLimitResponse> {
+        let _ = owner_user_id;
         let policy = self.load_effective_policy(user_id).await?;
         let windows = self.compute_windows(user_id, &policy).await?;
         let breakdown = self.load_breakdown(user_id).await?;
@@ -81,8 +81,8 @@ impl UsageLimitService {
             .unwrap_or(3.0)
     }
 
-    pub async fn check_quota(&self, org_id: Uuid, user_id: Uuid) -> Result<QuotaCheckResult> {
-        let _ = org_id;
+    pub async fn check_quota(&self, owner_user_id: Uuid, user_id: Uuid) -> Result<QuotaCheckResult> {
+        let _ = owner_user_id;
         let policy = self.load_effective_policy(user_id).await?;
         let windows = self.compute_windows(user_id, &policy).await?;
         let mult = Self::hard_cap_multiplier();

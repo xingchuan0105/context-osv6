@@ -28,7 +28,7 @@ impl<'a> AdminApp<'a> {
                 .map_err(crate::pg_error::map_pg_error)?;
             return Ok(validated.map(|key| WorkspaceApiKeyAuth {
                 key_id: key.id,
-                org_id: key.org_id,
+                owner_user_id: key.owner_user_id,
                 workspace_id: key.workspace_id,
                 permissions: key.permissions,
                 rate_limit_rpm: key.rate_limit_rpm,
@@ -41,7 +41,7 @@ impl<'a> AdminApp<'a> {
             .await?
             .map(|record| WorkspaceApiKeyAuth {
                 key_id: record.id,
-                org_id: record.org_id,
+                owner_user_id: record.owner_user_id,
                 workspace_id: record.workspace_id,
                 permissions: record.permissions,
                 rate_limit_rpm: record.rate_limit_rpm,
@@ -67,27 +67,27 @@ impl<'a> AdminApp<'a> {
             .await
     }
 
-    pub async fn list_org_api_keys(&self) -> Result<Vec<common::ApiKeyRow>, common::AppError> {
+    pub async fn list_account_api_keys(&self) -> Result<Vec<common::ApiKeyRow>, common::AppError> {
         self.admin
-            .list_org_api_keys(self.auth, self.storage)
+            .list_account_api_keys(self.auth, self.storage)
             .await
     }
 
-    pub async fn create_org_api_key(
+    pub async fn create_account_api_key(
         &self,
         req: common::CreateApiKeyRequest,
     ) -> Result<common::CreateApiKeyResponse, common::AppError> {
         self.admin
-            .create_org_api_key(self.auth, self.storage, req)
+            .create_account_api_key(self.auth, self.storage, req)
             .await
     }
 
-    pub async fn revoke_org_api_key(
+    pub async fn revoke_account_api_key(
         &self,
         key_id: &str,
     ) -> Result<common::StatusOnlyResponse, common::AppError> {
         self.admin
-            .revoke_org_api_key(self.auth, self.storage, key_id)
+            .revoke_account_api_key(self.auth, self.storage, key_id)
             .await
     }
 

@@ -8,7 +8,7 @@ use super::*;
 use crate::context::SessionContext;
 use crate::retrieval::ScoredChunk;
 use async_trait::async_trait;
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, TextDenseSearchRequest,
@@ -131,7 +131,7 @@ impl RetrievalReadPort for StubRetrievalDataPlane {
 async fn runtime_bm25_stage_uses_injected_data_plane() {
     let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
     let request = make_request("fallback query", "rag");
-    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
+    let auth = AuthContext::new(UserId::new(Uuid::from_u128(9)), SubjectKind::System);
     let plan = RagPlan {
         plan_version: "rag-item-v2".to_string(),
         plan_confidence: 0.8,

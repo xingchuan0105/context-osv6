@@ -11,14 +11,14 @@ async fn mcp_jsonrpc_initialize_and_tools_list() {
         .await
         .expect("notebook should create");
     let app = build_router(state);
-    let org_id = "00000000-0000-0000-0000-000000000001";
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
     let user_id = "00000000-0000-0000-0000-000000000002";
 
     let init_req = Request::builder()
         .uri(format!("/mcp/workspaces/{}", notebook.id))
         .method("POST")
         .header("Content-Type", "application/json")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(
             r#"{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}"#,
@@ -34,7 +34,7 @@ async fn mcp_jsonrpc_initialize_and_tools_list() {
         .uri(format!("/mcp/workspaces/{}", notebook.id))
         .method("POST")
         .header("Content-Type", "application/json")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(
             r#"{"jsonrpc":"2.0","id":"2","method":"tools/list","params":{}}"#,
@@ -59,14 +59,14 @@ async fn mcp_jsonrpc_initialize_and_tools_list() {
 async fn unified_mcp_lists_org_and_workspace_tools() {
     let state = test_app_state();
     let app = build_router(state);
-    let org_id = "00000000-0000-0000-0000-000000000001";
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
     let user_id = "00000000-0000-0000-0000-000000000002";
 
     let list_req = Request::builder()
         .uri("/api/v1/mcp")
         .method("POST")
         .header("Content-Type", "application/json")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(
             r#"{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}"#,
@@ -82,7 +82,7 @@ async fn unified_mcp_lists_org_and_workspace_tools() {
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    assert!(tool_names.contains(&"org.create_workspace"));
+    assert!(tool_names.contains(&"account.create_workspace"));
     assert!(tool_names.contains(&"workspace.create_upload"));
     assert!(tool_names.contains(&"workspace.rag_query"));
 }
@@ -92,14 +92,14 @@ async fn unified_mcp_lists_org_and_workspace_tools() {
 async fn org_mcp_create_workspace_returns_workspace_id() {
     let state = test_app_state();
     let app = build_router(state);
-    let org_id = "00000000-0000-0000-0000-000000000001";
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
     let user_id = "00000000-0000-0000-0000-000000000002";
 
     let call_req = Request::builder()
         .uri("/api/v1/mcp")
         .method("POST")
         .header("Content-Type", "application/json")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(
             serde_json::json!({
@@ -107,7 +107,7 @@ async fn org_mcp_create_workspace_returns_workspace_id() {
                 "id": "1",
                 "method": "tools/call",
                 "params": {
-                    "name": "org.create_workspace",
+                    "name": "account.create_workspace",
                     "arguments": {
                         "name": "Agent Workspace",
                         "description": "created via MCP"

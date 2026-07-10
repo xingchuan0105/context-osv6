@@ -42,7 +42,7 @@ pub struct UserLegalStatus {
 #[derive(Debug, Clone)]
 pub struct RegisterUserResult {
     pub user_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub email: String,
     pub full_name: String,
     pub auth_version: i32,
@@ -52,7 +52,7 @@ pub struct RegisterUserResult {
 #[derive(Debug, Clone)]
 pub struct AuthUserCredentials {
     pub user_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub email: String,
     pub full_name: Option<String>,
     pub password_hash: Option<String>,
@@ -63,7 +63,7 @@ pub struct AuthUserCredentials {
 #[derive(Debug, Clone)]
 pub struct AuthUserProfile {
     pub user_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub email: String,
     pub full_name: Option<String>,
 }
@@ -71,13 +71,13 @@ pub struct AuthUserProfile {
 #[derive(Debug, Clone)]
 pub struct PasswordResetUser {
     pub user_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub email: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct CreatePasswordResetTicketInput {
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub user_id: Uuid,
     pub email: String,
     pub purpose: String,

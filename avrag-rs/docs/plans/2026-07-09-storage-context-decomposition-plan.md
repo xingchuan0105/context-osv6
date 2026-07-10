@@ -38,7 +38,7 @@ constructor:
 | 18 | `upload_expire_sec: u64` | Object-store config |
 | 19 | `download_expire_sec: u64` | Object-store config |
 
-Two static helpers (`current_org_id`, `current_user_id`) are also defined on
+Two static helpers (`current_owner_user_id`, `current_user_id`) are also defined on
 `StorageContext` but only touch `AuthContext` — they do not belong here.
 
 ---
@@ -105,9 +105,9 @@ the next begins.
 
 ### Step 0 — Move the static helpers (warmup, ~15 min, zero risk)
 
-`current_org_id` / `current_user_id` take `&AuthContext` and never touch
+`current_owner_user_id` / `current_user_id` take `&AuthContext` and never touch
 instance state. Move them to free functions in `app-core` (e.g.
-`auth_scope::current_org_id`) and replace the ~6 callers
+`auth_scope::current_owner_user_id`) and replace the ~6 callers
 (`app-documents/src/{notebooks,url_imports}.rs`, `app-core/src/adapters/memory.rs`).
 
 - Verify: `cargo build --workspace && cargo test --workspace --lib`

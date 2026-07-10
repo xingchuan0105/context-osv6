@@ -4,7 +4,7 @@
 
 ## Milvus 查询
 
-- [ ] 每个查询必须带服务端 ACL filter（`org_id`、`workspace_id`、`doc_scope`）
+- [ ] 每个查询必须带服务端 ACL filter（`owner_user_id`、`workspace_id`、`doc_scope`）
 - [ ] 每个检索结果必须带 provenance（`doc_id`、`chunk_id`、`page`、`parse_run_id`、`source_locator`）
 - [ ] 图扩展必须有 `fan_out_limit`、`hop_limit`、`relation_count` eviction
 

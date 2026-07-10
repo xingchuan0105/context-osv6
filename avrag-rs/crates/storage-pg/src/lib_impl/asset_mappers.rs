@@ -2,7 +2,7 @@ use super::*;
 pub fn map_document_asset(row: PgRow) -> Result<DocumentAssetRow, PgStorageError> {
     Ok(DocumentAssetRow {
         asset_id: row.get("asset_id"),
-        org_id: row.get("org_id"),
+        owner_user_id: row.get("owner_user_id"),
         workspace_id: row.get("workspace_id"),
         document_id: row.get("document_id"),
         parse_run_id: row.get("parse_run_id"),
@@ -21,7 +21,7 @@ pub fn map_document_asset(row: PgRow) -> Result<DocumentAssetRow, PgStorageError
 pub fn map_multimodal_chunk(row: PgRow) -> Result<MultimodalChunkRow, PgStorageError> {
     Ok(MultimodalChunkRow {
         chunk_id: row.get("chunk_id"),
-        org_id: row.get("org_id"),
+        owner_user_id: row.get("owner_user_id"),
         workspace_id: row.get("workspace_id"),
         document_id: row.get("document_id"),
         parse_run_id: row.get("parse_run_id"),

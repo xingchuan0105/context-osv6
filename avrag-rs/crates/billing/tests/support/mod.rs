@@ -42,22 +42,17 @@ pub async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> (Uuid, Uuid) {
         .await
         .unwrap();
 
-    let org_id: Uuid =
-        sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
-            .bind(format!("org-{}", Uuid::new_v4()))
-            .fetch_one(&mut *tx)
-            .await
-            .unwrap();
-
+    // Personal B2C: account owner == user id (no organizations table).
     let user_id: Uuid = sqlx::query_scalar(
-        "insert into users (org_id, email, full_name) values ($1, $2, $3) returning id",
+        "insert into users (email, full_name, role) values ($1, $2, $3) returning id",
     )
-    .bind(org_id)
     .bind(format!("u-{}@example.com", Uuid::new_v4()))
     .bind("Test User")
+    .bind("user")
     .fetch_one(&mut *tx)
     .await
     .unwrap();
+    let owner_user_id = user_id;
 
     sqlx::query(
         r#"
@@ -74,13 +69,13 @@ pub async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> (Uuid, Uuid) {
 
     tx.commit().await.unwrap();
 
-    (user_id, org_id)
+    (user_id, owner_user_id)
 }
 
 /// Seed `days` distinct daily usage rows with `usage_units` per day.
 pub async fn seed_llm_usage_events(
     pool: &PgPool,
-    org_id: Uuid,
+    owner_user_id: Uuid,
     user_id: Uuid,
     days: i64,
     usage_units: i64,
@@ -93,14 +88,14 @@ pub async fn seed_llm_usage_events(
         sqlx::query(
             r#"
             insert into llm_usage_events
-                (org_id, user_id, feature, stage, provider, model,
+                (owner_user_id, user_id, feature, stage, provider, model,
                  prompt_tokens, completion_tokens, total_tokens,
                  usage_units, usage_source, created_at)
             values ($1, $2, 'chat', 'unknown', 'dashscope', 'qwen3.5-flash',
                     0, 0, 0, $3, 'actual', $4)
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(user_id)
         .bind(usage_units)
         .bind(when)

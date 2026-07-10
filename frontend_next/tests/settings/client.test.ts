@@ -104,7 +104,7 @@ describe("settings client", () => {
             notifications: [
               {
                 id: "notif-1",
-                org_id: "org-1",
+                owner_user_id: "owner-1",
                 user_id: "user-1",
                 event_type: "security_alert",
                 title: "Security alert",

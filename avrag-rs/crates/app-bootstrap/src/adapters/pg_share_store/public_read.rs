@@ -13,7 +13,7 @@
         let row = sqlx::query(
             r#"
             select
-              st.org_id,
+              st.owner_user_id,
               st.workspace_id,
               st.access_level,
               st.expires_at,
@@ -35,10 +35,10 @@
                 .map_err(|error| AppError::internal(error.to_string()))?;
             return Ok(None);
         };
-        let org_id = row
-            .try_get::<Uuid, _>("org_id")
+        let owner_user_id = row
+            .try_get::<Uuid, _>("owner_user_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &org_id.to_string()).await?;
+        set_rls_owner(tx.as_mut(), &owner_user_id.to_string()).await?;
         let workspace_id = row
             .try_get::<Uuid, _>("workspace_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
@@ -57,11 +57,11 @@
             .map_err(|error| AppError::internal(error.to_string()))?;
         sqlx::query(
             r#"
-            insert into share_access_logs (org_id, workspace_id, share_token, action, created_at)
+            insert into share_access_logs (owner_user_id, workspace_id, share_token, action, created_at)
             values ($1, $2, $3, 'view', now())
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(token)
         .execute(tx.as_mut())
@@ -135,7 +135,7 @@
         let row = sqlx::query(
             r#"
             select
-              st.org_id,
+              st.owner_user_id,
               st.workspace_id,
               st.access_level,
               coalesce(n.owner_id, st.created_by) as owner_user_id
@@ -156,15 +156,6 @@
                 .map_err(|error| AppError::internal(error.to_string()))?;
             return Ok(None);
         };
-        let org_id = row
-            .try_get::<Uuid, _>("org_id")
-            .map_err(|error| AppError::internal(error.to_string()))?;
-        let workspace_id = row
-            .try_get::<Uuid, _>("workspace_id")
-            .map_err(|error| AppError::internal(error.to_string()))?;
-        let access_level = row
-            .try_get::<String, _>("access_level")
-            .map_err(|error| AppError::internal(error.to_string()))?;
         let owner_user_id = row
             .try_get::<Option<Uuid>, _>("owner_user_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
@@ -174,13 +165,19 @@
                 .map_err(|error| AppError::internal(error.to_string()))?;
             return Ok(None);
         };
+        let workspace_id = row
+            .try_get::<Uuid, _>("workspace_id")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let access_level = row
+            .try_get::<String, _>("access_level")
+            .map_err(|error| AppError::internal(error.to_string()))?;
         sqlx::query(
             r#"
-            insert into share_access_logs (org_id, workspace_id, share_token, action, created_at)
+            insert into share_access_logs (owner_user_id, workspace_id, share_token, action, created_at)
             values ($1, $2, $3, 'chat', now())
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(token)
         .execute(tx.as_mut())
@@ -190,9 +187,8 @@
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(Some(PublicShareChatContextSnapshot {
-            org_id,
-            workspace_id,
             owner_user_id,
+            workspace_id,
             access_level: ShareAccessLevel::from_role(&access_level),
         }))
     }

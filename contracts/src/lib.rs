@@ -30,7 +30,9 @@ pub use auth::{
     NotificationRow, NotificationsResponse, RegisterRequest, SendResetCodeRequest,
     VerifyResetCodeRequest,
 };
-pub use auth_runtime::{ActorId, AuthContext, AuthError, OrgId, SubjectKind, ensure_same_org};
+pub use auth_runtime::{
+    ActorId, AuthContext, AuthError, SubjectKind, UserId, ensure_same_owner,
+};
 pub use billing::{BillingOverview, PlanRow, PlansResponse, SubscriptionResponse, UsageResponse};
 pub use chat::{
     AnswerBlock, ChatDonePayload, ChatEvent, ChatMessage, ChatMessageListResponse, ChatRequest,

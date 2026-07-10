@@ -543,7 +543,7 @@ impl BillableFeature {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeteringContext {
     pub user_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub feature: BillableFeature,
     pub stage: String,
     pub session_id: Option<Uuid>,

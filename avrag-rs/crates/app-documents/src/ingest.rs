@@ -38,7 +38,7 @@ impl DocumentContext {
         };
 
         let task = build_ingest_task(
-            seed.org_id.clone(),
+            seed.owner_user_id.clone(),
             seed.workspace_id.clone(),
             seed.document_id.clone(),
             Some(current_user_id(auth)),
@@ -82,7 +82,7 @@ impl DocumentContext {
         };
 
         let task = build_reindex_task(
-            seed.org_id,
+            seed.owner_user_id,
             seed.workspace_id,
             seed.document_id,
             Some(current_user_id(auth)),

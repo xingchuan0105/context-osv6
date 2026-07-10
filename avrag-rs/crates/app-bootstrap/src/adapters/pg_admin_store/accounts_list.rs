@@ -1,29 +1,27 @@
-    async fn list_orgs(
+    async fn list_accounts(
         &self,
         auth: &AuthContext,
         page: usize,
         per_page: usize,
-    ) -> Result<Vec<AdminOrgInfo>, AppError> {
+    ) -> Result<Vec<AdminAccountInfo>, AppError> {
+        // B2C: "org" admin surface lists personal accounts (users).
         let mut tx = self.begin_admin_tx(auth).await?;
         let page = page.max(1);
-        let per_page = admin_clamp_org_list_per_page(per_page);
+        let per_page = admin_clamp_account_list_per_page(per_page);
         let offset = ((page - 1) * per_page) as i64;
         let rows = sqlx::query(
             r#"
             select
-              o.id,
-              o.name,
-              o.created_at,
-              o.blocked,
-              count(distinct u.id) as user_count,
-              count(distinct d.id) as document_count,
-              count(distinct m.id) filter (where m.role = 'user') as query_count
-            from organizations o
-            left join users u on u.org_id = o.id
-            left join documents d on d.org_id = o.id
-            left join chat_messages m on m.org_id = o.id
-            group by o.id, o.name, o.created_at, o.blocked
-            order by o.created_at desc
+              u.id,
+              coalesce(nullif(u.full_name, ''), u.email) as name,
+              u.created_at,
+              coalesce(u.blocked, false) as blocked,
+              1::bigint as user_count,
+              (select count(*) from documents d where d.owner_user_id = u.id) as document_count,
+              (select count(*) from chat_messages m
+                 where m.owner_user_id = u.id and m.role = 'user') as query_count
+            from users u
+            order by u.created_at desc
             limit $1 offset $2
             "#,
         )
@@ -33,52 +31,54 @@
         .await
         .map_err(db_err)?;
         tx.commit().await.map_err(db_err)?;
-        rows.into_iter().map(Self::map_org_info).collect()
+        rows.into_iter().map(Self::map_account_info).collect()
     }
 
-    async fn get_org(&self, auth: &AuthContext, org_id: OrgId) -> Result<AdminOrgInfo, AppError> {
+    async fn get_account(&self, auth: &AuthContext, owner_user_id: UserId) -> Result<AdminAccountInfo, AppError> {
         let mut tx = self.begin_admin_tx(auth).await?;
         let row = sqlx::query(
             r#"
             select
-              o.id,
-              o.name,
-              o.created_at,
-              o.blocked,
-              (select count(*) from users u where u.org_id = o.id) as user_count,
-              (select count(*) from documents d where d.org_id = o.id) as document_count,
-              (select count(*) from chat_messages m where m.org_id = o.id and m.role = 'user') as query_count
-            from organizations o
-            where o.id = $1
+              u.id,
+              coalesce(nullif(u.full_name, ''), u.email) as name,
+              u.created_at,
+              coalesce(u.blocked, false) as blocked,
+              1::bigint as user_count,
+              (select count(*) from documents d where d.owner_user_id = u.id) as document_count,
+              (select count(*) from chat_messages m
+                 where m.owner_user_id = u.id and m.role = 'user') as query_count
+            from users u
+            where u.id = $1
             "#,
         )
-        .bind(org_id.into_uuid())
+        .bind(owner_user_id.into_uuid())
         .fetch_optional(tx.as_mut())
         .await
         .map_err(db_err)?;
         tx.commit()
             .await
             .map_err(db_err)?;
-        row.map(Self::map_org_info)
+        row.map(Self::map_account_info)
             .transpose()?
-            .ok_or_else(|| AppError::not_found("org_not_found", "Organization not found"))
+            .ok_or_else(|| AppError::not_found("account_not_found", "Account not found"))
     }
 
     async fn list_users(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
     ) -> Result<Vec<AdminUserInfo>, AppError> {
+        // Personal account: the only user under an owner is the owner themself.
         let mut tx = self.begin_admin_tx(auth).await?;
         let rows = sqlx::query(
             r#"
-            select id, email, org_id, role, created_at
+            select id, email, role, created_at
             from users
-            where org_id = $1
+            where id = $1
             order by created_at asc
             "#,
         )
-        .bind(org_id.into_uuid())
+        .bind(owner_user_id.into_uuid())
         .fetch_all(tx.as_mut())
         .await
         .map_err(db_err)?;
@@ -91,22 +91,23 @@
     async fn delete_user(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         user_id: Uuid,
     ) -> Result<(), AppError> {
         let mut tx = self.begin_admin_tx(auth).await?;
+        // Personal B2C: user must match the account owner id.
         let exists: bool = sqlx::query_scalar(
-            "select exists(select 1 from users where id = $1 and org_id = $2)",
+            "select exists(select 1 from users where id = $1 and id = $2)",
         )
         .bind(user_id)
-        .bind(org_id.into_uuid())
+        .bind(owner_user_id.into_uuid())
         .fetch_one(tx.as_mut())
         .await
         .map_err(db_err)?;
         if !exists {
             return Err(AppError::not_found(
                 "user_not_found",
-                "User not found in this organization",
+                "User not found for this account",
             ));
         }
         let deleted: i64 = sqlx::query_scalar("select delete_user_cascade($1)")
@@ -122,31 +123,30 @@
         } else {
             Err(AppError::not_found(
                 "user_not_found",
-                "User not found in this organization",
+                "User not found for this account",
             ))
         }
     }
 
-    async fn set_org_blocked(
+    async fn set_account_blocked(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         blocked: bool,
     ) -> Result<(), AppError> {
         let mut tx = self.begin_admin_tx(auth).await?;
-        let result = sqlx::query("update organizations set blocked = $2 where id = $1")
-            .bind(org_id.into_uuid())
+        let result = sqlx::query("update users set blocked = $2 where id = $1")
+            .bind(owner_user_id.into_uuid())
             .bind(blocked)
             .execute(tx.as_mut())
             .await
             .map_err(db_err)?;
         if result.rows_affected() == 0 {
             return Err(AppError::not_found(
-                "org_not_found",
-                "Organization not found",
+                "account_not_found",
+                "Account not found",
             ));
         }
         tx.commit().await.map_err(db_err)?;
         Ok(())
     }
-

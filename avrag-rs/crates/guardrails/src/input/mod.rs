@@ -21,7 +21,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct InputGuardContext<'a> {
     pub query: &'a str,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub user_id: Uuid,
     pub doc_scope: &'a [String],
     pub workspace_id: Option<Uuid>,
@@ -64,11 +64,11 @@ impl InputGuardPipeline {
     /// Lightweight content check — only runs the prompt_injection guard.
     ///
     /// Useful for sanitizing tool results / snippets where a full `InputGuardContext`
-    /// (org_id, user_id, doc_scope, etc.) is not available.
+    /// (owner_user_id, user_id, doc_scope, etc.) is not available.
     pub fn check_content(&self, text: &str, trace_id: Option<String>) -> Option<GuardResult> {
         let ctx = InputGuardContext {
             query: text,
-            org_id: uuid::Uuid::nil(),
+            owner_user_id: uuid::Uuid::nil(),
             user_id: uuid::Uuid::nil(),
             doc_scope: &[],
             workspace_id: None,

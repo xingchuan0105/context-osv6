@@ -72,9 +72,8 @@ impl ShareService {
             .resolve_public_share_chat_context(token)
             .await?
             .map(|snapshot| PublicShareChatContext {
-                org_id: snapshot.org_id,
-                workspace_id: snapshot.workspace_id,
                 owner_user_id: snapshot.owner_user_id,
+                workspace_id: snapshot.workspace_id,
                 access_level: snapshot.access_level.into(),
             }))
     }

@@ -1,14 +1,14 @@
 //! Row types referenced by chat persistence port methods.
 
 use chrono::{DateTime, Utc};
-use contracts::OrgId;
+use contracts::UserId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentAssetRow {
     pub asset_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
@@ -26,7 +26,7 @@ pub struct DocumentAssetRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultimodalChunkRow {
     pub chunk_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
@@ -53,7 +53,7 @@ pub struct NotificationCreateParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfileRow {
     pub user_id: Uuid,
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub expertise_domains: Vec<String>,
     pub preferred_answer_style: Option<String>,
     pub frequently_asked_topics: Vec<String>,

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_rag_core::RagRuntime;
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, GraphSearchOutput, GraphSearchRequest,
@@ -9,13 +9,13 @@ use contracts::{GraphHint, GraphRetrievalArgs, ToolResult, ToolStatus};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Mock data plane that simulates Milvus cross-tenant rejection.
+/// Mock data plane that simulates Milvus cross-account rejection.
 ///
-/// The "data owner" org is fixed at construction time.  Any graph search
-/// whose `tenant_org_id` does not match the data owner is rejected with
+/// The "data owner" account is fixed at construction time.  Any graph search
+/// whose `owner_user_id` does not match the data owner is rejected with
 /// the same error message that `TenantContext::verify_access` produces.
 struct CrossTenantBlockingDataPlane {
-    data_owner_org_id: String,
+    data_owner_user_id: String,
 }
 
 #[async_trait]
@@ -47,25 +47,25 @@ impl RetrievalReadPort for CrossTenantBlockingDataPlane {
     }
 
     async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
-        if request.tenant_org_id != self.data_owner_org_id {
+        if request.owner_user_id != self.data_owner_user_id {
             return Err(anyhow::anyhow!("cross_tenant_access_denied"));
         }
         Ok(GraphSearchOutput::default())
     }
 }
 
-fn test_runtime(data_owner_org_id: &str) -> RagRuntime {
+fn test_runtime(data_owner_user_id: &str) -> RagRuntime {
     let config = avrag_rag_core::test_doubles::test_rag_config();
     RagRuntime::with_data_plane(
         config,
         Arc::new(CrossTenantBlockingDataPlane {
-            data_owner_org_id: data_owner_org_id.to_string(),
+            data_owner_user_id: data_owner_user_id.to_string(),
         }),
     )
 }
 
-fn make_auth(org_id: Uuid) -> AuthContext {
-    AuthContext::new(OrgId::new(org_id), SubjectKind::System)
+fn make_auth(owner_user_id: Uuid) -> AuthContext {
+    AuthContext::new(UserId::new(owner_user_id), SubjectKind::System)
 }
 
 #[tokio::test]
@@ -99,7 +99,7 @@ async fn graph_retrieval_rejects_cross_tenant_access() {
     assert_eq!(
         result.status,
         ToolStatus::Error,
-        "graph_retrieval must return Error for cross-tenant requests"
+        "graph_retrieval must return Error for cross-account requests"
     );
     let error_msg = result
         .data
@@ -109,7 +109,7 @@ async fn graph_retrieval_rejects_cross_tenant_access() {
         .unwrap_or("");
     assert!(
         error_msg.contains("cross_tenant_access_denied"),
-        "error message should indicate cross-tenant denial, got: {}",
+        "error message should indicate cross-account denial, got: {}",
         error_msg
     );
 }

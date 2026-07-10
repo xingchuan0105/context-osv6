@@ -11,12 +11,11 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let actor_email = sqlx::query(
-            "select lower(email) as email from users where id = $1 and org_id = $2",
+            "select lower(email) as email from users where id = $1",
         )
         .bind(actor_id)
-        .bind(auth.org_id().into_uuid())
         .fetch_one(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?
@@ -26,12 +25,12 @@
             r#"
             select email, invite_status
             from workspace_members
-            where id = $1 and org_id = $2 and workspace_id = $3
+            where id = $1 and owner_user_id = $2 and workspace_id = $3
             for update
             "#,
         )
         .bind(member_id)
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .fetch_optional(tx.as_mut())
         .await
@@ -58,11 +57,11 @@
             update workspace_members
             set invite_status = 'declined',
                 updated_at = now()
-            where id = $1 and org_id = $2 and workspace_id = $3
+            where id = $1 and owner_user_id = $2 and workspace_id = $3
             "#,
         )
         .bind(member_id)
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .execute(tx.as_mut())
         .await

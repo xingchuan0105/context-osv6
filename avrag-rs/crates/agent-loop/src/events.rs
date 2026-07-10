@@ -281,7 +281,7 @@ mod tests {
             AgentEvent::Audit {
                 record: app_documents::AuditRecord {
                     audit_id: "a1".to_string(),
-                    org_id: "o1".to_string(),
+                    owner_user_id: "o1".to_string(),
                     actor_id: Some("u1".to_string()),
                     action: app_documents::AuditAction::RoutingDecision,
                     resource_type: "agent_request".to_string(),

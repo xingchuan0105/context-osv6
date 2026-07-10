@@ -10,8 +10,8 @@ import {
   userRoleLabel,
 } from "./admin-i18n";
 import {
-  useAdminOrganizationsQuery as useOrganizationsQuery,
-  useAdminOrganizationUsersQuery as useOrganizationUsersQuery,
+  useAdminAccountsQuery as useAccountsQuery,
+  useAdminAccountUsersQuery as useAccountUsersQuery,
 } from "./admin-queries";
 import {
   AdminMetricCard,
@@ -29,14 +29,14 @@ export function AdminUsersSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
   const { locale } = useUiPreferences();
-  const organizationsQuery = useOrganizationsQuery(actorId, token);
+  const accountsQuery = useAccountsQuery(actorId, token);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [sortMode, setSortMode] = useState("created_desc");
-  const organizations = organizationsQuery.data ?? [];
-  const effectiveSelectedOrgId = selectedOrgId ?? organizations[0]?.id ?? "";
-  const usersQuery = useOrganizationUsersQuery(actorId, token, effectiveSelectedOrgId);
+  const accounts = accountsQuery.data ?? [];
+  const effectiveSelectedOrgId = selectedOrgId ?? accounts[0]?.id ?? "";
+  const usersQuery = useAccountUsersQuery(actorId, token, effectiveSelectedOrgId);
   const users = usersQuery.data ?? [];
   const filteredUsers = sortUsers(
     users.filter((user) => {
@@ -58,9 +58,9 @@ export function AdminUsersSurface() {
     }),
     sortMode,
   );
-  const selectedOrg = organizations.find((organization) => organization.id === effectiveSelectedOrgId) ?? null;
-  const error = organizationsQuery.error ?? usersQuery.error ?? null;
-  const organizationsLoading = Boolean(token) && organizationsQuery.isPending;
+  const selectedOrg = accounts.find((account) => account.id === effectiveSelectedOrgId) ?? null;
+  const error = accountsQuery.error ?? usersQuery.error ?? null;
+  const accountsLoading = Boolean(token) && accountsQuery.isPending;
   const usersLoading = Boolean(token && effectiveSelectedOrgId) && usersQuery.isPending;
 
   return (
@@ -74,19 +74,19 @@ export function AdminUsersSurface() {
         <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
           <div>
             <label className="app-form-label" htmlFor="admin-users-org">
-              {adminText(locale, "admin.table.organization")}
+              {adminText(locale, "admin.table.account")}
             </label>
             <select
               className="app-input"
-              disabled={organizationsLoading || organizations.length === 0}
+              disabled={accountsLoading || accounts.length === 0}
               id="admin-users-org"
               onChange={(event) => setSelectedOrgId(event.target.value)}
               value={effectiveSelectedOrgId}
             >
-              <option value="">{adminText(locale, "common.selectOrganization")}</option>
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
+              <option value="">{adminText(locale, "common.selectAccount")}</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
                 </option>
               ))}
             </select>
@@ -131,13 +131,13 @@ export function AdminUsersSurface() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
-          <span>{selectedOrg ? `${adminText(locale, "users.currentOrganization")} ${selectedOrg.name}` : adminText(locale, "users.noOrganizationSelected")}</span>
+          <span>{selectedOrg ? `${adminText(locale, "users.currentAccount")} ${selectedOrg.name}` : adminText(locale, "users.noAccountSelected")}</span>
           {selectedOrg ? <span>{adminText(locale, "users.members")} {users.length}</span> : null}
         </div>
       </section>
 
       {!effectiveSelectedOrgId ? (
-        <EmptyState copy={adminText(locale, "users.chooseOrganization")} />
+        <EmptyState copy={adminText(locale, "users.chooseAccount")} />
       ) : usersLoading ? (
         <LoadingState copy={adminText(locale, "users.loading")} />
       ) : filteredUsers.length === 0 ? (

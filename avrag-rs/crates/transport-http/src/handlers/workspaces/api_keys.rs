@@ -54,7 +54,7 @@ pub(crate) async fn create_api_key_handler(
     }
 }
 
-pub(crate) async fn create_org_api_key_handler(
+pub(crate) async fn create_account_api_key_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<common::CreateApiKeyRequest>,
 ) -> Response {
@@ -67,13 +67,13 @@ pub(crate) async fn create_org_api_key_handler(
     if let Err(error) = require_user_admin(state.auth()) {
         return app_error_response(error);
     }
-    match state.admin_api().create_org_api_key(req).await {
+    match state.admin_api().create_account_api_key(req).await {
         Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }
 }
 
-pub(crate) async fn list_org_api_keys_handler(
+pub(crate) async fn list_account_api_keys_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if let Err(error) = forbid_api_key(
@@ -85,7 +85,7 @@ pub(crate) async fn list_org_api_keys_handler(
     if let Err(error) = require_user_admin(state.auth()) {
         return app_error_response(error);
     }
-    match state.admin_api().list_org_api_keys().await {
+    match state.admin_api().list_account_api_keys().await {
         Ok(api_keys) => (
             StatusCode::OK,
             Json(common::ApiKeyListResponse { api_keys }),
@@ -95,7 +95,7 @@ pub(crate) async fn list_org_api_keys_handler(
     }
 }
 
-pub(crate) async fn revoke_org_api_key_handler(
+pub(crate) async fn revoke_account_api_key_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(key_id): Path<String>,
 ) -> Response {
@@ -108,7 +108,7 @@ pub(crate) async fn revoke_org_api_key_handler(
     if let Err(error) = require_user_admin(state.auth()) {
         return app_error_response(error);
     }
-    match state.admin_api().revoke_org_api_key(&key_id).await {
+    match state.admin_api().revoke_account_api_key(&key_id).await {
         Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
         Err(error) => app_error_response(error),
     }

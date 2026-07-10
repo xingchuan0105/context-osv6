@@ -82,7 +82,7 @@ pub(crate) fn build_asset_object_key(
     let extension = infer_asset_extension(source_path).unwrap_or("bin");
     format!(
         "{}/{}/{}/assets/{}.{}",
-        context.org_id(),
+        context.user_id(),
         workspace_id,
         document_id,
         asset_id,

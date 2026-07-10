@@ -85,11 +85,11 @@ impl ConversationMemoryRepository {
             r#"
             select workspace_id
             from chat_sessions
-            where id = $1 and org_id = $2
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(session_id)
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -115,7 +115,7 @@ impl ConversationMemoryRepository {
                 r#"
                 select m.id as message_id, m.session_id, m.role, m.content, m.created_at
                 from chat_messages m
-                where m.org_id = $1
+                where m.owner_user_id = $1
                   and m.session_id = $2
                   and m.role in ('user', 'assistant')
                   and not (m.id = any($3))
@@ -123,7 +123,7 @@ impl ConversationMemoryRepository {
                 limit $4
                 "#,
             )
-            .bind(auth.org_id().into_uuid())
+            .bind(auth.user_id().into_uuid())
             .bind(session_id)
             .bind(exclude_message_ids)
             .bind(limit)
@@ -135,7 +135,7 @@ impl ConversationMemoryRepository {
                 select m.id as message_id, m.session_id, m.role, m.content, m.created_at
                 from chat_messages m
                 join chat_sessions s on s.id = m.session_id
-                where m.org_id = $1
+                where m.owner_user_id = $1
                   and s.workspace_id = $2
                   and s.user_id = $3
                   and m.role in ('user', 'assistant')
@@ -144,7 +144,7 @@ impl ConversationMemoryRepository {
                 limit $5
                 "#,
             )
-            .bind(auth.org_id().into_uuid())
+            .bind(auth.user_id().into_uuid())
             .bind(workspace_id)
             .bind(user_id)
             .bind(exclude_message_ids)
@@ -174,7 +174,7 @@ impl ConversationMemoryRepository {
                 select m.id as message_id, m.session_id, m.role, m.content, m.created_at,
                        ts_rank_cd(m.search_vector, plainto_tsquery('simple', $3)) as rank
                 from chat_messages m
-                where m.org_id = $1
+                where m.owner_user_id = $1
                   and m.session_id = $2
                   and m.role in ('user', 'assistant')
                   and not (m.id = any($4))
@@ -183,7 +183,7 @@ impl ConversationMemoryRepository {
                 limit $5
                 "#,
             )
-            .bind(auth.org_id().into_uuid())
+            .bind(auth.user_id().into_uuid())
             .bind(session_id)
             .bind(segmented_query)
             .bind(exclude_message_ids)
@@ -197,7 +197,7 @@ impl ConversationMemoryRepository {
                        ts_rank_cd(m.search_vector, plainto_tsquery('simple', $4)) as rank
                 from chat_messages m
                 join chat_sessions s on s.id = m.session_id
-                where m.org_id = $1
+                where m.owner_user_id = $1
                   and s.workspace_id = $2
                   and s.user_id = $3
                   and m.role in ('user', 'assistant')
@@ -207,7 +207,7 @@ impl ConversationMemoryRepository {
                 limit $6
                 "#,
             )
-            .bind(auth.org_id().into_uuid())
+            .bind(auth.user_id().into_uuid())
             .bind(workspace_id)
             .bind(user_id)
             .bind(segmented_query)

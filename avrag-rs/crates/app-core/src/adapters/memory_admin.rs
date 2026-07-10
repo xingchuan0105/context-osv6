@@ -8,13 +8,13 @@ use chrono::{DateTime, Utc};
 use common::{
     ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, new_id, now_rfc3339,
 };
-use contracts::auth_runtime::{AuthContext, OrgId};
+use contracts::auth_runtime::{AuthContext, UserId};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::admin_domain::{
     AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
+    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo, AdminRagHealthStatus,
     AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use crate::admin_store::AdminStorePort;
@@ -152,7 +152,7 @@ impl AdminStorePort for MemoryAdminStore {
         };
         Ok(Some(UserProfileRow {
             user_id,
-            org_id: auth.org_id(),
+            owner_user_id: auth.user_id(),
             expertise_domains: Vec::new(),
             preferred_answer_style: None,
             frequently_asked_topics: Vec::new(),
@@ -199,10 +199,10 @@ impl AdminStorePort for MemoryAdminStore {
     ) -> Result<CreateApiKeyResponse, AppError> {
         let plaintext_key = format!("sk_{}", new_id().replace('-', ""));
         let rate_limit_rpm_u32 = u32::try_from(rate_limit_rpm).unwrap_or(60);
-        let org_id = auth.org_id().to_string();
+        let owner_user_id = auth.user_id().to_string();
         let row = ApiKeyRow {
             id: new_id(),
-            org_id: org_id.clone(),
+            owner_user_id: owner_user_id.clone(),
             workspace_id: workspace_id
                 .map(|id| id.to_string())
                 .unwrap_or_default(),
@@ -230,7 +230,7 @@ impl AdminStorePort for MemoryAdminStore {
             &plaintext_key,
             MemoryApiKeyRecord {
                 id: Uuid::parse_str(&row.id).unwrap_or_else(|_| Uuid::new_v4()),
-                org_id: auth.org_id(),
+                owner_user_id: auth.user_id(),
                 workspace_id,
                 permissions: permissions.to_vec(),
                 rate_limit_rpm: rate_limit_rpm_u32,
@@ -275,7 +275,7 @@ impl AdminStorePort for MemoryAdminStore {
         if state.notifications.is_empty() {
             return Ok(vec![NotificationRow {
                 id: "notif-m1-skeleton".to_string(),
-                org_id: auth.org_id().to_string(),
+                owner_user_id: auth.user_id().to_string(),
                 user_id: user_id.to_string(),
                 event_type: "system.degrade".to_string(),
                 title: "M1/M2 skeleton running".to_string(),
@@ -313,16 +313,16 @@ impl AdminStorePort for MemoryAdminStore {
         Ok(false)
     }
 
-    async fn list_orgs(
+    async fn list_accounts(
         &self,
         _auth: &AuthContext,
         _page: usize,
         _per_page: usize,
-    ) -> Result<Vec<AdminOrgInfo>, AppError> {
+    ) -> Result<Vec<AdminAccountInfo>, AppError> {
         Ok(Vec::new())
     }
 
-    async fn get_org(&self, _auth: &AuthContext, _org_id: OrgId) -> Result<AdminOrgInfo, AppError> {
+    async fn get_account(&self, _auth: &AuthContext, _org_id: UserId) -> Result<AdminAccountInfo, AppError> {
         Err(AppError::not_found(
             "org_not_found",
             "Organization not found",
@@ -332,7 +332,7 @@ impl AdminStorePort for MemoryAdminStore {
     async fn list_users(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
     ) -> Result<Vec<AdminUserInfo>, AppError> {
         Ok(Vec::new())
     }
@@ -340,7 +340,7 @@ impl AdminStorePort for MemoryAdminStore {
     async fn delete_user(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _user_id: Uuid,
     ) -> Result<(), AppError> {
         Ok(())
@@ -349,7 +349,7 @@ impl AdminStorePort for MemoryAdminStore {
     async fn get_usage(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _period: &str,
     ) -> Result<AdminUsageStats, AppError> {
         Err(AppError::not_found(
@@ -358,10 +358,10 @@ impl AdminStorePort for MemoryAdminStore {
         ))
     }
 
-    async fn set_org_blocked(
+    async fn set_account_blocked(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _blocked: bool,
     ) -> Result<(), AppError> {
         Ok(())

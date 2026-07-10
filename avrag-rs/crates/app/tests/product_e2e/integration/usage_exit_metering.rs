@@ -21,8 +21,8 @@ async fn chat_records_llm_usage_event_with_usage_kind_chat() {
     let pool = sqlx::PgPool::connect(&ctx.pg_url)
         .await
         .expect("connect test pg");
-    let (user_id, org_id): (Uuid, Uuid) =
-        sqlx::query_as("SELECT id, org_id FROM users WHERE email = $1")
+    let (user_id, owner_user_id): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id, owner_user_id FROM users WHERE email = $1")
             .bind(&email)
             .fetch_one(&pool)
             .await
@@ -32,11 +32,11 @@ async fn chat_records_llm_usage_event_with_usage_kind_chat() {
     let before: (i64,) = sqlx::query_as(
         r#"
         SELECT COUNT(*) FROM llm_usage_events
-        WHERE user_id = $1 AND org_id = $2 AND usage_kind = 'chat'
+        WHERE user_id = $1 AND owner_user_id = $2 AND usage_kind = 'chat'
         "#,
     )
     .bind(user_id)
-    .bind(org_id)
+    .bind(owner_user_id)
     .fetch_one(&pool)
     .await
     .expect("count usage before chat");
@@ -63,11 +63,11 @@ async fn chat_records_llm_usage_event_with_usage_kind_chat() {
         let after: (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*) FROM llm_usage_events
-            WHERE user_id = $1 AND org_id = $2 AND usage_kind = 'chat'
+            WHERE user_id = $1 AND owner_user_id = $2 AND usage_kind = 'chat'
             "#,
         )
         .bind(user_id)
-        .bind(org_id)
+        .bind(owner_user_id)
         .fetch_one(&pool)
         .await
         .expect("count usage after chat");
@@ -90,13 +90,13 @@ async fn chat_records_llm_usage_event_with_usage_kind_chat() {
         r#"
         SELECT usage_kind, feature, total_tokens
         FROM llm_usage_events
-        WHERE user_id = $1 AND org_id = $2 AND usage_kind = 'chat'
+        WHERE user_id = $1 AND owner_user_id = $2 AND usage_kind = 'chat'
         ORDER BY created_at DESC
         LIMIT 1
         "#,
     )
     .bind(user_id)
-    .bind(org_id)
+    .bind(owner_user_id)
     .fetch_one(&pool)
     .await
     .expect("fetch latest chat usage row");

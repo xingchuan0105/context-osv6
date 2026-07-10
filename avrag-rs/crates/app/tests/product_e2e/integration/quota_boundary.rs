@@ -34,8 +34,8 @@ async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
     let pool = sqlx::PgPool::connect(&ctx.pg_url)
         .await
         .expect("connect test pg");
-    let (user_id, org_id): (Uuid, Uuid) =
-        sqlx::query_as("SELECT id, org_id FROM users WHERE email = $1")
+    let (user_id, owner_user_id): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id, owner_user_id FROM users WHERE email = $1")
             .bind(&email)
             .fetch_one(&pool)
             .await
@@ -45,13 +45,13 @@ async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
     sqlx::query(
         r#"
         INSERT INTO llm_usage_events (
-            org_id, user_id, feature, stage, provider, model,
+            owner_user_id, user_id, feature, stage, provider, model,
             prompt_tokens, completion_tokens, total_tokens,
             usage_units, usage_source
         ) VALUES ($1, $2, 'chat', 'test', 'test', 'scripted', 1000, 1000, 2000, 1000000, 'actual')
         "#,
     )
-    .bind(org_id)
+    .bind(owner_user_id)
     .bind(user_id)
     .execute(&pool)
     .await

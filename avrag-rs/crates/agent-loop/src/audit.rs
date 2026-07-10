@@ -41,7 +41,7 @@ impl AuditRetentionPolicy {
 
 /// Build an audit record for a routing decision.
 pub fn routing_decision_record(
-    org_id: &str,
+    owner_user_id: &str,
     actor_id: Option<&str>,
     trace_id: &str,
     mode_id: &str,
@@ -51,7 +51,7 @@ pub fn routing_decision_record(
 ) -> AuditRecord {
     AuditRecord {
         audit_id: Uuid::new_v4().to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         actor_id: actor_id.map(|s| s.to_string()),
         action: AuditAction::RoutingDecision,
         resource_type: "agent_request".to_string(),
@@ -93,7 +93,7 @@ mod tests {
             "doc_scope is non-empty",
         );
         assert_eq!(record.action, AuditAction::RoutingDecision);
-        assert_eq!(record.org_id, "org-1");
+        assert_eq!(record.owner_user_id, "org-1");
         assert_eq!(record.actor_id, Some("user-1".to_string()));
         assert_eq!(record.resource_id, "trace-1");
         let payload = record.payload.as_object().unwrap();

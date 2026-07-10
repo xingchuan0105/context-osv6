@@ -11,8 +11,8 @@ pub(crate) fn default_e2e_mm_embedding_model() -> String {
 /// Parameters captured during smoke bootstrap and passed to API + worker.
 #[derive(Debug, Clone)]
 pub(crate) struct E2eBootstrapConfig {
-    /// Aligns API bootstrap auth with per-test `x-org-id` / `x-user-id` headers.
-    pub org_id: String,
+    /// Aligns API bootstrap auth with per-test `x-owner-user-id` / `x-user-id` headers.
+    pub owner_user_id: String,
     pub user_id: String,
     pub database_url: String,
     pub auto_migrate: bool,
@@ -69,7 +69,7 @@ impl E2eBootstrapConfig {
     }
 
     fn apply_infra_overrides(&self, config: &mut AppConfig, base_url: &str) {
-        config.org_id = self.org_id.clone();
+        config.owner_user_id = self.owner_user_id.clone();
         config.user_id = self.user_id.clone();
         config.database_url = Some(self.database_url.clone());
         config.auto_migrate = self.auto_migrate;
@@ -185,9 +185,9 @@ impl E2eBootstrapConfig {
         }
     }
 
-    /// Inject worker process env. `NEXT_PUBLIC_DEV_ORG_ID` / `NEXT_PUBLIC_DEV_USER_ID`
+    /// Inject worker process env. `NEXT_PUBLIC_DEV_OWNER_USER_ID` / `NEXT_PUBLIC_DEV_USER_ID`
     /// are shared with `AppConfig::from_env` (see `app-core` config) — worker has no
-    /// separate `AVRAG_ORG_ID` / `AVRAG_USER_ID` keys; E2E must keep API headers,
+    /// separate `AVRAG_OWNER_USER_ID` / `AVRAG_USER_ID` keys; E2E must keep API headers,
     /// bootstrap config, and worker env aligned on the same pair.
     pub(crate) fn apply_worker_env(
         &self,
@@ -202,7 +202,7 @@ impl E2eBootstrapConfig {
             self.object_root, self.ingestion_queue_group
         );
         cmd.env("E2E_ENABLED", "true")
-            .env("NEXT_PUBLIC_DEV_ORG_ID", &self.org_id)
+            .env("NEXT_PUBLIC_DEV_OWNER_USER_ID", &self.owner_user_id)
             .env("NEXT_PUBLIC_DEV_USER_ID", &self.user_id)
             .env("DATABASE_URL", &self.database_url)
             .env(

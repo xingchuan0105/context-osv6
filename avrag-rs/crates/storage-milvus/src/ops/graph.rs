@@ -45,7 +45,7 @@ impl MilvusDataPlane {
         }
 
         // 租户隔离与 ACL 过滤
-        let tenant_filter = format!("org_id == '{}'", request.tenant_org_id);
+        let tenant_filter = format!("owner_user_id == '{}'", request.owner_user_id);
         let base_filter = doc_filter(&request.auth, request.doc_ids.as_deref());
         let entity_filter = if !base_filter.is_empty() {
             format!("({}) && ({})", tenant_filter, base_filter)

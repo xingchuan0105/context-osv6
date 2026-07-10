@@ -9,7 +9,7 @@ use uuid::Uuid;
 /// Tenant identity attached to metered LLM / embedding calls.
 #[derive(Debug, Clone)]
 pub struct TenantContext {
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub user_id: Uuid,
 }
 
@@ -78,7 +78,7 @@ mod tests {
             embeds: Mutex::new(Vec::new()),
         });
         let tenant = TenantContext {
-            org_id: Uuid::from_u128(1),
+            owner_user_id: Uuid::from_u128(1),
             user_id: Uuid::from_u128(2),
         };
         let record = ChatUsageRecord {

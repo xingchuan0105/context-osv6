@@ -163,7 +163,7 @@ pub(crate) fn build_document_index_batch(
     graph_records: GraphIndexRecords,
 ) -> DocumentIndexBatch {
     DocumentIndexBatch {
-        org_id: context.org_id(),
+        owner_user_id: context.user_id(),
         workspace_id,
         document_id,
         parse_run_id,

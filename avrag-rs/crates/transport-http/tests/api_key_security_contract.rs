@@ -4,7 +4,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{CreateApiKeyRequest, CreateWorkspaceRequest, default_org_id, default_user_id};
+use common::{CreateApiKeyRequest, CreateWorkspaceRequest, default_owner_user_id, default_user_id};
 use contracts::agent_permissions::{PERM_ADMIN, USER_ROLE_ORG_ADMIN};
 use contracts::workspaces::CreateChatSessionRequest;
 use std::env;
@@ -84,7 +84,7 @@ async fn register_and_get_token(app: &axum::Router, email: &str, full_name: &str
     register_session(app, email, full_name).await.0
 }
 
-/// Returns (session_token, user_id, org_id). Register currently issues org_admin JWT.
+/// Returns (session_token, user_id, owner_user_id). Register currently issues org_admin JWT.
 async fn register_session(app: &axum::Router, email: &str, full_name: &str) -> (String, Uuid, Uuid) {
     let response = app
         .clone()
@@ -105,15 +105,15 @@ async fn register_session(app: &axum::Router, email: &str, full_name: &str) -> (
     let data = payload.get("data").cloned().unwrap_or(payload);
     let token = data["token"].as_str().expect("token").to_string();
     let user_id = Uuid::parse_str(data["user"]["id"].as_str().expect("user.id")).unwrap();
-    // org_id is not on user DTO; decode JWT claims (same secret as issue_jwt).
-    let org_id = org_id_from_jwt(&token);
-    (token, user_id, org_id)
+    // owner_user_id is not on user DTO; decode JWT claims (same secret as issue_jwt).
+    let owner_user_id = owner_user_id_from_jwt(&token);
+    (token, user_id, owner_user_id)
 }
 
-fn org_id_from_jwt(token: &str) -> Uuid {
+fn owner_user_id_from_jwt(token: &str) -> Uuid {
     #[derive(serde::Deserialize)]
     struct Claims {
-        org_id: String,
+        owner_user_id: String,
     }
     // Must match transport_http jwt_secret() under debug/test (JWT_DEFAULT_SECRET).
     let secrets = [
@@ -131,7 +131,7 @@ fn org_id_from_jwt(token: &str) -> Uuid {
             &jsonwebtoken::Validation::default(),
         ) {
             Ok(data) => {
-                return Uuid::parse_str(&data.claims.org_id).expect("org_id uuid");
+                return Uuid::parse_str(&data.claims.owner_user_id).expect("owner_user_id uuid");
             }
             Err(err) => last_err = Some(err),
         }
@@ -140,8 +140,8 @@ fn org_id_from_jwt(token: &str) -> Uuid {
 }
 
 /// Non-admin user JWT so membership checks are not bypassed via PERM_ADMIN.
-fn non_admin_user_token(user_id: Uuid, org_id: Uuid) -> String {
-    transport_http::issue_jwt_for_auth_version(&user_id, &org_id, 1, "member")
+fn non_admin_user_token(user_id: Uuid, owner_user_id: Uuid) -> String {
+    transport_http::issue_jwt_for_auth_version(&user_id, &owner_user_id, 1, "member")
 }
 
 fn admin_app_state() -> AppState {
@@ -177,7 +177,7 @@ async fn rest_json(
 }
 
 #[tokio::test]
-async fn workspace_api_key_cannot_create_org_api_key() {
+async fn workspace_api_key_cannot_create_account_api_key() {
     let state = test_app_state();
     let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
@@ -216,7 +216,7 @@ async fn workspace_api_key_cannot_create_org_api_key() {
     );
 }
 #[tokio::test]
-async fn user_without_admin_cannot_create_org_api_key() {
+async fn user_without_admin_cannot_create_account_api_key() {
     let app = build_router(test_app_state());
     let response = app
         .oneshot(
@@ -224,7 +224,7 @@ async fn user_without_admin_cannot_create_org_api_key() {
                 .method("POST")
                 .uri("/api/v1/org/api-keys")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-org-id", default_org_id())
+                .header("x-owner-user-id", default_owner_user_id())
                 .header("x-user-id", default_user_id())
                 .body(Body::from(
                     serde_json::json!({ "name": "needs-admin" }).to_string(),
@@ -244,7 +244,7 @@ async fn user_without_admin_cannot_create_org_api_key() {
 }
 
 #[tokio::test]
-async fn admin_user_can_create_org_api_key() {
+async fn admin_user_can_create_account_api_key() {
     let app = build_router(test_app_state());
     let response = app
         .clone()
@@ -253,7 +253,7 @@ async fn admin_user_can_create_org_api_key() {
                 .method("POST")
                 .uri("/api/v1/org/api-keys")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-org-id", default_org_id())
+                .header("x-owner-user-id", default_owner_user_id())
                 .header("x-user-id", default_user_id())
                 .header("x-permissions", "admin")
                 .body(Body::from(
@@ -323,10 +323,10 @@ async fn workspace_api_key_cannot_read_other_workspace_session() {
 }
 
 #[tokio::test]
-async fn org_api_key_cannot_call_workspace_mcp_tool() {
+async fn account_api_key_cannot_call_workspace_mcp_tool() {
     let state = admin_app_state();
     let org_key = state.admin_api()
-        .create_org_api_key(CreateApiKeyRequest {
+        .create_account_api_key(CreateApiKeyRequest {
             name: "org-agent".to_string(),
             permissions: vec![],
             rate_limit_rpm: Some(60),
@@ -377,7 +377,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
         payload
             .pointer("/error/data/error")
             .and_then(|value| value.as_str()),
-        Some("org_key_cannot_call_workspace_tools")
+        Some("account_key_cannot_call_workspace_tools")
     );
 }
 
@@ -516,10 +516,10 @@ async fn workspace_api_key_cannot_update_other_workspace_session() {
 }
 
 #[tokio::test]
-async fn admin_user_can_list_and_revoke_org_api_keys() {
+async fn admin_user_can_list_and_revoke_account_api_keys() {
     let state = admin_app_state();
     let created = state.admin_api()
-        .create_org_api_key(CreateApiKeyRequest {
+        .create_account_api_key(CreateApiKeyRequest {
             name: "listed-org-key".to_string(),
             permissions: vec![],
             rate_limit_rpm: Some(60),
@@ -535,7 +535,7 @@ async fn admin_user_can_list_and_revoke_org_api_keys() {
             Request::builder()
                 .method("GET")
                 .uri("/api/v1/org/api-keys")
-                .header("x-org-id", default_org_id())
+                .header("x-owner-user-id", default_owner_user_id())
                 .header("x-user-id", default_user_id())
                 .header("x-permissions", "admin")
                 .body(Body::empty())
@@ -562,7 +562,7 @@ async fn admin_user_can_list_and_revoke_org_api_keys() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/api/v1/org/api-keys/{}", created.api_key.id))
-                .header("x-org-id", default_org_id())
+                .header("x-owner-user-id", default_owner_user_id())
                 .header("x-user-id", default_user_id())
                 .header("x-permissions", "admin")
                 .body(Body::empty())
@@ -574,13 +574,13 @@ async fn admin_user_can_list_and_revoke_org_api_keys() {
 }
 
 #[tokio::test]
-async fn org_admin_jwt_can_create_org_api_key() {
+async fn account_admin_jwt_can_create_account_api_key() {
     use transport_http::issue_jwt_for_auth_version;
     use uuid::Uuid;
 
     let user_id = Uuid::parse_str(&default_user_id()).unwrap();
-    let org_id = Uuid::parse_str(&default_org_id()).unwrap();
-    let token = issue_jwt_for_auth_version(&user_id, &org_id, 1, USER_ROLE_ORG_ADMIN);
+    let owner_user_id = Uuid::parse_str(&default_owner_user_id()).unwrap();
+    let token = issue_jwt_for_auth_version(&user_id, &owner_user_id, 1, USER_ROLE_ORG_ADMIN);
     let app = build_router(test_app_state());
 
     let (status, _) = rest_json(
@@ -810,10 +810,10 @@ async fn user_without_workspace_access_cannot_revoke_workspace_api_key() {
 }
 
 #[tokio::test]
-async fn org_api_key_create_strips_admin_permission() {
+async fn account_api_key_create_strips_admin_permission() {
     let state = admin_app_state();
     let created = state.admin_api()
-        .create_org_api_key(CreateApiKeyRequest {
+        .create_account_api_key(CreateApiKeyRequest {
             name: "org-key".to_string(),
             permissions: vec![
                 PERM_ADMIN.to_string(),

@@ -27,7 +27,7 @@ impl crate::PgAppRepository {
         let rows = sqlx::query(
             r#"
             select
-                n.id, n.org_id, n.owner_id, n.title, n.description, n.created_at, n.updated_at,
+                n.id, n.owner_user_id, n.owner_id, n.title, n.description, n.created_at, n.updated_at,
                 coalesce(doc_stats.document_count, 0) as document_count,
                 coalesce(doc_stats.status_summary, '{}'::jsonb) as status_summary,
                 exists(select 1 from share_tokens st where st.workspace_id = n.id and st.revoked_at is null) as shared

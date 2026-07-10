@@ -10,9 +10,9 @@ async fn cleanup_targets_reject_active_document_when_database_available() {
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
     let notebook = repo
         .bootstrap().create_workspace(
@@ -29,21 +29,21 @@ async fn cleanup_targets_reject_active_document_when_database_available() {
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
     let mut tx = repo.raw().begin().await.unwrap();
-    sqlx::query("select set_config('app.current_org', $1, true)")
-        .bind(org_id.into_uuid().to_string())
+    sqlx::query("select set_config('app.current_user', $1, true)")
+        .bind(owner_user_id.into_uuid().to_string())
         .execute(tx.as_mut())
         .await
         .unwrap();
     sqlx::query(
         r#"
         insert into document_assets (
-            asset_id, org_id, workspace_id, document_id, page, asset_kind,
+            asset_id, owner_user_id, workspace_id, document_id, page, asset_kind,
             storage_path, mime_type, parser_backend
         ) values ($1, $2, $3, $4, 1, 'image', 'must/not/delete.png', 'image/png', 'test')
         "#,
     )
     .bind(Uuid::new_v4())
-    .bind(org_id.into_uuid())
+    .bind(owner_user_id.into_uuid())
     .bind(workspace_id)
     .bind(document_id)
     .execute(tx.as_mut())
@@ -64,7 +64,7 @@ async fn cleanup_targets_reject_active_document_when_database_available() {
             .await
             .unwrap()
     );
-    let remaining = count_document_assets_for_org(&repo, org_id.into_uuid(), document_id).await;
+    let remaining = count_document_assets_for_org(&repo, owner_user_id.into_uuid(), document_id).await;
     assert_eq!(remaining, 1);
 }
 

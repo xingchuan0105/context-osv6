@@ -208,7 +208,7 @@ impl PasswordResetService {
         };
 
         let user_id = user_row.user_id;
-        let org_id = user_row.org_id;
+        let owner_user_id = user_row.owner_user_id;
         let resolved_email = user_row.email;
         let code = generate_reset_code();
         let reset_ticket = generate_reset_ticket();
@@ -223,7 +223,7 @@ impl PasswordResetService {
 
         if let Err(error) = store
             .create_password_reset_ticket(&CreatePasswordResetTicketInput {
-                org_id,
+                owner_user_id,
                 user_id,
                 email: resolved_email.clone(),
                 purpose: PASSWORD_RESET_PURPOSE.to_string(),

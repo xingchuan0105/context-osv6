@@ -11,13 +11,13 @@ impl DocumentRepository {
             select 1
             from documents
             where id = $1
-              and org_id = $2
+              and owner_user_id = $2
               and status not in ('deleting', 'deleted')
             for update
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         if guard.is_none() {
@@ -25,18 +25,18 @@ impl DocumentRepository {
             return Err(PgStorageError::NotFound("document not found".to_string()));
         }
 
-        sqlx::query("DELETE FROM document_multimodal_chunks WHERE org_id = $1 AND document_id = $2")
-            .bind(context.org_id().into_uuid())
+        sqlx::query("DELETE FROM document_multimodal_chunks WHERE owner_user_id = $1 AND document_id = $2")
+            .bind(context.user_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
-        sqlx::query("DELETE FROM document_assets WHERE org_id = $1 AND document_id = $2")
-            .bind(context.org_id().into_uuid())
+        sqlx::query("DELETE FROM document_assets WHERE owner_user_id = $1 AND document_id = $2")
+            .bind(context.user_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
-        sqlx::query("DELETE FROM document_blocks WHERE org_id = $1 AND document_id = $2")
-            .bind(context.org_id().into_uuid())
+        sqlx::query("DELETE FROM document_blocks WHERE owner_user_id = $1 AND document_id = $2")
+            .bind(context.user_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
@@ -85,7 +85,7 @@ impl DocumentRepository {
             r#"
             INSERT INTO document_parse_runs (
                 run_id,
-                org_id,
+                owner_user_id,
                 workspace_id,
                 document_id,
                 status,
@@ -97,7 +97,7 @@ impl DocumentRepository {
                 SELECT 1
                 FROM documents d
                 WHERE d.id = $4
-                  AND d.org_id = $2
+                  AND d.owner_user_id = $2
                   AND d.workspace_id = $3
                   AND d.status NOT IN ('deleting', 'deleted')
                 FOR UPDATE
@@ -105,7 +105,7 @@ impl DocumentRepository {
               AND EXISTS (
                 SELECT 1
                 FROM ingestion_tasks it
-                WHERE it.org_id = $2
+                WHERE it.owner_user_id = $2
                   AND it.document_id = $4
                   AND it.task_id = $7
                   AND it.lock_token = $8
@@ -116,7 +116,7 @@ impl DocumentRepository {
             "#,
         )
         .bind(params.run_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(params.workspace_id)
         .bind(params.document_id)
         .bind(params.backend_summary)
@@ -156,12 +156,12 @@ impl DocumentRepository {
                 artifact_path = COALESCE($7, artifact_path),
                 updated_at = NOW()
             WHERE pr.run_id = $1
-              AND pr.org_id = $8
+              AND pr.owner_user_id = $8
               AND EXISTS (
                   SELECT 1
                   FROM documents d
                   WHERE d.id = pr.document_id
-                    AND d.org_id = pr.org_id
+                    AND d.owner_user_id = pr.owner_user_id
                     AND d.workspace_id = pr.workspace_id
                     AND d.status NOT IN ('deleting', 'deleted')
                   FOR UPDATE
@@ -169,7 +169,7 @@ impl DocumentRepository {
               AND EXISTS (
                   SELECT 1
                   FROM ingestion_tasks it
-                  WHERE it.org_id = pr.org_id
+                  WHERE it.owner_user_id = pr.owner_user_id
                     AND it.document_id = pr.document_id
                     AND it.task_id = $9
                     AND it.lock_token = $10
@@ -185,7 +185,7 @@ impl DocumentRepository {
         .bind(params.warnings_json)
         .bind(params.error_json)
         .bind(params.artifact_path)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(task_id)
         .bind(lock_token)
         .execute(tx.inner())
@@ -211,13 +211,13 @@ impl DocumentRepository {
             select 1
             from documents
             where id = $1
-              and org_id = $2
+              and owner_user_id = $2
               and status not in ('deleting', 'deleted')
             for update
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         if guard.is_none() {
@@ -225,8 +225,8 @@ impl DocumentRepository {
             return Err(PgStorageError::NotFound("document not found".to_string()));
         }
 
-        sqlx::query("DELETE FROM document_blocks WHERE org_id = $1 AND document_id = $2")
-            .bind(context.org_id().into_uuid())
+        sqlx::query("DELETE FROM document_blocks WHERE owner_user_id = $1 AND document_id = $2")
+            .bind(context.user_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
@@ -235,7 +235,7 @@ impl DocumentRepository {
             sqlx::query(
                 r#"
                 INSERT INTO document_blocks (
-                    org_id,
+                    owner_user_id,
                     workspace_id,
                     document_id,
                     parse_run_id,
@@ -255,7 +255,7 @@ impl DocumentRepository {
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 "#,
             )
-            .bind(context.org_id().into_uuid())
+            .bind(context.user_id().into_uuid())
             .bind(workspace_id)
             .bind(document_id)
             .bind(block.parse_run_id)

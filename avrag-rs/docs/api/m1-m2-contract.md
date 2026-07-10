@@ -54,7 +54,7 @@
 可选请求头：
 
 - `x-request-id`
-- `x-org-id`
+- `x-owner-user-id`
 - `x-user-id`
 
 若未提供租户与用户头，服务回退到本地开发默认 UUID。

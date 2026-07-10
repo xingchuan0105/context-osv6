@@ -1,4 +1,4 @@
-use common::{default_org_id, default_user_id};
+use common::{default_owner_user_id, default_user_id};
 
 use crate::config_helpers::{
     build_redis_url, default_object_root, env_bool, env_csv, env_i64, env_optional_string,
@@ -8,7 +8,7 @@ use crate::config_helpers::{
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub public_base_url: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub user_id: String,
     pub database_url: Option<String>,
     pub auto_migrate: bool,
@@ -140,7 +140,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             public_base_url: "http://127.0.0.1:8080".to_string(),
-            org_id: default_org_id(),
+            owner_user_id: default_owner_user_id(),
             user_id: default_user_id(),
             database_url: None,
             auto_migrate: true,
@@ -236,7 +236,7 @@ impl Default for AppConfig {
                 base_url: "https://www.dmxapi.cn/v1".to_string(),
                 api_key: String::new(),
                 model: "gemini-3.1-flash-lite-preview".to_string(),
-                timeout_ms: 30000,
+                timeout_ms: 300_000,
                 temperature: Some(0.2),
                 api_style: Some("openai".to_string()),
                 dimensions: None,
@@ -313,7 +313,7 @@ impl AppConfig {
         let mut config = Self::default();
 
         config.public_base_url = env_string("AVRAG_PUBLIC_BASE_URL", &config.public_base_url);
-        config.org_id = env_string("NEXT_PUBLIC_DEV_ORG_ID", &config.org_id);
+        config.owner_user_id = env_string("NEXT_PUBLIC_DEV_OWNER_USER_ID", &config.owner_user_id);
         config.user_id = env_string("NEXT_PUBLIC_DEV_USER_ID", &config.user_id);
         config.database_url = env_optional_string("DATABASE_URL");
         config.auto_migrate = env_bool("AVRAG_RUN_MIGRATIONS", config.auto_migrate);

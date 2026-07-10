@@ -10,11 +10,11 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
-    let other_org_id = OrgId::from(Uuid::new_v4());
+    let other_org_id = UserId::from(Uuid::new_v4());
     let other_user_id = Uuid::new_v4();
     let other_ctx = AuthContext::new(other_org_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(other_user_id));
@@ -57,7 +57,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
         }
     }
     let claimed = claimed.expect("cleanup task for our document should be claimed");
-    assert_eq!(claimed.org_id, org_id.into_uuid());
+    assert_eq!(claimed.owner_user_id, owner_user_id.into_uuid());
     assert_eq!(claimed.workspace_id, workspace_id);
     assert_eq!(claimed.document_id, document_id);
     let lock_token = claimed.lock_token.expect("claim must return lock token");
@@ -96,8 +96,8 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
 
     let deletion_error = {
         let mut tx = repo.raw().begin().await.unwrap();
-        sqlx::query("select set_config('app.current_org', $1, true)")
-            .bind(org_id.into_uuid().to_string())
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.into_uuid().to_string())
             .execute(tx.as_mut())
             .await
             .unwrap();
@@ -144,20 +144,20 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
 
     let parse_run_id = Uuid::new_v4();
     let mut seed_tx = repo.raw().begin().await.unwrap();
-    sqlx::query("select set_config('app.current_org', $1, true)")
-        .bind(org_id.into_uuid().to_string())
+    sqlx::query("select set_config('app.current_user', $1, true)")
+        .bind(owner_user_id.into_uuid().to_string())
         .execute(seed_tx.as_mut())
         .await
         .unwrap();
     sqlx::query(
         r#"
         insert into document_parse_runs (
-            run_id, org_id, workspace_id, document_id, status, backend_summary, artifact_path
+            run_id, owner_user_id, workspace_id, document_id, status, backend_summary, artifact_path
         ) values ($1, $2, $3, $4, 'running', $5, $6)
         "#,
     )
     .bind(parse_run_id)
-    .bind(org_id.into_uuid())
+    .bind(owner_user_id.into_uuid())
     .bind(workspace_id)
     .bind(document_id)
     .bind(serde_json::json!({"test": true}))
@@ -167,11 +167,11 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     .unwrap();
     sqlx::query(
         r#"
-        insert into chunks (org_id, document_id, chunk_type, content, metadata, parse_run_id)
+        insert into chunks (owner_user_id, document_id, chunk_type, content, metadata, parse_run_id)
         values ($1, $2, 'body', 'cleanup body', '{}'::jsonb, $3)
         "#,
     )
-    .bind(org_id.into_uuid())
+    .bind(owner_user_id.into_uuid())
     .bind(document_id)
     .bind(parse_run_id)
     .execute(seed_tx.as_mut())
@@ -180,13 +180,13 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_assets (
-            asset_id, org_id, workspace_id, document_id, page, asset_kind,
+            asset_id, owner_user_id, workspace_id, document_id, page, asset_kind,
             storage_path, mime_type, parser_backend, parse_run_id
         ) values ($1, $2, $3, $4, 1, 'image', 'safe/asset.png', 'image/png', 'test', $5)
         "#,
     )
     .bind(Uuid::new_v4())
-    .bind(org_id.into_uuid())
+    .bind(owner_user_id.into_uuid())
     .bind(workspace_id)
     .bind(document_id)
     .bind(parse_run_id)
@@ -196,12 +196,12 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_blocks (
-            org_id, workspace_id, document_id, block_id, page, block_type, modality,
+            owner_user_id, workspace_id, document_id, block_id, page, block_type, modality,
             text, parser_backend, parse_run_id
         ) values ($1, $2, $3, 'block-1', 1, 'paragraph', 'text', 'block text', 'test', $4)
         "#,
     )
-    .bind(org_id.into_uuid())
+    .bind(owner_user_id.into_uuid())
     .bind(workspace_id)
     .bind(document_id)
     .bind(parse_run_id)
@@ -211,13 +211,13 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_multimodal_chunks (
-            chunk_id, org_id, workspace_id, document_id, page, context_text,
+            chunk_id, owner_user_id, workspace_id, document_id, page, context_text,
             normalized_text, parser_backend, parse_run_id
         ) values ($1, $2, $3, $4, 1, 'context', 'normalized', 'test', $5)
         "#,
     )
     .bind(Uuid::new_v4())
-    .bind(org_id.into_uuid())
+    .bind(owner_user_id.into_uuid())
     .bind(workspace_id)
     .bind(document_id)
     .bind(parse_run_id)
@@ -228,7 +228,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
 
     let wrong_parse_run_id = Uuid::new_v4();
     let mut other_tx = repo.raw().begin().await.unwrap();
-    sqlx::query("select set_config('app.current_org', $1, true)")
+    sqlx::query("select set_config('app.current_user', $1, true)")
         .bind(other_org_id.into_uuid().to_string())
         .execute(other_tx.as_mut())
         .await
@@ -236,7 +236,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_parse_runs (
-            run_id, org_id, workspace_id, document_id, status, backend_summary
+            run_id, owner_user_id, workspace_id, document_id, status, backend_summary
         ) values ($1, $2, $3, $4, 'completed', '{}'::jsonb)
         "#,
     )
@@ -249,7 +249,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     .unwrap();
     sqlx::query(
         r#"
-        insert into chunks (org_id, document_id, chunk_type, content, metadata, parse_run_id)
+        insert into chunks (owner_user_id, document_id, chunk_type, content, metadata, parse_run_id)
         values ($1, $2, 'body', 'wrong tenant body', '{}'::jsonb, $3)
         "#,
     )
@@ -262,7 +262,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_assets (
-            asset_id, org_id, workspace_id, document_id, page, asset_kind,
+            asset_id, owner_user_id, workspace_id, document_id, page, asset_kind,
             storage_path, mime_type, parser_backend, parse_run_id
         ) values ($1, $2, $3, $4, 1, 'image', 'wrong/asset.png', 'image/png', 'test', $5)
         "#,
@@ -278,7 +278,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_blocks (
-            org_id, workspace_id, document_id, block_id, page, block_type, modality,
+            owner_user_id, workspace_id, document_id, block_id, page, block_type, modality,
             text, parser_backend, parse_run_id
         ) values ($1, $2, $3, 'wrong-block-1', 1, 'paragraph', 'text', 'wrong block', 'test', $4)
         "#,
@@ -293,7 +293,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     sqlx::query(
         r#"
         insert into document_multimodal_chunks (
-            chunk_id, org_id, workspace_id, document_id, page, context_text,
+            chunk_id, owner_user_id, workspace_id, document_id, page, context_text,
             normalized_text, parser_backend, parse_run_id
         ) values ($1, $2, $3, $4, 1, 'wrong context', 'wrong normalized', 'test', $5)
         "#,
@@ -336,16 +336,16 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
         "document_parse_runs",
     ] {
         let sql = format!(
-            "select count(*)::bigint as c from {table} where org_id = $1 and document_id = $2"
+            "select count(*)::bigint as c from {table} where owner_user_id = $1 and document_id = $2"
         );
         let mut tx = repo.raw().begin().await.unwrap();
-        sqlx::query("select set_config('app.current_org', $1, true)")
-            .bind(org_id.into_uuid().to_string())
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.into_uuid().to_string())
             .execute(tx.as_mut())
             .await
             .unwrap();
         let count = sqlx::query(&sql)
-            .bind(org_id.into_uuid())
+            .bind(owner_user_id.into_uuid())
             .bind(document_id)
             .fetch_one(tx.as_mut())
             .await
@@ -356,7 +356,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
         assert_eq!(count, 0, "{table} should be cleaned for owning tenant");
 
         let mut tx = repo.raw().begin().await.unwrap();
-        sqlx::query("select set_config('app.current_org', $1, true)")
+        sqlx::query("select set_config('app.current_user', $1, true)")
             .bind(other_org_id.into_uuid().to_string())
             .execute(tx.as_mut())
             .await

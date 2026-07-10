@@ -9,16 +9,16 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let row = sqlx::query(
             r#"
             select owner_id, access_level
             from workspaces
-            where id = $1 and org_id = $2
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(workspace_id)
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .fetch_optional(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
@@ -45,15 +45,15 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let row = sqlx::query(
             r#"
             select access_level
             from workspace_members
-            where org_id = $1 and workspace_id = $2 and user_id = $3 and invite_status = 'accepted'
+            where owner_user_id = $1 and workspace_id = $2 and user_id = $3 and invite_status = 'accepted'
             "#,
         )
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .bind(user_id)
         .fetch_optional(tx.as_mut())

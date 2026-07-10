@@ -158,9 +158,8 @@ pub struct ShareAnalytics {
 
 #[derive(Debug, Clone)]
 pub struct PublicShareChatContext {
-    pub org_id: uuid::Uuid,
-    pub workspace_id: uuid::Uuid,
     pub owner_user_id: uuid::Uuid,
+    pub workspace_id: uuid::Uuid,
     pub access_level: AccessLevel,
 }
 

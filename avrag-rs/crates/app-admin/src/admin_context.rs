@@ -12,7 +12,7 @@ use std::sync::Arc;
 #[derive(Clone, Default)]
 pub struct AdminContext;
 
-fn ensure_org_api_key_admin(auth: &AuthContext) -> Result<(), AppError> {
+fn ensure_account_api_key_admin(auth: &AuthContext) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::User) {
         return Err(AppError::forbidden(
             "admin_required",
@@ -83,23 +83,23 @@ impl AdminContext {
             .await
     }
 
-    pub async fn list_org_api_keys(
+    pub async fn list_account_api_keys(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
-        ensure_org_api_key_admin(auth)?;
+        ensure_account_api_key_admin(auth)?;
         let store = require_admin_store(storage)?;
         store.list_api_keys(auth, None).await
     }
 
-    pub async fn create_org_api_key(
+    pub async fn create_account_api_key(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
         req: CreateApiKeyRequest,
     ) -> Result<CreateApiKeyResponse, AppError> {
-        ensure_org_api_key_admin(auth)?;
+        ensure_account_api_key_admin(auth)?;
         if req.name.trim().is_empty() {
             return Err(AppError::validation("name_required", "name is required"));
         }
@@ -123,13 +123,13 @@ impl AdminContext {
             .await
     }
 
-    pub async fn revoke_org_api_key(
+    pub async fn revoke_account_api_key(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
         key_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        ensure_org_api_key_admin(auth)?;
+        ensure_account_api_key_admin(auth)?;
         let store = require_admin_store(storage)?;
         let key_uuid = parse_uuid_or_app_error(key_id, "api_key_not_found", "api key not found")?;
         let is_org_key = store

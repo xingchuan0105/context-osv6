@@ -17,7 +17,7 @@ pub(super) use crate::middleware;
 
 pub(super) fn test_app_state() -> AppState {
     let mut config = app_core::AppConfig::default();
-    config.org_id = "00000000-0000-0000-0000-000000000001".to_string();
+    config.owner_user_id = "00000000-0000-0000-0000-000000000001".to_string();
     config.user_id = "00000000-0000-0000-0000-000000000002".to_string();
     AppState::new(config)
 }

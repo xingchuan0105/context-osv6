@@ -34,7 +34,9 @@ pub use guards_access::{
     AnswerContextChunk, ApiKeyListResponse, ApiKeyRow, CreateApiKeyRequest, CreateApiKeyResponse,
     InputGuardType, NotificationRow, NotificationsResponse, OutputGuardType, ShareTokenResponse,
 };
-pub use identity::{OrgId, UserId, default_org_id, default_rag_agent, default_user_id};
+pub use identity::{
+    UserId, default_owner_user_id, default_rag_agent, default_user_id,
+};
 pub use workspace_requests::{CreateWorkspaceRequest, UpdateWorkspaceRequest};
 pub use ssrf::{SsrfError, validate_http_url, validate_http_url_with_dns};
 pub use text_segment::{merge_search_tokens, rrf_merge, segment_for_fts};

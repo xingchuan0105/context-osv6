@@ -1,7 +1,7 @@
 "use client";
 
 import type { UiLocale } from "../../lib/ui-preferences";
-import type { AdminOrgRow, AdminUserRow } from "../../lib/admin/client";
+import type { AdminAccountRow, AdminUserRow } from "../../lib/admin/client";
 import { adminText } from "./admin-i18n";
 
 export function formatCompactNumber(value: number) {
@@ -24,7 +24,7 @@ export function formatUnixDate(value: number, locale: UiLocale) {
   }).format(new Date(value * 1000));
 }
 
-export function sortOrganizations(rows: AdminOrgRow[], sort: string) {
+export function sortAccounts(rows: AdminAccountRow[], sort: string) {
   const items = [...rows];
 
   items.sort((left, right) => {
@@ -67,13 +67,13 @@ export function sortUsers(rows: AdminUserRow[], sort: string) {
 export function formatCountLabel(
   locale: UiLocale,
   count: number,
-  suffixKey: "organizationDetail.users" | "organizationsInAggregate",
+  suffixKey: "accountDetail.users" | "accountsInAggregate",
 ) {
   return `${count} ${adminText(locale, suffixKey)}`;
 }
 
-export function rowBusy(orgId: string, busyOrgId: string, mutationPending: boolean) {
-  return mutationPending && busyOrgId === orgId;
+export function rowBusy(ownerUserId: string, busyOrgId: string, mutationPending: boolean) {
+  return mutationPending && busyOrgId === ownerUserId;
 }
 
 export const USAGE_PERIOD_OPTIONS = ["7d", "30d", "90d"] as const;

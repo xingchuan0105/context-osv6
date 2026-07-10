@@ -6,7 +6,7 @@
       "document_count": 0,
       "id": "nb-1",
       "name": "demo",
-      "org_id": "org-1",
+      "owner_user_id": "owner-1",
       "owner_id": "user-1",
       "shared": false,
       "status_summary": {},

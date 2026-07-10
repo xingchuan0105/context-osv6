@@ -10,8 +10,8 @@ pub(crate) async fn execute_mcp_tool(
     arguments: &Value,
 ) -> Result<Value, AppError> {
     match tool_name {
-        "org.create_workspace" => tools::create_workspace(state, arguments).await,
-        "org.list_workspaces" => tools::list_workspaces(state, arguments).await,
+        "account.create_workspace" => tools::create_workspace(state, arguments).await,
+        "account.list_workspaces" => tools::list_workspaces(state, arguments).await,
         "workspace.create_upload" => tools::create_upload(state, arguments).await,
         "workspace.complete_upload" => tools::complete_upload(state, arguments).await,
         "workspace.document_status" => tools::document_status(state, arguments).await,

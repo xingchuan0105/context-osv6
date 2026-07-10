@@ -2,13 +2,13 @@ use std::collections::HashSet;
 
 use app_core::{AdminStorePort, admin_escape_ilike_pattern};
 use async_trait::async_trait;
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use common::AppError;
 use uuid::Uuid;
 
 #[derive(Default)]
 struct OrgBlockingStore {
-    org_ids: HashSet<OrgId>,
+    org_ids: HashSet<UserId>,
 }
 
 #[async_trait]
@@ -144,21 +144,21 @@ impl AdminStorePort for OrgBlockingStore {
         Err(AppError::internal("not implemented"))
     }
 
-    async fn list_orgs(
+    async fn list_accounts(
         &self,
         _auth: &AuthContext,
         _page: usize,
         _per_page: usize,
-    ) -> Result<Vec<app_core::AdminOrgInfo>, AppError> {
+    ) -> Result<Vec<app_core::AdminAccountInfo>, AppError> {
         Err(AppError::internal("not implemented"))
     }
 
-    async fn get_org(
+    async fn get_account(
         &self,
         _auth: &AuthContext,
-        org_id: OrgId,
-    ) -> Result<app_core::AdminOrgInfo, AppError> {
-        if self.org_ids.contains(&org_id) {
+        owner_user_id: UserId,
+    ) -> Result<app_core::AdminAccountInfo, AppError> {
+        if self.org_ids.contains(&owner_user_id) {
             Err(AppError::internal("not implemented"))
         } else {
             Err(AppError::not_found(
@@ -171,7 +171,7 @@ impl AdminStorePort for OrgBlockingStore {
     async fn list_users(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
     ) -> Result<Vec<app_core::AdminUserInfo>, AppError> {
         Err(AppError::internal("not implemented"))
     }
@@ -179,7 +179,7 @@ impl AdminStorePort for OrgBlockingStore {
     async fn delete_user(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _user_id: Uuid,
     ) -> Result<(), AppError> {
         Err(AppError::internal("not implemented"))
@@ -188,19 +188,19 @@ impl AdminStorePort for OrgBlockingStore {
     async fn get_usage(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _period: &str,
     ) -> Result<app_core::AdminUsageStats, AppError> {
         Err(AppError::internal("not implemented"))
     }
 
-    async fn set_org_blocked(
+    async fn set_account_blocked(
         &self,
         _auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         _blocked: bool,
     ) -> Result<(), AppError> {
-        if self.org_ids.contains(&org_id) {
+        if self.org_ids.contains(&owner_user_id) {
             Ok(())
         } else {
             Err(AppError::not_found(
@@ -228,19 +228,19 @@ impl AdminStorePort for OrgBlockingStore {
 }
 
 fn test_auth() -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::nil()), SubjectKind::User)
+    AuthContext::new(UserId::from(Uuid::nil()), SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::nil()))
         .with_request_id("admin-store-behavior")
 }
 
 #[tokio::test]
-async fn set_org_blocked_returns_not_found_for_missing_org() {
+async fn set_account_blocked_returns_not_found_for_missing_org() {
     let store = OrgBlockingStore::default();
     let auth = test_auth();
-    let missing_org = OrgId::from(Uuid::new_v4());
+    let missing_org = UserId::from(Uuid::new_v4());
 
     let error = store
-        .set_org_blocked(&auth, missing_org, true)
+        .set_account_blocked(&auth, missing_org, true)
         .await
         .expect_err("blocking a missing org should fail");
 
@@ -248,14 +248,14 @@ async fn set_org_blocked_returns_not_found_for_missing_org() {
 }
 
 #[tokio::test]
-async fn set_org_blocked_succeeds_for_existing_org() {
-    let org_id = OrgId::from(Uuid::new_v4());
+async fn set_account_blocked_succeeds_for_existing_org() {
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let mut store = OrgBlockingStore::default();
-    store.org_ids.insert(org_id);
+    store.org_ids.insert(owner_user_id);
     let auth = test_auth();
 
     store
-        .set_org_blocked(&auth, org_id, true)
+        .set_account_blocked(&auth, owner_user_id, true)
         .await
         .expect("blocking an existing org should succeed");
 }

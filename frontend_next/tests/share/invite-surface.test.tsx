@@ -44,7 +44,7 @@ describe("InviteSurface", () => {
     mocks.getWorkspaceMock.mockResolvedValue({
       workspace: {
         workspace_id: "ws-1",
-        org_id: "org-1",
+        owner_user_id: "owner-1",
         owner_id: "user-1",
         name: "Workspace One",
         title: "Workspace One",

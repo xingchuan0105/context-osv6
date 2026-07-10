@@ -10,8 +10,8 @@ pub fn unique_test_identity() -> (String, String) {
     (Uuid::new_v4().to_string(), Uuid::new_v4().to_string())
 }
 
-pub fn milvus_collection_prefix_for_identity(org_id: &str) -> String {
-    let suffix = org_id
+pub fn milvus_collection_prefix_for_identity(owner_user_id: &str) -> String {
+    let suffix = owner_user_id
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
         .take(8)
@@ -20,9 +20,9 @@ pub fn milvus_collection_prefix_for_identity(org_id: &str) -> String {
     format!("avrag_e2e_{suffix}")
 }
 
-pub fn test_auth_headers_for(org_id: &str, user_id: &str) -> reqwest::header::HeaderMap {
+pub fn test_auth_headers_for(owner_user_id: &str, user_id: &str) -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("x-org-id", org_id.parse().unwrap());
+    headers.insert("x-owner-user-id", owner_user_id.parse().unwrap());
     headers.insert("x-user-id", user_id.parse().unwrap());
     headers.insert("x-permissions", "external_network".parse().unwrap());
     headers

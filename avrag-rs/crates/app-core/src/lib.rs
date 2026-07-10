@@ -32,10 +32,10 @@ pub use adapters::{
 };
 pub use admin_domain::{
     AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
-    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo,
+    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo,
     AdminRagHealthStatus, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
     admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
-    admin_clamp_org_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
+    admin_clamp_account_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
 };
 pub use admin_store::AdminStorePort;
 pub use analytics_context::*;
@@ -43,7 +43,7 @@ pub use api_key::{
     MemoryApiKeyRecord, deactivate_memory_api_key, hash_api_key, register_memory_api_key,
     validate_memory_api_key,
 };
-pub use auth_scope::{current_org_id, current_user_id};
+pub use auth_scope::{current_owner_user_id, current_user_id};
 pub use auth_store::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
     PasswordResetUser, RecordLegalAcceptanceInput, RegisterLegalAcceptance, RegisterUserInput,

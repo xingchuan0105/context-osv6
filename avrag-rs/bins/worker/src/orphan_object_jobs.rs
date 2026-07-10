@@ -75,7 +75,7 @@ impl OrphanObjectJobRunner {
             }
 
             // Safety: only delete objects that match the expected path pattern
-            // {org_id}/{workspace_id}/{document_id}/{filename}
+            // {owner_user_id}/{workspace_id}/{document_id}/{filename}
             if path.split('/').count() < 4 {
                 skipped += 1;
                 continue;
@@ -99,7 +99,7 @@ impl OrphanObjectJobRunner {
     }
 
     async fn fetch_document_object_paths(&self) -> Result<Vec<String>> {
-        // `documents` has forced row-level security keyed on `app.current_org`. The worker
+        // `documents` has forced row-level security keyed on `app.current_user`. The worker
         // pool has no org context, so a plain select sees zero rows and every object would
         // be misclassified as orphan and deleted — including in-flight uploads. Run the
         // scan as `super_admin` (allowed by `admin_access_documents`) inside a transaction
@@ -128,11 +128,11 @@ fn env_bool(key: &str, default: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+    use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
     use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
     use uuid::Uuid;
 
-    // Regression: `documents` has forced RLS keyed on `app.current_org`. The scan runs on
+    // Regression: `documents` has forced RLS keyed on `app.current_user`. The scan runs on
     // a raw pool with no org context, so it must escalate to `super_admin` to see in-flight
     // document object_paths — otherwise freshly uploaded objects get deleted mid-ingest.
     #[tokio::test]
@@ -142,9 +142,9 @@ mod tests {
         };
         let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
 
-        let org_id = OrgId::from(Uuid::new_v4());
+        let owner_user_id = UserId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
+        let ctx = AuthContext::new(owner_user_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
             .bootstrap().create_workspace(&ctx, "orphan-scan-test", "orphan scan test")
@@ -170,7 +170,7 @@ mod tests {
         // A second object with no matching document row is a true orphan.
         let orphan_path = format!(
             "{}/{}/{}/orphan.bin",
-            org_id.into_uuid(),
+            owner_user_id.into_uuid(),
             workspace_id,
             Uuid::new_v4()
         );
@@ -206,13 +206,13 @@ mod tests {
             .execute(&mut *tx)
             .await
             .unwrap();
-        sqlx::query("delete from documents where org_id = $1")
-            .bind(org_id.into_uuid())
+        sqlx::query("delete from documents where owner_user_id = $1")
+            .bind(owner_user_id.into_uuid())
             .execute(&mut *tx)
             .await
             .unwrap();
-        sqlx::query("delete from workspaces where org_id = $1")
-            .bind(org_id.into_uuid())
+        sqlx::query("delete from workspaces where owner_user_id = $1")
+            .bind(owner_user_id.into_uuid())
             .execute(&mut *tx)
             .await
             .unwrap();

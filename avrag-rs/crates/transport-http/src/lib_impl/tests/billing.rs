@@ -4,12 +4,12 @@ use super::support::*;
 async fn usage_limit_handler_sanitized_errors() {
     let state = test_app_state();
     let app = build_router(state);
-    let org_id = "11111111-1111-1111-1111-111111111111";
+    let owner_user_id = "11111111-1111-1111-1111-111111111111";
     let user_id = "22222222-2222-2222-2222-222222222222";
     let req = Request::builder()
         .uri("/api/auth/usage-limit")
         .method("GET")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::empty())
         .unwrap();

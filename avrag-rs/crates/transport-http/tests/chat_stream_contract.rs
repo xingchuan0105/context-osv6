@@ -3,7 +3,7 @@ use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage};
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::AppConfig;
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
@@ -113,11 +113,11 @@ fn test_agent_service() -> UnifiedAgentService {
 
 #[tokio::test]
 async fn post_chat_with_stream_flag_only_returns_sse() {
-    let (app, workspace_id, org_id) = test_app().await;
+    let (app, workspace_id, owner_user_id) = test_app().await;
     let request_id = "req-stream-flag";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "workspace_id": workspace_id,
@@ -147,11 +147,11 @@ async fn post_chat_with_stream_flag_only_returns_sse() {
 
 #[tokio::test]
 async fn post_chat_with_accept_sse_only_returns_sse() {
-    let (app, workspace_id, org_id) = test_app().await;
+    let (app, workspace_id, owner_user_id) = test_app().await;
     let request_id = "req-accept-sse";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "workspace_id": workspace_id,
@@ -175,11 +175,11 @@ async fn post_chat_with_accept_sse_only_returns_sse() {
 
 #[tokio::test]
 async fn post_rag_chat_stream_without_runtime_fails_closed_after_retrieval_activity() {
-    let (app, workspace_id, document_id, org_id) = test_app_with_ready_document().await;
+    let (app, workspace_id, document_id, owner_user_id) = test_app_with_ready_document().await;
     let request_id = "req-rag-progress";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Summarize available context.",
                 "workspace_id": workspace_id,
@@ -226,11 +226,11 @@ async fn post_rag_chat_stream_without_runtime_fails_closed_after_retrieval_activ
 
 #[tokio::test]
 async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
-    let (app, workspace_id, org_id) = test_app().await;
+    let (app, workspace_id, owner_user_id) = test_app().await;
     let request_id = "req-rag-empty-scope";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Summarize available context.",
                 "workspace_id": workspace_id,
@@ -262,11 +262,11 @@ async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
 
 #[tokio::test]
 async fn post_chat_stream_event_order_start_first_done_terminal() {
-    let (app, workspace_id, org_id) = test_app().await;
+    let (app, workspace_id, owner_user_id) = test_app().await;
     let request_id = "req-event-order";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "workspace_id": workspace_id,
@@ -310,11 +310,11 @@ async fn post_chat_stream_event_order_start_first_done_terminal() {
 
 #[tokio::test]
 async fn post_chat_stream_done_payload_includes_core_fields() {
-    let (app, workspace_id, org_id) = test_app().await;
+    let (app, workspace_id, owner_user_id) = test_app().await;
     let request_id = "req-done-payload";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "workspace_id": workspace_id,
@@ -352,10 +352,10 @@ async fn post_chat_stream_done_payload_includes_core_fields() {
 
 #[tokio::test]
 async fn post_chat_without_streaming_returns_json() {
-    let (app, workspace_id, org_id) = test_app().await;
+    let (app, workspace_id, owner_user_id) = test_app().await;
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "workspace_id": workspace_id,
@@ -392,7 +392,7 @@ async fn get_chat_is_not_the_streaming_entrypoint() {
             Request::builder()
                 .method("GET")
                 .uri("/api/v1/chat?query=hello&stream=true")
-                .header("x-org-id", Uuid::new_v4().to_string())
+                .header("x-owner-user-id", Uuid::new_v4().to_string())
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -405,11 +405,11 @@ async fn get_chat_is_not_the_streaming_entrypoint() {
 #[tokio::test]
 async fn post_chat_stream_errors_emit_request_id_and_code() {
     let app = build_router(AppState::new(AppConfig::default()));
-    let org_id = Uuid::new_v4();
+    let owner_user_id = Uuid::new_v4();
     let request_id = "req-stream-error";
     let response = app
         .oneshot(chat_post_request(
-            org_id,
+            owner_user_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "agent_type": "chat",
@@ -430,8 +430,8 @@ async fn post_chat_stream_errors_emit_request_id_and_code() {
 async fn test_app() -> (axum::Router, String, Uuid) {
     let mut state = AppState::new(AppConfig::default());
     state.set_agent_service(test_agent_service());
-    let org_id = Uuid::new_v4();
-    let state = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
+    let owner_user_id = Uuid::new_v4();
+    let state = state.with_auth(AuthContext::new(UserId::from(owner_user_id), SubjectKind::User));
     // Product App surface (T1): workspace ops live on WorkspaceApp, not AppState.
     let notebook = state
         .workspace()
@@ -442,15 +442,15 @@ async fn test_app() -> (axum::Router, String, Uuid) {
         .await
         .unwrap();
 
-    (build_router(state), notebook.id, org_id)
+    (build_router(state), notebook.id, owner_user_id)
 }
 
 async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) {
     let mut state = AppState::new(AppConfig::default());
     state.set_uses_memory_adapters(false);
     state.set_agent_service(test_agent_service());
-    let org_id = Uuid::new_v4();
-    let state = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
+    let owner_user_id = Uuid::new_v4();
+    let state = state.with_auth(AuthContext::new(UserId::from(owner_user_id), SubjectKind::User));
     let ws = state.workspace();
     let notebook = ws
         .create_workspace(CreateWorkspaceRequest {
@@ -477,11 +477,11 @@ async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) 
         .await
         .unwrap();
 
-    (build_router(state), notebook.id, upload.document_id, org_id)
+    (build_router(state), notebook.id, upload.document_id, owner_user_id)
 }
 
 fn chat_post_request(
-    org_id: Uuid,
+    owner_user_id: Uuid,
     body: serde_json::Value,
     accept: Option<&str>,
     request_id: Option<&str>,
@@ -490,7 +490,7 @@ fn chat_post_request(
         .method("POST")
         .uri("/api/v1/chat")
         .header(header::CONTENT_TYPE, "application/json")
-        .header("x-org-id", org_id.to_string());
+        .header("x-owner-user-id", owner_user_id.to_string());
 
     if let Some(accept) = accept {
         builder = builder.header(header::ACCEPT, accept);

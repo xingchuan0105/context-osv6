@@ -62,7 +62,7 @@ pub fn build_object_path(
 ) -> String {
     format!(
         "{}/{}/{}/{}",
-        context.org_id(),
+        context.user_id(),
         workspace_id,
         document_id,
         sanitize_filename(filename)

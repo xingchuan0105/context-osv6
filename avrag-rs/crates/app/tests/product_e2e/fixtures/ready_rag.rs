@@ -17,7 +17,7 @@ use super::super::{DocumentStatus, TestContext, UploadResponse};
 #[allow(dead_code)]
 pub(crate) struct RagSharedFixture {
     pub upload: UploadResponse,
-    pub(crate) org_id: String,
+    pub(crate) owner_user_id: String,
     pub(crate) user_id: String,
     pub(crate) app_state: Arc<app::AppState>,
     pub(crate) pg_url: String,
@@ -38,7 +38,7 @@ pub(crate) struct RagSharedFixture {
 
 impl RagSharedFixture {
     pub(crate) fn from_context(mut ctx: TestContext, upload: UploadResponse) -> Self {
-        let org_id = ctx.org_id.clone();
+        let owner_user_id = ctx.owner_user_id.clone();
         let user_id = ctx.user_id.clone();
         let app_state = ctx
             .app_state
@@ -97,7 +97,7 @@ impl RagSharedFixture {
 
         Self {
             upload,
-            org_id,
+            owner_user_id,
             user_id,
             app_state,
             pg_url,

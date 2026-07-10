@@ -107,7 +107,7 @@
 
 **事实**
 
-`crates/rag-core/src/runtime/tools/graph.rs` 已传 `tenant_org_id`、`hop_limit`、`fan_out_limit`、`relation_limit`、`supporting_chunk_limit`，`storage-milvus/src/schema.rs::doc_filter` 在 `doc_id` 列表为空时回退为 `doc_id == 'none'`（fail-closed）。
+`crates/rag-core/src/runtime/tools/graph.rs` 已传 `owner_user_id`、`hop_limit`、`fan_out_limit`、`relation_limit`、`supporting_chunk_limit`，`storage-milvus/src/schema.rs::doc_filter` 在 `doc_id` 列表为空时回退为 `doc_id == 'none'`（fail-closed）。
 
 **缺口**：尚无显式的"跨租户访问应被拒绝"集成测试覆盖 graph 工具路径（仅在 storage 层有部分单测）。
 

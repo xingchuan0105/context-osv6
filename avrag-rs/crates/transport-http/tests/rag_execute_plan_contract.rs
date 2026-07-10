@@ -19,7 +19,7 @@ async fn post_rag_execute_plan_is_not_routed() {
                 .method("POST")
                 .uri("/api/v1/rag/execute-plan")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-org-id", Uuid::new_v4().to_string())
+                .header("x-owner-user-id", Uuid::new_v4().to_string())
                 .body(Body::from(
                     serde_json::json!({
                         "plan_version": "rag-execute-v1",

@@ -141,7 +141,7 @@ export function AdminAuditLogsSurface() {
                     adminText(locale, "common.action"),
                     adminText(locale, "common.resource"),
                     adminText(locale, "common.resourceId"),
-                    adminText(locale, "audit.orgId"),
+                    adminText(locale, "audit.ownerUserId"),
                     adminText(locale, "common.actor"),
                     adminText(locale, "common.time"),
                   ].map((heading) => (
@@ -157,7 +157,7 @@ export function AdminAuditLogsSurface() {
                     <td style={{ padding: "1rem" }}>{auditActionLabel(locale, entry.action)}</td>
                     <td style={{ padding: "1rem" }}>{auditResourceTypeLabel(locale, entry.resource_type)}</td>
                     <td style={{ padding: "1rem" }}>{entry.resource_id}</td>
-                    <td style={{ padding: "1rem" }}>{entry.org_id ?? "—"}</td>
+                    <td style={{ padding: "1rem" }}>{entry.owner_user_id ?? "—"}</td>
                     <td style={{ padding: "1rem" }}>{entry.actor_id ?? "—"}</td>
                     <td style={{ padding: "1rem" }}>{formatTimestamp(entry.created_at, locale)}</td>
                   </tr>

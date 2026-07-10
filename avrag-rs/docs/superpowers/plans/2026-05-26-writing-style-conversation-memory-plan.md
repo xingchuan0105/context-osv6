@@ -1374,7 +1374,7 @@ impl PgAppRepository {
                     ) as tags
                 FROM chat_messages m
                 LEFT JOIN message_tags mt ON m.id = mt.message_id
-                WHERE m.session_id = $1 AND m.org_id = $2
+                WHERE m.session_id = $1 AND m.owner_user_id = $2
                   AND EXISTS (
                       SELECT 1 FROM message_tags mt2
                       WHERE mt2.message_id = m.id AND mt2.tag = ANY($3)
@@ -1385,7 +1385,7 @@ impl PgAppRepository {
                 "#
             )
             .bind(session_id)
-            .bind(auth.org_id())
+            .bind(auth.owner_user_id())
             .bind(tag_list)
             .bind(limit)
             .fetch_all(&self.pool)
@@ -1404,14 +1404,14 @@ impl PgAppRepository {
                     ) as tags
                 FROM chat_messages m
                 LEFT JOIN message_tags mt ON m.id = mt.message_id
-                WHERE m.session_id = $1 AND m.org_id = $2
+                WHERE m.session_id = $1 AND m.owner_user_id = $2
                 GROUP BY m.id
                 ORDER BY m.id DESC
                 LIMIT $3
                 "#
             )
             .bind(session_id)
-            .bind(auth.org_id())
+            .bind(auth.owner_user_id())
             .bind(limit)
             .fetch_all(&self.pool)
             .await?

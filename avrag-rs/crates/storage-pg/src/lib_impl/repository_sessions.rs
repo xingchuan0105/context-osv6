@@ -80,12 +80,12 @@ impl SessionRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            insert into chat_sessions (org_id, workspace_id, user_id, title, agent_type)
+            insert into chat_sessions (owner_user_id, workspace_id, user_id, title, agent_type)
             values ($1, $2, $3, $4, $5)
             returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(workspace_id)
         .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(title)
@@ -152,11 +152,11 @@ impl SessionRepository {
         );
         sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, citations, turn_metadata, resolved_query, search_tokens)
+            insert into chat_messages (owner_user_id, session_id, role, content, citations, turn_metadata, resolved_query, search_tokens)
             values ($1, $2, 'user', $3, '[]'::jsonb, $4, $5, $6)
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(session_id)
         .bind(turn.user_content)
         .bind(user_turn_metadata)
@@ -171,12 +171,12 @@ impl SessionRepository {
             crate::build_user_message_search_tokens(turn.assistant_content, None);
         let assistant_row = sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, search_tokens)
+            insert into chat_messages (owner_user_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, search_tokens)
             values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8, $9, $10)
             returning id
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(session_id)
         .bind(turn.assistant_content)
         .bind(answer_blocks_value)
@@ -209,11 +209,11 @@ impl SessionRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         sqlx::query(
             r#"
-            insert into usage_events (org_id, user_id, metric_type, quantity, source, created_at)
+            insert into usage_events (owner_user_id, user_id, metric_type, quantity, source, created_at)
             values ($1, $2, $3, $4, $5, now())
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(metric_type)
         .bind(quantity)

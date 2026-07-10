@@ -21,9 +21,9 @@ pub(crate) fn auth_error_to_app_error(error: AuthError) -> AppError {
         }
         AuthError::CrossTenantAccess => AppError::forbidden(
             "cross_tenant_access",
-            "resource belongs to another organization",
+            "resource belongs to another account",
         ),
-        AuthError::MissingOrgScope => AppError::unauthorized("organization scope required"),
+        AuthError::MissingUserScope => AppError::unauthorized("account scope required"),
     }
 }
 
@@ -35,10 +35,10 @@ fn ensure_permission_for_subject(auth: &AuthContext, permission: &str) -> Result
         .map_err(auth_error_to_app_error)
 }
 
-pub(crate) fn authorize_org_tool(auth: &AuthContext, permission: &str) -> Result<(), AppError> {
+pub(crate) fn authorize_account_tool(auth: &AuthContext, permission: &str) -> Result<(), AppError> {
     if auth.workspace_id().is_some() {
         return Err(AppError::forbidden(
-            "workspace_key_cannot_call_org_tools",
+            "workspace_key_cannot_call_account_tools",
             "workspace-scoped API keys cannot call org-level endpoints",
         ));
     }
@@ -53,7 +53,7 @@ pub(crate) fn authorize_workspace_tool(
     if matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         if auth.workspace_id().is_none() {
             return Err(AppError::forbidden(
-                "org_key_cannot_call_workspace_tools",
+                "account_key_cannot_call_workspace_tools",
                 "org-scoped API keys cannot call workspace-level endpoints",
             ));
         }
@@ -70,7 +70,7 @@ pub(crate) fn authorize_api_key_query_scoped(auth: &AuthContext) -> Result<(), A
     ensure_permission_for_subject(auth, PERM_QUERY)?;
     if auth.workspace_id().is_none() {
         return Err(AppError::forbidden(
-            "org_key_cannot_call_workspace_tools",
+            "account_key_cannot_call_workspace_tools",
             "org-scoped API keys cannot call workspace-level endpoints",
         ));
     }
@@ -84,7 +84,7 @@ pub(crate) fn authorize_workspace_index_or_query(
     if matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         if auth.workspace_id().is_none() {
             return Err(AppError::forbidden(
-                "org_key_cannot_call_workspace_tools",
+                "account_key_cannot_call_workspace_tools",
                 "org-scoped API keys cannot call workspace-level endpoints",
             ));
         }
@@ -133,11 +133,11 @@ pub(crate) fn require_user_admin(auth: &AuthContext) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::User) {
         return Err(AppError::forbidden(
             "admin_required",
-            "organization admin permission required",
+            "account admin permission required",
         ));
     }
     auth.ensure_permission(PERM_ADMIN).map_err(|_| {
-        AppError::forbidden("admin_required", "organization admin permission required")
+        AppError::forbidden("admin_required", "account admin permission required")
     })
 }
 
@@ -268,11 +268,11 @@ pub(crate) fn require_workspace_id_arg(arguments: &serde_json::Value) -> Result<
     parse_workspace_id(workspace_id)
 }
 
-pub(crate) fn org_create_permission() -> &'static str {
+pub(crate) fn account_create_permission() -> &'static str {
     PERM_WORKSPACE_CREATE
 }
 
-pub(crate) fn org_list_permission() -> &'static str {
+pub(crate) fn account_list_permission() -> &'static str {
     PERM_WORKSPACE_LIST
 }
 
@@ -318,7 +318,7 @@ pub(crate) async fn ensure_user_workspace_access(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::auth_runtime::OrgId;
+    use contracts::auth_runtime::UserId;
 
     #[test]
     fn workspace_access_required_constant_matches_forbidden_code() {
@@ -332,27 +332,27 @@ mod tests {
     }
 
     #[test]
-    fn workspace_key_rejected_for_org_tools() {
-        let auth = AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey)
+    fn workspace_key_rejected_for_account_tools() {
+        let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey)
             .with_workspace_scope(Uuid::new_v4())
             .grant(PERM_WORKSPACE_CREATE);
-        let err = authorize_org_tool(&auth, PERM_WORKSPACE_CREATE).unwrap_err();
-        assert_eq!(err.code(), "workspace_key_cannot_call_org_tools");
+        let err = authorize_account_tool(&auth, PERM_WORKSPACE_CREATE).unwrap_err();
+        assert_eq!(err.code(), "workspace_key_cannot_call_account_tools");
     }
 
     #[test]
-    fn org_key_rejected_for_workspace_tools() {
+    fn account_key_rejected_for_workspace_tools() {
         let auth =
-            AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey).grant(PERM_QUERY);
+            AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey).grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, Uuid::new_v4()).unwrap_err();
-        assert_eq!(err.code(), "org_key_cannot_call_workspace_tools");
+        assert_eq!(err.code(), "account_key_cannot_call_workspace_tools");
     }
 
     #[test]
     fn workspace_scope_mismatch_is_forbidden() {
         let scoped = Uuid::new_v4();
         let other = Uuid::new_v4();
-        let auth = AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey)
+        let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey)
             .with_workspace_scope(scoped)
             .grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, other).unwrap_err();

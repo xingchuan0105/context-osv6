@@ -89,7 +89,7 @@ export interface AnswerContextChunk {
 
 export interface ApiKeyRow {
 	id: string;
-	org_id: string;
+	owner_user_id: string;
 	workspace_id: string;
 	key_prefix: string;
 	name: string;
@@ -113,7 +113,7 @@ export interface AuditLogEntry {
 	action: string;
 	resource_type: string;
 	resource_id: string;
-	org_id?: string;
+	owner_user_id?: string;
 	created_at: number;
 }
 
@@ -537,7 +537,7 @@ export interface DegradationStatusResponse {
 
 export interface Document {
 	id: string;
-	org_id: string;
+	owner_user_id: string;
 	workspace_id: string;
 	owner_id: string;
 	file_name: string;
@@ -644,7 +644,7 @@ export interface NotificationPreferences {
 
 export interface NotificationRow {
 	id: string;
-	org_id: string;
+	owner_user_id: string;
 	user_id: string;
 	event_type: string;
 	title: string;
@@ -864,7 +864,7 @@ export interface UserRow {
 	id: string;
 	email: string;
 	full_name: string;
-	org_id: string;
+	owner_user_id: string;
 	role: string;
 	created_at: string;
 	last_active_at?: string;
@@ -894,7 +894,7 @@ export interface WorkerStatusResponse {
 
 export interface Workspace {
 	id: string;
-	org_id: string;
+	owner_user_id: string;
 	owner_id: string;
 	name: string;
 	title: string;

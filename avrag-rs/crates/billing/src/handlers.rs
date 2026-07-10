@@ -123,7 +123,7 @@ pub async fn check_quota(
 /// ADR 0006: create usage export (billable rows only).
 pub async fn handle_create_usage_export(
     store: Arc<dyn UsageLimitStorePort>,
-    org_id: Uuid,
+    owner_user_id: Uuid,
     user_id: Uuid,
     body: CreateUsageExportRequest,
 ) -> ApiResponse<UsageExportAccepted> {
@@ -140,7 +140,7 @@ pub async fn handle_create_usage_export(
         }
     };
     match store
-        .create_usage_export_job(org_id, user_id, from, to, &body.format)
+        .create_usage_export_job(owner_user_id, user_id, from, to, &body.format)
         .await
     {
         Ok(id) => {

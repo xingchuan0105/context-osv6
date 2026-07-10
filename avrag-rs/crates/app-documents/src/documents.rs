@@ -280,7 +280,7 @@ impl DocumentContext {
         }
 
         let task = build_ingest_task(
-            seed.org_id.clone(),
+            seed.owner_user_id.clone(),
             seed.workspace_id.clone(),
             seed.document_id.clone(),
             Some(current_user_id(auth)),

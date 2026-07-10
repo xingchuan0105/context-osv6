@@ -875,7 +875,7 @@ fn build_request(strategy: StrategyKind, query: &str) -> AgentRequest {
         format_hint: None,
         max_iterations: None,
         auth_context: serde_json::json!({
-            "org_id": "00000000-0000-0000-0000-000000000001",
+            "owner_user_id": "00000000-0000-0000-0000-000000000001",
             "subject_kind": "User",
             "permissions": []
         }),
@@ -1129,7 +1129,7 @@ static INGESTION_PERMITS: tokio::sync::Semaphore = tokio::sync::Semaphore::const
 
 fn test_auth_context() -> serde_json::Value {
     serde_json::json!({
-        "org_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
         "subject_kind": "User",
         "permissions": []
     })

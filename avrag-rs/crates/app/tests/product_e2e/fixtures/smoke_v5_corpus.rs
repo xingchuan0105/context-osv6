@@ -44,7 +44,7 @@ fn smoke_v5_ingest_timeout_secs(base: u64) -> u64 {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SmokeV5CorpusState {
-    pub org_id: String,
+    pub owner_user_id: String,
     pub user_id: String,
     pub workspace_id: String,
     pub documents: Vec<SmokeV5Document>,
@@ -59,7 +59,7 @@ pub struct SmokeV5Document {
 /// Infra + corpus metadata pinned for the test binary (survives per-test teardown).
 pub(crate) struct SmokeV5CorpusFixture {
     pub corpus: SmokeV5CorpusState,
-    pub(crate) org_id: String,
+    pub(crate) owner_user_id: String,
     pub(crate) user_id: String,
     pub(crate) app_state: Arc<app::AppState>,
     pub(crate) pg_url: String,
@@ -76,7 +76,7 @@ pub(crate) struct SmokeV5CorpusFixture {
 
 impl SmokeV5CorpusFixture {
     fn from_context(mut ctx: TestContext, corpus: SmokeV5CorpusState) -> Self {
-        let org_id = ctx.org_id.clone();
+        let owner_user_id = ctx.owner_user_id.clone();
         let user_id = ctx.user_id.clone();
         let app_state = ctx
             .app_state
@@ -118,7 +118,7 @@ impl SmokeV5CorpusFixture {
 
         Self {
             corpus,
-            org_id,
+            owner_user_id,
             user_id,
             app_state,
             pg_url,
@@ -175,7 +175,7 @@ fn save_smoke_v5_state(state: &SmokeV5CorpusState) {
 
 async fn validate_smoke_v5_corpus(ctx: &TestContext, state: &SmokeV5CorpusState) -> bool {
     let expected = smoke_v5_corpus_entries();
-    if state.org_id != DEFAULT_TEST_ORG_ID || state.user_id != DEFAULT_TEST_USER_ID {
+    if state.owner_user_id != DEFAULT_TEST_ORG_ID || state.user_id != DEFAULT_TEST_USER_ID {
         eprintln!("[smoke_v5] corpus cache identity mismatch (expected default test org/user)");
         return false;
     }
@@ -260,7 +260,7 @@ async fn ingest_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
     }
 
     SmokeV5CorpusState {
-        org_id: DEFAULT_TEST_ORG_ID.to_string(),
+        owner_user_id: DEFAULT_TEST_ORG_ID.to_string(),
         user_id: DEFAULT_TEST_USER_ID.to_string(),
         workspace_id: notebook.id,
         documents,

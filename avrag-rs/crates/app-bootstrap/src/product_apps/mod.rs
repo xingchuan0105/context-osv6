@@ -27,7 +27,7 @@ pub use admin_ops::AdminOpsApp;
 pub use agent::AgentApp;
 pub use conversation::ConversationApp;
 
-use contracts::auth_runtime::OrgId;
+use contracts::auth_runtime::UserId;
 use uuid::Uuid;
 
 use super::app_state::AppState;
@@ -36,7 +36,7 @@ use super::app_state::AppState;
 #[derive(Debug, Clone)]
 pub struct WorkspaceApiKeyAuth {
     pub key_id: Uuid,
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub workspace_id: Option<Uuid>,
     pub permissions: Vec<String>,
     pub rate_limit_rpm: u32,

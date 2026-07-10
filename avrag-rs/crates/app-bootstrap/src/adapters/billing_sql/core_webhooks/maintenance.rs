@@ -30,16 +30,16 @@ async fn emit_billing_notification(
     data: serde_json::Value,
 ) -> Result<()> {
     let user_uuid = Uuid::parse_str(user_id)?;
-    let org_id = get_org_id_by_user_id(repo.clone(), user_uuid).await?;
+    let owner_user_id = owner_user_id_for_user(repo.clone(), user_uuid).await?;
     let mut tx = repo.raw().begin().await?;
     set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
     sqlx::query(
         r#"
-        insert into notifications (org_id, user_id, event_type, title, body, data)
+        insert into notifications (owner_user_id, user_id, event_type, title, body, data)
         values ($1, $2, $3, $4, $5, $6)
         "#,
     )
-    .bind(org_id)
+    .bind(owner_user_id)
     .bind(user_uuid)
     .bind(event_type)
     .bind(title)

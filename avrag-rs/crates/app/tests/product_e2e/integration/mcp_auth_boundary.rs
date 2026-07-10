@@ -56,7 +56,7 @@ async fn org_key(ctx: &TestContext, permissions: &[&str]) -> String {
     let admin_state = state.with_auth(state.auth().clone().grant(PERM_ADMIN));
     let key = admin_state
         .admin_api()
-        .create_org_api_key(CreateApiKeyRequest {
+        .create_account_api_key(CreateApiKeyRequest {
             name: "org-boundary".to_string(),
             permissions: permissions.iter().map(|p| p.to_string()).collect(),
             rate_limit_rpm: Some(60),
@@ -74,7 +74,7 @@ async fn workspace_key_cannot_call_org_mcp_tool() {
     let notebook = ctx.create_workspace("boundary-ws").await.unwrap();
     let bearer = workspace_key(&ctx, &notebook.id, &["query"]).await;
 
-    let (status, payload) = mcp_tools_call(&ctx, &bearer, "org.list_workspaces", json!({})).await;
+    let (status, payload) = mcp_tools_call(&ctx, &bearer, "account.list_workspaces", json!({})).await;
     assert_eq!(status, 200, "body: {payload}");
     assert_eq!(
         mcp_error_code(&payload),

@@ -11,7 +11,7 @@ use agent_loop::runtime::{Agent, AgentRequest};
 use app::agents::AgentKind;
 use app::agents::unified::UnifiedAgent;
 use avrag_llm::LlmClient;
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -43,7 +43,7 @@ fn base_request(kind: AgentKind) -> AgentRequest {
         stream: false,
         language: None,
         auth: AuthContext::new(
-            OrgId::from(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()),
+            UserId::from(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()),
             SubjectKind::User,
         ),
         docscope_metadata: None,

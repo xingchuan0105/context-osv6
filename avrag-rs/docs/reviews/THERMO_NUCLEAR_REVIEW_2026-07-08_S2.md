@@ -107,7 +107,7 @@ But Write **is** implemented — `pipeline_steps.rs:57` routes `AgentKind::Write
 
 ### NEW-5. [CRITICAL] 102 typecheck errors from WIP admin components
 
-Untracked WIP files in `frontend_next/components/admin/` have **102 TypeScript errors** — all from missing i18n keys. Components call `adminMessage(locale, "common.loading")`, `"organizations.subtitle"`, etc., but these keys don't exist in any message file. The WIP code is uncompilable.
+Untracked WIP files in `frontend_next/components/admin/` have **102 TypeScript errors** — all from missing i18n keys. Components call `adminMessage(locale, "common.loading")`, `"accounts.subtitle"`, etc., but these keys don't exist in any message file. The WIP code is uncompilable.
 
 Root cause: Two parallel i18n systems in the admin layer (`INLINE_COPY` table in `admin-i18n.ts` vs `UI_MESSAGES` in `lib/i18n/messages/`). WIP surfaces bypass `adminText` (which reads `INLINE_COPY`) and use `adminMessage` → `formatUiMessage` (which reads `UI_MESSAGES`) with keys that exist in neither.
 

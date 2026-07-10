@@ -372,7 +372,7 @@ impl HostBridge for RuntimeBridge {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use contracts::auth_runtime::{OrgId, SubjectKind};
+    use contracts::auth_runtime::{UserId, SubjectKind};
     use avrag_retrieval_data_plane::{
         Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput,
         GraphSearchRequest, MultimodalSearchRequest, RelationPathCandidate, ScoredChunk,
@@ -491,7 +491,7 @@ mod tests {
     }
 
     fn make_auth() -> AuthContext {
-        AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System)
+        AuthContext::new(UserId::new(Uuid::from_u128(9)), SubjectKind::System)
     }
 
     #[test]

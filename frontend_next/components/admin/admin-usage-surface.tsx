@@ -11,7 +11,7 @@ import {
 import {
   ADMIN_ALL_ORGS_VALUE,
   getCombinedAdminQueryError,
-  useAdminOrganizationsQuery as useOrganizationsQuery,
+  useAdminAccountsQuery as useAccountsQuery,
   useAdminUsageScopeQuery,
 } from "./admin-queries";
 import {
@@ -31,29 +31,29 @@ export function AdminUsageSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
   const { locale } = useUiPreferences();
-  const organizationsQuery = useOrganizationsQuery(actorId, token);
+  const accountsQuery = useAccountsQuery(actorId, token);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<(typeof USAGE_PERIOD_OPTIONS)[number]>("30d");
-  const organizations = organizationsQuery.data ?? [];
+  const accounts = accountsQuery.data ?? [];
   const effectiveSelectedOrgId = selectedOrgId ?? ADMIN_ALL_ORGS_VALUE;
   const usageScopeQuery = useAdminUsageScopeQuery(
     actorId,
     token,
-    organizations,
+    accounts,
     effectiveSelectedOrgId,
     selectedPeriod,
   );
   const usage = usageScopeQuery.data?.usage ?? null;
-  const error = organizationsQuery.error ?? usageScopeQuery.error ?? null;
+  const error = accountsQuery.error ?? usageScopeQuery.error ?? null;
   const warning = usageScopeQuery.data?.failedOrgNames.length
     ? `${adminText(locale, "admin.loadError")} ${usageScopeQuery.data.failedOrgNames.join(", ")}`
     : "";
-  const selectedOrg = organizations.find((organization) => organization.id === effectiveSelectedOrgId) ?? null;
+  const selectedOrg = accounts.find((account) => account.id === effectiveSelectedOrgId) ?? null;
   const scopeLabel =
     effectiveSelectedOrgId === ADMIN_ALL_ORGS_VALUE
       ? adminText(locale, "usage.aggregateScope")
-      : selectedOrg?.name ?? adminText(locale, "users.noOrganizationSelected");
-  const usageLoading = Boolean(token) && (organizationsQuery.isPending || usageScopeQuery.isPending);
+      : selectedOrg?.name ?? adminText(locale, "users.noAccountSelected");
+  const usageLoading = Boolean(token) && (accountsQuery.isPending || usageScopeQuery.isPending);
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
@@ -72,15 +72,15 @@ export function AdminUsageSurface() {
             </label>
             <select
               className="app-input"
-              disabled={organizationsQuery.isPending || organizations.length === 0}
+              disabled={accountsQuery.isPending || accounts.length === 0}
               id="admin-usage-scope"
               onChange={(event) => setSelectedOrgId(event.target.value)}
               value={effectiveSelectedOrgId}
             >
               <option value={ADMIN_ALL_ORGS_VALUE}>{adminText(locale, "usage.aggregateScope")}</option>
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
                 </option>
               ))}
             </select>
@@ -104,8 +104,8 @@ export function AdminUsageSurface() {
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
           <span>{adminText(locale, "common.currentView")}{scopeLabel}</span>
           <span>{adminText(locale, "common.timeWindow")}{selectedPeriod}</span>
-          {effectiveSelectedOrgId === ADMIN_ALL_ORGS_VALUE && organizations.length > 0 ? (
-            <span>{formatCountLabel(locale, organizations.length, "organizationsInAggregate")}</span>
+          {effectiveSelectedOrgId === ADMIN_ALL_ORGS_VALUE && accounts.length > 0 ? (
+            <span>{formatCountLabel(locale, accounts.length, "accountsInAggregate")}</span>
           ) : null}
         </div>
       </section>

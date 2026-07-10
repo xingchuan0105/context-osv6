@@ -65,7 +65,7 @@ impl ChatContext {
             .await
             .ok()
             .flatten()?;
-        (notebook.org_id == self.current_org_id()).then_some(notebook)
+        (notebook.owner_user_id == self.current_owner_user_id()).then_some(notebook)
     }
 
     pub async fn remember_explicit_agent_preference(&self, query: &str) -> Result<(), AppError> {

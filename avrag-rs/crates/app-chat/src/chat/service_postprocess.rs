@@ -36,7 +36,7 @@ impl ChatContext {
                 };
                 let audit_record = AuditRecord {
                     audit_id: Uuid::new_v4().to_string(),
-                    org_id: self.auth.org_id().into_uuid().to_string(),
+                    owner_user_id: self.auth.user_id().into_uuid().to_string(),
                     actor_id: Some(user_uuid.to_string()),
                     action: audit_action,
                     resource_type: "chat".to_string(),

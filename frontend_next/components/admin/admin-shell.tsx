@@ -20,8 +20,8 @@ type AdminNavItem = {
 const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   {
     href: "/admin",
-    label: { zh: "组织", en: "Organizations" },
-    prefixes: ["/admin", "/admin/organizations", "/admin/orgs"],
+    label: { zh: "组织", en: "Accounts" },
+    prefixes: ["/admin", "/admin/accounts"],
   },
   {
     href: "/admin/users",
@@ -119,7 +119,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             const active = isActivePath(pathname, item.prefixes);
             const labelKey =
               item.href === "/admin"
-                ? "adminNavOrganizations"
+                ? "adminNavAccounts"
                 : item.href === "/admin/users"
                   ? "adminNavUsers"
                   : item.href === "/admin/usage"

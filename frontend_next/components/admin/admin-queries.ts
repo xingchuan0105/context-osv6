@@ -12,20 +12,20 @@ import {
   getAdminBillingOverview,
   getAdminDegradationStatus,
   getAdminHealth,
-  getAdminOrganization,
+  getAdminAccount,
   getAdminRagHealth,
-  getAdminUsageForOrganization,
+  getAdminUsageForAccount,
   getAdminWorkerStatus,
   listAdminAuditLogs,
   listAdminFeatureFlagChangeRequests,
   listAdminFeatureFlags,
-  listAdminOrganizations,
-  listAdminUsersForOrganization,
+  listAdminAccounts,
+  listAdminUsersForAccount,
   requestAdminFeatureFlagChange,
   reviewAdminFeatureFlagChange,
-  updateAdminOrganizationBlocked,
+  updateAdminAccountBlocked,
   type AdminAuditLogQuery,
-  type AdminOrgRow,
+  type AdminAccountRow,
   type AdminUsageResponse,
 } from "../../lib/admin/client";
 
@@ -37,20 +37,20 @@ function adminActorScope(actorId: string | null | undefined) {
 
 export const adminQueryKeys = {
   all: (actorId: string | null | undefined) => ["admin", adminActorScope(actorId)] as const,
-  organizations: (actorId: string | null | undefined) =>
-    [...adminQueryKeys.all(actorId), "organizations"] as const,
-  organization: (actorId: string | null | undefined, orgId: string) =>
-    [...adminQueryKeys.all(actorId), "organization", orgId] as const,
-  organizationUsers: (actorId: string | null | undefined, orgId: string) =>
-    [...adminQueryKeys.all(actorId), "organization-users", orgId] as const,
-  organizationUsage: (actorId: string | null | undefined, orgId: string, period: string) =>
-    [...adminQueryKeys.all(actorId), "organization-usage", orgId, period] as const,
+  accounts: (actorId: string | null | undefined) =>
+    [...adminQueryKeys.all(actorId), "accounts"] as const,
+  account: (actorId: string | null | undefined, ownerUserId: string) =>
+    [...adminQueryKeys.all(actorId), "account", ownerUserId] as const,
+  accountUsers: (actorId: string | null | undefined, ownerUserId: string) =>
+    [...adminQueryKeys.all(actorId), "account-users", ownerUserId] as const,
+  accountUsage: (actorId: string | null | undefined, ownerUserId: string, period: string) =>
+    [...adminQueryKeys.all(actorId), "account-usage", ownerUserId, period] as const,
   usageScope: (
     actorId: string | null | undefined,
     scope: string,
     period: string,
-    orgIds: string[],
-  ) => [...adminQueryKeys.all(actorId), "usage-scope", scope, period, ...orgIds] as const,
+    ownerUserIds: string[],
+  ) => [...adminQueryKeys.all(actorId), "usage-scope", scope, period, ...ownerUserIds] as const,
   health: (actorId: string | null | undefined) => [...adminQueryKeys.all(actorId), "health"] as const,
   billing: (actorId: string | null | undefined) => [...adminQueryKeys.all(actorId), "billing"] as const,
   ragHealth: (actorId: string | null | undefined) => [...adminQueryKeys.all(actorId), "rag-health"] as const,
@@ -71,62 +71,62 @@ const QUERY_OPTIONS = {
   retry: false,
 } as const;
 
-export function useAdminOrganizationsQuery(
+export function useAdminAccountsQuery(
   actorId: string | null | undefined,
   token: string | null | undefined,
 ) {
   return useQuery({
     ...QUERY_OPTIONS,
-    queryKey: adminQueryKeys.organizations(actorId),
-    queryFn: () => listAdminOrganizations(token as string),
+    queryKey: adminQueryKeys.accounts(actorId),
+    queryFn: () => listAdminAccounts(token as string),
     enabled: Boolean(actorId && token),
   });
 }
 
-export function useAdminOrganizationQuery(
+export function useAdminAccountQuery(
   actorId: string | null | undefined,
   token: string | null | undefined,
-  orgId: string,
+  ownerUserId: string,
 ) {
   return useQuery({
     ...QUERY_OPTIONS,
-    queryKey: adminQueryKeys.organization(actorId, orgId),
-    queryFn: () => getAdminOrganization(token as string, orgId),
-    enabled: Boolean(actorId && token && orgId),
+    queryKey: adminQueryKeys.account(actorId, ownerUserId),
+    queryFn: () => getAdminAccount(token as string, ownerUserId),
+    enabled: Boolean(actorId && token && ownerUserId),
   });
 }
 
-export function useAdminOrganizationUsersQuery(
+export function useAdminAccountUsersQuery(
   actorId: string | null | undefined,
   token: string | null | undefined,
-  orgId: string,
+  ownerUserId: string,
 ) {
   return useQuery({
     ...QUERY_OPTIONS,
-    queryKey: adminQueryKeys.organizationUsers(actorId, orgId),
-    queryFn: () => listAdminUsersForOrganization(token as string, orgId),
-    enabled: Boolean(actorId && token && orgId),
+    queryKey: adminQueryKeys.accountUsers(actorId, ownerUserId),
+    queryFn: () => listAdminUsersForAccount(token as string, ownerUserId),
+    enabled: Boolean(actorId && token && ownerUserId),
   });
 }
 
-export function useAdminOrganizationUsageQuery(
+export function useAdminAccountUsageQuery(
   actorId: string | null | undefined,
   token: string | null | undefined,
-  orgId: string,
+  ownerUserId: string,
   period: string,
 ) {
   return useQuery({
     ...QUERY_OPTIONS,
-    queryKey: adminQueryKeys.organizationUsage(actorId, orgId, period),
-    queryFn: () => getAdminUsageForOrganization(token as string, orgId, period),
-    enabled: Boolean(actorId && token && orgId),
+    queryKey: adminQueryKeys.accountUsage(actorId, ownerUserId, period),
+    queryFn: () => getAdminUsageForAccount(token as string, ownerUserId, period),
+    enabled: Boolean(actorId && token && ownerUserId),
   });
 }
 
 export function useAdminUsageScopeQuery(
   actorId: string | null | undefined,
   token: string | null | undefined,
-  organizations: AdminOrgRow[],
+  accounts: AdminAccountRow[],
   selectedOrgId: string,
   period: string,
 ) {
@@ -136,14 +136,14 @@ export function useAdminUsageScopeQuery(
       actorId,
       selectedOrgId,
       period,
-      organizations.map((organization) => organization.id),
+      accounts.map((account) => account.id),
     ),
-    queryFn: () => loadUsageForScope(token as string, organizations, selectedOrgId, period),
+    queryFn: () => loadUsageForScope(token as string, accounts, selectedOrgId, period),
     enabled: Boolean(
       actorId &&
         token &&
         selectedOrgId &&
-        (selectedOrgId !== ADMIN_ALL_ORGS_VALUE || organizations.length > 0),
+        (selectedOrgId !== ADMIN_ALL_ORGS_VALUE || accounts.length > 0),
     ),
   });
 }
@@ -250,28 +250,28 @@ export function useAdminAuditLogsQuery(
   });
 }
 
-export function useUpdateAdminOrganizationBlockedMutation(
+export function useUpdateAdminAccountBlockedMutation(
   actorId: string | null | undefined,
   token: string | null | undefined,
 ) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ orgId, blocked }: { orgId: string; blocked: boolean }) =>
-      updateAdminOrganizationBlocked(token as string, orgId, blocked),
+    mutationFn: ({ ownerUserId, blocked }: { ownerUserId: string; blocked: boolean }) =>
+      updateAdminAccountBlocked(token as string, ownerUserId, blocked),
     onSuccess: (_data, variables) => {
       queryClient.setQueryData(
-        adminQueryKeys.organizations(actorId),
-        (current: AdminOrgRow[] | undefined) =>
-          current?.map((organization) =>
-            organization.id === variables.orgId
-              ? { ...organization, blocked: variables.blocked }
-              : organization,
+        adminQueryKeys.accounts(actorId),
+        (current: AdminAccountRow[] | undefined) =>
+          current?.map((account) =>
+            account.id === variables.ownerUserId
+              ? { ...account, blocked: variables.blocked }
+              : account,
           ) ?? current,
       );
       queryClient.setQueryData(
-        adminQueryKeys.organization(actorId, variables.orgId),
-        (current: AdminOrgRow | null | undefined) =>
+        adminQueryKeys.account(actorId, variables.ownerUserId),
+        (current: AdminAccountRow | null | undefined) =>
           current ? { ...current, blocked: variables.blocked } : current,
       );
     },
@@ -351,14 +351,14 @@ export function getCombinedAdminQueryError(
 
 async function loadUsageForScope(
   token: string,
-  organizations: AdminOrgRow[],
+  accounts: AdminAccountRow[],
   selectedOrgId: string,
   period: string,
 ) {
   if (selectedOrgId === ADMIN_ALL_ORGS_VALUE) {
     const results = await Promise.allSettled(
-      organizations.map((organization) =>
-        getAdminUsageForOrganization(token, organization.id, period),
+      accounts.map((account) =>
+        getAdminUsageForAccount(token, account.id, period),
       ),
     );
     const aggregate: AdminUsageResponse = {
@@ -373,8 +373,8 @@ async function loadUsageForScope(
         aggregate.total_requests += result.value.total_requests;
         aggregate.total_tokens += result.value.total_tokens;
         aggregate.total_documents += result.value.total_documents;
-      } else if (organizations[index]) {
-        failedOrgNames.push(organizations[index].name);
+      } else if (accounts[index]) {
+        failedOrgNames.push(accounts[index].name);
       }
     });
 
@@ -382,7 +382,7 @@ async function loadUsageForScope(
   }
 
   return {
-    usage: await getAdminUsageForOrganization(token, selectedOrgId, period),
+    usage: await getAdminUsageForAccount(token, selectedOrgId, period),
     failedOrgNames: [] as string[],
   };
 }

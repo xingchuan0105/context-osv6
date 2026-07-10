@@ -275,7 +275,7 @@ impl TaskProcessor for PgTaskProcessor {
         if let Some(obs) = self.metering.task_usage_observer.as_ref() {
             let auth = task_context(task);
             let tenant = avrag_llm::TenantContext {
-                org_id: auth.org_id().into_uuid(),
+                owner_user_id: auth.user_id().into_uuid(),
                 user_id: auth
                     .actor_id()
                     .map(|a| a.into_uuid())

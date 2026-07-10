@@ -10,9 +10,9 @@ async fn search_conversation_history_workspace_scope_spans_sessions_when_databas
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
@@ -68,8 +68,8 @@ async fn search_conversation_history_workspace_scope_spans_sessions_when_databas
 
     let tokens_row: Option<(Option<String>,)> = {
         let mut tx = repo.raw().begin().await.unwrap();
-        sqlx::query("select set_config('app.current_org', $1, true)")
-            .bind(org_id.into_uuid().to_string())
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.into_uuid().to_string())
             .execute(tx.as_mut())
             .await
             .unwrap();
@@ -118,9 +118,9 @@ async fn search_sessions_matches_assistant_message_body_when_database_available(
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
@@ -170,9 +170,9 @@ async fn search_conversation_history_matches_assistant_message_when_database_ava
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo

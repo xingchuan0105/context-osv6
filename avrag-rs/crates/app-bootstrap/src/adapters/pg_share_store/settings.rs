@@ -9,7 +9,7 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let notebook_row =
             sqlx::query("select access_level, allow_download from workspaces where id = $1")
                 .bind(workspace_id)
@@ -26,11 +26,11 @@
             r#"
             select token, access_level, expires_at, revoked_at, access_count
             from share_tokens
-            where org_id = $1 and workspace_id = $2
+            where owner_user_id = $1 and workspace_id = $2
             order by created_at desc
             "#,
         )
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .fetch_all(tx.as_mut())
         .await
@@ -76,7 +76,7 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         sqlx::query("update workspaces set access_level = $2, updated_at = now() where id = $1")
             .bind(workspace_id)
             .bind(access_level)
@@ -102,7 +102,7 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         sqlx::query(
             r#"
             update workspaces
@@ -134,16 +134,16 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let rows = sqlx::query(
             r#"
             select id, workspace_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
             from workspace_members
-            where org_id = $1 and workspace_id = $2
+            where owner_user_id = $1 and workspace_id = $2
             order by invited_at asc
             "#,
         )
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .fetch_all(tx.as_mut())
         .await

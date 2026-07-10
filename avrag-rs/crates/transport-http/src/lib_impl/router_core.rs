@@ -50,7 +50,7 @@ const JWT_DEFAULT_SECRET: &str = "change-me-in-production";
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct JwtClaims {
     pub(crate) sub: String,
-    pub(crate) org_id: String,
+    pub(crate) owner_user_id: String,
     pub(crate) permissions: Vec<String>,
     jti: String,
     #[serde(default = "default_auth_version")]
@@ -97,8 +97,8 @@ pub(crate) async fn record_api_product_event_if_available(
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-pub fn issue_jwt(user_id: &Uuid, org_id: &Uuid) -> String {
-    issue_jwt_for_auth_version(user_id, org_id, default_auth_version(), "user")
+pub fn issue_jwt(user_id: &Uuid, owner_user_id: &Uuid) -> String {
+    issue_jwt_for_auth_version(user_id, owner_user_id, default_auth_version(), "user")
 }
 
 pub(crate) fn jwt_permissions_for_user_role(user_role: &str) -> Vec<String> {
@@ -116,14 +116,14 @@ pub(crate) fn jwt_permissions_for_user_role(user_role: &str) -> Vec<String> {
 #[doc(hidden)]
 pub fn issue_jwt_for_auth_version(
     user_id: &Uuid,
-    org_id: &Uuid,
+    owner_user_id: &Uuid,
     auth_version: i32,
     user_role: &str,
 ) -> String {
     let now = chrono::Utc::now();
     let claims = JwtClaims {
         sub: user_id.to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         permissions: jwt_permissions_for_user_role(user_role),
         jti: Uuid::new_v4().to_string(),
         auth_version,

@@ -11,7 +11,7 @@ mod tests {
         StorageContext, StorageContextParts, StorageInfra, StorageStores,
     };
     use app_documents::DocumentContext;
-    use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+    use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
     use avrag_guardrails::GuardPipeline;
     use common::{AppError, new_id, now_rfc3339};
     use contracts::chat::ChatRequest;
@@ -77,7 +77,7 @@ mod tests {
     }
 
     fn test_auth() -> AuthContext {
-        AuthContext::new(OrgId::from(Uuid::nil()), SubjectKind::User)
+        AuthContext::new(UserId::from(Uuid::nil()), SubjectKind::User)
             .with_actor_id(ActorId::new(Uuid::nil()))
             .with_request_id("pipeline-test")
     }
@@ -188,7 +188,7 @@ mod tests {
         let workspace_id = new_id();
         let notebook = Workspace {
             id: workspace_id.clone(),
-            org_id: test_auth().org_id().to_string(),
+            owner_user_id: test_auth().user_id().to_string(),
             owner_id: Uuid::nil().to_string(),
             name: "Test Workspace".to_string(),
             title: "Test Workspace".to_string(),

@@ -2,14 +2,14 @@ use app_bootstrap::AppState;
 use common::{AppError, CreateWorkspaceRequest};
 use serde_json::{Value, json};
 
-use crate::auth_guard::{authorize_org_tool, org_create_permission, org_list_permission};
+use crate::auth_guard::{authorize_account_tool, account_create_permission, account_list_permission};
 use crate::mcp::catalog;
 
 pub(crate) async fn create_workspace(
     state: &AppState,
     arguments: &Value,
 ) -> Result<Value, AppError> {
-    authorize_org_tool(state.auth(), org_create_permission())?;
+    authorize_account_tool(state.auth(), account_create_permission())?;
     let name = arguments
         .get("name")
         .and_then(|value| value.as_str())
@@ -29,7 +29,7 @@ pub(crate) async fn create_workspace(
         .create_workspace(CreateWorkspaceRequest { name, description })
         .await?;
     Ok(catalog::success_result(
-        "org.create_workspace",
+        "account.create_workspace",
         None,
         json!({ "workspace": notebook }),
         vec![
@@ -44,12 +44,12 @@ pub(crate) async fn list_workspaces(
     state: &AppState,
     _arguments: &Value,
 ) -> Result<Value, AppError> {
-    authorize_org_tool(state.auth(), org_list_permission())?;
+    authorize_account_tool(state.auth(), account_list_permission())?;
     let workspaces = state.workspace().list_workspaces().await;
     Ok(catalog::success_result(
-        "org.list_workspaces",
+        "account.list_workspaces",
         None,
         json!({ "workspaces": workspaces }),
-        vec!["org.create_workspace to add another workspace"],
+        vec!["account.create_workspace to add another workspace"],
     ))
 }

@@ -8,16 +8,16 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import {
   adminText,
   formatAdminError,
-  orgStatusLabel,
+  accountStatusLabel,
   planLabel,
   userRoleLabel,
 } from "./admin-i18n";
 import {
   getCombinedAdminQueryError,
-  useAdminOrganizationQuery,
-  useAdminOrganizationUsageQuery,
-  useAdminOrganizationUsersQuery as useOrganizationUsersQuery,
-  useUpdateAdminOrganizationBlockedMutation,
+  useAdminAccountQuery,
+  useAdminAccountUsageQuery,
+  useAdminAccountUsersQuery as useAccountUsersQuery,
+  useUpdateAdminAccountBlockedMutation,
 } from "./admin-queries";
 import {
   AdminMetricCard,
@@ -33,40 +33,40 @@ import {
   sortUsers,
 } from "./admin-utils";
 
-export function AdminOrganizationDetailSurface() {
-  const params = useParams<{ org_id: string }>();
-  const orgId = typeof params?.org_id === "string" ? params.org_id : "";
+export function AdminAccountDetailSurface() {
+  const params = useParams<{ owner_user_id: string }>();
+  const ownerUserId = typeof params?.owner_user_id === "string" ? params.owner_user_id : "";
   const { token, user } = useAuth();
   const actorId = user?.id;
   const { locale } = useUiPreferences();
-  const organizationQuery = useAdminOrganizationQuery(actorId, token, orgId);
-  const usersQuery = useOrganizationUsersQuery(actorId, token, orgId);
-  const usage7dQuery = useAdminOrganizationUsageQuery(actorId, token, orgId, "7d");
-  const usage30dQuery = useAdminOrganizationUsageQuery(actorId, token, orgId, "30d");
-  const toggleBlockedMutation = useUpdateAdminOrganizationBlockedMutation(actorId, token);
-  const organization = organizationQuery.data ?? null;
+  const accountQuery = useAdminAccountQuery(actorId, token, ownerUserId);
+  const usersQuery = useAccountUsersQuery(actorId, token, ownerUserId);
+  const usage7dQuery = useAdminAccountUsageQuery(actorId, token, ownerUserId, "7d");
+  const usage30dQuery = useAdminAccountUsageQuery(actorId, token, ownerUserId, "30d");
+  const toggleBlockedMutation = useUpdateAdminAccountBlockedMutation(actorId, token);
+  const account = accountQuery.data ?? null;
   const users = usersQuery.data ?? [];
   const usage7d = usage7dQuery.data ?? null;
   const usage30d = usage30dQuery.data ?? null;
-  const loading = Boolean(token && orgId) && organizationQuery.isPending;
-  const insightLoading = Boolean(token && orgId) && (usersQuery.isPending || usage7dQuery.isPending || usage30dQuery.isPending);
-  const error = organizationQuery.error ?? toggleBlockedMutation.error ?? null;
+  const loading = Boolean(token && ownerUserId) && accountQuery.isPending;
+  const insightLoading = Boolean(token && ownerUserId) && (usersQuery.isPending || usage7dQuery.isPending || usage30dQuery.isPending);
+  const error = accountQuery.error ?? toggleBlockedMutation.error ?? null;
   const insightError = getCombinedAdminQueryError(usersQuery, usage7dQuery, usage30dQuery);
   const ownerCount = users.filter((user) => user.role === "owner").length;
   const adminCount = users.filter((user) => user.role === "admin").length;
   const memberCount = users.filter((user) => ["member", "viewer", "editor"].includes(user.role)).length;
   const recentMembers = sortUsers(users, "created_desc").slice(0, 5);
-  const requestsPerUser30d = organization ? Math.floor((usage30d?.total_requests ?? 0) / Math.max(organization.user_count, 1)) : 0;
-  const notebooksPerUser = organization ? Math.floor(organization.workspace_count / Math.max(organization.user_count, 1)) : 0;
+  const requestsPerUser30d = account ? Math.floor((usage30d?.total_requests ?? 0) / Math.max(account.user_count, 1)) : 0;
+  const notebooksPerUser = account ? Math.floor(account.workspace_count / Math.max(account.user_count, 1)) : 0;
 
   async function handleToggleBlocked() {
-    if (!organization) {
+    if (!account) {
       return;
     }
 
     await toggleBlockedMutation.mutateAsync({
-      orgId: organization.id,
-      blocked: !organization.blocked,
+      ownerUserId: account.id,
+      blocked: !account.blocked,
     });
   }
 
@@ -78,47 +78,47 @@ export function AdminOrganizationDetailSurface() {
         </Link>
       </div>
       <AdminPageHeading
-        title={adminText(locale, "organizationDetail.title")}
-        subtitle={adminText(locale, "organizationDetail.subtitle")}
+        title={adminText(locale, "accountDetail.title")}
+        subtitle={adminText(locale, "accountDetail.subtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       {loading ? (
-        <LoadingState copy={adminText(locale, "organizationDetail.loading")} />
-      ) : !organization ? (
-        <EmptyState copy={adminText(locale, "organizationDetail.notFound")} />
+        <LoadingState copy={adminText(locale, "accountDetail.loading")} />
+      ) : !account ? (
+        <EmptyState copy={adminText(locale, "accountDetail.notFound")} />
       ) : (
         <>
           <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "start" }}>
               <div style={{ display: "grid", gap: "0.35rem" }}>
-                <h2 style={{ margin: 0 }}>{organization.name}</h2>
+                <h2 style={{ margin: 0 }}>{account.name}</h2>
                 <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-                  {adminText(locale, "common.organizationId")}: {organization.id}
+                  {adminText(locale, "common.accountId")}: {account.id}
                 </p>
               </div>
               <button className="app-button-ghost" disabled={toggleBlockedMutation.isPending} type="button" onClick={() => void handleToggleBlocked()}>
                 {toggleBlockedMutation.isPending
                   ? adminText(locale, "common.processing")
-                  : organization.blocked
-                    ? adminText(locale, "organizations.unblockOrganization")
-                    : adminText(locale, "organizations.blockOrganization")}
+                  : account.blocked
+                    ? adminText(locale, "accounts.unblockAccount")
+                    : adminText(locale, "accounts.blockAccount")}
               </button>
             </div>
             <div style={{ display: "grid", gap: "0.7rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
-              <AdminMetricCard label={adminText(locale, "common.status")} tone={organization.blocked ? "danger" : "success"} value={orgStatusLabel(locale, organization.blocked)} />
-              <AdminMetricCard label={adminText(locale, "admin.table.plan")} value={planLabel(locale, organization.plan)} />
-              <AdminMetricCard label={adminText(locale, "admin.table.users")} value={organization.user_count.toString()} />
+              <AdminMetricCard label={adminText(locale, "common.status")} tone={account.blocked ? "danger" : "success"} value={accountStatusLabel(locale, account.blocked)} />
+              <AdminMetricCard label={adminText(locale, "admin.table.plan")} value={planLabel(locale, account.plan)} />
+              <AdminMetricCard label={adminText(locale, "admin.table.users")} value={account.user_count.toString()} />
               <AdminMetricCard
                 label={adminText(locale, "common.workspaces")}
-                value={organization.workspace_count.toString()}
-                detail={`${adminText(locale, "common.created")} ${formatUnixDate(organization.created_at, locale)}`}
+                value={account.workspace_count.toString()}
+                detail={`${adminText(locale, "common.created")} ${formatUnixDate(account.created_at, locale)}`}
               />
             </div>
           </section>
 
           {insightError ? <ErrorState message={formatAdminError(locale, insightError)} /> : null}
           {insightLoading ? (
-            <LoadingState copy={adminText(locale, "organizationDetail.loadingInsights")} />
+            <LoadingState copy={adminText(locale, "accountDetail.loadingInsights")} />
           ) : (
             <>
               <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
@@ -131,9 +131,9 @@ export function AdminOrganizationDetailSurface() {
               <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}>
                 <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
                   <div className="app-inline-row" style={{ marginBottom: 0 }}>
-                    <h3 style={{ margin: 0 }}>{adminText(locale, "organizationDetail.teamComposition")}</h3>
+                    <h3 style={{ margin: 0 }}>{adminText(locale, "accountDetail.teamComposition")}</h3>
                     <span style={{ color: "hsl(var(--muted-foreground))" }}>
-                      {formatCountLabel(locale, users.length, "organizationDetail.users")}
+                      {formatCountLabel(locale, users.length, "accountDetail.users")}
                     </span>
                   </div>
                   <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
@@ -159,10 +159,10 @@ export function AdminOrganizationDetailSurface() {
                 </section>
 
                 <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-                  <h3 style={{ margin: 0 }}>{adminText(locale, "organizationDetail.operationalEfficiency")}</h3>
+                  <h3 style={{ margin: 0 }}>{adminText(locale, "accountDetail.operationalEfficiency")}</h3>
                   <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
                     <AdminMetricCard label={adminText(locale, "common.requestsPerUser30d")} value={requestsPerUser30d.toString()} />
-                    <AdminMetricCard label={adminText(locale, "organizationDetail.workspacesPerUser")} value={notebooksPerUser.toString()} tone="success" />
+                    <AdminMetricCard label={adminText(locale, "accountDetail.workspacesPerUser")} value={notebooksPerUser.toString()} tone="success" />
                   </div>
                   <div className="app-inline-surface" style={{ display: "grid", gap: "0.5rem" }}>
                     <div className="app-inline-row" style={{ marginBottom: 0 }}>

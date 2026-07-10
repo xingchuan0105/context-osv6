@@ -1,5 +1,5 @@
 use app_core::{AdminAuditLogPage, AdminUsageStats};
-use contracts::auth_runtime::OrgId;
+use contracts::auth_runtime::UserId;
 use uuid::Uuid;
 
 #[derive(serde::Serialize)]
@@ -42,7 +42,7 @@ fn audit_log_page_serializes_pagination_metadata() {
 #[test]
 fn usage_stats_serializes_org_scoped_metrics() {
     let stats = AdminUsageStats {
-        org_id: OrgId::from(Uuid::from_u128(99)),
+        owner_user_id: UserId::from(Uuid::from_u128(99)),
         period: "30d".to_string(),
         query_count: 12,
         document_count: 3,

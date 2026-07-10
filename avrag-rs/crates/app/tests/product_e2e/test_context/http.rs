@@ -216,7 +216,7 @@ impl TestContext {
         workspace_id: &str,
         filename: &str,
     ) -> anyhow::Result<()> {
-        let object_path = format!("{}/{}/{}/{}", self.org_id, workspace_id, document_id, filename);
+        let object_path = format!("{}/{}/{}/{}", self.owner_user_id, workspace_id, document_id, filename);
         let object_full_path = std::path::Path::new(&self.object_root).join(&object_path);
         if !object_full_path.is_file() {
             anyhow::bail!(

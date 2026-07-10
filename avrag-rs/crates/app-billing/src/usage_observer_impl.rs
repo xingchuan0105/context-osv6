@@ -99,7 +99,7 @@ impl PgUsageObserver {
     pub async fn record_chat_for(&self, tenant: &TenantContext, record: &ChatUsageRecord) {
         let ctx = MeteringContext {
             user_id: tenant.user_id,
-            org_id: tenant.org_id,
+            owner_user_id: tenant.owner_user_id,
             feature: Self::map_feature(&record.feature),
             stage: if record.stage.is_empty() {
                 record.feature.clone()
@@ -123,7 +123,7 @@ impl PgUsageObserver {
         };
         if let Err(e) = self.store.insert_llm_usage_event(&ctx, usage).await {
             tracing::warn!(
-                org_id = %tenant.org_id,
+                owner_user_id = %tenant.owner_user_id,
                 user_id = %tenant.user_id,
                 error = %e,
                 "PgUsageObserver::record_chat failed; continuing"
@@ -151,7 +151,7 @@ impl PgUsageObserver {
             .unwrap_or(record.estimated_tokens);
         let ctx = MeteringContext {
             user_id: tenant.user_id,
-            org_id: tenant.org_id,
+            owner_user_id: tenant.owner_user_id,
             feature: Self::map_feature(&record.feature),
             stage: "embedding".to_string(),
             session_id: None,
@@ -171,7 +171,7 @@ impl PgUsageObserver {
         };
         if let Err(e) = self.store.insert_llm_usage_event(&ctx, usage).await {
             tracing::warn!(
-                org_id = %tenant.org_id,
+                owner_user_id = %tenant.owner_user_id,
                 user_id = %tenant.user_id,
                 error = %e,
                 "PgUsageObserver::record_embedding failed; continuing"
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn task_tenant_observer_is_non_billable_for_worker_path() {
         let tenant = TenantContext {
-            org_id: Uuid::nil(),
+            owner_user_id: Uuid::nil(),
             user_id: Uuid::nil(),
         };
         let observer = TaskTenantUsageObserver::new(Arc::new(StubUsageLimitStore), tenant);

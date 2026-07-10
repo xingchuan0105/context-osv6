@@ -14,7 +14,7 @@ export {
 } from "./admin-shared-ui";
 
 export { AdminHealthSurface } from "./admin-health-surface";
-export { AdminOrganizationDetailSurface } from "./admin-org-detail-surface";
-export { AdminOrganizationsSurface } from "./admin-orgs-surface";
+export { AdminAccountDetailSurface } from "./admin-account-detail-surface";
+export { AdminAccountsSurface } from "./admin-accounts-surface";
 export { AdminUsageSurface } from "./admin-usage-surface";
 export { AdminUsersSurface } from "./admin-users-surface";

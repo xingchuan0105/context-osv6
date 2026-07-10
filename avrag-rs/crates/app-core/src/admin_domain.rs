@@ -1,11 +1,11 @@
-use contracts::auth_runtime::OrgId;
+use contracts::auth_runtime::UserId;
 use chrono::{DateTime, Utc};
-use common::UserId;
 use serde::Serialize;
 
+/// Admin view of an account (replaces former organization row).
 #[derive(Debug, Clone, Serialize)]
-pub struct AdminOrgInfo {
-    pub id: OrgId,
+pub struct AdminAccountInfo {
+    pub id: UserId,
     pub name: String,
     pub created_at: i64,
     pub blocked: bool,
@@ -18,14 +18,13 @@ pub struct AdminOrgInfo {
 pub struct AdminUserInfo {
     pub id: UserId,
     pub email: String,
-    pub org_id: OrgId,
     pub role: String,
     pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AdminUsageStats {
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub period: String,
     pub query_count: i64,
     pub document_count: i64,
@@ -51,7 +50,7 @@ pub struct AdminAuditLogEntry {
     pub action: String,
     pub resource_type: String,
     pub resource_id: String,
-    pub org_id: Option<String>,
+    pub owner_user_id: Option<String>,
     pub created_at: i64,
 }
 
@@ -76,7 +75,7 @@ pub fn admin_clamp_audit_per_page(value: usize) -> usize {
     value.clamp(1, 200)
 }
 
-pub fn admin_clamp_org_list_per_page(value: usize) -> usize {
+pub fn admin_clamp_account_list_per_page(value: usize) -> usize {
     value.clamp(1, 500)
 }
 
@@ -111,7 +110,7 @@ fn admin_csv_cell(value: &str) -> String {
 
 pub fn admin_audit_logs_to_csv(items: &[AdminAuditLogEntry]) -> String {
     let mut lines =
-        vec!["id,action,resource_type,resource_id,actor_id,org_id,created_at".to_string()];
+        vec!["id,action,resource_type,resource_id,actor_id,owner_user_id,created_at".to_string()];
     for item in items {
         lines.push(format!(
             "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"",
@@ -120,7 +119,7 @@ pub fn admin_audit_logs_to_csv(items: &[AdminAuditLogEntry]) -> String {
             admin_csv_cell(&item.resource_type),
             admin_csv_cell(&item.resource_id),
             admin_csv_cell(&item.actor_id.clone().unwrap_or_default()),
-            admin_csv_cell(&item.org_id.clone().unwrap_or_default()),
+            admin_csv_cell(&item.owner_user_id.clone().unwrap_or_default()),
             item.created_at
         ));
     }
@@ -145,8 +144,8 @@ mod tests {
 
     #[test]
     fn clamp_org_list_per_page_enforces_bounds() {
-        assert_eq!(admin_clamp_org_list_per_page(0), 1);
-        assert_eq!(admin_clamp_org_list_per_page(1000), 500);
+        assert_eq!(admin_clamp_account_list_per_page(0), 1);
+        assert_eq!(admin_clamp_account_list_per_page(1000), 500);
     }
 
     #[test]
@@ -162,7 +161,7 @@ mod tests {
             action: "+SUM(1,1)".to_string(),
             resource_type: "-bad".to_string(),
             resource_id: "@evil".to_string(),
-            org_id: Some("\tmacro".to_string()),
+            owner_user_id: Some("\tmacro".to_string()),
             created_at: 1,
         }]);
         assert!(csv.contains("'=cmd|'/c calc'!A0"));

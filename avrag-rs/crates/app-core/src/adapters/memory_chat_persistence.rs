@@ -25,7 +25,7 @@ use crate::domain_rows::{
     ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, IndexedChunk,
     MultimodalChunkRow, NotificationCreateParams, UserProfileRow,
 };
-use crate::{MemoryState, current_org_id};
+use crate::{MemoryState, current_owner_user_id};
 
 /// Memory-backed chat persistence (sessions, messages, catalog, light side-effects).
 #[derive(Clone)]
@@ -42,15 +42,15 @@ impl MemoryChatPersistence {
         }
     }
 
-    fn org_id(auth: &AuthContext) -> String {
-        current_org_id(auth)
+    fn owner_user_id(auth: &AuthContext) -> String {
+        current_owner_user_id(auth)
     }
 
     fn session_visible(state: &MemoryState, auth: &AuthContext, session: &ChatSession) -> bool {
         state
             .workspaces
             .get(&session.workspace_id)
-            .map(|nb| nb.org_id == Self::org_id(auth))
+            .map(|nb| nb.owner_user_id == Self::owner_user_id(auth))
             .unwrap_or(false)
     }
 
@@ -156,7 +156,7 @@ impl SessionPort for MemoryChatPersistence {
         let notebook = state
             .workspaces
             .get(&notebook_key)
-            .filter(|nb| nb.org_id == Self::org_id(auth))
+            .filter(|nb| nb.owner_user_id == Self::owner_user_id(auth))
             .cloned()
             .ok_or_else(|| AppError::not_found("workspace_not_found", "workspace not found"))?;
         let now = now_rfc3339();
@@ -398,12 +398,12 @@ impl ChatCatalogPort for MemoryChatPersistence {
         pattern: &str,
     ) -> Result<Vec<Workspace>, AppError> {
         let q = Self::strip_like_pattern(pattern);
-        let org = Self::org_id(auth);
+        let org = Self::owner_user_id(auth);
         let state = self.state.read().await;
         Ok(state
             .workspaces
             .values()
-            .filter(|nb| nb.org_id == org)
+            .filter(|nb| nb.owner_user_id == org)
             .filter(|nb| {
                 nb.title.to_lowercase().contains(&q) || nb.description.to_lowercase().contains(&q)
             })
@@ -417,19 +417,19 @@ impl ChatCatalogPort for MemoryChatPersistence {
         pattern: &str,
     ) -> Result<Vec<SourceRow>, AppError> {
         let q = Self::strip_like_pattern(pattern);
-        let org = Self::org_id(auth);
+        let org = Self::owner_user_id(auth);
         let state = self.state.read().await;
         Ok(state
             .documents
             .values()
             .filter(|stored| {
-                stored.document.org_id == org
+                stored.document.owner_user_id == org
                     && stored.document.file_name.to_lowercase().contains(&q)
                     && !Self::is_deleting_or_deleted(&stored.document.status)
             })
             .filter_map(|stored| {
                 let notebook = state.workspaces.get(&stored.document.workspace_id)?;
-                if notebook.org_id != org {
+                if notebook.owner_user_id != org {
                     return None;
                 }
                 Some(SourceRow {
@@ -450,12 +450,12 @@ impl ChatCatalogPort for MemoryChatPersistence {
         workspace_id: Uuid,
     ) -> Result<Option<Workspace>, AppError> {
         let key = workspace_id.to_string();
-        let org = Self::org_id(auth);
+        let org = Self::owner_user_id(auth);
         let state = self.state.read().await;
         Ok(state
             .workspaces
             .get(&key)
-            .filter(|nb| nb.org_id == org)
+            .filter(|nb| nb.owner_user_id == org)
             .cloned())
     }
 }
@@ -531,7 +531,7 @@ impl ChatSideEffectPort for MemoryChatPersistence {
         };
         let row = common::NotificationRow {
             id: new_id(),
-            org_id: Self::org_id(auth),
+            owner_user_id: Self::owner_user_id(auth),
             user_id: params.user_id.to_string(),
             event_type: params.event_type,
             title: params.title,
@@ -564,11 +564,11 @@ impl ChatSideEffectPort for MemoryChatPersistence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+    use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
     use crate::chat_persistence::{MessagePort, SessionPort};
 
     fn auth(org: Uuid, user: Uuid) -> AuthContext {
-        AuthContext::new(OrgId::from(org), SubjectKind::User).with_actor_id(ActorId::new(user))
+        AuthContext::new(UserId::from(org), SubjectKind::User).with_actor_id(ActorId::new(user))
     }
 
     #[tokio::test]
@@ -584,7 +584,7 @@ mod tests {
                 workspace_id.to_string(),
                 Workspace {
                     id: workspace_id.to_string(),
-                    org_id: org.to_string(),
+                    owner_user_id: org.to_string(),
                     owner_id: user.to_string(),
                     name: "nb".into(),
                     title: "nb".into(),
@@ -644,7 +644,7 @@ mod tests {
                 workspace_id.to_string(),
                 Workspace {
                     id: workspace_id.to_string(),
-                    org_id: org.to_string(),
+                    owner_user_id: org.to_string(),
                     owner_id: user.to_string(),
                     name: "nb".into(),
                     title: "nb".into(),

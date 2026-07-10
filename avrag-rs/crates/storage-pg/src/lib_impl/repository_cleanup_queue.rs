@@ -56,7 +56,7 @@ impl IngestionQueueRepository {
                 updated_at = now()
             from next_task
             where dct.task_id = next_task.task_id
-            returning dct.task_id, dct.org_id, dct.workspace_id, dct.document_id, dct.requested_by,
+            returning dct.task_id, dct.owner_user_id, dct.workspace_id, dct.document_id, dct.requested_by,
                       dct.idempotency_key, dct.payload, dct.lock_token,
                       dct.attempt_count, dct.max_attempts
             "#,
@@ -147,7 +147,7 @@ impl IngestionQueueRepository {
             .await?;
         let row = sqlx::query(
             r#"
-            select org_id, document_id, attempt_count, max_attempts
+            select owner_user_id, document_id, attempt_count, max_attempts
             from document_cleanup_tasks
             where task_id = $1
               and lock_token = $2
@@ -166,12 +166,12 @@ impl IngestionQueueRepository {
             tx.commit().await?;
             return Ok(DocumentCleanupTaskFailureOutcome::LeaseLost);
         };
-        let org_id: Uuid = row.try_get("org_id")?;
+        let owner_user_id: Uuid = row.try_get("owner_user_id")?;
         let document_id: Uuid = row.try_get("document_id")?;
         let attempt_count: i32 = row.try_get("attempt_count")?;
         let max_attempts: i32 = row.try_get("max_attempts")?;
-        sqlx::query("select set_config('app.current_org', $1, true)")
-            .bind(org_id.to_string())
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.to_string())
             .execute(tx.as_mut())
             .await?;
         sqlx::query(
@@ -179,12 +179,12 @@ impl IngestionQueueRepository {
             update documents
             set deletion_error = $3,
                 updated_at = now()
-            where org_id = $1
+            where owner_user_id = $1
               and id = $2
               and status = 'deleting'
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(document_id)
         .bind(error)
         .execute(tx.as_mut())

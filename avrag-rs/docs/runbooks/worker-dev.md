@@ -84,7 +84,7 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 
 - `task_id`
 - `kind`
-- `org_id`
+- `owner_user_id`
 - `workspace_id`
 - `document_id`
 - `requested_by`

@@ -52,7 +52,7 @@ fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
 
     if let Some(observer) = ctx.billing.usage_observer() {
         let tenant = TenantContext {
-            org_id: ctx.auth.org_id().into_uuid(),
+            owner_user_id: ctx.auth.user_id().into_uuid(),
             user_id: ctx
                 .auth
                 .actor_id()

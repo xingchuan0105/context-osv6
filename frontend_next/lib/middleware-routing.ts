@@ -27,14 +27,6 @@ function resolveCompatibilityRedirect(pathname: string): string | null {
     }
   }
 
-  if (pathname.startsWith("/admin/orgs/")) {
-    const match = pathname.match(/^\/admin\/orgs\/([^/]+)$/);
-
-    if (match) {
-      return `/admin/organizations/${match[1]}`;
-    }
-  }
-
   return null;
 }
 

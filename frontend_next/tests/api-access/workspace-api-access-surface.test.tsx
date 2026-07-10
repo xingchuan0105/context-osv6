@@ -42,7 +42,7 @@ describe("WorkspaceApiAccessSurface", () => {
       api_keys: [
         {
           id: "key-1",
-          org_id: "org-1",
+          owner_user_id: "owner-1",
           workspace_id: workspaceId,
           key_prefix: "sk_live_123",
           name: "Existing Key",
@@ -60,7 +60,7 @@ describe("WorkspaceApiAccessSurface", () => {
     mocks.createApiKeyMock.mockResolvedValue({
       api_key: {
         id: "key-2",
-        org_id: "org-1",
+        owner_user_id: "owner-1",
         workspace_id: workspaceId,
         key_prefix: "sk_live_456",
         name: "Agent Key",

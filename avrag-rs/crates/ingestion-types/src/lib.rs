@@ -19,7 +19,7 @@ pub enum IngestionTaskKind {
 pub struct IngestionTask {
     pub task_id: String,
     pub kind: IngestionTaskKind,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub workspace_id: String,
     pub document_id: String,
     pub requested_by: Option<String>,
@@ -128,7 +128,7 @@ impl AuditAction {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditRecord {
     pub audit_id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub actor_id: Option<String>,
     pub action: AuditAction,
     pub resource_type: String,

@@ -9,7 +9,7 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let rows = sqlx::query(
             r#"
             select
@@ -20,12 +20,12 @@
                 st.created_at
             from share_tokens st
             left join share_access_logs sal on sal.share_token = st.token
-            where st.org_id = $1 and st.workspace_id = $2
+            where st.owner_user_id = $1 and st.workspace_id = $2
             group by st.token, st.access_level, st.created_at
             order by total_views desc, max(sal.created_at) desc nulls last
             "#,
         )
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .fetch_all(tx.as_mut())
         .await
@@ -65,18 +65,18 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let rows = sqlx::query(
             r#"
             select sal.id, sal.workspace_id, sal.share_token, sal.action, sal.created_at
             from share_access_logs sal
             join share_tokens st on st.token = sal.share_token
-            where st.org_id = $1 and st.workspace_id = $2
+            where st.owner_user_id = $1 and st.workspace_id = $2
             order by sal.created_at desc
             limit $3
             "#,
         )
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .bind(limit as i64)
         .fetch_all(tx.as_mut())

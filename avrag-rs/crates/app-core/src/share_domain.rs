@@ -119,9 +119,8 @@ pub struct ShareAnalyticsEntry {
 
 #[derive(Debug, Clone)]
 pub struct PublicShareChatContextSnapshot {
-    pub org_id: Uuid,
-    pub workspace_id: Uuid,
     pub owner_user_id: Uuid,
+    pub workspace_id: Uuid,
     pub access_level: ShareAccessLevel,
 }
 

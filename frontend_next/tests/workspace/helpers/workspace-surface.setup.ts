@@ -110,7 +110,7 @@ export function resetWorkspaceSurfaceMocks(
   mocks.getWorkspaceMock.mockResolvedValue({
     workspace: {
       workspace_id: "ws-1",
-      org_id: "org-1",
+      owner_user_id: "owner-1",
       owner_id: "user-1",
       name: "Workspace 1",
       title: "Workspace 1",
@@ -182,7 +182,7 @@ export function resetWorkspaceSurfaceMocks(
   mocks.updateWorkspaceMock.mockResolvedValue({
     workspace: {
       workspace_id: "ws-1",
-      org_id: "org-1",
+      owner_user_id: "owner-1",
       owner_id: "user-1",
       name: "Workspace 1",
       title: "Renamed Workspace",
@@ -209,7 +209,7 @@ export function resetWorkspaceSurfaceMocks(
   mocks.createWorkspaceMock.mockResolvedValue({
     workspace: {
       workspace_id: "ws-2",
-      org_id: "org-1",
+      owner_user_id: "owner-1",
       owner_id: "user-1",
       name: "工作区1",
       title: "工作区1",

@@ -24,7 +24,7 @@ export type UserPreferences = {
 
 export type NotificationRow = {
   id: string;
-  org_id: string;
+  owner_user_id: string;
   user_id: string;
   event_type: string;
   title: string;

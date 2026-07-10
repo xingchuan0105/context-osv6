@@ -96,9 +96,9 @@ const INLINE_COPY = {
     zh: "开启",
     en: "On",
   },
-  "common.organizationId": {
-    zh: "组织 ID",
-    en: "Organization ID",
+  "common.accountId": {
+    zh: "账户 ID",
+    en: "Account ID",
   },
   "common.page": {
     zh: "页码",
@@ -160,9 +160,9 @@ const INLINE_COPY = {
     zh: "范围",
     en: "Scope",
   },
-  "common.selectOrganization": {
-    zh: "选择组织",
-    en: "Select an organization",
+  "common.selectAccount": {
+    zh: "选择账户",
+    en: "Select an account",
   },
   "common.service": {
     zh: "服务",
@@ -252,8 +252,8 @@ const INLINE_COPY = {
     zh: "下一页",
     en: "Next",
   },
-  "audit.orgId": {
-    zh: "组织 ID",
+  "audit.ownerUserId": {
+    zh: "账户 ID",
     en: "Org ID",
   },
   "audit.previous": {
@@ -376,117 +376,117 @@ const INLINE_COPY = {
     zh: "来源：",
     en: "Source: ",
   },
-  "organizations.activeOrganizations": {
-    zh: "正常组织",
-    en: "Active organizations",
+  "accounts.activeAccounts": {
+    zh: "正常账户",
+    en: "Active accounts",
   },
-  "organizations.blockOrganization": {
-    zh: "封禁组织",
-    en: "Block organization",
+  "accounts.blockAccount": {
+    zh: "封禁账户",
+    en: "Block account",
   },
-  "organizations.blockedOrganizations": {
-    zh: "封禁组织",
-    en: "Blocked organizations",
+  "accounts.blockedAccounts": {
+    zh: "封禁账户",
+    en: "Blocked accounts",
   },
-  "organizations.empty": {
-    zh: "没有找到组织。",
-    en: "No organizations found.",
+  "accounts.empty": {
+    zh: "没有找到账户。",
+    en: "No accounts found.",
   },
-  "organizations.filterByNameIdPlan": {
+  "accounts.filterByNameIdPlan": {
     zh: "按名称、ID 或计划筛选",
     en: "Filter by name, ID, or plan",
   },
-  "organizations.loading": {
-    zh: "正在加载组织...",
-    en: "Loading organizations...",
+  "accounts.loading": {
+    zh: "正在加载账户...",
+    en: "Loading accounts...",
   },
-  "organizations.matching": {
-    zh: "匹配组织",
-    en: "Matching organizations",
+  "accounts.matching": {
+    zh: "匹配账户",
+    en: "Matching accounts",
   },
-  "organizations.noMatch": {
-    zh: "没有组织匹配当前筛选。",
-    en: "No organizations match the current filters.",
+  "accounts.noMatch": {
+    zh: "没有账户匹配当前筛选。",
+    en: "No accounts match the current filters.",
   },
-  "organizations.sort.nameAsc": {
+  "accounts.sort.nameAsc": {
     zh: "名称 A-Z",
     en: "Name A-Z",
   },
-  "organizations.sort.workspacesDesc": {
+  "accounts.sort.workspacesDesc": {
     zh: "知识库数优先",
     en: "Workspaces desc",
   },
-  "organizations.sort.queriesDesc": {
+  "accounts.sort.queriesDesc": {
     zh: "请求数优先",
     en: "Queries desc",
   },
-  "organizations.sort.usersDesc": {
+  "accounts.sort.usersDesc": {
     zh: "用户数优先",
     en: "Users desc",
   },
-  "organizations.statusFilterLabel": {
-    zh: "组织状态",
-    en: "Organization status",
+  "accounts.statusFilterLabel": {
+    zh: "账户状态",
+    en: "Account status",
   },
-  "organizations.subtitle": {
-    zh: "查看组织、团队规模、知识库数量和访问状态。",
-    en: "Review organizations, team size, notebooks, and access status.",
+  "accounts.subtitle": {
+    zh: "查看账户、团队规模、知识库数量和访问状态。",
+    en: "Review accounts, team size, notebooks, and access status.",
   },
-  "organizations.totalWorkspaces": {
+  "accounts.totalWorkspaces": {
     zh: "知识库总数",
     en: "Total notebooks",
   },
-  "organizations.unblockOrganization": {
-    zh: "解除封禁组织",
-    en: "Unblock organization",
+  "accounts.unblockAccount": {
+    zh: "解除封禁账户",
+    en: "Unblock account",
   },
-  "organizations.usersCovered": {
+  "accounts.usersCovered": {
     zh: "覆盖用户",
     en: "Users covered",
   },
-  "organizationDetail.loading": {
-    zh: "正在加载组织...",
-    en: "Loading organization...",
+  "accountDetail.loading": {
+    zh: "正在加载账户...",
+    en: "Loading account...",
   },
-  "organizationDetail.loadingInsights": {
-    zh: "正在加载组织洞察...",
-    en: "Loading organization insights...",
+  "accountDetail.loadingInsights": {
+    zh: "正在加载账户洞察...",
+    en: "Loading account insights...",
   },
-  "organizationDetail.notFound": {
-    zh: "未找到组织。",
-    en: "Organization not found.",
+  "accountDetail.notFound": {
+    zh: "未找到账户。",
+    en: "Account not found.",
   },
-  "organizationDetail.operationalEfficiency": {
+  "accountDetail.operationalEfficiency": {
     zh: "运营效率",
     en: "Operational efficiency",
   },
-  "organizationDetail.workspacesPerUser": {
+  "accountDetail.workspacesPerUser": {
     zh: "人均知识库",
     en: "Workspaces per user",
   },
-  "organizationDetail.subtitle": {
-    zh: "查看组织配置、成员构成和近期 7/30 天用量。",
-    en: "Review organization configuration, member composition, and recent 7/30 day usage.",
+  "accountDetail.subtitle": {
+    zh: "查看账户配置、成员构成和近期 7/30 天用量。",
+    en: "Review account configuration, member composition, and recent 7/30 day usage.",
   },
-  "organizationDetail.teamComposition": {
+  "accountDetail.teamComposition": {
     zh: "团队构成",
     en: "Team composition",
   },
-  "organizationDetail.title": {
-    zh: "组织详情",
-    en: "Organization detail",
+  "accountDetail.title": {
+    zh: "账户详情",
+    en: "Account detail",
   },
-  "organizationDetail.users": {
+  "accountDetail.users": {
     zh: "位成员",
     en: "members",
   },
-  "organizationsInAggregate": {
-    zh: "个组织参与聚合",
-    en: "organizations in aggregate",
+  "accountsInAggregate": {
+    zh: "个账户参与聚合",
+    en: "accounts in aggregate",
   },
   "usage.aggregateScope": {
-    zh: "全部组织（聚合）",
-    en: "All organizations (aggregate)",
+    zh: "全部账户（聚合）",
+    en: "All accounts (aggregate)",
   },
   "usage.loading": {
     zh: "正在加载用量数据...",
@@ -497,20 +497,20 @@ const INLINE_COPY = {
     en: "No usage data is available yet.",
   },
   "usage.subtitle": {
-    zh: "默认显示全部组织的聚合结果，并支持切换时间窗口。",
-    en: "The default view aggregates all organizations and supports time-window switching.",
+    zh: "默认显示全部账户的聚合结果，并支持切换时间窗口。",
+    en: "The default view aggregates all accounts and supports time-window switching.",
   },
   "users.allRoles": {
     zh: "全部角色",
     en: "All roles",
   },
-  "users.chooseOrganization": {
-    zh: "请选择一个组织以查看用户。",
-    en: "Choose an organization to inspect users.",
+  "users.chooseAccount": {
+    zh: "请选择一个账户以查看用户。",
+    en: "Choose an account to inspect users.",
   },
-  "users.currentOrganization": {
-    zh: "当前组织",
-    en: "Current organization",
+  "users.currentAccount": {
+    zh: "当前账户",
+    en: "Current account",
   },
   "users.filterPlaceholder": {
     zh: "按邮箱、姓名或角色筛选",
@@ -548,17 +548,17 @@ const INLINE_COPY = {
     zh: "没有用户匹配当前筛选。",
     en: "No users match the current filters.",
   },
-  "users.noOrganizationSelected": {
-    zh: "尚未选择组织",
-    en: "No organization selected",
+  "users.noAccountSelected": {
+    zh: "尚未选择账户",
+    en: "No account selected",
   },
   "users.roleGrouping": {
     zh: "角色分组",
     en: "Role grouping",
   },
   "users.subtitle": {
-    zh: "先选择组织，再按邮箱、角色或创建时间查看成员。",
-    en: "Select an organization, then inspect members by email, role, or creation time.",
+    zh: "先选择账户，再按邮箱、角色或创建时间查看成员。",
+    en: "Select an account, then inspect members by email, role, or creation time.",
   },
   "audit.actorIdPlaceholder": {
     zh: "执行者 ID",
@@ -624,9 +624,9 @@ const INLINE_COPY = {
     zh: "加载后台数据失败。",
     en: "Failed to load admin data.",
   },
-  "admin.nav.organizations": {
-    zh: "组织",
-    en: "Organizations",
+  "admin.nav.accounts": {
+    zh: "账户",
+    en: "Accounts",
   },
   "admin.nav.users": {
     zh: "用户",
@@ -640,9 +640,9 @@ const INLINE_COPY = {
     zh: "RAG 健康",
     en: "RAG Health",
   },
-  "admin.table.organization": {
-    zh: "组织",
-    en: "Organization",
+  "admin.table.account": {
+    zh: "账户",
+    en: "Account",
   },
   "admin.table.plan": {
     zh: "计划",
@@ -668,9 +668,9 @@ const INLINE_COPY = {
     zh: "最近活跃",
     en: "Last active",
   },
-  "admin.metrics.totalOrganizations": {
-    zh: "组织总数",
-    en: "Total organizations",
+  "admin.metrics.totalAccounts": {
+    zh: "账户总数",
+    en: "Total accounts",
   },
   "admin.metrics.totalRequests": {
     zh: "请求总数",

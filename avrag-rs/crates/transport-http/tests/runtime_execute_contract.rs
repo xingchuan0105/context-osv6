@@ -42,7 +42,7 @@ async fn post_runtime_execute_rejects_empty_calls() {
                 .method("POST")
                 .uri("/api/v1/runtime/execute")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-org-id", Uuid::new_v4().to_string())
+                .header("x-owner-user-id", Uuid::new_v4().to_string())
                 .body(Body::from(serde_json::json!({ "calls": [] }).to_string()))
                 .unwrap(),
         )
@@ -67,7 +67,7 @@ async fn post_runtime_execute_fails_closed_without_runtime() {
                 .method("POST")
                 .uri("/api/v1/runtime/execute")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-org-id", Uuid::new_v4().to_string())
+                .header("x-owner-user-id", Uuid::new_v4().to_string())
                 .body(Body::from(
                     serde_json::json!({
                         "calls": [
@@ -98,7 +98,7 @@ async fn get_runtime_execute_is_not_allowed() {
             Request::builder()
                 .method("GET")
                 .uri("/api/v1/runtime/execute")
-                .header("x-org-id", Uuid::new_v4().to_string())
+                .header("x-owner-user-id", Uuid::new_v4().to_string())
                 .body(Body::empty())
                 .unwrap(),
         )

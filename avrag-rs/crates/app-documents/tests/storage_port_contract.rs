@@ -8,7 +8,7 @@ use app_core::{
 };
 use app_documents::DocumentContext;
 use async_trait::async_trait;
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use common::{AppError, CreateWorkspaceRequest, Document, SourceRow, now_rfc3339};
 use contracts::documents::DocumentStatus;
 use contracts::workspaces::Workspace;
@@ -79,7 +79,7 @@ impl DocumentStorePort for RecordingDocumentStore {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(vec![Workspace {
             id: Uuid::new_v4().to_string(),
-            org_id: "org-test".to_string(),
+            owner_user_id: "org-test".to_string(),
             owner_id: "user-test".to_string(),
             name: "Port Workspace".to_string(),
             title: "Port Workspace".to_string(),
@@ -253,7 +253,7 @@ impl DocumentStorePort for RecordingDocumentStore {
 }
 
 fn test_auth() -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::nil()), SubjectKind::User)
+    AuthContext::new(UserId::from(Uuid::nil()), SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::nil()))
         .with_request_id("documents-port-contract")
 }

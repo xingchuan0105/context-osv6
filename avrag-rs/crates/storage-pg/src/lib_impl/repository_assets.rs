@@ -8,21 +8,21 @@ impl AssetRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            INSERT INTO document_assets (asset_id, org_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend)
+            INSERT INTO document_assets (asset_id, owner_user_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend)
             SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
             WHERE EXISTS (
                 SELECT 1
                 FROM documents
                 WHERE id = $4
-                  AND org_id = $2
+                  AND owner_user_id = $2
                   AND status NOT IN ('deleting', 'deleted')
                 FOR UPDATE
             )
-            RETURNING asset_id, org_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
+            RETURNING asset_id, owner_user_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             "#,
         )
         .bind(params.asset_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(params.workspace_id)
         .bind(params.document_id)
         .bind(params.parse_run_id)
@@ -48,21 +48,21 @@ impl AssetRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            INSERT INTO document_multimodal_chunks (chunk_id, org_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata)
+            INSERT INTO document_multimodal_chunks (chunk_id, owner_user_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata)
             SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
             WHERE EXISTS (
                 SELECT 1
                 FROM documents
                 WHERE id = $4
-                  AND org_id = $2
+                  AND owner_user_id = $2
                   AND status NOT IN ('deleting', 'deleted')
                 FOR UPDATE
             )
-            RETURNING chunk_id, org_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
+            RETURNING chunk_id, owner_user_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             "#,
         )
         .bind(params.chunk_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(params.workspace_id)
         .bind(params.document_id)
         .bind(params.parse_run_id)
@@ -87,7 +87,7 @@ impl AssetRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            SELECT asset_id, org_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
+            SELECT asset_id, owner_user_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             FROM document_assets
             WHERE asset_id = $1
             "#,
@@ -107,7 +107,7 @@ impl AssetRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            SELECT chunk_id, org_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
+            SELECT chunk_id, owner_user_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             FROM document_multimodal_chunks
             WHERE chunk_id = $1
             "#,
@@ -160,7 +160,7 @@ impl AssetRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            SELECT chunk_id, org_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
+            SELECT chunk_id, owner_user_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             FROM document_multimodal_chunks
             WHERE chunk_id = any($1)
             "#,
@@ -189,7 +189,7 @@ impl AssetRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            SELECT asset_id, org_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
+            SELECT asset_id, owner_user_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             FROM document_assets
             WHERE asset_id = any($1)
             ORDER BY created_at

@@ -62,7 +62,7 @@ pub struct UserRow {
     pub id: String,
     pub email: String,
     pub full_name: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub role: String,
     pub created_at: String,
     pub last_active_at: Option<String>,
@@ -153,7 +153,7 @@ pub struct AuditLogEntry {
     pub action: String,
     pub resource_type: String,
     pub resource_id: String,
-    pub org_id: Option<String>,
+    pub owner_user_id: Option<String>,
     #[typeshare(serialized_as = "number")]
     pub created_at: i64,
 }

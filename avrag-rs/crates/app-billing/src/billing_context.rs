@@ -61,9 +61,9 @@ impl BillingContext {
             .actor_id()
             .map(|a| a.into_uuid())
             .ok_or_else(|| AppError::internal("no authenticated user"))?;
-        let org_id = auth.org_id().into_uuid();
+        let owner_user_id = auth.user_id().into_uuid();
         qm.rolling_service()
-            .get_user_usage(org_id, user_id)
+            .get_user_usage(owner_user_id, user_id)
             .await
             .map_err(|e| AppError::internal(format!("failed to get usage limit: {}", e)))
     }
@@ -79,9 +79,9 @@ impl BillingContext {
             .actor_id()
             .map(|a| a.into_uuid())
             .unwrap_or_else(Uuid::nil);
-        let org_id = auth.org_id().into_uuid();
+        let owner_user_id = auth.user_id().into_uuid();
         qm.rolling_service()
-            .check_quota(org_id, user_id)
+            .check_quota(owner_user_id, user_id)
             .await
             .map_err(|e| AppError::internal(format!("usage limit check failed: {}", e)))
     }
@@ -103,7 +103,7 @@ impl BillingContext {
             .map(|v| v.into_uuid())
             .unwrap_or_else(Uuid::nil);
         let decision = qm
-            .check_quota(auth.org_id().into_uuid(), user_uuid, metric_type, requested)
+            .check_quota(auth.user_id().into_uuid(), user_uuid, metric_type, requested)
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
 
@@ -138,10 +138,10 @@ impl BillingContext {
                 .actor_id()
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(Uuid::nil);
-            let org_id = auth.org_id().into_uuid();
+            let owner_user_id = auth.user_id().into_uuid();
             let ctx = avrag_billing::usage_limit::MeteringContext {
                 user_id,
-                org_id,
+                owner_user_id,
                 feature,
                 stage: stage.to_string(),
                 session_id: None,

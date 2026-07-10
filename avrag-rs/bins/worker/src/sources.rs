@@ -149,7 +149,7 @@ impl StateSink for PgStateSink {
             .audit()
             .append_audit_record(&AuditRecord {
                 audit_id: common::new_id(),
-                org_id: task.org_id.clone(),
+                owner_user_id: task.owner_user_id.clone(),
                 actor_id: task.requested_by.clone(),
                 action: ingestion::AuditAction::StateTransition,
                 resource_type: "document".to_string(),

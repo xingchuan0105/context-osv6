@@ -160,13 +160,13 @@ pub trait UsageLimitStorePort: Send + Sync {
     /// ADR 0006: create a usage export job (billable rows only).
     async fn create_usage_export_job(
         &self,
-        org_id: Uuid,
+        owner_user_id: Uuid,
         user_id: Uuid,
         range_from: DateTime<Utc>,
         range_to: DateTime<Utc>,
         format: &str,
     ) -> Result<Uuid, AppError> {
-        let _ = (org_id, user_id, range_from, range_to, format);
+        let _ = (owner_user_id, user_id, range_from, range_to, format);
         Err(AppError::internal("usage export not implemented"))
     }
 

@@ -84,7 +84,7 @@ pub struct EmptyResponse {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationRow {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub user_id: String,
     pub event_type: String,
     pub title: String,

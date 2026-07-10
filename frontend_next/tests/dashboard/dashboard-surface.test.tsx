@@ -67,7 +67,7 @@ function renderWithQuery(ui: ReactElement) {
 const workspaces = [
   {
     workspace_id: "ws-1",
-    org_id: "org-1",
+    owner_user_id: "owner-1",
     owner_id: "user-1",
     name: "Alpha",
     title: "Alpha",
@@ -80,7 +80,7 @@ const workspaces = [
   },
   {
     workspace_id: "ws-2",
-    org_id: "org-1",
+    owner_user_id: "owner-1",
     owner_id: "user-2",
     name: "Beta",
     title: "Beta",
@@ -93,7 +93,7 @@ const workspaces = [
   },
   {
     workspace_id: "ws-3",
-    org_id: "org-1",
+    owner_user_id: "owner-1",
     owner_id: "user-1",
     name: "Gamma",
     title: "",

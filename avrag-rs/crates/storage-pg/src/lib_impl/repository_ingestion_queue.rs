@@ -23,8 +23,8 @@ impl IngestionQueueRepository {
         task: &IngestionTask,
     ) -> Result<bool, PgStorageError> {
         let queue_group = ingestion_queue_group_from_env();
-        let org_id = OrgId::from(
-            Uuid::parse_str(&task.org_id)
+        let owner_user_id = UserId::from(
+            Uuid::parse_str(&task.owner_user_id)
                 .map_err(|_| PgStorageError::NotFound("invalid task org id".to_string()))?,
         );
         let actor_id = task
@@ -33,9 +33,9 @@ impl IngestionQueueRepository {
             .and_then(|value| Uuid::parse_str(value).ok())
             .map(ActorId::new);
         let context = if let Some(actor_id) = actor_id {
-            AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User).with_actor_id(actor_id)
+            AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User).with_actor_id(actor_id)
         } else {
-            AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::System)
+            AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::System)
         };
 
         let mut tx = self.pool.begin(&context).await?;
@@ -43,7 +43,7 @@ impl IngestionQueueRepository {
         let result = sqlx::query(
             r#"
             insert into ingestion_tasks (
-                task_id, org_id, workspace_id, document_id, kind, requested_by, idempotency_key,
+                task_id, owner_user_id, workspace_id, document_id, kind, requested_by, idempotency_key,
                 queue_group, payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, now(), $12, now())
@@ -54,7 +54,7 @@ impl IngestionQueueRepository {
             Uuid::parse_str(&task.task_id)
                 .map_err(|_| PgStorageError::NotFound("invalid task id".to_string()))?,
         )
-        .bind(org_id.into_uuid())
+        .bind(owner_user_id.into_uuid())
         .bind(
             Uuid::parse_str(&task.workspace_id)
                 .map_err(|_| PgStorageError::NotFound("invalid notebook id".to_string()))?,
@@ -125,15 +125,15 @@ impl IngestionQueueRepository {
         .execute(tx.inner())
         .await?;
 
-        let org_id = Uuid::parse_str(&task.org_id)
+        let owner_user_id = Uuid::parse_str(&task.owner_user_id)
             .map_err(|_| PgStorageError::NotFound("invalid task org id".to_string()))?;
-        if org_id != context.org_id().into_uuid() {
+        if owner_user_id != context.user_id().into_uuid() {
             return Err(PgStorageError::NotFound("invalid task org id".to_string()));
         }
         let result = sqlx::query(
             r#"
             insert into ingestion_tasks (
-                task_id, org_id, workspace_id, document_id, kind, requested_by, idempotency_key,
+                task_id, owner_user_id, workspace_id, document_id, kind, requested_by, idempotency_key,
                 queue_group, payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, now(), $12, now())
@@ -144,7 +144,7 @@ impl IngestionQueueRepository {
             Uuid::parse_str(&task.task_id)
                 .map_err(|_| PgStorageError::NotFound("invalid task id".to_string()))?,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(
             Uuid::parse_str(&task.workspace_id)
                 .map_err(|_| PgStorageError::NotFound("invalid notebook id".to_string()))?,
@@ -182,10 +182,10 @@ impl IngestionQueueRepository {
             r#"
             select count(*)::bigint as task_count
             from ingestion_tasks
-            where org_id = $1 and document_id = $2
+            where owner_user_id = $1 and document_id = $2
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(document_id)
         .fetch_one(self.pool.raw())
         .await?;
@@ -242,7 +242,7 @@ impl IngestionQueueRepository {
                 updated_at = now()
             from next_task
             where it.task_id = next_task.task_id
-            returning it.task_id, it.org_id, it.workspace_id, it.document_id, it.kind, it.requested_by,
+            returning it.task_id, it.owner_user_id, it.workspace_id, it.document_id, it.kind, it.requested_by,
                       it.idempotency_key, it.enqueued_at, it.payload, it.lock_token,
                       it.attempt_count, it.max_attempts
             "#,

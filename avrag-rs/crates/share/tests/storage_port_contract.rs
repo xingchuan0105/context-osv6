@@ -2,7 +2,7 @@ mod support;
 
 use std::sync::Arc;
 
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_share::{AccessLevel, ShareService};
 use support::MemoryShareStore;
 use uuid::Uuid;
@@ -43,7 +43,7 @@ fn share_modules_do_not_call_storage_pg_escape_hatch() {
 }
 
 fn owner_auth(owner_id: Uuid) -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::User)
+    AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::User)
         .with_actor_id(ActorId::new(owner_id))
         .with_request_id("share-port-contract")
 }

@@ -11,7 +11,7 @@
 **问题**: User B 和 User A 是同一个 org，doc_scope 明确包含 A 的文档，断言永远为 true。
 
 **修复**:
-1. 在 `TestContext` 增加 `with_org_id(org_id: &str)` 工厂方法，生成不同 auth header 的上下文
+1. 在 `TestContext` 增加 `with_org_id(owner_user_id: &str)` 工厂方法，生成不同 auth header 的上下文
 2. 重写测试：
    - Org A 上传 antifragile.txt
    - Org B 上传 empty.txt

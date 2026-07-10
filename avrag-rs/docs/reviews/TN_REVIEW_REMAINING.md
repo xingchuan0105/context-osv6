@@ -278,7 +278,7 @@
 
 **计划：**
 1. 确认这些组件是否应在本次修复范围内（询问 WIP 开发者）
-2. 方案 A：添加缺失的 i18n keys 到 `lib/i18n/messages/common.ts`（新建 `organizations.ts`, `organizationDetail.ts`）
+2. 方案 A：添加缺失的 i18n keys 到 `lib/i18n/messages/common.ts`（新建 `accounts.ts`, `organizationDetail.ts`）
 3. 方案 B：将 admin surfaces 改用 `adminText`/`INLINE_COPY` 系统
 4. 方案 C：统一两套 i18n 为一套
 5. 验证：`pnpm typecheck` → 0 errors

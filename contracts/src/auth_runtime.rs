@@ -8,10 +8,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+/// Account owner / tenant root for personal B2C (replaces former `UserId`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct OrgId(Uuid);
+pub struct UserId(Uuid);
 
-impl OrgId {
+impl UserId {
     pub fn new(value: Uuid) -> Self {
         Self(value)
     }
@@ -19,21 +20,25 @@ impl OrgId {
     pub fn into_uuid(self) -> Uuid {
         self.0
     }
+
+    pub fn uuid(&self) -> &Uuid {
+        &self.0
+    }
 }
 
-impl Display for OrgId {
+impl Display for UserId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl From<Uuid> for OrgId {
+impl From<Uuid> for UserId {
     fn from(value: Uuid) -> Self {
         Self::new(value)
     }
 }
 
-impl FromStr for OrgId {
+impl FromStr for UserId {
     type Err = uuid::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -58,6 +63,26 @@ impl ActorId {
     }
 }
 
+impl Display for ActorId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl From<Uuid> for ActorId {
+    fn from(value: Uuid) -> Self {
+        Self::new(value)
+    }
+}
+
+impl FromStr for ActorId {
+    type Err = uuid::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Uuid::parse_str(s).map(Self::new)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubjectKind {
     User,
@@ -65,9 +90,13 @@ pub enum SubjectKind {
     System,
 }
 
+/// Auth scope: account owner (`user_id`) + optional actor + workspace scope.
+///
+/// Personal B2C: `user_id` is the resource owner used for RLS
+/// (`app.current_user` / `owner_user_id`). There is no organization tenant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthContext {
-    org_id: OrgId,
+    user_id: UserId,
     actor_id: Option<ActorId>,
     subject_kind: SubjectKind,
     workspace_id: Option<Uuid>,
@@ -77,9 +106,9 @@ pub struct AuthContext {
 }
 
 impl AuthContext {
-    pub fn new(org_id: OrgId, subject_kind: SubjectKind) -> Self {
+    pub fn new(user_id: UserId, subject_kind: SubjectKind) -> Self {
         Self {
-            org_id,
+            user_id,
             actor_id: None,
             subject_kind,
             workspace_id: None,
@@ -114,8 +143,14 @@ impl AuthContext {
         self
     }
 
-    pub fn org_id(&self) -> OrgId {
-        self.org_id
+    /// Account owner id (tenant root for RLS / `owner_user_id`).
+    pub fn user_id(&self) -> UserId {
+        self.user_id
+    }
+
+    /// Alias for resource ownership checks (same as [`Self::user_id`]).
+    pub fn owner_user_id(&self) -> UserId {
+        self.user_id
     }
 
     pub fn actor_id(&self) -> Option<ActorId> {
@@ -166,20 +201,20 @@ impl AuthContext {
 
 #[derive(Debug, Error)]
 pub enum AuthError {
-    #[error("missing org scope")]
-    MissingOrgScope,
+    #[error("missing user scope")]
+    MissingUserScope,
     #[error("missing workspace scope")]
     MissingWorkspaceScope,
     #[error("missing permission: {permission}")]
     MissingPermission { permission: String },
-    #[error("resource belongs to a different organization")]
+    #[error("resource belongs to a different account owner")]
     CrossTenantAccess,
     #[error("workspace scope mismatch: expected {expected}, got {actual}")]
     WorkspaceScopeMismatch { expected: Uuid, actual: Uuid },
 }
 
-pub fn ensure_same_org(context: &AuthContext, resource_org_id: OrgId) -> Result<(), AuthError> {
-    if context.org_id() == resource_org_id {
+pub fn ensure_same_owner(context: &AuthContext, resource_owner: UserId) -> Result<(), AuthError> {
+    if context.owner_user_id() == resource_owner {
         return Ok(());
     }
 

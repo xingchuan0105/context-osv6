@@ -45,7 +45,7 @@ impl AdminContext {
         let existing_profile = store.get_user_profile(auth, user_id).await?;
         let profile = UserProfileRow {
             user_id,
-            org_id: auth.org_id(),
+            owner_user_id: auth.user_id(),
             expertise_domains: existing_profile
                 .as_ref()
                 .map(|profile| profile.expertise_domains.clone())

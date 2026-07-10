@@ -4,21 +4,21 @@ use crate::domain_row_convert::{user_profile_row, user_profile_row_to_pg};
 use crate::pg_error::map_pg_error;
 use app_core::{
     AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
-    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo,
+    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo,
     AdminRagHealthStatus, AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
     admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
-    admin_clamp_org_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
+    admin_clamp_account_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
     domain_rows::UserProfileRow,
 };
 use async_trait::async_trait;
-use contracts::auth_runtime::{AuthContext, OrgId};
+use contracts::auth_runtime::{AuthContext, UserId};
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
-use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, UserId};
+use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
 use sqlx::{Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 
-use crate::adapters::pg_session::{begin_tx, db_err, set_current_org, set_current_role};
+use crate::adapters::pg_session::{begin_tx, db_err, set_rls_owner, set_current_role};
 
 pub struct PgAdminStoreAdapter {
     repo: Arc<PgAppRepository>,
@@ -37,11 +37,11 @@ impl PgAdminStoreAdapter {
             .actor_id()
             .ok_or_else(|| AppError::unauthorized("admin action requires an authenticated user"))?;
         let mut tx = begin_tx(self.repo.raw()).await?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
+        // Personal B2C: role lives on the user row (account == user).
         let role =
-            sqlx::query_scalar::<_, String>("select role from users where id = $1 and org_id = $2")
+            sqlx::query_scalar::<_, String>("select role from users where id = $1")
                 .bind(actor_id.into_uuid())
-                .bind(auth.org_id().into_uuid())
                 .fetch_optional(tx.as_mut())
                 .await
                 .map_err(db_err)?;

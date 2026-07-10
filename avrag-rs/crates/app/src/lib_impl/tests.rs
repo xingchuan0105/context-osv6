@@ -609,7 +609,7 @@ mod tests {
         let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
 
         let mut config = AppConfig::default();
-        config.org_id = Uuid::new_v4().to_string();
+        config.owner_user_id = Uuid::new_v4().to_string();
         config.user_id = Uuid::new_v4().to_string();
         config.object_root = object_root.to_string_lossy().to_string();
 

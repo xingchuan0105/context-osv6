@@ -25,7 +25,7 @@ pub(crate) async fn generate_document_summary(
     let mut skip_llm_summary = false;
 
     if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
-        match svc.check_quota(context.org_id().into_uuid(), user_id).await {
+        match svc.check_quota(context.user_id().into_uuid(), user_id).await {
             Ok(quota) => {
                 if quota.blocked_5h || quota.blocked_7d {
                     info!(document_id = %document_id, user_id = %user_id, "skipping LLM summary — quota exhausted");
@@ -80,7 +80,7 @@ pub(crate) async fn generate_document_summary(
     if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
         let ctx = avrag_billing::usage_limit::MeteringContext {
             user_id,
-            org_id: context.org_id().into_uuid(),
+            owner_user_id: context.user_id().into_uuid(),
             feature: avrag_billing::usage_limit::BillableFeature::Summary,
             stage: "worker_summary".to_string(),
             session_id: None,

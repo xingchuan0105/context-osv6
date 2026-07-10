@@ -7,7 +7,7 @@ atomic: true
 
 ## Personal product workflow
 
-Context-OS is a personal product: one user owns their workspaces. Agents should **not** assume an organization or account-level API key.
+Context-OS is a personal product: one user owns their workspaces. Agents should **not** assume an account or account-level API key.
 
 ### Get a workspace id
 
@@ -19,7 +19,7 @@ Context-OS is a personal product: one user owns their workspaces. Agents should 
 ### Do not use for personal agents
 
 - Do not mint or require account-scoped / org-scoped API keys for normal personal automation.
-- MCP tools named `org.create_workspace` / `org.list_workspaces` are internal wire names, not part of the personal product surface.
+- MCP tools named `account.create_workspace` / `account.list_workspaces` are internal wire names, not part of the personal product surface.
 
 ## Forbidden
 

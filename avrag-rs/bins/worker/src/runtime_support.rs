@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use app_core::AppConfig;
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, ObjectStoreHeadError, S3ObjectStore};
@@ -12,8 +12,8 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 pub(crate) fn task_context(task: &IngestionTask) -> AuthContext {
-    let org_id = Uuid::parse_str(&task.org_id).unwrap_or_else(|_| Uuid::nil());
-    let auth = AuthContext::new(OrgId::from(org_id), SubjectKind::System);
+    let owner_user_id = Uuid::parse_str(&task.owner_user_id).unwrap_or_else(|_| Uuid::nil());
+    let auth = AuthContext::new(UserId::from(owner_user_id), SubjectKind::System);
     if let Some(requested_by) = task
         .requested_by
         .as_deref()
@@ -25,7 +25,7 @@ pub(crate) fn task_context(task: &IngestionTask) -> AuthContext {
 }
 
 pub(crate) fn document_cleanup_task_context(task: &DocumentCleanupTask) -> AuthContext {
-    let auth = AuthContext::new(OrgId::from(task.org_id), SubjectKind::System);
+    let auth = AuthContext::new(UserId::from(task.owner_user_id), SubjectKind::System);
     if let Some(requested_by) = task.requested_by {
         return auth.with_actor_id(ActorId::new(requested_by));
     }
@@ -165,9 +165,9 @@ pub(crate) type WorkerUsageObserver =
     Option<(std::sync::Arc<dyn avrag_llm::UsageObserver>, avrag_llm::TenantContext)>;
 
 pub(crate) fn worker_system_tenant(config: &AppConfig) -> avrag_llm::TenantContext {
-    let org_id = Uuid::parse_str(&config.org_id).unwrap_or_else(|_| Uuid::nil());
+    let owner_user_id = Uuid::parse_str(&config.owner_user_id).unwrap_or_else(|_| Uuid::nil());
     let user_id = Uuid::parse_str(&config.user_id).unwrap_or_else(|_| Uuid::nil());
-    avrag_llm::TenantContext { org_id, user_id }
+    avrag_llm::TenantContext { owner_user_id, user_id }
 }
 
 fn apply_worker_observer(

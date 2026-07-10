@@ -6,13 +6,13 @@ use app_core::{
     PublicShareChatContextSnapshot, ShareAccessLevel, SharedKnowledgeBaseSnapshot,
     SharedWorkspaceSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
 };
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_share::{AccessLevel, ShareService};
 use support::MemoryShareStore;
 use uuid::Uuid;
 
 fn user_auth(user_id: Uuid) -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::User)
+    AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::User)
         .with_actor_id(ActorId::new(user_id))
         .with_request_id("share-behavior-test")
 }
@@ -86,16 +86,14 @@ async fn load_shared_workspace_returns_none_for_unknown_token() {
 async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
     let store = Arc::new(MemoryShareStore::new());
     let token = "chat-context-token";
-    let org_id = Uuid::new_v4();
-    let workspace_id = Uuid::new_v4();
     let owner_user_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
     store
         .seed_public_chat_context(
             token,
             PublicShareChatContextSnapshot {
-                org_id,
-                workspace_id,
                 owner_user_id,
+                workspace_id,
                 access_level: ShareAccessLevel::Read,
             },
         )
@@ -108,9 +106,8 @@ async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
         .expect("resolve should succeed")
         .expect("token should resolve to chat context");
 
-    assert_eq!(context.org_id, org_id);
-    assert_eq!(context.workspace_id, workspace_id);
     assert_eq!(context.owner_user_id, owner_user_id);
+    assert_eq!(context.workspace_id, workspace_id);
     assert_eq!(context.access_level, AccessLevel::Read);
 }
 

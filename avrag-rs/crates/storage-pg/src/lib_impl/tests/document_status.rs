@@ -10,9 +10,9 @@ async fn generic_status_update_rejects_deleting_and_deleted_when_database_availa
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
@@ -71,9 +71,9 @@ async fn update_document_summary_overwrites_existing_summary_when_database_avail
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo

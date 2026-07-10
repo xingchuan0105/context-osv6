@@ -4,11 +4,11 @@
 
 use app_core::{
     AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
+    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo, AdminRagHealthStatus,
     AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use common::AppError;
-use contracts::auth_runtime::{AuthContext, OrgId};
+use contracts::auth_runtime::{AuthContext, UserId};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -36,48 +36,48 @@ impl<'a> AdminOpsApp<'a> {
         Ok(())
     }
 
-    pub async fn list_orgs(
+    pub async fn list_accounts(
         &self,
         page: usize,
         per_page: usize,
-    ) -> Result<Vec<AdminOrgInfo>, AppError> {
+    ) -> Result<Vec<AdminAccountInfo>, AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.list_orgs(self.auth, page, per_page).await
+        store.list_accounts(self.auth, page, per_page).await
     }
 
-    pub async fn get_org(&self, org_id: OrgId) -> Result<AdminOrgInfo, AppError> {
+    pub async fn get_account(&self, owner_user_id: UserId) -> Result<AdminAccountInfo, AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.get_org(self.auth, org_id).await
+        store.get_account(self.auth, owner_user_id).await
     }
 
-    pub async fn list_users(&self, org_id: OrgId) -> Result<Vec<AdminUserInfo>, AppError> {
+    pub async fn list_users(&self, owner_user_id: UserId) -> Result<Vec<AdminUserInfo>, AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.list_users(self.auth, org_id).await
+        store.list_users(self.auth, owner_user_id).await
     }
 
-    pub async fn delete_user(&self, org_id: OrgId, user_id: Uuid) -> Result<(), AppError> {
+    pub async fn delete_user(&self, owner_user_id: UserId, user_id: Uuid) -> Result<(), AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.delete_user(self.auth, org_id, user_id).await
+        store.delete_user(self.auth, owner_user_id, user_id).await
     }
 
     pub async fn get_usage(
         &self,
-        org_id: OrgId,
+        owner_user_id: UserId,
         period: &str,
     ) -> Result<AdminUsageStats, AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.get_usage(self.auth, org_id, period).await
+        store.get_usage(self.auth, owner_user_id, period).await
     }
 
-    pub async fn set_org_blocked(&self, org_id: OrgId, blocked: bool) -> Result<(), AppError> {
+    pub async fn set_account_blocked(&self, owner_user_id: UserId, blocked: bool) -> Result<(), AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.set_org_blocked(self.auth, org_id, blocked).await
+        store.set_account_blocked(self.auth, owner_user_id, blocked).await
     }
 
     pub async fn billing_overview(&self) -> Result<AdminBillingOverview, AppError> {

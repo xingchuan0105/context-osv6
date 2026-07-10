@@ -15,12 +15,12 @@ impl ChunkRepository {
             select id, status
             from documents
             where id = any($1)
-              and org_id = $2
+              and owner_user_id = $2
               and status not in ('deleting', 'deleted')
             "#,
         )
         .bind(doc_ids)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

@@ -64,7 +64,7 @@ RAG API (检索服务，非自主 agent)
 
 ```text
 Postgres: 产品控制面
-- users, organizations, workspaces / notebooks
+- users, accounts, workspaces / notebooks
 - auth and sessions, chat history
 - agent memory metadata (session summaries, user profiles)
 - ingestion jobs, audit / usage / billing
@@ -326,7 +326,7 @@ G2（canary token / SysVec）取消后，相关死代码于 2026-05-13 二轮修
 
 ## 11. 产品级保护约束
 
-每次 Milvus 查询必须强制带服务端 ACL filter（`org_id`、`workspace_id`、`doc_scope`）。
+每次 Milvus 查询必须强制带服务端 ACL filter（`owner_user_id`、`workspace_id`、`doc_scope`）。
 
 每个检索结果必须带 provenance：`doc_id`、`chunk_id`、`page`、`parse_run_id`、`source_locator`。
 

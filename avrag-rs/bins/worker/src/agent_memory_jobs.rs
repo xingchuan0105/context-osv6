@@ -60,7 +60,14 @@ impl AgentPreferenceConsolidationJobRunner {
     }
 
     async fn run_once(&self, now: DateTime<Utc>) -> Result<usize> {
-        let org_ids = sqlx::query("select id from organizations")
+        // Personal B2C: iterate account owners (= users) that have chat history.
+        let owner_ids = sqlx::query(
+            r#"
+            select distinct owner_user_id as id
+            from chat_sessions
+            where owner_user_id is not null
+            "#,
+        )
             .fetch_all(&self.pool)
             .await?
             .into_iter()
@@ -68,10 +75,10 @@ impl AgentPreferenceConsolidationJobRunner {
             .collect::<Vec<_>>();
 
         let mut updated_profiles = 0usize;
-        for org_id in org_ids {
+        for owner_user_id in owner_ids {
             let mut tx = self.pool.begin().await?;
-            sqlx::query("select set_config('app.current_org', $1, true)")
-                .bind(org_id.to_string())
+            sqlx::query("select set_config('app.current_user', $1, true)")
+                .bind(owner_user_id.to_string())
                 .execute(tx.as_mut())
                 .await?;
 
@@ -82,9 +89,9 @@ impl AgentPreferenceConsolidationJobRunner {
                        profiles.user_id is not null as has_profile
                 from chat_sessions sessions
                 left join user_profiles profiles
-                  on profiles.org_id = sessions.org_id
+                  on profiles.owner_user_id = sessions.owner_user_id
                  and profiles.user_id = sessions.user_id
-                where sessions.org_id = $1
+                where sessions.owner_user_id = $1
                   and sessions.user_id is not null
                   and exists (
                     select 1
@@ -94,7 +101,7 @@ impl AgentPreferenceConsolidationJobRunner {
                   )
                 "#,
             )
-            .bind(org_id)
+            .bind(owner_user_id)
             .fetch_all(tx.as_mut())
             .await?;
 
@@ -127,14 +134,14 @@ impl AgentPreferenceConsolidationJobRunner {
                     select messages.content
                     from chat_messages messages
                     join chat_sessions sessions on sessions.id = messages.session_id
-                    where sessions.org_id = $1
+                    where sessions.owner_user_id = $1
                       and sessions.user_id = $2
                       and messages.role = 'user'
                       and messages.created_at > $3
                     order by messages.created_at asc
                     "#,
                 )
-                .bind(org_id)
+                .bind(owner_user_id)
                 .bind(user_id)
                 .bind(since)
                 .fetch_all(tx.as_mut())
@@ -161,7 +168,7 @@ impl AgentPreferenceConsolidationJobRunner {
                     sqlx::query(
                         r#"
                         insert into user_profiles (
-                            user_id, org_id, expertise_domains, preferred_answer_style,
+                            user_id, owner_user_id, expertise_domains, preferred_answer_style,
                             frequently_asked_topics, custom_preferences, inferred_at, inference_version
                         )
                         values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, $3, $4, 'agent-preference-memory-v1')
@@ -173,7 +180,7 @@ impl AgentPreferenceConsolidationJobRunner {
                         "#,
                     )
                     .bind(user_id)
-                    .bind(org_id)
+                    .bind(owner_user_id)
                     .bind(serde_json::to_value(&preferences)?)
                     .bind(now)
                     .execute(tx.as_mut())
@@ -204,7 +211,7 @@ impl AgentPreferenceConsolidationJobRunner {
                 sqlx::query(
                     r#"
                     insert into user_profiles (
-                        user_id, org_id, expertise_domains, preferred_answer_style,
+                        user_id, owner_user_id, expertise_domains, preferred_answer_style,
                         frequently_asked_topics, custom_preferences, inferred_at, inference_version
                     )
                     values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, $3, $4, 'agent-preference-memory-v1')
@@ -216,7 +223,7 @@ impl AgentPreferenceConsolidationJobRunner {
                     "#,
                 )
                 .bind(user_id)
-                .bind(org_id)
+                .bind(owner_user_id)
                 .bind(serde_json::to_value(&preferences)?)
                 .bind(now)
                 .execute(tx.as_mut())

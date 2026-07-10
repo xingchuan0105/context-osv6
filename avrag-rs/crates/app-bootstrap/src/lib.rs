@@ -292,7 +292,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let embedding_tenant = {
         let auth = auth_context_from_config(&config);
         avrag_llm::TenantContext {
-            org_id: auth.org_id().into_uuid(),
+            owner_user_id: auth.user_id().into_uuid(),
             user_id: auth
                 .actor_id()
                 .map(|a| a.into_uuid())

@@ -8,12 +8,12 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import {
   adminText,
   formatAdminError,
-  orgStatusLabel,
+  accountStatusLabel,
   planLabel,
 } from "./admin-i18n";
 import {
-  useAdminOrganizationsQuery as useOrganizationsQuery,
-  useUpdateAdminOrganizationBlockedMutation,
+  useAdminAccountsQuery as useAccountsQuery,
+  useUpdateAdminAccountBlockedMutation,
 } from "./admin-queries";
 import {
   AdminMetricCard,
@@ -24,57 +24,57 @@ import {
 } from "./admin-shared-ui";
 import {
   rowBusy,
-  sortOrganizations,
+  sortAccounts,
 } from "./admin-utils";
 
-export function AdminOrganizationsSurface() {
+export function AdminAccountsSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
   const { locale } = useUiPreferences();
-  const organizationsQuery = useOrganizationsQuery(actorId, token);
-  const toggleBlockedMutation = useUpdateAdminOrganizationBlockedMutation(actorId, token);
+  const accountsQuery = useAccountsQuery(actorId, token);
+  const toggleBlockedMutation = useUpdateAdminAccountBlockedMutation(actorId, token);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortMode, setSortMode] = useState("queries_desc");
   const [busyOrgId, setBusyOrgId] = useState("");
-  const organizations = organizationsQuery.data ?? [];
-  const filteredOrganizations = sortOrganizations(
-    organizations.filter((organization) => {
+  const accounts = accountsQuery.data ?? [];
+  const filteredAccounts = sortAccounts(
+    accounts.filter((account) => {
       const normalizedQuery = query.trim().toLowerCase();
 
       if (
         normalizedQuery &&
-        !organization.name.toLowerCase().includes(normalizedQuery) &&
-        !organization.id.toLowerCase().includes(normalizedQuery) &&
-        !organization.plan.toLowerCase().includes(normalizedQuery)
+        !account.name.toLowerCase().includes(normalizedQuery) &&
+        !account.id.toLowerCase().includes(normalizedQuery) &&
+        !account.plan.toLowerCase().includes(normalizedQuery)
       ) {
         return false;
       }
 
       if (statusFilter === "active") {
-        return !organization.blocked;
+        return !account.blocked;
       }
 
       if (statusFilter === "blocked") {
-        return organization.blocked;
+        return account.blocked;
       }
 
       return true;
     }),
     sortMode,
   );
-  const blockedCount = organizations.filter((organization) => organization.blocked).length;
-  const activeCount = organizations.length - blockedCount;
-  const totalUserCount = organizations.reduce((total, organization) => total + organization.user_count, 0);
-  const totalWorkspaceCount = organizations.reduce((total, organization) => total + organization.workspace_count, 0);
-  const error = organizationsQuery.error ?? toggleBlockedMutation.error ?? null;
-  const loading = Boolean(token) && organizationsQuery.isPending;
+  const blockedCount = accounts.filter((account) => account.blocked).length;
+  const activeCount = accounts.length - blockedCount;
+  const totalUserCount = accounts.reduce((total, account) => total + account.user_count, 0);
+  const totalWorkspaceCount = accounts.reduce((total, account) => total + account.workspace_count, 0);
+  const error = accountsQuery.error ?? toggleBlockedMutation.error ?? null;
+  const loading = Boolean(token) && accountsQuery.isPending;
 
-  async function handleToggleBlocked(orgId: string, blocked: boolean) {
-    setBusyOrgId(orgId);
+  async function handleToggleBlocked(ownerUserId: string, blocked: boolean) {
+    setBusyOrgId(ownerUserId);
 
     try {
-      await toggleBlockedMutation.mutateAsync({ orgId, blocked });
+      await toggleBlockedMutation.mutateAsync({ ownerUserId, blocked });
     } finally {
       setBusyOrgId("");
     }
@@ -83,25 +83,25 @@ export function AdminOrganizationsSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminText(locale, "admin.nav.organizations")}
-        subtitle={adminText(locale, "organizations.subtitle")}
+        title={adminText(locale, "admin.nav.accounts")}
+        subtitle={adminText(locale, "accounts.subtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       {loading ? (
-        <LoadingState copy={adminText(locale, "organizations.loading")} />
-      ) : organizations.length === 0 ? (
-        <EmptyState copy={adminText(locale, "organizations.empty")} />
+        <LoadingState copy={adminText(locale, "accounts.loading")} />
+      ) : accounts.length === 0 ? (
+        <EmptyState copy={adminText(locale, "accounts.empty")} />
       ) : (
         <>
           <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
-            <AdminMetricCard label={adminText(locale, "admin.metrics.totalOrganizations")} tone="primary" value={organizations.length.toString()} />
-            <AdminMetricCard label={adminText(locale, "organizations.activeOrganizations")} tone="success" value={activeCount.toString()} />
-            <AdminMetricCard label={adminText(locale, "organizations.blockedOrganizations")} tone="danger" value={blockedCount.toString()} />
+            <AdminMetricCard label={adminText(locale, "admin.metrics.totalAccounts")} tone="primary" value={accounts.length.toString()} />
+            <AdminMetricCard label={adminText(locale, "accounts.activeAccounts")} tone="success" value={activeCount.toString()} />
+            <AdminMetricCard label={adminText(locale, "accounts.blockedAccounts")} tone="danger" value={blockedCount.toString()} />
             <AdminMetricCard
-              label={adminText(locale, "organizations.totalWorkspaces")}
+              label={adminText(locale, "accounts.totalWorkspaces")}
               tone="warning"
               value={totalWorkspaceCount.toString()}
-              detail={`${adminText(locale, "organizations.usersCovered")} ${totalUserCount}`}
+              detail={`${adminText(locale, "accounts.usersCovered")} ${totalUserCount}`}
             />
           </div>
 
@@ -115,14 +115,14 @@ export function AdminOrganizationsSurface() {
                   className="app-input"
                   id="admin-org-search"
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder={adminText(locale, "organizations.filterByNameIdPlan")}
+                  placeholder={adminText(locale, "accounts.filterByNameIdPlan")}
                   type="text"
                   value={query}
                 />
               </div>
               <div>
                 <label className="app-form-label" htmlFor="admin-org-status-filter">
-                  {adminText(locale, "organizations.statusFilterLabel")}
+                  {adminText(locale, "accounts.statusFilterLabel")}
                 </label>
                 <select
                   className="app-input"
@@ -140,22 +140,22 @@ export function AdminOrganizationsSurface() {
                   {adminText(locale, "admin.filter.sortLabel")}
                 </label>
                 <select className="app-input" id="admin-org-sort" onChange={(event) => setSortMode(event.target.value)} value={sortMode}>
-                  <option value="queries_desc">{adminText(locale, "organizations.sort.queriesDesc")}</option>
-                  <option value="users_desc">{adminText(locale, "organizations.sort.usersDesc")}</option>
-                  <option value="workspaces_desc">{adminText(locale, "organizations.sort.workspacesDesc")}</option>
+                  <option value="queries_desc">{adminText(locale, "accounts.sort.queriesDesc")}</option>
+                  <option value="users_desc">{adminText(locale, "accounts.sort.usersDesc")}</option>
+                  <option value="workspaces_desc">{adminText(locale, "accounts.sort.workspacesDesc")}</option>
                   <option value="created_desc">{adminText(locale, "users.newestFirst")}</option>
-                  <option value="name_asc">{adminText(locale, "organizations.sort.nameAsc")}</option>
+                  <option value="name_asc">{adminText(locale, "accounts.sort.nameAsc")}</option>
                 </select>
               </div>
             </div>
             <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
-              <span>{adminText(locale, "organizations.matching")} {filteredOrganizations.length}/{organizations.length}</span>
-              <span>{adminText(locale, "organizations.usersCovered")} {filteredOrganizations.reduce((total, organization) => total + organization.user_count, 0)}</span>
+              <span>{adminText(locale, "accounts.matching")} {filteredAccounts.length}/{accounts.length}</span>
+              <span>{adminText(locale, "accounts.usersCovered")} {filteredAccounts.reduce((total, account) => total + account.user_count, 0)}</span>
             </div>
           </section>
 
-          {filteredOrganizations.length === 0 ? (
-            <EmptyState copy={adminText(locale, "organizations.noMatch")} />
+          {filteredAccounts.length === 0 ? (
+            <EmptyState copy={adminText(locale, "accounts.noMatch")} />
           ) : (
             <section className="app-inline-surface" style={{ overflowX: "auto", padding: 0 }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -177,23 +177,23 @@ export function AdminOrganizationsSurface() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrganizations.map((organization) => {
-                    const isBusy = rowBusy(organization.id, busyOrgId, toggleBlockedMutation.isPending);
+                  {filteredAccounts.map((account) => {
+                    const isBusy = rowBusy(account.id, busyOrgId, toggleBlockedMutation.isPending);
 
                     return (
-                      <tr key={organization.id} style={{ borderTop: "1px solid hsl(var(--border))" }}>
+                      <tr key={account.id} style={{ borderTop: "1px solid hsl(var(--border))" }}>
                         <td style={{ padding: "1rem" }}>
-                          <Link href={`/admin/organizations/${organization.id}`} style={{ fontWeight: 600 }}>
-                            {organization.name}
+                          <Link href={`/admin/accounts/${account.id}`} style={{ fontWeight: 600 }}>
+                            {account.name}
                           </Link>
                           <div style={{ fontSize: "0.78rem", color: "hsl(var(--muted-foreground))", marginTop: "0.2rem" }}>
-                            ID: {organization.id.slice(0, 8)}...
+                            ID: {account.id.slice(0, 8)}...
                           </div>
                         </td>
-                        <td style={{ padding: "1rem" }}>{planLabel(locale, organization.plan)}</td>
-                        <td style={{ padding: "1rem" }}>{organization.user_count}</td>
-                        <td style={{ padding: "1rem" }}>{organization.workspace_count}</td>
-                        <td style={{ padding: "1rem" }}>{organization.query_count}</td>
+                        <td style={{ padding: "1rem" }}>{planLabel(locale, account.plan)}</td>
+                        <td style={{ padding: "1rem" }}>{account.user_count}</td>
+                        <td style={{ padding: "1rem" }}>{account.workspace_count}</td>
+                        <td style={{ padding: "1rem" }}>{account.query_count}</td>
                         <td style={{ padding: "1rem" }}>
                           <span
                             style={{
@@ -201,11 +201,11 @@ export function AdminOrganizationsSurface() {
                               alignItems: "center",
                               padding: "0.25rem 0.6rem",
                               borderRadius: "999px",
-                              background: organization.blocked ? "rgba(197, 48, 48, 0.1)" : "rgba(25, 135, 84, 0.1)",
-                              color: organization.blocked ? "hsl(var(--destructive))" : "hsl(var(--success))",
+                              background: account.blocked ? "rgba(197, 48, 48, 0.1)" : "rgba(25, 135, 84, 0.1)",
+                              color: account.blocked ? "hsl(var(--destructive))" : "hsl(var(--success))",
                             }}
                           >
-                            {orgStatusLabel(locale, organization.blocked)}
+                            {accountStatusLabel(locale, account.blocked)}
                           </span>
                         </td>
                         <td style={{ padding: "1rem" }}>
@@ -213,11 +213,11 @@ export function AdminOrganizationsSurface() {
                             className="app-button-ghost"
                             disabled={isBusy}
                             type="button"
-                            onClick={() => void handleToggleBlocked(organization.id, !organization.blocked)}
+                            onClick={() => void handleToggleBlocked(account.id, !account.blocked)}
                           >
                             {isBusy
                               ? adminText(locale, "common.processing")
-                              : organization.blocked
+                              : account.blocked
                                 ? adminText(locale, "admin.unblockAction")
                                 : adminText(locale, "admin.blockAction")}
                           </button>

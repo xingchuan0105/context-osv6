@@ -193,7 +193,7 @@ impl DocumentRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, workspace_id, file_name, mime_type, file_size, status, object_path
+            select id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, object_path
             from documents
             where id = $1
             for update
@@ -208,7 +208,7 @@ impl DocumentRepository {
             return Ok(DocumentDeletionOutcome::NotFound);
         };
 
-        let org_id: Uuid = row.try_get("org_id")?;
+        let owner_user_id: Uuid = row.try_get("owner_user_id")?;
         let workspace_id: Uuid = row.try_get("workspace_id")?;
         let status_text: String = row.try_get("status")?;
         let status = parse_document_status(&status_text);
@@ -220,7 +220,7 @@ impl DocumentRepository {
 
         let task_inserted = insert_document_cleanup_task(
             tx.inner(),
-            org_id,
+            owner_user_id,
             workspace_id,
             document_id,
             context.actor_id().map(ActorId::into_uuid),
@@ -258,13 +258,13 @@ impl DocumentRepository {
                 locked_by = null,
                 lock_token = null,
                 updated_at = now()
-            where org_id = $1
+            where owner_user_id = $1
               and document_id = $2
               and status in ('queued', 'processing')
               and dead_lettered_at is null
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
@@ -320,12 +320,12 @@ impl DocumentRepository {
             update documents d
             set status = $2, updated_at = now()
             where d.id = $1
-              and d.org_id = $3
+              and d.owner_user_id = $3
               and d.status not in ('deleting', 'deleted')
               and exists (
                   select 1
                   from ingestion_tasks it
-                  where it.org_id = d.org_id
+                  where it.owner_user_id = d.owner_user_id
                     and it.document_id = d.id
                     and it.task_id = $4
                     and it.lock_token = $5
@@ -336,7 +336,7 @@ impl DocumentRepository {
         )
         .bind(document_id)
         .bind(document_status_str(&status))
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(task_id)
         .bind(lock_token)
         .execute(tx.inner())
@@ -371,9 +371,9 @@ impl DocumentRepository {
                 select 1
                 from documents d
                 join ingestion_tasks it
-                  on it.org_id = d.org_id
+                  on it.owner_user_id = d.owner_user_id
                  and it.document_id = d.id
-                where d.org_id = $1
+                where d.owner_user_id = $1
                   and d.id = $2
                   and d.status not in ('deleting', 'deleted')
                   and it.task_id = $3
@@ -383,7 +383,7 @@ impl DocumentRepository {
             ) as allowed
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(document_id)
         .bind(task_id)
         .bind(lock_token)
@@ -407,19 +407,19 @@ impl DocumentRepository {
                 select 1
                 from chunks c
                 where c.document_id = $1
-                  and c.org_id = $2
+                  and c.owner_user_id = $2
                   and c.chunk_type = 'body'
             )
             or exists(
                 select 1
                 from document_multimodal_chunks m
                 where m.document_id = $1
-                  and m.org_id = $2
+                  and m.owner_user_id = $2
             ) as has_content
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_one(tx.inner())
         .await?;
         tx.commit().await?;
@@ -450,19 +450,19 @@ impl DocumentRepository {
 
         let mut tx = self.pool.begin(context).await?;
         let metadata = serde_json::json!({});
-        let org_id = context.org_id().into_uuid();
+        let owner_user_id = context.user_id().into_uuid();
         let result = sqlx::query(
             r#"
             update chunks c
             set content = $2, metadata = $3
             where c.document_id = $1
               and c.chunk_type = 'summary'
-              and c.org_id = $4
+              and c.owner_user_id = $4
               and exists (
                   select 1
                   from documents d
                   where d.id = c.document_id
-                    and d.org_id = c.org_id
+                    and d.owner_user_id = c.owner_user_id
                     and d.status not in ('deleting', 'deleted')
                   for update
               )
@@ -471,7 +471,7 @@ impl DocumentRepository {
                   or exists (
                       select 1
                       from ingestion_tasks it
-                      where it.org_id = c.org_id
+                      where it.owner_user_id = c.owner_user_id
                         and it.document_id = c.document_id
                         and it.task_id = $5
                         and it.lock_token = $6
@@ -484,7 +484,7 @@ impl DocumentRepository {
         .bind(document_id)
         .bind(&summary.summary_text)
         .bind(&metadata)
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(task_id)
         .bind(lock_token)
         .execute(tx.inner())
@@ -493,13 +493,13 @@ impl DocumentRepository {
         if result.rows_affected() == 0 {
             let result = sqlx::query(
                 r#"
-                insert into chunks (id, org_id, document_id, chunk_type, content, metadata)
+                insert into chunks (id, owner_user_id, document_id, chunk_type, content, metadata)
                 select gen_random_uuid(), $4, $1, 'summary', $2, $3
                 where exists (
                     select 1
                     from documents d
                     where d.id = $1
-                      and d.org_id = $4
+                      and d.owner_user_id = $4
                       and d.status not in ('deleting', 'deleted')
                     for update
                 )
@@ -508,7 +508,7 @@ impl DocumentRepository {
                       or exists (
                           select 1
                           from ingestion_tasks it
-                          where it.org_id = $4
+                          where it.owner_user_id = $4
                             and it.document_id = $1
                             and it.task_id = $5
                             and it.lock_token = $6
@@ -521,7 +521,7 @@ impl DocumentRepository {
             .bind(document_id)
             .bind(&summary.summary_text)
             .bind(&metadata)
-            .bind(org_id)
+            .bind(owner_user_id)
             .bind(task_id)
             .bind(lock_token)
             .execute(tx.inner())
@@ -559,19 +559,19 @@ impl DocumentRepository {
 
         let mut tx = self.pool.begin(context).await?;
         let metadata = serde_json::to_value(profile).unwrap_or_default();
-        let org_id = context.org_id().into_uuid();
+        let owner_user_id = context.user_id().into_uuid();
         let result = sqlx::query(
             r#"
             update chunks c
             set metadata = $2
             where c.document_id = $1
               and c.chunk_type = 'profile'
-              and c.org_id = $3
+              and c.owner_user_id = $3
               and exists (
                   select 1
                   from documents d
                   where d.id = c.document_id
-                    and d.org_id = c.org_id
+                    and d.owner_user_id = c.owner_user_id
                     and d.status not in ('deleting', 'deleted')
                   for update
               )
@@ -580,7 +580,7 @@ impl DocumentRepository {
                   or exists (
                       select 1
                       from ingestion_tasks it
-                      where it.org_id = c.org_id
+                      where it.owner_user_id = c.owner_user_id
                         and it.document_id = c.document_id
                         and it.task_id = $4
                         and it.lock_token = $5
@@ -592,7 +592,7 @@ impl DocumentRepository {
         )
         .bind(document_id)
         .bind(&metadata)
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(task_id)
         .bind(lock_token)
         .execute(tx.inner())
@@ -601,13 +601,13 @@ impl DocumentRepository {
         if result.rows_affected() == 0 {
             let result = sqlx::query(
                 r#"
-                insert into chunks (id, org_id, document_id, chunk_type, content, metadata)
+                insert into chunks (id, owner_user_id, document_id, chunk_type, content, metadata)
                 select gen_random_uuid(), $3, $1, 'profile', '', $2
                 where exists (
                     select 1
                     from documents d
                     where d.id = $1
-                      and d.org_id = $3
+                      and d.owner_user_id = $3
                       and d.status not in ('deleting', 'deleted')
                     for update
                 )
@@ -616,7 +616,7 @@ impl DocumentRepository {
                       or exists (
                           select 1
                           from ingestion_tasks it
-                          where it.org_id = $3
+                          where it.owner_user_id = $3
                             and it.document_id = $1
                             and it.task_id = $4
                             and it.lock_token = $5
@@ -628,7 +628,7 @@ impl DocumentRepository {
             )
             .bind(document_id)
             .bind(&metadata)
-            .bind(org_id)
+            .bind(owner_user_id)
             .bind(task_id)
             .bind(lock_token)
             .execute(tx.inner())

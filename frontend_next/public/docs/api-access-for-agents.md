@@ -28,7 +28,7 @@ Agents do **not** need a separate “account-level” or “org-level” key for
 - **Agents (external automation):** `Authorization: Bearer <workspace_api_key>` on `POST /api/v1/mcp` and scoped REST routes. Permission checks apply to the key (`index`, `query`, etc.).
 - **Human UI (interactive sessions):** user JWT (or trusted frontend proxy headers). Signed-in users are not subject to API-key permission strings.
 - **Workspace API keys** (scoped to one `workspace_id`): default permissions `index`, `query` when omitted at creation — call `workspace.*` MCP tools only.
-- Internal proxy auth (`x-org-id`, `x-user-id`, optional `x-permissions`) is for trusted frontends and tests only. End users and personal agents should use JWT or workspace API keys instead.
+- Internal proxy auth (`x-owner-user-id`, `x-user-id`, optional `x-permissions`) is for trusted frontends and tests only. End users and personal agents should use JWT or workspace API keys instead.
 
 Create workspace keys (product path): `POST /api/v1/workspaces/{workspace_id}/api-keys` (signed-in user session only; managed from the workspace API Access UI)
 
@@ -81,7 +81,7 @@ Example `tools/call`:
 
 ### Wire-protocol note (not part of the personal product UI)
 
-The MCP catalog may still list tools named `org.create_workspace` and `org.list_workspaces`. Those names reflect internal routing, not a user-facing organization feature. **Personal users create workspaces in the UI**, not through agent credentials. Integrators should not depend on account-scoped API keys unless they operate a separate automation platform.
+The MCP catalog may still list tools named `account.create_workspace` and `account.list_workspaces`. Those names reflect internal routing, not a user-facing account feature. **Personal users create workspaces in the UI**, not through agent credentials. Integrators should not depend on account-scoped API keys unless they operate a separate automation platform.
 
 ## REST endpoints (advanced / UI)
 

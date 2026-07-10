@@ -26,8 +26,8 @@ pub(crate) async fn begin_super_admin_tx_sqlx<'a>(
     Ok(tx)
 }
 
-pub(crate) async fn set_current_org(conn: &mut PgConnection, org_id: &str) -> Result<(), AppError> {
-    set_config(conn, "app.current_org", org_id)
+pub(crate) async fn set_rls_owner(conn: &mut PgConnection, owner_user_id: &str) -> Result<(), AppError> {
+    set_config(conn, "app.current_user", owner_user_id)
         .await
         .map_err(db_err)
 }
@@ -57,7 +57,7 @@ pub(crate) async fn set_public_share_token(
 }
 
 pub(crate) struct RlsContext<'a> {
-    pub org_id: Option<&'a str>,
+    pub owner_user_id: Option<&'a str>,
     pub role: Option<&'a str>,
     pub user_id: Option<&'a str>,
     pub public_share_token: Option<&'a str>,
@@ -67,8 +67,8 @@ pub(crate) async fn set_rls_context(
     conn: &mut PgConnection,
     ctx: RlsContext<'_>,
 ) -> Result<(), AppError> {
-    if let Some(org_id) = ctx.org_id {
-        set_current_org(conn, org_id).await?;
+    if let Some(owner_user_id) = ctx.owner_user_id {
+        set_rls_owner(conn, owner_user_id).await?;
     }
     if let Some(role) = ctx.role {
         set_current_role(conn, role).await?;

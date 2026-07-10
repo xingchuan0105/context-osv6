@@ -7,7 +7,7 @@ use app_core::{
 };
 use app_documents::DocumentContext;
 use async_trait::async_trait;
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use common::AppError;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -46,7 +46,7 @@ impl ObjectStorePort for TestObjectStore {
     }
 }
 
-fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, String) {
+fn memory_storage(owner_user_id: &str, user_id: &str) -> (StorageContext, String, String) {
     let memory_state = Arc::new(RwLock::new(MemoryState::default()));
     let storage = StorageContext::from_parts(StorageContextParts {
         infra: StorageInfra {
@@ -77,17 +77,17 @@ fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, Strin
             download_expire_sec: 3600,
         },
     });
-    (storage, org_id.to_string(), user_id.to_string())
+    (storage, owner_user_id.to_string(), user_id.to_string())
 }
 
 #[tokio::test]
 async fn validate_document_scope_rejects_foreign_workspace_in_memory() {
-    let (storage, org_id, user_id) = memory_storage(
+    let (storage, owner_user_id, user_id) = memory_storage(
         "00000000-0000-0000-0000-000000000001",
         "00000000-0000-0000-0000-000000000002",
     );
     let auth = AuthContext::new(
-        OrgId::from(Uuid::parse_str(&org_id).unwrap()),
+        UserId::from(Uuid::parse_str(&owner_user_id).unwrap()),
         SubjectKind::User,
     )
     .with_actor_id(ActorId::new(Uuid::parse_str(&user_id).unwrap()));
@@ -103,7 +103,7 @@ async fn validate_document_scope_rejects_foreign_workspace_in_memory() {
             app_core::StoredDocument {
                 document: common::Document {
                     id: document_id.clone(),
-                    org_id: org_id.clone(),
+                    owner_user_id: owner_user_id.clone(),
                     workspace_id: notebook_a.clone(),
                     owner_id: user_id.clone(),
                     file_name: "scope.txt".to_string(),

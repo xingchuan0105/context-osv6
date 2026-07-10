@@ -148,7 +148,7 @@ Symptom: 生产扇入 `common` 24（v3: 22）、`avrag-auth` 22（v3: 20）；`c
 
 Source: Brooks — The Mythical Man-Month — Ch. 2: Brooks's Law (communication overhead via change radius)
 
-Consequence: 修改 `AuthContext` / `OrgId` 或 `ContentStore` 签名仍触发约 2/3 workspace 重编译；desktop 经 `common` 间接依赖 auth，枢纽变更继续波及桌面端。
+Consequence: 修改 `AuthContext` / `UserId` 或 `ContentStore` 签名仍触发约 2/3 workspace 重编译；desktop 经 `common` 间接依赖 auth，枢纽变更继续波及桌面端。
 
 Remedy: 将 `ContentStore` 所需的 auth 类型下沉到 `contracts` 或独立 `auth-types` 轻量 crate；`common` 仅 re-export 或完全去掉对 `avrag-auth` 的生产依赖，让适配器层（`storage-local` / `pg_*`）承担 auth 类型转换。
 

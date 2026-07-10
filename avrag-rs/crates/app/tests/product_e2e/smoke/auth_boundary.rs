@@ -2,7 +2,7 @@
 //!
 //! The transport-http layer enforces two things on every request:
 //! 1. An `AuthContext` must be resolvable from either a JWT bearer
-//!    token or `x-org-id` / `x-user-id` proxy headers. Otherwise → 401.
+//!    token or `x-owner-user-id` / `x-user-id` proxy headers. Otherwise → 401.
 //! 2. The resolved `AuthContext` must be in the right org scope for
 //!    the requested resource (notebooks, documents, etc.) — this is
 //!    the RLS path that the `tenants::isolation` tests also exercise.
@@ -72,7 +72,7 @@ async fn chat_with_malformed_org_id_uuid_returns_401() {
     super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
     let bare = bare_client_with_headers(&[
-        ("x-org-id", "not-a-uuid"),
+        ("x-owner-user-id", "not-a-uuid"),
         ("x-user-id", USER_ID),
         ("x-permissions", "external_network"),
     ]);
@@ -91,7 +91,7 @@ async fn chat_with_malformed_org_id_uuid_returns_401() {
     assert_eq!(
         resp.status().as_u16(),
         401,
-        "x-org-id that is not a valid UUID must be rejected, got {}",
+        "x-owner-user-id that is not a valid UUID must be rejected, got {}",
         resp.status()
     );
 }
@@ -109,7 +109,7 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
     // (no doc_scope, etc.) — we just want to confirm it does NOT 500.
     let ctx = TestContext::new_smoke().await;
     let bare =
-        bare_client_with_headers(&[("x-org-id", ORG_ID), ("x-permissions", "external_network")]);
+        bare_client_with_headers(&[("x-owner-user-id", ORG_ID), ("x-permissions", "external_network")]);
 
     let resp = bare
         .post(format!("{}/api/v1/chat", ctx.base_url))

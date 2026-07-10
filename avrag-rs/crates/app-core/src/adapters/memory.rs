@@ -1,6 +1,6 @@
 use crate::ports::workspaces::workspace_store::WorkspaceStore;
 use crate::{
-    BillingQuotaPort, DocumentStorePort, MemoryState, current_org_id, current_user_id,
+    BillingQuotaPort, DocumentStorePort, MemoryState, current_owner_user_id, current_user_id,
     domain_rows::{
         DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
         DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use contracts::auth_runtime::AuthContext;
 use common::{
     AppError, CreateWorkspaceRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
-    SourceRow, default_org_id, default_user_id, new_id, now_rfc3339,
+    SourceRow, default_owner_user_id, default_user_id, new_id, now_rfc3339,
 };
 use contracts::documents::DocumentStatus;
 use contracts::workspaces::Workspace;
@@ -32,7 +32,7 @@ impl WorkspaceStore for MemoryWorkspaceStore {
         let now = now_rfc3339();
         Ok(Workspace {
             id: new_id(),
-            org_id: default_org_id(),
+            owner_user_id: default_owner_user_id(),
             owner_id: default_user_id(),
             name: req.name.clone(),
             title: req.name,
@@ -58,7 +58,7 @@ impl MemoryDocumentStore {
 }
 
 fn org_matches(auth: &AuthContext, candidate: &str) -> bool {
-    candidate == current_org_id(auth)
+    candidate == current_owner_user_id(auth)
 }
 
 fn is_deleting_or_deleted(status: &DocumentStatus) -> bool {
@@ -79,7 +79,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(state
             .workspaces
             .values()
-            .filter(|n| org_matches(auth, &n.org_id))
+            .filter(|n| org_matches(auth, &n.owner_user_id))
             .cloned()
             .collect())
     }
@@ -93,7 +93,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(state
             .workspaces
             .get(&workspace_id.to_string())
-            .filter(|n| org_matches(auth, &n.org_id))
+            .filter(|n| org_matches(auth, &n.owner_user_id))
             .cloned())
     }
 
@@ -106,7 +106,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let now = now_rfc3339();
         let notebook = Workspace {
             id: new_id(),
-            org_id: current_org_id(auth),
+            owner_user_id: current_owner_user_id(auth),
             owner_id: current_user_id(auth),
             name: name.to_string(),
             title: name.to_string(),
@@ -137,7 +137,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(notebook) = notebook else {
             return Ok(None);
         };
-        if !org_matches(auth, &notebook.org_id) {
+        if !org_matches(auth, &notebook.owner_user_id) {
             return Ok(None);
         }
         if let Some(name) = name {
@@ -161,7 +161,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let can_delete = state
             .workspaces
             .get(&key)
-            .map(|n| org_matches(auth, &n.org_id))
+            .map(|n| org_matches(auth, &n.owner_user_id))
             .unwrap_or(false);
         if !can_delete {
             return Ok(false);
@@ -191,7 +191,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let mut result = Vec::new();
         for id in document_ids {
             if let Some(stored) = state.documents.get(&id.to_string())
-                && org_matches(auth, &stored.document.org_id)
+                && org_matches(auth, &stored.document.owner_user_id)
             {
                 result.push(DocumentScopeState {
                     document_id: *id,
@@ -222,7 +222,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(state
             .documents
             .values()
-            .filter(|stored| org_matches(auth, &stored.document.org_id))
+            .filter(|stored| org_matches(auth, &stored.document.owner_user_id))
             .filter(|stored| {
                 notebook_filter
                     .as_ref()
@@ -251,7 +251,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let now = now_rfc3339();
         let document = Document {
             id: new_id(),
-            org_id: current_org_id(auth),
+            owner_user_id: current_owner_user_id(auth),
             workspace_id: workspace_id.to_string(),
             owner_id: current_user_id(auth),
             file_name: filename.to_string(),
@@ -282,18 +282,18 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get(&document_id.to_string()) else {
             return Ok(None);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(None);
         }
         let doc = &stored.document;
         Ok(Some(DocumentTaskSeed {
             document_id: doc.id.clone(),
-            org_id: doc.org_id.clone(),
+            owner_user_id: doc.owner_user_id.clone(),
             workspace_id: doc.workspace_id.clone(),
             filename: doc.file_name.clone(),
             mime_type: doc.mime_type.clone(),
             file_size: doc.file_size,
-            object_path: format!("{}/{}/{}", doc.org_id, doc.workspace_id, doc.id),
+            object_path: format!("{}/{}/{}", doc.owner_user_id, doc.workspace_id, doc.id),
             status: doc.status.clone(),
         }))
     }
@@ -308,7 +308,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get_mut(&document_id.to_string()) else {
             return Ok(false);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(false);
         }
         if is_deleting_or_deleted(&stored.document.status) {
@@ -329,7 +329,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get_mut(&document_id.to_string()) else {
             return Ok(DocumentUploadMutationOutcome::NotFound);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(DocumentUploadMutationOutcome::NotFound);
         }
         if !upload_status_mutable(&stored.document.status) {
@@ -354,7 +354,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get_mut(&document_id.to_string()) else {
             return Ok(DocumentUploadQueueOutcome::NotFound);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(DocumentUploadQueueOutcome::NotFound);
         }
         if !upload_status_mutable(&stored.document.status) {
@@ -380,7 +380,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get_mut(&document_id.to_string()) else {
             return Ok(false);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(false);
         }
         if is_deleting_or_deleted(&stored.document.status) {
@@ -409,7 +409,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get_mut(&key) else {
             return Ok(DocumentDeletionOutcome::NotFound);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(DocumentDeletionOutcome::NotFound);
         }
         match stored.document.status {
@@ -435,7 +435,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let Some(stored) = state.documents.get(&document_id.to_string()) else {
             return Ok(None);
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Ok(None);
         }
         if is_deleting_or_deleted(&stored.document.status) {
@@ -464,7 +464,7 @@ impl DocumentStorePort for MemoryDocumentStore {
                 "document not found",
             ));
         };
-        if !org_matches(auth, &stored.document.org_id) {
+        if !org_matches(auth, &stored.document.owner_user_id) {
             return Err(AppError::not_found(
                 "document_not_found",
                 "document not found",

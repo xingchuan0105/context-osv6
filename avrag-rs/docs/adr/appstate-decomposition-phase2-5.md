@@ -204,7 +204,7 @@ impl StorageContext {
     pub fn max_upload_file_size_bytes(&self) -> u64 { ... }
     pub(crate) fn inner(&self) -> &Arc<RwLock<MemoryState>> { ... }
     pub(crate) fn api_keys(&self) -> &Arc<RwLock<BTreeMap<...>>> { ... }
-    pub(crate) fn current_org_id(auth: &AuthContext) -> String { ... }
+    pub(crate) fn current_owner_user_id(auth: &AuthContext) -> String { ... }
     pub(crate) fn current_user_id(auth: &AuthContext) -> String { ... }
 }
 ```

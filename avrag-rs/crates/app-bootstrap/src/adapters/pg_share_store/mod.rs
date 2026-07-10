@@ -17,7 +17,7 @@ use common::AppError;
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::adapters::pg_session::{set_current_org, set_current_role, set_public_share_token};
+use crate::adapters::pg_session::{set_rls_owner, set_current_role, set_public_share_token};
 
 pub struct PgShareStoreAdapter {
     repo: Arc<PgAppRepository>,

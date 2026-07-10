@@ -56,7 +56,7 @@ async fn oldest_event_in_window_drives_reset_at() {
     };
     run_migrations(&pool).await;
 
-    let (user_id, org_id) = seed_user_with_plan(&pool, PLAN_FREE).await;
+    let (user_id, owner_user_id) = seed_user_with_plan(&pool, PLAN_FREE).await;
 
     let now = Utc::now();
     let oldest = now - Duration::hours(4) - Duration::minutes(30);
@@ -64,14 +64,14 @@ async fn oldest_event_in_window_drives_reset_at() {
         sqlx::query(
             r#"
             insert into llm_usage_events
-                (org_id, user_id, feature, stage, provider, model,
+                (owner_user_id, user_id, feature, stage, provider, model,
                  prompt_tokens, completion_tokens, total_tokens,
                  usage_units, usage_source, created_at)
             values ($1, $2, 'chat', 'unknown', 'dashscope', 'qwen3.5-flash',
                     0, 0, 0, $3, 'actual', $4)
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(user_id)
         .bind(units)
         .bind(when)

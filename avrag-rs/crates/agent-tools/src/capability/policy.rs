@@ -357,7 +357,7 @@ mod tests {
 
     fn auth_with(permission: &str) -> contracts::auth_runtime::AuthContext {
         contracts::auth_runtime::AuthContext::new(
-            contracts::auth_runtime::OrgId::new(uuid::Uuid::nil()),
+            contracts::auth_runtime::UserId::new(uuid::Uuid::nil()),
             contracts::auth_runtime::SubjectKind::User,
         )
         .grant(permission)

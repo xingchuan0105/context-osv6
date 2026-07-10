@@ -36,11 +36,11 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/sources", get(handlers::list_sources_handler))
         .route(
             "/org/api-keys",
-            get(handlers::list_org_api_keys_handler).post(handlers::create_org_api_key_handler),
+            get(handlers::list_account_api_keys_handler).post(handlers::create_account_api_key_handler),
         )
         .route(
             "/org/api-keys/{key_id}",
-            axum::routing::delete(handlers::revoke_org_api_key_handler),
+            axum::routing::delete(handlers::revoke_account_api_key_handler),
         )
         .route("/notifications", get(handlers::list_notifications_handler))
         .route(

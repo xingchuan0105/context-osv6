@@ -111,7 +111,7 @@ Exit metering fixed double-insert into `llm_usage_events` for chat aggregation (
 **Additionally:**
 
 - `PgUsageObserver::map_feature` is **substring heuristics** (`contains("plan")`, `contains("answer")`, embedding → Answer). Wrong feature → wrong billable bucket forever, fail-open.
-- Worker observer uses **bootstrap system tenant**, not task `org_id`/`requested_by` — ingestion LLM/embedding spend is attributed to the wrong tenant for multi-tenant billing.
+- Worker observer uses **bootstrap system tenant**, not task `owner_user_id`/`requested_by` — ingestion LLM/embedding spend is attributed to the wrong tenant for multi-tenant billing.
 - Write path correctly prefers agent client + observer, but still **falls back to `WriterLlm::from_env()`** (second config channel for the same model).
 - `BillingContext.record_llm_usage` remains as a third entry for aggregated/cost analytics alongside observer.
 

@@ -3,7 +3,7 @@ use crate::types::MilvusStorageError;
 /// 租户上下文，强制在所有数据访问点传播
 #[derive(Debug, Clone)]
 pub struct TenantContext {
-    pub org_id: String,
+    pub owner_user_id: String,
     pub user_id: String,
     pub workspace_id: Option<String>,
     pub doc_scope: Vec<String>,
@@ -12,7 +12,7 @@ pub struct TenantContext {
 impl TenantContext {
     /// 构建 Milvus 过滤条件（强制注入租户 ID）
     pub fn build_milvus_filter(&self, base_filter: Option<&str>) -> String {
-        let tenant_filter = format!("org_id == '{}'", self.org_id);
+        let tenant_filter = format!("owner_user_id == '{}'", self.owner_user_id);
         match base_filter {
             Some(base) if !base.is_empty() => format!("({}) && ({})", tenant_filter, base),
             _ => tenant_filter,
@@ -20,8 +20,8 @@ impl TenantContext {
     }
 
     /// 验证数据访问权限
-    pub fn verify_access(&self, target_org_id: &str) -> Result<(), MilvusStorageError> {
-        if self.org_id != target_org_id {
+    pub fn verify_access(&self, target_owner_user_id: &str) -> Result<(), MilvusStorageError> {
+        if self.owner_user_id != target_owner_user_id {
             return Err(MilvusStorageError::TenantAccessDenied {
                 message: "cross_tenant_access_denied".to_string(),
             });

@@ -1,5 +1,5 @@
 use app_bootstrap::AppState;
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use axum::{
     Json,
     body::{Body, to_bytes},
@@ -16,7 +16,8 @@ use std::{
 use uuid::Uuid;
 
 pub(crate) const HEADER_REQUEST_ID: &str = "x-request-id";
-pub(crate) const HEADER_ORG_ID: &str = "x-org-id";
+/// Trusted proxy account owner (`x-owner-user-id`). Personal B2C may omit and use `x-user-id`.
+pub(crate) const HEADER_OWNER_USER_ID: &str = "x-owner-user-id";
 pub(crate) const HEADER_USER_ID: &str = "x-user-id";
 pub(crate) const HEADER_RATE_LIMIT_LIMIT: &str = "x-ratelimit-limit";
 pub(crate) const HEADER_RATE_LIMIT_REMAINING: &str = "x-ratelimit-remaining";
@@ -158,7 +159,7 @@ pub(crate) async fn request_context_middleware(
                 "message": if is_chat_endpoint {
                     "Viewing shared content does not require sign-in, but asking questions requires sign-in."
                 } else {
-                    "Authentication required. Provide a Bearer token or x-org-id header."
+                    "Authentication required. Provide a Bearer token or x-owner-user-id header."
                 },
             })),
         )
@@ -167,7 +168,7 @@ pub(crate) async fn request_context_middleware(
 
     let rate_key = format!(
         "{}:{}",
-        auth.org_id().into_uuid(),
+        auth.user_id().into_uuid(),
         auth.actor_id()
             .map(|actor| actor.into_uuid())
             .unwrap_or(Uuid::nil())
@@ -302,7 +303,7 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
     let token = crate::lib_impl::extract_bearer(headers)?;
 
     if let Some(claims) = crate::lib_impl::verify_jwt(token) {
-        let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
+        let org_uuid = Uuid::parse_str(&claims.owner_user_id).ok()?;
         let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
 
         if state.postgres_configured()
@@ -313,7 +314,7 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
             return None;
         }
 
-        let mut ctx = AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)
+        let mut ctx = AuthContext::new(UserId::from(org_uuid), SubjectKind::User)
             .with_actor_id(ActorId::new(user_uuid));
         for perm in &claims.permissions {
             ctx = ctx.grant(perm);
@@ -326,7 +327,7 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
         .validate_workspace_api_key(token)
         .await
         .ok()??;
-    let mut ctx = AuthContext::new(validated.org_id, SubjectKind::ApiKey)
+    let mut ctx = AuthContext::new(validated.owner_user_id, SubjectKind::ApiKey)
         .with_actor_id(ActorId::new(validated.key_id))
         .with_rate_limit_rpm(validated.rate_limit_rpm);
     if let Some(workspace_id) = validated.workspace_id {
@@ -352,21 +353,25 @@ fn proxy_auth_allowed(state: &AppState) -> bool {
 }
 
 fn auth_from_proxy_headers(headers: &HeaderMap) -> Option<AuthContext> {
-    let org_id = headers
-        .get(HEADER_ORG_ID)
+    // Account owner: x-owner-user-id, else personal account falls back to x-user-id.
+    let owner_user_id = headers
+        .get(HEADER_OWNER_USER_ID)
+        .or_else(|| headers.get(HEADER_USER_ID))
         .and_then(|value| value.to_str().ok())
         .and_then(|value| Uuid::parse_str(value).ok())
-        .map(OrgId::new)?;
+        .map(UserId::new)?;
 
-    let user_id = headers
+    let actor = headers
         .get(HEADER_USER_ID)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| Uuid::parse_str(value).ok())
         .map(ActorId::new);
 
-    let mut ctx = AuthContext::new(org_id, SubjectKind::User);
-    if let Some(actor) = user_id {
+    let mut ctx = AuthContext::new(owner_user_id, SubjectKind::User);
+    if let Some(actor) = actor {
         ctx = ctx.with_actor_id(actor);
+    } else {
+        ctx = ctx.with_actor_id(ActorId::new(owner_user_id.into_uuid()));
     }
     // Support x-permissions header for testing and internal routing.
     if let Some(perms) = headers.get("x-permissions").and_then(|v| v.to_str().ok()) {

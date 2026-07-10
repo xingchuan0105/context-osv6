@@ -29,11 +29,11 @@ impl PgAdminStoreAdapter {
         }
     }
 
-    fn map_org_info(row: sqlx::postgres::PgRow) -> Result<AdminOrgInfo, AppError> {
+    fn map_account_info(row: sqlx::postgres::PgRow) -> Result<AdminAccountInfo, AppError> {
         let id: Uuid = row.try_get("id").map_err(db_err)?;
         let created_at: DateTime<Utc> = row.try_get("created_at").map_err(db_err)?;
-        Ok(AdminOrgInfo {
-            id: OrgId::from(id),
+        Ok(AdminAccountInfo {
+            id: UserId::from(id),
             name: row.try_get("name").map_err(db_err)?,
             created_at: created_at.timestamp(),
             blocked: row.try_get("blocked").map_err(db_err)?,
@@ -45,12 +45,10 @@ impl PgAdminStoreAdapter {
 
     fn map_user_info(row: sqlx::postgres::PgRow) -> Result<AdminUserInfo, AppError> {
         let id: Uuid = row.try_get("id").map_err(db_err)?;
-        let org_id: Uuid = row.try_get("org_id").map_err(db_err)?;
         let created_at: DateTime<Utc> = row.try_get("created_at").map_err(db_err)?;
         Ok(AdminUserInfo {
             id: UserId::from(id),
             email: row.try_get("email").map_err(db_err)?,
-            org_id: OrgId::from(org_id),
             role: row.try_get("role").map_err(db_err)?,
             created_at: created_at.timestamp(),
         })
@@ -65,7 +63,7 @@ impl PgAdminStoreAdapter {
             builder.push("select count(*) as total from audit_log where 1 = 1");
         } else {
             builder.push(
-                "select id, actor_id, action, resource_type, resource_id, org_id, created_at from audit_log where 1 = 1",
+                "select id, actor_id, action, resource_type, resource_id, owner_user_id, created_at from audit_log where 1 = 1",
             );
         }
 
@@ -136,8 +134,8 @@ impl PgAdminStoreAdapter {
         let actor_id = row
             .try_get::<Option<Uuid>, _>("actor_id")
             .map_err(db_err)?;
-        let org_id = row
-            .try_get::<Option<Uuid>, _>("org_id")
+        let owner_user_id = row
+            .try_get::<Option<Uuid>, _>("owner_user_id")
             .map_err(db_err)?;
         let created_at: DateTime<Utc> = row.try_get("created_at").map_err(db_err)?;
         Ok(AdminAuditLogEntry {
@@ -146,7 +144,7 @@ impl PgAdminStoreAdapter {
             action: row.try_get("action").map_err(db_err)?,
             resource_type: row.try_get("resource_type").map_err(db_err)?,
             resource_id: row.try_get("resource_id").map_err(db_err)?,
-            org_id: org_id.map(|value| value.to_string()),
+            owner_user_id: owner_user_id.map(|value| value.to_string()),
             created_at: created_at.timestamp(),
         })
     }

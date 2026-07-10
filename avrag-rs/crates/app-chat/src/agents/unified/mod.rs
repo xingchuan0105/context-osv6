@@ -108,13 +108,13 @@ impl Agent for UnifiedAgent {
             .await;
 
         // Emit audit record for routing decision.
-        let org_id = request.auth.org_id().to_string();
+        let owner_user_id = request.auth.user_id().to_string();
         let actor_id_owned = request
             .auth
             .actor_id()
             .map(|id| id.into_uuid().to_string());
         let audit_record = audit::routing_decision_record(
-            &org_id,
+            &owner_user_id,
             actor_id_owned.as_deref(),
             &trace_id,
             &mode_id,
@@ -129,7 +129,7 @@ impl Agent for UnifiedAgent {
             .await;
 
         let tenant = TenantContext {
-            org_id: request.auth.org_id().into_uuid(),
+            owner_user_id: request.auth.user_id().into_uuid(),
             user_id: request
                 .auth
                 .actor_id()

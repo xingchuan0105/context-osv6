@@ -428,7 +428,7 @@ Discover -> Plan -> Teach -> Verify -> Remediate -> Iterate
 | 字段 | 说明 |
 |------|------|
 | `goal_id` | 学习目标 ID |
-| `org_id` | 租户边界 |
+| `owner_user_id` | 租户边界 |
 | `user_id` | 学习者 |
 | `workspace_id` | workspace |
 | `doc_scope` | 选中文档范围 |
@@ -489,7 +489,7 @@ Discover -> Plan -> Teach -> Verify -> Remediate -> Iterate
 |------|------|
 | `run_id` | 运行 ID |
 | `goal_id` | 学习目标 |
-| `org_id` | 租户边界 |
+| `owner_user_id` | 租户边界 |
 | `user_id` | 学习者 |
 | `workspace_id` | workspace |
 | `status` | `active/waiting_for_user/completed/paused/failed/cancelled` |

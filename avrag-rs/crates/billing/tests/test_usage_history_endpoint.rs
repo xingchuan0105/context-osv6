@@ -52,8 +52,8 @@ async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events() {
         .await
         .unwrap();
 
-    let (user_id, org_id) = seed_user_with_plan(&pool, "free").await;
-    seed_llm_usage_events(&pool, org_id, user_id, 3, 50_000).await;
+    let (user_id, owner_user_id) = seed_user_with_plan(&pool, "free").await;
+    seed_llm_usage_events(&pool, owner_user_id, user_id, 3, 50_000).await;
 
     // Sanity: 3 days x 50K = 150K total, grouped by date_trunc('day').
     let now = Utc::now();

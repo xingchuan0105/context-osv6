@@ -51,14 +51,14 @@ impl TestContext {
     }
 
     /// Create a Smoke E2E context with a specific org/user identity (no RAG).
-    pub async fn new_smoke_with_org(org_id: &str, user_id: &str) -> Self {
-        let identity = Some((org_id.to_string(), user_id.to_string()));
+    pub async fn new_smoke_with_org(owner_user_id: &str, user_id: &str) -> Self {
+        let identity = Some((owner_user_id.to_string(), user_id.to_string()));
         Self::build_smoke(false, 300, identity, false, None, false, None).await
     }
 
     /// Create a Smoke E2E context with RAG and a specific org/user identity.
-    pub async fn new_smoke_with_rag_and_org(org_id: &str, user_id: &str) -> Self {
-        let identity = Some((org_id.to_string(), user_id.to_string()));
+    pub async fn new_smoke_with_rag_and_org(owner_user_id: &str, user_id: &str) -> Self {
+        let identity = Some((owner_user_id.to_string(), user_id.to_string()));
         Self::build_smoke(true, 300, identity, false, None, false, None).await
     }
 

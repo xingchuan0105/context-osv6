@@ -12,8 +12,8 @@ use uuid::Uuid;
 use super::super::{app_error_response, error_response};
 use crate::middleware::RequestState;
 use crate::auth_guard::{
-    authorize_org_tool, authorize_workspace_notebook_str, org_create_permission,
-    org_list_permission, query_permission,
+    authorize_account_tool, authorize_workspace_notebook_str, account_create_permission,
+    account_list_permission, query_permission,
 };
 
 #[utoipa::path(
@@ -27,7 +27,7 @@ use crate::auth_guard::{
 pub(crate) async fn list_workspaces(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
-    if let Err(error) = authorize_org_tool(state.auth(), org_list_permission()) {
+    if let Err(error) = authorize_account_tool(state.auth(), account_list_permission()) {
         return app_error_response(error);
     }
     let workspaces = state.workspace().list_workspaces().await;
@@ -98,7 +98,7 @@ pub(crate) async fn create_workspace(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<CreateWorkspaceRequest>,
 ) -> Response {
-    if let Err(error) = authorize_org_tool(state.auth(), org_create_permission()) {
+    if let Err(error) = authorize_account_tool(state.auth(), account_create_permission()) {
         return app_error_response(error);
     }
     match state.workspace().create_workspace(req).await {

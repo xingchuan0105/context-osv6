@@ -51,7 +51,7 @@ pub struct DocumentStatusResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub workspace_id: String,
     pub owner_id: String,
     pub file_name: String,

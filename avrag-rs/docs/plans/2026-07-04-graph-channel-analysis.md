@@ -215,7 +215,7 @@ python3 - <<'EOF'
 from pymilvus import MilvusClient
 from collections import defaultdict
 c = MilvusClient(uri='http://127.0.0.1:19530')
-org = "org_id == '00000000-0000-0000-0000-000000000001'"
+org = "owner_user_id == '00000000-0000-0000-0000-000000000001'"
 rows = c.query(collection_name='avrag_e2e_00000000_rag_kg_relations', filter=org,
                output_fields=['doc_id','subject','object'], limit=1000)
 doc_ents = defaultdict(set)

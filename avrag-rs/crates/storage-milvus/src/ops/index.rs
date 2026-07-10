@@ -68,8 +68,8 @@ impl MilvusDataPlane {
 
         // Phase 0: Pre-cleanup.
         let purge_filter = format!(
-            "org_id == '{}' && doc_id == '{}'",
-            batch.org_id, batch.document_id
+            "owner_user_id == '{}' && doc_id == '{}'",
+            batch.owner_user_id, batch.document_id
         );
         let collections = [
             &names.text_chunks,
@@ -93,7 +93,7 @@ impl MilvusDataPlane {
                 .map(|chunk| {
                     json!({
                         "id": chunk.chunk_id.to_string(),
-                        "org_id": batch.org_id.to_string(),
+                        "owner_user_id": batch.owner_user_id.to_string(),
                         "workspace_id": batch.workspace_id.as_ref().map(Uuid::to_string),
                         "doc_id": batch.document_id.to_string(),
                         "chunk_id": chunk.chunk_id.to_string(),
@@ -133,7 +133,7 @@ impl MilvusDataPlane {
                 .map(|chunk| {
                     json!({
                         "id": chunk.chunk_id.to_string(),
-                        "org_id": batch.org_id.to_string(),
+                        "owner_user_id": batch.owner_user_id.to_string(),
                         "workspace_id": batch.workspace_id.as_ref().map(Uuid::to_string),
                         "doc_id": batch.document_id.to_string(),
                         "chunk_id": chunk.chunk_id.to_string(),
@@ -182,7 +182,7 @@ impl MilvusDataPlane {
                 .map(|entity| {
                     json!({
                         "id": entity.entity_id.to_string(),
-                        "org_id": batch.org_id.to_string(),
+                        "owner_user_id": batch.owner_user_id.to_string(),
                         "workspace_id": batch.workspace_id.as_ref().map(Uuid::to_string),
                         "doc_id": batch.document_id.to_string(),
                         "entity_id": entity.entity_id.to_string(),
@@ -222,7 +222,7 @@ impl MilvusDataPlane {
                 .map(|relation| {
                     json!({
                         "id": relation.relation_id.to_string(),
-                        "org_id": batch.org_id.to_string(),
+                        "owner_user_id": batch.owner_user_id.to_string(),
                         "workspace_id": batch.workspace_id.as_ref().map(Uuid::to_string),
                         "doc_id": batch.document_id.to_string(),
                         "relation_id": relation.relation_id.to_string(),
@@ -263,7 +263,7 @@ impl MilvusDataPlane {
                 .map(|passage| {
                     json!({
                         "id": passage.passage_id.to_string(),
-                        "org_id": batch.org_id.to_string(),
+                        "owner_user_id": batch.owner_user_id.to_string(),
                         "workspace_id": batch.workspace_id.as_ref().map(Uuid::to_string),
                         "doc_id": batch.document_id.to_string(),
                         "chunk_id": passage.chunk_id.as_ref().map(Uuid::to_string),

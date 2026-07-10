@@ -217,7 +217,7 @@ async fn create_document_upload_rejects_unsupported_file_type() {
         })
         .await
         .expect("notebook should create");
-    let org_id = "00000000-0000-0000-0000-000000000001";
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
     let user_id = "00000000-0000-0000-0000-000000000002";
 
     let app = build_router(state);
@@ -225,7 +225,7 @@ async fn create_document_upload_rejects_unsupported_file_type() {
         .uri(format!("/api/v1/workspaces/{}/documents", notebook.id))
         .method("POST")
         .header("Content-Type", "application/json")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(
             r#"{"filename":"archive","file_size":12,"mime_type":"application/octet-stream"}"#,
@@ -274,7 +274,7 @@ async fn dev_upload_handler_completes_upload_flow() {
     let req = Request::builder()
         .uri(format!("/dev-upload/{}", created.document_id))
         .method("PUT")
-        .header("x-org-id", "00000000-0000-0000-0000-000000000001")
+        .header("x-owner-user-id", "00000000-0000-0000-0000-000000000001")
         .header("x-user-id", "00000000-0000-0000-0000-000000000002")
         .body(Body::from("hello dev upload"))
         .unwrap();

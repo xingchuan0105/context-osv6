@@ -291,11 +291,11 @@ impl TestContext {
         };
 
         let identity = identity.or_else(|| Some(unique_test_identity()));
-        let (org_id, user_id) = identity
+        let (owner_user_id, user_id) = identity
             .as_ref()
             .expect("identity is always Some after .or_else above");
         let milvus_collection_prefix =
-            enable_rag.then(|| milvus_collection_prefix_for_identity(org_id));
+            enable_rag.then(|| milvus_collection_prefix_for_identity(owner_user_id));
 
         let (pg_url, shared_pg) = if let Some(infra) = persistent_infra {
             setup::acquire_external_postgres(&infra.postgres_url)
@@ -387,7 +387,7 @@ impl TestContext {
             "default".to_string()
         };
         let bootstrap = E2eBootstrapConfig {
-            org_id: org_id.clone(),
+            owner_user_id: owner_user_id.clone(),
             user_id: user_id.clone(),
             database_url: pg_url.clone(),
             auto_migrate: run_migrations,
@@ -532,7 +532,7 @@ impl TestContext {
         Self {
             http_client: client,
             base_url,
-            org_id: org_id.clone(),
+            owner_user_id: owner_user_id.clone(),
             user_id: user_id.clone(),
             app_state: Some(app_state),
             bootstrap: Some(bootstrap),
@@ -639,7 +639,7 @@ impl TestContext {
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(HTTP_TIMEOUT_REAL_LLM_SECS))
-            .default_headers(test_auth_headers_for(&fixture.org_id, &fixture.user_id))
+            .default_headers(test_auth_headers_for(&fixture.owner_user_id, &fixture.user_id))
             .build()
             .expect("reqwest client build");
 
@@ -653,7 +653,7 @@ impl TestContext {
         Self {
             http_client: client,
             base_url,
-            org_id: fixture.org_id.clone(),
+            owner_user_id: fixture.owner_user_id.clone(),
             user_id: fixture.user_id.clone(),
             app_state: Some(fixture.app_state.clone()),
             bootstrap: Some(bootstrap),
@@ -760,7 +760,7 @@ impl TestContext {
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(HTTP_TIMEOUT_RAG_SECS))
-            .default_headers(test_auth_headers_for(&fixture.org_id, &fixture.user_id))
+            .default_headers(test_auth_headers_for(&fixture.owner_user_id, &fixture.user_id))
             .build()
             .expect("reqwest client build");
 
@@ -774,7 +774,7 @@ impl TestContext {
         Self {
             http_client: client,
             base_url,
-            org_id: fixture.org_id.clone(),
+            owner_user_id: fixture.owner_user_id.clone(),
             user_id: fixture.user_id.clone(),
             app_state: Some(fixture.app_state.clone()),
             bootstrap: Some(bootstrap),

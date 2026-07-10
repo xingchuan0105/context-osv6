@@ -264,7 +264,7 @@
 
 字段建议：
 - `asset_id`
-- `org_id`
+- `owner_user_id`
 - `workspace_id`
 - `document_id`
 - `page`
@@ -281,7 +281,7 @@
 
 字段建议：
 - `chunk_id`
-- `org_id`
+- `owner_user_id`
 - `workspace_id`
 - `document_id`
 - `asset_id`

@@ -1,5 +1,5 @@
-import { AdminOrganizationsSurface } from "../../components/admin/admin-core-surfaces";
+import { AdminAccountsSurface } from "../../components/admin/admin-core-surfaces";
 
 export default function AdminHomePage() {
-  return <AdminOrganizationsSurface />;
+  return <AdminAccountsSurface />;
 }

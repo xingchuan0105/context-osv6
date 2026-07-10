@@ -1,5 +1,5 @@
 use super::*;
-pub use contracts::auth_runtime::{ActorId, AuthContext, AuthError, OrgId};
+pub use contracts::auth_runtime::{ActorId, AuthContext, AuthError, UserId};
 pub use chrono::{DateTime, Utc};
 pub use common::{
     merge_search_tokens, rrf_merge, segment_for_fts, ApiKeyRow, Document, DocumentContentResponse,
@@ -46,24 +46,24 @@ impl TenantPgPool {
         context: &AuthContext,
     ) -> Result<TenantTransaction<'a>, PgStorageError> {
         let mut tx = self.pool.begin().await?;
-        let org_id = context.org_id();
-        sqlx::query("select set_config('app.current_org', $1, true)")
-            .bind(org_id.to_string())
+        let owner_user_id = context.user_id();
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.to_string())
             .execute(&mut *tx)
             .await?;
 
-        Ok(TenantTransaction { tx, org_id })
+        Ok(TenantTransaction { tx, owner_user_id })
     }
 }
 
 pub struct TenantTransaction<'a> {
     tx: Transaction<'a, Postgres>,
-    org_id: OrgId,
+    owner_user_id: UserId,
 }
 
 impl<'a> TenantTransaction<'a> {
-    pub fn org_id(&self) -> OrgId {
-        self.org_id
+    pub fn owner_user_id(&self) -> UserId {
+        self.owner_user_id
     }
 
     pub fn inner(&mut self) -> &mut PgConnection {
@@ -94,7 +94,7 @@ pub struct NotificationCreateParams {
 #[derive(Debug, Clone)]
 pub struct ValidatedApiKey {
     pub id: Uuid,
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub workspace_id: Option<Uuid>,
     pub permissions: Vec<String>,
     pub created_by: Option<Uuid>,
@@ -104,7 +104,7 @@ pub struct ValidatedApiKey {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfileRow {
     pub user_id: Uuid,
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub expertise_domains: Vec<String>,
     pub preferred_answer_style: Option<String>,
     pub frequently_asked_topics: Vec<String>,

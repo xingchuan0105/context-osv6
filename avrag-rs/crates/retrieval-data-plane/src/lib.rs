@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use contracts::auth_runtime::{AuthContext, OrgId};
+use contracts::auth_runtime::{AuthContext, UserId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -143,9 +143,9 @@ pub struct GraphSearchRequest {
     pub hop_limit: usize,
     /// Maximum number of relations to retrieve per hop.
     pub fan_out_limit: usize,
-    /// Tenant context for mandatory access control.
-    /// All searches are scoped to this tenant's data.
-    pub tenant_org_id: String,
+    /// Account owner for mandatory access control.
+    /// All searches are scoped to this account's data.
+    pub owner_user_id: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -165,7 +165,7 @@ pub struct GraphSearchOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentIndexBatch {
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub workspace_id: Option<Uuid>,
     pub document_id: Uuid,
     pub parse_run_id: Uuid,
@@ -394,7 +394,7 @@ mod tests {
     }
 
     fn auth_context() -> AuthContext {
-        AuthContext::new(OrgId::from(Uuid::from_u128(1)), SubjectKind::System)
+        AuthContext::new(UserId::from(Uuid::from_u128(1)), SubjectKind::System)
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
                 query_entity_vectors: Vec::new(),
                 hop_limit: 1,
                 fan_out_limit: 10,
-                tenant_org_id: "test-org".to_string(),
+                owner_user_id: "test-org".to_string(),
             })
             .await
             .unwrap_err();

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::{
     DocumentIndexBatch, FALLBACK_RETRIEVAL_WEIGHT, MultimodalChunkIndexRecord, RetrievalDataPlane,
     RetrievalReadPort, TextDenseSearchRequest, multimodal_retrieval_weight,
@@ -69,7 +69,7 @@ impl RetrievalDataPlane for StubDataPlane {
 }
 
 fn auth_context() -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::from_u128(1)), SubjectKind::System)
+    AuthContext::new(UserId::from(Uuid::from_u128(1)), SubjectKind::System)
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn multimodal_retrieval_weight_downweights_failed_ocr_page_raster() {
 #[test]
 fn document_index_batch_roundtrip_preserves_retrieval_weight() {
     let batch = DocumentIndexBatch {
-        org_id: OrgId::from(Uuid::from_u128(10)),
+        owner_user_id: UserId::from(Uuid::from_u128(10)),
         workspace_id: None,
         document_id: Uuid::from_u128(11),
         parse_run_id: Uuid::from_u128(12),
@@ -132,7 +132,7 @@ async fn default_graph_search_fails_with_explicit_adapter_message() {
             query_entity_vectors: Vec::new(),
             hop_limit: 1,
             fan_out_limit: 5,
-            tenant_org_id: "org-1".to_string(),
+            owner_user_id: "org-1".to_string(),
         })
         .await
         .unwrap_err();
@@ -219,7 +219,7 @@ async fn write_methods_are_required_and_callable_on_full_data_plane() {
     data_plane.ensure_schema().await.expect("ensure_schema");
     data_plane
         .replace_document_index(DocumentIndexBatch {
-            org_id: auth.org_id(),
+            owner_user_id: auth.user_id(),
             workspace_id: None,
             document_id: Uuid::from_u128(50),
             parse_run_id: Uuid::from_u128(51),

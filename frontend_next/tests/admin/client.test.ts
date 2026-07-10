@@ -5,18 +5,18 @@ import {
   getAdminBillingOverview,
   getAdminDegradationStatus,
   getAdminHealth,
-  getAdminOrganization,
+  getAdminAccount,
   getAdminRagHealth,
-  getAdminUsageForOrganization,
+  getAdminUsageForAccount,
   getAdminWorkerStatus,
   listAdminAuditLogs,
   listAdminFeatureFlagChangeRequests,
   listAdminFeatureFlags,
-  listAdminOrganizations,
-  listAdminUsersForOrganization,
+  listAdminAccounts,
+  listAdminUsersForAccount,
   requestAdminFeatureFlagChange,
   reviewAdminFeatureFlagChange,
-  updateAdminOrganizationBlocked,
+  updateAdminAccountBlocked,
 } from "../../lib/admin/client";
 
 const fetchMock = vi.fn();
@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe("admin client", () => {
-  it("maps organization, user, usage, and health admin endpoints", async () => {
+  it("maps account, user, usage, and health admin endpoints", async () => {
     fetchMock
       .mockResolvedValueOnce(
         new Response(
@@ -41,7 +41,7 @@ describe("admin client", () => {
             ok: true,
             data: [
               {
-                id: "org-1",
+                id: "owner-1",
                 name: "Alpha Org",
                 created_at: 1_713_600_000,
                 blocked: false,
@@ -60,7 +60,7 @@ describe("admin client", () => {
           JSON.stringify({
             ok: true,
             data: {
-              id: "org-1",
+              id: "owner-1",
               name: "Alpha Org",
               created_at: 1_713_600_000,
               blocked: true,
@@ -81,7 +81,7 @@ describe("admin client", () => {
               {
                 id: "user-1",
                 email: "owner@example.com",
-                org_id: "org-1",
+                owner_user_id: "owner-1",
                 role: "owner",
                 created_at: 1_713_600_100,
               },
@@ -96,7 +96,7 @@ describe("admin client", () => {
           JSON.stringify({
             ok: true,
             data: {
-              org_id: "org-1",
+              owner_user_id: "owner-1",
               period: "30d",
               query_count: 99,
               document_count: 11,
@@ -129,9 +129,9 @@ describe("admin client", () => {
         ),
       );
 
-    await expect(listAdminOrganizations("token-123")).resolves.toEqual([
+    await expect(listAdminAccounts("token-123")).resolves.toEqual([
       {
-        id: "org-1",
+        id: "owner-1",
         name: "Alpha Org",
         plan: "N/A",
         user_count: 12,
@@ -142,8 +142,8 @@ describe("admin client", () => {
       },
     ]);
 
-    await expect(getAdminOrganization("token-123", "org-1")).resolves.toEqual({
-      id: "org-1",
+    await expect(getAdminAccount("token-123", "owner-1")).resolves.toEqual({
+      id: "owner-1",
       name: "Alpha Org",
       plan: "N/A",
       user_count: 12,
@@ -153,25 +153,25 @@ describe("admin client", () => {
       created_at: 1_713_600_000,
     });
 
-    await expect(listAdminUsersForOrganization("token-123", "org-1")).resolves.toEqual([
+    await expect(listAdminUsersForAccount("token-123", "owner-1")).resolves.toEqual([
       {
         id: "user-1",
         email: "owner@example.com",
         full_name: "",
-        org_id: "org-1",
+        owner_user_id: "owner-1",
         role: "owner",
         created_at: 1_713_600_100,
         last_active_at: null,
       },
     ]);
 
-    await expect(getAdminUsageForOrganization("token-123", "org-1", "30d")).resolves.toEqual({
+    await expect(getAdminUsageForAccount("token-123", "owner-1", "30d")).resolves.toEqual({
       total_requests: 99,
       total_tokens: 2222,
       total_documents: 11,
     });
 
-    await expect(updateAdminOrganizationBlocked("token-123", "org-1", true)).resolves.toBeUndefined();
+    await expect(updateAdminAccountBlocked("token-123", "owner-1", true)).resolves.toBeUndefined();
 
     await expect(getAdminHealth("token-123")).resolves.toEqual({
       status: "ok",
@@ -181,29 +181,29 @@ describe("admin client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/admin/organizations",
+      "https://api.example.test/api/v1/admin/accounts",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.test/api/v1/admin/organizations/org-1",
+      "https://api.example.test/api/v1/admin/accounts/owner-1",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "https://api.example.test/api/v1/admin/users?org_id=org-1",
+      "https://api.example.test/api/v1/admin/users?owner_user_id=owner-1",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      "https://api.example.test/api/v1/admin/usage?org_id=org-1&period=30d",
+      "https://api.example.test/api/v1/admin/usage?owner_user_id=owner-1&period=30d",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock.mock.calls[4]?.[1]).toEqual(
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          org_id: "org-1",
+          owner_user_id: "owner-1",
           blocked: true,
         }),
       }),
@@ -382,7 +382,7 @@ describe("admin client", () => {
                   action: "task_failed",
                   resource_type: "document",
                   resource_id: "doc-1",
-                  org_id: "org-1",
+                  owner_user_id: "owner-1",
                   created_at: 1_713_600_400,
                 },
               ],
@@ -467,7 +467,7 @@ describe("admin client", () => {
           action: "task_failed",
           resource_type: "document",
           resource_id: "doc-1",
-          org_id: "org-1",
+          owner_user_id: "owner-1",
           created_at: 1_713_600_400,
         },
       ],

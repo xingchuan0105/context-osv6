@@ -45,7 +45,7 @@ RAG API (检索服务，非自主 agent)
 ```text
 Postgres: 产品控制面
 - users
-- organizations
+- accounts
 - workspaces / notebooks
 - auth and sessions
 - chat history
@@ -434,7 +434,7 @@ Agent 输出支持中英双语：
 
 目标架构必须保留以下约束：
 
-- 每次 Milvus 查询必须强制带服务端 ACL filter，例如 `org_id`、`workspace_id`、`doc_scope`。
+- 每次 Milvus 查询必须强制带服务端 ACL filter，例如 `owner_user_id`、`workspace_id`、`doc_scope`。
 - 每个检索结果必须带 provenance：`doc_id`、`chunk_id`、`page`、`parse_run_id` 和可用的 `source_locator`。
 - 文档重解析必须删除或 supersede 旧 chunk、embedding、entity、relation 与 passage。
 - 图抽取失败时必须降级到 BM25 + dense + multimodal retrieval。

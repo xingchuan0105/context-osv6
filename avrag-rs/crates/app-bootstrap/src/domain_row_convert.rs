@@ -7,7 +7,7 @@ use app_core::domain_rows::{
 pub fn document_task_seed(value: avrag_storage_pg::DocumentTaskSeed) -> DocumentTaskSeed {
     DocumentTaskSeed {
         document_id: value.document_id,
-        org_id: value.org_id,
+        owner_user_id: value.owner_user_id,
         workspace_id: value.workspace_id,
         filename: value.filename,
         mime_type: value.mime_type,
@@ -76,7 +76,7 @@ pub fn document_scope_state(value: avrag_storage_pg::DocumentScopeState) -> Docu
 pub fn user_profile_row_to_pg(value: &UserProfileRow) -> avrag_storage_pg::UserProfileRow {
     avrag_storage_pg::UserProfileRow {
         user_id: value.user_id,
-        org_id: value.org_id,
+        owner_user_id: value.owner_user_id,
         expertise_domains: value.expertise_domains.clone(),
         preferred_answer_style: value.preferred_answer_style.clone(),
         frequently_asked_topics: value.frequently_asked_topics.clone(),
@@ -90,7 +90,7 @@ pub fn user_profile_row_to_pg(value: &UserProfileRow) -> avrag_storage_pg::UserP
 pub fn user_profile_row(value: avrag_storage_pg::UserProfileRow) -> UserProfileRow {
     UserProfileRow {
         user_id: value.user_id,
-        org_id: value.org_id,
+        owner_user_id: value.owner_user_id,
         expertise_domains: value.expertise_domains,
         preferred_answer_style: value.preferred_answer_style,
         frequently_asked_topics: value.frequently_asked_topics,
@@ -129,7 +129,7 @@ pub fn notification_create_params(
 pub fn document_asset_row(value: avrag_storage_pg::DocumentAssetRow) -> DocumentAssetRow {
     DocumentAssetRow {
         asset_id: value.asset_id,
-        org_id: value.org_id,
+        owner_user_id: value.owner_user_id,
         workspace_id: value.workspace_id,
         document_id: value.document_id,
         parse_run_id: value.parse_run_id,
@@ -148,7 +148,7 @@ pub fn document_asset_row(value: avrag_storage_pg::DocumentAssetRow) -> Document
 pub fn multimodal_chunk_row(value: avrag_storage_pg::MultimodalChunkRow) -> MultimodalChunkRow {
     MultimodalChunkRow {
         chunk_id: value.chunk_id,
-        org_id: value.org_id,
+        owner_user_id: value.owner_user_id,
         workspace_id: value.workspace_id,
         document_id: value.document_id,
         parse_run_id: value.parse_run_id,

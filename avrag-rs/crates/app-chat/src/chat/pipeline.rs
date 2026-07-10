@@ -163,7 +163,7 @@ async fn run_pipeline(
     };
     let audit_record = AuditRecord {
         audit_id: Uuid::new_v4().to_string(),
-        org_id: state.auth.org_id().into_uuid().to_string(),
+        owner_user_id: state.auth.user_id().into_uuid().to_string(),
         actor_id: preflight.user_uuid.to_string().into(),
         action: audit_action,
         resource_type: "chat".to_string(),

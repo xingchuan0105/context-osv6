@@ -62,13 +62,13 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, owner_id, title, description, created_at, updated_at
+            select id, owner_user_id, owner_id, title, description, created_at, updated_at
             from workspaces
-            where id = $1 and org_id = $2
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(workspace_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -85,12 +85,12 @@ impl BootstrapRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            insert into workspaces (org_id, owner_id, title, description)
+            insert into workspaces (owner_user_id, owner_id, title, description)
             values ($1, $2, $3, $4)
-            returning id, org_id, owner_id, title, description, created_at, updated_at
+            returning id, owner_user_id, owner_id, title, description, created_at, updated_at
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(name)
         .bind(description)
@@ -113,7 +113,7 @@ impl BootstrapRepository {
             update workspaces
             set title = $2, description = $3, updated_at = now()
             where id = $1
-            returning id, org_id, owner_id, title, description, created_at, updated_at
+            returning id, owner_user_id, owner_id, title, description, created_at, updated_at
             "#,
         )
         .bind(workspace_id)
@@ -152,13 +152,13 @@ impl BootstrapRepository {
         let document_id = Uuid::new_v4();
         let row = sqlx::query(
             r#"
-            insert into documents (id, org_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
+            insert into documents (id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
             values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8)
-            returning id, org_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
+            returning id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
         .bind(document_id)
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(workspace_id)
         .bind(filename)
         .bind(mime_type)
@@ -179,7 +179,7 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, workspace_id, file_name, mime_type, file_size, object_path, status
+            select id, owner_user_id, workspace_id, file_name, mime_type, file_size, object_path, status
             from documents
             where id = $1
             "#,
@@ -220,14 +220,14 @@ impl BootstrapRepository {
             update documents
             set file_size = $2, chunk_count = $3, updated_at = now()
             where id = $1
-              and org_id = $4
+              and owner_user_id = $4
               and status not in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
         .bind(i64::try_from(content.len()).unwrap_or(i64::MAX))
         .bind(i32::try_from(body_chunks.len()).unwrap_or(i32::MAX))
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .execute(tx.inner())
         .await?;
 
@@ -244,12 +244,12 @@ impl BootstrapRepository {
         for chunk in body_chunks {
             let row = sqlx::query(
                 r#"
-                insert into chunks (org_id, document_id, parse_run_id, chunk_type, page, content, metadata)
+                insert into chunks (owner_user_id, document_id, parse_run_id, chunk_type, page, content, metadata)
                 values ($1, $2, $3, 'body', $4, $5, $6)
                 returning id, document_id, page, content, metadata
                 "#,
             )
-            .bind(context.org_id().into_uuid())
+            .bind(context.user_id().into_uuid())
             .bind(document_id)
             .bind(chunk.parse_run_id)
             .bind(chunk.page)
@@ -280,11 +280,11 @@ impl BootstrapRepository {
 
         sqlx::query(
             r#"
-            insert into chunks (org_id, document_id, parse_run_id, chunk_type, page, content, metadata)
+            insert into chunks (owner_user_id, document_id, parse_run_id, chunk_type, page, content, metadata)
             values ($1, $2, $3, 'summary', 1, $4, '{}'::jsonb)
             "#,
         )
-        .bind(context.org_id().into_uuid())
+        .bind(context.user_id().into_uuid())
         .bind(document_id)
         .bind(parse_run_id)
         .bind(summary)
@@ -313,12 +313,12 @@ impl BootstrapRepository {
         for entry in entries {
             sqlx::query(
                 r#"
-                insert into document_toc (id, org_id, document_id, workspace_id, parent_id, title, heading_level, page, chunk_id, rank)
+                insert into document_toc (id, owner_user_id, document_id, workspace_id, parent_id, title, heading_level, page, chunk_id, rank)
                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 "#,
             )
             .bind(entry.id)
-            .bind(context.org_id().into_uuid())
+            .bind(context.user_id().into_uuid())
             .bind(document_id)
             .bind(workspace_id)
             .bind(entry.parent_id)

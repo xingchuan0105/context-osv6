@@ -106,10 +106,10 @@ impl<'a> BillingApp<'a> {
         };
         let store: Arc<dyn app_core::UsageLimitStorePort> =
             Arc::new(crate::adapters::PgUsageLimitStoreAdapter::new(repo));
-        let org_id = self.auth.org_id().into_uuid();
+        let owner_user_id = self.auth.user_id().into_uuid();
         let user_id = actor_id.into_uuid();
         let response =
-            avrag_billing::handle_create_usage_export(store, org_id, user_id, body).await;
+            avrag_billing::handle_create_usage_export(store, owner_user_id, user_id, body).await;
         if response.ok {
             if let Some(data) = response.data.as_ref() {
                 tracing::info!(
@@ -117,7 +117,7 @@ impl<'a> BillingApp<'a> {
                     export_id = %data.export_id,
                     status = %data.status,
                     user_id = %user_id,
-                    org_id = %org_id,
+                    owner_user_id = %owner_user_id,
                     "usage export job created"
                 );
             }

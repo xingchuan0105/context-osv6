@@ -4,11 +4,11 @@ use chrono::{DateTime, Utc};
 use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
 use uuid::Uuid;
 
-use contracts::auth_runtime::OrgId;
+use contracts::auth_runtime::UserId;
 
 use crate::admin_domain::{
     AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
+    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo, AdminRagHealthStatus,
     AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use crate::domain_rows::UserProfileRow;
@@ -105,39 +105,39 @@ pub trait AdminStorePort: Send + Sync {
         notification_id: Uuid,
     ) -> Result<bool, AppError>;
 
-    async fn list_orgs(
+    async fn list_accounts(
         &self,
         auth: &AuthContext,
         page: usize,
         per_page: usize,
-    ) -> Result<Vec<AdminOrgInfo>, AppError>;
+    ) -> Result<Vec<AdminAccountInfo>, AppError>;
 
-    async fn get_org(&self, auth: &AuthContext, org_id: OrgId) -> Result<AdminOrgInfo, AppError>;
+    async fn get_account(&self, auth: &AuthContext, owner_user_id: UserId) -> Result<AdminAccountInfo, AppError>;
 
     async fn list_users(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
     ) -> Result<Vec<AdminUserInfo>, AppError>;
 
     async fn delete_user(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         user_id: Uuid,
     ) -> Result<(), AppError>;
 
     async fn get_usage(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         period: &str,
     ) -> Result<AdminUsageStats, AppError>;
 
-    async fn set_org_blocked(
+    async fn set_account_blocked(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         blocked: bool,
     ) -> Result<(), AppError>;
 

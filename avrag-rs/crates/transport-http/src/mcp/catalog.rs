@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 pub(crate) fn mcp_all_tools() -> Vec<Value> {
     let mut tools = Vec::new();
-    tools.extend(org_tools());
+    tools.extend(account_tools());
     tools.extend(ingest_tools());
     tools.extend(query_tools());
     tools
@@ -19,11 +19,11 @@ fn workspace_id_property() -> Value {
     })
 }
 
-fn org_tools() -> Vec<Value> {
+fn account_tools() -> Vec<Value> {
     vec![
         json!({
-            "name": "org.create_workspace",
-            "description": "Create a new workspace (notebook) in the current organization.",
+            "name": "account.create_workspace",
+            "description": "Create a new workspace under the current personal account.",
             "inputSchema": {
                 "type": "object",
                 "required": ["name"],
@@ -34,8 +34,8 @@ fn org_tools() -> Vec<Value> {
             }
         }),
         json!({
-            "name": "org.list_workspaces",
-            "description": "List workspaces (notebooks) accessible in the current organization.",
+            "name": "account.list_workspaces",
+            "description": "List workspaces accessible under the current personal account.",
             "inputSchema": {
                 "type": "object",
                 "properties": {}
@@ -169,7 +169,7 @@ pub(crate) fn operation_guide_mode_for_tool(tool_name: &str) -> Option<&'static 
         | "workspace.document_status"
         | "workspace.add_url_source" => Some("index"),
         "workspace.list_sources" => Some("query"),
-        "org.create_workspace" | "org.list_workspaces" => Some("workspace.create"),
+        "account.create_workspace" | "account.list_workspaces" => Some("workspace.create"),
         _ => None,
     }
 }

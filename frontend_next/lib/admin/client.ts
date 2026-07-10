@@ -1,6 +1,6 @@
 import { request, requestEnvelope, requestText, type ApiEnvelope } from "../http/request";
 
-export type AdminOrgRow = {
+export type AdminAccountRow = {
   id: string;
   name: string;
   plan: string;
@@ -15,7 +15,7 @@ export type AdminUserRow = {
   id: string;
   email: string;
   full_name: string;
-  org_id: string;
+  owner_user_id: string;
   role: string;
   created_at: number;
   last_active_at: number | null;
@@ -94,7 +94,7 @@ export type AdminAuditLogEntry = {
   action: string;
   resource_type: string;
   resource_id: string;
-  org_id: string | null;
+  owner_user_id: string | null;
   created_at: number;
 };
 
@@ -115,7 +115,7 @@ export type AdminAuditLogListResponse = {
   per_page: number;
 };
 
-type RawOrgRow = {
+type RawAccountRow = {
   id: string;
   name: string;
   created_at: number;
@@ -128,13 +128,13 @@ type RawOrgRow = {
 type RawUserRow = {
   id: string;
   email: string;
-  org_id: string;
+  owner_user_id?: string;
   role: string;
   created_at: number;
 };
 
 type RawUsageResponse = {
-  org_id: string;
+  owner_user_id: string;
   period: string;
   query_count: number;
   document_count: number;
@@ -168,7 +168,7 @@ function buildQuery(query: AdminAuditLogQuery) {
   return params.toString();
 }
 
-function mapOrgRow(raw: RawOrgRow): AdminOrgRow {
+function mapAccountRow(raw: RawAccountRow): AdminAccountRow {
   return {
     id: raw.id,
     name: raw.name,
@@ -186,34 +186,34 @@ function mapUserRow(raw: RawUserRow): AdminUserRow {
     id: raw.id,
     email: raw.email,
     full_name: "",
-    org_id: raw.org_id,
+    owner_user_id: raw.owner_user_id ?? raw.id,
     role: raw.role,
     created_at: raw.created_at,
     last_active_at: null,
   };
 }
 
-export async function listAdminOrganizations(token: string) {
-  const rows = await requestEnvelope<RawOrgRow[]>("/api/v1/admin/organizations", { method: "GET" }, token, "Failed to load organizations");
+export async function listAdminAccounts(token: string) {
+  const rows = await requestEnvelope<RawAccountRow[]>("/api/v1/admin/accounts", { method: "GET" }, token, "Failed to load accounts");
 
-  return rows.map(mapOrgRow);
+  return rows.map(mapAccountRow);
 }
 
-export async function getAdminOrganization(token: string, orgId: string) {
-  const row = await requestEnvelope<RawOrgRow>(`/api/v1/admin/organizations/${orgId}`, { method: "GET" }, token, "Failed to load organization");
+export async function getAdminAccount(token: string, ownerUserId: string) {
+  const row = await requestEnvelope<RawAccountRow>(`/api/v1/admin/accounts/${ownerUserId}`, { method: "GET" }, token, "Failed to load account");
 
-  return mapOrgRow(row);
+  return mapAccountRow(row);
 }
 
-export async function listAdminUsersForOrganization(token: string, orgId: string) {
-  const rows = await requestEnvelope<RawUserRow[]>(`/api/v1/admin/users?org_id=${encodeURIComponent(orgId)}`, { method: "GET" }, token, "Failed to load users");
+export async function listAdminUsersForAccount(token: string, ownerUserId: string) {
+  const rows = await requestEnvelope<RawUserRow[]>(`/api/v1/admin/users?owner_user_id=${encodeURIComponent(ownerUserId)}`, { method: "GET" }, token, "Failed to load users");
 
   return rows.map(mapUserRow);
 }
 
-export async function getAdminUsageForOrganization(token: string, orgId: string, period = "30d") {
+export async function getAdminUsageForAccount(token: string, ownerUserId: string, period = "30d") {
   const usage = await requestEnvelope<RawUsageResponse>(
-    `/api/v1/admin/usage?org_id=${encodeURIComponent(orgId)}&period=${encodeURIComponent(period)}`,
+    `/api/v1/admin/usage?owner_user_id=${encodeURIComponent(ownerUserId)}&period=${encodeURIComponent(period)}`,
     { method: "GET" },
     token,
     "Failed to load usage",
@@ -226,13 +226,13 @@ export async function getAdminUsageForOrganization(token: string, orgId: string,
   } satisfies AdminUsageResponse;
 }
 
-export async function updateAdminOrganizationBlocked(token: string, orgId: string, blocked: boolean) {
+export async function updateAdminAccountBlocked(token: string, ownerUserId: string, blocked: boolean) {
   await request<ApiEnvelope<Record<string, never>>>(
     "/api/v1/admin/billing/block",
     {
       method: "POST",
       body: JSON.stringify({
-        org_id: orgId,
+        owner_user_id: ownerUserId,
         blocked,
       }),
     },

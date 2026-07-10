@@ -4,7 +4,7 @@ export {
   adminText,
   formatAdminError,
   planLabel,
-  orgStatusLabel,
+  accountStatusLabel,
   userRoleLabel,
   healthStatusLabel,
   featureFlagStatusLabel,

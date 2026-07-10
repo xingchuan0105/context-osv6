@@ -59,7 +59,7 @@ pub struct AnswerContextChunk {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeyRow {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub workspace_id: String,
     pub key_prefix: String,
     pub name: String,
@@ -100,7 +100,7 @@ pub struct CreateApiKeyResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationRow {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub user_id: String,
     pub event_type: String,
     pub title: String,

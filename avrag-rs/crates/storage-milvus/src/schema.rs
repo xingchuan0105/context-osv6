@@ -13,7 +13,7 @@ pub const TEXT_OUTPUT_FIELDS: [&str; 11] = [
     "parser_backend",
     "source_locator",
     "doc_version",
-    "org_id",
+    "owner_user_id",
     "workspace_id",
 ];
 
@@ -31,7 +31,7 @@ pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 15] = [
     "retrieval_weight",
     "source_locator",
     "doc_version",
-    "org_id",
+    "owner_user_id",
     "workspace_id",
 ];
 
@@ -46,7 +46,7 @@ pub const RELATION_OUTPUT_FIELDS: [&str; 13] = [
     "supporting_chunk_ids",
     "metadata",
     "doc_version",
-    "org_id",
+    "owner_user_id",
     "workspace_id",
     "id",
 ];
@@ -55,7 +55,7 @@ pub fn schema_text(config: &MilvusConfig) -> (Value, Vec<Value>) {
     let schema = collection_schema(
         vec![
             varchar_field("id", 128, true, false, false),
-            varchar_field("org_id", 64, false, false, false),
+            varchar_field("owner_user_id", 64, false, false, false),
             varchar_field("workspace_id", 64, false, true, false),
             varchar_field("doc_id", 64, false, false, false),
             varchar_field("chunk_id", 64, false, false, false),
@@ -88,7 +88,7 @@ pub fn schema_multimodal(config: &MilvusConfig) -> (Value, Vec<Value>) {
     let schema = collection_schema(
         vec![
             varchar_field("id", 128, true, false, false),
-            varchar_field("org_id", 64, false, false, false),
+            varchar_field("owner_user_id", 64, false, false, false),
             varchar_field("workspace_id", 64, false, true, false),
             varchar_field("doc_id", 64, false, false, false),
             varchar_field("chunk_id", 64, false, false, false),
@@ -119,7 +119,7 @@ pub fn schema_entities(config: &MilvusConfig) -> (Value, Vec<Value>) {
     let schema = collection_schema(
         vec![
             varchar_field("id", 128, true, false, false),
-            varchar_field("org_id", 64, false, false, false),
+            varchar_field("owner_user_id", 64, false, false, false),
             varchar_field("workspace_id", 64, false, true, false),
             varchar_field("doc_id", 64, false, false, false),
             varchar_field("entity_id", 64, false, false, false),
@@ -146,7 +146,7 @@ pub fn schema_relations(config: &MilvusConfig) -> (Value, Vec<Value>) {
     let schema = collection_schema(
         vec![
             varchar_field("id", 128, true, false, false),
-            varchar_field("org_id", 64, false, false, false),
+            varchar_field("owner_user_id", 64, false, false, false),
             varchar_field("workspace_id", 64, false, true, false),
             varchar_field("doc_id", 64, false, false, false),
             varchar_field("relation_id", 64, false, false, false),
@@ -174,7 +174,7 @@ pub fn schema_graph_passages(config: &MilvusConfig) -> (Value, Vec<Value>) {
     let schema = collection_schema(
         vec![
             varchar_field("id", 128, true, false, false),
-            varchar_field("org_id", 64, false, false, false),
+            varchar_field("owner_user_id", 64, false, false, false),
             varchar_field("workspace_id", 64, false, true, false),
             varchar_field("doc_id", 64, false, false, false),
             varchar_field("chunk_id", 64, false, true, false),
@@ -340,7 +340,7 @@ pub fn bm25_index(field_name: &str, index_name: &str) -> Value {
 }
 
 pub fn doc_filter(auth: &AuthContext, doc_ids: Option<&[Uuid]>) -> String {
-    let mut filter = format!("org_id == {}", milvus_string(&auth.org_id().to_string()));
+    let mut filter = format!("owner_user_id == {}", milvus_string(&auth.user_id().to_string()));
     if let Some(doc_ids) = doc_ids {
         if doc_ids.is_empty() {
             return "doc_id == 'none'".to_string(); // Block everything if empty

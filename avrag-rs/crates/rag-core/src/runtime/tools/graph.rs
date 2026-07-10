@@ -62,7 +62,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             query_entity_vectors: Vec::new(),
             hop_limit: args.hop_limit,
             fan_out_limit: args.fan_out_limit,
-            tenant_org_id: auth.org_id().to_string(),
+            owner_user_id: auth.user_id().to_string(),
         })
         .await
     {

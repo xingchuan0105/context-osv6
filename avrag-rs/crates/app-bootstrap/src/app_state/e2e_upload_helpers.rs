@@ -49,8 +49,8 @@ impl AppState {
                 tracing::warn!(error = %error, "E2E grant: failed to set super_admin role");
                 "admin role grant failed".to_string()
             })?;
-        let user_row: Option<(Uuid, Uuid)> = sqlx::query_as::<_, (Uuid, Uuid)>(
-            "select id, org_id from users where email = $1 limit 1",
+        let user_id: Option<Uuid> = sqlx::query_scalar(
+            "select id from users where email = $1 limit 1",
         )
         .bind(email)
         .fetch_optional(&mut *tx)
@@ -59,7 +59,7 @@ impl AppState {
             tracing::warn!(error = %error, "E2E grant: database error during user lookup");
             "admin role grant failed".to_string()
         })?;
-        let (user_id, org_id) = user_row.ok_or_else(|| "user not found".to_string())?;
+        let user_id = user_id.ok_or_else(|| "user not found".to_string())?;
         sqlx::query(
             r#"
             update users
@@ -68,11 +68,10 @@ impl AppState {
                     when role is distinct from 'super_admin' then auth_version + 1
                     else auth_version
                 end
-            where id = $1 and org_id = $2
+            where id = $1
             "#,
         )
         .bind(user_id)
-        .bind(org_id)
         .execute(&mut *tx)
         .await
         .map_err(|error| {
@@ -99,17 +98,20 @@ impl AppState {
         let repo = self
             .postgres_repo()
             .ok_or_else(|| "database not available".to_string())?;
-        let owner_row: Option<(Uuid, Uuid)> = sqlx::query_as::<_, (Uuid, Uuid)>(
-            "select id, org_id from users where email = $1 limit 1",
+        // Ensure owner exists (personal account). Member is a separate personal user.
+        let owner_exists: bool = sqlx::query_scalar(
+            "select exists(select 1 from users where email = $1)",
         )
         .bind(owner_email)
-        .fetch_optional(repo.raw())
+        .fetch_one(repo.raw())
         .await
         .map_err(|error| {
             tracing::warn!(error = %error, "E2E org member: owner lookup failed");
             "owner lookup failed".to_string()
         })?;
-        let (_owner_id, org_id) = owner_row.ok_or_else(|| "owner not found".to_string())?;
+        if !owner_exists {
+            return Err("owner not found".to_string());
+        }
 
         if let Some((existing_id,)) =
             sqlx::query_as::<_, (Uuid,)>("select id from users where email = $1 limit 1")
@@ -146,10 +148,9 @@ impl AppState {
                 "member provisioning failed".to_string()
             })?;
         sqlx::query(
-            "insert into users (id, org_id, email, full_name, password_hash, role) values ($1, $2, $3, $4, $5, 'user')",
+            "insert into users (id, email, full_name, password_hash, role) values ($1, $2, $3, $4, 'user')",
         )
         .bind(user_id)
-        .bind(org_id)
         .bind(member_email)
         .bind(full_name)
         .bind(password_hash)
@@ -196,11 +197,11 @@ impl AppState {
         let _ = sqlx::query("select set_config('app.current_role', 'super_admin', true)")
             .execute(&mut *tx)
             .await;
+        let _ = org_uuid; // legacy JWT claim; personal account uses user id only
         let auth_version = sqlx::query_scalar::<_, i32>(
-            "select auth_version from users where id = $1 and org_id = $2",
+            "select auth_version from users where id = $1",
         )
         .bind(user_uuid)
-        .bind(org_uuid)
         .fetch_optional(&mut *tx)
         .await
         .ok()
@@ -260,7 +261,7 @@ impl AppState {
             .execute(&mut *tx)
             .await
             .map_err(|error| common::AppError::internal(error.to_string()))?;
-        let row = sqlx::query("select org_id, object_path from documents where id = $1")
+        let row = sqlx::query("select owner_user_id, object_path from documents where id = $1")
             .bind(document_uuid)
             .fetch_optional(&mut *tx)
             .await
@@ -272,13 +273,13 @@ impl AppState {
             .await
             .map_err(|error| common::AppError::internal(error.to_string()))?;
 
-        let org_id = row
-            .try_get::<Uuid, _>("org_id")
+        let owner_user_id = row
+            .try_get::<Uuid, _>("owner_user_id")
             .map_err(|error| common::AppError::internal(error.to_string()))?;
         let object_path = row
             .try_get::<String, _>("object_path")
             .map_err(|error| common::AppError::internal(error.to_string()))?;
-        let mut auth = contracts::auth_runtime::AuthContext::new(org_id.into(), contracts::auth_runtime::SubjectKind::System);
+        let mut auth = contracts::auth_runtime::AuthContext::new(owner_user_id.into(), contracts::auth_runtime::SubjectKind::System);
         if let Some(actor) = self.auth().actor_id() {
             auth = auth.with_actor_id(actor);
         }

@@ -51,7 +51,7 @@ async fn admin_routes_reject_org_only_proxy_auth_before_repo_access() {
                 Request::builder()
                     .method(Method::GET)
                     .uri(path)
-                    .header("x-org-id", "11111111-1111-1111-1111-111111111111")
+                    .header("x-owner-user-id", "11111111-1111-1111-1111-111111111111")
                     .body(Body::empty())
                     .unwrap(),
             )

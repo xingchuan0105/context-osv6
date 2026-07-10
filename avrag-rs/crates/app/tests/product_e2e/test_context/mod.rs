@@ -28,7 +28,7 @@ use super::setup;
 pub struct TestContext {
     pub http_client: reqwest::Client,
     pub base_url: String,
-    pub(crate) org_id: String,
+    pub(crate) owner_user_id: String,
     pub(crate) user_id: String,
     pub(crate) app_state: Option<Arc<app::AppState>>,
     pub(crate) bootstrap: Option<config::E2eBootstrapConfig>,

@@ -12,15 +12,15 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         sqlx::query(
             r#"
-            insert into share_tokens (token, org_id, workspace_id, access_level, created_by, expires_at)
+            insert into share_tokens (token, owner_user_id, workspace_id, access_level, created_by, expires_at)
             values ($1, $2, $3, $4, $5, $6)
             "#,
         )
         .bind(&token)
-        .bind(auth.org_id().into_uuid())
+        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .bind(access_level.as_db())
         .bind(auth.actor_id().map(|id| id.into_uuid()))
@@ -100,7 +100,7 @@
         let workspace_id = row
             .try_get::<Uuid, _>("workspace_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         sqlx::query("update share_tokens set revoked_at = now() where token = $1")
             .bind(token)
             .execute(tx.as_mut())

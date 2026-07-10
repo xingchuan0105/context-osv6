@@ -428,7 +428,7 @@ pub(crate) async fn object_storage_webhook_handler(
 
 fn extract_document_id_from_object_path(path: &str) -> Option<String> {
     let parts: Vec<&str> = path.split('/').collect();
-    // Expected format: {org_id}/{workspace_id}/{document_id}/{filename}
+    // Expected format: {owner_user_id}/{workspace_id}/{document_id}/{filename}
     if parts.len() >= 3 {
         Some(parts[2].to_string())
     } else {

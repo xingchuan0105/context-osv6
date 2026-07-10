@@ -25,9 +25,9 @@ export const adminMessages = {
     zh: "后台导航",
     en: "Admin navigation",
   },
-  adminNavOrganizations: {
-    zh: "组织",
-    en: "Organizations",
+  adminNavAccounts: {
+    zh: "账户",
+    en: "Accounts",
   },
   adminNavRagHealth: {
     zh: "RAG 健康",
@@ -57,9 +57,9 @@ export const adminMessages = {
     zh: "后台导航",
     en: "Admin navigation",
   },
-  "admin.nav.organizations": {
-    zh: "组织",
-    en: "Organizations",
+  "admin.nav.accounts": {
+    zh: "账户",
+    en: "Accounts",
   },
   "admin.nav.users": {
     zh: "用户",
@@ -98,8 +98,8 @@ export const adminMessages = {
     en: "Audit logs",
   },
   "admin.pageSubtitle": {
-    zh: "查看组织、用量、健康状态和系统级运营数据。",
-    en: "Review organizations, usage, health, and system-wide operational signals.",
+    zh: "查看账户、用量、健康状态和系统级运营数据。",
+    en: "Review accounts, usage, health, and system-wide operational signals.",
   },
   "admin.searchLabel": {
     zh: "搜索",
@@ -165,9 +165,9 @@ export const adminMessages = {
     zh: "加载后台数据失败。",
     en: "Failed to load admin data.",
   },
-  "admin.table.organization": {
-    zh: "组织",
-    en: "Organization",
+  "admin.table.account": {
+    zh: "账户",
+    en: "Account",
   },
   "admin.table.plan": {
     zh: "计划",
@@ -193,9 +193,9 @@ export const adminMessages = {
     zh: "最近活跃",
     en: "Last active",
   },
-  "admin.metrics.totalOrganizations": {
-    zh: "组织总数",
-    en: "Total organizations",
+  "admin.metrics.totalAccounts": {
+    zh: "账户总数",
+    en: "Total accounts",
   },
   "admin.metrics.totalUsers": {
     zh: "用户总数",

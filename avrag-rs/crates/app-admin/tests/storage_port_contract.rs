@@ -7,7 +7,7 @@ use app_core::{
     ObjectStorePort, StorageContext, StorageContextParts, StorageInfra, StorageStores,
 };
 use async_trait::async_trait;
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use common::{ApiKeyRow, AppError, CreateApiKeyRequest, NotificationRow};
 use contracts::UserPreferences;
 use tokio::sync::RwLock;
@@ -223,20 +223,20 @@ impl AdminStorePort for RecordingAdminStore {
         Err(AppError::internal("not implemented"))
     }
 
-    async fn list_orgs(
+    async fn list_accounts(
         &self,
         _auth: &AuthContext,
         _page: usize,
         _per_page: usize,
-    ) -> Result<Vec<app_core::AdminOrgInfo>, AppError> {
+    ) -> Result<Vec<app_core::AdminAccountInfo>, AppError> {
         Ok(Vec::new())
     }
 
-    async fn get_org(
+    async fn get_account(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
-    ) -> Result<app_core::AdminOrgInfo, AppError> {
+        _org_id: UserId,
+    ) -> Result<app_core::AdminAccountInfo, AppError> {
         Err(AppError::not_found(
             "org_not_found",
             "Organization not found",
@@ -246,7 +246,7 @@ impl AdminStorePort for RecordingAdminStore {
     async fn list_users(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
     ) -> Result<Vec<app_core::AdminUserInfo>, AppError> {
         Ok(Vec::new())
     }
@@ -254,7 +254,7 @@ impl AdminStorePort for RecordingAdminStore {
     async fn delete_user(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _user_id: Uuid,
     ) -> Result<(), AppError> {
         Ok(())
@@ -263,7 +263,7 @@ impl AdminStorePort for RecordingAdminStore {
     async fn get_usage(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _period: &str,
     ) -> Result<app_core::AdminUsageStats, AppError> {
         Err(AppError::not_found(
@@ -272,10 +272,10 @@ impl AdminStorePort for RecordingAdminStore {
         ))
     }
 
-    async fn set_org_blocked(
+    async fn set_account_blocked(
         &self,
         _auth: &AuthContext,
-        _org_id: OrgId,
+        _org_id: UserId,
         _blocked: bool,
     ) -> Result<(), AppError> {
         Ok(())
@@ -304,7 +304,7 @@ impl AdminStorePort for RecordingAdminStore {
 }
 
 fn test_auth() -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::nil()), SubjectKind::User)
+    AuthContext::new(UserId::from(Uuid::nil()), SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::nil()))
         .with_request_id("admin-port-contract")
 }

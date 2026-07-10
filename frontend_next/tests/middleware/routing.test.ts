@@ -8,14 +8,16 @@ describe("resolveMiddlewareAction", () => {
       type: "redirect",
       destination: "/dashboard",
     });
-    expect(resolveMiddlewareAction("/admin/orgs/abc", true)).toEqual({
-      type: "redirect",
-      destination: "/admin/organizations/abc",
-    });
     expect(resolveMiddlewareAction("/workspaces/ws-1/share", true)).toEqual({
       type: "redirect",
       destination: "/dashboard/ws-1/share",
     });
+  });
+
+  it("does not redirect retired admin org paths (gone, not aliased)", () => {
+    expect(resolveMiddlewareAction("/admin/orgs/abc", true)).toEqual({ type: "next" });
+    expect(resolveMiddlewareAction("/admin/organizations", true)).toEqual({ type: "next" });
+    expect(resolveMiddlewareAction("/admin/accounts/abc", true)).toEqual({ type: "next" });
   });
 
   it("allows public paths to continue", () => {

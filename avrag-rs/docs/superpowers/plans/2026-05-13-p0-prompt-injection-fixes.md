@@ -98,7 +98,7 @@ impl InputGuardPipeline {
     pub fn check_content(&self, text: &str, trace_id: Option<String>) -> Option<GuardResult> {
         let ctx = InputGuardContext {
             query: text,
-            org_id: uuid::Uuid::nil(),
+            owner_user_id: uuid::Uuid::nil(),
             user_id: uuid::Uuid::nil(),
             doc_scope: &[],
             workspace_id: None,
@@ -284,7 +284,7 @@ for msg in &req.messages {
     if msg.role == "user" {
         let msg_guard = self.guard_pipeline.check_input(
             &msg.content,
-            self.auth.org_id().into_uuid(),
+            self.auth.owner_user_id().into_uuid(),
             user_uuid,
             &guard_scope,
             notebook_uuid,
@@ -297,7 +297,7 @@ for msg in &req.messages {
             );
             let audit_record = AuditRecord {
                 audit_id: Uuid::new_v4().to_string(),
-                org_id: self.auth.org_id().into_uuid().to_string(),
+                owner_user_id: self.auth.owner_user_id().into_uuid().to_string(),
                 actor_id: Some(user_uuid.to_string()),
                 action: AuditAction::InputGuardBlock,
                 resource_type: "chat".to_string(),

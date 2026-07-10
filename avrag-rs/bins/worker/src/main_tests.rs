@@ -1,5 +1,5 @@
 use app_core::{AppConfig, load_prompt_template};
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::{
     EntityIndexRecord, GraphPassageIndexRecord, RelationIndexRecord, TextChunkIndexRecord,
 };
@@ -276,7 +276,7 @@ fn graph_degrade_reasons_are_counted() {
 
 #[test]
 fn build_document_index_batch_carries_parse_run_id() {
-    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(1)), SubjectKind::System);
+    let auth = AuthContext::new(UserId::new(Uuid::from_u128(1)), SubjectKind::System);
     let document_id = Uuid::from_u128(2);
     let parse_run_id = Uuid::from_u128(3);
     let chunk_id = Uuid::from_u128(4);

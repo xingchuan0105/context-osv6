@@ -1,9 +1,5 @@
 use app_bootstrap::AppState;
-use app_core::{
-    AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
-    AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
-};
+use app_core::{AdminAuditLogPage, AdminAuditLogQuery};
 use axum::{
     Extension, Json, Router,
     extract::{Path, Query},
@@ -19,12 +15,12 @@ use crate::middleware::RequestState;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route("/admin/organizations", get(list_orgs))
-        .route("/admin/organizations/{org_id}", get(get_org))
+        .route("/admin/accounts", get(list_accounts))
+        .route("/admin/accounts/{owner_user_id}", get(get_account))
         .route("/admin/users", get(list_users))
         .route("/admin/users/{user_id}", axum::routing::delete(delete_user))
         .route("/admin/usage", get(get_usage))
-        .route("/admin/billing/block", axum::routing::post(block_org))
+        .route("/admin/billing/block", axum::routing::post(block_account))
         .route("/admin/health", get(health))
         .route("/admin/billing", get(billing_overview))
         .route("/admin/rag-health", get(rag_health))
@@ -47,25 +43,25 @@ pub(crate) fn router() -> Router<AppState> {
 }
 
 #[derive(Deserialize)]
-struct ListOrgsQuery {
+struct ListAccountsQuery {
     page: Option<usize>,
     per_page: Option<usize>,
 }
 
 #[derive(Deserialize)]
-struct OrgQuery {
-    org_id: String,
+struct AccountQuery {
+    owner_user_id: String,
 }
 
 #[derive(Deserialize)]
 struct UsageQuery {
-    org_id: String,
+    owner_user_id: String,
     period: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct BlockOrgRequest {
-    org_id: String,
+struct BlockAccountRequest {
+    owner_user_id: String,
     blocked: bool,
 }
 
@@ -148,11 +144,11 @@ async fn ops_json<T: serde::Serialize>(
 }
 
 #[allow(clippy::result_large_err)]
-fn parse_org_id(value: &str) -> Result<common::OrgId, Response> {
-    value.parse::<common::OrgId>().map_err(|_| {
+fn parse_owner_user_id(value: &str) -> Result<common::UserId, Response> {
+    value.parse::<common::UserId>().map_err(|_| {
         Json(ApiResponse::<serde_json::Value>::err(
-            "invalid_org_id",
-            "org_id must be a UUID",
+            "invalid_owner_user_id",
+            "owner_user_id must be a UUID",
         ))
         .into_response()
     })
@@ -170,35 +166,35 @@ fn audit_query(query: AuditQuery) -> AdminAuditLogQuery {
     }
 }
 
-async fn list_orgs(
+async fn list_accounts(
     Extension(RequestState(state)): Extension<RequestState>,
-    Query(query): Query<ListOrgsQuery>,
+    Query(query): Query<ListAccountsQuery>,
 ) -> Response {
     let page = query.page.unwrap_or(1).max(1);
-    let per_page = app_core::admin_clamp_org_list_per_page(query.per_page.unwrap_or(100));
-    ops_json(state.admin_ops().list_orgs(page, per_page).await).await
+    let per_page = app_core::admin_clamp_account_list_per_page(query.per_page.unwrap_or(100));
+    ops_json(state.admin_ops().list_accounts(page, per_page).await).await
 }
 
-async fn get_org(
+async fn get_account(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(org_id): Path<String>,
+    Path(owner_user_id): Path<String>,
 ) -> Response {
-    let org_id = match parse_org_id(&org_id) {
-        Ok(org_id) => org_id,
+    let owner_user_id = match parse_owner_user_id(&owner_user_id) {
+        Ok(owner_user_id) => owner_user_id,
         Err(response) => return response,
     };
-    ops_json(state.admin_ops().get_org(org_id).await).await
+    ops_json(state.admin_ops().get_account(owner_user_id).await).await
 }
 
 async fn list_users(
     Extension(RequestState(state)): Extension<RequestState>,
-    Query(query): Query<OrgQuery>,
+    Query(query): Query<AccountQuery>,
 ) -> Response {
-    let org_id = match parse_org_id(&query.org_id) {
-        Ok(org_id) => org_id,
+    let owner_user_id = match parse_owner_user_id(&query.owner_user_id) {
+        Ok(owner_user_id) => owner_user_id,
         Err(response) => return response,
     };
-    ops_json(state.admin_ops().list_users(org_id).await).await
+    ops_json(state.admin_ops().list_users(owner_user_id).await).await
 }
 
 async fn delete_user(
@@ -215,31 +211,31 @@ async fn delete_user(
             .into_response();
         }
     };
-    let org_id = state.auth().org_id();
-    ops_json(state.admin_ops().delete_user(org_id, user_id).await).await
+    let owner_user_id = state.auth().user_id();
+    ops_json(state.admin_ops().delete_user(owner_user_id, user_id).await).await
 }
 
 async fn get_usage(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(query): Query<UsageQuery>,
 ) -> Response {
-    let org_id = match parse_org_id(&query.org_id) {
-        Ok(org_id) => org_id,
+    let owner_user_id = match parse_owner_user_id(&query.owner_user_id) {
+        Ok(owner_user_id) => owner_user_id,
         Err(response) => return response,
     };
     let period = query.period.unwrap_or_else(|| "30d".to_string());
-    ops_json(state.admin_ops().get_usage(org_id, &period).await).await
+    ops_json(state.admin_ops().get_usage(owner_user_id, &period).await).await
 }
 
-async fn block_org(
+async fn block_account(
     Extension(RequestState(state)): Extension<RequestState>,
-    Json(body): Json<BlockOrgRequest>,
+    Json(body): Json<BlockAccountRequest>,
 ) -> Response {
-    let org_id = match parse_org_id(&body.org_id) {
-        Ok(org_id) => org_id,
+    let owner_user_id = match parse_owner_user_id(&body.owner_user_id) {
+        Ok(owner_user_id) => owner_user_id,
         Err(response) => return response,
     };
-    ops_json(state.admin_ops().set_org_blocked(org_id, body.blocked).await).await
+    ops_json(state.admin_ops().set_account_blocked(owner_user_id, body.blocked).await).await
 }
 
 #[derive(Serialize)]

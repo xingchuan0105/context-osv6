@@ -26,7 +26,7 @@ pub enum PgStorageError {
 #[derive(Debug, Clone)]
 pub struct DocumentTaskSeed {
     pub document_id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub workspace_id: String,
     pub filename: String,
     pub mime_type: String,
@@ -73,7 +73,7 @@ pub enum DocumentCleanupTaskFailureOutcome {
 #[derive(Debug, Clone)]
 pub struct DocumentCleanupTask {
     pub task_id: Uuid,
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub requested_by: Option<Uuid>,
@@ -86,7 +86,7 @@ pub struct DocumentCleanupTask {
 
 #[derive(Debug, Clone)]
 pub struct DocumentCleanupTargets {
-    pub org_id: Uuid,
+    pub owner_user_id: Uuid,
     pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub status: DocumentStatus,
@@ -112,7 +112,7 @@ pub use common::IndexedChunk;
 
 pub fn map_notebook(row: PgRow) -> Result<Workspace, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let owner_id: Option<Uuid> = row.try_get("owner_id")?;
     let title: String = row.try_get("title")?;
     let description: String = row.try_get("description")?;
@@ -127,7 +127,7 @@ pub fn map_notebook(row: PgRow) -> Result<Workspace, PgStorageError> {
     let shared: bool = row.try_get("shared").unwrap_or(false);
     Ok(Workspace {
         id: id.to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         owner_id: owner_id.map(|value| value.to_string()).unwrap_or_default(),
         name: title.clone(),
         title,
@@ -142,7 +142,7 @@ pub fn map_notebook(row: PgRow) -> Result<Workspace, PgStorageError> {
 
 pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let workspace_id: Uuid = row.try_get("workspace_id")?;
     let file_name: String = row.try_get("file_name")?;
     let mime_type: Option<String> = row.try_get("mime_type")?;
@@ -153,7 +153,7 @@ pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
     Ok(Document {
         id: id.to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         workspace_id: workspace_id.to_string(),
         owner_id: String::new(),
         file_name,
@@ -241,7 +241,7 @@ pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
 
 pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok().flatten();
     let created_by: Option<Uuid> = row.try_get("created_by").ok().flatten();
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
@@ -253,7 +253,7 @@ pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
         .unwrap_or_else(|_| vec!["query".to_string()]);
     Ok(ApiKeyRow {
         id: id.to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         workspace_id: workspace_id
             .map(|value| value.to_string())
             .unwrap_or_default(),
@@ -274,7 +274,7 @@ pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
 
 pub fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let user_id: Uuid = row.try_get("user_id")?;
     let data_value: serde_json::Value = row.try_get("data")?;
     let data = match data_value {
@@ -286,7 +286,7 @@ pub fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
     let read_at: Option<DateTime<Utc>> = row.try_get("read_at").ok().flatten();
     Ok(NotificationRow {
         id: id.to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         user_id: user_id.to_string(),
         event_type: row.try_get("event_type")?,
         title: row.try_get("title")?,
@@ -300,13 +300,13 @@ pub fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
 
 pub fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
     let user_id: Uuid = row.try_get("user_id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let expertise_domains = json_string_vec(row.try_get("expertise_domains")?);
     let frequently_asked_topics = json_string_vec(row.try_get("frequently_asked_topics")?);
     let inferred_at: DateTime<Utc> = row.try_get("inferred_at")?;
     Ok(UserProfileRow {
         user_id,
-        org_id: OrgId::from(org_id),
+        owner_user_id: UserId::from(owner_user_id),
         expertise_domains,
         preferred_answer_style: row.try_get("preferred_answer_style").ok(),
         frequently_asked_topics,
@@ -340,7 +340,7 @@ pub fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
 
 pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
     let document_id: Uuid = row.try_get("id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let workspace_id: Uuid = row.try_get("workspace_id")?;
     let filename: String = row.try_get("file_name")?;
     let mime_type: Option<String> = row.try_get("mime_type")?;
@@ -349,7 +349,7 @@ pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageE
     let status: String = row.try_get("status")?;
     Ok(DocumentTaskSeed {
         document_id: document_id.to_string(),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         workspace_id: workspace_id.to_string(),
         filename,
         mime_type: mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
@@ -371,7 +371,7 @@ pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValida
 
 pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     let task_id: Uuid = row.try_get("task_id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
     let workspace_id: Uuid = row.try_get("workspace_id")?;
     let document_id: Uuid = row.try_get("document_id")?;
     let kind: String = row.try_get("kind")?;
@@ -382,7 +382,7 @@ pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     Ok(IngestionTask {
         task_id: task_id.to_string(),
         kind: parse_ingestion_kind(&kind),
-        org_id: org_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
         workspace_id: workspace_id.to_string(),
         document_id: document_id.to_string(),
         requested_by: requested_by.map(|value| value.to_string()),
@@ -398,7 +398,7 @@ pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
 pub fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorageError> {
     Ok(DocumentCleanupTask {
         task_id: row.try_get("task_id")?,
-        org_id: row.try_get("org_id")?,
+        owner_user_id: row.try_get("owner_user_id")?,
         workspace_id: row.try_get("workspace_id")?,
         document_id: row.try_get("document_id")?,
         requested_by: row.try_get("requested_by")?,

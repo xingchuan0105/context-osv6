@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, DocumentIndexBatch, EntityIndexRecord, GraphPassageIndexRecord,
     GraphRelationHint, GraphSearchRequest, MultimodalChunkIndexRecord, MultimodalSearchRequest,
@@ -41,8 +41,8 @@ async fn configured_milvus_adapter_can_index_search_and_delete() -> anyhow::Resu
     };
 
     let data_plane = MilvusDataPlane::new(config);
-    let org_id = OrgId::new(Uuid::new_v4());
-    let auth = AuthContext::new(org_id, SubjectKind::System);
+    let owner_user_id = UserId::new(Uuid::new_v4());
+    let auth = AuthContext::new(owner_user_id, SubjectKind::System);
     let document_id = Uuid::new_v4();
     let parse_run_id = Uuid::new_v4();
     let chunk_id = Uuid::new_v4();
@@ -52,7 +52,7 @@ async fn configured_milvus_adapter_can_index_search_and_delete() -> anyhow::Resu
 
     let report = data_plane
         .replace_document_index(DocumentIndexBatch {
-            org_id,
+            owner_user_id,
             workspace_id: None,
             document_id,
             parse_run_id,
@@ -164,7 +164,7 @@ async fn configured_milvus_adapter_can_index_search_and_delete() -> anyhow::Resu
 /// distinguishable content so reindex tests can verify only the latest
 /// parse_run is visible.
 fn make_index_batch(
-    org_id: OrgId,
+    owner_user_id: UserId,
     document_id: Uuid,
     parse_run_id: Uuid,
     chunk_id: Uuid,
@@ -176,7 +176,7 @@ fn make_index_batch(
     let multimodal_chunk_id = Uuid::new_v4();
     let asset_id = Uuid::new_v4();
     DocumentIndexBatch {
-        org_id,
+        owner_user_id,
         workspace_id: None,
         document_id,
         parse_run_id,
@@ -241,15 +241,15 @@ async fn reindex_replaces_old_parse_run_and_only_latest_is_visible() -> anyhow::
     };
 
     let data_plane = MilvusDataPlane::new(config);
-    let org_id = OrgId::new(Uuid::new_v4());
-    let auth = AuthContext::new(org_id, SubjectKind::System);
+    let owner_user_id = UserId::new(Uuid::new_v4());
+    let auth = AuthContext::new(owner_user_id, SubjectKind::System);
     let document_id = Uuid::new_v4();
 
     // === Parse run A (old) ===
     let parse_run_a = Uuid::new_v4();
     let chunk_a = Uuid::new_v4();
     let batch_a = make_index_batch(
-        org_id,
+        owner_user_id,
         document_id,
         parse_run_a,
         chunk_a,
@@ -262,7 +262,7 @@ async fn reindex_replaces_old_parse_run_and_only_latest_is_visible() -> anyhow::
     let parse_run_b = Uuid::new_v4();
     let chunk_b = Uuid::new_v4();
     let batch_b = make_index_batch(
-        org_id,
+        owner_user_id,
         document_id,
         parse_run_b,
         chunk_b,
@@ -338,7 +338,7 @@ async fn reindex_replaces_old_parse_run_and_only_latest_is_visible() -> anyhow::
             query_entity_vectors: Vec::new(),
             hop_limit: 1,
             fan_out_limit: 10,
-            tenant_org_id: "test-org".to_string(),
+            owner_user_id: "test-org".to_string(),
         })
         .await?;
 

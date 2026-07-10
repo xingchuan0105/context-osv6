@@ -1,4 +1,4 @@
-use contracts::auth_runtime::OrgId;
+use contracts::auth_runtime::UserId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -12,24 +12,24 @@ pub use lock::{DocumentLock, DocumentLockGuard};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrgScopedKeyspace {
     namespace: String,
-    org_id: OrgId,
+    owner_user_id: UserId,
 }
 
 impl OrgScopedKeyspace {
-    pub fn new(namespace: impl Into<String>, org_id: OrgId) -> Result<Self, CacheKeyError> {
+    pub fn new(namespace: impl Into<String>, owner_user_id: UserId) -> Result<Self, CacheKeyError> {
         let namespace = namespace.into();
         if namespace.trim().is_empty() {
             return Err(CacheKeyError::EmptyNamespace);
         }
 
-        Ok(Self { namespace, org_id })
+        Ok(Self { namespace, owner_user_id })
     }
 
     pub fn cache_key(&self, suffix: &str) -> Result<String, CacheKeyError> {
         Ok(format!(
             "{}:{}:cache:{}",
             self.namespace,
-            self.org_id,
+            self.owner_user_id,
             sanitize_segment(suffix)?
         ))
     }
@@ -42,7 +42,7 @@ impl OrgScopedKeyspace {
         Ok(format!(
             "{}:{}:lock:{}:{}",
             self.namespace,
-            self.org_id,
+            self.owner_user_id,
             sanitize_segment(resource_kind)?,
             resource_id
         ))
@@ -56,7 +56,7 @@ impl OrgScopedKeyspace {
         Ok(format!(
             "{}:{}:idempotency:{}:{}",
             self.namespace,
-            self.org_id,
+            self.owner_user_id,
             sanitize_segment(operation)?,
             sanitize_segment(idempotency_id)?
         ))

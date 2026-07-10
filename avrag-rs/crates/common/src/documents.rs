@@ -6,7 +6,7 @@ use contracts::documents::DocumentStatus;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     #[serde(rename = "workspace_id", alias = "workspace_id")]
     pub workspace_id: String,
     pub owner_id: String,

@@ -10,7 +10,7 @@ export class AdminPage {
 
   async expectLoaded() {
     await expect(
-      this.page.getByRole("heading", { name: /组织|Organizations/i })
+      this.page.getByRole("heading", { name: /组织|Accounts/i })
     ).toBeVisible();
   }
 
@@ -19,8 +19,8 @@ export class AdminPage {
     await this.page.waitForURL(/\/admin\/users$/);
   }
 
-  async navigateToOrganizations() {
-    await this.page.getByRole("link", { name: /^(组织|Organizations)$/i }).first().click();
+  async navigateToAccounts() {
+    await this.page.getByRole("link", { name: /^(组织|Accounts)$/i }).first().click();
     await this.page.waitForURL(/\/admin\/?$/);
   }
 

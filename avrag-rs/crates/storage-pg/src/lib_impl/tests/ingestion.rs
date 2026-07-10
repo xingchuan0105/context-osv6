@@ -10,9 +10,9 @@ async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_a
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
@@ -31,7 +31,7 @@ async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_a
         .unwrap();
 
     let task = ingestion::build_ingest_task(
-        org_id.to_string(),
+        owner_user_id.to_string(),
         notebook.id.clone(),
         document.id.clone(),
         Some(user_id.to_string()),
@@ -95,9 +95,9 @@ async fn ingestion_side_effect_guard_requires_current_lease_and_non_deleting_doc
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
+    let owner_user_id = UserId::from(Uuid::new_v4());
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
     let notebook = repo
         .bootstrap().create_workspace(&ctx, "ingestion guard notebook", "ingestion guard")
@@ -115,7 +115,7 @@ async fn ingestion_side_effect_guard_requires_current_lease_and_non_deleting_doc
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
     let task = ingestion::build_ingest_task(
-        org_id.to_string(),
+        owner_user_id.to_string(),
         notebook.id.clone(),
         document.id.clone(),
         Some(user_id.to_string()),

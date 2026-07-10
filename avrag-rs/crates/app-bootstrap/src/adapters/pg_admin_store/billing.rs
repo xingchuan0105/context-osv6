@@ -27,7 +27,7 @@
     async fn get_usage(
         &self,
         auth: &AuthContext,
-        org_id: OrgId,
+        owner_user_id: UserId,
         period: &str,
     ) -> Result<AdminUsageStats, AppError> {
         let mut tx = self.begin_admin_tx(auth).await?;
@@ -35,13 +35,13 @@
         let row = sqlx::query(
             r#"
             select
-              (select count(*) from chat_messages m where m.org_id = $1 and m.role = 'user' and m.created_at >= $2) as query_count,
-              (select count(*) from documents d where d.org_id = $1 and d.created_at >= $2) as document_count,
-              (select count(*) from chunks c where c.org_id = $1 and c.created_at >= $2) as chunk_count,
-              (select coalesce(sum(d.file_size), 0)::bigint from documents d where d.org_id = $1) as storage_bytes
+              (select count(*) from chat_messages m where m.owner_user_id = $1 and m.role = 'user' and m.created_at >= $2) as query_count,
+              (select count(*) from documents d where d.owner_user_id = $1 and d.created_at >= $2) as document_count,
+              (select count(*) from chunks c where c.owner_user_id = $1 and c.created_at >= $2) as chunk_count,
+              (select coalesce(sum(d.file_size), 0)::bigint from documents d where d.owner_user_id = $1) as storage_bytes
             "#,
         )
-        .bind(org_id.into_uuid())
+        .bind(owner_user_id.into_uuid())
         .bind(since)
         .fetch_one(tx.as_mut())
         .await
@@ -50,7 +50,7 @@
             .await
             .map_err(db_err)?;
         Ok(AdminUsageStats {
-            org_id,
+            owner_user_id,
             period: period.to_string(),
             query_count: row
                 .try_get("query_count")

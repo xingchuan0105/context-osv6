@@ -43,14 +43,14 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         sqlx::query(
             r#"
             INSERT INTO llm_usage_events (
-                org_id, user_id, feature, stage, provider, model,
+                owner_user_id, user_id, feature, stage, provider, model,
                 prompt_tokens, completion_tokens, total_tokens,
                 usage_units, usage_source, usage_kind, billable,
                 session_id, document_id, request_id, trace_id
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             "#,
         )
-        .bind(ctx.org_id)
+        .bind(ctx.owner_user_id)
         .bind(ctx.user_id)
         .bind(ctx.feature.as_str())
         .bind(&ctx.stage)
@@ -270,7 +270,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
 
     async fn create_usage_export_job(
         &self,
-        org_id: Uuid,
+        owner_user_id: Uuid,
         user_id: Uuid,
         range_from: DateTime<Utc>,
         range_to: DateTime<Utc>,
@@ -305,12 +305,12 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         sqlx::query(
             r#"
             INSERT INTO usage_export_jobs (
-              id, org_id, user_id, range_from, range_to, format, status
+              id, owner_user_id, user_id, range_from, range_to, format, status
             ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')
             "#,
         )
         .bind(id)
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(user_id)
         .bind(range_from)
         .bind(range_to)

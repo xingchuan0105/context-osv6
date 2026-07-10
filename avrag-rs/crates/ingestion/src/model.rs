@@ -56,21 +56,21 @@ impl DocumentStateMachine {
 }
 
 pub fn build_ingest_task(
-    org_id: impl Into<String>,
+    owner_user_id: impl Into<String>,
     workspace_id: impl Into<String>,
     document_id: impl Into<String>,
     requested_by: Option<String>,
     payload: IngestDocumentPayload,
 ) -> IngestionTask {
-    let org_id = org_id.into();
+    let owner_user_id = owner_user_id.into();
     let workspace_id = workspace_id.into();
     let document_id = document_id.into();
-    let idempotency_key = format!("{}:{}:{}", org_id, document_id, payload.object_path);
+    let idempotency_key = format!("{}:{}:{}", owner_user_id, document_id, payload.object_path);
 
     IngestionTask {
         task_id: new_id(),
         kind: IngestionTaskKind::IngestDocument,
-        org_id,
+        owner_user_id,
         workspace_id,
         document_id,
         requested_by,
@@ -84,21 +84,21 @@ pub fn build_ingest_task(
 }
 
 pub fn build_ingest_url_task(
-    org_id: impl Into<String>,
+    owner_user_id: impl Into<String>,
     workspace_id: impl Into<String>,
     document_id: impl Into<String>,
     requested_by: Option<String>,
     payload: IngestUrlPayload,
 ) -> IngestionTask {
-    let org_id = org_id.into();
+    let owner_user_id = owner_user_id.into();
     let workspace_id = workspace_id.into();
     let document_id = document_id.into();
-    let idempotency_key = format!("{}:{}:{}", org_id, document_id, payload.url);
+    let idempotency_key = format!("{}:{}:{}", owner_user_id, document_id, payload.url);
 
     IngestionTask {
         task_id: new_id(),
         kind: IngestionTaskKind::IngestUrl,
-        org_id,
+        owner_user_id,
         workspace_id,
         document_id,
         requested_by,
@@ -112,24 +112,24 @@ pub fn build_ingest_url_task(
 }
 
 pub fn build_reindex_task(
-    org_id: impl Into<String>,
+    owner_user_id: impl Into<String>,
     workspace_id: impl Into<String>,
     document_id: impl Into<String>,
     requested_by: Option<String>,
     payload: ReindexDocumentPayload,
 ) -> IngestionTask {
-    let org_id = org_id.into();
+    let owner_user_id = owner_user_id.into();
     let workspace_id = workspace_id.into();
     let document_id = document_id.into();
     let idempotency_key = format!(
         "{}:{}:reindex:{}",
-        org_id, document_id, payload.requested_revision
+        owner_user_id, document_id, payload.requested_revision
     );
 
     IngestionTask {
         task_id: new_id(),
         kind: IngestionTaskKind::ReindexDocument,
-        org_id,
+        owner_user_id,
         workspace_id,
         document_id,
         requested_by,
@@ -145,7 +145,7 @@ pub fn build_reindex_task(
 pub fn task_audit(task: &IngestionTask, action: AuditAction, payload: Value) -> AuditRecord {
     AuditRecord {
         audit_id: new_id(),
-        org_id: task.org_id.clone(),
+        owner_user_id: task.owner_user_id.clone(),
         actor_id: task.requested_by.clone(),
         action,
         resource_type: "document_ingestion_task".to_string(),

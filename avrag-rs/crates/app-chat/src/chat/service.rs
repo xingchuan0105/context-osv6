@@ -171,7 +171,7 @@ impl ChatContext {
 
         let input_guard = self.orchestrator.guard_pipeline().check_input(
             &req.query,
-            self.auth.org_id().into_uuid(),
+            self.auth.user_id().into_uuid(),
             user_uuid,
             &guard_scope,
             notebook_uuid,
@@ -185,7 +185,7 @@ impl ChatContext {
             );
             let audit_record = AuditRecord {
                 audit_id: Uuid::new_v4().to_string(),
-                org_id: self.auth.org_id().into_uuid().to_string(),
+                owner_user_id: self.auth.user_id().into_uuid().to_string(),
                 actor_id: Some(user_uuid.to_string()),
                 action: AuditAction::InputGuardBlock,
                 resource_type: "chat".to_string(),
@@ -213,7 +213,7 @@ impl ChatContext {
             if msg.role == "user" {
                 let msg_guard = self.orchestrator.guard_pipeline().check_input(
                     &msg.content,
-                    self.auth.org_id().into_uuid(),
+                    self.auth.user_id().into_uuid(),
                     user_uuid,
                     &guard_scope,
                     notebook_uuid,
@@ -226,7 +226,7 @@ impl ChatContext {
                     );
                     let audit_record = AuditRecord {
                         audit_id: Uuid::new_v4().to_string(),
-                        org_id: self.auth.org_id().into_uuid().to_string(),
+                        owner_user_id: self.auth.user_id().into_uuid().to_string(),
                         actor_id: Some(user_uuid.to_string()),
                         action: AuditAction::InputGuardBlock,
                         resource_type: "chat".to_string(),

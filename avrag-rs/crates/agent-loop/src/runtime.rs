@@ -1,7 +1,7 @@
 use crate::AgentKind;
 use crate::events::AgentEventSink;
 use crate::react_loop::DegradeReason;
-use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use contracts::chat::{ChatTurnInput, Citation, DegradeTraceItem};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 /// Stub auth for offline tests / eval / redteam when no real principal is available.
 pub fn stub_agent_auth() -> AuthContext {
-    AuthContext::new(OrgId::from(Uuid::nil()), SubjectKind::System)
+    AuthContext::new(UserId::from(Uuid::nil()), SubjectKind::System)
 }
 
 /// Layer-3 user profile carried into the agent loop (not UI `UserPreferences`).
@@ -317,7 +317,7 @@ mod tests {
             stream: false,
             language: None,
             auth: AuthContext::new(
-                OrgId::from(Uuid::parse_str("00000000-0000-0000-0000-0000000000a1").unwrap()),
+                UserId::from(Uuid::parse_str("00000000-0000-0000-0000-0000000000a1").unwrap()),
                 SubjectKind::User,
             ),
             docscope_metadata: None,

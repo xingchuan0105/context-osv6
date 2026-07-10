@@ -55,12 +55,12 @@ impl QuotaManager {
 
     pub async fn check_quota(
         &self,
-        org_id: Uuid,
+        owner_user_id: Uuid,
         user_id: Uuid,
         metric_type: &str,
         requested: i64,
     ) -> Result<UnifiedQuotaDecision> {
-        let rolling = self.rolling_svc.check_quota(org_id, user_id).await?;
+        let rolling = self.rolling_svc.check_quota(owner_user_id, user_id).await?;
         if rolling.blocked_5h || rolling.blocked_7d {
             let (reason, until) = if rolling.blocked_5h {
                 (QuotaDenyReason::RollingWindow5h, rolling.blocked_until_5h)

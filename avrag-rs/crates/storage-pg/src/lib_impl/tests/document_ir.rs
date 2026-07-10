@@ -10,11 +10,11 @@ async fn document_ir_projection_deletes_are_tenant_scoped_when_database_availabl
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_id = OrgId::from(Uuid::new_v4());
-    let owner_org_uuid = org_id.into_uuid();
+    let owner_user_id = UserId::from(Uuid::new_v4());
+    let owner_org_uuid = owner_user_id.into_uuid();
     let other_org_uuid = Uuid::new_v4();
     let user_id = Uuid::new_v4();
-    let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
     let notebook = repo
         .bootstrap().create_workspace(&ctx, "ir tenant scope notebook", "ir tenant scope")

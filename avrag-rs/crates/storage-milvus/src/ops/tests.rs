@@ -22,7 +22,7 @@ fn test_config() -> MilvusConfig {
 
 fn make_test_batch(doc_id: Uuid, parse_run_id: Uuid) -> DocumentIndexBatch {
     DocumentIndexBatch {
-        org_id: contracts::auth_runtime::OrgId::new(Uuid::from_u128(1)),
+        owner_user_id: contracts::auth_runtime::UserId::new(Uuid::from_u128(1)),
         workspace_id: None,
         document_id: doc_id,
         parse_run_id,

@@ -8,7 +8,7 @@ const originalAnchorClick = HTMLAnchorElement.prototype.click;
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({
-    org_id: "org-1",
+    owner_user_id: "owner-1",
   }),
 }));
 
@@ -21,11 +21,11 @@ vi.mock("../../lib/ui-preferences", () => ({
 }));
 
 vi.mock("../../lib/admin/client", () => ({
-  listAdminOrganizations: mocks.listAdminOrganizationsMock,
-  getAdminOrganization: mocks.getAdminOrganizationMock,
-  listAdminUsersForOrganization: mocks.listAdminUsersForOrganizationMock,
-  getAdminUsageForOrganization: mocks.getAdminUsageForOrganizationMock,
-  updateAdminOrganizationBlocked: mocks.updateAdminOrganizationBlockedMock,
+  listAdminAccounts: mocks.listAdminAccountsMock,
+  getAdminAccount: mocks.getAdminAccountMock,
+  listAdminUsersForAccount: mocks.listAdminUsersForAccountMock,
+  getAdminUsageForAccount: mocks.getAdminUsageForAccountMock,
+  updateAdminAccountBlocked: mocks.updateAdminAccountBlockedMock,
   getAdminHealth: mocks.getAdminHealthMock,
   getAdminBillingOverview: mocks.getAdminBillingOverviewMock,
   getAdminRagHealth: mocks.getAdminRagHealthMock,
@@ -39,7 +39,7 @@ vi.mock("../../lib/admin/client", () => ({
   exportAdminAuditLogsCsv: mocks.exportAdminAuditLogsCsvMock,
 }));
 
-import { AdminOrganizationsSurface, AdminUsageSurface } from "../../components/admin/admin-core-surfaces";
+import { AdminAccountsSurface, AdminUsageSurface } from "../../components/admin/admin-core-surfaces";
 import { AdminAuditLogsSurface, AdminFeatureFlagsSurface } from "../../components/admin/admin-ops-surfaces";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createAdminSurfacesMocks());
@@ -79,11 +79,11 @@ describe("admin surfaces", () => {
     mocks.uiPreferencesState = {
       locale: "en",
     };
-    mocks.listAdminOrganizationsMock.mockReset();
-    mocks.getAdminOrganizationMock.mockReset();
-    mocks.listAdminUsersForOrganizationMock.mockReset();
-    mocks.getAdminUsageForOrganizationMock.mockReset();
-    mocks.updateAdminOrganizationBlockedMock.mockReset();
+    mocks.listAdminAccountsMock.mockReset();
+    mocks.getAdminAccountMock.mockReset();
+    mocks.listAdminUsersForAccountMock.mockReset();
+    mocks.getAdminUsageForAccountMock.mockReset();
+    mocks.updateAdminAccountBlockedMock.mockReset();
     mocks.getAdminHealthMock.mockReset();
     mocks.getAdminBillingOverviewMock.mockReset();
     mocks.getAdminRagHealthMock.mockReset();
@@ -96,9 +96,9 @@ describe("admin surfaces", () => {
     mocks.listAdminAuditLogsMock.mockReset();
     mocks.exportAdminAuditLogsCsvMock.mockReset();
 
-    mocks.listAdminOrganizationsMock.mockResolvedValue([
+    mocks.listAdminAccountsMock.mockResolvedValue([
       {
-        id: "org-1",
+        id: "owner-1",
         name: "Alpha Org",
         plan: "pro",
         user_count: 12,
@@ -118,18 +118,18 @@ describe("admin surfaces", () => {
         created_at: 1_713_600_100,
       },
     ]);
-    mocks.getAdminUsageForOrganizationMock.mockImplementation(async (_token: string, orgId: string, period: string) => {
+    mocks.getAdminUsageForAccountMock.mockImplementation(async (_token: string, ownerUserId: string, period: string) => {
       if (period === "7d") {
-        return orgId === "org-1"
+        return ownerUserId === "owner-1"
           ? { total_requests: 70, total_tokens: 700, total_documents: 7 }
           : { total_requests: 30, total_tokens: 300, total_documents: 3 };
       }
 
-      return orgId === "org-1"
+      return ownerUserId === "owner-1"
         ? { total_requests: 120, total_tokens: 1200, total_documents: 12 }
         : { total_requests: 80, total_tokens: 1800, total_documents: 8 };
     });
-    mocks.updateAdminOrganizationBlockedMock.mockResolvedValue(undefined);
+    mocks.updateAdminAccountBlockedMock.mockResolvedValue(undefined);
     mocks.listAdminFeatureFlagsMock.mockResolvedValue([
       {
         key: "guard_output",
@@ -196,7 +196,7 @@ describe("admin surfaces", () => {
           action: "task_failed",
           resource_type: "document",
           resource_id: "doc-1",
-          org_id: "org-1",
+          owner_user_id: "owner-1",
           created_at: 1_713_600_400,
         },
       ],
@@ -222,10 +222,10 @@ describe("admin surfaces", () => {
     HTMLAnchorElement.prototype.click = originalAnchorClick;
   });
 
-  it("loads organizations and toggles block state", async () => {
+  it("loads accounts and toggles block state", async () => {
     const user = userEvent.setup();
 
-    renderWithQueryClient(<AdminOrganizationsSurface />);
+    renderWithQueryClient(<AdminAccountsSurface />);
 
     expect(await screen.findByText("Alpha Org")).toBeTruthy();
 
@@ -240,13 +240,13 @@ describe("admin surfaces", () => {
     expect(within(alphaRow as HTMLTableRowElement).queryByRole("button", { name: "Block" })).toBeNull();
   });
 
-  it("scopes organization cache to the signed-in actor inside the same query client", async () => {
-    let resolveSecondActorOrganizations: (value: Awaited<ReturnType<typeof mocks.listAdminOrganizationsMock>>) => void =
+  it("scopes account cache to the signed-in actor inside the same query client", async () => {
+    let resolveSecondActorAccounts: (value: Awaited<ReturnType<typeof mocks.listAdminAccountsMock>>) => void =
       () => {
-        throw new Error("Expected the second actor organizations request to be pending.");
+        throw new Error("Expected the second actor accounts request to be pending.");
       };
 
-    mocks.listAdminOrganizationsMock.mockImplementation((token: string) => {
+    mocks.listAdminAccountsMock.mockImplementation((token: string) => {
       if (token === "token-a") {
         return Promise.resolve([
           {
@@ -264,7 +264,7 @@ describe("admin surfaces", () => {
 
       if (token === "token-b") {
         return new Promise((resolve) => {
-          resolveSecondActorOrganizations = resolve;
+          resolveSecondActorAccounts = resolve;
         });
       }
 
@@ -280,7 +280,7 @@ describe("admin surfaces", () => {
       },
     };
 
-    const view = renderWithQueryClient(<AdminOrganizationsSurface />);
+    const view = renderWithQueryClient(<AdminAccountsSurface />);
 
     expect(await screen.findByText("Alpha Org")).toBeTruthy();
 
@@ -293,19 +293,19 @@ describe("admin surfaces", () => {
       },
     };
 
-    view.rerenderWithClient(<AdminOrganizationsSurface />);
+    view.rerenderWithClient(<AdminAccountsSurface />);
 
     await waitFor(() => {
-      expect(mocks.listAdminOrganizationsMock).toHaveBeenCalledWith("token-b");
+      expect(mocks.listAdminAccountsMock).toHaveBeenCalledWith("token-b");
     });
 
     await waitFor(() => {
       expect(screen.queryByText("Alpha Org")).toBeNull();
     });
 
-    expect(screen.getByText("Loading organizations...")).toBeTruthy();
+    expect(screen.getByText("Loading accounts...")).toBeTruthy();
 
-    resolveSecondActorOrganizations([
+    resolveSecondActorAccounts([
       {
         id: "org-b",
         name: "Beta Org",
@@ -322,7 +322,7 @@ describe("admin surfaces", () => {
     expect(screen.queryByText("Alpha Org")).toBeNull();
   });
 
-  it("aggregates usage across organizations and reloads when the period changes", async () => {
+  it("aggregates usage across accounts and reloads when the period changes", async () => {
     const user = userEvent.setup();
 
     renderWithQueryClient(<AdminUsageSurface />);

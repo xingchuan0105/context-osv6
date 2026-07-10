@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use contracts::auth_runtime::OrgId;
+use contracts::auth_runtime::UserId;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct MemoryApiKeyRecord {
     pub id: Uuid,
-    pub org_id: OrgId,
+    pub owner_user_id: UserId,
     pub workspace_id: Option<Uuid>,
     pub permissions: Vec<String>,
     pub rate_limit_rpm: u32,

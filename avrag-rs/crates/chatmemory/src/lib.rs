@@ -89,7 +89,7 @@ impl ChatMemory {
         };
         let profile = UserProfileRow {
             user_id,
-            org_id: auth.org_id(),
+            owner_user_id: auth.user_id(),
             expertise_domains: update.expertise_domains,
             preferred_answer_style: update.preferred_answer_style,
             frequently_asked_topics: update.frequently_asked_topics,

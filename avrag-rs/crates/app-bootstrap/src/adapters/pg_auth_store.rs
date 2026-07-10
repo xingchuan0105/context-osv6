@@ -24,10 +24,6 @@ impl PgAuthStoreAdapter {
     }
 }
 
-fn org_name_from_email(email: &str) -> String {
-    format!("org-{}", email.split('@').next().unwrap_or("user"))
-}
-
 fn hash_reset_value(secret: &str, scope: &str, value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(secret.as_bytes());
@@ -64,26 +60,14 @@ impl AuthStorePort for PgAuthStoreAdapter {
             _ => {}
         }
 
-        let org_id = Uuid::new_v4();
+        // Personal B2C: one user row is the account; no organizations table.
         let user_id = Uuid::new_v4();
         let full_name = input.full_name.as_deref().unwrap_or_default();
 
         if let Err(error) = sqlx::query(
-            "INSERT INTO organizations (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
-        )
-        .bind(org_id)
-        .bind(org_name_from_email(&input.email))
-        .execute(tx.as_mut())
-        .await
-        {
-            return Err(map_sqlx_error(error));
-        }
-
-        if let Err(error) = sqlx::query(
-            "INSERT INTO users (id, org_id, email, full_name, password_hash, role) VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO users (id, email, full_name, password_hash, role) VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(user_id)
-        .bind(org_id)
         .bind(input.email.trim())
         .bind(full_name)
         .bind(&input.password_hash)
@@ -113,7 +97,8 @@ impl AuthStorePort for PgAuthStoreAdapter {
         tx.commit().await.map_err(map_sqlx_error)?;
         Ok(RegisterUserResult {
             user_id,
-            org_id,
+            // Personal account: owner == user (legacy field name kept for JWT issuance).
+            owner_user_id: user_id,
             email: input.email.trim().to_string(),
             full_name: full_name.to_string(),
             auth_version: 1,
@@ -208,8 +193,9 @@ impl AuthStorePort for PgAuthStoreAdapter {
         let mut tx = begin_super_admin_tx_sqlx(pool)
             .await
             .map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, Option<String>, i32, String)>(
-            "SELECT id, org_id, email, full_name, password_hash, auth_version, role FROM users WHERE email = $1",
+        // B2C: users row is the account; personal owner == user id.
+        let row = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>, i32, String)>(
+            "SELECT id, email, full_name, password_hash, auth_version, role FROM users WHERE email = $1",
         )
         .bind(email.trim())
         .fetch_optional(tx.as_mut())
@@ -218,10 +204,10 @@ impl AuthStorePort for PgAuthStoreAdapter {
         tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(row.map(
-            |(user_id, org_id, email, full_name, password_hash, auth_version, role)| {
+            |(user_id, email, full_name, password_hash, auth_version, role)| {
                 AuthUserCredentials {
                     user_id,
-                    org_id,
+                    owner_user_id: user_id,
                     email,
                     full_name,
                     password_hash,
@@ -260,22 +246,20 @@ impl AuthStorePort for PgAuthStoreAdapter {
         let mut tx = begin_super_admin_tx_sqlx(pool)
             .await
             .map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
-            "SELECT id, org_id, email, full_name FROM users WHERE id = $1",
+        let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
+            "SELECT id, email, full_name FROM users WHERE id = $1",
         )
         .bind(user_id)
         .fetch_optional(tx.as_mut())
         .await
         .map_err(map_sqlx_error)?;
         tx.commit().await.map_err(map_sqlx_error)?;
-        Ok(
-            row.map(|(user_id, org_id, email, full_name)| AuthUserProfile {
-                user_id,
-                org_id,
-                email,
-                full_name,
-            }),
-        )
+        Ok(row.map(|(user_id, email, full_name)| AuthUserProfile {
+            user_id,
+            owner_user_id: user_id,
+            email,
+            full_name,
+        }))
     }
 
     async fn update_user_profile(
@@ -287,12 +271,12 @@ impl AuthStorePort for PgAuthStoreAdapter {
         let mut tx = begin_super_admin_tx_sqlx(pool)
             .await
             .map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
+        let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
             r#"
             update users
             set full_name = $2
             where id = $1
-            returning id, org_id, email, full_name
+            returning id, email, full_name
             "#,
         )
         .bind(user_id)
@@ -301,14 +285,12 @@ impl AuthStorePort for PgAuthStoreAdapter {
         .await
         .map_err(map_sqlx_error)?;
         tx.commit().await.map_err(map_sqlx_error)?;
-        Ok(
-            row.map(|(user_id, org_id, email, full_name)| AuthUserProfile {
-                user_id,
-                org_id,
-                email,
-                full_name,
-            }),
-        )
+        Ok(row.map(|(user_id, email, full_name)| AuthUserProfile {
+            user_id,
+            owner_user_id: user_id,
+            email,
+            full_name,
+        }))
     }
 
     async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>, AppError> {
@@ -356,9 +338,9 @@ impl AuthStorePort for PgAuthStoreAdapter {
         let mut tx = begin_super_admin_tx_sqlx(pool)
             .await
             .map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, Uuid, String)>(
+        let row = sqlx::query_as::<_, (Uuid, String)>(
             r#"
-            select id, org_id, email
+            select id, email
             from users
             where lower(email) = lower($1)
             order by created_at desc
@@ -370,9 +352,9 @@ impl AuthStorePort for PgAuthStoreAdapter {
         .await
         .map_err(map_sqlx_error)?;
         tx.commit().await.map_err(map_sqlx_error)?;
-        Ok(row.map(|(user_id, org_id, email)| PasswordResetUser {
+        Ok(row.map(|(user_id, email)| PasswordResetUser {
             user_id,
-            org_id,
+            owner_user_id: user_id,
             email,
         }))
     }
@@ -388,13 +370,13 @@ impl AuthStorePort for PgAuthStoreAdapter {
         sqlx::query(
             r#"
             insert into password_reset_tickets (
-                org_id, user_id, email, purpose, ticket_hash, code_hash,
+                owner_user_id, user_id, email, purpose, ticket_hash, code_hash,
                 expires_at, code_expires_at, attempts, used_at, created_at, updated_at
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, 0, null, now(), now())
             "#,
         )
-        .bind(input.org_id)
+        .bind(input.owner_user_id)
         .bind(input.user_id)
         .bind(&input.email)
         .bind(&input.purpose)

@@ -291,7 +291,7 @@ mod tests {
     #[tokio::test]
     async fn enforcement_blocks_web_search_without_perm() {
         let auth = contracts::auth_runtime::AuthContext::new(
-            contracts::auth_runtime::OrgId::new(uuid::Uuid::nil()),
+            contracts::auth_runtime::UserId::new(uuid::Uuid::nil()),
             contracts::auth_runtime::SubjectKind::User,
         );
         let result = dispatch_tool(
@@ -311,7 +311,7 @@ mod tests {
     #[tokio::test]
     async fn enforcement_allows_web_search_with_perm() {
         let auth = contracts::auth_runtime::AuthContext::new(
-            contracts::auth_runtime::OrgId::new(uuid::Uuid::nil()),
+            contracts::auth_runtime::UserId::new(uuid::Uuid::nil()),
             contracts::auth_runtime::SubjectKind::User,
         )
         .grant("external_network");

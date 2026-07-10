@@ -4,12 +4,12 @@ use super::support::*;
 async fn workspace_routes_with_auth_headers() {
     let state = test_app_state();
     let app = build_router(state);
-    let org_id = "11111111-1111-1111-1111-111111111111";
+    let owner_user_id = "11111111-1111-1111-1111-111111111111";
     let user_id = "22222222-2222-2222-2222-222222222222";
     let req = Request::builder()
         .uri("/api/v1/workspaces")
         .method("GET")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::empty())
         .unwrap();
@@ -29,14 +29,14 @@ async fn chat_session_routes_work_with_auth_headers() {
         .await
         .expect("notebook should create");
     let app = build_router(state);
-    let org_id = "00000000-0000-0000-0000-000000000001";
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
     let user_id = "00000000-0000-0000-0000-000000000002";
 
     let create_req = Request::builder()
         .uri("/api/v1/chat/sessions")
         .method("POST")
         .header("Content-Type", "application/json")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(format!(
             r#"{{"workspace_id":"{}","title":"My Session","agent_type":"chat"}}"#,
@@ -52,7 +52,7 @@ async fn chat_session_routes_work_with_auth_headers() {
     let list_req = Request::builder()
         .uri(format!("/api/v1/chat/sessions?workspace_id={}", notebook.id))
         .method("GET")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::empty())
         .unwrap();
@@ -62,7 +62,7 @@ async fn chat_session_routes_work_with_auth_headers() {
     let get_req = Request::builder()
         .uri(format!("/api/v1/chat/sessions/{}", session_id))
         .method("GET")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::empty())
         .unwrap();
@@ -72,7 +72,7 @@ async fn chat_session_routes_work_with_auth_headers() {
     let messages_req = Request::builder()
         .uri(format!("/api/v1/chat/sessions/{}/messages", session_id))
         .method("GET")
-        .header(middleware::HEADER_ORG_ID, org_id)
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::empty())
         .unwrap();
@@ -693,7 +693,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
         .to_string();
     let claims = verify_jwt(&token).expect("jwt should decode");
     let user_id = Uuid::parse_str(&claims.sub).unwrap();
-    let org_id = Uuid::parse_str(&claims.org_id).unwrap();
+    let owner_user_id = Uuid::parse_str(&claims.owner_user_id).unwrap();
 
     let notebook_req = Request::builder()
         .uri("/api/v1/workspaces")
@@ -715,7 +715,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
         .create_share_token(
             &contracts::auth_runtime::AuthContext::new(
-                contracts::auth_runtime::OrgId::from(org_id),
+                contracts::auth_runtime::UserId::from(owner_user_id),
                 contracts::auth_runtime::SubjectKind::User,
             )
             .with_actor_id(contracts::auth_runtime::ActorId::new(user_id)),
@@ -753,11 +753,11 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
 #[test]
 fn jwt_roundtrip() {
     let user_id = Uuid::new_v4();
-    let org_id = Uuid::new_v4();
-    let token = issue_jwt(&user_id, &org_id);
+    let owner_user_id = Uuid::new_v4();
+    let token = issue_jwt(&user_id, &owner_user_id);
     let claims = verify_jwt(&token).expect("token should be valid");
     assert_eq!(claims.sub, user_id.to_string());
-    assert_eq!(claims.org_id, org_id.to_string());
+    assert_eq!(claims.owner_user_id, owner_user_id.to_string());
     assert!(!claims.permissions.iter().any(|perm| perm == "admin"));
 }
 
@@ -765,10 +765,10 @@ fn jwt_roundtrip() {
 #[test]
 fn jwt_org_admin_includes_admin_permission() {
     let user_id = Uuid::new_v4();
-    let org_id = Uuid::new_v4();
+    let owner_user_id = Uuid::new_v4();
     let token = issue_jwt_for_auth_version(
         &user_id,
-        &org_id,
+        &owner_user_id,
         1,
         contracts::USER_ROLE_ORG_ADMIN,
     );

@@ -80,7 +80,7 @@ fn empty_state() -> IterationState {
 
 fn test_auth() -> contracts::auth_runtime::AuthContext {
     serde_json::from_value(serde_json::json!({
-        "org_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
         "subject_kind": "User",
         "permissions": []
     }))

@@ -6,7 +6,7 @@ use typeshare::typeshare;
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Workspace {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub owner_id: String,
     pub name: String,
     pub title: String,
@@ -95,7 +95,7 @@ pub struct UpdateChatSessionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ApiKeyRow {
     pub id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub workspace_id: String,
     pub key_prefix: String,
     pub name: String,

@@ -80,21 +80,12 @@ pub(super) fn seconds_until_next_month() -> u64 {
     next.signed_duration_since(now).num_seconds().max(1) as u64
 }
 
-async fn get_org_id_by_user_id(
-    repo: Arc<PgAppRepository>,
+/// Personal B2C: account owner is the user id itself (no org table).
+async fn owner_user_id_for_user(
+    _repo: Arc<PgAppRepository>,
     user_id: Uuid,
 ) -> Result<Uuid> {
-    if user_id.is_nil() {
-        return Ok(Uuid::nil());
-    }
-    let mut tx = repo.raw().begin().await?;
-    set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
-    let org_id = sqlx::query_scalar::<_, Uuid>("select org_id from users where id = $1")
-        .bind(user_id)
-        .fetch_one(tx.as_mut())
-        .await?;
-    tx.commit().await?;
-    Ok(org_id)
+    Ok(user_id)
 }
 
 #[allow(dead_code)]

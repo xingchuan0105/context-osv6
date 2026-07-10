@@ -130,10 +130,10 @@ async fn workspace_api_key_defaults_include_index_and_query() {
 }
 
 #[tokio::test]
-async fn org_api_key_can_create_workspace_via_mcp() {
+async fn account_api_key_can_create_workspace_via_mcp() {
     let state = admin_app_state();
     let org_key = state.admin_api()
-        .create_org_api_key(CreateApiKeyRequest {
+        .create_account_api_key(CreateApiKeyRequest {
             name: "org-agent".to_string(),
             permissions: vec![],
             rate_limit_rpm: Some(60),
@@ -146,7 +146,7 @@ async fn org_api_key_can_create_workspace_via_mcp() {
     let (status, payload) = mcp_tools_call(
         &app,
         &org_key.plaintext_key,
-        "org.create_workspace",
+        "account.create_workspace",
         serde_json::json!({
             "name": "Org Bearer Workspace",
             "description": "via org key"
@@ -171,7 +171,7 @@ async fn workspace_key_cannot_call_org_mcp_tool() {
     let (status, payload) = mcp_tools_call(
         &app,
         &bearer,
-        "org.create_workspace",
+        "account.create_workspace",
         serde_json::json!({
             "name": "blocked",
             "description": ""
@@ -182,7 +182,7 @@ async fn workspace_key_cannot_call_org_mcp_tool() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         mcp_app_error_code(&payload),
-        Some("workspace_key_cannot_call_org_tools")
+        Some("workspace_key_cannot_call_account_tools")
     );
     assert_eq!(mcp_guide_mode(&payload), Some("workspace.create"));
 }
@@ -390,7 +390,7 @@ async fn rest_create_workspace_forbidden_for_workspace_key() {
     let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
     assert_eq!(
         payload.get("error").and_then(|value| value.as_str()),
-        Some("workspace_key_cannot_call_org_tools")
+        Some("workspace_key_cannot_call_account_tools")
     );
 }
 

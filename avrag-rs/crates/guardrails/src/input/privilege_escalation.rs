@@ -96,7 +96,7 @@ mod tests {
     fn make_ctx(query: &str) -> InputGuardContext<'_> {
         InputGuardContext {
             query,
-            org_id: uuid::Uuid::new_v4(),
+            owner_user_id: uuid::Uuid::new_v4(),
             user_id: uuid::Uuid::new_v4(),
             doc_scope: &[],
             workspace_id: None,

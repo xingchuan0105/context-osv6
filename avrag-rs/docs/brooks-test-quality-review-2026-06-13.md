@@ -97,10 +97,10 @@ Remedy: 至少补 4 个 Vitest unit test：
 
 **Test Duplication — billing usage 测试中 user+org+event seed 块在 3 个文件复制**
 
-Symptom: `crates/billing/tests/test_usage_window_endpoint.rs:33-73` 把 org+user+subscription 的 seed 提到了 helper `seed_user_with_plan`，但相邻的 `test_usage_forecast_endpoint.rs:62-77` 与 `test_usage_history_endpoint.rs:57-72` 内联了几乎相同的 `insert into organizations` + `insert into users` 块；每个文件还各自重复了 `for offset_days in 0..3 { sqlx::query("insert into llm_usage_events ...") }` 的 seed loop（仅 `usage_units` 和窗口长度参数不同）。`tests/support/mod.rs` 当前只提供 `pg_pool_or_skip` + `run_migrations`，没有共享 fixture。
+Symptom: `crates/billing/tests/test_usage_window_endpoint.rs:33-73` 把 org+user+subscription 的 seed 提到了 helper `seed_user_with_plan`，但相邻的 `test_usage_forecast_endpoint.rs:62-77` 与 `test_usage_history_endpoint.rs:57-72` 内联了几乎相同的 `insert into accounts` + `insert into users` 块；每个文件还各自重复了 `for offset_days in 0..3 { sqlx::query("insert into llm_usage_events ...") }` 的 seed loop（仅 `usage_units` 和窗口长度参数不同）。`tests/support/mod.rs` 当前只提供 `pg_pool_or_skip` + `run_migrations`，没有共享 fixture。
 Source: Meszaros — *xUnit Test Patterns*, Test Code Duplication (p.213)；Hunt & Thomas — *The Pragmatic Programmer*, DRY。
 Consequence: schema 改动（如新增 `users.tenant_id` 列）需要在 3 处同步；新人改一处就过本地，CI 才暴露另两处仍按旧 schema seed。
-Remedy: 把 `seed_user_with_plan` 提到 `crates/billing/tests/support/mod.rs`，并新增 `seed_llm_usage_events(pool, org_id, user_id, days, units_per_day)` helper；三个测试文件改为 `let (user_id, org_id) = support::seed_user_with_plan(&pool, "free").await;` + `support::seed_llm_usage_events(&pool, org_id, user_id, 3, 50_000).await;`。
+Remedy: 把 `seed_user_with_plan` 提到 `crates/billing/tests/support/mod.rs`，并新增 `seed_llm_usage_events(pool, owner_user_id, user_id, days, units_per_day)` helper；三个测试文件改为 `let (user_id, owner_user_id) = support::seed_user_with_plan(&pool, "free").await;` + `support::seed_llm_usage_events(&pool, owner_user_id, user_id, 3, 50_000).await;`。
 
 ---
 

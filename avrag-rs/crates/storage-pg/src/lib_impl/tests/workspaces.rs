@@ -10,8 +10,8 @@ async fn get_workspace_returns_none_for_other_org_when_database_available() {
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
     repo.bootstrap().migrate().await.unwrap();
 
-    let org_a = OrgId::from(Uuid::new_v4());
-    let org_b = OrgId::from(Uuid::new_v4());
+    let org_a = UserId::from(Uuid::new_v4());
+    let org_b = UserId::from(Uuid::new_v4());
     let ctx_a = AuthContext::new(org_a, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
     let ctx_b = AuthContext::new(org_b, contracts::auth_runtime::SubjectKind::User)

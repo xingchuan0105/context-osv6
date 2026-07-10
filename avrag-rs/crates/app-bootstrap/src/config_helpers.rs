@@ -1,7 +1,7 @@
 use anyhow::Result as AnyResult;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::{AppConfig, ChatPersistencePort, ModelProviderConfig};
-use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_llm::{
     EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner, TenantContext, UsageObserver,
 };
@@ -12,9 +12,9 @@ use std::{path::PathBuf, sync::Arc};
 use uuid::Uuid;
 
 pub fn auth_context_from_config(config: &AppConfig) -> AuthContext {
-    let org_uuid = Uuid::parse_str(&config.org_id).unwrap_or_else(|_| Uuid::nil());
+    let org_uuid = Uuid::parse_str(&config.owner_user_id).unwrap_or_else(|_| Uuid::nil());
     let user_uuid = Uuid::parse_str(&config.user_id).unwrap_or_else(|_| Uuid::nil());
-    AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)
+    AuthContext::new(UserId::from(org_uuid), SubjectKind::User)
         .with_actor_id(ActorId::new(user_uuid))
         .with_request_id("config-bootstrap")
 }

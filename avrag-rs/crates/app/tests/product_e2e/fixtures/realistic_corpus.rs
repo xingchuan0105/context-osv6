@@ -31,7 +31,7 @@ const REALISTIC_CORPUS: &[(&str, u64)] = &[
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RealisticCorpusState {
-    pub org_id: String,
+    pub owner_user_id: String,
     pub user_id: String,
     pub workspace_id: String,
     pub documents: Vec<RealisticDocument>,
@@ -46,7 +46,7 @@ pub struct RealisticDocument {
 /// Infra + corpus metadata pinned for the test binary (survives per-test teardown).
 pub(crate) struct RealisticCorpusFixture {
     pub corpus: RealisticCorpusState,
-    pub(crate) org_id: String,
+    pub(crate) owner_user_id: String,
     pub(crate) user_id: String,
     pub(crate) app_state: Arc<app::AppState>,
     pub(crate) pg_url: String,
@@ -63,7 +63,7 @@ pub(crate) struct RealisticCorpusFixture {
 
 impl RealisticCorpusFixture {
     fn from_context(mut ctx: TestContext, corpus: RealisticCorpusState) -> Self {
-        let org_id = ctx.org_id.clone();
+        let owner_user_id = ctx.owner_user_id.clone();
         let user_id = ctx.user_id.clone();
         let app_state = ctx
             .app_state
@@ -105,7 +105,7 @@ impl RealisticCorpusFixture {
 
         Self {
             corpus,
-            org_id,
+            owner_user_id,
             user_id,
             app_state,
             pg_url,
@@ -155,12 +155,12 @@ fn save_realistic_state(state: &RealisticCorpusState) {
 }
 
 /// `documents`/`chunks`/`notebooks` have FORCE ROW LEVEL SECURITY keyed on
-/// `app.current_org`; a raw connection sees zero rows and every doc would look
+/// `app.current_user`; a raw connection sees zero rows and every doc would look
 /// "missing from PG" (the historical phantom-empty-DB / reingest loop).
-async fn connect_with_org_context(pg_url: &str, org_id: &str) -> anyhow::Result<sqlx::PgConnection> {
+async fn connect_with_org_context(pg_url: &str, owner_user_id: &str) -> anyhow::Result<sqlx::PgConnection> {
     let mut conn = sqlx::PgConnection::connect(pg_url).await?;
-    sqlx::query("select set_config('app.current_org', $1, false)")
-        .bind(org_id)
+    sqlx::query("select set_config('app.current_user', $1, false)")
+        .bind(owner_user_id)
         .execute(&mut conn)
         .await?;
     Ok(conn)
@@ -179,7 +179,7 @@ fn fail_missing_realistic_corpus(detail: &str) -> ! {
 
 async fn validate_realistic_corpus_pg(pg_url: &str, state: &RealisticCorpusState) -> bool {
     let expected = REALISTIC_CORPUS;
-    if state.org_id != DEFAULT_TEST_ORG_ID || state.user_id != DEFAULT_TEST_USER_ID {
+    if state.owner_user_id != DEFAULT_TEST_ORG_ID || state.user_id != DEFAULT_TEST_USER_ID {
         eprintln!("[realistic] corpus cache identity mismatch (expected default test org/user)");
         return false;
     }
@@ -198,7 +198,7 @@ async fn validate_realistic_corpus_pg(pg_url: &str, state: &RealisticCorpusState
         }
     }
 
-    let mut conn = match connect_with_org_context(pg_url, &state.org_id).await {
+    let mut conn = match connect_with_org_context(pg_url, &state.owner_user_id).await {
         Ok(conn) => conn,
         Err(err) => {
             eprintln!("[realistic] corpus cache PG connect failed: {err}");
@@ -276,7 +276,7 @@ async fn validate_realistic_corpus_pg(pg_url: &str, state: &RealisticCorpusState
 }
 
 async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusState> {
-    let org_id = Uuid::parse_str(DEFAULT_TEST_ORG_ID).ok()?;
+    let owner_user_id = Uuid::parse_str(DEFAULT_TEST_ORG_ID).ok()?;
     let mut conn = match connect_with_org_context(pg_url, DEFAULT_TEST_ORG_ID).await {
         Ok(conn) => conn,
         Err(err) => {
@@ -293,7 +293,7 @@ async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusSta
             SELECT d.id, d.workspace_id
             FROM documents d
             LEFT JOIN workspaces n ON n.id = d.workspace_id
-            WHERE d.org_id = $1
+            WHERE d.owner_user_id = $1
               AND d.file_name = $2
               AND d.status = 'completed'
               AND d.chunk_count > 0
@@ -303,7 +303,7 @@ async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusSta
             LIMIT 1
             "#,
         )
-        .bind(org_id)
+        .bind(owner_user_id)
         .bind(*filename)
         .bind(REALISTIC_NOTEBOOK_NAME)
         .fetch_optional(&mut conn)
@@ -334,7 +334,7 @@ async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusSta
 
     let workspace_id = workspace_id?;
     Some(RealisticCorpusState {
-        org_id: DEFAULT_TEST_ORG_ID.to_string(),
+        owner_user_id: DEFAULT_TEST_ORG_ID.to_string(),
         user_id: DEFAULT_TEST_USER_ID.to_string(),
         workspace_id: workspace_id.to_string(),
         documents,

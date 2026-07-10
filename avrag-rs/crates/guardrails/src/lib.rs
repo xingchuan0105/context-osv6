@@ -35,7 +35,7 @@ impl GuardPipeline {
     pub fn check_input(
         &self,
         query: &str,
-        org_id: Uuid,
+        owner_user_id: Uuid,
         user_id: Uuid,
         doc_scope: &[String],
         workspace_id: Option<Uuid>,
@@ -43,7 +43,7 @@ impl GuardPipeline {
     ) -> GuardResult {
         let input_ctx = input::InputGuardContext {
             query,
-            org_id,
+            owner_user_id,
             user_id,
             doc_scope,
             workspace_id,
@@ -61,7 +61,7 @@ impl GuardPipeline {
     /// Lightweight content check — only runs the prompt_injection guard.
     ///
     /// Useful for sanitizing tool results / snippets where a full `InputGuardContext`
-    /// (org_id, user_id, doc_scope, etc.) is not available.
+    /// (owner_user_id, user_id, doc_scope, etc.) is not available.
     pub fn check_content(&self, text: &str, trace_id: Option<String>) -> Option<GuardResult> {
         self.input.check_content(text, trace_id)
     }
@@ -132,11 +132,11 @@ mod tests {
         #[test]
         fn test_check_input_no_panic(s in "\\PC*") {
             let pipeline = GuardPipeline::new();
-            let org_id = Uuid::new_v4();
+            let owner_user_id = Uuid::new_v4();
             let user_id = Uuid::new_v4();
             let _ = pipeline.check_input(
                 &s,
-                org_id,
+                owner_user_id,
                 user_id,
                 &[],
                 None,
@@ -148,11 +148,11 @@ mod tests {
     #[test]
     fn test_guard_pipeline_check_input_passes_normal_query() {
         let pipeline = GuardPipeline::new();
-        let org_id = Uuid::new_v4();
+        let owner_user_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
         let result = pipeline.check_input(
             "What is machine learning?",
-            org_id,
+            owner_user_id,
             user_id,
             &[],
             None,
@@ -164,11 +164,11 @@ mod tests {
     #[test]
     fn test_guard_pipeline_check_input_blocks_sql_injection() {
         let pipeline = GuardPipeline::new();
-        let org_id = Uuid::new_v4();
+        let owner_user_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
         let result = pipeline.check_input(
             "'; DROP TABLE users; --",
-            org_id,
+            owner_user_id,
             user_id,
             &[],
             None,

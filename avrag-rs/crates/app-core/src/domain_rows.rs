@@ -12,7 +12,7 @@ pub use common::IndexedChunk;
 #[derive(Debug, Clone)]
 pub struct DocumentTaskSeed {
     pub document_id: String,
-    pub org_id: String,
+    pub owner_user_id: String,
     pub workspace_id: String,
     pub filename: String,
     pub mime_type: String,

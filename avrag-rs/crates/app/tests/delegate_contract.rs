@@ -193,10 +193,10 @@ async fn admin_create_share_token_missing_notebook_returns_not_found() {
 
 #[tokio::test]
 async fn admin_ops_without_actor_is_unauthorized() {
-    use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+    use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
     let state = memory_state().await;
     // Memory bootstrap attaches a default actor; strip it for this contract.
-    let state = state.with_auth(AuthContext::new(OrgId::from(uuid::Uuid::nil()), SubjectKind::User));
+    let state = state.with_auth(AuthContext::new(UserId::from(uuid::Uuid::nil()), SubjectKind::User));
     let err = state.admin_ops().list_feature_flags().await.unwrap_err();
     assert_eq!(err.http_status(), 401);
     assert_eq!(err.code(), "unauthorized");
