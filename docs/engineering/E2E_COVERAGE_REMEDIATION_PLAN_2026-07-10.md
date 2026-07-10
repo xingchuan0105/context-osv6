@@ -4,6 +4,7 @@
 |------|-----|
 | 日期 | 2026-07-10 |
 | 状态 | **Done** — W0–W3 + W5 closed；W4 cancelled（D5 已由 W3 满足） |
+| 交接 | [`E2E_COVERAGE_REMEDIATION_HANDOFF_2026-07-10.md`](./E2E_COVERAGE_REMEDIATION_HANDOFF_2026-07-10.md) |
 | 起因 | 审查 E2E 脚本 vs 产品能力：分层齐全，但 **Write 缺 mock/UI 门禁**；Admin/Prefs/Guardrails 偏浅；文档/registry 与金字塔入口漂移 |
 | 约束 | Solo local trunk；**不扩 CI 剧场**；Write **不进** ReAct ToolCatalog（T2）；日常默认仍只 L1 |
 | 上游 | 会话审查结论；[`TEST_PYRAMID_INVENTORY_2026-07-09.md`](./TEST_PYRAMID_INVENTORY_2026-07-09.md)；[`avrag-rs/docs/e2e-gates.md`](../../avrag-rs/docs/e2e-gates.md)；[`avrag-rs/docs/full-functional-e2e-guide.md`](../../avrag-rs/docs/full-functional-e2e-guide.md)；[`avrag-rs/docs/plans/2026-07-08-write-mode-launch-plan.md`](../../avrag-rs/docs/plans/2026-07-08-write-mode-launch-plan.md) |
