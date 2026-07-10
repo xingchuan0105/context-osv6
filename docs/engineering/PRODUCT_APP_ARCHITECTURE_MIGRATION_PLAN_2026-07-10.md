@@ -3,10 +3,11 @@
 | 字段 | 值 |
 |------|-----|
 | 日期 | 2026-07-10 |
-| 状态 | **Done — W0–W6 complete** |
+| 状态 | **Done — Phase A + TN R0–R5**（Conversation 单入口 / Write 真出 agent lane / 工具单一真相） |
 | 动机 | 后续功能上线节奏快，AppState 门面债会指数堆积；现在迁到最佳实践形态，比事后还债便宜 |
 | 约束 | Solo local trunk；日常 **L1**；行为保持；**不**做大爆炸重写 |
 | 相关 | [`TN_REMEDIATION_HANDOFF_2026-07-09.md`](./TN_REMEDIATION_HANDOFF_2026-07-09.md)、[`TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](./TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md)、ADR-0006 §5a |
+| **TN 续作** | [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) — Conversation 单入口 / Write 出 pipeline / 工具单一真相 |
 
 ---
 
@@ -304,3 +305,5 @@ share::ShareApp 或 app-share::ShareApp
 | 2026-07-10 | 补全 ShareApp W1 方法清单；handoff 挂接下一主线 |
 | 2026-07-10 | **W0 立宪落地**：ADR-0007 + 决策清单勾选；状态 In Progress |
 | 2026-07-10 | **W0–W6 全部完成**：product_apps 绞杀 Bound；Write∉ToolCatalog；composition root |
+| 2026-07-10 | **TN review**：判定为 Phase A（命名+门禁），非终态；续作见 `PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md` |
+| 2026-07-10 | **TN R0–R5 Done** 与终态对齐 |

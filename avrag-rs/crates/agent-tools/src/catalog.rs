@@ -237,12 +237,9 @@ mod tests {
                 "{id} must not be in ToolCatalog (WriteApp control ring only)"
             );
         }
-        // Still available for Write mode meta via skill registry, not catalog dispatch.
         assert!(
-            cat.skill_registry()
-                .get("write_refine_revise")
-                .is_some(),
-            "skill registry keeps write_refine for WriteApp disclosure"
+            cat.skill_registry().get("write_refine_revise").is_none(),
+            "write_refine must not be on SkillRegistry (WriteApp-local ToolSpec only)"
         );
     }
 }

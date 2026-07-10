@@ -2,12 +2,13 @@
 
 | 字段 | 值 |
 |------|-----|
-| 状态 | **TN-3 S4 Done**；**Product App 架构迁移 Done (W0–W6)** |
+| 状态 | **TN-3 S4 Done**；Product App **Phase A+B Done（R0–R5）** |
 | 分支 | 本地 `master`（solo trunk） |
 | 范围 | `avrag-rs` / `contracts` / `frontend_next` / scripts（**不含** `frontend_rust`） |
 | 主方案 | [`TN_CODE_QUALITY_REMEDIATION_2026-07-09.md`](./TN_CODE_QUALITY_REMEDIATION_2026-07-09.md) |
 | TN-3 plan | [`TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](./TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md) |
-| **架构迁移** | [`PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md`](./PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md) — Composition Root + 产品 App；**Plan 待拍板** |
+| **架构 Phase A** | [`PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md`](./PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md) |
+| **TN 结构续作** | [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) — **Done** |
 | 产品词 | ADR-0006 **§5a**：Capability / Skill / Tool **三层保留** |
 
 ---
@@ -16,7 +17,8 @@
 
 **TN 主线 + TN-3 S4 已关。** 工具执行单点 `ToolCatalog`；Bound 面已拆；workspace 命名主体完成；UserProfile 强类型 merge；测试金字塔入口就绪（日常 L1）。
 
-**下一阶段（防债）：** 把 `AppState` 从业务门面绞杀为 composition root；产品面进 `*App`。详见架构迁移计划；默认首切 **ShareApp**。
+**架构 Phase A+B 已落地**（Conversation 单入口、Write 出 agent lane、write_refine 工具单一真相）。  
+续作计划：[`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) **Done**。
 
 ---
 
@@ -90,9 +92,10 @@ pnpm -C frontend_next exec tsc --noEmit
 |------|------|------|
 | W0 | 立宪 + ADR + Bound freeze（T1） | **Done** |
 | W1 | **ShareApp** 完整样板切片 | **Done** |
-| W2–W6 | Workspace → Billing/Prefs → Admin → Agent/Write → 拆 Bound | **Done** |
+| W2–W6 | Workspace → Billing/Prefs → Admin → Agent/Write → 拆 Bound | **Done（Phase A）** |
+| **R0–R5** | TN 结构修复（见 TN remediation plan） | **Done** |
 
-铁律摘要：停增 AppState/Bound 业务方法；Write 永不进 ToolCatalog；ReAct 只走 `dispatch_tool`；Solo L1。
+铁律摘要：停增 AppState 业务方法；Write 永不进 ReAct ToolCatalog；ReAct 只走 `dispatch_tool`；Solo L1。
 
 ---
 
@@ -104,4 +107,6 @@ pnpm -C frontend_next exec tsc --noEmit
 | 2026-07-09 | **TN-3 拍板**：日常 A、真 AI A、真界面 A、性能 A、结构 S4、测试先量再砍 |
 | 2026-07-09 | **TN-3 完成**：P2 UserProfile；P5 入口脚本 + inventory + dedup + L1 bench + 巨石部分拆分 |
 | 2026-07-10 | 挂接 **Product App 架构迁移计划**；TN 关后下一主线 = composition root + 产品 App |
-| 2026-07-10 | **Product App W0–W6 Done**：composition root + product_apps；Bound 拆除 |
+| 2026-07-10 | **Product App W0–W6 Phase A**：product_apps + Bound 拆除（非终态） |
+| 2026-07-10 | TN review FAIL → 编排 [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) |
+| 2026-07-10 | **Product App TN R0–R5 Done** |

@@ -123,12 +123,7 @@ pub(crate) async fn chat_post_handler(
         );
     }
 
-    let result = if app_bootstrap::WriteApp::is_write_agent_type(&agent_type) {
-        state.write_app().execute(req).await
-    } else {
-        state.agent().execute_chat(req).await
-    };
-    match result {
+    match state.conversation().execute(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => {
             let event_name = chat_failure_event_name(&agent_type);
@@ -195,28 +190,16 @@ fn chat_live_stream_response(
 
     tokio::spawn(async move {
         let error_sender = sender.clone();
-        let stream_result = if app_bootstrap::WriteApp::is_write_agent_type(&agent_type_for_task) {
-            state
-                .write_app()
-                .execute_stream(
-                    req,
-                    request_id_for_task.clone(),
-                    sender.clone(),
-                    cancel_for_task,
-                )
-                .await
-        } else {
-            state
-                .agent()
-                .execute_chat_stream(
-                    req,
-                    request_id_for_task.clone(),
-                    sender.clone(),
-                    cancel_for_task,
-                )
-                .await
-        };
-        if let Err(error) = stream_result {
+        if let Err(error) = state
+            .conversation()
+            .execute_stream(
+                req,
+                request_id_for_task.clone(),
+                sender.clone(),
+                cancel_for_task,
+            )
+            .await
+        {
 
             state
                 .record_product_event_if_available(

@@ -48,12 +48,13 @@ impl AppState {
         &self.auth
     }
 
-    // --- Product path (W2): use product Apps on AppState ---
-    // Prefer: chat() / docs() / admin_api() / admin_ops() / share() / prefs() / billing_api()
-    // (see `product_apps/`). The raw domain/context accessors below are for
-    // bootstrap, middleware, and tests — not for new product handlers.
+    // --- Product path (ADR-0007): use product Apps on AppState ---
+    // Prefer: conversation() / agent() / write() / workspace() / share() /
+    // billing_api() / admin_api() / admin_ops() / prefs() (see product_apps/).
+    // Raw domain accessors below are for bootstrap, middleware, and tests.
 
-    /// Chat domain context (sessions / RAG orchestration). Prefer for product paths.
+    /// Raw chat context. Prefer `conversation()` / `agent()` / `write()` for product paths.
+    #[deprecated(note = "use conversation() for execute, agent() for sessions")]
     pub fn chat(&self) -> &app_chat::ChatContext {
         &self.chat
     }

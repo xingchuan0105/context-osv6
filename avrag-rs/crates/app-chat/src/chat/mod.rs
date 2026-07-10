@@ -1,8 +1,8 @@
 // Chat orchestration module.
 //
 // All chat execution flows through a linear async pipeline:
-//   preflight → resolve_session → dispatch_mode → output_guard → persist → usage
-//   → notifications → terminal stream events.
+//   preflight → resolve_session → dispatch_agent_mode | run_write_mode
+//   → output_guard → persist → usage → notifications → terminal stream events.
 //
 // Rationale:
 // - Chat orchestration is intrinsically static and linear; an external graph
@@ -23,9 +23,10 @@ mod service;
 #[cfg(test)]
 mod pipeline_tests;
 
+pub use pipeline::is_write_agent_type;
 pub(crate) use pipeline::{
     ChatExecution, ChatPreflight, StreamConfig, execute_chat_pipeline,
-    execute_chat_pipeline_stream,
+    execute_chat_pipeline_stream, execute_write_pipeline, execute_write_pipeline_stream,
 };
 pub(crate) use pipeline_steps::attach_debug_trace_from_sink;
 pub(crate) use service::{BuildChatExecutionParams, build_chat_execution_from_result};

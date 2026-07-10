@@ -3,8 +3,8 @@ mod app_state;
 mod product_apps;
 
 pub use product_apps::{
-    AdminApp, AdminOpsApp, AgentApp, BillingApp, PrefsApp, ShareApp, WorkspaceApp, WriteApp,
-    WorkspaceApiKeyAuth,
+    AdminApp, AdminOpsApp, AgentApp, BillingApp, ConversationApp, PrefsApp, ShareApp,
+    WorkspaceApp, WriteApp, WorkspaceApiKeyAuth,
 };
 mod config_helpers;
 mod domain_row_convert;

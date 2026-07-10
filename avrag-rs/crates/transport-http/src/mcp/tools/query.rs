@@ -70,11 +70,7 @@ pub(crate) async fn execute_query_tool(
         format_hint: None,
     };
     expand_external_workspace_rag_scope(state, &workspace_id_str, &mut req).await?;
-    let response = if app_bootstrap::WriteApp::is_write_agent_type(&req.agent_type) {
-        state.write_app().execute(req).await?
-    } else {
-        state.agent().execute_chat(req).await?
-    };
+    let response = state.conversation().execute(req).await?;
     Ok(super::super::catalog::success_result(
         tool_name,
         Some(&workspace_id_str),

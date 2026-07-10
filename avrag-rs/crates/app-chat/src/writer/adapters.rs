@@ -11,7 +11,6 @@ use write_core::{
     WriteResearchKind, WriteResearchPort,
 };
 
-use agent_tools::capability::CapabilityRegistry;
 use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::r#loop::assembler::build_iteration_budget_hint;
 use agent_loop::r#loop::config::{load_mode_config, load_system_prompt, ModeConfig};
@@ -113,16 +112,12 @@ impl WriteResearchPort for SubagentResearchPort<'_> {
 /// ModeConfig-backed host for write_refine tools / prompts / tier budget.
 pub struct AppWriteRefineMode {
     mode: ModeConfig,
-    registry: &'static CapabilityRegistry,
 }
 
 impl AppWriteRefineMode {
     pub fn load() -> Result<Self, String> {
         let mode = load_mode_config("write_refine").map_err(|e| e.to_string())?;
-        Ok(Self {
-            mode,
-            registry: CapabilityRegistry::standard_cached(),
-        })
+        Ok(Self { mode })
     }
 }
 
@@ -132,7 +127,8 @@ impl WriteRefineModeHost for AppWriteRefineMode {
     }
 
     fn tool_specs(&self) -> Vec<ToolSpec> {
-        self.mode.tools_for_retrieve(self.registry)
+        // Write control tools are local specs — not ToolCatalog / SkillRegistry.
+        agent_tools::skills::builtin::write_refine::tool_specs_for_pool(&self.mode.tool_pool)
     }
 
     fn max_react_iterations(&self, user_tier: Option<&str>, hard_cap: u8) -> u8 {

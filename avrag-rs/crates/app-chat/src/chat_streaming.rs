@@ -77,4 +77,20 @@ impl ChatContext {
         crate::chat::execute_chat_pipeline_stream(self.clone(), req, request_id, sender, token)
             .await
     }
+
+    /// Write-lane streaming entry (SSE).
+    pub async fn execute_write_stream(
+        &self,
+        req: contracts::chat::ChatRequest,
+        request_id: String,
+        sender: UnboundedSender<ChatEvent>,
+        token: CancellationToken,
+    ) -> Result<(), AppError> {
+        if req.query.trim().is_empty() {
+            return Err(AppError::validation("query_required", "query is required"));
+        }
+
+        crate::chat::execute_write_pipeline_stream(self.clone(), req, request_id, sender, token)
+            .await
+    }
 }

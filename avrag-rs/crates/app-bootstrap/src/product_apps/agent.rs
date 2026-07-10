@@ -1,7 +1,5 @@
-//! Product App — Agent (Chat / RAG / Search).
-//!
-//! Tools execute only via `ToolCatalog` / `dispatch_tool`. Write is **not** this App
-//! (see [`super::WriteApp`]).
+//! Product App — Agent (Chat / RAG / Search sessions + APIs).
+//! Tools: ToolCatalog / dispatch_tool only. Write is Conversation → WriteApp.
 
 use common::{AppError, SourceRow, StatusOnlyResponse};
 use contracts::auth_runtime::AuthContext;
@@ -17,35 +15,28 @@ use tokio_util::sync::CancellationToken;
 /// Product entry for chat / RAG / web-search sessions and related session APIs.
 pub struct AgentApp<'a> {
     pub(crate) chat: &'a app_chat::ChatContext,
+    #[allow(dead_code)]
     pub(crate) auth: &'a AuthContext,
 }
 
 impl<'a> AgentApp<'a> {
-    pub fn auth(&self) -> &'a AuthContext {
-        self.auth
-    }
-
-    /// Raw chat context (infra / rare escapes). Prefer AgentApp methods for product work.
+    /// Raw chat context (infra escapes). Prefer AgentApp / ConversationApp methods.
     pub fn chat(&self) -> &'a app_chat::ChatContext {
         self.chat
     }
 
-    pub fn is_write_agent_type(agent_type: &str) -> bool {
-        agent_type.eq_ignore_ascii_case("write")
-    }
-
-    /// Non-streaming Chat/RAG/Search. Write requests must use [`super::WriteApp::execute`].
+    /// Non-streaming Chat/RAG/Search (agent lane; rejects write).
     pub async fn execute_chat(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
-        if Self::is_write_agent_type(&req.agent_type) {
+        if app_chat::is_write_agent_type(&req.agent_type) {
             return Err(AppError::validation(
-                "use_write_app",
-                "write mode must enter via WriteApp, not AgentApp",
+                "use_write_entry",
+                "write mode must enter via ConversationApp / WriteApp",
             ));
         }
         self.chat.execute_chat(req).await
     }
 
-    /// Streaming Chat/RAG/Search (SSE). Write must use [`super::WriteApp::execute_stream`].
+    /// Streaming Chat/RAG/Search (SSE).
     pub async fn execute_chat_stream(
         &self,
         req: ChatRequest,
@@ -53,10 +44,10 @@ impl<'a> AgentApp<'a> {
         sender: UnboundedSender<ChatEvent>,
         token: CancellationToken,
     ) -> Result<(), AppError> {
-        if Self::is_write_agent_type(&req.agent_type) {
+        if app_chat::is_write_agent_type(&req.agent_type) {
             return Err(AppError::validation(
-                "use_write_app",
-                "write mode must enter via WriteApp, not AgentApp",
+                "use_write_entry",
+                "write mode must enter via ConversationApp / WriteApp",
             ));
         }
         self.chat

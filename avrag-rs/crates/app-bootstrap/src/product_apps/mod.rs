@@ -1,7 +1,10 @@
 //! Product Apps (ADR-0007) — use-case entry points assembled by AppState (composition root).
 //!
 //! **Freeze:** do not add business methods on AppState; add them on the relevant `*App` here
-//! (or in domain crates behind the App). Bound faces under `app_state::bound` are removed.
+//! (or in domain crates behind the App).
+//!
+//! Product accessors: `conversation()`, `workspace()`, `share()`, `billing()`, `prefs()`,
+//! `admin_api()`, `admin_ops()`, `agent()`, `write()`. Historical aliases may be deprecated.
 
 mod share;
 mod workspace;
@@ -11,6 +14,7 @@ mod admin;
 mod admin_ops;
 mod agent;
 mod write;
+mod conversation;
 
 pub use share::ShareApp;
 pub use workspace::WorkspaceApp;
@@ -20,6 +24,7 @@ pub use admin::AdminApp;
 pub use admin_ops::AdminOpsApp;
 pub use agent::AgentApp;
 pub use write::WriteApp;
+pub use conversation::ConversationApp;
 
 use contracts::auth_runtime::OrgId;
 use uuid::Uuid;
@@ -37,6 +42,14 @@ pub struct WorkspaceApiKeyAuth {
 }
 
 impl AppState {
+    /// Single conversation execute entry (chat/rag/search/write). Prefer over agent/write split.
+    pub fn conversation(&self) -> ConversationApp<'_> {
+        ConversationApp {
+            chat: &self.chat,
+            auth: &self.auth,
+        }
+    }
+
     /// Workspace / documents product App.
     pub fn workspace(&self) -> WorkspaceApp<'_> {
         WorkspaceApp {
@@ -48,7 +61,8 @@ impl AppState {
         }
     }
 
-    /// Alias for workspace product App (historical `docs()` name).
+    /// Alias for workspace (historical `docs()` name).
+    #[deprecated(note = "use workspace()")]
     pub fn docs(&self) -> WorkspaceApp<'_> {
         self.workspace()
     }
@@ -62,7 +76,7 @@ impl AppState {
         }
     }
 
-    /// Billing product App.
+    /// Billing product App (`billing()` is reserved for raw BillingContext).
     pub fn billing_api(&self) -> BillingApp<'_> {
         BillingApp {
             auth: &self.auth,
@@ -98,7 +112,7 @@ impl AppState {
         }
     }
 
-    /// Agent product App (Chat/RAG/Search). Tools via ToolCatalog only.
+    /// Agent product App (sessions / search / non-write execute helpers).
     pub fn agent(&self) -> AgentApp<'_> {
         AgentApp {
             chat: &self.chat,
@@ -106,18 +120,24 @@ impl AppState {
         }
     }
 
-    /// Write product App (refine loop; never ToolCatalog).
-    pub fn write_app(&self) -> WriteApp<'_> {
+    /// Write product App (refine loop). Prefer `conversation().execute` from transport.
+    pub fn write(&self) -> WriteApp<'_> {
         WriteApp {
             chat: &self.chat,
             auth: &self.auth,
         }
     }
+
+    /// Alias for write (historical name).
+    #[deprecated(note = "use write()")]
+    pub fn write_app(&self) -> WriteApp<'_> {
+        self.write()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AgentApp, WriteApp};
+    use super::{ConversationApp, WriteApp};
     use crate::AppState;
     use app_core::AppConfig;
     use contracts::chat::ChatRequest;
@@ -140,59 +160,67 @@ mod tests {
     }
 
     #[test]
-    fn composition_root_exposes_all_product_apps() {
+    fn composition_root_exposes_product_apps() {
         let state = AppState::new(AppConfig::default());
         let _ = state.workspace();
-        let _ = state.docs();
         let _ = state.share();
         let _ = state.billing_api();
         let _ = state.prefs();
         let _ = state.admin_api();
         let _ = state.admin_ops();
         let _ = state.agent();
-        let _ = state.write_app();
-        assert!(WriteApp::WRITE_REFINE_OUTSIDE_TOOL_CATALOG);
+        let _ = state.write();
+        let _ = state.conversation();
     }
 
     #[tokio::test]
-    async fn write_app_execute_is_product_entry_for_write_mode() {
+    async fn conversation_routes_write_and_chat_on_real_path() {
         let state = AppState::new(AppConfig::default());
-        // Drives shipped WriteApp::execute → ChatContext::execute_chat (query validation).
-        let err = state
-            .write_app()
+        let conv = state.conversation();
+        let write_err = conv
             .execute(empty_chat_req("write"))
             .await
-            .expect_err("empty query must fail on real path");
-        assert_eq!(err.code(), "query_required");
-    }
+            .expect_err("empty write query");
+        assert_eq!(write_err.code(), "query_required");
 
-    #[tokio::test]
-    async fn write_app_rejects_non_write_agent_type() {
-        let state = AppState::new(AppConfig::default());
-        let err = state
-            .write_app()
+        let chat_err = conv
             .execute(empty_chat_req("chat"))
             .await
-            .expect_err("WriteApp must reject chat mode");
-        assert_eq!(err.code(), "write_mode_required");
+            .expect_err("empty chat query");
+        assert_eq!(chat_err.code(), "query_required");
     }
 
     #[tokio::test]
-    async fn agent_app_rejects_write_mode_and_accepts_chat_entry() {
+    async fn write_app_rejects_non_write_and_uses_write_pipeline() {
         let state = AppState::new(AppConfig::default());
-        let write_err = state
+        let err = state
+            .write()
+            .execute(empty_chat_req("chat"))
+            .await
+            .expect_err("WriteApp rejects chat");
+        assert_eq!(err.code(), "write_mode_required");
+
+        let empty = state
+            .write()
+            .execute(empty_chat_req("write"))
+            .await
+            .expect_err("empty write");
+        assert_eq!(empty.code(), "query_required");
+        assert!(WriteApp::is_write_agent_type("Write"));
+        let _ = ConversationApp {
+            chat: &state.chat,
+            auth: &state.auth,
+        };
+    }
+
+    #[tokio::test]
+    async fn agent_rejects_write_on_agent_lane() {
+        let state = AppState::new(AppConfig::default());
+        let err = state
             .agent()
             .execute_chat(empty_chat_req("write"))
             .await
-            .expect_err("AgentApp must not own write");
-        assert_eq!(write_err.code(), "use_write_app");
-
-        let chat_err = state
-            .agent()
-            .execute_chat(empty_chat_req("chat"))
-            .await
-            .expect_err("empty chat query fails on real path");
-        assert_eq!(chat_err.code(), "query_required");
-        assert!(AgentApp::is_write_agent_type("Write"));
+            .expect_err("agent lane rejects write");
+        assert_eq!(err.code(), "use_write_entry");
     }
 }

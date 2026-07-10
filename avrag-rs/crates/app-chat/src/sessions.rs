@@ -183,4 +183,12 @@ impl ChatContext {
 
         ChatService::new(self.clone()).execute(req).await
     }
+
+    /// Write-lane product entry (does not use agent-lane `dispatch_agent_mode`).
+    pub async fn execute_write(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
+        if req.query.trim().is_empty() {
+            return Err(AppError::validation("query_required", "query is required"));
+        }
+        crate::chat::execute_write_pipeline(self.clone(), req).await
+    }
 }

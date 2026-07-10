@@ -2,7 +2,8 @@
 //! `write_refine_finish`.
 //!
 //! These are LLM-facing native tools registered in `CapabilityRegistry` and
-//! disclosed to the WriteRefine ReAct loop via `modes/write_refine.yaml::tool_pool`.
+//! disclosed to the Write refine loop via `modes/write_refine.yaml::tool_pool` +
+//! [`tool_specs_for_pool`] (not SkillRegistry / ToolCatalog).
 //!
 //! **Runtime routing:** the real handlers live in `WriteRefineLoopRunner`
 //! (`crate::writer::refine_loop`), which intercepts these three tool ids and
@@ -340,6 +341,24 @@ impl SkillComponent for WriteRefineLexicalSkill {
     async fn execute<'a>(&self, _args: &Value, _ctx: &'a ExecutionContext<'a>) -> ToolResult {
         not_implemented_result(LEXICAL_ID, VERSION)
     }
+}
+
+/// All write-control ToolSpecs (not registered on SkillRegistry).
+pub fn all_tool_specs() -> Vec<ToolSpec> {
+    vec![
+        WriteRefineReviseSkill.spec(),
+        WriteRefineResearchSkill.spec(),
+        WriteRefineFinishSkill.spec(),
+        WriteRefineLexicalSkill.spec(),
+    ]
+}
+
+/// Resolve ToolSpecs for a write_refine.yaml tool_pool (order preserved).
+pub fn tool_specs_for_pool(pool: &[String]) -> Vec<ToolSpec> {
+    let all = all_tool_specs();
+    pool.iter()
+        .filter_map(|id| all.iter().find(|s| s.name == *id).cloned())
+        .collect()
 }
 
 #[cfg(test)]

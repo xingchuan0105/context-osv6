@@ -20,7 +20,8 @@ fn agent_request_with_resolved_session(
     agent_request
 }
 
-pub(crate) async fn dispatch_mode(
+/// Agent-lane modes only (chat / RAG / search). Write enters via `execute_write_pipeline`.
+pub(crate) async fn dispatch_agent_mode(
     state: &ChatContext,
     request: &ChatRequest,
     session: &ChatSession,
@@ -53,12 +54,22 @@ pub(crate) async fn dispatch_mode(
         Some(crate::agents::AgentKind::Rag) => {
             run_rag_mode(state, request, session, stream_config).await
         }
-        Some(crate::agents::AgentKind::Write) => {
-            // Write is intentionally outside UnifiedAgent (needs ChatContext for
-            // drafts / refine loop). See agents::unified module docs.
-            crate::writer::run_write_mode(state, request, session, stream_config).await
-        }
+        Some(crate::agents::AgentKind::Write) => Err(AppError::validation(
+            "use_write_entry",
+            "write mode is not dispatched on the agent lane; use execute_write_pipeline",
+        )),
     }
+}
+
+/// @deprecated name — tests may still call this; agent lane only.
+#[cfg(test)]
+pub(crate) async fn dispatch_mode(
+    state: &ChatContext,
+    request: &ChatRequest,
+    session: &ChatSession,
+    stream_config: Option<&StreamConfig>,
+) -> Result<ChatExecution, AppError> {
+    dispatch_agent_mode(state, request, session, stream_config).await
 }
 
 async fn run_general_mode(

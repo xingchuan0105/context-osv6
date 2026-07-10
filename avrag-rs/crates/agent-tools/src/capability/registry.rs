@@ -46,16 +46,13 @@ impl CapabilityRegistry {
         STANDARD_REGISTRY.get_or_init(Self::standard)
     }
 
-    /// Look up a tool by id.
+    /// Look up a tool by id (ReAct [`ToolCatalog`] only).
     ///
-    /// Prefer ReAct [`ToolCatalog`]. Write-control tools (`write_refine_*`) are **not**
-    /// in that catalog (ADR-0007); their disclosure meta comes from SkillRegistry only.
+    /// Write-control tools (`write_refine_*`) are **not** here — see WriteApp /
+    /// `write_refine::tool_specs_for_pool`.
     pub fn tool(&self, id: &str) -> Option<&ToolMetadata> {
         let _ = self;
-        if let Some(m) = ToolCatalog::standard_cached().tool_meta(id) {
-            return Some(m);
-        }
-        write_control_tool_meta(id)
+        ToolCatalog::standard_cached().tool_meta(id)
     }
 
     /// Look up a skill by id.
@@ -142,42 +139,6 @@ impl CapabilityRegistry {
 // ---------------------------------------------------------------------------
 // Helpers: convert v4 types into v5 metadata
 // ---------------------------------------------------------------------------
-
-/// WriteApp control-ring tool meta (not in ToolCatalog / UnifiedAgent ReAct).
-fn write_control_tool_meta(id: &str) -> Option<&'static ToolMetadata> {
-    use std::sync::OnceLock;
-    static MAP: OnceLock<HashMap<String, ToolMetadata>> = OnceLock::new();
-    let map = MAP.get_or_init(|| {
-        let mut m = HashMap::new();
-        let reg = crate::skills::builtin_registry_cached();
-        for skill in reg.iter() {
-            if !skill.id().starts_with("write_refine") {
-                continue;
-            }
-            let spec = skill.spec();
-            m.insert(
-                skill.id().to_string(),
-                ToolMetadata {
-                    id: spec.name.clone(),
-                    version: spec.version.clone(),
-                    owner: "write-control".to_string(),
-                    description: spec.description.clone(),
-                    input_schema: spec.input_schema.clone(),
-                    output_schema: spec.output_schema.clone(),
-                    risk_level: super::RiskLevel::Medium,
-                    permissions: Vec::new(),
-                    external_deps: vec![],
-                    deprecation: None,
-                    retry_policy: super::RetryPolicy::default(),
-                    activation_phase: ActivationPhase::PlanAndEvaluate,
-                    applicable_strategies: vec!["write".into()],
-                },
-            );
-        }
-        m
-    });
-    map.get(id)
-}
 
 /// ADR-0007 §8.8 retired skills — excluded from default registry catalog.
 ///
@@ -366,8 +327,8 @@ mod tests {
             "catalog tools (non-write builtins + RAG)"
         );
         assert!(
-            registry.tool("write_refine_revise").is_some(),
-            "write control meta still resolvable for WriteApp disclosure"
+            registry.tool("write_refine_revise").is_none(),
+            "write_refine must not appear on CapabilityRegistry/ToolCatalog"
         );
         assert!(registry.tool("web_search").is_some());
         assert!(registry.tool("web_fetch").is_some());
