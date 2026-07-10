@@ -14,7 +14,7 @@ See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 ## Test pyramid (product lock 2026-07-09)
 
-Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](../../docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md), inventory [`TEST_PYRAMID_INVENTORY_2026-07-09.md`](../../docs/engineering/TEST_PYRAMID_INVENTORY_2026-07-09.md), dedup [`TEST_PYRAMID_DEDUP_MAP.md`](../../docs/engineering/TEST_PYRAMID_DEDUP_MAP.md).
+Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](../../docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md), inventory [`TEST_PYRAMID_INVENTORY_2026-07-09.md`](../../docs/engineering/TEST_PYRAMID_INVENTORY_2026-07-09.md), dedup [`TEST_PYRAMID_DEDUP_MAP.md`](../../docs/engineering/TEST_PYRAMID_DEDUP_MAP.md). Coverage gaps / layer-map remediation: [`E2E_COVERAGE_REMEDIATION_PLAN_2026-07-10.md`](../../docs/engineering/E2E_COVERAGE_REMEDIATION_PLAN_2026-07-10.md).
 
 | Layer | When | Entry | Contents |
 |-------|------|-------|----------|

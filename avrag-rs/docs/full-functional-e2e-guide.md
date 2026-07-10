@@ -33,25 +33,39 @@
 
 ## 1. 测试分层总览
 
-| 层 | ID | 触发 | 外部依赖 | 时长预算 | 入口命令 |
+> **层编号注意（2026-07-10）**：下表是**历史/套件 ID**（`smoke` / `integration` / `llm_real` / Playwright projects）。Solo 日常权威金字塔是 **L1–L3**（`scripts/test-l*.sh`），**勿把本表 L1 当成 `scripts/test-l1.sh`**。对照见下「新旧层映射」；详情：[`docs/engineering/TEST_PYRAMID_INVENTORY_2026-07-09.md`](../../docs/engineering/TEST_PYRAMID_INVENTORY_2026-07-09.md)、[`docs/engineering/E2E_COVERAGE_REMEDIATION_PLAN_2026-07-10.md`](../../docs/engineering/E2E_COVERAGE_REMEDIATION_PLAN_2026-07-10.md)、[`e2e-gates.md`](e2e-gates.md)#test-pyramid-product-lock-2026-07-09。
+
+| 层（历史套件 ID） | ID | 触发 | 外部依赖 | 时长预算 | 入口命令 |
 |----|-----|------|----------|----------|----------|
-| **L1 PR Smoke** | `smoke` | 每个 PR | Mock LLM/Search/Embedding；真 PG/Milvus/Worker | ≤10 min | `./scripts/run-product-smoke-e2e.sh` |
-| **L2 Integration** | `integration` | `master` push / 手动 | 同上 Mock；真基础设施；**真实解析管线**（LiteParse/Paddle mock jobs） | ≤15 min | `E2E_MODE=integration cargo test -p app --test product_e2e --features product-e2e -- --test-threads=1` |
-| **L3 Nightly Real** | `nightly` / `llm_real` | cron / 手动 | **真实 LLM + Embedding + Brave Search**；真基础设施 | ≤60 min | `E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1` |
-| **L4 Playwright Skills** | `skills` | nightly cron / 手动 | 真实栈 + 浏览器；RAG/Search **硬 citation** | ≤45 min | `cd frontend_next && pnpm exec playwright test --project=skills` |
-| **L5 Playwright Journey** | `journey` | PR/手动 | 真实栈；WebSearch citation PR 软 / nightly 硬 | 按需 | `pnpm exec playwright test --project=journey` |
-| **L6 单元/契约** | `unit` | PR | 无 Docker 或轻量 PG | 并行 | 见 §6 |
+| **L1 PR Smoke** | `smoke` | 波次末 / 手动（solo 默认不进每日） | Mock LLM/Search/Embedding；真 PG/Milvus/Worker | ≤10 min | `./scripts/run-product-smoke-e2e.sh`（或仓根 `scripts/test-l2-mechanisms.sh`） |
+| **L2 Integration** | `integration` | 波次末 / 手动 | 同上 Mock；真基础设施；**真实解析管线**（LiteParse/Paddle mock jobs） | ≤15 min | 仓根 `scripts/test-l2-integration.sh`；或 `E2E_MODE=integration cargo test -p app --test product_e2e --features product-e2e -- --test-threads=1` |
+| **L3 Nightly Real** | `nightly` / `llm_real` | cron / 手动 | **真实 LLM + Embedding + Brave Search**；真基础设施 | ≤60 min | 仓根 `scripts/test-l3-llm.sh`（薄路径）；全量：`E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1` |
+| **L4 Playwright Skills** | `skills` | nightly cron / 手动 | 真实栈 + 浏览器；RAG/Search **硬 citation** | ≤45 min | `cd frontend_next && pnpm exec playwright test --project=skills`（L3 UI 族） |
+| **L5 Playwright Journey** | `journey` | 波次末 / 手动 | 真实栈；WebSearch citation PR 软 / nightly 硬 | 按需 | 仓根 `scripts/test-l3-journey.sh`（`JOURNEY=1` 全量）；或 `pnpm exec playwright test --project=journey` |
+| **L6 单元/契约** | `unit` | 日常 / PR | 无 Docker 或轻量 PG | 并行 | 见 §6；日常入口 **`scripts/test-l1.sh`** |
 
-**CI 映射**（仓库根 `.github/workflows/`）：
+### 新旧层映射（权威金字塔 ↔ 本指南历史 ID）
 
-| Workflow | 层 | 备注 |
-|----------|-----|------|
-| `smoke-e2e.yml` | L1 | PR 路径过滤 `avrag-rs/**` |
-| `integration-e2e.yml` | L2 | `on.push.branches: [master, main]` |
-| `nightly-llm-real.yml` | L3 | `SEARCH_REQUIRE_REAL=1` |
-| `frontend-skills.yml` | L4 | 02:00 UTC |
-| `frontend-journey.yml` / `frontend-smoke.yml` | L5 | 见各 workflow |
-| `frontend-unit.yml` | L6 | Vitest |
+| 新金字塔（权威，`e2e-gates.md`） | 本指南历史 ID | 仓根入口 |
+|----------------------------------|---------------|----------|
+| **L1 日常** | 部分 L6 unit / 契约 / crate `--lib` | `scripts/test-l1.sh` |
+| **L2 mock smoke** | 旧 L1 PR smoke | `scripts/test-l2-mechanisms.sh` → `avrag-rs/scripts/run-product-smoke-e2e.sh` |
+| **L2 integration** | 旧 L2 | `scripts/test-l2-integration.sh` |
+| **L3 UI** | 旧 L4 skills / 旧 L5 journey | `scripts/test-l3-journey.sh` |
+| **L3 LLM 薄路径** | 旧 L3 `llm_real` 子集 | `scripts/test-l3-llm.sh` |
+| **L3-release quality** | release gate | `rag_quality_prod`（`.github/workflows/release-e2e-gate.yml`） |
+
+**CI 映射**（仓库根 `.github/workflows/`；solo 默认以本地 `scripts/test-l*.sh` 为准，勿把 GitHub 队列当日常进度环）：
+
+| Workflow | 历史层 | 备注 |
+|----------|--------|------|
+| `smoke-e2e.yml` | 旧 L1 / 新 L2 smoke | 现多为 `workflow_dispatch`；非 solo 每日默认 |
+| `integration-e2e.yml` | 旧 L2 / 新 L2 integration | `on.push.branches` 或手动 |
+| `nightly-llm-real.yml` | 旧 L3 / 新 L3 LLM | `SEARCH_REQUIRE_REAL=1` |
+| `frontend-skills.yml` | 旧 L4 / 新 L3 UI | 02:00 UTC |
+| `frontend-journey.yml` / `frontend-smoke.yml` | 旧 L5 / 新 L3 UI | 见各 workflow |
+| `frontend-unit.yml` | 旧 L6 / 新 L1 子集 | Vitest |
+| `release-e2e-gate.yml` | L3-release quality | `rag_quality_prod`；`workflow_dispatch` / `release` published |
 
 > PR-1（2026-06-29）：`frontend-journey` / `frontend-skills` / `frontend-smoke` / `nightly-llm-real` 均通过 `scripts/ci-start-milvus.sh` 在测试前预启 Milvus（修复 journey/skills 上传→RAG 因 Milvus 未就绪导致的假绿/flaky）。
 
@@ -220,7 +234,7 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 | Checkout consent gate | `smoke::billing_boundary` | L1 | — |
 | Usage 仪表 | `billing/usage-*.spec.ts` | L5 | — |
 | Admin 导航 | `smoke/admin-navigation.spec.ts` | L5 | — |
-| Workspace CRUD | `journey/notebook-crud.spec.ts` | L5 | Product E2E 仅 create |
+| Workspace CRUD | `journey/workspace-crud.spec.ts` | L5 | Product E2E 仅 create |
 | Tauri IPC | desktop 13 单元测 | L6 | 非 product E2E |
 
 ---
@@ -584,6 +598,6 @@ cargo test --test product_e2e -p app --features product-e2e -- --list
 | 目录 | Spec | 真实 LLM/Search | Citation 门禁 |
 |------|------|-----------------|---------------|
 | `smoke/` | auth-flow, auth-failure, legal-consent, admin-navigation, query-library | 栈依赖 | 部分 |
-| `journey/` | workspace-chat, workspace-upload-rag, notebook-crud, invite, share, session, analyze | upload-rag / search 是 | upload-rag 硬；search 分层 |
+| `journey/` | workspace-chat, workspace-upload-rag, workspace-crud, citation-interaction, invite, share, session, analyze | upload-rag / search 是 | upload-rag 硬；search 分层 |
 | `skills/` | rag-available, search-available, format-output, analyze, notebook | **是** | **硬** |
 | `billing/` | pricing, paywall, usage, visual | — | — |

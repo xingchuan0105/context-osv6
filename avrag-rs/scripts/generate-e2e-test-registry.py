@@ -443,9 +443,15 @@ capability_domains:
   CAP-DEGRADE:
     name: 降级韧性
     required_layers: [L2]
+  CAP-WRITE:
+    name: 长文写作
+    # L1=mock smoke (write_smoke planned W1), L3=llm_real write_real, L5=UI journey (planned W2)
+    required_layers: [L1, L3, L5]
 
 smoke_module_lists:
-  non_rag: [chat_smoke, search_smoke, auth_boundary, share_boundary, billing_boundary]
+  # Keep in sync with avrag-rs/scripts/run-product-smoke-e2e.sh NON_RAG_MODULES.
+  # write_smoke planned W1 — not yet in script or this list.
+  non_rag: [chat_smoke, search_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary]
   rag_serial: [ingestion_smoke, rag_smoke, rag_fallback_smoke, rag_codegen_multitool_smoke, memory_multiturn_smoke, paddle_image_smoke]
   manual_only: [search_real_smoke, paddle_pdf_smoke]
 
@@ -482,6 +488,15 @@ playwright_specs:
     evidence: [E-P, E-Prod, E-Q]
     citation_gate: hard
     note: bundled phase0-mini.pdf LiteParse path
+  - path: frontend_next/e2e/specs/journey/workspace-crud.spec.ts
+    layer: L5
+    capabilities: [CAP-CHAT]
+    evidence: [E-P, E-Prod]
+  - path: frontend_next/e2e/specs/journey/citation-interaction.spec.ts
+    layer: L5
+    capabilities: [CAP-RAG]
+    evidence: [E-P, E-Prod, E-Q]
+    citation_gate: hard
   - path: frontend_next/e2e/specs/journey/invite-collaboration.spec.ts
     layer: L5
     capabilities: [CAP-SHARE]
@@ -490,7 +505,16 @@ playwright_specs:
     layer: L5
     capabilities: [CAP-SHARE]
     evidence: [E-P, E-Prod]
+  - path: frontend_next/e2e/specs/journey/workspace-write.spec.ts
+    layer: L5
+    capabilities: [CAP-WRITE]
+    evidence: [E-P, E-Prod]
+    note: planned W2 — file not yet present
   - path: frontend_next/e2e/specs/smoke/auth-flow.spec.ts
+    layer: L5
+    capabilities: [CAP-AUTH]
+    evidence: [E-P, E-Prod]
+  - path: frontend_next/e2e/specs/smoke/api-access.spec.ts
     layer: L5
     capabilities: [CAP-AUTH]
     evidence: [E-P, E-Prod]

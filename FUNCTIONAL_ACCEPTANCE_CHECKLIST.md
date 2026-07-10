@@ -282,15 +282,15 @@
 
 |#|功能点|状态|代码证据|
 |-|-|-|-|
-|12.1|黄金集回归测试 (100-500 样本)|⚠️|`EvaluationHarness::with_evaluator` + 样本集单测已绿；生产 `RagRuntime` 全流水线接线与 CI 发布门禁仍待接|
-|12.2|发布门禁 (Recall@15 ≤3% 下降等)|⚠️|`tests/rag_quality/src/metrics.rs:258` `assert_passing(baseline_recall=0.97)` 三门禁：Recall@15 下降≤3%、Citation Accuracy≥95%、Hallucination Rate≤2%。缺：未在 `.github/workflows/` 发布流程中强制阻断，仅在 `weekly-regression.yml` 跑单元测试|
+|12.1|黄金集回归测试 (100-500 样本)|⚠️|`EvaluationHarness::with_evaluator` + 样本集单测已绿；生产路径由 `rag_quality_prod`（`ProductionRagEvaluator` → 真实 `RagRuntime`）覆盖子集。更大 golden / 全语料日常化仍待扩展|
+|12.2|发布门禁 (Recall@15 ≤3% 下降等)|✅|**已接发布门禁**：`.github/workflows/release-e2e-gate.yml`（`workflow_dispatch` / `release` published）跑 `product_e2e` `rag_quality_prod`（硬门禁 Recall@15 drop ≤3% from baseline；Citation / Hallucination 上报，见 `e2e-gates.md` Release gate）。单元侧 `tests/rag_quality` 仍在 `weekly-regression.yml`。**不是 PR merge 门禁**（solo 默认本地 trunk；merge 门禁见 `e2e-gates.md`）|
 |12.3|每周回归运行|✅|`.github/workflows/weekly-regression.yml` `cron: '0 2 * * 0'` 每周日 02:00 UTC，跑 `cargo test -p rag_quality`，支持 `workflow_dispatch` 手动触发|
 |12.4|用户反馈收集|✅|前后端闭环：后端 `transport-http/src/handlers.rs:1727` `message_feedback_handler` → `analytics/src/service.rs` `record_product_event()` 写入 `product_events`；前端 `workspace-chat-pane.tsx` 👍/👎 按钮 → `lib/workspace/client.ts` `submitWorkspaceMessageFeedback()`|
 |12.5|引用点击率跟踪|✅|链路完整：前端 `workspace-citation-modal.tsx` 调用 `lookupWorkspaceCitation()` → 后端 `citation_lookup_handler`（`transport-http/src/handlers.rs:1242`）自动记录 `ProductEventName::CitationOpened` + `SourceFocused` 到 `product_events` 表（含 `doc_id`/`chunk_id`/`page` 元数据）|
 |12.6|失败/降级率监控|✅|`telemetry/src/prometheus.rs` 暴露 `degrades_total`（按 agent_type+reason）和 `dependency_failures_total`；RAG/WebSearch agent 降级路径调用 `observe_degrade()`。Grafana dashboard/alert rule 属运维基础设施层，不在本期代码范围；degradation rate % 可通过 PromQL 在 Grafana 中计算（如 `rate(degrades_total[5m])`），无需代码逻辑|
 |12.7|延迟与成本监控|✅|Prometheus: `llm_calls_total`/`llm_call_duration_ms`/`llm_usage_tokens_total`/`http_request_duration_ms`；analytics: `cost_events` 表六类成本事件（`CostEventName`）。已清理 `telemetry/src/lib.rs` 死代码 `record_planner_latency()`/`record_rag_query()`，指标双轨已完整|
 
-**小计**: 已实现 5 / 部分实现 2 / 未实现 0 / 待确认 0
+**小计**: 已实现 6 / 部分实现 1 / 未实现 0 / 待确认 0
 
 \---
 
@@ -325,9 +325,9 @@
 |9. 前端|18|17|0|0|0|1|
 |10. 计费与 SaaS|5|3|0|0|0|2|
 |11. 共享与协作|8|8|0|0|0|0|
-|12. 评估与质量|7|5|2|0|0|0|
+|12. 评估与质量|7|6|1|0|0|0|
 |13. 文件存储|7|7|0|0|0|0|
-|**总计**|**176**|**155 (88%)**|**2 (1%)**|**0 (0%)**|**0 (0%)**|**19 (11%)**|
+|**总计**|**176**|**156 (89%)**|**1 (1%)**|**0 (0%)**|**0 (0%)**|**19 (11%)**|
 
 \---
 
@@ -350,7 +350,7 @@
 ### 需要关注 (❌ + ⚠️ 较多)
 
 * **API/基础设施**: L1–L4 缓存与 LLM 双限流已实现（§8.10–8.17）；剩余缺口为分层限流 Edge 层与 429 `Retry-After` header（部分实现）
-* **评估与质量**: 黄金集回归与发布门禁仍为骨架（§12.1–12.2）；每周回归 workflow 已绿
+* **评估与质量**: 发布门禁已接 `release-e2e-gate.yml` + `rag_quality_prod`（§12.2 ✅）；§12.1 全量黄金集/日常化仍为扩展项；每周回归 workflow 已绿
 * **Chat Agent**: Intent 状态机为产品决策不实现（§3.10 🚫）
 * **记忆系统**: 24h throttle、TTL 清理部分实现
 
@@ -361,7 +361,7 @@
 
 ### 建议后续动作
 
-1. 将 `rag_quality` 的 `evaluate_example` 接入真实 `RagRuntime`，并在 CI 发布门禁中启用 §12.2 三门禁
+1. 扩展 golden 覆盖与 §12.1 日常化（§12.2 发布门禁 `release-e2e-gate` + `rag_quality_prod` 已存在；Citation/Halluc 硬阈值仍按 e2e-gates 上报策略）
 2. 补齐分层限流 Edge 层与 429 `Retry-After`（若产品要求）
 3. 建立持续的自动化验收测试，与本文档联动
 
