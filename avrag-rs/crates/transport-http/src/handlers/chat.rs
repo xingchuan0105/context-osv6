@@ -234,11 +234,32 @@ fn sse_response_from_receiver(
     let stream = async_stream::stream! {
         let _guard = SseStreamGuard(surface, cancel);
         telemetry::prometheus::inc_sse_streams(surface);
+        let mut order = crate::SseEventOrderTracker::new();
 
         while let Some(event) = receiver.recv().await {
             let event_name = sse_event_name(&event);
+            if let Err(violation) = order.observe(event_name) {
+                // Do not emit post-terminal frames; log for CAP-STREAM patho/ops.
+                tracing::error!(
+                    stage = "sse_order",
+                    surface,
+                    event = event_name,
+                    error = %violation,
+                    "SSE event order violation; dropping event"
+                );
+                continue;
+            }
             telemetry::prometheus::observe_sse_event(surface, event_name);
             yield Ok::<_, Infallible>(sse_event(event_name, &event));
+        }
+        if let Err(violation) = order.finish() {
+            tracing::warn!(
+                stage = "sse_order",
+                surface,
+                error = %violation,
+                events = ?order.event_names(),
+                "SSE stream ended with incomplete event order"
+            );
         }
     };
 

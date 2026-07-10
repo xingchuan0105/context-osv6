@@ -352,6 +352,67 @@ async fn worker_runtime_requeues_retryable_failures_without_marking_failed() {
     );
 }
 
+/// S4 P-Lock: DocumentLocked must requeue (Queued), never Completed / Failed dead-letter
+/// when the task source says Requeued — same as lock miss in the real worker processor.
+#[tokio::test]
+async fn patho_lock_document_locked_requeues_without_completed() {
+    struct LockedProcessor;
+    #[async_trait]
+    impl TaskProcessor for LockedProcessor {
+        async fn process(&mut self, _task: &IngestionTask) -> Result<(), IngestionError> {
+            Err(IngestionError::document_locked(
+                "redis document lock held; requeue for retry",
+            ))
+        }
+    }
+
+    let task = build_ingest_task(
+        "owner-1",
+        "workspace-1",
+        "doc-lock",
+        Some("user-1".to_string()),
+        IngestDocumentPayload {
+            source_uri: "s3://bucket/o/w/d/file.pdf".to_string(),
+            object_path: "o/w/d/file.pdf".to_string(),
+            mime_type: "application/pdf".to_string(),
+            filename: "file.pdf".to_string(),
+            file_size: 128,
+        },
+    );
+    let state = SharedStateSink::default();
+    let transitions = state.transitions.clone();
+
+    let mut worker = WorkerRuntime::new(
+        SingleTaskSource::new(task).with_failure_outcome(TaskFailureOutcome::Requeued),
+        CapturingAuditSink::default(),
+        state,
+        LockedProcessor,
+    );
+
+    let err = worker.run_once().await.expect_err("lock must fail tick");
+    assert_eq!(err.class(), "document_locked");
+    let transitions = transitions.lock().unwrap();
+    assert!(
+        transitions.iter().any(|t| {
+            t.from == contracts::documents::DocumentStatus::Processing
+                && t.to == contracts::documents::DocumentStatus::Queued
+        }),
+        "expected requeue to Queued, got {transitions:?}"
+    );
+    assert!(
+        !transitions
+            .iter()
+            .any(|t| t.to == contracts::documents::DocumentStatus::Completed),
+        "DocumentLocked must never transition to Completed"
+    );
+    assert!(
+        !transitions
+            .iter()
+            .any(|t| t.to == contracts::documents::DocumentStatus::Failed),
+        "retryable lock should not dead-letter Failed"
+    );
+}
+
 #[tokio::test]
 async fn worker_runtime_records_success_state_and_audit_before_task_completion() {
     let task = build_ingest_task(

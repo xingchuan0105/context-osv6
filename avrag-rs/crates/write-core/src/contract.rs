@@ -35,8 +35,9 @@ pub fn is_write_internal_feature_tag(feature: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// S4 P-Terminal (CAP-WRITE): empty topic must never enter write pipeline.
     #[test]
-    fn empty_topic_is_rejected() {
+    fn patho_terminal_empty_write_topic_rejected() {
         let err = require_non_empty_write_topic("").unwrap_err();
         assert_eq!(err.code(), "empty_write_topic");
         let err = require_non_empty_write_topic("   \n").unwrap_err();

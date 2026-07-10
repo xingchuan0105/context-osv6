@@ -310,6 +310,11 @@ impl TaskProcessor for PgTaskProcessor {
                     Ok(Some(guard)) => Some(guard),
                     Ok(None) => {
                         // Must NOT return Ok: WorkerRuntime treats Ok as Completed.
+                        tracing::warn!(
+                            stage = "lock",
+                            document_id = %document_id,
+                            "document lock held (redis); requeue"
+                        );
                         return Err(IngestionError::document_locked(format!(
                             "redis document lock held for {document_id}; requeue for retry"
                         )));
@@ -330,6 +335,12 @@ impl TaskProcessor for PgTaskProcessor {
                 match PgAdvisoryLockGuard::try_acquire(self.storage.repo.raw().clone(), key).await {
                     Some(guard) => Some(guard),
                     None => {
+                        tracing::warn!(
+                            stage = "lock",
+                            document_id = %document_id,
+                            advisory_key = key,
+                            "document lock held (postgres advisory); requeue"
+                        );
                         return Err(IngestionError::document_locked(format!(
                             "postgres advisory lock held for {document_id} (key={key}); requeue for retry"
                         )));
@@ -394,7 +405,9 @@ impl TaskProcessor for PgTaskProcessor {
             }
 
             info!(
+                stage = "route",
                 filename = %filename,
+                document_id = %document_id,
                 route = ?route_decision.route,
                 reason = %route_decision.reason,
                 "Document routing decision"

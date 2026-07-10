@@ -9,18 +9,28 @@ capability_domains:
   CAP-CHAT:
     name: 通用对话
     required_layers: [L1, L3, L5]
+    # Pyramid L2-patho: patho_chat_budget_exhausted_* (agent-loop)
+    patho_filters: [patho_chat_budget]
   CAP-RAG:
     name: 文档问答
     required_layers: [L1, L2, L3, L4, L5]
+    # Pyramid L2-patho: patho_rag_cross_owner_* (avrag-rag-core)
+    patho_filters: [patho_rag_cross_owner]
   CAP-SEARCH:
     name: 联网搜索
     required_layers: [L1, L2, L3, L4, L5]
   CAP-INGEST:
     name: 入库解析
+    # Pyramid: L1=unit (patho_scale/lock/terminal), L2=mock smoke + patho, L3=thin/staging PDF
+    # Note: TEAF layer numbers here are historical; mock smoke is pyramid L2 not L1.
     required_layers: [L1, L2, L3]
+    patho_filters: [patho_scale, patho_terminal, patho_lock]
+    patho_entry: "scripts/test-l2-patho.sh (ingestion)"
   CAP-STREAM:
     name: 流式可观测
     required_layers: [L2, L6]
+    # Pyramid L2-patho: patho_stream_* SSE order (transport-http)
+    patho_filters: [patho_stream]
   CAP-MEMORY:
     name: 多轮记忆
     required_layers: [L1, L3]
@@ -30,6 +40,8 @@ capability_domains:
   CAP-AUTH:
     name: 认证边界
     required_layers: [L1, L6]
+    # Pyramid L2-patho: patho_authz_* (transport-http)
+    patho_filters: [patho_authz]
   CAP-SHARE:
     name: 协作分享
     required_layers: [L1, L5]
@@ -44,8 +56,10 @@ capability_domains:
     required_layers: [L2]
   CAP-WRITE:
     name: 长文写作
-    # L1=mock smoke write_smoke (W1), L3=llm_real write_real, L5=UI journey workspace-write (W2)
+    # Pyramid: L2 mock smoke write_smoke; L3 llm_real write_real; L3-UI journey workspace-write
+    # (TEAF L1/L3/L5 labels below are registry-historical, not pyramid L1.)
     required_layers: [L1, L3, L5]
+    patho_filters: [patho_terminal_empty_write_topic, patho_terminal_write_finish_unmet_bands]
   CAP-GUARD:
     name: 输入输出护栏
     # L1=product_e2e guardrails_smoke (W3 HTTP blackbox); crate unit tests in avrag-guardrails

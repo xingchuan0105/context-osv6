@@ -49,7 +49,30 @@ Acceptance (smoke/E2E): wave end or pre-ship only — local scripts or `workflow
 Wave-end acceptance may include (light checklist; not every commit):
 
 * **L2 product smoke** — `bash scripts/test-l2-mechanisms.sh` or `avrag-rs/scripts/run-product-smoke-e2e.sh`, including `write_smoke` + `guardrails_smoke`
+* **L2 patho** — `bash scripts/test-l2-patho.sh` (scale / lock / false-terminal; CAP-INGEST first)
 * **L3 journey short set** — optionally `JOURNEY=1 bash scripts/test-l3-journey.sh`, including `workspace-write`
+
+**Pre-prod / 准部署 (DR2):** `bash scripts/test-dr2.sh`  
+(L1 → L2-core → L2-patho → L3-thin; see [`ACCEPTANCE_PYRAMID_STABILIZATION_PLAN_2026-07-10.md`](./ACCEPTANCE_PYRAMID_STABILIZATION_PLAN_2026-07-10.md)).
+
+| 变体 | 命令 |
+|------|------|
+| 机制准部署（无 UI/LLM） | `SKIP_L3=1 bash scripts/test-dr2.sh` |
+| 完整 L3 | `REQUIRE_L3=1 bash scripts/test-dr2.sh` |
+| 快速 patho 抽检 | `SKIP_L2_CORE=1 SKIP_L3=1 bash scripts/test-dr2.sh` |
+
+失败看控制台 `[PYRAMID] next=`；摘要：`docs/engineering/_reports/dr2-latest.md`。
+
+定位辅助：
+
+```bash
+# 把失败输出喂给 triage
+bash scripts/test-l1.sh 2>&1 | tee /tmp/l1.log | bash scripts/pyramid-triage.sh
+# 文档卡在 processing / 假 completed
+bash scripts/ingest-doc-dump.sh <document_uuid>
+# worker 日志
+rg 'stage=' /tmp/avrag-worker.log | rg <document_uuid>
+```
 
 ---
 

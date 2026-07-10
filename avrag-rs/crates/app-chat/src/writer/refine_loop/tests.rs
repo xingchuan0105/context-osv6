@@ -254,8 +254,10 @@ async fn handle_research_6th_call_returns_budget_exhausted_without_invoking_work
     assert_eq!(ctx.research_calls_used, 5);
 }
 
+/// S4 P-Terminal (CAP-WRITE): finishing with unmet bands must surface validation_warning
+/// (not silent false-success quality).
 #[tokio::test]
-async fn handle_finish_returns_validation_warning_when_bands_not_satisfied() {
+async fn patho_terminal_write_finish_unmet_bands_warns() {
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
     assert!(!ctx.bands_satisfied);

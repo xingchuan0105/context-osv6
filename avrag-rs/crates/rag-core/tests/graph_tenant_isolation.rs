@@ -68,8 +68,9 @@ fn make_auth(owner_user_id: Uuid) -> AuthContext {
     AuthContext::new(UserId::new(owner_user_id), SubjectKind::System)
 }
 
+/// S4 P-Authz (CAP-RAG): graph search must not return Ok for foreign owner.
 #[tokio::test]
-async fn graph_retrieval_rejects_cross_tenant_access() {
+async fn patho_rag_cross_owner_graph_retrieval_rejected() {
     let data_owner = Uuid::from_u128(0x0001);
     let attacker = Uuid::from_u128(0x0002);
 

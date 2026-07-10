@@ -26,6 +26,57 @@ Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09
 
 **Do not** merge L1+L2+L3 into one daily command. Bench L1: `scripts/bench-test-suites.sh`.
 
+**Stabilization (2026-07-10):** deploy readiness, patho class, triage —  
+[`docs/engineering/ACCEPTANCE_PYRAMID_STABILIZATION_PLAN_2026-07-10.md`](../../docs/engineering/ACCEPTANCE_PYRAMID_STABILIZATION_PLAN_2026-07-10.md).
+
+### Deploy readiness (DR0–DR3)
+
+| Tier | Must green | Use |
+|------|------------|-----|
+| **DR0** | `scripts/test-l1.sh` | Every commit |
+| **DR1** | DR0 + `scripts/test-l2-mechanisms.sh` | Mechanism wave / internal demo |
+| **DR2 准部署** | DR1 + `scripts/test-l2-patho.sh` + L3-thin (`test-l3-journey.sh`, `test-l3-llm.sh`) | Pre-prod / VPS pre-ship |
+| **DR3** | DR2 + quality / full journey / staging PDF | Production release |
+
+One-shot DR2: `bash scripts/test-dr2.sh`
+
+| Env | Meaning |
+|-----|---------|
+| `REQUIRE_L3=1` | L3-thin must pass (fail otherwise) |
+| `SKIP_L3=1` | mechanisms-only DR2 (L1+L2-core+L2-patho) |
+| `SKIP_L2_CORE=1` | skip product smoke (patho after L1 only; not full DR1) |
+
+Report: `docs/engineering/_reports/dr2-latest.md` (override with `DR2_REPORT=`).
+
+Failures print `[PYRAMID] FAIL layer=… signal=… next=…` for triage.
+
+**Ops / localization (W4)**
+
+| Tool | Use |
+|------|-----|
+| `bash scripts/pyramid-triage.sh '<error text>'` | Map log/snippet → next commands |
+| `bash scripts/ingest-doc-dump.sh <document_uuid>` | PG dump: status, tasks, chunks, FALSE_COMPLETED |
+| Worker logs | Filter `stage=parse_validate\|materialize\|index\|lock\|terminal` + `document_id` |
+
+### Failure signals (S0–S6) — triage first
+
+| Signal | Meaning | First dig |
+|--------|---------|-----------|
+| **S0** | compile / types / contracts | L1 crate |
+| **S1** | pure mechanism | L1 unit |
+| **S2** | HTTP / SSE / Product App | L2 mock smoke |
+| **S3** | browser journey | L3 Playwright |
+| **S4** | scale / lock / false terminal / SLA | **L2-patho** |
+| **S5** | real LLM / PDF / external | L3-thin / staging |
+| **S6** | quality / perf baselines | release / nightly |
+
+**Triage:** red at L3 → re-run L2 same CAP → L1. Slow / false-complete / lock → force L2-patho, not full journey.
+
+### Registry layer note
+
+`e2e-test-registry.yaml` historically used TEAF L1–L6 numbers. **Pyramid L1 ≠ mock smoke.**  
+Mock product smoke is **pyramid L2**. Pathological / SLA regressions live under **L2-patho** (`patho_*` tests).
+
 ## Merge gate vs nightly (ADR 0006 §11)
 
 **Process note:** for single-developer workflow, “merge gate” means **commit-stage** checks only. Acceptance smoke is manual until a wave is closed—see SOLO_DISCIPLINE.

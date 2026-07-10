@@ -31,6 +31,8 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
     let embed_started = std::time::Instant::now();
     let text_index_records = if needs_text_vector_index {
         tracing::info!(
+            stage = "index_embed",
+            document_id = %document_id,
             chunk_count = materialize.chunks.len(),
             "ingestion index: embedding text chunks"
         );
@@ -40,6 +42,8 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
     };
     if needs_text_vector_index {
         tracing::info!(
+            stage = "index_embed",
+            document_id = %document_id,
             vectors = text_index_records.len(),
             elapsed_ms = embed_started.elapsed().as_millis(),
             "ingestion index: text embedding done"

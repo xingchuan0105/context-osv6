@@ -584,10 +584,10 @@ mod ir_chunk_plan_tests {
         assert_eq!(plan.multimodal_chunks[0].asset_ref, "asset-1");
     }
 
-    /// Regression: LiteParse emits ~1.5k micro-paragraphs. Per-block `cl100k_base()`
-    /// rebuild used to burn ~2 minutes and trip the 300s ingestion timeout.
+    /// S4 P-Scale (L2-patho filter `patho_scale`): LiteParse ~1.5k micro-paragraphs.
+    /// Per-block `cl100k_base()` rebuild used to burn minutes and trip task timeout.
     #[test]
-    fn build_ir_chunk_plan_handles_many_micro_blocks_quickly() {
+    fn patho_scale_micro_blocks_chunk_plan_under_budget() {
         let blocks: Vec<BlockIr> = (0..1500)
             .map(|i| BlockIr {
                 block_id: format!("b-{i}"),

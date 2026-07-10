@@ -8,7 +8,7 @@
 > [`INGESTION_AND_ORG_REMOVAL_UNIFIED_PLAN_2026-07-10.md`](./INGESTION_AND_ORG_REMOVAL_UNIFIED_PLAN_2026-07-10.md)  
 > - **A 部**订正根因：非 create 卡住，而是 `build_ir_chunk_plan` 对 ~1500 micro-block 重复 `cl100k_base()`（高 CPU → 300s timeout；有 `running` parse_run + blocks、无 chunks）。  
 > - **B 部**：彻底去掉 org 概念（owner_user / workspace）。  
-> 查 `document_parse_runs` 须设租户 GUC（现 `app.current_org`）；只设 `super_admin` 会假阴性「无行」。
+> 查 `document_parse_runs` 须设租户 GUC（现 `app.current_user`）；只设 `super_admin` 会假阴性「无行」。
 
 ---
 
@@ -41,7 +41,7 @@
 ## 3. 根因（按证据优先级）
 
 > **§3.1 已订正（2026-07-10 复检）** — 详见统一方案 A 部。  
-> 设 `app.current_org` 后可见：**多条 `document_parse_runs`（status=running）** + **1502 `document_blocks`** + **0 chunks**。  
+> 设 `app.current_user` 后可见：**多条 `document_parse_runs`（status=running）** + **1502 `document_blocks`** + **0 chunks**。  
 > 卡点在 IR project **之后** 的 `build_ir_chunk_plan`（per-block `cl100k_base()`），不是 create 前后。
 
 ### 3.1 主因：`build_ir_chunk_plan` 重复构造 tokenizer（代码）
@@ -204,7 +204,7 @@ SET status = 'pending', chunk_count = 0, updated_at = now()
 WHERE id = '9b9a1c86-605d-477c-b6b8-d9216ce8aeed';
 
 INSERT INTO ingestion_tasks (
-  task_id, org_id, workspace_id, document_id, kind, requested_by,
+  task_id, owner_user_id, workspace_id, document_id, kind, requested_by,
   idempotency_key, payload, status, attempt_count, max_attempts,
   available_at, enqueued_at, updated_at, queue_group
 ) VALUES (

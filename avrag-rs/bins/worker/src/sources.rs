@@ -108,10 +108,16 @@ impl StateSink for PgStateSink {
                 .document_has_ingest_content(&context, document_id)
                 .await
                 .map_err(from_storage_error)?;
-            if !has_content {
-                return Err(IngestionError::parse(format!(
-                    "refusing completed status for document {document_id}: no body or multimodal chunks"
-                )));
+            if let Err(err) =
+                IngestionError::ensure_ingest_content_for_completed(has_content, document_id)
+            {
+                tracing::error!(
+                    stage = "terminal",
+                    document_id = %document_id,
+                    has_content,
+                    "refusing completed without ingest content"
+                );
+                return Err(err);
             }
         }
 

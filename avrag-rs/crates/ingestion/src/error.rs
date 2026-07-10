@@ -73,6 +73,13 @@ pub enum IngestionError {
     /// **not** be treated as successful completion by the worker runtime.
     #[error("document locked by another worker: {0}")]
     DocumentLocked(String),
+    /// Terminal integrity: would have marked completed with no body/multimodal index.
+    /// Not a parse failure — metrics class is `empty_index`.
+    #[error("empty index for document {document_id}: {message}")]
+    EmptyIndex {
+        document_id: String,
+        message: String,
+    },
     #[error("document seed not found")]
     SeedNotFound,
     #[error("internal: {0}")]
@@ -120,6 +127,7 @@ impl IngestionError {
             Self::InvalidId(_) => "invalid_id",
             Self::Timeout(_) => "timeout",
             Self::DocumentLocked(_) => "document_locked",
+            Self::EmptyIndex { .. } => "empty_index",
             Self::SeedNotFound => "seed_not_found",
             Self::Internal(_) => "internal",
         }
@@ -127,6 +135,13 @@ impl IngestionError {
 
     pub fn document_locked(message: impl ToString) -> Self {
         Self::DocumentLocked(message.to_string())
+    }
+
+    pub fn empty_index(document_id: impl ToString, message: impl ToString) -> Self {
+        Self::EmptyIndex {
+            document_id: document_id.to_string(),
+            message: message.to_string(),
+        }
     }
 
     pub fn storage(error: impl ToString) -> Self {
@@ -230,6 +245,21 @@ impl IngestionError {
     pub fn internal(error: impl ToString) -> Self {
         Self::Internal(error.to_string())
     }
+
+    /// Terminal integrity: never mark `completed` without body/multimodal index content.
+    /// Worker `StateSink` must call this (or equivalent) before transitioning to Completed.
+    pub fn ensure_ingest_content_for_completed(
+        has_content: bool,
+        document_id: impl std::fmt::Display,
+    ) -> Result<(), Self> {
+        if has_content {
+            return Ok(());
+        }
+        Err(Self::empty_index(
+            document_id.to_string(),
+            "refusing completed status: no body or multimodal chunks",
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -249,5 +279,35 @@ mod tests {
             IngestionError::document_locked("busy").class(),
             "document_locked"
         );
+    }
+
+    /// S4 P-Terminal: empty index must not be a successful completed transition.
+    #[test]
+    fn patho_terminal_refuses_completed_without_content() {
+        let err = IngestionError::ensure_ingest_content_for_completed(false, "doc-empty")
+            .expect_err("empty content must refuse completed");
+        assert_eq!(err.class(), "empty_index");
+        assert!(
+            matches!(err, IngestionError::EmptyIndex { .. }),
+            "must be EmptyIndex variant, got {err:?}"
+        );
+        assert!(
+            err.to_string().contains("refusing completed")
+                || err.to_string().contains("empty index"),
+            "message should name the guard: {err}"
+        );
+        IngestionError::ensure_ingest_content_for_completed(true, "doc-ok")
+            .expect("content present allows completed");
+    }
+
+    /// S4 P-Lock: lock miss is a distinct, retryable class — never "ok"/completed.
+    #[test]
+    fn patho_lock_document_locked_is_distinct_retry_class() {
+        let err = IngestionError::document_locked("redis document lock held; requeue");
+        assert_eq!(err.class(), "document_locked");
+        assert_ne!(err.class(), "internal");
+        assert_ne!(err.class(), "timeout");
+        // Runtime maps any process Err + Requeued → Queued, not Failed/Completed.
+        assert!(matches!(err, IngestionError::DocumentLocked(_)));
     }
 }

@@ -331,8 +331,9 @@ mod tests {
         assert_eq!(err.code(), "workspace_access_required");
     }
 
+    /// S4 P-Authz (CAP-AUTH): workspace-scoped key must not call account-level tools.
     #[test]
-    fn workspace_key_rejected_for_account_tools() {
+    fn patho_authz_workspace_key_cannot_call_account_tools() {
         let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey)
             .with_workspace_scope(Uuid::new_v4())
             .grant(PERM_WORKSPACE_CREATE);
@@ -340,16 +341,18 @@ mod tests {
         assert_eq!(err.code(), "workspace_key_cannot_call_account_tools");
     }
 
+    /// S4 P-Authz: account-scoped API key cannot call workspace-scoped tools.
     #[test]
-    fn account_key_rejected_for_workspace_tools() {
+    fn patho_authz_account_key_cannot_call_workspace_tools() {
         let auth =
             AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey).grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, Uuid::new_v4()).unwrap_err();
         assert_eq!(err.code(), "account_key_cannot_call_workspace_tools");
     }
 
+    /// S4 P-Authz: cross-workspace id is forbidden (owner boundary on wire scope).
     #[test]
-    fn workspace_scope_mismatch_is_forbidden() {
+    fn patho_authz_cross_workspace_scope_forbidden() {
         let scoped = Uuid::new_v4();
         let other = Uuid::new_v4();
         let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey)

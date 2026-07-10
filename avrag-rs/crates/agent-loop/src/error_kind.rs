@@ -333,12 +333,15 @@ mod tests {
         assert_eq!(e.minimum_strategy(), ErrorHandlingStrategy::MaskAndContinue);
     }
 
+    /// S4 P-Scale (CAP-CHAT): iteration budget must force exit policy, not retry forever.
     #[test]
-    fn budget_exhausted_fallbacks() {
+    fn patho_chat_budget_exhausted_forces_fallback_not_retry() {
         let e = AgentErrorKind::BudgetExhausted { current: 4, max: 4 };
         assert!(!e.is_retriable());
         assert!(!e.is_degradable());
         assert_eq!(e.minimum_strategy(), ErrorHandlingStrategy::Fallback);
+        let app = e.to_app_error();
+        assert_eq!(app.code(), "budget_exhausted");
     }
 
     #[test]

@@ -63,6 +63,12 @@ pub(crate) async fn run_document_pipeline(
 
     // Stage 1 — parse + validate
     let stage_started = std::time::Instant::now();
+    info!(
+        stage = "parse_validate",
+        document_id = %document_id,
+        filename = %filename,
+        "ingestion stage begin"
+    );
     let document_ir = stage_parse_and_validate_ir(
         processor,
         bytes,
@@ -75,16 +81,23 @@ pub(crate) async fn run_document_pipeline(
     )
     .await?;
     info!(
+        stage = "parse_validate",
         filename = %filename,
         document_id = %document_id,
         blocks = document_ir.blocks.len(),
         assets = document_ir.assets.len(),
         elapsed_ms = stage_started.elapsed().as_millis(),
-        "ingestion stage parse+validate done"
+        "ingestion stage done"
     );
 
     // Stage 2 — project IR blocks
     let stage_started = std::time::Instant::now();
+    info!(
+        stage = "ir_project",
+        document_id = %document_id,
+        filename = %filename,
+        "ingestion stage begin"
+    );
     stage_project_document_ir(
         processor,
         task,
@@ -96,15 +109,22 @@ pub(crate) async fn run_document_pipeline(
     )
     .await?;
     info!(
+        stage = "ir_project",
         filename = %filename,
         document_id = %document_id,
         blocks = document_ir.blocks.len(),
         elapsed_ms = stage_started.elapsed().as_millis(),
-        "ingestion stage IR project done"
+        "ingestion stage done"
     );
 
     // Stage 3 — chunks, assets, multimodal, toc/profile
     let stage_started = std::time::Instant::now();
+    info!(
+        stage = "materialize",
+        document_id = %document_id,
+        filename = %filename,
+        "ingestion stage begin"
+    );
     let materialize = stage_materialize_chunks_assets_profile(
         processor,
         task,
@@ -118,15 +138,22 @@ pub(crate) async fn run_document_pipeline(
     )
     .await?;
     info!(
+        stage = "materialize",
         filename = %filename,
         document_id = %document_id,
         processed_chunk_count = materialize.processed_chunk_count,
         elapsed_ms = stage_started.elapsed().as_millis(),
-        "ingestion stage materialize done"
+        "ingestion stage done"
     );
 
     // Stage 4 — summary (best-effort, non-fatal)
     let stage_started = std::time::Instant::now();
+    info!(
+        stage = "summary",
+        document_id = %document_id,
+        filename = %filename,
+        "ingestion stage begin"
+    );
     generate_document_summary(
         processor,
         context,
@@ -138,14 +165,21 @@ pub(crate) async fn run_document_pipeline(
     )
     .await;
     info!(
+        stage = "summary",
         filename = %filename,
         document_id = %document_id,
         elapsed_ms = stage_started.elapsed().as_millis(),
-        "ingestion stage summary done"
+        "ingestion stage done"
     );
 
     // Stage 5 — retrieval index replace
     let stage_started = std::time::Instant::now();
+    info!(
+        stage = "index",
+        document_id = %document_id,
+        filename = %filename,
+        "ingestion stage begin"
+    );
     stage_build_and_replace_retrieval_index(
         processor,
         task,
@@ -159,18 +193,48 @@ pub(crate) async fn run_document_pipeline(
     )
     .await?;
     info!(
+        stage = "index",
         filename = %filename,
         document_id = %document_id,
         elapsed_ms = stage_started.elapsed().as_millis(),
         total_elapsed_ms = pipeline_started.elapsed().as_millis(),
-        "ingestion stage index done"
+        "ingestion stage done"
+    );
+
+    let body_chunks = materialize.chunks.len();
+    let multimodal_chunks = materialize.stored_multimodal_chunks.len();
+    info!(
+        stage = "terminal",
+        document_id = %document_id,
+        filename = %filename,
+        body_chunks,
+        multimodal_chunks,
+        processed_chunk_count = materialize.processed_chunk_count,
+        "ingestion terminal integrity check"
     );
 
     if materialize.processed_chunk_count == 0 {
-        return Err(IngestionError::parse(format!(
-            "refusing to complete ingestion for {filename}: zero indexed chunks"
-        )));
+        tracing::error!(
+            stage = "terminal",
+            document_id = %document_id,
+            filename = %filename,
+            body_chunks,
+            multimodal_chunks,
+            "refusing completed: zero indexed chunks"
+        );
+        return Err(IngestionError::empty_index(
+            document_id,
+            format!("refusing to complete ingestion for {filename}: zero indexed chunks"),
+        ));
     }
+
+    // materialize.processed_chunk_count is max(body, multimodal); both counts are logged above
+    // so ops can see which side is empty when only one modality is present.
+    debug_assert_eq!(
+        materialize.processed_chunk_count,
+        body_chunks.max(multimodal_chunks),
+        "processed_chunk_count must match max(body, multimodal)"
+    );
 
     Ok(IngestionPipelineMetrics {
         content: materialize.content,

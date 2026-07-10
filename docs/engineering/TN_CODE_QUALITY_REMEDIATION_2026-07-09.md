@@ -399,7 +399,7 @@ pub user_preferences: Option<serde_json::Value>,
 **目标**：
 
 ```rust
-pub auth: AuthContext,  // 或最小化 AgentAuth { org_id, user_id, roles… }
+pub auth: AuthContext,  // 或最小化 AgentAuth { owner_user_id, user_id, roles… }
 pub user_preferences: Option<UserPreferences>,
 // metadata 仅保留真正开放扩展的 BTreeMap，并文档化允许 key
 ```
@@ -409,7 +409,7 @@ pub user_preferences: Option<UserPreferences>,
 | 步骤 | 动作 |
 |------|------|
 | 4.1 | 定义 `AgentAuth`（若不愿依赖完整 AuthContext）并在 `build_agent_request` 填充 |
-| 4.2 | 全库替换 `auth_context.get("org_id")…` 为字段访问 |
+| 4.2 | 全库替换 `auth_context.get("owner_user_id")…` 为字段访问 |
 | 4.3 | preferences 改为 contracts 类型 |
 | 4.4 | 序列化需求（eval/红队）用显式 DTO，`AgentRequest` 本身可 `Serialize` 派生时 skip runtime-only 字段（已有 cancellation_token 模式） |
 

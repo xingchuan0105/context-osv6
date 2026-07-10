@@ -16,14 +16,18 @@
 # Override: CARGO_BUILD_JOBS=8 L1_TEST_THREADS=4 bash scripts/test-l1.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=pyramid-lib.sh
+source "${ROOT}/scripts/pyramid-lib.sh"
 cd "$ROOT"
 
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 L1_TEST_THREADS="${L1_TEST_THREADS:-2}"
 
+echo "[PYRAMID] layer=L1 begin"
 echo "==> L1 file-size gate"
 if [[ -f scripts/check_file_size_limits.sh ]]; then
-  bash scripts/check_file_size_limits.sh
+  bash scripts/check_file_size_limits.sh \
+    || pyramid_fail L1 S0 "bash scripts/check_file_size_limits.sh" "file-size gate"
 else
   echo "skip file-size gate (script not found)"
 fi
@@ -43,16 +47,19 @@ for p in "${PKGS[@]}"; do
     threads=1
   fi
   echo "  -> cargo test -p ${p} --lib -- --test-threads=${threads}"
-  cargo test -p "$p" --lib -- --test-threads="${threads}"
+  cargo test -p "$p" --lib -- --test-threads="${threads}" \
+    || pyramid_fail L1 S0/S1 "cargo test -p ${p} --lib -- --test-threads=${threads}" "crate=${p}"
 done
 
 if [[ -d "$ROOT/frontend_next" ]]; then
   echo "==> L1 frontend tsc (if pnpm available)"
   if command -v pnpm >/dev/null 2>&1; then
-    pnpm -C "$ROOT/frontend_next" exec tsc --noEmit
+    pnpm -C "$ROOT/frontend_next" exec tsc --noEmit \
+      || pyramid_fail L1 S0 "pnpm -C frontend_next exec tsc --noEmit" "frontend types"
   else
     echo "skip tsc: pnpm not found"
   fi
 fi
 
+pyramid_ok L1
 echo "L1 OK"
