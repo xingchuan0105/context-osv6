@@ -96,6 +96,25 @@ impl StateSink for PgStateSink {
             .await?;
         }
 
+        // Refuse empty completed: lock-skip / partial paths must not leave
+        // status=completed with no body/multimodal retrieval content.
+        if matches!(
+            transition.to,
+            contracts::documents::DocumentStatus::Completed
+        ) {
+            let has_content = self
+                .repo
+                .documents()
+                .document_has_ingest_content(&context, document_id)
+                .await
+                .map_err(from_storage_error)?;
+            if !has_content {
+                return Err(IngestionError::parse(format!(
+                    "refusing completed status for document {document_id}: no body or multimodal chunks"
+                )));
+            }
+        }
+
         let updated = if matches!(
             transition.to,
             contracts::documents::DocumentStatus::Processing

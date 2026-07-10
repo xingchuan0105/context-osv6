@@ -393,6 +393,39 @@ impl DocumentRepository {
         Ok(row.try_get("allowed")?)
     }
 
+    /// True when the document has body chunks and/or multimodal chunks suitable
+    /// for retrieval. Used to refuse `completed` with empty index content.
+    pub async fn document_has_ingest_content(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<bool, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let row = sqlx::query(
+            r#"
+            select exists(
+                select 1
+                from chunks c
+                where c.document_id = $1
+                  and c.org_id = $2
+                  and c.chunk_type = 'body'
+            )
+            or exists(
+                select 1
+                from document_multimodal_chunks m
+                where m.document_id = $1
+                  and m.org_id = $2
+            ) as has_content
+            "#,
+        )
+        .bind(document_id)
+        .bind(context.org_id().into_uuid())
+        .fetch_one(tx.inner())
+        .await?;
+        tx.commit().await?;
+        Ok(row.try_get("has_content")?)
+    }
+
     pub async fn update_document_summary(
         &self,
         context: &AuthContext,

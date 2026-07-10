@@ -69,6 +69,10 @@ pub enum IngestionError {
     InvalidId(String),
     #[error("task timeout after {0}s")]
     Timeout(u64),
+    /// Document is locked by another worker (or a stale lock). Retryable — must
+    /// **not** be treated as successful completion by the worker runtime.
+    #[error("document locked by another worker: {0}")]
+    DocumentLocked(String),
     #[error("document seed not found")]
     SeedNotFound,
     #[error("internal: {0}")]
@@ -115,9 +119,14 @@ impl IngestionError {
             },
             Self::InvalidId(_) => "invalid_id",
             Self::Timeout(_) => "timeout",
+            Self::DocumentLocked(_) => "document_locked",
             Self::SeedNotFound => "seed_not_found",
             Self::Internal(_) => "internal",
         }
+    }
+
+    pub fn document_locked(message: impl ToString) -> Self {
+        Self::DocumentLocked(message.to_string())
     }
 
     pub fn storage(error: impl ToString) -> Self {
@@ -236,5 +245,9 @@ mod tests {
             "storage_database"
         );
         assert_eq!(IngestionError::Timeout(30).class(), "timeout");
+        assert_eq!(
+            IngestionError::document_locked("busy").class(),
+            "document_locked"
+        );
     }
 }

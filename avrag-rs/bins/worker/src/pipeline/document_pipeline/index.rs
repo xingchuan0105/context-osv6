@@ -28,11 +28,23 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
     parse_run_state: &mut ParseRunState,
 ) -> Result<(), IngestionError> {
     let needs_text_vector_index = processor.storage.retrieval_data_plane.is_some();
+    let embed_started = std::time::Instant::now();
     let text_index_records = if needs_text_vector_index {
+        tracing::info!(
+            chunk_count = materialize.chunks.len(),
+            "ingestion index: embedding text chunks"
+        );
         build_text_index_records(processor, &materialize.chunks).await?
     } else {
         Vec::new()
     };
+    if needs_text_vector_index {
+        tracing::info!(
+            vectors = text_index_records.len(),
+            elapsed_ms = embed_started.elapsed().as_millis(),
+            "ingestion index: text embedding done"
+        );
+    }
     if !text_index_records.is_empty() {
         parse_run_state.outputs.text_vector_count = text_index_records.len();
     }

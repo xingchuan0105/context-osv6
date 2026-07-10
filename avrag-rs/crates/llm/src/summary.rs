@@ -3,7 +3,7 @@ use anyhow::Context;
 use common::{Domain, Era, Genre, SummaryMetadata, SummaryOutput};
 use serde::Deserialize;
 use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
-use tiktoken_rs::{CoreBPE, cl100k_base, cl100k_base_singleton};
+use tiktoken_rs::{CoreBPE, cl100k_base_singleton};
 const MAX_SUMMARY_CONTEXT_TOKENS: usize = 900_000;
 const RESERVED_PROMPT_TOKENS: usize = 4_000;
 const MAX_BATCH_CONTEXT_TOKENS: usize = MAX_SUMMARY_CONTEXT_TOKENS - RESERVED_PROMPT_TOKENS;
@@ -421,7 +421,7 @@ fn build_summary_batches_for_limit(
         anyhow::bail!("summary content is empty");
     }
 
-    let tokenizer = cl100k_base().context("failed to initialize summary tokenizer")?;
+    let tokenizer = cl100k_base_singleton();
     let total_tokens = tokenizer.encode_ordinary(content).len();
     let batch_count = total_tokens.div_ceil(max_batch_context_tokens).max(1);
     let target_tokens = total_tokens.div_ceil(batch_count).max(1);

@@ -1,12 +1,12 @@
-use tiktoken_rs::cl100k_base;
+use tiktoken_rs::cl100k_base_singleton;
 
 /// Count tokens in text using the cl100k_base tokenizer (GPT-4 / Claude / Qwen compatible).
-/// Falls back to chars/3.5 heuristic if tokenizer fails to load.
+///
+/// Uses the process-wide tokenizer singleton. Calling `cl100k_base()` per text
+/// re-parses the full BPE vocab (~80ms) and made multi-chunk embedding burn CPU
+/// for minutes (rate-limit estimates call this once per input per batch).
 pub fn count_tokens(text: &str) -> usize {
-    match cl100k_base() {
-        Ok(bpe) => bpe.encode_ordinary(text).len(),
-        Err(_) => fallback_estimate(text),
-    }
+    cl100k_base_singleton().encode_ordinary(text).len()
 }
 
 /// Estimate tokens for a slice of chat messages.
@@ -22,10 +22,6 @@ pub fn count_chat_messages(messages: &[crate::ChatMessage]) -> usize {
 /// Count tokens for a system prompt + user query pair (common Chat pattern).
 pub fn count_system_and_query(system: &str, query: &str) -> usize {
     count_tokens(system) + 4 + count_tokens(query)
-}
-
-fn fallback_estimate(text: &str) -> usize {
-    ((text.chars().count() as f64) / 3.5).ceil() as usize
 }
 
 #[cfg(test)]

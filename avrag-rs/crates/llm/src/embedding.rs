@@ -264,7 +264,10 @@ impl EmbeddingClient {
             return Ok(vectors);
         }
 
-        let mut vectors = Vec::with_capacity(texts.len());
+        // Slot-based reassembly: batch offset must index into `missing_indices`, not
+        // the local batch index alone (old `Vec::insert` path was O(n²) and wrong for
+        // batch>0 — multi-chunk ingestion hung at high CPU on ~hundreds of vectors).
+        let mut slots: Vec<Option<Vec<f32>>> = vec![None; texts.len()];
         let mut missing_indices = Vec::new();
         let mut missing_texts = Vec::new();
 
@@ -276,7 +279,7 @@ impl EmbeddingClient {
                     &sha256_hex(text),
                 );
                 match cache.get(&key).await.and_then(|raw| serde_json::from_str(&raw).ok()) {
-                    Some(cached) => vectors.push(cached),
+                    Some(cached) => slots[index] = Some(cached),
                     None => {
                         missing_indices.push(index);
                         missing_texts.push(*text);
@@ -289,9 +292,16 @@ impl EmbeddingClient {
         }
 
         if !missing_texts.is_empty() {
+            let mut missing_offset = 0usize;
             for batch in missing_texts.chunks(TEXT_EMBEDDING_BATCH_SIZE) {
                 self.check_rate_limit(self.estimate_tokens_for_texts(batch))?;
                 let batch_vectors = self.embed_openai_compatible_text(batch).await?;
+                anyhow::ensure!(
+                    batch_vectors.len() == batch.len(),
+                    "embedding batch returned {} vectors for {} inputs",
+                    batch_vectors.len(),
+                    batch.len()
+                );
                 if let Some(cache) = &self.cache {
                     for (text, vector) in batch.iter().zip(batch_vectors.iter()) {
                         let key = embedding_cache_key(
@@ -305,18 +315,23 @@ impl EmbeddingClient {
                     }
                 }
                 for (batch_index, vector) in batch_vectors.into_iter().enumerate() {
-                    let original_index = missing_indices[batch_index];
-                    vectors.insert(original_index, vector);
+                    let original_index = missing_indices[missing_offset + batch_index];
+                    slots[original_index] = Some(vector);
                 }
+                missing_offset += batch.len();
             }
         }
 
-        anyhow::ensure!(
-            vectors.len() == texts.len(),
-            "embedding produced {} vectors for {} inputs (cache reassembly or provider mismatch)",
-            vectors.len(),
-            texts.len()
-        );
+        let mut vectors = Vec::with_capacity(texts.len());
+        for (index, slot) in slots.into_iter().enumerate() {
+            let vector = slot.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "embedding reassembly missing vector for input index {index} of {}",
+                    texts.len()
+                )
+            })?;
+            vectors.push(vector);
+        }
 
         Ok(vectors)
     }
@@ -792,8 +807,80 @@ mod tests {
         );
         let message = result.unwrap_err().to_string();
         assert!(
-            message.contains("vectors") && message.contains("texts"),
+            message.contains("vectors") && (message.contains("texts") || message.contains("inputs")),
             "error should explain the count mismatch, got: {message}"
         );
+    }
+
+    /// Multi-batch embed (batch size 10) must preserve input order without
+    /// quadratic `Vec::insert` reassembly.
+    #[tokio::test]
+    async fn embed_multi_batch_preserves_order() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let http_calls = Arc::new(AtomicUsize::new(0));
+        let call_counter = http_calls.clone();
+        let app = Router::new().route(
+            "/embeddings",
+            post(move |Json(req): Json<serde_json::Value>| {
+                call_counter.fetch_add(1, Ordering::SeqCst);
+                let texts = req["input"]
+                    .as_array()
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                let data: Vec<serde_json::Value> = texts
+                    .iter()
+                    .map(|t| {
+                        // Encode text length into first dim so order is verifiable.
+                        let mut vector = vec![0.0f32; 8];
+                        vector[0] = t.len() as f32;
+                        json!({ "embedding": vector })
+                    })
+                    .collect();
+                async move { Json(json!({ "data": data })) }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock embedding listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "mock-multi-batch".to_string(),
+            timeout_ms: 5_000,
+            api_style: None,
+            dimensions: Some(8),
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        // 25 texts → 3 batches (10+10+5) with TEXT_EMBEDDING_BATCH_SIZE=10.
+        let owned: Vec<String> = (0..25).map(|i| format!("t{i:02}")).collect();
+        let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+        let vectors = client.embed(&refs).await.expect("multi-batch embed");
+        assert_eq!(vectors.len(), 25);
+        assert_eq!(
+            http_calls.load(Ordering::SeqCst),
+            3,
+            "expected three HTTP batches for 25 texts"
+        );
+        for (i, vector) in vectors.iter().enumerate() {
+            assert_eq!(
+                vector[0], owned[i].len() as f32,
+                "vector order mismatch at index {i}"
+            );
+        }
     }
 }

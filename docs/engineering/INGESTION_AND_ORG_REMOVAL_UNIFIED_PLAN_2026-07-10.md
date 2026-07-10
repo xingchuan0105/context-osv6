@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 日期 | 2026-07-10 |
-| 状态 | **In progress** — I1–I6 已落地；现场 PDF requeue 验收可选；**O 波未开** |
+| 状态 | **In progress** — I1–I6 + B1–B5 已落地；现场 PDF 已验收 `completed`+`chunk_count=483`；**O 波未开** |
 | 类型 | 统一修复 / 迁移方案（Solo local trunk） |
 | 上游诊断 | [`INGESTION_PDF_STUCK_DIAGNOSIS_2026-07-10.md`](./INGESTION_PDF_STUCK_DIAGNOSIS_2026-07-10.md)（§3.1 根因已订正，见本文 A 部） |
 | 命名先例 | [`WORKSPACE_RENAME_DECISIONS_2026-07-09.md`](./WORKSPACE_RENAME_DECISIONS_2026-07-09.md)（notebook→workspace，**无长期双挂**） |

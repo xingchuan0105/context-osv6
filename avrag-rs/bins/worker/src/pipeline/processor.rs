@@ -309,8 +309,10 @@ impl TaskProcessor for PgTaskProcessor {
                 match lock.try_acquire(document_id).await {
                     Ok(Some(guard)) => Some(guard),
                     Ok(None) => {
-                        info!(%document_id, "skipping document — lock held by another worker");
-                        return Ok(());
+                        // Must NOT return Ok: WorkerRuntime treats Ok as Completed.
+                        return Err(IngestionError::document_locked(format!(
+                            "redis document lock held for {document_id}; requeue for retry"
+                        )));
                     }
                     Err(error) => {
                         warn!(%document_id, error = %error, "redis document lock acquire failed; falling back to advisory lock");
@@ -321,14 +323,16 @@ impl TaskProcessor for PgTaskProcessor {
                 None
             };
             // When no Redis lock is held, acquire the advisory fallback. If the
-            // advisory lock is already held by another worker, skip this document.
+            // advisory lock is already held by another worker, fail (requeue) —
+            // never Ok-skip, which would mark the document completed empty.
             let _pg_lock_guard = if _redis_lock_guard.is_none() {
                 let key = document_advisory_key(document_id);
                 match PgAdvisoryLockGuard::try_acquire(self.storage.repo.raw().clone(), key).await {
                     Some(guard) => Some(guard),
                     None => {
-                        info!(%document_id, advisory_key = key, "skipping document — advisory lock held by another worker");
-                        return Ok(());
+                        return Err(IngestionError::document_locked(format!(
+                            "postgres advisory lock held for {document_id} (key={key}); requeue for retry"
+                        )));
                     }
                 }
             } else {
