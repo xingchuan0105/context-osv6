@@ -19,8 +19,37 @@ pub(crate) enum MockLlmRoute {
     FormatSkillPpt,
     FormatSkillHtml,
     ChatAnswer,
+    /// HeavyTail skeleton stage (`heavytail::skeleton::SKELETON_SYSTEM`).
+    WriteSkeletonJson,
+    /// HeavyTail draft stage (`heavytail::draft::PLAIN_SYSTEM`).
+    WriteDraftProse,
+    /// WriteRefine non-tool content path; tool rounds use finish tool-call.
+    WriteRefineFinish,
     Fallback,
 }
+
+/// Canned skeleton JSON: 1 short section, empty `card_refs` (valid when
+/// research is degraded / cards empty). `key_points` length 2–5; rhythms
+/// accepted by `normalize_skeleton`.
+const MOCK_WRITE_SKELETON_JSON: &str = r#"{
+  "title": "量子纠缠入门",
+  "sections": [
+    {
+      "heading": "基本概念",
+      "key_points": ["纠缠态含义", "测量关联现象"],
+      "card_refs": [],
+      "target_chars": 200,
+      "paragraphs": [{"rhythm": "Mixed"}]
+    }
+  ]
+}"#;
+
+const MOCK_WRITE_DRAFT_PROSE: &str = "\
+量子纠缠是量子力学里一种奇特的关联。两个粒子一旦纠缠，测量其中一个，\
+另一个的状态会立刻与之对应。短句先立住：这不是普通的相关。\
+随后再展开：爱因斯坦曾称其为“幽灵般的超距作用”，而实验已经反复验证，\
+这种关联在现实中可靠出现，并成为量子通信与计算的重要基础。\
+读者不必害怕公式；把纠缠理解为“共享一份不可分割的信息”就足够入门。";
 
 impl MockLlmRoute {
     /// Return the canned response body for this route.
@@ -39,6 +68,9 @@ impl MockLlmRoute {
             Self::ChatAnswer => {
                 "Hello! I'm the general chat assistant for Context OS. How can I help you today?"
             }
+            Self::WriteSkeletonJson => MOCK_WRITE_SKELETON_JSON,
+            Self::WriteDraftProse => MOCK_WRITE_DRAFT_PROSE,
+            Self::WriteRefineFinish => "",
             Self::Fallback => {
                 "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder."
             }
@@ -54,6 +86,9 @@ impl MockLlmRoute {
             "format-ppt" => Some(Self::FormatSkillPpt),
             "format-html" => Some(Self::FormatSkillHtml),
             "chat-answer" => Some(Self::ChatAnswer),
+            "write-skeleton" => Some(Self::WriteSkeletonJson),
+            "write-draft" => Some(Self::WriteDraftProse),
+            "write-refine-finish" => Some(Self::WriteRefineFinish),
             "fallback" => Some(Self::Fallback),
             _ => None,
         }
@@ -65,16 +100,23 @@ impl MockLlmRoute {
     ///
     /// ## Order matters
     ///
-    /// The format-skill catalog (`- ppt-generation (v1.0): ...`,
-    /// `- html-renderer (v1.0): ...`) is appended to **every** RAG
-    /// answer-phase system prompt, so the format-skill checks must
-    /// come BEFORE the generic RAG answer check. Same logic for the
-    /// search answer: the user prompt template always includes a
-    /// `Search results:` line, so the search-answer check must be
-    /// early enough to not be masked by later fallbacks.
+    /// Write-mode stages (skeleton / draft / refine) must resolve before
+    /// generic Fallback. The format-skill catalog is appended to **every**
+    /// RAG answer-phase system prompt, so format-skill checks must come
+    /// BEFORE the generic RAG answer check. Search answer: user prompt
+    /// template always includes a `Search results:` line.
     pub(crate) fn from_system_prompt(system_prompt: &str, user_prompt: &str) -> Self {
         if system_prompt.contains("general chat assistant for Context OS") {
             Self::ChatAnswer
+        // HeavyTail write pipeline fingerprints.
+        } else if system_prompt.contains("大纲编辑") || system_prompt.contains("只返回 JSON") {
+            Self::WriteSkeletonJson
+        } else if system_prompt.contains("中文长文写作助手") {
+            Self::WriteDraftProse
+        } else if system_prompt.contains("精修 Agent")
+            || system_prompt.contains("write_refine_finish")
+        {
+            Self::WriteRefineFinish
         // Synthesis answer contracts (before format-skill catalog lines).
         } else if system_prompt.contains("Context OS RAG answer agent")
             || system_prompt.contains("internal_answer_v1")
@@ -132,7 +174,36 @@ fn mock_tool_names(req: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn mock_write_refine_finish_call() -> serde_json::Value {
+    json!({
+        "id": "call_write_refine_finish_0",
+        "type": "function",
+        "function": {
+            "name": "write_refine_finish",
+            "arguments": serde_json::to_string(&json!({
+                "reason": "mock e2e: draft already substantive",
+                "bands_satisfied": false,
+            })).unwrap_or_else(|_| "{}".to_string()),
+        }
+    })
+}
+
 fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<serde_json::Value> {
+    // WriteRefine control ring (not ToolCatalog): finish on first tools turn
+    // so the refine loop exits in ≤1 ReAct iteration under mock LLM.
+    if tool_names.iter().any(|name| name == "write_refine_finish") {
+        return Some(mock_write_refine_finish_call());
+    }
+    // Force-lexical last-round may expose only write_refine_lexical — still
+    // end the loop quickly with empty content (caller falls through); prefer
+    // any write_refine_* present to avoid web_search misfires.
+    if tool_names
+        .iter()
+        .any(|name| name.starts_with("write_refine_"))
+    {
+        return None;
+    }
+
     let query = user_prompt
         .trim()
         .trim_start_matches("[prior_user_query]")

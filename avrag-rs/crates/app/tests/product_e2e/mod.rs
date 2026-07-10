@@ -170,10 +170,10 @@ pub struct UploadResponse {
     pub status: u16,
 }
 
-/// Workspace creation response wrapper.
+/// Workspace creation response wrapper (matches `contracts::workspaces::WorkspaceResponse`).
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct WorkspaceResponse {
-    pub notebook: WorkspaceInner,
+    pub workspace: WorkspaceInner,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -196,6 +196,9 @@ mod mock_routing_tests {
             "format-ppt",
             "format-html",
             "chat-answer",
+            "write-skeleton",
+            "write-draft",
+            "write-refine-finish",
             "fallback",
         ] {
             assert!(
@@ -203,6 +206,31 @@ mod mock_routing_tests {
                 "header value '{value}' should map to a route"
             );
         }
+    }
+
+    #[test]
+    fn write_stage_system_prompts_route_correctly() {
+        assert_eq!(
+            MockLlmRoute::from_system_prompt(
+                "你是中文长文写作的大纲编辑。根据主题输出骨架。\n只返回 JSON，不要 markdown。",
+                "主题：测试"
+            ),
+            MockLlmRoute::WriteSkeletonJson
+        );
+        assert_eq!(
+            MockLlmRoute::from_system_prompt(
+                "你是中文长文写作助手。按任务要求输出自然流畅的正文。",
+                "写一节"
+            ),
+            MockLlmRoute::WriteDraftProse
+        );
+        assert_eq!(
+            MockLlmRoute::from_system_prompt(
+                "你是 Context OS 写作引擎的 **精修 Agent**。调用 write_refine_finish 收工。",
+                "诊断报告"
+            ),
+            MockLlmRoute::WriteRefineFinish
+        );
     }
 
     #[test]

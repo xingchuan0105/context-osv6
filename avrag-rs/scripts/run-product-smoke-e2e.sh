@@ -13,6 +13,7 @@ fi
 NON_RAG_MODULES=(
   chat_smoke
   search_smoke
+  write_smoke
   auth_boundary
   share_boundary
   workspace_crud

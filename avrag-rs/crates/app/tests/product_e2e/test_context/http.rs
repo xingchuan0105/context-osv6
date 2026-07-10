@@ -29,7 +29,7 @@ impl TestContext {
             anyhow::bail!("create notebook failed: HTTP {status}, body: {body}");
         }
         let wrapper: WorkspaceResponse = serde_json::from_value(body)?;
-        Ok(wrapper.notebook)
+        Ok(wrapper.workspace)
     }
 
     pub async fn upload_document(&self, fixture: &str) -> anyhow::Result<UploadResponse> {
@@ -621,7 +621,7 @@ impl TestContext {
             anyhow::bail!("create notebook with token failed: HTTP {status}, body: {body}");
         }
         let wrapper: WorkspaceResponse = serde_json::from_value(body)?;
-        Ok(wrapper.notebook)
+        Ok(wrapper.workspace)
     }
 
     pub async fn chat_with_bearer_token(

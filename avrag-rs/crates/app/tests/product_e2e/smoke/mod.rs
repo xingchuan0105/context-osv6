@@ -26,6 +26,7 @@ pub mod rag_smoke;
 pub mod search_real_smoke;
 pub mod search_smoke;
 pub mod share_boundary;
+pub mod write_smoke;
 
 use crate::product_e2e::TestContext;
 

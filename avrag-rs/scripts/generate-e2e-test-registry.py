@@ -445,13 +445,12 @@ capability_domains:
     required_layers: [L2]
   CAP-WRITE:
     name: 长文写作
-    # L1=mock smoke (write_smoke planned W1), L3=llm_real write_real, L5=UI journey (planned W2)
+    # L1=mock smoke write_smoke (W1), L3=llm_real write_real, L5=UI journey (planned W2)
     required_layers: [L1, L3, L5]
 
 smoke_module_lists:
   # Keep in sync with avrag-rs/scripts/run-product-smoke-e2e.sh NON_RAG_MODULES.
-  # write_smoke planned W1 — not yet in script or this list.
-  non_rag: [chat_smoke, search_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary]
+  non_rag: [chat_smoke, search_smoke, write_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary]
   rag_serial: [ingestion_smoke, rag_smoke, rag_fallback_smoke, rag_codegen_multitool_smoke, memory_multiturn_smoke, paddle_image_smoke]
   manual_only: [search_real_smoke, paddle_pdf_smoke]
 

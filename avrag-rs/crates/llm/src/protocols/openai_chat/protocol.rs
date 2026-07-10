@@ -160,7 +160,15 @@ impl Protocol for OpenAiChatProtocol {
             });
         }
 
-        if state.accumulated_content.is_empty() && state.accumulated_reasoning.is_empty() {
+        // Tool-only turns (empty content + tool_calls) are valid OpenAI responses.
+        let has_tool_calls = state
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty());
+        if state.accumulated_content.is_empty()
+            && state.accumulated_reasoning.is_empty()
+            && !has_tool_calls
+        {
             events.push(LlmEvent::ProviderError {
                 message: "Chat completion stream finished without content".to_string(),
                 retryable: None,
@@ -170,7 +178,11 @@ impl Protocol for OpenAiChatProtocol {
 
         let usage = state.usage.as_ref().map(usage_to_event_usage);
         events.push(LlmEvent::Finish {
-            reason: FinishReason::Stop,
+            reason: if has_tool_calls {
+                FinishReason::ToolCalls
+            } else {
+                FinishReason::Stop
+            },
             usage,
         });
 
@@ -179,11 +191,17 @@ impl Protocol for OpenAiChatProtocol {
 
     fn finalize(&self, state: Self::State) -> Result<LlmResponse, LlmError> {
         let mut content = state.accumulated_content;
+        let has_tool_calls = state
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty());
         if content.is_empty() {
-            if state.accumulated_reasoning.is_empty() {
+            if !state.accumulated_reasoning.is_empty() {
+                content = state.accumulated_reasoning.clone();
+            } else if !has_tool_calls {
                 return Err(LlmError::EmptyStream);
             }
-            content = state.accumulated_reasoning.clone();
+            // else: tool-only response — keep empty content.
         }
 
         let reasoning_content = if state.accumulated_reasoning.is_empty() {
