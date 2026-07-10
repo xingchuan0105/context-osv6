@@ -39,10 +39,18 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
     document_ir: &DocumentIr,
     parse_run_state: &mut ParseRunState,
 ) -> Result<MaterializeOutput, IngestionError> {
+    let chunk_plan_started = std::time::Instant::now();
     let chunk_plan =
         ingestion::chunker::build_ir_chunk_plan(document_ir, filename, &ChunkPolicy::default());
     parse_run_state.outputs.text_chunk_count = chunk_plan.text_chunks.len();
     parse_run_state.outputs.multimodal_chunk_count = chunk_plan.multimodal_chunks.len();
+
+    if chunk_plan.text_chunks.is_empty() && chunk_plan.multimodal_chunks.is_empty() {
+        return Err(IngestionError::parse(format!(
+            "ingestion produced no text or multimodal chunks for {filename} (blocks={})",
+            document_ir.blocks.len()
+        )));
+    }
 
     let content = collect_document_text(&chunk_plan);
     let body_chunks = build_document_chunk_rows(&chunk_plan, parse_run_id);
@@ -51,6 +59,7 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
         filename = %filename,
         text_chunks = chunk_plan.text_chunks.len(),
         multimodal_chunks = chunk_plan.multimodal_chunks.len(),
+        elapsed_ms = chunk_plan_started.elapsed().as_millis(),
         "IR chunk plan generated"
     );
 
@@ -64,7 +73,14 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
         &body_chunks,
     )
     .await?;
-    let processed_chunk_count = chunks.len().max(1);
+    // Do not inflate with .max(1): empty body must not look like a successful index.
+    let processed_chunk_count = chunks.len().max(chunk_plan.multimodal_chunks.len());
+    info!(
+        filename = %filename,
+        body_chunks = chunks.len(),
+        multimodal_chunks = chunk_plan.multimodal_chunks.len(),
+        "body chunks persisted"
+    );
 
     persist_profile_and_toc(
         processor,

@@ -3,7 +3,7 @@ use anyhow::Context;
 use common::{Domain, Era, Genre, SummaryMetadata, SummaryOutput};
 use serde::Deserialize;
 use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
-use tiktoken_rs::{CoreBPE, cl100k_base};
+use tiktoken_rs::{CoreBPE, cl100k_base, cl100k_base_singleton};
 const MAX_SUMMARY_CONTEXT_TOKENS: usize = 900_000;
 const RESERVED_PROMPT_TOKENS: usize = 4_000;
 const MAX_BATCH_CONTEXT_TOKENS: usize = MAX_SUMMARY_CONTEXT_TOKENS - RESERVED_PROMPT_TOKENS;
@@ -482,8 +482,8 @@ fn split_content_for_summary(
     }
 }
 
-fn token_chunk_config(target_tokens: usize) -> ChunkConfig<CoreBPE> {
-    let tokenizer = cl100k_base().expect("cl100k tokenizer should load");
+fn token_chunk_config(target_tokens: usize) -> ChunkConfig<&'static CoreBPE> {
+    let tokenizer = cl100k_base_singleton();
     ChunkConfig::new(target_tokens.max(1)).with_sizer(tokenizer)
 }
 
@@ -508,8 +508,8 @@ fn summary_split_mode(filename: &str) -> SummarySplitMode {
 
 fn code_splitter(
     language: CodeLanguage,
-    config: ChunkConfig<CoreBPE>,
-) -> Option<CodeSplitter<CoreBPE>> {
+    config: ChunkConfig<&'static CoreBPE>,
+) -> Option<CodeSplitter<&'static CoreBPE>> {
     match language {
         CodeLanguage::Rust => CodeSplitter::new(tree_sitter_rust::LANGUAGE, config).ok(),
         CodeLanguage::Python => CodeSplitter::new(tree_sitter_python::LANGUAGE, config).ok(),

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use common::ParsedPreviewItem;
 use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
-use tiktoken_rs::{CoreBPE, cl100k_base};
+use tiktoken_rs::{CoreBPE, cl100k_base_singleton};
 use uuid::Uuid;
 
 use crate::ir::{BlockType, DocumentIr, ParseBackend, SourceLocator};
@@ -123,8 +123,11 @@ const CHARS_PER_TOKEN: usize = 4;
 /// *tokens* because the config uses a tokenizer sizer. `policy.overlap_chars`
 /// is in characters, so it is converted to tokens with [`CHARS_PER_TOKEN`].
 /// `with_overlap` rejects values `>= capacity`, so we clamp to stay below it.
-fn token_chunk_config(policy: &ChunkPolicy) -> ChunkConfig<CoreBPE> {
-    let tokenizer = cl100k_base().expect("cl100k tokenizer should load");
+///
+/// Uses [`cl100k_base_singleton`] so callers that split many micro-blocks
+/// (LiteParse IR) do not re-parse the full BPE vocab per block (~80ms each).
+fn token_chunk_config(policy: &ChunkPolicy) -> ChunkConfig<&'static CoreBPE> {
+    let tokenizer = cl100k_base_singleton();
     let mut config = ChunkConfig::new(TARGET_CHUNK_TOKENS).with_sizer(tokenizer);
 
     if policy.overlap_chars > 0 {
@@ -173,8 +176,8 @@ fn chunk_kind(mode: SplitMode) -> &'static str {
 
 fn code_splitter(
     language: CodeLanguage,
-    config: ChunkConfig<CoreBPE>,
-) -> Option<CodeSplitter<CoreBPE>> {
+    config: ChunkConfig<&'static CoreBPE>,
+) -> Option<CodeSplitter<&'static CoreBPE>> {
     match language {
         CodeLanguage::Rust => CodeSplitter::new(tree_sitter_rust::LANGUAGE, config).ok(),
         CodeLanguage::Python => CodeSplitter::new(tree_sitter_python::LANGUAGE, config).ok(),
@@ -250,7 +253,7 @@ fn sub(a: i32, b: i32) -> i32 { a - b }"),
 
     #[test]
     fn build_chunk_items_respects_token_budget() {
-        let tokenizer = cl100k_base().unwrap();
+        let tokenizer = cl100k_base_singleton();
         let long = (0..5000)
             .map(|i| format!("token{}", i))
             .collect::<Vec<_>>()
@@ -458,6 +461,7 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
 }
 
 fn split_text_segments(text: &str, mode: SplitMode, policy: &ChunkPolicy) -> Vec<String> {
+    // Config is cheap when the sizer is the process-wide cl100k singleton.
     let config = token_chunk_config(policy);
     match mode {
         SplitMode::Markdown => MarkdownSplitter::new(config)
@@ -578,5 +582,56 @@ mod ir_chunk_plan_tests {
         assert_eq!(plan.text_chunks[0].block_type, BlockType::SlideText);
         assert_eq!(plan.multimodal_chunks[0].block_type, BlockType::SlideImage);
         assert_eq!(plan.multimodal_chunks[0].asset_ref, "asset-1");
+    }
+
+    /// Regression: LiteParse emits ~1.5k micro-paragraphs. Per-block `cl100k_base()`
+    /// rebuild used to burn ~2 minutes and trip the 300s ingestion timeout.
+    #[test]
+    fn build_ir_chunk_plan_handles_many_micro_blocks_quickly() {
+        let blocks: Vec<BlockIr> = (0..1500)
+            .map(|i| BlockIr {
+                block_id: format!("b-{i}"),
+                page: Some((i / 100 + 1) as u32),
+                block_type: BlockType::Paragraph,
+                modality: BlockModality::TextOnly,
+                text: format!("short micro block number {i} with a few words"),
+                alt_text: None,
+                asset_refs: Vec::new(),
+                caption: None,
+                section_path: Vec::new(),
+                source_locator: SourceLocator {
+                    page: Some((i / 100 + 1) as u32),
+                    ..SourceLocator::default()
+                },
+                parser_backend: ParseBackend::LiteParsePdf,
+                metadata: BTreeMap::new(),
+            })
+            .collect();
+        let document = DocumentIr {
+            document_id: "doc-micro".to_string(),
+            title: "paper".to_string(),
+            doc_type: DocumentType::Pdf,
+            primary_backend: ParseBackend::LiteParsePdf,
+            backend_version: None,
+            language: None,
+            metadata: BTreeMap::new(),
+            pages: Vec::new(),
+            blocks,
+            assets: Vec::new(),
+            warnings: Vec::new(),
+        };
+
+        let started = std::time::Instant::now();
+        let plan = build_ir_chunk_plan(&document, "paper.pdf", &ChunkPolicy::default());
+        let elapsed = started.elapsed();
+        assert!(
+            !plan.text_chunks.is_empty(),
+            "expected text chunks from micro-blocks"
+        );
+        assert!(
+            elapsed.as_secs() < 10,
+            "build_ir_chunk_plan on 1500 micro-blocks took {:?}; tokenizer must use cl100k singleton",
+            elapsed
+        );
     }
 }

@@ -392,6 +392,12 @@ impl TaskProcessor for PgTaskProcessor {
                 )
                 .await
                 .map_err(from_storage_error)?;
+            info!(
+                filename = %filename,
+                document_id = %document_id,
+                parse_run_id = %parse_run_id,
+                "document parse run created"
+            );
 
             let pipeline_metrics = match run_document_pipeline(
                 self,

@@ -152,6 +152,7 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
 | T6 | Solo local trunk; do not expand CI theater for architecture work |
 | T7 | **`workspace` is the sole product truth** replacing `notebook` (see §8.3a) |
+| T8 | **No product `org`**: tenant/ownership is **`user_id` / `owner_user_id`**, scope is **`workspace_id`** (see §8.3b). Migration in progress — **do not add new org surface area** |
 
 ### 8.3a Workspace supersedes notebook (sole source of truth)
 
@@ -167,6 +168,22 @@ AppState is a **composition root + face factory** (still holds fat infra context
 
 * When a test or mock fails because product returns `workspace` and the test expected `notebook` (or the reverse): **fix product/schema/wire toward `workspace`**, not “align tests back to notebook.”  
 * Related residual notes: [`docs/engineering/WORKSPACE_RENAME_DECISIONS_2026-07-09.md`](docs/engineering/WORKSPACE_RENAME_DECISIONS_2026-07-09.md) if present.
+
+### 8.3b Org removed as product/tenant concept (sole source of truth)
+
+**Product is B2C personal:** account (`user`) + **`workspace`**. There is **no** team/organization product concept.
+
+| Surface | Required |
+|---------|----------|
+| New API / JSON / MCP tools / tests / error copy | **Never** introduce `org_id`, `OrgId`, `organizations`, `x-org-id`, `app.current_org`, MCP `org.*` |
+| Ownership / RLS / isolation | Prefer **`owner_user_id`** or **`user_id`**; resource scope **`workspace_id`** |
+| Auth context (target) | Root = **user**; optional workspace scope — **not** org |
+| Admin | Users / usage only — **no** new Organizations admin features |
+| Existing residual `org_*` in schema/code | **Migrate off** per plan; if a test fails because product still has `org_id` while new code uses owner user: **fix toward user/workspace**, never “align new code back to org” |
+
+* Full plan (ingestion fix + org hard-cut waves): [`docs/engineering/INGESTION_AND_ORG_REMOVAL_UNIFIED_PLAN_2026-07-10.md`](docs/engineering/INGESTION_AND_ORG_REMOVAL_UNIFIED_PLAN_2026-07-10.md).  
+* Billing already user-scoped (ADR-0001 / migration 0035). Do **not** reintroduce org-level subscription keys.  
+* Until O-wave Done, reading legacy columns is fine; **writing new org-first APIs is forbidden**.
 
 ### 8.3 Coding standards for features
 

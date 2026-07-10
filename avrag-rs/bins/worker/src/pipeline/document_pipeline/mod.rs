@@ -2,6 +2,7 @@ use contracts::auth_runtime::AuthContext;
 use ingestion::{
     DocumentIr, IngestionError, IngestionTask,
 };
+use tracing::info;
 use uuid::Uuid;
 
 use super::helpers::ParseRunOutputs;
@@ -58,7 +59,10 @@ pub(crate) async fn run_document_pipeline(
         route_decision,
     } = params;
 
+    let pipeline_started = std::time::Instant::now();
+
     // Stage 1 — parse + validate
+    let stage_started = std::time::Instant::now();
     let document_ir = stage_parse_and_validate_ir(
         processor,
         bytes,
@@ -70,8 +74,17 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state,
     )
     .await?;
+    info!(
+        filename = %filename,
+        document_id = %document_id,
+        blocks = document_ir.blocks.len(),
+        assets = document_ir.assets.len(),
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        "ingestion stage parse+validate done"
+    );
 
     // Stage 2 — project IR blocks
+    let stage_started = std::time::Instant::now();
     stage_project_document_ir(
         processor,
         task,
@@ -82,8 +95,16 @@ pub(crate) async fn run_document_pipeline(
         &document_ir,
     )
     .await?;
+    info!(
+        filename = %filename,
+        document_id = %document_id,
+        blocks = document_ir.blocks.len(),
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        "ingestion stage IR project done"
+    );
 
     // Stage 3 — chunks, assets, multimodal, toc/profile
+    let stage_started = std::time::Instant::now();
     let materialize = stage_materialize_chunks_assets_profile(
         processor,
         task,
@@ -96,8 +117,16 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state,
     )
     .await?;
+    info!(
+        filename = %filename,
+        document_id = %document_id,
+        processed_chunk_count = materialize.processed_chunk_count,
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        "ingestion stage materialize done"
+    );
 
     // Stage 4 — summary (best-effort, non-fatal)
+    let stage_started = std::time::Instant::now();
     generate_document_summary(
         processor,
         context,
@@ -108,8 +137,15 @@ pub(crate) async fn run_document_pipeline(
         &document_ir.title,
     )
     .await;
+    info!(
+        filename = %filename,
+        document_id = %document_id,
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        "ingestion stage summary done"
+    );
 
     // Stage 5 — retrieval index replace
+    let stage_started = std::time::Instant::now();
     stage_build_and_replace_retrieval_index(
         processor,
         task,
@@ -122,6 +158,19 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state,
     )
     .await?;
+    info!(
+        filename = %filename,
+        document_id = %document_id,
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        total_elapsed_ms = pipeline_started.elapsed().as_millis(),
+        "ingestion stage index done"
+    );
+
+    if materialize.processed_chunk_count == 0 {
+        return Err(IngestionError::parse(format!(
+            "refusing to complete ingestion for {filename}: zero indexed chunks"
+        )));
+    }
 
     Ok(IngestionPipelineMetrics {
         content: materialize.content,
