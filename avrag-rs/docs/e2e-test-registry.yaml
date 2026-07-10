@@ -3,7 +3,7 @@
 # Regenerate: ./scripts/generate-e2e-test-registry.py
 
 schema_version: 1
-generated_test_count: 102
+generated_test_count: 113
 
 capability_domains:
   CAP-CHAT:
@@ -46,10 +46,14 @@ capability_domains:
     name: 长文写作
     # L1=mock smoke write_smoke (W1), L3=llm_real write_real, L5=UI journey workspace-write (W2)
     required_layers: [L1, L3, L5]
+  CAP-GUARD:
+    name: 输入输出护栏
+    # L1=product_e2e guardrails_smoke (W3 HTTP blackbox); crate unit tests in avrag-guardrails
+    required_layers: [L1]
 
 smoke_module_lists:
   # Keep in sync with avrag-rs/scripts/run-product-smoke-e2e.sh NON_RAG_MODULES.
-  non_rag: [chat_smoke, search_smoke, write_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary]
+  non_rag: [chat_smoke, search_smoke, write_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary, guardrails_smoke]
   rag_serial: [ingestion_smoke, rag_smoke, rag_fallback_smoke, rag_codegen_multitool_smoke, memory_multiturn_smoke, paddle_image_smoke]
   manual_only: [search_real_smoke, paddle_pdf_smoke]
 
@@ -729,6 +733,17 @@ tests:
       - I
     parallel_group: G-serial-integration
     ci_default: true
+  - id: product_e2e::integration::usage_exit_metering::chat_records_llm_usage_event_with_usage_kind_chat
+    layer: L2
+    module: usage_exit_metering
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
   - id: product_e2e::llm_real::chat_real::real_llm_general_chat_returns_substantive_answer
     layer: L3
     module: chat_real
@@ -746,12 +761,18 @@ tests:
     parallel_group: G-serial-llm
     ci_default: false
     ignore: true
-  - id: product_e2e::llm_real::cost_report_from_artifacts
-    layer: L6
+  - id: product_e2e::llm_real::cost_report::cost_report_from_artifacts
+    layer: L3
+    module: cost_report
+    suite: llm_real
     capabilities: []
     evidence:
       - E-P
-    ci_default: true
+    deps:
+      - R
+      - I
+    ci_default: false
+    ignore: true
   - id: product_e2e::llm_real::format_real::real_llm_format_html_renderer_returns_html
     layer: L3
     module: format_real
@@ -863,6 +884,61 @@ tests:
     parallel_group: G-serial-llm
     ci_default: false
     ignore: true
+  - id: product_e2e::llm_real::rag_quality_prod::production_rag_evaluator_runs_real_retrieval_against_golden_set
+    layer: L3
+    module: rag_quality_prod
+    suite: llm_real
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - R
+      - I
+    ci_default: true
+  - id: product_e2e::llm_real::rag_quality_prod::rag_system_prompt_smoke_v5
+    layer: L3
+    module: rag_quality_prod
+    suite: llm_real
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - R
+      - I
+    ci_default: true
+  - id: product_e2e::llm_real::rag_quality_prod::rag_tools_golden_set
+    layer: L3
+    module: rag_quality_prod
+    suite: llm_real
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - R
+      - I
+    ci_default: true
+  - id: product_e2e::llm_real::rag_quality_prod::realistic_corpus_full_eval
+    layer: L3
+    module: rag_quality_prod
+    suite: llm_real
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - R
+      - I
+    ci_default: true
+  - id: product_e2e::llm_real::rag_quality_prod::triplet_benchmark_huawei_ipd
+    layer: L3
+    module: rag_quality_prod
+    suite: llm_real
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - R
+      - I
+    ci_default: true
   - id: product_e2e::llm_real::rag_real::real_llm_rag_complex_query_uses_multiple_tools
     layer: L3
     module: rag_real
@@ -914,6 +990,19 @@ tests:
     parallel_group: G-serial-llm
     ci_default: false
     ignore: true
+  - id: product_e2e::llm_real::stream_reasoning_tests::classify_reqwest_error_categories
+    layer: L6
+    module: stream_reasoning_tests
+    suite: llm_real
+    capabilities:
+      - CAP-STREAM
+    evidence:
+      - E-P
+      - E-Obs
+    deps:
+      - M
+    parallel_group: G-serial-llm
+    ci_default: true
   - id: product_e2e::llm_real::stream_reasoning_tests::collect_observability_ignores_non_string_reasoning
     layer: L6
     module: stream_reasoning_tests
@@ -992,6 +1081,30 @@ tests:
       - M
     parallel_group: G-serial-llm
     ci_default: true
+  - id: product_e2e::llm_real::stream_reasoning_tests::summarize_tool_activity_merges_sse_and_response_tools
+    layer: L6
+    module: stream_reasoning_tests
+    suite: llm_real
+    capabilities:
+      - CAP-STREAM
+    evidence:
+      - E-P
+      - E-Obs
+    deps:
+      - M
+    parallel_group: G-serial-llm
+    ci_default: true
+  - id: product_e2e::llm_real::write_real::real_llm_write_mode_produces_article_with_fingerprint
+    layer: L3
+    module: write_real
+    suite: llm_real
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - R
+      - I
+    ci_default: true
   - id: product_e2e::mock_routing_tests::header_routing_recognizes_all_known_routes
     layer: L6
     capabilities:
@@ -1038,6 +1151,15 @@ tests:
     ci_default: true
     note: "mock LLM routing contracts"
   - id: product_e2e::mock_routing_tests::system_prompt_routing_falls_back_when_no_marker_matches
+    layer: L6
+    capabilities:
+      - CAP-RAG
+      - CAP-CHAT
+    evidence:
+      - E-P
+    ci_default: true
+    note: "mock LLM routing contracts"
+  - id: product_e2e::mock_routing_tests::write_stage_system_prompts_route_correctly
     layer: L6
     capabilities:
       - CAP-RAG
@@ -1243,6 +1365,21 @@ tests:
       - I
     parallel_group: G-parallel-smoke
     ci_default: true
+  - id: product_e2e::smoke::guardrails_smoke::chat_prompt_injection_returns_input_guard_blocked
+    layer: L1
+    module: guardrails_smoke
+    suite: smoke
+    capabilities:
+      - CAP-GUARD
+    evidence:
+      - E-P
+      - E-Prod
+    deps:
+      - M
+      - I
+    parallel_group: G-parallel-smoke
+    ci_default: true
+    note: "HTTP blackbox: SQL injection → 400 input_guard_blocked (fail-closed)"
   - id: product_e2e::smoke::ingestion_smoke::upload_document_completes_ingestion
     layer: L1
     module: ingestion_smoke
@@ -1258,20 +1395,6 @@ tests:
     parallel_group: G-serial-rag
     ci_default: true
   - id: product_e2e::smoke::memory_multiturn_smoke::first_turn_memory_tool_works_with_resolved_session_id
-    layer: L1
-    module: memory_multiturn_smoke
-    suite: smoke
-    capabilities:
-      - CAP-MEMORY
-    evidence:
-      - E-P
-      - E-Prod
-    deps:
-      - M
-      - I
-    parallel_group: G-serial-rag
-    ci_default: true
-  - id: product_e2e::smoke::memory_multiturn_smoke::multiturn_anaphora_writes_resolved_query_to_db
     layer: L1
     module: memory_multiturn_smoke
     suite: smoke
@@ -1326,17 +1449,6 @@ tests:
       - M
       - I
     parallel_group: G-serial-rag
-    ci_default: true
-  - id: product_e2e::smoke::workspace_crud::workspace_crud_lifecycle_via_http
-    layer: L1
-    module: workspace_crud
-    suite: smoke
-    capabilities: []
-    evidence:
-      - E-P
-    deps:
-      - M
-      - I
     ci_default: true
   - id: product_e2e::smoke::paddle_image_smoke::paddle_ocr_image_ingest_smoke
     layer: L1
@@ -1514,6 +1626,35 @@ tests:
       - I
     parallel_group: G-parallel-smoke
     ci_default: true
+  - id: product_e2e::smoke::workspace_crud::workspace_crud_lifecycle_via_http
+    layer: L1
+    module: workspace_crud
+    suite: smoke
+    capabilities:
+      - CAP-CHAT
+    evidence:
+      - E-P
+      - E-Prod
+    deps:
+      - M
+      - I
+    parallel_group: G-parallel-smoke
+    ci_default: true
+  - id: product_e2e::smoke::write_smoke::write_mode_returns_article_under_mock_llm
+    layer: L1
+    module: write_smoke
+    suite: smoke
+    capabilities:
+      - CAP-WRITE
+    evidence:
+      - E-P
+      - E-Prod
+    deps:
+      - M
+      - I
+    parallel_group: G-parallel-smoke
+    ci_default: true
+    note: "mock write pipeline (research/skeleton/draft/refine)"
   - id: product_e2e::tenants::isolation::cross_org_rag_cannot_query_org_a_doc_by_id
     layer: L2
     module: isolation

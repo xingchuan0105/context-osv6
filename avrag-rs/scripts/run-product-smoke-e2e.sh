@@ -18,6 +18,7 @@ NON_RAG_MODULES=(
   share_boundary
   workspace_crud
   billing_boundary
+  guardrails_smoke
 )
 
 # Registered for module-guard coverage only; not executed in PR smoke (#[ignore] / staging).

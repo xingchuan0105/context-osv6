@@ -389,7 +389,9 @@ cargo test -p avrag-guardrails --lib
 
 ### W3/W4
 
-- [ ] 至少一项 P1 落地  
+- [x] W3 Guardrails HTTP blackbox：`smoke::guardrails_smoke` → 400 `input_guard_blocked`（fail-closed）  
+- [ ] W4 Admin/Prefs 薄测（可选；D5 已由 W3 满足）  
+
 
 ### 收尾
 

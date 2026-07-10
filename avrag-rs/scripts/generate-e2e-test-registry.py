@@ -113,6 +113,26 @@ MODULE_META: dict[tuple[str, str], dict] = {
         "deps": ["M", "I"],
         "evidence": ["E-P", "E-Prod"],
     },
+    ("smoke", "guardrails_smoke"): {
+        "capabilities": ["CAP-GUARD"],
+        "parallel_group": "G-parallel-smoke",
+        "deps": ["M", "I"],
+        "evidence": ["E-P", "E-Prod"],
+        "note": "HTTP blackbox: SQL injection → 400 input_guard_blocked (fail-closed)",
+    },
+    ("smoke", "write_smoke"): {
+        "capabilities": ["CAP-WRITE"],
+        "parallel_group": "G-parallel-smoke",
+        "deps": ["M", "I"],
+        "evidence": ["E-P", "E-Prod"],
+        "note": "mock write pipeline (research/skeleton/draft/refine)",
+    },
+    ("smoke", "workspace_crud"): {
+        "capabilities": ["CAP-CHAT"],
+        "parallel_group": "G-parallel-smoke",
+        "deps": ["M", "I"],
+        "evidence": ["E-P", "E-Prod"],
+    },
     ("integration", "streaming_chat"): {
         "capabilities": ["CAP-STREAM", "CAP-RAG"],
         "parallel_group": "G-serial-integration",
@@ -447,10 +467,14 @@ capability_domains:
     name: 长文写作
     # L1=mock smoke write_smoke (W1), L3=llm_real write_real, L5=UI journey workspace-write (W2)
     required_layers: [L1, L3, L5]
+  CAP-GUARD:
+    name: 输入输出护栏
+    # L1=product_e2e guardrails_smoke (W3 HTTP blackbox); crate unit tests in avrag-guardrails
+    required_layers: [L1]
 
 smoke_module_lists:
   # Keep in sync with avrag-rs/scripts/run-product-smoke-e2e.sh NON_RAG_MODULES.
-  non_rag: [chat_smoke, search_smoke, write_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary]
+  non_rag: [chat_smoke, search_smoke, write_smoke, auth_boundary, share_boundary, workspace_crud, billing_boundary, guardrails_smoke]
   rag_serial: [ingestion_smoke, rag_smoke, rag_fallback_smoke, rag_codegen_multitool_smoke, memory_multiturn_smoke, paddle_image_smoke]
   manual_only: [search_real_smoke, paddle_pdf_smoke]
 

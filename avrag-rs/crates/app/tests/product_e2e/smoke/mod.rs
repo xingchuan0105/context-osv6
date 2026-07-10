@@ -15,6 +15,7 @@ pub(crate) use crate::product_e2e::e2e_gate::require_smoke_suite;
 pub mod auth_boundary;
 pub mod billing_boundary;
 pub mod chat_smoke;
+pub mod guardrails_smoke;
 pub mod ingestion_smoke;
 pub mod memory_multiturn_smoke;
 pub mod workspace_crud;
