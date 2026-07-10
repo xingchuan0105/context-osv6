@@ -88,11 +88,11 @@ pub(crate) async fn expand_external_workspace_rag_scope(
         return Ok(());
     }
 
-    state.docs()
+    state.workspace()
         .get_workspace(workspace_id)
         .await
         .ok_or_else(|| AppError::not_found("workspace_not_found", "workspace not found"))?;
-    let doc_scope = state.docs()
+    let doc_scope = state.workspace()
         .list_documents(Some(workspace_id), None)
         .await
         .into_iter()

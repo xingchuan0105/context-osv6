@@ -5,7 +5,7 @@
 //!   2. Add `registry.register(Box::new(YourSkill));` below.
 //!
 //! Write refine tools live in `write_refine` but are **not** registered here —
-//! they are WriteApp control-ring tools (ADR-0007), disclosed via local ToolSpec only.
+//! they are Write control-ring tools (ADR-0007), disclosed via local ToolSpec only.
 
 pub mod calculator;
 pub mod code_interpreter;

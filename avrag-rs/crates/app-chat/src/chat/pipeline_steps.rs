@@ -20,7 +20,7 @@ fn agent_request_with_resolved_session(
     agent_request
 }
 
-/// Agent-lane modes only (chat / RAG / search). Write enters via `execute_write_pipeline`.
+/// Agent-lane modes only (chat / RAG / search). Write enters via write `PipelineLane`.
 pub(crate) async fn dispatch_agent_mode(
     state: &ChatContext,
     request: &ChatRequest,
@@ -55,7 +55,7 @@ pub(crate) async fn dispatch_agent_mode(
             run_rag_mode(state, request, session, stream_config).await
         }
         Some(crate::agents::AgentKind::Write) => Err(AppError::internal(
-            "lane invariant: write must not reach dispatch_agent_mode (use execute_write_pipeline)",
+            "lane invariant: write must not reach dispatch_agent_mode (use write PipelineLane)",
         )),
     }
 }

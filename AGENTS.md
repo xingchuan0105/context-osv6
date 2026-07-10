@@ -119,7 +119,7 @@ These guidelines override your default tendency to be overly helpful, overly ver
 
 ## 8\. Product App Architecture (backend `avrag-rs`) — **mandatory for new work**
 
-**Status (2026-07-10):** Phase A–C **Done** (product entry + Write/Agent lanes + wrapper slim). TN review: **APPROVE**. Residual polish only: [`docs/engineering/PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md`](docs/engineering/PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md). Full history: ADR-0007, `PRODUCT_APP_*` plans under `docs/engineering/`.
+**Status (2026-07-10):** Phase A–C **Done** (product entry + Write/Agent lanes + wrapper slim). TN review: **APPROVE**. Residual cleanup Done: [`docs/engineering/PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md`](docs/engineering/PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md). Full history: ADR-0007, `PRODUCT_APP_*` plans under `docs/engineering/`.
 
 ### 8.1 Current shape (do not regress)
 

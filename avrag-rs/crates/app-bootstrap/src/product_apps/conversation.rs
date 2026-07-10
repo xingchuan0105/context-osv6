@@ -4,7 +4,6 @@
 //! Lane decision is once here; ChatContext pipelines own the rest.
 
 use common::AppError;
-use contracts::auth_runtime::AuthContext;
 use contracts::chat::{ChatEvent, ChatRequest, ChatResponse};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
@@ -12,8 +11,6 @@ use tokio_util::sync::CancellationToken;
 /// Single product entry for all conversation execute paths (POST + SSE).
 pub struct ConversationApp<'a> {
     pub(crate) chat: &'a app_chat::ChatContext,
-    #[allow(dead_code)]
-    pub(crate) auth: &'a AuthContext,
 }
 
 impl<'a> ConversationApp<'a> {

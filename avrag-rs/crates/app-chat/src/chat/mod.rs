@@ -25,8 +25,8 @@ mod pipeline_tests;
 
 pub use pipeline::is_write_agent_type;
 pub(crate) use pipeline::{
-    ChatExecution, ChatPreflight, StreamConfig, execute_chat_pipeline,
-    execute_chat_pipeline_stream, execute_write_pipeline, execute_write_pipeline_stream,
+    ChatExecution, ChatPreflight, PipelineLane, StreamConfig, execute_pipeline,
+    execute_pipeline_stream,
 };
 pub(crate) use pipeline_steps::attach_debug_trace_from_sink;
 pub(crate) use service::{BuildChatExecutionParams, build_chat_execution_from_result};

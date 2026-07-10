@@ -1,7 +1,7 @@
 //! WriteRefine control-ring tool **schemas** (ADR-0007).
 //!
 //! Not registered on SkillRegistry / ToolCatalog. Disclosed only via
-//! [`tool_specs_for_pool`] for `modes/write_refine.yaml` + WriteApp refine loop.
+//! [`tool_specs_for_pool`] for `modes/write_refine.yaml` + Write refine loop.
 //! Runtime handlers live in write-core / app-chat writer (not SkillComponent::execute).
 
 use contracts::ToolSpec;

@@ -3,11 +3,11 @@
 //! **Freeze:** do not add business methods on AppState; add them on the relevant `*App` here
 //! (or in domain crates behind the App).
 //!
-//! **Execute:** only `conversation().execute[_stream]`. AgentApp = sessions/search/tools;
-//! WriteApp = non-execute surface; domain pipelines own write vs agent lanes.
+//! **Execute:** only `conversation().execute[_stream]`. AgentApp = sessions/search/tools.
+//! Domain pipelines own write vs agent lanes (`PipelineLane`).
 //!
-//! Product accessors: `conversation()`, `workspace()` (+ `docs()` alias), `share()`,
-//! `billing_api()`, `prefs()`, `admin_api()`, `admin_ops()`, `agent()`, `write()`.
+//! Product accessors: `conversation()`, `workspace()`, `share()`, `billing_api()`,
+//! `prefs()`, `admin_api()`, `admin_ops()`, `agent()`.
 
 mod share;
 mod workspace;
@@ -16,7 +16,6 @@ mod prefs;
 mod admin;
 mod admin_ops;
 mod agent;
-mod write;
 mod conversation;
 
 pub use share::ShareApp;
@@ -26,7 +25,6 @@ pub use prefs::PrefsApp;
 pub use admin::AdminApp;
 pub use admin_ops::AdminOpsApp;
 pub use agent::AgentApp;
-pub use write::WriteApp;
 pub use conversation::ConversationApp;
 
 use contracts::auth_runtime::OrgId;
@@ -45,12 +43,9 @@ pub struct WorkspaceApiKeyAuth {
 }
 
 impl AppState {
-    /// Single conversation execute entry (chat/rag/search/write). Prefer over agent/write split.
+    /// Single conversation execute entry (chat/rag/search/write).
     pub fn conversation(&self) -> ConversationApp<'_> {
-        ConversationApp {
-            chat: &self.chat,
-            auth: &self.auth,
-        }
+        ConversationApp { chat: &self.chat }
     }
 
     /// Workspace / documents product App.
@@ -62,11 +57,6 @@ impl AppState {
             billing: &self.billing,
             analytics: &self.analytics,
         }
-    }
-
-    /// Alias for [`Self::workspace`] (historical name; prefer `workspace()`).
-    pub fn docs(&self) -> WorkspaceApp<'_> {
-        self.workspace()
     }
 
     /// Share / collab product App.
@@ -114,26 +104,14 @@ impl AppState {
         }
     }
 
-    /// Agent product App (sessions / search / non-write execute helpers).
+    /// Agent product App (sessions / search / citations / runtime tools / usage).
     pub fn agent(&self) -> AgentApp<'_> {
-        AgentApp {
-            chat: &self.chat,
-            auth: &self.auth,
-        }
-    }
-
-    /// Write product surface (non-execute). Execute via `conversation()`.
-    pub fn write(&self) -> WriteApp<'_> {
-        WriteApp {
-            chat: &self.chat,
-            auth: &self.auth,
-        }
+        AgentApp { chat: &self.chat }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::WriteApp;
     use crate::AppState;
     use app_core::AppConfig;
     use contracts::chat::ChatRequest;
@@ -159,16 +137,14 @@ mod tests {
     fn composition_root_exposes_product_apps() {
         let state = AppState::new(AppConfig::default());
         let _ = state.workspace();
-        let _ = state.docs(); // alias
         let _ = state.share();
         let _ = state.billing_api();
         let _ = state.prefs();
         let _ = state.admin_api();
         let _ = state.admin_ops();
         let _ = state.agent();
-        let _ = state.write();
         let _ = state.conversation();
-        assert!(WriteApp::is_write_agent_type("Write"));
+        assert!(app_chat::is_write_agent_type("Write"));
     }
 
     #[tokio::test]
@@ -193,7 +169,6 @@ mod tests {
         let state = AppState::new(AppConfig::default());
         let mut req = empty_chat_req("write");
         req.query = "hello".into();
-        // Direct agent pipeline path (bypass Conversation) still rejects write.
         let err = state
             .chat
             .execute_chat(req)

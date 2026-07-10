@@ -189,6 +189,6 @@ impl ChatContext {
         if req.query.trim().is_empty() {
             return Err(AppError::validation("query_required", "query is required"));
         }
-        crate::chat::execute_write_pipeline(self.clone(), req).await
+        crate::chat::execute_pipeline(self.clone(), req, crate::chat::PipelineLane::Write).await
     }
 }

@@ -10,6 +10,8 @@
 | **架构 Phase A** | [`PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md`](./PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md) |
 | **TN Phase B** | [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) — **Done** |
 | **TN Phase C** | [`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) — **Done** |
+| **P2 残留** | [`PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md`](./PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md) — **Done** |
+| **Agent 纪律** | 根目录 [`AGENTS.md`](../../AGENTS.md) §8、[`CLAUDE.md`](../../CLAUDE.md) Product App 节 |
 | 产品词 | ADR-0006 **§5a**：Capability / Skill / Tool **三层保留** |
 
 ---
@@ -19,8 +21,9 @@
 **TN 主线 + TN-3 S4 已关。** 工具执行单点 `ToolCatalog`；Bound 面已拆；workspace 命名主体完成；UserProfile 强类型 merge；测试金字塔入口就绪（日常 L1）。
 
 **架构 Phase A+B 已落地**（Conversation 单入口、Write 出 agent lane、write_refine 工具单一真相）。  
-**架构 Phase A+B+C 已落地**（Conversation 直调 pipeline；write_refine 纯 ToolSpec）。  
-Phase C：[`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) **Done**。
+**架构 Phase A+B+C 已落地**（Conversation 直调 pipeline；write_refine 纯 ToolSpec）。TN **APPROVE**。  
+**纪律已写入** 根目录 `AGENTS.md` §8 / `CLAUDE.md`。  
+**可选残留：** [`PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md`](./PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md)（删 WriteApp 空壳等，不阻塞功能）。
 
 ---
 
@@ -115,3 +118,5 @@ pnpm -C frontend_next exec tsc --noEmit
 | 2026-07-10 | **Product App TN R0–R5 Done** |
 | 2026-07-10 | TN Conditional Approve 残留 → 编排 [`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) |
 | 2026-07-10 | **Product App TN Phase C S0–S5 Done** |
+| 2026-07-10 | 架构现状/标准写入 AGENTS.md §8 + CLAUDE.md；P2 残留计划 |
+| 2026-07-10 | **P2-1–P2-5 Done**（WriteApp 删除、pipeline 合并、composition 纪律） |

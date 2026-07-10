@@ -2,7 +2,6 @@
 //! **Execute** (chat/rag/search/write) goes through ConversationApp only.
 
 use common::{AppError, SourceRow, StatusOnlyResponse};
-use contracts::auth_runtime::AuthContext;
 use contracts::chat::ChatMessage;
 use contracts::documents::CitationLookupResponse;
 use contracts::workspaces::{
@@ -13,8 +12,6 @@ use contracts::{RuntimeExecuteRequest, RuntimeExecuteResponse};
 /// Product entry for sessions, search, citations, and runtime tools (not conversation execute).
 pub struct AgentApp<'a> {
     pub(crate) chat: &'a app_chat::ChatContext,
-    #[allow(dead_code)]
-    pub(crate) auth: &'a AuthContext,
 }
 
 impl<'a> AgentApp<'a> {

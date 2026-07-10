@@ -74,8 +74,15 @@ impl ChatContext {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
-        crate::chat::execute_chat_pipeline_stream(self.clone(), req, request_id, sender, token)
-            .await
+        crate::chat::execute_pipeline_stream(
+            self.clone(),
+            req,
+            request_id,
+            sender,
+            token,
+            crate::chat::PipelineLane::Agent,
+        )
+        .await
     }
 
     /// Write-lane streaming entry (SSE).
@@ -90,7 +97,14 @@ impl ChatContext {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
-        crate::chat::execute_write_pipeline_stream(self.clone(), req, request_id, sender, token)
-            .await
+        crate::chat::execute_pipeline_stream(
+            self.clone(),
+            req,
+            request_id,
+            sender,
+            token,
+            crate::chat::PipelineLane::Write,
+        )
+        .await
     }
 }

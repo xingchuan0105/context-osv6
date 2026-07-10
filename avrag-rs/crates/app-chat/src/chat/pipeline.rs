@@ -33,7 +33,6 @@ pub(crate) struct ChatExecution {
     #[serde(default)]
     pub debug_metadata: Option<serde_json::Value>,
     /// Whether Token events were already emitted during mode-step execution.
-    /// When true, `build_response` skips its own token emission to avoid duplication.
     #[serde(default)]
     pub tokens_emitted: bool,
     /// Whether Citations events were already emitted during mode-step execution.
@@ -41,12 +40,12 @@ pub(crate) struct ChatExecution {
     pub citations_emitted: bool,
 }
 
-/// Which product lane owns this pipeline run (ADR-0007 Phase B).
+/// Which product lane owns this pipeline run (ADR-0007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PipelineLane {
     /// Chat / RAG / Search via UnifiedAgent + ToolCatalog.
     Agent,
-    /// Write refine ring — never via ToolCatalog / AgentApp.
+    /// Write refine ring — never via ToolCatalog.
     Write,
 }
 
@@ -54,24 +53,28 @@ pub fn is_write_agent_type(agent_type: &str) -> bool {
     agent_type.eq_ignore_ascii_case("write")
 }
 
-pub(crate) async fn execute_chat_pipeline(
+/// Non-streaming pipeline for either product lane.
+pub(crate) async fn execute_pipeline(
     state: ChatContext,
     request: ChatRequest,
+    lane: PipelineLane,
 ) -> Result<ChatResponse, AppError> {
     info!(
         orchestrator = "pipeline",
-        lane = "agent",
-        "executing chat with linear pipeline"
+        lane = ?lane,
+        "executing linear pipeline"
     );
-    run_pipeline(state, request, None, PipelineLane::Agent).await
+    run_pipeline(state, request, None, lane).await
 }
 
-pub(crate) async fn execute_chat_pipeline_stream(
+/// Streaming pipeline for either product lane.
+pub(crate) async fn execute_pipeline_stream(
     state: ChatContext,
     request: ChatRequest,
     request_id: String,
     sender: UnboundedSender<contracts::chat::ChatEvent>,
     token: CancellationToken,
+    lane: PipelineLane,
 ) -> Result<(), AppError> {
     let stream_config = StreamConfig {
         sender,
@@ -80,45 +83,10 @@ pub(crate) async fn execute_chat_pipeline_stream(
     };
     info!(
         orchestrator = "pipeline",
-        lane = "agent",
-        "executing streaming chat with linear pipeline"
+        lane = ?lane,
+        "executing streaming linear pipeline"
     );
-    run_pipeline(state, request, Some(stream_config), PipelineLane::Agent)
-        .await
-        .map(|_| ())
-}
-
-/// Product Write entry — preflight/session shared with chat; mode dispatch is write-only.
-pub(crate) async fn execute_write_pipeline(
-    state: ChatContext,
-    request: ChatRequest,
-) -> Result<ChatResponse, AppError> {
-    info!(
-        orchestrator = "pipeline",
-        lane = "write",
-        "executing write with linear pipeline"
-    );
-    run_pipeline(state, request, None, PipelineLane::Write).await
-}
-
-pub(crate) async fn execute_write_pipeline_stream(
-    state: ChatContext,
-    request: ChatRequest,
-    request_id: String,
-    sender: UnboundedSender<contracts::chat::ChatEvent>,
-    token: CancellationToken,
-) -> Result<(), AppError> {
-    let stream_config = StreamConfig {
-        sender,
-        request_id,
-        token,
-    };
-    info!(
-        orchestrator = "pipeline",
-        lane = "write",
-        "executing streaming write with linear pipeline"
-    );
-    run_pipeline(state, request, Some(stream_config), PipelineLane::Write)
+    run_pipeline(state, request, Some(stream_config), lane)
         .await
         .map(|_| ())
 }
@@ -133,7 +101,7 @@ async fn run_pipeline(
         PipelineLane::Agent if is_write_agent_type(&request.agent_type) => {
             return Err(AppError::validation(
                 "use_write_entry",
-                "write mode must enter via execute_write_pipeline, not agent chat pipeline",
+                "write mode must enter via write pipeline lane, not agent chat pipeline",
             ));
         }
         PipelineLane::Write if !is_write_agent_type(&request.agent_type) => {
@@ -183,7 +151,6 @@ async fn run_pipeline(
     let audit_action = match execution.mode.as_str() {
         "search" => AuditAction::SearchRequest,
         "rag" => AuditAction::RagRequest,
-        "write" => AuditAction::ChatRequest,
         _ => AuditAction::ChatRequest,
     };
     let audit_record = AuditRecord {
@@ -221,8 +188,6 @@ async fn run_pipeline(
             .await?;
     }
 
-    // Emit terminal SSE (especially `done`) before persistence/usage so clients
-    // are not blocked on slow post-processing (fixes missing done on long answers).
     crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
 
     if request.source_type.as_deref() != Some("share")

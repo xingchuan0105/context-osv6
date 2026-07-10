@@ -48,7 +48,7 @@ impl CapabilityRegistry {
 
     /// Look up a tool by id (ReAct [`ToolCatalog`] only).
     ///
-    /// Write-control tools (`write_refine_*`) are **not** here — see WriteApp /
+    /// Write-control tools (`write_refine_*`) are **not** here — see Write mode /
     /// `write_refine::tool_specs_for_pool`.
     pub fn tool(&self, id: &str) -> Option<&ToolMetadata> {
         let _ = self;
@@ -321,7 +321,7 @@ mod tests {
     fn standard_registry_loads_prompt_skills_and_catalog_tools() {
         let registry = CapabilityRegistry::standard();
         // Tools come solely from ToolCatalog (skills + RAG), not a second map.
-        // write_refine_* excluded from ReAct ToolCatalog (WriteApp control ring).
+        // write_refine_* excluded from ReAct ToolCatalog (Write control ring).
         assert!(
             registry.tool_count() >= 6 + crate::catalog::RAG_TOOL_IDS.len(),
             "catalog tools (non-write builtins + RAG)"

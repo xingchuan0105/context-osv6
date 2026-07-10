@@ -48,17 +48,16 @@ impl AppState {
         &self.auth
     }
 
-    // --- Product path (ADR-0007): use product Apps on AppState ---
-    // Prefer: conversation() / agent() / write() / workspace() / share() /
-    // billing_api() / admin_api() / admin_ops() / prefs() (see product_apps/).
-    // Raw domain accessors below are for bootstrap, middleware, and tests.
+    // --- Infra accessors (not product use-case API) ---
+    // Product: conversation() / agent() / workspace() / share() / billing_api() /
+    // admin_api() / admin_ops() / prefs() — see product_apps/.
 
     /// Raw chat context. Prefer `conversation()` for execute, `agent()` for sessions.
     pub fn chat(&self) -> &app_chat::ChatContext {
         &self.chat
     }
 
-    /// Raw document context (needs caller-supplied auth/storage). Prefer `docs()`.
+    /// Raw document context. Prefer `workspace()` for product document/workspace APIs.
     pub fn documents(&self) -> &app_documents::DocumentContext {
         &self.documents
     }

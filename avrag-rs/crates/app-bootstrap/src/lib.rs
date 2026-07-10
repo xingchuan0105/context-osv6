@@ -4,7 +4,7 @@ mod product_apps;
 
 pub use product_apps::{
     AdminApp, AdminOpsApp, AgentApp, BillingApp, ConversationApp, PrefsApp, ShareApp,
-    WorkspaceApp, WriteApp, WorkspaceApiKeyAuth,
+    WorkspaceApp, WorkspaceApiKeyAuth,
 };
 mod config_helpers;
 mod domain_row_convert;

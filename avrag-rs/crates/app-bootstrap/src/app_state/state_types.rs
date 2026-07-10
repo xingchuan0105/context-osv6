@@ -7,6 +7,14 @@ use avrag_storage_pg::PgAppRepository;
 use crate::adapters::RedisRateLimitBackend;
 use crate::services::PasswordResetService;
 
+/// Application composition root (ADR-0007).
+///
+/// **Product API:** assemble faces via `conversation` / `agent` / `workspace` / `share` /
+/// `billing_api` / `prefs` / `admin_*` (see `crate::product_apps`). Do **not** add new
+/// business methods here — put use-cases on Product Apps or domain crates.
+///
+/// **Infra:** fields below are shared runtime handles used by face assembly and bootstrap.
+/// Prefer Product Apps from transport/MCP; use raw accessors only for middleware/tests.
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) auth: AuthContext,

@@ -7,7 +7,7 @@ use contracts::workspaces::{ChatSession, CreateChatSessionRequest};
 use tracing::info;
 use uuid::Uuid;
 
-use super::{ChatExecution, ChatPreflight, execute_chat_pipeline};
+use super::{ChatExecution, ChatPreflight, PipelineLane, execute_pipeline};
 use crate::context::ChatContext;
 use crate::{
     derive_profile_domains, derive_profile_topics, detect_preferred_style, estimate_token_count,
@@ -31,7 +31,7 @@ impl ChatContext {
         if req.agent_type == "rag" && !req.doc_scope.is_empty() {
             self.validate_rag_doc_scope(&req.doc_scope).await?;
         }
-        execute_chat_pipeline(self.clone(), req).await
+        execute_pipeline(self.clone(), req, PipelineLane::Agent).await
     }
 
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id, trace_id = tracing::field::Empty))]

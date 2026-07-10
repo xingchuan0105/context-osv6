@@ -57,7 +57,7 @@ impl ToolCatalog {
         let mut tools = HashMap::new();
         let skill_reg = builtin_registry_cached();
         for skill in skill_reg.iter() {
-            // Write refine control-loop tools are owned by WriteApp / WriteRefineLoopRunner
+            // Write refine control-loop tools are owned by Write mode / WriteRefineLoopRunner
             // (ADR-0007 T2). They stay in SkillRegistry for Write mode disclosure only,
             // never as UnifiedAgent ReAct ToolCatalog entries.
             if skill.id().starts_with("write_refine") {
@@ -234,12 +234,12 @@ mod tests {
         ] {
             assert!(
                 cat.get(id).is_none(),
-                "{id} must not be in ToolCatalog (WriteApp control ring only)"
+                "{id} must not be in ToolCatalog (Write control ring only)"
             );
         }
         assert!(
             cat.skill_registry().get("write_refine_revise").is_none(),
-            "write_refine must not be on SkillRegistry (WriteApp-local ToolSpec only)"
+            "write_refine must not be on SkillRegistry (Write-local ToolSpec only)"
         );
     }
 }

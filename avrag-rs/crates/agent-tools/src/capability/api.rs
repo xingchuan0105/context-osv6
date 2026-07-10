@@ -73,7 +73,7 @@ pub struct ModeSchema {
 // Mode YAML tool_pool (product modes only)
 // ---------------------------------------------------------------------------
 
-/// Product mode id → modes/*.yaml file stem (chat/rag/search only; write is WriteApp-local).
+/// Product mode id → modes/*.yaml file stem (chat/rag/search only; write is Write-local).
 const PRODUCT_MODE_FILES: &[(&str, &str)] = &[
     ("chat", "chat"),
     ("rag", "rag"),
