@@ -9,6 +9,7 @@ use ingestion::parser::{
 use ingestion::{IngestionError, IngestionTask, TaskProcessor};
 use std::path::Path;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -212,6 +213,56 @@ impl PgTaskProcessor {
             .map_err(from_storage_error)?;
         Ok(())
     }
+
+    /// Best-effort terminal write when the timed-out future left a `running` parse_run.
+    async fn finish_parse_run_after_timeout(
+        &self,
+        task: &IngestionTask,
+        tracked: TimeoutTrackedParseRun,
+    ) {
+        let context = task_context(task);
+        let failure_error = serde_json::json!({
+            "message": format!("task timeout after {}s", self.task_timeout_secs),
+            "code": "ingestion_task_timeout",
+        });
+        let empty_state = ParseRunState::default();
+        // Minimal route decision for summary assembly when the inner future was cancelled.
+        let route_decision = tracked.route_decision;
+        match self
+            .finish_parse_run(
+                &context,
+                tracked.parse_run_id,
+                tracked.parse_run_started_at,
+                &tracked.object_path,
+                task,
+                &route_decision,
+                &empty_state,
+                "failed",
+                Some(&failure_error),
+            )
+            .await
+        {
+            Ok(()) => info!(
+                task_id = %task.task_id,
+                parse_run_id = %tracked.parse_run_id,
+                "parse run marked failed after task timeout"
+            ),
+            Err(error) => warn!(
+                task_id = %task.task_id,
+                parse_run_id = %tracked.parse_run_id,
+                error = %error,
+                "failed to mark parse run failed after task timeout"
+            ),
+        }
+    }
+}
+
+/// Shared across the timed future so a cancel can still finish the parse_run row.
+struct TimeoutTrackedParseRun {
+    parse_run_id: Uuid,
+    parse_run_started_at: std::time::Instant,
+    object_path: String,
+    route_decision: ParseRouteDecision,
 }
 
 #[async_trait::async_trait]
@@ -239,6 +290,10 @@ impl TaskProcessor for PgTaskProcessor {
                 lock_token.clone(),
             )
         });
+        // Survives future cancel so timeout can finish a `running` parse_run row.
+        let timeout_parse_run: Arc<Mutex<Option<TimeoutTrackedParseRun>>> =
+            Arc::new(Mutex::new(None));
+        let timeout_parse_run_for_task = timeout_parse_run.clone();
         let timeout_result = tokio::time::timeout(
             Duration::from_secs(self.task_timeout_secs),
             async {
@@ -398,6 +453,17 @@ impl TaskProcessor for PgTaskProcessor {
                 parse_run_id = %parse_run_id,
                 "document parse run created"
             );
+            {
+                let mut track_route = route_decision.clone();
+                // Drop heavy LiteParse snapshot from the timeout tracker.
+                track_route.liteparse_snapshot = None;
+                *timeout_parse_run_for_task.lock().await = Some(TimeoutTrackedParseRun {
+                    parse_run_id,
+                    parse_run_started_at,
+                    object_path: object_path.clone(),
+                    route_decision: track_route,
+                });
+            }
 
             let pipeline_metrics = match run_document_pipeline(
                 self,
@@ -437,6 +503,8 @@ impl TaskProcessor for PgTaskProcessor {
                         None,
                     )
                     .await?;
+                    // Completed successfully — clear tracker so timeout handler is a no-op.
+                    *timeout_parse_run_for_task.lock().await = None;
 
                     if let Some(document_ir) = parse_run_state.document_ir.as_ref() {
                         info!(
@@ -463,6 +531,7 @@ impl TaskProcessor for PgTaskProcessor {
                         .await
                         .unwrap_or(false);
                     if !may_record_failure {
+                        *timeout_parse_run_for_task.lock().await = None;
                         return Err(error);
                     }
                     let failure_error = serde_json::json!({ "message": error.to_string() });
@@ -479,6 +548,7 @@ impl TaskProcessor for PgTaskProcessor {
                             Some(&failure_error),
                         )
                         .await;
+                    *timeout_parse_run_for_task.lock().await = None;
                     return Err(error);
                 }
             };
@@ -544,8 +614,16 @@ impl TaskProcessor for PgTaskProcessor {
         .await;
         let result = match timeout_result {
             Ok(inner) => inner,
-            Err(_) => Err(IngestionError::Timeout(self.task_timeout_secs)),
+            Err(_) => {
+                // While the lease/heartbeat is still valid, mark any open parse_run failed.
+                if let Some(tracked) = timeout_parse_run.lock().await.take() {
+                    self.finish_parse_run_after_timeout(task, tracked).await;
+                }
+                Err(IngestionError::Timeout(self.task_timeout_secs))
+            }
         };
+        // Dropping the timed future releases advisory/redis guards via Drop;
+        // stop heartbeat after timeout finish so finish_document_parse_run still sees processing lease.
         stop_ingestion_task_lock_heartbeat(lock_heartbeat).await;
         let outcome = match &result {
             Ok(()) => "success",

@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 日期 | 2026-07-10 |
-| 状态 | **In progress** — I 波代码已落地（tokenizer + 阶段日志 + 零 chunk 拒绝）；O 波未开 |
+| 状态 | **In progress** — I1–I6 已落地；现场 PDF requeue 验收可选；**O 波未开** |
 | 类型 | 统一修复 / 迁移方案（Solo local trunk） |
 | 上游诊断 | [`INGESTION_PDF_STUCK_DIAGNOSIS_2026-07-10.md`](./INGESTION_PDF_STUCK_DIAGNOSIS_2026-07-10.md)（§3.1 根因已订正，见本文 A 部） |
 | 命名先例 | [`WORKSPACE_RENAME_DECISIONS_2026-07-09.md`](./WORKSPACE_RENAME_DECISIONS_2026-07-09.md)（notebook→workspace，**无长期双挂**） |
@@ -87,11 +87,11 @@ Debug worker 再放大数倍 → 轻松超过 `AVRAG_INGESTION_TASK_TIMEOUT_SECS
 | ID | 任务 | 文件 / 位置 | 验收 | 状态 |
 |----|------|-------------|------|------|
 | **I1** | `cl100k_base()` → `cl100k_base_singleton()`（sizer 进程内复用） | `crates/ingestion/src/chunker.rs`；`crates/llm/src/summary.rs` 同修 | 单元：1500 micro-blocks &lt; 10s | **Done** |
-| **I2** | （可选）LiteParse micro-block 按页/段落合并 | `liteparse_ir` | blocks 降到百级 | Pending |
+| **I2** | LiteParse micro-block 按页/行距 coalesce | `crates/ingestion/src/parser/liteparse_ir.rs` | 相邻行合并；heading 分离 | **Done** |
 | **I3** | 阶段日志 + elapsed：parse_run create / parse / project / chunk plan / body / index | `document_pipeline/*`、`processor.rs` | 再卡可定位 | **Done** |
 | **I4** | 零 text+multimodal chunks → 失败；`processed_chunk_count` 不再 `.max(1)` 假成功 | `materialize.rs`、`mod.rs` | 无假 completed | **Done** |
-| **I5** | timeout 后 finish parse_run + 释放 lease | `processor.rs` + queue | requeue 可立刻 claim | Pending |
-| **I6** | dev 默认 pdf-renderer + worker 日志路径 | scripts | 扫描件不哑火 | Pending |
+| **I5** | timeout 后 finish parse_run=`failed`（lease 仍有效时）；advisory 靠 Drop | `processor.rs` | 不再长期残留 `running` | **Done** |
+| **I6** | product-dev-up 拉起 pdf-renderer；worker/api tee `.dev-logs/` | `scripts/product-dev-up.sh`、worker runbook | 扫描件可渲；日志落盘 | **Done** |
 
 **明确不做（I 波）**：重写整个 PDF 路由；上真实 OCR 依赖修文本 PDF；扩 CI。
 

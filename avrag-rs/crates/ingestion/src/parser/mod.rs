@@ -28,6 +28,7 @@ pub use liteparse::{LiteParseService, ParsedPdfSnapshot};
 pub use liteparse_config::LiteParseConfig;
 pub use liteparse_ir::{
     LiteParsePageProbe, LiteParseTextBlock, append_liteparse_blocks_to_ir, blocks_to_document_ir,
+    coalesce_liteparse_text_blocks,
     page_has_searchable_text,
 };
 pub use liteparse_probe_bridge::{

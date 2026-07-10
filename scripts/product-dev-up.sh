@@ -27,6 +27,8 @@ if tmux has-session -t "${SESSION}" 2>/dev/null; then
 fi
 
 mkdir -p "${MINIO_DATA_DIR}"
+DEV_LOG_DIR="${AVRAG_DIR}/.dev-logs"
+mkdir -p "${DEV_LOG_DIR}"
 
 echo "Starting PostgreSQL and Redis..."
 sudo pg_ctlcluster 16 main start >/dev/null 2>&1 || true
@@ -40,6 +42,11 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='avrag'" | grep
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='avrag_rs'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE avrag_rs OWNER avrag;"
 
+echo "Starting pdf-visual-renderer (scan/E-class PDF fallback; local dev)..."
+bash "${AVRAG_DIR}/scripts/pdf-renderer-up.sh" || {
+  echo "WARN: pdf-visual-renderer failed to start; text PDFs still work, scans/visual fallback will fail." >&2
+}
+
 tmux new-session -d -s "${SESSION}" -n minio \
   "MINIO_ROOT_USER='${MINIO_ROOT_USER:-minioadmin}' MINIO_ROOT_PASSWORD='${MINIO_ROOT_PASSWORD:-minioadmin}' exec minio server '${MINIO_DATA_DIR}' --address '${MINIO_API_ADDR}' --console-address '${MINIO_CONSOLE_ADDR}'"
 
@@ -47,10 +54,10 @@ tmux new-window -t "${SESSION}" -n office \
   "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && OFFICE_PARSER_BIND=127.0.0.1:9090 exec cargo run -p avrag-office-parser-jvm --bin office-parser-jvm"
 
 tmux new-window -t "${SESSION}" -n api \
-  "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && exec cargo run -p avrag-api"
+  "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && exec cargo run -p avrag-api 2>&1 | tee -a '${DEV_LOG_DIR}/api.log'"
 
 tmux new-window -t "${SESSION}" -n worker \
-  "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && exec cargo run -p avrag-worker"
+  "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && export RUST_LOG=\"\${RUST_LOG:-info,avrag_worker=info}\" && exec cargo run -p avrag-worker 2>&1 | tee -a '${DEV_LOG_DIR}/worker.log'"
 
 tmux new-window -t "${SESSION}" -n next \
   "cd '${NEXT_DIR}' && exec pnpm dev"
@@ -64,5 +71,10 @@ echo "URLs:"
 echo "  frontend       http://127.0.0.1:3000"
 echo "  api            http://127.0.0.1:8080"
 echo "  office parser  http://127.0.0.1:9090/v1/healthz"
+echo "  pdf-renderer   http://127.0.0.1:9091/v1/healthz"
 echo "  milvus         ${MILVUS_URL} (start separately)"
 echo "  minio          http://127.0.0.1:9001"
+echo "Logs:"
+echo "  worker         ${DEV_LOG_DIR}/worker.log"
+echo "  api            ${DEV_LOG_DIR}/api.log"
+echo "  pdf-renderer   ${DEV_LOG_DIR}/pdf-visual-renderer.log"

@@ -45,8 +45,20 @@
 ## 运行
 
 ```bash
-cargo run -p avrag-worker
+# 推荐：product-dev-up 会拉起 pdf-renderer，worker 日志 tee 到 .dev-logs/worker.log
+bash scripts/product-dev-up.sh   # 仓库根
+
+# 或单独：
+bash avrag-rs/scripts/pdf-renderer-up.sh   # 扫描 PDF / visual 回退需要 :9091
+cd avrag-rs
+mkdir -p .dev-logs
+RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-logs/worker.log
 ```
+
+| 依赖 | 说明 |
+|------|------|
+| `PDF_RENDERER_BASE_URL`（默认 `http://127.0.0.1:9091`） | **dev 应常开** `scripts/pdf-renderer-up.sh`；纯 text PDF 可不依赖 |
+| `.dev-logs/worker.log` | `product-dev-up` 默认 tee；避免只挂 pts 丢日志 |
 
 启动时建议先确认：
 
@@ -56,6 +68,8 @@ cargo run -p avrag-worker
 2. **健康探针**
    - `AVRAG_WORKER_HEALTH_PORT=0` 时会自动选端口并写入 `AVRAG_WORKER_HEALTH_PORT_FILE`。
    - 本地可直接 `curl http://127.0.0.1:<port>/health` 验证存活。
+3. **pdf-visual-renderer**
+   - `curl -fsS http://127.0.0.1:9091/v1/healthz`
 
 ## 任务契约
 
