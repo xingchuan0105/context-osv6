@@ -46,10 +46,14 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
     parse_run_state.outputs.multimodal_chunk_count = chunk_plan.multimodal_chunks.len();
 
     if chunk_plan.text_chunks.is_empty() && chunk_plan.multimodal_chunks.is_empty() {
-        return Err(IngestionError::parse(format!(
-            "ingestion produced no text or multimodal chunks for {filename} (blocks={})",
-            document_ir.blocks.len()
-        )));
+        // Not a parse failure — terminal integrity / empty index (metrics: empty_index).
+        return Err(IngestionError::empty_index(
+            document_id,
+            format!(
+                "ingestion produced no text or multimodal chunks for {filename} (blocks={})",
+                document_ir.blocks.len()
+            ),
+        ));
     }
 
     let content = collect_document_text(&chunk_plan);

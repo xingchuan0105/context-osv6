@@ -1,7 +1,9 @@
 //! SSE event-order contract for chat streams (CAP-STREAM).
 //!
-//! - Offline: [`validate_chat_sse_event_order`] for full sequences (tests).
-//! - Online: [`SseEventOrderTracker`] in the HTTP stream loop.
+//! - Offline: [`validate_chat_sse_event_order`] for full sequences (tests / patho).
+//! - Online: [`SseEventOrderTracker`] **must** gate every chat SSE frame in
+//!   `handlers/chat.rs` (`sse_response_from_receiver`) before flush. Do not build
+//!   a parallel `Sse::new` stream for chat without this tracker.
 
 /// Validate ordered chat SSE event **names** (not payloads).
 ///

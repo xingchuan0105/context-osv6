@@ -32,6 +32,7 @@ run_patho write-core CAP-WRITE --lib
 run_patho transport-http "CAP-AUTH+CAP-STREAM" --lib
 run_patho agent-loop CAP-CHAT --lib
 run_patho app-chat CAP-WRITE --lib
+# Pin integration binary only — avoid default lib target (0 tests, noisy).
 run_patho avrag-rag-core CAP-RAG --test graph_tenant_isolation
 
 pyramid_ok L2-patho

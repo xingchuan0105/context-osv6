@@ -393,29 +393,30 @@ impl DocumentRepository {
         Ok(row.try_get("allowed")?)
     }
 
-    /// True when the document has body chunks and/or multimodal chunks suitable
-    /// for retrieval. Used to refuse `completed` with empty index content.
-    pub async fn document_has_ingest_content(
+    /// Body + multimodal index counts for a document (owner-scoped).
+    /// Used for terminal integrity: refuse empty completed and dual-check vs materialize.
+    pub async fn document_ingest_content_counts(
         &self,
         context: &AuthContext,
         document_id: Uuid,
-    ) -> Result<bool, PgStorageError> {
+    ) -> Result<(i64, i64), PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select exists(
-                select 1
+            select
+              (
+                select count(*)::bigint
                 from chunks c
                 where c.document_id = $1
                   and c.owner_user_id = $2
                   and c.chunk_type = 'body'
-            )
-            or exists(
-                select 1
+              ) as body_chunks,
+              (
+                select count(*)::bigint
                 from document_multimodal_chunks m
                 where m.document_id = $1
                   and m.owner_user_id = $2
-            ) as has_content
+              ) as multimodal_chunks
             "#,
         )
         .bind(document_id)
@@ -423,7 +424,23 @@ impl DocumentRepository {
         .fetch_one(tx.inner())
         .await?;
         tx.commit().await?;
-        Ok(row.try_get("has_content")?)
+        Ok((
+            row.try_get::<i64, _>("body_chunks")?,
+            row.try_get::<i64, _>("multimodal_chunks")?,
+        ))
+    }
+
+    /// True when the document has body chunks and/or multimodal chunks suitable
+    /// for retrieval. Used to refuse `completed` with empty index content.
+    pub async fn document_has_ingest_content(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<bool, PgStorageError> {
+        let (body, multimodal) = self
+            .document_ingest_content_counts(context, document_id)
+            .await?;
+        Ok(body > 0 || multimodal > 0)
     }
 
     pub async fn update_document_summary(

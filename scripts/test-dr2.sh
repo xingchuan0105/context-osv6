@@ -39,7 +39,8 @@ run_step() {
   shift 3
   echo ""
   echo "[PYRAMID] layer=${layer} begin"
-  if "$@"; then
+  # Nested scripts suppress their own pyramid_ok (PYRAMID_NESTED=1).
+  if PYRAMID_NESTED=1 "$@"; then
     pyramid_ok "$layer"
     return 0
   fi
@@ -50,6 +51,15 @@ run_step() {
 write_report() {
   mkdir -p "$(dirname "$REPORT")"
   local overall="$1"
+  local skip_warn=""
+  if [[ "${SKIP_L2_CORE}" == "1" ]]; then
+    skip_warn="
+## Warning
+
+**L2-core was SKIPPED** (\`SKIP_L2_CORE=1\`). Tier is **not** full DR1/DR2.
+Operators must not treat patho-only green as product-smoke green.
+"
+  fi
   cat >"$REPORT" <<EOF
 # DR2 status report
 
@@ -61,7 +71,7 @@ write_report() {
 | REQUIRE_L3 | ${REQUIRE_L3} |
 | SKIP_L3 | ${SKIP_L3} |
 | SKIP_L2_CORE | ${SKIP_L2_CORE} |
-
+${skip_warn}
 ## Layers
 
 | Layer | Status |
@@ -90,6 +100,10 @@ EOF
 
 echo "======== DR2 准部署 ladder ========"
 echo "[PYRAMID] started=${STARTED_AT}"
+if [[ "$SKIP_L2_CORE" == "1" ]]; then
+  echo "[PYRAMID] WARN SKIP_L2_CORE=1 — max tier this run is DR2-patho-only (not full DR1/DR2)"
+  echo "[PYRAMID] WARN L2-core=skipped (product smoke / mechanisms not run)"
+fi
 
 # --- L1 ---
 if run_step L1 S0/S1 "bash scripts/test-l1.sh" bash scripts/test-l1.sh; then
@@ -123,7 +137,12 @@ if run_step L2-patho S4 \
   "bash scripts/test-l2-patho.sh  # or cargo test -p ingestion --lib patho_" \
   bash scripts/test-l2-patho.sh; then
   L2_PATHO_STATUS=ok
-  DR_TIER=DR2
+  # Never claim full DR2 when L2-core was skipped (patho alone ≠ mechanisms green).
+  if [[ "$SKIP_L2_CORE" == "1" ]]; then
+    DR_TIER=DR2-patho-only
+  else
+    DR_TIER=DR2
+  fi
 else
   L2_PATHO_STATUS=FAIL
   write_report FAIL
@@ -137,14 +156,10 @@ if [[ "$SKIP_L3" == "1" ]]; then
   L3_JOURNEY_STATUS=skipped
   L3_LLM_STATUS=skipped
 else
-  # Peek keys without sourcing full .env; export only if L3-llm will run.
-  if pyramid_has_llm_keys; then
-    pyramid_export_llm_keys_if_needed
-  fi
-
+  # Peek keys only in parent (no export flood). L3-llm loads keys itself if needed.
   if [[ -x scripts/test-l3-journey.sh ]] && pyramid_has_playwright; then
     echo "[PYRAMID] layer=L3-thin journey begin"
-    if bash scripts/test-l3-journey.sh; then
+    if PYRAMID_NESTED=1 bash scripts/test-l3-journey.sh; then
       L3_JOURNEY_STATUS=ok
       L3_OK=1
       pyramid_ok L3-thin-journey
@@ -165,7 +180,7 @@ else
 
   if [[ -x scripts/test-l3-llm.sh ]] && pyramid_has_llm_keys; then
     echo "[PYRAMID] layer=L3-thin llm begin"
-    if bash scripts/test-l3-llm.sh; then
+    if PYRAMID_NESTED=1 bash scripts/test-l3-llm.sh; then
       L3_LLM_STATUS=ok
       L3_OK=1
       pyramid_ok L3-thin-llm

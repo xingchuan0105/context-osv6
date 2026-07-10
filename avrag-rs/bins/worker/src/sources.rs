@@ -98,22 +98,34 @@ impl StateSink for PgStateSink {
 
         // Refuse empty completed: lock-skip / partial paths must not leave
         // status=completed with no body/multimodal retrieval content.
+        // Log PG counts so ops can dual-check vs materialize stage=terminal logs.
         if matches!(
             transition.to,
             contracts::documents::DocumentStatus::Completed
         ) {
-            let has_content = self
+            let (pg_body_chunks, pg_multimodal_chunks) = self
                 .repo
                 .documents()
-                .document_has_ingest_content(&context, document_id)
+                .document_ingest_content_counts(&context, document_id)
                 .await
                 .map_err(from_storage_error)?;
+            let has_content = pg_body_chunks > 0 || pg_multimodal_chunks > 0;
+            info!(
+                stage = "terminal",
+                document_id = %document_id,
+                pg_body_chunks,
+                pg_multimodal_chunks,
+                has_content,
+                "ingestion terminal PG content counts before completed"
+            );
             if let Err(err) =
                 IngestionError::ensure_ingest_content_for_completed(has_content, document_id)
             {
                 tracing::error!(
                     stage = "terminal",
                     document_id = %document_id,
+                    pg_body_chunks,
+                    pg_multimodal_chunks,
                     has_content,
                     "refusing completed without ingest content"
                 );

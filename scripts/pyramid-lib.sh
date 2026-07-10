@@ -2,6 +2,11 @@
 # Shared helpers for pyramid / DR scripts. Source from other scripts:
 #   # shellcheck source=pyramid-lib.sh
 #   source "$(dirname "$0")/pyramid-lib.sh"
+#
+# Secrets: local Solo only. Never `source` full avrag-rs/.env here — only peek/export
+# named keys via _pyramid_env_get / pyramid_export_keys_if_unset (reduces secret flood
+# into child process env and log capture). Do not run these helpers on multi-user hosts
+# without scrubbing process env.
 
 pyramid_fail() {
   local layer="$1"
@@ -19,8 +24,12 @@ pyramid_fail() {
   return 1
 }
 
+# When PYRAMID_NESTED=1 (set by DR ladder run_step), suppress OK noise — outer run_step prints once.
 pyramid_ok() {
   local layer="$1"
+  if [[ "${PYRAMID_NESTED:-0}" == "1" ]]; then
+    return 0
+  fi
   echo "[PYRAMID] layer=${layer} result=OK"
 }
 

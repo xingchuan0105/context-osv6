@@ -226,6 +226,8 @@ fn chat_live_stream_response(
     sse_response_from_receiver(receiver, surface_label(surface), cancel)
 }
 
+/// Shared chat SSE framing: every event is gated by [`SseEventOrderTracker`] before flush.
+/// Offline contract: [`validate_chat_sse_event_order`]. Production path must not bypass this helper.
 fn sse_response_from_receiver(
     mut receiver: UnboundedReceiver<ChatEvent>,
     surface: &'static str,
@@ -238,8 +240,9 @@ fn sse_response_from_receiver(
 
         while let Some(event) = receiver.recv().await {
             let event_name = sse_event_name(&event);
+            // Contract gate before flush — patho/unit tests exercise the same tracker.
             if let Err(violation) = order.observe(event_name) {
-                // Do not emit post-terminal frames; log for CAP-STREAM patho/ops.
+                // Do not emit post-terminal / out-of-order frames (CAP-STREAM).
                 tracing::error!(
                     stage = "sse_order",
                     surface,
@@ -252,6 +255,7 @@ fn sse_response_from_receiver(
             telemetry::prometheus::observe_sse_event(surface, event_name);
             yield Ok::<_, Infallible>(sse_event(event_name, &event));
         }
+        // Full-sequence validate (start … done|error) when the receiver ends.
         if let Err(violation) = order.finish() {
             tracing::warn!(
                 stage = "sse_order",

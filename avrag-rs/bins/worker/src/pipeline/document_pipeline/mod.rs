@@ -236,6 +236,52 @@ pub(crate) async fn run_document_pipeline(
         "processed_chunk_count must match max(body, multimodal)"
     );
 
+    // Dual-assert: PG body/multimodal counts must match materialize before status flip.
+    // StateSink also re-checks has_content; this catches partial persist mismatches early.
+    let (pg_body, pg_multimodal) = processor
+        .storage
+        .repo
+        .documents()
+        .document_ingest_content_counts(context, document_id)
+        .await
+        .map_err(crate::ingestion_guard::from_storage_error)?;
+    let pg_body_usize = usize::try_from(pg_body).unwrap_or(0);
+    let pg_multimodal_usize = usize::try_from(pg_multimodal).unwrap_or(0);
+    info!(
+        stage = "terminal",
+        document_id = %document_id,
+        filename = %filename,
+        body_chunks,
+        multimodal_chunks,
+        pg_body_chunks = pg_body,
+        pg_multimodal_chunks = pg_multimodal,
+        "ingestion terminal materialize vs PG dual-check"
+    );
+    if pg_body_usize != body_chunks || pg_multimodal_usize != multimodal_chunks {
+        tracing::error!(
+            stage = "terminal",
+            document_id = %document_id,
+            filename = %filename,
+            body_chunks,
+            multimodal_chunks,
+            pg_body_chunks = pg_body,
+            pg_multimodal_chunks = pg_multimodal,
+            "materialize counts disagree with PG before completed"
+        );
+        return Err(IngestionError::empty_index(
+            document_id,
+            format!(
+                "refusing completed for {filename}: materialize body={body_chunks} multimodal={multimodal_chunks} vs PG body={pg_body} multimodal={pg_multimodal}"
+            ),
+        ));
+    }
+    if pg_body == 0 && pg_multimodal == 0 {
+        return Err(IngestionError::empty_index(
+            document_id,
+            format!("refusing completed for {filename}: PG has no body or multimodal chunks"),
+        ));
+    }
+
     Ok(IngestionPipelineMetrics {
         content: materialize.content,
         processed_chunk_count: materialize.processed_chunk_count,

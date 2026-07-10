@@ -40,11 +40,17 @@ fi
 echo "======== ingest dump document_id=${DOC_ID} ========"
 echo "[PYRAMID] layer=ops cap=CAP-INGEST signal=S4"
 
-# is_local=false: session-level GUC so every following statement sees super_admin.
-# is_local=true only lasts one statement under psql autocommit → empty RLS results.
+# RLS: must be session-level (is_local=false). Under psql autocommit,
+# is_local=true only applies to the set_config statement → later SELECTs return 0 rows.
+# Single psql session: one connection, GUC sticky for the whole dump.
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v doc_id="$DOC_ID" <<'SQL'
 SELECT set_config('app.current_role', 'super_admin', false);
+-- Fail fast if GUC did not stick (should never happen with is_local=false).
+SELECT CASE
+  WHEN current_setting('app.current_role', true) = 'super_admin' THEN 'rls_bypass=ok'
+  ELSE current_setting('app.current_role', true)
+END AS rls_guc_check;
 
 \echo --- documents ---
 SELECT id, status, chunk_count, file_name, mime_type,
