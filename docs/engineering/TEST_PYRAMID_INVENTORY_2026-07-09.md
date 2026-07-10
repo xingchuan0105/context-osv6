@@ -59,11 +59,14 @@
 |------|-----|------|
 | crate `--lib` / contracts / vitest / tsc / file-size | L1 | E/C |
 | product_e2e smoke mock | L2 | E/C |
+| `write_smoke` / CAP-WRITE | L2 | E/C（Write mock 成文） |
+| `guardrails_smoke` | L2 | E（输入 guard fail-closed） |
 | product_e2e integration mock | L2 | E |
 | product_e2e llm_real 薄路径 | L3 | B/C |
 | rag_quality_prod | L3-release | B/D |
 | Playwright smoke | L3-smoke | A |
 | Playwright journey | L3-journey | A |
+| `workspace-write` journey | L3-journey | A（Write 模式可感路径） |
 | skills / judge / billing | L3 specialty | A/B |
 
 ## 巨石拆分结果

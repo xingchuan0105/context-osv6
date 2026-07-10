@@ -46,6 +46,11 @@ cd avrag-rs && cargo test -p <crate> --lib
 
 Acceptance (smoke/E2E): wave end or pre-ship only — local scripts or `workflow_dispatch`, not every commit.
 
+Wave-end acceptance may include (light checklist; not every commit):
+
+* **L2 product smoke** — `bash scripts/test-l2-mechanisms.sh` or `avrag-rs/scripts/run-product-smoke-e2e.sh`, including `write_smoke` + `guardrails_smoke`
+* **L3 journey short set** — optionally `JOURNEY=1 bash scripts/test-l3-journey.sh`, including `workspace-write`
+
 ---
 
 ## Pipeline stages (when you use automation at all)
@@ -120,3 +125,4 @@ When a product wave settles and smoke is green on `workflow_dispatch`:
 |------|------|
 | 2026-07-09 | Initial solo discipline; product/frontend smoke deferred from PR |
 | 2026-07-09 | **Default = local trunk** (`master` on disk); push only for backup/deploy |
+| 2026-07-10 | Wave-end light checklist: L2 `write_smoke`+`guardrails_smoke`; optional L3 `workspace-write` |

@@ -72,7 +72,7 @@ Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09
 
 - **Smoke integration modules** (`smoke::`, serial for RAG): `ingestion_smoke`, `rag_smoke`, `rag_fallback_smoke`, `rag_codegen_multitool_smoke`, `memory_multiturn_smoke`, `paddle_image_smoke`
 - **Smoke manual-only** (module guard only; `#[ignore]`): `search_real_smoke`, `paddle_pdf_smoke`
-- **Non-RAG smoke modules** (parallel): `chat_smoke`, `search_smoke`, `auth_boundary`, `share_boundary`
+- **Non-RAG smoke modules** (parallel): `chat_smoke`, `search_smoke`, `write_smoke`, `auth_boundary`, `share_boundary`, `workspace_crud`, `billing_boundary`, `guardrails_smoke`
 - **Unit tests** (parallel with non-RAG smoke; no Docker):
   - `setup::tests` (6) — docker port/timestamp parsing, active-container registry, docker id
   - `e2e_gate::tests` (4) — `E2E_MODE` suite gating

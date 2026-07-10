@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # L1 — daily fast base (product拍板: 日常只跑这一层)
-# Usage: bash scripts/test-l1.sh [extra cargo -p crates...]
+# Usage: bash scripts/test-l1.sh [cargo -p crate names...]
+#
+# Default packages (when no args): agent-tools, agent-loop, app-chat
+# When changing transport-http / storage-pg, pass them as args, e.g.:
+#   bash scripts/test-l1.sh transport-http
+#   bash scripts/test-l1.sh agent-tools agent-loop app-chat transport-http storage-pg
+#
+# Layer semantics / acceptance gates: avrag-rs/docs/e2e-gates.md
+# Coverage remediation (Write/guardrails closeout): docs/engineering/E2E_COVERAGE_REMEDIATION_PLAN_2026-07-10.md
 #
 # Resource defaults (WSL / ~16G RAM friendly):
 #   CARGO_BUILD_JOBS — rustc parallel compile jobs (default 2)

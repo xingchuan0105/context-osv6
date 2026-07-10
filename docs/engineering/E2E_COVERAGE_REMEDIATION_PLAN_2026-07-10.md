@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 日期 | 2026-07-10 |
-| 状态 | **In progress — W1 Done (write_smoke mock green)** |
+| 状态 | **Done** — W0–W3 + W5 closed；W4 cancelled（D5 已由 W3 满足） |
 | 起因 | 审查 E2E 脚本 vs 产品能力：分层齐全，但 **Write 缺 mock/UI 门禁**；Admin/Prefs/Guardrails 偏浅；文档/registry 与金字塔入口漂移 |
 | 约束 | Solo local trunk；**不扩 CI 剧场**；Write **不进** ReAct ToolCatalog（T2）；日常默认仍只 L1 |
 | 上游 | 会话审查结论；[`TEST_PYRAMID_INVENTORY_2026-07-09.md`](./TEST_PYRAMID_INVENTORY_2026-07-09.md)；[`avrag-rs/docs/e2e-gates.md`](../../avrag-rs/docs/e2e-gates.md)；[`avrag-rs/docs/full-functional-e2e-guide.md`](../../avrag-rs/docs/full-functional-e2e-guide.md)；[`avrag-rs/docs/plans/2026-07-08-write-mode-launch-plan.md`](../../avrag-rs/docs/plans/2026-07-08-write-mode-launch-plan.md) |
@@ -368,14 +368,14 @@ cargo test -p avrag-guardrails --lib
 
 ### 开始前
 
-- [ ] 读本计划 §0–§2  
-- [ ] Milvus/PG 策略：Write smoke 默认 **不依赖** 冷 RAG；非 RAG 并行组  
-- [ ] 不向用户索要已在 `.env` 的 key  
+- [x] 读本计划 §0–§2  
+- [x] Milvus/PG 策略：Write smoke 默认 **不依赖** 冷 RAG；非 RAG 并行组  
+- [x] 不向用户索要已在 `.env` 的 key  
 
 ### W0
 
-- [ ] 层映射写入 full-functional 或 e2e-gates  
-- [ ] registry non_rag 含 `workspace_crud`  
+- [x] 层映射写入 full-functional 或 e2e-gates  
+- [x] registry non_rag 含 `workspace_crud`  
 
 ### W1
 
@@ -385,18 +385,25 @@ cargo test -p avrag-guardrails --lib
 
 ### W2
 
-- [ ] `workspace-write.spec.ts` 绿  
+- [x] `workspace-write.spec.ts` 绿  
 
 ### W3/W4
 
 - [x] W3 Guardrails HTTP blackbox：`smoke::guardrails_smoke` → 400 `input_guard_blocked`（fail-closed）  
-- [ ] W4 Admin/Prefs 薄测（可选；D5 已由 W3 满足）  
+- [x] W4 Admin/Prefs 薄测 — **cancelled**（D5 已由 W3 满足，不再做）  
 
+### W5
+
+- [x] `test-l1.sh` 默认 packages / 可选 crate 注释  
+- [x] `SOLO_DISCIPLINE` 波次末 L2/L3 轻量勾选  
+- [x] 本文件状态 → **Done**  
+- [x] `TEST_PYRAMID_INVENTORY` 资产表：`write_smoke` / `guardrails_smoke` / `workspace-write`  
+- [x] `e2e-gates.md` Non-RAG smoke 列表含 `write_smoke` + `guardrails_smoke`  
 
 ### 收尾
 
-- [ ] 本文件状态 → **Done**  
-- [ ] 更新 `TEST_PYRAMID_INVENTORY` 资产表一行 Write  
+- [x] 本文件状态 → **Done**  
+- [x] 更新 `TEST_PYRAMID_INVENTORY` 资产表一行 Write  
 
 ---
 
@@ -415,4 +422,8 @@ cargo test -p avrag-guardrails --lib
 | 日期 | 说明 |
 |------|------|
 | 2026-07-10 | 初稿：基于 E2E 覆盖审查的分波修复编排 |
-| 2026-07-10 | **W1 Done**：mock Write routes + `smoke::write_smoke`；LLM tool-only finalize 修复；product_e2e `WorkspaceResponse.workspace` 对齐 |
+| 2026-07-10 | **W0** `3ccdd05`：docs 层映射 + registry 与金字塔对齐 |
+| 2026-07-10 | **W1** `0ff0284`：mock Write routes + `smoke::write_smoke`；LLM tool-only finalize 修复；product_e2e `WorkspaceResponse.workspace` 对齐 |
+| 2026-07-10 | **W2** `8715909`：Playwright `workspace-write` journey |
+| 2026-07-10 | **W3** `6734a2f`：`smoke::guardrails_smoke` HTTP blackbox（D5）；**W4 cancelled** |
+| 2026-07-10 | **W5 Done**：入口脚本注释 / Solo 波次末清单 / inventory / e2e-gates Non-RAG 列表；计划状态 → **Done** |
