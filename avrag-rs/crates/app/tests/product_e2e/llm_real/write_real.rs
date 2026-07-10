@@ -6,7 +6,7 @@ use crate::product_e2e::{
     ChatStreamParams, TestContext,
     assertions::assert_answer_substantive,
     llm_real::{
-        REAL_LLM_STREAM_DEADLINE, REAL_LLM_STREAM_MAX_EVENTS, collect_observability_from_events,
+        REAL_LLM_STREAM_MAX_EVENTS, WRITE_REAL_STREAM_DEADLINE, collect_observability_from_events,
         load_env_from_repo_dotenv, merge_llm_real_extra, parse_chat_response_from_stream_events,
         require_nightly_suite, require_real_llm_config,
     },
@@ -20,12 +20,12 @@ async fn real_llm_write_mode_produces_article_with_fingerprint() {
     require_real_llm_config();
 
     let ctx = TestContext::new_with_real_llm().await;
-    let notebook = ctx.create_workspace("write-real").await.expect("notebook");
+    let workspace = ctx.create_workspace("write-real").await.expect("workspace");
 
     let params = ChatStreamParams {
         query: "用三百字左右介绍量子纠缠的基本概念，面向普通读者。",
         agent_type: "write",
-        workspace_id: &notebook.id,
+        workspace_id: &workspace.id,
         doc_scope: &[],
         session_id: None,
         format_hint: None,
@@ -33,11 +33,13 @@ async fn real_llm_write_mode_produces_article_with_fingerprint() {
         pin_mock_chunk_ids: false,
     };
 
+    // 600s stream + matching HTTP client timeout (HTTP_TIMEOUT_REAL_LLM_SECS) —
+    // research (real Search) alone often exceeds the generic 180s chat/rag deadline.
     let events = ctx
         .chat_stream_with_params(
             params,
             REAL_LLM_STREAM_MAX_EVENTS,
-            REAL_LLM_STREAM_DEADLINE,
+            WRITE_REAL_STREAM_DEADLINE,
         )
         .await
         .expect("write stream");

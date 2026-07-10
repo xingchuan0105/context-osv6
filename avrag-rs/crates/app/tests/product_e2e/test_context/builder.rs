@@ -31,7 +31,8 @@ pub(crate) struct PersistentSmokeInfra {
 /// HTTP client timeout for mock RAG paths (ingestion + retrieval + synthesis).
 pub(crate) const HTTP_TIMEOUT_RAG_SECS: u64 = 120;
 /// HTTP client timeout when `use_real_llm` is enabled (nightly / llm_real).
-pub(crate) const HTTP_TIMEOUT_REAL_LLM_SECS: u64 = 180;
+/// Real-LLM HTTP client timeout (must cover Write multi-phase + research; UI journey uses ~600s).
+pub(crate) const HTTP_TIMEOUT_REAL_LLM_SECS: u64 = 600;
 /// HTTP client timeout for non-RAG smoke paths.
 pub(crate) const HTTP_TIMEOUT_DEFAULT_SECS: u64 = 60;
 

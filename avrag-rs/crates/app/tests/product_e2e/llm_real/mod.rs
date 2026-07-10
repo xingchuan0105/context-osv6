@@ -138,8 +138,11 @@ pub const REAL_LLM_MAX_ATTEMPTS: usize = 2;
 /// Extra attempts for multi-tool RAG probes where the model may answer in one retrieval pass.
 pub const REAL_LLM_MULTITOOL_MAX_ATTEMPTS: usize = 3;
 
-/// Stream deadline for real-LLM runs (thinking models can be slow).
+/// Stream deadline for real-LLM chat/rag/search (thinking models can be slow).
 pub const REAL_LLM_STREAM_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Write multi-phase (research + skeleton + draft + refine) + real Search — align with UI journey.
+pub const WRITE_REAL_STREAM_DEADLINE: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// Safety cap on SSE events (thinking models emit many small deltas).
 pub const REAL_LLM_STREAM_MAX_EVENTS: usize = 4096;
