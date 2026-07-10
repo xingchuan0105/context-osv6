@@ -477,3 +477,4 @@ docs: close full-test diagnosis after F0–F6 (F6)
 | 日期 | 说明 |
 |------|------|
 | 2026-07-10 | 初稿：基于全量门禁诊断，编排 F0–F6 修复计划 |
+| 2026-07-10 | 实施完成：F0 contracts+smoke build；F1 mock post-tool 非空；F2 RAG 指纹/synthesis 检测；F3 multitool round 计数+memory workspace scope；F4 quota phase+enforcement；F5 L3 reuse；F6 全 smoke + failure + 原 14 失败项复验绿。另 AGENTS/CLAUDE T7 workspace 唯一真相 |
