@@ -127,7 +127,7 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
         id: resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : current?.id ?? fallbackAssistantId,
         role: "assistant",
         mode: normalizeMessageMode(payload.agent_type) ?? current?.mode ?? deps.effectiveChatModeRef.current,
-        content: answer || current?.content || "",
+        content: getAnswerText(answer || current?.content || "", payload.answer_blocks ?? current?.answerBlocks ?? []),
         answerBlocks:
           payload.answer_blocks && payload.answer_blocks.length > 0
             ? payload.answer_blocks

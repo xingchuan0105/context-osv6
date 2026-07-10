@@ -135,20 +135,24 @@
   --space-9: 4rem;
   --space-10: 6rem;
 
-  /* === Typography === */
-  --font-size-overline: 0.75rem;
-  --font-size-meta: 0.8125rem;
-  --font-size-control: 0.875rem;
-  --font-size-caption: 0.75rem;
-  --font-size-caption-strong: 0.8125rem;
-  --font-size-label: 0.8125rem;
-  --font-size-body: 0.9375rem;
-  --font-size-body-strong: 1rem;
-  --font-size-section-title: 1rem;
-  --font-size-shell-title: 1.125rem;
-  --font-size-brand: 1.0625rem;
-  --font-size-title-sm: 1.25rem;
-  --font-size-title: 1.75rem;
+  /*
+   * Typography — product shell (U13 / STYLE_BASELINE §5.2)
+   * body 14 · control 13 · meta 12 · section-title 15 · shell-title 17
+   * Marketing pages may use larger local clamps; do not raise these defaults for chrome.
+   */
+  --font-size-overline: 0.6875rem;
+  --font-size-meta: 0.75rem;
+  --font-size-control: 0.8125rem;
+  --font-size-caption: 0.6875rem;
+  --font-size-caption-strong: 0.75rem;
+  --font-size-label: 0.75rem;
+  --font-size-body: 0.875rem;
+  --font-size-body-strong: 0.9375rem;
+  --font-size-section-title: 0.9375rem;
+  --font-size-shell-title: 1.0625rem;
+  --font-size-brand: 1rem;
+  --font-size-title-sm: 1.125rem;
+  --font-size-title: 1.5rem;
 
   --line-height-overline: 1.4;
   --line-height-meta: 1.5;

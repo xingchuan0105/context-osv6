@@ -60,7 +60,7 @@ describe("WorkspaceChatPane composer", () => {
     });
   });
 
-  it("captures sent prompts when the user sends a message", async () => {
+  it("sends composer text without capturing into the removed prompt library", async () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
 
     render(
@@ -78,9 +78,7 @@ describe("WorkspaceChatPane composer", () => {
     await waitFor(() => {
       expect(mocks.streamWorkspaceChatMock).toHaveBeenCalled();
     });
-    expect(queryLibraryStore.getState().workspaces["ws-capture"]?.[0]?.text).toBe(
-      "Summarize quarterly report",
-    );
+    expect(queryLibraryStore.getState().workspaces["ws-capture"]).toBeUndefined();
   });
 
   it("does not capture prompts when auth token is missing", async () => {

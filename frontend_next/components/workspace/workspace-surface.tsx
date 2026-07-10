@@ -242,7 +242,6 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     <WorkspaceHistoryPane
       activeSessionId={activeSessionId}
       onDeleteSession={(session) => void removeSession(session)}
-      onInsert={handleInsertIntoComposer}
       onNewThread={() => void startNewThread()}
       onRenameSession={(session) => {
         renameSession(session);

@@ -164,7 +164,7 @@ describe("WorkspaceChatPane streaming search flow", () => {
     });
     await user.click(composer);
     await user.keyboard("/");
-    await user.click(screen.getByRole("button", { name: /网络搜索\s*web_search/i }));
+    await user.click(screen.getByTestId("workspace-chat-mode-search"));
     expect(workspaceUiStore.getState().workspaces["ws-1"]?.chatMode).toBe("search");
     expect(workspaceUiStore.getState().workspaces["ws-1"]?.chatModePreference).toBe("manual");
 
@@ -210,6 +210,16 @@ describe("WorkspaceChatPane streaming search flow", () => {
     });
     expect(screen.getAllByText("Hello")).toHaveLength(1);
     expect(screen.getByText("Hello").closest('[data-testid="workspace-answer-bubble"]')?.getAttribute("data-mode")).toBe("search");
+
+    // Grok end-state: process strip stays as a collapsed completed summary (not hidden).
+    await waitFor(() => {
+      const progressCard = screen.getByTestId("workspace-progress-card");
+      expect(progressCard.getAttribute("data-progress-state")).toBe("completed");
+      expect(within(progressCard).getByText("网络搜索")).toBeTruthy();
+      expect(within(progressCard).queryByText("网络搜索中")).toBeNull();
+      // Steps stay collapsed after finalize.
+      expect(within(progressCard).queryByText("正在搜索网页")).toBeNull();
+    });
 
     expect(onSessionChange).toHaveBeenCalledWith("sess-new");
     await waitFor(() => {

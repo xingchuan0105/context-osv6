@@ -17,12 +17,49 @@ export function normalizeMessageMode(mode: string | null | undefined): Workspace
   return null;
 }
 
+/** Hide tool-payload dumps that leaked into assistant `content` (e.g. doc_profile JSON). */
+export function sanitizeAssistantDisplayContent(content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return content;
+  }
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
+    return content;
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const looksLikeDocProfile = parsed.every(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          ("doc_id" in item || "name" in item || "chunk_id" in item),
+      );
+      if (looksLikeDocProfile) {
+        return "";
+      }
+    }
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const keys = Object.keys(parsed as object);
+      if (keys.some((k) => k === "doc_id" || k === "tool" || k === "chunks")) {
+        return "";
+      }
+    }
+  } catch {
+    return content;
+  }
+  return content;
+}
+
 export function mapTranscriptMessage(message: WorkspaceChatMessage): UiChatMessage {
+  const rawContent = message.content ?? "";
+  const content =
+    message.role === "assistant" ? sanitizeAssistantDisplayContent(rawContent) : rawContent;
   return {
     id: String(message.id),
     role: message.role === "assistant" ? "assistant" : "user",
     mode: message.role === "assistant" ? normalizeMessageMode(message.agent_id) : null,
-    content: message.content,
+    content,
     answerBlocks: message.answer_blocks ?? [],
     citations: message.citations ?? [],
     degradeTrace: [],
@@ -43,12 +80,14 @@ export function getAnswerBlockText(blocks: AnswerBlock[]) {
 
 export function getAnswerText(content: string, blocks: AnswerBlock[]) {
   const blockText = getAnswerBlockText(blocks);
-  return content.trim().length > 0 ? content : blockText;
+  const safeContent = sanitizeAssistantDisplayContent(content);
+  return safeContent.trim().length > 0 ? safeContent : blockText;
 }
 
 export function getStreamingDisplayText(content: string, blocks: AnswerBlock[]) {
   const blockText = getAnswerBlockText(blocks);
-  return blockText || content;
+  const safeContent = sanitizeAssistantDisplayContent(content);
+  return blockText || safeContent;
 }
 
 export function getPrefersReducedStreamingMotion() {
@@ -115,11 +154,33 @@ export function getInitialProgressEntry(locale: "zh-CN" | "en", mode: WorkspaceC
         timestamp: null,
       };
     }
+    if (mode === "search") {
+      return {
+        id: "progress-initial",
+        phase: "planning",
+        title: "正在生成网络搜索计划",
+        detail: "系统正在拆解问题并准备搜索网页来源。",
+        counts: {},
+        sourcesPreview: [],
+        timestamp: null,
+      };
+    }
+    if (mode === "write") {
+      return {
+        id: "progress-initial",
+        phase: "planning",
+        title: "正在准备写作流程",
+        detail: "系统正在组织结构与素材。",
+        counts: {},
+        sourcesPreview: [],
+        timestamp: null,
+      };
+    }
     return {
       id: "progress-initial",
-      phase: "planning",
-      title: "正在生成网络搜索计划",
-      detail: "系统正在拆解问题并准备搜索网页来源。",
+      phase: "thinking",
+      title: "正在思考",
+      detail: null,
       counts: {},
       sourcesPreview: [],
       timestamp: null,
@@ -136,11 +197,33 @@ export function getInitialProgressEntry(locale: "zh-CN" | "en", mode: WorkspaceC
       timestamp: null,
     };
   }
+  if (mode === "search") {
+    return {
+      id: "progress-initial",
+      phase: "planning",
+      title: "Preparing a web research plan",
+      detail: "Breaking down the request before searching the web.",
+      counts: {},
+      sourcesPreview: [],
+      timestamp: null,
+    };
+  }
+  if (mode === "write") {
+    return {
+      id: "progress-initial",
+      phase: "planning",
+      title: "Preparing the writing flow",
+      detail: "Organizing structure and source material.",
+      counts: {},
+      sourcesPreview: [],
+      timestamp: null,
+    };
+  }
   return {
     id: "progress-initial",
-    phase: "planning",
-    title: "Preparing a web research plan",
-    detail: "Breaking down the request before searching the web.",
+    phase: "thinking",
+    title: "Thinking",
+    detail: null,
     counts: {},
     sourcesPreview: [],
     timestamp: null,

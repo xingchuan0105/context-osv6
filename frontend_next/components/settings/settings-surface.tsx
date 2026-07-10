@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { AppPageFrame } from "../page-frame";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
@@ -16,6 +18,11 @@ export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
       subtitle={formatUiMessage(locale, "settings.pageSubtitle")}
     >
       <div className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
+          <Link className="app-link app-link-muted" href="/dashboard" data-testid="settings-back-dashboard">
+            {formatUiMessage(locale, "dashboardBackToWorkspaces")}
+          </Link>
+        </div>
         <SettingsTabBar activeTab={activeTab} />
         <SettingsPanel activeTab={activeTab} />
       </div>

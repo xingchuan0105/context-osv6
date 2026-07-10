@@ -61,7 +61,7 @@ export function handleTokenEvent(
   event: Extract<ChatEvent, { event: "token" }>,
 ) {
   const activeProgressMode = deps.progressTracker.modeRef.current;
-
+  // Chat/write: drop thinking hint on first token. Research: keep process card alongside answer.
   if (!activeProgressMode || !isResearchMode(activeProgressMode)) {
     deps.progressTracker.hide();
   }
@@ -89,7 +89,8 @@ export function handleDoneEvent(
   deps: StreamEventHandlerDeps,
   event: Extract<ChatEvent, { event: "done" }>,
 ) {
-  deps.progressTracker.hide();
+  // Grok end-state: keep a collapsible process summary with frozen elapsed (no-op if already hidden).
+  deps.progressTracker.finalize();
   deps.handleDoneWithTypewriter(event as PendingDoneEvent);
 }
 

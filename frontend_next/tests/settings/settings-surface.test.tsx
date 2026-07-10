@@ -301,8 +301,11 @@ describe("SettingsSurface", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText("Pro")).toHaveLength(2);
+      // Current plan summary shows Pro; plan grid moved to /upgrade (U5).
+      expect(screen.getAllByText("Pro").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Active")).toBeTruthy();
+      expect(screen.getAllByText(/更换方案|Change plan/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByTestId("settings-back-dashboard")).toBeTruthy();
     });
   });
 

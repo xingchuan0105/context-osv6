@@ -129,22 +129,26 @@ export function useChatStream(
       typewriter.resetStreamingTypewriter();
       onSessionActivityRef.current?.();
 
-      messageHistory.setMessages((current) => [
-        ...current,
-        {
-          id: `user-${Date.now()}`,
-          role: "user",
-          mode: null,
-          content: trimmedQuery,
-          answerBlocks: [],
-          citations: [],
-          degradeTrace: [],
-          guarded: false,
-          messageId: null,
-          sessionId: requestSessionId,
-          toolResults: [],
-        },
-      ]);
+      // U9: new thread (no session yet) must not keep previous session transcript.
+      messageHistory.setMessages((current) => {
+        const base = requestSessionId == null ? [] : current;
+        return [
+          ...base,
+          {
+            id: `user-${Date.now()}`,
+            role: "user",
+            mode: null,
+            content: trimmedQuery,
+            answerBlocks: [],
+            citations: [],
+            degradeTrace: [],
+            guarded: false,
+            messageId: null,
+            sessionId: requestSessionId,
+            toolResults: [],
+          },
+        ];
+      });
       progressTracker.show(effectiveChatModeRef.current);
 
       const controller = new AbortController();

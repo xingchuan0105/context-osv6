@@ -141,9 +141,21 @@ export const dashboardMessages = {
     zh: "设置",
     en: "Settings",
   },
+  dashboardAccountLink: {
+    zh: "账户",
+    en: "Account",
+  },
+  dashboardAppearanceLink: {
+    zh: "外观",
+    en: "Appearance",
+  },
   dashboardProfileLink: {
     zh: "账号信息",
     en: "Account",
+  },
+  dashboardBackToWorkspaces: {
+    zh: "← 工作区",
+    en: "← Workspaces",
   },
   dashboardSearchEmptyIdle: {
     zh: "输入关键词搜索工作区",

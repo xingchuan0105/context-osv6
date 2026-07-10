@@ -31,8 +31,14 @@ function getToolRenderHint(toolName: string): string {
   return TOOL_RENDER_HINTS[toolName] ?? "json";
 }
 
+function isCompactToolByDefault(toolName: string): boolean {
+  const hint = getToolRenderHint(toolName);
+  // JSON dumps (doc_profile, etc.) stay collapsed so they never look like the answer.
+  return hint === "json" || toolName.includes("profile") || toolName.includes("doc_");
+}
+
 export function ToolResultCard({ locale, result }: ToolResultCardProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(() => !isCompactToolByDefault(result.tool));
   const data = (result.data ?? {}) as Record<string, unknown>;
   const isError = result.status === ToolStatus.Error;
   const isOk = result.status === ToolStatus.Ok;
@@ -246,43 +252,23 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
                 {results.map((r: SearchResultRow, i: number) => {
                   const safeUrl = toSafeHttpUrl(typeof r.url === "string" ? r.url : null);
                   return (
-                  <div
-                    key={i}
-                    style={{
-                      padding: "0.4rem 0.5rem",
-                      borderRadius: "6px",
-                      background: "hsl(var(--muted) / 0.15)",
-                    }}
-                  >
+                  <div key={i} className={styles.toolResultSearchRow}>
                     {safeUrl ? (
                       <a
+                        className={styles.toolResultSearchLink}
                         href={safeUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{
-                          fontWeight: 600,
-                          fontSize: "0.85rem",
-                          color: "hsl(217 91% 60%)",
-                          textDecoration: "none",
-                        }}
                       >
                         {typeof r.title === "string" ? r.title : safeUrl}
                       </a>
                     ) : (
-                      <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                      <div className={styles.toolResultSearchTitle}>
                         {typeof r.title === "string" ? r.title : ""}
                       </div>
                     )}
                     {typeof r.snippet === "string" && r.snippet ? (
-                      <div
-                        style={{
-                          fontSize: "0.78rem",
-                          color: "hsl(var(--muted-foreground))",
-                          marginTop: "0.15rem",
-                        }}
-                      >
-                        {r.snippet}
-                      </div>
+                      <div className={styles.toolResultSearchSnippet}>{r.snippet}</div>
                     ) : null}
                   </div>
                   );
@@ -340,7 +326,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {toolLabel}
           <span className={[styles.toolResultStatus, statusClass].join(" ")}>{statusLabel}</span>
         </span>
-        <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
+        <span className={styles.toolResultChevron} aria-hidden="true">
           {expanded ? "▾" : "▸"}
         </span>
       </button>

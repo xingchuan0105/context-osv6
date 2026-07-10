@@ -31,7 +31,6 @@ vi.mock("../../lib/workspace/client", () => ({
 }));
 
 import { WorkspaceHistoryPane } from "../../components/workspace/workspace-history-pane";
-import { queryLibraryStore } from "../../lib/workspace/query-library/store";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createWorkspaceHistoryPaneMocks());
 
@@ -61,7 +60,6 @@ const sessions = [
 beforeEach(() => {
   document.body.innerHTML = "";
   window.localStorage.clear();
-  queryLibraryStore.setState({ workspaces: {} });
   mocks.listWorkspaceSessionMessagesMock.mockReset();
   mocks.listWorkspaceSessionMessagesMock.mockImplementation(async (_token: string, sessionId: string) => ({
     messages:
@@ -101,7 +99,6 @@ describe("WorkspaceHistoryPane", () => {
       <WorkspaceHistoryPane
         activeSessionId="sess-1"
         onDeleteSession={vi.fn()}
-        onInsert={vi.fn()}
         onNewThread={vi.fn()}
         onRenameSession={vi.fn()}
         onSelectSession={vi.fn()}
@@ -111,7 +108,7 @@ describe("WorkspaceHistoryPane", () => {
       />,
     );
 
-    expect(screen.getByTestId("query-library-panel")).toBeTruthy();
+    expect(screen.queryByTestId("query-library-panel")).toBeNull();
   });
 
   it("keeps session threads and query library visible together in the history rail", () => {
@@ -125,15 +122,10 @@ describe("WorkspaceHistoryPane", () => {
       updated_at: `2026-04-${String(index + 2).padStart(2, "0")}T00:00:00Z`,
     }));
 
-    for (let index = 0; index < 6; index += 1) {
-      queryLibraryStore.getState().capture("ws-layout", `Saved prompt ${index + 1}`);
-    }
-
     render(
       <WorkspaceHistoryPane
         activeSessionId="sess-1"
         onDeleteSession={vi.fn()}
-        onInsert={vi.fn(() => true)}
         onNewThread={vi.fn()}
         onRenameSession={vi.fn()}
         onSelectSession={vi.fn()}
@@ -145,9 +137,7 @@ describe("WorkspaceHistoryPane", () => {
 
     expect(screen.getByText("Thread 1")).toBeTruthy();
     expect(screen.getByText("Thread 8")).toBeTruthy();
-    expect(screen.getByTestId("query-library-panel")).toBeTruthy();
-    expect(screen.getByText("Saved prompt 1")).toBeTruthy();
-    expect(screen.getByText("Saved prompt 6")).toBeTruthy();
+    expect(screen.queryByTestId("query-library-panel")).toBeNull();
   });
 
   it("opens and closes the session kebab menu on outside click and Escape, then auto-closes after actions", async () => {
@@ -160,7 +150,6 @@ describe("WorkspaceHistoryPane", () => {
       <WorkspaceHistoryPane
         activeSessionId="sess-1"
         onDeleteSession={onDeleteSession}
-        onInsert={vi.fn()}
         onNewThread={vi.fn()}
         onRenameSession={onRenameSession}
         onSelectSession={vi.fn()}
@@ -220,7 +209,6 @@ describe("WorkspaceHistoryPane", () => {
       <WorkspaceHistoryPane
         activeSessionId="sess-1"
         onDeleteSession={vi.fn()}
-        onInsert={vi.fn()}
         onNewThread={vi.fn()}
         onRenameSession={vi.fn()}
         onSelectSession={onSelectSession}

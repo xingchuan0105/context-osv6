@@ -70,8 +70,16 @@ export const settingsMessages = {
     en: "Current plan",
   },
   "settings.billing.managePlanAction": {
-    zh: "管理计划",
-    en: "Manage plan",
+    zh: "管理订阅",
+    en: "Manage subscription",
+  },
+  "settings.billing.changePlanAction": {
+    zh: "更换方案",
+    en: "Change plan",
+  },
+  "settings.billing.portalUnavailable": {
+    zh: "自助账单门户暂未开通。请通过「更换方案」升级，或联系支持处理订阅。",
+    en: "Self-service billing portal is not available. Use Change plan to upgrade, or contact support.",
   },
   "settings.billing.portalAction": {
     zh: "打开账单门户",

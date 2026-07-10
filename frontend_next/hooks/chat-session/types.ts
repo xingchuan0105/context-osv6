@@ -31,6 +31,8 @@ export type ProgressEntry = {
   counts: Record<string, number>;
   sourcesPreview: ProgressSourcePreview[];
   timestamp: string | null;
+  /** Client wall-clock when this step was added (for Grok-style elapsed). */
+  startedAtMs?: number;
 };
 
 export type UseChatSessionOptions = {
@@ -51,6 +53,10 @@ export type UseChatSessionResult = {
     activities: ProgressEntry[];
     mode: WorkspaceChatMode | null;
     collapsed: boolean;
+    /** Stream start time (ms) for live elapsed in the process header. */
+    startedAtMs: number | null;
+    /** When set, process is finalized (timer frozen, collapsed summary). */
+    endedAtMs: number | null;
   };
   error: string | null;
   send: (query: string) => void;

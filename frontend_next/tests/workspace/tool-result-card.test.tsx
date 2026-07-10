@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ToolResultCard, ToolResultsPanel } from "../../components/workspace/chat-message-list";
 import { ToolStatus, type ToolResult } from "../../lib/workspace/stream";
@@ -150,7 +151,8 @@ describe("ToolResultCard — weather_query", () => {
 });
 
 describe("ToolResultCard — generic fallback", () => {
-  it("renders unknown tool data as JSON", () => {
+  it("renders unknown tool data as JSON when expanded", async () => {
+    const user = userEvent.setup();
     render(
       <ToolResultCard
         locale="en"
@@ -158,6 +160,9 @@ describe("ToolResultCard — generic fallback", () => {
       />,
     );
     expect(screen.getByText("custom_tool")).toBeTruthy();
+    // Generic tools start collapsed so JSON dumps stay out of the answer flow (U10).
+    expect(screen.queryByText(/"foo"/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: /custom_tool/i }));
     expect(screen.getByText(/"foo"/)).toBeTruthy();
     expect(screen.getByText(/"bar"/)).toBeTruthy();
   });

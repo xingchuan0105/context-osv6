@@ -18,14 +18,13 @@ import {
   type SessionSearchDocument,
   type SessionSearchResult,
 } from "../../lib/workspace/session-title-text";
-import { WorkspaceQueryLibraryPanel } from "./workspace-query-library-panel";
+
 import styles from "./workspace-shell.module.css";
 
 type WorkspaceHistoryPaneProps = {
   sessions: WorkspaceSession[];
   activeSessionId: string | null;
   workspaceId: string;
-  onInsert: (text: string) => boolean;
   onNewThread: () => void;
   onSelectSession: (sessionId: string) => void;
   onTogglePinSession: (session: WorkspaceSession) => void;
@@ -38,7 +37,6 @@ export function WorkspaceHistoryPane({
   sessions,
   activeSessionId,
   workspaceId,
-  onInsert,
   onNewThread,
   onSelectSession,
   onTogglePinSession,
@@ -522,8 +520,6 @@ export function WorkspaceHistoryPane({
           <p className={styles.emptyState}>{formatUiMessage(locale, "workspaceNoSessionsMatch")}</p>
         )}
       </div>
-
-      <WorkspaceQueryLibraryPanel workspaceId={workspaceId} onInsert={onInsert} />
 
       {searchOpen ? (
         <div className="dashboard-modal-backdrop" onClick={closeSearch} role="presentation">

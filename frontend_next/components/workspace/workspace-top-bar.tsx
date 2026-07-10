@@ -245,7 +245,7 @@ export function WorkspaceTopBar({
           <button
             aria-expanded={gearMenuOpen}
             aria-haspopup="dialog"
-            aria-label={formatUiMessage(locale, "dashboardSettingsLink")}
+            aria-label={formatUiMessage(locale, "dashboardAppearanceLink")}
             className={styles.topBarActionButton}
             type="button"
             onClick={() => {
@@ -254,9 +254,10 @@ export function WorkspaceTopBar({
             }}
           >
             <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
-              <path d="M4 21V14M4 10V3M12 21V8M12 4V3M20 21v-9M20 8V3M1 14h6M9 8h6M17 18h6" />
+              <path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              <circle cx="12" cy="12" r="4" />
             </svg>
-            <span>{formatUiMessage(locale, "dashboardSettingsLink")}</span>
+            <span>{formatUiMessage(locale, "dashboardAppearanceLink")}</span>
           </button>
 
           {gearMenuOpen ? (

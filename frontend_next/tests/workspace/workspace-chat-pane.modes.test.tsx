@@ -126,4 +126,76 @@ describe("WorkspaceChatPane modes", () => {
     expect((composer as HTMLTextAreaElement).value).toBe("Line 1\nLine 2");
     expect(mocks.streamWorkspaceChatMock).not.toHaveBeenCalled();
   });
+
+  it("opens the mode menu on hover (U14) and keeps it open across the bridge delay", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+    const matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("hover: hover"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    vi.stubGlobal("matchMedia", matchMedia);
+
+    render(
+      <WorkspaceChatPane
+        workspaceId="ws-hover-mode"
+        sessionId={null}
+        selectedSourceIds={[]}
+      />,
+    );
+
+    const anchor = screen.getByTestId("workspace-chat-mode-anchor");
+    expect(screen.queryByTestId("workspace-chat-mode-menu")).toBeNull();
+
+    fireEvent.mouseEnter(anchor);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-mode-menu")).toBeTruthy();
+    });
+    expect(screen.getByTestId("workspace-chat-mode-rag")).toBeTruthy();
+    expect(screen.getByTestId("workspace-chat-mode-search")).toBeTruthy();
+    expect(screen.getByTestId("workspace-chat-mode-chat")).toBeTruthy();
+    expect(screen.getByTestId("workspace-chat-mode-write")).toBeTruthy();
+    expect(screen.getByText("快速即时对话")).toBeTruthy();
+
+    fireEvent.mouseLeave(anchor);
+    // Still open during close delay (U14 bridge).
+    expect(screen.getByTestId("workspace-chat-mode-menu")).toBeTruthy();
+
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("workspace-chat-mode-menu")).toBeNull();
+      },
+      { timeout: 500 },
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("toggles the mode menu on click and applies selection immediately", async () => {
+    const user = userEvent.setup();
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+
+    render(
+      <WorkspaceChatPane
+        workspaceId="ws-click-mode"
+        sessionId={null}
+        selectedSourceIds={[]}
+      />,
+    );
+
+    const modeButton = screen.getByTestId("workspace-chat-mode-button");
+    await user.click(modeButton);
+    expect(screen.getByTestId("workspace-chat-mode-menu")).toBeTruthy();
+
+    await user.click(screen.getByTestId("workspace-chat-mode-search"));
+    expect(screen.queryByTestId("workspace-chat-mode-menu")).toBeNull();
+    expect(workspaceUiStore.getState().workspaces["ws-click-mode"]?.chatMode).toBe("search");
+    expect(within(modeButton).getByText("网络搜索")).toBeTruthy();
+  });
 });

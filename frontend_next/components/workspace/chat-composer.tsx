@@ -1,14 +1,26 @@
 "use client";
 
-import { type KeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { type WorkspaceChatMode } from "../../lib/workspace/ui-store";
+import { IconChevronUp, IconSend, IconStop } from "./chat-icons";
 import styles from "./workspace-chat.module.css";
 
 const CHAT_MODE_ORDER: WorkspaceChatMode[] = ["rag", "search", "chat", "write"];
 const MIN_COMPOSER_TEXTAREA_HEIGHT = 52;
 const AUTO_COMPOSER_TEXTAREA_MAX_HEIGHT = 192;
 const MANUAL_COMPOSER_TEXTAREA_MAX_HEIGHT = 360;
+/** U14: brief open delay avoids flicker when the pointer grazes the trigger. */
+const MODE_MENU_OPEN_DELAY_MS = 60;
+/** U14: leave delay bridges the gap between trigger and floating menu. */
+const MODE_MENU_CLOSE_DELAY_MS = 200;
 
 function getModeLabel(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
   switch (mode) {
@@ -38,8 +50,30 @@ function getModeCode(mode: WorkspaceChatMode) {
   }
 }
 
+function getModeHint(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
+  switch (mode) {
+    case "rag":
+      return formatUiMessage(locale, "workspaceChatModeHintRag");
+    case "search":
+      return formatUiMessage(locale, "workspaceChatModeHintSearch");
+    case "write":
+      return formatUiMessage(locale, "workspaceChatModeHintWrite");
+    case "chat":
+    default:
+      return formatUiMessage(locale, "workspaceChatModeHintChat");
+  }
+}
+
 function getModeIndex(mode: WorkspaceChatMode) {
   return Math.max(CHAT_MODE_ORDER.indexOf(mode), 0);
+}
+
+function canUseHoverOpen() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(hover: hover)").matches
+  );
 }
 
 type ChatComposerProps = {
@@ -74,6 +108,8 @@ export function ChatComposer({
   const composerCardRef = useRef<HTMLDivElement | null>(null);
   const composerResizeCleanupRef = useRef<(() => void) | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
+  const modeMenuOpenTimerRef = useRef<number | null>(null);
+  const modeMenuCloseTimerRef = useRef<number | null>(null);
 
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [modeMenuActiveIndex, setModeMenuActiveIndex] = useState(0);
@@ -81,6 +117,64 @@ export function ChatComposer({
   const [isComposerResizing, setIsComposerResizing] = useState(false);
 
   const activeModeLabel = getModeLabel(locale, effectiveChatMode);
+
+  const clearModeMenuTimers = useCallback(() => {
+    if (modeMenuOpenTimerRef.current != null) {
+      window.clearTimeout(modeMenuOpenTimerRef.current);
+      modeMenuOpenTimerRef.current = null;
+    }
+    if (modeMenuCloseTimerRef.current != null) {
+      window.clearTimeout(modeMenuCloseTimerRef.current);
+      modeMenuCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const openModeMenu = useCallback(() => {
+    setModeMenuActiveIndex(getModeIndex(effectiveChatMode));
+    setShowModeMenu(true);
+  }, [effectiveChatMode]);
+
+  const closeModeMenu = useCallback(() => {
+    clearModeMenuTimers();
+    setShowModeMenu(false);
+  }, [clearModeMenuTimers]);
+
+  const scheduleOpenModeMenu = useCallback(() => {
+    if (!canUseHoverOpen()) {
+      return;
+    }
+    if (modeMenuCloseTimerRef.current != null) {
+      window.clearTimeout(modeMenuCloseTimerRef.current);
+      modeMenuCloseTimerRef.current = null;
+    }
+    if (showModeMenu) {
+      return;
+    }
+    if (modeMenuOpenTimerRef.current != null) {
+      return;
+    }
+    modeMenuOpenTimerRef.current = window.setTimeout(() => {
+      modeMenuOpenTimerRef.current = null;
+      openModeMenu();
+    }, MODE_MENU_OPEN_DELAY_MS);
+  }, [openModeMenu, showModeMenu]);
+
+  const scheduleCloseModeMenu = useCallback(() => {
+    if (!canUseHoverOpen()) {
+      return;
+    }
+    if (modeMenuOpenTimerRef.current != null) {
+      window.clearTimeout(modeMenuOpenTimerRef.current);
+      modeMenuOpenTimerRef.current = null;
+    }
+    if (modeMenuCloseTimerRef.current != null) {
+      return;
+    }
+    modeMenuCloseTimerRef.current = window.setTimeout(() => {
+      modeMenuCloseTimerRef.current = null;
+      setShowModeMenu(false);
+    }, MODE_MENU_CLOSE_DELAY_MS);
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -101,7 +195,7 @@ export function ChatComposer({
     textarea.style.height = `${nextTextareaHeight}px`;
   }, [composerTextareaHeight, draft, textareaRef]);
 
-  // Close mode menu on outside click
+  // Close mode menu on outside click (touch / pointer)
   useEffect(() => {
     if (!showModeMenu) {
       return;
@@ -109,7 +203,7 @@ export function ChatComposer({
 
     function handlePointerDown(event: MouseEvent) {
       if (!modeMenuRef.current?.contains(event.target as Node)) {
-        setShowModeMenu(false);
+        closeModeMenu();
       }
     }
 
@@ -118,14 +212,15 @@ export function ChatComposer({
     return () => {
       window.removeEventListener("mousedown", handlePointerDown);
     };
-  }, [showModeMenu]);
+  }, [showModeMenu, closeModeMenu]);
 
-  // Cleanup resize on unmount
+  // Cleanup timers + resize on unmount
   useEffect(() => {
     return () => {
+      clearModeMenuTimers();
       composerResizeCleanupRef.current?.();
     };
-  }, []);
+  }, [clearModeMenuTimers]);
 
   // Report height changes to parent for shell clearance
   useEffect(() => {
@@ -161,19 +256,14 @@ export function ChatComposer({
     };
   }, [onHeightChange]);
 
-  const openModeMenu = useCallback(() => {
-    setModeMenuActiveIndex(getModeIndex(effectiveChatMode));
-    setShowModeMenu(true);
-  }, [effectiveChatMode]);
-
   const applyModeSelection = useCallback(
     (mode: WorkspaceChatMode) => {
       onModeChange(mode);
       setModeMenuActiveIndex(getModeIndex(mode));
-      setShowModeMenu(false);
+      closeModeMenu();
       textareaRef.current?.focus();
     },
-    [onModeChange, textareaRef],
+    [closeModeMenu, onModeChange, textareaRef],
   );
 
   function handleComposerResizeStart(event: ReactMouseEvent<HTMLButtonElement>) {
@@ -228,11 +318,44 @@ export function ChatComposer({
     window.addEventListener("mouseup", handleMouseUp);
   }
 
+  function handleModeTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!showModeMenu) {
+        openModeMenu();
+      }
+      setModeMenuActiveIndex((current) => {
+        if (!showModeMenu) {
+          return getModeIndex(effectiveChatMode);
+        }
+        if (event.key === "ArrowDown") {
+          return (current + 1) % CHAT_MODE_ORDER.length;
+        }
+        return (current - 1 + CHAT_MODE_ORDER.length) % CHAT_MODE_ORDER.length;
+      });
+      return;
+    }
+
+    if (event.key === "Escape" && showModeMenu) {
+      event.preventDefault();
+      closeModeMenu();
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      // Keep native button activation for open/toggle via click handler.
+      if (showModeMenu && event.key === "Enter") {
+        event.preventDefault();
+        applyModeSelection(CHAT_MODE_ORDER[modeMenuActiveIndex] ?? effectiveChatMode);
+      }
+    }
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (showModeMenu) {
       if (event.key === "Escape") {
         event.preventDefault();
-        setShowModeMenu(false);
+        closeModeMenu();
         return;
       }
 
@@ -297,54 +420,6 @@ export function ChatComposer({
         <label className={styles.srOnly} htmlFor={`workspace-chat-composer-${workspaceId}`}>
           {formatUiMessage(locale, "workspaceChatComposerLabel")}
         </label>
-        <div className={styles.tagRow} ref={modeMenuRef}>
-          <button
-            aria-expanded={showModeMenu}
-            aria-label={formatUiMessage(locale, "workspaceChatModeLabel")}
-            className={`${styles.modeTag}${showModeMenu ? ` ${styles.modeTagOpen}` : ""}`}
-            data-testid="workspace-chat-mode-button"
-            onClick={() => {
-              if (showModeMenu) {
-                setShowModeMenu(false);
-                return;
-              }
-              openModeMenu();
-            }}
-            type="button"
-          >
-            <span>{activeModeLabel}</span>
-            <svg aria-hidden="true" className={styles.modeTagChevron} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="m7 14 5-5 5 5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-            </svg>
-          </button>
-
-          {showModeMenu ? (
-            <div className={styles.modeMenu}>
-              {CHAT_MODE_ORDER.map((mode, index) => (
-                <button
-                  className={`${styles.modeMenuItem}${index === modeMenuActiveIndex ? ` ${styles.modeMenuItemActive}` : ""}`}
-                  data-testid={`workspace-chat-mode-${mode}`}
-                  key={mode}
-                  onClick={() => applyModeSelection(mode)}
-                  type="button"
-                >
-                  <span className={styles.modeMenuItemLabel}>{getModeLabel(locale, mode)}</span>
-                  <span className={styles.modeMenuItemCode}>{getModeCode(mode)}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {effectiveChatMode === "write" ? (
-            <p
-              className={styles.writeUsageHint}
-              data-testid="workspace-chat-write-usage-hint"
-              role="note"
-            >
-              {formatUiMessage(locale, "workspaceChatModeWriteUsageHint")}
-            </p>
-          ) : null}
-        </div>
 
         <textarea
           className={styles.textarea}
@@ -356,7 +431,7 @@ export function ChatComposer({
             onDraftChange(nextDraft);
 
             if (showModeMenu && nextDraft.trim().length > 0) {
-              setShowModeMenu(false);
+              closeModeMenu();
             }
           }}
           onKeyDown={handleKeyDown}
@@ -368,7 +443,94 @@ export function ChatComposer({
 
         <div className={styles.composerToolbar}>
           <div className={styles.toolbarLeft}>
-            <p className={styles.hint}>{formatUiMessage(locale, "workspaceChatComposerHint")}</p>
+            <div
+              className={styles.modeMenuAnchor}
+              data-testid="workspace-chat-mode-anchor"
+              ref={modeMenuRef}
+              onMouseEnter={scheduleOpenModeMenu}
+              onMouseLeave={scheduleCloseModeMenu}
+            >
+              <button
+                aria-expanded={showModeMenu}
+                aria-haspopup="menu"
+                aria-label={formatUiMessage(locale, "workspaceChatModeLabel")}
+                className={`${styles.modeTag}${showModeMenu ? ` ${styles.modeTagOpen}` : ""}`}
+                data-testid="workspace-chat-mode-button"
+                onClick={() => {
+                  clearModeMenuTimers();
+                  if (showModeMenu) {
+                    setShowModeMenu(false);
+                    return;
+                  }
+                  openModeMenu();
+                }}
+                onKeyDown={handleModeTriggerKeyDown}
+                type="button"
+              >
+                <span>{activeModeLabel}</span>
+                <IconChevronUp className={styles.modeTagChevron} />
+              </button>
+
+              {showModeMenu ? (
+                <div
+                  className={styles.modeMenu}
+                  data-testid="workspace-chat-mode-menu"
+                  role="menu"
+                  aria-label={formatUiMessage(locale, "workspaceChatModeLabel")}
+                >
+                  {CHAT_MODE_ORDER.map((mode, index) => {
+                    const selected = mode === effectiveChatMode;
+                    const active = index === modeMenuActiveIndex;
+                    return (
+                      <button
+                        aria-checked={selected}
+                        className={[
+                          styles.modeMenuItem,
+                          selected ? styles.modeMenuItemSelected : "",
+                          active ? styles.modeMenuItemActive : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        data-testid={`workspace-chat-mode-${mode}`}
+                        key={mode}
+                        onClick={() => applyModeSelection(mode)}
+                        role="menuitemradio"
+                        type="button"
+                      >
+                        <span className={styles.modeMenuItemText}>
+                          <span className={styles.modeMenuItemLabelRow}>
+                            {selected ? (
+                              <span aria-hidden="true" className={styles.modeMenuItemCheck}>
+                                ✓
+                              </span>
+                            ) : (
+                              <span aria-hidden="true" className={styles.modeMenuItemCheckSpacer} />
+                            )}
+                            <span className={styles.modeMenuItemLabel}>
+                              {getModeLabel(locale, mode)}
+                            </span>
+                          </span>
+                          <span className={styles.modeMenuItemHint}>{getModeHint(locale, mode)}</span>
+                        </span>
+                        <span className={styles.modeMenuItemCode}>{getModeCode(mode)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+
+            {effectiveChatMode === "write" ? (
+              <p
+                className={styles.writeUsageHint}
+                data-testid="workspace-chat-write-usage-hint"
+                role="note"
+              >
+                {formatUiMessage(locale, "workspaceChatModeWriteUsageHint")}
+              </p>
+            ) : (
+              <p className={styles.hint}>{formatUiMessage(locale, "workspaceChatComposerHint")}</p>
+            )}
           </div>
 
           {isStreaming ? (
@@ -382,9 +544,7 @@ export function ChatComposer({
               }}
               type="button"
             >
-              <svg aria-hidden="true" className={styles.sendIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <rect height="10" rx="1.5" strokeWidth="2" width="10" x="7" y="7" />
-              </svg>
+              <IconStop className={styles.sendIcon} />
               <span className={styles.srOnly}>{locale === "zh-CN" ? "停止" : "Stop"}</span>
             </button>
           ) : (
@@ -395,10 +555,7 @@ export function ChatComposer({
               disabled={draft.trim().length === 0}
               type="submit"
             >
-              <svg aria-hidden="true" className={styles.sendIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M12 18V6" strokeLinecap="round" strokeWidth="2" />
-                <path d="m7.5 10.5 4.5-4.5 4.5 4.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
+              <IconSend className={styles.sendIcon} />
               <span className={styles.srOnly}>{formatUiMessage(locale, "workspaceSend")}</span>
             </button>
           )}

@@ -11,8 +11,6 @@ import type {
   WorkspaceCitationRequest,
   WorkspaceWebSourcesRequest,
 } from "../../lib/workspace/model";
-import { insertAtCursor } from "../../lib/workspace/query-library/logic";
-import { queryLibraryStore } from "../../lib/workspace/query-library/store";
 import {
   resolveWorkspaceChatMode,
   useWorkspaceUi,
@@ -135,13 +133,9 @@ export function WorkspaceChatPane({
   );
 
   const handleSend = useCallback(() => {
-    const trimmed = draft.trim();
-    if (trimmed && !chatSession.isStreaming && auth.token) {
-      queryLibraryStore.getState().capture(workspaceId, draft);
-    }
     chatSession.send(draft);
     setDraft("");
-  }, [auth.token, chatSession, draft, workspaceId]);
+  }, [chatSession, draft]);
 
   const insertIntoComposer = useCallback(
     (text: string): boolean => {
@@ -153,8 +147,8 @@ export function WorkspaceChatPane({
         const textarea = textareaRef.current;
         const start = textarea?.selectionStart ?? currentDraft.length;
         const end = textarea?.selectionEnd ?? currentDraft.length;
-        const { nextDraft, nextCursor } = insertAtCursor(currentDraft, text, start, end);
-        pendingCursorRef.current = nextCursor;
+        const nextDraft = `${currentDraft.slice(0, start)}${text}${currentDraft.slice(end)}`;
+        pendingCursorRef.current = start + text.length;
         return nextDraft;
       });
 
@@ -213,6 +207,7 @@ export function WorkspaceChatPane({
         progress={chatSession.progress}
         isStreaming={chatSession.isStreaming}
         locale={locale}
+        activeModeLabel={activeModeLabel}
         onToggleProgressCollapsed={chatSession.toggleProgressCollapsed}
         onSelectCitation={onSelectCitation ?? (() => {})}
         onOpenWebSources={onOpenWebSources ?? (() => {})}

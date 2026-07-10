@@ -93,6 +93,22 @@ export const workspaceMessages = {
     zh: "写作模式可能消耗较多额度",
     en: "Write mode may use more of your quota",
   },
+  workspaceChatModeHintChat: {
+    zh: "快速即时对话",
+    en: "Quick conversational answers",
+  },
+  workspaceChatModeHintRag: {
+    zh: "基于工作区资料回答",
+    en: "Answer from workspace sources",
+  },
+  workspaceChatModeHintSearch: {
+    zh: "检索网络后作答",
+    en: "Search the web, then answer",
+  },
+  workspaceChatModeHintWrite: {
+    zh: "长文写作与改写",
+    en: "Long-form drafting and rewrite",
+  },
   workspaceChatRegionLabel: {
     zh: "工作区对话",
     en: "Workspace chat",
@@ -236,6 +252,10 @@ export const workspaceMessages = {
   workspaceEmptyStateBody: {
     zh: "开始一个新对话，或围绕当前工作区资料提出问题。",
     en: "Start a new conversation or ask a question about this workspace.",
+  },
+  workspaceEmptyStateModeHint: {
+    zh: "当前模式：{mode} · 输入 / 可切换",
+    en: "Mode: {mode} · press / to switch",
   },
   workspaceNoSessionsMatch: {
     zh: "暂无会话。",
@@ -752,6 +772,18 @@ export const workspaceMessages = {
   "workspaceProgressThinking": {
     zh: "正在思考",
     en: "Thinking",
+  },
+  "workspaceProgressCompletedRag": {
+    zh: "知识库检索",
+    en: "Knowledge retrieval",
+  },
+  "workspaceProgressCompletedSearch": {
+    zh: "网络搜索",
+    en: "Web search",
+  },
+  "workspaceProgressCompletedThinking": {
+    zh: "思考完成",
+    en: "Thought process",
   },
   "workspaceProgressCountQueries": {
     zh: "查询",

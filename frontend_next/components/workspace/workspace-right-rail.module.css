@@ -1076,8 +1076,9 @@
 }
 
 .webSourcesCount {
-  font-size: 0.9rem;
+  font-size: var(--font-size-control);
   font-weight: 600;
+  line-height: var(--line-height-control);
   color: hsl(var(--foreground));
 }
 
@@ -1121,9 +1122,9 @@
 }
 
 .webSourceTitle {
-  font-size: 0.86rem;
+  font-size: var(--font-size-control);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: var(--line-height-control);
 }
 
 .webSourceLink {
@@ -1143,16 +1144,16 @@
 }
 
 .webSourceUrl {
-  font-size: 0.75rem;
+  font-size: var(--font-size-meta);
   color: hsl(var(--muted-foreground));
   word-break: break-all;
-  line-height: 1.35;
+  line-height: var(--line-height-meta);
 }
 
 .webSourceSnippet {
-  font-size: 0.8rem;
+  font-size: var(--font-size-meta);
   color: hsl(var(--foreground));
-  line-height: 1.45;
+  line-height: var(--line-height-meta);
   opacity: 0.82;
 }
 

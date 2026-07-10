@@ -142,7 +142,8 @@ describe("WorkspaceChatPane streaming typewriter", () => {
       await flushChatPaneMicrotasks();
 
       expect(screen.getByText("Instant token")).toBeTruthy();
-      expect(vi.getTimerCount()).toBe(0);
+      // Progress elapsed clock may keep a 1s interval while the research process card is open.
+      expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
 
       await act(async () => {
         releaseDone();
@@ -152,7 +153,7 @@ describe("WorkspaceChatPane streaming typewriter", () => {
       await flushChatPaneMicrotasks();
 
       expect(screen.getByText("Instant token")).toBeTruthy();
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
     } finally {
       restoreMatchMedia();
     }
