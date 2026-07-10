@@ -1,4 +1,11 @@
 include = [{ path = "local-machine.toml", optional = true }]
 
+# Cap rustc parallelism for shared/WSL hosts (~16G RAM). Full-core default often
+# thrashing disk + memory when target/ is multi-GB.
+# Override for this shell:  CARGO_BUILD_JOBS=8 cargo test ...
+# Or permanently on a strong machine: local-machine.toml → [build] jobs = 8
+[build]
+jobs = 2
+
 [alias]
 test-app = ["test", "-p", "app", "--message-format=short"]

@@ -117,3 +117,54 @@ These guidelines override your default tendency to be overly helpful, overly ver
 * **Do not** re-add smoke as required PR checks or expand CI theater without an explicit request.
 * **Toolchain vs product:** prefer separate local commits for major toolchain bumps.
 
+## 8\. Product App Architecture (backend `avrag-rs`) — **mandatory for new work**
+
+**Status (2026-07-10):** Phase A–C **Done** (product entry + Write/Agent lanes + wrapper slim). TN review: **APPROVE**. Residual polish only: [`docs/engineering/PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md`](docs/engineering/PRODUCT_APP_RESIDUAL_CLEANUP_PLAN_2026-07-10.md). Full history: ADR-0007, `PRODUCT_APP_*` plans under `docs/engineering/`.
+
+### 8.1 Current shape (do not regress)
+
+```text
+Transport / MCP (thin: parse, auth, status codes)
+        │
+        ▼
+Product Apps (app-bootstrap/src/product_apps/)
+  conversation()  → sole chat/rag/search/write EXECUTE entry
+  agent()         → sessions / search / citations / runtime_tools / usage
+  workspace()     → workspaces / documents / sources
+  share() / billing_api() / prefs() / admin_api() / admin_ops()
+        │
+        ▼
+Domain crates (app-chat, write-core, share, agent-tools, …)
+  write lane  → execute_write_pipeline → run_write_mode  (NOT ToolCatalog)
+  agent lane  → execute_chat_pipeline → dispatch_agent_mode + ToolCatalog/dispatch_tool
+```
+
+AppState is a **composition root + face factory** (still holds fat infra contexts). **Do not** add new business methods on `AppState`. Put use-cases on the right `*App` or in domain crates.
+
+### 8.2 Iron rules (T1–T6)
+
+| # | Rule |
+|---|------|
+| T1 | **No new business methods** on `AppState` or shallow faces; new capability → domain service / target Product App |
+| T2 | **Write forever outside ReAct ToolCatalog**; `write_refine_*` only via `write_refine::tool_specs_for_pool` (Write control ring) |
+| T3 | Chat/RAG/Search tool **execute** only through `ToolCatalog` / `dispatch_tool` |
+| T4 | **No C4**: Capability / Skill / Tool stay three layers (ADR-0006 §5a) |
+| T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
+| T6 | Solo local trunk; do not expand CI theater for architecture work |
+
+### 8.3 Coding standards for features
+
+* **Execute path:** handlers/MCP call **`state.conversation().execute` / `execute_stream` only**. No `if agent_type == "write"` in transport; no `state.chat().execute_*` for product execute.
+* **Sessions / search / citations:** `state.agent().…` (not raw `ChatContext` in new production code).
+* **Documents / workspaces:** use `state.workspace()` for documents/workspaces.
+* **Do not** add new Product App types or pass-through wrappers “for architecture.” Deletion test: if removing the type only forces callers to use the inner type, delete it.
+* **Do not** re-register `write_refine_*` on SkillRegistry / ToolCatalog or restore meta side-tables.
+* **Domain depth:** business logic lives in domain crates (`app-chat`, `write-core`, `avrag_share`, …). Product Apps orchestrate; they must not become a second copy of Bound god-objects.
+* **AppState is composition root + face factory; product API is Product Apps only. Residual plan Done.
+
+### 8.4 Verification defaults
+
+* After touching product entry / pipeline / tools: `cargo test -p app-bootstrap --lib`, `cargo test -p app-chat --lib`, `cargo test -p agent-tools --lib` as relevant; wave end or ask → full L1 (`bash scripts/test-l1.sh`).
+* **WSL resource defaults:** L1 and `avrag-rs/.cargo/config.toml` cap `jobs=2` / modest test threads. Override with `CARGO_BUILD_JOBS` / `L1_TEST_THREADS` or `local-machine.toml`. Do not stack concurrent full `cargo test` runs.
+* Real LLM / full Playwright: **not** required to land architecture or mid-wave product features.
+

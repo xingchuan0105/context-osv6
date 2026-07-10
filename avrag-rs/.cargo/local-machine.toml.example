@@ -1,0 +1,7 @@
+# Copy to local-machine.toml (gitignored if you prefer) to override WSL-safe defaults.
+# avrag-rs/.cargo/config.toml includes this file when present.
+
+[build]
+# Strong host example:
+# jobs = 8
+jobs = 4
