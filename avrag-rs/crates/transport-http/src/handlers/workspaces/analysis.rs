@@ -174,11 +174,11 @@ pub(crate) async fn get_workspace_analysis_handler(
     if let Err(error) = ensure_user_workspace_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
-    let Some(notebook) = state.docs().get_workspace(&workspace_id).await else {
+    let Some(notebook) = state.workspace().get_workspace(&workspace_id).await else {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     };
 
-    let docs = state.docs();
+    let docs = state.workspace();
     let chat = state.agent();
     let prefs = state.prefs();
     let (sources, sessions, preferences, notes) = tokio::join!(

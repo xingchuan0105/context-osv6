@@ -179,7 +179,7 @@ async fn rest_json(
 #[tokio::test]
 async fn workspace_api_key_cannot_create_org_api_key() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "key-mgmt".to_string(),
             description: String::new(),
@@ -270,21 +270,21 @@ async fn admin_user_can_create_org_api_key() {
 #[tokio::test]
 async fn workspace_api_key_cannot_read_other_workspace_session() {
     let state = test_app_state();
-    let notebook_a = state.docs()
+    let notebook_a = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "session-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let notebook_b = state.docs()
+    let notebook_b = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "session-b".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let session_b = state.chat()
+    let session_b = state.agent()
         .create_session(CreateChatSessionRequest {
             workspace_id: notebook_b.id.clone(),
             title: Some("private".to_string()),
@@ -334,7 +334,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
         })
         .await
         .unwrap();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "target".to_string(),
             description: String::new(),
@@ -384,7 +384,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
 #[tokio::test]
 async fn workspace_api_key_cannot_create_workspace_api_key() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "nested-keys".to_string(),
             description: String::new(),
@@ -423,7 +423,7 @@ async fn workspace_api_key_cannot_create_workspace_api_key() {
 #[tokio::test]
 async fn workspace_api_key_cannot_list_workspace_notes() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "notes-ui".to_string(),
             description: String::new(),
@@ -463,21 +463,21 @@ async fn workspace_api_key_cannot_list_workspace_notes() {
 #[tokio::test]
 async fn workspace_api_key_cannot_update_other_workspace_session() {
     let state = test_app_state();
-    let notebook_a = state.docs()
+    let notebook_a = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "session-update-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let notebook_b = state.docs()
+    let notebook_b = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "session-update-b".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let session_b = state.chat()
+    let session_b = state.agent()
         .create_session(CreateChatSessionRequest {
             workspace_id: notebook_b.id.clone(),
             title: Some("private".to_string()),
@@ -598,7 +598,7 @@ async fn org_admin_jwt_can_create_org_api_key() {
 #[tokio::test]
 async fn workspace_api_key_cannot_read_user_preferences() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "prefs-ui".to_string(),
             description: String::new(),
@@ -637,7 +637,7 @@ async fn workspace_api_key_cannot_read_user_preferences() {
 #[tokio::test]
 async fn workspace_api_key_cannot_update_profile() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "profile-ui".to_string(),
             description: String::new(),
@@ -835,7 +835,7 @@ async fn org_api_key_create_strips_admin_permission() {
 #[tokio::test]
 async fn workspace_api_key_create_strips_admin_permission() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "strip-admin".to_string(),
             description: String::new(),

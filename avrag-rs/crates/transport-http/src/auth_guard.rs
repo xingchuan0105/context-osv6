@@ -169,7 +169,7 @@ pub(crate) async fn ensure_document_in_workspace(
     document_id: &str,
     workspace_id: &str,
 ) -> Result<(), AppError> {
-    let document = state.docs()
+    let document = state.workspace()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
@@ -222,7 +222,7 @@ pub(crate) async fn authorize_document_access(
     if !matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let document = state.docs()
+    let document = state.workspace()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
@@ -238,7 +238,7 @@ pub(crate) async fn authorize_document_access_index_or_query(
     if !matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let document = state.docs()
+    let document = state.workspace()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()

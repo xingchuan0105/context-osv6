@@ -2,13 +2,14 @@
 
 | 字段 | 值 |
 |------|-----|
-| 状态 | **TN-3 S4 Done**；Product App **Phase A+B Done（R0–R5）** |
+| 状态 | **TN-3 S4 Done**；Product App Phase A+B+C Done（S0–S5） |
 | 分支 | 本地 `master`（solo trunk） |
 | 范围 | `avrag-rs` / `contracts` / `frontend_next` / scripts（**不含** `frontend_rust`） |
 | 主方案 | [`TN_CODE_QUALITY_REMEDIATION_2026-07-09.md`](./TN_CODE_QUALITY_REMEDIATION_2026-07-09.md) |
 | TN-3 plan | [`TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](./TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md) |
 | **架构 Phase A** | [`PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md`](./PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md) |
-| **TN 结构续作** | [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) — **Done** |
+| **TN Phase B** | [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) — **Done** |
+| **TN Phase C** | [`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) — **Done** |
 | 产品词 | ADR-0006 **§5a**：Capability / Skill / Tool **三层保留** |
 
 ---
@@ -18,7 +19,8 @@
 **TN 主线 + TN-3 S4 已关。** 工具执行单点 `ToolCatalog`；Bound 面已拆；workspace 命名主体完成；UserProfile 强类型 merge；测试金字塔入口就绪（日常 L1）。
 
 **架构 Phase A+B 已落地**（Conversation 单入口、Write 出 agent lane、write_refine 工具单一真相）。  
-续作计划：[`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) **Done**。
+**架构 Phase A+B+C 已落地**（Conversation 直调 pipeline；write_refine 纯 ToolSpec）。  
+Phase C：[`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) **Done**。
 
 ---
 
@@ -93,7 +95,8 @@ pnpm -C frontend_next exec tsc --noEmit
 | W0 | 立宪 + ADR + Bound freeze（T1） | **Done** |
 | W1 | **ShareApp** 完整样板切片 | **Done** |
 | W2–W6 | Workspace → Billing/Prefs → Admin → Agent/Write → 拆 Bound | **Done（Phase A）** |
-| **R0–R5** | TN 结构修复（见 TN remediation plan） | **Done** |
+| **R0–R5** | TN 结构修复（Phase B） | **Done** |
+| **S0–S5** | 包装收口（Phase C wrapper slim plan） | **Done** |
 
 铁律摘要：停增 AppState 业务方法；Write 永不进 ReAct ToolCatalog；ReAct 只走 `dispatch_tool`；Solo L1。
 
@@ -110,3 +113,5 @@ pnpm -C frontend_next exec tsc --noEmit
 | 2026-07-10 | **Product App W0–W6 Phase A**：product_apps + Bound 拆除（非终态） |
 | 2026-07-10 | TN review FAIL → 编排 [`PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_REMEDIATION_PLAN_2026-07-10.md) |
 | 2026-07-10 | **Product App TN R0–R5 Done** |
+| 2026-07-10 | TN Conditional Approve 残留 → 编排 [`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) |
+| 2026-07-10 | **Product App TN Phase C S0–S5 Done** |

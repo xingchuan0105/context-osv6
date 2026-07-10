@@ -87,7 +87,7 @@ fn test_app_state() -> AppState {
 /// `(app, workspace_id, bearer)`.
 async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, String, String) {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "openai-contract".to_string(),
             description: String::new(),

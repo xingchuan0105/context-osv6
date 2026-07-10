@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 日期 | 2026-07-10 |
-| 状态 | **Done — R0–R5 complete** |
+| 状态 | **Done — R0–R5 complete**；残留收口见 [`PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md`](./PRODUCT_APP_TN_WRAPPER_SLIM_PLAN_2026-07-10.md) |
 | 起因 | Thermo-Nuclear review：W0–W6 完成的是 **命名 + 入口门禁**，非 ADR-0007 终态；薄包装 / 双分发 / Write 三真相源 |
 | 约束 | Solo local trunk；日常 **L1**；行为保持；**优先删概念**，不扩 CI |
 | 上游 | [`PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md`](./PRODUCT_APP_ARCHITECTURE_MIGRATION_PLAN_2026-07-10.md)（结构迁移初稿） |

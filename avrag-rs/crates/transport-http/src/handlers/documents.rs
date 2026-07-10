@@ -24,7 +24,7 @@ pub(crate) async fn list_documents_handler(
     {
         return app_error_response(error);
     }
-    let documents = state.docs()
+    let documents = state.workspace()
         .list_documents(params.workspace_id(), None)
         .await;
     (
@@ -44,7 +44,7 @@ pub(crate) async fn create_document_upload_handler(
     {
         return app_error_response(error);
     }
-    match state.docs().create_document_upload(&workspace_id, req).await {
+    match state.workspace().create_document_upload(&workspace_id, req).await {
         Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -60,7 +60,7 @@ pub(crate) async fn add_url_source_handler(
     {
         return app_error_response(error);
     }
-    match state.docs().add_url_source(&workspace_id, req).await {
+    match state.workspace().add_url_source(&workspace_id, req).await {
         Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -75,7 +75,7 @@ pub(crate) async fn list_sources_handler(
     {
         return app_error_response(error);
     }
-    let sources = state.docs().list_sources(params.workspace_id()).await;
+    let sources = state.workspace().list_sources(params.workspace_id()).await;
     (StatusCode::OK, Json(common::SourcesResponse { sources })).into_response()
 }
 
@@ -87,9 +87,9 @@ pub(crate) async fn update_document_handler(
     if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
-    match state.docs().update_document(&document_id, req).await {
+    match state.workspace().update_document(&document_id, req).await {
         Ok(_) => {
-            let document = state.docs()
+            let document = state.workspace()
                 .list_documents(None, Some(&document_id))
                 .await
                 .into_iter()
@@ -114,7 +114,7 @@ pub(crate) async fn delete_document_handler(
     if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
-    match state.docs().delete_document(&document_id).await {
+    match state.workspace().delete_document(&document_id).await {
         Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -127,7 +127,7 @@ pub(crate) async fn get_document_status_handler(
     if let Err(error) = authorize_document_access_index_or_query(&state, &document_id).await {
         return app_error_response(error);
     }
-    let document = state.docs()
+    let document = state.workspace()
         .list_documents(None, Some(&document_id))
         .await
         .into_iter()
@@ -155,7 +155,7 @@ pub(crate) async fn get_document_content_handler(
     if let Err(error) = authorize_document_access_index_or_query(&state, &document_id).await {
         return app_error_response(error);
     }
-    match state.docs().get_document_content(&document_id).await {
+    match state.workspace().get_document_content(&document_id).await {
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -175,7 +175,7 @@ pub(crate) async fn get_parsed_preview_handler(
     if let Err(error) = authorize_document_access_index_or_query(&state, &document_id).await {
         return app_error_response(error);
     }
-    match state.docs()
+    match state.workspace()
         .get_parsed_preview(
             &document_id,
             params.cursor.unwrap_or(0),
@@ -195,7 +195,7 @@ pub(crate) async fn reindex_document_handler(
     if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
-    match state.docs().reindex_document(&document_id).await {
+    match state.workspace().reindex_document(&document_id).await {
         Ok(_) => (
             StatusCode::ACCEPTED,
             Json(contracts::auth::EmptyResponse {}),
@@ -212,7 +212,7 @@ pub(crate) async fn complete_document_upload_handler(
     if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
-    match state.docs().complete_document_upload(&document_id).await {
+    match state.workspace().complete_document_upload(&document_id).await {
         Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
         Err(error) => app_error_response(error),
     }

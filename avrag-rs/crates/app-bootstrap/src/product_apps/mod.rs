@@ -3,8 +3,11 @@
 //! **Freeze:** do not add business methods on AppState; add them on the relevant `*App` here
 //! (or in domain crates behind the App).
 //!
-//! Product accessors: `conversation()`, `workspace()`, `share()`, `billing()`, `prefs()`,
-//! `admin_api()`, `admin_ops()`, `agent()`, `write()`. Historical aliases may be deprecated.
+//! **Execute:** only `conversation().execute[_stream]`. AgentApp = sessions/search/tools;
+//! WriteApp = non-execute surface; domain pipelines own write vs agent lanes.
+//!
+//! Product accessors: `conversation()`, `workspace()` (+ `docs()` alias), `share()`,
+//! `billing_api()`, `prefs()`, `admin_api()`, `admin_ops()`, `agent()`, `write()`.
 
 mod share;
 mod workspace;
@@ -61,8 +64,7 @@ impl AppState {
         }
     }
 
-    /// Alias for workspace (historical `docs()` name).
-    #[deprecated(note = "use workspace()")]
+    /// Alias for [`Self::workspace`] (historical name; prefer `workspace()`).
     pub fn docs(&self) -> WorkspaceApp<'_> {
         self.workspace()
     }
@@ -120,24 +122,18 @@ impl AppState {
         }
     }
 
-    /// Write product App (refine loop). Prefer `conversation().execute` from transport.
+    /// Write product surface (non-execute). Execute via `conversation()`.
     pub fn write(&self) -> WriteApp<'_> {
         WriteApp {
             chat: &self.chat,
             auth: &self.auth,
         }
     }
-
-    /// Alias for write (historical name).
-    #[deprecated(note = "use write()")]
-    pub fn write_app(&self) -> WriteApp<'_> {
-        self.write()
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ConversationApp, WriteApp};
+    use super::WriteApp;
     use crate::AppState;
     use app_core::AppConfig;
     use contracts::chat::ChatRequest;
@@ -163,6 +159,7 @@ mod tests {
     fn composition_root_exposes_product_apps() {
         let state = AppState::new(AppConfig::default());
         let _ = state.workspace();
+        let _ = state.docs(); // alias
         let _ = state.share();
         let _ = state.billing_api();
         let _ = state.prefs();
@@ -171,6 +168,7 @@ mod tests {
         let _ = state.agent();
         let _ = state.write();
         let _ = state.conversation();
+        assert!(WriteApp::is_write_agent_type("Write"));
     }
 
     #[tokio::test]
@@ -191,36 +189,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_app_rejects_non_write_and_uses_write_pipeline() {
+    async fn pipeline_defends_agent_lane_against_write_agent_type() {
         let state = AppState::new(AppConfig::default());
+        let mut req = empty_chat_req("write");
+        req.query = "hello".into();
+        // Direct agent pipeline path (bypass Conversation) still rejects write.
         let err = state
-            .write()
-            .execute(empty_chat_req("chat"))
+            .chat
+            .execute_chat(req)
             .await
-            .expect_err("WriteApp rejects chat");
-        assert_eq!(err.code(), "write_mode_required");
-
-        let empty = state
-            .write()
-            .execute(empty_chat_req("write"))
-            .await
-            .expect_err("empty write");
-        assert_eq!(empty.code(), "query_required");
-        assert!(WriteApp::is_write_agent_type("Write"));
-        let _ = ConversationApp {
-            chat: &state.chat,
-            auth: &state.auth,
-        };
-    }
-
-    #[tokio::test]
-    async fn agent_rejects_write_on_agent_lane() {
-        let state = AppState::new(AppConfig::default());
-        let err = state
-            .agent()
-            .execute_chat(empty_chat_req("write"))
-            .await
-            .expect_err("agent lane rejects write");
+            .expect_err("agent pipeline rejects write agent_type");
         assert_eq!(err.code(), "use_write_entry");
     }
 }

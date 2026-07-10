@@ -30,7 +30,7 @@ pub(crate) async fn list_workspaces(
     if let Err(error) = authorize_org_tool(state.auth(), org_list_permission()) {
         return app_error_response(error);
     }
-    let workspaces = state.docs().list_workspaces().await;
+    let workspaces = state.workspace().list_workspaces().await;
     (
         StatusCode::OK,
         Json(contracts::workspaces::WorkspaceListResponse { workspaces }),
@@ -57,7 +57,7 @@ pub(crate) async fn get_workspace(
     if let Err(error) = authorize_workspace_notebook_str(state.auth(), query_permission(), &id) {
         return app_error_response(error);
     }
-    match state.docs().get_workspace(&id).await {
+    match state.workspace().get_workspace(&id).await {
         Some(nb) => {
             state
                 .record_product_event_if_available(
@@ -101,7 +101,7 @@ pub(crate) async fn create_workspace(
     if let Err(error) = authorize_org_tool(state.auth(), org_create_permission()) {
         return app_error_response(error);
     }
-    match state.docs().create_workspace(req).await {
+    match state.workspace().create_workspace(req).await {
         Ok(nb) => (
             StatusCode::CREATED,
             Json(contracts::workspaces::WorkspaceResponse { workspace: nb }),
@@ -135,7 +135,7 @@ pub(crate) async fn update_workspace(
             "API keys cannot modify workspace metadata",
         ));
     }
-    match state.docs().update_workspace(&id, req).await {
+    match state.workspace().update_workspace(&id, req).await {
         Ok(nb) => (
             StatusCode::OK,
             Json(contracts::workspaces::WorkspaceResponse { workspace: nb }),
@@ -167,7 +167,7 @@ pub(crate) async fn delete_workspace(
             "API keys cannot modify workspace metadata",
         ));
     }
-    match state.docs().delete_workspace(&id).await {
+    match state.workspace().delete_workspace(&id).await {
         Ok(_) => (
             StatusCode::OK,
             Json(serde_json::json!({"status": "deleted"})),

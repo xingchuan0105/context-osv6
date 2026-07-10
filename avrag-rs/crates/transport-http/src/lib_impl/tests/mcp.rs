@@ -3,7 +3,7 @@ use super::support::*;
 #[tokio::test]
 async fn mcp_jsonrpc_initialize_and_tools_list() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "MCP Workspace".to_string(),
             description: String::new(),

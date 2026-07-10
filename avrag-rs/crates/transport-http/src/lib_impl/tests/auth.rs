@@ -21,7 +21,7 @@ async fn workspace_routes_with_auth_headers() {
 #[tokio::test]
 async fn chat_session_routes_work_with_auth_headers() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "Session Test".to_string(),
             description: String::new(),
@@ -745,7 +745,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
             .is_some_and(|message| message.contains("asking questions requires sign-in"))
     );
 
-    let sessions = state.chat().list_sessions(Some(&workspace_id)).await;
+    let sessions = state.agent().list_sessions(Some(&workspace_id)).await;
     assert!(sessions.is_empty());
 }
 

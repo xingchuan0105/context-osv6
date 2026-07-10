@@ -162,7 +162,7 @@ pub(crate) async fn list_workspace_notes_handler(
     if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_workspace(&workspace_id).await.is_none() {
+    if state.workspace().get_workspace(&workspace_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
@@ -189,7 +189,7 @@ pub(crate) async fn get_workspace_note_handler(
     if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_workspace(&workspace_id).await.is_none() {
+    if state.workspace().get_workspace(&workspace_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
@@ -220,7 +220,7 @@ pub(crate) async fn create_workspace_note_handler(
     if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_workspace(&workspace_id).await.is_none() {
+    if state.workspace().get_workspace(&workspace_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
@@ -267,7 +267,7 @@ pub(crate) async fn update_workspace_note_handler(
     if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_workspace(&workspace_id).await.is_none() {
+    if state.workspace().get_workspace(&workspace_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
@@ -320,7 +320,7 @@ pub(crate) async fn delete_workspace_note_handler(
     if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_workspace(&workspace_id).await.is_none() {
+    if state.workspace().get_workspace(&workspace_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
@@ -356,7 +356,7 @@ pub(crate) async fn promote_notebook_note_handler(
     if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_workspace(&workspace_id).await.is_none() {
+    if state.workspace().get_workspace(&workspace_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
@@ -387,7 +387,7 @@ pub(crate) async fn promote_notebook_note_handler(
 
     let markdown = format!("# {}\n\n{}\n", note.title, note.content);
     let filename = format!("{}.md", slugify_note_filename(&note.title));
-    let upload = match state.docs()
+    let upload = match state.workspace()
         .create_document_upload(
             &workspace_id,
             CreateDocumentRequest {
@@ -402,13 +402,13 @@ pub(crate) async fn promote_notebook_note_handler(
         Err(error) => return app_error_response(error),
     };
 
-    if let Err(error) = state.docs()
+    if let Err(error) = state.workspace()
         .put_uploaded_document(&upload.document_id, markdown.into_bytes())
         .await
     {
         return app_error_response(error);
     }
-    if let Err(error) = state.docs().complete_document_upload(&upload.document_id).await {
+    if let Err(error) = state.workspace().complete_document_upload(&upload.document_id).await {
         return app_error_response(error);
     }
 

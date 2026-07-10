@@ -1,7 +1,7 @@
 //! Contract tests for AppState domain faces after TN Wave 3.
 //!
-//! - Chat: `state.chat()`
-//! - Workspaces/docs: `state.docs()`
+//! - Chat: `state.agent()`
+//! - Workspaces/docs: `state.workspace()`
 //! - Admin API keys: `state.admin_api()`
 //! - Share token helper still on AppState
 
@@ -14,7 +14,7 @@ async fn memory_state() -> AppState {
 }
 
 async fn create_workspace(state: &AppState) -> contracts::workspaces::Workspace {
-    state.docs()
+    state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "delegate-contract".into(),
             description: String::new(),
@@ -24,7 +24,7 @@ async fn create_workspace(state: &AppState) -> contracts::workspaces::Workspace 
 }
 
 // ---------------------------------------------------------------------------
-// Chat face: state.chat()
+// Chat face: state.agent()
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -32,7 +32,7 @@ async fn citation_lookup_missing_session_returns_session_not_found() {
     let state = memory_state().await;
 
     let err = state
-        .chat()
+        .agent()
         .lookup_citation("missing-session", 1, 1)
         .await
         .unwrap_err();
@@ -46,7 +46,7 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
     let state = memory_state().await;
     let notebook = create_workspace(&state).await;
     let session = state
-        .chat()
+        .agent()
         .create_session(CreateChatSessionRequest {
             workspace_id: notebook.id,
             title: Some("citation contract".into()),
@@ -57,7 +57,7 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
 
     // Session exists; missing message id is a 404 on the message, not the session.
     let err = state
-        .chat()
+        .agent()
         .lookup_citation(&session.id, 999, 1)
         .await
         .unwrap_err();
@@ -70,7 +70,7 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
 async fn citation_asset_missing_returns_not_found_in_memory_mode() {
     let state = memory_state().await;
 
-    let err = state.chat().get_citation_asset("asset-1").await.unwrap_err();
+    let err = state.agent().get_citation_asset("asset-1").await.unwrap_err();
 
     assert_eq!(err.code(), "asset_not_found");
     assert_eq!(err.http_status(), 404);
@@ -81,7 +81,7 @@ async fn list_sessions_empty_for_new_workspace() {
     let state = memory_state().await;
     let notebook = create_workspace(&state).await;
 
-    let sessions = state.chat().list_sessions(Some(&notebook.id)).await;
+    let sessions = state.agent().list_sessions(Some(&notebook.id)).await;
 
     assert!(sessions.is_empty());
 }
@@ -90,7 +90,7 @@ async fn list_sessions_empty_for_new_workspace() {
 async fn execute_chat_empty_query_returns_validation_error() {
     let state = memory_state().await;
 
-    let err = state.chat()
+    let err = state.agent()
         .execute_chat(contracts::chat::ChatRequest {
             query: "   ".to_string(),
             workspace_id: None,
@@ -119,7 +119,7 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
     let notebook = create_workspace(&state).await;
 
     let err = state
-        .chat()
+        .agent()
         .execute_chat(contracts::chat::ChatRequest {
             query: "hello from delegate contract".to_string(),
             workspace_id: Some(notebook.id.clone()),

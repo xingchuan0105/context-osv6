@@ -53,8 +53,7 @@ impl AppState {
     // billing_api() / admin_api() / admin_ops() / prefs() (see product_apps/).
     // Raw domain accessors below are for bootstrap, middleware, and tests.
 
-    /// Raw chat context. Prefer `conversation()` / `agent()` / `write()` for product paths.
-    #[deprecated(note = "use conversation() for execute, agent() for sessions")]
+    /// Raw chat context. Prefer `conversation()` for execute, `agent()` for sessions.
     pub fn chat(&self) -> &app_chat::ChatContext {
         &self.chat
     }

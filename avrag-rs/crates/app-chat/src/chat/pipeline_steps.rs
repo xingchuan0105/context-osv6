@@ -54,9 +54,8 @@ pub(crate) async fn dispatch_agent_mode(
         Some(crate::agents::AgentKind::Rag) => {
             run_rag_mode(state, request, session, stream_config).await
         }
-        Some(crate::agents::AgentKind::Write) => Err(AppError::validation(
-            "use_write_entry",
-            "write mode is not dispatched on the agent lane; use execute_write_pipeline",
+        Some(crate::agents::AgentKind::Write) => Err(AppError::internal(
+            "lane invariant: write must not reach dispatch_agent_mode (use execute_write_pipeline)",
         )),
     }
 }

@@ -42,7 +42,7 @@ async fn create_workspace_with_key(
     permissions: Vec<String>,
 ) -> (AppState, String, String, axum::Router) {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "unified-contract".to_string(),
             description: String::new(),
@@ -105,7 +105,7 @@ async fn mcp_tools_call(
 #[tokio::test]
 async fn workspace_api_key_defaults_include_index_and_query() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "defaults".to_string(),
             description: String::new(),
@@ -238,14 +238,14 @@ async fn workspace_query_only_key_cannot_mcp_create_upload() {
 #[tokio::test]
 async fn mcp_complete_upload_rejects_document_from_other_workspace() {
     let state = test_app_state();
-    let notebook_a = state.docs()
+    let notebook_a = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "workspace-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let notebook_b = state.docs()
+    let notebook_b = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "workspace-b".to_string(),
             description: String::new(),
@@ -264,7 +264,7 @@ async fn mcp_complete_upload_rejects_document_from_other_workspace() {
         )
         .await
         .unwrap();
-    let upload_b = state.docs()
+    let upload_b = state.workspace()
         .create_document_upload(
             &notebook_b.id,
             CreateDocumentRequest {
@@ -298,21 +298,21 @@ async fn mcp_complete_upload_rejects_document_from_other_workspace() {
 #[tokio::test]
 async fn workspace_key_cannot_rag_other_workspace_doc_scope() {
     let state = test_app_state();
-    let notebook_a = state.docs()
+    let notebook_a = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "scope-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let notebook_b = state.docs()
+    let notebook_b = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "scope-b".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let upload_b = state.docs()
+    let upload_b = state.workspace()
         .create_document_upload(
             &notebook_b.id,
             CreateDocumentRequest {
@@ -323,11 +323,11 @@ async fn workspace_key_cannot_rag_other_workspace_doc_scope() {
         )
         .await
         .unwrap();
-    state.docs()
+    state.workspace()
         .put_uploaded_document(&upload_b.document_id, b"secret content".to_vec())
         .await
         .unwrap();
-    state.docs()
+    state.workspace()
         .transition_document_status(&upload_b.document_id, DocumentStatus::Completed)
         .await
         .unwrap();
@@ -459,7 +459,7 @@ async fn mcp_ingestion_flow_create_upload_complete_status() {
         Some("index")
     );
 
-    state.docs()
+    state.workspace()
         .put_uploaded_document(&document_id, b"ingestion flow contract body".to_vec())
         .await
         .expect("upload bytes");
@@ -482,7 +482,7 @@ async fn mcp_ingestion_flow_create_upload_complete_status() {
         Some(true)
     );
 
-    state.docs()
+    state.workspace()
         .transition_document_status(&document_id, DocumentStatus::Completed)
         .await
         .expect("mark completed");

@@ -3,7 +3,7 @@ use super::support::*;
 #[tokio::test]
 async fn workspace_api_key_can_access_its_workspace_sources() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "API Key Workspace".to_string(),
             description: String::new(),
@@ -165,14 +165,14 @@ async fn document_and_share_routes_work_when_database_available() {
 #[tokio::test]
 async fn signed_upload_handler_accepts_valid_signed_url() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "Upload Test".to_string(),
             description: String::new(),
         })
         .await
         .expect("notebook should create");
-    let created = state.docs()
+    let created = state.workspace()
         .create_document_upload(
             &notebook.id,
             common::CreateDocumentRequest {
@@ -210,7 +210,7 @@ async fn signed_upload_handler_accepts_valid_signed_url() {
 #[tokio::test]
 async fn create_document_upload_rejects_unsupported_file_type() {
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "Unsupported Upload Test".to_string(),
             description: String::new(),
@@ -251,14 +251,14 @@ async fn dev_upload_handler_completes_upload_flow() {
     }
 
     let state = test_app_state();
-    let notebook = state.docs()
+    let notebook = state.workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "Dev Upload Test".to_string(),
             description: String::new(),
         })
         .await
         .expect("notebook should create");
-    let created = state.docs()
+    let created = state.workspace()
         .create_document_upload(
             &notebook.id,
             common::CreateDocumentRequest {

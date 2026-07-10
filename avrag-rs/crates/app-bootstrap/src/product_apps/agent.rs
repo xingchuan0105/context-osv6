@@ -1,18 +1,16 @@
-//! Product App — Agent (Chat / RAG / Search sessions + APIs).
-//! Tools: ToolCatalog / dispatch_tool only. Write is Conversation → WriteApp.
+//! Product App — Agent (sessions / search / citations / runtime tools).
+//! **Execute** (chat/rag/search/write) goes through ConversationApp only.
 
 use common::{AppError, SourceRow, StatusOnlyResponse};
 use contracts::auth_runtime::AuthContext;
-use contracts::chat::{ChatEvent, ChatMessage, ChatRequest, ChatResponse};
+use contracts::chat::ChatMessage;
 use contracts::documents::CitationLookupResponse;
 use contracts::workspaces::{
     ChatSession, CreateChatSessionRequest, UpdateChatSessionRequest, Workspace,
 };
 use contracts::{RuntimeExecuteRequest, RuntimeExecuteResponse};
-use tokio::sync::mpsc::UnboundedSender;
-use tokio_util::sync::CancellationToken;
 
-/// Product entry for chat / RAG / web-search sessions and related session APIs.
+/// Product entry for sessions, search, citations, and runtime tools (not conversation execute).
 pub struct AgentApp<'a> {
     pub(crate) chat: &'a app_chat::ChatContext,
     #[allow(dead_code)]
@@ -20,41 +18,6 @@ pub struct AgentApp<'a> {
 }
 
 impl<'a> AgentApp<'a> {
-    /// Raw chat context (infra escapes). Prefer AgentApp / ConversationApp methods.
-    pub fn chat(&self) -> &'a app_chat::ChatContext {
-        self.chat
-    }
-
-    /// Non-streaming Chat/RAG/Search (agent lane; rejects write).
-    pub async fn execute_chat(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
-        if app_chat::is_write_agent_type(&req.agent_type) {
-            return Err(AppError::validation(
-                "use_write_entry",
-                "write mode must enter via ConversationApp / WriteApp",
-            ));
-        }
-        self.chat.execute_chat(req).await
-    }
-
-    /// Streaming Chat/RAG/Search (SSE).
-    pub async fn execute_chat_stream(
-        &self,
-        req: ChatRequest,
-        request_id: String,
-        sender: UnboundedSender<ChatEvent>,
-        token: CancellationToken,
-    ) -> Result<(), AppError> {
-        if app_chat::is_write_agent_type(&req.agent_type) {
-            return Err(AppError::validation(
-                "use_write_entry",
-                "write mode must enter via ConversationApp / WriteApp",
-            ));
-        }
-        self.chat
-            .execute_chat_stream(req, request_id, sender, token)
-            .await
-    }
-
     pub async fn execute_runtime_tools(
         &self,
         req: RuntimeExecuteRequest,
@@ -116,5 +79,12 @@ impl<'a> AgentApp<'a> {
         asset_id: &str,
     ) -> Result<(Vec<u8>, String), AppError> {
         self.chat.get_citation_asset(asset_id).await
+    }
+
+    /// User usage limit (product path; replaces raw `state.chat().get_user_usage_limit`).
+    pub async fn get_user_usage_limit(
+        &self,
+    ) -> Result<avrag_billing::usage_limit::UsageLimitResponse, AppError> {
+        self.chat.get_user_usage_limit().await
     }
 }

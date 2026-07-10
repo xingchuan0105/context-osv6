@@ -152,14 +152,14 @@ pub(crate) async fn dev_upload_handler(
         Err(error) => return handlers::app_error_response(error),
     };
 
-    if let Err(error) = upload_state.docs()
+    if let Err(error) = upload_state.workspace()
         .put_uploaded_document(&document_id, body.to_vec())
         .await
     {
         return handlers::app_error_response(error);
     }
 
-    match upload_state.docs().complete_document_upload(&document_id).await {
+    match upload_state.workspace().complete_document_upload(&document_id).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(error) => handlers::app_error_response(error),
     }
@@ -209,7 +209,7 @@ pub(crate) async fn signed_upload_handler(
         ));
     }
 
-    match upload_state.docs()
+    match upload_state.workspace()
         .put_uploaded_document(&document_id, body.to_vec())
         .await
     {
@@ -403,7 +403,7 @@ pub(crate) async fn object_storage_webhook_handler(
             }
         };
 
-        match upload_state.docs().complete_document_upload(&document_id).await {
+        match upload_state.workspace().complete_document_upload(&document_id).await {
             Ok(_) => {
                 processed += 1;
             }
