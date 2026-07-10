@@ -46,6 +46,7 @@ axum = { workspace = true, optional = true }
 transport-http = { path = "../transport-http", optional = true }
 
 [dev-dependencies]
+agent-tools = { path = "../agent-tools" }
 app-core = { path = "../app-core" }
 axum = { version = "0.8", features = ["macros", "multipart"] }
 avrag-storage-pg = { path = "../storage-pg" }

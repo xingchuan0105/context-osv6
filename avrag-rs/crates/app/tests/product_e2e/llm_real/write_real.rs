@@ -61,10 +61,16 @@ async fn real_llm_write_mode_produces_article_with_fingerprint() {
                 stream_error_with_done: false,
             },
             Some(serde_json::json!({
+                // SseSink maps AgentEvent::Activity.stage → ChatEvent phase field.
                 "write_activity_stages": events
                     .iter()
                     .filter(|e| e.event == "activity")
-                    .filter_map(|e| e.data.get("stage").and_then(|v| v.as_str()))
+                    .filter_map(|e| {
+                        e.data
+                            .get("phase")
+                            .or_else(|| e.data.get("stage"))
+                            .and_then(|v| v.as_str())
+                    })
                     .collect::<Vec<_>>(),
             })),
         ),

@@ -176,4 +176,20 @@ mod tests {
             .expect_err("agent pipeline rejects write agent_type");
         assert_eq!(err.code(), "use_write_entry");
     }
+
+    #[tokio::test]
+    async fn conversation_rejects_write_refine_as_user_agent_type() {
+        let state = AppState::new(AppConfig::default());
+        let mut req = empty_chat_req("write_refine");
+        req.query = "should not enter chat or write pipeline".into();
+        let err = state
+            .conversation()
+            .execute(req)
+            .await
+            .expect_err("write_refine is not a user mode");
+        assert_eq!(err.code(), "write_refine_not_user_mode");
+        assert!(app_chat::is_reserved_internal_agent_type("write_refine"));
+        assert!(app_chat::is_reserved_internal_agent_type("Write_Refine"));
+        assert!(!app_chat::is_reserved_internal_agent_type("write"));
+    }
 }

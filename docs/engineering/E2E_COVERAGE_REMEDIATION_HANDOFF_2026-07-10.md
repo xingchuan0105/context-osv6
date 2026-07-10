@@ -196,6 +196,7 @@ cd avrag-rs && cargo test -p avrag-llm --lib openai
 | 文档 | 用途 |
 |------|------|
 | [修复计划（Done）](./E2E_COVERAGE_REMEDIATION_PLAN_2026-07-10.md) | 波次定义、DoD、技术策略 |
+| [Hardening 计划（Ready）](./E2E_HARDENING_PLAN_2026-07-10.md) | 审查后：软断言 / 协议 unit / journey mock / 小债（H1–H5） |
 | [e2e-gates](../../avrag-rs/docs/e2e-gates.md) | 门禁语义与 smoke 模块列表 |
 | [full-functional-e2e-guide](../../avrag-rs/docs/full-functional-e2e-guide.md) | 能力矩阵 + 新旧层映射 |
 | [Write 上线计划](../../avrag-rs/docs/plans/2026-07-08-write-mode-launch-plan.md) | 产品文档/UI（与测试门禁部分重叠；UI 模式按钮已存在） |

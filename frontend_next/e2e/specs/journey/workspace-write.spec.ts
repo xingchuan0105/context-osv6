@@ -3,6 +3,15 @@ import { DashboardPage } from "../../pom/dashboard-page";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
 import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 
+/**
+ * Write UI journey (L3).
+ *
+ * Backend: Playwright `webServer` starts `avrag-api` with project `.env` LLM
+ * config (typically **real LLM**). Fast mock coverage is L2 `smoke::write_smoke`
+ * — do not treat this journey as a daily mock gate (E2E hardening H3 option C).
+ *
+ * Wall clock on real LLM is often ~5–6 min (research alone 2–3 min).
+ */
 test.describe("Workspace Write Journey", () => {
   test.beforeAll(async ({ request }) => {
     await resetAndPrepareTestUser(request);
@@ -13,7 +22,6 @@ test.describe("Workspace Write Journey", () => {
     runId,
   }) => {
     // Write = research (Search worker) + skeleton + multi-section draft + refine.
-    // Mock is short; real LLM on this stack is ~5 min (research alone ~2–3 min).
     test.setTimeout(600_000);
 
     const dashboard = new DashboardPage(page);
@@ -33,8 +41,8 @@ test.describe("Workspace Write Journey", () => {
     // Write emits tokens only at terminal done (no mid-stream answer_start/token).
     await chat.waitForAnswer(540_000);
 
-    // Structural assertions: completed assistant message, non-empty body, write mode tag
-    const lastMessage = chat.getLastMessage();
+    // Assistant-only bubble (H1): avoid matching the trailing user message.
+    const lastMessage = chat.getLastAssistantMessage();
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
 
@@ -43,6 +51,7 @@ test.describe("Workspace Write Journey", () => {
     );
 
     const answer = await chat.lastAnswerText();
-    expect(answer.length).toBeGreaterThan(0);
+    // Align with write_smoke substantive floor; still softer than llm_real (80).
+    expect(answer.length).toBeGreaterThan(40);
   });
 });

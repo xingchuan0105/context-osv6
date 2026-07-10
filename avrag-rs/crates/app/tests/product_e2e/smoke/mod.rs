@@ -1,14 +1,17 @@
-//! Smoke E2E tests — PR level, 3 P0 cases.
+//! Smoke E2E tests — product mechanism gate (mock LLM/Search/Embedding).
 //!
-//! - ingestion_smoke.rs: upload → wait → verify PG data
-//! - rag_smoke.rs: upload → RAG query → verify doc citation
-//! - search_smoke.rs: open query → verify web citation
+//! Module list is owned by
+//! [`scripts/run-product-smoke-e2e.sh`](../../../../../scripts/run-product-smoke-e2e.sh)
+//! (`NON_RAG_MODULES` + `RAG_SERIAL_MODULES` + `SMOKE_MANUAL_ONLY_MODULES`).
+//!
+//! Highlights:
+//! - chat / search / **write** / guardrails / auth / share / billing / workspace_crud
+//! - RAG serial: ingestion, rag, fallback, codegen multitool, memory, paddle_image
+//! - manual-only (`#[ignore]`): search_real_smoke, paddle_pdf_smoke
 //!
 //! All smoke tests call [`require_smoke_suite`]. Use `--test-threads=1` for
 //! `auth_boundary` (shared PG + fixed notebook ids).
-//! PR CI module list: [`scripts/run-product-smoke-e2e.sh`](../../../../../scripts/run-product-smoke-e2e.sh).
-//! `search_real_smoke` and `paddle_pdf_smoke` are registered under
-//! `SMOKE_MANUAL_ONLY_MODULES` (guard only; `#[ignore]`).
+//! Solo default: not daily — wave end / `test-l2-mechanisms.sh` / manual.
 
 pub(crate) use crate::product_e2e::e2e_gate::require_smoke_suite;
 

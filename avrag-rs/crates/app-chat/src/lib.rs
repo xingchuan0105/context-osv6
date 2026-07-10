@@ -38,7 +38,7 @@ pub use chat_streaming::{
     STREAM_PLACEHOLDER_MESSAGE_ID, chat_done_payload, chunk_text_for_stream,
     emit_buffered_agent_answer_if_needed, stream_event_message_id,
 };
-pub use chat::is_write_agent_type;
+pub use chat::{is_reserved_internal_agent_type, is_write_agent_type};
 pub use context::ChatContext;
 pub use external_agent_guide::{attach_operation_guide, load_invoke_operation_guide};
 pub use llm_context::LlmContext;

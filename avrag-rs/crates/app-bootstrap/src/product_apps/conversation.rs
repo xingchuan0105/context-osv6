@@ -14,8 +14,20 @@ pub struct ConversationApp<'a> {
 }
 
 impl<'a> ConversationApp<'a> {
+    /// Reject internal-only agent_type strings at the product boundary.
+    fn validate_user_agent_type(agent_type: &str) -> Result<(), AppError> {
+        if app_chat::is_reserved_internal_agent_type(agent_type) {
+            return Err(AppError::validation(
+                "write_refine_not_user_mode",
+                "write_refine is an internal control ring; use agent_type=write",
+            ));
+        }
+        Ok(())
+    }
+
     /// Non-streaming execute. Sole product-level write/agent routing.
     pub async fn execute(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
+        Self::validate_user_agent_type(&req.agent_type)?;
         if app_chat::is_write_agent_type(&req.agent_type) {
             self.chat.execute_write(req).await
         } else {
@@ -31,6 +43,7 @@ impl<'a> ConversationApp<'a> {
         sender: UnboundedSender<ChatEvent>,
         token: CancellationToken,
     ) -> Result<(), AppError> {
+        Self::validate_user_agent_type(&req.agent_type)?;
         if app_chat::is_write_agent_type(&req.agent_type) {
             self.chat
                 .execute_write_stream(req, request_id, sender, token)

@@ -1,7 +1,7 @@
 //! Contract tests for the HeavyTail `write` mode surface (no live LLM).
 
+use agent_tools::capability::{CapabilityRegistry, write_mode_schema};
 use app::agents::AgentKind;
-use app::agents::capability::{CapabilityRegistry, write_mode_schema};
 
 #[test]
 fn write_mode_schema_requires_internet_and_web_search() {
@@ -31,4 +31,11 @@ fn agent_kind_write_round_trip() {
     assert_eq!(AgentKind::Write.as_canonical_str(), "write");
     assert_eq!(AgentKind::parse("write"), Some(AgentKind::Write));
     assert_eq!(AgentKind::parse("WRITE"), Some(AgentKind::Write));
+}
+
+#[test]
+fn write_refine_is_not_a_user_agent_kind() {
+    // Internal control ring only; product ConversationApp rejects the string.
+    assert_eq!(AgentKind::parse("write_refine"), None);
+    assert!(app_chat::is_reserved_internal_agent_type("write_refine"));
 }

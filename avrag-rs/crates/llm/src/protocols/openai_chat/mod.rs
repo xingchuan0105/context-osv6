@@ -16,8 +16,9 @@ pub(crate) use types::ApiUsageRaw;
 mod tests {
     use super::request::build_chat_completion_request_body;
     use super::stream::ChatCompletionStreamParser;
-    use super::types::ApiUsageRaw;
-    use crate::schema::ChatMessage;
+    use super::types::{ApiUsageRaw, OpenAiChatProtocol, OpenAiChatState};
+    use crate::protocols::Protocol;
+    use crate::schema::{ChatMessage, FinishReason, LlmError, LlmEvent};
     use crate::ModelProviderConfig;
 
     fn test_config(base_url: &str, enable_thinking: Option<bool>) -> ModelProviderConfig {
@@ -437,5 +438,90 @@ data: [DONE]
 
         let usage = raw.to_llm_usage("deepseek".to_string(), "model".to_string());
         assert_eq!(usage.cached_tokens, 8);
+    }
+
+    fn tool_only_state() -> OpenAiChatState {
+        OpenAiChatState {
+            accumulated_content: String::new(),
+            accumulated_reasoning: String::new(),
+            tool_calls: Some(vec![contracts::ToolCall {
+                tool: "write_refine_finish".to_string(),
+                version: "1.0".to_string(),
+                args: serde_json::json!({"reason": "unit"}),
+            }]),
+            model: "mock".to_string(),
+            provider: "openai".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Tool-only turns (empty content + tool_calls) are valid OpenAI responses.
+    #[test]
+    fn finalize_accepts_tool_only_empty_content() {
+        let protocol = OpenAiChatProtocol;
+        let resp = protocol
+            .finalize(tool_only_state())
+            .expect("tool-only finalize must not EmptyStream");
+        assert!(resp.content.is_empty());
+        assert_eq!(
+            resp.tool_calls.as_ref().map(|c| c.len()),
+            Some(1),
+            "tool_calls must be preserved"
+        );
+        assert_eq!(
+            resp.tool_calls.as_ref().and_then(|c| c.first()).map(|t| t.tool.as_str()),
+            Some("write_refine_finish")
+        );
+    }
+
+    #[test]
+    fn finalize_rejects_empty_stream_without_tools_or_reasoning() {
+        let protocol = OpenAiChatProtocol;
+        let err = protocol
+            .finalize(OpenAiChatState::default())
+            .expect_err("empty content without tools must fail");
+        assert!(
+            matches!(err, LlmError::EmptyStream),
+            "expected EmptyStream, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn on_halt_tool_only_emits_finish_tool_calls_not_provider_error() {
+        let protocol = OpenAiChatProtocol;
+        let state = tool_only_state();
+        let events = protocol.on_halt(&state);
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, LlmEvent::ProviderError { .. })),
+            "tool-only on_halt must not emit empty-stream ProviderError: {events:?}"
+        );
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                LlmEvent::Finish {
+                    reason: FinishReason::ToolCalls,
+                    ..
+                }
+            )),
+            "expected Finish(ToolCalls), got {events:?}"
+        );
+    }
+
+    #[test]
+    fn on_halt_empty_without_tools_is_provider_error() {
+        let protocol = OpenAiChatProtocol;
+        let events = protocol.on_halt(&OpenAiChatState::default());
+        assert!(
+            events.iter().any(|e| matches!(e, LlmEvent::ProviderError { .. })),
+            "expected ProviderError for empty stream, got {events:?}"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, LlmEvent::Finish { .. })),
+            "must not Finish after empty-stream error: {events:?}"
+        );
     }
 }

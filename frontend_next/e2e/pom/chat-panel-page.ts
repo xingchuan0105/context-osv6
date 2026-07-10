@@ -84,6 +84,13 @@ export class ChatPanelPage {
     return this.page.locator("[data-testid='chat-message']").last();
   }
 
+  /** Last completed-or-pending assistant bubble (role-scoped). */
+  getLastAssistantMessage(): Locator {
+    return this.page
+      .locator('[data-testid="chat-message"][data-role="assistant"]')
+      .last();
+  }
+
   /**
    * 返回去除 HTML 标签的纯文本答案。
    * ⚠️ 测试 format-output（HTML/PPT）时，应使用 lastAnswerHtml() 获取原始 HTML。

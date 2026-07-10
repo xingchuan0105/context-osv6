@@ -53,6 +53,14 @@ pub fn is_write_agent_type(agent_type: &str) -> bool {
     agent_type.eq_ignore_ascii_case("write")
 }
 
+/// Internal WriteRefine control-ring id — not a user-selectable product mode.
+///
+/// Callers must use `agent_type=write`; refine tools run only inside the write
+/// pipeline (`write_refine::tool_specs_for_pool`), never as a top-level mode.
+pub fn is_reserved_internal_agent_type(agent_type: &str) -> bool {
+    agent_type.eq_ignore_ascii_case("write_refine")
+}
+
 /// Non-streaming pipeline for either product lane.
 pub(crate) async fn execute_pipeline(
     state: ChatContext,
