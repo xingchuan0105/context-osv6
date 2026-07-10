@@ -25,6 +25,9 @@ Usage:
   bash scripts/rust-disk-hygiene.sh prune [options]
   bash scripts/rust-disk-hygiene.sh clean [options]
 
+Note: monorepo default is local <workspace>/target (see deactivate-rust-cache.sh).
+Shared cache under ~/.cache/context-osv6/target is opt-in only.
+
 Options:
   --root PATH                 Workspace root to scan
   --cache-root PATH           Shared cache root to scan

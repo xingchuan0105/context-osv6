@@ -1,7 +1,12 @@
-# Copy to local-machine.toml (gitignored if you prefer) to override WSL-safe defaults.
+# Copy to local-machine.toml (gitignored) for machine-local overrides.
+# Default monorepo policy: local target/ — do NOT set target-dir unless you
+# intentionally run: bash scripts/activate-rust-cache.sh --shared-targets
 # avrag-rs/.cargo/config.toml includes this file when present.
 
 [build]
 # Strong host example:
 # jobs = 8
 jobs = 4
+
+# Optional compile cache (keeps per-workspace target; caches rustc outputs):
+# rustc-wrapper = "sccache"

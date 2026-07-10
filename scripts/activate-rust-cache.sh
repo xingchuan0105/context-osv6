@@ -1,24 +1,40 @@
 #!/usr/bin/env bash
+# OPT-IN: shared Cargo target under ~/.cache/context-osv6/target.
+#
+# Default for this monorepo is LOCAL target/ (Cargo default). Prefer that on WSL
+# and multi-session/agent work to avoid 16-core thrash and multi-10G shared I/O.
+#
+# Use this script only when you explicitly want a shared target (e.g. single
+# developer, one cargo at a time, disk is cheap). To undo:
+#   bash scripts/deactivate-rust-cache.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CACHE_ROOT="${HOME}/.cache/context-osv6"
 WORKTREES_ROOT="${REPO_ROOT}/.worktrees"
-MIGRATE_MAIN_TARGETS=1
+MIGRATE_MAIN_TARGETS=0
 MIGRATE_WORKTREE_TARGETS=0
+FORCE=0
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/activate-rust-cache.sh [options]
+  bash scripts/activate-rust-cache.sh --shared-targets [options]
+
+OPT-IN shared target. Default monorepo policy is local target/ — see
+scripts/deactivate-rust-cache.sh and AGENTS.md / CLAUDE.md.
+
+Required:
+  --shared-targets               Acknowledge shared target (multi-GB, high I/O)
 
 Options:
   --repo-root PATH               Workspace root to configure
   --cache-root PATH              Shared cache root
   --worktrees-root PATH          Worktrees root
-  --no-migrate-main-targets      Only write Cargo overrides; do not move main targets
-  --migrate-worktree-targets     Also move existing worktree-local targets into shared cache
+  --migrate-main-targets         Move/symlink main avrag-rs|frontend_rust target into cache
+  --migrate-worktree-targets     Also migrate worktree-local targets into shared cache
+  --force                        Skip interactive warning
   -h, --help                     Show this help
 EOF
 }
@@ -27,6 +43,8 @@ die() {
   echo "error: $*" >&2
   exit 1
 }
+
+SHARED_TARGETS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,12 +60,24 @@ while [[ $# -gt 0 ]]; do
       WORKTREES_ROOT="$2"
       shift 2
       ;;
+    --shared-targets)
+      SHARED_TARGETS=1
+      shift
+      ;;
     --no-migrate-main-targets)
       MIGRATE_MAIN_TARGETS=0
       shift
       ;;
+    --migrate-main-targets)
+      MIGRATE_MAIN_TARGETS=1
+      shift
+      ;;
     --migrate-worktree-targets)
       MIGRATE_WORKTREE_TARGETS=1
+      shift
+      ;;
+    --force)
+      FORCE=1
       shift
       ;;
     -h|--help)
@@ -55,10 +85,32 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      die "unknown argument: $1"
+      die "unknown argument: $1 (shared target requires --shared-targets)"
       ;;
   esac
 done
+
+if (( SHARED_TARGETS != 1 )); then
+  cat >&2 <<'EOF'
+error: shared Cargo target is opt-in.
+
+  Default: local <workspace>/target (recommended for WSL / multi-agent).
+  Opt-in:  bash scripts/activate-rust-cache.sh --shared-targets [--migrate-main-targets]
+  Undo:    bash scripts/deactivate-rust-cache.sh
+
+See AGENTS.md / CLAUDE.md (Rust target / resource policy).
+EOF
+  exit 1
+fi
+
+if (( FORCE != 1 )); then
+  cat <<EOF
+WARNING: Shared target under ${CACHE_ROOT}/target can grow to tens of GB and
+causes heavy disk I/O. Prefer local target + CARGO_BUILD_JOBS=2 on WSL.
+Continue in 3s... (Ctrl+C to abort)
+EOF
+  sleep 3
+fi
 
 mkdir -p "${CACHE_ROOT}/target/avrag-rs" \
          "${CACHE_ROOT}/sccache"
@@ -73,34 +125,61 @@ workspace_cache_target() {
   esac
 }
 
-write_local_machine() {
+# Merge/update target-dir into local-machine.toml without wiping other keys.
+write_local_machine_target_dir() {
   local workspace_root="$1"
   local target_dir="$2"
   local local_machine="${workspace_root}/.cargo/local-machine.toml"
 
   mkdir -p "${workspace_root}/.cargo"
-  {
-    echo "[build]"
-    printf 'target-dir = "%s"\n' "${target_dir}"
-    if command -v sccache >/dev/null 2>&1; then
-      echo 'rustc-wrapper = "sccache"'
-    fi
-    echo
-    echo "[profile.dev]"
-    echo "debug = 0"
-    echo "incremental = true"
-    echo
-    echo "[profile.test]"
-    echo "debug = 0"
-    echo "incremental = true"
-    if command -v sccache >/dev/null 2>&1; then
+  if [[ ! -f "${local_machine}" ]]; then
+    {
+      echo "[build]"
+      printf 'target-dir = "%s"\n' "${target_dir}"
+      if command -v sccache >/dev/null 2>&1; then
+        echo 'rustc-wrapper = "sccache"'
+      fi
       echo
-      echo "[env]"
-      printf 'SCCACHE_DIR = { value = "%s", force = true }\n' "${CACHE_ROOT}/sccache"
-    fi
-  } > "${local_machine}"
+      echo "[profile.dev]"
+      echo "debug = 0"
+      echo "incremental = true"
+      echo
+      echo "[profile.test]"
+      echo "debug = 0"
+      echo "incremental = true"
+      if command -v sccache >/dev/null 2>&1; then
+        echo
+        echo "[env]"
+        printf 'SCCACHE_DIR = { value = "%s", force = true }\n' "${CACHE_ROOT}/sccache"
+      fi
+    } > "${local_machine}"
+    echo "wrote ${local_machine}"
+    return
+  fi
 
-  echo "wrote ${local_machine}"
+  local tmp
+  tmp="$(mktemp)"
+  if grep -qE '^\s*target-dir\s*=' "${local_machine}"; then
+    sed -E "s|^[[:space:]]*target-dir[[:space:]]*=.*|target-dir = \"${target_dir}\"|" \
+      "${local_machine}" > "${tmp}"
+  elif grep -qE '^\s*\[build\]' "${local_machine}"; then
+    # Insert after [build]
+    awk -v td="target-dir = \"${target_dir}\"" '
+      BEGIN { done=0 }
+      /^\[build\]/ { print; print td; done=1; next }
+      { print }
+      END { if (!done) { print "[build]"; print td } }
+    ' "${local_machine}" > "${tmp}"
+  else
+    {
+      echo "[build]"
+      printf 'target-dir = "%s"\n' "${target_dir}"
+      echo
+      cat "${local_machine}"
+    } > "${tmp}"
+  fi
+  mv "${tmp}" "${local_machine}"
+  echo "updated target-dir in ${local_machine}"
 }
 
 migrate_workspace_target() {
@@ -157,7 +236,7 @@ configure_checkout() {
   for workspace_root in "${checkout_root}/avrag-rs"; do
     [[ -d "${workspace_root}" ]] || continue
     target_dir="$(workspace_cache_target "${workspace_root}")"
-    write_local_machine "${workspace_root}" "${target_dir}"
+    write_local_machine_target_dir "${workspace_root}" "${target_dir}"
     if (( migrate_targets == 1 )); then
       migrate_workspace_target "${workspace_root}" "${target_dir}"
     fi
@@ -169,5 +248,9 @@ configure_checkout "${REPO_ROOT}" "${MIGRATE_MAIN_TARGETS}"
 if [[ -d "${WORKTREES_ROOT}" ]]; then
   while IFS= read -r worktree_checkout; do
     configure_checkout "${worktree_checkout}" "${MIGRATE_WORKTREE_TARGETS}"
-  done < <(find "${WORKTREES_ROOT}" -mindepth 2 -maxdepth 2 -type d -name context-osv6 | sort)
+  done < <(find "${WORKTREES_ROOT}" -mindepth 2 -maxdepth 2 -type d -name context-osv6 2>/dev/null | sort)
 fi
+
+echo
+echo "Shared target activated under ${CACHE_ROOT}/target"
+echo "Undo: bash scripts/deactivate-rust-cache.sh"

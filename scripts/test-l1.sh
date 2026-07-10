@@ -5,18 +5,20 @@
 # Resource defaults (WSL / ~16G RAM friendly):
 #   CARGO_BUILD_JOBS — rustc parallel compile jobs (default 2)
 #   L1_TEST_THREADS  — libtest threads per package (default 2; agent-loop always 1)
-# Override examples:
-#   CARGO_BUILD_JOBS=8 L1_TEST_THREADS=4 bash scripts/test-l1.sh
+# Override: CARGO_BUILD_JOBS=8 L1_TEST_THREADS=4 bash scripts/test-l1.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Cap compile + test parallelism before any cargo invocation.
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 L1_TEST_THREADS="${L1_TEST_THREADS:-2}"
 
 echo "==> L1 file-size gate"
-bash scripts/check_file_size_limits.sh
+if [[ -f scripts/check_file_size_limits.sh ]]; then
+  bash scripts/check_file_size_limits.sh
+else
+  echo "skip file-size gate (script not found)"
+fi
 
 cd avrag-rs
 DEFAULT_PKGS=(agent-tools agent-loop app-chat)

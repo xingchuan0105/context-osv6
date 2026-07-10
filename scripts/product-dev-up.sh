@@ -7,11 +7,14 @@ NEXT_DIR="${ROOT_DIR}/frontend_next"
 SESSION="${CONTEXT_OS_DEV_SESSION:-context-os-dev}"
 BASE_DIR="${HOME}/.local/share/avrag-dev"
 MINIO_DATA_DIR="${BASE_DIR}/minio/data"
-CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${HOME}/.cache/context-osv6/target/avrag-rs}"
+# Default: local avrag-rs/target (Cargo default). Override only if you intentionally
+# use shared cache: CARGO_TARGET_DIR=$HOME/.cache/context-osv6/target/avrag-rs
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${AVRAG_DIR}/target}"
+# Cap rustc parallelism on WSL/low-RAM (override with CARGO_BUILD_JOBS=N).
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 MILVUS_URL="${MILVUS_URL:-http://127.0.0.1:19530}"
 MINIO_API_ADDR="${MINIO_API_ADDR:-127.0.0.1:9000}"
 MINIO_CONSOLE_ADDR="${MINIO_CONSOLE_ADDR:-127.0.0.1:9001}"
-
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux is required for this dev stack script." >&2
   exit 1
