@@ -431,8 +431,10 @@ async fn test_app() -> (axum::Router, String, Uuid) {
     let mut state = AppState::new(AppConfig::default());
     state.set_agent_service(test_agent_service());
     let org_id = Uuid::new_v4();
+    let state = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
+    // Product App surface (T1): workspace ops live on WorkspaceApp, not AppState.
     let notebook = state
-        .with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User))
+        .workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "stream-contract".to_string(),
             description: "chat stream contract test".to_string(),
@@ -448,15 +450,16 @@ async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) 
     state.set_uses_memory_adapters(false);
     state.set_agent_service(test_agent_service());
     let org_id = Uuid::new_v4();
-    let scoped = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
-    let notebook = scoped
+    let state = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
+    let ws = state.workspace();
+    let notebook = ws
         .create_workspace(CreateWorkspaceRequest {
             name: "stream-contract-rag".to_string(),
             description: "chat stream RAG contract test".to_string(),
         })
         .await
         .unwrap();
-    let upload = scoped
+    let upload = ws
         .create_document_upload(
             &notebook.id,
             CreateDocumentRequest {
@@ -467,12 +470,10 @@ async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) 
         )
         .await
         .unwrap();
-    scoped
-        .put_uploaded_document(&upload.document_id, b"atlas rollback checklist".to_vec())
+    ws.put_uploaded_document(&upload.document_id, b"atlas rollback checklist".to_vec())
         .await
         .unwrap();
-    scoped
-        .transition_document_status(&upload.document_id, DocumentStatus::Completed)
+    ws.transition_document_status(&upload.document_id, DocumentStatus::Completed)
         .await
         .unwrap();
 

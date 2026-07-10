@@ -1,14 +1,12 @@
-//! PR-3 (plan §6.3): quota exhaustion 429 boundary at the integration layer.
+//! Rolling usage hard-cap 429 boundary at the integration layer (ADR-0006).
 //!
-//! Registers a real user, seeds `llm_usage_events` with usage_units that exceed
-//! the rolling 5h limit, then sends a chat. The chat flow's first gate is
-//! `ensure_metric_quota` (`chat/service.rs`), which calls
-//! `QuotaManager::check_quota`; the rolling 5h window is blocked, so the
-//! request must come back as HTTP 429 with `quota_exceeded` — distinct from the
-//! per-key rate-limit `rate_limit_exceeded` covered by `rate_limit_boundary`.
+//! Product semantics: soft limit (plan) allows traffic; hard-cap
+//! (`limit × multiplier`, default 3×) returns HTTP 429 with
+//! `usage_limit_exceeded` only when `USAGE_LIMIT_ENFORCEMENT_PHASE` is
+//! `5h_enforcement` or `7d_enforcement`. Distinct from per-key
+//! `rate_limit_exceeded` (`rate_limit_boundary`).
 //!
-//! Real PG (so the `QuotaManager` is wired) + mock LLM. The quota check runs
-//! before the agent, so no Milvus/RAG is needed (`new_smoke`).
+//! Real PG + mock LLM. Quota check runs before the agent (`new_smoke`).
 
 use uuid::Uuid;
 
@@ -17,6 +15,14 @@ use crate::product_e2e::TestContext;
 #[tokio::test]
 async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
     super::require_integration_suite();
+
+    // Enforcement is off by default in many envs (shadow). Force 5h hard block.
+    let prev_phase = std::env::var("USAGE_LIMIT_ENFORCEMENT_PHASE").ok();
+    // SAFETY: product_e2e runs with --test-threads=1 for this suite path.
+    unsafe {
+        std::env::set_var("USAGE_LIMIT_ENFORCEMENT_PHASE", "5h_enforcement");
+    }
+
     let ctx = TestContext::new_smoke().await;
 
     let email = format!("quota-boundary-{}@example.test", Uuid::new_v4());
@@ -25,7 +31,6 @@ async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
         .await
         .expect("register user");
 
-    // Resolve the new user's id + org_id so we can seed usage on their behalf.
     let pool = sqlx::PgPool::connect(&ctx.pg_url)
         .await
         .expect("connect test pg");
@@ -36,8 +41,7 @@ async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
             .await
             .expect("fetch registered user");
 
-    // Seed enough usage_units to exhaust the rolling 5h window regardless of
-    // the free plan's exact limit (compute_windows blocks when used >= limit).
+    // Far past free plan × hard_cap_multiplier so blocked_5h is true.
     sqlx::query(
         r#"
         INSERT INTO llm_usage_events (
@@ -63,15 +67,24 @@ async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
         .await
         .expect("chat response");
 
+    match prev_phase {
+        Some(v) => unsafe { std::env::set_var("USAGE_LIMIT_ENFORCEMENT_PHASE", v) },
+        None => unsafe { std::env::remove_var("USAGE_LIMIT_ENFORCEMENT_PHASE") },
+    }
+
     assert_eq!(
         resp.status, 429,
-        "exhausted quota must block chat with 429, body={}",
+        "hard-cap must block chat with 429, body={}",
         resp.body_json,
     );
+    let error = resp
+        .body_json
+        .get("error")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
     assert_eq!(
-        resp.body_json.get("error").and_then(|value| value.as_str()),
-        Some("quota_exceeded"),
-        "body must carry quota_exceeded (not rate_limit_exceeded), body={}",
+        error, "usage_limit_exceeded",
+        "expected usage_limit_exceeded (ADR-0006 hard cap), not rate_limit_exceeded; body={}",
         resp.body_json,
     );
 }

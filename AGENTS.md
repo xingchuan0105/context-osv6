@@ -151,12 +151,28 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | T4 | **No C4**: Capability / Skill / Tool stay three layers (ADR-0006 §5a) |
 | T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
 | T6 | Solo local trunk; do not expand CI theater for architecture work |
+| T7 | **`workspace` is the sole product truth** replacing `notebook` (see §8.3a) |
+
+### 8.3a Workspace supersedes notebook (sole source of truth)
+
+**Canonical product term: `workspace`.** `notebook` is a **legacy alias only** (pre-rename residual). Do **not** reintroduce `notebook` as the primary name.
+
+| Surface | Required |
+|---------|----------|
+| API / JSON / tool schemas / error messages / new tests | Prefer **`workspace`** (`workspace_id`, `scope=workspace`, `WorkspaceApp`, …) |
+| Domain enums / Product Apps | **`Workspace`**, `state.workspace()` — never new `Notebook*` product APIs |
+| Wire labels (tool results, SSE, registry) | Emit **`workspace`**, not `notebook` |
+| Incoming legacy values | May **accept** `notebook` as a one-way alias → map to workspace; **never** invent new notebook-first paths |
+| Local vars in old tests | Fine if unexported; **do not** copy into new public contracts or mock tool args as the preferred spelling |
+
+* When a test or mock fails because product returns `workspace` and the test expected `notebook` (or the reverse): **fix product/schema/wire toward `workspace`**, not “align tests back to notebook.”  
+* Related residual notes: [`docs/engineering/WORKSPACE_RENAME_DECISIONS_2026-07-09.md`](docs/engineering/WORKSPACE_RENAME_DECISIONS_2026-07-09.md) if present.
 
 ### 8.3 Coding standards for features
 
 * **Execute path:** handlers/MCP call **`state.conversation().execute` / `execute_stream` only**. No `if agent_type == "write"` in transport; no `state.chat().execute_*` for product execute.
 * **Sessions / search / citations:** `state.agent().…` (not raw `ChatContext` in new production code).
-* **Documents / workspaces:** use `state.workspace()` for documents/workspaces.
+* **Documents / workspaces:** use `state.workspace()` for documents/workspaces (**not** notebook APIs).
 * **Do not** add new Product App types or pass-through wrappers “for architecture.” Deletion test: if removing the type only forces callers to use the inner type, delete it.
 * **Do not** re-register `write_refine_*` on SkillRegistry / ToolCatalog or restore meta side-tables.
 * **Domain depth:** business logic lives in domain crates (`app-chat`, `write-core`, `avrag_share`, …). Product Apps orchestrate; they must not become a second copy of Bound god-objects.

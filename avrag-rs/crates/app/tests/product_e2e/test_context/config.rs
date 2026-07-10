@@ -123,6 +123,13 @@ impl E2eBootstrapConfig {
             AppConfig::default()
         };
         self.apply_infra_overrides(&mut config, base_url);
+        // Mock path uses AppConfig::default() (not from_env). Still honor enforcement
+        // phase when tests set USAGE_LIMIT_ENFORCEMENT_PHASE (quota_boundary).
+        if let Ok(phase) = std::env::var("USAGE_LIMIT_ENFORCEMENT_PHASE") {
+            if !phase.trim().is_empty() {
+                config.usage_limit.enforcement_phase = phase;
+            }
+        }
 
         if self.use_real_llm {
             return config;

@@ -9,7 +9,7 @@
 ## Agent 职责（你负责消解）
 
 1. 看到代词（it/this/that/它/这/那）、指示词（这位/那位/这本书/那个概念）、省略（about it/谁写的）→ 检查 2 条 prior 是否够锚定实体
-2. 不够 → 调 `conversation_history_load`（`scope=notebook` 默认）拉更早历史
+2. 不够 → 调 `conversation_history_load`（`scope=workspace` 默认）拉更早历史
 3. 用最近一条相关 user turn 锚定实体
 4. 消解后仍歧义（多个同等候选实体）→ 向用户澄清，不臆造
 5. 跨轮保持主题与实体连续性；勿发明上文不存在的实体

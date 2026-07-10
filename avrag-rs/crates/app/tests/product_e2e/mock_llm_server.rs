@@ -117,9 +117,9 @@ impl MockLlmRoute {
             || system_prompt.contains("write_refine_finish")
         {
             Self::WriteRefineFinish
-        // Synthesis answer contracts (before format-skill catalog lines).
+        // Synthesis answer contracts (skill-injected; not schema name in base RAG prompt).
         } else if system_prompt.contains("Context OS RAG answer agent")
-            || system_prompt.contains("internal_answer_v1")
+            || system_prompt.contains("合成输出（Synthesis）")
         {
             Self::RagAnswer
         } else if system_prompt.contains("Context OS Web Search answer agent")
@@ -446,14 +446,22 @@ fn chunk_ids_one_per_doc_from_transcript(transcript: &str) -> Vec<String> {
 fn mock_synthesis_json_rag(transcript: &str, system_prompt: &str) -> String {
     let chunk_ids = collect_unique_chunk_ids_from_transcript(transcript);
     let mut chunk_ids = if chunk_ids.is_empty() {
-        vec![extract_retrieval_chunk_id(transcript)
+        // Prefer real observation / pinned smoke state. Never panic the mock server
+        // (F2): panic → broken connection → HTTP 500 llm completion failed.
+        if let Some(id) = extract_retrieval_chunk_id(transcript)
             .or_else(|| read_mock_rag_state(|state| state.codegen_chunk_id.clone()))
-            .unwrap_or_else(|| {
-                let preview: String = transcript.chars().take(500).collect();
-                panic!(
-                    "mock RAG synthesis could not resolve chunk_id; transcript preview: {preview}"
-                )
-            })]
+            .or_else(|| {
+                read_mock_rag_state(|state| state.codegen_chunk_ids.first().cloned())
+            })
+        {
+            vec![id]
+        } else {
+            let fallback = "00000000-0000-4000-8000-0000000000e2".to_string();
+            eprintln!(
+                "[mock_llm] RAG synthesis: no chunk_id in transcript/state; using fallback {fallback}"
+            );
+            vec![fallback]
+        }
     } else {
         chunk_ids
     };
@@ -515,10 +523,16 @@ fn mock_synthesis_json_search() -> String {
 
 fn resolve_mock_content(route: MockLlmRoute, system_prompt: &str, transcript: &str) -> String {
     match route {
-        MockLlmRoute::RagAnswer if system_prompt.contains("internal_answer_v1") => {
+        MockLlmRoute::RagAnswer
+            if system_prompt.contains("internal_answer_v1")
+                || system_prompt.contains("合成输出（Synthesis）") =>
+        {
             mock_synthesis_json_rag(transcript, system_prompt)
         }
-        MockLlmRoute::SearchAnswer if system_prompt.contains("internal_search_answer_v1") => {
+        MockLlmRoute::SearchAnswer
+            if system_prompt.contains("internal_search_answer_v1")
+                || system_prompt.contains("Context OS Web Search answer agent") =>
+        {
             mock_synthesis_json_search()
         }
         _ => route.canned_response().to_string(),
@@ -529,13 +543,13 @@ fn detect_synthesis_route(
     system_prompt: &str,
     _messages: &[serde_json::Value],
 ) -> Option<MockLlmRoute> {
-    // Synthesis contract must win over format-skill catalog lines in the same system prompt.
-    if system_prompt.contains("internal_search_answer_v1")
-        || system_prompt.contains("Context OS Web Search answer agent")
+    // Synthesis skill injection only — not the schema name in base orchestrator docs.
+    if system_prompt.contains("Context OS Web Search answer agent")
+        || system_prompt.contains("internal_search_answer_v1")
     {
         return Some(MockLlmRoute::SearchAnswer);
     }
-    if system_prompt.contains("internal_answer_v1")
+    if system_prompt.contains("合成输出（Synthesis）")
         || system_prompt.contains("Context OS RAG answer agent")
     {
         return Some(MockLlmRoute::RagAnswer);
@@ -584,15 +598,62 @@ async fn mock_llm_handler(
         .iter()
         .any(|m| m.get("role").and_then(|r| r.as_str()) == Some("tool"));
 
-    let is_synthesis_contract = system_prompt.contains("internal_answer_v1")
-        || system_prompt.contains("internal_search_answer_v1");
-    let is_rag_retrieve = !is_synthesis_contract && system_prompt.contains("检索 → 评估 → 合成");
+    // Synthesis phase injects answer skills ("合成输出" / Web Search answer agent).
+    // Do NOT treat the base orchestrator alone as synthesis: rag-system.md documents
+    // `internal_answer_v1` in the retrieve prompt, which previously forced
+    // is_rag_retrieve=false and fell through to dense auto_fallback (F2/F3).
+    let is_synthesis_contract = system_prompt.contains("合成输出（Synthesis）")
+        || system_prompt.contains("Context OS Web Search answer agent")
+        || system_prompt.contains("Context OS RAG answer agent");
+    let is_rag_retrieve = !is_synthesis_contract
+        && (system_prompt.contains("检索 → 评估 → 合成")
+            || system_prompt.contains("RAG agent")
+            || system_prompt.contains("**检索轮**")
+            || (system_prompt.contains("检索轮") && system_prompt.contains("codegen")));
 
-    // ReAct loop: after tool results, stop iterating and proceed to synthesis.
+    // ReAct loop: after tool results, emit a final answer (not empty content).
+    // Empty content without tool_calls is EmptyStream in openai_chat finalize and
+    // surfaces as HTTP 500 "llm completion failed" in product smoke (F1).
     if !is_stream && !tool_names.is_empty() && has_tool_results {
+        let content = if is_synthesis_contract
+            || system_prompt.contains("internal_search_answer_v1")
+            || system_prompt.contains("Context OS Web Search answer agent")
+            || tool_names.iter().any(|n| n == "web_search" || n == "web_fetch")
+        {
+            if system_prompt.contains("internal_search_answer_v1") {
+                mock_synthesis_json_search()
+            } else {
+                MockLlmRoute::SearchAnswer.canned_response().to_string()
+            }
+        } else if system_prompt.contains("internal_answer_v1")
+            || system_prompt.contains("Context OS RAG answer agent")
+        {
+            let transcript = messages
+                .iter()
+                .filter_map(|message| message.get("content").and_then(|c| c.as_str()))
+                .collect::<Vec<_>>()
+                .join("\n");
+            mock_synthesis_json_rag(&transcript, system_prompt)
+        } else if tool_names.iter().any(|n| n.starts_with("write_refine_")) {
+            // Control ring already finished via tool call; no further prose needed.
+            String::new()
+        } else {
+            MockLlmRoute::ChatAnswer.canned_response().to_string()
+        };
+        // write_refine_* post-tool: allow empty only if we also had finish (loop exits
+        // on tool handler). Prefer a non-empty stop token for protocol safety.
+        let content = if content.is_empty() {
+            " ".to_string()
+        } else {
+            content
+        };
         return axum::Json(json!({
-            "choices": [{"message": {"role": "assistant", "content": ""}}],
-            "usage": {"prompt_tokens": 50, "completion_tokens": 1, "total_tokens": 51},
+            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "usage": {
+                "prompt_tokens": 50,
+                "completion_tokens": content.len().max(1),
+                "total_tokens": 51
+            },
             "model": "mock-llm"
         }))
         .into_response();
@@ -653,8 +714,10 @@ async fn mock_llm_handler(
         && !is_synthesis_contract
         && system_prompt.contains("搜索 → 验证 → 合成")
     {
+        // Retrieve-only planning turn without tools: non-empty stop (not EmptyStream).
+        let content = "search_retrieve_done";
         return axum::Json(json!({
-            "choices": [{"message": {"role": "assistant", "content": ""}}],
+            "choices": [{"message": {"role": "assistant", "content": content}}],
             "usage": {"prompt_tokens": 40, "completion_tokens": 1, "total_tokens": 41},
             "model": "mock-llm"
         }))

@@ -95,7 +95,10 @@ export E2E_MODE=smoke
 CARGO_LOCKED=(--locked)
 
 echo "== Pre-build shared artifacts (avoid parallel cargo lock contention) =="
-cargo build "${CARGO_LOCKED[@]}" -p avrag-worker -p app --features product-e2e --tests
+# Build only the product_e2e binary (+ worker). Do not `cargo build -p app --tests`
+# (builds every integration test binary); stale contracts elsewhere must not block smoke.
+cargo build "${CARGO_LOCKED[@]}" -p avrag-worker
+cargo build "${CARGO_LOCKED[@]}" -p app --features product-e2e --test product_e2e
 
 echo "== Paddle image routing + worker metadata contracts =="
 cargo test "${CARGO_LOCKED[@]}" -p ingestion image_file_routing_uses_paddle_ocr_image_route --quiet

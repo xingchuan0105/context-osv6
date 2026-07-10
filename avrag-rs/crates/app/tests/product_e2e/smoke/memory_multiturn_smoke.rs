@@ -98,12 +98,12 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
         data.get("scope")
             .and_then(|v: &serde_json::Value| v.as_str()),
         Some("workspace"),
-        "expected default notebook scope, got: {data}"
+        "expected default workspace scope, got: {data}"
     );
 }
 
 #[tokio::test]
-async fn notebook_scope_conversation_history_load_spans_sessions() {
+async fn workspace_scope_conversation_history_load_spans_sessions() {
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (workspace_id, doc_id) = ingest_antifragile(&mut ctx).await;
@@ -128,7 +128,7 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
 
     let session_b_http = ctx
         .chat(
-            "Start a fresh session in the same notebook.",
+            "Start a fresh session in the same workspace.",
             &workspace_id,
             &doc_scope,
         )
@@ -146,7 +146,7 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
     ctx.set_mock_emit_memory_tool(Some("conversation_history_load"));
     let recall_http = ctx
         .chat_with_session(
-            "Search notebook history for antifragility.",
+            "Search workspace history for antifragility.",
             &workspace_id,
             &doc_scope,
             &session_b,
@@ -175,7 +175,7 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
         .unwrap_or_default();
     assert!(
         !messages.is_empty(),
-        "expected notebook-scoped hits, got: {data}"
+        "expected workspace-scoped hits, got: {data}"
     );
     let spans_sessions = messages.iter().any(|msg: &serde_json::Value| {
         msg.get("session_id")

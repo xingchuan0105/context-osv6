@@ -10,14 +10,15 @@
 
 #[test]
 fn static_mode_schemas_match_capability_registry() {
-    let registry = app::agents::capability::CapabilityRegistry::standard();
+    // Capability catalog lives in agent-tools (not app::agents after Product App split).
+    let registry = agent_tools::capability::CapabilityRegistry::standard();
 
-    let chat = app::agents::capability::chat_mode_schema();
+    let chat = agent_tools::capability::chat_mode_schema();
     assert_eq!(registry.mode("chat").unwrap(), &chat);
 
-    let rag = app::agents::capability::rag_mode_schema();
+    let rag = agent_tools::capability::rag_mode_schema();
     assert_eq!(registry.mode("rag").unwrap(), &rag);
 
-    let search = app::agents::capability::search_mode_schema();
+    let search = agent_tools::capability::search_mode_schema();
     assert_eq!(registry.mode("search").unwrap(), &search);
 }

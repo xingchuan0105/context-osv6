@@ -67,6 +67,10 @@ fn parse_history_scope(value: Option<&Value>) -> ConversationHistoryScope {
         .map(str::to_lowercase)
     {
         Some(scope) if scope == "session" => ConversationHistoryScope::Session,
+        // Canonical: workspace. Accept legacy "notebook" alias (pre-rename wire value).
+        Some(scope) if scope == "workspace" || scope == "notebook" => {
+            ConversationHistoryScope::Workspace
+        }
         _ => ConversationHistoryScope::Workspace,
     }
 }
@@ -74,7 +78,8 @@ fn parse_history_scope(value: Option<&Value>) -> ConversationHistoryScope {
 fn scope_label(scope: ConversationHistoryScope) -> &'static str {
     match scope {
         ConversationHistoryScope::Session => "session",
-        ConversationHistoryScope::Workspace => "notebook",
+        // Wire label must match product domain (Workspace), not pre-rename "notebook".
+        ConversationHistoryScope::Workspace => "workspace",
     }
 }
 

@@ -13,7 +13,7 @@ applicable_modes: [rag, search, chat]
 **你的职责**：看到代词、指示词、省略（"它"、"那位作者"、"这本书"、"about it"、"那个概念"）时，**主动调** `conversation_history_load` 拉取更早历史，自己消解指代。
 
 **按需调取**（本簇）：
-1. 更早或跨 session 历史 → `conversation_history_load`（`query` 用当前原话或提取的关键实体；默认 `scope=notebook`；近序 + 中文分词 FTS 混合检索）
+1. 更早或跨 session 历史 → `conversation_history_load`（`query` 用当前原话或提取的关键实体；默认 `scope=workspace`；近序 + 中文分词 FTS 混合检索）
 2. 长期画像/偏好 → `user_profile_load`（跨会话偏好、专业领域、表达风格时）
 
 ## 指代消解流程（你负责）

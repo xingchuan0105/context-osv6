@@ -18,14 +18,14 @@ impl SkillComponent for ConversationHistoryLoad {
 
     fn description(&self) -> &str {
         "Load when the agent needs to recall previous user messages beyond runtime-injected recent turns. \
-         Searches by query (jieba-segmented FTS) merged with recency; default scope is notebook (cross-session)."
+         Searches by query (jieba-segmented FTS) merged with recency; default scope is workspace (cross-session)."
     }
 
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "conversation_history_load".to_string(),
             version: "1.0".to_string(),
-            description: "Search prior user messages in the current notebook (or session-only). \
+            description: "Search prior user messages in the current workspace (or session-only). \
                           Combines recent messages with full-text search on segmented query tokens."
                 .to_string(),
             input_schema: serde_json::json!({
@@ -37,9 +37,9 @@ impl SkillComponent for ConversationHistoryLoad {
                     },
                     "scope": {
                         "type": "string",
-                        "enum": ["notebook", "session"],
-                        "description": "Search within the current notebook (default) or current session only.",
-                        "default": "notebook"
+                        "enum": ["workspace", "session"],
+                        "description": "Search within the current workspace (default) or current session only.",
+                        "default": "workspace"
                     },
                     "limit": {
                         "type": "integer",

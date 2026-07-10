@@ -6,9 +6,9 @@
 //! - Emits the expected event stream via the sink
 //! - Handles cancellation and error paths correctly
 
+use agent_loop::events::{AgentEvent, CollectingSink};
+use agent_loop::runtime::{Agent, AgentRequest};
 use app::agents::AgentKind;
-use app::agents::events::{AgentEvent, CollectingSink};
-use app::agents::runtime::{Agent, AgentRequest};
 use app::agents::unified::UnifiedAgent;
 use avrag_llm::LlmClient;
 use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};

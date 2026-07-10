@@ -81,13 +81,23 @@ print(json.dumps(chunks))
 }
 
 pub(super) fn count_code_execution_results(messages: &[serde_json::Value]) -> usize {
+    // Count only observation turns — not system/skill docs that *mention* the tag
+    // (codegen SKILL.md documents `<code_execution_result>` in the system prompt).
     messages
         .iter()
         .filter(|message| {
+            let role = message.get("role").and_then(|r| r.as_str()).unwrap_or("");
+            if role == "system" {
+                return false;
+            }
             message
                 .get("content")
                 .and_then(|content| content.as_str())
-                .is_some_and(|content| content.contains("<code_execution_result>"))
+                .is_some_and(|content| {
+                    content.contains("<code_execution_result")
+                        && content.contains("</code_execution_result>")
+                        && content.contains("[block ")
+                })
         })
         .count()
 }
@@ -115,17 +125,13 @@ pub(super) fn mock_memory_tool_call(tool: &str) -> Option<serde_json::Value> {
 }
 
 pub(super) fn messages_have_code_execution_result(messages: &[serde_json::Value]) -> bool {
-    messages.iter().any(|message| {
-        message
-            .get("content")
-            .and_then(|content| content.as_str())
-            .is_some_and(|content| content.contains("<code_execution_result>"))
-    })
+    count_code_execution_results(messages) > 0
 }
 
 pub(super) fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) -> String {
     if read_mock_rag_state(|state| state.skip_codegen) {
-        return String::new();
+        // Non-empty stop so openai finalize does not EmptyStream (caller may still synthesize).
+        return "rag_skip_codegen".to_string();
     }
     if read_mock_rag_state(|state| state.multiround_profile) {
         let rounds = count_code_execution_results(messages);
@@ -148,11 +154,12 @@ pub(super) fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) 
                 });
                 format_mock_rag_chunk_fetch_codegen(&chunk_id)
             }
-            _ => String::new(),
+            // Enough retrieve rounds: non-empty stop; synthesis phase uses internal_answer_v1.
+            _ => "rag_retrieve_complete".to_string(),
         };
     }
     if messages_have_code_execution_result(messages) {
-        String::new()
+        "rag_retrieve_complete".to_string()
     } else {
         format_mock_rag_codegen_response_for_query(&resolve_dense_search_query(messages))
     }
