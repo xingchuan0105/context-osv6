@@ -78,7 +78,7 @@ async fn workspace_key_cannot_call_org_mcp_tool() {
     assert_eq!(status, 200, "body: {payload}");
     assert_eq!(
         mcp_error_code(&payload),
-        Some("workspace_key_cannot_call_org_tools")
+        Some("workspace_key_cannot_call_account_tools")
     );
 }
 
@@ -98,7 +98,8 @@ async fn org_key_cannot_call_workspace_mcp_tool() {
     assert_eq!(status, 200, "body: {payload}");
     assert_eq!(
         mcp_error_code(&payload),
-        Some("org_key_cannot_call_workspace_tools")
+        // Product wire: account-scoped keys (B2C) — not org_*.
+        Some("account_key_cannot_call_workspace_tools")
     );
 }
 

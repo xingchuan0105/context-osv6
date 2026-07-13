@@ -15,7 +15,23 @@ pub fn assert_no_external_workers() {
     let raw = String::from_utf8_lossy(&output.stdout);
     let mut offenders = Vec::new();
     for line in raw.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        if line.contains("product_e2e") {
+        // Ignore test harness, shells, and command-line strings that merely mention the token.
+        if line.contains("product_e2e")
+            || line.contains("/bin/bash")
+            || line.contains("bash -c")
+            || line.contains("pgrep")
+            || line.contains("tee /tmp/")
+            || line.contains("scripts/test-l3")
+        {
+            continue;
+        }
+        // Only real worker binaries (debug/release or bare name as argv0).
+        let is_worker_bin = line.contains("target/debug/avrag-worker")
+            || line.contains("target/release/avrag-worker")
+            || line.split_whitespace().any(|tok| {
+                tok == "avrag-worker" || tok.ends_with("/avrag-worker")
+            });
+        if !is_worker_bin {
             continue;
         }
         let pid = line.split_whitespace().next().unwrap_or("unknown");

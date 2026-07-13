@@ -21,12 +21,13 @@ async fn chat_records_llm_usage_event_with_usage_kind_chat() {
     let pool = sqlx::PgPool::connect(&ctx.pg_url)
         .await
         .expect("connect test pg");
-    let (user_id, owner_user_id): (Uuid, Uuid) =
-        sqlx::query_as("SELECT id, owner_user_id FROM users WHERE email = $1")
-            .bind(&email)
-            .fetch_one(&pool)
-            .await
-            .expect("fetch registered user");
+    // B2C personal: users has no owner_user_id; account root is users.id.
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch registered user");
+    let owner_user_id = user_id;
 
     // Baseline: no chat usage for this user yet.
     let before: (i64,) = sqlx::query_as(
