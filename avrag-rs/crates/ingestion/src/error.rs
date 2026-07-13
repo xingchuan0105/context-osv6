@@ -144,6 +144,27 @@ impl IngestionError {
         }
     }
 
+    /// Whether WorkerRuntime should requeue the task (`true`) or dead-letter + Failed (`false`).
+    ///
+    /// EmptyIndex is terminal integrity (retry cannot create chunks). DocumentLocked is
+    /// concurrency and must requeue.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::DocumentLocked(_) => true,
+            Self::Timeout(_) => true,
+            Self::EmptyIndex { .. } => false,
+            Self::SeedNotFound => false,
+            Self::InvalidStateTransition { .. } => false,
+            Self::Security {
+                kind: SecurityKind::Malware | SecurityKind::ZipBomb,
+                ..
+            } => false,
+            Self::InvalidId(_) => false,
+            // Transient infra / parse / index: allow attempt budget.
+            _ => true,
+        }
+    }
+
     pub fn storage(error: impl ToString) -> Self {
         Self::Storage {
             kind: StorageKind::Other,
@@ -307,7 +328,14 @@ mod tests {
         assert_eq!(err.class(), "document_locked");
         assert_ne!(err.class(), "internal");
         assert_ne!(err.class(), "timeout");
-        // Runtime maps any process Err + Requeued → Queued, not Failed/Completed.
-        assert!(matches!(err, IngestionError::DocumentLocked(_)));
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn empty_index_is_not_retryable() {
+        let err = IngestionError::empty_index("doc", "no chunks");
+        assert!(!err.is_retryable());
+        assert_eq!(err.class(), "empty_index");
+        assert!(matches!(err, IngestionError::EmptyIndex { .. }));
     }
 }

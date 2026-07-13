@@ -43,6 +43,14 @@ impl TaskSource for SingleTaskSource {
     ) -> Result<TaskFailureOutcome, IngestionError> {
         Ok(self.fail_outcome)
     }
+
+    async fn fail_terminal(
+        &mut self,
+        _task: &IngestionTask,
+        _error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError> {
+        Ok(TaskFailureOutcome::DeadLettered)
+    }
 }
 
 #[derive(Default)]
@@ -142,6 +150,15 @@ impl TaskSource for OrderingTaskSource {
     ) -> Result<TaskFailureOutcome, IngestionError> {
         self.events.lock().unwrap().push("task_source.fail");
         Ok(TaskFailureOutcome::Requeued)
+    }
+
+    async fn fail_terminal(
+        &mut self,
+        _task: &IngestionTask,
+        _error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError> {
+        self.events.lock().unwrap().push("task_source.fail_terminal");
+        Ok(TaskFailureOutcome::DeadLettered)
     }
 }
 

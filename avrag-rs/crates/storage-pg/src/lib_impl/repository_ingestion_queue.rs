@@ -422,4 +422,53 @@ impl IngestionQueueRepository {
         tx.commit().await?;
         Ok(TaskFailureOutcome::Requeued)
     }
+
+    /// Dead-letter immediately (EmptyIndex / malware / etc.) without burning retry budget.
+    pub async fn fail_ingestion_task_terminal(
+        &self,
+        task_id: &str,
+        lock_token: Option<&str>,
+        error: &str,
+    ) -> Result<TaskFailureOutcome, PgStorageError> {
+        let Some(lock_token) = lock_token else {
+            return Ok(TaskFailureOutcome::LeaseLost);
+        };
+        let lock_token = match Uuid::parse_str(lock_token) {
+            Ok(value) => value,
+            Err(_) => return Ok(TaskFailureOutcome::LeaseLost),
+        };
+        let task_id = Uuid::parse_str(task_id)
+            .map_err(|_| PgStorageError::NotFound("invalid task id".to_string()))?;
+
+        let mut tx = self.pool.raw().begin().await?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
+        let result = sqlx::query(
+            r#"
+            update ingestion_tasks
+            set status = 'dead_letter',
+                locked_at = null,
+                locked_by = null,
+                lock_token = null,
+                last_error = $3,
+                last_failed_at = now(),
+                dead_lettered_at = coalesce(dead_lettered_at, now()),
+                updated_at = now()
+            where task_id = $1
+              and lock_token = $2
+              and status = 'processing'
+              and dead_lettered_at is null
+            "#,
+        )
+        .bind(task_id)
+        .bind(lock_token)
+        .bind(error)
+        .execute(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+        if result.rows_affected() > 0 {
+            Ok(TaskFailureOutcome::DeadLettered)
+        } else {
+            Ok(TaskFailureOutcome::LeaseLost)
+        }
+    }
 }

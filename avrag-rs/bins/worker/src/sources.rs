@@ -48,6 +48,18 @@ impl TaskSource for PgTaskSource {
             .await
             .map_err(|err| IngestionError::TaskSource(err.to_string()))
     }
+
+    async fn fail_terminal(
+        &mut self,
+        task: &IngestionTask,
+        error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError> {
+        self.repo
+            .ingestion_queue()
+            .fail_ingestion_task_terminal(&task.task_id, task.lock_token.as_deref(), error)
+            .await
+            .map_err(|err| IngestionError::TaskSource(err.to_string()))
+    }
 }
 
 pub(crate) struct PgAuditSink {

@@ -19,6 +19,13 @@ pub trait TaskSource {
         task: &IngestionTask,
         error: &str,
     ) -> Result<TaskFailureOutcome, IngestionError>;
+
+    /// Non-retryable failure: dead-letter the task immediately (no attempt budget wait).
+    async fn fail_terminal(
+        &mut self,
+        task: &IngestionTask,
+        error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError>;
 }
 
 #[async_trait]
@@ -62,6 +69,14 @@ impl TaskSource for NoopTaskSource {
         _error: &str,
     ) -> Result<TaskFailureOutcome, IngestionError> {
         Ok(TaskFailureOutcome::Requeued)
+    }
+
+    async fn fail_terminal(
+        &mut self,
+        _task: &IngestionTask,
+        _error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError> {
+        Ok(TaskFailureOutcome::DeadLettered)
     }
 }
 
@@ -158,7 +173,13 @@ where
 
         if let Err(error) = task_result {
             let error_message = error.to_string();
-            let failure_outcome = self.task_source.fail(&task, &error_message).await?;
+            let failure_outcome = if error.is_retryable() {
+                self.task_source.fail(&task, &error_message).await?
+            } else {
+                self.task_source
+                    .fail_terminal(&task, &error_message)
+                    .await?
+            };
             match failure_outcome {
                 TaskFailureOutcome::DeadLettered => {
                     if let Err(transition_error) = self

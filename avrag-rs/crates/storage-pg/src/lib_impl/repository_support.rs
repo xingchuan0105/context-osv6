@@ -23,6 +23,11 @@ pub async fn ensure_user_and_actor(
     if let Some(actor_id) = context.actor_id() {
         let user_id = actor_id.into_uuid();
         if user_id != owner {
+            // Forced RLS on users: only self-row or admin role may INSERT.
+            // Owner GUC is already set by TenantTransaction; elevate for actor row only.
+            sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+                .execute(&mut *conn)
+                .await?;
             sqlx::query(
                 r#"
                 insert into users (id, email, full_name)
@@ -35,6 +40,10 @@ pub async fn ensure_user_and_actor(
             .bind("Local Dev User")
             .execute(&mut *conn)
             .await?;
+            // Clear local role so later statements in this tx stay owner-scoped.
+            sqlx::query("select set_config('app.current_role', '', true)")
+                .execute(&mut *conn)
+                .await?;
         }
     }
 

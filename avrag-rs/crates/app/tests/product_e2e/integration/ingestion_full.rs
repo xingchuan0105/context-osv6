@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext, assertions::*};
+use crate::product_e2e::{DocumentStatus, HttpResponse, TestContext};
 
 #[tokio::test]
 async fn empty_document_ingests_with_zero_chunks_and_degrades() {
@@ -17,14 +17,19 @@ async fn empty_document_ingests_with_zero_chunks_and_degrades() {
         "expected HTTP 201 from POST .../documents"
     );
 
-    // 2. Wait for ingestion — should still complete (not hang/fail)
+    // 2. Empty index is terminal integrity (S4): must not hang in queued forever.
+    // Worker dead-letters EmptyIndex immediately → document Failed (not requeue/backoff).
     let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(60))
         .await
         .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    assert_eq!(
+        status,
+        DocumentStatus::Failed,
+        "empty index must mark document Failed (not completed with empty body / infinite requeue)"
+    );
 
-    // 3. Query the empty document — should degrade gracefully
+    // 3. Failed docs are rejected from RAG doc_scope (invalid_doc_scope) — not 5xx.
     let http_resp: HttpResponse = ctx
         .chat(
             "What is in this document?",
@@ -33,16 +38,19 @@ async fn empty_document_ingests_with_zero_chunks_and_degrades() {
         )
         .await
         .unwrap();
-
-    // 4. Protocol assertions
-    assert_http_ok(&http_resp);
-
-    // 5. Business assertions
-    let resp: ChatResponse = http_resp.into_business().unwrap();
-    // Empty doc should produce a degrade trace or fallback answer
-    assert!(
-        !resp.degrade_trace.is_empty() || resp.citations.is_empty(),
-        "expected degrade trace or no citations for empty document, got citations: {:?}",
-        resp.citations
+    assert_eq!(
+        http_resp.status, 400,
+        "failed empty doc in doc_scope must be 400, body: {}",
+        http_resp.body_json
+    );
+    let err = http_resp
+        .body_json
+        .get("error")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert_eq!(
+        err, "invalid_doc_scope",
+        "expected invalid_doc_scope for failed document, body: {}",
+        http_resp.body_json
     );
 }

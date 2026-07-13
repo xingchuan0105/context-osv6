@@ -36,25 +36,31 @@ fn document_advisory_key(document_id: Uuid) -> i64 {
     (document_id.as_u128() & 0x7fffffffffffffff) as i64
 }
 
-/// RAII guard that releases a Postgres advisory lock on drop.
+/// RAII guard that releases a Postgres **session** advisory lock on drop.
 ///
-/// Mirrors the semantics of [`avrag_cache_redis::DocumentLockGuard`]: releasing
-/// is best-effort and logged on failure. The lock is acquired via the worker's
-/// repository pool as a fallback when no Redis document lock is configured.
+/// Session locks bind to the **same connection** that acquired them. We hold a
+/// dedicated [`PoolConnection`] for the guard lifetime and unlock on that
+/// connection in `Drop`. Unlocking via a different pool checkout is a no-op and
+/// left the lock stuck until the original session died (Journey residual R1:
+/// empty-doc tasks requeued forever with "advisory lock held").
 struct PgAdvisoryLockGuard {
-    pool: sqlx::PgPool,
+    conn: Option<sqlx::pool::PoolConnection<sqlx::Postgres>>,
     key: i64,
 }
 
 impl PgAdvisoryLockGuard {
-    async fn try_acquire(pool: sqlx::PgPool, key: i64) -> Option<Self> {
+    async fn try_acquire(pool: &sqlx::PgPool, key: i64) -> Option<Self> {
+        let mut conn = pool.acquire().await.ok()?;
         let acquired = sqlx::query_scalar::<_, bool>("select pg_try_advisory_lock($1)")
             .bind(key)
-            .fetch_one(&pool)
+            .fetch_one(&mut *conn)
             .await
             .ok()?;
         if acquired {
-            Some(Self { pool, key })
+            Some(Self {
+                conn: Some(conn),
+                key,
+            })
         } else {
             None
         }
@@ -63,17 +69,46 @@ impl PgAdvisoryLockGuard {
 
 impl Drop for PgAdvisoryLockGuard {
     fn drop(&mut self) {
-        let pool = self.pool.clone();
+        let Some(mut conn) = self.conn.take() else {
+            return;
+        };
         let key = self.key;
-        tokio::spawn(async move {
-            if let Err(error) = sqlx::query_scalar::<_, bool>("select pg_advisory_unlock($1)")
-                .bind(key)
-                .fetch_one(&pool)
-                .await
+        let run_unlock = |conn: &mut sqlx::pool::PoolConnection<sqlx::Postgres>| {
+            let fut = async {
+                match sqlx::query_scalar::<_, bool>("select pg_advisory_unlock($1)")
+                    .bind(key)
+                    .fetch_one(&mut **conn)
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        info!(
+                            key,
+                            "pg_advisory_unlock returned false (lock not held on this session)"
+                        );
+                    }
+                    Err(error) => {
+                        info!(key, error = %error, "failed to release document advisory lock");
+                    }
+                }
+            };
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                // Same runtime: must block_in_place so we don't deadlock the worker.
+                tokio::task::block_in_place(|| handle.block_on(fut));
+            } else if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
             {
-                info!(key, error = %error, "failed to release document advisory lock");
+                rt.block_on(fut);
+            } else {
+                info!(
+                    key,
+                    "advisory lock guard dropped without runtime; unlock skipped until session close"
+                );
             }
-        });
+        };
+        run_unlock(&mut conn);
+        // conn Drop returns the session to the pool after unlock.
     }
 }
 
@@ -332,7 +367,7 @@ impl TaskProcessor for PgTaskProcessor {
             // never Ok-skip, which would mark the document completed empty.
             let _pg_lock_guard = if _redis_lock_guard.is_none() {
                 let key = document_advisory_key(document_id);
-                match PgAdvisoryLockGuard::try_acquire(self.storage.repo.raw().clone(), key).await {
+                match PgAdvisoryLockGuard::try_acquire(self.storage.repo.raw(), key).await {
                     Some(guard) => Some(guard),
                     None => {
                         tracing::warn!(
