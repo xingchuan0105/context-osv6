@@ -70,7 +70,8 @@ test.describe("Citation interaction journey", () => {
     const resp = await feedbackResponse;
     expect(resp.status()).toBe(200);
 
+    // UI uses IconThumbUp (no emoji text); success = disabled + active class.
     await expect(thumbUp).toBeDisabled();
-    await expect(thumbUp).toContainText("👍");
+    await expect(thumbUp).toHaveClass(/messageActionButtonActive|ActionButtonActive/);
   });
 });

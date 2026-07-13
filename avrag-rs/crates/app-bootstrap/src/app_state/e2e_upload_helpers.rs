@@ -141,12 +141,30 @@ impl AppState {
         })?;
 
         if let Some((existing_id,)) = existing_member {
-            repo.auth().delete_user_cascade(self.auth(), existing_id)
+            // Cascade SQL must run as super_admin (function touches cross-tenant rows).
+            let mut del_tx = repo.raw().begin().await.map_err(|error| {
+                tracing::warn!(error = %error, "E2E collaborator: begin delete tx failed");
+                "member cleanup failed".to_string()
+            })?;
+            sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+                .execute(&mut *del_tx)
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "E2E collaborator: delete elevate failed");
+                    "member cleanup failed".to_string()
+                })?;
+            sqlx::query("select delete_user_cascade($1)")
+                .bind(existing_id)
+                .execute(&mut *del_tx)
                 .await
                 .map_err(|error| {
                     tracing::warn!(error = %error, "E2E collaborator: failed to delete existing member");
                     "member cleanup failed".to_string()
                 })?;
+            del_tx.commit().await.map_err(|error| {
+                tracing::warn!(error = %error, "E2E collaborator: commit delete failed");
+                "member cleanup failed".to_string()
+            })?;
         }
 
         let password_hash = hash(password, DEFAULT_COST).map_err(|error| {

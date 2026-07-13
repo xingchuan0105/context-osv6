@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | 日期 | 2026-07-13 |
-| 状态 | **In progress** — W1–W3 已落地；D3 `workspace-upload-rag` **绿**（2026-07-13）；全量 journey 仍待收口 |
+| 状态 | **Done (journey core)** — W1–W4 + invite/write/pdf/citation/analyze + patho claim；本地 11 journey 已绿（2026-07-13） |
 | 触发 | `bash scripts/test-l3-journey.sh`：**3 passed / 9 failed**（31.5 min）；上传类文档永久「排队中」 |
 | 诊断结论 | Worker `claim_next_ingestion_task` 走 raw pool **无 RLS 抬权** → 强制 RLS 下可见行=0；叠加 workspace 响应形状 / history testid / org E2E 钩子过期 |
 | 约束 | Solo local trunk；**不**默认扩 CI；修产品 P0 优先于扩测试；与 T8「无 product org」一致 |

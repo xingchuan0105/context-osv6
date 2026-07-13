@@ -12,8 +12,9 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
+        // users RLS only sees self; elevate so invitee email resolves and member row writes.
+        set_current_role(tx.as_mut(), "super_admin").await?;
         set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
-        // Global email uniqueness (B2C); match any existing account by email.
         let invited_user = sqlx::query(
             "select id from users where lower(email) = lower($1) limit 1",
         )

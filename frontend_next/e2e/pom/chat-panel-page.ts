@@ -61,18 +61,44 @@ export class ChatPanelPage {
   /**
    * 等待回答完整生成：先等 assistant 消息出现，再等 progress card 消失。
    * 适用于需要确认流式生成已结束的场景（timeout 较长）。
+   * Fail-fast if a visible error banner appears (write/RAG silent hang).
    */
   async waitForAnswer(timeoutMs = 120_000) {
     const assistantMessage = this.page
       .locator('[data-testid="chat-message"][data-role="assistant"]')
       .last();
-    await assistantMessage.waitFor({ timeout: timeoutMs });
+    // Do not use bare [role="alert"] — workspace shell always has an empty alert region.
+    const errorBanner = this.page.locator(
+      '[data-testid="workspace-chat-error"], [data-testid="workspace-stream-error"], [data-testid="workspace-answer-error"]',
+    );
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      if (await assistantMessage.isVisible().catch(() => false)) {
+        break;
+      }
+      if (await errorBanner.first().isVisible().catch(() => false)) {
+        const text = (await errorBanner.first().innerText().catch(() => "")).trim();
+        throw new Error(`chat stream failed before answer: ${text || "(error banner)"}`);
+      }
+      await this.page.waitForTimeout(500);
+    }
+    await assistantMessage.waitFor({ timeout: Math.max(1_000, deadline - Date.now()) });
+
     try {
       await this.page
         .locator('[data-testid="workspace-progress-card"]')
-        .waitFor({ state: "detached", timeout: timeoutMs });
+        .waitFor({ state: "detached", timeout: Math.max(1_000, deadline - Date.now()) });
     } catch {
       // progress card may not appear for fast responses
+    }
+
+    // Terminal pending=false when present (write only paints on done).
+    const settled = this.page
+      .locator('[data-testid="chat-message"][data-role="assistant"][data-pending="false"]')
+      .last();
+    if ((await settled.count()) > 0) {
+      await settled.waitFor({ state: "visible", timeout: Math.max(1_000, deadline - Date.now()) });
     }
   }
 

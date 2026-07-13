@@ -1,6 +1,6 @@
     async fn accept_invite(
         &self,
-        auth: &AuthContext,
+        _auth: &AuthContext,
         workspace_id: Uuid,
         member_id: Uuid,
         actor_id: Uuid,
@@ -11,7 +11,9 @@
             .begin()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
+        // Invitee is not workspace owner: must elevate to read/update the pending row
+        // (owner_user_id = inviter) and resolve actor email under users RLS.
+        set_current_role(tx.as_mut(), "super_admin").await?;
         let actor_email = sqlx::query(
             "select lower(email) as email from users where id = $1",
         )
@@ -24,14 +26,13 @@
         .map_err(|error| AppError::internal(error.to_string()))?;
         let row = sqlx::query(
             r#"
-            select email, invite_status
+            select email, invite_status, owner_user_id
             from workspace_members
-            where id = $1 and owner_user_id = $2 and workspace_id = $3
+            where id = $1 and workspace_id = $2
             for update
             "#,
         )
         .bind(member_id)
-        .bind(auth.user_id().into_uuid())
         .bind(workspace_id)
         .fetch_optional(tx.as_mut())
         .await
@@ -45,6 +46,9 @@
             .to_lowercase();
         let invite_status = row
             .try_get::<String, _>("invite_status")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let owner_user_id = row
+            .try_get::<Uuid, _>("owner_user_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
         if invite_status != "pending" || (!invite_email.is_empty() && invite_email != actor_email)
         {
@@ -64,7 +68,7 @@
             "#,
         )
         .bind(member_id)
-        .bind(auth.user_id().into_uuid())
+        .bind(owner_user_id)
         .bind(workspace_id)
         .bind(actor_id)
         .execute(tx.as_mut())

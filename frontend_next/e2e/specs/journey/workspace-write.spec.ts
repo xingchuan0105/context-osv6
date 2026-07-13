@@ -39,12 +39,16 @@ test.describe("Workspace Write Journey", () => {
     });
 
     // Write emits tokens only at terminal done (no mid-stream answer_start/token).
+    // Fail-fast via waitForAnswer error banner; keep wall budget for real LLM research.
     await chat.waitForAnswer(540_000);
 
     // Assistant-only bubble (H1): avoid matching the trailing user message.
     const lastMessage = chat.getLastAssistantMessage();
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
+
+    // Surface silent hang: progress card must be gone after waitForAnswer.
+    await expect(page.locator('[data-testid="workspace-progress-card"]')).toHaveCount(0);
 
     await expect(lastMessage.locator("[data-testid='mode-indicator']")).toContainText(
       /write|写作/i,
@@ -53,5 +57,6 @@ test.describe("Workspace Write Journey", () => {
     const answer = await chat.lastAnswerText();
     // Align with write_smoke substantive floor; still softer than llm_real (80).
     expect(answer.length).toBeGreaterThan(40);
+    expect(answer.toLowerCase()).not.toMatch(/stream (failed|error)|internal error|panic/i);
   });
 });
