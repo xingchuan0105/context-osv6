@@ -62,8 +62,8 @@ export const settingsMessages = {
     en: "Billing and plan",
   },
   "settings.billing.sectionSubtitle": {
-    zh: "查看当前订阅、用量和账单入口。",
-    en: "Review your current subscription, usage, and billing entry points.",
+    zh: "查看当前订阅与用量。更换方案请点「管理订阅」前往定价页。",
+    en: "Review your current subscription and usage. Manage plan opens the pricing page.",
   },
   "settings.billing.currentPlanLabel": {
     zh: "当前计划",

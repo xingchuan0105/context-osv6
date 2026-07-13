@@ -150,8 +150,20 @@ export const dashboardMessages = {
     en: "Appearance",
   },
   dashboardProfileLink: {
-    zh: "账号信息",
-    en: "Account",
+    zh: "个人资料",
+    en: "Profile",
+  },
+  dashboardBillingLink: {
+    zh: "账单",
+    en: "Billing",
+  },
+  dashboardLogout: {
+    zh: "退出登录",
+    en: "Log out",
+  },
+  dashboardOpenAccountMenu: {
+    zh: "打开账户菜单",
+    en: "Open account menu",
   },
   dashboardBackToWorkspaces: {
     zh: "← 工作区",

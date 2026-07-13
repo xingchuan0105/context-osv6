@@ -7,10 +7,12 @@ import { resetDefaultWorkspaceTitleCounters } from "../../lib/dashboard/default-
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createDashboardSurfaceMocks());
 
+const replaceMock = vi.hoisted(() => vi.fn());
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mocks.pushMock,
-    replace: vi.fn(),
+    replace: replaceMock,
     prefetch: vi.fn(),
     refresh: vi.fn(),
     back: vi.fn(),
@@ -110,6 +112,7 @@ beforeEach(() => {
   window.localStorage.clear();
   resetDefaultWorkspaceTitleCounters();
   mocks.pushMock.mockReset();
+  replaceMock.mockReset();
   mocks.listWorkspacesMock.mockReset();
   mocks.getFavoriteWorkspaceIdsMock.mockReset();
   mocks.createWorkspaceMock.mockReset();
@@ -126,7 +129,7 @@ beforeEach(() => {
     completeAuth: vi.fn(),
     updateUser: vi.fn(),
     clearAuth: vi.fn(),
-    logout: vi.fn(),
+    logout: vi.fn().mockResolvedValue(undefined),
   };
 
   mocks.listWorkspacesMock.mockResolvedValue({
@@ -203,6 +206,29 @@ async function openWorkspaceMenu(user: ReturnType<typeof userEvent.setup>, title
 }
 
 describe("DashboardSurface", () => {
+  it("account menu includes profile, billing, and logout", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<DashboardSurface />);
+    await waitFor(() => {
+      expect(mocks.listWorkspacesMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByTestId("dashboard-account-menu-trigger"));
+    expect(screen.getByTestId("dashboard-account-menu")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "个人资料" }).getAttribute("href")).toBe(
+      "/settings?tab=profile",
+    );
+    expect(screen.getByRole("menuitem", { name: "账单" }).getAttribute("href")).toBe(
+      "/settings?tab=billing",
+    );
+
+    await user.click(screen.getByTestId("dashboard-logout"));
+    await waitFor(() => {
+      expect(mocks.authState.logout).toHaveBeenCalledTimes(1);
+      expect(replaceMock).toHaveBeenCalledWith("/login");
+    });
+  });
+
   it("renders card view by default and makes workspace content clickable outside the actions menu", async () => {
     const user = userEvent.setup();
 

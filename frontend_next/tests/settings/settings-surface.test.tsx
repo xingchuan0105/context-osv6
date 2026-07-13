@@ -301,12 +301,13 @@ describe("SettingsSurface", () => {
     );
 
     await waitFor(() => {
-      // Current plan summary shows Pro; billing CTA is portal-only (manage subscription).
+      // Current plan summary only; manage subscription is a single CTA → /pricing.
       expect(screen.getAllByText("Pro").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Active")).toBeTruthy();
-      expect(screen.getAllByText(/管理订阅|Manage subscription/i).length).toBeGreaterThanOrEqual(1);
-      // In-app plan change is always available (portal may fall back to Creem/Alipay pricing).
-      expect(screen.getAllByText(/更换方案|Change plan/i).length).toBeGreaterThanOrEqual(1);
+      const manage = screen.getByTestId("settings-manage-subscription");
+      expect(manage.getAttribute("href")).toBe("/pricing");
+      expect(screen.queryByTestId("settings-change-plan")).toBeNull();
+      expect(screen.queryByTestId("settings-plan-picker")).toBeNull();
       expect(screen.getByTestId("settings-back-dashboard")).toBeTruthy();
       expect(screen.getByTestId("product-chrome-footer")).toBeTruthy();
     });

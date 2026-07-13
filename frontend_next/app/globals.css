@@ -526,6 +526,53 @@ a.dashboard-brand-title:hover {
   flex: 0 0 auto;
 }
 
+.dashboard-account-menu {
+  position: relative;
+}
+
+.dashboard-account-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 40;
+  min-width: 10.5rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.4rem;
+  border: 1px solid hsl(var(--dashboard-border));
+  border-radius: var(--radius-card, 12px);
+  background: hsl(var(--dashboard-surface));
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.dashboard-account-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--dashboard-foreground));
+  font: inherit;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dashboard-account-menu-item:hover {
+  background: hsl(var(--dashboard-surface-muted));
+}
+
+.dashboard-account-menu-danger {
+  color: hsl(var(--destructive, 0 72% 51%));
+}
+
+.dashboard-account-menu-danger:hover {
+  background: hsl(var(--destructive, 0 72% 51%) / 0.08);
+}
+
 .dashboard-avatar-link {
   display: grid;
   place-items: center;
