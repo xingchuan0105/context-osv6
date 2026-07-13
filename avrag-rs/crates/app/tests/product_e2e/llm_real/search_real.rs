@@ -40,10 +40,15 @@ async fn real_llm_search_open_query_returns_web_citation() {
     assert_has_citations(resp);
     assert_answer_has_web_citation(resp);
     assert_answer_substantive(resp, 30);
+    let blocking: Vec<_> = resp
+        .degrade_trace
+        .iter()
+        .filter(|item| !super::non_blocking_degrade(item))
+        .collect();
     assert!(
-        resp.degrade_trace.is_empty(),
-        "expected no degradation trace on the happy path, got: {:?}",
-        resp.degrade_trace
+        blocking.is_empty(),
+        "expected no blocking degradation on search happy path, got: {:?}",
+        blocking
     );
 
     // Persist artifact for audit even on pass.

@@ -856,7 +856,8 @@ pub async fn chat_general_with_retry(
     .await
 }
 
-/// Retry streaming search until a non-empty, non-degraded answer.
+/// Retry streaming search until a non-empty answer without **blocking** degrades.
+/// Soft: `web_fetch` unavailable (optional page fetch) does not fail readiness.
 pub async fn search_with_retry(
     ctx: &TestContext,
     query: &str,
@@ -875,7 +876,7 @@ pub async fn search_with_retry(
             debug: true,
             pin_mock_chunk_ids: true,
         },
-        |resp| !resp.answer.is_empty() && resp.degrade_trace.is_empty(),
+        |resp| !resp.answer.is_empty() && degrade_trace_non_blocking(resp),
         "search",
         REAL_LLM_MAX_ATTEMPTS,
     )
@@ -904,6 +905,7 @@ pub(crate) fn require_real_llm_config() {
 ///
 /// - `doc_scan` / `scan_data`: successful scan path labels (see rag-core doc_scan).
 /// - multimodal embedding empty: known soft degrade when no MM content.
+/// - `web_fetch` ToolUnavailable: optional enricher; Brave snippet search can still succeed.
 pub(crate) fn non_blocking_degrade(
     item: &crate::product_e2e::DegradeTraceItem,
 ) -> bool {
@@ -914,11 +916,22 @@ pub(crate) fn non_blocking_degrade(
             DegradeReason::Other(msg) if msg == "scan_data" || msg.contains("scan_data")
         ) || item.impact.contains("doc_scan");
     }
+    if item.stage == "web_fetch" {
+        return matches!(&item.reason, DegradeReason::ToolUnavailable)
+            || item.impact.contains("web_fetch unavailable");
+    }
     item.stage == "dense_retrieval"
         && matches!(
             &item.reason,
             DegradeReason::Other(msg) if msg.contains("multimodal embedding input is empty")
         )
+}
+
+/// True when every degrade item is non-blocking (search/rag soft paths).
+pub(crate) fn degrade_trace_non_blocking(
+    resp: &crate::product_e2e::ChatResponse,
+) -> bool {
+    resp.degrade_trace.iter().all(non_blocking_degrade)
 }
 
 pub mod chat_real;

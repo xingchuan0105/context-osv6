@@ -182,16 +182,7 @@ async fn fetch_and_extract(url: &str, max_length: usize) -> anyhow::Result<Fetch
     let text = extract_text(&html);
 
     let length = text.len();
-    let (content, truncated) = if text.len() > max_length {
-        let truncated_text = format!(
-            "{}... [truncated, {} chars total]",
-            &text[..max_length],
-            text.len()
-        );
-        (truncated_text, true)
-    } else {
-        (text, false)
-    };
+    let (content, truncated) = truncate_extracted_text(&text, max_length);
 
     Ok(FetchResult {
         title,
@@ -282,9 +273,35 @@ fn decode_basic_entities(text: &str) -> String {
         .replace("&#39;", "'")
 }
 
+/// Truncate by **byte budget** without panicking on multi-byte UTF-8 (e.g. CJK).
+fn truncate_extracted_text(text: &str, max_length: usize) -> (String, bool) {
+    if text.len() <= max_length {
+        return (text.to_string(), false);
+    }
+    let end = text.floor_char_boundary(max_length);
+    (
+        format!(
+            "{}... [truncated, {} chars total]",
+            &text[..end],
+            text.chars().count()
+        ),
+        true,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn truncate_extracted_text_handles_cjk_byte_boundary() {
+        // "速度" is 6 bytes (3+3); cut at 4 must not panic mid-char.
+        let text = "速度".repeat(1000);
+        let (out, truncated) = truncate_extracted_text(&text, 4);
+        assert!(truncated);
+        assert!(out.contains("truncated"));
+        assert!(out.is_char_boundary(out.find('.').unwrap_or(0)));
+    }
 
     #[test]
     fn validate_url_accepts_http() {
