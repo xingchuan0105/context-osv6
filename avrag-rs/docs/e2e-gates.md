@@ -20,9 +20,11 @@ Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09
 |-------|------|-------|----------|
 | **L1** | Every commit (solo default) | `scripts/test-l1.sh` | file-size gate + crate `--lib` + `tsc` |
 | **L2** | Mechanism changes / wave | `scripts/test-l2-mechanisms.sh`, `test-l2-integration.sh` | loop/tools/storage lib + mock product smoke/integration |
-| **L3 UI** | Wave end (short) / release (long) | `scripts/test-l3-journey.sh` (`JOURNEY=1` for full) | Playwright smoke / journey |
-| **L3 LLM** | Wave end sample | `scripts/test-l3-llm.sh` | llm_real thin paths (not quality corpus) |
-| **L3 quality/perf** | release / weekly / nightly | existing workflows | `rag_quality_prod`, judge, skills |
+| **L3-thin-ui** | DR2 / wave end | `scripts/test-l3-ui-smoke.sh` | Playwright **smoke** (auth/legal) |
+| **L3-thin-llm** | DR2 / wave end | `scripts/test-l3-llm.sh` | 四模式各 1（chat/rag/search/write）；**标准 doc `antifragile.txt` 冷灌库一次复用** |
+| **L3-journey** | DR3 / 显式 | `scripts/test-l3-journey.sh` | Playwright journey（upload→RAG 同标准 doc） |
+| **L3-full quality** | release / nightly | `scripts/test-l3-quality.sh` | `rag_quality_prod`（禁外部 worker） |
+| **L3 skills/judge** | release / weekly | existing workflows | skills, judge |
 
 **Do not** merge L1+L2+L3 into one daily command. Bench L1: `scripts/bench-test-suites.sh`.
 
@@ -35,8 +37,8 @@ Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09
 |------|------------|-----|
 | **DR0** | `scripts/test-l1.sh` | Every commit |
 | **DR1** | DR0 + `scripts/test-l2-mechanisms.sh` | Mechanism wave / internal demo |
-| **DR2 准部署** | DR1 + `scripts/test-l2-patho.sh` + L3-thin (`test-l3-journey.sh`, `test-l3-llm.sh`) | Pre-prod / VPS pre-ship |
-| **DR3** | DR2 + quality / full journey / staging PDF | Production release |
+| **DR2 准部署** | DR1 + `test-l2-patho.sh` + **L3-thin-ui** + **L3-thin-llm** | Pre-prod / VPS pre-ship |
+| **DR3** | DR2 + `test-l3-journey.sh` + `test-l3-quality.sh` / staging PDF | Production release |
 
 One-shot DR2: `bash scripts/test-dr2.sh`
 

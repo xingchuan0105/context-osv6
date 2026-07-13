@@ -20,7 +20,8 @@ type AdminNavItem = {
 const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   {
     href: "/admin",
-    label: { zh: "组织", en: "Accounts" },
+    // Product is B2C personal: account list, not org/tenant admin.
+    label: { zh: "账户", en: "Accounts" },
     prefixes: ["/admin", "/admin/accounts"],
   },
   {

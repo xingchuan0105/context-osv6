@@ -6,6 +6,16 @@ import { resetAndPrepareTestUser, waitForDocumentReady } from "../../utils/api-h
 import goldenSet from "../../fixtures/golden_set.json";
 import path from "path";
 
+/**
+ * Soft UI availability for RAG mode (mode indicator + answer).
+ *
+ * Hard citation / upload→RAG product gate lives on:
+ *   - L2: product_e2e smoke rag_smoke
+ *   - L3-thin-llm: llm_real rag_real (standard doc)
+ *   - L3-journey: workspace-upload-rag.spec.ts
+ * Skills project is nightly/display; do not double hard-gate citations unless
+ * SKILLS_HARD_CITATION=1.
+ */
 test.describe("RAG Skill Availability", () => {
   test.describe.configure({ retries: 2 });
 
@@ -26,6 +36,7 @@ test.describe("RAG Skill Availability", () => {
     await page.goto("/dashboard");
     await dashboard.createWorkspace();
 
+    // Same standard product fixture as journey + llm_real (antifragile.txt).
     const fixturePath = path.join(__dirname, "../../fixtures/antifragile.txt");
     await workspace.uploadFile(fixturePath);
     await workspace.waitForIngestionComplete();
@@ -49,7 +60,18 @@ test.describe("RAG Skill Availability", () => {
     expect(answer.toLowerCase()).toMatch(/antifragil|taleb|反脆弱|脆弱/);
 
     const citationCount = await chat.citationCount();
-    expect(citationCount, "RAG golden set requires at least one citation").toBeGreaterThan(0);
+    const hardCitation =
+      process.env.SKILLS_HARD_CITATION === "1" ||
+      process.env.SKILLS_HARD_CITATION === "true";
+    if (hardCitation) {
+      expect(citationCount, "SKILLS_HARD_CITATION=1 requires ≥1 citation").toBeGreaterThan(0);
+    } else if (citationCount === 0) {
+      test.info().annotations.push({
+        type: "soft",
+        description:
+          "RAG skills: no citation chip (soft). Hard UI RAG gate: journey workspace-upload-rag / llm_real rag_real",
+      });
+    }
 
     if (process.env.RUN_QUALITY_JUDGE) {
       const { judgeAnswer } = await import("../../utils/judge");

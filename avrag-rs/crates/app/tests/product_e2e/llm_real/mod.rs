@@ -900,6 +900,27 @@ pub(crate) fn require_real_llm_config() {
     }
 }
 
+/// Degrade items that are **not** product failures on happy paths.
+///
+/// - `doc_scan` / `scan_data`: successful scan path labels (see rag-core doc_scan).
+/// - multimodal embedding empty: known soft degrade when no MM content.
+pub(crate) fn non_blocking_degrade(
+    item: &crate::product_e2e::DegradeTraceItem,
+) -> bool {
+    use crate::product_e2e::DegradeReason;
+    if item.stage == "doc_scan" {
+        return matches!(
+            &item.reason,
+            DegradeReason::Other(msg) if msg == "scan_data" || msg.contains("scan_data")
+        ) || item.impact.contains("doc_scan");
+    }
+    item.stage == "dense_retrieval"
+        && matches!(
+            &item.reason,
+            DegradeReason::Other(msg) if msg.contains("multimodal embedding input is empty")
+        )
+}
+
 pub mod chat_real;
 pub mod write_real;
 pub mod format_real;

@@ -79,8 +79,8 @@ ${skip_warn}
 | L1 (DR0) | ${L1_STATUS} |
 | L2-core (DR1) | ${L2_CORE_STATUS} |
 | L2-patho (DR2) | ${L2_PATHO_STATUS} |
-| L3-thin journey | ${L3_JOURNEY_STATUS} |
-| L3-thin llm | ${L3_LLM_STATUS} |
+| L3-thin-ui (PW smoke) | ${L3_JOURNEY_STATUS} |
+| L3-thin-llm (4 modes) | ${L3_LLM_STATUS} |
 
 ## Next (if red)
 
@@ -149,37 +149,37 @@ else
   exit 1
 fi
 
-# --- L3-thin ---
+# --- L3-thin (UI smoke + four-mode LLM; not full journey/quality) ---
 L3_OK=0
 if [[ "$SKIP_L3" == "1" ]]; then
   echo "[PYRAMID] layer=L3-thin skipped (SKIP_L3=1)"
   L3_JOURNEY_STATUS=skipped
   L3_LLM_STATUS=skipped
 else
-  # Peek keys only in parent (no export flood). L3-llm loads keys itself if needed.
-  if [[ -x scripts/test-l3-journey.sh ]] && pyramid_has_playwright; then
-    echo "[PYRAMID] layer=L3-thin journey begin"
-    if PYRAMID_NESTED=1 bash scripts/test-l3-journey.sh; then
+  # L3-thin-ui = Playwright smoke (auth). Journey upload-RAG is L3-journey / DR3.
+  if [[ -x scripts/test-l3-ui-smoke.sh ]] && pyramid_has_playwright; then
+    echo "[PYRAMID] layer=L3-thin-ui begin"
+    if PYRAMID_NESTED=1 bash scripts/test-l3-ui-smoke.sh; then
       L3_JOURNEY_STATUS=ok
       L3_OK=1
-      pyramid_ok L3-thin-journey
+      pyramid_ok L3-thin-ui
     else
       L3_JOURNEY_STATUS=FAIL
-      echo "[PYRAMID] FAIL layer=L3-thin-journey signal=S3"
-      echo "[PYRAMID] next= cd frontend_next && pnpm exec playwright test e2e/specs/smoke"
+      echo "[PYRAMID] FAIL layer=L3-thin-ui signal=S3"
+      echo "[PYRAMID] next= bash scripts/test-l3-ui-smoke.sh  # rebuild avrag-api if login 500"
       if [[ "$REQUIRE_L3" == "1" ]]; then
         write_report FAIL
         exit 1
       fi
-      echo "[PYRAMID] DR2_PARTIAL: journey failed (REQUIRE_L3=0)"
+      echo "[PYRAMID] DR2_PARTIAL: L3-thin-ui failed (REQUIRE_L3=0)"
     fi
   else
-    echo "[PYRAMID] layer=L3-thin journey skipped (no pnpm or script)"
+    echo "[PYRAMID] layer=L3-thin-ui skipped (no pnpm or script)"
     L3_JOURNEY_STATUS=skipped
   fi
 
   if [[ -x scripts/test-l3-llm.sh ]] && pyramid_has_llm_keys; then
-    echo "[PYRAMID] layer=L3-thin llm begin"
+    echo "[PYRAMID] layer=L3-thin-llm begin"
     if PYRAMID_NESTED=1 bash scripts/test-l3-llm.sh; then
       L3_LLM_STATUS=ok
       L3_OK=1
@@ -187,15 +187,15 @@ else
     else
       L3_LLM_STATUS=FAIL
       echo "[PYRAMID] FAIL layer=L3-thin-llm signal=S5"
-      echo "[PYRAMID] next= E2E_MODE=nightly cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1"
+      echo "[PYRAMID] next= bash scripts/test-l3-llm.sh  # thin four-mode; quality: test-l3-quality.sh"
       if [[ "$REQUIRE_L3" == "1" ]]; then
         write_report FAIL
         exit 1
       fi
-      echo "[PYRAMID] DR2_PARTIAL: llm sample failed (REQUIRE_L3=0)"
+      echo "[PYRAMID] DR2_PARTIAL: L3-thin-llm failed (REQUIRE_L3=0)"
     fi
   else
-    echo "[PYRAMID] layer=L3-thin llm skipped (no AGENT_LLM_API_KEY/DEEPSEEK_API_KEY/DMX_API_KEY)"
+    echo "[PYRAMID] layer=L3-thin-llm skipped (no AGENT_LLM_API_KEY/DEEPSEEK_API_KEY/DMX_API_KEY)"
     L3_LLM_STATUS=skipped
   fi
 fi
@@ -215,16 +215,17 @@ if [[ "$SKIP_L2_CORE" == "1" ]]; then
 elif [[ "$L3_OK" -eq 1 && "$L3_JOURNEY_STATUS" == "ok" && "$L3_LLM_STATUS" == "ok" ]]; then
   DR_TIER=DR2-full
   write_report OK
-  echo "[PYRAMID] DR2 OK (full: L1+L2+patho+L3 journey+llm)"
+  echo "[PYRAMID] DR2 OK (L1+L2+patho+L3-thin-ui+L3-thin-llm)"
 elif [[ "$L3_OK" -eq 1 ]]; then
   DR_TIER=DR2-partial-l3
   write_report PARTIAL
-  echo "[PYRAMID] DR2_PARTIAL (L1+L2-core+patho OK; some L3 ok)"
+  echo "[PYRAMID] DR2_PARTIAL (L1+L2-core+patho OK; some L3-thin ok)"
 else
   DR_TIER=DR2-mechanisms
   write_report PARTIAL
   echo "[PYRAMID] DR2_PARTIAL (L1+L2-core+L2-patho OK; L3 skipped or optional fail)"
-  echo "[PYRAMID] For full 准部署 with UI+LLM: REQUIRE_L3=1 bash scripts/test-dr2.sh"
+  echo "[PYRAMID] For DR2 with L3-thin: REQUIRE_L3=1 bash scripts/test-dr2.sh"
+  echo "[PYRAMID] L3-journey / quality: bash scripts/test-l3-journey.sh | test-l3-quality.sh"
 fi
 
 echo "======== DR2 complete (${DR_TIER}) ========"

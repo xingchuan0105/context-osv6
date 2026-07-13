@@ -1,35 +1,33 @@
 #!/usr/bin/env bash
-# L3 — real UI. Default: Playwright smoke (short). JOURNEY=1 for full journey.
-# Product: 短旅程波次末；长旅程发版/夜间. DR2 L3-thin.
+# L3-journey — Playwright long UI stories (upload→RAG, chat, write, share).
+# Not DR2 default. Wave-end / DR3 / explicit JOURNEY=1.
+#
+# Standard document for upload→RAG: frontend_next/e2e/fixtures/antifragile.txt
+# (same bytes as product_e2e standard doc — see fixtures/standard_doc.rs).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=pyramid-lib.sh
 source "${ROOT}/scripts/pyramid-lib.sh"
 cd "$ROOT/frontend_next"
 
-echo "[PYRAMID] layer=L3-thin-journey begin"
+echo "[PYRAMID] layer=L3-journey begin"
 
-# Local: reuse already-running avrag-api/worker (8080/8081) to avoid webServer port fights.
-# CI always starts fresh servers (PLAYWRIGHT_REUSE_SERVER unset/false there).
 if [[ "${CI:-}" != "true" && "${CI:-}" != "1" ]]; then
   export PLAYWRIGHT_REUSE_SERVER="${PLAYWRIGHT_REUSE_SERVER:-1}"
 fi
 
-if [[ "${JOURNEY:-0}" == "1" ]]; then
-  echo "==> L3 Playwright journey (PLAYWRIGHT_REUSE_SERVER=${PLAYWRIGHT_REUSE_SERVER:-0})"
-  pnpm exec playwright test --project=functional e2e/specs/journey \
-    || pyramid_fail L3-thin-journey S3 \
-      "cd frontend_next && JOURNEY=1 pnpm exec playwright test --project=functional e2e/specs/journey" \
-      "full journey"
-else
-  echo "==> L3 Playwright smoke (short) (PLAYWRIGHT_REUSE_SERVER=${PLAYWRIGHT_REUSE_SERVER:-0})"
-  if ! pnpm exec playwright test --project=functional e2e/specs/smoke 2>/dev/null; then
-    pnpm exec playwright test e2e/specs/smoke \
-      || pyramid_fail L3-thin-journey S3 \
-        "cd frontend_next && pnpm exec playwright test e2e/specs/smoke" \
-        "playwright smoke"
-  fi
+# Backward compat: old callers expected smoke when JOURNEY unset.
+# New default for this script is journey; DR2 uses test-l3-ui-smoke.sh.
+if [[ "${JOURNEY:-1}" == "0" || "${L3_UI_MODE:-}" == "smoke" ]]; then
+  echo "[PYRAMID] delegating to test-l3-ui-smoke.sh (JOURNEY=0 or L3_UI_MODE=smoke)"
+  exec bash "${ROOT}/scripts/test-l3-ui-smoke.sh"
 fi
 
-pyramid_ok L3-thin-journey
+echo "==> L3 Playwright journey (PLAYWRIGHT_REUSE_SERVER=${PLAYWRIGHT_REUSE_SERVER:-0})"
+pnpm exec playwright test --project=journey e2e/specs/journey \
+  || pyramid_fail L3-journey S3 \
+    "cd frontend_next && pnpm exec playwright test --project=journey e2e/specs/journey" \
+    "upload-rag uses antifragile.txt standard doc"
+
+pyramid_ok L3-journey
 echo "L3 journey OK"

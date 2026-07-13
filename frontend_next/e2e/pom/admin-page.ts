@@ -9,9 +9,11 @@ export class AdminPage {
   }
 
   async expectLoaded() {
+    // Post-org-removal: default /admin is personal accounts surface (中文「账户」).
+    // Keep legacy「组织」/Accounts for older builds during transition.
     await expect(
-      this.page.getByRole("heading", { name: /组织|Accounts/i })
-    ).toBeVisible();
+      this.page.getByRole("heading", { name: /账户|组织|Accounts|Users|用户/i })
+    ).toBeVisible({ timeout: 15_000 });
   }
 
   async navigateToUsers() {
@@ -20,7 +22,10 @@ export class AdminPage {
   }
 
   async navigateToAccounts() {
-    await this.page.getByRole("link", { name: /^(组织|Accounts)$/i }).first().click();
+    await this.page
+      .getByRole("link", { name: /^(账户|组织|Accounts)$/i })
+      .first()
+      .click();
     await this.page.waitForURL(/\/admin\/?$/);
   }
 

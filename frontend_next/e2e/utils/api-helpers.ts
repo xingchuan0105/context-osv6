@@ -296,30 +296,72 @@ export async function resetTestUserData(request: APIRequestContext) {
 /**
  * 确保预置 E2E 账号存在（必要时 API 注册），并授予 super_admin。
  * 须在 reset-user-data 之后、浏览器登录之前调用。
+ *
+ * Login 5xx (e.g. stale API vs schema) fails fast — do not mask as register 409.
+ * Register 409 (email_exists) retries login once (password/account already present).
  */
 export async function ensureTestUserAccount(request: APIRequestContext) {
-  const loginResp = await request.post("/api/auth/login", {
-    data: { email: TEST_USER.email, password: TEST_USER.password },
+  const loginPayload = { email: TEST_USER.email, password: TEST_USER.password };
+
+  let loginResp = await request.post("/api/auth/login", {
+    data: loginPayload,
     timeout: 30_000,
   });
 
-  if (!loginResp.ok()) {
-    const registerResp = await request.post("/api/auth/register", {
-      data: {
-        email: TEST_USER.email,
-        password: TEST_USER.password,
-        full_name: TEST_USER.fullName,
-        terms_version: PUBLISHED_TERMS_VERSION,
-        privacy_version: PUBLISHED_PRIVACY_VERSION,
-      },
-      timeout: 30_000,
-    });
-    if (!registerResp.ok()) {
-      throw new Error(`register failed: ${registerResp.status()} ${await registerResp.text()}`);
-    }
+  if (loginResp.ok()) {
+    await grantTestUserAdminRole(request);
+    return;
   }
 
-  await grantTestUserAdminRole(request);
+  const loginStatus = loginResp.status();
+  const loginBody = await loginResp.text();
+
+  // Server/schema errors: never fall through to register (masks binary/schema skew).
+  if (loginStatus >= 500) {
+    throw new Error(
+      `login failed with ${loginStatus} (not a missing-account case): ${loginBody}. ` +
+        `Rebuild/restart avrag-api against current DB migrations (org_id removal etc.).`,
+    );
+  }
+
+  const registerResp = await request.post("/api/auth/register", {
+    data: {
+      email: TEST_USER.email,
+      password: TEST_USER.password,
+      full_name: TEST_USER.fullName,
+      terms_version: PUBLISHED_TERMS_VERSION,
+      privacy_version: PUBLISHED_PRIVACY_VERSION,
+    },
+    timeout: 30_000,
+  });
+
+  if (registerResp.ok()) {
+    await grantTestUserAdminRole(request);
+    return;
+  }
+
+  const regStatus = registerResp.status();
+  const regBody = await registerResp.text();
+
+  // Account already exists: retry login with fixture password.
+  if (regStatus === 409 || regBody.includes("email_exists")) {
+    loginResp = await request.post("/api/auth/login", {
+      data: loginPayload,
+      timeout: 30_000,
+    });
+    if (loginResp.ok()) {
+      await grantTestUserAdminRole(request);
+      return;
+    }
+    throw new Error(
+      `register returned ${regStatus} (email exists) but re-login failed ${loginResp.status()}: ${await loginResp.text()}. ` +
+        `Check E2E_TEST_USER_PASSWORD matches the existing account.`,
+    );
+  }
+
+  throw new Error(
+    `register failed: ${regStatus} ${regBody} (prior login ${loginStatus}: ${loginBody})`,
+  );
 }
 
 /**

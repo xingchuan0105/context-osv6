@@ -3,32 +3,21 @@
 //! Run:
 //!   cargo test -p app --test product_e2e llm_real::multi_turn -- --ignored --test-threads=1 --nocapture
 
-use std::time::Duration;
-
 use crate::product_e2e::{
-    DocumentStatus, TestContext,
     assertions::{assert_answer_substantive, assert_has_citations},
-    llm_real::{chat_with_retry, chat_with_session_retry, merge_llm_real_extra},
+    fixtures::shared_standard_doc_real_llm,
+    llm_real::{
+        chat_with_retry, chat_with_session_retry, merge_llm_real_extra, non_blocking_degrade,
+    },
 };
 
 /// Turn 1: document-grounded RAG. Turn 2: follow-up in same session references Taleb.
+/// Reuses cold-ingested standard doc (same corpus as rag_real / format_real).
 #[tokio::test]
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
     super::require_nightly_suite();
-    let mut ctx = TestContext::new_with_real_llm().await;
-
-    let upload = ctx
-        .upload_document("antifragile.txt")
-        .await
-        .expect("upload document");
-    assert_eq!(upload.status, 201);
-
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(180))
-        .await
-        .expect("ingest document");
-    assert_eq!(status, DocumentStatus::Completed);
+    let (ctx, upload) = shared_standard_doc_real_llm().await;
 
     let doc_scope = vec![upload.document_id.clone()];
 
@@ -43,10 +32,15 @@ async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
 
     assert_has_citations(resp1);
     assert_answer_substantive(resp1, 50);
+    let blocking1: Vec<_> = resp1
+        .degrade_trace
+        .iter()
+        .filter(|item| !non_blocking_degrade(item))
+        .collect();
     assert!(
-        resp1.degrade_trace.is_empty(),
-        "turn 1 degrade_trace: {:?}",
-        resp1.degrade_trace
+        blocking1.is_empty(),
+        "turn 1 blocking degrade_trace: {:?}",
+        blocking1
     );
 
     let session_id = resp1.session_id.clone();
@@ -67,10 +61,15 @@ async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
         "expected turn-2 answer to mention Taleb, got: {}",
         resp2.answer.chars().take(200).collect::<String>()
     );
+    let blocking2: Vec<_> = resp2
+        .degrade_trace
+        .iter()
+        .filter(|item| !non_blocking_degrade(item))
+        .collect();
     assert!(
-        resp2.degrade_trace.is_empty(),
-        "turn 2 degrade_trace: {:?}",
-        resp2.degrade_trace
+        blocking2.is_empty(),
+        "turn 2 blocking degrade_trace: {:?}",
+        blocking2
     );
 
     // ADR-0010: server-side query normalization removed; no resolved_query

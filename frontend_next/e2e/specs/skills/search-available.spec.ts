@@ -4,6 +4,11 @@ import { ChatPanelPage } from "../../pom/chat-panel-page";
 import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 import goldenSet from "../../fixtures/golden_set.json";
 
+/**
+ * Soft UI availability for search mode.
+ * Hard web-citation gate: L2 search_smoke + L3-thin-llm search_real.
+ * Set SKILLS_HARD_CITATION=1 to restore citation hard assert on skills.
+ */
 test.describe("Search Skill Availability", () => {
   const entry = goldenSet.entries.find((e) => e.id === "search-tokyo-weather-01")!;
   if (!entry.query) throw new Error("golden entry missing query");
@@ -26,7 +31,7 @@ test.describe("Search Skill Availability", () => {
     await chat.ask(query, "search");
     await chat.waitForResponse(150_000);
 
-    // Availability assertions（与 workspace-chat search 模式一致：结构优先，citation 为外部依赖）
+    // Availability assertions（结构优先；citation 默认 soft）
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
@@ -39,7 +44,18 @@ test.describe("Search Skill Availability", () => {
     expect(answer.toLowerCase()).toMatch(/tokyo|weather|东京|天气|搜索|search/);
 
     const citationCount = await chat.citationCount();
-    expect(citationCount, "Search golden set requires at least one citation").toBeGreaterThan(0);
+    const hardCitation =
+      process.env.SKILLS_HARD_CITATION === "1" ||
+      process.env.SKILLS_HARD_CITATION === "true";
+    if (hardCitation) {
+      expect(citationCount, "SKILLS_HARD_CITATION=1 requires ≥1 citation").toBeGreaterThan(0);
+    } else if (citationCount === 0) {
+      test.info().annotations.push({
+        type: "soft",
+        description:
+          "Search skills: no citation chip (soft). Hard gate: search_smoke / search_real",
+      });
+    }
 
     // Quality judge (non-blocking report)
     if (process.env.RUN_QUALITY_JUDGE) {

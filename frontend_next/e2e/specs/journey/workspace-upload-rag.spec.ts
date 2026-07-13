@@ -26,7 +26,8 @@ test.describe("Document Upload + RAG Journey", () => {
     await page.goto("/dashboard");
     await dashboard.createWorkspace();
 
-    const fixturePath = path.join(__dirname, "../../fixtures/sample-document.txt");
+    // Standard product fixture (same bytes as product_e2e antifragile.txt — shared corpus policy).
+    const fixturePath = path.join(__dirname, "../../fixtures/antifragile.txt");
     await workspace.uploadFile(fixturePath);
 
     test.slow();
@@ -35,8 +36,8 @@ test.describe("Document Upload + RAG Journey", () => {
     const documentId = await workspace.getLatestCompletedDocumentId();
     await waitForDocumentReady(request, documentId);
 
-    // 问题直接指向 fixture 中的可检索片段（技术架构段落），避免 LLM 误判 evidence_insufficient
-    const messageText = `E2E ${runId}: According to the uploaded document, what frontend and backend technologies does Context-OS use? Cite the document.`;
+    // Align with llm_real rag_real / golden: antifragility grounded Q&A + citation.
+    const messageText = `E2E ${runId}: What is antifragility according to the uploaded document? Cite the document.`;
     await chat.ask(messageText, "rag");
     await chat.waitForAnswer(150_000);
 

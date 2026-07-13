@@ -8,6 +8,7 @@
 | 约束 | Solo local trunk；**不**把全栈 E2E 塞进每 commit；不扩 GitHub CI 剧场为默认环 |
 | 上游 | [`TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](./TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md)、[`TEST_PYRAMID_INVENTORY_2026-07-09.md`](./TEST_PYRAMID_INVENTORY_2026-07-09.md)、[`avrag-rs/docs/e2e-gates.md`](../../avrag-rs/docs/e2e-gates.md)、[`SOLO_DISCIPLINE.md`](./SOLO_DISCIPLINE.md)、[`INGESTION_PDF_STUCK_DIAGNOSIS_2026-07-10.md`](./INGESTION_PDF_STUCK_DIAGNOSIS_2026-07-10.md) |
 | 资产 | 入口 `scripts/test-l{1,2,3}-*.sh`；`e2e-test-registry.yaml`（CAP-*）；product_e2e smoke/integration |
+| 下游 L3 | [`L3_TEST_INTEGRATION_AND_CORPUS_PLAN_2026-07-10.md`](./L3_TEST_INTEGRATION_AND_CORPUS_PLAN_2026-07-10.md)（thin/journey/quality 拆分 + 标准 doc 灌库复用） |
 
 ---
 

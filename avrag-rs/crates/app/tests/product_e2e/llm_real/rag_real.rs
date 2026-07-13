@@ -6,17 +6,15 @@
 //! Run:
 //!   cargo test -p app --test product_e2e llm_real::rag_real -- --ignored --test-threads=1 --nocapture
 
-use std::time::Duration;
-
 use crate::product_e2e::{
-    DegradeReason, DocumentStatus, TestContext,
     assertions::{
         assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
         assert_citation_referenced_in_answer, assert_has_citations,
     },
+    fixtures::shared_standard_doc_real_llm,
     llm_real::{
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry_attempts, chat_with_retry,
-        merge_llm_real_extra,
+        merge_llm_real_extra, non_blocking_degrade,
     },
 };
 
@@ -33,26 +31,10 @@ const RETRIEVAL_TOOLS: &[&str] = &[
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_rag_document_qa_returns_citation() {
     super::require_nightly_suite();
-    let mut ctx = TestContext::new_with_real_llm().await;
+    // Cold ingest once per binary via standard_doc; reuse for other thin agent queries.
+    let (ctx, upload) = shared_standard_doc_real_llm().await;
 
-    // 1. Upload a fixture document.
-    let upload = ctx
-        .upload_document("antifragile.txt")
-        .await
-        .expect("upload document");
-    assert_eq!(
-        upload.status, 201,
-        "expected HTTP 201 from POST .../documents"
-    );
-
-    // 2. Wait for real ingestion + embedding pipeline.
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(180))
-        .await
-        .expect("ingest document");
-    assert_eq!(status, DocumentStatus::Completed);
-
-    // 3. Ask a question that requires reading the document (retry for transient LLM errors).
+    // Ask a question that requires reading the document (retry for transient LLM errors).
     let result = chat_with_retry(
         &ctx,
         "What is antifragility?",
@@ -62,16 +44,21 @@ async fn real_llm_rag_document_qa_returns_citation() {
     .await;
     let resp = &result.resp;
 
-    // 4. Product assertions — align with smoke/rag_smoke: citations + substance, not keywords.
+    // Product assertions — align with smoke/rag_smoke: citations + substance, not keywords.
     assert_has_citations(resp);
     assert_citation_doc_id(resp, &upload.document_id);
     assert_answer_has_doc_citation(resp);
     assert_answer_substantive(resp, 50);
     assert_citation_referenced_in_answer(resp);
+    let blocking: Vec<_> = resp
+        .degrade_trace
+        .iter()
+        .filter(|item| !non_blocking_degrade(item))
+        .collect();
     assert!(
-        resp.degrade_trace.is_empty(),
-        "expected no degradation trace on the happy path, got: {:?}",
-        resp.degrade_trace
+        blocking.is_empty(),
+        "expected no blocking degradation on the happy path, got: {:?}",
+        blocking
     );
 
     // 6. RAG retrieval is codegen/SDK-only (no native dense_retrieval tool_call).
@@ -97,19 +84,8 @@ async fn real_llm_rag_document_qa_returns_citation() {
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_rag_complex_query_uses_multiple_tools() {
     super::require_nightly_suite();
-    let mut ctx = TestContext::new_with_real_llm().await;
-
-    let upload = ctx
-        .upload_document("antifragile.txt")
-        .await
-        .expect("upload document");
-    assert_eq!(upload.status, 201);
-
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(180))
-        .await
-        .expect("ingest document");
-    assert_eq!(status, DocumentStatus::Completed);
+    // Extended (not thin default): still reuses the same cold standard doc.
+    let (ctx, upload) = shared_standard_doc_real_llm().await;
 
     let result = chat_with_citations_retry_attempts(
         &ctx,
@@ -137,13 +113,7 @@ async fn real_llm_rag_complex_query_uses_multiple_tools() {
     let blocking_degrades: Vec<_> = resp
         .degrade_trace
         .iter()
-        .filter(|item| {
-            !(item.stage == "dense_retrieval"
-                && matches!(
-                    &item.reason,
-                    DegradeReason::Other(msg) if msg.contains("multimodal embedding input is empty")
-                ))
-        })
+        .filter(|item| !non_blocking_degrade(item))
         .collect();
     assert!(
         blocking_degrades.is_empty(),
