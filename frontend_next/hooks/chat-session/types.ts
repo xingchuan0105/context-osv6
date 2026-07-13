@@ -8,6 +8,15 @@ import type {
   ToolResult,
 } from "../../lib/workspace/stream";
 
+/** Frozen process card for a finished assistant turn (survives refresh via local cache). */
+export type UiProgressSnapshot = {
+  mode: WorkspaceChatMode;
+  activities: ProgressEntry[];
+  startedAtMs: number | null;
+  endedAtMs: number | null;
+  collapsed: boolean;
+};
+
 export type UiChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -21,6 +30,8 @@ export type UiChatMessage = {
   pending?: boolean;
   sessionId: string | null;
   toolResults: ToolResult[];
+  /** Per-turn retrieval/process card (attached on stream done; restored after refresh). */
+  progress?: UiProgressSnapshot | null;
 };
 
 export type ProgressEntry = {

@@ -276,7 +276,8 @@ export async function createPortalSession(token: string) {
 
 export type CheckoutRequest = {
   plan_id?: string;
-  provider?: "stripe" | "creem" | "alipay";
+  /** Product checkout providers only (Stripe removed 2026-07-13). */
+  provider?: "creem" | "alipay";
 };
 
 export type CheckoutResponse = {

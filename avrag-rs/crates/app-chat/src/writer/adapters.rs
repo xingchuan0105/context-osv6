@@ -44,6 +44,9 @@ impl WriteActivitySink for AgentWriteActivitySink<'_> {
             .emit(AgentEvent::Activity {
                 stage: stage.to_string(),
                 message,
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
     }

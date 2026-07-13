@@ -417,6 +417,22 @@ textarea {
   padding: 2rem 2rem 3.5rem;
 }
 
+.dashboard-brand-link {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.dashboard-brand-title {
+  text-decoration: none;
+}
+
+a.dashboard-brand-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
 .dashboard-brand {
   display: inline-flex;
   align-items: center;

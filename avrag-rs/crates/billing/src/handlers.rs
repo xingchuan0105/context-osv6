@@ -89,13 +89,10 @@ pub async fn handle_create_checkout(
 }
 
 pub async fn handle_create_portal(
-    _store: Arc<dyn BillingStorePort>,
-    _user_id: UserId,
+    store: Arc<dyn BillingStorePort>,
+    user_id: UserId,
 ) -> ApiResponse<PortalResponse> {
-    ApiResponse::err(
-        "billing_portal_unavailable",
-        "Self-service billing portal is unavailable; manage subscriptions via Creem or contact support",
-    )
+    BillingService::shared().create_portal(store, user_id).await
 }
 
 pub async fn handle_webhook(

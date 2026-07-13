@@ -44,6 +44,7 @@ async fn search_conversation_history_workspace_scope_spans_sessions_when_databas
             tool_results: &[],
             user_turn_metadata: None,
             user_resolved_query: Some("What is antifragility?"),
+            assistant_turn_metadata: None,
         },
     )
     .await
@@ -61,6 +62,7 @@ async fn search_conversation_history_workspace_scope_spans_sessions_when_databas
             tool_results: &[],
             user_turn_metadata: None,
             user_resolved_query: None,
+            assistant_turn_metadata: None,
         },
     )
     .await
@@ -147,6 +149,7 @@ async fn search_sessions_matches_assistant_message_body_when_database_available(
             tool_results: &[],
             user_turn_metadata: None,
             user_resolved_query: None,
+            assistant_turn_metadata: None,
         },
     )
     .await
@@ -204,6 +207,7 @@ async fn search_conversation_history_matches_assistant_message_when_database_ava
             tool_results: &[],
             user_turn_metadata: None,
             user_resolved_query: None,
+            assistant_turn_metadata: None,
         },
     )
     .await
@@ -221,6 +225,7 @@ async fn search_conversation_history_matches_assistant_message_when_database_ava
             tool_results: &[],
             user_turn_metadata: None,
             user_resolved_query: None,
+            assistant_turn_metadata: None,
         },
     )
     .await

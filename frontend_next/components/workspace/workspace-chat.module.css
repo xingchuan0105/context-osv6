@@ -435,6 +435,11 @@
   padding-left: 1.4rem;
 }
 
+.markdownContent ol {
+  list-style: decimal;
+  list-style-position: outside;
+}
+
 .markdownContent .taskList {
   padding-left: 0;
   list-style: none;
@@ -717,6 +722,58 @@
   transform: scale(1);
 }
 
+/* Grok-style square matrix: cells light in a chase loop while the card is live. */
+.progressMatrix {
+  display: grid !important;
+  grid-template-columns: repeat(3, 0.28rem);
+  grid-template-rows: repeat(3, 0.28rem);
+  gap: 0.12rem;
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  margin-top: 0.18rem;
+  border-radius: 0.2rem;
+  color: hsl(var(--foreground));
+}
+
+.progressMatrix::before {
+  display: none;
+}
+
+.progressMatrixCell {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.05rem;
+  background: currentColor;
+  opacity: 0.18;
+}
+
+.progressIconPulse .progressMatrixCell {
+  animation: progressMatrixChase 1.05s ease-in-out infinite;
+  animation-delay: calc(var(--cell-i, 0) * 0.08s);
+}
+
+.progressIconDone .progressMatrixCell {
+  opacity: 0.45;
+  animation: none;
+}
+
+@keyframes progressMatrixChase {
+  0%,
+  100% {
+    opacity: 0.16;
+    transform: scale(0.9);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+
 @keyframes progressDotPulse {
   0%,
   100% {
@@ -732,6 +789,11 @@
 @media (prefers-reduced-motion: reduce) {
   .progressIconPulse .progressIconCore {
     animation: none;
+  }
+
+  .progressIconPulse .progressMatrixCell {
+    animation: none;
+    opacity: 0.55;
   }
 }
 
@@ -880,7 +942,7 @@
   align-items: baseline;
   justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.35rem 0.55rem;
   color: hsl(var(--foreground));
   font-size: var(--font-size-control);
   line-height: 1.5;
@@ -896,6 +958,40 @@
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-meta);
   white-space: nowrap;
+}
+
+/* Level-2 section disclosure: step title always visible when card is open. */
+.progressStepDisclosure {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.progressStepDisclosure:hover .progressItemHeader strong {
+  color: hsl(var(--foreground));
+}
+
+.progressStepDisclosure:hover .progressStepChevron {
+  color: hsl(var(--foreground));
+}
+
+.progressStepChevron {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  flex: none;
+}
+
+.progressStepBody {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
 }
 
 .progressItemDetail {

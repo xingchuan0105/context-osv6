@@ -82,6 +82,14 @@ export const usageMessages = {
     zh: "无限制",
     en: "Unlimited",
   },
+  usageApproxTokensLabel: {
+    zh: "约 {used} / {limit} tokens",
+    en: "≈ {used} / {limit} tokens",
+  },
+  usageMarginNote: {
+    zh: "方案乘数 M={m}；按输入（含缓存命中优惠）与输出折算后计入额度，缓存命中更省",
+    en: "Plan multiplier M={m}; usage is folded from input (cache-hit discounted) and output — cache hits cost less",
+  },
   usageForecastDetail: {
     zh: "预计 30 天用量 {projected} / 7d 限额 {limit}",
     en: "Projected 30-day usage {projected} / 7d limit {limit}",

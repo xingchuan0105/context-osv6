@@ -42,6 +42,9 @@ mod tests {
             sink.emit(AgentEvent::Activity {
                 stage: self.0.to_string(),
                 message: "running".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
             let query = request.query.clone();

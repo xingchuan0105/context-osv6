@@ -159,12 +159,31 @@ export function markdownToRichTextHtml(markdown: string | null | undefined) {
     }
 
     if (/^\d+\.\s+/.test(line)) {
-      const items: string[] = [];
-      while (index < lines.length && /^\d+\.\s+/.test(lines[index] ?? "")) {
-        items.push((lines[index] ?? "").replace(/^\d+\.\s+/, ""));
+      // Product: do NOT convert to browser <ol> (would re-number via CSS list-style).
+      // Keep the model's own "1. / 2. / …" text as written, including blank lines between items.
+      const itemLines: string[] = [];
+      while (index < lines.length) {
+        const currentRaw = lines[index] ?? "";
+        if (!currentRaw.trim()) {
+          let look = index + 1;
+          while (look < lines.length && !(lines[look] ?? "").trim()) {
+            look += 1;
+          }
+          if (look < lines.length && /^\d+\.\s+/.test(lines[look] ?? "")) {
+            index = look;
+            continue;
+          }
+          break;
+        }
+        if (!/^\d+\.\s+/.test(currentRaw)) {
+          break;
+        }
+        itemLines.push(currentRaw.trimEnd());
         index += 1;
       }
-      blocks.push(`<ol>${items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ol>`);
+      blocks.push(
+        itemLines.map((item) => `<p>${renderInlineMarkdown(item)}</p>`).join(""),
+      );
       continue;
     }
 

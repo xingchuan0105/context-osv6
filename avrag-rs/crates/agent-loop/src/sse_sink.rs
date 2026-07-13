@@ -7,6 +7,7 @@ use crate::events::{AgentEvent, AgentEventSink};
 use contracts::chat::ChatEvent;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedSender;
 
 /// Sink that maps `AgentEvent` to `ChatEvent` and forwards them into the
@@ -22,6 +23,8 @@ pub struct SseSink {
     answer_started: AtomicBool,
     message_delta_emitted: AtomicBool,
     citations_emitted: AtomicBool,
+    /// Shared log of progress-relevant events (Activity + Reasoning) for persistence.
+    progress_events: Arc<Mutex<Vec<AgentEvent>>>,
 }
 
 impl Clone for SseSink {
@@ -39,6 +42,7 @@ impl Clone for SseSink {
                 self.message_delta_emitted.load(Ordering::SeqCst),
             ),
             citations_emitted: AtomicBool::new(self.citations_emitted.load(Ordering::SeqCst)),
+            progress_events: self.progress_events.clone(),
         }
     }
 }
@@ -77,6 +81,7 @@ impl SseSink {
             answer_started: AtomicBool::new(false),
             message_delta_emitted: AtomicBool::new(false),
             citations_emitted: AtomicBool::new(false),
+            progress_events: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -98,6 +103,28 @@ impl SseSink {
         self.citations_emitted.load(Ordering::SeqCst)
     }
 
+    /// Progress snapshot for assistant `turn_metadata` (None when nothing to show).
+    pub fn progress_turn_metadata(&self) -> Option<serde_json::Value> {
+        let events = self
+            .progress_events
+            .lock()
+            .map(|g| g.clone())
+            .unwrap_or_default();
+        crate::progress::assistant_progress_turn_metadata(&self.agent_type, &events)
+    }
+
+    fn record_progress_event(&self, event: &AgentEvent) {
+        if !matches!(
+            event,
+            AgentEvent::Activity { .. } | AgentEvent::ReasoningSummaryDelta { .. }
+        ) {
+            return;
+        }
+        if let Ok(mut guard) = self.progress_events.lock() {
+            guard.push(event.clone());
+        }
+    }
+
     /// Send a single `AgentEvent` after mapping it to `ChatEvent`.
     pub fn send(&self, event: AgentEvent) {
         if matches!(event, AgentEvent::Done { .. }) && !self.emit_done {
@@ -110,6 +137,7 @@ impl SseSink {
         if matches!(event, AgentEvent::Audit { .. }) {
             return;
         }
+        self.record_progress_event(&event);
         if matches!(&event, AgentEvent::Citations { citations } if !citations.is_empty()) {
             self.citations_emitted.store(true, Ordering::SeqCst);
         }
@@ -119,13 +147,19 @@ impl SseSink {
 
     fn map_event(&self, event: AgentEvent) -> ChatEvent {
         match event {
-            AgentEvent::Activity { stage, message } => ChatEvent::Activity {
+            AgentEvent::Activity {
+                stage,
+                message,
+                detail,
+                counts,
+                sources_preview,
+            } => ChatEvent::Activity {
                 request_id: self.request_id.clone(),
                 phase: stage,
                 title: message,
-                detail: None,
-                counts: BTreeMap::new(),
-                sources_preview: Vec::new(),
+                detail,
+                counts,
+                sources_preview,
                 timestamp: Some(now_rfc3339()),
             },
             AgentEvent::ReasoningSummaryDelta { text } => ChatEvent::ReasoningSummaryDelta {
@@ -390,6 +424,9 @@ mod tests {
         sink.send(AgentEvent::Activity {
             stage: "planning".to_string(),
             message: " analysing".to_string(),
+            detail: None,
+            counts: Default::default(),
+            sources_preview: Vec::new(),
         });
         let event = rx.try_recv().expect("activity event should be sent");
         assert!(

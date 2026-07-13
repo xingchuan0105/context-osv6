@@ -1,23 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import {
-  createPortalSession,
   getSubscription,
-  getUsage,
   listPlans,
 } from "../../lib/settings/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import {
-  formatCompactNumber,
   formatDate,
-  progressBarStyle,
-  progressTrackStyle,
   settingsKeys,
   subscriptionStatusLabel,
 } from "./settings-shared";
@@ -27,14 +23,17 @@ export function BillingPanel() {
   const { token } = useAuth();
   const { locale } = useUiPreferences();
   const [actionError, setActionError] = useState("");
+  /** In-app plan actions (no external Stripe portal — Creem/Alipay only). */
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
 
   const billingQuery = useQuery({
     queryKey: settingsKeys.billing(token),
     enabled: Boolean(token),
     queryFn: async () => {
-      const [subscriptionResult, usageResult, plansResult] = await Promise.allSettled([
+      // Product metering truth is UsageLimitPanel (5h/7d usage_units). Do not load
+      // legacy monthly token/document counters from /billing/usage (confusing dual numbers).
+      const [subscriptionResult, plansResult] = await Promise.allSettled([
         getSubscription(token as string),
-        getUsage(token as string),
         listPlans(token as string),
       ]);
 
@@ -46,10 +45,6 @@ export function BillingPanel() {
         );
       }
 
-      if (usageResult.status === "rejected") {
-        failedItems.push(formatUiMessage(locale, "settings.billing.failedItem.usage"));
-      }
-
       if (plansResult.status === "rejected") {
         failedItems.push(formatUiMessage(locale, "settings.billing.failedItem.plans"));
       }
@@ -57,7 +52,6 @@ export function BillingPanel() {
       return {
         subscription:
           subscriptionResult.status === "fulfilled" ? subscriptionResult.value : null,
-        usage: usageResult.status === "fulfilled" ? usageResult.value : null,
         plans: plansResult.status === "fulfilled" ? plansResult.value.plans : [],
         partialError:
           failedItems.length > 0
@@ -68,53 +62,17 @@ export function BillingPanel() {
       };
     },
   });
-  const portalMutation = useMutation({
-    mutationFn: async () => {
-      if (!token) {
-        throw new Error(formatUiMessage(locale, "settings.profile.notAuthenticated"));
-      }
-
-      const response = await createPortalSession(token);
-
-      if (!response.url.trim()) {
-        throw new Error(formatUiMessage(locale, "settings.billing.portalEmpty"));
-      }
-
-      return response;
-    },
-    onSuccess: (response) => {
-      window.location.assign(response.url);
-    },
-  });
-
   const currentPlan = billingQuery.data?.subscription
     ? billingQuery.data.plans.find(
         (plan) => plan.id === billingQuery.data?.subscription?.plan_id,
       ) ?? null
     : null;
 
-  async function handleManagePlan() {
+  function handleManagePlan() {
+    // Stripe Customer Portal removed with Stripe payment stack (2026-07-13).
+    // Product path: expand in-app plan list + link to /pricing (Creem/Alipay checkout).
     setActionError("");
-
-    try {
-      await portalMutation.mutateAsync();
-    } catch (error) {
-      const raw =
-        error instanceof Error
-          ? error.message
-          : describeAuthError(formatUiMessage(locale, "settings.saveError"), error);
-      const lower = raw.toLowerCase();
-      const portalUnavailable =
-        lower.includes("portal is unavailable") ||
-        lower.includes("self-service billing") ||
-        lower.includes("creem") ||
-        lower.includes("not available");
-      setActionError(
-        portalUnavailable
-          ? formatUiMessage(locale, "settings.billing.portalUnavailable")
-          : raw,
-      );
-    }
+    setShowPlanPicker(true);
   }
 
   const errorMessage =
@@ -140,19 +98,22 @@ export function BillingPanel() {
             </p>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <a className="app-button-primary" href="/upgrade" style={{ textDecoration: "none" }}>
-              {formatUiMessage(locale, "settings.billing.changePlanAction")}
-            </a>
             <button
-              className="app-button-secondary"
-              disabled={portalMutation.isPending || !token}
+              className="app-button-primary"
+              data-testid="settings-manage-subscription"
+              disabled={!token}
               type="button"
-              onClick={() => void handleManagePlan()}
+              onClick={() => handleManagePlan()}
             >
-              {portalMutation.isPending
-                ? formatUiMessage(locale, "settings.billing.loadingPortal")
-                : formatUiMessage(locale, "settings.billing.managePlanAction")}
+              {formatUiMessage(locale, "settings.billing.managePlanAction")}
             </button>
+            <Link
+              className="app-button-secondary"
+              data-testid="settings-change-plan"
+              href="/pricing"
+            >
+              {formatUiMessage(locale, "settings.billing.changePlanAction")}
+            </Link>
           </div>
         </div>
         {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
@@ -197,79 +158,74 @@ export function BillingPanel() {
         )}
       </section>
 
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <h3 style={{ margin: 0 }}>
-          {formatUiMessage(locale, "settings.billing.usageTitle")}
-        </h3>
-        {!billingQuery.data?.usage ? (
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {billingQuery.isLoading
-              ? formatUiMessage(locale, "settings.billing.loadingUsage")
-              : formatUiMessage(locale, "settings.billing.noUsageData")}
-          </p>
-        ) : (
-          <>
-            {[
-              {
-                label: formatUiMessage(locale, "settings.billing.tokensLabel"),
-                used: billingQuery.data.usage.used_tokens,
-                limit: billingQuery.data.usage.limit_tokens,
-              },
-              {
-                label: formatUiMessage(locale, "settings.billing.documentsLabel"),
-                used: billingQuery.data.usage.used_documents,
-                limit: billingQuery.data.usage.limit_documents,
-              },
-            ].map(({ label, used, limit }) => {
-              const percent =
-                typeof limit === "number" && limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
-
-              return (
-                <div key={label} style={{ display: "grid", gap: "0.45rem" }}>
-                  <div className="app-inline-row" style={{ marginBottom: 0 }}>
-                    <span>{label}</span>
-                    <strong>
-                      {formatCompactNumber(used)}
-                      {" / "}
-                      {limit > 0
-                        ? formatCompactNumber(limit)
-                        : formatUiMessage(locale, "settings.usage.notSet")}
-                    </strong>
-                  </div>
-                  <div style={progressTrackStyle()}>
-                    <div style={progressBarStyle(percent)} />
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        )}
-      </section>
-
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <h3 style={{ margin: 0 }}>
-              {formatUiMessage(locale, "settings.billing.availablePlansTitle")}
-            </h3>
-            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }}>
-              {locale === "zh-CN"
-                ? "升级与更换方案在独立页面完成，避免与账单状态混在同一折叠区。"
-                : "Upgrade and plan changes open on a dedicated page."}
-            </p>
+      {showPlanPicker || (billingQuery.data?.plans?.length ?? 0) > 0 ? (
+        <section
+          className="app-inline-surface"
+          data-testid="settings-plan-picker"
+          style={{ display: "grid", gap: "0.8rem" }}
+        >
+          <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
+            <div style={{ display: "grid", gap: "0.25rem" }}>
+              <h3 style={{ margin: 0 }}>
+                {formatUiMessage(locale, "settings.billing.availablePlansTitle")}
+              </h3>
+              <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }}>
+                {formatUiMessage(locale, "settings.billing.planPickerHint")}
+              </p>
+            </div>
+            <Link className="app-link" href="/pricing">
+              {formatUiMessage(locale, "settings.billing.openPricingPage")}
+            </Link>
           </div>
-          <a className="app-button-primary" href="/upgrade" style={{ textDecoration: "none" }}>
-            {formatUiMessage(locale, "settings.billing.changePlanAction")}
-          </a>
-        </div>
-        {billingQuery.data?.plans && billingQuery.data.plans.length > 0 ? (
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }}>
-            {locale === "zh-CN"
-              ? `当前可选 ${billingQuery.data.plans.length} 个方案（Free / 付费等），点击「更换方案」查看详情。`
-              : `${billingQuery.data.plans.length} plans available — open Change plan for details.`}
-          </p>
-        ) : null}
-      </section>
+          {(billingQuery.data?.plans ?? []).length === 0 ? (
+            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+              {formatUiMessage(locale, "settings.billing.noPlans")}
+            </p>
+          ) : (
+            <ul style={{ display: "grid", gap: "0.55rem", listStyle: "none", margin: 0, padding: 0 }}>
+              {(billingQuery.data?.plans ?? []).map((plan) => {
+                const isCurrent = plan.id === billingQuery.data?.subscription?.plan_id;
+                return (
+                  <li
+                    key={plan.id}
+                    className="app-inline-surface"
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "0.75rem",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: "0.15rem" }}>
+                      <strong>
+                        {plan.name}
+                        {isCurrent
+                          ? ` · ${formatUiMessage(locale, "settings.billing.currentPlanBadge")}`
+                          : ""}
+                      </strong>
+                      {plan.features.length > 0 ? (
+                        <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }}>
+                          {plan.features.slice(0, 3).join(" · ")}
+                        </span>
+                      ) : null}
+                    </div>
+                    {!isCurrent ? (
+                      <Link
+                        className="app-button-secondary"
+                        href={`/pricing?plan=${encodeURIComponent(plan.id)}`}
+                      >
+                        {formatUiMessage(locale, "settings.billing.changePlanAction")}
+                      </Link>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
     </section>
   );
 }

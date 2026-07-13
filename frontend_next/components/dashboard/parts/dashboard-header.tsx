@@ -3,22 +3,47 @@
 import Link from "next/link";
 
 import { ContextOsMark } from "../../context-os-mark";
+import { brandHomeHref } from "../../product-chrome-footer";
 import { type DashboardLocale } from "../../../lib/dashboard/model";
 import { formatUiMessage } from "../../../lib/i18n/messages";
 
 export function DashboardHeader({
-  avatarInitial,
+  avatarInitial: _avatarInitial,
   locale,
 }: {
+  /** Reserved for optional avatar badge; product keeps account text only. */
   avatarInitial: string;
   locale: DashboardLocale;
 }) {
+  const brandHref = brandHomeHref();
+  const brandIsExternal = /^https?:\/\//i.test(brandHref);
+
   return (
     <header className="dashboard-header">
       <div className="dashboard-brand">
-        <ContextOsMark className="dashboard-brand-mark" />
+        {brandIsExternal ? (
+          <a
+            className="dashboard-brand-link"
+            href={brandHref}
+            rel="noopener noreferrer"
+            target="_blank"
+            title={formatUiMessage(locale, "productChrome.brandHome")}
+          >
+            <ContextOsMark className="dashboard-brand-mark" />
+          </a>
+        ) : (
+          <Link
+            className="dashboard-brand-link"
+            href={brandHref}
+            title={formatUiMessage(locale, "productChrome.brandHome")}
+          >
+            <ContextOsMark className="dashboard-brand-mark" />
+          </Link>
+        )}
         <div>
-          <div className="dashboard-brand-title">Context OS</div>
+          <Link className="dashboard-brand-title" href="/dashboard">
+            Context-OS
+          </Link>
           <div className="dashboard-brand-subtitle">{formatUiMessage(locale, "dashboardBrandSubtitle")}</div>
         </div>
       </div>
@@ -33,13 +58,6 @@ export function DashboardHeader({
             <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />
           </svg>
           <span>{formatUiMessage(locale, "dashboardAccountLink")}</span>
-        </Link>
-        <Link
-          aria-label={formatUiMessage(locale, "dashboardProfileLink")}
-          className="dashboard-avatar-link"
-          href="/settings?tab=profile"
-        >
-          {avatarInitial}
         </Link>
       </div>
     </header>

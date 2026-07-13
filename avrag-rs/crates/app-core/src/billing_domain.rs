@@ -22,15 +22,12 @@ pub const ADMIN_ROLE_SUPER: &str = "super_admin";
 
 #[derive(Clone, Debug, Default)]
 pub struct BillingConfig {
-    pub stripe_secret_key: String,
-    pub stripe_webhook_secret: String,
-    pub stripe_price_pro: String,
-    pub stripe_price_plus: String,
+    /// Residual label fields (display only; not Stripe API).
     pub billing_price_label_pro: String,
     pub billing_price_label_plus: String,
     pub public_app_base_url: String,
 
-    // Creem Config
+    // Creem Config (international cards — primary non-CN checkout)
     pub creem_api_key: String,
     pub creem_webhook_secret: String,
     pub creem_price_pro: String,
@@ -55,15 +52,6 @@ pub struct BillingConfig {
 impl BillingConfig {
     pub fn from_env() -> Self {
         Self {
-            stripe_secret_key: std::env::var("STRIPE_SECRET_KEY").unwrap_or_default(),
-            stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").unwrap_or_default(),
-            stripe_price_pro: std::env::var("STRIPE_PRICE_PRO")
-                .or_else(|_| std::env::var("STRIPE_PRICE_PRO_MONTHLY"))
-                .or_else(|_| std::env::var("STRIPE_PRICE_ID"))
-                .unwrap_or_default(),
-            stripe_price_plus: std::env::var("STRIPE_PRICE_PLUS")
-                .or_else(|_| std::env::var("STRIPE_PRICE_ENTERPRISE"))
-                .unwrap_or_default(),
             billing_price_label_pro: std::env::var("BILLING_PRICE_LABEL_PRO")
                 .unwrap_or_else(|_| "¥129 / 月 · $19 / 月".to_string()),
             billing_price_label_plus: std::env::var("BILLING_PRICE_LABEL_PLUS")
@@ -107,14 +95,7 @@ impl BillingConfig {
         }
     }
 
-    pub fn stripe_enabled(&self) -> bool {
-        !self.stripe_secret_key.trim().is_empty()
-    }
-
-    pub fn webhook_enabled(&self) -> bool {
-        self.stripe_enabled() && !self.stripe_webhook_secret.trim().is_empty()
-    }
-
+    /// Product payment providers: Creem + Alipay only (Stripe removed 2026-07-13).
     pub fn creem_enabled(&self) -> bool {
         !self.creem_api_key.trim().is_empty()
     }
@@ -179,18 +160,6 @@ impl BillingConfig {
         }
     }
 
-    pub fn checkout_price_for_plan(&self, plan_id: &str) -> Option<&str> {
-        match plan_id.trim() {
-            PLAN_PRO if !self.stripe_price_pro.trim().is_empty() => {
-                Some(self.stripe_price_pro.as_str())
-            }
-            PLAN_PLUS if !self.stripe_price_plus.trim().is_empty() => {
-                Some(self.stripe_price_plus.as_str())
-            }
-            _ => None,
-        }
-    }
-
     pub fn checkout_available(&self, plan_id: &str) -> bool {
         if plan_id.trim() == PLAN_FREE {
             return false;
@@ -247,15 +216,16 @@ impl BillingConfig {
             .unwrap_or(0)
     }
 
+    /// Map provider price/product ids to plan (Creem product ids + Alipay not needed for id map).
     pub fn plan_id_by_price_id(&self, price_id: &str) -> Option<&'static str> {
         let price_id = price_id.trim();
         if price_id.is_empty() {
             return None;
         }
-        if price_id == self.stripe_price_pro.trim() {
+        if price_id == self.creem_product_pro.trim() || price_id == self.creem_price_pro.trim() {
             return Some(PLAN_PRO);
         }
-        if price_id == self.stripe_price_plus.trim() {
+        if price_id == self.creem_product_plus.trim() || price_id == self.creem_price_plus.trim() {
             return Some(PLAN_PLUS);
         }
         None
@@ -271,8 +241,16 @@ pub struct BillingPlanQuota {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UsageWindowBucket {
+    /// Internal usage_units (ledger).
     pub used: i64,
+    /// Internal rolling limit in usage_units.
     pub limit: i64,
+    /// Product-facing approx tokens: used / M * 1000.
+    #[serde(default)]
+    pub used_tokens_approx: i64,
+    /// Product-facing approx tokens: limit / M * 1000.
+    #[serde(default)]
+    pub limit_tokens_approx: i64,
     pub percentage: i32,
     pub reset_at: DateTime<Utc>,
 }
@@ -286,10 +264,17 @@ pub struct LimitHits {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageWindowResponse {
     pub plan_id: String,
+    /// Plan margin multiplier M (transparent to users).
+    #[serde(default = "default_margin_multiplier")]
+    pub margin_multiplier: f64,
     pub rolling_5h: UsageWindowBucket,
     pub rolling_7d: UsageWindowBucket,
     pub soft_limit_hit: LimitHits,
     pub hard_limit_hit: LimitHits,
+}
+
+fn default_margin_multiplier() -> f64 {
+    2.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -328,9 +313,16 @@ pub struct BillingPlan {
     pub quotas: Vec<BillingPlanQuota>,
 }
 
+/// Active checkout/webhook providers: **Creem** + **Alipay** only.
+///
+/// `Stripe` remains only so legacy DB rows / historical webhook payloads can deserialize;
+/// product code must not start new Stripe checkouts or process Stripe webhooks
+/// (removed 2026-07-13 — see `docs/engineering/STRIPE_BILLING_REMOVAL_2026-07-13.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BillingProvider {
+    /// Legacy residual only — not a product payment path.
+    #[serde(alias = "stripe")]
     Stripe,
     Creem,
     Alipay,
@@ -350,6 +342,7 @@ impl std::str::FromStr for BillingProvider {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_lowercase().as_str() {
+            // Accept parse for residual routing keys; handlers reject active Stripe ops.
             "stripe" => Ok(Self::Stripe),
             "creem" => Ok(Self::Creem),
             "alipay" => Ok(Self::Alipay),

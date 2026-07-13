@@ -70,11 +70,12 @@ describe("PricingCards", () => {
     expect(onSelect).toHaveBeenCalledWith("pro");
   });
 
-  it("shows 5h/7d rolling limits per plan", () => {
+  it("shows 5h/7d approx token limits and plan margin M", () => {
     render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
-    expect(screen.getByText(/5 小时窗口: 100K/)).toBeTruthy();
-    expect(screen.getByText(/7 天窗口: 400K/)).toBeTruthy();
-    expect(screen.getByText(/5 小时窗口: 600K/)).toBeTruthy();
-    expect(screen.getByText(/7 天窗口: 4\.0M/)).toBeTruthy();
+    expect(screen.getByText(/5 小时约 100K tokens/)).toBeTruthy();
+    expect(screen.getByText(/7 天约 400K tokens/)).toBeTruthy();
+    expect(screen.getByText(/5 小时约 600K tokens/)).toBeTruthy();
+    expect(screen.getByText(/7 天约 4\.0M tokens/)).toBeTruthy();
+    expect(screen.getAllByText(/方案乘数 M=/).length).toBeGreaterThanOrEqual(3);
   });
 });

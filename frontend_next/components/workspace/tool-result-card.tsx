@@ -32,9 +32,8 @@ function getToolRenderHint(toolName: string): string {
 }
 
 function isCompactToolByDefault(toolName: string): boolean {
-  const hint = getToolRenderHint(toolName);
-  // JSON dumps (doc_profile, etc.) stay collapsed so they never look like the answer.
-  return hint === "json" || toolName.includes("profile") || toolName.includes("doc_");
+  // Product rule: only web_search is shown (and folded). Other user-facing tools expand.
+  return toolName === "web_search" || getToolRenderHint(toolName) === "search";
 }
 
 export function ToolResultCard({ locale, result }: ToolResultCardProps) {
@@ -340,16 +339,9 @@ type ToolResultsPanelProps = {
   results: ToolResult[];
 };
 
-export function ToolResultsPanel({ locale, results }: ToolResultsPanelProps) {
-  if (results.length === 0) {
-    return null;
-  }
-  return (
-    <div className={styles.toolResultsPanel}>
-      {results.map((result, index) => (
-        <ToolResultCard key={`${result.tool}-${index}`} locale={locale} result={result} />
-      ))}
-    </div>
-  );
+export function ToolResultsPanel({ locale: _locale, results: _results }: ToolResultsPanelProps) {
+  // Product rule (2026-07-13): never surface tool-call records in any of the 4 modes.
+  // Retrieval/search process belongs in ProgressTimeline; final answer + citations only.
+  return null;
 }
 

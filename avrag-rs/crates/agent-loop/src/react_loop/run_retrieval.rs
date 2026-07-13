@@ -132,6 +132,9 @@ impl ReActLoop {
             .emit(AgentEvent::Activity {
                 stage: "budget_exhausted".to_string(),
                 message: "iteration budget exhausted, evaluating exit policy".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
         true

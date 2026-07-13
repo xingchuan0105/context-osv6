@@ -9,7 +9,7 @@ import {
   normalizeStreamMessageId,
 } from "./helpers";
 import type { MessageHistory } from "./use-message-history";
-import type { PendingDoneEvent, UiChatMessage } from "./types";
+import type { PendingDoneEvent, UiChatMessage, UiProgressSnapshot } from "./types";
 
 export type StreamAssistantUpdateDeps = {
   messageHistory: MessageHistory;
@@ -89,6 +89,7 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
             ? current?.sessionId ?? event.session_id
             : current?.sessionId ?? deps.streamingSessionIdRef.current,
         toolResults: current?.toolResults ?? [],
+        progress: current?.progress ?? null,
       }),
       undefined,
       fallbackAssistantId,
@@ -113,15 +114,18 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
       pending: true,
       sessionId: current?.sessionId ?? deps.streamingSessionIdRef.current,
       toolResults: current?.toolResults ?? [],
+      progress: current?.progress ?? null,
     }));
   }
 
-  function finalizeStreamingDone(event: PendingDoneEvent) {
+  function finalizeStreamingDone(
+    event: PendingDoneEvent,
+    progressSnapshot?: UiProgressSnapshot | null,
+  ) {
     const payload = event.payload as ChatResponse;
     const answer = getAnswerText(payload.answer ?? "", payload.answer_blocks ?? []);
     const resolvedMessageId = normalizeStreamMessageId(event.message_id);
     const fallbackAssistantId = getAssistantMessageKey(event.message_id);
-
     updateStreamingAssistant(
       (current) => ({
         id: resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : current?.id ?? fallbackAssistantId,
@@ -142,6 +146,7 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
         pending: false,
         sessionId: event.session_id,
         toolResults: payload.tool_results ?? current?.toolResults ?? [],
+        progress: progressSnapshot ?? current?.progress ?? null,
       }),
       undefined,
       fallbackAssistantId,
@@ -163,9 +168,20 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
       return;
     }
 
+    // Keep an assistant slot after errors/abort so the transcript never ends on a
+    // bare user query. Empty content is left for the error banner; non-empty keeps text.
     deps.messageHistory.setMessages((current) =>
       current.map((message) =>
-        message.id === pendingMessageId ? { ...message, pending: false } : message,
+        message.id === pendingMessageId
+          ? {
+              ...message,
+              pending: false,
+              content:
+                message.content.trim().length > 0
+                  ? message.content
+                  : message.content /* may stay empty; UI shows stream error banner */,
+            }
+          : message,
       ),
     );
   }

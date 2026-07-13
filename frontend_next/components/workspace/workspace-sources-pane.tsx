@@ -228,10 +228,17 @@ export function WorkspaceSourcesPane({
               const selectable = !processing && !failed;
               const showStatus = visualStatus !== "ready" && visualStatus !== "completed";
               const statusLabel = showStatus ? getStatusLabel(locale, visualStatus) : "";
-              const showStatusText =
-                showStatus &&
-                !processing &&
-                !failed;
+              const errorDetail =
+                failed && typeof source.last_error === "string" && source.last_error.trim()
+                  ? source.last_error.trim()
+                  : "";
+              // Always surface failed/error text (not just spinner-adjacent processing).
+              const showStatusText = showStatus && !processing;
+              const rowTitle = errorDetail
+                ? `${statusLabel}: ${errorDetail}`
+                : showStatus
+                  ? statusLabel
+                  : undefined;
 
               return (
                 <li
@@ -240,6 +247,8 @@ export function WorkspaceSourcesPane({
                     styles.sourceListItem,
                     selected ? styles.listItemSelected : "",
                     focused || viewerOpen ? styles.listItemFocused : "",
+                    failed ? styles.listItemFailed : "",
+                    menuOpen ? styles.listItemMenuOpen : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -247,7 +256,7 @@ export function WorkspaceSourcesPane({
                   data-document-id={source.id}
                   data-status={visualStatus}
                   key={source.id}
-                  title={showStatus ? statusLabel : undefined}
+                  title={rowTitle}
                 >
                   <div className={styles.listItemTopRow}>
                     <button
@@ -282,6 +291,7 @@ export function WorkspaceSourcesPane({
                     <button
                       className={styles.sourceOpenButton}
                       type="button"
+                      title={source.file_name}
                       onClick={() => onOpenSource(source.id)}
                     >
                       <span className={styles.listItemTitleText}>{source.file_name}</span>
@@ -343,14 +353,23 @@ export function WorkspaceSourcesPane({
                     </div>
                   </div>
 
-                  {showStatusText || viewerOpen ? (
+                  {showStatusText || viewerOpen || errorDetail ? (
                     <div className={styles.listItemMetaRow}>
-                      {showStatusText ? <span className={styles.statusBadge}>{statusLabel}</span> : null}
+                      {showStatusText ? (
+                        <span className={styles.statusBadge} data-testid="ingestion-status-label">
+                          {statusLabel}
+                        </span>
+                      ) : null}
                       {viewerOpen ? (
                         <span className={styles.inlineBadge}>
                           {formatUiMessage(locale, "workspaceRightRail.viewerSectionTitle")}
                         </span>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {errorDetail ? (
+                    <div className={styles.sourceErrorDetail} data-testid="ingestion-error-detail">
+                      {errorDetail}
                     </div>
                   ) : null}
                 </li>

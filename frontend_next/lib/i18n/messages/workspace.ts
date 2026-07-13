@@ -769,6 +769,14 @@ export const workspaceMessages = {
     zh: "收起过程",
     en: "Collapse progress",
   },
+  "workspaceProgressStepExpand": {
+    zh: "展开步骤：{title}",
+    en: "Expand step: {title}",
+  },
+  "workspaceProgressStepCollapse": {
+    zh: "收起步骤：{title}",
+    en: "Collapse step: {title}",
+  },
   "workspaceProgressThinking": {
     zh: "正在思考",
     en: "Thinking",
@@ -804,6 +812,143 @@ export const workspaceMessages = {
   "workspaceProgressCountDocuments": {
     zh: "文档",
     en: "documents",
+  },
+  // Progress WorkFact keys (backend title = stable key; frontend localizes)
+  "progress.understand": {
+    zh: "正在理解问题",
+    en: "Understanding your question",
+  },
+  "progress.compose_answer": {
+    zh: "正在整理回答",
+    en: "Writing the answer",
+  },
+  "progress.memory": {
+    zh: "正在回忆相关上下文",
+    en: "Recalling relevant context",
+  },
+  "progress.retrieve_semantic.running": {
+    zh: "正在语义检索",
+    en: "Running semantic search",
+  },
+  "progress.retrieve_semantic.done": {
+    zh: "完成语义检索",
+    en: "Semantic search complete",
+  },
+  "progress.retrieve_semantic.empty": {
+    zh: "未找到相关内容（语义检索）",
+    en: "No relevant results (semantic search)",
+  },
+  "progress.retrieve_keyword.running": {
+    zh: "正在关键词检索",
+    en: "Running keyword search",
+  },
+  "progress.retrieve_keyword.done": {
+    zh: "完成关键词检索",
+    en: "Keyword search complete",
+  },
+  "progress.retrieve_keyword.empty": {
+    zh: "未找到相关内容（关键词检索）",
+    en: "No relevant results (keyword search)",
+  },
+  "progress.retrieve_graph.running": {
+    zh: "正在关系检索",
+    en: "Running relation search",
+  },
+  "progress.retrieve_graph.done": {
+    zh: "完成关系检索",
+    en: "Relation search complete",
+  },
+  "progress.retrieve_graph.empty": {
+    zh: "未找到相关内容（关系检索）",
+    en: "No relevant results (relation search)",
+  },
+  "progress.retrieve_doc.running": {
+    zh: "正在阅读文档",
+    en: "Reading documents",
+  },
+  "progress.retrieve_doc.done": {
+    zh: "完成文档阅读",
+    en: "Document read complete",
+  },
+  "progress.retrieve_doc.empty": {
+    zh: "未找到相关文档内容",
+    en: "No relevant document content",
+  },
+  "progress.search_web.running": {
+    zh: "正在网页搜索",
+    en: "Searching the web",
+  },
+  "progress.search_web.done": {
+    zh: "完成网页搜索",
+    en: "Web search complete",
+  },
+  "progress.search_web.empty": {
+    zh: "未找到相关网页",
+    en: "No relevant web results",
+  },
+  "progress.fetch_url.running": {
+    zh: "正在读取网页",
+    en: "Fetching page",
+  },
+  "progress.fetch_url.done": {
+    zh: "完成读取网页",
+    en: "Page fetch complete",
+  },
+  "progress.fetch_url.empty": {
+    zh: "未能读取网页",
+    en: "Could not fetch page",
+  },
+  "progress.write_research": {
+    zh: "正在收集写作素材",
+    en: "Gathering writing material",
+  },
+  "progress.write_outline": {
+    zh: "正在规划文章大纲",
+    en: "Planning article outline",
+  },
+  "progress.write_draft": {
+    zh: "正在起草正文",
+    en: "Drafting the article",
+  },
+  "progress.write_draft_section": {
+    zh: "正在起草第 {section} 节",
+    en: "Drafting section {section}",
+  },
+  "progress.write_refine": {
+    zh: "正在润色修订",
+    en: "Refining the draft",
+  },
+  "progress.write_refine_round": {
+    zh: "正在润色第 {section} 轮",
+    en: "Refine round {section}",
+  },
+  "progress.write_validate": {
+    zh: "正在校验文稿",
+    en: "Validating the draft",
+  },
+  "progress.fallback_unavailable": {
+    zh: "补充检索不可用",
+    en: "Fallback retrieval unavailable",
+  },
+  "progress.detail.query": {
+    zh: "「{query}」",
+    en: "“{query}”",
+  },
+  "progress.detail.queryWithHits": {
+    zh: "「{query}」· 命中 {n} 条",
+    en: "“{query}” · {n} hits",
+  },
+  "progress.detail.hitsOnly": {
+    zh: "命中 {n} 条",
+    en: "{n} hits",
+  },
+  "progress.detail.emptyQuery": {
+    zh: "检索式「{query}」",
+    en: "Query “{query}”",
+  },
+  "progress.reasonPreview": {
+    zh: "思考摘要",
+    en: "Reasoning summary",
   },
   "workspaceRightRail.promoteNoteAction": {
     zh: "转换为来源",

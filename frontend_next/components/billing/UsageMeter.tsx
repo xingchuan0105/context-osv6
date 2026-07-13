@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import styles from "./UsageMeter.module.css";
 import { formatCompactToken, formatCountdown, formatLimitToken } from "../../lib/billing/format";
-import type { UsageWindowBucket, LimitHits } from "../../lib/billing/api";
+import {
+  bucketLimitTokensApprox,
+  bucketUsedTokensApprox,
+  type UsageWindowBucket,
+  type LimitHits,
+} from "../../lib/billing/api";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
 
@@ -37,6 +42,8 @@ function BucketCard({
 }) {
   const countdown = useCountdown(bucket.reset_at);
   const unlimitedLabel = formatUiMessage(locale, "usageUnlimited");
+  const usedApprox = bucketUsedTokensApprox(bucket);
+  const limitApprox = bucketLimitTokensApprox(bucket);
   const fillClass = isHardHit
     ? styles.barFill + " " + styles.danger
     : isSoftHit
@@ -46,9 +53,10 @@ function BucketCard({
     <div className={`${styles.card} ${compact ? styles.compact : ""}`}>
       <h3 className={styles.title}>{title}</h3>
       <div className={styles.numbers}>
-        <span className={styles.used}>{formatCompactToken(bucket.used)}</span>
+        <span className={styles.used}>{formatCompactToken(usedApprox)}</span>
         {" / "}
-        <span className={styles.limit}>{formatLimitToken(bucket.limit, unlimitedLabel)}</span>
+        <span className={styles.limit}>{formatLimitToken(limitApprox, unlimitedLabel)}</span>
+        <span className={styles.unitHint}> tokens</span>
       </div>
       <div
         className={styles.bar}
@@ -56,6 +64,10 @@ function BucketCard({
         aria-valuenow={bucket.percentage}
         aria-valuemin={0}
         aria-valuemax={100}
+        aria-label={formatUiMessage(locale, "usageApproxTokensLabel", {
+          used: formatCompactToken(usedApprox),
+          limit: formatLimitToken(limitApprox, unlimitedLabel),
+        })}
       >
         <div className={fillClass} style={{ width: `${bucket.percentage}%` }} />
       </div>
@@ -72,13 +84,15 @@ function BucketCard({
 export function UsageMeter({
   variant,
   locale,
-  planId,
+  planId: _planId,
+  marginMultiplier,
   rolling5h,
   rolling7d,
   softLimitHit,
   hardLimitHit,
 }: UsageMeterProps) {
   const compact = variant === "compact";
+  const m = marginMultiplier ?? 2.0;
   return (
     <div
       data-testid="usage-meter"
@@ -100,6 +114,11 @@ export function UsageMeter({
         compact={compact}
         locale={locale}
       />
+      {!compact ? (
+        <p className={styles.marginNote} data-testid="usage-margin-note">
+          {formatUiMessage(locale, "usageMarginNote", { m: String(m) })}
+        </p>
+      ) : null}
     </div>
   );
 }

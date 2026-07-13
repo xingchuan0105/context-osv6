@@ -5,60 +5,9 @@ pub(super) async fn process_webhook_event(
     config: &BillingConfig,
 ) -> Result<()> {
     match provider {
+        // Stripe payment stack removed 2026-07-13 — do not process residual webhooks.
         BillingProvider::Stripe => {
-            let event_type = payload
-                .get("type")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown");
-
-            match event_type {
-                "customer.subscription.created"
-                | "customer.subscription.updated"
-                | "customer.subscription.deleted" => {
-                    let mut snapshot = subscription_snapshot_from_event(payload, config)?;
-                    hydrate_subscription_snapshot(repo.clone(), &mut snapshot, config).await?;
-                    if event_type == "customer.subscription.deleted" {
-                        snapshot.status = STATUS_CANCELED.to_string();
-                    }
-                    upsert_subscription_snapshot(repo.clone(), &snapshot).await?;
-                    let _ = emit_billing_notification(
-                        repo.clone(),
-                        &snapshot.user_id,
-                        "billing.subscription.updated",
-                        "Billing subscription updated",
-                        "Your billing subscription status changed.",
-                        serde_json::json!({
-                            "plan_id": snapshot.plan_id,
-                            "status": snapshot.status,
-                            "stripe_subscription_id": snapshot.stripe_subscription_id,
-                        }),
-                    )
-                    .await;
-                }
-                "invoice.payment_failed" => {
-                    if let Some(subscription_id) = invoice_subscription_id(payload) {
-                        update_subscription_status(repo.clone(), &subscription_id, STATUS_PAST_DUE).await?;
-                        if let Some(existing) =
-                            load_existing_subscription_fields(repo.clone(), &subscription_id).await?
-                        {
-                            let _ = emit_billing_notification(
-                                repo.clone(),
-                                &existing.user_id,
-                                "billing.payment_failed",
-                                "Billing payment failed",
-                                "A subscription invoice payment failed and needs attention.",
-                                serde_json::json!({
-                                    "plan_id": existing.plan_id,
-                                    "stripe_subscription_id": subscription_id,
-                                    "status": STATUS_PAST_DUE,
-                                }),
-                            )
-                            .await;
-                        }
-                    }
-                }
-                _ => {}
-            }
+            anyhow::bail!("billing_provider_removed: Stripe is not a product payment provider");
         }
         BillingProvider::Creem => {
             let event_type = payload

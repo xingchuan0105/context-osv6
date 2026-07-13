@@ -97,8 +97,23 @@ export function resetWorkspaceSurfaceMocks(
 
   mocks.getUsageWindowMock.mockResolvedValue({
     plan_id: "free",
-    rolling_5h: { used: 1000, limit: 100000, percentage: 1, reset_at: "2099-01-01T00:00:00Z" },
-    rolling_7d: { used: 5000, limit: 400000, percentage: 1, reset_at: "2099-01-01T00:00:00Z" },
+    margin_multiplier: 2.0,
+    rolling_5h: {
+      used: 2,
+      limit: 200,
+      used_tokens_approx: 1000,
+      limit_tokens_approx: 100_000,
+      percentage: 1,
+      reset_at: "2099-01-01T00:00:00Z",
+    },
+    rolling_7d: {
+      used: 10,
+      limit: 800,
+      used_tokens_approx: 5000,
+      limit_tokens_approx: 400_000,
+      percentage: 1,
+      reset_at: "2099-01-01T00:00:00Z",
+    },
     soft_limit_hit: { rolling_5h: false, rolling_7d: false },
     hard_limit_hit: { rolling_5h: false, rolling_7d: false },
   });

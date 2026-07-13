@@ -39,6 +39,9 @@ impl Agent for ScriptedAgent {
             .emit(AgentEvent::Activity {
                 stage: "test".to_string(),
                 message: "test agent".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
         let _ = sink

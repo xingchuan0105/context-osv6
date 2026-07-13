@@ -3,7 +3,7 @@
 import styles from "./PricingCards.module.css";
 import type { BillingPlan } from "../../lib/billing/api";
 import { formatCompactToken } from "../../lib/billing/format";
-import { getPlanRollingLimits } from "../../lib/billing/planLimits";
+import { getPlanMarginMultiplier, getPlanRollingLimits } from "../../lib/billing/planLimits";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
 
@@ -22,6 +22,7 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
         const isHighlight = plan.plan_id === highlightTier;
         const isCurrent = plan.current;
         const limits = getPlanRollingLimits(plan.plan_id);
+        const margin = getPlanMarginMultiplier(plan.plan_id);
         const buttonLabel = isCurrent
           ? formatUiMessage(locale, "currentPlan")
           : plan.plan_id === "free"
@@ -43,11 +44,16 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
             {limits && !compact && (
               <ul className={styles.limits}>
                 <li>
-                  {formatUiMessage(locale, "usageWindow5h")}: {formatCompactToken(limits.rolling5h)}
+                  {formatUiMessage(locale, "pricingLimitApprox5h", {
+                    tokens: formatCompactToken(limits.rolling5h),
+                  })}
                 </li>
                 <li>
-                  {formatUiMessage(locale, "usageWindow7d")}: {formatCompactToken(limits.rolling7d)}
+                  {formatUiMessage(locale, "pricingLimitApprox7d", {
+                    tokens: formatCompactToken(limits.rolling7d),
+                  })}
                 </li>
+                <li>{formatUiMessage(locale, "pricingMarginLabel", { m: String(margin) })}</li>
               </ul>
             )}
             <div className={styles.description}>{plan.description}</div>

@@ -46,8 +46,20 @@ export const pricingMessages = {
     en: "How is token usage counted?",
   },
   pricingFaqTokenAnswer: {
-    zh: "输入 + 输出按 DeepSeek 公开计费标准累计",
-    en: "Input + output per DeepSeek public pricing",
+    zh: "按 DeepSeek 风格将输入（区分缓存命中/未命中）与输出折成成本单位，再乘方案乘数 M（Free 2.0 / Plus 1.5 / Pro 1.3）。产品展示为「约 tokens」，以全为缓存未命中输入为参照。",
+    en: "Input (cache hit vs miss) and output are folded like DeepSeek cost, then multiplied by plan M (Free 2.0 / Plus 1.5 / Pro 1.3). Limits are shown as ≈ tokens (pure cache-miss input reference).",
+  },
+  pricingLimitApprox5h: {
+    zh: "5 小时约 {tokens} tokens",
+    en: "≈ {tokens} tokens / 5h",
+  },
+  pricingLimitApprox7d: {
+    zh: "7 天约 {tokens} tokens",
+    en: "≈ {tokens} tokens / 7d",
+  },
+  pricingMarginLabel: {
+    zh: "方案乘数 M={m}",
+    en: "Plan multiplier M={m}",
   },
   pricingFaqReset: {
     zh: "限额会重置吗？",

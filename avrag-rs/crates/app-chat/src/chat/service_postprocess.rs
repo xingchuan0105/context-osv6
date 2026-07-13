@@ -80,6 +80,7 @@ impl ChatContext {
         // resolved_query or query_resolution metadata is persisted.
         let user_turn_metadata: Option<serde_json::Value> = None;
         let user_resolved_query: Option<&str> = None;
+        let assistant_turn_metadata = execution.assistant_turn_metadata.clone();
         let assistant_message_id = chat_persistence
             .append_chat_turn(
                 &self.auth,
@@ -93,6 +94,7 @@ impl ChatContext {
                     tool_results: &tool_results,
                     user_turn_metadata,
                     user_resolved_query,
+                    assistant_turn_metadata,
                 },
             )
             .await?;

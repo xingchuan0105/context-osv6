@@ -131,6 +131,7 @@ export function UsageDashboardClient() {
           variant="full"
           locale={locale}
           planId={window.plan_id}
+          marginMultiplier={window.margin_multiplier}
           rolling5h={window.rolling_5h}
           rolling7d={window.rolling_7d}
           softLimitHit={window.soft_limit_hit}

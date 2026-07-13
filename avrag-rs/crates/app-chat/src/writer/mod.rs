@@ -93,7 +93,7 @@ impl<'a> WriterOrchestrator<'a> {
         let checkpoint_dir = writer_checkpoint_dir(request.session_id.as_deref());
         let priming = load_write_priming();
 
-        emit_activity(sink, "research", "Gathering research material").await;
+        emit_activity(sink, "act:write_research", "progress.write_research").await;
 
         let invoker = SubagentInvoker::new(
             service,
@@ -104,7 +104,7 @@ impl<'a> WriterOrchestrator<'a> {
         state.phase = WriterPhase::Skeleton;
         checkpoint_state(&state, &checkpoint_dir)?;
 
-        emit_activity(sink, "skeleton", "Planning article outline").await;
+        emit_activity(sink, "act:write_outline", "progress.write_outline").await;
 
         let llm = build_writer_llm(self.ctx)?;
         let skeleton_llm = llm.with_phase("skeleton");
@@ -147,7 +147,7 @@ impl<'a> WriterOrchestrator<'a> {
         checkpoint_state(&state, &checkpoint_dir)?;
 
         // Default-on WriteRefine agent loop (replaces fixed-round heavytail::refine).
-        emit_activity(sink, "refine", "Starting WriteRefine agent loop").await;
+        emit_activity(sink, "act:write_refine", "progress.write_refine").await;
         let refine_llm = llm.with_phase("refine");
         let reservoir = research_outcome.reservoir.clone();
         let mut workspace = std::mem::take(&mut state.workspace);
@@ -183,7 +183,7 @@ impl<'a> WriterOrchestrator<'a> {
         state.workspace = refine_ctx.workspace;
         checkpoint_state(&state, &checkpoint_dir)?;
 
-        emit_activity(sink, "validate", "Validating fingerprint bands").await;
+        emit_activity(sink, "act:write_validate", "progress.write_validate").await;
 
         state.phase = WriterPhase::Validating;
         let sentences: Vec<(String, usize)> = state
@@ -269,17 +269,36 @@ fn load_write_priming() -> String {
 
 fn spawn_section_progress(sink: &dyn AgentEventSink, section: usize, total: usize) {
     let sink = sink.clone_boxed();
-    let message = format!("Drafting section {section}/{total}");
+    // title key + section numbers in detail for frontend i18n params if needed later
+    let detail = format!("{section}/{total}");
     tokio::spawn(async move {
-        emit_activity(sink.as_ref(), "draft", &message).await;
+        let _ = sink
+            .as_ref()
+            .emit(agent_loop::events::AgentEvent::Activity {
+                stage: "act:write_draft".to_string(),
+                message: "progress.write_draft_section".to_string(),
+                detail: Some(detail),
+                counts: Default::default(),
+                sources_preview: Vec::new(),
+            })
+            .await;
     });
 }
 
 fn spawn_round_progress(sink: &dyn AgentEventSink, round: usize, max_rounds: usize) {
     let sink = sink.clone_boxed();
-    let message = format!("Refining round {round}/{max_rounds}");
+    let detail = format!("{round}/{max_rounds}");
     tokio::spawn(async move {
-        emit_activity(sink.as_ref(), "refine", &message).await;
+        let _ = sink
+            .as_ref()
+            .emit(agent_loop::events::AgentEvent::Activity {
+                stage: "act:write_refine".to_string(),
+                message: "progress.write_refine_round".to_string(),
+                detail: Some(detail),
+                counts: Default::default(),
+                sources_preview: Vec::new(),
+            })
+            .await;
     });
 }
 
@@ -288,6 +307,9 @@ async fn emit_activity(sink: &dyn AgentEventSink, stage: &str, message: &str) {
         .emit(AgentEvent::Activity {
             stage: stage.to_string(),
             message: message.to_string(),
+            detail: None,
+            counts: Default::default(),
+            sources_preview: Vec::new(),
         })
         .await;
 }
@@ -363,6 +385,7 @@ pub(crate) async fn run_write_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
+        execution.assistant_turn_metadata = sink.progress_turn_metadata();
         return Ok(execution);
     }
 
@@ -384,6 +407,8 @@ pub(crate) async fn run_write_mode(
     if emit_debug_trace {
         crate::chat::attach_debug_trace_from_sink(&mut execution, &sink);
     }
+    execution.assistant_turn_metadata =
+        agent_loop::progress::assistant_progress_turn_metadata(WRITE_AGENT_TYPE, &sink.events());
     Ok(execution)
 }
 

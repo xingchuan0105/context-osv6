@@ -104,39 +104,6 @@ pub(crate) async fn load_quota_limit(
         .map_err(map_store_error)
 }
 
-// Stripe customer helpers kept for portal/checkout paths not yet fully wired.
-#[allow(dead_code)]
-pub(crate) async fn load_customer_id(
-    store: Arc<dyn BillingStorePort>,
-    user_id: UserId,
-) -> Result<Option<String>> {
-    store
-        .load_customer_id(user_id)
-        .await
-        .map_err(map_store_error)
-}
-
-#[allow(dead_code)]
-pub(crate) async fn ensure_customer(
-    store: Arc<dyn BillingStorePort>,
-    client: &crate::StripeClient,
-    user_id: UserId,
-) -> Result<String> {
-    if let Some(customer_id) = load_customer_id(store.clone(), user_id).await? {
-        return Ok(customer_id);
-    }
-    let (name, email) = store
-        .load_user_contact(user_id)
-        .await
-        .map_err(map_store_error)?;
-    let customer_id = client.create_customer(user_id, &name, &email).await?;
-    store
-        .save_stripe_customer_id(user_id, &customer_id)
-        .await
-        .map_err(map_store_error)?;
-    Ok(customer_id)
-}
-
 pub(crate) async fn load_usage_window(
     store: Arc<dyn BillingStorePort>,
     user_id: UserId,

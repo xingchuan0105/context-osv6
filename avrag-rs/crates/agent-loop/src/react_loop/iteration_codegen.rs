@@ -34,9 +34,25 @@ impl ReActLoop {
         let mut bridge_tool_results = Vec::new();
 
         for (idx, code) in codes.iter().enumerate() {
-            let (block_status, block_text, is_err, block_bridge_results) = self
+            let (block_status, block_text, is_err, block_bridge_results, bridge_calls) = self
                 .execute_codegen_block(idx, code, request, auth, &interpreter_lock)
                 .await;
+            // User-facing progress: one step per bridge client.* call (not codegen itself).
+            for call in &bridge_calls {
+                if let Some((kind, product)) = crate::progress::bridge_method_progress(&call.method)
+                {
+                    let query = call.query.as_deref().unwrap_or("");
+                    let hits = crate::progress::hits_from_tool_data(call.result.data.as_ref());
+                    let docs = crate::progress::doc_labels_from_tool_data(call.result.data.as_ref());
+                    crate::progress::emit_work_fact(
+                        sink,
+                        crate::progress::WorkFact::retrieval_finished(
+                            kind, product, query, hits, &docs,
+                        ),
+                    )
+                    .await;
+                }
+            }
             bridge_tool_results.extend(block_bridge_results);
             combined_result.push_str(&block_text);
             combined_result.push('\n');
@@ -137,6 +153,9 @@ impl ReActLoop {
             .emit(AgentEvent::Activity {
                 stage: "sandbox_error".to_string(),
                 message: "consecutive sandbox errors, breaking to synthesis".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
         Some(IterationOutcome {
@@ -173,7 +192,13 @@ impl ReActLoop {
         request: &AgentRequest,
         auth: &contracts::auth_runtime::AuthContext,
         interpreter_lock: &Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
-    ) -> (contracts::ToolStatus, String, bool, Vec<ToolResult>) {
+    ) -> (
+        contracts::ToolStatus,
+        String,
+        bool,
+        Vec<ToolResult>,
+        Vec<avrag_rag_core::runtime::bridge::CapturedBridgeCall>,
+    ) {
         let code = code.to_string();
         let interpreter_lock = Arc::clone(interpreter_lock);
         let exec_result: Result<
@@ -182,6 +207,7 @@ impl ReActLoop {
         >;
         let mut block_observation_stdout: Option<String> = None;
         let mut block_bridge_results = Vec::new();
+        let mut bridge_calls = Vec::new();
 
         if let Some(runtime) = &self.rag_runtime {
             let bridge = Arc::new(avrag_rag_core::runtime::bridge::RuntimeBridge::new(
@@ -196,6 +222,7 @@ impl ReActLoop {
             {
                 Ok(exec) => {
                     block_bridge_results = bridge.take_captured_results();
+                    bridge_calls = bridge.take_captured_calls();
                     block_observation_stdout =
                         Some(crate::helpers::codegen_observation_stdout(
                             &exec.stdout,
@@ -238,7 +265,7 @@ impl ReActLoop {
                     "[block {}] stdout: {}\nstderr: {}",
                     idx, stdout_for_observation, exec.stderr
                 );
-                (status, text, is_err, block_bridge_results)
+                (status, text, is_err, block_bridge_results, bridge_calls)
             }
             Err(e) => {
                 let text = format!("[block {}] Execution failed: {e}", idx);
@@ -247,6 +274,7 @@ impl ReActLoop {
                     text,
                     true,
                     block_bridge_results,
+                    bridge_calls,
                 )
             }
         }

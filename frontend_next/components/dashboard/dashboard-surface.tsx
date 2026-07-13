@@ -23,6 +23,7 @@ import {
 } from "../../lib/dashboard/preferences";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { ProductChromeFooter } from "../product-chrome-footer";
 import { DashboardHeader } from "./parts/dashboard-header";
 import { DashboardSearchDialog } from "./parts/dashboard-search-dialog";
 import { DashboardToolbar } from "./parts/dashboard-toolbar";
@@ -333,6 +334,10 @@ export function DashboardSurface() {
           workspaces={workspaces}
         />
       ) : null}
+
+      <div className="dashboard-main" style={{ paddingTop: 0 }}>
+        <ProductChromeFooter />
+      </div>
     </main>
   );
 }

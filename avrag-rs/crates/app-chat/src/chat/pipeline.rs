@@ -38,6 +38,9 @@ pub(crate) struct ChatExecution {
     /// Whether Citations events were already emitted during mode-step execution.
     #[serde(default)]
     pub citations_emitted: bool,
+    /// Assistant-row `turn_metadata` (e.g. `{ "progress": { … } }`) for refresh restore.
+    #[serde(default)]
+    pub assistant_turn_metadata: Option<serde_json::Value>,
 }
 
 /// Which product lane owns this pipeline run (ADR-0007).

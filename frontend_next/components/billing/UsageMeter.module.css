@@ -36,6 +36,20 @@
 
 .numbers .used { color: hsl(var(--foreground)); }
 .numbers .limit { color: hsl(var(--muted-foreground)); font-size: var(--font-size-body); }
+.unitHint {
+  margin-left: 0.25rem;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-regular);
+  color: hsl(var(--muted-foreground));
+}
+
+.marginNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+}
 
 .bar {
   width: 100%;

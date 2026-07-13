@@ -5,6 +5,8 @@ export type UsageMeterProps = {
   variant: "full" | "compact";
   locale: UiLocale;
   planId: "free" | "plus" | "pro";
+  /** Plan margin multiplier M; shown transparently under meters. */
+  marginMultiplier?: number;
   rolling5h: UsageWindowBucket;
   rolling7d: UsageWindowBucket;
   softLimitHit: LimitHits;

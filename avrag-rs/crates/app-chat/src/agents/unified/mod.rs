@@ -139,12 +139,11 @@ impl Agent for UnifiedAgent {
 
         match request.kind {
             crate::agents::AgentKind::Chat => {
-                let _ = sink
-                    .emit(AgentEvent::Activity {
-                        stage: "chat".to_string(),
-                        message: "ReAct chat".to_string(),
-                    })
-                    .await;
+                agent_loop::progress::emit_work_fact(
+                    sink,
+                    agent_loop::progress::WorkFact::understand(&request.query),
+                )
+                .await;
                 self.run_react_mode(
                     "chat",
                     self.chat_llm_client.clone().or_else(|| self.llm_client.clone()),
@@ -191,6 +190,11 @@ impl Agent for UnifiedAgent {
                     }
                 };
 
+                agent_loop::progress::emit_work_fact(
+                    sink,
+                    agent_loop::progress::WorkFact::understand(&request.query),
+                )
+                .await;
                 self.run_react_mode(
                     "rag",
                     self.llm_client.clone(),
@@ -215,6 +219,11 @@ impl Agent for UnifiedAgent {
                     }
                 };
 
+                agent_loop::progress::emit_work_fact(
+                    sink,
+                    agent_loop::progress::WorkFact::understand(&request.query),
+                )
+                .await;
                 self.run_react_mode(
                     "search",
                     self.search_llm_client

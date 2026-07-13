@@ -14,7 +14,13 @@ import type {
   UseChatSessionResult,
 } from "./chat-session/types";
 
-export type { ProgressEntry, UiChatMessage, UseChatSessionOptions, UseChatSessionResult };
+export type {
+  ProgressEntry,
+  UiChatMessage,
+  UiProgressSnapshot,
+  UseChatSessionOptions,
+  UseChatSessionResult,
+};
 
 export function useChatSession(options: UseChatSessionOptions): UseChatSessionResult {
   const { token, locale, sessionId } = options;
@@ -40,6 +46,22 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
   useEffect(() => {
     let cancelled = false;
 
+    // Backend assigns session_id on stream start for new threads. Parent lifts that
+    // into sessionId — must NOT tear down the in-flight progress card / local transcript.
+    // Only skip when the prop matches the stream's session (or stream has not stamped one yet).
+    const streamingSid = chatStream.streamingSessionIdRef.current;
+    if (
+      chatStream.isStreamingRef.current &&
+      sessionId != null &&
+      (streamingSid == null || streamingSid === sessionId)
+    ) {
+      setActiveSessionId(sessionId);
+      chatStream.streamingSessionIdRef.current = sessionId;
+      return () => {
+        cancelled = true;
+      };
+    }
+
     chatStream.resetStreamingTypewriter();
     setActiveSessionId(sessionId);
     messageHistory.reset();
@@ -64,7 +86,9 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
           return;
         }
 
-        messageHistory.setMessages(response.messages.map(mapTranscriptMessage));
+        messageHistory.setMessages(
+          response.messages.map((message) => mapTranscriptMessage(message, locale)),
+        );
       } catch {
         if (!cancelled) {
           setError(formatUiMessage(locale, "workspaceChatLoadError"));

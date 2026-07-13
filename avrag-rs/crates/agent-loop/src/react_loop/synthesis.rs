@@ -115,11 +115,16 @@ impl SynthesisPhase {
         let candidate_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
         if let Some(answer) = resolve_synthesis_answer(&candidate_refs, tool_results, messages, mode) {
             let prose = render_synthesis_prose(&answer);
-            let _ = sink
-                .emit(AgentEvent::MessageDelta {
-                    text: prose.clone(),
-                })
-                .await;
+            crate::progress::emit_work_fact(sink, crate::progress::WorkFact::compose_answer()).await;
+            // P0 "true stream" for JSON synthesis: chunk prose into MessageDelta
+            // (generation was complete_json; streaming the validated answer still
+            // gives progressive UI without breaking the answer contract).
+            const CHUNK: usize = 24;
+            let chars: Vec<char> = prose.chars().collect();
+            for piece in chars.chunks(CHUNK) {
+                let text: String = piece.iter().collect();
+                let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+            }
 
             let usage = crate::events::AgentUsage {
                 provider: first.usage.provider.clone(),
@@ -152,6 +157,9 @@ impl SynthesisPhase {
                 .emit(AgentEvent::Activity {
                     stage: "synthesis_refusal_lift".to_string(),
                     message: "Lifted refusal from reasoning after contract violation".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
                 })
                 .await;
             let _ = sink
@@ -176,6 +184,9 @@ impl SynthesisPhase {
                 .emit(AgentEvent::Activity {
                     stage: "synthesis_partial_fallback".to_string(),
                     message: "Salvaged partial answer after contract validation failed".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
                 })
                 .await;
             let _ = sink
@@ -196,6 +207,9 @@ impl SynthesisPhase {
             .emit(AgentEvent::Activity {
                 stage: "synthesis_contract_violation".to_string(),
                 message: "Synthesis JSON contract validation failed after repair".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
 

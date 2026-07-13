@@ -1,6 +1,7 @@
 import type { WorkspaceChatMessage } from "../../lib/workspace/client";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import type { AnswerBlock } from "../../lib/workspace/stream";
+import { progressSnapshotFromTurnMetadata } from "./progress-i18n";
 import type { ProgressEntry, UiChatMessage } from "./types";
 
 export const STREAM_TYPEWRITER_CHARS_PER_TICK = 8;
@@ -51,10 +52,18 @@ export function sanitizeAssistantDisplayContent(content: string): string {
   return content;
 }
 
-export function mapTranscriptMessage(message: WorkspaceChatMessage): UiChatMessage {
+export function mapTranscriptMessage(
+  message: WorkspaceChatMessage,
+  locale: "zh-CN" | "en" = "zh-CN",
+): UiChatMessage {
   const rawContent = message.content ?? "";
   const content =
     message.role === "assistant" ? sanitizeAssistantDisplayContent(rawContent) : rawContent;
+  // Server is source of truth: progress lives on assistant turn_metadata (cross-device).
+  const progress =
+    message.role === "assistant"
+      ? progressSnapshotFromTurnMetadata(locale, message.turn_metadata)
+      : null;
   return {
     id: String(message.id),
     role: message.role === "assistant" ? "assistant" : "user",
@@ -68,6 +77,7 @@ export function mapTranscriptMessage(message: WorkspaceChatMessage): UiChatMessa
     pending: false,
     sessionId: message.session_id,
     toolResults: message.tool_results ?? [],
+    progress,
   };
 }
 

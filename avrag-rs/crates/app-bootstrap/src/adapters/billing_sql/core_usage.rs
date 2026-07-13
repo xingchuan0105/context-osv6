@@ -264,7 +264,8 @@ pub(super) async fn load_usage_window(
     // Plan-level 5h/7d caps (0/0 = unlimited, same convention as usage_limit/service.rs).
     let policy_row = sqlx::query(
         r#"
-        select rolling_5h_limit_units, rolling_7d_limit_units
+        select rolling_5h_limit_units, rolling_7d_limit_units,
+               COALESCE(margin_multiplier, 2.0) AS margin_multiplier
         from usage_limit_plan_policies
         where plan_id = $1
         "#,
@@ -272,14 +273,20 @@ pub(super) async fn load_usage_window(
     .bind(&plan_id)
     .fetch_optional(repo.raw())
     .await?;
-    let (limit_5h, limit_7d) = policy_row
+    let (limit_5h, limit_7d, margin_multiplier) = policy_row
         .map(|row| {
             (
                 row.try_get::<i64, _>("rolling_5h_limit_units").unwrap_or(0),
                 row.try_get::<i64, _>("rolling_7d_limit_units").unwrap_or(0),
+                row.try_get::<f64, _>("margin_multiplier").unwrap_or(2.0),
             )
         })
-        .unwrap_or((0, 0));
+        .unwrap_or((0, 0, 2.0));
+    let margin_multiplier = if margin_multiplier.is_finite() && margin_multiplier > 0.0 {
+        margin_multiplier
+    } else {
+        2.0
+    };
 
     let now = Utc::now();
     let cutoff_5h = now - Duration::hours(5);
@@ -297,11 +304,12 @@ pub(super) async fn load_usage_window(
         .map(|t| t + Duration::days(7))
         .unwrap_or(now);
 
-    let bucket_5h = build_bucket(used_5h, limit_5h, reset_5h);
-    let bucket_7d = build_bucket(used_7d, limit_7d, reset_7d);
+    let bucket_5h = build_bucket(used_5h, limit_5h, margin_multiplier, reset_5h);
+    let bucket_7d = build_bucket(used_7d, limit_7d, margin_multiplier, reset_7d);
 
     Ok(UsageWindowResponse {
         plan_id,
+        margin_multiplier,
         rolling_5h: bucket_5h.clone(),
         rolling_7d: bucket_7d.clone(),
         soft_limit_hit: LimitHits {
@@ -315,7 +323,12 @@ pub(super) async fn load_usage_window(
     })
 }
 
-fn build_bucket(used: i64, limit: i64, reset_at: DateTime<Utc>) -> UsageWindowBucket {
+fn build_bucket(
+    used: i64,
+    limit: i64,
+    margin_multiplier: f64,
+    reset_at: DateTime<Utc>,
+) -> UsageWindowBucket {
     let raw = if limit > 0 {
         (used as f64 / limit as f64) * 100.0
     } else {
@@ -325,6 +338,8 @@ fn build_bucket(used: i64, limit: i64, reset_at: DateTime<Utc>) -> UsageWindowBu
     UsageWindowBucket {
         used,
         limit,
+        used_tokens_approx: app_core::tokens_approx_from_units(used, margin_multiplier),
+        limit_tokens_approx: app_core::tokens_approx_from_units(limit, margin_multiplier),
         percentage,
         reset_at,
     }
@@ -335,6 +350,9 @@ async fn sum_usage_units_window(
     user_id: uuid::Uuid,
     since: DateTime<Utc>,
 ) -> Result<i64> {
+    // FORCE RLS on llm_usage_events requires app.current_user = owner_user_id.
+    let mut tx = repo.raw().begin().await?;
+    set_current_user(tx.as_mut(), &user_id.to_string()).await?;
     let row = sqlx::query(
         r#"
         select coalesce(sum(usage_units), 0)::bigint as total
@@ -344,8 +362,9 @@ async fn sum_usage_units_window(
     )
     .bind(user_id)
     .bind(since)
-    .fetch_one(repo.raw())
+    .fetch_one(tx.as_mut())
     .await?;
+    tx.commit().await?;
     Ok(row.try_get::<i64, _>("total")?)
 }
 
@@ -354,6 +373,8 @@ async fn oldest_event_in_window(
     user_id: uuid::Uuid,
     since: DateTime<Utc>,
 ) -> Result<Option<DateTime<Utc>>> {
+    let mut tx = repo.raw().begin().await?;
+    set_current_user(tx.as_mut(), &user_id.to_string()).await?;
     let row = sqlx::query(
         r#"
         select min(created_at) as oldest
@@ -363,8 +384,9 @@ async fn oldest_event_in_window(
     )
     .bind(user_id)
     .bind(since)
-    .fetch_one(repo.raw())
+    .fetch_one(tx.as_mut())
     .await?;
+    tx.commit().await?;
     Ok(row.try_get::<Option<DateTime<Utc>>, _>("oldest")?)
 }
 

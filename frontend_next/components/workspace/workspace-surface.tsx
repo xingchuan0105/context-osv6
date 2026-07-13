@@ -428,6 +428,8 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                 }}
                 onSessionActivity={() => {
                   recheckUsageRef.current?.();
+                  // Pass current selection explicitly so a new thread (null) does not
+                  // fall back to sessions[0] and wipe the live progress card.
                   void reloadSessions(activeSessionId);
                 }}
                 onSessionChange={(sessionId) => {
@@ -554,13 +556,17 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
           userId={auth.user.id}
           used={
             usageWarning.windowType === "5h"
-              ? usageWarning.data.rolling_5h.used
-              : usageWarning.data.rolling_7d.used
+              ? (usageWarning.data.rolling_5h.used_tokens_approx ??
+                usageWarning.data.rolling_5h.used)
+              : (usageWarning.data.rolling_7d.used_tokens_approx ??
+                usageWarning.data.rolling_7d.used)
           }
           limit={
             usageWarning.windowType === "5h"
-              ? usageWarning.data.rolling_5h.limit
-              : usageWarning.data.rolling_7d.limit
+              ? (usageWarning.data.rolling_5h.limit_tokens_approx ??
+                usageWarning.data.rolling_5h.limit)
+              : (usageWarning.data.rolling_7d.limit_tokens_approx ??
+                usageWarning.data.rolling_7d.limit)
           }
           resetAt={
             usageWarning.windowType === "5h"

@@ -7,7 +7,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::Multipart,
+    extract::{DefaultBodyLimit, Multipart},
     http::StatusCode,
     routing::{get, post},
 };
@@ -64,6 +64,13 @@ async fn main() -> anyhow::Result<()> {
 
     let bind = std::env::var("OFFICE_PARSER_BIND").unwrap_or_else(|_| "127.0.0.1:9090".to_string());
     let addr: SocketAddr = bind.parse()?;
+    // Axum default body limit is 2 MiB; real-world office uploads often exceed that.
+    // Override via OFFICE_PARSER_MAX_BODY_BYTES (bytes). Default 100 MiB.
+    let max_body_bytes = std::env::var("OFFICE_PARSER_MAX_BODY_BYTES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(100 * 1024 * 1024);
 
     let app = Router::new()
         .route("/v1/healthz", get(healthz))
@@ -73,9 +80,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/parse/xls", post(parse_xls))
         .route("/v1/parse/xlsx", post(parse_xlsx))
         .route("/v1/parse/ppt", post(parse_ppt))
-        .route("/v1/parse/pptx", post(parse_pptx));
+        .route("/v1/parse/pptx", post(parse_pptx))
+        .layer(DefaultBodyLimit::max(max_body_bytes));
 
-    info!(%addr, "office-parser-jvm listening");
+    info!(%addr, max_body_bytes, "office-parser-jvm listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())

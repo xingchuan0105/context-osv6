@@ -45,17 +45,29 @@ export function useChatStream(
     activeSessionIdRef.current = activeSessionId;
   }, [options.token, options.workspaceId, options.sessionId, options.selectedSourceIds, options.effectiveChatMode, options.locale, options.onSessionChange, options.onSessionActivity, activeSessionId]);
 
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isStreaming, setIsStreamingState] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   const streamingSessionIdRef = useRef<string | null>(null);
   const streamingMessageIdRef = useRef<string | null>(null);
+  /** True while a turn is in flight (including wait before first token). Used to avoid
+   * sessionId-driven transcript reload wiping the live progress card. */
+  const isStreamingRef = useRef(false);
+  const setIsStreaming = useCallback((value: React.SetStateAction<boolean>) => {
+    setIsStreamingState((prev) => {
+      const next = typeof value === "function" ? value(prev) : value;
+      isStreamingRef.current = next;
+      return next;
+    });
+  }, []);
   const stopControllerRef = useRef<AbortController | null>(null);
 
   const streamEnginesRef = useRef<{
     assistant: StreamAssistantUpdates;
     typewriter: StreamTypewriter;
   } | null>(null);
+  const progressTrackerRef = useRef(progressTracker);
+  progressTrackerRef.current = progressTracker;
 
   if (!streamEnginesRef.current) {
     const typewriterResetRef = { current: () => {} };
@@ -75,7 +87,11 @@ export function useChatStream(
 
     const typewriter = createStreamTypewriter({
       appendStreamingDisplayText: assistant.appendStreamingDisplayText,
-      finalizeStreamingDone: assistant.finalizeStreamingDone,
+      finalizeStreamingDone: (event, progressSnapshot) => {
+        assistant.finalizeStreamingDone(event, progressSnapshot);
+        // Live card → message-bound card; clear the singleton so we don't double-render.
+        progressTrackerRef.current.hide();
+      },
     });
 
     typewriterResetRef.current = typewriter.resetStreamingTypewriter;
@@ -130,12 +146,16 @@ export function useChatStream(
       onSessionActivityRef.current?.();
 
       // U9: new thread (no session yet) must not keep previous session transcript.
+      // Do NOT insert an empty assistant bubble here — product rule: no answer frame
+      // until the first answer character (token / typewriter). Progress card alone
+      // covers "work in progress" until ensureStreamingAssistant runs.
+      const now = Date.now();
       messageHistory.setMessages((current) => {
         const base = requestSessionId == null ? [] : current;
         return [
           ...base,
           {
-            id: `user-${Date.now()}`,
+            id: `user-${now}`,
             role: "user",
             mode: null,
             content: trimmedQuery,
@@ -149,6 +169,8 @@ export function useChatStream(
           },
         ];
       });
+      // Reserve streaming id so the first token attaches to a stable assistant row.
+      streamingMessageIdRef.current = nextAssistantId;
       progressTracker.show(effectiveChatModeRef.current);
 
       const controller = new AbortController();
@@ -193,7 +215,7 @@ export function useChatStream(
       })();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isStreaming, messageHistory.setMessages, progressTracker, setError, handleStreamEvent],
+    [isStreaming, messageHistory.setMessages, progressTracker, setError, handleStreamEvent, setIsStreaming],
   );
 
   const stop = useCallback(() => {
@@ -211,7 +233,7 @@ export function useChatStream(
     setIsStreaming(false);
     setStreamingMessageId(null);
     streamingMessageIdRef.current = null;
-  }, [progressTracker]);
+  }, [progressTracker, setIsStreaming]);
 
   useEffect(() => {
     const engines = streamEnginesRef.current;
@@ -228,6 +250,7 @@ export function useChatStream(
 
   return {
     isStreaming,
+    isStreamingRef,
     send,
     stop,
     resetStreamingTypewriter: typewriter.resetStreamingTypewriter,

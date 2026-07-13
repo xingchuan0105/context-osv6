@@ -36,6 +36,8 @@ export type WorkspaceSource = {
   title: string;
   file_name: string;
   status: string;
+  /** Latest ingestion task error when status is failed/error (optional). */
+  last_error?: string | null;
 };
 
 export type WorkspaceNote = {

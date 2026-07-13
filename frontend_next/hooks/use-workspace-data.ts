@@ -86,8 +86,24 @@ export function useWorkspaceData(workspaceId: string) {
     const response = await listWorkspaceSessions(auth.token, workspaceId);
     setSessions(response.sessions);
     setActiveSessionId((current) => {
-      const next = preferredSessionId ?? current;
-      if (next && response.sessions.some((s) => s.id === next)) return next;
+      // Explicit preferred id (including mid-stream new session assignment).
+      if (preferredSessionId != null) {
+        if (response.sessions.some((s) => s.id === preferredSessionId)) {
+          return preferredSessionId;
+        }
+        // Session list may lag creation by a tick — still select the preferred id
+        // so the chat pane does not snap back to an older thread.
+        return preferredSessionId;
+      }
+      // preferredSessionId === null means "new thread": keep null, do not fall back
+      // to sessions[0] (that used to wipe the live progress card on first send).
+      if (preferredSessionId === null) {
+        return null;
+      }
+      // undefined: keep current if still present, else first session.
+      if (current && response.sessions.some((s) => s.id === current)) {
+        return current;
+      }
       return response.sessions[0]?.id ?? null;
     });
   }, [auth.token, workspaceId]);

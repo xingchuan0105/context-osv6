@@ -78,8 +78,24 @@ export const settingsMessages = {
     en: "Change plan",
   },
   "settings.billing.portalUnavailable": {
-    zh: "自助账单门户暂未开通。请通过「更换方案」升级，或联系支持处理订阅。",
-    en: "Self-service billing portal is not available. Use Change plan to upgrade, or contact support.",
+    zh: "自助账单门户暂未开通。请稍后重试，或联系支持处理订阅。",
+    en: "Self-service billing portal is not available. Try again later, or contact support.",
+  },
+  "settings.billing.portalFallbackHint": {
+    zh: "请在下方方案列表中更换计划，或打开定价页完成 Creem/支付宝 支付（产品未使用外部账单门户）。",
+    en: "Change plan below or open pricing for Creem/Alipay checkout (no external billing portal).",
+  },
+  "settings.billing.planPickerHint": {
+    zh: "选择方案后将进入定价/结账页完成变更。",
+    en: "Selecting a plan opens the pricing/checkout page to complete the change.",
+  },
+  "settings.billing.openPricingPage": {
+    zh: "打开定价页",
+    en: "Open pricing",
+  },
+  "settings.billing.currentPlanBadge": {
+    zh: "当前",
+    en: "Current",
   },
   "settings.billing.portalAction": {
     zh: "打开账单门户",
@@ -198,8 +214,8 @@ export const settingsMessages = {
     en: "Personal usage",
   },
   "settings.usage.sectionSubtitle": {
-    zh: "查看当前账号的配额窗口和分项用量。",
-    en: "Review quota windows and current usage breakdown.",
+    zh: "按约 tokens 展示 5 小时 / 7 天滚动额度（Free 约 100K / 400K）。内部按输入（含缓存命中优惠）、输出折算后再乘方案乘数 M（Free 2.0 / Plus 1.5 / Pro 1.3）。达软上限会提示升级。",
+    en: "Shown as ≈ tokens on 5h / 7d rolling windows (Free ≈ 100K / 400K). Internally: input (cache-hit discounted) + output, then plan multiplier M (Free 2.0 / Plus 1.5 / Pro 1.3). Soft limits encourage upgrades.",
   },
   "settings.usage.loading": {
     zh: "正在加载用量...",

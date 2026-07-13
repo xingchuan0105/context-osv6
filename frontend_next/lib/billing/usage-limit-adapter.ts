@@ -1,14 +1,17 @@
 import type { UsageLimitResponse, UsageWindow } from "../settings/client";
 import type { LimitHits, UsageWindowBucket } from "./api";
+import { getPlanMarginMultiplier, tokensApproxFromUnits } from "./planLimits";
 import type { UsageMeterProps } from "./types";
 import type { UiLocale } from "../i18n/config";
 
 const PLAN_IDS = new Set<UsageMeterProps["planId"]>(["free", "plus", "pro"]);
 
-function toBucket(window: UsageWindow): UsageWindowBucket {
+function toBucket(window: UsageWindow, marginMultiplier: number): UsageWindowBucket {
   return {
     used: window.used_units,
     limit: window.limit_units,
+    used_tokens_approx: tokensApproxFromUnits(window.used_units, marginMultiplier),
+    limit_tokens_approx: tokensApproxFromUnits(window.limit_units, marginMultiplier),
     percentage: window.percent_used,
     reset_at: window.next_relief_at ?? window.blocked_until ?? new Date().toISOString(),
   };
@@ -48,12 +51,15 @@ export function usageLimitToMeterProps(
   options?: { variant?: UsageMeterProps["variant"] },
 ): UsageMeterProps {
   const { softLimitHit, hardLimitHit } = toLimitHits(data.windows);
+  const planId = resolvePlanId(data);
+  const marginMultiplier = getPlanMarginMultiplier(planId);
   return {
     variant: options?.variant ?? "full",
     locale,
-    planId: resolvePlanId(data),
-    rolling5h: toBucket(data.windows.rolling_5h),
-    rolling7d: toBucket(data.windows.rolling_7d),
+    planId,
+    marginMultiplier,
+    rolling5h: toBucket(data.windows.rolling_5h, marginMultiplier),
+    rolling7d: toBucket(data.windows.rolling_7d, marginMultiplier),
     softLimitHit,
     hardLimitHit,
   };

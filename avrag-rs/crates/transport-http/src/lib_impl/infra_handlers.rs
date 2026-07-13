@@ -113,7 +113,8 @@ pub(crate) async fn openapi_handler() -> Response {
                 "/v1/workspaces/{workspace_id}/chat/completions": {},
                 "/mcp/workspaces/{workspace_id}": {},
                 "/mcp/workspaces/{workspace_id}/tools/call": {},
-                "/webhooks/stripe": {}
+                "/webhooks/creem": {},
+                "/webhooks/alipay": {}
             }
         })),
     )
@@ -229,10 +230,19 @@ pub(crate) async fn billing_webhook_handler(
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
 
+    if provider == avrag_billing::BillingProvider::Stripe {
+        return (
+            StatusCode::GONE,
+            Json(json!({
+                "error": "billing_provider_removed",
+                "message": "Stripe webhooks are no longer accepted; use Creem or Alipay"
+            })),
+        )
+            .into_response();
+    }
+
     let signature = match provider {
-        avrag_billing::BillingProvider::Stripe => headers
-            .get("stripe-signature")
-            .and_then(|value| value.to_str().ok()),
+        avrag_billing::BillingProvider::Stripe => None, // unreachable after GONE above
         avrag_billing::BillingProvider::Creem => headers
             .get("creem-signature")
             .and_then(|value| value.to_str().ok()),

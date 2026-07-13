@@ -41,6 +41,7 @@ impl UsageLimitService {
                     prompt_tokens: record.prompt_tokens,
                     completion_tokens: record.completion_tokens,
                     total_tokens: record.total_tokens,
+                    cached_tokens: 0,
                     usage_source: record.usage_source,
                     usage_kind: "chat",
                     billable: true,

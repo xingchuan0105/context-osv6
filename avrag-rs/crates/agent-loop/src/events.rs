@@ -10,8 +10,17 @@ pub use app_documents::AuditRecord;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum AgentEvent {
-    /// High-level progress / activity notification.
-    Activity { stage: String, message: String },
+    /// High-level progress / activity notification (user-facing Progress / WorkFact).
+    Activity {
+        stage: String,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        counts: BTreeMap<String, usize>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        sources_preview: Vec<contracts::chat::ChatActivitySourcePreview>,
+    },
     /// Incremental reasoning summary text (e.g. from model's reasoning tokens).
     ReasoningSummaryDelta { text: String },
     /// Incremental answer/message text.
@@ -242,6 +251,9 @@ mod tests {
             AgentEvent::Activity {
                 stage: "planning".to_string(),
                 message: "Building retrieval plan".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             },
             AgentEvent::ReasoningSummaryDelta {
                 text: "The user wants to know".to_string(),
@@ -341,6 +353,9 @@ mod tests {
             .emit(AgentEvent::Activity {
                 stage: "plan".to_string(),
                 message: "planning".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
         let _ = sink

@@ -1,8 +1,14 @@
 import { ApiError, request } from "../http/request";
 
 export type UsageWindowBucket = {
+  /** Internal usage_units (ledger). */
   used: number;
+  /** Internal rolling limit in usage_units. */
   limit: number;
+  /** Product-facing approx tokens (used / M * 1000). */
+  used_tokens_approx?: number;
+  /** Product-facing approx tokens (limit / M * 1000). */
+  limit_tokens_approx?: number;
   percentage: number;
   reset_at: string; // ISO 8601
 };
@@ -14,11 +20,22 @@ export type LimitHits = {
 
 export type UsageWindowResponse = {
   plan_id: "free" | "plus" | "pro";
+  /** Plan margin multiplier M (free 2.0 / plus 1.5 / pro 1.3). */
+  margin_multiplier?: number;
   rolling_5h: UsageWindowBucket;
   rolling_7d: UsageWindowBucket;
   soft_limit_hit: LimitHits;
   hard_limit_hit: LimitHits;
 };
+
+/** Prefer server approx tokens; fall back to units when older API omits fields. */
+export function bucketUsedTokensApprox(bucket: UsageWindowBucket): number {
+  return bucket.used_tokens_approx ?? bucket.used;
+}
+
+export function bucketLimitTokensApprox(bucket: UsageWindowBucket): number {
+  return bucket.limit_tokens_approx ?? bucket.limit;
+}
 
 export type DailyUsage = {
   date: string; // YYYY-MM-DD

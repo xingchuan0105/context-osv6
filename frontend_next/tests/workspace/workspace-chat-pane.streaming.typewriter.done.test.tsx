@@ -14,7 +14,7 @@ import {
 setupWorkspaceChatPaneTestLifecycle();
 
 describe("WorkspaceChatPane streaming typewriter done finalization", () => {
-  it("finalizes a done-only answer immediately", async () => {
+  it("typewriters a done-only answer (no mid-stream tokens) then finalizes", async () => {
     vi.useFakeTimers();
 
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
@@ -39,6 +39,10 @@ describe("WorkspaceChatPane streaming typewriter done finalization", () => {
 
     const { composer } = renderStreamingChatPane({ workspaceId: "ws-done-only" });
     await submitChatMessage(composer, "Explain the plan");
+    await flushChatPaneMicrotasks();
+
+    // Short answers that arrive only on `done` still go through the typewriter queue.
+    await vi.runAllTimersAsync();
     await flushChatPaneMicrotasks();
 
     expect(screen.getByText("Done-only answer")).toBeTruthy();
@@ -89,6 +93,9 @@ describe("WorkspaceChatPane streaming typewriter done finalization", () => {
     await flushChatPaneMicrotasks();
 
     expect(screen.getByText(longAnswer)).toBeTruthy();
+    // Progress card elapsed timer may still be scheduled until React commits completed/hide.
+    await vi.runAllTimersAsync();
+    await flushChatPaneMicrotasks();
     expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -117,6 +117,7 @@ impl PgUsageObserver {
             prompt_tokens: record.prompt_tokens,
             completion_tokens: record.completion_tokens,
             total_tokens: record.total_tokens,
+            cached_tokens: record.cached_tokens,
             usage_source: UsageSource::Actual,
             usage_kind: "chat",
             billable: self.billable,
@@ -165,6 +166,7 @@ impl PgUsageObserver {
             prompt_tokens: total_tokens,
             completion_tokens: 0,
             total_tokens,
+            cached_tokens: 0,
             usage_source,
             usage_kind,
             billable: self.billable,
@@ -347,8 +349,8 @@ mod tests {
             &self,
             _provider: &str,
             _model: &str,
-        ) -> Result<(f64, f64), AppError> {
-            Ok((1.0, 2.0))
+        ) -> Result<(f64, f64, f64), AppError> {
+            Ok((1.0, 0.02, 2.0))
         }
 
         async fn has_user_override(&self, _user_id: Uuid) -> Result<bool, AppError> {

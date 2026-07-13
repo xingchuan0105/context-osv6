@@ -119,7 +119,7 @@ impl SessionRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, created_at
+            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, turn_metadata, resolved_query, created_at
             from chat_messages
             where session_id = $1 and id = $2
             "#,
@@ -167,12 +167,16 @@ impl SessionRepository {
 
         let tool_results_value =
             serde_json::to_value(turn.tool_results).unwrap_or_else(|_| json!([]));
+        let assistant_turn_metadata = turn
+            .assistant_turn_metadata
+            .clone()
+            .unwrap_or_else(|| json!({}));
         let assistant_search_tokens =
             crate::build_user_message_search_tokens(turn.assistant_content, None);
         let assistant_row = sqlx::query(
             r#"
-            insert into chat_messages (owner_user_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, search_tokens)
-            values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8, $9, $10)
+            insert into chat_messages (owner_user_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, turn_metadata, search_tokens)
+            values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8, $9, $10, $11)
             returning id
             "#,
         )
@@ -185,6 +189,7 @@ impl SessionRepository {
         .bind(agent_icon(turn.agent_type))
         .bind(serde_json::to_value(turn.citations).unwrap_or_else(|_| json!([])))
         .bind(tool_results_value)
+        .bind(assistant_turn_metadata)
         .bind(assistant_search_tokens)
         .fetch_one(tx.inner())
         .await?;

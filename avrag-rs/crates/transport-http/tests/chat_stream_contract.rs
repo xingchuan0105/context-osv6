@@ -34,6 +34,9 @@ impl Agent for ScriptedAgent {
                 .emit(AgentEvent::Activity {
                     stage: "planning".to_string(),
                     message: "planning".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
                 })
                 .await;
 
@@ -60,6 +63,9 @@ impl Agent for ScriptedAgent {
                 .emit(AgentEvent::Activity {
                     stage: "retrieving".to_string(),
                     message: "retrieving".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
                 })
                 .await;
 
@@ -73,6 +79,9 @@ impl Agent for ScriptedAgent {
             .emit(AgentEvent::Activity {
                 stage: "test".to_string(),
                 message: "test agent".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
         let _ = sink

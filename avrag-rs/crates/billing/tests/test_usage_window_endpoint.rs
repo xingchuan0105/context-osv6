@@ -114,15 +114,20 @@ fn usage_window_response_shape_matches_spec() {
     // is caught at compile time on both sides.
     let resp = UsageWindowResponse {
         plan_id: PLAN_FREE.to_string(),
+        margin_multiplier: 2.0,
         rolling_5h: UsageWindowBucket {
             used: 0,
-            limit: 100_000,
+            limit: 200,
+            used_tokens_approx: 0,
+            limit_tokens_approx: 100_000,
             percentage: 0,
             reset_at: Utc::now(),
         },
         rolling_7d: UsageWindowBucket {
             used: 0,
-            limit: 400_000,
+            limit: 800,
+            used_tokens_approx: 0,
+            limit_tokens_approx: 400_000,
             percentage: 0,
             reset_at: Utc::now(),
         },
@@ -130,8 +135,11 @@ fn usage_window_response_shape_matches_spec() {
         hard_limit_hit: LimitHits::default(),
     };
     assert_eq!(resp.plan_id, PLAN_FREE);
-    assert_eq!(resp.rolling_5h.limit, 100_000);
-    assert_eq!(resp.rolling_7d.limit, 400_000);
+    assert_eq!(resp.margin_multiplier, 2.0);
+    assert_eq!(resp.rolling_5h.limit, 200);
+    assert_eq!(resp.rolling_5h.limit_tokens_approx, 100_000);
+    assert_eq!(resp.rolling_7d.limit, 800);
+    assert_eq!(resp.rolling_7d.limit_tokens_approx, 400_000);
     assert!(!resp.soft_limit_hit.rolling_5h);
     assert!(!resp.hard_limit_hit.rolling_5h);
 }

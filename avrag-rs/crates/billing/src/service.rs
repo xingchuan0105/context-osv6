@@ -13,7 +13,7 @@ use crate::core::{
     update_webhook_lease_status,
 };
 use crate::types::{BillingProvider, PLAN_FREE, PLAN_PRO};
-use crate::{AlipayClient, BillingConfig, CreemClient, StripeClient, Subscription};
+use crate::{AlipayClient, BillingConfig, CreemClient, Subscription};
 
 #[derive(Deserialize)]
 pub struct CreateCheckoutRequest {
@@ -60,7 +60,6 @@ pub struct BillingService {
     config: BillingConfig,
     creem: CreemClient,
     alipay: AlipayClient,
-    stripe: StripeClient,
 }
 
 static BILLING_SERVICE: LazyLock<BillingService> = LazyLock::new(BillingService::from_env);
@@ -70,12 +69,10 @@ impl BillingService {
         let config = BillingConfig::from_env();
         let creem = CreemClient::new(config.clone());
         let alipay = AlipayClient::new(config.clone());
-        let stripe = StripeClient::new(config.clone());
         Self {
             config,
             creem,
             alipay,
-            stripe,
         }
     }
 
@@ -131,6 +128,19 @@ impl BillingService {
         }))
     }
 
+    /// External customer portal is **not** offered (Stripe removed; Creem/Alipay
+    /// use in-app plan change + `/pricing` checkout). Always returns unavailable.
+    pub async fn create_portal(
+        &self,
+        _store: Arc<dyn BillingStorePort>,
+        _user_id: UserId,
+    ) -> ApiResponse<PortalResponse> {
+        ApiResponse::err(
+            "billing_portal_unavailable",
+            "External billing portal is not used; change plans via in-app pricing (Creem/Alipay)",
+        )
+    }
+
     pub async fn create_checkout(
         &self,
         store: Arc<dyn BillingStorePort>,
@@ -152,8 +162,8 @@ impl BillingService {
 
         match requested_provider {
             BillingProvider::Stripe => ApiResponse::err(
-                "billing_provider_deprecated",
-                "Stripe checkout is deprecated; use Creem (international) or Alipay (China)",
+                "billing_provider_removed",
+                "Stripe is not a product payment provider; use Creem (international) or Alipay (China)",
             ),
             BillingProvider::Creem => {
                 if !config.creem_enabled() {
@@ -258,21 +268,13 @@ impl BillingService {
     ) -> ApiResponse<serde_json::Value> {
         let config = &self.config;
 
-        // 1. Verify signatures
+        // 1. Verify signatures (Stripe provider permanently rejected).
         match provider {
             BillingProvider::Stripe => {
-                if !config.webhook_enabled() {
-                    return ApiResponse::err(
-                        "billing_unconfigured",
-                        "billing webhook is not configured",
-                    );
-                }
-                if let Err(error) = self
-                    .stripe
-                    .verify_webhook_signature(payload, signature.unwrap_or_default())
-                {
-                    return ApiResponse::err("billing_webhook_signature_failed", &error.to_string());
-                }
+                return ApiResponse::err(
+                    "billing_provider_removed",
+                    "Stripe webhooks are no longer accepted; product billing is Creem + Alipay only",
+                );
             }
             BillingProvider::Creem => {
                 let secret = std::env::var("CREEM_WEBHOOK_SECRET").unwrap_or_default();

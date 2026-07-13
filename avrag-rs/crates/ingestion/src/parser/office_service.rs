@@ -24,10 +24,11 @@ impl OfficeParserServiceConfig {
         let api_key = std::env::var("OFFICE_PARSER_API_KEY")
             .ok()
             .filter(|value| !value.trim().is_empty());
+        // Large real-world docx often exceed 30s on cold JVM / complex layouts.
         let timeout_ms = std::env::var("OFFICE_PARSER_TIMEOUT_MS")
             .ok()
             .and_then(|value| value.parse().ok())
-            .unwrap_or(30000);
+            .unwrap_or(120_000);
 
         Some(Self {
             base_url,
@@ -221,9 +222,15 @@ impl OfficeParserServiceClient {
             .await
             .with_context(|| format!("Failed to call office parser {}", format.endpoint_path()))?;
 
-        Self::decode_json_response(response)
-            .await
-            .with_context(|| format!("Failed to decode office parser {}", format.endpoint_path()))
+        // Prefer the full anyhow chain (status/body details) in the outer message so
+        // worker last_error is actionable, not just "Failed to decode …".
+        match Self::decode_json_response(response).await {
+            Ok(value) => Ok(value),
+            Err(error) => Err(error.context(format!(
+                "office parser {} request failed",
+                format.endpoint_path()
+            ))),
+        }
     }
 
     fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
@@ -239,15 +246,18 @@ impl OfficeParserServiceClient {
     async fn decode_json_response<T: for<'de> Deserialize<'de>>(
         response: reqwest::Response,
     ) -> Result<T> {
-        if response.status().is_success() {
-            return response
-                .json()
-                .await
-                .context("Failed to decode office parser success payload");
-        }
-
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
+        let body_preview = truncate_for_error(&body, 480);
+
+        if status.is_success() {
+            return serde_json::from_str::<T>(&body).with_context(|| {
+                format!(
+                    "Failed to decode office parser success payload (status={status}, body={body_preview})"
+                )
+            });
+        }
+
         if let Ok(error) = serde_json::from_str::<OfficeParserErrorEnvelope>(&body) {
             anyhow::bail!(
                 "office parser error {}: {} (retryable={})",
@@ -257,8 +267,21 @@ impl OfficeParserServiceClient {
             );
         }
 
-        anyhow::bail!("office parser request failed: {} - {}", status, body);
+        anyhow::bail!(
+            "office parser request failed: {} - {}",
+            status,
+            body_preview
+        );
     }
+}
+
+fn truncate_for_error(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let head: String = trimmed.chars().take(max_chars).collect();
+    format!("{head}…")
 }
 
 #[cfg(test)]

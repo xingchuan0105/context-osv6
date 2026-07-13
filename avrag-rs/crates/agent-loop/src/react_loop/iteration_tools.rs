@@ -50,6 +50,16 @@ impl ReActLoop {
         for (idx, call) in calls.iter().enumerate() {
             let call_id = &call_ids[idx];
             let tool_start = std::time::Instant::now();
+            // User-facing progress before native tool runs (Search etc.).
+            if let Some((kind, product)) = crate::progress::native_tool_progress(&call.tool) {
+                let q = crate::progress::query_from_tool_args(&call.tool, &call.args);
+                // Search: no domain chips — only product action + query.
+                crate::progress::emit_work_fact(
+                    sink,
+                    crate::progress::WorkFact::retrieval_started(kind, product, &q),
+                )
+                .await;
+            }
             let result = self
                 .dispatch_tool_call(
                     call,
@@ -59,6 +69,18 @@ impl ReActLoop {
                 )
                 .await;
             let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;
+
+            if let Some((kind, product)) = crate::progress::native_tool_progress(&call.tool) {
+                let q = crate::progress::query_from_tool_args(&call.tool, &call.args);
+                let hits = crate::progress::hits_from_tool_data(result.data.as_ref());
+                // Search: empty doc labels (no domain chips per product decision).
+                let docs: Vec<String> = Vec::new();
+                crate::progress::emit_work_fact(
+                    sink,
+                    crate::progress::WorkFact::retrieval_finished(kind, product, &q, hits, &docs),
+                )
+                .await;
+            }
 
             let _ = sink
                 .emit(AgentEvent::ToolResult {

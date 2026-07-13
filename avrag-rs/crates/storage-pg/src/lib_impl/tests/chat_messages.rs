@@ -63,6 +63,7 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
                 tool_results: &tool_results,
                 user_turn_metadata: None,
                 user_resolved_query: None,
+                assistant_turn_metadata: None,
             },
         )
         .await
@@ -137,6 +138,7 @@ async fn chat_message_turn_metadata_roundtrip_when_database_available() {
                 tool_results: &[],
                 user_turn_metadata: Some(metadata),
                 user_resolved_query: Some("Who wrote Antifragile?"),
+                assistant_turn_metadata: None,
             },
         )
         .await

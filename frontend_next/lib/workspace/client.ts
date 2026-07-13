@@ -50,6 +50,8 @@ export type WorkspaceChatMessage = {
   agent_icon?: string | null;
   citations?: Citation[];
   tool_results?: ToolResult[] | null;
+  /** Free-form row metadata; assistant may include `{ progress: … }` for process cards. */
+  turn_metadata?: Record<string, unknown> | null;
   created_at: string;
 };
 

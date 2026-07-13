@@ -28,4 +28,6 @@ pub struct ChatTurn<'a> {
     pub user_turn_metadata: Option<serde_json::Value>,
     /// Non-destructive resolved query for retrieval (ADR-0008); `user_content` stays raw.
     pub user_resolved_query: Option<&'a str>,
+    /// Assistant-row metadata (e.g. `{ "progress": { … } }` for process-card restore).
+    pub assistant_turn_metadata: Option<serde_json::Value>,
 }

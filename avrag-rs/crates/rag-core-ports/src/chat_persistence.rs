@@ -21,6 +21,8 @@ pub struct AppendChatTurn<'a> {
     pub tool_results: &'a [ToolResult],
     pub user_turn_metadata: Option<serde_json::Value>,
     pub user_resolved_query: Option<&'a str>,
+    /// Assistant-row metadata (e.g. progress snapshot for refresh restore).
+    pub assistant_turn_metadata: Option<serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------

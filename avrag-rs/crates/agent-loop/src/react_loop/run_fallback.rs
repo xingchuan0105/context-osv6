@@ -103,6 +103,9 @@ impl ReActLoop {
             .emit(AgentEvent::Activity {
                 stage: "degraded_no_evidence".to_string(),
                 message: answer.clone(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
         let _ = sink
@@ -165,8 +168,18 @@ impl ReActLoop {
 
         let _ = sink
             .emit(AgentEvent::Activity {
-                stage: "auto_fallback".to_string(),
-                message: format!("Running fallback: {}", fallback.tool_id),
+                stage: "act:retrieve_semantic".to_string(),
+                message: "progress.retrieve_semantic.running".to_string(),
+                detail: {
+                    let q = crate::progress::truncate_chars(retrieval_query, 48);
+                    if q.is_empty() {
+                        None
+                    } else {
+                        Some(q)
+                    }
+                },
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
 
@@ -279,12 +292,15 @@ impl ReActLoop {
     pub(super) async fn emit_unknown_fallback_skipped(
         &self,
         sink: &dyn AgentEventSink,
-        tool_id: &str,
+        _tool_id: &str,
     ) {
         let _ = sink
             .emit(AgentEvent::Activity {
-                stage: "fallback_skipped".to_string(),
-                message: format!("unknown fallback tool_id: {tool_id}"),
+                stage: "act:retrieve_semantic".to_string(),
+                message: "progress.fallback_unavailable".to_string(),
+                detail: None,
+                counts: Default::default(),
+                sources_preview: Vec::new(),
             })
             .await;
     }

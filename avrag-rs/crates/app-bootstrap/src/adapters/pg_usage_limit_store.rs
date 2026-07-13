@@ -8,8 +8,10 @@ use async_trait::async_trait;
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::AppError;
-use sqlx::Row;
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
+
+use crate::adapters::pg_session::set_current_user;
 
 pub struct PgUsageLimitStoreAdapter {
     repo: Arc<PgAppRepository>,
@@ -20,8 +22,23 @@ impl PgUsageLimitStoreAdapter {
         Self { repo }
     }
 
-    fn pool(&self) -> &sqlx::PgPool {
+    fn pool(&self) -> &PgPool {
         self.repo.raw()
+    }
+
+    /// `llm_usage_events` has FORCE RLS on `owner_user_id = app.current_user`.
+    /// All product reads/writes must open a txn and set that GUC first.
+    async fn begin_as_owner(
+        &self,
+        owner_user_id: Uuid,
+    ) -> Result<Transaction<'_, Postgres>, AppError> {
+        let mut tx = self
+            .pool()
+            .begin()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        set_current_user(tx.as_mut(), &owner_user_id.to_string()).await?;
+        Ok(tx)
     }
 }
 
@@ -32,22 +49,40 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         ctx: &MeteringContext,
         record: UsageLimitUsageRecord<'_>,
     ) -> Result<i64, AppError> {
-        let (input_rate, output_rate) =
+        let (rate_miss, rate_cache, rate_out) =
             self.load_model_rates(record.provider, record.model).await?;
-        let usage_units = app_core::compute_usage_units_with_rates(
+        // Billable rows use the user's plan margin M; internal rows still unitize with M=1.0
+        // so analytics stay comparable without inflating non-quota ledgers.
+        let margin_multiplier = if record.billable {
+            let plan_id = self.get_user_plan(ctx.user_id).await.unwrap_or_else(|_| "free".into());
+            self.load_plan_policy(&plan_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|p| p.margin_multiplier)
+                .filter(|m| m.is_finite() && *m > 0.0)
+                .unwrap_or(2.0)
+        } else {
+            1.0
+        };
+        let usage_units = app_core::compute_usage_units_three_bucket(
             record.prompt_tokens,
             record.completion_tokens,
-            input_rate,
-            output_rate,
+            record.cached_tokens,
+            rate_miss,
+            rate_cache,
+            rate_out,
+            margin_multiplier,
         );
+        let mut tx = self.begin_as_owner(ctx.owner_user_id).await?;
         sqlx::query(
             r#"
             INSERT INTO llm_usage_events (
                 owner_user_id, user_id, feature, stage, provider, model,
-                prompt_tokens, completion_tokens, total_tokens,
+                prompt_tokens, completion_tokens, total_tokens, cached_tokens,
                 usage_units, usage_source, usage_kind, billable,
                 session_id, document_id, request_id, trace_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             "#,
         )
         .bind(ctx.owner_user_id)
@@ -59,6 +94,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .bind(record.prompt_tokens as i64)
         .bind(record.completion_tokens as i64)
         .bind(record.total_tokens as i64)
+        .bind(record.cached_tokens as i64)
         .bind(usage_units)
         .bind(record.usage_source.as_str())
         .bind(record.usage_kind)
@@ -67,9 +103,12 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .bind(ctx.document_id)
         .bind(&ctx.request_id)
         .bind(&ctx.trace_id)
-        .execute(self.pool())
+        .execute(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(usage_units)
     }
 
@@ -118,7 +157,8 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
     ) -> Result<Option<UsageLimitPlanPolicyRow>, AppError> {
         let row = sqlx::query(
             r#"
-            SELECT rolling_5h_limit_units, rolling_7d_limit_units, enabled
+            SELECT rolling_5h_limit_units, rolling_7d_limit_units, enabled,
+                   COALESCE(margin_multiplier, 2.0) AS margin_multiplier
             FROM usage_limit_plan_policies
             WHERE plan_id = $1
             "#,
@@ -131,6 +171,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             enabled: row.try_get("enabled").unwrap_or(true),
             rolling_5h_limit_units: row.try_get("rolling_5h_limit_units").unwrap_or(100),
             rolling_7d_limit_units: row.try_get("rolling_7d_limit_units").unwrap_or(1000),
+            margin_multiplier: row.try_get("margin_multiplier").unwrap_or(2.0),
         }))
     }
 
@@ -140,6 +181,8 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         since: DateTime<Utc>,
     ) -> Result<i64, AppError> {
         // ADR 0006 §7: only customer-billable rows count toward rolling quotas.
+        // B2C: owner_user_id == user_id for RLS; set GUC to that principal.
+        let mut tx = self.begin_as_owner(user_id).await?;
         let row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(usage_units), 0)::bigint AS total
@@ -151,9 +194,12 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         )
         .bind(user_id)
         .bind(since)
-        .fetch_one(self.pool())
+        .fetch_one(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(row
             .try_get::<i64, _>("total")
             .map_err(|e| AppError::internal(e.to_string()))?)
@@ -164,6 +210,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         user_id: Uuid,
         since: DateTime<Utc>,
     ) -> Result<Option<DateTime<Utc>>, AppError> {
+        let mut tx = self.begin_as_owner(user_id).await?;
         let row = sqlx::query(
             r#"
             SELECT created_at
@@ -177,9 +224,12 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         )
         .bind(user_id)
         .bind(since)
-        .fetch_optional(self.pool())
+        .fetch_optional(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(row.and_then(|row| row.try_get::<DateTime<Utc>, _>("created_at").ok()))
     }
 
@@ -188,6 +238,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         user_id: Uuid,
         since: DateTime<Utc>,
     ) -> Result<std::collections::HashMap<String, i64>, AppError> {
+        let mut tx = self.begin_as_owner(user_id).await?;
         let rows = sqlx::query(
             r#"
             SELECT feature, COALESCE(SUM(usage_units), 0)::bigint AS total
@@ -200,9 +251,12 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         )
         .bind(user_id)
         .bind(since)
-        .fetch_all(self.pool())
+        .fetch_all(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
         let mut breakdown = std::collections::HashMap::new();
         for row in rows {
             breakdown.insert(
@@ -215,10 +269,16 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         Ok(breakdown)
     }
 
-    async fn load_model_rates(&self, provider: &str, model: &str) -> Result<(f64, f64), AppError> {
+    async fn load_model_rates(
+        &self,
+        provider: &str,
+        model: &str,
+    ) -> Result<(f64, f64, f64), AppError> {
         let row = sqlx::query(
             r#"
-            SELECT input_unit_rate, output_unit_rate
+            SELECT input_unit_rate,
+                   COALESCE(cache_hit_unit_rate, 0.02) AS cache_hit_unit_rate,
+                   output_unit_rate
             FROM llm_model_weights
             WHERE enabled = true AND provider = $1 AND model = $2
             ORDER BY effective_from DESC
@@ -233,10 +293,11 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         Ok(if let Some(row) = row {
             (
                 row.try_get::<f64, _>("input_unit_rate").unwrap_or(1.0),
+                row.try_get::<f64, _>("cache_hit_unit_rate").unwrap_or(0.02),
                 row.try_get::<f64, _>("output_unit_rate").unwrap_or(2.0),
             )
         } else {
-            (1.0, 2.0)
+            (1.0, 0.02, 2.0)
         })
     }
 
@@ -250,6 +311,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
     }
 
     async fn has_estimated_usage(&self, user_id: Uuid) -> Result<bool, AppError> {
+        let mut tx = self.begin_as_owner(user_id).await?;
         let row = sqlx::query(
             r#"
             SELECT EXISTS(
@@ -260,9 +322,12 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             "#,
         )
         .bind(user_id)
-        .fetch_one(self.pool())
+        .fetch_one(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(row
             .try_get::<bool, _>("has_estimated")
             .map_err(|e| AppError::internal(e.to_string()))?)

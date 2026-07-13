@@ -100,6 +100,9 @@ pub struct SourceRow {
     pub title: String,
     pub file_name: String,
     pub status: String,
+    /// Latest ingestion task error (if any). Surfaces failed parse/index reasons in UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

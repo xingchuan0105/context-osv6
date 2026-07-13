@@ -16,12 +16,23 @@ use tracing::info;
 use super::tools;
 use crate::RagRuntime;
 
+/// One sandbox `client.*` call with product-progress metadata (not for UI raw tool dump).
+#[derive(Debug, Clone)]
+pub struct CapturedBridgeCall {
+    /// SDK method name: dense_search / lexical_search / …
+    pub method: String,
+    /// Human query / terms from call args when present.
+    pub query: Option<String>,
+    pub result: ToolResult,
+}
+
 /// Host-side bridge backed by `RagRuntime` tool dispatch.
 pub struct RuntimeBridge {
     runtime: Arc<RagRuntime>,
     auth: AuthContext,
     doc_scope: Vec<String>,
     captured_results: Arc<Mutex<Vec<ToolResult>>>,
+    captured_calls: Arc<Mutex<Vec<CapturedBridgeCall>>>,
 }
 
 impl RuntimeBridge {
@@ -31,6 +42,7 @@ impl RuntimeBridge {
             auth,
             doc_scope,
             captured_results: Arc::new(Mutex::new(Vec::new())),
+            captured_calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -41,6 +53,29 @@ impl RuntimeBridge {
             .unwrap_or_else(|e| e.into_inner())
             .drain(..)
             .collect()
+    }
+
+    /// Drain per-call progress metadata (method + query + result).
+    pub fn take_captured_calls(&self) -> Vec<CapturedBridgeCall> {
+        self.captured_calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain(..)
+            .collect()
+    }
+
+    fn extract_query(method: &str, args: &Value) -> Option<String> {
+        match method {
+            "dense_search" | "lexical_search" | "graph_search" => args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned),
+            "chunk_fetch" => args
+                .get("chunk_id")
+                .and_then(|v| v.as_str())
+                .map(|id| format!("片段 {id}")),
+            _ => None,
+        }
     }
 
     /// RPC methods supported by `method_to_tool_call` (must match Python shim `client`).
@@ -349,6 +384,14 @@ impl HostBridge for RuntimeBridge {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(result.clone());
+        self.captured_calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(CapturedBridgeCall {
+                method: method.to_string(),
+                query: Self::extract_query(method, &args),
+                result: result.clone(),
+            });
         let data = Self::tool_result_to_bridge_data(&result);
         let chunk_count = data
             .get("chunks")

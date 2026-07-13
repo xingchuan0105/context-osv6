@@ -1,5 +1,4 @@
 import type { ChatEvent } from "../../lib/contracts";
-import { isResearchMode, normalizeMessageMode } from "./helpers";
 import type { ProgressTracker } from "./use-progress-tracker";
 import type { PendingDoneEvent, UseChatSessionOptions } from "./types";
 
@@ -20,7 +19,7 @@ export type StreamEventHandlerDeps = {
   ) => void;
   markTokenReceived: () => void;
   enqueueStreamingText: (text: string) => void;
-  handleDoneWithTypewriter: (event: PendingDoneEvent) => void;
+  handleDoneWithTypewriter: (event: PendingDoneEvent, progressSnapshot?: import("./types").UiProgressSnapshot | null) => void;
   resetStreamingTypewriter: () => void;
   clearPendingStreamingAssistant: () => void;
 };
@@ -49,23 +48,18 @@ export function handleAnswerStartEvent(
   deps: StreamEventHandlerDeps,
   event: Extract<ChatEvent, { event: "answer_start" }>,
 ) {
-  if (normalizeMessageMode(event.agent_type) === "chat") {
-    return;
+  // Do not mount an empty answer bubble on answer_start (product: no frame until
+  // first character). First token / typewriter chunk creates the assistant row.
+  if (event.session_id) {
+    deps.streamingSessionIdRef.current = event.session_id;
   }
-
-  deps.beginAnswerStreaming(event);
 }
 
 export function handleTokenEvent(
   deps: StreamEventHandlerDeps,
   event: Extract<ChatEvent, { event: "token" }>,
 ) {
-  const activeProgressMode = deps.progressTracker.modeRef.current;
-  // Chat/write: drop thinking hint on first token. Research: keep process card alongside answer.
-  if (!activeProgressMode || !isResearchMode(activeProgressMode)) {
-    deps.progressTracker.hide();
-  }
-
+  // Keep progress card for all 4 modes until stream finalize/error (immediate progress UX).
   deps.ensureStreamingAssistant(event);
   deps.markTokenReceived();
   deps.enqueueStreamingText(event.content);
@@ -89,9 +83,10 @@ export function handleDoneEvent(
   deps: StreamEventHandlerDeps,
   event: Extract<ChatEvent, { event: "done" }>,
 ) {
-  // Grok end-state: keep a collapsible process summary with frozen elapsed (no-op if already hidden).
-  deps.progressTracker.finalize();
-  deps.handleDoneWithTypewriter(event as PendingDoneEvent);
+  // Freeze progress and hand snapshot to done/typewriter path (attached + cached on finalizeStreamingDone).
+  // Live card stays until the assistant row receives the snapshot so there is no flash-gap.
+  const progressSnapshot = deps.progressTracker.finalize();
+  deps.handleDoneWithTypewriter(event as PendingDoneEvent, progressSnapshot);
 }
 
 export function handleErrorEvent(

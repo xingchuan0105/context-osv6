@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { AppPageFrame } from "../page-frame";
+import { ProductChromeFooter } from "../product-chrome-footer";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { SettingsPanel } from "./settings-panel";
@@ -25,6 +26,7 @@ export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
         </div>
         <SettingsTabBar activeTab={activeTab} />
         <SettingsPanel activeTab={activeTab} />
+        <ProductChromeFooter />
       </div>
     </AppPageFrame>
   );

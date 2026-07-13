@@ -5,32 +5,51 @@ import { resetUsagePageMocks } from "./helpers/usage-page.setup";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createUsagePageMocks());
 
-vi.mock("../../lib/billing/api", () => ({
-  billingApi: {
-    getUsageWindow: vi.fn().mockResolvedValue({
-      plan_id: "free",
-      rolling_5h: { used: 80000, limit: 100000, percentage: 80, reset_at: "2099-01-01T00:00:00Z" },
-      rolling_7d: { used: 200000, limit: 400000, percentage: 50, reset_at: "2099-01-01T00:00:00Z" },
-      soft_limit_hit: { rolling_5h: true, rolling_7d: false },
-      hard_limit_hit: { rolling_5h: false, rolling_7d: false },
-    }),
-    getUsageHistory: vi.fn().mockResolvedValue({
-      daily: [
-        { date: "2026-06-01", tokens: 50000 },
-        { date: "2026-06-02", tokens: 75000 },
-      ],
-    }),
-    getUsageForecast: vi.fn().mockResolvedValue({
-      current_plan: "free",
-      avg_30d_tokens: 8000,
-      projected_30d_tokens: 240000,
-      current_limit_7d: 400000,
-      upgrade_recommended: false,
-      suggestion_zh: "按当前用量，本月无需升级",
-      suggestion_en: "Based on current usage, no upgrade needed",
-    }),
-  },
-}));
+vi.mock("../../lib/billing/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/billing/api")>();
+  return {
+    ...actual,
+    billingApi: {
+      getUsageWindow: vi.fn().mockResolvedValue({
+        plan_id: "free",
+        margin_multiplier: 2.0,
+        rolling_5h: {
+          used: 160,
+          limit: 200,
+          used_tokens_approx: 80_000,
+          limit_tokens_approx: 100_000,
+          percentage: 80,
+          reset_at: "2099-01-01T00:00:00Z",
+        },
+        rolling_7d: {
+          used: 400,
+          limit: 800,
+          used_tokens_approx: 200_000,
+          limit_tokens_approx: 400_000,
+          percentage: 50,
+          reset_at: "2099-01-01T00:00:00Z",
+        },
+        soft_limit_hit: { rolling_5h: true, rolling_7d: false },
+        hard_limit_hit: { rolling_5h: false, rolling_7d: false },
+      }),
+      getUsageHistory: vi.fn().mockResolvedValue({
+        daily: [
+          { date: "2026-06-01", tokens: 50000 },
+          { date: "2026-06-02", tokens: 75000 },
+        ],
+      }),
+      getUsageForecast: vi.fn().mockResolvedValue({
+        current_plan: "free",
+        avg_30d_tokens: 8000,
+        projected_30d_tokens: 240000,
+        current_limit_7d: 400000,
+        upgrade_recommended: false,
+        suggestion_zh: "按当前用量，本月无需升级",
+        suggestion_en: "Based on current usage, no upgrade needed",
+      }),
+    },
+  };
+});
 
 vi.mock("../../lib/billing/featureFlag", () => ({
   isPricingRevampEnabledSSR: () => true,
@@ -77,8 +96,23 @@ describe("UsagePage", () => {
     resetUsagePageMocks(mocks);
     vi.mocked(billingApi.getUsageWindow).mockResolvedValue({
       plan_id: "free",
-      rolling_5h: { used: 80000, limit: 100000, percentage: 80, reset_at: "2099-01-01T00:00:00Z" },
-      rolling_7d: { used: 200000, limit: 400000, percentage: 50, reset_at: "2099-01-01T00:00:00Z" },
+      margin_multiplier: 2.0,
+      rolling_5h: {
+        used: 160,
+        limit: 200,
+        used_tokens_approx: 80_000,
+        limit_tokens_approx: 100_000,
+        percentage: 80,
+        reset_at: "2099-01-01T00:00:00Z",
+      },
+      rolling_7d: {
+        used: 400,
+        limit: 800,
+        used_tokens_approx: 200_000,
+        limit_tokens_approx: 400_000,
+        percentage: 50,
+        reset_at: "2099-01-01T00:00:00Z",
+      },
       soft_limit_hit: { rolling_5h: true, rolling_7d: false },
       hard_limit_hit: { rolling_5h: false, rolling_7d: false },
     });

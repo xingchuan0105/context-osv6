@@ -47,7 +47,7 @@ export function WorkspaceTopBar({
   const safeWorkspaceDescription = workspaceDescription ?? "";
   const currentUserLabel = auth.user?.full_name.trim() || auth.user?.email.trim() || formatUiMessage(locale, "workspaceAnonymousUser");
   const currentUserEmail = auth.user?.email.trim() || formatUiMessage(locale, "workspaceAnonymousUser");
-  const newWorkspaceLabel = locale === "zh-CN" ? "新建笔记本" : "New Workspace";
+  const newWorkspaceLabel = formatUiMessage(locale, "workspaceCreateDialogLabel");
   const displayTitle = safeWorkspaceTitle;
 
   useEffect(() => {

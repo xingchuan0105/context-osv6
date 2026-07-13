@@ -167,7 +167,24 @@ function citationToWebSource(citation: Citation): WebSource | null {
 }
 
 function hasRenderedCitationMarkup(content: string) {
-  return /\[\[image:\d+\]\]|\[\[\d+\]\]|\[\d+\]/u.test(content);
+  // RAG: [[cite:CHUNK_ID]] / [[image:CHUNK_ID]]; Search/legacy: [[n]] / [n]
+  return /\[\[(?:cite|image):[^\]]+\]\]|\[\[\d+\]\]|\[\d+\]/iu.test(content);
+}
+
+function resolveCitationFromMarker(
+  citations: Citation[],
+  opts: { displayId?: string; chunkId?: string },
+): Citation | null {
+  if (opts.chunkId) {
+    const byChunk = findCitationByChunkId(citations, opts.chunkId);
+    if (byChunk) {
+      return byChunk;
+    }
+  }
+  if (opts.displayId) {
+    return findCitationByDisplayId(citations, opts.displayId);
+  }
+  return null;
 }
 
 type RichMarkdownCitationToken = {
@@ -181,13 +198,23 @@ function markdownToRichTextHtmlWithCitationButtons(
   locale: "zh-CN" | "en",
 ) {
   const citationTokens: RichMarkdownCitationToken[] = [];
+  // Order matters: named cite/image first, then numeric [[n]] / [n].
   const tokenizedMarkdown = markdown.replace(
-    /\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/gu,
-    (marker, bracketedId: string | undefined, prefixedId: string | undefined) => {
-      const displayId = bracketedId ?? prefixedId ?? "";
-      const citation = findCitationByDisplayId(citations, displayId);
+    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
+    (
+      marker,
+      citeChunkId: string | undefined,
+      imageChunkId: string | undefined,
+      bracketedId: string | undefined,
+      prefixedId: string | undefined,
+    ) => {
+      const citation = resolveCitationFromMarker(citations, {
+        chunkId: citeChunkId ?? imageChunkId,
+        displayId: bracketedId ?? prefixedId,
+      });
       if (!citation) {
-        return marker;
+        // Drop unknown markers so raw [[cite:uuid]] never leaks into the answer body.
+        return "";
       }
       const token = `CITATIONTOKEN${citationTokens.length}END`;
       citationTokens.push({ citation, token });
@@ -210,12 +237,13 @@ function markdownToRichTextHtmlWithCitationButtons(
 
 type RenderedAnswerToken =
   | { type: "text"; text: string }
-  | { type: "citation"; displayId: string }
-  | { type: "image"; displayId: string };
+  | { type: "citation"; displayId?: string; chunkId?: string }
+  | { type: "image"; displayId?: string; chunkId?: string };
 
 function tokenizeRenderedAnswerLine(line: string) {
   const tokens: RenderedAnswerToken[] = [];
-  const pattern = /\[\[image:(\d+)\]\]|\[\[(\d+)\]\]|\[(\d+)\]/gu;
+  const pattern =
+    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[(\d+)\]\]|\[(\d+)\]/giu;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -224,9 +252,11 @@ function tokenizeRenderedAnswerLine(line: string) {
       tokens.push({ type: "text", text: line.slice(lastIndex, match.index) });
     }
     if (match[1]) {
-      tokens.push({ type: "image", displayId: match[1] });
+      tokens.push({ type: "citation", chunkId: match[1] });
+    } else if (match[2]) {
+      tokens.push({ type: "image", chunkId: match[2] });
     } else {
-      tokens.push({ type: "citation", displayId: match[2] ?? match[3] ?? "" });
+      tokens.push({ type: "citation", displayId: match[3] ?? match[4] ?? "" });
     }
     lastIndex = match.index + match[0].length;
   }
@@ -422,7 +452,10 @@ export function CitationRenderer({
       const tokens = tokenizeRenderedAnswerLine(line);
 
       if (tokens.length === 1 && tokens[0]?.type === "image") {
-        const citation = findCitationByDisplayId(message.citations, tokens[0].displayId);
+        const citation = resolveCitationFromMarker(message.citations, {
+          chunkId: tokens[0].chunkId,
+          displayId: tokens[0].displayId,
+        });
         if (!citation) {
           return null;
         }
@@ -448,25 +481,23 @@ export function CitationRenderer({
             }
 
             if (token.type === "citation") {
-              const citation = findCitationByDisplayId(message.citations, token.displayId);
+              const citation = resolveCitationFromMarker(message.citations, {
+                chunkId: token.chunkId,
+                displayId: token.displayId,
+              });
               if (!citation) {
-                return (
-                  <span className={styles.inlineCitationFallback} key={`fallback-${lineIndex}-${tokenIndex}`}>
-                    [{token.displayId}]
-                  </span>
-                );
+                return null;
               }
               inlineCitationsRendered += 1;
               return renderCitationButton(citation, `inline-${lineIndex}-${tokenIndex}`);
             }
 
-            const citation = findCitationByDisplayId(message.citations, token.displayId);
+            const citation = resolveCitationFromMarker(message.citations, {
+              chunkId: token.chunkId,
+              displayId: token.displayId,
+            });
             if (!citation) {
-              return (
-                <span className={styles.inlineCitationFallback} key={`image-fallback-${lineIndex}-${tokenIndex}`}>
-                  [image {token.displayId}]
-                </span>
-              );
+              return null;
             }
             inlineCitationsRendered += 1;
             return renderCitationButton(citation, `image-inline-${lineIndex}-${tokenIndex}`);

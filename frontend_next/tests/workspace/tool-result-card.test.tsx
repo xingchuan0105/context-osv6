@@ -19,14 +19,18 @@ describe("ToolResultsPanel", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders multiple tool result cards", () => {
+  it("hides all tool result cards in product transcript (all modes)", () => {
     const results: ToolResult[] = [
       makeResult("calculator", ToolStatus.Ok, { result: 42, expression: "6*7" }),
       makeResult("weather_query", ToolStatus.Ok, { location: "Beijing", temperature: 25 }),
+      makeResult("dense_retrieval", ToolStatus.Ok, {}),
+      makeResult("web_search", ToolStatus.Ok, { results: [] }),
     ];
-    render(<ToolResultsPanel locale="en" results={results} />);
-    expect(screen.getByText("Calculator")).toBeTruthy();
-    expect(screen.getByText("Weather")).toBeTruthy();
+    const { container } = render(<ToolResultsPanel locale="en" results={results} />);
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByText("Calculator")).toBeNull();
+    expect(screen.queryByText("dense_retrieval")).toBeNull();
+    expect(screen.queryByText("Web Search")).toBeNull();
   });
 });
 
@@ -160,7 +164,9 @@ describe("ToolResultCard — generic fallback", () => {
       />,
     );
     expect(screen.getByText("custom_tool")).toBeTruthy();
-    // Generic tools start collapsed so JSON dumps stay out of the answer flow (U10).
+    // Non-search tools expand by default; body is collapsible via header.
+    expect(screen.getByText(/"foo"/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /custom_tool/i }));
     expect(screen.queryByText(/"foo"/)).toBeNull();
     await user.click(screen.getByRole("button", { name: /custom_tool/i }));
     expect(screen.getByText(/"foo"/)).toBeTruthy();
@@ -168,8 +174,31 @@ describe("ToolResultCard — generic fallback", () => {
   });
 });
 
+describe("ToolResultsPanel — product hide", () => {
+  it("hides profile/history and user-facing tools alike", () => {
+    const { container } = render(
+      <ToolResultsPanel
+        locale="en"
+        results={[
+          makeResult("user_profile_load", ToolStatus.Ok, { ok: true }),
+          makeResult("conversation_history_load", ToolStatus.Ok, { ok: true }),
+          makeResult("web_search", ToolStatus.Ok, {
+            results: [{ title: "Example", url: "https://example.com", snippet: "x" }],
+          }),
+          makeResult("dense_retrieval", ToolStatus.Ok, {}),
+        ]}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByText("user_profile_load")).toBeNull();
+    expect(screen.queryByText("Web Search")).toBeNull();
+    expect(screen.queryByText("dense_retrieval")).toBeNull();
+  });
+});
+
 describe("ToolResultCard — web_search", () => {
-  it("renders safe search result links", () => {
+  it("starts collapsed and renders safe search result links when expanded", async () => {
+    const user = userEvent.setup();
     render(
       <ToolResultCard
         locale="en"
@@ -179,11 +208,14 @@ describe("ToolResultCard — web_search", () => {
       />,
     );
 
+    expect(screen.queryByRole("link", { name: "Example" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Web Search/i }));
     const link = screen.getByRole("link", { name: "Example" });
     expect(link.getAttribute("href")).toBe("https://example.com/article");
   });
 
-  it("does not render javascript: URLs as links", () => {
+  it("does not render javascript: URLs as links", async () => {
+    const user = userEvent.setup();
     render(
       <ToolResultCard
         locale="en"
@@ -193,6 +225,7 @@ describe("ToolResultCard — web_search", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: /Web Search/i }));
     expect(screen.queryByRole("link", { name: "Malicious" })).toBeNull();
     expect(screen.getByText("Malicious")).toBeTruthy();
   });

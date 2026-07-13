@@ -924,6 +924,7 @@
   flex: 1 1 0;
   gap: 0.18rem;
   min-height: 0;
+  align-content: start;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0.15rem;

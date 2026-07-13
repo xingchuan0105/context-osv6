@@ -301,11 +301,14 @@ describe("SettingsSurface", () => {
     );
 
     await waitFor(() => {
-      // Current plan summary shows Pro; plan grid moved to /upgrade (U5).
+      // Current plan summary shows Pro; billing CTA is portal-only (manage subscription).
       expect(screen.getAllByText("Pro").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Active")).toBeTruthy();
+      expect(screen.getAllByText(/管理订阅|Manage subscription/i).length).toBeGreaterThanOrEqual(1);
+      // In-app plan change is always available (portal may fall back to Creem/Alipay pricing).
       expect(screen.getAllByText(/更换方案|Change plan/i).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId("settings-back-dashboard")).toBeTruthy();
+      expect(screen.getByTestId("product-chrome-footer")).toBeTruthy();
     });
   });
 

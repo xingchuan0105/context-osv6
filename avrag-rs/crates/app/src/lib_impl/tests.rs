@@ -347,6 +347,9 @@ mod tests {
                 .emit(agent_loop::events::AgentEvent::Activity {
                     stage: "chat".to_string(),
                     message: "Scripted chat".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
                 })
                 .await;
             let _ = sink
@@ -395,6 +398,9 @@ mod tests {
                 .emit(agent_loop::events::AgentEvent::Activity {
                     stage: "chat".to_string(),
                     message: "Buffered chat".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
                 })
                 .await;
 

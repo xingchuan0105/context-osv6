@@ -310,7 +310,7 @@ impl MessagePort for MemoryChatPersistence {
             agent_icon: None,
             citations: turn.citations.to_vec(),
             tool_results: turn.tool_results.to_vec(),
-            turn_metadata: None,
+            turn_metadata: turn.assistant_turn_metadata.clone(),
             resolved_query: None,
             created_at: now.clone(),
         };
@@ -439,6 +439,7 @@ impl ChatCatalogPort for MemoryChatPersistence {
                     title: stored.document.file_name.clone(),
                     file_name: stored.document.file_name.clone(),
                     status: Self::status_label(&stored.document.status).to_string(),
+                    last_error: None,
                 })
             })
             .collect())
@@ -619,6 +620,7 @@ mod tests {
                     tool_results: &[],
                     user_turn_metadata: None,
                     user_resolved_query: None,
+                    assistant_turn_metadata: None,
                 },
             )
             .await

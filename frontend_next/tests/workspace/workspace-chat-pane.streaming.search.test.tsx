@@ -181,18 +181,29 @@ describe("WorkspaceChatPane streaming search flow", () => {
       const progressCard = screen.getByTestId("workspace-progress-card");
       expect(progressCard).toBeTruthy();
       expect(progressCard.closest("article")).toBeNull();
+      expect(progressCard.getAttribute("data-card-collapsed")).toBe("false");
       expect(within(progressCard).getByText("网络搜索中")).toBeTruthy();
-      expect(within(progressCard).queryByText("正在搜索网页")).toBeNull();
+      // Level-1 card expanded: step titles visible. Level-2 sections default collapsed.
+      expect(within(progressCard).getByText("正在搜索网页")).toBeTruthy();
       expect(within(progressCard).queryByText("系统正在读取多个网页来源。")).toBeNull();
+      expect(within(progressCard).queryByText("查询 2")).toBeNull();
+      expect(within(progressCard).queryByText("来源 4")).toBeNull();
+      expect(within(progressCard).queryByText("example.com")).toBeNull();
     });
 
-    await user.click(screen.getByRole("button", { name: "展开过程" }));
-    const expandedProgressCard = screen.getByTestId("workspace-progress-card");
-    expect(within(expandedProgressCard).getByText("正在搜索网页")).toBeTruthy();
-    expect(within(expandedProgressCard).getByText("系统正在读取多个网页来源。")).toBeTruthy();
-    expect(within(expandedProgressCard).getByText("查询 2")).toBeTruthy();
-    expect(within(expandedProgressCard).getByText("来源 4")).toBeTruthy();
-    expect(within(expandedProgressCard).getByText("example.com")).toBeTruthy();
+    // Expand the search activity section (not the seed planning step) to reveal detail/meta.
+    const progressCardBeforeExpand = screen.getByTestId("workspace-progress-card");
+    const searchStepToggle = within(progressCardBeforeExpand).getByRole("button", {
+      name: /展开步骤：正在搜索网页/,
+    });
+    await user.click(searchStepToggle);
+    await waitFor(() => {
+      const progressCard = screen.getByTestId("workspace-progress-card");
+      expect(within(progressCard).getByText("系统正在读取多个网页来源。")).toBeTruthy();
+      expect(within(progressCard).getByText("查询 2")).toBeTruthy();
+      expect(within(progressCard).getByText("来源 4")).toBeTruthy();
+      expect(within(progressCard).getByText("example.com")).toBeTruthy();
+    });
 
     releaseAnswerStart();
 
@@ -211,14 +222,14 @@ describe("WorkspaceChatPane streaming search flow", () => {
     expect(screen.getAllByText("Hello")).toHaveLength(1);
     expect(screen.getByText("Hello").closest('[data-testid="workspace-answer-bubble"]')?.getAttribute("data-mode")).toBe("search");
 
-    // Grok end-state: process strip stays as a collapsed completed summary (not hidden).
+    // Grok end-state: card stays expanded with step titles; not hidden.
     await waitFor(() => {
       const progressCard = screen.getByTestId("workspace-progress-card");
       expect(progressCard.getAttribute("data-progress-state")).toBe("completed");
+      expect(progressCard.getAttribute("data-card-collapsed")).toBe("false");
       expect(within(progressCard).getByText("网络搜索")).toBeTruthy();
       expect(within(progressCard).queryByText("网络搜索中")).toBeNull();
-      // Steps stay collapsed after finalize.
-      expect(within(progressCard).queryByText("正在搜索网页")).toBeNull();
+      expect(within(progressCard).getByText("正在搜索网页")).toBeTruthy();
     });
 
     expect(onSessionChange).toHaveBeenCalledWith("sess-new");

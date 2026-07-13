@@ -10,7 +10,6 @@ mod creem_client;
 mod handlers;
 pub mod quota_service;
 mod service;
-mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
 mod tier;
@@ -24,7 +23,6 @@ pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 pub use alipay_client::AlipayClient;
 pub use creem_client::CreemClient;
 pub use service::BillingService;
-pub use stripe_client::StripeClient;
 pub use tier::{BillingTier, ReactLoopAgentMode, ReactLoopBudgetPolicy};
 pub use types::{
     BillingConfig, BillingEvent, BillingPlan, BillingPlanQuota, BillingProvider, CreateUsageExportRequest,

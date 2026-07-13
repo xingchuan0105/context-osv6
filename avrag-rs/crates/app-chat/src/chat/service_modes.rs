@@ -39,6 +39,7 @@ impl ChatContext {
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
+            assistant_turn_metadata: None,
         })
     }
 
@@ -111,5 +112,6 @@ pub(crate) fn build_chat_execution_from_result(
         debug_metadata: params.debug_metadata,
         tokens_emitted: false,
         citations_emitted: false,
+        assistant_turn_metadata: None,
     }
 }

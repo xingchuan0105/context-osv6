@@ -5,11 +5,19 @@ import {
   getStreamingDisplayText,
   getPrefersReducedStreamingMotion,
 } from "./helpers";
-import type { PendingDoneEvent } from "./types";
+import type { PendingDoneEvent, UiProgressSnapshot } from "./types";
 
 export type StreamTypewriterDeps = {
   appendStreamingDisplayText: (chunk: string) => void;
-  finalizeStreamingDone: (event: PendingDoneEvent) => void;
+  finalizeStreamingDone: (
+    event: PendingDoneEvent,
+    progressSnapshot?: UiProgressSnapshot | null,
+  ) => void;
+};
+
+type PendingDone = {
+  event: PendingDoneEvent;
+  progressSnapshot: UiProgressSnapshot | null;
 };
 
 export function createStreamTypewriter(deps: StreamTypewriterDeps) {
@@ -18,7 +26,7 @@ export function createStreamTypewriter(deps: StreamTypewriterDeps) {
   const streamDisplayedTextRef = { current: "" };
   const streamReceivedTokenRef = { current: false };
   const streamReduceMotionRef = { current: false };
-  const pendingDoneEventRef: { current: PendingDoneEvent | null } = { current: null };
+  const pendingDoneRef: { current: PendingDone | null } = { current: null };
 
   function stopStreamingTypewriter() {
     if (streamTypewriterTimerRef.current !== null) {
@@ -33,15 +41,17 @@ export function createStreamTypewriter(deps: StreamTypewriterDeps) {
     streamDisplayedTextRef.current = "";
     streamReceivedTokenRef.current = false;
     streamReduceMotionRef.current = getPrefersReducedStreamingMotion();
-    pendingDoneEventRef.current = null;
+    pendingDoneRef.current = null;
   }
 
   function finalizePendingDoneIfReady() {
-    if (streamTypewriterQueueRef.current.length > 0 || !pendingDoneEventRef.current) {
+    if (streamTypewriterQueueRef.current.length > 0 || !pendingDoneRef.current) {
       return;
     }
 
-    deps.finalizeStreamingDone(pendingDoneEventRef.current);
+    const pending = pendingDoneRef.current;
+    pendingDoneRef.current = null;
+    deps.finalizeStreamingDone(pending.event, pending.progressSnapshot);
   }
 
   function flushStreamingTypewriterQueue() {
@@ -115,13 +125,33 @@ export function createStreamTypewriter(deps: StreamTypewriterDeps) {
     return answer.length - queuedAnswer.length <= STREAM_TYPEWRITER_MAX_DRAIN_CHARS_AFTER_DONE;
   }
 
-  function handleDoneWithTypewriter(event: PendingDoneEvent) {
+  function handleDoneWithTypewriter(
+    event: PendingDoneEvent,
+    progressSnapshot?: UiProgressSnapshot | null,
+  ) {
+    const snap = progressSnapshot ?? null;
+
+    // If the backend never streamed tokens (common for short RAG/search), still
+    // typewriter the final answer so the UI does not "pop" the whole bubble at once.
+    if (!streamReceivedTokenRef.current && !streamReduceMotionRef.current) {
+      const answer = getStreamingDisplayText(
+        event.payload.answer ?? "",
+        event.payload.answer_blocks ?? [],
+      );
+      if (answer && streamDisplayedTextRef.current.length === 0) {
+        pendingDoneRef.current = { event, progressSnapshot: snap };
+        streamTypewriterQueueRef.current = answer;
+        scheduleStreamingTypewriter();
+        return;
+      }
+    }
+
     if (!shouldDrainTypewriterQueueAfterDone(event)) {
-      deps.finalizeStreamingDone(event);
+      deps.finalizeStreamingDone(event, snap);
       return;
     }
 
-    pendingDoneEventRef.current = event;
+    pendingDoneRef.current = { event, progressSnapshot: snap };
     scheduleStreamingTypewriter();
   }
 

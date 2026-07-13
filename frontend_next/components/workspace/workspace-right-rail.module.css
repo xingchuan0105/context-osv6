@@ -586,10 +586,21 @@
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
+  min-width: 0;
+  max-width: 100%;
+  /* Must stay visible: ⋯ dropdown is position:absolute below the trigger.
+     Long-title ellipsis is handled on .listItemTitleText / .sourceOpenButton. */
+  overflow: visible;
   transition:
     background 120ms ease,
     border-color 120ms ease,
     box-shadow 120ms ease;
+}
+
+.listItemMenuOpen {
+  /* Lift the open card so its menu paints above neighboring items / scroll peers. */
+  position: relative;
+  z-index: 5;
 }
 
 .listItem:hover {
@@ -647,6 +658,7 @@
   justify-content: space-between;
   gap: 0.48rem;
   min-width: 0;
+  width: 100%;
 }
 
 .sourceToggleButton,
@@ -676,12 +688,15 @@
 
 .sourceOpenButton,
 .noteSelectButton {
-  width: 100%;
+  /* Do NOT use width:100% in a flex row — it overflows past the menu button. */
+  width: auto;
   min-width: 0;
+  max-width: 100%;
 }
 
 .sourceOpenButton {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  overflow: hidden;
 }
 
 .selectionMark {
@@ -703,9 +718,12 @@
 .sourceStatusSpinner {
   width: 1.08rem;
   height: 1.08rem;
-  border: 2px solid hsl(var(--muted-foreground) / 0.28);
-  border-top-color: hsl(var(--foreground));
+  border: 2.5px solid hsl(var(--muted-foreground) / 0.22);
+  border-top-color: hsl(var(--primary, 221 83% 53%));
+  border-right-color: hsl(var(--primary, 221 83% 53%) / 0.55);
   border-radius: 999px;
+  background: hsl(var(--card));
+  box-shadow: 0 0 0 1px hsl(var(--border));
   animation: sourceStatusSpin 0.72s linear infinite;
 }
 
@@ -713,6 +731,27 @@
   width: 1.08rem;
   height: 1.08rem;
   color: hsl(var(--destructive));
+}
+
+.sourceErrorDetail {
+  margin: 0.15rem 0 0.25rem 2.15rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: var(--radius-control);
+  border: 1px solid hsl(var(--destructive-border, var(--destructive)));
+  background: hsl(var(--destructive-soft, 0 84% 60% / 0.08));
+  color: hsl(var(--destructive));
+  font-size: var(--font-size-meta, 0.75rem);
+  line-height: 1.35;
+  word-break: break-word;
+  max-height: 4.2em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.listItemFailed {
+  border-color: hsl(var(--destructive-border, var(--destructive)) / 0.35);
 }
 
 .selectionMarkIcon {
@@ -729,6 +768,7 @@
 .listItemTitleText,
 .noteTitleText {
   min-width: 0;
+  max-width: 100%;
   color: hsl(var(--foreground));
   font-size: var(--font-size-control);
   font-weight: 600;
@@ -736,9 +776,13 @@
 }
 
 .listItemTitleText {
+  display: block;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Keep a visual gap so text never paints over the ⋯ menu. */
+  padding-right: 0.15rem;
 }
 
 .noteTitleRow {
@@ -771,7 +815,11 @@
 
 .itemMenuAnchor {
   position: relative;
-  flex: none;
+  flex: 0 0 auto;
+  z-index: 2;
+  /* Reserve space so long titles cannot cover the ⋯ control. */
+  margin-left: 0.1rem;
+  isolation: isolate;
 }
 
 .itemMenuTrigger {
@@ -780,12 +828,16 @@
   place-items: center;
   width: calc(var(--font-size-control) * 2.45);
   height: calc(var(--font-size-control) * 2.45);
+  min-width: calc(var(--font-size-control) * 2.45);
   padding: 0;
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
   color: hsl(var(--subtle-foreground));
   cursor: pointer;
+  flex: none;
+  position: relative;
+  z-index: 2;
   transition:
     background 120ms ease,
     border-color 120ms ease,
@@ -809,12 +861,14 @@
   position: absolute;
   top: calc(100% + 0.4rem);
   right: 0;
-  z-index: 10;
+  z-index: 20;
   display: grid;
   gap: 0.15rem;
   min-width: 10.5rem;
   padding: 0.35rem;
   border: 1px solid hsl(var(--border));
+  /* Ensure panel is not a zero-hit target if parent stacking is odd. */
+  pointer-events: auto;
   border-radius: 0.9rem;
   background: hsl(var(--card));
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);

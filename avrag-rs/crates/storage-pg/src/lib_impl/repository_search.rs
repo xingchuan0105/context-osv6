@@ -79,7 +79,16 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select d.id, d.workspace_id, n.title as workspace_name, d.file_name, d.status
+            select d.id, d.workspace_id, n.title as workspace_name, d.file_name, d.status,
+                   (
+                     select t.last_error
+                     from ingestion_tasks t
+                     where t.document_id = d.id
+                       and t.last_error is not null
+                       and length(trim(t.last_error)) > 0
+                     order by t.updated_at desc nulls last
+                     limit 1
+                   ) as last_error
             from documents d
             join workspaces n on n.id = d.workspace_id
             where d.file_name ilike $1
@@ -110,6 +119,11 @@ impl ChunkRepository {
                 status: row
                     .try_get("status")
                     .unwrap_or_else(|_| "pending".to_string()),
+                last_error: row
+                    .try_get::<Option<String>, _>("last_error")
+                    .ok()
+                    .flatten()
+                    .filter(|value| !value.trim().is_empty()),
             })
             .collect())
     }

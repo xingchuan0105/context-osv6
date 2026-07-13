@@ -63,6 +63,7 @@ pub mod content_guard;
 pub mod error_kind;
 pub mod events;
 pub mod helpers;
+pub mod progress;
 pub mod react_loop;
 pub mod runtime;
 pub mod sse_sink;

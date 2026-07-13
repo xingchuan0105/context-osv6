@@ -3,13 +3,42 @@ use crate::events::{AgentEvent, AgentEventSink};
 use contracts::ToolCall;
 
 /// Chunk size for non-streaming reasoning emission (matches stream token granularity).
-const REASONING_CHUNK_CHARS: usize = 256;
+const REASONING_CHUNK_CHARS: usize = 64;
+
+/// Hard cap on the product-facing reasoning *summary* (not full CoT).
+/// UI shows this under “思考摘要”; keep it short and scannable.
+const REASONING_SUMMARY_MAX_CHARS: usize = 160;
+
+fn truncate_reasoning_summary(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= REASONING_SUMMARY_MAX_CHARS {
+        return text.to_string();
+    }
+    let hard: String = chars[..REASONING_SUMMARY_MAX_CHARS].iter().collect();
+    // Prefer cutting at a soft boundary when possible.
+    if let Some((byte_idx, ch)) = hard.char_indices().rev().find(|(_, c)| {
+        matches!(
+            c,
+            '。' | '！' | '？' | '.' | '!' | '?' | '；' | ';' | '\n' | '，' | ','
+        )
+    }) {
+        if hard[..byte_idx].chars().count() >= REASONING_SUMMARY_MAX_CHARS / 2 {
+            let mut out = hard[..byte_idx + ch.len_utf8()].to_string();
+            out.push('…');
+            return out;
+        }
+    }
+    let mut out = hard;
+    out.push('…');
+    out
+}
 
 /// Emit `ReasoningSummaryDelta` events for non-empty reasoning text.
 pub async fn emit_reasoning_chunks(sink: &dyn AgentEventSink, reasoning: Option<&str>) {
-    let Some(text) = reasoning.filter(|s| !s.is_empty()) else {
+    let Some(raw) = reasoning.filter(|s| !s.is_empty()) else {
         return;
     };
+    let text = truncate_reasoning_summary(raw);
     let chars: Vec<char> = text.chars().collect();
     for chunk in chars.chunks(REASONING_CHUNK_CHARS) {
         let piece: String = chunk.iter().collect();
@@ -147,7 +176,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn emit_reasoning_chunks_splits_large_text() {
+    async fn emit_reasoning_chunks_splits_and_caps_summary() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = RecordingSink {
             events: events.clone(),
@@ -155,13 +184,25 @@ mod tests {
         let text = "x".repeat(300);
         emit_reasoning_chunks(&sink, Some(&text)).await;
         let evs = events.lock().unwrap();
-        assert_eq!(evs.len(), 2);
-        assert!(matches!(&evs[0], AgentEvent::ReasoningSummaryDelta { text } if text.len() == 256));
-        assert!(matches!(&evs[1], AgentEvent::ReasoningSummaryDelta { text } if text.len() == 44));
+        let joined: String = evs
+            .iter()
+            .map(|ev| match ev {
+                AgentEvent::ReasoningSummaryDelta { text } => text.as_str(),
+                _ => "",
+            })
+            .collect();
+        // Cap at REASONING_SUMMARY_MAX_CHARS + ellipsis.
+        assert!(joined.chars().count() <= REASONING_SUMMARY_MAX_CHARS + 1);
+        assert!(joined.ends_with('…'));
+        assert!(evs.len() >= 2);
+        assert!(matches!(
+            &evs[0],
+            AgentEvent::ReasoningSummaryDelta { text } if text.chars().count() == REASONING_CHUNK_CHARS
+        ));
     }
 
     #[tokio::test]
-    async fn record_reasoning_accumulates() {
+    async fn record_reasoning_accumulates_raw_but_emits_capped() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = RecordingSink {
             events: events.clone(),

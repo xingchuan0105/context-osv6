@@ -12,7 +12,7 @@ import {
   type Citation,
 } from "../../lib/workspace/stream";
 import styles from "./workspace-chat.module.css";
-import type { ProgressEntry, UiChatMessage } from "../../hooks/use-chat-session";
+import type { ProgressEntry, UiChatMessage, UiProgressSnapshot } from "../../hooks/use-chat-session";
 import {
   IconChatEmpty,
   IconCopy,
@@ -26,6 +26,28 @@ import { CitationRenderer, collectWebSources, getCitationAnchorRect } from "./ci
 import { ProgressTimeline } from "./progress-timeline";
 
 export { ToolResultCard, ToolResultsPanel } from "./tool-result-card";
+
+/** Completed-turn progress card with local card-level collapse (restored after refresh). */
+function MessageProgressCard({
+  locale,
+  snapshot,
+}: {
+  locale: "zh-CN" | "en";
+  snapshot: UiProgressSnapshot;
+}) {
+  const [collapsed, setCollapsed] = useState(snapshot.collapsed);
+  return (
+    <ProgressTimeline
+      activities={snapshot.activities}
+      collapsed={collapsed}
+      endedAtMs={snapshot.endedAtMs}
+      locale={locale}
+      mode={snapshot.mode}
+      startedAtMs={snapshot.startedAtMs}
+      onToggleCollapsed={() => setCollapsed((value) => !value)}
+    />
+  );
+}
 
 type MessageActionId = "copy" | "edit" | "note" | "regenerate";
 
@@ -172,31 +194,39 @@ export function ChatMessageList({
     onSubmitFeedback(messageId, rating);
   }
 
-  // Grok layout: process strip sits above the current-turn assistant answer when present.
-  const progressBeforeIndex = (() => {
+  // Live process strip for the in-flight turn — after the latest user message.
+  const liveProgressBeforeIndex = (() => {
     if (!progress.mode) {
       return -1;
     }
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i]?.role === "assistant") {
-        return i;
+      if (messages[i]?.role === "user") {
+        return i + 1;
       }
     }
     return messages.length;
   })();
 
-  const progressTimeline =
-    progress.mode != null ? (
-      <ProgressTimeline
-        activities={progress.activities}
-        collapsed={progress.collapsed}
-        locale={locale}
-        mode={progress.mode}
-        startedAtMs={progress.startedAtMs}
-        endedAtMs={progress.endedAtMs}
-        onToggleCollapsed={onToggleProgressCollapsed}
-      />
-    ) : null;
+  const assistantAtLiveSlot =
+    liveProgressBeforeIndex >= 0 && liveProgressBeforeIndex < messages.length
+      ? messages[liveProgressBeforeIndex]
+      : null;
+  // Prefer message-bound snapshot once attached (avoids double cards after done).
+  const showLiveProgress =
+    progress.mode != null &&
+    !(assistantAtLiveSlot?.role === "assistant" && assistantAtLiveSlot.progress);
+
+  const liveProgressTimeline = showLiveProgress ? (
+    <ProgressTimeline
+      activities={progress.activities}
+      collapsed={progress.collapsed}
+      locale={locale}
+      mode={progress.mode}
+      startedAtMs={progress.startedAtMs}
+      endedAtMs={progress.endedAtMs}
+      onToggleCollapsed={onToggleProgressCollapsed}
+    />
+  ) : null;
 
   return (
     <div
@@ -228,7 +258,10 @@ export function ChatMessageList({
 
         {messages.map((message, index) => (
           <Fragment key={message.id}>
-            {progressBeforeIndex === index ? progressTimeline : null}
+            {liveProgressBeforeIndex === index ? liveProgressTimeline : null}
+            {message.role === "assistant" && message.progress ? (
+              <MessageProgressCard locale={locale} snapshot={message.progress} />
+            ) : null}
             <article
               className={[
                 styles.message,
@@ -250,6 +283,20 @@ export function ChatMessageList({
                   .filter(Boolean)
                   .join(" ")}
               >
+                {(() => {
+                  // No empty answer chrome before first character (progress card covers waiting).
+                  const showAssistantBubble =
+                    message.role !== "assistant" ||
+                    !message.pending ||
+                    message.content.trim().length > 0 ||
+                    (message.answerBlocks?.length ?? 0) > 0;
+
+                  if (message.role === "assistant" && !showAssistantBubble) {
+                    return null;
+                  }
+
+                  return (
+                    <>
                 {message.role === "assistant" ? (
                   <div
                     className={[
@@ -337,7 +384,16 @@ export function ChatMessageList({
                       })()
                     : null}
                 </div>
+                    </>
+                  );
+                })()}
 
+                {!(
+                  message.role === "assistant" &&
+                  message.pending &&
+                  !message.content.trim() &&
+                  (message.answerBlocks?.length ?? 0) === 0
+                ) ? (
                 <div className={styles.messageActions}>
                   {getMessageActionIds(message.role).map((action) => {
                     const label = getActionLabel(locale, action);
@@ -400,6 +456,7 @@ export function ChatMessageList({
                     </>
                   ) : null}
                 </div>
+                ) : null}
 
                 {message.role === "assistant" &&
                 (message.guarded || message.degradeTrace.length > 0) ? (
@@ -423,7 +480,7 @@ export function ChatMessageList({
           </Fragment>
         ))}
 
-        {progressBeforeIndex === messages.length ? progressTimeline : null}
+        {liveProgressBeforeIndex === messages.length ? liveProgressTimeline : null}
       </div>
     </div>
   );

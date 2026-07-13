@@ -135,6 +135,7 @@ async fn run_general_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
+        execution.assistant_turn_metadata = sink.progress_turn_metadata();
         return Ok(execution);
     }
 
@@ -167,6 +168,8 @@ async fn run_general_mode(
     if emit_debug_trace {
         attach_debug_trace_from_sink(&mut execution, &sink);
     }
+    execution.assistant_turn_metadata =
+        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events());
     Ok(execution)
 }
 
@@ -231,6 +234,7 @@ async fn run_search_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
+        execution.assistant_turn_metadata = sink.progress_turn_metadata();
         return Ok(execution);
     }
 
@@ -258,6 +262,8 @@ async fn run_search_mode(
     if emit_debug_trace {
         attach_debug_trace_from_sink(&mut execution, &sink);
     }
+    execution.assistant_turn_metadata =
+        agent_loop::progress::assistant_progress_turn_metadata("search", &sink.events());
     Ok(execution)
 }
 
@@ -339,13 +345,14 @@ async fn run_rag_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
+        execution.assistant_turn_metadata = sink.progress_turn_metadata();
         return Ok(execution);
     }
 
     let sink = agent_loop::events::CollectingSink::new();
     let agent_result = agent_service.run(agent_request, &sink).await?;
 
-    let execution = crate::chat::build_chat_execution_from_result(
+    let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
         crate::chat::BuildChatExecutionParams {
             mode: "rag",
@@ -357,6 +364,8 @@ async fn run_rag_mode(
             debug_metadata: agent_result.debug_payload.clone(),
         },
     );
+    execution.assistant_turn_metadata =
+        agent_loop::progress::assistant_progress_turn_metadata("rag", &sink.events());
     Ok(execution)
 }
 

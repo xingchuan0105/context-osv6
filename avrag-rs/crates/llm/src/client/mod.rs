@@ -175,6 +175,7 @@ impl LlmClient {
                 prompt_tokens: usage.prompt_tokens(),
                 completion_tokens: usage.completion_tokens(),
                 total_tokens: usage.total_tokens(),
+                cached_tokens: usage.cached_token_count(),
                 provider: call.provider.clone(),
                 model: model.to_string(),
                 feature: self.feature.clone(),

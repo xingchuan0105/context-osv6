@@ -110,7 +110,10 @@ async fn hydrate_subscription_snapshot(
             snapshot.plan_id = mapped_plan.to_string();
         }
     if snapshot.stripe_price_id.is_empty() && !snapshot.plan_id.is_empty()
-        && let Some(price_id) = config.checkout_price_for_plan(&snapshot.plan_id) {
+        && let Some(price_id) = config
+            .creem_checkout_product_for_plan(&snapshot.plan_id)
+            .or_else(|| config.creem_checkout_price_for_plan(&snapshot.plan_id))
+        {
             snapshot.stripe_price_id = price_id.to_string();
         }
 

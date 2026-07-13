@@ -156,6 +156,7 @@ impl MessagePort for PgChatPersistenceAdapter {
                     tool_results: turn.tool_results,
                     user_turn_metadata: turn.user_turn_metadata,
                     user_resolved_query: turn.user_resolved_query,
+                    assistant_turn_metadata: turn.assistant_turn_metadata,
                 },
             )
             .await

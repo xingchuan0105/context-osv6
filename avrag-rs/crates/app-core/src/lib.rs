@@ -61,7 +61,10 @@ pub use billing_store::{
     BillingStorePort, UsageExportJobRow, UsageLimitOverrideRow, UsageLimitPlanPolicyRow,
     UsageLimitStorePort, UsageLimitUsageRecord,
 };
-pub use billing_usage_units::{compute_usage_units, compute_usage_units_with_rates};
+pub use billing_usage_units::{
+    compute_usage_units, compute_usage_units_three_bucket, compute_usage_units_with_rates,
+    tokens_approx_from_units,
+};
 pub use chat_persistence::{
     AppendChatTurn, ChatCatalogPort, ChatContentPort, ChatPersistencePort, ChatSideEffectPort,
     MessagePort, ProfilePort, SessionPort,

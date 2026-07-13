@@ -21,6 +21,8 @@ pub struct UsageLimitPlanPolicyRow {
     pub enabled: bool,
     pub rolling_5h_limit_units: i64,
     pub rolling_7d_limit_units: i64,
+    /// Plan margin multiplier M (free 2.0 / plus 1.5 / pro 1.3).
+    pub margin_multiplier: f64,
 }
 
 pub struct UsageLimitUsageRecord<'a> {
@@ -29,6 +31,8 @@ pub struct UsageLimitUsageRecord<'a> {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    /// Provider prompt-cache hit tokens (clamped to prompt at unitization).
+    pub cached_tokens: u32,
     pub usage_source: UsageSource,
     /// Exit-metering kind: `chat`, `embedding_text`, `embedding_multimodal`, …
     pub usage_kind: &'a str,
@@ -151,7 +155,12 @@ pub trait UsageLimitStorePort: Send + Sync {
         since: DateTime<Utc>,
     ) -> Result<HashMap<String, i64>, AppError>;
 
-    async fn load_model_rates(&self, provider: &str, model: &str) -> Result<(f64, f64), AppError>;
+    /// Returns (rate_miss, rate_cache_hit, rate_out).
+    async fn load_model_rates(
+        &self,
+        provider: &str,
+        model: &str,
+    ) -> Result<(f64, f64, f64), AppError>;
 
     async fn has_user_override(&self, user_id: Uuid) -> Result<bool, AppError>;
 
