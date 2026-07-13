@@ -16,13 +16,14 @@ test.describe.serial("Chat multi-turn session", () => {
   test("second turn references first turn context", async ({ page, runId }) => {
     test.setTimeout(180_000);
 
-    const notebook = await createWorkspaceViaAPI(
+    const created = await createWorkspaceViaAPI(
       page.request,
       `e2e-chat-session ${runId}`,
     );
+    const workspaceId = created.workspace.id;
 
     const chat = new ChatPanelPage(page);
-    await page.goto(`/dashboard/${notebook.notebook.id}`);
+    await page.goto(`/dashboard/${workspaceId}`);
     await page.waitForLoadState("networkidle");
 
     // Turn 1: ask from golden_set

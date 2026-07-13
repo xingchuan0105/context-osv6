@@ -8,10 +8,11 @@ test.describe("Session history", () => {
   });
 
   test("messages survive page refresh", async ({ page, runId }) => {
-    const notebook = await createWorkspaceViaAPI(page.request, `e2e-history-test ${runId}`);
+    const created = await createWorkspaceViaAPI(page.request, `e2e-history-test ${runId}`);
+    const workspaceId = created.workspace.id;
 
     const chat = new ChatPanelPage(page);
-    await page.goto(`/dashboard/${notebook.notebook.id}`);
+    await page.goto(`/dashboard/${workspaceId}`);
     await page.waitForLoadState("networkidle");
 
     await chat.ask("What is antifragility?");

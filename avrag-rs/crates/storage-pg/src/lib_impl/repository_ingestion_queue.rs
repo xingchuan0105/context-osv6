@@ -192,11 +192,16 @@ impl IngestionQueueRepository {
         Ok(row.try_get("task_count")?)
     }
 
+    /// Claim is **cross-tenant scheduling**: must run as `super_admin` under forced RLS
+    /// (`tenant_isolation_ingestion_tasks`). Without this GUC, workers see 0 rows forever
+    /// while UI documents stay `queued` (Journey 2026-07-13).
     pub async fn claim_next_ingestion_task(
         &self,
         worker_id: &str,
         worker_queue_group: &str,
     ) -> Result<Option<IngestionTask>, PgStorageError> {
+        let mut tx = self.pool.raw().begin().await?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
         let row = sqlx::query(
             r#"
             with exhausted_tasks as (
@@ -250,8 +255,9 @@ impl IngestionQueueRepository {
         .bind(worker_id)
         .bind(worker_queue_group)
         .bind(STALE_PROCESSING_TIMEOUT_SECS)
-        .fetch_optional(self.pool.raw())
+        .fetch_optional(tx.as_mut())
         .await?;
+        tx.commit().await?;
         row.map(map_ingestion_task).transpose()
     }
 
@@ -267,6 +273,8 @@ impl IngestionQueueRepository {
             Err(_) => return Ok(false),
         };
 
+        let mut tx = self.pool.raw().begin().await?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
         let result = sqlx::query(
             r#"
             update ingestion_tasks
@@ -280,8 +288,9 @@ impl IngestionQueueRepository {
         )
         .bind(task_id)
         .bind(lock_token)
-        .execute(self.pool.raw())
+        .execute(tx.as_mut())
         .await?;
+        tx.commit().await?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -298,6 +307,8 @@ impl IngestionQueueRepository {
             Ok(value) => value,
             Err(_) => return Ok(TaskCompletionOutcome::LeaseLost),
         };
+        let mut tx = self.pool.raw().begin().await?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
         let result = sqlx::query(
             r#"
             delete from ingestion_tasks
@@ -312,8 +323,9 @@ impl IngestionQueueRepository {
                 .map_err(|_| PgStorageError::NotFound("invalid task id".to_string()))?,
         )
         .bind(lock_token)
-        .execute(self.pool.raw())
+        .execute(tx.as_mut())
         .await?;
+        tx.commit().await?;
         if result.rows_affected() > 0 {
             Ok(TaskCompletionOutcome::Completed)
         } else {
@@ -338,6 +350,7 @@ impl IngestionQueueRepository {
             .map_err(|_| PgStorageError::NotFound("invalid task id".to_string()))?;
 
         let mut tx = self.pool.raw().begin().await?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
         let row = sqlx::query(
             r#"
             select attempt_count, max_attempts

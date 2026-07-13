@@ -98,53 +98,71 @@ impl AppState {
         let repo = self
             .postgres_repo()
             .ok_or_else(|| "database not available".to_string())?;
+        // Forced RLS: all cross-user lookups/inserts must use super_admin.
+        let mut lookup_tx = repo.raw().begin().await.map_err(|error| {
+            tracing::warn!(error = %error, "E2E collaborator: begin lookup tx failed");
+            "member provisioning failed".to_string()
+        })?;
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(&mut *lookup_tx)
+            .await
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E collaborator: set super_admin failed");
+                "member provisioning failed".to_string()
+            })?;
         // Ensure owner exists (personal account). Member is a separate personal user.
         let owner_exists: bool = sqlx::query_scalar(
             "select exists(select 1 from users where email = $1)",
         )
         .bind(owner_email)
-        .fetch_one(repo.raw())
+        .fetch_one(&mut *lookup_tx)
         .await
         .map_err(|error| {
-            tracing::warn!(error = %error, "E2E org member: owner lookup failed");
+            tracing::warn!(error = %error, "E2E collaborator: owner lookup failed");
             "owner lookup failed".to_string()
         })?;
         if !owner_exists {
+            let _ = lookup_tx.rollback().await;
             return Err("owner not found".to_string());
         }
 
-        if let Some((existing_id,)) =
+        let existing_member: Option<(Uuid,)> =
             sqlx::query_as::<_, (Uuid,)>("select id from users where email = $1 limit 1")
                 .bind(member_email)
-                .fetch_optional(repo.raw())
+                .fetch_optional(&mut *lookup_tx)
                 .await
                 .map_err(|error| {
-                    tracing::warn!(error = %error, "E2E org member: member lookup failed");
+                    tracing::warn!(error = %error, "E2E collaborator: member lookup failed");
                     "member lookup failed".to_string()
-                })?
-        {
+                })?;
+        lookup_tx.commit().await.map_err(|error| {
+            tracing::warn!(error = %error, "E2E collaborator: commit lookup failed");
+            "member provisioning failed".to_string()
+        })?;
+
+        if let Some((existing_id,)) = existing_member {
             repo.auth().delete_user_cascade(self.auth(), existing_id)
                 .await
                 .map_err(|error| {
-                    tracing::warn!(error = %error, "E2E org member: failed to delete existing member");
+                    tracing::warn!(error = %error, "E2E collaborator: failed to delete existing member");
                     "member cleanup failed".to_string()
                 })?;
         }
 
         let password_hash = hash(password, DEFAULT_COST).map_err(|error| {
-            tracing::warn!(error = %error, "E2E org member: password hash failed");
+            tracing::warn!(error = %error, "E2E collaborator: password hash failed");
             "password hash failed".to_string()
         })?;
         let user_id = Uuid::new_v4();
         let mut tx = repo.raw().begin().await.map_err(|error| {
-            tracing::warn!(error = %error, "E2E org member: begin tx failed");
+            tracing::warn!(error = %error, "E2E collaborator: begin tx failed");
             "member provisioning failed".to_string()
         })?;
         sqlx::query("select set_config('app.current_role', 'super_admin', true)")
             .execute(&mut *tx)
             .await
             .map_err(|error| {
-                tracing::warn!(error = %error, "E2E org member: set super_admin failed");
+                tracing::warn!(error = %error, "E2E collaborator: set super_admin failed");
                 "member provisioning failed".to_string()
             })?;
         sqlx::query(

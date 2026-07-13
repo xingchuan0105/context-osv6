@@ -4,6 +4,7 @@
 |------|-----|
 | 日期 | 2026-07-10 |
 | 状态 | **Done** — W0–W4 complete (2026-07-13) |
+| 下游 | Journey 实跑失败修复：[`JOURNEY_INGEST_RLS_AND_E2E_FIX_PLAN_2026-07-13.md`](./JOURNEY_INGEST_RLS_AND_E2E_FIX_PLAN_2026-07-13.md) |
 | 触发 | 全套金字塔 DR2 跑批：L3 journey/LLM 假红 + 多入口重复测同一路径；用户要求**修复 + 按业务场景整合**，且 **ingestion 冷灌库尽量复用** |
 | 约束 | Solo local trunk；DR2 只含 L3-thin；不把 quality/skills 塞进日常准部署；UI 可 REUSE dev 栈，Rust quality 禁外部 worker |
 | 上游 | [`ACCEPTANCE_PYRAMID_STABILIZATION_PLAN_2026-07-10.md`](./ACCEPTANCE_PYRAMID_STABILIZATION_PLAN_2026-07-10.md)、[`TEST_PYRAMID_DEDUP_MAP.md`](./TEST_PYRAMID_DEDUP_MAP.md)、[`avrag-rs/docs/e2e-gates.md`](../../avrag-rs/docs/e2e-gates.md)、[`SOLO_DISCIPLINE.md`](./SOLO_DISCIPLINE.md) |

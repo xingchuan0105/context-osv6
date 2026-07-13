@@ -383,8 +383,9 @@ export async function grantTestUserAdminRole(request: APIRequestContext) {
 }
 
 /**
- * 将协作者账号放入 owner 所在 org，供 invite-accept E2E 使用。
+ * 确保协作者个人账号存在（B2C：无 org 租户）。
  * 须在 owner 账号存在（reset + ensureTestUserAccount）之后调用。
+ * 后端仍路由 `/api/e2e/ensure-org-member`（遗留路径名）；实现已改为 personal user provision。
  */
 export async function ensureE2eOrgMember(
   request: APIRequestContext,

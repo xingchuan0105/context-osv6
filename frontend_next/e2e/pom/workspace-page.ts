@@ -69,14 +69,23 @@ export class WorkspacePage {
     await this.page.waitForSelector("[data-testid='desktop-history-rail']", { state: "visible" });
   }
 
+  /** @deprecated Product removed query-library panel; use history rail helpers. */
   getQueryLibraryPanel() {
-    return this.page.getByTestId("query-library-panel");
+    return this.page.getByTestId("desktop-history-rail");
+  }
+
+  getHistoryRail() {
+    return this.page.getByTestId("desktop-history-rail");
+  }
+
+  async clickHistoryItemContaining(text: string) {
+    const rail = this.getHistoryRail();
+    await rail.waitFor({ state: "visible" });
+    await rail.locator('[data-testid="history-item"]').filter({ hasText: text }).first().click();
   }
 
   async clickQueryLibraryItem(text: string) {
-    const panel = this.getQueryLibraryPanel();
-    await panel.waitFor({ state: "visible" });
-    await panel.getByText(text, { exact: true }).click();
+    await this.clickHistoryItemContaining(text);
   }
 
   async uploadFile(filePath: string) {
@@ -93,7 +102,8 @@ export class WorkspacePage {
 
   async waitForIngestionComplete(timeout?: number) {
     // P2: timeout 从环境变量读取，CI 中可覆盖
-    const effectiveTimeout = timeout ?? parseInt(process.env.E2E_INGESTION_TIMEOUT || "120000", 10);
+    // Local REUSE worker may share queue with leftover tasks; 180s is safer than 120s.
+    const effectiveTimeout = timeout ?? parseInt(process.env.E2E_INGESTION_TIMEOUT || "180000", 10);
     // 等待任意 source item 的 data-status 变为 completed 或 ready
     await this.page.waitForSelector(
       '[data-testid="ingestion-status"][data-status="completed"], [data-testid="ingestion-status"][data-status="ready"]',

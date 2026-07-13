@@ -17,7 +17,8 @@ test.describe("Document Upload + RAG Journey", () => {
     request,
     runId,
   }) => {
-    test.setTimeout(180_000);
+    // ingest (≤180s) + RAG answer (≤150s) + upload/nav overhead
+    test.setTimeout(360_000);
 
     const dashboard = new DashboardPage(page);
     const workspace = new WorkspacePage(page);
@@ -48,7 +49,8 @@ test.describe("Document Upload + RAG Journey", () => {
     const answer = await chat.lastAnswerText();
     expect(answer.length).toBeGreaterThan(20);
     expect(answer.toLowerCase()).not.toContain("could not find relevant evidence");
-    expect(answer).toMatch(/Next\.js|React|TypeScript|Rust|Milvus/i);
+    // antifragile.txt standard corpus (Taleb) — not the old stack-tech fixture.
+    expect(answer).toMatch(/antifragil|shock|volatil|resilien|disorder|stress/i);
 
     const citationCount = await chat.citationCount();
     expect(citationCount, "RAG journey requires at least one citation").toBeGreaterThan(0);

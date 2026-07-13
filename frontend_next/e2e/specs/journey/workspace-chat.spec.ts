@@ -30,9 +30,15 @@ test.describe("Workspace Chat Journey", () => {
     expect(answer.length).toBeGreaterThan(0);
     expect(answer).toMatch(/巴黎|Paris/i);
 
-    // Verify history persisted — 提示词库同步即可；首轮 general chat 未必立刻出现在会话列表
+    // History rail shows session list (not legacy query-library-panel).
     await workspace.waitForHistoryTabVisible();
-    await expect(page.getByTestId("query-library-panel").getByText(runId)).toBeVisible();
+    await expect(
+      page.locator('[data-testid="desktop-history-rail"] [data-testid="history-item"]').first(),
+    ).toBeVisible({ timeout: 15_000 });
+    // Session title / preview should retain the user turn (runId marker).
+    await expect(
+      page.locator('[data-testid="desktop-history-rail"]').getByText(runId, { exact: false }),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("user can switch to web search mode and get search-grounded answer", async ({ page, runId }) => {
