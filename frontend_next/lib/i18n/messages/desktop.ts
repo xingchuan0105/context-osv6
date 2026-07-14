@@ -33,6 +33,14 @@ export const desktopMessages = {
     zh: "当前为便携版 EXE：下载后直接运行即可（建议固定安装目录）。完整安装包（NSIS）将在后续发版提供。",
     en: "Portable EXE: run after download. A full NSIS installer will ship in a later release.",
   },
+  "desktop.signedHint": {
+    zh: "安装包已 Authenticode 签名。若仍见 SmartScreen，选择「仍要运行」（自签/新发布者需积累信誉）。",
+    en: "Installer is Authenticode-signed. SmartScreen may still warn for new/self-signed publishers — use Run anyway if needed.",
+  },
+  "desktop.unsignedHint": {
+    zh: "安装包尚未使用商业代码签名证书；SmartScreen 可能提示未知发布者。",
+    en: "Installer is not yet signed with a commercial code-signing certificate; SmartScreen may warn.",
+  },
   "desktop.buyCta": {
     zh: "购买授权",
     en: "Buy license",

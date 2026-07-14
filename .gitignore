@@ -107,3 +107,6 @@ frontend_next/.serena/
 
 # VPS config snapshots (use vps-pull-config.sh)
 deploy/pulled/
+
+# Windows Authenticode local certs (never commit)
+desktop/signing/

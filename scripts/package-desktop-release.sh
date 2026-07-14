@@ -52,6 +52,22 @@ fi
 
 DEST="$STAGE/$OUT_NAME"
 cp -f "$SRC" "$DEST"
+
+# Authenticode (optional). Production: WINDOWS_CERTIFICATE_FILE + PASSWORD.
+# Dev: SIGN_ALLOW_SELF_SIGNED=1 (default when SIGN_WINDOWS=1 and no pfx).
+SIGN_WINDOWS="${SIGN_WINDOWS:-1}"
+SIGNED_JSON=false
+if [[ "$SIGN_WINDOWS" == "1" ]]; then
+  if [[ -z "${WINDOWS_CERTIFICATE_FILE:-}" && -z "${SIGN_ALLOW_SELF_SIGNED:-}" ]]; then
+    export SIGN_ALLOW_SELF_SIGNED=1
+  fi
+  if bash "$ROOT/scripts/sign-windows-release.sh" "$DEST"; then
+    SIGNED_JSON=true
+  else
+    echo "package-desktop-release: warning: signing failed; shipping unsigned" >&2
+  fi
+fi
+
 SIZE="$(wc -c < "$DEST" | tr -d ' ')"
 SHA="$(sha256sum "$DEST" | awk '{print $1}')"
 
@@ -76,7 +92,8 @@ cat > "$OUT_ROOT/latest.json" <<EOF
       "sha256": "${SHA}",
       "size_bytes": ${SIZE},
       "format": "${FORMAT}",
-      "filename": "${OUT_NAME}"
+      "filename": "${OUT_NAME}",
+      "authenticode": ${SIGNED_JSON}
     }
   },
   "min_os": "Windows 10 64-bit (WebView2)",
@@ -90,6 +107,7 @@ cp -f "$OUT_ROOT/latest.json" "$STAGE/latest.json"
 echo "package-desktop-release: version=${VERSION}"
 echo "  artifact: $DEST"
 echo "  format:   $FORMAT"
+echo "  signed:   $SIGNED_JSON"
 echo "  sha256:   $SHA"
 echo "  size:     $SIZE"
 echo "  latest:   $OUT_ROOT/latest.json"

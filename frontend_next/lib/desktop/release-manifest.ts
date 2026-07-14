@@ -3,6 +3,8 @@ export type DesktopPlatformManifest = {
   sha256: string;
   size_bytes: number;
   format: "nsis" | "portable" | string;
+  /** Present when package-desktop-release ran sign-windows-release. */
+  authenticode?: boolean;
   filename?: string;
 };
 

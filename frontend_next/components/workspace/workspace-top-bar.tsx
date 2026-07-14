@@ -119,8 +119,11 @@ export function WorkspaceTopBar({
     onWorkspaceTitleDraftChange(workspaceTitle);
   }
 
+  // IA: primary top-bar actions stay product-only (workspace, share, API).
+  // No marketing chrome (pricing / blog / family dump). Desktop discoverability
+  // for web users is secondary: avatar menu + ProductChromeFooter + /help.
   return (
-    <header className={styles.topBar} data-testid="workspace-top-bar">
+    <header className={styles.topBar} data-testid="workspace-top-bar" data-marketing-chrome="false">
       <div className={styles.topBarBrand}>
         <Link className={styles.topBarBrandBlock} href="/dashboard">
           <ContextOsMark className={styles.topBarMark} />
@@ -356,6 +359,18 @@ export function WorkspaceTopBar({
               >
                 {formatUiMessage(locale, "dashboardProfileLink")}
               </Link>
+              {!desktopRuntime ? (
+                <Link
+                  className={styles.menuChoice}
+                  href="/desktop"
+                  data-testid="workspace-avatar-desktop"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                  }}
+                >
+                  {formatUiMessage(locale, "productChrome.desktop")}
+                </Link>
+              ) : null}
               <button className={styles.menuDangerButton} type="button" onClick={() => void handleLogout()}>
                 {formatUiMessage(locale, "workspaceLogout")}
               </button>

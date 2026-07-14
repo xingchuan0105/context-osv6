@@ -159,6 +159,11 @@ export function DesktopReleaseDetails() {
       {win.format === "portable" ? (
         <div>{formatUiMessage(locale, "desktop.portableHint")}</div>
       ) : null}
+      {win.authenticode === true ? (
+        <div data-testid="desktop-signed-hint">{formatUiMessage(locale, "desktop.signedHint")}</div>
+      ) : win.authenticode === false ? (
+        <div data-testid="desktop-unsigned-hint">{formatUiMessage(locale, "desktop.unsignedHint")}</div>
+      ) : null}
     </dl>
   );
 }

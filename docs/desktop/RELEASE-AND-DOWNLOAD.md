@@ -26,7 +26,24 @@ cd ../desktop && pnpm tauri build --bundles nsis
 - **主下载**：`desktop/src-tauri/target/*/release/bundle/nsis/*-setup.exe`
 - 便携 exe（仅应急）：`…/release/avrag-desktop.exe`（`ALLOW_PORTABLE=1` 才允许打包）
 
-**说明**：交叉编 NSIS 不支持 Authenticode 签名；公开推广前在 Windows 主机上签名。
+**Authenticode 签名**（Linux 交叉编可用 `osslsigncode`）：
+
+```bash
+# 生产 OV/EV 证书
+export WINDOWS_CERTIFICATE_FILE=/secure/path/codesign.pfx
+export WINDOWS_CERTIFICATE_PASSWORD='…'
+# 可选时间戳
+# export WINDOWS_TIMESTAMP_URL=http://timestamp.digicert.com
+
+bash scripts/package-desktop-release.sh   # SIGN_WINDOWS=1 默认会签
+# 或单独： bash scripts/sign-windows-release.sh path/to/setup.exe
+
+# 无商业证书时开发自签（SmartScreen 仍可能提示未知发布者）
+SIGN_ALLOW_SELF_SIGNED=1 bash scripts/package-desktop-release.sh
+```
+
+证书与口令**永不入库**；自签材料落在 gitignored 的 `desktop/signing/`。  
+`latest.json` 字段 `platforms.windows-x64.authenticode` 为 true/false。
 
 ## 2. 打包 latest.json
 
