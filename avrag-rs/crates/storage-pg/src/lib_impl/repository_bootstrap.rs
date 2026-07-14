@@ -22,8 +22,12 @@ impl BootstrapRepository {
     }
 
     pub async fn migrate(&self) -> Result<(), PgStorageError> {
-        let migrations_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../migrations");
+        // Prefer runtime path for packaged/VPS deploys; fall back to crate-relative path in dev.
+        let migrations_path = std::env::var("AVRAG_MIGRATIONS_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../migrations")
+            });
         let migrator = sqlx::migrate::Migrator::new(migrations_path.as_path()).await?;
         migrator.run(self.pool.raw()).await?;
         if std::env::var("AVRAG_SKIP_SEARCH_TOKEN_RESEGMENT")
