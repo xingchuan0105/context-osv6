@@ -11,8 +11,10 @@ import { AuthFrame } from "@/components/page-frame";
 import { login } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/context";
 import { describeAuthError } from "@/lib/auth/errors";
+import { getLicenseStatus } from "@/lib/desktop/tauri-license";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { getSafeNextPath } from "@/lib/navigation/next-path";
+import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { useUiPreferences } from "@/lib/ui-preferences";
 
 export default function LoginPage() {
@@ -25,11 +27,38 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [interactive, setInteractive] = useState(false);
+  const [desktopEscape, setDesktopEscape] = useState(false);
   const nextPath = getSafeNextPath(searchParams.get("next"));
 
   useEffect(() => {
     setInteractive(true);
   }, []);
+
+  // Desktop client must never stay on cloud /login (SaaS form).
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+    setDesktopEscape(true);
+    let cancelled = false;
+    void getLicenseStatus()
+      .then((status) => {
+        if (cancelled) return;
+        const open =
+          status.kind === "trial" ||
+          status.kind === "active" ||
+          status.kind === "offline_grace";
+        router.replace(open ? "/dashboard" : "/activate");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          router.replace("/activate");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function handleSubmit() {
     const loginFailed = formatUiMessage(locale, "authLoginFailed");
@@ -77,6 +106,18 @@ export default function LoginPage() {
 
     event.preventDefault();
     void handleSubmit();
+  }
+
+  if (desktopEscape || isTauri()) {
+    return (
+      <main className="app-auth-shell">
+        <section className="app-surface-card" style={{ maxWidth: "28rem", textAlign: "center" }}>
+          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+            正在进入客户端（无需云端登录）…
+          </p>
+        </section>
+      </main>
+    );
   }
 
   return (

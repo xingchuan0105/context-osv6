@@ -11,6 +11,7 @@
     "beforeBuildCommand": "pnpm --dir ../frontend_next build:desktop"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Context-OS Client",

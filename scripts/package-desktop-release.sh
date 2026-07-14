@@ -16,8 +16,15 @@ mkdir -p "$STAGE"
 
 # Prefer NSIS setup under any target triple, then portable exe
 find_nsis() {
-  find "$TAURI_TARGET_BASE" -type f \( -name '*-setup.exe' -o -name '*setup.exe' \) 2>/dev/null \
-    | grep -E 'bundle/nsis|bundle\\nsis' | head -1 || true
+  # Prefer Context-OS_* names, then newest mtime under nsis bundle dirs
+  local preferred
+  preferred="$(find "$TAURI_TARGET_BASE" -type f -path '*/bundle/nsis/Context-OS*-setup.exe' 2>/dev/null | head -1 || true)"
+  if [[ -n "$preferred" && -f "$preferred" ]]; then
+    echo "$preferred"
+    return 0
+  fi
+  find "$TAURI_TARGET_BASE" -type f -path '*/bundle/nsis/*-setup.exe' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2- || true
 }
 
 find_portable() {

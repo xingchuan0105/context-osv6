@@ -10,13 +10,46 @@ import type { ChatRequest, ChatEvent } from "../contracts";
 import { parseIpcChatEvent } from "../workspace/stream";
 
 /**
- * 检测是否在 Tauri 环境中运行
+ * 检测是否在 Tauri 环境中运行。
+ *
+ * Tauri 2 官方 `isTauri()` 检查 `globalThis.isTauri`；
+ * 同时兼容 `__TAURI_INTERNALS__` / `__TAURI__` 与 tauri 自定义协议 host，
+ * 避免首屏误判为 Web 而跳进 /login。
  */
 export function isTauri(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
-  return "__TAURI_INTERNALS__" in window;
+  const w = window as Window & {
+    isTauri?: boolean;
+    __TAURI_INTERNALS__?: unknown;
+    __TAURI__?: unknown;
+  };
+  if (w.isTauri === true) {
+    return true;
+  }
+  if ("__TAURI_INTERNALS__" in w || "__TAURI__" in w) {
+    return true;
+  }
+  // Custom protocol / asset hosts used by Tauri 2 webview
+  try {
+    const { protocol, hostname } = window.location;
+    if (protocol === "tauri:" || protocol === "asset:") {
+      return true;
+    }
+    if (
+      hostname === "tauri.localhost" ||
+      (hostname === "localhost" &&
+        protocol.startsWith("http") &&
+        typeof navigator !== "undefined" &&
+        navigator.userAgent.includes("Tauri"))
+    ) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 /**

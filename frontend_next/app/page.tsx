@@ -21,24 +21,49 @@ export default function HomePage() {
   const [label, setLabel] = useState("正在进入 Context-OS…");
 
   useEffect(() => {
-    if (isTauri()) {
+    let cancelled = false;
+
+    async function routeDesktop() {
       setLabel("正在检查客户端许可…");
-      void getLicenseStatus()
-        .then((status) => {
-          const open =
-            status.kind === "trial" ||
-            status.kind === "active" ||
-            status.kind === "offline_grace";
-          router.replace(open ? "/dashboard" : "/activate");
-        })
-        .catch(() => {
+      try {
+        const status = await getLicenseStatus();
+        if (cancelled) return;
+        const open =
+          status.kind === "trial" ||
+          status.kind === "active" ||
+          status.kind === "offline_grace";
+        router.replace(open ? "/dashboard" : "/activate");
+      } catch {
+        if (!cancelled) {
+          // License IPC missing → still stay on client path (never cloud login).
           router.replace("/activate");
-        });
-      return;
+        }
+      }
     }
 
-    const hasAuthSession = getCookie(AUTH_SESSION_COOKIE_NAME) === "1";
-    router.replace(hasAuthSession ? "/dashboard" : "/login");
+    // Re-check isTauri after a short delay — internals can appear slightly after first paint.
+    const run = () => {
+      if (cancelled) return;
+      if (isTauri()) {
+        void routeDesktop();
+        return;
+      }
+      // Second chance after tick (webview inject race)
+      window.setTimeout(() => {
+        if (cancelled) return;
+        if (isTauri()) {
+          void routeDesktop();
+          return;
+        }
+        const hasAuthSession = getCookie(AUTH_SESSION_COOKIE_NAME) === "1";
+        router.replace(hasAuthSession ? "/dashboard" : "/login");
+      }, 50);
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   return (
