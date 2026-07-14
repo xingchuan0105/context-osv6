@@ -20,7 +20,7 @@
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--card));
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 16px 30px hsl(0 0% 0% / 0.12);
   animation: editorLinkPanelIn 150ms ease;
 }
 

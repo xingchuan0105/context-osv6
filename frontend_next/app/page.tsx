@@ -24,7 +24,7 @@ export default function HomePage() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ color: "#6b7280", fontSize: "14px" }}>正在进入 Context OS...</div>
+      <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px" }}>正在进入 Context OS...</div>
       <LegalFooterLinks />
     </div>
   );

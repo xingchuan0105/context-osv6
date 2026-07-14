@@ -17,7 +17,7 @@ export function ContextOsMark({ className, style }: ContextOsMarkProps) {
       width="90"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect width="76" height="76" rx="18" fill="#0F1117" />
+      <rect width="76" height="76" rx="18" fill="currentColor" />
       <rect
         x="0.75"
         y="0.75"

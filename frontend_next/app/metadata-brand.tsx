@@ -5,7 +5,7 @@ const brandSquareStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   borderRadius: "24%",
-  background: "#0F1117",
+  background: "#171717",
   border: "1px solid rgba(255,255,255,0.14)",
   position: "relative",
   overflow: "hidden",
@@ -75,8 +75,8 @@ export function MetadataPreviewCard(): ReactElement {
         height: "100%",
         flexDirection: "column",
         justifyContent: "space-between",
-        background: "#F8FAFC",
-        color: "#0F1117",
+        background: "#FFFFFF",
+        color: "#171717",
         padding: "56px 64px",
         fontFamily: "Inter, sans-serif",
       }}
@@ -111,7 +111,7 @@ export function MetadataPreviewCard(): ReactElement {
               fontWeight: 700,
               letterSpacing: "0.14em",
               textTransform: "uppercase",
-              color: "#475569",
+              color: "#737373",
             }}
           >
             Context OS
@@ -144,7 +144,7 @@ export function MetadataPreviewCard(): ReactElement {
             display: "flex",
             fontSize: "28px",
             lineHeight: 1.45,
-            color: "#334155",
+            color: "#2e2e2e",
           }}
         >
           Second-brain workspace for collecting content, writing notes, sharing context, and querying knowledge through AI.
@@ -156,7 +156,7 @@ export function MetadataPreviewCard(): ReactElement {
             gap: "12px",
             fontSize: "20px",
             fontWeight: 600,
-            color: "#0F1117",
+            color: "#171717",
           }}
         >
           <div
@@ -165,7 +165,7 @@ export function MetadataPreviewCard(): ReactElement {
               width: "12px",
               height: "12px",
               borderRadius: "999px",
-              background: "#0F1117",
+              background: "#171717",
             }}
           />
           Second-brain workspace for organizing, distributing, and querying knowledge

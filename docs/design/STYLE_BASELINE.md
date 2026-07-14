@@ -2,7 +2,8 @@
 
 **体系名**: Monochrome Ink  
 **状态**: Canonical（样式源规范；实现以本文件为准）  
-**日期**: 2026-07-10  
+**实现源**: `packages/cos-tokens/`（`sync.sh` 同步到 App / Landing / Why / Ghost / Canju）  
+**日期**: 2026-07-10（实施推进 2026-07-13）  
 **结构参考**: `frontend_next`（字阶 / 间距 / 圆角 / 控件纪律）  
 **色彩方向**: 黑白灰主导 + **单一标志色 Copper**（禁止品牌青 / 品牌绿）  
 **关联计划**: [`docs/engineering/VISUAL_SYSTEM_AND_MULTI_SITE_UPGRADE_PLAN_2026-07-10.md`](../engineering/VISUAL_SYSTEM_AND_MULTI_SITE_UPGRADE_PLAN_2026-07-10.md)  

@@ -104,7 +104,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {stderr ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>stderr</div>
-              <pre style={{ color: "hsl(0 84% 60%)" }}>{stderr}</pre>
+              <pre style={{ color: "hsl(var(--destructive))" }}>{stderr}</pre>
             </div>
           ) : null}
           {!success && data.exit_code !== undefined ? (

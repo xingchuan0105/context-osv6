@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Second-brain workspace for organizing, distributing, and querying knowledge with AI.",
     start_url: "/",
     display: "standalone",
-    background_color: "#F8FAFC",
-    theme_color: "#0F1117",
+    background_color: "#FFFFFF",
+    theme_color: "#171717",
     icons: [
       {
         src: "/icon.svg",

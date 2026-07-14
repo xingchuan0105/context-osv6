@@ -360,7 +360,7 @@
 .answerImageCard:hover {
   border-color: hsl(var(--border-strong));
   background: hsl(var(--card));
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 28px hsl(0 0% 0% / 0.08);
 }
 
 .answerImage {
@@ -1631,13 +1631,13 @@
 }
 
 .toolResultStatusOk {
-  background: hsl(142 76% 36% / 0.12);
-  color: hsl(142 76% 36%);
+  background: hsl(var(--success) / 0.12);
+  color: hsl(var(--success));
 }
 
 .toolResultStatusError {
-  background: hsl(0 84% 60% / 0.12);
-  color: hsl(0 84% 60%);
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
 }
 
 .toolResultStatusOther {
