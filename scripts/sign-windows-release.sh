@@ -10,7 +10,7 @@
 #
 # Optional:
 #   WINDOWS_TIMESTAMP_URL=http://timestamp.digicert.com
-#   WINDOWS_SIGN_DESCRIPTION="AVRag Desktop"
+#   WINDOWS_SIGN_DESCRIPTION="Context-OS"
 #   WINDOWS_SIGN_URL=https://app.contextlm.top
 set -euo pipefail
 

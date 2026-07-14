@@ -21,9 +21,9 @@ find_nsis() {
 }
 
 find_portable() {
-  # Prefer release avrag-desktop.exe (not deps/)
+  # Prefer release main binary (not deps/): Context-OS.exe (new) or legacy avrag-desktop.exe
   local candidates
-  candidates="$(find "$TAURI_TARGET_BASE" -type f -path '*/release/avrag-desktop.exe' 2>/dev/null | head -5)"
+  candidates="$(find "$TAURI_TARGET_BASE" -type f \( -path '*/release/Context-OS.exe' -o -path '*/release/avrag-desktop.exe' \) 2>/dev/null | head -5)"
   echo "$candidates" | head -1
 }
 
@@ -40,11 +40,11 @@ ALLOW_PORTABLE="${ALLOW_PORTABLE:-0}"
 if [[ -n "$NSIS" && -f "$NSIS" ]]; then
   FORMAT="nsis"
   SRC="$NSIS"
-  OUT_NAME="Context-OS-Client_${VERSION}_x64-setup.exe"
+  OUT_NAME="Context-OS_${VERSION}_x64-setup.exe"
 elif [[ "$ALLOW_PORTABLE" == "1" && -n "$PORTABLE" && -f "$PORTABLE" ]]; then
   FORMAT="portable"
   SRC="$PORTABLE"
-  OUT_NAME="Context-OS-Client_${VERSION}_x64.exe"
+  OUT_NAME="Context-OS_${VERSION}_x64.exe"
   echo "package-desktop-release: warning: packaging portable exe (ALLOW_PORTABLE=1)" >&2
 else
   die "no NSIS *-setup.exe under $TAURI_TARGET_BASE (run: bash scripts/build-windows.sh). Portable fallback: ALLOW_PORTABLE=1"
@@ -83,7 +83,7 @@ PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # latest.json (root of release out)
 cat > "$OUT_ROOT/latest.json" <<EOF
 {
-  "product": "Context-OS Client",
+  "product": "Context-OS",
   "version": "${VERSION}",
   "published_at": "${PUBLISHED_AT}",
   "platforms": {
