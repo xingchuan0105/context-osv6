@@ -33,9 +33,25 @@ export const commonMessages = {
     zh: "定价",
     en: "Pricing",
   },
+  "productChrome.desktop": {
+    zh: "桌面客户端",
+    en: "Desktop app",
+  },
   "productChrome.legalCenter": {
     zh: "法律中心",
     en: "Legal center",
+  },
+  "marketingChrome.navLabel": {
+    zh: "产品导航",
+    en: "Product navigation",
+  },
+  "marketingChrome.login": {
+    zh: "登录",
+    en: "Log in",
+  },
+  "marketingChrome.enterApp": {
+    zh: "进入应用",
+    en: "Open app",
   },
   "productChrome.terms": {
     zh: "用户协议",

@@ -89,4 +89,16 @@ export const pricingMessages = {
     zh: "月付",
     en: "Monthly billing",
   },
+  pricingDesktopCrossTitle: {
+    zh: "需要本地客户端？",
+    en: "Need a local client?",
+  },
+  pricingDesktopCrossBody: {
+    zh: "Windows 桌面版支持本机文档与自带 LLM Key，买断授权。与上方 SaaS 套餐相互独立。",
+    en: "Windows desktop keeps docs on-device with your own LLM keys (one-time license). Separate from SaaS plans above.",
+  },
+  pricingDesktopCrossCta: {
+    zh: "下载桌面客户端",
+    en: "Download Desktop",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

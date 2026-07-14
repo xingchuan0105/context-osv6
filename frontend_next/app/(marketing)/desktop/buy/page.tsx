@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { DesktopDownloadButton } from "@/components/desktop/DesktopDownloadButton";
 import styles from "@/components/desktop/desktop.module.css";
+import { MarketingShell } from "@/components/marketing-chrome";
 import {
   createLicenseCheckout,
   fetchMyLicenses,
@@ -100,6 +101,7 @@ export default function DesktopBuyPage() {
   }
 
   return (
+    <MarketingShell active="desktop">
     <main className="app-page-shell" style={{ background: "hsl(var(--surface-muted))" }}>
       <div className="app-page-center" style={{ maxWidth: "42rem" }}>
         <header className="app-page-heading" style={{ textAlign: "center" }}>
@@ -188,5 +190,6 @@ export default function DesktopBuyPage() {
         )}
       </div>
     </main>
+    </MarketingShell>
   );
 }

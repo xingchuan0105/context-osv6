@@ -487,7 +487,7 @@ pub(crate) async fn mock_activate(
 
 pub(crate) async fn request_trial_license(device_id: &str) -> Result<String, LicenseError> {
     let base = std::env::var("AVRAG_API_BASE")
-        .unwrap_or_else(|_| "https://app.avrag.com".to_string());
+        .unwrap_or_else(|_| "https://app.contextlm.top".to_string());
     let response = reqwest::Client::new()
         .post(format!("{base}/api/v1/licenses/trial"))
         .json(&serde_json::json!({ "device_id": device_id }))

@@ -96,6 +96,20 @@ export function PricingPageClient() {
           <p>{formatUiMessage(locale, "pricingFaqUpgradeAnswer")}</p>
         </details>
       </section>
+
+      <section
+        className={styles.faq}
+        style={{ marginTop: "1.5rem" }}
+        data-testid="pricing-desktop-crosslink"
+      >
+        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingDesktopCrossTitle")}</h2>
+        <p style={{ color: "hsl(var(--muted-foreground))", marginBottom: "0.75rem" }}>
+          {formatUiMessage(locale, "pricingDesktopCrossBody")}
+        </p>
+        <a className="app-button-secondary" href="/desktop">
+          {formatUiMessage(locale, "pricingDesktopCrossCta")}
+        </a>
+      </section>
     </div>
   );
 }

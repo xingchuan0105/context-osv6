@@ -65,4 +65,12 @@ export const desktopMessages = {
     zh: "尚未安装客户端？请先下载再激活。",
     en: "Don't have the app yet? Download it before activating.",
   },
+  "desktop.backToHub": {
+    zh: "返回官网",
+    en: "Brand site",
+  },
+  "desktop.openSaaS": {
+    zh: "打开云端应用",
+    en: "Open cloud app",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -70,6 +70,10 @@ export function ProductChromeFooter({
           {formatUiMessage(locale, "productChrome.pricing")}
         </Link>
         <span aria-hidden="true">·</span>
+        <Link className="app-link app-link-muted" href="/desktop" data-testid="product-chrome-desktop">
+          {formatUiMessage(locale, "productChrome.desktop")}
+        </Link>
+        <span aria-hidden="true">·</span>
         <Link className="app-link app-link-muted" href="/legal">
           {formatUiMessage(locale, "productChrome.legalCenter")}
         </Link>

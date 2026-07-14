@@ -140,6 +140,11 @@ export default function LoginPage() {
               {formatUiMessage(locale, "authSignUp")}
             </Link>
           </p>
+          <p className="app-form-footnote" style={{ marginTop: "0.5rem" }}>
+            <Link className="app-link app-link-muted" href="/desktop" data-testid="login-desktop-link">
+              {formatUiMessage(locale, "productChrome.desktop")}
+            </Link>
+          </p>
         </AuthFrame>
       </GuestOnlyGate>
       <LegalFooterLinks />

@@ -17,6 +17,7 @@ import {
   startTrial,
   type ActivationResult,
 } from "@/lib/desktop/tauri-license";
+import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 
 type View = "choice" | "input" | "success" | "error";
 
@@ -101,11 +102,11 @@ export default function ActivatePage() {
 
   async function handleOpenBuyPage() {
     const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
-    await openInBrowser(`https://app.avrag.com/desktop/buy${query}`);
+    await openInBrowser(`${appAbsoluteUrl(APP_PATHS.desktopBuy)}${query}`);
   }
 
   async function handleOpenHelp() {
-    await openInBrowser("https://app.avrag.com/help/desktop-activation");
+    await openInBrowser(appAbsoluteUrl(APP_PATHS.help));
   }
 
   return (

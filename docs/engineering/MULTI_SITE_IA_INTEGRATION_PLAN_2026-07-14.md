@@ -1,7 +1,8 @@
 # 多站点 / 多页面信息架构与集成方案
 
 **日期**: 2026-07-14  
-**状态**: Design（分析 + 可执行方案；待开工实现）  
+**状态**: I0–I2 **landed**（2026-07-14：site-map、App 营销顶栏/页脚/帮助/定价交叉链、Landing+Why 家族导航、公网 deploy）  
+
 **触发**: `/desktop` 页面与 NSIS 安装包已就绪，但用户从「网站」侧无法自然发现入口——**有页无链**。  
 **关联**: [`STYLE_BASELINE.md`](../design/STYLE_BASELINE.md) §3.2、[`DESKTOP_WEB_DOWNLOAD_INSTALL_PLAN`](./DESKTOP_WEB_DOWNLOAD_INSTALL_PLAN_2026-07-14.md)、[`LOCAL_VPS_ALIGNMENT_PLAN`](./LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md)、[`VISUAL_SYSTEM_AND_MULTI_SITE_UPGRADE_PLAN`](./VISUAL_SYSTEM_AND_MULTI_SITE_UPGRADE_PLAN_2026-07-10.md)
 

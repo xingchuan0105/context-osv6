@@ -169,4 +169,24 @@ export const helpMessages = {
     zh: "帮助中心",
     en: "Help center",
   },
+  helpSectionDesktopTitle: {
+    zh: "7. 桌面客户端",
+    en: "7. Desktop client",
+  },
+  helpItemDesktop1: {
+    zh: "Windows 安装包可从桌面产品页下载；买断授权与云端账号体系配合使用。",
+    en: "Download the Windows installer from the desktop product page; licenses work with your cloud account.",
+  },
+  helpItemDesktop2: {
+    zh: "安装后可用授权码或 deep link 激活；SmartScreen 提示时选择仍要运行（签名上线前）。",
+    en: "After install, activate with a license key or deep link; use Run anyway if SmartScreen warns (pre-signing).",
+  },
+  helpItemDesktopDownload: {
+    zh: "下载 / 了解桌面客户端",
+    en: "Download / learn about Desktop",
+  },
+  helpItemDesktopBuy: {
+    zh: "购买桌面授权",
+    en: "Buy a desktop license",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

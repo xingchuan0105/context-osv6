@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import LegalFooterLinks from '@/components/legal/LegalFooterLinks';
+import { MarketingShell } from '@/components/marketing-chrome';
 
 export const metadata: Metadata = {
   title: '法律中心',
@@ -49,29 +50,31 @@ export default function LegalCenter() {
   ];
 
   return (
-    <div className="legal-center">
-      <div className="legal-center-header">
-        <h1>法律中心</h1>
-        <p>使用Context-OS前请阅读以下文档</p>
-      </div>
+    <MarketingShell active="legal">
+      <div className="legal-center">
+        <div className="legal-center-header">
+          <h1>法律中心</h1>
+          <p>使用Context-OS前请阅读以下文档</p>
+        </div>
 
-      <div className="legal-cards">
-        {cards.map((card) => (
-          <Link key={card.href} href={card.href} className="legal-card">
-            <h2>{card.title}</h2>
-            <p>{card.description}</p>
-            <span className="legal-card-updated">
-              最后更新: {card.lastUpdated}
-            </span>
-          </Link>
-        ))}
-      </div>
+        <div className="legal-cards">
+          {cards.map((card) => (
+            <Link key={card.href} href={card.href} className="legal-card">
+              <h2>{card.title}</h2>
+              <p>{card.description}</p>
+              <span className="legal-card-updated">
+                最后更新: {card.lastUpdated}
+              </span>
+            </Link>
+          ))}
+        </div>
 
-      <div className="legal-contact">
-        <p>如有法律问题，请联系: <a href="mailto:legal@context-os.com">legal@context-os.com</a></p>
-      </div>
+        <div className="legal-contact">
+          <p>如有法律问题，请联系: <a href="mailto:legal@context-os.com">legal@context-os.com</a></p>
+        </div>
 
-      <LegalFooterLinks />
-    </div>
+        <LegalFooterLinks />
+      </div>
+    </MarketingShell>
   );
 }

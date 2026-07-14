@@ -52,15 +52,19 @@
 
 ```text
 [Mark] Context-OS
-  应用    app.contextlm.top
+  应用    app.contextlm.top/login?next=/dashboard   （云端 SaaS）
+  桌面    app.contextlm.top/desktop                 （Windows 客户端 — 交付形态，L1 必显）
   博客    blog.contextlm.top
   工具    whyimright.contextlm.top · canju.contextlm.top
 ```
 
 | 表面 | 顶栏 |
 |------|------|
-| Marketing / Blog / Why / Canju chrome | 固定高 **3.5–4rem**（56–64px），底边 `1px solid hsl(var(--border))` |
-| App 内 | 产品 chrome；设置或关于中保留家族链接即可 |
+| Marketing / Blog / Why / Canju chrome | 固定高 **3.5–4rem**（56–64px），底边 `1px solid hsl(var(--border))`；**须含「桌面」** |
+| App 营销 path（`/desktop` `/pricing` `/legal`） | 轻顶栏：Hub · 定价 · 桌面 · 登录 / 进入应用 |
+| App 内工作区 | 产品 chrome；**页脚/帮助**链到桌面，**勿**把营销项塞进工作顶栏 |
+
+链接契约：`frontend_next/lib/site-map.ts`。发现矩阵见 [`MULTI_SITE_IA_INTEGRATION_PLAN_2026-07-14.md`](../engineering/MULTI_SITE_IA_INTEGRATION_PLAN_2026-07-14.md)。
 
 ### 3.3 默认主题
 

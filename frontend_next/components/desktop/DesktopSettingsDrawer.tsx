@@ -18,6 +18,7 @@ import {
   testLlmConnection,
   type LocalLlmConfig,
 } from "@/lib/desktop/tauri-llm";
+import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 
 type DrawerTab = "llm" | "license" | "diagnostic";
 
@@ -246,7 +247,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               <button
                 type="button"
                 className="app-button-secondary"
-                onClick={() => void openInBrowser("https://app.avrag.com/desktop/buy")}
+                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.desktopBuy))}
               >
                 购买/升级
               </button>
