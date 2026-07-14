@@ -23,6 +23,7 @@ use commands::llm_config::{
     diagnose_llm, get_llm_config, list_available_models, set_llm_config, test_llm_connection,
 };
 use commands::local::{get_backend_status, init_local_backend, list_local_documents};
+use commands::docker_status::get_docker_status;
 use commands::local_product::{
     ensure_local_product, get_local_product_status, stop_local_product,
 };
@@ -67,6 +68,7 @@ pub fn run() {
             get_client_runtime_config,
             ensure_local_stack,
             stop_local_stack,
+            get_docker_status,
             get_local_product_status,
             ensure_local_product,
             stop_local_product,

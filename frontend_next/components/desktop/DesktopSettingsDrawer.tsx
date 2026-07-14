@@ -17,6 +17,7 @@ import {
   ensureLocalSession,
   ensureLocalStack,
   getClientRuntimeConfig,
+  getDockerStatus,
   getLlmConfig,
   getLocalProductStatus,
   getLocalSession,
@@ -26,6 +27,7 @@ import {
   stopLocalStack,
   testLlmConnection,
   type ClientRuntimeConfig,
+  type DockerStatus,
   type LocalLlmConfig,
   type LocalProductStatus,
   type LocalSessionStatus,
@@ -58,6 +60,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   const [stack, setStack] = useState<LocalStackStatus | null>(null);
   const [product, setProduct] = useState<LocalProductStatus | null>(null);
   const [localSession, setLocalSession] = useState<LocalSessionStatus | null>(null);
+  const [docker, setDocker] = useState<DockerStatus | null>(null);
   const [runtimeConfig, setRuntimeConfig] = useState<ClientRuntimeConfig | null>(null);
   const [stackBusy, setStackBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -110,21 +113,31 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     void getLocalSession()
       .then(setLocalSession)
       .catch(() => setLocalSession(null));
+
+    void getDockerStatus()
+      .then(setDocker)
+      .catch(() => setDocker(null));
   }, [open]);
 
   async function refreshStack() {
     setLoading(true);
     setError("");
     try {
-      const [nextStack, nextConfig, nextProduct] = await Promise.all([
+      const [nextStack, nextConfig, nextProduct, nextDocker] = await Promise.all([
         getLocalStackStatus(),
         getClientRuntimeConfig(),
         getLocalProductStatus(),
+        getDockerStatus(),
       ]);
       setStack(nextStack);
       setRuntimeConfig(nextConfig);
       setProduct(nextProduct);
+      setDocker(nextDocker);
+      if (nextStack.docker) {
+        setDocker(nextStack.docker);
+      }
       const parts = [
+        nextDocker.overall_ok ? "Docker 就绪" : "Docker 未就绪",
         nextStack.overall_ok ? "数据栈就绪" : "数据栈未全就绪",
         nextProduct.api_ok ? "API 就绪" : "API 未就绪",
       ];
@@ -475,9 +488,67 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         {tab === "stack" ? (
           <div className={styles.drawerSection}>
             <p className={styles.subtitle}>
-              本机数据面：PostgreSQL、Redis、完整 Milvus。一键「启动并迁移」会拉起 Docker
-              栈、写出 client.env，并对本机库执行 schema migrations。
+              本机数据面：PostgreSQL、Redis、完整 Milvus。依赖 Docker（Windows 请使用 Docker
+              Desktop）。一键「启动并迁移」会拉起 compose 栈、写出 client.env，并执行 migrations。
             </p>
+
+            <div
+              style={{
+                marginBottom: "0.85rem",
+                padding: "0.75rem",
+                borderRadius: "0.5rem",
+                border: "1px solid hsl(var(--border))",
+                display: "grid",
+                gap: "0.4rem",
+              }}
+            >
+              <p style={{ margin: 0 }}>
+                <strong>Docker</strong> —{" "}
+                <span
+                  style={{
+                    color: docker?.overall_ok
+                      ? "hsl(var(--success))"
+                      : "hsl(var(--destructive))",
+                  }}
+                >
+                  {docker
+                    ? docker.overall_ok
+                      ? "就绪"
+                      : !docker.cli_ok
+                        ? "未安装"
+                        : !docker.daemon_ok
+                          ? "引擎未运行"
+                          : "compose 不可用"
+                    : "未探测"}
+                </span>
+              </p>
+              {docker ? <p className={styles.subtitle} style={{ margin: 0 }}>{docker.detail}</p> : null}
+              {docker && !docker.overall_ok ? (
+                <>
+                  <p className={styles.subtitle} style={{ margin: 0 }}>
+                    {docker.install_hint}
+                  </p>
+                  <div className="app-button-row" style={{ flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="app-button-primary"
+                      onClick={() => void openInBrowser(docker.install_url)}
+                    >
+                      打开 Docker 安装指南
+                    </button>
+                    <button
+                      type="button"
+                      className="app-button-secondary"
+                      disabled={loading}
+                      onClick={() => void refreshStack()}
+                    >
+                      重新检测 Docker
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
             {stack ? (
               <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.5rem" }}>
                 {stack.services.map((s) => (
@@ -497,8 +568,13 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               <button
                 type="button"
                 className="app-button-primary"
-                disabled={loading || stackBusy}
+                disabled={loading || stackBusy || (docker != null && !docker.overall_ok)}
                 onClick={() => void handleEnsureStack()}
+                title={
+                  docker && !docker.overall_ok
+                    ? "请先安装并启动 Docker Desktop"
+                    : undefined
+                }
               >
                 {stackBusy ? "处理中…" : "启动并迁移"}
               </button>

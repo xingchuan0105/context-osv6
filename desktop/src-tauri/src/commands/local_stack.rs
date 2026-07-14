@@ -28,6 +28,8 @@ pub struct LocalStackStatus {
     /// Absolute path to `desktop/runtime/client.env` when monorepo is found.
     pub env_file_path: Option<String>,
     pub env_file_exists: bool,
+    /// Nested Docker probe for install guidance in settings UI.
+    pub docker: Option<super::docker_status::DockerStatus>,
 }
 
 /// Connection strings for local PG / Redis / Milvus (and related process flags).
@@ -180,6 +182,7 @@ fn build_status() -> LocalStackStatus {
         .unwrap_or(false);
 
     let overall_ok = services.iter().all(|s| s.ok);
+    let docker = Some(super::docker_status::docker_status_snapshot());
     LocalStackStatus {
         overall_ok,
         services,
@@ -187,6 +190,7 @@ fn build_status() -> LocalStackStatus {
         script_path: script,
         env_file_path: env_path.map(|p| p.display().to_string()),
         env_file_exists: env_exists,
+        docker,
     }
 }
 
@@ -286,6 +290,24 @@ pub fn get_client_runtime_config() -> ClientRuntimeConfig {
 /// Bring up compose stack, write `client.env`, apply SQL migrations (`ensure`).
 #[tauri::command]
 pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError> {
+    // Fail fast with install guidance when Docker is missing / daemon down.
+    let docker = super::docker_status::docker_status_snapshot();
+    if !docker.overall_ok {
+        let status = build_status();
+        let config = build_runtime_config();
+        return Ok(EnsureLocalStackResult {
+            ok: false,
+            message: format!(
+                "Docker 未就绪：{}。{}",
+                docker.detail, docker.install_hint
+            ),
+            stdout: String::new(),
+            stderr: docker.detail.clone(),
+            status,
+            config,
+        });
+    }
+
     let (code, stdout, stderr) =
         tokio::task::spawn_blocking(|| run_stack_script("ensure"))
             .await
@@ -302,10 +324,13 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
             "Script finished but not all ports are open yet — retry probe shortly.".into()
         }
     } else {
-        format!(
-            "desktop-local-stack.sh ensure failed (exit {code}). {}",
-            stderr.lines().last().unwrap_or("see stderr")
-        )
+        let tail = stderr.lines().last().unwrap_or("see stderr");
+        let docker_hint = if !docker.overall_ok {
+            format!(" · {}", docker.install_hint)
+        } else {
+            String::new()
+        };
+        format!("desktop-local-stack.sh ensure failed (exit {code}). {tail}{docker_hint}")
     };
 
     Ok(EnsureLocalStackResult {

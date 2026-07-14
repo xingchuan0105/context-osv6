@@ -3,6 +3,7 @@ pub mod backend;
 pub mod cache;
 pub mod chat;
 pub mod chat_stream;
+pub mod docker_status;
 pub mod license;
 pub mod llm_config;
 pub mod local;

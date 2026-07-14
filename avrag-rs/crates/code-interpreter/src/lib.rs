@@ -153,7 +153,7 @@ impl CodeInterpreter {
         // Keep `child_pid` referenced on non-unix so the binding stays live; the
         // group-kill is a no-op there (sandbox requires Unix anyway).
         #[cfg(not(unix))]
-        let child_pid: Option<u32> = child.id();
+        let child_pid: Option<u32> = Some(child.id());
 
         // Resource limits are applied inside the Python sandbox via the
         // `resource` module.  The Python wrapper calls resource.setrlimit()

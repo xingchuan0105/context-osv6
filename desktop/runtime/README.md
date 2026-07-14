@@ -7,7 +7,10 @@ Full **Milvus** + PostgreSQL + Redis for the desktop client, plus optional **avr
 ```bash
 # Optional: stage api/worker into desktop/runtime/bin (and Tauri binaries/)
 bash scripts/stage-desktop-sidecars.sh
-# or STAGE_BUILD=1 bash scripts/stage-desktop-sidecars.sh
+# Windows NSIS sidecars (from Linux/WSL with mingw):
+# STAGE_TARGET_TRIPLE=x86_64-pc-windows-gnu STAGE_BUILD=1 bash scripts/stage-desktop-sidecars.sh
+# Full Windows installer (embeds sidecars via Tauri externalBin):
+# bash scripts/build-windows.sh
 
 # 1) Data plane (compose + client.env + migrations + JWT_SECRET)
 bash scripts/desktop-local-stack.sh ensure

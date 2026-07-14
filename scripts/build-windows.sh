@@ -29,6 +29,22 @@ fi
 
 rustup target add "$TARGET" >/dev/null
 
+SKIP_SIDECARS="${SKIP_SIDECARS:-0}"
+if [[ "$SKIP_SIDECARS" != "1" ]]; then
+  log "staging Windows product sidecars (avrag-api / avrag-worker) for NSIS externalBin…"
+  export USERPROFILE="${USERPROFILE:-${HOME}/.cache/context-osv6/win-userprofile}"
+  mkdir -p "$USERPROFILE"
+  STAGE_TARGET_TRIPLE="$TARGET" STAGE_BUILD="${STAGE_BUILD:-1}" \
+    bash "$ROOT/scripts/stage-desktop-sidecars.sh"
+  API_BIN="$DESKTOP/src-tauri/binaries/avrag-api-${TARGET}.exe"
+  WORKER_BIN="$DESKTOP/src-tauri/binaries/avrag-worker-${TARGET}.exe"
+  [[ -f "$API_BIN" ]] || die "missing $API_BIN after stage-desktop-sidecars"
+  [[ -f "$WORKER_BIN" ]] || die "missing $WORKER_BIN after stage-desktop-sidecars"
+  log "sidecars: $API_BIN + $WORKER_BIN"
+else
+  log "SKIP_SIDECARS=1 — NSIS will not embed avrag-api/worker"
+fi
+
 if [[ "$SKIP_FRONTEND" != "1" ]]; then
   log "building frontend static export (BUILD_TARGET=desktop)…"
   (
@@ -42,7 +58,15 @@ else
   [[ -d "$FE/out" ]] || die "frontend_next/out missing"
 fi
 
-log "tauri build --target $TARGET --bundles nsis"
+# Merge Tauri config: embed sidecars as externalBin (next to app after install)
+# and ship compose/README as resources. Only applied for this Windows build so
+# host linux/mac builds stay free of missing externalBin requirements.
+TAURI_EXTRA_CONFIG='{"bundle":{"externalBin":["binaries/avrag-api","binaries/avrag-worker"],"resources":["../runtime/docker-compose.client.yml","../runtime/README.md"]}}'
+if [[ "$SKIP_SIDECARS" == "1" ]]; then
+  TAURI_EXTRA_CONFIG='{"bundle":{"resources":["../runtime/docker-compose.client.yml","../runtime/README.md"]}}'
+fi
+
+log "tauri build --target $TARGET --bundles nsis (+ sidecars)"
 (
   cd "$DESKTOP"
   export CI=true
@@ -53,9 +77,11 @@ log "tauri build --target $TARGET --bundles nsis"
   fi
   if [[ "$SKIP_FRONTEND" == "1" ]]; then
     pnpm tauri build --target "$TARGET" --bundles nsis \
-      --config '{"build":{"beforeBuildCommand":""}}'
+      --config '{"build":{"beforeBuildCommand":""}}' \
+      --config "$TAURI_EXTRA_CONFIG"
   else
-    pnpm tauri build --target "$TARGET" --bundles nsis
+    pnpm tauri build --target "$TARGET" --bundles nsis \
+      --config "$TAURI_EXTRA_CONFIG"
   fi
 )
 
@@ -68,6 +94,17 @@ if [[ -z "$SETUP" || ! -f "$SETUP" ]]; then
 fi
 
 [[ -n "$SETUP" && -f "$SETUP" ]] || die "NSIS setup.exe not produced under $NSIS_DIR (check tauri build logs)"
+
+# Verify sidecars were linked into the release tree (Tauri places externalBin next to the exe).
+RELEASE_DIR="$DESKTOP/src-tauri/target/${TARGET}/release"
+if [[ "$SKIP_SIDECARS" != "1" ]]; then
+  if [[ -f "$RELEASE_DIR/avrag-api.exe" || -f "$RELEASE_DIR/avrag-api-${TARGET}.exe" ]]; then
+    log "release tree contains avrag-api sidecar"
+  else
+    log "warning: avrag-api.exe not found next to release exe — check externalBin staging"
+    ls -la "$RELEASE_DIR"/*.exe 2>/dev/null | head -20 || true
+  fi
+fi
 
 log "OK setup: $SETUP ($(du -h "$SETUP" | awk '{print $1}'))"
 log "next:"

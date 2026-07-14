@@ -59,6 +59,17 @@ export type LocalStackServiceStatus = {
   detail: string;
 };
 
+export type DockerStatus = {
+  cli_ok: boolean;
+  daemon_ok: boolean;
+  compose_ok: boolean;
+  overall_ok: boolean;
+  detail: string;
+  install_url: string;
+  install_hint: string;
+  platform: string;
+};
+
 export type LocalStackStatus = {
   overall_ok: boolean;
   services: LocalStackServiceStatus[];
@@ -66,6 +77,7 @@ export type LocalStackStatus = {
   script_path?: string | null;
   env_file_path?: string | null;
   env_file_exists?: boolean;
+  docker?: DockerStatus | null;
 };
 
 export type ClientRuntimeConfig = {
@@ -123,6 +135,10 @@ export async function getLocalStackStatus(): Promise<LocalStackStatus> {
   return invoke<LocalStackStatus>("get_local_stack_status");
 }
 
+export async function getDockerStatus(): Promise<DockerStatus> {
+  return invoke<DockerStatus>("get_docker_status");
+}
+
 export async function getClientRuntimeConfig(): Promise<ClientRuntimeConfig> {
   return invoke<ClientRuntimeConfig>("get_client_runtime_config");
 }
@@ -146,6 +162,8 @@ export type LocalProductStatus = {
   compose_hint: string;
   script_path?: string | null;
   log_dir?: string | null;
+  api_bin_path?: string | null;
+  worker_bin_path?: string | null;
 };
 
 export type EnsureLocalProductResult = {

@@ -104,11 +104,17 @@ EOF
 # Copy latest into version dir for archival
 cp -f "$OUT_ROOT/latest.json" "$STAGE/latest.json"
 
-# Stage product sidecars + runtime layout next to installer (optional companion pack).
-# Consumers unzip or copy into CONTEXT_OS_CLIENT_HOME (or next to install for monorepo dev).
+# Stage product sidecars + runtime layout next to installer (companion pack).
+# Windows NSIS already embeds externalBin when built via build-windows.sh;
+# this folder is a fallback / monorepo pack and for CONTEXT_OS_CLIENT_HOME.
 SIDECAR_STAGE="$STAGE/runtime-sidecars"
 mkdir -p "$SIDECAR_STAGE/bin"
-if bash "$ROOT/scripts/stage-desktop-sidecars.sh" 2>/dev/null; then
+WIN_TRIPLE="${STAGE_TARGET_TRIPLE:-x86_64-pc-windows-gnu}"
+# Prefer already-staged Windows sidecars (from build-windows); else host stage.
+if [[ -f "$ROOT/desktop/src-tauri/binaries/avrag-api-${WIN_TRIPLE}.exe" ]]; then
+  cp -f "$ROOT/desktop/src-tauri/binaries/avrag-api-${WIN_TRIPLE}.exe" "$SIDECAR_STAGE/bin/avrag-api.exe" || true
+  cp -f "$ROOT/desktop/src-tauri/binaries/avrag-worker-${WIN_TRIPLE}.exe" "$SIDECAR_STAGE/bin/avrag-worker.exe" || true
+elif bash "$ROOT/scripts/stage-desktop-sidecars.sh" 2>/dev/null; then
   if [[ -d "$ROOT/desktop/runtime/bin" ]]; then
     cp -a "$ROOT/desktop/runtime/bin/." "$SIDECAR_STAGE/bin/" 2>/dev/null || true
   fi
@@ -120,18 +126,18 @@ cp -f "$ROOT/scripts/desktop-local-product.sh" "$SIDECAR_STAGE/" 2>/dev/null || 
 cat >"$SIDECAR_STAGE/INSTALL.txt" <<'SIDEEOF'
 Context-OS Client — companion runtime (data plane + product binaries)
 
-1. Install Docker Desktop (or Docker Engine) for Postgres/Redis/Milvus.
-2. Set CONTEXT_OS_CLIENT_HOME to this folder (absolute path).
-3. From monorepo or with scripts on PATH:
-     bash desktop-local-stack.sh ensure
-     bash desktop-local-product.sh ensure
-4. API listens on http://127.0.0.1:18080
-5. Desktop shell auto-creates personal local@context-os.client session (no cloud login).
+1. Install Docker Desktop (Windows/Mac) or Docker Engine (Linux).
+   Windows: https://docs.docker.com/desktop/setup/install/windows-install/
+2. Start Docker until the engine is Running.
+3. The NSIS installer embeds avrag-api.exe / avrag-worker.exe next to the app
+   when built with scripts/build-windows.sh (externalBin).
+4. Optional: set CONTEXT_OS_CLIENT_HOME to this folder for script-based control.
+5. API: http://127.0.0.1:18080 · local user local@context-os.client (no cloud login).
 
-Binaries live in ./bin/ when staged with scripts/stage-desktop-sidecars.sh.
+Settings → 本机数据栈 shows Docker probe + install guide if the engine is missing.
 SIDEEOF
 
-# Optional Tauri externalBin (host triple) — does not fail packaging if absent.
+# Tauri externalBin staging dir (windows triple + host if present)
 if [[ -d "$ROOT/desktop/src-tauri/binaries" ]]; then
   mkdir -p "$STAGE/tauri-binaries"
   cp -a "$ROOT/desktop/src-tauri/binaries/." "$STAGE/tauri-binaries/" 2>/dev/null || true

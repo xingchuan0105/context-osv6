@@ -20,6 +20,9 @@ pub struct LocalProductStatus {
     pub compose_hint: String,
     pub script_path: Option<String>,
     pub log_dir: Option<String>,
+    /// Resolved avrag-api path (NSIS externalBin, CLIENT_HOME, or monorepo runtime/bin).
+    pub api_bin_path: Option<String>,
+    pub worker_bin_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,6 +69,52 @@ fn monorepo_root() -> Option<PathBuf> {
 
 fn product_script(root: &Path) -> PathBuf {
     root.join("scripts/desktop-local-product.sh")
+}
+
+/// Sidecars bundled via Tauri externalBin land next to the main executable.
+fn sidecar_next_to_exe(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let candidates = [
+        dir.join(name),
+        dir.join(format!("{name}.exe")),
+        // Some layouts keep resources/bin
+        dir.join("bin").join(name),
+        dir.join("bin").join(format!("{name}.exe")),
+        dir.join("resources").join("bin").join(name),
+        dir.join("resources").join("bin").join(format!("{name}.exe")),
+    ];
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+/// Prefer installed sidecar, then monorepo staged bin.
+pub fn resolve_product_bin(name: &str) -> Option<PathBuf> {
+    if let Some(p) = sidecar_next_to_exe(name) {
+        return Some(p);
+    }
+    if let Ok(home) = std::env::var("CONTEXT_OS_CLIENT_HOME") {
+        let p = PathBuf::from(&home).join("bin").join(name);
+        if p.is_file() {
+            return Some(p);
+        }
+        let pexe = PathBuf::from(&home).join("bin").join(format!("{name}.exe"));
+        if pexe.is_file() {
+            return Some(pexe);
+        }
+    }
+    if let Some(root) = monorepo_root() {
+        let p = root.join("desktop/runtime/bin").join(name);
+        if p.is_file() {
+            return Some(p);
+        }
+        let pexe = root
+            .join("desktop/runtime/bin")
+            .join(format!("{name}.exe"));
+        if pexe.is_file() {
+            return Some(pexe);
+        }
+    }
+    None
 }
 
 fn read_env_file_value(key: &str) -> Option<String> {
@@ -187,6 +236,9 @@ fn build_status() -> LocalProductStatus {
         "not running".into()
     };
 
+    let api_bin = resolve_product_bin("avrag-api").map(|p| p.display().to_string());
+    let worker_bin = resolve_product_bin("avrag-worker").map(|p| p.display().to_string());
+
     LocalProductStatus {
         overall_ok: api_ok && worker_ok,
         api_ok,
@@ -198,6 +250,8 @@ fn build_status() -> LocalProductStatus {
         compose_hint: "bash scripts/desktop-local-product.sh ensure".into(),
         script_path: script,
         log_dir,
+        api_bin_path: api_bin,
+        worker_bin_path: worker_bin,
     }
 }
 

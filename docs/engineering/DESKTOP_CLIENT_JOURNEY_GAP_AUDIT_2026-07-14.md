@@ -277,6 +277,8 @@ D3  （可选）高级模式：配置自建服务端 base URL，客户端仅 UI+
 | **D2** | **Scaffold landed** | `desktop/runtime/docker-compose.client.yml` 完整 Milvus+PG+Redis；`scripts/desktop-local-stack.sh`；`get_local_stack_status` IPC；设置页可探测端口。**与云端同构的 ingest/API 进程挂载仍为后续** |
 | **D2 续** | **Landed (wire)** | `ensure`/`migrate`/`write-env` → `desktop/runtime/client.env`；`sqlx migrate` 对本机 PG；IPC `get_client_runtime_config` / `ensure_local_stack` / `stop_local_stack`；设置页「启动并迁移 / 停止栈」+ 连接串展示 |
 | **D2+** | **Landed (product sidecar)** | `scripts/desktop-local-product.sh` 启停 `avrag-api`(:18080)+`avrag-worker`；`client.env` 含 API/object/collection 前缀；IPC `ensure_local_product` / `get_local_product_status`；`api_call` HTTP 代理到本机产品 API；设置页产品进程控件 |
-| **D2++** | **Landed (pack + local auth)** | `stage-desktop-sidecars.sh` → `runtime/bin` + Tauri `binaries/*-triple`；`package-desktop-release` 附 `runtime-sidecars/`；`CONTEXT_OS_CLIENT_HOME`/`runtime/bin` 查找路径；`JWT_SECRET` 写入 `client.env`；IPC `ensure_local_session`（`local@context-os.client` 注册/登录）；`ClientLocalSessionBootstrap` 许可后注入 AuthProvider；设置页「刷新本机会话」。**仍后续**：Windows 交叉编译 sidecar 默认进 NSIS、Docker Desktop 安装引导 UX |
+| **D2++** | **Landed (pack + local auth)** | `stage-desktop-sidecars.sh` → `runtime/bin` + Tauri `binaries/*-triple`；`package-desktop-release` 附 `runtime-sidecars/`；`CONTEXT_OS_CLIENT_HOME`/`runtime/bin` 查找路径；`JWT_SECRET` 写入 `client.env`；IPC `ensure_local_session`；`ClientLocalSessionBootstrap`；设置页本机会话 |
+| **D2++-1** | **Landed (NSIS sidecars)** | `build-windows.sh` 默认 `STAGE_BUILD=1` 交叉编译 `avrag-api/worker` → `binaries/*-x86_64-pc-windows-gnu.exe`，Tauri `externalBin` 打进 NSIS；安装后 sidecar 与主程序同目录（`resolve_product_bin`） |
+| **D2++-2** | **Landed (Docker 引导)** | IPC `get_docker_status`；栈状态嵌套 docker 探测；设置页 Docker 卡片 +「打开安装指南」；ensure 在 Docker 未就绪时 fail-fast 中文提示 |
 
-**下一步**：NSIS 一键嵌入 Windows sidecar + Docker 探测/引导；本机 workspace 冷创建与首文档 ingest 冒烟。
+**下一步**：本机 workspace 冷创建与首文档 ingest 冒烟；Windows 上 Docker Desktop 首次启动向导（可选）。
