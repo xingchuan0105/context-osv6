@@ -1,7 +1,7 @@
 # 本地 ↔ VPS 对齐方案
 
 **日期**: 2026-07-14  
-**状态**: Plan（建议立即按 §5 做一次对账）  
+**状态**: Plan + P0 已落地（2026-07-14：`deploy-frontend.sh` / `deploy-status.sh` / `vps-pull-config.sh`；`deploy/nginx` + `deploy/systemd` 入库）  
 **问题**: 部分产物/配置直接写在 VPS；页面与脚本改在本地磁盘。两端无单一真相，易漂移。  
 **原则**: **源码与可重建配置只认本地 trunk；VPS 只跑「发布物」与「运行时状态」。**
 
