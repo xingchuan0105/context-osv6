@@ -1,0 +1,19 @@
+[Unit]
+Description=Context-OS v6 Frontend (Next.js standalone)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/avrag-rs/frontend
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=HOSTNAME=127.0.0.1
+Environment=API_PROXY_TARGET=http://127.0.0.1:8081
+Environment=NEXT_PUBLIC_API_BASE_URL=
+ExecStart=/usr/bin/node /opt/avrag-rs/frontend/server.js
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

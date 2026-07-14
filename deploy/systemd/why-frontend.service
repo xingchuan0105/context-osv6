@@ -1,0 +1,18 @@
+[Unit]
+Description=Why I Am Right Frontend
+After=network.target why-api.service
+
+[Service]
+Type=simple
+# WorkingDirectory must contain server.js after deploy (may be nested under standalone)
+WorkingDirectory=/opt/whyiamright/frontend
+Environment=NODE_ENV=production
+Environment=PORT=3004
+Environment=HOSTNAME=127.0.0.1
+Environment=NEXT_PUBLIC_API_URL=
+ExecStart=/usr/bin/node /opt/whyiamright/frontend/server.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

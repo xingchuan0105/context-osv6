@@ -19,6 +19,21 @@
 | Cloud release notes | `docs/release/cloud/…`（启用后） |
 | 安装包 checksum / 签名 | 发版流水线产物，不入库 |
 
+### 网页下载（2026-07-14）
+
+| 产物 | 命名 / URL |
+|------|------------|
+| 版本单一事实 | `desktop/package.json` 与 `desktop/src-tauri/tauri.conf.json` 的 `version`（须同步） |
+| Windows 安装包（优先 NSIS） | `AVRag-Desktop_{version}_x64-setup.exe` |
+| Windows 便携（无 NSIS 时） | `AVRag-Desktop_{version}_x64.exe` |
+| 校验 | `SHA256SUMS`（同目录） |
+| 发现 | 公网 `GET /releases/desktop/latest.json` |
+| 版本化目录 | `/releases/desktop/v{version}/…`（长缓存） |
+| 发版脚本 | `scripts/package-desktop-release.sh`、`scripts/publish-desktop-release.sh` |
+| 详细计划 | `docs/engineering/DESKTOP_WEB_DOWNLOAD_INSTALL_PLAN_2026-07-14.md` |
+
+`latest.json` 由打包脚本生成，网页只读该文件渲染「下载 Windows」按钮。
+
 ## 最低兼容云 API（可选连云）
 
 当桌面构建包含连云能力时，每个 **MINOR** 发版说明须声明：
@@ -46,3 +61,4 @@ Min cloud API: v1   # 示例；以实际 OpenAPI / route 兼容策略为准
 | 日期 | 说明 |
 |------|------|
 | 2026-07-09 | 初稿（ADR 0006 backlog #4） |
+| 2026-07-14 | 增加网页下载产物命名、`latest.json` 与发版脚本约定 |

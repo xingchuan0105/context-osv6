@@ -11,6 +11,9 @@ node_modules/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 
+# Packaged desktop releases (binaries + latest.json staging)
+dist/desktop-release/
+
 # =====================
 # IDE / Editor
 # =====================
@@ -101,3 +104,6 @@ frontend_next/out/
 frontend_next/.serena/
 .code-review/
 .mimocode/
+
+# VPS config snapshots (use vps-pull-config.sh)
+deploy/pulled/

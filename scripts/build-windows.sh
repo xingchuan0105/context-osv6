@@ -39,3 +39,8 @@ pnpm tauri build --target x86_64-pc-windows-gnu
 echo ""
 echo "=== 构建完成 ==="
 echo "输出目录: desktop/src-tauri/target/x86_64-pc-windows-gnu/release/bundle/"
+echo ""
+echo "下一步（网页下载发布）:"
+echo "  bash scripts/package-desktop-release.sh"
+echo "  bash scripts/publish-desktop-release.sh"
+echo "文档: docs/desktop/RELEASE-AND-DOWNLOAD.md"

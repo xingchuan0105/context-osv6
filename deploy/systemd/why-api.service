@@ -1,0 +1,16 @@
+[Unit]
+Description=Why I Am Right API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/whyiamright
+EnvironmentFile=/opt/whyiamright/why-backend.env
+# PORT must be set inside why-backend.env (EnvironmentFile overrides Environment=)
+# Recommended: PORT=8082 (avoid cchess :8080)
+ExecStart=/opt/whyiamright/bin/why-api
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
