@@ -68,7 +68,7 @@ describe("LicensesSummary", () => {
 
   it("renders desktop client section", () => {
     render(<LicensesSummary />);
-    expect(screen.getByText("桌面客户端")).toBeTruthy();
-    expect(screen.getByText(/桌面客户端安装包内另附声明/)).toBeTruthy();
+    expect(screen.getByText("客户端")).toBeTruthy();
+    expect(screen.getByText(/客户端安装包内另附声明/)).toBeTruthy();
   });
 });

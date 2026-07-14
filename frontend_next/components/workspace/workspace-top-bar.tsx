@@ -187,7 +187,7 @@ export function WorkspaceTopBar({
           <>
             <DesktopStatusBadge onClick={() => setDesktopDrawerOpen(true)} />
             <button
-              aria-label="桌面端设置"
+              aria-label="客户端设置"
               className={styles.topBarActionButton}
               type="button"
               onClick={() => {
@@ -209,7 +209,7 @@ export function WorkspaceTopBar({
                   strokeWidth="1.8"
                 />
               </svg>
-              <span className={styles.topBarActionLabel}>桌面设置</span>
+              <span className={styles.topBarActionLabel}>客户端设置</span>
             </button>
           </>
         ) : null}
@@ -368,7 +368,7 @@ export function WorkspaceTopBar({
                     setAvatarMenuOpen(false);
                   }}
                 >
-                  {formatUiMessage(locale, "productChrome.desktop")}
+                  {formatUiMessage(locale, "productChrome.client")}
                 </Link>
               ) : null}
               <button className={styles.menuDangerButton} type="button" onClick={() => void handleLogout()}>

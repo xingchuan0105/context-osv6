@@ -71,7 +71,7 @@ export function ProductChromeFooter({
         </Link>
         <span aria-hidden="true">·</span>
         <Link className="app-link app-link-muted" href="/desktop" data-testid="product-chrome-desktop">
-          {formatUiMessage(locale, "productChrome.desktop")}
+          {formatUiMessage(locale, "productChrome.client")}
         </Link>
         <span aria-hidden="true">·</span>
         <Link className="app-link app-link-muted" href="/legal">

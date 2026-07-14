@@ -105,8 +105,8 @@ export default function DesktopBuyPage() {
     <main className="app-page-shell" style={{ background: "hsl(var(--surface-muted))" }}>
       <div className="app-page-center" style={{ maxWidth: "42rem" }}>
         <header className="app-page-heading" style={{ textAlign: "center" }}>
-          <h1 className="app-page-title">AVRag Desktop</h1>
-          <p className="app-page-subtitle">本地 AI 知识助手</p>
+          <h1 className="app-page-title">{formatUiMessage(locale, "desktop.buyTitle")}</h1>
+          <p className="app-page-subtitle">{formatUiMessage(locale, "desktop.buySubtitle")}</p>
           {deviceId ? (
             <p className="app-page-subtitle" style={{ fontSize: "var(--font-size-label)" }}>
               设备 ID: {deviceId.slice(0, 12)}…
@@ -175,7 +175,7 @@ export default function DesktopBuyPage() {
               className="app-button-primary"
               style={{ display: "inline-flex", marginBottom: "0.75rem" }}
             >
-              在 AVRag Desktop 中激活
+              {formatUiMessage(locale, "desktop.activateInClient")}
             </a>
 
             <p className={styles.subtitle}>或手动输入授权码激活</p>

@@ -93,13 +93,13 @@ export const SITE_LINKS: SiteLinkDef[] = [
   {
     id: "desktop",
     href: APP_PATHS.desktop,
-    label: { zh: "桌面", en: "Desktop" },
+    label: { zh: "客户端", en: "Client" },
     discovery: ["family_nav", "hub_cta", "app_footer", "help", "pricing", "marketing_chrome"],
   },
   {
     id: "desktop_buy",
     href: APP_PATHS.desktopBuy,
-    label: { zh: "购买桌面授权", en: "Buy desktop license" },
+    label: { zh: "购买客户端授权", en: "Buy client license" },
     discovery: ["help"],
   },
   {
@@ -143,7 +143,7 @@ export function siteLinkLabel(id: SiteLinkId, locale: SiteLocale = "zh"): string
 export function familyNavLinks(locale: SiteLocale = "zh"): Array<{ id: string; label: string; href: string }> {
   return [
     { id: "app", label: locale === "zh" ? "应用" : "App", href: EXTERNAL.appLogin() },
-    { id: "desktop", label: locale === "zh" ? "桌面" : "Desktop", href: EXTERNAL.appDesktop() },
+    { id: "desktop", label: locale === "zh" ? "客户端" : "Client", href: EXTERNAL.appDesktop() },
     { id: "blog", label: locale === "zh" ? "博客" : "Blog", href: EXTERNAL.blog },
     { id: "why", label: "Why I Am Right", href: EXTERNAL.why },
     { id: "canju", label: locale === "zh" ? "象棋" : "Xiangqi", href: EXTERNAL.canju },

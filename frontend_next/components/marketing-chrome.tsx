@@ -7,14 +7,14 @@ import { ContextOsMark } from "./context-os-mark";
 import { brandHomeHref } from "./product-chrome-footer";
 import { APP_PATHS } from "../lib/site-map";
 import { formatUiMessage } from "../lib/i18n/messages";
-import { useUiPreferences } from "../lib/ui-preferences";
+import { useUiPreferences, type UiLocale } from "../lib/ui-preferences";
 
 /**
  * Light top bar for marketing paths (/desktop, /pricing, /legal).
- * Not used inside authenticated workspace chrome.
+ * Brand lockup is always horizontal (mark + Context-OS).
  */
 export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "legal" | "none" }) {
-  const { locale } = useUiPreferences();
+  const { locale, setLocale } = useUiPreferences();
   const hub = brandHomeHref();
   const hubExternal = /^https?:\/\//i.test(hub);
 
@@ -24,6 +24,13 @@ export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "
     fontSize: "0.9rem",
     textDecoration: "none",
   });
+
+  const brandInner = (
+    <>
+      <ContextOsMark size={28} className="cos-mark--nav" />
+      <span className="cos-brand-lockup__wordmark">Context-OS</span>
+    </>
+  );
 
   return (
     <header
@@ -53,43 +60,61 @@ export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "
         }}
       >
         {hubExternal ? (
-          <a
-            href={hub}
-            className="app-auth-brand-link"
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}
-            rel="noopener noreferrer"
-          >
-            <ContextOsMark size={28} className="cos-mark--nav" />
-            <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>Context-OS</span>
+          <a href={hub} className="cos-brand-lockup" rel="noopener noreferrer" data-testid="mkt-brand-lockup">
+            {brandInner}
           </a>
         ) : (
-          <Link
-            href={hub}
-            className="app-auth-brand-link"
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}
-          >
-            <ContextOsMark size={28} className="cos-mark--nav" />
-            <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>Context-OS</span>
+          <Link href={hub} className="cos-brand-lockup" data-testid="mkt-brand-lockup">
+            {brandInner}
           </Link>
         )}
 
         <nav
           aria-label={formatUiMessage(locale, "marketingChrome.navLabel")}
-          style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}
+          style={{ display: "flex", alignItems: "center", gap: "0.85rem", flexWrap: "wrap" }}
         >
           <Link href={APP_PATHS.pricing} style={linkStyle(active === "pricing")} data-testid="mkt-nav-pricing">
             {formatUiMessage(locale, "productChrome.pricing")}
           </Link>
           <Link href={APP_PATHS.desktop} style={linkStyle(active === "desktop")} data-testid="mkt-nav-desktop">
-            {formatUiMessage(locale, "productChrome.desktop")}
+            {formatUiMessage(locale, "productChrome.client")}
           </Link>
           <Link href={APP_PATHS.legal} style={linkStyle(active === "legal")} data-testid="mkt-nav-legal">
             {formatUiMessage(locale, "productChrome.legalCenter")}
           </Link>
-          <Link href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`} className="app-button-secondary" style={{ fontSize: "0.85rem", padding: "0.35rem 0.75rem" }}>
+          <span style={{ display: "inline-flex", gap: "0.35rem", fontSize: "0.8rem" }} role="group" aria-label="Language">
+            {(["zh-CN", "en"] as UiLocale[]).map((code) => (
+              <button
+                key={code}
+                type="button"
+                data-testid={`mkt-lang-${code}`}
+                onClick={() => setLocale(code)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  padding: "0.15rem 0.25rem",
+                  fontWeight: locale === code ? 700 : 500,
+                  color: locale === code ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+                }}
+              >
+                {code === "zh-CN" ? "中文" : "EN"}
+              </button>
+            ))}
+          </span>
+          <Link
+            href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`}
+            className="app-button-secondary"
+            style={{ fontSize: "0.85rem", padding: "0.35rem 0.75rem" }}
+          >
             {formatUiMessage(locale, "marketingChrome.login")}
           </Link>
-          <Link href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`} className="app-button-primary" style={{ fontSize: "0.85rem", padding: "0.35rem 0.75rem" }} data-testid="mkt-nav-enter-app">
+          <Link
+            href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`}
+            className="app-button-primary"
+            style={{ fontSize: "0.85rem", padding: "0.35rem 0.75rem" }}
+            data-testid="mkt-nav-enter-app"
+          >
             {formatUiMessage(locale, "marketingChrome.enterApp")}
           </Link>
         </nav>

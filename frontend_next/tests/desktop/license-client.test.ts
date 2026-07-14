@@ -116,7 +116,7 @@ describe("license-client", () => {
   it("licenseStatusLabel_mapsKnownStatuses", () => {
     expect(licenseStatusLabel("active")).toBe("已激活");
     expect(licenseStatusLabel("trial")).toBe("试用中");
-    expect(licenseKindDisplay("pro")).toBe("AVRag Desktop Pro");
+    expect(licenseKindDisplay("pro")).toBe("Context-OS Client Pro");
   });
 
   it("formatHeartbeatLabel_formatsRecentHeartbeat", () => {

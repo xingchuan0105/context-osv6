@@ -54,7 +54,7 @@ export default function LicensesPage() {
         <div className="app-page-center" style={{ maxWidth: "42rem" }}>
           <header className="app-page-heading">
             <h1 className="app-page-title">我的授权</h1>
-            <p className="app-page-subtitle">管理 AVRag Desktop 授权与已激活设备</p>
+            <p className="app-page-subtitle">管理 Context-OS 客户端授权与已激活设备</p>
           </header>
 
           {loading ? <p className={styles.subtitle}>加载中…</p> : null}

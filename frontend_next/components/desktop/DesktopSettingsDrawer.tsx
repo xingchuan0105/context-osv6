@@ -126,11 +126,11 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
       <aside
         className={styles.drawerPanel}
         role="dialog"
-        aria-label="桌面端设置"
+        aria-label="客户端设置"
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.drawerHeader}>
-          <h2 className={styles.drawerTitle}>桌面端设置</h2>
+          <h2 className={styles.drawerTitle}>客户端设置</h2>
           <button type="button" className="app-button-ghost" onClick={onClose}>
             关闭
           </button>

@@ -34,8 +34,12 @@ export const commonMessages = {
     en: "Pricing",
   },
   "productChrome.desktop": {
-    zh: "桌面客户端",
-    en: "Desktop app",
+    zh: "客户端",
+    en: "Client",
+  },
+  "productChrome.client": {
+    zh: "客户端",
+    en: "Client",
   },
   "productChrome.legalCenter": {
     zh: "法律中心",
@@ -52,6 +56,14 @@ export const commonMessages = {
   "marketingChrome.enterApp": {
     zh: "进入应用",
     en: "Open app",
+  },
+  "productName.client": {
+    zh: "Context-OS 客户端",
+    en: "Context-OS Client",
+  },
+  "productName.short": {
+    zh: "Context-OS",
+    en: "Context-OS",
   },
   "productChrome.terms": {
     zh: "用户协议",

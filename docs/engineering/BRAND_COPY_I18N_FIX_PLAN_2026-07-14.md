@@ -1,7 +1,8 @@
 # 品牌壳 · 文案 · 多语言修复计划
 
 **日期**: 2026-07-14  
-**状态**: Plan（核实完毕，待开工）  
+**状态**: N1–N4 **landed**（2026-07-14：横排 lockup、客户端文案、去 AVRag 用户面、Client 产物名、营销/Hub/Why/Canju 英中切换）  
+
 **依据截图**: `E:\OneDrive\桌面\16.png`（`/desktop` 营销顶栏 + 产品页）  
 **相关**: [`BRAND_MARK_FAVICON_AUDIT`](./BRAND_MARK_FAVICON_AUDIT_2026-07-14.md)、[`MULTI_SITE_IA_INTEGRATION_PLAN`](./LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md)（发现路径）、[`STYLE_BASELINE`](../design/STYLE_BASELINE.md)
 

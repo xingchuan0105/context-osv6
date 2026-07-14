@@ -23,18 +23,16 @@ export default function DesktopProductPage() {
       <main className="app-page-shell" style={{ background: "hsl(var(--surface-muted))" }}>
         <div className="app-page-center" style={{ maxWidth: "42rem" }}>
           <header className="app-page-heading" style={{ textAlign: "center" }}>
-            <h1 className="app-page-title">AVRag Desktop</h1>
-            <p className="app-page-subtitle">
-              本地 AI 知识助手。自带 LLM API Key，离线优先，数据留在本机。
-            </p>
+            <h1 className="app-page-title">{formatUiMessage(locale, "desktop.productTitle")}</h1>
+            <p className="app-page-subtitle">{formatUiMessage(locale, "desktop.productSubtitle")}</p>
           </header>
 
           <section className={styles.card}>
             <ul className={styles.buyFeatures}>
-              <li>16+ LLM 服务商预设，含智谱 Coding Plan 一键配置</li>
-              <li>本地文档索引与 RAG 检索，支持 PDF / Markdown</li>
-              <li>买断制授权，v1.x 终身免费升级</li>
-              <li>与 SaaS 工作区数据互通（可选同步）</li>
+              <li>{formatUiMessage(locale, "desktop.feature1")}</li>
+              <li>{formatUiMessage(locale, "desktop.feature2")}</li>
+              <li>{formatUiMessage(locale, "desktop.feature3")}</li>
+              <li>{formatUiMessage(locale, "desktop.feature4")}</li>
             </ul>
 
             <div
@@ -58,15 +56,9 @@ export default function DesktopProductPage() {
               {formatUiMessage(locale, "desktop.installTitle")}
             </h2>
             <ol style={{ margin: 0, paddingLeft: "1.25rem", color: "hsl(var(--muted-foreground))" }}>
-              <li style={{ marginBottom: "0.4rem" }}>
-                {formatUiMessage(locale, "desktop.installStep1")}
-              </li>
-              <li style={{ marginBottom: "0.4rem" }}>
-                {formatUiMessage(locale, "desktop.installStep2")}
-              </li>
-              <li style={{ marginBottom: "0.4rem" }}>
-                {formatUiMessage(locale, "desktop.installStep3")}
-              </li>
+              <li style={{ marginBottom: "0.4rem" }}>{formatUiMessage(locale, "desktop.installStep1")}</li>
+              <li style={{ marginBottom: "0.4rem" }}>{formatUiMessage(locale, "desktop.installStep2")}</li>
+              <li style={{ marginBottom: "0.4rem" }}>{formatUiMessage(locale, "desktop.installStep3")}</li>
             </ol>
             <p
               style={{

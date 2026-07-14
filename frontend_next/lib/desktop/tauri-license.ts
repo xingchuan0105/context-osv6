@@ -92,9 +92,9 @@ export async function listenDeepLinkActivate(onKey: (key: string) => void): Prom
 }
 
 export function licenseKindLabel(kind: LicenseKind): string {
-  if (kind === "pro") return "AVRag Desktop Pro";
-  if (kind === "standard") return "AVRag Desktop Standard";
-  return "AVRag Desktop Trial";
+  if (kind === "pro") return "Context-OS Client Pro";
+  if (kind === "standard") return "Context-OS Client Standard";
+  return "Context-OS Client Trial";
 }
 
 export function licenseSeatsMax(kind: LicenseKind): number {

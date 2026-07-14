@@ -47,7 +47,10 @@
 | 唯一 mark | **ContextOsMark Full**（双弧 + 中轴 + 节点圆点）。组件：`frontend_next/components/context-os-mark.tsx`；静态：`public/brand/context-os-mark.svg`（浅底深墨，适暗 chrome）与 `app/icon.svg`（深底浅墨，favicon） |
 | 尺寸 | 由 `size` / CSS 槽控制（nav ~28px、shell ~32px、auth ~56px）；**禁止**组件硬编码 90px |
 | 填色 | React：plate=`currentColor`，ink=`--cos-mark-ink` 或 `background`；禁止仅双弧简化版混用 |
-| 禁止 | Dual-arc 简化标；绿块 + 三横线旧 mark；任意站点私自换 path |
+| 锁头布局 | 营销/家族顶栏用 **`.cos-brand-lockup` 横排**（mark + 「Context-OS」）；**禁止**营销壳复用 `.app-auth-brand-link` 的 column |
+| 对外命名 | 用户面 **Context-OS**；安装版 **Context-OS 客户端** / EN **Context-OS Client**；导航短标中文 **客户端**、英文 **Client**（勿用「桌面」作导航主文案） |
+| 多语言 | App 营销顶栏提供 中文/EN；Hub/Why/Canju 顶栏提供语言切换；禁止用户面 **AVRag** |
+| 禁止 | Dual-arc 简化标；绿块 + 三横线旧 mark；任意站点私自换 path；导航写「桌面」 |
 
 ### 3.2 产品家族导航
 

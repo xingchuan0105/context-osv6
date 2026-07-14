@@ -115,7 +115,7 @@ export default function ActivatePage() {
         <>
           <header className={styles.header}>
             <ContextOsMark size={64} style={{ margin: "0 auto" }} />
-            <h1 className={styles.title}>欢迎使用 AVRag Desktop</h1>
+            <h1 className={styles.title}>欢迎使用 Context-OS 客户端</h1>
             <p className={styles.subtitle}>请选择激活方式</p>
           </header>
 

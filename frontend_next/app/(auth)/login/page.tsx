@@ -142,7 +142,7 @@ export default function LoginPage() {
           </p>
           <p className="app-form-footnote" style={{ marginTop: "0.5rem" }}>
             <Link className="app-link app-link-muted" href="/desktop" data-testid="login-desktop-link">
-              {formatUiMessage(locale, "productChrome.desktop")}
+              {formatUiMessage(locale, "productChrome.client")}
             </Link>
           </p>
         </AuthFrame>

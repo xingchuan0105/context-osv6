@@ -85,9 +85,9 @@ export default function LicensesSummary() {
         </section>
 
         <section className="licenses-desktop">
-          <h2>桌面客户端</h2>
+          <h2>客户端</h2>
           <p>
-            桌面客户端安装包内另附声明；可在About对话框中查看。
+            客户端安装包内另附声明；可在 About 对话框中查看。
           </p>
         </section>
       </div>

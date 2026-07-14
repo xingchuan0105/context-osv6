@@ -27,5 +27,7 @@ describe("site-map", () => {
     expect(getAppPublicOrigin()).toMatch(/^https?:\/\//);
     expect(appAbsoluteUrl(APP_PATHS.desktop)).toContain("/desktop");
     expect(EXTERNAL.appDesktop()).toContain("desktop");
+    expect(familyNavLinks("zh").find((l) => l.id === "desktop")?.label).toBe("客户端");
+    expect(familyNavLinks("en").find((l) => l.id === "desktop")?.label).toBe("Client");
   });
 });
