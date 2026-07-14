@@ -106,7 +106,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       >
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
-            <ContextOsMark />
+            <ContextOsMark size={28} />
             <div style={{ display: "grid", gap: "0.15rem" }}>
               <strong>Context OS</strong>
               <span style={{ fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>

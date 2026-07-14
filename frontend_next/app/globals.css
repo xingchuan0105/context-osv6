@@ -82,11 +82,21 @@ textarea {
   text-underline-offset: 0.15em;
 }
 
+/* Auth card: large mark (size still passed via ContextOsMark size prop when set) */
 .app-auth-mark {
   display: block;
-  width: 5rem;
-  height: 5rem;
+  width: 3.5rem;
+  height: 3.5rem;
   color: hsl(var(--foreground));
+  --cos-mark-ink: hsl(var(--background));
+}
+
+/* Marketing / family chrome nav slot — must fit 56px header */
+.cos-mark--nav {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: hsl(var(--foreground));
+  --cos-mark-ink: hsl(var(--background));
 }
 
 .app-auth-brand-label {
@@ -469,6 +479,7 @@ a.dashboard-brand-title:hover {
   border-radius: 0.6rem;
   flex: none;
   color: hsl(var(--foreground));
+  --cos-mark-ink: hsl(var(--background));
 }
 
 .dashboard-brand-title {

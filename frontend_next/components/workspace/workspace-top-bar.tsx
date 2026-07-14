@@ -126,7 +126,7 @@ export function WorkspaceTopBar({
     <header className={styles.topBar} data-testid="workspace-top-bar" data-marketing-chrome="false">
       <div className={styles.topBarBrand}>
         <Link className={styles.topBarBrandBlock} href="/dashboard">
-          <ContextOsMark className={styles.topBarMark} />
+          <ContextOsMark size={32} className={styles.topBarMark} />
           <span className={styles.topBarBrandName}>Context-OS</span>
         </Link>
 

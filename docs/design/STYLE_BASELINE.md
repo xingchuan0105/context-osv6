@@ -44,9 +44,10 @@
 
 | 项 | 规范 |
 |----|------|
-| 唯一 mark | **ContextOsMark**（双弧「上下文」符号，见 `frontend_next/components/context-os-mark.tsx`） |
-| 填色 | `currentColor` 或 `hsl(var(--foreground))`；暗底反白 |
-| 禁止 | 绿块 + 三横线旧 mark；任意站点私自换标 |
+| 唯一 mark | **ContextOsMark Full**（双弧 + 中轴 + 节点圆点）。组件：`frontend_next/components/context-os-mark.tsx`；静态：`public/brand/context-os-mark.svg`（浅底深墨，适暗 chrome）与 `app/icon.svg`（深底浅墨，favicon） |
+| 尺寸 | 由 `size` / CSS 槽控制（nav ~28px、shell ~32px、auth ~56px）；**禁止**组件硬编码 90px |
+| 填色 | React：plate=`currentColor`，ink=`--cos-mark-ink` 或 `background`；禁止仅双弧简化版混用 |
+| 禁止 | Dual-arc 简化标；绿块 + 三横线旧 mark；任意站点私自换 path |
 
 ### 3.2 产品家族导航
 

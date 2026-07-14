@@ -65,7 +65,7 @@ export function DashboardHeader({
             target="_blank"
             title={formatUiMessage(locale, "productChrome.brandHome")}
           >
-            <ContextOsMark className="dashboard-brand-mark" />
+            <ContextOsMark size={36} className="dashboard-brand-mark" />
           </a>
         ) : (
           <Link
@@ -73,7 +73,7 @@ export function DashboardHeader({
             href={brandHref}
             title={formatUiMessage(locale, "productChrome.brandHome")}
           >
-            <ContextOsMark className="dashboard-brand-mark" />
+            <ContextOsMark size={36} className="dashboard-brand-mark" />
           </Link>
         )}
         <div>

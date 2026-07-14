@@ -28,7 +28,10 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  process.env.NEXT_PUBLIC_APP_ORIGIN?.trim() ||
+  "https://app.contextlm.top";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -38,9 +41,9 @@ export const metadata: Metadata = {
   },
   description: "Second-brain workspace for organizing, distributing, and querying knowledge with AI.",
   icons: {
-    icon: "/icon.svg",
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: "/icon.svg",
-    apple: "/apple-icon",
+    apple: "/icon.svg",
   },
   manifest: "/manifest.webmanifest",
   openGraph: {

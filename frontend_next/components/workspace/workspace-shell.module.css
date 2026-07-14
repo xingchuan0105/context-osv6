@@ -34,11 +34,13 @@
 }
 
 .topBarMark {
-  width: calc(var(--font-size-brand) * 2.4);
-  height: calc(var(--font-size-brand) * 2.4);
-  border-radius: 0.6rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
   flex: none;
   box-shadow: var(--shadow-sm);
+  color: hsl(var(--foreground));
+  --cos-mark-ink: hsl(var(--background));
 }
 
 .topBarWordmark {

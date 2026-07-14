@@ -114,7 +114,7 @@ export default function ActivatePage() {
       {view === "choice" ? (
         <>
           <header className={styles.header}>
-            <ContextOsMark style={{ width: "4rem", height: "4rem", margin: "0 auto" }} />
+            <ContextOsMark size={64} style={{ margin: "0 auto" }} />
             <h1 className={styles.title}>欢迎使用 AVRag Desktop</h1>
             <p className={styles.subtitle}>请选择激活方式</p>
           </header>

@@ -28,7 +28,7 @@ export function AuthFrame({ title, subtitle, children }: AuthFrameProps) {
       rel="noopener noreferrer"
       title={brandLabel}
     >
-      <ContextOsMark className="app-auth-mark" />
+      <ContextOsMark size={56} className="app-auth-mark" />
       <span className="app-auth-brand-label">{brandLabel}</span>
     </a>
   ) : (
@@ -38,7 +38,7 @@ export function AuthFrame({ title, subtitle, children }: AuthFrameProps) {
       href={brandHref}
       title={brandLabel}
     >
-      <ContextOsMark className="app-auth-mark" />
+      <ContextOsMark size={56} className="app-auth-mark" />
       <span className="app-auth-brand-label">{brandLabel}</span>
     </Link>
   );
@@ -82,7 +82,7 @@ export function DashboardShellPlaceholder() {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div className="brand-row">
-          <ContextOsMark />
+          <ContextOsMark size={36} />
           <div className="brand-copy">
             <div className="brand-title">Context OS</div>
             <div className="brand-subtitle">Dashboard foundation placeholder</div>
@@ -118,7 +118,7 @@ export function WorkspaceShellPlaceholder() {
     <main className="workspace-shell">
       <header className="workspace-topbar">
         <div className="brand-row">
-          <ContextOsMark />
+          <ContextOsMark size={36} />
           <div className="brand-copy">
             <div className="brand-title">Untitled Workspace</div>
             <div className="brand-subtitle">Three-column shell foundation placeholder</div>

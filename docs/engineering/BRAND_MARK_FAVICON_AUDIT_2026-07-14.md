@@ -1,7 +1,8 @@
 # 品牌 Mark / 标签页 Icon 全站审计清单
 
 **日期**: 2026-07-14  
-**状态**: Audit only（问题清单；修复另波）  
+**状态**: Audit + **Full 字形全站统一进行中/落地**（2026-07-14 决策：全部用 Full；M1–M3 实现）  
+
 **触发**: 品牌官网未用规范 SVG LOGO；部分页无 tab icon；`/desktop` 等页 mark 比例溢出框体  
 **规范源**: [`docs/design/STYLE_BASELINE.md`](../design/STYLE_BASELINE.md) §3.1 — 唯一 mark = **ContextOsMark**（双弧 + 规范填色）  
 **关联**: 多站 IA 计划、视觉基准 Monochrome Ink

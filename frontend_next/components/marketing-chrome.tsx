@@ -59,7 +59,7 @@ export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "
             style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}
             rel="noopener noreferrer"
           >
-            <ContextOsMark className="app-auth-mark" />
+            <ContextOsMark size={28} className="cos-mark--nav" />
             <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>Context-OS</span>
           </a>
         ) : (
@@ -68,7 +68,7 @@ export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "
             className="app-auth-brand-link"
             style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}
           >
-            <ContextOsMark className="app-auth-mark" />
+            <ContextOsMark size={28} className="cos-mark--nav" />
             <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>Context-OS</span>
           </Link>
         )}
