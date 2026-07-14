@@ -44,7 +44,7 @@ function MessageProgressCard({
       locale={locale}
       mode={snapshot.mode}
       startedAtMs={snapshot.startedAtMs}
-      onToggleCollapsed={() => setCollapsed((value) => !value)}
+      onToggleCollapsed={() => setCollapsed((value: boolean) => !value)}
     />
   );
 }
@@ -216,7 +216,8 @@ export function ChatMessageList({
     progress.mode != null &&
     !(assistantAtLiveSlot?.role === "assistant" && assistantAtLiveSlot.progress);
 
-  const liveProgressTimeline = showLiveProgress ? (
+  const liveProgressTimeline =
+    showLiveProgress && progress.mode != null ? (
     <ProgressTimeline
       activities={progress.activities}
       collapsed={progress.collapsed}

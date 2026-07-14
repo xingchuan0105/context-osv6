@@ -1,6 +1,12 @@
+"use client";
+
+import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { formatUiMessage } from "../lib/i18n/messages";
+import { useUiPreferences } from "../lib/ui-preferences";
 import { ContextOsMark } from "./context-os-mark";
+import { brandHomeHref } from "./product-chrome-footer";
 
 type AuthFrameProps = {
   title: string;
@@ -9,11 +15,39 @@ type AuthFrameProps = {
 };
 
 export function AuthFrame({ title, subtitle, children }: AuthFrameProps) {
+  const { locale } = useUiPreferences();
+  const brandHref = brandHomeHref();
+  const brandIsExternal = /^https?:\/\//i.test(brandHref);
+  const brandLabel = formatUiMessage(locale, "productChrome.brandHome");
+
+  const brandMark = brandIsExternal ? (
+    <a
+      className="app-auth-brand-link"
+      data-testid="auth-brand-home"
+      href={brandHref}
+      rel="noopener noreferrer"
+      title={brandLabel}
+    >
+      <ContextOsMark className="app-auth-mark" />
+      <span className="app-auth-brand-label">{brandLabel}</span>
+    </a>
+  ) : (
+    <Link
+      className="app-auth-brand-link"
+      data-testid="auth-brand-home"
+      href={brandHref}
+      title={brandLabel}
+    >
+      <ContextOsMark className="app-auth-mark" />
+      <span className="app-auth-brand-label">{brandLabel}</span>
+    </Link>
+  );
+
   return (
     <main className="app-auth-shell">
       <section className="app-surface-card app-auth-card">
         <div className="app-auth-header">
-          <ContextOsMark className="app-auth-mark" />
+          {brandMark}
           <h1 className="app-auth-title">{title}</h1>
           <p className="app-page-subtitle app-auth-subtitle">{subtitle}</p>
         </div>

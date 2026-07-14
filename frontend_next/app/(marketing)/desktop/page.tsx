@@ -1,10 +1,20 @@
+"use client";
+
 import Link from "next/link";
 
+import {
+  DesktopDownloadButton,
+  DesktopReleaseDetails,
+} from "@/components/desktop/DesktopDownloadButton";
 import styles from "@/components/desktop/desktop.module.css";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { useUiPreferences } from "@/lib/ui-preferences";
 
 export default function DesktopProductPage() {
+  const { locale } = useUiPreferences();
+
   return (
-    <main className="app-page-shell" style={{ background: "#f6f5f4" }}>
+    <main className="app-page-shell" style={{ background: "hsl(var(--surface-muted))" }}>
       <div className="app-page-center" style={{ maxWidth: "42rem" }}>
         <header className="app-page-heading" style={{ textAlign: "center" }}>
           <h1 className="app-page-title">AVRag Desktop</h1>
@@ -21,14 +31,46 @@ export default function DesktopProductPage() {
             <li>与 SaaS 工作区数据互通（可选同步）</li>
           </ul>
 
-          <div className="app-button-row" style={{ justifyContent: "center", marginTop: "1.25rem" }}>
-            <Link href="/desktop/buy" className="app-button-primary">
-              购买授权
+          <div
+            className="app-button-row"
+            style={{ justifyContent: "center", marginTop: "1.25rem", flexWrap: "wrap" }}
+          >
+            <DesktopDownloadButton />
+            <Link href="/desktop/buy" className="app-button-secondary">
+              {formatUiMessage(locale, "desktop.buyCta")}
             </Link>
-            <Link href="/help" className="app-button-secondary">
-              了解更多
+            <Link href="/help" className="app-button-ghost">
+              {formatUiMessage(locale, "desktop.learnMore")}
             </Link>
           </div>
+
+          <DesktopReleaseDetails />
+        </section>
+
+        <section className={styles.card} style={{ marginTop: "1rem" }}>
+          <h2 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem" }}>
+            {formatUiMessage(locale, "desktop.installTitle")}
+          </h2>
+          <ol style={{ margin: 0, paddingLeft: "1.25rem", color: "hsl(var(--muted-foreground))" }}>
+            <li style={{ marginBottom: "0.4rem" }}>
+              {formatUiMessage(locale, "desktop.installStep1")}
+            </li>
+            <li style={{ marginBottom: "0.4rem" }}>
+              {formatUiMessage(locale, "desktop.installStep2")}
+            </li>
+            <li style={{ marginBottom: "0.4rem" }}>
+              {formatUiMessage(locale, "desktop.installStep3")}
+            </li>
+          </ol>
+          <p
+            style={{
+              margin: "0.75rem 0 0",
+              fontSize: "0.85rem",
+              color: "hsl(var(--subtle-foreground))",
+            }}
+          >
+            {formatUiMessage(locale, "desktop.smartScreenHint")}
+          </p>
         </section>
       </div>
     </main>

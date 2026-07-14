@@ -301,12 +301,13 @@ describe("SettingsSurface", () => {
     );
 
     await waitFor(() => {
-      // Current plan summary shows Pro; billing CTA is portal-only (manage subscription).
+      // Current plan summary only; manage subscription is a single CTA → /pricing.
       expect(screen.getAllByText("Pro").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Active")).toBeTruthy();
-      expect(screen.getAllByText(/管理订阅|Manage subscription/i).length).toBeGreaterThanOrEqual(1);
-      // In-app plan change is always available (portal may fall back to Creem/Alipay pricing).
-      expect(screen.getAllByText(/更换方案|Change plan/i).length).toBeGreaterThanOrEqual(1);
+      const manage = screen.getByTestId("settings-manage-subscription");
+      expect(manage.getAttribute("href")).toBe("/pricing");
+      expect(screen.queryByTestId("settings-change-plan")).toBeNull();
+      expect(screen.queryByTestId("settings-plan-picker")).toBeNull();
       expect(screen.getByTestId("settings-back-dashboard")).toBeTruthy();
       expect(screen.getByTestId("product-chrome-footer")).toBeTruthy();
     });
@@ -393,41 +394,10 @@ describe("SettingsSurface", () => {
     expect(mocks.replaceMock).toHaveBeenCalledWith("/login");
   });
 
-  it("shows reset password entry only when enabled", () => {
-    mocks.authState = {
-      token: "token-123",
-      user: {
-        id: "user-1",
-        email: "owner@example.com",
-        full_name: "Owner",
-      },
-      clearAuth: mocks.clearAuthMock,
-      updateUser: mocks.updateUserMock,
-      logout: mocks.logoutMock,
-      passwordResetEnabled: false,
-    };
-
-    const { rerender } = renderWithQuery(<SettingsSurface activeTab="security" />);
+  it("does not show reset password entry in settings security", () => {
+    renderWithQuery(<SettingsSurface activeTab="security" />);
 
     expect(screen.queryByRole("link", { name: "Reset password" })).toBeNull();
-
-    mocks.authState = {
-      token: "token-123",
-      user: {
-        id: "user-1",
-        email: "owner@example.com",
-        full_name: "Owner",
-      },
-      clearAuth: mocks.clearAuthMock,
-      updateUser: mocks.updateUserMock,
-      logout: mocks.logoutMock,
-      passwordResetEnabled: true,
-    };
-
-    rerender(rerenderWithQuery(<SettingsSurface activeTab="security" />));
-
-    expect(screen.getByRole("link", { name: "Reset password" }).getAttribute("href")).toBe(
-      "/reset-password",
-    );
+    expect(screen.queryByRole("link", { name: "重置密码" })).toBeNull();
   });
 });

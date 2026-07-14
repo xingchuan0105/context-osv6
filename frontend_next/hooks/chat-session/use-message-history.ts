@@ -15,7 +15,7 @@ export function useMessageHistory(token: string, locale: "zh-CN" | "en") {
         return;
       }
       const response = await listWorkspaceSessionMessages(token, sessionId);
-      setMessages(response.messages.map(mapTranscriptMessage));
+      setMessages(response.messages.map((message) => mapTranscriptMessage(message, locale)));
     },
     [token, locale],
   );

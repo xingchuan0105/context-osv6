@@ -4,6 +4,7 @@ import { adminMessages } from "./admin";
 import { authMessages } from "./auth";
 import { commonMessages } from "./common";
 import { dashboardMessages } from "./dashboard";
+import { desktopMessages } from "./desktop";
 import { gateMessages } from "./gate";
 import { helpMessages } from "./help";
 import { homeMessages } from "./home";
@@ -23,6 +24,7 @@ export const UI_MESSAGES = {
   ...authMessages,
   ...commonMessages,
   ...dashboardMessages,
+  ...desktopMessages,
   ...gateMessages,
   ...helpMessages,
   ...homeMessages,

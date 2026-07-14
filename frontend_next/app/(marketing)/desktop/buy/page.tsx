@@ -3,12 +3,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { DesktopDownloadButton } from "@/components/desktop/DesktopDownloadButton";
 import styles from "@/components/desktop/desktop.module.css";
 import {
   createLicenseCheckout,
   fetchMyLicenses,
 } from "@/lib/desktop/license-client";
 import { useAuth } from "@/lib/auth/context";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { useUiPreferences } from "@/lib/ui-preferences";
 
 const DESKTOP_TIERS = [
   {
@@ -35,6 +38,7 @@ export default function DesktopBuyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const auth = useAuth();
+  const { locale } = useUiPreferences();
   const deviceId = searchParams.get("device_id") ?? "";
   const checkoutSuccess = searchParams.get("success") === "1";
   const [purchasedKey, setPurchasedKey] = useState<string | null>(null);
@@ -96,7 +100,7 @@ export default function DesktopBuyPage() {
   }
 
   return (
-    <main className="app-page-shell" style={{ background: "#f6f5f4" }}>
+    <main className="app-page-shell" style={{ background: "hsl(var(--surface-muted))" }}>
       <div className="app-page-center" style={{ maxWidth: "42rem" }}>
         <header className="app-page-heading" style={{ textAlign: "center" }}>
           <h1 className="app-page-title">AVRag Desktop</h1>
@@ -173,6 +177,13 @@ export default function DesktopBuyPage() {
             </a>
 
             <p className={styles.subtitle}>或手动输入授权码激活</p>
+
+            <div style={{ marginTop: "1.25rem" }}>
+              <p className={styles.subtitle} style={{ marginBottom: "0.5rem" }}>
+                {formatUiMessage(locale, "desktop.needClientHint")}
+              </p>
+              <DesktopDownloadButton className="app-button-secondary" compact />
+            </div>
           </section>
         )}
       </div>

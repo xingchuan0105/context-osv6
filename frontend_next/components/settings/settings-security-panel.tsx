@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -12,7 +11,7 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 
 export function SecurityPanel() {
   const router = useRouter();
-  const { clearAuth, logout, passwordResetEnabled, token, user } = useAuth();
+  const { clearAuth, logout, token, user } = useAuth();
   const { locale, theme } = useUiPreferences();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -104,11 +103,6 @@ export function SecurityPanel() {
                 ? formatUiMessage(locale, "settings.security.updating")
                 : formatUiMessage(locale, "settings.security.changePasswordAction")}
             </button>
-            {passwordResetEnabled ? (
-              <Link className="app-button-secondary" href="/reset-password">
-                {formatUiMessage(locale, "settings.security.resetPasswordAction")}
-              </Link>
-            ) : null}
             <button className="app-button-ghost" type="button" onClick={() => void handleLogout()}>
               {formatUiMessage(locale, "workspaceLogout")}
             </button>

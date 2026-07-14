@@ -10,6 +10,7 @@ import { useProgressTracker } from "./chat-session/use-progress-tracker";
 import type {
   ProgressEntry,
   UiChatMessage,
+  UiProgressSnapshot,
   UseChatSessionOptions,
   UseChatSessionResult,
 } from "./chat-session/types";

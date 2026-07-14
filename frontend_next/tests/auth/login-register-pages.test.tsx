@@ -81,6 +81,10 @@ describe("login and register pages", () => {
 
     render(<LoginPage />);
 
+    const brandHome = screen.getByTestId("auth-brand-home");
+    expect(brandHome.getAttribute("href")).toBe("https://www.contextlm.top");
+    expect(brandHome).toHaveTextContent("品牌官网");
+
     expect((screen.getByLabelText("密码") as HTMLInputElement).placeholder).toBe("至少 8 位");
 
     await user.type(screen.getByLabelText("邮箱"), "user@example.com");
