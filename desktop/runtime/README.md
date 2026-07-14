@@ -1,4 +1,4 @@
-# Context-OS Client local data plane + product
+# Context-OS local data plane + product
 
 Full **Milvus** + PostgreSQL + Redis for the desktop client, plus optional **avrag-api / avrag-worker** processes and a **local B2C personal session** (no cloud login).
 

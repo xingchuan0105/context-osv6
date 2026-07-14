@@ -30,8 +30,10 @@ mod tests {
 
     #[test]
     fn parse_activate_key_extracts_license_key() {
-        let key = parse_activate_key("avrag-desktop://activate?key=AVRG-TEST-KEY").expect("key");
+        let key = parse_activate_key("context-os://activate?key=AVRG-TEST-KEY").expect("key");
         assert_eq!(key, "AVRG-TEST-KEY");
+        let legacy = parse_activate_key("avrag-desktop://activate?key=LEGACY-KEY").expect("legacy");
+        assert_eq!(legacy, "LEGACY-KEY");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build AVRag Desktop Windows NSIS installer (setup.exe).
+# Build Context-OS Windows NSIS installer (setup.exe).
 # Prefer running on Windows; on Ubuntu/WSL needs: mingw-w64, nsis, rust target x86_64-pc-windows-gnu.
 set -euo pipefail
 

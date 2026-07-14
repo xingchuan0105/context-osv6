@@ -3,8 +3,8 @@ name = "avrag-desktop"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "AVRag Desktop Client - Tauri 2 桌面壳"
-authors = ["AVRag Team"]
+description = "Context-OS Client - Tauri 2 desktop shell"
+authors = ["Context-OS"]
 
 [lib]
 name = "avrag_desktop_lib"

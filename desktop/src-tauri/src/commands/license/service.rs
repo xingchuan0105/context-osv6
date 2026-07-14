@@ -54,7 +54,9 @@ pub fn offline_grace_days(last_heartbeat: i64, now: i64) -> i32 {
 
 pub fn parse_activate_key(raw_url: &str) -> Option<String> {
     let parsed = Url::parse(raw_url).ok()?;
-    if parsed.scheme() != "avrag-desktop" {
+    // Preferred scheme is context-os; avrag-desktop kept as one-way legacy alias.
+    let scheme = parsed.scheme();
+    if scheme != "context-os" && scheme != "avrag-desktop" {
         return None;
     }
 

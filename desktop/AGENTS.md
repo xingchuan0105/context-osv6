@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-这是 AVRag 的桌面客户端，基于 Tauri 2 构建，复用现有 `frontend_next` 静态资源 + `avrag-rs` Rust 核心。
+这是 Context-OS 桌面客户端，基于 Tauri 2 构建，复用现有 `frontend_next` 静态资源 + `avrag-rs` Rust 核心。
 
 ## 架构设计
 

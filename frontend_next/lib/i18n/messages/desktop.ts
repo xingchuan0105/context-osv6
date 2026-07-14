@@ -2,8 +2,8 @@ import type { UiMessageDescriptor } from "./types";
 
 export const desktopMessages = {
   "desktop.productTitle": {
-    zh: "Context-OS 客户端",
-    en: "Context-OS Client",
+    zh: "Context-OS",
+    en: "Context-OS",
   },
   "desktop.productSubtitle": {
     zh: "本地 AI 知识助手。自带 LLM API Key，离线优先，数据留在本机。",
@@ -86,8 +86,8 @@ export const desktopMessages = {
     en: "Run the installer (Windows 10+ with WebView2)",
   },
   "desktop.installStep3": {
-    zh: "购买授权后，在客户端粘贴密钥，或点击「在 Context-OS 客户端中激活」",
-    en: "After purchase, paste the license key in the client or open Activate in Context-OS Client",
+    zh: "购买授权后，在客户端粘贴密钥，或点击「在 Context-OS 中激活」",
+    en: "After purchase, paste the license key in the client or open Activate in Context-OS",
   },
   "desktop.smartScreenHint": {
     zh: "若 SmartScreen 提示未知应用，选择「仍要运行」（正式签名信誉积累前属正常现象）。",
@@ -106,23 +106,23 @@ export const desktopMessages = {
     en: "Open cloud app",
   },
   "desktop.activateInClient": {
-    zh: "在 Context-OS 客户端中激活",
-    en: "Activate in Context-OS Client",
+    zh: "在 Context-OS 中激活",
+    en: "Activate in Context-OS",
   },
   "desktop.buyTitle": {
-    zh: "Context-OS 客户端",
-    en: "Context-OS Client",
+    zh: "Context-OS",
+    en: "Context-OS",
   },
   "desktop.buySubtitle": {
     zh: "本地 AI 知识助手",
     en: "Local AI knowledge assistant",
   },
   "desktop.welcomeTitle": {
-    zh: "欢迎使用 Context-OS 客户端",
-    en: "Welcome to Context-OS Client",
+    zh: "欢迎使用 Context-OS",
+    en: "Welcome to Context-OS",
   },
   "desktop.licensesSubtitle": {
-    zh: "管理 Context-OS 客户端授权与已激活设备",
-    en: "Manage Context-OS Client licenses and activated devices",
+    zh: "管理 Context-OS 授权与已激活设备",
+    en: "Manage Context-OS licenses and activated devices",
   },
 } satisfies Record<string, UiMessageDescriptor>;

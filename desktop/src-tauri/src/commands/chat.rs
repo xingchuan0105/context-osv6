@@ -10,7 +10,7 @@ use crate::commands::api::IpcApiError;
 const LLM_NOT_CONFIGURED: &str =
     "LLM is not configured. Open Settings → AI Model to add your API key.";
 pub const LICENSE_REQUIRED: &str =
-    "License required. Please activate Context-OS Client first.";
+    "License required. Please activate Context-OS first.";
 
 pub fn chat_event_channel(request_id: &str) -> String {
     format!("chat://{request_id}")

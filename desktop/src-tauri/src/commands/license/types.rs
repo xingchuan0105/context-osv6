@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) const LICENSE_FILENAME: &str = "license.json";
 pub(crate) const DEVICE_SALT: &str = "avrag-desktop-salt";
-/// Local trial length for Context-OS Client (no cloud account).
+/// Local trial length for Context-OS (no cloud account).
 pub(crate) const TRIAL_DURATION_DAYS: i64 = 21;
 pub(crate) const TRIAL_DURATION_SECS: i64 = TRIAL_DURATION_DAYS * 24 * 60 * 60;
 pub(crate) const OFFLINE_GRACE_SECS: i64 = 30 * 24 * 60 * 60;

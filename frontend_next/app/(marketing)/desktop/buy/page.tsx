@@ -171,7 +171,7 @@ export default function DesktopBuyPage() {
             </div>
 
             <a
-              href={`avrag-desktop://activate?key=${encodeURIComponent(purchasedKey)}`}
+              href={`context-os://activate?key=${encodeURIComponent(purchasedKey)}`}
               className="app-button-primary"
               style={{ display: "inline-flex", marginBottom: "0.75rem" }}
             >

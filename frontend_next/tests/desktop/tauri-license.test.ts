@@ -92,8 +92,8 @@ describe("tauri-license", () => {
   });
 
   it("licenseKindLabel_mapsKinds", () => {
-    expect(licenseKindLabel("pro")).toBe("Context-OS Client Pro");
-    expect(licenseKindLabel("standard")).toBe("Context-OS Client Standard");
-    expect(licenseKindLabel("trial")).toBe("Context-OS Client Trial");
+    expect(licenseKindLabel("pro")).toBe("Context-OS Pro");
+    expect(licenseKindLabel("standard")).toBe("Context-OS Standard");
+    expect(licenseKindLabel("trial")).toBe("Context-OS Trial");
   });
 });

@@ -7,7 +7,7 @@ import {
 } from "@/lib/desktop/release-manifest";
 
 const sample: DesktopReleaseManifest = {
-  product: "Context-OS Client",
+  product: "Context-OS",
   version: "0.1.0",
   published_at: "2026-07-14T00:00:00Z",
   platforms: {

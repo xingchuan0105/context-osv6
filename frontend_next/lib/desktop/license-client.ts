@@ -100,9 +100,9 @@ export function licenseStatusLabel(status: string): string {
 
 export function licenseKindDisplay(kind: string): string {
   const normalized = kind.toLowerCase();
-  if (normalized.includes("pro")) return "Context-OS Client Pro";
-  if (normalized.includes("standard")) return "Context-OS Client Standard";
-  if (normalized.includes("trial")) return "Context-OS Client Trial";
+  if (normalized.includes("pro")) return "Context-OS Pro";
+  if (normalized.includes("standard")) return "Context-OS Standard";
+  if (normalized.includes("trial")) return "Context-OS Trial";
   return kind;
 }
 

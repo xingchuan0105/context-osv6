@@ -58,8 +58,8 @@ export const commonMessages = {
     en: "Open app",
   },
   "productName.client": {
-    zh: "Context-OS 客户端",
-    en: "Context-OS Client",
+    zh: "Context-OS",
+    en: "Context-OS",
   },
   "productName.short": {
     zh: "Context-OS",

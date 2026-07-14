@@ -92,9 +92,9 @@ export async function listenDeepLinkActivate(onKey: (key: string) => void): Prom
 }
 
 export function licenseKindLabel(kind: LicenseKind): string {
-  if (kind === "pro") return "Context-OS Client Pro";
-  if (kind === "standard") return "Context-OS Client Standard";
-  return "Context-OS Client Trial";
+  if (kind === "pro") return "Context-OS Pro";
+  if (kind === "standard") return "Context-OS Standard";
+  return "Context-OS Trial";
 }
 
 export function licenseSeatsMax(kind: LicenseKind): number {

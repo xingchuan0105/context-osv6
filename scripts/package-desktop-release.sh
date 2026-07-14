@@ -131,7 +131,7 @@ cp -f "$ROOT/desktop/runtime/README.md" "$SIDECAR_STAGE/" 2>/dev/null || true
 cp -f "$ROOT/scripts/desktop-local-stack.sh" "$SIDECAR_STAGE/" 2>/dev/null || true
 cp -f "$ROOT/scripts/desktop-local-product.sh" "$SIDECAR_STAGE/" 2>/dev/null || true
 cat >"$SIDECAR_STAGE/INSTALL.txt" <<'SIDEEOF'
-Context-OS Client — companion runtime (data plane + product binaries)
+Context-OS — companion runtime (data plane + product binaries)
 
 1. Install Docker Desktop (Windows/Mac) or Docker Engine (Linux).
    Windows: https://docs.docker.com/desktop/setup/install/windows-install/

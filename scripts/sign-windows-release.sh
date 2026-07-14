@@ -26,7 +26,7 @@ command -v osslsigncode >/dev/null 2>&1 || die "osslsigncode missing (sudo apt-g
 CERT_FILE="${WINDOWS_CERTIFICATE_FILE:-}"
 CERT_PASS="${WINDOWS_CERTIFICATE_PASSWORD:-}"
 TS_URL="${WINDOWS_TIMESTAMP_URL:-http://timestamp.digicert.com}"
-DESC="${WINDOWS_SIGN_DESCRIPTION:-Context-OS Client}"
+DESC="${WINDOWS_SIGN_DESCRIPTION:-Context-OS}"
 URL="${WINDOWS_SIGN_URL:-https://app.contextlm.top}"
 ALLOW_SELF="${SIGN_ALLOW_SELF_SIGNED:-0}"
 SIGNING_DIR="$ROOT/desktop/signing"
