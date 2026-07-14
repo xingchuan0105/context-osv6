@@ -60,6 +60,8 @@ curl -sS -m 8 -o /dev/null -w "pub_health:%{http_code}\n" https://app.contextlm.
 curl -sS -m 8 -o /dev/null -w "pub_desktop:%{http_code}\n" https://app.contextlm.top/desktop
 curl -sS -m 8 -o /dev/null -w "pub_latest:%{http_code}\n" https://app.contextlm.top/releases/desktop/latest.json
 curl -sS -m 8 -o /dev/null -w "pub_why:%{http_code}\n" https://whyimright.contextlm.top/
+curl -sS -m 8 -o /dev/null -w "pub_landing:%{http_code}\n" https://contextlm.top/
+curl -sS -m 8 -o /dev/null -w "pub_canju:%{http_code}\n" https://canju.contextlm.top/
 echo "--- desktop latest (remote) ---"
 curl -sS -m 8 https://app.contextlm.top/releases/desktop/latest.json 2>/dev/null | head -c 400
 echo

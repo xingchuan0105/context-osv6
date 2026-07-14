@@ -38,9 +38,16 @@ echo "vps-pull-config: fetching from ${VPS_MAIN_HOST} → deploy/pulled/${STAMP}
 if [[ -f "$OUT/$STAMP/avrag-frontend.service" ]]; then
   cp -f "$OUT/$STAMP/avrag-frontend.service" "$ROOT/deploy/systemd/avrag-frontend.service"
 fi
-if [[ -f "$OUT/$STAMP/app-contextlm.conf" ]]; then
-  cp -f "$OUT/$STAMP/app-contextlm.conf" "$ROOT/deploy/nginx/app-contextlm.conf"
-fi
+for unit in why-frontend.service why-api.service; do
+  if [[ -f "$OUT/$STAMP/$unit" ]]; then
+    cp -f "$OUT/$STAMP/$unit" "$ROOT/deploy/systemd/$unit"
+  fi
+done
+for conf in app-contextlm.conf canju.conf context-os-landing.conf whyiamright.conf; do
+  if [[ -f "$OUT/$STAMP/$conf" ]]; then
+    cp -f "$OUT/$STAMP/$conf" "$ROOT/deploy/nginx/$conf"
+  fi
+done
 
 # Ignore pulled snapshots in git by default (keep canonical deploy/nginx + systemd tracked)
 echo "vps-pull-config: wrote $OUT/$STAMP"

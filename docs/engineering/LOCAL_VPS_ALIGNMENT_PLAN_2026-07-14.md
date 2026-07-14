@@ -1,11 +1,11 @@
 # 本地 ↔ VPS 对齐方案
 
 **日期**: 2026-07-14  
-**状态**: Plan + **P0/P1/P2-backend 已落地**（2026-07-14）  
+**状态**: Plan + **P0/P1/P2 已落地**（2026-07-14）  
 - P0: `deploy-frontend.sh` / `deploy-status.sh`；frontend 发版写 `DEPLOYED.txt`  
 - P1: `vps-pull-config.sh`；`deploy/nginx` + `deploy/systemd` 入库；AGENTS/SOLO 写明「发版只走 `scripts/deploy-*`」  
 - P2-backend: `deploy-backend.sh` + `deploy/docker/run-avrag-containers.sh`（API/worker + migrations/prompts）  
-- P2-public-sites: 仍待（landing/why/canju 统一入口）  
+- P2-public-sites: `deploy-public-sites.sh`（landing / why / canju）；nginx 片段 `deploy/nginx/{canju,context-os-landing,whyiamright}.conf`  
 
 **问题**: 部分产物/配置直接写在 VPS；页面与脚本改在本地磁盘。两端无单一真相，易漂移。  
 **原则**: **源码与可重建配置只认本地 trunk；VPS 只跑「发布物」与「运行时状态」。**
@@ -74,7 +74,8 @@
 | App 前端 | `cd frontend_next && pnpm build` | `.next/standalone` + static + public | `/opt/avrag-rs/frontend` + `avrag-frontend.service` | `scripts/deploy-frontend.sh` |
 | Desktop 包 | package 脚本 | `dist/desktop-release/` | `/var/www/releases/desktop/` | **已有** `package-desktop-release.sh` + `publish-desktop-release.sh` |
 | Migrations / prompts | 随后端包 | 仓库目录 | `/opt/avrag-rs/migrations` `prompts` | 后端 deploy 一并 rsync |
-| Landing / Canju / Ghost / Why | 各仓 build | 静态或 standalone | `/var/www/*` `/opt/whyiamright` | 各 `publish-*.sh` 或统一 `deploy-public-sites.sh` |
+| Landing / Canju / Why | 各仓 build（路径可 `LANDING_DIR`/`WHY_DIR`/`CCHESS_DIR`） | 静态或 standalone | `/var/www/*` `/opt/whyiamright` | **`scripts/deploy-public-sites.sh`** |
+| Ghost blog | CMS 内容（Docker） | — | `ghost-blog` 容器 | 不在 artifact 发版路径（内容在 Ghost） |
 
 **禁止**：SSH 上 VPS 直接改 React/TS/业务逻辑再「凑合用」。
 
@@ -224,7 +225,7 @@ P0  ✅ 用脚本重发 frontend，写 DEPLOYED.txt(rev=…)
 P1  ✅ vps-pull-config：nginx + systemd 入库
 P1  ✅ 文档：本文件链到 AGENTS.md / SOLO「发版只走 scripts/deploy-*」
 P2  ✅ deploy-backend.sh 收口 API/worker
-P2  ⬜ 公域站（landing/why/canju）统一 publish 入口
+P2  ✅ 公域站（landing/why/canju）统一 `deploy-public-sites.sh`
 ```
 
 ---
@@ -257,6 +258,13 @@ ASSETS_ONLY=1 bash scripts/deploy-backend.sh
 # Desktop 安装包
 bash scripts/package-desktop-release.sh && bash scripts/publish-desktop-release.sh
 
+# 公域站（landing / why / canju；卫星仓默认 $HOME 下）
+bash scripts/deploy-public-sites.sh
+bash scripts/deploy-public-sites.sh landing why   # 子集
+SKIP_BUILD=1 bash scripts/deploy-public-sites.sh canju
+# 可选：同步 nginx 片段并 reload
+# APPLY_NGINX=1 bash scripts/deploy-public-sites.sh
+
 # 对账
 bash scripts/deploy-status.sh
 
@@ -264,4 +272,4 @@ bash scripts/deploy-status.sh
 bash scripts/vps-pull-config.sh
 ```
 
-**下一步**：P2 公域站统一入口（可选）；日常发版一律走上表脚本。
+**下一步**：日常发版一律走上表脚本；Ghost 内容仍走 Ghost 管理台。
