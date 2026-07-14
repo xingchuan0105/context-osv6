@@ -32,8 +32,8 @@ mod tests {
     fn sample_document() -> Document {
         Document {
             id: "doc-1".to_string(),
-            org_id: "org-1".to_string(),
-            notebook_id: "nb-1".to_string(),
+            owner_user_id: "user-1".to_string(),
+            workspace_id: "ws-1".to_string(),
             owner_id: "user-1".to_string(),
             file_name: "report.pdf".to_string(),
             mime_type: "application/pdf".to_string(),

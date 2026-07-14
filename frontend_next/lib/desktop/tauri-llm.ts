@@ -63,6 +63,35 @@ export type LocalStackStatus = {
   overall_ok: boolean;
   services: LocalStackServiceStatus[];
   compose_hint: string;
+  script_path?: string | null;
+  env_file_path?: string | null;
+  env_file_exists?: boolean;
+};
+
+export type ClientRuntimeConfig = {
+  database_url: string;
+  redis_url: string;
+  milvus_url: string;
+  pg_host: string;
+  pg_port: number;
+  redis_host: string;
+  redis_port: number;
+  milvus_host: string;
+  milvus_port: number;
+  migrations_dir?: string | null;
+  env_file_path?: string | null;
+  env_file_exists: boolean;
+  monorepo_root?: string | null;
+  note: string;
+};
+
+export type EnsureLocalStackResult = {
+  ok: boolean;
+  message: string;
+  stdout: string;
+  stderr: string;
+  status: LocalStackStatus;
+  config: ClientRuntimeConfig;
 };
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -92,6 +121,18 @@ export async function listAvailableModels(config: LocalLlmConfig): Promise<strin
 
 export async function getLocalStackStatus(): Promise<LocalStackStatus> {
   return invoke<LocalStackStatus>("get_local_stack_status");
+}
+
+export async function getClientRuntimeConfig(): Promise<ClientRuntimeConfig> {
+  return invoke<ClientRuntimeConfig>("get_client_runtime_config");
+}
+
+export async function ensureLocalStack(): Promise<EnsureLocalStackResult> {
+  return invoke<EnsureLocalStackResult>("ensure_local_stack");
+}
+
+export async function stopLocalStack(): Promise<EnsureLocalStackResult> {
+  return invoke<EnsureLocalStackResult>("stop_local_stack");
 }
 
 export type RepairActionResult = {

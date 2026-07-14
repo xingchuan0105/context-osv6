@@ -23,7 +23,9 @@ use commands::llm_config::{
     diagnose_llm, get_llm_config, list_available_models, set_llm_config, test_llm_connection,
 };
 use commands::local::{get_backend_status, init_local_backend, list_local_documents};
-use commands::local_stack::get_local_stack_status;
+use commands::local_stack::{
+    ensure_local_stack, get_client_runtime_config, get_local_stack_status, stop_local_stack,
+};
 use commands::system::{get_app_data_dir, get_app_version, is_tauri_environment};
 use registry::ChatStreamRegistry;
 
@@ -57,7 +59,10 @@ pub fn run() {
             test_llm_connection,
             diagnose_llm,
             list_available_models,
-            get_local_stack_status
+            get_local_stack_status,
+            get_client_runtime_config,
+            ensure_local_stack,
+            stop_local_stack
         ])
         .setup(|app| {
             #[cfg(any(windows, target_os = "linux"))]

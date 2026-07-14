@@ -13,10 +13,14 @@ import {
   openInBrowser,
 } from "@/lib/desktop/tauri-license";
 import {
+  ensureLocalStack,
+  getClientRuntimeConfig,
   getLlmConfig,
   getLocalStackStatus,
   setLlmConfig,
+  stopLocalStack,
   testLlmConnection,
+  type ClientRuntimeConfig,
   type LocalLlmConfig,
   type LocalStackStatus,
 } from "@/lib/desktop/tauri-llm";
@@ -43,6 +47,8 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   const [licenseLabel, setLicenseLabel] = useState("");
   const [licenseDetail, setLicenseDetail] = useState("");
   const [stack, setStack] = useState<LocalStackStatus | null>(null);
+  const [runtimeConfig, setRuntimeConfig] = useState<ClientRuntimeConfig | null>(null);
+  const [stackBusy, setStackBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -81,7 +87,69 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     void getLocalStackStatus()
       .then(setStack)
       .catch(() => setStack(null));
+
+    void getClientRuntimeConfig()
+      .then(setRuntimeConfig)
+      .catch(() => setRuntimeConfig(null));
   }, [open]);
+
+  async function refreshStack() {
+    setLoading(true);
+    setError("");
+    try {
+      const [nextStack, nextConfig] = await Promise.all([
+        getLocalStackStatus(),
+        getClientRuntimeConfig(),
+      ]);
+      setStack(nextStack);
+      setRuntimeConfig(nextConfig);
+      setMessage(nextStack.overall_ok ? "本机数据栈全部就绪" : "部分服务未就绪");
+    } catch (probeError) {
+      setError(probeError instanceof Error ? probeError.message : "探测失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleEnsureStack() {
+    setStackBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await ensureLocalStack();
+      setStack(result.status);
+      setRuntimeConfig(result.config);
+      if (result.ok) {
+        setMessage(result.message);
+      } else {
+        setError(result.message || result.stderr || "启动失败");
+      }
+    } catch (ensureError) {
+      setError(ensureError instanceof Error ? ensureError.message : "启动本机栈失败");
+    } finally {
+      setStackBusy(false);
+    }
+  }
+
+  async function handleStopStack() {
+    setStackBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await stopLocalStack();
+      setStack(result.status);
+      setRuntimeConfig(result.config);
+      if (result.ok) {
+        setMessage(result.message);
+      } else {
+        setError(result.message || result.stderr || "停止失败");
+      }
+    } catch (stopError) {
+      setError(stopError instanceof Error ? stopError.message : "停止本机栈失败");
+    } finally {
+      setStackBusy(false);
+    }
+  }
 
   if (!open) {
     return null;
@@ -144,17 +212,6 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     setProvider(preset.id);
     setBaseUrl(preset.base_url);
     setModel(preset.model);
-  }
-
-  async function refreshStack() {
-    setLoading(true);
-    try {
-      setStack(await getLocalStackStatus());
-    } catch {
-      setError("无法探测本机数据栈");
-    } finally {
-      setLoading(false);
-    }
   }
 
   const tabs: { id: DrawerTab; label: string }[] = [
@@ -321,7 +378,8 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         {tab === "stack" ? (
           <div className={styles.drawerSection}>
             <p className={styles.subtitle}>
-              本机数据面：PostgreSQL、Redis、完整 Milvus。首次请启动本地栈后再索引文档。
+              本机数据面：PostgreSQL、Redis、完整 Milvus。一键「启动并迁移」会拉起 Docker
+              栈、写出 client.env，并对本机库执行 schema migrations。
             </p>
             {stack ? (
               <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.5rem" }}>
@@ -338,13 +396,59 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
             ) : (
               <p className={styles.subtitle}>尚未探测（仅桌面运行时可用）</p>
             )}
-            <div className="app-button-row" style={{ marginTop: "0.75rem" }}>
-              <button type="button" className="app-button-secondary" disabled={loading} onClick={() => void refreshStack()}>
+            <div className="app-button-row" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="app-button-primary"
+                disabled={loading || stackBusy}
+                onClick={() => void handleEnsureStack()}
+              >
+                {stackBusy ? "处理中…" : "启动并迁移"}
+              </button>
+              <button
+                type="button"
+                className="app-button-secondary"
+                disabled={loading || stackBusy}
+                onClick={() => void refreshStack()}
+              >
                 重新探测
               </button>
+              <button
+                type="button"
+                className="app-button-secondary"
+                disabled={loading || stackBusy}
+                onClick={() => void handleStopStack()}
+              >
+                停止栈
+              </button>
             </div>
+            {runtimeConfig ? (
+              <div style={{ marginTop: "0.85rem", display: "grid", gap: "0.35rem" }}>
+                <p className={styles.subtitle} style={{ margin: 0 }}>
+                  <strong>运行时连接</strong>
+                  {runtimeConfig.env_file_exists ? " · client.env 已生成" : " · client.env 未生成"}
+                </p>
+                <code className={styles.subtitle} style={{ display: "block", wordBreak: "break-all" }}>
+                  DATABASE_URL={runtimeConfig.database_url}
+                </code>
+                <code className={styles.subtitle} style={{ display: "block", wordBreak: "break-all" }}>
+                  REDIS_URL={runtimeConfig.redis_url}
+                </code>
+                <code className={styles.subtitle} style={{ display: "block", wordBreak: "break-all" }}>
+                  MILVUS_URL={runtimeConfig.milvus_url}
+                </code>
+                {runtimeConfig.env_file_path ? (
+                  <p className={styles.subtitle} style={{ margin: 0 }}>
+                    env 文件：{runtimeConfig.env_file_path}
+                  </p>
+                ) : null}
+                <p className={styles.subtitle} style={{ margin: 0 }}>
+                  {runtimeConfig.note}
+                </p>
+              </div>
+            ) : null}
             <p className={styles.subtitle} style={{ marginTop: "0.75rem" }}>
-              启动命令：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh up"}</code>
+              CLI：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh ensure"}</code>
             </p>
           </div>
         ) : null}
