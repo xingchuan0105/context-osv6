@@ -1,46 +1,75 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Build AVRag Desktop Windows NSIS installer (setup.exe).
+# Prefer running on Windows; on Ubuntu/WSL needs: mingw-w64, nsis, rust target x86_64-pc-windows-gnu.
+set -euo pipefail
 
-# Windows 桌面客户端构建脚本
-# 需要在 Windows 环境或安装了 mingw-w64 的 Linux 环境中运行
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DESKTOP="$ROOT/desktop"
+FE="$ROOT/frontend_next"
+TARGET="${TAURI_WINDOWS_TARGET:-x86_64-pc-windows-gnu}"
+SKIP_FRONTEND="${SKIP_FRONTEND:-0}"
 
-set -e
+die() { echo "build-windows: $*" >&2; exit 1; }
+log() { echo "build-windows: $*"; }
 
-echo "=== AVRag Desktop - Windows Build ==="
+command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || die "mingw-w64 missing (sudo apt-get install -y mingw-w64)"
+command -v makensis >/dev/null 2>&1 || die "makensis missing (sudo apt-get install -y nsis)"
+command -v rustup >/dev/null 2>&1 || die "rustup missing"
 
-# 检查依赖
-if ! command -v x86_64-w64-mingw32-gcc &> /dev/null; then
-    echo "错误: mingw-w64 未安装"
-    echo "请运行: sudo apt-get install -y mingw-w64"
-    exit 1
-fi
-
-# 配置 Cargo
-mkdir -p ~/.cargo
-cat >> ~/.cargo/config.toml << 'EOF'
+# Cargo linker for gnu target (idempotent block)
+mkdir -p "${CARGO_HOME:-$HOME/.cargo}"
+CFG="${CARGO_HOME:-$HOME/.cargo}/config.toml"
+if ! grep -q '\[target\.x86_64-pc-windows-gnu\]' "$CFG" 2>/dev/null; then
+  cat >> "$CFG" <<'EOF'
 
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
 EOF
+fi
 
-# 添加 Rust 目标
-rustup target add x86_64-pc-windows-gnu
+rustup target add "$TARGET" >/dev/null
 
-# 构建前端
-echo "构建前端静态资源..."
-cd frontend_next
-BUILD_TARGET=desktop pnpm build
-cd ..
+if [[ "$SKIP_FRONTEND" != "1" ]]; then
+  log "building frontend static export (BUILD_TARGET=desktop)…"
+  (
+    cd "$FE"
+    export NEXT_TELEMETRY_DISABLED=1
+    export BUILD_TARGET=desktop
+    pnpm build:desktop
+  )
+else
+  log "SKIP_FRONTEND=1 — expecting $FE/out"
+  [[ -d "$FE/out" ]] || die "frontend_next/out missing"
+fi
 
-# 构建桌面应用
-echo "构建 Windows 桌面应用..."
-cd desktop
-pnpm tauri build --target x86_64-pc-windows-gnu
+log "tauri build --target $TARGET --bundles nsis"
+(
+  cd "$DESKTOP"
+  export CI=true
+  export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
+  # Ensure local cli
+  if [[ ! -x node_modules/.bin/tauri ]]; then
+    CI=true pnpm install
+  fi
+  if [[ "$SKIP_FRONTEND" == "1" ]]; then
+    pnpm tauri build --target "$TARGET" --bundles nsis \
+      --config '{"build":{"beforeBuildCommand":""}}'
+  else
+    pnpm tauri build --target "$TARGET" --bundles nsis
+  fi
+)
 
-echo ""
-echo "=== 构建完成 ==="
-echo "输出目录: desktop/src-tauri/target/x86_64-pc-windows-gnu/release/bundle/"
-echo ""
-echo "下一步（网页下载发布）:"
-echo "  bash scripts/package-desktop-release.sh"
-echo "  bash scripts/publish-desktop-release.sh"
-echo "文档: docs/desktop/RELEASE-AND-DOWNLOAD.md"
+# Locate setup.exe
+NSIS_DIR="$DESKTOP/src-tauri/target/${TARGET}/release/bundle/nsis"
+SETUP="$(find "$NSIS_DIR" -type f -name '*-setup.exe' 2>/dev/null | head -1 || true)"
+if [[ -z "$SETUP" || ! -f "$SETUP" ]]; then
+  # broader search
+  SETUP="$(find "$DESKTOP/src-tauri/target" -type f \( -name '*-setup.exe' -o -name '*setup.exe' \) 2>/dev/null | head -1 || true)"
+fi
+
+[[ -n "$SETUP" && -f "$SETUP" ]] || die "NSIS setup.exe not produced under $NSIS_DIR (check tauri build logs)"
+
+log "OK setup: $SETUP ($(du -h "$SETUP" | awk '{print $1}'))"
+log "next:"
+log "  bash scripts/package-desktop-release.sh"
+log "  bash scripts/publish-desktop-release.sh"

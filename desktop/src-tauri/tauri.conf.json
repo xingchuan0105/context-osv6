@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../../frontend_next/out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm --dir ../../frontend_next dev",
-    "beforeBuildCommand": "pnpm --dir ../../frontend_next build:desktop"
+    "beforeDevCommand": "pnpm --dir ../frontend_next dev",
+    "beforeBuildCommand": "pnpm --dir ../frontend_next build:desktop"
   },
   "app": {
     "windows": [
@@ -34,12 +34,18 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

@@ -3,23 +3,30 @@
 配套计划：`docs/engineering/DESKTOP_WEB_DOWNLOAD_INSTALL_PLAN_2026-07-14.md`  
 版本约定：`docs/desktop/VERSIONING.md`
 
-## 1. 构建 Windows 产物
+## 1. 构建 Windows 产物（主格式 = NSIS setup.exe）
 
-在 Windows 机（推荐）或已装 mingw 的 Linux：
+**推荐入口（本机 Ubuntu/WSL 可交叉编）：**
 
 ```bash
-# 可选：交叉编
+# 依赖：mingw-w64、nsis、Rust 1.96+（desktop/src-tauri/rust-toolchain.toml）
+# sudo apt-get install -y mingw-w64 nsis
 bash scripts/build-windows.sh
-
-# 或在 desktop 目录（Windows 本机）
-cd frontend_next && pnpm build:desktop
-cd ../desktop && pnpm tauri build
+# 已有 frontend_next/out 时可：SKIP_FRONTEND=1 bash scripts/build-windows.sh
 ```
 
-产物常见路径：
+或 Windows 本机：
 
-- NSIS：`desktop/src-tauri/target/*/release/bundle/nsis/*-setup.exe`
-- 便携：`desktop/src-tauri/target/*/release/avrag-desktop.exe`
+```bash
+cd frontend_next && pnpm build:desktop
+cd ../desktop && pnpm tauri build --bundles nsis
+```
+
+产物：
+
+- **主下载**：`desktop/src-tauri/target/*/release/bundle/nsis/*-setup.exe`
+- 便携 exe（仅应急）：`…/release/avrag-desktop.exe`（`ALLOW_PORTABLE=1` 才允许打包）
+
+**说明**：交叉编 NSIS 不支持 Authenticode 签名；公开推广前在 Windows 主机上签名。
 
 ## 2. 打包 latest.json
 

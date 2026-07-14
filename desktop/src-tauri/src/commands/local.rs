@@ -49,7 +49,7 @@ pub async fn list_local_documents(
     state: State<'_, AppLocalState>,
 ) -> Result<Vec<serde_json::Value>, IpcApiError> {
     let auth = contracts::auth_runtime::AuthContext::new(
-        contracts::auth_runtime::OrgId::from(uuid::Uuid::nil()),
+        contracts::auth_runtime::UserId::from(uuid::Uuid::nil()),
         contracts::auth_runtime::SubjectKind::System,
     );
 

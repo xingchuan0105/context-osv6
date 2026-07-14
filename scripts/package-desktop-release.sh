@@ -34,17 +34,20 @@ FORMAT=""
 SRC=""
 OUT_NAME=""
 
+# Prefer NSIS. Set ALLOW_PORTABLE=1 only for emergency fallback.
+ALLOW_PORTABLE="${ALLOW_PORTABLE:-0}"
+
 if [[ -n "$NSIS" && -f "$NSIS" ]]; then
   FORMAT="nsis"
   SRC="$NSIS"
   OUT_NAME="AVRag-Desktop_${VERSION}_x64-setup.exe"
-elif [[ -n "$PORTABLE" && -f "$PORTABLE" ]]; then
+elif [[ "$ALLOW_PORTABLE" == "1" && -n "$PORTABLE" && -f "$PORTABLE" ]]; then
   FORMAT="portable"
   SRC="$PORTABLE"
   OUT_NAME="AVRag-Desktop_${VERSION}_x64.exe"
-  echo "package-desktop-release: warning: no NSIS setup found; packaging portable exe" >&2
+  echo "package-desktop-release: warning: packaging portable exe (ALLOW_PORTABLE=1)" >&2
 else
-  die "no Windows artifact under $TAURI_TARGET_BASE (build with scripts/build-windows.sh first)"
+  die "no NSIS *-setup.exe under $TAURI_TARGET_BASE (run: bash scripts/build-windows.sh). Portable fallback: ALLOW_PORTABLE=1"
 fi
 
 DEST="$STAGE/$OUT_NAME"
