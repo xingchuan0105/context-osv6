@@ -13,15 +13,19 @@ import {
   openInBrowser,
 } from "@/lib/desktop/tauri-license";
 import {
+  ensureLocalProduct,
   ensureLocalStack,
   getClientRuntimeConfig,
   getLlmConfig,
+  getLocalProductStatus,
   getLocalStackStatus,
   setLlmConfig,
+  stopLocalProduct,
   stopLocalStack,
   testLlmConnection,
   type ClientRuntimeConfig,
   type LocalLlmConfig,
+  type LocalProductStatus,
   type LocalStackStatus,
 } from "@/lib/desktop/tauri-llm";
 import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
@@ -47,6 +51,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   const [licenseLabel, setLicenseLabel] = useState("");
   const [licenseDetail, setLicenseDetail] = useState("");
   const [stack, setStack] = useState<LocalStackStatus | null>(null);
+  const [product, setProduct] = useState<LocalProductStatus | null>(null);
   const [runtimeConfig, setRuntimeConfig] = useState<ClientRuntimeConfig | null>(null);
   const [stackBusy, setStackBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -91,19 +96,29 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     void getClientRuntimeConfig()
       .then(setRuntimeConfig)
       .catch(() => setRuntimeConfig(null));
+
+    void getLocalProductStatus()
+      .then(setProduct)
+      .catch(() => setProduct(null));
   }, [open]);
 
   async function refreshStack() {
     setLoading(true);
     setError("");
     try {
-      const [nextStack, nextConfig] = await Promise.all([
+      const [nextStack, nextConfig, nextProduct] = await Promise.all([
         getLocalStackStatus(),
         getClientRuntimeConfig(),
+        getLocalProductStatus(),
       ]);
       setStack(nextStack);
       setRuntimeConfig(nextConfig);
-      setMessage(nextStack.overall_ok ? "本机数据栈全部就绪" : "部分服务未就绪");
+      setProduct(nextProduct);
+      const parts = [
+        nextStack.overall_ok ? "数据栈就绪" : "数据栈未全就绪",
+        nextProduct.api_ok ? "API 就绪" : "API 未就绪",
+      ];
+      setMessage(parts.join(" · "));
     } catch (probeError) {
       setError(probeError instanceof Error ? probeError.message : "探测失败");
     } finally {
@@ -146,6 +161,50 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
       }
     } catch (stopError) {
       setError(stopError instanceof Error ? stopError.message : "停止本机栈失败");
+    } finally {
+      setStackBusy(false);
+    }
+  }
+
+  async function handleEnsureProduct() {
+    setStackBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await ensureLocalProduct();
+      setProduct(result.status);
+      if (result.ok) {
+        setMessage(result.message);
+      } else {
+        setError(result.message || result.stderr || "启动本机产品进程失败");
+      }
+      try {
+        setStack(await getLocalStackStatus());
+        setRuntimeConfig(await getClientRuntimeConfig());
+      } catch {
+        /* ignore */
+      }
+    } catch (productError) {
+      setError(productError instanceof Error ? productError.message : "启动本机产品进程失败");
+    } finally {
+      setStackBusy(false);
+    }
+  }
+
+  async function handleStopProduct() {
+    setStackBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await stopLocalProduct();
+      setProduct(result.status);
+      if (result.ok) {
+        setMessage(result.message);
+      } else {
+        setError(result.message || result.stderr || "停止产品进程失败");
+      }
+    } catch (stopError) {
+      setError(stopError instanceof Error ? stopError.message : "停止产品进程失败");
     } finally {
       setStackBusy(false);
     }
@@ -447,8 +506,62 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                 </p>
               </div>
             ) : null}
+
+            <div style={{ marginTop: "1rem", borderTop: "1px solid hsl(var(--border))", paddingTop: "0.85rem" }}>
+              <p className={styles.subtitle} style={{ marginTop: 0 }}>
+                <strong>本机产品进程</strong>（avrag-api + worker，默认 :18080）。先起数据栈，再启动产品；REST 经桌面{" "}
+                <code>api_call</code> 代理。
+              </p>
+              {product ? (
+                <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.4rem" }}>
+                  <li>
+                    <strong>API</strong> {product.api_base_url} —{" "}
+                    <span style={{ color: product.api_ok ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                      {product.api_ok ? "OK" : "DOWN"}
+                    </span>
+                    <div className={styles.subtitle}>{product.health_detail}</div>
+                  </li>
+                  <li>
+                    <strong>Worker</strong> —{" "}
+                    <span style={{ color: product.worker_ok ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                      {product.worker_ok ? "OK" : "DOWN"}
+                    </span>
+                    <div className={styles.subtitle}>{product.worker_detail}</div>
+                  </li>
+                </ul>
+              ) : (
+                <p className={styles.subtitle}>尚未探测产品进程</p>
+              )}
+              <div className="app-button-row" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="app-button-primary"
+                  disabled={loading || stackBusy}
+                  onClick={() => void handleEnsureProduct()}
+                >
+                  {stackBusy ? "处理中…" : "启动产品进程"}
+                </button>
+                <button
+                  type="button"
+                  className="app-button-secondary"
+                  disabled={loading || stackBusy}
+                  onClick={() => void handleStopProduct()}
+                >
+                  停止产品进程
+                </button>
+              </div>
+              {product?.log_dir ? (
+                <p className={styles.subtitle} style={{ marginTop: "0.5rem" }}>
+                  日志：{product.log_dir}
+                </p>
+              ) : null}
+            </div>
+
             <p className={styles.subtitle} style={{ marginTop: "0.75rem" }}>
-              CLI：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh ensure"}</code>
+              CLI 栈：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh ensure"}</code>
+              <br />
+              CLI 产品：
+              <code>{product?.compose_hint ?? "bash scripts/desktop-local-product.sh ensure"}</code>
             </p>
           </div>
         ) : null}

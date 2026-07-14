@@ -135,6 +135,39 @@ export async function stopLocalStack(): Promise<EnsureLocalStackResult> {
   return invoke<EnsureLocalStackResult>("stop_local_stack");
 }
 
+export type LocalProductStatus = {
+  overall_ok: boolean;
+  api_ok: boolean;
+  worker_ok: boolean;
+  api_base_url: string;
+  api_endpoint: string;
+  health_detail: string;
+  worker_detail: string;
+  compose_hint: string;
+  script_path?: string | null;
+  log_dir?: string | null;
+};
+
+export type EnsureLocalProductResult = {
+  ok: boolean;
+  message: string;
+  stdout: string;
+  stderr: string;
+  status: LocalProductStatus;
+};
+
+export async function getLocalProductStatus(): Promise<LocalProductStatus> {
+  return invoke<LocalProductStatus>("get_local_product_status");
+}
+
+export async function ensureLocalProduct(): Promise<EnsureLocalProductResult> {
+  return invoke<EnsureLocalProductResult>("ensure_local_product");
+}
+
+export async function stopLocalProduct(): Promise<EnsureLocalProductResult> {
+  return invoke<EnsureLocalProductResult>("stop_local_product");
+}
+
 export type RepairActionResult = {
   applied: boolean;
   message: string;

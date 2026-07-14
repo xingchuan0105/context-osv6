@@ -219,7 +219,7 @@ fn build_runtime_config() -> ClientRuntimeConfig {
     } else if !env_exists {
         "Run ensure_local_stack (or `bash scripts/desktop-local-stack.sh ensure`) to start services, write client.env, and apply migrations.".into()
     } else {
-        "Point avrag-api / worker at these URLs (source client.env). Desktop chat remains BYOK; ingest/API attach is the next product step.".into()
+        "Data plane ready. Start product with bash scripts/desktop-local-product.sh ensure (API :18080). Desktop chat remains BYOK; REST goes via api_call proxy when product is up.".into()
     };
 
     ClientRuntimeConfig {

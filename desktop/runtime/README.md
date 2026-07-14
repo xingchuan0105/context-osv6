@@ -1,83 +1,74 @@
-# Context-OS Client local data plane
+# Context-OS Client local data plane + product
 
-Full **Milvus** + PostgreSQL + Redis for the desktop client (vector knowledge graph requires Milvus).
+Full **Milvus** + PostgreSQL + Redis for the desktop client, plus optional **avrag-api / avrag-worker** processes on the same machine.
 
 ## Quick start
 
 ```bash
-# monorepo root — start stack, write client.env, apply migrations
+# 1) Data plane (compose + client.env + migrations)
 bash scripts/desktop-local-stack.sh ensure
 
-# or step by step
-bash scripts/desktop-local-stack.sh up
-bash scripts/desktop-local-stack.sh migrate
+# 2) Product processes (api :18080 + worker)
+bash scripts/desktop-local-product.sh ensure
+
+# status / stop
 bash scripts/desktop-local-stack.sh status
+bash scripts/desktop-local-product.sh status
+bash scripts/desktop-local-product.sh stop
+bash scripts/desktop-local-stack.sh down
 ```
 
-Requires: **Docker** + **docker compose**, and **sqlx-cli** for migrations:
+Requires: **Docker** + **docker compose**, **sqlx-cli** (migrations), prebuilt or buildable `avrag-api` / `avrag-worker`.
 
 ```bash
 cargo install sqlx-cli --no-default-features --features postgres
+# binaries preferred from avrag-rs/target/{release,debug}/
 ```
 
-Ports (localhost only):
+## Ports (localhost only)
 
-| Service        | Port  |
-|----------------|-------|
-| PostgreSQL     | 5433  |
-| Redis          | 6380  |
-| Milvus         | 19530 |
-| Milvus metrics | 19091 |
+| Service        | Port  | Notes |
+|----------------|-------|--------|
+| PostgreSQL     | 5433  | client DB `avrag_client` |
+| Redis          | 6380  | |
+| Milvus         | 19530 | may share host Milvus; collections use `avrag_client` prefix |
+| Milvus metrics | 19091 | |
+| **Product API**| **18080** | offset from product-dev `:8080` |
 
-## Client process env
+## Env
 
-`ensure` / `up` / `write-env` write:
-
-`desktop/runtime/client.env` (gitignored under `data/`; the env file itself is local-generated)
+`desktop/runtime/client.env` (generated, gitignored):
 
 ```bash
 set -a && source desktop/runtime/client.env && set +a
 ```
 
-Defaults:
+Includes `DATABASE_URL`, `REDIS_URL`, `MILVUS_URL`, `AVRAG_API_ADDR`, `AVRAG_PUBLIC_BASE_URL`, `AVRAG_OBJECT_ROOT`, `MILVUS_COLLECTION_PREFIX=avrag_client`.
 
-```bash
-export DATABASE_URL=postgres://avrag:avrag@127.0.0.1:5433/avrag_client
-export REDIS_URL=redis://127.0.0.1:6380/0
-export MILVUS_URL=http://127.0.0.1:19530
-export CLIENT_PG_PORT=5433
-export CLIENT_REDIS_PORT=6380
-export CLIENT_MILVUS_PORT=19530
-export AVRAG_RUN_MIGRATIONS=true
-export AVRAG_MIGRATIONS_DIR=<monorepo>/avrag-rs/migrations
-```
+Product start also layers LLM keys from `avrag-rs/.env` (data-plane vars from `client.env` win).
 
-Point **avrag-api** / **worker** at these URLs for a monorepo-local data plane matching SaaS shape. Desktop chat remains **BYOK** in-process; full product ingest/API sidecar attach is a follow-up.
+Runtime dirs (gitignored): `run/` (pid), `logs/`, `objects/`, `data/`.
 
 ## Desktop IPC
 
 | Command | Purpose |
 |---------|---------|
-| `get_local_stack_status` | TCP probe PG/Redis/Milvus + env file presence |
-| `get_client_runtime_config` | Connection strings + monorepo paths |
-| `ensure_local_stack` | Runs `desktop-local-stack.sh ensure` |
-| `stop_local_stack` | Runs `… down` (volumes retained) |
+| `get_local_stack_status` | TCP probe PG/Redis/Milvus |
+| `get_client_runtime_config` | Connection strings |
+| `ensure_local_stack` / `stop_local_stack` | Compose + migrate |
+| `get_local_product_status` | API health + worker pid |
+| `ensure_local_product` / `stop_local_product` | Stack ensure + api/worker |
+| `api_call` | HTTP proxy → `http://127.0.0.1:18080` when product is up |
 
-Settings UI (**本机数据栈** tab): 启动并迁移 / 重新探测 / 停止栈.
+Settings UI (**本机数据栈**): data plane + product process controls.
 
-Optional: set `CONTEXT_OS_ROOT` if the app cannot resolve the monorepo root.
+Chat remains **BYOK in-process**; document ingest / Product Apps REST go through the local product API when started.
+
+Optional: `CONTEXT_OS_ROOT` if monorepo root cannot be resolved.
 
 ## Product rules
 
 - **No cloud account login** in the client.
-- **21-day local trial** (device-bound file).
-- LLM / Embedding: BYOK in client settings.
-- Data plane is **on-machine** via this compose stack.
-
-## Stop
-
-```bash
-bash scripts/desktop-local-stack.sh down
-```
-
-Data volumes stay under `desktop/runtime/data/` (gitignored).
+- **21-day local trial**.
+- LLM / Embedding: BYOK in client settings (also used by product if keys are in `avrag-rs/.env`).
+- Data + product processes are **on-machine**.

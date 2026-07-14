@@ -23,6 +23,9 @@ use commands::llm_config::{
     diagnose_llm, get_llm_config, list_available_models, set_llm_config, test_llm_connection,
 };
 use commands::local::{get_backend_status, init_local_backend, list_local_documents};
+use commands::local_product::{
+    ensure_local_product, get_local_product_status, stop_local_product,
+};
 use commands::local_stack::{
     ensure_local_stack, get_client_runtime_config, get_local_stack_status, stop_local_stack,
 };
@@ -62,7 +65,10 @@ pub fn run() {
             get_local_stack_status,
             get_client_runtime_config,
             ensure_local_stack,
-            stop_local_stack
+            stop_local_stack,
+            get_local_product_status,
+            ensure_local_product,
+            stop_local_product
         ])
         .setup(|app| {
             #[cfg(any(windows, target_os = "linux"))]

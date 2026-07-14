@@ -111,6 +111,9 @@ deploy/pulled/
 # Windows Authenticode local certs (never commit)
 desktop/signing/
 
-# Desktop local stack volumes + generated client env
+# Desktop local stack volumes + generated client env / product runtime
 desktop/runtime/data/
 desktop/runtime/client.env
+desktop/runtime/run/
+desktop/runtime/logs/
+desktop/runtime/objects/

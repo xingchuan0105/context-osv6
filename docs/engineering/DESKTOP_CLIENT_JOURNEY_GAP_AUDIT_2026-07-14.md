@@ -275,6 +275,7 @@ D3  （可选）高级模式：配置自建服务端 base URL，客户端仅 UI+
 | **D0** | **Landed** | 客户端不走云 Login（`AppShellGate` + `ClientLicenseGate`）；冷启动按许可 → `/activate` 或 `/dashboard`；试用 **21 天本机签发**；欢迎文案更新 |
 | **D1** | **Landed** | 设置抽屉：LLM + Embedding + 本机数据栈探测 + 授权；`/setup` 引导保留 |
 | **D2** | **Scaffold landed** | `desktop/runtime/docker-compose.client.yml` 完整 Milvus+PG+Redis；`scripts/desktop-local-stack.sh`；`get_local_stack_status` IPC；设置页可探测端口。**与云端同构的 ingest/API 进程挂载仍为后续** |
-| **D2 续** | **Landed (wire)** | `ensure`/`migrate`/`write-env` → `desktop/runtime/client.env`；`sqlx migrate` 对本机 PG；IPC `get_client_runtime_config` / `ensure_local_stack` / `stop_local_stack`；设置页「启动并迁移 / 停止栈」+ 连接串展示。**仍后续**：avrag-api/worker 作为 sidecar 与桌面进程深度挂载 |
+| **D2 续** | **Landed (wire)** | `ensure`/`migrate`/`write-env` → `desktop/runtime/client.env`；`sqlx migrate` 对本机 PG；IPC `get_client_runtime_config` / `ensure_local_stack` / `stop_local_stack`；设置页「启动并迁移 / 停止栈」+ 连接串展示 |
+| **D2+** | **Landed (product sidecar)** | `scripts/desktop-local-product.sh` 启停 `avrag-api`(:18080)+`avrag-worker`；`client.env` 含 API/object/collection 前缀；IPC `ensure_local_product` / `get_local_product_status`；`api_call` HTTP 代理到本机产品 API；设置页产品进程控件。**仍后续**：打包捆绑二进制/Docker、无 monorepo 安装路径、客户端会话鉴权与 SaaS 解耦 |
 
-**下一步**：打包路径下的 Docker/脚本定位；客户端内启动 avrag-api/worker sidecar 消费 `client.env`（ingest/检索与云端同构）。
+**下一步**：安装包捆绑 api/worker + 数据栈引导；桌面登录/用户模型与本机 API 对齐（B2C personal，无 org）。
