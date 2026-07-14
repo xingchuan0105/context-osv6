@@ -68,13 +68,44 @@ fn product_script(root: &Path) -> PathBuf {
     root.join("scripts/desktop-local-product.sh")
 }
 
+fn read_env_file_value(key: &str) -> Option<String> {
+    let path = monorepo_root()
+        .map(|r| r.join("desktop/runtime/client.env"))
+        .or_else(|| {
+            std::env::var("CONTEXT_OS_CLIENT_HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join("client.env"))
+        })?;
+    let raw = std::fs::read_to_string(path).ok()?;
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            if k.trim() == key {
+                return Some(v.trim().trim_matches('"').to_string());
+            }
+        }
+    }
+    None
+}
+
 fn client_api_base() -> String {
-    env_or(
-        "AVRAG_PUBLIC_BASE_URL",
-        &env_or("CLIENT_API_BASE_URL", "http://127.0.0.1:18080"),
-    )
-    .trim_end_matches('/')
-    .to_string()
+    if let Ok(v) = std::env::var("AVRAG_PUBLIC_BASE_URL") {
+        if !v.trim().is_empty() {
+            return v.trim().trim_end_matches('/').to_string();
+        }
+    }
+    if let Ok(v) = std::env::var("CLIENT_API_BASE_URL") {
+        if !v.trim().is_empty() {
+            return v.trim().trim_end_matches('/').to_string();
+        }
+    }
+    if let Some(v) = read_env_file_value("AVRAG_PUBLIC_BASE_URL") {
+        return v.trim_end_matches('/').to_string();
+    }
+    "http://127.0.0.1:18080".into()
 }
 
 fn client_api_host_port() -> (String, u16) {

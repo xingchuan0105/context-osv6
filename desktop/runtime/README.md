@@ -1,74 +1,82 @@
 # Context-OS Client local data plane + product
 
-Full **Milvus** + PostgreSQL + Redis for the desktop client, plus optional **avrag-api / avrag-worker** processes on the same machine.
+Full **Milvus** + PostgreSQL + Redis for the desktop client, plus optional **avrag-api / avrag-worker** processes and a **local B2C personal session** (no cloud login).
 
-## Quick start
+## Quick start (monorepo)
 
 ```bash
-# 1) Data plane (compose + client.env + migrations)
+# Optional: stage api/worker into desktop/runtime/bin (and Tauri binaries/)
+bash scripts/stage-desktop-sidecars.sh
+# or STAGE_BUILD=1 bash scripts/stage-desktop-sidecars.sh
+
+# 1) Data plane (compose + client.env + migrations + JWT_SECRET)
 bash scripts/desktop-local-stack.sh ensure
 
 # 2) Product processes (api :18080 + worker)
 bash scripts/desktop-local-product.sh ensure
 
 # status / stop
-bash scripts/desktop-local-stack.sh status
 bash scripts/desktop-local-product.sh status
 bash scripts/desktop-local-product.sh stop
 bash scripts/desktop-local-stack.sh down
 ```
 
-Requires: **Docker** + **docker compose**, **sqlx-cli** (migrations), prebuilt or buildable `avrag-api` / `avrag-worker`.
+Requires: **Docker** + **docker compose**, **sqlx-cli** (migrations), staged or cargo-built `avrag-api` / `avrag-worker`.
 
-```bash
-cargo install sqlx-cli --no-default-features --features postgres
-# binaries preferred from avrag-rs/target/{release,debug}/
+## Non-monorepo / install layout
+
+```text
+CONTEXT_OS_CLIENT_HOME/
+  bin/avrag-api[.exe]
+  bin/avrag-worker[.exe]
+  docker-compose.client.yml
+  client.env          # generated
+  jwt.secret          # generated
+  data/ run/ logs/ objects/
+  desktop-local-stack.sh
+  desktop-local-product.sh
 ```
 
-## Ports (localhost only)
-
-| Service        | Port  | Notes |
-|----------------|-------|--------|
-| PostgreSQL     | 5433  | client DB `avrag_client` |
-| Redis          | 6380  | |
-| Milvus         | 19530 | may share host Milvus; collections use `avrag_client` prefix |
-| Milvus metrics | 19091 | |
-| **Product API**| **18080** | offset from product-dev `:8080` |
-
-## Env
-
-`desktop/runtime/client.env` (generated, gitignored):
-
 ```bash
-set -a && source desktop/runtime/client.env && set +a
+export CONTEXT_OS_CLIENT_HOME=/path/to/runtime-sidecars
+# scripts resolve ROOT relative to themselves; prefer running from monorepo
+# or copy scripts into CLIENT_HOME and set CONTEXT_OS_ROOT if needed.
 ```
 
-Includes `DATABASE_URL`, `REDIS_URL`, `MILVUS_URL`, `AVRAG_API_ADDR`, `AVRAG_PUBLIC_BASE_URL`, `AVRAG_OBJECT_ROOT`, `MILVUS_COLLECTION_PREFIX=avrag_client`.
+Release packaging (`scripts/package-desktop-release.sh`) stages a `runtime-sidecars/` companion folder next to the NSIS installer.
 
-Product start also layers LLM keys from `avrag-rs/.env` (data-plane vars from `client.env` win).
+Tauri `bundle.resources` ships compose + README with the app. Product binaries are staged via `stage-desktop-sidecars.sh` (optional `desktop/src-tauri/binaries/*-<triple>` for future `externalBin`).
 
-Runtime dirs (gitignored): `run/` (pid), `logs/`, `objects/`, `data/`.
+## Ports
 
-## Desktop IPC
+| Service        | Port  |
+|----------------|-------|
+| PostgreSQL     | 5433  |
+| Redis          | 6380  |
+| Milvus         | 19530 |
+| Product API    | 18080 |
+
+## Local B2C session
+
+- Email: `local@context-os.client` (personal account; **no org**)
+- Credentials: app data `local_user.json` (device-local)
+- JWT: app data `local_session.json`
+- Desktop shell calls `ensure_local_session` after license OK — never cloud `/login`
+- REST via `api_call` with Bearer token
+
+Legal versions on register: `2026-06-13` (terms + privacy).
+
+## Desktop IPC (summary)
 
 | Command | Purpose |
 |---------|---------|
-| `get_local_stack_status` | TCP probe PG/Redis/Milvus |
-| `get_client_runtime_config` | Connection strings |
 | `ensure_local_stack` / `stop_local_stack` | Compose + migrate |
-| `get_local_product_status` | API health + worker pid |
-| `ensure_local_product` / `stop_local_product` | Stack ensure + api/worker |
-| `api_call` | HTTP proxy → `http://127.0.0.1:18080` when product is up |
-
-Settings UI (**本机数据栈**): data plane + product process controls.
-
-Chat remains **BYOK in-process**; document ingest / Product Apps REST go through the local product API when started.
-
-Optional: `CONTEXT_OS_ROOT` if monorepo root cannot be resolved.
+| `ensure_local_product` / `stop_local_product` | api + worker |
+| `ensure_local_session` / `get_local_session` | Local personal JWT |
+| `api_call` | Proxy to `:18080` |
 
 ## Product rules
 
 - **No cloud account login** in the client.
 - **21-day local trial**.
-- LLM / Embedding: BYOK in client settings (also used by product if keys are in `avrag-rs/.env`).
-- Data + product processes are **on-machine**.
+- LLM / Embedding: BYOK; product may also use keys from `avrag-rs/.env` in monorepo.

@@ -73,9 +73,19 @@ stop_pidfile() {
 
 find_bin() {
   local name="$1"
+  # Prefer staged client layout (packaged or monorepo desktop/runtime/bin), then cargo targets.
+  local client_home="${CONTEXT_OS_CLIENT_HOME:-$RUNTIME_DIR}"
   local candidates=(
+    "$client_home/bin/$name"
+    "$client_home/bin/${name}.exe"
+    "$RUNTIME_DIR/bin/$name"
+    "$RUNTIME_DIR/bin/${name}.exe"
+    "$ROOT/desktop/src-tauri/binaries/${name}-$(rustc -vV 2>/dev/null | awk '/^host:/{print $2}')"
+    "$ROOT/desktop/src-tauri/binaries/${name}-$(rustc -vV 2>/dev/null | awk '/^host:/{print $2}').exe"
     "$AVRAG_DIR/target/release/$name"
+    "$AVRAG_DIR/target/release/${name}.exe"
     "$AVRAG_DIR/target/debug/$name"
+    "$AVRAG_DIR/target/debug/${name}.exe"
     "${CARGO_TARGET_DIR:-}/release/$name"
     "${CARGO_TARGET_DIR:-}/debug/$name"
     "$HOME/.cache/context-osv6/target/avrag-rs/release/$name"
@@ -83,7 +93,12 @@ find_bin() {
   )
   local p
   for p in "${candidates[@]}"; do
-    [[ -n "$p" && -x "$p" ]] && { echo "$p"; return 0; }
+    [[ -n "$p" && ( -x "$p" || -f "$p" ) ]] || continue
+    # Prefer executable bit when present; Windows .exe may lack +x on NTFS mounts.
+    if [[ -x "$p" || "$p" == *.exe ]]; then
+      echo "$p"
+      return 0
+    fi
   done
   return 1
 }

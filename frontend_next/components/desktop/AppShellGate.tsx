@@ -4,11 +4,13 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { ProtectedRouteGate } from "@/components/auth-gates";
 import { ClientLicenseGate } from "@/components/desktop/ClientLicenseGate";
+import { ClientLocalSessionBootstrap } from "@/components/desktop/ClientLocalSessionBootstrap";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 
 /**
  * Web SaaS: cloud session required.
- * Desktop client: license only — never redirect to /login.
+ * Desktop client: license only + local B2C session against on-machine API —
+ * never redirect to cloud /login.
  */
 export function AppShellGate({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<"unknown" | "web" | "desktop">("unknown");
@@ -28,7 +30,11 @@ export function AppShellGate({ children }: { children: ReactNode }) {
   }
 
   if (mode === "desktop") {
-    return <ClientLicenseGate>{children}</ClientLicenseGate>;
+    return (
+      <ClientLicenseGate>
+        <ClientLocalSessionBootstrap>{children}</ClientLocalSessionBootstrap>
+      </ClientLicenseGate>
+    );
   }
 
   return <ProtectedRouteGate>{children}</ProtectedRouteGate>;

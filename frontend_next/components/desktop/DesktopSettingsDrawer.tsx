@@ -14,10 +14,12 @@ import {
 } from "@/lib/desktop/tauri-license";
 import {
   ensureLocalProduct,
+  ensureLocalSession,
   ensureLocalStack,
   getClientRuntimeConfig,
   getLlmConfig,
   getLocalProductStatus,
+  getLocalSession,
   getLocalStackStatus,
   setLlmConfig,
   stopLocalProduct,
@@ -26,8 +28,10 @@ import {
   type ClientRuntimeConfig,
   type LocalLlmConfig,
   type LocalProductStatus,
+  type LocalSessionStatus,
   type LocalStackStatus,
 } from "@/lib/desktop/tauri-llm";
+import { useAuth } from "@/lib/auth/context";
 import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 
 type DrawerTab = "llm" | "embedding" | "stack" | "license" | "diagnostic";
@@ -38,6 +42,7 @@ type DesktopSettingsDrawerProps = {
 };
 
 export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerProps) {
+  const { completeAuth, user: authUser, isAuthenticated } = useAuth();
   const [tab, setTab] = useState<DrawerTab>("llm");
   const [config, setConfig] = useState<LocalLlmConfig | null>(null);
   const [provider, setProvider] = useState("zhipu");
@@ -52,6 +57,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   const [licenseDetail, setLicenseDetail] = useState("");
   const [stack, setStack] = useState<LocalStackStatus | null>(null);
   const [product, setProduct] = useState<LocalProductStatus | null>(null);
+  const [localSession, setLocalSession] = useState<LocalSessionStatus | null>(null);
   const [runtimeConfig, setRuntimeConfig] = useState<ClientRuntimeConfig | null>(null);
   const [stackBusy, setStackBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -100,6 +106,10 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     void getLocalProductStatus()
       .then(setProduct)
       .catch(() => setProduct(null));
+
+    void getLocalSession()
+      .then(setLocalSession)
+      .catch(() => setLocalSession(null));
   }, [open]);
 
   async function refreshStack() {
@@ -205,6 +215,34 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
       }
     } catch (stopError) {
       setError(stopError instanceof Error ? stopError.message : "停止产品进程失败");
+    } finally {
+      setStackBusy(false);
+    }
+  }
+
+  async function handleEnsureSession() {
+    setStackBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const session = await ensureLocalSession();
+      setLocalSession(session);
+      if (session.ready && session.token && session.user) {
+        completeAuth({
+          token: session.token,
+          user: {
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.full_name,
+          },
+          reset_ticket: null,
+        });
+        setMessage(session.message);
+      } else {
+        setError(session.message || "本机会话未就绪");
+      }
+    } catch (sessionError) {
+      setError(sessionError instanceof Error ? sessionError.message : "本机会话失败");
     } finally {
       setStackBusy(false);
     }
@@ -555,6 +593,28 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                   日志：{product.log_dir}
                 </p>
               ) : null}
+
+              <div style={{ marginTop: "0.85rem" }}>
+                <p className={styles.subtitle} style={{ margin: 0 }}>
+                  <strong>本机个人账户</strong>（B2C · 无云登录）
+                  {isAuthenticated && authUser ? ` · ${authUser.email}` : ""}
+                </p>
+                {localSession ? (
+                  <p className={styles.subtitle} style={{ margin: "0.35rem 0 0" }}>
+                    {localSession.ready ? "会话就绪" : "会话未就绪"} — {localSession.message}
+                  </p>
+                ) : null}
+                <div className="app-button-row" style={{ marginTop: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="app-button-secondary"
+                    disabled={loading || stackBusy}
+                    onClick={() => void handleEnsureSession()}
+                  >
+                    刷新本机会话
+                  </button>
+                </div>
+              </div>
             </div>
 
             <p className={styles.subtitle} style={{ marginTop: "0.75rem" }}>

@@ -104,6 +104,39 @@ EOF
 # Copy latest into version dir for archival
 cp -f "$OUT_ROOT/latest.json" "$STAGE/latest.json"
 
+# Stage product sidecars + runtime layout next to installer (optional companion pack).
+# Consumers unzip or copy into CONTEXT_OS_CLIENT_HOME (or next to install for monorepo dev).
+SIDECAR_STAGE="$STAGE/runtime-sidecars"
+mkdir -p "$SIDECAR_STAGE/bin"
+if bash "$ROOT/scripts/stage-desktop-sidecars.sh" 2>/dev/null; then
+  if [[ -d "$ROOT/desktop/runtime/bin" ]]; then
+    cp -a "$ROOT/desktop/runtime/bin/." "$SIDECAR_STAGE/bin/" 2>/dev/null || true
+  fi
+fi
+cp -f "$ROOT/desktop/runtime/docker-compose.client.yml" "$SIDECAR_STAGE/" 2>/dev/null || true
+cp -f "$ROOT/desktop/runtime/README.md" "$SIDECAR_STAGE/" 2>/dev/null || true
+cp -f "$ROOT/scripts/desktop-local-stack.sh" "$SIDECAR_STAGE/" 2>/dev/null || true
+cp -f "$ROOT/scripts/desktop-local-product.sh" "$SIDECAR_STAGE/" 2>/dev/null || true
+cat >"$SIDECAR_STAGE/INSTALL.txt" <<'SIDEEOF'
+Context-OS Client — companion runtime (data plane + product binaries)
+
+1. Install Docker Desktop (or Docker Engine) for Postgres/Redis/Milvus.
+2. Set CONTEXT_OS_CLIENT_HOME to this folder (absolute path).
+3. From monorepo or with scripts on PATH:
+     bash desktop-local-stack.sh ensure
+     bash desktop-local-product.sh ensure
+4. API listens on http://127.0.0.1:18080
+5. Desktop shell auto-creates personal local@context-os.client session (no cloud login).
+
+Binaries live in ./bin/ when staged with scripts/stage-desktop-sidecars.sh.
+SIDEEOF
+
+# Optional Tauri externalBin (host triple) — does not fail packaging if absent.
+if [[ -d "$ROOT/desktop/src-tauri/binaries" ]]; then
+  mkdir -p "$STAGE/tauri-binaries"
+  cp -a "$ROOT/desktop/src-tauri/binaries/." "$STAGE/tauri-binaries/" 2>/dev/null || true
+fi
+
 echo "package-desktop-release: version=${VERSION}"
 echo "  artifact: $DEST"
 echo "  format:   $FORMAT"
@@ -112,3 +145,4 @@ echo "  sha256:   $SHA"
 echo "  size:     $SIZE"
 echo "  latest:   $OUT_ROOT/latest.json"
 echo "  public:   $REL_URL"
+echo "  sidecars: $SIDECAR_STAGE"

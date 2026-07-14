@@ -168,6 +168,29 @@ export async function stopLocalProduct(): Promise<EnsureLocalProductResult> {
   return invoke<EnsureLocalProductResult>("stop_local_product");
 }
 
+export type LocalAuthUser = {
+  id: string;
+  email: string;
+  full_name: string;
+};
+
+export type LocalSessionStatus = {
+  ready: boolean;
+  email: string;
+  token?: string | null;
+  user?: LocalAuthUser | null;
+  message: string;
+  api_base_url: string;
+};
+
+export async function getLocalSession(): Promise<LocalSessionStatus> {
+  return invoke<LocalSessionStatus>("get_local_session");
+}
+
+export async function ensureLocalSession(): Promise<LocalSessionStatus> {
+  return invoke<LocalSessionStatus>("ensure_local_session");
+}
+
 export type RepairActionResult = {
   applied: boolean;
   message: string;
