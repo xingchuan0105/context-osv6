@@ -38,28 +38,20 @@ pub async fn start_trial(app: AppHandle) -> Result<TrialResult, IpcApiError> {
         }
     }
 
-    if is_dev_mode() {
-        let expires_at = now_unix() + TRIAL_DURATION_SECS;
-        mock_activate(
-            &format!("DEV-TRIAL-{}", uuid::Uuid::new_v4()),
-            &device_id,
-            &app_data_dir,
-            LicenseKind::Trial,
-            Some(expires_at),
-        )
-        .await?;
-        return Ok(TrialResult {
-            expires_at,
-            days_remaining: 7,
-        });
-    }
-
-    let license_key = request_trial_license(&device_id).await?;
-    activate_with_keygen(&license_key, &device_id, &app_data_dir).await?;
+    // Client product: no cloud account. Trial is issued and stored locally on-device.
+    // Paid licenses still use Keygen when not in offline/dev mode.
     let expires_at = now_unix() + TRIAL_DURATION_SECS;
+    mock_activate(
+        &format!("LOCAL-TRIAL-{}", uuid::Uuid::new_v4()),
+        &device_id,
+        &app_data_dir,
+        LicenseKind::Trial,
+        Some(expires_at),
+    )
+    .await?;
     Ok(TrialResult {
         expires_at,
-        days_remaining: 7,
+        days_remaining: TRIAL_DURATION_DAYS as i32,
     })
 }
 

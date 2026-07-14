@@ -14,13 +14,15 @@ import {
 } from "@/lib/desktop/tauri-license";
 import {
   getLlmConfig,
+  getLocalStackStatus,
   setLlmConfig,
   testLlmConnection,
   type LocalLlmConfig,
+  type LocalStackStatus,
 } from "@/lib/desktop/tauri-llm";
 import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 
-type DrawerTab = "llm" | "license" | "diagnostic";
+type DrawerTab = "llm" | "embedding" | "stack" | "license" | "diagnostic";
 
 type DesktopSettingsDrawerProps = {
   open: boolean;
@@ -34,8 +36,13 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
+  const [embBaseUrl, setEmbBaseUrl] = useState("");
+  const [embApiKey, setEmbApiKey] = useState("");
+  const [embModel, setEmbModel] = useState("");
+  const [embDims, setEmbDims] = useState("");
   const [licenseLabel, setLicenseLabel] = useState("");
   const [licenseDetail, setLicenseDetail] = useState("");
+  const [stack, setStack] = useState<LocalStackStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -51,6 +58,12 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         setApiKey(saved.api_key);
         setBaseUrl(saved.base_url);
         setModel(saved.model);
+        if (saved.embedding) {
+          setEmbBaseUrl(saved.embedding.base_url);
+          setEmbApiKey(saved.embedding.api_key);
+          setEmbModel(saved.embedding.model);
+          setEmbDims(saved.embedding.dimensions != null ? String(saved.embedding.dimensions) : "");
+        }
       })
       .catch(() => {});
 
@@ -64,6 +77,10 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         setLicenseLabel("未激活");
         setLicenseDetail("");
       });
+
+    void getLocalStackStatus()
+      .then(setStack)
+      .catch(() => setStack(null));
   }, [open]);
 
   if (!open) {
@@ -71,13 +88,23 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   }
 
   function buildDraftConfig(): LocalLlmConfig {
+    const embedding =
+      embBaseUrl.trim() || embModel.trim()
+        ? {
+            base_url: embBaseUrl.trim() || baseUrl,
+            api_key: embApiKey.trim() || apiKey,
+            model: embModel.trim() || "text-embedding-3-small",
+            dimensions: embDims.trim() ? Number(embDims) : null,
+          }
+        : config?.embedding ?? null;
+
     return {
       provider,
       base_url: baseUrl,
       api_key: apiKey,
       model,
       timeout_ms: config?.timeout_ms ?? 30_000,
-      embedding: config?.embedding ?? null,
+      embedding,
     };
   }
 
@@ -85,12 +112,11 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     setLoading(true);
     setError("");
     setMessage("");
-
     try {
       const next = buildDraftConfig();
       await setLlmConfig(next);
       setConfig(next);
-      setMessage("LLM 配置已保存");
+      setMessage("配置已保存");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "保存失败");
     } finally {
@@ -102,7 +128,6 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     setLoading(true);
     setError("");
     setMessage("");
-
     try {
       const result = await testLlmConnection(buildDraftConfig());
       setMessage(result.message);
@@ -121,6 +146,25 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     setModel(preset.model);
   }
 
+  async function refreshStack() {
+    setLoading(true);
+    try {
+      setStack(await getLocalStackStatus());
+    } catch {
+      setError("无法探测本机数据栈");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const tabs: { id: DrawerTab; label: string }[] = [
+    { id: "llm", label: "LLM" },
+    { id: "embedding", label: "Embedding" },
+    { id: "stack", label: "本机数据栈" },
+    { id: "license", label: "授权" },
+    { id: "diagnostic", label: "诊断" },
+  ];
+
   return (
     <div className={styles.drawerOverlay} role="presentation" onClick={onClose}>
       <aside
@@ -137,11 +181,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         </header>
 
         <div className={styles.drawerTabs}>
-          {([
-            { id: "llm" as const, label: "AI 模型" },
-            { id: "license" as const, label: "授权管理" },
-            { id: "diagnostic" as const, label: "诊断工具" },
-          ]).map((item) => (
+          {tabs.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -214,23 +254,98 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
             />
 
             <div className="app-button-row">
-              <button
-                type="button"
-                className="app-button-secondary"
-                disabled={loading}
-                onClick={() => void handleTestLlm()}
-              >
+              <button type="button" className="app-button-secondary" disabled={loading} onClick={() => void handleTestLlm()}>
                 测试连接
               </button>
-              <button
-                type="button"
-                className="app-button-primary"
-                disabled={loading}
-                onClick={() => void handleSaveLlm()}
-              >
+              <button type="button" className="app-button-primary" disabled={loading} onClick={() => void handleSaveLlm()}>
                 保存
               </button>
             </div>
+            <p className={styles.subtitle}>
+              <Link href="/setup" onClick={onClose}>
+                打开完整引导（/setup）
+              </Link>
+            </p>
+          </div>
+        ) : null}
+
+        {tab === "embedding" ? (
+          <div className={styles.drawerSection}>
+            <p className={styles.subtitle}>用于本机文档向量化；可与 LLM 共用 Key，或单独填写。</p>
+            <label className="app-form-label" htmlFor="emb-base">
+              Embedding Base URL
+            </label>
+            <input
+              id="emb-base"
+              className="app-input"
+              value={embBaseUrl}
+              placeholder={baseUrl || "https://…"}
+              onChange={(event) => setEmbBaseUrl(event.target.value)}
+            />
+            <label className="app-form-label" htmlFor="emb-key">
+              Embedding API Key
+            </label>
+            <input
+              id="emb-key"
+              className="app-input"
+              type="password"
+              value={embApiKey}
+              onChange={(event) => setEmbApiKey(event.target.value)}
+            />
+            <label className="app-form-label" htmlFor="emb-model">
+              Embedding Model
+            </label>
+            <input
+              id="emb-model"
+              className="app-input"
+              value={embModel}
+              placeholder="text-embedding-3-small / embedding-2"
+              onChange={(event) => setEmbModel(event.target.value)}
+            />
+            <label className="app-form-label" htmlFor="emb-dims">
+              Dimensions（可选）
+            </label>
+            <input
+              id="emb-dims"
+              className="app-input"
+              value={embDims}
+              placeholder="1024"
+              onChange={(event) => setEmbDims(event.target.value)}
+            />
+            <button type="button" className="app-button-primary" disabled={loading} onClick={() => void handleSaveLlm()}>
+              保存 Embedding 配置
+            </button>
+          </div>
+        ) : null}
+
+        {tab === "stack" ? (
+          <div className={styles.drawerSection}>
+            <p className={styles.subtitle}>
+              本机数据面：PostgreSQL、Redis、完整 Milvus。首次请启动本地栈后再索引文档。
+            </p>
+            {stack ? (
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.5rem" }}>
+                {stack.services.map((s) => (
+                  <li key={s.id}>
+                    <strong>{s.label}</strong> {s.endpoint} —{" "}
+                    <span style={{ color: s.ok ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                      {s.ok ? "OK" : "DOWN"}
+                    </span>
+                    <div className={styles.subtitle}>{s.detail}</div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.subtitle}>尚未探测（仅桌面运行时可用）</p>
+            )}
+            <div className="app-button-row" style={{ marginTop: "0.75rem" }}>
+              <button type="button" className="app-button-secondary" disabled={loading} onClick={() => void refreshStack()}>
+                重新探测
+              </button>
+            </div>
+            <p className={styles.subtitle} style={{ marginTop: "0.75rem" }}>
+              启动命令：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh up"}</code>
+            </p>
           </div>
         ) : null}
 
@@ -241,15 +356,15 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
             </p>
             {licenseDetail ? <p className={styles.subtitle}>{licenseDetail}</p> : null}
             <div className="app-button-row">
-              <Link href="/licenses" className="app-button-secondary" onClick={onClose}>
-                在浏览器管理授权
+              <Link href="/activate" className="app-button-secondary" onClick={onClose}>
+                欢迎 / 激活页
               </Link>
               <button
                 type="button"
                 className="app-button-secondary"
                 onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.desktopBuy))}
               >
-                购买/升级
+                购买授权
               </button>
             </div>
           </div>

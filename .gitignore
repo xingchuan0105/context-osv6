@@ -110,3 +110,6 @@ deploy/pulled/
 
 # Windows Authenticode local certs (never commit)
 desktop/signing/
+
+# Desktop local stack volumes
+desktop/runtime/data/

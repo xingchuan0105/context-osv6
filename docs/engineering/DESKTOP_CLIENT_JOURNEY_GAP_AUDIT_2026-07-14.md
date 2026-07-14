@@ -268,4 +268,12 @@ D3  （可选）高级模式：配置自建服务端 base URL，客户端仅 UI+
 
 ---
 
-**下一步**：按 **D0 → D1 → D2** 开工。本文件含检查结论与已冻结决策；路由逻辑尚未改。
+## 9. 实施进度（2026-07-14 开工）
+
+| Wave | 状态 | 交付 |
+|------|------|------|
+| **D0** | **Landed** | 客户端不走云 Login（`AppShellGate` + `ClientLicenseGate`）；冷启动按许可 → `/activate` 或 `/dashboard`；试用 **21 天本机签发**；欢迎文案更新 |
+| **D1** | **Landed** | 设置抽屉：LLM + Embedding + 本机数据栈探测 + 授权；`/setup` 引导保留 |
+| **D2** | **Scaffold landed** | `desktop/runtime/docker-compose.client.yml` 完整 Milvus+PG+Redis；`scripts/desktop-local-stack.sh`；`get_local_stack_status` IPC；设置页可探测端口。**与云端同构的 ingest/API 进程挂载仍为后续** |
+
+**下一步**：在客户端进程内挂载 `DATABASE_URL`/`MILVUS_URL` 并跑本地 migrations + ingest worker（D2 续）。

@@ -1,10 +1,10 @@
 import { openInBrowser } from "@/lib/desktop/tauri-license";
 
 export type LocalEmbeddingConfig = {
-  provider: string;
   base_url: string;
   api_key: string;
   model: string;
+  dimensions?: number | null;
 };
 
 export type LocalLlmConfig = {
@@ -13,6 +13,8 @@ export type LocalLlmConfig = {
   api_key: string;
   model: string;
   timeout_ms?: number;
+  enable_thinking?: boolean | null;
+  enable_cache?: boolean | null;
   embedding?: LocalEmbeddingConfig | null;
 };
 
@@ -49,9 +51,18 @@ export type DiagnosticReport = {
   suggestions: RepairSuggestion[];
 };
 
-export type RepairActionResult = {
-  applied: boolean;
-  message: string;
+export type LocalStackServiceStatus = {
+  id: string;
+  label: string;
+  endpoint: string;
+  ok: boolean;
+  detail: string;
+};
+
+export type LocalStackStatus = {
+  overall_ok: boolean;
+  services: LocalStackServiceStatus[];
+  compose_hint: string;
 };
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -78,6 +89,15 @@ export async function diagnoseLlm(config: LocalLlmConfig): Promise<DiagnosticRep
 export async function listAvailableModels(config: LocalLlmConfig): Promise<string[]> {
   return invoke<string[]>("list_available_models", { config });
 }
+
+export async function getLocalStackStatus(): Promise<LocalStackStatus> {
+  return invoke<LocalStackStatus>("get_local_stack_status");
+}
+
+export type RepairActionResult = {
+  applied: boolean;
+  message: string;
+};
 
 export function mergeLlmConfigPatch(
   current: LocalLlmConfig | null,

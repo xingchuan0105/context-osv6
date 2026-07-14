@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import { ProtectedRouteGate } from "../../components/auth-gates";
+import { AppShellGate } from "@/components/desktop/AppShellGate";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  return <ProtectedRouteGate>{children}</ProtectedRouteGate>;
+  return <AppShellGate>{children}</AppShellGate>;
 }

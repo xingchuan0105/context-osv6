@@ -103,7 +103,7 @@ export function licenseSeatsMax(kind: LicenseKind): number {
 
 export function licenseTypeLabel(kind: LicenseKind, daysRemaining?: number | null): string {
   if (kind === "trial") {
-    return `试用（剩余 ${daysRemaining ?? 7} 天）`;
+    return `试用（剩余 ${daysRemaining ?? 21} 天）`;
   }
   return "永久（v1.x 终身免费升级）";
 }

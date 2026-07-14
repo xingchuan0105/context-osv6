@@ -6,4 +6,5 @@ pub mod chat_stream;
 pub mod license;
 pub mod llm_config;
 pub mod local;
+pub mod local_stack;
 pub mod system;

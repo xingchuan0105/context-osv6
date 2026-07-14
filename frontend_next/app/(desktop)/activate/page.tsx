@@ -116,7 +116,9 @@ export default function ActivatePage() {
           <header className={styles.header}>
             <ContextOsMark size={64} style={{ margin: "0 auto" }} />
             <h1 className={styles.title}>欢迎使用 Context-OS 客户端</h1>
-            <p className={styles.subtitle}>请选择激活方式</p>
+            <p className={styles.subtitle}>
+              无需云端账号。数据与向量库在本机；先试用或激活后再进入工作区。
+            </p>
           </header>
 
           <div className={styles.choiceGrid}>
@@ -126,8 +128,8 @@ export default function ActivatePage() {
               onClick={() => void handleStartTrial()}
               disabled={loading}
             >
-              <p className={styles.choiceTitle}>开始 7 天试用</p>
-              <p className={styles.choiceHint}>全功能免费体验，无需信用卡</p>
+              <p className={styles.choiceTitle}>开始 21 天试用</p>
+              <p className={styles.choiceHint}>本机许可，全功能体验，无需注册云账号</p>
             </button>
             <button
               type="button"
@@ -136,7 +138,7 @@ export default function ActivatePage() {
               disabled={loading}
             >
               <p className={styles.choiceTitle}>我已有授权码</p>
-              <p className={styles.choiceHint}>输入 AVRG-XXXX 格式授权码</p>
+              <p className={styles.choiceHint}>输入购买后获得的授权码</p>
             </button>
           </div>
 
