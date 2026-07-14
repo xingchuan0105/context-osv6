@@ -116,6 +116,7 @@ These guidelines override your default tendency to be overly helpful, overly ver
 * **GitHub is backup/optional remote**, not the development loop. Do not babysit CI queues as progress.
 * **Do not** re-add smoke as required PR checks or expand CI theater without an explicit request.
 * **Toolchain vs product:** prefer separate local commits for major toolchain bumps.
+* **VPS deploy (formal path only):** publish via `scripts/deploy-frontend.sh`, `scripts/deploy-backend.sh`, `scripts/publish-desktop-release.sh` (status: `scripts/deploy-status.sh`). Do not ad-hoc scp product code onto the VPS. Alignment plan: [`docs/engineering/LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md`](docs/engineering/LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md).
 
 ## 8\. Product App Architecture (backend `avrag-rs`) — **mandatory for new work**
 

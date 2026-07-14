@@ -48,6 +48,10 @@ echo "--- DEPLOYED.txt (tail) ---"
 tail -n 20 /opt/avrag-rs/DEPLOYED.txt 2>/dev/null || echo "(none)"
 echo "--- frontend meta ---"
 cat /opt/avrag-rs/frontend/DEPLOY_META.json 2>/dev/null || echo "(no DEPLOY_META.json)"
+echo "--- backend meta ---"
+cat /opt/avrag-rs/DEPLOY_META.backend.json 2>/dev/null || echo "(no DEPLOY_META.backend.json)"
+echo "--- api/worker containers ---"
+docker ps --filter name=avrag-api --filter name=avrag-worker --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || true
 echo
 echo "--- health ---"
 curl -sS -m 5 -o /dev/null -w "api_health:%{http_code}\n" http://127.0.0.1:8081/health

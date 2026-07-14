@@ -24,7 +24,7 @@ Trunk branch: **`master`** (local). Primary machine: WSL path `/home/chuan/conte
 | Record | Local git | `git commit` on this machine — history does **not** require GitHub |
 | Verify | Local | Targeted tests only (see below). **No push required.** |
 | Backup | GitHub (optional) | Occasional `git push origin master` at milestones, tags, or before risky ops |
-| Deploy | As you prefer | scp/rsync/VPS scripts; not “must pass GitHub PR checks first” |
+| Deploy | Local → VPS via formal scripts | **Only** `scripts/deploy-frontend.sh` / `deploy-backend.sh` / `publish-desktop-release.sh` (+ `deploy-status.sh`). Not ad-hoc scp of product code; not “must pass GitHub PR checks first”. See [`LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md`](./LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md). |
 
 ### Agents must follow
 

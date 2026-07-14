@@ -1,7 +1,12 @@
 # 本地 ↔ VPS 对齐方案
 
 **日期**: 2026-07-14  
-**状态**: Plan + P0 已落地（2026-07-14：`deploy-frontend.sh` / `deploy-status.sh` / `vps-pull-config.sh`；`deploy/nginx` + `deploy/systemd` 入库）  
+**状态**: Plan + **P0/P1/P2-backend 已落地**（2026-07-14）  
+- P0: `deploy-frontend.sh` / `deploy-status.sh`；frontend 发版写 `DEPLOYED.txt`  
+- P1: `vps-pull-config.sh`；`deploy/nginx` + `deploy/systemd` 入库；AGENTS/SOLO 写明「发版只走 `scripts/deploy-*`」  
+- P2-backend: `deploy-backend.sh` + `deploy/docker/run-avrag-containers.sh`（API/worker + migrations/prompts）  
+- P2-public-sites: 仍待（landing/why/canju 统一入口）  
+
 **问题**: 部分产物/配置直接写在 VPS；页面与脚本改在本地磁盘。两端无单一真相，易漂移。  
 **原则**: **源码与可重建配置只认本地 trunk；VPS 只跑「发布物」与「运行时状态」。**
 
@@ -65,7 +70,7 @@
 
 | 组件 | 本地构建命令 | 产物路径 | VPS 落点 | 推荐脚本 |
 |------|--------------|----------|----------|----------|
-| API / Worker | `cargo build --release -p avrag-api -p avrag-worker`（glibc 注意） | `target/release/*` | `/opt/avrag-rs/bin` + runtime 容器 | 待收口 `scripts/deploy-backend.sh` |
+| API / Worker | `cargo build --release -p avrag-api -p avrag-worker`（本地 Ubuntu 24.04 / glibc 2.39） | `target/release/*` | `/opt/avrag-rs/bin` + `avrag-runtime:24.04` host 网络 | **`scripts/deploy-backend.sh`** |
 | App 前端 | `cd frontend_next && pnpm build` | `.next/standalone` + static + public | `/opt/avrag-rs/frontend` + `avrag-frontend.service` | `scripts/deploy-frontend.sh` |
 | Desktop 包 | package 脚本 | `dist/desktop-release/` | `/var/www/releases/desktop/` | **已有** `package-desktop-release.sh` + `publish-desktop-release.sh` |
 | Migrations / prompts | 随后端包 | 仓库目录 | `/opt/avrag-rs/migrations` `prompts` | 后端 deploy 一并 rsync |
@@ -160,10 +165,12 @@ deploy/
 scripts/
   package-desktop-release.sh        # 已有
   publish-desktop-release.sh        # 已有
-  deploy-frontend.sh                # 待建：build+rsync+restart
-  deploy-backend.sh                 # 待建：bin+migrations+prompts
-  deploy-status.sh                  # 待建：curl 健康 + 打印 DEPLOYED
-  vps-pull-config.sh                # 待建：只拉 nginx/unit 到 deploy/ 供 diff
+  deploy-frontend.sh                # ✅ build+rsync+restart
+  deploy-backend.sh                 # ✅ bin+migrations+prompts + recreate containers
+  deploy-status.sh                  # ✅ curl 健康 + 打印 DEPLOYED
+  vps-pull-config.sh                # ✅ 只拉 nginx/unit 到 deploy/ 供 diff
+deploy/docker/
+  run-avrag-containers.sh           # ✅ VPS 上 recreate api/worker
 ```
 
 **`deploy-frontend.sh` 契约（建议）**：
@@ -211,13 +218,13 @@ scripts/
 ## 9. 实施顺序（建议 1 个工作单元内做完）
 
 ```text
-P0  本地：相关改动 commit 分条落盘（frontend / scripts / docs / deploy）
-P0  补 deploy-frontend.sh + deploy-status.sh
-P0  用脚本重发 frontend，写 DEPLOYED.txt(rev=…)
-P1  vps-pull-config：nginx + systemd 入库
-P1  文档：本文件链到 AGENTS.md / SOLO 一句「发版只走 scripts/deploy-*」
-P2  deploy-backend.sh 收口 API/worker
-P2  公域站（landing/why/canju）统一 publish 入口
+P0  ✅ 本地：相关改动 commit 分条落盘（frontend / scripts / docs / deploy）
+P0  ✅ 补 deploy-frontend.sh + deploy-status.sh
+P0  ✅ 用脚本重发 frontend，写 DEPLOYED.txt(rev=…)
+P1  ✅ vps-pull-config：nginx + systemd 入库
+P1  ✅ 文档：本文件链到 AGENTS.md / SOLO「发版只走 scripts/deploy-*」
+P2  ✅ deploy-backend.sh 收口 API/worker
+P2  ⬜ 公域站（landing/why/canju）统一 publish 入口
 ```
 
 ---
@@ -234,4 +241,27 @@ P2  公域站（landing/why/canju）统一 publish 入口
 
 ---
 
-**下一步**：若认可，可直接执行 P0（commit 策略你确认后；或先只写 `deploy-frontend.sh` 并用当前工作区重发一次前端 + 写 `DEPLOYED.txt`）。
+## 11. 发版命令速查
+
+```bash
+# 前端（Next standalone → /opt/avrag-rs/frontend）
+bash scripts/deploy-frontend.sh
+
+# 后端（bins + migrations + prompts → docker recreate）
+bash scripts/deploy-backend.sh
+# 已有 release 二进制、仅重发：
+SKIP_BUILD=1 bash scripts/deploy-backend.sh
+# 只同步 migrations/prompts 并 restart：
+ASSETS_ONLY=1 bash scripts/deploy-backend.sh
+
+# Desktop 安装包
+bash scripts/package-desktop-release.sh && bash scripts/publish-desktop-release.sh
+
+# 对账
+bash scripts/deploy-status.sh
+
+# 从 VPS 拉 nginx/unit 回本地 diff
+bash scripts/vps-pull-config.sh
+```
+
+**下一步**：P2 公域站统一入口（可选）；日常发版一律走上表脚本。
