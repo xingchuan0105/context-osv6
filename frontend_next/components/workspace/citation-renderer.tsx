@@ -214,7 +214,12 @@ function markdownToRichTextHtmlWithCitationButtons(
         displayId: webId ?? bracketedId ?? prefixedId,
       });
       if (!citation) {
-        // Drop unknown markers so raw [[cite:uuid]] never leaks into the answer body.
+        // Unresolved web markers: keep a neutral numeric chip (not raw [[web:n]]).
+        const fallbackId = webId ?? bracketedId ?? prefixedId;
+        if (fallbackId) {
+          return `<span class="${styles.inlineCitationFallback}" title="source">${fallbackId}</span>`;
+        }
+        // Drop unknown doc/image markers so raw [[cite:uuid]] never leaks.
         return "";
       }
       const token = `CITATIONTOKEN${citationTokens.length}END`;

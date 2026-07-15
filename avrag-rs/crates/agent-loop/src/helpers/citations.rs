@@ -98,7 +98,10 @@ pub fn build_search_citations_from_tool_results(tool_results: &[ToolResult]) -> 
                 caption: None,
                 image_url: None,
                 parser_backend: None,
-                source_locator: None,
+                source_locator: Some(serde_json::json!({
+                    "url": search_result.url,
+                    "title": search_result.title,
+                })),
                 parse_run_id: None,
             });
             next_id = citation_id + 1;
@@ -133,57 +136,65 @@ pub fn filter_citations_for_mode(
         return citations;
     }
 
-    let filtered: Vec<Citation> = if mode_id == "search" {
-        let indices = extract_search_citation_indices(answer);
-        if indices.is_empty() {
-            Vec::new()
-        } else {
-            citations
-                .iter()
-                .filter(|citation| {
-                    citation.layer.as_deref() == Some("search")
-                        && indices.contains(&citation.citation_id)
-                })
-                .cloned()
-                .collect()
-        }
-    } else {
-        let cited_chunk_ids = crate::cite_extract::extract_referenced_chunk_ids(answer);
-        if cited_chunk_ids.is_empty() {
-            Vec::new()
-        } else {
-            citations
-                .iter()
-                .filter(|citation| {
-                    citation
-                        .chunk_id
-                        .as_ref()
-                        .is_some_and(|id| cited_chunk_ids.contains(id))
-                })
-                .cloned()
-                .collect()
-        }
-    };
+    // Prefer [[web:n]] (+ legacy bare [[n]]) for web; [[cite:id]] for docs.
+    let web_indices = extract_web_citation_indices(answer);
+    let cited_chunk_ids = crate::cite_extract::extract_referenced_chunk_ids(answer);
 
     if mode_id == "search" {
-        return filtered;
+        if web_indices.is_empty() {
+            return Vec::new();
+        }
+        return citations
+            .into_iter()
+            .filter(|citation| {
+                citation.layer.as_deref() == Some("search")
+                    && web_indices.contains(&citation.citation_id)
+            })
+            .collect();
     }
 
-    filtered
-        .into_iter()
-        .enumerate()
-        .map(|(index, mut citation)| {
-            citation.citation_id = (index + 1) as i64;
-            citation
+    // chat / rag / dual (product dual uses AgentKind::Rag → mode_id "rag"):
+    // keep both doc chunk cites and web indices. Never drop web when only [[web:n]] is used.
+    let mut docs: Vec<Citation> = citations
+        .iter()
+        .filter(|citation| {
+            citation.layer.as_deref() != Some("search")
+                && citation
+                    .chunk_id
+                    .as_ref()
+                    .is_some_and(|id| cited_chunk_ids.contains(id))
         })
-        .collect()
+        .cloned()
+        .collect();
+    // Stable renumber only for doc citations (frontend resolves docs by chunk_id).
+    for (index, citation) in docs.iter_mut().enumerate() {
+        citation.citation_id = (index + 1) as i64;
+    }
+
+    let mut webs: Vec<Citation> = citations
+        .into_iter()
+        .filter(|citation| {
+            citation.layer.as_deref() == Some("search")
+                && web_indices.contains(&citation.citation_id)
+        })
+        .collect();
+    // Keep original search observation indices so [[web:n]] continues to resolve.
+
+    docs.append(&mut webs);
+    docs
 }
 
-fn extract_search_citation_indices(answer: &str) -> std::collections::HashSet<i64> {
-    crate::react_loop::answer_contract::extract_search_indices(answer)
-        .into_iter()
-        .map(|index| index as i64)
-        .collect()
+fn extract_web_citation_indices(answer: &str) -> std::collections::HashSet<i64> {
+    // [[web:n]] + legacy bare [[n]] / [[1, 2]]
+    let mut set: std::collections::HashSet<i64> =
+        crate::react_loop::answer_contract::extract_web_marker_indices_public(answer)
+            .into_iter()
+            .map(|index| index as i64)
+            .collect();
+    for index in crate::react_loop::answer_contract::extract_search_indices(answer) {
+        set.insert(index as i64);
+    }
+    set
 }
 
 pub fn degrade_trace_from_tool_results(tool_results: &[ToolResult]) -> Vec<DegradeTraceItem> {
@@ -375,6 +386,25 @@ mod tests {
         assert_eq!(search.len(), 2);
         assert_eq!(search[0].citation_id, 1);
         assert_eq!(search[1].citation_id, 2);
+    }
+
+    #[test]
+    fn rag_mode_keeps_web_markers_even_without_doc_cites() {
+        let citations = vec![
+            sample_citation(1, "chunk-a"),
+            sample_search_citation(4, "https://g.example"),
+            sample_search_citation(2, "https://b.example"),
+        ];
+        let filtered = filter_citations_for_mode(
+            "rag",
+            "Best practice [[web:4]] and also [[web:2]]",
+            citations,
+        );
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|c| c.layer.as_deref() == Some("search")));
+        assert_eq!(filtered[0].citation_id, 4);
+        assert_eq!(filtered[1].citation_id, 2);
+        assert_eq!(filtered[0].doc_id, "https://g.example");
     }
 
     #[test]

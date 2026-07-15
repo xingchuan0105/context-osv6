@@ -97,7 +97,10 @@ pub fn synthesis_contract_block(mode: &ModeConfig) -> &'static str {
              - Web evidence: [[web:n]] where n is the web_search observation index (1-based).\n\
              - Do NOT use bare [[n]] for web; do NOT put web indices into doc cites.\n\
              citations[]: kind is \"doc\" or \"web\"; id is chunk_id or web index string.\n\
-             answer_text is the ONLY user-visible body — never narrate schema fields or internal tokens."
+             answer_text is the ONLY user-visible body — never narrate schema fields or internal tokens.\n\
+             FORBIDDEN in answer_text: wrappers like [来源：…], [来源:…], **[来源：…]**, \
+'来源：' attribution lines, or any prose that re-lists citations outside [[cite:]]/[[web:n]].\n\
+             Place markers inline next to the claim; the product UI renders sources separately."
         }
     }
 }
@@ -375,6 +378,11 @@ fn extract_cite_chunk_ids(text: &str) -> Vec<String> {
         }
     }
     ids
+}
+
+/// Public for citation filtering (`[[web:n]]` + legacy bare `[[n]]`).
+pub fn extract_web_marker_indices_public(text: &str) -> Vec<u32> {
+    extract_web_marker_indices(text)
 }
 
 fn extract_web_marker_indices(text: &str) -> Vec<u32> {
@@ -865,8 +873,82 @@ pub fn ensure_user_visible_answer_text(raw: &str) -> String {
             _ => break,
         }
     }
-    rewrite_legacy_web_markers(&text)
+    let text = rewrite_legacy_web_markers(&text);
+    strip_model_source_wrappers(&text)
 }
+
+/// Remove model-invented source attribution shells like `[来源：…]` / `**[来源：…]**`.
+/// Keeps inline `[[cite:]]` / `[[web:n]]` markers (rescued from inside wrappers).
+pub fn strip_model_source_wrappers(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(found) = rest.find("[来源") {
+        let mut start = found;
+        if start >= 2
+            && rest.as_bytes()[start - 2] == b'*'
+            && rest.as_bytes()[start - 1] == b'*'
+        {
+            start -= 2;
+        }
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        let Some(close) = after.find(']') else {
+            if let Some(nl) = after.find('\n') {
+                rest = &after[nl..];
+            } else {
+                rest = "";
+            }
+            continue;
+        };
+        let block = &after[..close + 1];
+        // Rescue citation markers from inside the wrapper before dropping it.
+        let rescued = extract_inline_markers_from(block);
+        if !rescued.is_empty() {
+            if !out.ends_with(|c: char| c.is_whitespace()) {
+                out.push(' ');
+            }
+            out.push_str(&rescued);
+            out.push(' ');
+        }
+        let mut end = close + 1;
+        if after.get(end..end + 2) == Some("**") {
+            end += 2;
+        }
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    for empty in ["[来源： ]", "[来源: ]", "[来源：]", "[来源:]"] {
+        out = out.replace(empty, "");
+    }
+    while out.contains("  ") {
+        out = out.replace("  ", " ");
+    }
+    out
+}
+
+fn extract_inline_markers_from(block: &str) -> String {
+    let mut parts = Vec::new();
+    let mut rest = block;
+    while let Some(start) = rest.find("[[") {
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("]]") else {
+            break;
+        };
+        let inner = after[..end].trim();
+        if inner.starts_with("cite:")
+            || inner.starts_with("image:")
+            || inner.starts_with("web:")
+            || inner.parse::<u32>().is_ok()
+            || inner.contains(',')
+        {
+            parts.push(format!("[[{inner}]]"));
+        }
+        rest = &after[end + 2..];
+    }
+    parts.join(" ")
+}
+
+
 
 const PARTIAL_EVIDENCE_INSUFFICIENT_ZH: &str = "资料不足以完整回答";
 
@@ -1320,6 +1402,15 @@ mod tests {
         assert!(!text.contains("EVIDENCEINSUFFICIENTFALLBACK"));
         assert!(text.contains("[[web:1]]") || text.contains("[[1]]"));
         assert!(!text.contains("schemaversion"));
+    }
+
+    #[test]
+    fn strip_model_source_wrappers_removes_laiyuan_shells() {
+        let raw = "[来源： ]** --- ## 二、框架\n根据报告[[web:4]]：\n**[来源：[[web:4]] [[web:2]]]**\n正文";
+        let cleaned = strip_model_source_wrappers(raw);
+        assert!(!cleaned.contains("[来源"));
+        assert!(cleaned.contains("[[web:4]]") || cleaned.contains("框架"));
+        assert!(cleaned.contains("正文") || cleaned.contains("框架"));
     }
 
     #[test]
