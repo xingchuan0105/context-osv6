@@ -36,6 +36,7 @@ export const WORKSPACE_HTML_SANITIZE_CONFIG: DOMPurifyConfig = {
     "href",
     "rel",
     "target",
+    "title",
     "type",
   ],
   ALLOW_DATA_ATTR: false,

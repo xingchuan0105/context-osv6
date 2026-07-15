@@ -200,10 +200,12 @@ function resolveCitationFromMarker(
 }
 
 type RichMarkdownCitationToken = {
-  citation: Citation;
+  citation: Citation | null;
   token: string;
   /** Sequential chip number in answer order (1,2,3…). */
   displaySeq: number;
+  /** Unresolved web marker — render non-clickable chip after markdown escape. */
+  fallbackOnly?: boolean;
 };
 
 function markdownToRichTextHtmlWithCitationButtons(
@@ -215,11 +217,23 @@ function markdownToRichTextHtmlWithCitationButtons(
   /** First-appearance order → sequential chip 1,2,3… (same source reuses same number). */
   const sequentialByKey = new Map<string, number>();
   let nextSequential = 1;
-  // Order matters: named cite/image first, then web / numeric markers.
+
+  const allocSeq = (key: string) => {
+    let seq = sequentialByKey.get(key);
+    if (seq === undefined) {
+      seq = nextSequential;
+      nextSequential += 1;
+      sequentialByKey.set(key, seq);
+    }
+    return seq;
+  };
+
+  // Placeholders must be plain text so markdown/escapeHtml does not mangle them;
+  // real <button>/<span> HTML is injected only after markdownToRichTextHtml.
   const tokenizedMarkdown = markdown.replace(
     /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
     (
-      marker,
+      _marker,
       citeChunkId: string | undefined,
       imageChunkId: string | undefined,
       webId: string | undefined,
@@ -231,28 +245,21 @@ function markdownToRichTextHtmlWithCitationButtons(
         displayId: webId ?? bracketedId ?? prefixedId,
       });
       if (!citation) {
-        // Unresolved web markers: sequential fallback chip (not raw [[web:n]] / observation id).
         const fallbackId = webId ?? bracketedId ?? prefixedId;
-        if (fallbackId) {
-          const key = `fallback:${fallbackId}`;
-          let seq = sequentialByKey.get(key);
-          if (seq === undefined) {
-            seq = nextSequential;
-            nextSequential += 1;
-            sequentialByKey.set(key, seq);
-          }
-          return `<span class="${styles.inlineCitationFallback}" title="source">${seq}</span>`;
+        if (!fallbackId) {
+          return "";
         }
-        // Drop unknown doc/image markers so raw [[cite:uuid]] never leaks.
-        return "";
+        const seq = allocSeq(`fallback:${fallbackId}`);
+        const token = `CITATIONTOKEN${citationTokens.length}END`;
+        citationTokens.push({
+          citation: null,
+          token,
+          displaySeq: seq,
+          fallbackOnly: true,
+        });
+        return token;
       }
-      const key = citationIdentityKey(citation);
-      let seq = sequentialByKey.get(key);
-      if (seq === undefined) {
-        seq = nextSequential;
-        nextSequential += 1;
-        sequentialByKey.set(key, seq);
-      }
+      const seq = allocSeq(citationIdentityKey(citation));
       const token = `CITATIONTOKEN${citationTokens.length}END`;
       citationTokens.push({ citation, token, displaySeq: seq });
       return token;
@@ -260,12 +267,17 @@ function markdownToRichTextHtmlWithCitationButtons(
   );
   let html = markdownToRichTextHtml(tokenizedMarkdown);
 
-  citationTokens.forEach(({ citation, token, displaySeq }, tokenIndex) => {
+  citationTokens.forEach(({ citation, token, displaySeq, fallbackOnly }, tokenIndex) => {
+    const displayId = escapeHtmlAttribute(String(displaySeq));
+    if (fallbackOnly || !citation) {
+      const spanHtml = `<span class="${styles.inlineCitationFallback}" title="source">${displayId}</span>`;
+      html = html.split(token).join(spanHtml);
+      return;
+    }
     const citationIndex = findCitationIndex(citations, citation);
     const resolvedIndex = citationIndex >= 0 ? citationIndex : 0;
     const label = escapeHtmlAttribute(getInlineCitationAriaLabel(locale, citation, resolvedIndex));
-    const displayId = escapeHtmlAttribute(String(displaySeq));
-    const buttonHtml = `<button aria-label="${label}" class="${styles.inlineCitationButton}" data-inline-citation-token-index="${tokenIndex}" type="button">${displayId}</button>`;
+    const buttonHtml = `<button aria-label="${label}" class="${styles.inlineCitationButton}" data-inline-citation-token-index="${tokenIndex}" data-testid="workspace-citation" type="button">${displayId}</button>`;
     html = html.split(token).join(buttonHtml);
   });
 
@@ -420,7 +432,7 @@ export function CitationRenderer({
                 return;
               }
               const tokenIndex = Number.parseInt(button.dataset.inlineCitationTokenIndex ?? "", 10);
-              const citation = richMarkdown.citationTokens[tokenIndex]?.citation;
+              const citation = richMarkdown.citationTokens[tokenIndex]?.citation ?? null;
               if (citation) {
                 handleCitationClick(citation, button);
               }
@@ -482,79 +494,38 @@ export function CitationRenderer({
   }
 
   if (hasRenderedCitationMarkup(message.content)) {
-    let inlineCitationsRendered = 0;
-
-    const renderedLines = message.content.split("\n").map((line, lineIndex) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) {
-        return <div aria-hidden="true" className={styles.answerSpacer} key={`spacer-${lineIndex}`} />;
-      }
-
-      const tokens = tokenizeRenderedAnswerLine(line);
-
-      if (tokens.length === 1 && tokens[0]?.type === "image") {
-        const citation = resolveCitationFromMarker(message.citations, {
-          chunkId: tokens[0].chunkId,
-          displayId: tokens[0].displayId,
-        });
-        if (!citation) {
-          return null;
-        }
-        inlineCitationsRendered += 1;
-        return renderImageCard(citation, `rendered-image-${lineIndex}`);
-      }
-
-      return (
-        <p className={styles.answerTextBlock} key={`line-${lineIndex}`}>
-          {tokens.map((token, tokenIndex) => {
-            if (token.type === "text") {
-              if (!token.text) {
-                return null;
-              }
-              return (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: sanitizeWorkspaceHtml(markdownToInlineHtml(token.text)),
-                  }}
-                  key={`text-${lineIndex}-${tokenIndex}`}
-                />
-              );
-            }
-
-            if (token.type === "citation") {
-              const citation = resolveCitationFromMarker(message.citations, {
-                chunkId: token.chunkId,
-                displayId: token.displayId,
-              });
-              if (!citation) {
-                return null;
-              }
-              inlineCitationsRendered += 1;
-              return renderCitationButton(citation, `inline-${lineIndex}-${tokenIndex}`);
-            }
-
-            const citation = resolveCitationFromMarker(message.citations, {
-              chunkId: token.chunkId,
-              displayId: token.displayId,
-            });
-            if (!citation) {
-              return null;
-            }
-            inlineCitationsRendered += 1;
-            return renderCitationButton(citation, `image-inline-${lineIndex}-${tokenIndex}`);
-          })}
-        </p>
-      );
-    });
-
+    // Prefer the same rich-markdown path so sequential chips + safe token injection apply.
+    const richMarkdown = markdownToRichTextHtmlWithCitationButtons(
+      message.content,
+      message.citations,
+      locale,
+    );
     const trailingCitationsMarkup =
-      inlineCitationsRendered === 0 && message.citations.length > 0
+      richMarkdown.citationTokens.filter((t) => t.citation).length === 0 &&
+      message.citations.length > 0
         ? dedupeCitations(message.citations)
         : [];
 
     return (
       <>
-        <div className={styles.answerBlockStack}>{renderedLines}</div>
+        <div
+          className={styles.markdownContent}
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            const button = target.closest<HTMLButtonElement>(
+              "button[data-inline-citation-token-index]",
+            );
+            if (!button) {
+              return;
+            }
+            const tokenIndex = Number.parseInt(button.dataset.inlineCitationTokenIndex ?? "", 10);
+            const citation = richMarkdown.citationTokens[tokenIndex]?.citation ?? null;
+            if (citation) {
+              handleCitationClick(citation, button);
+            }
+          }}
+          dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(richMarkdown.html) }}
+        />
         {trailingCitationsMarkup.length > 0 ? (
           <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
             {trailingCitationsMarkup.map((citation, idx) =>
