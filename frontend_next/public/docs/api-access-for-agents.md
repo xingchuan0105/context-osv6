@@ -92,8 +92,8 @@ REST routes below enforce the **same workspace scope and permission rules** as M
 | `GET` | `/api/v1/sources?workspace_id={workspace_id}` | List sources |
 | `POST` | `/api/v1/workspaces/{workspace_id}/documents` | Create file upload |
 | `POST` | `/api/v1/documents/{document_id}/complete-upload` | Finish upload |
-| `POST` | `/api/v1/chat` | REST/SSE chat |
-| `GET` | `/api/v1/agent/operation-guides/{mode}` | Prefetch guide (`rag`, `search`, `index`, `workspace.create`) |
+| `POST` | `/api/v1/chat` | REST/SSE chat (`capabilities`: `rag` / `search` multiselect; legacy `agent_type` still accepted). **`agent_type=write` is offline** (`write_mode_disabled`) |
+| `GET` | `/api/v1/agent/operation-guides/{mode}` | Prefetch guide (`rag`, `search`, `index`, `workspace.create`) — no write guide |
 
 ## Deprecated MCP path
 

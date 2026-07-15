@@ -142,14 +142,17 @@ fn query_tools() -> Vec<Value> {
         }),
         json!({
             "name": "workspace.chat",
-            "description": "Legacy alias for workspace.rag_query.",
+            "description": "Legacy alias for workspace.rag_query. Prefer agent_type rag|search|chat (or REST capabilities[]). agent_type=write is rejected (write_mode_disabled).",
             "inputSchema": {
                 "type": "object",
                 "required": ["workspace_id", "query"],
                 "properties": {
                     "workspace_id": workspace_id_property(),
                     "query": { "type": "string" },
-                    "agent_type": { "type": "string" },
+                    "agent_type": {
+                        "type": "string",
+                        "description": "Legacy mode: rag|search|chat. write is product-offline (write_mode_disabled)."
+                    },
                     "doc_scope": {
                         "type": "array",
                         "items": { "type": "string" }

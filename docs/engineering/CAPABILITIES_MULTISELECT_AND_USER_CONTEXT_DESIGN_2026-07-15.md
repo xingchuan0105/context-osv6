@@ -211,11 +211,11 @@ Failure / partial (must be distinguishable; never fabricate city):
 - Missing `client_context` → clock fields absent or explicit unavailable reason.
 - Private / unknown IP, missing mmdb, or lookup miss → `confidence: "none"` + `reason`; omit fake city.
 
-### 6.5 Deployment
+### 6.5 Deployment / ops
 
-- Config env e.g. `GEOIP_CITY_DB_PATH` pointing at GeoLite2-City.mmdb.
+- Config env: `GEOIP_CITY_DB_PATH` → GeoLite2-City.mmdb path (documented in `avrag-rs/.env.example`).
 - Dev without mmdb: geo degrades to `none`; chat must still work.
-- Document how to obtain/update the database (MaxMind license / download process).
+- Obtain/update DB via MaxMind GeoLite2 license / download process; mount path on VPS or local and set the env var before process start.
 - Production reverse proxy must forward real client IP and only trust boundary hop.
 
 ### 6.6 Prompt / tool description constraints

@@ -917,13 +917,13 @@ git commit -am "feat(frontend): capability tag toggles and message chips; remove
 - MCP catalog `agent_type` docs: note capabilities
 - Fix product e2e that **must** still compile: `write_real.rs` either `#[ignore]` with note write offline or expect 4xx
 
-- [ ] **Step 1: Align schemas**
+- [x] **Step 1: Align schemas**
 
 ```rust
 // chat_mode_schema tool_pool or external_tools include user_context if that schema is used for disclosure
 ```
 
-- [ ] **Step 2: write e2e**
+- [x] **Step 2: write e2e**
 
 ```rust
 // write_real.rs — at top of test:
@@ -932,13 +932,13 @@ git commit -am "feat(frontend): capability tag toggles and message chips; remove
 
 Prefer explicit assert reject if test harness is cheap; else ignore with reason.
 
-- [ ] **Step 3: Run broader L1 subset**
+- [x] **Step 3: Run broader L1 subset** (targeted filters in Task 12)
 
 ```bash
 cd /home/chuan/context-osv6/avrag-rs && cargo test -p agent-tools --lib && cargo test -p app-chat --lib && cargo test -p app-bootstrap --lib
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (combined with Task 12)
 
 ```bash
 git commit -am "chore: align capability schemas and park write e2e after product offline"
@@ -953,7 +953,7 @@ git commit -am "chore: align capability schemas and park write e2e after product
 - Design doc status already Approved; plan this file
 - `graphify update .` after structural Rust/TS symbol changes
 
-- [ ] **Step 1: Final targeted verify**
+- [x] **Step 1: Final targeted verify**
 
 ```bash
 cd /home/chuan/context-osv6/avrag-rs && cargo test -p contracts --manifest-path ../contracts/Cargo.toml 2>/dev/null || \
@@ -964,13 +964,13 @@ cd /home/chuan/context-osv6/avrag-rs && cargo test -p app-bootstrap --lib
 cd /home/chuan/context-osv6/frontend_next && pnpm exec vitest run tests/workspace/workspace-chat-pane.modes.test.tsx
 ```
 
-- [ ] **Step 2: graphify**
+- [x] **Step 2: graphify**
 
 ```bash
 cd /home/chuan/context-osv6 && graphify update .
 ```
 
-- [ ] **Step 3: Commit docs if any**
+- [x] **Step 3: Commit docs if any** (single commit with Task 11)
 
 ```bash
 git add docs/engineering/ avrag-rs/prompts/README.md 2>/dev/null

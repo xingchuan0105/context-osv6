@@ -150,7 +150,7 @@ fn load_mode_disclosed_tools(file_stem: &str) -> Vec<String> {
     ids
 }
 
-/// Union of disclosed tool ids across product modes (chat/rag/search/write).
+/// Union of disclosed tool ids across product modes (chat/rag/search).
 pub fn product_mode_tool_pool_union() -> BTreeSet<String> {
     let mut ids = BTreeSet::new();
     for (_, file_stem) in PRODUCT_MODE_FILES {

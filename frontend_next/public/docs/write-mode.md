@@ -2,11 +2,13 @@
 
 Stable link: `/docs/write-mode.md`
 
+> **Product offline (2026-07-15):** `agent_type: "write"` is **rejected** at the product boundary with HTTP 4xx `write_mode_disabled`. Prefer chat plus optional `capabilities: ["rag"]` / `["search"]`. This page is retained as residual design notes for the HeavyTail pipeline — not a live user mode.
+
 ## 1. 概述 / Overview
 
-**Write 模式** 是 Context-OS 的第四种对话模式，与 `chat` / `rag` / `search` 同级。它围绕一个主题自动撰写长文：调研资料、规划大纲、分段起草、统计指纹精修、校验交付。
+**Write 模式**（当前产品不可选）曾是 Context-OS 的第四种对话模式，与 `chat` / `rag` / `search` 同级。它围绕一个主题自动撰写长文：调研资料、规划大纲、分段起草、统计指纹精修、校验交付。
 
-**Write mode** is the fourth conversation mode in Context-OS, on par with `chat` / `rag` / `search`. Given a topic, it automatically writes a long-form article: research → skeleton → draft → fingerprint-driven refinement → validate.
+**Write mode** (currently **product-offline**) was the fourth conversation mode in Context-OS, on par with `chat` / `rag` / `search`. Given a topic, it automatically writes a long-form article: research → skeleton → draft → fingerprint-driven refinement → validate.
 
 | 模式 / Mode | `agent_type` | 典型调用数 / Typical LLM calls | 联网 / Internet | 输出 / Output |
 |------|------------|------------|------|------|

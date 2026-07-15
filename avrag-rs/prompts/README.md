@@ -13,6 +13,12 @@ See [docs/agents/cds-v1.1.md](../docs/agents/cds-v1.1.md) for the full spec.
 | **C — Pipeline** | `pipeline/*.system*.md` | **Not registered**; `include_str!` / hot reload | Worker ingestion, chat postprocess |
 | **Templates** | `templates/*.tmpl` | Not registered | User-side templates paired with pipeline system prompts |
 
+### Capability multiselect + `user_context` (2026-07-15)
+
+- Product assemble: `agent-base.md` + optional `capability-rag.md` / `capability-search.md` (not a single write orchestrator).
+- Base tool `user_context` (clock + MaxMind city) is always in the agent tool pool; optional geo via env `GEOIP_CITY_DB_PATH` (see `avrag-rs/.env.example`). Without the DB, geo degrades to `confidence: none`.
+- Product write (`agent_type=write`) is offline (`write_mode_disabled`).
+
 ## Clusters (A)
 
 | Id | Mode | Notes |

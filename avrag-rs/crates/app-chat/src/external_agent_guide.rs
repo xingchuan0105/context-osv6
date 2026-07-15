@@ -11,12 +11,18 @@ const SEARCH_SUMMARY: &str = "Search uses native tool calls (web_search, web_fet
 const INDEX_SUMMARY: &str = "Ingestion uses MCP workspace tools plus HTTP PUT for file bytes. Flow: create_upload → PUT upload_url → complete_upload → poll document_status until completed.";
 const WORKSPACE_CREATE_SUMMARY: &str = "Personal product: humans create workspaces in the UI, then share workspace_id plus a workspace API key (index+query). Do not rely on account/org-scoped keys for normal automation.";
 
+/// Prefetch / MCP operation guides for external agents.
+///
+/// Product modes with guides: `rag`, `search`, `index`, `workspace.create`.
+/// Dual `rag+search` has no separate guide (clients compose rag/search).
+/// Write is product-offline (`write_mode_disabled`) — no guide.
 pub fn load_invoke_operation_guide(mode: &str) -> Option<AgentOperationGuide> {
     match mode {
         "rag" => Some(build_rag_guide()),
         "search" => Some(build_search_guide()),
         "index" => Some(build_index_guide()),
         "workspace.create" => Some(build_workspace_create_guide()),
+        // write / write_refine / chat pure: no external-agent guide
         _ => None,
     }
 }

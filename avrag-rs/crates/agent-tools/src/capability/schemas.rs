@@ -6,10 +6,13 @@
 use super::ModeSchema;
 
 /// Chat mode schema.
+///
+/// Runtime always exposes base skill `user_context` (see `mode_assemble`); listed
+/// here so capability metadata matches the product tool surface.
 pub fn chat_mode_schema() -> ModeSchema {
     ModeSchema {
         id: "chat".to_string(),
-        tool_pool: vec![],
+        tool_pool: vec!["user_context".to_string()],
         external_tools_used: vec![],
         requires_internet: false,
     }
@@ -35,7 +38,10 @@ pub fn search_mode_schema() -> ModeSchema {
     }
 }
 
-/// Write mode schema.
+/// Write mode schema (residual registry entry only).
+///
+/// Product `ConversationApp` rejects `agent_type=write` with `write_mode_disabled`
+/// (2026-07-15 offline). Kept so historical registry metadata / tests stay stable.
 pub fn write_mode_schema() -> ModeSchema {
     ModeSchema {
         id: "write".to_string(),
@@ -45,7 +51,7 @@ pub fn write_mode_schema() -> ModeSchema {
     }
 }
 
-/// All built-in mode schemas (chat, rag, search, write).
+/// All built-in mode schemas (chat, rag, search; write residual / product-offline).
 pub fn standard_mode_schemas() -> Vec<ModeSchema> {
     vec![
         chat_mode_schema(),
@@ -74,6 +80,7 @@ mod tests {
         let schema = chat_mode_schema();
         assert_eq!(schema.id, "chat");
         assert!(!schema.requires_internet);
+        assert!(schema.tool_pool.iter().any(|t| t == "user_context"));
     }
 
     #[test]
