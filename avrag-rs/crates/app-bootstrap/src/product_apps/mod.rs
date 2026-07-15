@@ -3,8 +3,8 @@
 //! **Freeze:** do not add business methods on AppState; add them on the relevant `*App` here
 //! (or in domain crates behind the App).
 //!
-//! **Execute:** only `conversation().execute[_stream]`. AgentApp = sessions/search/tools.
-//! Domain pipelines own write vs agent lanes (`PipelineLane`).
+//! **Execute:** only `conversation().execute[_stream]` (chat/rag/search; write rejected).
+//! AgentApp = sessions/search/tools. Domain pipelines own `PipelineLane` internals.
 //!
 //! Product accessors: `conversation()`, `workspace()`, `share()`, `billing_api()`,
 //! `prefs()`, `admin_api()`, `admin_ops()`, `agent()`.
@@ -43,7 +43,7 @@ pub struct WorkspaceApiKeyAuth {
 }
 
 impl AppState {
-    /// Single conversation execute entry (chat/rag/search/write).
+    /// Single conversation execute entry (chat/rag/search; write rejected at boundary).
     pub fn conversation(&self) -> ConversationApp<'_> {
         ConversationApp { chat: &self.chat }
     }
@@ -122,6 +122,8 @@ mod tests {
             workspace_id: None,
             session_id: None,
             agent_type: agent_type.to_string(),
+            capabilities: None,
+            client_context: None,
             source_type: None,
             source_token: None,
             doc_scope: vec![],
@@ -148,16 +150,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn conversation_routes_write_and_chat_on_real_path() {
+    async fn conversation_rejects_write_agent_type() {
         let state = AppState::new(AppConfig::default());
         let conv = state.conversation();
+        let mut req = empty_chat_req("write");
+        req.query = "hello".into();
         let write_err = conv
-            .execute(empty_chat_req("write"))
+            .execute(req)
             .await
-            .expect_err("empty write query");
-        assert_eq!(write_err.code(), "query_required");
+            .expect_err("product boundary rejects write");
+        assert_eq!(write_err.code(), "write_mode_disabled");
+    }
 
-        let chat_err = conv
+    #[tokio::test]
+    async fn conversation_routes_chat_on_real_path() {
+        let state = AppState::new(AppConfig::default());
+        let chat_err = state
+            .conversation()
             .execute(empty_chat_req("chat"))
             .await
             .expect_err("empty chat query");

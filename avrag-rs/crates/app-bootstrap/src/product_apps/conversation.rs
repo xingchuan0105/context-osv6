@@ -1,7 +1,7 @@
 //! Product App — Conversation (single session-execute entry).
 //!
-//! Transport/MCP call **only** this App for chat/rag/search/write execution.
-//! Lane decision is once here; ChatContext pipelines own the rest.
+//! Transport/MCP call **only** this App for chat/rag/search execution.
+//! Product write is hard-disabled here; agent chat lane owns the rest.
 
 use common::AppError;
 use contracts::chat::{ChatEvent, ChatRequest, ChatResponse};
@@ -19,23 +19,26 @@ impl<'a> ConversationApp<'a> {
         if app_chat::is_reserved_internal_agent_type(agent_type) {
             return Err(AppError::validation(
                 "write_refine_not_user_mode",
-                "write_refine is an internal control ring; use agent_type=write",
+                "write_refine is an internal control ring and is not available as a user agent_type",
             ));
         }
         Ok(())
     }
 
-    /// Non-streaming execute. Sole product-level write/agent routing.
+    /// Non-streaming execute. Product boundary rejects write; always agent chat lane.
     pub async fn execute(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
         Self::validate_user_agent_type(&req.agent_type)?;
+        // Reject product write
         if app_chat::is_write_agent_type(&req.agent_type) {
-            self.chat.execute_write(req).await
-        } else {
-            self.chat.execute_chat(req).await
+            return Err(app_chat::write_disabled_error());
         }
+        // Also resolve to catch issues early (write already rejected above)
+        app_chat::resolve_capabilities(req.capabilities.as_deref(), &req.agent_type)?;
+        // Always agent chat lane from product boundary
+        self.chat.execute_chat(req).await
     }
 
-    /// Streaming execute (SSE). Sole product-level write/agent routing.
+    /// Streaming execute (SSE). Product boundary rejects write; always agent chat lane.
     pub async fn execute_stream(
         &self,
         req: ChatRequest,
@@ -44,14 +47,15 @@ impl<'a> ConversationApp<'a> {
         token: CancellationToken,
     ) -> Result<(), AppError> {
         Self::validate_user_agent_type(&req.agent_type)?;
+        // Reject product write
         if app_chat::is_write_agent_type(&req.agent_type) {
-            self.chat
-                .execute_write_stream(req, request_id, sender, token)
-                .await
-        } else {
-            self.chat
-                .execute_chat_stream(req, request_id, sender, token)
-                .await
+            return Err(app_chat::write_disabled_error());
         }
+        // Also resolve to catch issues early (write already rejected above)
+        app_chat::resolve_capabilities(req.capabilities.as_deref(), &req.agent_type)?;
+        // Always agent chat lane from product boundary
+        self.chat
+            .execute_chat_stream(req, request_id, sender, token)
+            .await
     }
 }
