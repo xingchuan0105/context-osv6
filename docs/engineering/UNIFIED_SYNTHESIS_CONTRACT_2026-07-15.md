@@ -1,7 +1,8 @@
 # Unified synthesis contract (`internal_answer_unified_v1`)
 
 **Date:** 2026-07-15  
-**Status:** Implemented (backend primary path; frontend marker render)
+**Status:** Implemented + thinned (2026-07-15)  
+**Principle:** LLM owns prose/format within a thin envelope; server peels `answer_text` and hangs `[[cite:]]`/`[[web:n]]` — no heavy format police.
 
 ## Decision
 

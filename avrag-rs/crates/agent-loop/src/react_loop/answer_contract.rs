@@ -88,19 +88,16 @@ pub fn synthesis_contract_block(mode: &ModeConfig) -> &'static str {
         }
         AnswerContractKind::InternalAnswerUnifiedV1
         | AnswerContractKind::InternalHybridAnswerV1 => {
-            "Respond with ONLY one JSON object (no markdown fences). Use the unified schema:\n\
-             {\"schema_version\":\"internal_answer_unified_v1\",\"answer_text\":\"user-visible prose only\",\
-\"citations\":[{\"kind\":\"doc\",\"id\":\"CHUNK_ID\"},{\"kind\":\"web\",\"id\":\"1\",\"url\":null,\"title\":null}],\
-\"coverage\":\"full\",\"refusal_reason\":null}\n\
-             In answer_text:\n\
-             - Workspace/doc evidence: [[cite:CHUNK_ID]] (id must match a doc chunk from tool observations).\n\
-             - Web evidence: [[web:n]] where n is the web_search observation index (1-based).\n\
-             - Do NOT use bare [[n]] for web; do NOT put web indices into doc cites.\n\
-             citations[]: kind is \"doc\" or \"web\"; id is chunk_id or web index string.\n\
-             answer_text is the ONLY user-visible body — never narrate schema fields or internal tokens.\n\
-             FORBIDDEN in answer_text: wrappers like [来源：…], [来源:…], **[来源：…]**, \
-'来源：' attribution lines, or any prose that re-lists citations outside [[cite:]]/[[web:n]].\n\
-             Place markers inline next to the claim; the product UI renders sources separately."
+            // Thin contract: LLM owns prose; server only peels this envelope + hangs markers.
+            "Return ONLY this JSON (no markdown fences, no extra keys):\n\
+{\"schema_version\":\"internal_answer_unified_v1\",\"answer_text\":\"<markdown prose>\",\
+\"citations\":[{\"kind\":\"doc\",\"id\":\"<chunk_id>\"},{\"kind\":\"web\",\"id\":\"<n>\"}],\
+\"coverage\":\"full|partial|none\",\"refusal_reason\":null}\n\
+Rules:\n\
+- answer_text = user-visible markdown only (never paste this JSON into answer_text).\n\
+- Doc: [[cite:CHUNK_ID]] next to the claim; citations kind=doc id=CHUNK_ID from tools.\n\
+- Web: [[web:n]] next to the claim; citations kind=web id=n (1-based web_search index).\n\
+- Do not invent [来源：…] / source footnotes; UI renders markers."
         }
     }
 }
@@ -652,47 +649,15 @@ pub fn validate_synthesis_answer(
 
 fn validate_unified_answer(
     answer: &InternalAnswerUnifiedV1,
-    tool_results: &[ToolResult],
-    messages: &[ChatMessage],
+    _tool_results: &[ToolResult],
+    _messages: &[ChatMessage],
     _mode: &ModeConfig,
 ) -> Vec<String> {
+    // Thin validation: LLM owns cite quality; server only requires non-empty prose.
+    // Citation hanging is done later from [[cite:]] / [[web:n]] in the answer body.
     let mut errors = Vec::new();
     if answer.answer_text.trim().is_empty() {
         errors.push("answer_text is empty".to_string());
-    }
-    let known = known_chunk_ids_with_messages(tool_results, messages);
-    for cite in &answer.citations {
-        match cite.kind.as_str() {
-            "doc" => {
-                if !known.contains(&cite.id) {
-                    errors.push(format!("citation doc id {} not found in tool results", cite.id));
-                }
-                let marker = format!("[[cite:{}]]", cite.id);
-                if !answer.answer_text.contains(&marker) {
-                    errors.push(format!("answer_text missing marker {marker}"));
-                }
-            }
-            "web" => {
-                let Ok(n) = cite.id.parse::<u32>() else {
-                    errors.push(format!("web citation id must be numeric, got {}", cite.id));
-                    continue;
-                };
-                let marker = format!("[[web:{n}]]");
-                let legacy = format!("[[{n}]]");
-                if !answer.answer_text.contains(&marker) && !answer.answer_text.contains(&legacy) {
-                    errors.push(format!("answer_text missing web marker {marker}"));
-                }
-            }
-            other => errors.push(format!("unknown citation kind {other}")),
-        }
-    }
-    if answer.coverage.as_deref() == Some("none")
-        && answer
-            .refusal_reason
-            .as_ref()
-            .is_none_or(|r| r.trim().is_empty())
-    {
-        errors.push("refusal_reason is required when coverage=none".to_string());
     }
     errors
 }
@@ -1246,24 +1211,52 @@ pub fn resolve_synthesis_answer(
     messages: &[ChatMessage],
     mode: &ModeConfig,
 ) -> Option<ParsedSynthesisAnswer> {
+    let unified = matches!(
+        mode.synthesis_output.contract,
+        AnswerContractKind::InternalAnswerUnifiedV1 | AnswerContractKind::InternalHybridAnswerV1
+    );
+
     for raw in candidates {
         if let Ok(parsed) = parse_synthesis_answer(raw, mode) {
+            if unified {
+                // Thin path: trust LLM answer_text; do not fail the turn on cite hygiene.
+                let errors = validate_synthesis_answer(&parsed, tool_results, messages, mode);
+                if errors.is_empty() {
+                    return Some(parsed);
+                }
+                // Empty answer_text only — try next candidate / unwrap.
+                tracing::warn!(?errors, "unified synthesis rejected (empty prose)");
+                continue;
+            }
             let errors = validate_synthesis_answer(&parsed, tool_results, messages, mode);
             if errors.is_empty() {
                 return Some(parsed);
             }
             tracing::warn!(?errors, "synthesis JSON failed validation");
-            // Hybrid / flaky cite ids: accept sanitized prose rather than failing the turn.
             if let Some(sanitized) = sanitize_parsed_answer(&parsed, tool_results, messages) {
                 return Some(sanitized);
             }
+        }
+        // Minimal peel: if model returned an envelope, use answer_text only.
+        if unified {
+            if let Some(text) = unwrap_synthesis_json_envelope(raw) {
+                if !text.trim().is_empty() {
+                    return Some(ParsedSynthesisAnswer::Unified(InternalAnswerUnifiedV1 {
+                        schema_version: "internal_answer_unified_v1".into(),
+                        answer_text: text,
+                        citations: vec![],
+                        coverage: Some("full".into()),
+                        refusal_reason: None,
+                    }));
+                }
+            }
+            continue;
         }
         if let Some(lifted) = lift_prose_to_contract(raw, tool_results, messages, mode) {
             let errors = validate_synthesis_answer(&lifted, tool_results, messages, mode);
             if errors.is_empty() {
                 return Some(lifted);
             }
-            tracing::warn!(?errors, "synthesis prose lift failed validation");
             if let Some(sanitized) = sanitize_parsed_answer(&lifted, tool_results, messages) {
                 return Some(sanitized);
             }

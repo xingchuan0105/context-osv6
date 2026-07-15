@@ -1,10 +1,10 @@
 use super::answer_contract::{
-    collect_synthesis_validation_errors, contract_violation_fallback,
-    extract_partial_synthesis_fallback, render_synthesis_prose, resolve_synthesis_answer,
-    synthesis_contract_block, unwrap_synthesis_json_envelope,
+    contract_violation_fallback, extract_partial_synthesis_fallback, render_synthesis_prose,
+    resolve_synthesis_answer, synthesis_contract_block, unwrap_synthesis_json_envelope,
 };
 
-const DEFAULT_SYNTHESIS_REPAIR_ROUNDS: usize = 2;
+/// Prefer LLM self-format; at most one repair if the envelope cannot be parsed at all.
+const DEFAULT_SYNTHESIS_REPAIR_ROUNDS: usize = 1;
 
 /// Never show a raw synthesis JSON envelope in the product UI.
 fn ensure_user_facing_prose(text: String) -> String {
@@ -94,18 +94,11 @@ impl SynthesisPhase {
                 return Err(super::cancellation::cancellation_error());
             }
 
-            let validation_errors =
-                collect_synthesis_validation_errors(&candidate_refs, tool_results, messages, mode);
-            let repair_user = if validation_errors.is_empty() {
-                "Return ONLY valid JSON matching the synthesis contract. No markdown fences."
-                    .to_string()
-            } else {
-                format!(
-                    "Return ONLY valid JSON matching the synthesis contract. No markdown fences.\n\
-                     Validation errors from your previous response:\n{}",
-                    validation_errors.join("\n")
-                )
-            };
+            // Thin repair: only ask for a parseable envelope; do not nitpick cite hygiene.
+            let repair_user = "Return ONLY the synthesis JSON object from the system contract. \
+No markdown fences. Put all user-visible markdown in answer_text."
+                .to_string();
+            let _ = (tool_results, messages);
             let last_candidate = candidates.last().expect("candidates non-empty");
             let mut repair_messages = vec![
                 ChatMessage::system(system_content.clone()),
