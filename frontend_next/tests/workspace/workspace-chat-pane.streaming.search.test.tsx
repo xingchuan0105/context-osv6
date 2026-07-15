@@ -2,8 +2,6 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { workspaceUiStore } from "../../lib/workspace/ui-store";
-
 import {
   renderChatPane,
   setupWorkspaceChatPaneTestLifecycle,
@@ -14,7 +12,7 @@ import "./workspace-chat-pane.shared-mocks";
 setupWorkspaceChatPaneTestLifecycle();
 
 describe("WorkspaceChatPane streaming search flow", () => {
-  it("streams assistant tokens incrementally, supports '/' mode selection, and persists the mode in the workspace UI store", async () => {
+  it("streams assistant tokens incrementally after enabling the Search capability", async () => {
     const onFocusSource = vi.fn();
     const onSelectCitation = vi.fn();
     const onSessionActivity = vi.fn();
@@ -163,10 +161,10 @@ describe("WorkspaceChatPane streaming search flow", () => {
       onSessionChange,
     });
     await user.click(composer);
-    await user.keyboard("/");
-    await user.click(screen.getByTestId("workspace-chat-mode-search"));
-    expect(workspaceUiStore.getState().workspaces["ws-1"]?.chatMode).toBe("search");
-    expect(workspaceUiStore.getState().workspaces["ws-1"]?.chatModePreference).toBe("manual");
+    await user.click(screen.getByTestId("workspace-chat-cap-search"));
+    expect(screen.getByTestId("workspace-chat-cap-search").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
 
     await user.type(composer, "Explain the plan");
     await user.keyboard("{Enter}");

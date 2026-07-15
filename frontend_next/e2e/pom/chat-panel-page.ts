@@ -23,10 +23,15 @@ export class ChatPanelPage {
     }, question);
   }
 
-  /** 完整消息发送：可选前置设置对话模式 */
+  /**
+   * 完整消息发送：可选前置设置能力标签。
+   * mode 兼容旧调用：write 已下线（忽略）；chat → 清空；rag/search → 单选。
+   */
   async ask(question: string, mode?: "rag" | "search" | "chat" | "write") {
-    if (mode) {
-      await this.setMode(mode);
+    if (mode === "rag" || mode === "search") {
+      await this.setCapabilities([mode]);
+    } else if (mode === "chat" || mode === "write") {
+      await this.setCapabilities([]);
     }
     const composerInput = this.page.locator('[data-testid="workspace-chat-composer"]');
     await composerInput.waitFor({ timeout: 10_000 });
@@ -38,13 +43,31 @@ export class ChatPanelPage {
     await sendButton.click();
   }
 
+  /** Ensure only the desired capability tags are pressed. */
+  async setCapabilities(caps: Array<"rag" | "search">) {
+    const desired = new Set(caps);
+    for (const cap of ["rag", "search"] as const) {
+      const button = this.page.locator(`[data-testid="workspace-chat-cap-${cap}"]`);
+      await button.waitFor({ timeout: 10_000 });
+      const pressed = (await button.getAttribute("aria-pressed")) === "true";
+      const shouldPress = desired.has(cap);
+      if (pressed !== shouldPress) {
+        await button.click();
+      }
+    }
+  }
+
+  /** @deprecated Prefer setCapabilities. Maps exclusive mode to capability toggles. */
   async setMode(mode: "rag" | "search" | "chat" | "write") {
-    await this.page.locator('[data-testid="workspace-chat-mode-button"]').click();
-    await this.page.locator(`[data-testid="workspace-chat-mode-${mode}"]`).click();
+    if (mode === "rag" || mode === "search") {
+      await this.setCapabilities([mode]);
+      return;
+    }
+    await this.setCapabilities([]);
   }
 
   async switchToWebSearchMode() {
-    await this.setMode("search");
+    await this.setCapabilities(["search"]);
   }
 
   /**

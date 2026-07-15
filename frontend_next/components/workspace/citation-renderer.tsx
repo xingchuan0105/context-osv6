@@ -287,7 +287,11 @@ export function CitationRenderer({
   onSelectCitation,
 }: CitationRendererProps) {
   function handleCitationClick(citation: Citation, target: HTMLElement) {
-    const webSource = message.mode === "search" ? citationToWebSource(citation) : null;
+    const hasSearch =
+      message.capabilities?.includes("search") ||
+      message.mode === "search" ||
+      message.mode === "rag+search";
+    const webSource = hasSearch ? citationToWebSource(citation) : null;
     if (webSource && onOpenWebSources) {
       onOpenWebSources({ sources: [webSource] });
       return;

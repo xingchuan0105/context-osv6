@@ -54,8 +54,8 @@ export const workspaceMessages = {
     en: "Workspace chat composer",
   },
   workspaceChatComposerPlaceholder: {
-    zh: "输入 / 选择模式，然后开始提问...",
-    en: "Type / to choose a mode, then start typing...",
+    zh: "输入问题，可开启知识库 / 网络搜索…",
+    en: "Ask anything — toggle RAG / Search below…",
   },
   workspaceCitationsLabel: {
     zh: "引用",
@@ -70,12 +70,24 @@ export const workspaceMessages = {
     en: "Failed to load workspace transcript.",
   },
   workspaceChatModeChat: {
-    zh: "聊天模式",
-    en: "chat",
+    zh: "聊天",
+    en: "Chat",
   },
   workspaceChatModeLabel: {
     zh: "对话模式",
     en: "Chat mode",
+  },
+  workspaceChatCapabilityLabel: {
+    zh: "能力标签",
+    en: "Capabilities",
+  },
+  workspaceChatCapRag: {
+    zh: "知识库",
+    en: "RAG",
+  },
+  workspaceChatCapSearch: {
+    zh: "网络搜索",
+    en: "Search",
   },
   workspaceChatModeRag: {
     zh: "知识库检索",
@@ -254,8 +266,8 @@ export const workspaceMessages = {
     en: "Start a new conversation or ask a question about this workspace.",
   },
   workspaceEmptyStateModeHint: {
-    zh: "当前模式：{mode} · 输入 / 可切换",
-    en: "Mode: {mode} · press / to switch",
+    zh: "当前：{mode} · 可开启知识库 / 网络搜索",
+    en: "Active: {mode} · toggle RAG / Search below",
   },
   workspaceNoSessionsMatch: {
     zh: "暂无会话。",

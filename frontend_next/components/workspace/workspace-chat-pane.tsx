@@ -12,10 +12,9 @@ import type {
   WorkspaceWebSourcesRequest,
 } from "../../lib/workspace/model";
 import {
-  resolveWorkspaceChatMode,
-  useWorkspaceUi,
-  type WorkspaceChatMode,
-} from "../../lib/workspace/ui-store";
+  deriveAgentTypeLabel,
+  type WorkspaceCapability,
+} from "../../lib/workspace/capabilities";
 import { useChatSession } from "../../hooks/use-chat-session";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList } from "./chat-message-list";
@@ -33,32 +32,23 @@ type WorkspaceChatPaneProps = {
   registerComposerInsert?: (handler: ((text: string) => boolean) | null) => void;
 };
 
-function getModeLabel(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
-  switch (mode) {
-    case "rag":
-      return formatUiMessage(locale, "workspaceChatModeRag");
-    case "search":
-      return formatUiMessage(locale, "workspaceChatModeSearch");
-    case "write":
-      return formatUiMessage(locale, "workspaceChatModeWrite");
-    case "chat":
-    default:
-      return formatUiMessage(locale, "workspaceChatModeChat");
+function getCapabilitiesSummaryLabel(
+  locale: "zh-CN" | "en",
+  capabilities: WorkspaceCapability[],
+) {
+  if (capabilities.length === 0) {
+    return formatUiMessage(locale, "workspaceChatModeChat");
   }
+  const parts = capabilities.map((cap) =>
+    cap === "rag"
+      ? formatUiMessage(locale, "workspaceChatCapRag")
+      : formatUiMessage(locale, "workspaceChatCapSearch"),
+  );
+  return parts.join(locale === "zh-CN" ? " · " : " · ");
 }
 
-function getModeCode(mode: WorkspaceChatMode) {
-  switch (mode) {
-    case "rag":
-      return "RAG";
-    case "search":
-      return "web_search";
-    case "write":
-      return "write";
-    case "chat":
-    default:
-      return "chat";
-  }
+function getCapabilitiesCode(capabilities: WorkspaceCapability[]) {
+  return deriveAgentTypeLabel(capabilities);
 }
 
 export function WorkspaceChatPane({
@@ -74,23 +64,39 @@ export function WorkspaceChatPane({
 }: WorkspaceChatPaneProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
-  const workspaceUi = useWorkspaceUi(workspaceId);
-  const { setChatMode } = workspaceUi;
   const [draft, setDraft] = useState("");
   const [composerClearance, setComposerClearance] = useState<number | null>(null);
+  const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingCursorRef = useRef<number | null>(null);
+  const lastEstablishedSessionRef = useRef<string | null>(null);
 
-  const effectiveChatMode = resolveWorkspaceChatMode(workspaceUi, selectedSourceIds.length > 0);
-  const activeModeLabel = getModeLabel(locale, effectiveChatMode);
-  const activeModeCode = getModeCode(effectiveChatMode);
+  // Session-only capabilities: reset on new thread or switch between sessions.
+  // Do not wipe when backend assigns session_id on first send (null → id).
+  useEffect(() => {
+    if (sessionId === null) {
+      setCapabilities([]);
+      lastEstablishedSessionRef.current = null;
+      return;
+    }
+    if (
+      lastEstablishedSessionRef.current != null &&
+      lastEstablishedSessionRef.current !== sessionId
+    ) {
+      setCapabilities([]);
+    }
+    lastEstablishedSessionRef.current = sessionId;
+  }, [sessionId]);
+
+  const activeModeLabel = getCapabilitiesSummaryLabel(locale, capabilities);
+  const activeModeCode = getCapabilitiesCode(capabilities);
 
   const chatSession = useChatSession({
     token: auth.token || "",
     workspaceId,
     sessionId,
     selectedSourceIds,
-    effectiveChatMode,
+    capabilities,
     locale,
     onSessionChange,
     onSessionActivity,
@@ -220,12 +226,12 @@ export function WorkspaceChatPane({
         draft={draft}
         onDraftChange={setDraft}
         isStreaming={chatSession.isStreaming}
-        effectiveChatMode={effectiveChatMode}
+        capabilities={capabilities}
         locale={locale}
         workspaceId={workspaceId}
         onSubmit={handleSend}
         onStop={chatSession.stop}
-        onModeChange={setChatMode}
+        onCapabilitiesChange={setCapabilities}
         textareaRef={textareaRef}
         onHeightChange={setComposerClearance}
       />

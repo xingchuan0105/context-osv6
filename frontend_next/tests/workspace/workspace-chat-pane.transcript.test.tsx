@@ -136,6 +136,7 @@ describe("WorkspaceChatPane transcript", () => {
         workspace_id: "ws-inline-rag",
         session_id: null,
         agent_type: "rag",
+        capabilities: ["rag"],
         doc_scope: ["doc-1"],
         stream: true,
       });
@@ -177,6 +178,7 @@ describe("WorkspaceChatPane transcript", () => {
       />,
     );
 
+    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
     const composer = screen.getByRole("textbox", { name: "工作区对话输入框" });
     await user.type(composer, "Summarize the plan");
     await user.keyboard("{Enter}");

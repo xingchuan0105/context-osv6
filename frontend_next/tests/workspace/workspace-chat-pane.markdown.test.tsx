@@ -182,7 +182,8 @@ describe("WorkspaceChatPane markdown", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Chat mode summary" })).toBeTruthy();
-    expect(screen.getByText("Ready").closest("li")).toBeTruthy();
+    // Ordered lists keep model-written numbers as paragraphs (not browser <ol>/<li>).
+    expect(screen.getByText("Ready").closest("p")).toBeTruthy();
     expect(screen.getByText("{\"ok\":true}").tagName.toLowerCase()).toBe("code");
 
     expect(screen.getByRole("heading", { name: "RAG mode summary" })).toBeTruthy();

@@ -8,7 +8,7 @@ import type { ProgressEntry } from "../../hooks/use-chat-session";
 import styles from "./workspace-chat.module.css";
 
 function isResearchMode(mode: WorkspaceChatMode) {
-  return mode === "rag" || mode === "search";
+  return mode === "rag" || mode === "search" || mode === "rag+search";
 }
 
 function getProgressCountLabel(locale: "zh-CN" | "en", key: string) {
@@ -45,7 +45,7 @@ function getHeaderTitle(
 ) {
   const researchMode = isResearchMode(mode);
   if (completed) {
-    if (mode === "rag") {
+    if (mode === "rag" || mode === "rag+search") {
       return formatUiMessage(locale, "workspaceProgressCompletedRag");
     }
     if (mode === "search") {
@@ -57,9 +57,9 @@ function getHeaderTitle(
     );
   }
   if (researchMode) {
-    return mode === "rag"
-      ? formatUiMessage(locale, "workspaceProgressHeadingRag")
-      : formatUiMessage(locale, "workspaceProgressHeadingSearch");
+    return mode === "search"
+      ? formatUiMessage(locale, "workspaceProgressHeadingSearch")
+      : formatUiMessage(locale, "workspaceProgressHeadingRag");
   }
   return (
     activities[activities.length - 1]?.title ??

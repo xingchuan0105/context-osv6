@@ -6,6 +6,7 @@ import type {
   WorkspaceCitationRequest,
   WorkspaceWebSourcesRequest,
 } from "../../lib/workspace/model";
+import type { WorkspaceCapability } from "../../lib/workspace/capabilities";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import {
   type AnswerBlock,
@@ -68,32 +69,33 @@ function getCopyableMessageContent(message: UiChatMessage) {
   return message.content;
 }
 
-function getModeLabel(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
-  switch (mode) {
-    case "rag":
-      return formatUiMessage(locale, "workspaceChatModeRag");
-    case "search":
-      return formatUiMessage(locale, "workspaceChatModeSearch");
-    case "write":
-      return formatUiMessage(locale, "workspaceChatModeWrite");
-    case "chat":
-    default:
-      return formatUiMessage(locale, "workspaceChatModeChat");
-  }
+function getCapabilityLabel(locale: "zh-CN" | "en", cap: WorkspaceCapability) {
+  return cap === "rag"
+    ? formatUiMessage(locale, "workspaceChatCapRag")
+    : formatUiMessage(locale, "workspaceChatCapSearch");
 }
 
-function getModeCode(mode: WorkspaceChatMode) {
-  switch (mode) {
-    case "rag":
-      return "RAG";
-    case "search":
-      return "web_search";
-    case "write":
-      return "write";
-    case "chat":
-    default:
-      return "chat";
+function messageHasSearch(message: UiChatMessage) {
+  if (message.capabilities?.includes("search")) {
+    return true;
   }
+  return message.mode === "search" || message.mode === "rag+search";
+}
+
+function messageCapabilityChips(message: UiChatMessage): WorkspaceCapability[] {
+  if (message.capabilities && message.capabilities.length > 0) {
+    return message.capabilities.slice(0, 2);
+  }
+  if (message.mode === "rag") {
+    return ["rag"];
+  }
+  if (message.mode === "search") {
+    return ["search"];
+  }
+  if (message.mode === "rag+search") {
+    return ["rag", "search"];
+  }
+  return [];
 }
 
 function getMessageActionIds(role: UiChatMessage["role"]): MessageActionId[] {
@@ -298,29 +300,37 @@ export function ChatMessageList({
 
                   return (
                     <>
-                {message.role === "assistant" ? (
-                  <div
-                    className={[
-                      styles.modeBubbleTag,
-                      message.mode === "rag"
-                        ? styles.modeBubbleTagRag
-                        : message.mode === "search"
-                          ? styles.modeBubbleTagSearch
-                          : message.mode === "write"
-                            ? styles.modeBubbleTagWrite
-                            : styles.modeBubbleTagGeneral,
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    data-testid="mode-indicator"
-                    data-mode={message.mode ?? "chat"}
-                  >
-                    <span>{getModeLabel(locale, message.mode ?? "chat")}</span>
-                    <span className={styles.modeBubbleTagCode}>
-                      {getModeCode(message.mode ?? "chat")}
-                    </span>
-                  </div>
-                ) : null}
+                {message.role === "assistant"
+                  ? (() => {
+                      const chips = messageCapabilityChips(message);
+                      if (chips.length === 0) {
+                        return null;
+                      }
+                      return (
+                        <div
+                          className={styles.capabilityChipRow}
+                          data-testid="mode-indicator"
+                          data-mode={message.mode ?? "chat"}
+                        >
+                          {chips.map((cap) => (
+                            <span
+                              key={cap}
+                              className={[
+                                styles.modeBubbleTag,
+                                cap === "rag"
+                                  ? styles.modeBubbleTagRag
+                                  : styles.modeBubbleTagSearch,
+                              ].join(" ")}
+                              data-testid={`capability-chip-${cap}`}
+                              data-capability={cap}
+                            >
+                              {getCapabilityLabel(locale, cap)}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()
+                  : null}
 
                 <div
                   className={[
@@ -328,7 +338,7 @@ export function ChatMessageList({
                     message.role === "assistant"
                       ? [
                           styles.bubbleAssistant,
-                          message.mode === "rag"
+                          message.mode === "rag" || message.mode === "rag+search"
                             ? styles.bubbleAssistantRag
                             : message.mode === "search"
                               ? styles.bubbleAssistantSearch
@@ -364,7 +374,7 @@ export function ChatMessageList({
                     message.content || (message.pending ? "..." : "")
                   )}
 
-                  {message.role === "assistant" && message.mode === "search" && !message.pending
+                  {message.role === "assistant" && messageHasSearch(message) && !message.pending
                     ? (() => {
                         const webSources = collectWebSources(message.citations);
                         if (webSources.length === 0) {
