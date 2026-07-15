@@ -1,6 +1,7 @@
 //! Assemble a runtime [`ModeConfig`] from a product [`CapabilitySet`].
 //!
-//! Does not wire into the chat pipeline yet (Task 6); pure config composition.
+//! Wired by `chat::pipeline_steps::dispatch_agent_mode` into AgentRequest metadata
+//! (`assembled_mode_config`, `system_prompt_parts`, `capabilities`).
 
 use crate::capabilities::CapabilitySet;
 use agent_loop::r#loop::config::{

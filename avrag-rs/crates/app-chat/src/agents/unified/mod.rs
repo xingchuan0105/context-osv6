@@ -190,6 +190,25 @@ impl Agent for UnifiedAgent {
                     }
                 };
 
+                // Dual rag+search: also attach web search when capability present.
+                let dual_search = metadata_has_capability(&request, "search");
+                let search_executor = if dual_search {
+                    match self.search_executor.clone() {
+                        Some(executor) => Some(executor),
+                        None => {
+                            let _ = sink
+                                .emit(AgentEvent::Error {
+                                    code: "search_unavailable".to_string(),
+                                    message: "Search executor is not configured".to_string(),
+                                })
+                                .await;
+                            return Err(AppError::internal("Search executor is not configured"));
+                        }
+                    }
+                } else {
+                    None
+                };
+
                 agent_loop::progress::emit_work_fact(
                     sink,
                     agent_loop::progress::WorkFact::understand(&request.query),
@@ -198,7 +217,13 @@ impl Agent for UnifiedAgent {
                 self.run_react_mode(
                     "rag",
                     self.llm_client.clone(),
-                    |lp| lp.with_rag_runtime(Some(rag)),
+                    |lp| {
+                        let mut lp = lp.with_rag_runtime(Some(rag));
+                        if let Some(search) = search_executor {
+                            lp = lp.with_search_executor(Some(search));
+                        }
+                        lp
+                    },
                     request,
                     sink,
                     &tenant,
@@ -247,10 +272,10 @@ impl Agent for UnifiedAgent {
 impl UnifiedAgent {
     /// Common ReAct-mode execution path shared by Chat / Rag / Search.
     ///
-    /// Loads the mode config, resolves the supplied `llm_client` (attaching the
-    /// usage observer when present), builds the loop via `configure_loop`, runs
-    /// it, and stamps the routing decision. Per-mode differences are confined to
-    /// the caller: which LLM field is used and how the loop is configured.
+    /// Prefers `request.metadata["assembled_mode_config"]` when present (CapabilitySet
+    /// assembly path); otherwise loads YAML via `mode_id` (tests / backward compat).
+    /// Per-mode differences are confined to the caller: which LLM field is used and
+    /// how the loop is configured.
     async fn run_react_mode(
         &self,
         mode_id: &str,
@@ -260,7 +285,7 @@ impl UnifiedAgent {
         sink: &dyn AgentEventSink,
         tenant: &TenantContext,
     ) -> Result<AgentRunResult, AppError> {
-        let mode = match agent_loop::r#loop::config::load_mode_config(mode_id) {
+        let mode = match resolve_mode_config(mode_id, &request) {
             Ok(m) => m,
             Err(e) => {
                 let _ = sink
@@ -272,11 +297,16 @@ impl UnifiedAgent {
                 return Err(e);
             }
         };
+        let stage_id = if mode.id.is_empty() {
+            mode_id.to_string()
+        } else {
+            mode.id.clone()
+        };
 
         let llm = match llm_client {
             Some(client) => {
-                // Tag stage with mode id; attach exit metering when configured.
-                let client = client.with_stage(mode_id);
+                // Tag stage with assembled/legacy mode id; attach exit metering.
+                let client = client.with_stage(&stage_id);
                 let client = if let Some(ref observer) = self.usage_observer {
                     client.with_observer(observer.clone(), tenant.clone())
                 } else {
@@ -301,9 +331,41 @@ impl UnifiedAgent {
                 .with_chat_persistence(self.chat_persistence.clone()),
         );
         let mut result = loop_agent.run(&mode, request, sink).await?;
-        result.routing_decision = Some(mode_id.to_string());
+        result.routing_decision = Some(stage_id);
         Ok(result)
     }
+}
+
+/// Prefer pipeline-assembled ModeConfig from metadata; fall back to YAML load.
+fn resolve_mode_config(
+    mode_id: &str,
+    request: &AgentRequest,
+) -> Result<agent_loop::r#loop::config::ModeConfig, AppError> {
+    if let Some(value) = request.metadata.get("assembled_mode_config") {
+        if let Ok(cfg) =
+            serde_json::from_value::<agent_loop::r#loop::config::ModeConfig>(value.clone())
+        {
+            // Reject empty shell objects that failed serialization to a usable config.
+            if !cfg.id.is_empty() || !cfg.tool_pool.is_empty() || !cfg.system_prompt_base.is_empty()
+            {
+                return Ok(cfg);
+            }
+        }
+    }
+    agent_loop::r#loop::config::load_mode_config(mode_id)
+}
+
+fn metadata_has_capability(request: &AgentRequest, cap: &str) -> bool {
+    request
+        .metadata
+        .get("capabilities")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str())
+                .any(|s| s.eq_ignore_ascii_case(cap))
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

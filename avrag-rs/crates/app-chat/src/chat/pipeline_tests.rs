@@ -19,12 +19,18 @@ mod tests {
     use tokio::sync::RwLock;
     use uuid::Uuid;
 
-    use crate::chat::pipeline_steps::dispatch_mode;
-    use crate::{ChatContext, LlmContext, OrchestratorContext};
+    use crate::chat::pipeline_steps::{
+        agent_kind_for, dispatch_mode, inject_assembled_metadata,
+    };
+    use crate::{
+        assemble_mode, resolve_capabilities, CapabilitySet, ChatContext, LlmContext,
+        OrchestratorContext,
+    };
 
     use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
     use crate::agents::service::UnifiedAgentService;
     use async_trait::async_trait;
+    use std::sync::Mutex;
 
     struct PipelineEchoAgent;
 
@@ -37,6 +43,27 @@ mod tests {
         ) -> Result<AgentRunResult, AppError> {
             Ok(AgentRunResult {
                 answer: request.query.clone(),
+                ..Default::default()
+            })
+        }
+    }
+
+    /// Captures AgentRequest metadata for assembly-path assertions.
+    struct MetadataCaptureAgent {
+        last: Arc<Mutex<Option<AgentRequest>>>,
+    }
+
+    #[async_trait]
+    impl Agent for MetadataCaptureAgent {
+        async fn run(
+            &self,
+            request: AgentRequest,
+            _sink: &dyn agent_loop::events::AgentEventSink,
+        ) -> Result<AgentRunResult, AppError> {
+            let answer = request.query.clone();
+            *self.last.lock().unwrap() = Some(request);
+            Ok(AgentRunResult {
+                answer,
                 ..Default::default()
             })
         }
@@ -214,5 +241,176 @@ mod tests {
         assert_eq!(execution.response.session_id, session.id);
         assert!(execution.apply_output_guard);
         assert_eq!(execution.response.answer, "test");
+        assert_eq!(execution.response.agent_type, "rag");
+        let caps = execution
+            .assistant_turn_metadata
+            .as_ref()
+            .and_then(|m| m.get("capabilities"))
+            .cloned();
+        assert_eq!(caps, Some(serde_json::json!(["rag"])));
+    }
+
+    #[test]
+    fn agent_kind_for_dual_is_rag() {
+        let dual = CapabilitySet {
+            rag: true,
+            search: true,
+        };
+        assert_eq!(agent_kind_for(dual), crate::agents::AgentKind::Rag);
+        assert_eq!(agent_kind_for(CapabilitySet::default()), crate::agents::AgentKind::Chat);
+        assert_eq!(
+            agent_kind_for(CapabilitySet {
+                rag: false,
+                search: true
+            }),
+            crate::agents::AgentKind::Search
+        );
+    }
+
+    #[test]
+    fn inject_assembled_metadata_dual_roundtrips_mode_config() {
+        let caps = CapabilitySet {
+            rag: true,
+            search: true,
+        };
+        let assembled = assemble_mode(caps).expect("assemble dual");
+        let mut req = AgentRequest {
+            kind: crate::agents::AgentKind::Rag,
+            query: "q".into(),
+            workspace_id: None,
+            session_id: None,
+            doc_scope: vec![],
+            messages: vec![],
+            user_preferences: None,
+            debug: false,
+            stream: false,
+            language: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
+            auth: test_auth(),
+            docscope_metadata: None,
+            metadata: BTreeMap::new(),
+            cancellation_token: None,
+            guard_pipeline: None,
+        };
+        inject_assembled_metadata(&mut req, caps, &assembled);
+
+        let listed = req
+            .metadata
+            .get("capabilities")
+            .and_then(|v| v.as_array())
+            .expect("capabilities array");
+        assert_eq!(listed.len(), 2);
+
+        let parts = req
+            .metadata
+            .get("system_prompt_parts")
+            .and_then(|v| v.as_array())
+            .expect("system_prompt_parts");
+        assert_eq!(parts.len(), 3);
+
+        let cfg_val = req
+            .metadata
+            .get("assembled_mode_config")
+            .cloned()
+            .expect("assembled_mode_config");
+        let cfg: agent_loop::r#loop::config::ModeConfig =
+            serde_json::from_value(cfg_val).expect("deserialize ModeConfig");
+        assert_eq!(cfg.id, "rag+search");
+        assert!(cfg.tool_pool.iter().any(|t| t == "web_search"));
+        assert!(cfg.tool_pool.iter().any(|t| t == "user_context"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_dual_capabilities_injects_metadata_and_label() {
+        let capture = Arc::new(Mutex::new(None));
+        let agent = MetadataCaptureAgent {
+            last: capture.clone(),
+        };
+        let workspace_id = new_id();
+        let notebook = Workspace {
+            id: workspace_id.clone(),
+            owner_user_id: test_auth().user_id().to_string(),
+            owner_id: Uuid::nil().to_string(),
+            name: "Test Workspace".to_string(),
+            title: "Test Workspace".to_string(),
+            description: String::new(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            document_count: 0,
+            status_summary: Default::default(),
+            shared: false,
+        };
+        let mut state = test_chat_context(Some(notebook));
+        state.orchestrator = OrchestratorContext::new(
+            Some(Arc::new(UnifiedAgentService::new(Box::new(agent)))),
+            None,
+            Arc::new(GuardPipeline::new()),
+            None,
+        );
+
+        let mut request = request_with_mode("chat", vec![workspace_id.clone()]);
+        request.capabilities = Some(vec!["rag".into(), "search".into()]);
+        let mut session = session_for("chat");
+        session.workspace_id = workspace_id;
+
+        let execution = dispatch_mode(&state, &request, &session, None)
+            .await
+            .unwrap();
+
+        assert_eq!(execution.mode, "rag+search");
+        assert_eq!(execution.response.agent_type, "rag+search");
+        let caps_meta = execution
+            .assistant_turn_metadata
+            .as_ref()
+            .and_then(|m| m.get("capabilities"))
+            .cloned();
+        assert_eq!(caps_meta, Some(serde_json::json!(["rag", "search"])));
+
+        let captured = capture.lock().unwrap().take().expect("agent ran");
+        assert!(
+            captured.metadata.contains_key("assembled_mode_config"),
+            "assembled_mode_config must reach agent"
+        );
+        assert!(
+            captured.metadata.contains_key("system_prompt_parts"),
+            "system_prompt_parts must reach agent"
+        );
+        let cfg: agent_loop::r#loop::config::ModeConfig = serde_json::from_value(
+            captured
+                .metadata
+                .get("assembled_mode_config")
+                .cloned()
+                .unwrap(),
+        )
+        .expect("ModeConfig");
+        assert_eq!(cfg.id, "rag+search");
+        assert_eq!(captured.kind, crate::agents::AgentKind::Rag);
+    }
+
+    #[tokio::test]
+    async fn dispatch_search_only_capabilities_skips_doc_scope_clarify() {
+        let state = test_chat_context(None);
+        let mut request = request_with_mode("chat", vec![]);
+        request.capabilities = Some(vec!["search".into()]);
+        let session = session_for("chat");
+
+        let execution = dispatch_mode(&state, &request, &session, None)
+            .await
+            .unwrap();
+
+        assert_eq!(execution.mode, "search");
+        assert_eq!(execution.response.agent_type, "search");
+        // Search path applies output guard (not clarify).
+        assert!(execution.apply_output_guard);
+        assert_eq!(execution.response.answer, "test");
+    }
+
+    #[test]
+    fn resolve_empty_capabilities_wins_over_rag_agent_type() {
+        let caps = resolve_capabilities(Some(&[]), "rag").unwrap();
+        assert!(caps.is_pure_chat());
+        assert_eq!(agent_kind_for(caps), crate::agents::AgentKind::Chat);
     }
 }

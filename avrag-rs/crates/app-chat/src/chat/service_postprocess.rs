@@ -78,9 +78,21 @@ impl ChatContext {
         }).collect();
         // ADR-0010: server-side query normalization removed; no per-turn
         // resolved_query or query_resolution metadata is persisted.
-        let user_turn_metadata: Option<serde_json::Value> = None;
+        // Persist capabilities for UI replay (prefer resolved assistant meta; fall back to request).
+        let user_turn_metadata: Option<serde_json::Value> = execution
+            .assistant_turn_metadata
+            .as_ref()
+            .and_then(|m| m.get("capabilities").cloned())
+            .map(|c| serde_json::json!({ "capabilities": c }))
+            .or_else(|| {
+                req.capabilities
+                    .as_ref()
+                    .map(|c| serde_json::json!({ "capabilities": c }))
+            });
         let user_resolved_query: Option<&str> = None;
         let assistant_turn_metadata = execution.assistant_turn_metadata.clone();
+        // Prefer derived capability label (chat|rag|search|rag+search) over raw request.agent_type.
+        let persist_agent_type = execution.response.agent_type.as_str();
         let assistant_message_id = chat_persistence
             .append_chat_turn(
                 &self.auth,
@@ -89,7 +101,7 @@ impl ChatContext {
                     user_content: req.query.trim(),
                     assistant_content: &execution.response.answer,
                     assistant_answer_blocks: &execution.response.answer_blocks,
-                    agent_type: &req.agent_type,
+                    agent_type: persist_agent_type,
                     citations: &execution.response.citations,
                     tool_results: &tool_results,
                     user_turn_metadata,

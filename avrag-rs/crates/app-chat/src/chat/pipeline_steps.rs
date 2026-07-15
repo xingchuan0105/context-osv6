@@ -5,8 +5,10 @@ use contracts::chat::{ChatRequest, ModeDebug};
 use contracts::workspaces::ChatSession;
 
 use agent_loop::runtime::AgentRequest;
+use crate::capabilities::CapabilitySet;
 use crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID;
 use crate::context::ChatContext;
+use crate::mode_assemble::AssembledMode;
 
 use super::pipeline::{ChatExecution, StreamConfig};
 
@@ -20,6 +22,57 @@ fn agent_request_with_resolved_session(
     agent_request
 }
 
+/// Map resolved capabilities to the ReAct shell kind.
+/// Dual rag+search uses Rag so codegen/retrieval paths stay available; config is hybrid.
+pub(crate) fn agent_kind_for(caps: CapabilitySet) -> crate::agents::AgentKind {
+    match (caps.rag, caps.search) {
+        (false, false) => crate::agents::AgentKind::Chat,
+        (true, false) => crate::agents::AgentKind::Rag,
+        (false, true) => crate::agents::AgentKind::Search,
+        (true, true) => crate::agents::AgentKind::Rag,
+    }
+}
+
+/// Attach assembled mode config + capability metadata for UnifiedAgent / assembler.
+pub(crate) fn inject_assembled_metadata(
+    agent_request: &mut AgentRequest,
+    caps: CapabilitySet,
+    assembled: &AssembledMode,
+) {
+    agent_request.metadata.insert(
+        "capabilities".to_string(),
+        serde_json::to_value(caps.as_string_list()).unwrap_or_else(|_| serde_json::json!([])),
+    );
+    agent_request.metadata.insert(
+        "system_prompt_parts".to_string(),
+        serde_json::to_value(&assembled.system_prompt_parts)
+            .unwrap_or_else(|_| serde_json::json!([])),
+    );
+    agent_request.metadata.insert(
+        "assembled_mode_config".to_string(),
+        serde_json::to_value(&assembled.config).unwrap_or_else(|_| serde_json::json!({})),
+    );
+}
+
+fn merge_capabilities_turn_metadata(
+    existing: Option<serde_json::Value>,
+    caps: CapabilitySet,
+) -> Option<serde_json::Value> {
+    let caps_val =
+        serde_json::to_value(caps.as_string_list()).unwrap_or_else(|_| serde_json::json!([]));
+    match existing {
+        Some(mut v) => {
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert("capabilities".to_string(), caps_val);
+            } else {
+                v = serde_json::json!({ "capabilities": caps_val });
+            }
+            Some(v)
+        }
+        None => Some(serde_json::json!({ "capabilities": caps_val })),
+    }
+}
+
 /// Agent-lane modes only (chat / RAG / search). Write enters via write `PipelineLane`.
 pub(crate) async fn dispatch_agent_mode(
     state: &ChatContext,
@@ -27,34 +80,63 @@ pub(crate) async fn dispatch_agent_mode(
     session: &ChatSession,
     stream_config: Option<&StreamConfig>,
 ) -> Result<ChatExecution, AppError> {
-    let agent_kind = crate::agents::AgentKind::parse(&request.agent_type);
+    let caps = crate::resolve_capabilities(request.capabilities.as_deref(), &request.agent_type)?;
+    let assembled = crate::assemble_mode(caps)?;
+    let kind = agent_kind_for(caps);
+    let agent_type_label = caps.agent_type_label();
 
-    if matches!(agent_kind, Some(crate::agents::AgentKind::Rag)) && request.doc_scope.is_empty() {
+    // Doc-scope clarify only when RAG capability is on (not pure chat / search-only).
+    if caps.rag && request.doc_scope.is_empty() {
         let message = crate::i18n::clarify::need_doc_scope(request.language.as_deref()).to_string();
-        return state
+        let mut execution = state
             .execute_clarify_mode_core(request, session, &message)
-            .await;
+            .await?;
+        execution.mode = agent_type_label.to_string();
+        execution.response.agent_type = agent_type_label.to_string();
+        execution.assistant_turn_metadata =
+            merge_capabilities_turn_metadata(execution.assistant_turn_metadata, caps);
+        return Ok(execution);
     }
 
-    match agent_kind {
-        Some(crate::agents::AgentKind::Chat) | None => {
+    match kind {
+        crate::agents::AgentKind::Chat => {
             run_general_mode(
                 state,
                 request,
                 session,
                 stream_config,
-                crate::agents::AgentKind::Chat,
-                "chat",
+                kind,
+                agent_type_label,
+                caps,
+                &assembled,
             )
             .await
         }
-        Some(crate::agents::AgentKind::Search) => {
-            run_search_mode(state, request, session, stream_config).await
+        crate::agents::AgentKind::Search => {
+            run_search_mode(
+                state,
+                request,
+                session,
+                stream_config,
+                agent_type_label,
+                caps,
+                &assembled,
+            )
+            .await
         }
-        Some(crate::agents::AgentKind::Rag) => {
-            run_rag_mode(state, request, session, stream_config).await
+        crate::agents::AgentKind::Rag => {
+            run_rag_mode(
+                state,
+                request,
+                session,
+                stream_config,
+                agent_type_label,
+                caps,
+                &assembled,
+            )
+            .await
         }
-        Some(crate::agents::AgentKind::Write) => Err(AppError::internal(
+        crate::agents::AgentKind::Write => Err(AppError::internal(
             "lane invariant: write must not reach dispatch_agent_mode (use write PipelineLane)",
         )),
     }
@@ -78,6 +160,8 @@ async fn run_general_mode(
     stream_config: Option<&StreamConfig>,
     kind: crate::agents::AgentKind,
     agent_type: &'static str,
+    caps: CapabilitySet,
+    assembled: &AssembledMode,
 ) -> Result<ChatExecution, AppError> {
     let Some(agent_service) = state.agent_service() else {
         return Err(AppError::internal("agent service is not configured"));
@@ -89,12 +173,17 @@ async fn run_general_mode(
             .await,
         session,
     );
+    inject_assembled_metadata(&mut agent_request, caps, assembled);
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
     }
     let emit_debug_trace = agent_request.debug;
     let mut general_debug = state.build_general_agent_debug(&agent_request);
+    general_debug.insert(
+        "capabilities".to_string(),
+        serde_json::to_value(caps.as_string_list()).unwrap_or_else(|_| serde_json::json!([])),
+    );
 
     if let Some(config) = stream_config {
         let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
@@ -135,7 +224,8 @@ async fn run_general_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
-        execution.assistant_turn_metadata = sink.progress_turn_metadata();
+        execution.assistant_turn_metadata =
+            merge_capabilities_turn_metadata(sink.progress_turn_metadata(), caps);
         return Ok(execution);
     }
 
@@ -168,8 +258,10 @@ async fn run_general_mode(
     if emit_debug_trace {
         attach_debug_trace_from_sink(&mut execution, &sink);
     }
-    execution.assistant_turn_metadata =
-        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events());
+    execution.assistant_turn_metadata = merge_capabilities_turn_metadata(
+        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
+        caps,
+    );
     Ok(execution)
 }
 
@@ -178,6 +270,9 @@ async fn run_search_mode(
     request: &ChatRequest,
     session: &ChatSession,
     stream_config: Option<&StreamConfig>,
+    agent_type: &'static str,
+    caps: CapabilitySet,
+    assembled: &AssembledMode,
 ) -> Result<ChatExecution, AppError> {
     let Some(agent_service) = state.agent_service() else {
         return Err(AppError::internal("agent service is not configured"));
@@ -193,6 +288,7 @@ async fn run_search_mode(
             .await,
         session,
     );
+    inject_assembled_metadata(&mut agent_request, caps, assembled);
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -205,7 +301,7 @@ async fn run_search_mode(
             config.request_id.clone(),
             session.id.clone(),
             STREAM_PLACEHOLDER_MESSAGE_ID,
-            "search".to_string(),
+            agent_type.to_string(),
         )
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
@@ -217,8 +313,8 @@ async fn run_search_mode(
         let mut execution = crate::chat::build_chat_execution_from_result(
             &agent_result,
             crate::chat::BuildChatExecutionParams {
-                mode: "search",
-                agent_type: "search",
+                mode: agent_type,
+                agent_type,
                 session_id: &session.id,
                 input_usage_text: request.query.trim(),
                 // Search 答案合成基于外部网页 snippet，存在 prompt 注入与 PII
@@ -234,7 +330,8 @@ async fn run_search_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
-        execution.assistant_turn_metadata = sink.progress_turn_metadata();
+        execution.assistant_turn_metadata =
+            merge_capabilities_turn_metadata(sink.progress_turn_metadata(), caps);
         return Ok(execution);
     }
 
@@ -245,8 +342,8 @@ async fn run_search_mode(
     let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
         crate::chat::BuildChatExecutionParams {
-            mode: "search",
-            agent_type: "search",
+            mode: agent_type,
+            agent_type,
             session_id: &session.id,
             input_usage_text: request.query.trim(),
             // 同 stream 分支：search 模式输出必经 output guard。
@@ -262,8 +359,10 @@ async fn run_search_mode(
     if emit_debug_trace {
         attach_debug_trace_from_sink(&mut execution, &sink);
     }
-    execution.assistant_turn_metadata =
-        agent_loop::progress::assistant_progress_turn_metadata("search", &sink.events());
+    execution.assistant_turn_metadata = merge_capabilities_turn_metadata(
+        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
+        caps,
+    );
     Ok(execution)
 }
 
@@ -292,6 +391,9 @@ async fn run_rag_mode(
     request: &ChatRequest,
     session: &ChatSession,
     stream_config: Option<&StreamConfig>,
+    agent_type: &'static str,
+    caps: CapabilitySet,
+    assembled: &AssembledMode,
 ) -> Result<ChatExecution, AppError> {
     let Some(agent_service) = state.agent_service() else {
         return Err(AppError::internal("agent service is not configured"));
@@ -307,6 +409,7 @@ async fn run_rag_mode(
             .await,
         session,
     );
+    inject_assembled_metadata(&mut agent_request, caps, assembled);
 
     if !request.doc_scope.is_empty()
         && let Ok(metadata) = state.load_docscope_metadata(&request.doc_scope).await
@@ -323,7 +426,7 @@ async fn run_rag_mode(
             config.request_id.clone(),
             session.id.clone(),
             STREAM_PLACEHOLDER_MESSAGE_ID,
-            "rag".to_string(),
+            agent_type.to_string(),
         )
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
@@ -334,8 +437,8 @@ async fn run_rag_mode(
         let mut execution = crate::chat::build_chat_execution_from_result(
             &agent_result,
             crate::chat::BuildChatExecutionParams {
-                mode: "rag",
-                agent_type: "rag",
+                mode: agent_type,
+                agent_type,
                 session_id: &session.id,
                 input_usage_text: request.query.trim(),
                 apply_output_guard: true,
@@ -345,7 +448,8 @@ async fn run_rag_mode(
         );
         execution.tokens_emitted = true;
         execution.citations_emitted = sink.has_citations_emitted();
-        execution.assistant_turn_metadata = sink.progress_turn_metadata();
+        execution.assistant_turn_metadata =
+            merge_capabilities_turn_metadata(sink.progress_turn_metadata(), caps);
         return Ok(execution);
     }
 
@@ -355,8 +459,8 @@ async fn run_rag_mode(
     let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
         crate::chat::BuildChatExecutionParams {
-            mode: "rag",
-            agent_type: "rag",
+            mode: agent_type,
+            agent_type,
             session_id: &session.id,
             input_usage_text: request.query.trim(),
             apply_output_guard: true,
@@ -364,8 +468,10 @@ async fn run_rag_mode(
             debug_metadata: agent_result.debug_payload.clone(),
         },
     );
-    execution.assistant_turn_metadata =
-        agent_loop::progress::assistant_progress_turn_metadata("rag", &sink.events());
+    execution.assistant_turn_metadata = merge_capabilities_turn_metadata(
+        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
+        caps,
+    );
     Ok(execution)
 }
 
