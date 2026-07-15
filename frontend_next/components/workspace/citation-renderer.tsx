@@ -167,7 +167,7 @@ function citationToWebSource(citation: Citation): WebSource | null {
 }
 
 function hasRenderedCitationMarkup(content: string) {
-  // RAG: [[cite:CHUNK_ID]] / [[image:CHUNK_ID]]; Search/legacy: [[n]] / [n]
+  // Doc: [[cite:CHUNK_ID]] / [[image:CHUNK_ID]]; Web: [[web:n]]; legacy: [[n]] / [n]
   return /\[\[(?:cite|image|web):[^\]]+\]\]|\[\[\d+\]\]|\[\d+\]/iu.test(content);
 }
 
