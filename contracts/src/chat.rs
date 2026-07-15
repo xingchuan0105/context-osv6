@@ -4,6 +4,17 @@ use ts_rs::TS;
 use typeshare::typeshare;
 
 #[typeshare]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ClientContext {
+    /// ISO-8601 local datetime with offset when possible, e.g. `2026-07-15T14:32:00+08:00`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_time: Option<String>,
+    /// IANA timezone, e.g. `Asia/Shanghai`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+}
+
+#[typeshare]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatRequest {
     pub query: String,
@@ -13,6 +24,12 @@ pub struct ChatRequest {
     pub session_id: Option<String>,
     #[serde(default = "default_chat_agent")]
     pub agent_type: String,
+    /// Product capability tags. When **present** (including empty `[]`), wins over `agent_type` for tool exposure.
+    /// Allowed values: `rag`, `search`. Unknown values ignored at resolve time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_context: Option<ClientContext>,
     #[serde(default)]
     pub source_type: Option<String>,
     #[serde(default)]

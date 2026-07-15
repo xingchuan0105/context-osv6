@@ -51,6 +51,35 @@ fn chat_request_deserializes_debug_flag() {
 }
 
 #[test]
+fn chat_request_deserializes_capabilities_and_client_context() {
+    let raw = r#"{
+      "query": "hi",
+      "capabilities": ["rag", "search", "rag"],
+      "client_context": {
+        "local_time": "2026-07-15T14:32:00+08:00",
+        "timezone": "Asia/Shanghai"
+      }
+    }"#;
+    let req: ChatRequest = serde_json::from_str(raw).unwrap();
+    assert_eq!(
+        req.capabilities.as_ref().unwrap(),
+        &vec!["rag".to_string(), "search".to_string(), "rag".to_string()]
+    );
+    assert_eq!(
+        req.client_context.as_ref().unwrap().timezone.as_deref(),
+        Some("Asia/Shanghai")
+    );
+}
+
+#[test]
+fn chat_request_omitted_capabilities_is_none() {
+    let raw = r#"{"query":"hi","agent_type":"rag"}"#;
+    let req: ChatRequest = serde_json::from_str(raw).unwrap();
+    assert!(req.capabilities.is_none());
+    assert_eq!(req.agent_type, "rag");
+}
+
+#[test]
 fn chat_event_serializes_with_a_stable_event_tag() {
     let event = ChatEvent::Start {
         request_id: "req-123".to_string(),
@@ -358,7 +387,7 @@ fn export_golden_fixtures() {
         serde_json::to_value(WorkspaceListResponse {
             workspaces: vec![Workspace {
                 id: "nb-1".to_string(),
-                org_id: "org-1".to_string(),
+                owner_user_id: "user-1".to_string(),
                 owner_id: "user-1".to_string(),
                 name: "demo".to_string(),
                 title: "Demo".to_string(),
