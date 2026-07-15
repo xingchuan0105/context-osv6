@@ -1,10 +1,15 @@
 use super::answer_contract::{
     collect_synthesis_validation_errors, contract_violation_fallback,
     extract_partial_synthesis_fallback, render_synthesis_prose, resolve_synthesis_answer,
-    synthesis_contract_block,
+    synthesis_contract_block, unwrap_synthesis_json_envelope,
 };
 
 const DEFAULT_SYNTHESIS_REPAIR_ROUNDS: usize = 2;
+
+/// Never show a raw synthesis JSON envelope in the product UI.
+fn ensure_user_facing_prose(text: String) -> String {
+    unwrap_synthesis_json_envelope(&text).unwrap_or(text)
+}
 use super::assembler::AssembledContext;
 use super::config::{AnswerContractKind, ModeConfig};
 use super::reasoning_emit;
@@ -119,7 +124,7 @@ impl SynthesisPhase {
 
         let candidate_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
         if let Some(answer) = resolve_synthesis_answer(&candidate_refs, tool_results, messages, mode) {
-            let prose = render_synthesis_prose(&answer);
+            let prose = ensure_user_facing_prose(render_synthesis_prose(&answer));
             crate::progress::emit_work_fact(sink, crate::progress::WorkFact::compose_answer()).await;
             // P0 "true stream" for JSON synthesis: chunk prose into MessageDelta
             // (generation was complete_json; streaming the validated answer still
@@ -185,6 +190,7 @@ impl SynthesisPhase {
         if let Some(partial) =
             extract_partial_synthesis_fallback(&candidate_refs, tool_results, messages, mode)
         {
+            let partial = ensure_user_facing_prose(partial);
             let _ = sink
                 .emit(AgentEvent::Activity {
                     stage: "synthesis_partial_fallback".to_string(),
@@ -217,6 +223,37 @@ impl SynthesisPhase {
                 sources_preview: Vec::new(),
             })
             .await;
+
+        // Last resort: never surface a raw synthesis JSON envelope to the user.
+        if let Some(unwrapped) = candidates
+            .iter()
+            .rev()
+            .find_map(|c| unwrap_synthesis_json_envelope(c))
+        {
+            let unwrapped = ensure_user_facing_prose(unwrapped);
+            let _ = sink
+                .emit(AgentEvent::Activity {
+                    stage: "synthesis_json_unwrap".to_string(),
+                    message: "Unwrapped answer_text from synthesis JSON after validation failure"
+                        .to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
+                })
+                .await;
+            let _ = sink
+                .emit(AgentEvent::MessageDelta {
+                    text: unwrapped.clone(),
+                })
+                .await;
+            let _ = sink
+                .emit(AgentEvent::Done {
+                    final_message: Some(unwrapped.clone()),
+                    usage: None,
+                })
+                .await;
+            return Ok(unwrapped);
+        }
 
         let fallback = contract_violation_fallback(&mode.id);
         let _ = sink

@@ -35,6 +35,12 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         let rag = load_mode_config("rag")?;
         merge_tool_pool(&mut config.tool_pool, &rag.tool_pool);
         merge_skill_catalog(&mut config.skill_catalog, &rag.skill_catalog);
+        // Drop chat mandatory synthesis when leaving pure chat (chat.yaml has mandatory chat).
+        config
+            .skill_catalog
+            .mandatory
+            .synthesis
+            .retain(|s| s != "chat");
         merge_max_budget(&mut config, &rag);
         config.inject_retrieval_query = true;
         config.loop_exit.require_evidence = true;
@@ -59,6 +65,10 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         config.loop_exit.skip_synthesis_on_direct_answer = false;
         if caps.rag {
             config.synthesis_output.contract = AnswerContractKind::InternalHybridAnswerV1;
+            // Dual: do not force both rag-answer and search-answer (and never chat)
+            // as concurrent mandatory synthesis skills — that confuses the model into
+            // emitting raw JSON envelopes. Prefer a single RAG-shaped hybrid contract.
+            config.skill_catalog.mandatory.synthesis = vec!["rag-answer".to_string()];
             // Keep rag auto_fallback when dual.
         } else {
             config.synthesis_output.contract = AnswerContractKind::InternalSearchAnswerV1;
@@ -201,6 +211,20 @@ mod tests {
         assert_eq!(
             assembled.system_prompt_parts[2],
             "prompts/orchestrators/capability-search.md"
+        );
+        assert_eq!(
+            assembled.config.skill_catalog.mandatory.synthesis,
+            vec!["rag-answer".to_string()],
+            "dual must not mandate chat+rag-answer+search-answer together"
+        );
+        assert!(
+            !assembled
+                .config
+                .skill_catalog
+                .mandatory
+                .synthesis
+                .iter()
+                .any(|s| s == "chat" || s == "search-answer")
         );
         assert!(
             assembled

@@ -62,10 +62,13 @@ pub fn synthesis_contract_block(mode: &ModeConfig) -> &'static str {
              Every citations[].chunk_id MUST appear as [[cite:CHUNK_ID]] in answer_text."
         }
         AnswerContractKind::InternalHybridAnswerV1 => {
-            "Respond with ONLY a JSON object (no markdown fences). Use ONE of:\n\
-             RAG: {\"schema_version\":\"internal_answer_v1\",\"answer_text\":\"prose with [[cite:CHUNK_ID]]\",\"citations\":[{\"chunk_id\":\"...\"}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
-             Search: {\"schema_version\":\"internal_search_answer_v1\",\"answer_text\":\"...\",\"citations\":[{\"index\":1}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
-             Prefer [[cite:CHUNK_ID]] for document evidence and [[n]] for web search indices; both styles are accepted when mixed evidence is present."
+            "Respond with ONLY a JSON object (no markdown fences). Prefer a single RAG-shaped object when document evidence is present:\n\
+             {\"schema_version\":\"internal_answer_v1\",\"answer_text\":\"prose with [[cite:CHUNK_ID]] and/or [[n]] for web\",\"citations\":[{\"chunk_id\":\"...\"}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
+             Use [[cite:CHUNK_ID]] only for workspace/doc chunks that appear in tool observations (copy ids exactly).\n\
+             Use [[n]] for web_search observation indices; do not put web indices into citations[].chunk_id.\n\
+             If only web evidence (no doc chunks), use:\n\
+             {\"schema_version\":\"internal_search_answer_v1\",\"answer_text\":\"...\",\"citations\":[{\"index\":1}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
+             Never return the JSON envelope as user-facing prose — answer_text is the only user-visible body."
         }
     }
 }
@@ -431,30 +434,27 @@ pub fn render_synthesis_prose(answer: &ParsedSynthesisAnswer) -> String {
 
 const PARTIAL_EVIDENCE_INSUFFICIENT_ZH: &str = "资料不足以完整回答";
 
+/// Strong refusal cues only. Avoid mid-sentence phrases like「未提及…」in analytical prose
+/// (that false-positive aborted hybrid salvage and leaked raw synthesis JSON).
 const DRAFT_REFUSAL_CUES: &[&str] = &[
-    "未找到",
-    "未提及",
-    "未提到",
-    "没有提及",
-    "没有找到",
-    "没有提到",
     "未在文档中找到",
-    "文档中未",
-    "资料中未",
-    "不在文档",
-    "不在资料",
-    "未提供",
-    "无法确认",
-    "无法确定",
+    "文档中未找到",
+    "资料中未找到",
+    "资料不足以",
     "无法回答",
     "暂无相关",
     "无相关内容",
+    "没有找到相关",
 ];
 
 pub fn contract_violation_fallback(mode_id: &str) -> String {
     match mode_id {
         "rag" => "找到了相关资料，但未能生成符合引用格式要求的完整答案，请尝试重新提问。".to_string(),
         "search" => "找到了搜索结果，但未能生成符合格式要求的完整答案，请尝试重新提问。".to_string(),
+        "rag+search" => {
+            "找到了文档与网络资料，但未能生成符合引用格式要求的完整答案，请尝试重新提问。"
+                .to_string()
+        }
         _ => "未能生成符合格式要求的完整答案。".to_string(),
     }
 }
@@ -548,30 +548,79 @@ fn sanitize_partial_answer(
     tool_results: &[ToolResult],
     messages: &[ChatMessage],
 ) -> Option<String> {
+    sanitize_parsed_answer(answer, tool_results, messages).map(|p| render_synthesis_prose(&p))
+}
+
+/// Drop unknown citation ids / markers; keep usable prose (hybrid-safe).
+pub fn sanitize_parsed_answer(
+    answer: &ParsedSynthesisAnswer,
+    tool_results: &[ToolResult],
+    messages: &[ChatMessage],
+) -> Option<ParsedSynthesisAnswer> {
     match answer {
         ParsedSynthesisAnswer::Rag(ans) => {
             let known = known_chunk_ids_with_messages(tool_results, messages);
             let cleaned = strip_unknown_cite_markers(&ans.answer_text, &known);
-            if cleaned.chars().count() >= 4 {
-                Some(cleaned)
-            } else {
-                None
+            if cleaned.chars().count() < 4 {
+                return None;
             }
+            let citations: Vec<InternalCitationV1> = ans
+                .citations
+                .iter()
+                .filter(|c| known.contains(&c.chunk_id))
+                .cloned()
+                .collect();
+            Some(ParsedSynthesisAnswer::Rag(InternalAnswerV1 {
+                schema_version: "internal_answer_v1".to_string(),
+                answer_text: cleaned,
+                citations,
+                coverage: ans.coverage.clone(),
+                refusal_reason: ans.refusal_reason.clone(),
+            }))
         }
         ParsedSynthesisAnswer::Search(ans) => {
             let valid_indices: Vec<u32> = ans.citations.iter().map(|c| c.index).collect();
             let cleaned = strip_unknown_search_markers(&ans.answer_text, &valid_indices);
-            if cleaned.chars().count() >= 4 {
-                Some(cleaned)
-            } else {
-                None
+            if cleaned.chars().count() < 4 {
+                return None;
             }
+            Some(ParsedSynthesisAnswer::Search(InternalSearchAnswerV1 {
+                schema_version: "internal_search_answer_v1".to_string(),
+                answer_text: cleaned,
+                citations: ans.citations.clone(),
+                coverage: ans.coverage.clone(),
+                refusal_reason: ans.refusal_reason.clone(),
+            }))
         }
     }
 }
 
-/// When synthesis JSON fails validation but the model attempted an answer (no refusal
-/// phrasing in draft `answer_text`), salvage usable prose by dropping invalid citations.
+/// If a string is a synthesis JSON envelope, return `answer_text` only.
+pub fn unwrap_synthesis_json_envelope(raw: &str) -> Option<String> {
+    let body = strip_json_fences(raw);
+    let trimmed = body.trim();
+    if !trimmed.starts_with('{') {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let schema = value.get("schema_version").and_then(|v| v.as_str()).unwrap_or("");
+    if schema != "internal_answer_v1"
+        && schema != "internal_search_answer_v1"
+        && schema != "internal_hybrid_answer_v1"
+    {
+        return None;
+    }
+    let text = value.get("answer_text").and_then(|v| v.as_str())?;
+    let t = text.trim();
+    if t.is_empty() {
+        return None;
+    }
+    Some(t.to_string())
+}
+
+/// When synthesis JSON fails validation but the model attempted an answer, salvage
+/// usable prose by dropping invalid citations. Do **not** abort salvage just because
+/// analytical text contains phrases like「未提及」.
 pub fn extract_partial_synthesis_fallback(
     candidates: &[&str],
     tool_results: &[ToolResult],
@@ -582,22 +631,33 @@ pub fn extract_partial_synthesis_fallback(
         return None;
     }
 
-    for raw in candidates {
-        if let Some(parsed) = try_parse_candidate(raw, tool_results, messages, mode) {
-            let answer_text = match &parsed {
-                ParsedSynthesisAnswer::Rag(a) => &a.answer_text,
-                ParsedSynthesisAnswer::Search(a) => &a.answer_text,
-            };
-            if draft_contains_refusal(answer_text) {
-                return None;
-            }
-        }
-    }
-
     for raw in candidates.iter().rev() {
         let Some(parsed) = try_parse_candidate(raw, tool_results, messages, mode) else {
+            // Unparseable as contract: still try envelope unwrap for user-facing prose.
+            if let Some(text) = unwrap_synthesis_json_envelope(raw) {
+                if text.chars().count() >= 4 && !draft_contains_refusal(&text) {
+                    return Some(text);
+                }
+            }
             continue;
         };
+        let answer_text = match &parsed {
+            ParsedSynthesisAnswer::Rag(a) => a.answer_text.as_str(),
+            ParsedSynthesisAnswer::Search(a) => a.answer_text.as_str(),
+        };
+        // Explicit contract refusal (coverage=none / refusal_reason) still skips salvage.
+        if draft_contains_refusal(answer_text)
+            || matches!(
+                &parsed,
+                ParsedSynthesisAnswer::Rag(a) if a.coverage.as_deref() == Some("none")
+            )
+            || matches!(
+                &parsed,
+                ParsedSynthesisAnswer::Search(a) if a.coverage.as_deref() == Some("none")
+            )
+        {
+            continue;
+        }
         if let Some(cleaned) = sanitize_partial_answer(&parsed, tool_results, messages) {
             return Some(cleaned);
         }
@@ -631,6 +691,10 @@ pub fn resolve_synthesis_answer(
                 return Some(parsed);
             }
             tracing::warn!(?errors, "synthesis JSON failed validation");
+            // Hybrid / flaky cite ids: accept sanitized prose rather than failing the turn.
+            if let Some(sanitized) = sanitize_parsed_answer(&parsed, tool_results, messages) {
+                return Some(sanitized);
+            }
         }
         if let Some(lifted) = lift_prose_to_contract(raw, tool_results, messages, mode) {
             let errors = validate_synthesis_answer(&lifted, tool_results, messages, mode);
@@ -638,6 +702,9 @@ pub fn resolve_synthesis_answer(
                 return Some(lifted);
             }
             tracing::warn!(?errors, "synthesis prose lift failed validation");
+            if let Some(sanitized) = sanitize_parsed_answer(&lifted, tool_results, messages) {
+                return Some(sanitized);
+            }
         }
     }
     None
@@ -749,6 +816,58 @@ mod tests {
         assert!(partial.contains("2019年在大连建厂"));
         assert!(partial.contains("[[cite:good]]"));
         assert!(!partial.contains("[[cite:bad]]"));
+    }
+
+    #[test]
+    fn unwrap_synthesis_json_envelope_extracts_answer_text() {
+        let raw = r#"{
+  "schema_version": "internal_answer_v1",
+  "answer_text": "这篇报告与最佳实践的差距在于未提及 IaC。",
+  "citations": [{"chunk_id": "e8018cfe"}],
+  "coverage": "full",
+  "refusal_reason": null
+}"#;
+        let text = unwrap_synthesis_json_envelope(raw).expect("unwrap");
+        assert!(text.contains("差距"));
+        assert!(!text.contains("schema_version"));
+    }
+
+    #[test]
+    fn resolve_sanitizes_unknown_cites_instead_of_failing() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let tool_results = vec![contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({"chunks": [{"chunk_id": "good"}]})),
+            trace: None,
+        }];
+        let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"正文[[cite:good]]与未知[[cite:bad]]","citations":[{"chunk_id":"good"},{"chunk_id":"bad"}],"coverage":"full","refusal_reason":null}"#;
+        let resolved = resolve_synthesis_answer(&[raw], &tool_results, &[], &mode)
+            .expect("should sanitize");
+        let prose = render_synthesis_prose(&resolved);
+        assert!(prose.contains("正文"));
+        assert!(prose.contains("[[cite:good]]"));
+        assert!(!prose.contains("[[cite:bad]]"));
+        assert!(!prose.contains("schema_version"));
+    }
+
+    #[test]
+    fn analytical_weiti_phrase_does_not_abort_partial_salvage() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let tool_results = vec![contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({"chunks": []})),
+            trace: None,
+        }];
+        // 「未提及」used to false-positive as refusal and return None (leaking JSON upstream).
+        let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"报告采用了容器化，但未提及基础设施即代码（IaC）。","citations":[{"chunk_id":"missing"}],"coverage":"full","refusal_reason":null}"#;
+        let partial = extract_partial_synthesis_fallback(&[raw], &tool_results, &[], &mode)
+            .expect("should salvage analytical prose");
+        assert!(partial.contains("未提及"));
+        assert!(!partial.contains("schema_version"));
     }
 
     #[test]
