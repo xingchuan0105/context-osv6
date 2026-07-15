@@ -406,11 +406,20 @@ export interface ChatTurnInput {
 	resolved_query?: string;
 }
 
+export interface ChatClientContext {
+	local_time: string;
+	timezone: string;
+}
+
 export interface ChatRequest {
 	query: string;
 	workspace_id?: string;
 	session_id?: string;
 	agent_type: string;
+	/** Multiselect product capabilities (`rag` | `search`). Empty = pure chat. */
+	capabilities?: string[];
+	/** Frontend clock for base `user_context` tool. */
+	client_context?: ChatClientContext;
 	source_type?: string;
 	source_token?: string;
 	doc_scope?: string[];

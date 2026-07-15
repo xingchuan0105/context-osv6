@@ -1,4 +1,10 @@
 import type { WorkspaceChatMessage } from "../../lib/workspace/client";
+import {
+  capabilitiesFromAgentType,
+  deriveAgentTypeLabel,
+  normalizeCapabilities,
+  type WorkspaceCapability,
+} from "../../lib/workspace/capabilities";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import type { AnswerBlock } from "../../lib/workspace/stream";
 import { progressSnapshotFromTurnMetadata } from "./progress-i18n";
@@ -12,10 +18,21 @@ export function normalizeMessageMode(mode: string | null | undefined): Workspace
   if (mode === "general" || mode === "chat") {
     return "chat";
   }
-  if (mode === "rag" || mode === "search" || mode === "write") {
+  if (mode === "rag" || mode === "search" || mode === "write" || mode === "rag+search") {
     return mode;
   }
   return null;
+}
+
+/** Prefer turn_metadata.capabilities; fall back to legacy agent_id / agent_type. */
+export function normalizeMessageCapabilities(
+  message: Pick<WorkspaceChatMessage, "agent_id" | "turn_metadata">,
+): WorkspaceCapability[] {
+  const meta = message.turn_metadata;
+  if (meta && typeof meta === "object" && "capabilities" in meta) {
+    return normalizeCapabilities(meta.capabilities);
+  }
+  return capabilitiesFromAgentType(message.agent_id);
 }
 
 /** Hide tool-payload dumps that leaked into assistant `content` (e.g. doc_profile JSON). */
@@ -64,10 +81,19 @@ export function mapTranscriptMessage(
     message.role === "assistant"
       ? progressSnapshotFromTurnMetadata(locale, message.turn_metadata)
       : null;
+  const capabilities =
+    message.role === "assistant" ? normalizeMessageCapabilities(message) : [];
+  const mode =
+    message.role === "assistant"
+      ? capabilities.length > 0
+        ? deriveAgentTypeLabel(capabilities)
+        : normalizeMessageMode(message.agent_id)
+      : null;
   return {
     id: String(message.id),
     role: message.role === "assistant" ? "assistant" : "user",
-    mode: message.role === "assistant" ? normalizeMessageMode(message.agent_id) : null,
+    mode,
+    capabilities,
     content,
     answerBlocks: message.answer_blocks ?? [],
     citations: message.citations ?? [],
@@ -148,12 +174,12 @@ export function getAssistantMessageKey(messageId: number) {
 }
 
 export function isResearchMode(mode: WorkspaceChatMode) {
-  return mode === "rag" || mode === "search";
+  return mode === "rag" || mode === "search" || mode === "rag+search";
 }
 
 export function getInitialProgressEntry(locale: "zh-CN" | "en", mode: WorkspaceChatMode): ProgressEntry {
   if (locale === "zh-CN") {
-    if (mode === "rag") {
+    if (mode === "rag" || mode === "rag+search") {
       return {
         id: "progress-initial",
         phase: "planning",
@@ -196,7 +222,7 @@ export function getInitialProgressEntry(locale: "zh-CN" | "en", mode: WorkspaceC
       timestamp: null,
     };
   }
-  if (mode === "rag") {
+  if (mode === "rag" || mode === "rag+search") {
     return {
       id: "progress-initial",
       phase: "planning",

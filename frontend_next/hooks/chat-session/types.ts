@@ -1,3 +1,4 @@
+import type { WorkspaceCapability } from "../../lib/workspace/capabilities";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import type { ChatEvent, ChatResponse } from "../../lib/contracts";
 import type {
@@ -21,6 +22,8 @@ export type UiChatMessage = {
   id: string;
   role: "user" | "assistant";
   mode: WorkspaceChatMode | null;
+  /** 0–2 product capability tags; empty preferred when pure chat. */
+  capabilities: WorkspaceCapability[];
   content: string;
   answerBlocks: AnswerBlock[];
   citations: Citation[];
@@ -51,7 +54,8 @@ export type UseChatSessionOptions = {
   workspaceId: string;
   sessionId: string | null;
   selectedSourceIds: string[];
-  effectiveChatMode: WorkspaceChatMode;
+  /** Session-only multiselect; empty = pure chat. */
+  capabilities: WorkspaceCapability[];
   locale: "zh-CN" | "en";
   onSessionChange?: (sessionId: string | null) => void;
   onSessionActivity?: () => void;

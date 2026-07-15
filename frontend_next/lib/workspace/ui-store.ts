@@ -7,9 +7,19 @@ import { createStore } from "zustand/vanilla";
 
 import type { WorkspaceCitationRequest } from "./model";
 
-export type WorkspaceChatMode = "rag" | "search" | "chat" | "write";
+/** Derived agent_type / progress label. Prefer `WorkspaceCapability[]` for selection. */
+export type WorkspaceChatMode = "rag" | "search" | "chat" | "write" | "rag+search";
 type WorkspaceChatModeInput = WorkspaceChatMode | "general";
 export type WorkspaceChatModePreference = "auto" | "manual";
+
+export type { WorkspaceCapability } from "./capabilities";
+export {
+  buildClientContext,
+  capabilitiesFromAgentType,
+  deriveAgentTypeLabel,
+  normalizeCapabilities,
+  toggleCapability,
+} from "./capabilities";
 
 export type WorkspaceUiState = {
   historyRailOpen: boolean;
@@ -108,7 +118,7 @@ function normalizeChatMode(mode: string | null | undefined): WorkspaceChatMode {
     return "chat";
   }
 
-  if (mode === "rag" || mode === "search" || mode === "write") {
+  if (mode === "rag" || mode === "search" || mode === "write" || mode === "rag+search") {
     return mode;
   }
 

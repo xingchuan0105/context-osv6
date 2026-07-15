@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import {
+  buildClientContext,
+  deriveAgentTypeLabel,
+  normalizeCapabilities,
+  type WorkspaceCapability,
+} from "../../lib/workspace/capabilities";
 import { streamChat } from "../../lib/runtime/transport";
 import type { ChatEvent } from "../../lib/contracts";
 import type { ChatRequest } from "../../lib/workspace/stream";
+import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import { dispatchStreamEvent, type StreamEventHandlerDeps } from "./stream-event-handlers";
 import {
   createStreamAssistantUpdates,
@@ -27,7 +34,12 @@ export function useChatStream(
   const workspaceIdRef = useRef(options.workspaceId);
   const sessionIdRef = useRef(options.sessionId);
   const selectedSourceIdsRef = useRef(options.selectedSourceIds);
-  const effectiveChatModeRef = useRef(options.effectiveChatMode);
+  const capabilitiesRef = useRef<WorkspaceCapability[]>(
+    normalizeCapabilities(options.capabilities),
+  );
+  const effectiveChatModeRef = useRef<WorkspaceChatMode>(
+    deriveAgentTypeLabel(capabilitiesRef.current),
+  );
   const localeRef = useRef(options.locale);
   const onSessionChangeRef = useRef(options.onSessionChange);
   const onSessionActivityRef = useRef(options.onSessionActivity);
@@ -38,12 +50,14 @@ export function useChatStream(
     workspaceIdRef.current = options.workspaceId;
     sessionIdRef.current = options.sessionId;
     selectedSourceIdsRef.current = options.selectedSourceIds;
-    effectiveChatModeRef.current = options.effectiveChatMode;
+    const nextCaps = normalizeCapabilities(options.capabilities);
+    capabilitiesRef.current = nextCaps;
+    effectiveChatModeRef.current = deriveAgentTypeLabel(nextCaps);
     localeRef.current = options.locale;
     onSessionChangeRef.current = options.onSessionChange;
     onSessionActivityRef.current = options.onSessionActivity;
     activeSessionIdRef.current = activeSessionId;
-  }, [options.token, options.workspaceId, options.sessionId, options.selectedSourceIds, options.effectiveChatMode, options.locale, options.onSessionChange, options.onSessionActivity, activeSessionId]);
+  }, [options.token, options.workspaceId, options.sessionId, options.selectedSourceIds, options.capabilities, options.locale, options.onSessionChange, options.onSessionActivity, activeSessionId]);
 
   const [isStreaming, setIsStreamingState] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -77,6 +91,7 @@ export function useChatStream(
       streamingMessageIdRef,
       streamingSessionIdRef,
       effectiveChatModeRef,
+      capabilitiesRef,
       setActiveSessionId,
       onSessionChangeRef,
       setIsStreaming,
@@ -150,6 +165,10 @@ export function useChatStream(
       // until the first answer character (token / typewriter). Progress card alone
       // covers "work in progress" until ensureStreamingAssistant runs.
       const now = Date.now();
+      const turnCapabilities = [...capabilitiesRef.current];
+      const agentType = deriveAgentTypeLabel(turnCapabilities);
+      effectiveChatModeRef.current = agentType;
+
       messageHistory.setMessages((current) => {
         const base = requestSessionId == null ? [] : current;
         return [
@@ -158,6 +177,7 @@ export function useChatStream(
             id: `user-${now}`,
             role: "user",
             mode: null,
+            capabilities: [],
             content: trimmedQuery,
             answerBlocks: [],
             citations: [],
@@ -171,7 +191,7 @@ export function useChatStream(
       });
       // Reserve streaming id so the first token attaches to a stable assistant row.
       streamingMessageIdRef.current = nextAssistantId;
-      progressTracker.show(effectiveChatModeRef.current);
+      progressTracker.show(agentType);
 
       const controller = new AbortController();
       stopControllerRef.current = controller;
@@ -184,7 +204,9 @@ export function useChatStream(
               query: trimmedQuery,
               workspace_id: workspaceIdRef.current,
               session_id: requestSessionId,
-              agent_type: effectiveChatModeRef.current,
+              agent_type: agentType,
+              capabilities: turnCapabilities,
+              client_context: buildClientContext(),
               doc_scope: selectedSourceIdsRef.current,
               messages: [],
               stream: true,

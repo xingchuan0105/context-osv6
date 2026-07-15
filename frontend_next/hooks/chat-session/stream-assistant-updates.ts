@@ -1,4 +1,10 @@
 import type { ChatEvent, ChatResponse, Citation } from "../../lib/contracts";
+import {
+  capabilitiesFromAgentType,
+  deriveAgentTypeLabel,
+  normalizeCapabilities,
+  type WorkspaceCapability,
+} from "../../lib/workspace/capabilities";
 import { parseStreamCitations } from "../../lib/workspace/stream";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import {
@@ -11,11 +17,27 @@ import {
 import type { MessageHistory } from "./use-message-history";
 import type { PendingDoneEvent, UiChatMessage, UiProgressSnapshot } from "./types";
 
+function resolveAssistantCapabilities(
+  agentType: string | null | undefined,
+  fallbackCaps: WorkspaceCapability[],
+  fallbackMode: WorkspaceChatMode,
+): WorkspaceCapability[] {
+  const fromAgent = capabilitiesFromAgentType(agentType);
+  if (fromAgent.length > 0) {
+    return fromAgent;
+  }
+  if (fallbackCaps.length > 0) {
+    return normalizeCapabilities(fallbackCaps);
+  }
+  return capabilitiesFromAgentType(fallbackMode);
+}
+
 export type StreamAssistantUpdateDeps = {
   messageHistory: MessageHistory;
   streamingMessageIdRef: React.MutableRefObject<string | null>;
   streamingSessionIdRef: React.MutableRefObject<string | null>;
   effectiveChatModeRef: React.MutableRefObject<WorkspaceChatMode>;
+  capabilitiesRef: React.MutableRefObject<WorkspaceCapability[]>;
   setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   onSessionChangeRef: React.MutableRefObject<((sessionId: string | null) => void) | undefined>;
   setIsStreaming: React.Dispatch<React.SetStateAction<boolean>>;
@@ -66,31 +88,60 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
     const resolvedMessageId = normalizeStreamMessageId(event.message_id);
     const fallbackAssistantId = getAssistantMessageKey(event.message_id);
     const eventMode = event.event === "answer_start" ? normalizeMessageMode(event.agent_type) : null;
+    const eventCaps =
+      event.event === "answer_start"
+        ? resolveAssistantCapabilities(
+            event.agent_type,
+            deps.capabilitiesRef.current,
+            deps.effectiveChatModeRef.current,
+          )
+        : null;
 
     updateStreamingAssistant(
-      (current) => ({
-        id:
-          current?.id ??
-          deps.streamingMessageIdRef.current ??
-          (resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : fallbackAssistantId) ??
-          `assistant-${Date.now()}`,
-        role: "assistant",
-        mode: eventMode ?? current?.mode ?? deps.effectiveChatModeRef.current,
-        content: current?.content ?? "",
-        answerBlocks: current?.answerBlocks ?? [],
-        citations:
-          event.event === "citations" ? parseStreamCitations(event.citations) : current?.citations ?? [],
-        degradeTrace: current?.degradeTrace ?? [],
-        guarded: current?.guarded ?? false,
-        messageId: resolvedMessageId ?? current?.messageId ?? null,
-        pending: true,
-        sessionId:
-          event.event === "answer_start"
-            ? current?.sessionId ?? event.session_id
-            : current?.sessionId ?? deps.streamingSessionIdRef.current,
-        toolResults: current?.toolResults ?? [],
-        progress: current?.progress ?? null,
-      }),
+      (current) => {
+        const capabilities =
+          eventCaps ??
+          current?.capabilities ??
+          resolveAssistantCapabilities(
+            null,
+            deps.capabilitiesRef.current,
+            deps.effectiveChatModeRef.current,
+          );
+        const mode =
+          eventMode ??
+          current?.mode ??
+          (capabilities.length > 0
+            ? deriveAgentTypeLabel(capabilities)
+            : deps.effectiveChatModeRef.current);
+        return {
+          id:
+            current?.id ??
+            deps.streamingMessageIdRef.current ??
+            (resolvedMessageId !== null
+              ? getAssistantMessageKey(resolvedMessageId)
+              : fallbackAssistantId) ??
+            `assistant-${Date.now()}`,
+          role: "assistant",
+          mode,
+          capabilities,
+          content: current?.content ?? "",
+          answerBlocks: current?.answerBlocks ?? [],
+          citations:
+            event.event === "citations"
+              ? parseStreamCitations(event.citations)
+              : current?.citations ?? [],
+          degradeTrace: current?.degradeTrace ?? [],
+          guarded: current?.guarded ?? false,
+          messageId: resolvedMessageId ?? current?.messageId ?? null,
+          pending: true,
+          sessionId:
+            event.event === "answer_start"
+              ? current?.sessionId ?? event.session_id
+              : current?.sessionId ?? deps.streamingSessionIdRef.current,
+          toolResults: current?.toolResults ?? [],
+          progress: current?.progress ?? null,
+        };
+      },
       undefined,
       fallbackAssistantId,
     );
@@ -101,21 +152,35 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
       return;
     }
 
-    updateStreamingAssistant((current) => ({
-      id: current?.id ?? deps.streamingMessageIdRef.current ?? `assistant-${Date.now()}`,
-      role: "assistant",
-      mode: current?.mode ?? deps.effectiveChatModeRef.current,
-      content: `${current?.content ?? ""}${chunk}`,
-      answerBlocks: current?.answerBlocks ?? [],
-      citations: current?.citations ?? [],
-      degradeTrace: current?.degradeTrace ?? [],
-      guarded: current?.guarded ?? false,
-      messageId: current?.messageId ?? null,
-      pending: true,
-      sessionId: current?.sessionId ?? deps.streamingSessionIdRef.current,
-      toolResults: current?.toolResults ?? [],
-      progress: current?.progress ?? null,
-    }));
+    updateStreamingAssistant((current) => {
+      const capabilities =
+        current?.capabilities ??
+        resolveAssistantCapabilities(
+          null,
+          deps.capabilitiesRef.current,
+          deps.effectiveChatModeRef.current,
+        );
+      return {
+        id: current?.id ?? deps.streamingMessageIdRef.current ?? `assistant-${Date.now()}`,
+        role: "assistant",
+        mode:
+          current?.mode ??
+          (capabilities.length > 0
+            ? deriveAgentTypeLabel(capabilities)
+            : deps.effectiveChatModeRef.current),
+        capabilities,
+        content: `${current?.content ?? ""}${chunk}`,
+        answerBlocks: current?.answerBlocks ?? [],
+        citations: current?.citations ?? [],
+        degradeTrace: current?.degradeTrace ?? [],
+        guarded: current?.guarded ?? false,
+        messageId: current?.messageId ?? null,
+        pending: true,
+        sessionId: current?.sessionId ?? deps.streamingSessionIdRef.current,
+        toolResults: current?.toolResults ?? [],
+        progress: current?.progress ?? null,
+      };
+    });
   }
 
   function finalizeStreamingDone(
@@ -127,27 +192,46 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
     const resolvedMessageId = normalizeStreamMessageId(event.message_id);
     const fallbackAssistantId = getAssistantMessageKey(event.message_id);
     updateStreamingAssistant(
-      (current) => ({
-        id: resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : current?.id ?? fallbackAssistantId,
-        role: "assistant",
-        mode: normalizeMessageMode(payload.agent_type) ?? current?.mode ?? deps.effectiveChatModeRef.current,
-        content: getAnswerText(answer || current?.content || "", payload.answer_blocks ?? current?.answerBlocks ?? []),
-        answerBlocks:
-          payload.answer_blocks && payload.answer_blocks.length > 0
-            ? payload.answer_blocks
-            : current?.answerBlocks ?? [],
-        citations:
-          payload.citations && payload.citations.length > 0
-            ? payload.citations
-            : current?.citations ?? [],
-        degradeTrace: payload.degrade_trace ?? [],
-        guarded: hasGuardrailIntervention(payload.guard_report),
-        messageId: resolvedMessageId ?? current?.messageId ?? null,
-        pending: false,
-        sessionId: event.session_id,
-        toolResults: payload.tool_results ?? current?.toolResults ?? [],
-        progress: progressSnapshot ?? current?.progress ?? null,
-      }),
+      (current) => {
+        const capabilities = resolveAssistantCapabilities(
+          payload.agent_type,
+          current?.capabilities ?? deps.capabilitiesRef.current,
+          deps.effectiveChatModeRef.current,
+        );
+        return {
+          id:
+            resolvedMessageId !== null
+              ? getAssistantMessageKey(resolvedMessageId)
+              : current?.id ?? fallbackAssistantId,
+          role: "assistant",
+          mode:
+            normalizeMessageMode(payload.agent_type) ??
+            current?.mode ??
+            (capabilities.length > 0
+              ? deriveAgentTypeLabel(capabilities)
+              : deps.effectiveChatModeRef.current),
+          capabilities,
+          content: getAnswerText(
+            answer || current?.content || "",
+            payload.answer_blocks ?? current?.answerBlocks ?? [],
+          ),
+          answerBlocks:
+            payload.answer_blocks && payload.answer_blocks.length > 0
+              ? payload.answer_blocks
+              : current?.answerBlocks ?? [],
+          citations:
+            payload.citations && payload.citations.length > 0
+              ? payload.citations
+              : current?.citations ?? [],
+          degradeTrace: payload.degrade_trace ?? [],
+          guarded: hasGuardrailIntervention(payload.guard_report),
+          messageId: resolvedMessageId ?? current?.messageId ?? null,
+          pending: false,
+          sessionId: event.session_id,
+          toolResults: payload.tool_results ?? current?.toolResults ?? [],
+          progress: progressSnapshot ?? current?.progress ?? null,
+        };
+      },
       undefined,
       fallbackAssistantId,
     );
