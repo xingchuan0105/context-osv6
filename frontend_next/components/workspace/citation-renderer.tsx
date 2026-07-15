@@ -284,39 +284,6 @@ function markdownToRichTextHtmlWithCitationButtons(
   return { citationTokens, html };
 }
 
-type RenderedAnswerToken =
-  | { type: "text"; text: string }
-  | { type: "citation"; displayId?: string; chunkId?: string }
-  | { type: "image"; displayId?: string; chunkId?: string };
-
-function tokenizeRenderedAnswerLine(line: string) {
-  const tokens: RenderedAnswerToken[] = [];
-  const pattern =
-    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(\d+)\]/giu;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(line)) !== null) {
-    if (match.index > lastIndex) {
-      tokens.push({ type: "text", text: line.slice(lastIndex, match.index) });
-    }
-    if (match[1]) {
-      tokens.push({ type: "citation", chunkId: match[1] });
-    } else if (match[2]) {
-      tokens.push({ type: "image", chunkId: match[2] });
-    } else {
-      tokens.push({ type: "citation", displayId: match[3] ?? match[4] ?? match[5] ?? "" });
-    }
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < line.length) {
-    tokens.push({ type: "text", text: line.slice(lastIndex) });
-  }
-
-  return tokens;
-}
-
 // =============================================================================
 // Sub-components
 // =============================================================================
