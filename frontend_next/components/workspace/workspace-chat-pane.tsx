@@ -13,6 +13,8 @@ import type {
 } from "../../lib/workspace/model";
 import {
   deriveAgentTypeLabel,
+  loadStoredCapabilities,
+  storeCapabilities,
   type WorkspaceCapability,
 } from "../../lib/workspace/capabilities";
 import { useChatSession } from "../../hooks/use-chat-session";
@@ -66,27 +68,24 @@ export function WorkspaceChatPane({
   const { locale } = useUiPreferences();
   const [draft, setDraft] = useState("");
   const [composerClearance, setComposerClearance] = useState<number | null>(null);
-  const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>([]);
+  const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>(() =>
+    loadStoredCapabilities(workspaceId),
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingCursorRef = useRef<number | null>(null);
-  const lastEstablishedSessionRef = useRef<string | null>(null);
 
-  // Session-only capabilities: reset on new thread or switch between sessions.
-  // Do not wipe when backend assigns session_id on first send (null → id).
+  // Restore per-workspace capability toggles after refresh / workspace switch.
   useEffect(() => {
-    if (sessionId === null) {
-      setCapabilities([]);
-      lastEstablishedSessionRef.current = null;
-      return;
-    }
-    if (
-      lastEstablishedSessionRef.current != null &&
-      lastEstablishedSessionRef.current !== sessionId
-    ) {
-      setCapabilities([]);
-    }
-    lastEstablishedSessionRef.current = sessionId;
-  }, [sessionId]);
+    setCapabilities(loadStoredCapabilities(workspaceId));
+  }, [workspaceId]);
+
+  const handleCapabilitiesChange = useCallback(
+    (next: WorkspaceCapability[]) => {
+      setCapabilities(next);
+      storeCapabilities(workspaceId, next);
+    },
+    [workspaceId],
+  );
 
   const activeModeLabel = getCapabilitiesSummaryLabel(locale, capabilities);
   const activeModeCode = getCapabilitiesCode(capabilities);
@@ -231,7 +230,7 @@ export function WorkspaceChatPane({
         workspaceId={workspaceId}
         onSubmit={handleSend}
         onStop={chatSession.stop}
-        onCapabilitiesChange={setCapabilities}
+        onCapabilitiesChange={handleCapabilitiesChange}
         textareaRef={textareaRef}
         onHeightChange={setComposerClearance}
       />

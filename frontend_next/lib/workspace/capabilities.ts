@@ -60,6 +60,45 @@ export function deriveAgentTypeLabel(
   return "chat";
 }
 
+const CAPABILITIES_STORAGE_PREFIX = "context-os.workspace-capabilities.v1:";
+
+function capabilitiesStorageKey(workspaceId: string) {
+  return `${CAPABILITIES_STORAGE_PREFIX}${workspaceId}`;
+}
+
+/** Persist composer capability toggles per workspace (survives page refresh). */
+export function loadStoredCapabilities(workspaceId: string): WorkspaceCapability[] {
+  if (typeof window === "undefined" || !workspaceId) {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(capabilitiesStorageKey(workspaceId));
+    if (!raw) {
+      return [];
+    }
+    return normalizeCapabilities(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+export function storeCapabilities(
+  workspaceId: string,
+  capabilities: readonly WorkspaceCapability[],
+) {
+  if (typeof window === "undefined" || !workspaceId) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      capabilitiesStorageKey(workspaceId),
+      JSON.stringify(normalizeCapabilities(capabilities)),
+    );
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 export type ClientContext = {
   local_time: string;
   timezone: string;

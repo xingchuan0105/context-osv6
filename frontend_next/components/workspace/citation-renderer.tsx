@@ -20,8 +20,20 @@ function getCitationLabel(citation: Citation, index: number) {
   return citation.doc_name.trim().length > 0 ? citation.doc_name : `Source ${index + 1}`;
 }
 
-function getCitationDisplayId(citation: Citation, index: number) {
-  return String(citation.citation_id > 0 ? citation.citation_id : index + 1);
+function getCitationDisplayId(_citation: Citation, index: number) {
+  // Always show 1-based appearance order in the answer (1,2,3…), not web observation ids.
+  return String(index + 1);
+}
+
+function citationIdentityKey(citation: Citation): string {
+  if (citation.chunk_id?.trim()) {
+    return `doc:${citation.chunk_id.trim()}`;
+  }
+  const url = getCitationUrl(citation);
+  if (url) {
+    return `web:${url}`;
+  }
+  return `id:${citation.citation_id}:${citation.doc_id}`;
 }
 
 function getCitationPageText(locale: "zh-CN" | "en", page: number | null | undefined) {
@@ -190,6 +202,8 @@ function resolveCitationFromMarker(
 type RichMarkdownCitationToken = {
   citation: Citation;
   token: string;
+  /** Sequential chip number in answer order (1,2,3…). */
+  displaySeq: number;
 };
 
 function markdownToRichTextHtmlWithCitationButtons(
@@ -198,7 +212,10 @@ function markdownToRichTextHtmlWithCitationButtons(
   locale: "zh-CN" | "en",
 ) {
   const citationTokens: RichMarkdownCitationToken[] = [];
-  // Order matters: named cite/image first, then numeric [[n]] / [n].
+  /** First-appearance order → sequential chip 1,2,3… (same source reuses same number). */
+  const sequentialByKey = new Map<string, number>();
+  let nextSequential = 1;
+  // Order matters: named cite/image first, then web / numeric markers.
   const tokenizedMarkdown = markdown.replace(
     /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
     (
@@ -214,26 +231,40 @@ function markdownToRichTextHtmlWithCitationButtons(
         displayId: webId ?? bracketedId ?? prefixedId,
       });
       if (!citation) {
-        // Unresolved web markers: keep a neutral numeric chip (not raw [[web:n]]).
+        // Unresolved web markers: sequential fallback chip (not raw [[web:n]] / observation id).
         const fallbackId = webId ?? bracketedId ?? prefixedId;
         if (fallbackId) {
-          return `<span class="${styles.inlineCitationFallback}" title="source">${fallbackId}</span>`;
+          const key = `fallback:${fallbackId}`;
+          let seq = sequentialByKey.get(key);
+          if (seq === undefined) {
+            seq = nextSequential;
+            nextSequential += 1;
+            sequentialByKey.set(key, seq);
+          }
+          return `<span class="${styles.inlineCitationFallback}" title="source">${seq}</span>`;
         }
         // Drop unknown doc/image markers so raw [[cite:uuid]] never leaks.
         return "";
       }
+      const key = citationIdentityKey(citation);
+      let seq = sequentialByKey.get(key);
+      if (seq === undefined) {
+        seq = nextSequential;
+        nextSequential += 1;
+        sequentialByKey.set(key, seq);
+      }
       const token = `CITATIONTOKEN${citationTokens.length}END`;
-      citationTokens.push({ citation, token });
+      citationTokens.push({ citation, token, displaySeq: seq });
       return token;
     },
   );
   let html = markdownToRichTextHtml(tokenizedMarkdown);
 
-  citationTokens.forEach(({ citation, token }, tokenIndex) => {
+  citationTokens.forEach(({ citation, token, displaySeq }, tokenIndex) => {
     const citationIndex = findCitationIndex(citations, citation);
     const resolvedIndex = citationIndex >= 0 ? citationIndex : 0;
     const label = escapeHtmlAttribute(getInlineCitationAriaLabel(locale, citation, resolvedIndex));
-    const displayId = escapeHtmlAttribute(getCitationDisplayId(citation, resolvedIndex));
+    const displayId = escapeHtmlAttribute(String(displaySeq));
     const buttonHtml = `<button aria-label="${label}" class="${styles.inlineCitationButton}" data-inline-citation-token-index="${tokenIndex}" type="button">${displayId}</button>`;
     html = html.split(token).join(buttonHtml);
   });
