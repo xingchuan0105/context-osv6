@@ -9,6 +9,8 @@ fn request(agent_type: &str, query: &str, doc_scope: &[&str]) -> ChatRequest {
         workspace_id: None,
         session_id: None,
         agent_type: agent_type.to_string(),
+        capabilities: None,
+        client_context: None,
         source_type: None,
         source_token: None,
         doc_scope: doc_scope.iter().map(|value| value.to_string()).collect(),

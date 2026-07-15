@@ -22,6 +22,8 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         workspace_id: None,
         session_id: None,
         agent_type: "chat".to_string(),
+        capabilities: None,
+        client_context: None,
         source_type: None,
         source_token: None,
         doc_scope: args.doc_scope.clone(),

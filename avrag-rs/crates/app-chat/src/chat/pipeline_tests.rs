@@ -142,6 +142,8 @@ mod tests {
             workspace_id: Some("notebook-1".to_string()),
             session_id: None,
             agent_type: agent_type.to_string(),
+            capabilities: None,
+            client_context: None,
             source_type: None,
             source_token: None,
             doc_scope,
