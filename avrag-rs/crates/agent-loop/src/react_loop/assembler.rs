@@ -24,6 +24,30 @@ pub struct AssembledContext {
 
 pub struct ContextAssembler;
 
+/// Load system prompt base: if `request.metadata.system_prompt_parts` is a non-empty
+/// array of path strings, load each and join with `\n\n---\n\n`; otherwise use
+/// `mode.system_prompt_base`.
+fn load_assembled_system_base(mode: &ModeConfig, request: &AgentRequest) -> String {
+    if let Some(parts) = request
+        .metadata
+        .get("system_prompt_parts")
+        .and_then(|v| v.as_array())
+    {
+        let paths: Vec<&str> = parts.iter().filter_map(|v| v.as_str()).collect();
+        if !paths.is_empty() {
+            let loaded: Vec<String> = paths
+                .iter()
+                .filter_map(|p| super::config::load_system_prompt(p).ok())
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            if !loaded.is_empty() {
+                return loaded.join("\n\n---\n\n");
+            }
+        }
+    }
+    super::config::load_system_prompt(&mode.system_prompt_base).unwrap_or_default()
+}
+
 impl ContextAssembler {
     pub fn assemble_retrieve(
         iteration: u8,
@@ -35,7 +59,7 @@ impl ContextAssembler {
         last_assistant_content: Option<&str>,
     ) -> AssembledContext {
         let _ = last_assistant_content;
-        let base = super::config::load_system_prompt(&mode.system_prompt_base).unwrap_or_default();
+        let base = load_assembled_system_base(mode, request);
         let first_round = iteration == 0;
 
         let skill_request = disclosed.last_skill_request.as_deref();
@@ -82,7 +106,7 @@ impl ContextAssembler {
         registry: &CapabilityRegistry,
         disclosed: &mut DisclosedState,
     ) -> AssembledContext {
-        let base = super::config::load_system_prompt(&mode.system_prompt_base).unwrap_or_default();
+        let base = load_assembled_system_base(mode, request);
         let mut hint_parts = Vec::new();
 
         if let Some(hint) = request.format_hint.as_deref() {

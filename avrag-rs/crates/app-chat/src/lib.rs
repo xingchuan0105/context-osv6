@@ -10,6 +10,7 @@
 pub mod agent_runtime;
 pub mod agents;
 pub mod capabilities;
+pub mod mode_assemble;
 pub mod chat;
 pub mod chat_private;
 pub mod chat_streaming;
@@ -35,6 +36,7 @@ mod external_agent_guide;
 
 pub use agents::AgentKind;
 pub use capabilities::{resolve_capabilities, CapabilitySet, write_disabled_error};
+pub use mode_assemble::{assemble_mode, AssembledMode};
 pub use chat_service::ChatService;
 pub use chat_streaming::{
     STREAM_PLACEHOLDER_MESSAGE_ID, chat_done_payload, chunk_text_for_stream,

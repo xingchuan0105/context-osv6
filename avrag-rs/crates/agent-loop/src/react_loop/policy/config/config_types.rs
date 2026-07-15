@@ -54,6 +54,8 @@ impl Default for LoopExitConfig {
 pub enum AnswerContractKind {
     InternalAnswerV1,
     InternalSearchAnswerV1,
+    /// Dual RAG+Search: accept either cite style (`[[cite:…]]` or `[[n]]`).
+    InternalHybridAnswerV1,
     ProseOnly,
 }
 

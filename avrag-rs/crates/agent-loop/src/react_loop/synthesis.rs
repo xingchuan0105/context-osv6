@@ -44,7 +44,12 @@ impl SynthesisPhase {
                     AnswerContractKind::InternalSearchAnswerV1 => {
                         "internal_search_answer_v1".to_string()
                     }
-                    _ => "internal_answer_v1".to_string(),
+                    AnswerContractKind::InternalHybridAnswerV1 => {
+                        "internal_hybrid_answer_v1".to_string()
+                    }
+                    AnswerContractKind::InternalAnswerV1 | AnswerContractKind::ProseOnly => {
+                        "internal_answer_v1".to_string()
+                    }
                 },
             })
             .await;

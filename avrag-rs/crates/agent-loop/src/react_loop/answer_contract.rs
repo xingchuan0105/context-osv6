@@ -61,6 +61,12 @@ pub fn synthesis_contract_block(mode: &ModeConfig) -> &'static str {
              {\"schema_version\":\"internal_answer_v1\",\"answer_text\":\"prose with [[cite:CHUNK_ID]]\",\"citations\":[{\"chunk_id\":\"...\"}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
              Every citations[].chunk_id MUST appear as [[cite:CHUNK_ID]] in answer_text."
         }
+        AnswerContractKind::InternalHybridAnswerV1 => {
+            "Respond with ONLY a JSON object (no markdown fences). Use ONE of:\n\
+             RAG: {\"schema_version\":\"internal_answer_v1\",\"answer_text\":\"prose with [[cite:CHUNK_ID]]\",\"citations\":[{\"chunk_id\":\"...\"}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
+             Search: {\"schema_version\":\"internal_search_answer_v1\",\"answer_text\":\"...\",\"citations\":[{\"index\":1}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
+             Prefer [[cite:CHUNK_ID]] for document evidence and [[n]] for web search indices; both styles are accepted when mixed evidence is present."
+        }
     }
 }
 
@@ -93,6 +99,24 @@ pub fn parse_synthesis_answer(
             let parsed: InternalAnswerV1 =
                 serde_json::from_str(&body).map_err(|e| format!("json parse error: {e}"))?;
             Ok(ParsedSynthesisAnswer::Rag(parsed))
+        }
+        AnswerContractKind::InternalHybridAnswerV1 => {
+            // Prefer RAG JSON, then search JSON.
+            if let Ok(parsed) = serde_json::from_str::<InternalAnswerV1>(&body) {
+                if parsed.schema_version != "internal_search_answer_v1" {
+                    return Ok(ParsedSynthesisAnswer::Rag(parsed));
+                }
+            }
+            if let Ok(parsed) = serde_json::from_str::<InternalSearchAnswerV1>(&body) {
+                return Ok(ParsedSynthesisAnswer::Search(parsed));
+            }
+            if let Ok(parsed) = serde_json::from_str::<InternalAnswerV1>(&body) {
+                return Ok(ParsedSynthesisAnswer::Rag(parsed));
+            }
+            Err(
+                "json parse error: hybrid expects internal_answer_v1 or internal_search_answer_v1"
+                    .to_string(),
+            )
         }
         AnswerContractKind::ProseOnly => Err("prose_only has no synthesis contract".to_string()),
     }
@@ -171,51 +195,63 @@ pub fn lift_prose_to_contract(
 ) -> Option<ParsedSynthesisAnswer> {
     let prose = strip_json_fences(raw);
     match mode.synthesis_output.contract {
-        AnswerContractKind::InternalAnswerV1 => {
-            let cited_ids = crate::cite_extract::extract_referenced_chunk_ids(&prose);
-            if cited_ids.is_empty() {
-                return None;
-            }
-            let known = known_chunk_ids_with_messages(tool_results, messages);
-            let citations: Vec<InternalCitationV1> = cited_ids
-                .iter()
-                .filter(|id| known.contains(*id))
-                .map(|id| InternalCitationV1 {
-                    chunk_id: id.clone(),
-                    quote_span: None,
-                    confidence: None,
-                })
-                .collect();
-            if citations.is_empty() {
-                return None;
-            }
-            Some(ParsedSynthesisAnswer::Rag(InternalAnswerV1 {
-                schema_version: "internal_answer_v1".to_string(),
-                answer_text: prose,
-                citations,
-                coverage: Some("full".to_string()),
-                refusal_reason: None,
-            }))
-        }
-        AnswerContractKind::InternalSearchAnswerV1 => {
-            let indices = extract_search_indices(&prose);
-            if indices.is_empty() {
-                return None;
-            }
-            let citations: Vec<InternalSearchCitationV1> = indices
-                .into_iter()
-                .map(|index| InternalSearchCitationV1 { index })
-                .collect();
-            Some(ParsedSynthesisAnswer::Search(InternalSearchAnswerV1 {
-                schema_version: "internal_search_answer_v1".to_string(),
-                answer_text: prose,
-                citations,
-                coverage: Some("full".to_string()),
-                refusal_reason: None,
-            }))
+        AnswerContractKind::InternalAnswerV1 => lift_rag_prose(&prose, tool_results, messages),
+        AnswerContractKind::InternalSearchAnswerV1 => lift_search_prose(&prose),
+        AnswerContractKind::InternalHybridAnswerV1 => {
+            // Prefer RAG cite markers, then search [[n]] indices.
+            lift_rag_prose(&prose, tool_results, messages).or_else(|| lift_search_prose(&prose))
         }
         AnswerContractKind::ProseOnly => None,
     }
+}
+
+fn lift_rag_prose(
+    prose: &str,
+    tool_results: &[ToolResult],
+    messages: &[ChatMessage],
+) -> Option<ParsedSynthesisAnswer> {
+    let cited_ids = crate::cite_extract::extract_referenced_chunk_ids(prose);
+    if cited_ids.is_empty() {
+        return None;
+    }
+    let known = known_chunk_ids_with_messages(tool_results, messages);
+    let citations: Vec<InternalCitationV1> = cited_ids
+        .iter()
+        .filter(|id| known.contains(*id))
+        .map(|id| InternalCitationV1 {
+            chunk_id: id.clone(),
+            quote_span: None,
+            confidence: None,
+        })
+        .collect();
+    if citations.is_empty() {
+        return None;
+    }
+    Some(ParsedSynthesisAnswer::Rag(InternalAnswerV1 {
+        schema_version: "internal_answer_v1".to_string(),
+        answer_text: prose.to_string(),
+        citations,
+        coverage: Some("full".to_string()),
+        refusal_reason: None,
+    }))
+}
+
+fn lift_search_prose(prose: &str) -> Option<ParsedSynthesisAnswer> {
+    let indices = extract_search_indices(prose);
+    if indices.is_empty() {
+        return None;
+    }
+    let citations: Vec<InternalSearchCitationV1> = indices
+        .into_iter()
+        .map(|index| InternalSearchCitationV1 { index })
+        .collect();
+    Some(ParsedSynthesisAnswer::Search(InternalSearchAnswerV1 {
+        schema_version: "internal_search_answer_v1".to_string(),
+        answer_text: prose.to_string(),
+        citations,
+        coverage: Some("full".to_string()),
+        refusal_reason: None,
+    }))
 }
 
 fn answer_references_search_index(answer: &str, index: u32) -> bool {
