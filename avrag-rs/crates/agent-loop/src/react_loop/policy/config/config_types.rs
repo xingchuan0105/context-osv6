@@ -54,7 +54,9 @@ impl Default for LoopExitConfig {
 pub enum AnswerContractKind {
     InternalAnswerV1,
     InternalSearchAnswerV1,
-    /// Dual RAG+Search: accept either cite style (`[[cite:…]]` or `[[n]]`).
+    /// Unified doc+web synthesis (`[[cite:…]]` + `[[web:n]]`). Preferred for rag/search/dual.
+    InternalAnswerUnifiedV1,
+    /// @deprecated alias of unified dual path; still accepted in old configs.
     InternalHybridAnswerV1,
     ProseOnly,
 }

@@ -168,7 +168,7 @@ function citationToWebSource(citation: Citation): WebSource | null {
 
 function hasRenderedCitationMarkup(content: string) {
   // RAG: [[cite:CHUNK_ID]] / [[image:CHUNK_ID]]; Search/legacy: [[n]] / [n]
-  return /\[\[(?:cite|image):[^\]]+\]\]|\[\[\d+\]\]|\[\d+\]/iu.test(content);
+  return /\[\[(?:cite|image|web):[^\]]+\]\]|\[\[\d+\]\]|\[\d+\]/iu.test(content);
 }
 
 function resolveCitationFromMarker(
@@ -200,17 +200,18 @@ function markdownToRichTextHtmlWithCitationButtons(
   const citationTokens: RichMarkdownCitationToken[] = [];
   // Order matters: named cite/image first, then numeric [[n]] / [n].
   const tokenizedMarkdown = markdown.replace(
-    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
+    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
     (
       marker,
       citeChunkId: string | undefined,
       imageChunkId: string | undefined,
+      webId: string | undefined,
       bracketedId: string | undefined,
       prefixedId: string | undefined,
     ) => {
       const citation = resolveCitationFromMarker(citations, {
         chunkId: citeChunkId ?? imageChunkId,
-        displayId: bracketedId ?? prefixedId,
+        displayId: webId ?? bracketedId ?? prefixedId,
       });
       if (!citation) {
         // Drop unknown markers so raw [[cite:uuid]] never leaks into the answer body.
@@ -243,7 +244,7 @@ type RenderedAnswerToken =
 function tokenizeRenderedAnswerLine(line: string) {
   const tokens: RenderedAnswerToken[] = [];
   const pattern =
-    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[(\d+)\]\]|\[(\d+)\]/giu;
+    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(\d+)\]/giu;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -256,7 +257,7 @@ function tokenizeRenderedAnswerLine(line: string) {
     } else if (match[2]) {
       tokens.push({ type: "image", chunkId: match[2] });
     } else {
-      tokens.push({ type: "citation", displayId: match[3] ?? match[4] ?? "" });
+      tokens.push({ type: "citation", displayId: match[3] ?? match[4] ?? match[5] ?? "" });
     }
     lastIndex = match.index + match[0].length;
   }

@@ -46,7 +46,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         config.loop_exit.require_evidence = true;
         config.loop_exit.allow_content_early_stop = false;
         config.loop_exit.skip_synthesis_on_direct_answer = false;
-        config.synthesis_output.contract = AnswerContractKind::InternalAnswerV1;
+        config.synthesis_output.contract = AnswerContractKind::InternalAnswerUnifiedV1;
         config.auto_fallback = rag.auto_fallback.clone();
         if let Some(t) = rag.temperature {
             config.temperature = Some(t);
@@ -64,15 +64,14 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         config.loop_exit.allow_content_early_stop = false;
         config.loop_exit.skip_synthesis_on_direct_answer = false;
         if caps.rag {
-            config.synthesis_output.contract = AnswerContractKind::InternalHybridAnswerV1;
-            // Dual: do not force both rag-answer and search-answer (and never chat)
-            // as concurrent mandatory synthesis skills — that confuses the model into
-            // emitting raw JSON envelopes. Prefer a single RAG-shaped hybrid contract.
+            // Dual: unified contract + single mandatory answer skill.
+            config.synthesis_output.contract = AnswerContractKind::InternalAnswerUnifiedV1;
             config.skill_catalog.mandatory.synthesis = vec!["rag-answer".to_string()];
             // Keep rag auto_fallback when dual.
         } else {
-            config.synthesis_output.contract = AnswerContractKind::InternalSearchAnswerV1;
+            config.synthesis_output.contract = AnswerContractKind::InternalAnswerUnifiedV1;
             config.auto_fallback = search.auto_fallback.clone();
+            config.skill_catalog.mandatory.synthesis = vec!["search-answer".to_string()];
         }
         if let Some(t) = search.temperature {
             // Search-only uses search temp; dual keeps rag temp already set.
@@ -244,7 +243,7 @@ mod tests {
         );
         assert_eq!(
             assembled.config.synthesis_output.contract,
-            AnswerContractKind::InternalHybridAnswerV1
+            AnswerContractKind::InternalAnswerUnifiedV1
         );
         assert!(assembled.config.inject_retrieval_query);
         assert!(assembled.config.loop_exit.require_evidence);
@@ -270,7 +269,7 @@ mod tests {
         assert_eq!(assembled.system_prompt_parts.len(), 2);
         assert_eq!(
             assembled.config.synthesis_output.contract,
-            AnswerContractKind::InternalAnswerV1
+            AnswerContractKind::InternalAnswerUnifiedV1
         );
         assert!(!assembled
             .config
@@ -289,7 +288,7 @@ mod tests {
         assert_eq!(assembled.config.id, "search");
         assert_eq!(
             assembled.config.synthesis_output.contract,
-            AnswerContractKind::InternalSearchAnswerV1
+            AnswerContractKind::InternalAnswerUnifiedV1
         );
         let fb = assembled.config.auto_fallback.expect("search fallback");
         assert_eq!(fb.tool_id, "web_search");
