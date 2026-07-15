@@ -152,7 +152,7 @@ fn skill_policy_defaults(id: &str) -> (Vec<Permission>, Vec<String>) {
     match id {
         "web_search" | "web_fetch" => (vec![Permission::ExternalNetwork], search),
         "code_interpreter" => (vec![Permission::CodeExecution], all),
-        "conversation_history_load" | "user_profile_load" => (vec![], all),
+        "conversation_history_load" | "user_profile_load" | "user_context" => (vec![], all),
         "calculator" | "weather_query" => (vec![], all),
         _ if id.starts_with("write_refine") => (vec![], vec!["write".into()]),
         _ => (vec![], all),
@@ -162,7 +162,8 @@ fn skill_policy_defaults(id: &str) -> (Vec<Permission>, Vec<String>) {
 fn infer_risk(id: &str) -> RiskLevel {
     match id {
         "web_search" | "web_fetch" | "code_interpreter" => RiskLevel::High,
-        "calculator" | "weather_query" | "conversation_history_load" | "user_profile_load" => {
+        "calculator" | "weather_query" | "conversation_history_load" | "user_profile_load"
+        | "user_context" => {
             RiskLevel::Low
         }
         _ if id.starts_with("write_refine") => RiskLevel::Medium,

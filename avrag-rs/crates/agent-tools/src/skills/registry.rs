@@ -21,6 +21,12 @@ pub struct ExecutionContext<'a> {
     pub auth: Option<&'a contracts::auth_runtime::AuthContext>,
     pub session_id: Option<uuid::Uuid>,
     pub chat_persistence: Option<&'a dyn ChatPersistencePort>,
+    /// Client IP for `user_context` geo (may be "unknown").
+    pub client_ip: Option<String>,
+    /// Frontend-reported local time (ISO-8601).
+    pub client_local_time: Option<String>,
+    /// Frontend-reported IANA timezone.
+    pub client_timezone: Option<String>,
 }
 
 impl<'a> ExecutionContext<'a> {
@@ -30,6 +36,9 @@ impl<'a> ExecutionContext<'a> {
             auth: None,
             session_id: None,
             chat_persistence: None,
+            client_ip: None,
+            client_local_time: None,
+            client_timezone: None,
         }
     }
 
@@ -44,7 +53,22 @@ impl<'a> ExecutionContext<'a> {
             auth,
             session_id,
             chat_persistence,
+            client_ip: None,
+            client_local_time: None,
+            client_timezone: None,
         }
+    }
+
+    pub fn with_client_context(
+        mut self,
+        client_ip: Option<String>,
+        client_local_time: Option<String>,
+        client_timezone: Option<String>,
+    ) -> Self {
+        self.client_ip = client_ip;
+        self.client_local_time = client_local_time;
+        self.client_timezone = client_timezone;
+        self
     }
 }
 

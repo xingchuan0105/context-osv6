@@ -11,6 +11,7 @@ fn request(agent_type: &str, query: &str, doc_scope: &[&str]) -> ChatRequest {
         agent_type: agent_type.to_string(),
         capabilities: None,
         client_context: None,
+        client_ip: None,
         source_type: None,
         source_token: None,
         doc_scope: doc_scope.iter().map(|value| value.to_string()).collect(),

@@ -21,11 +21,22 @@ impl ReActLoop {
         auth: &contracts::auth_runtime::AuthContext,
         doc_scope: &[String],
         session_id: Option<&str>,
+        request: &AgentRequest,
     ) -> ToolResult {
+        let meta_str = |key: &str| {
+            request
+                .metadata
+                .get(key)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
         let deps = OwnedToolDeps {
             search_executor: self.search_executor.clone(),
             rag_runtime: self.rag_runtime.clone(),
             chat_persistence: self.effective_chat_persistence(),
+            client_ip: meta_str("client_ip"),
+            client_local_time: meta_str("client_local_time"),
+            client_timezone: meta_str("client_timezone"),
         };
         deps.dispatch(call, auth, doc_scope, session_id).await
     }
@@ -66,6 +77,7 @@ impl ReActLoop {
                     auth,
                     &request.doc_scope,
                     request.session_id.as_deref(),
+                    request,
                 )
                 .await;
             let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;

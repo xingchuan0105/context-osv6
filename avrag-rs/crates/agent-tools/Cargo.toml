@@ -17,6 +17,7 @@ chrono.workspace = true
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 evalexpr.workspace = true
+maxminddb = "0.24"
 regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true

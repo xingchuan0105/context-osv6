@@ -18,6 +18,7 @@ pub const MAX_PROMPT_HISTORY_TURNS: usize = 2;
 
 pub mod capability;
 pub mod catalog;
+pub mod geoip;
 pub mod progressive;
 pub mod rag_bridge;
 pub mod skills;

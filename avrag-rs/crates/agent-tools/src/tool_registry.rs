@@ -25,6 +25,9 @@ pub struct ToolDispatchContext<'a> {
     pub chat_persistence: Option<&'a dyn ChatPersistencePort>,
     /// When true, run CapabilityRegistry policy enforcement (production loop).
     pub enforce_policy: bool,
+    pub client_ip: Option<&'a str>,
+    pub client_local_time: Option<&'a str>,
+    pub client_timezone: Option<&'a str>,
 }
 
 /// Canonical tool execute entry used by ReActLoop and all call sites.
@@ -111,6 +114,11 @@ async fn dispatch_skill(
         ctx.auth,
         ctx.session_id,
         ctx.chat_persistence,
+    )
+    .with_client_context(
+        ctx.client_ip.map(str::to_string),
+        ctx.client_local_time.map(str::to_string),
+        ctx.client_timezone.map(str::to_string),
     );
 
     execute_with_retry(
@@ -157,6 +165,9 @@ pub struct OwnedToolDeps {
     pub search_executor: Option<Arc<dyn avrag_search::SearchProvider>>,
     pub rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     pub chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
+    pub client_ip: Option<String>,
+    pub client_local_time: Option<String>,
+    pub client_timezone: Option<String>,
 }
 
 impl OwnedToolDeps {
@@ -176,6 +187,9 @@ impl OwnedToolDeps {
             rag_runtime: self.rag_runtime.as_deref(),
             chat_persistence: self.chat_persistence.as_deref(),
             enforce_policy: true,
+            client_ip: self.client_ip.as_deref(),
+            client_local_time: self.client_local_time.as_deref(),
+            client_timezone: self.client_timezone.as_deref(),
         };
         dispatch_tool(call, &ctx).await
     }
@@ -205,6 +219,9 @@ mod tests {
             rag_runtime: None,
             chat_persistence: None,
             enforce_policy: false,
+            client_ip: None,
+            client_local_time: None,
+            client_timezone: None,
         }
     }
 
@@ -220,6 +237,9 @@ mod tests {
             rag_runtime: None,
             chat_persistence: None,
             enforce_policy: true,
+            client_ip: None,
+            client_local_time: None,
+            client_timezone: None,
         }
     }
 

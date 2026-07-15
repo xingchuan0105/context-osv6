@@ -63,7 +63,7 @@ pub(crate) fn check_rate_limit(key: &str, limit_rpm: u32) -> (bool, u32, u32) {
     }
 }
 
-fn extract_client_ip(headers: &HeaderMap) -> String {
+pub(crate) fn extract_client_ip(headers: &HeaderMap) -> String {
     headers
         .get(HEADER_FORWARDED_FOR)
         .and_then(|value| value.to_str().ok())

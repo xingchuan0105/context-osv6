@@ -124,6 +124,7 @@ mod tests {
             agent_type: agent_type.to_string(),
             capabilities: None,
             client_context: None,
+        client_ip: None,
             source_type: None,
             source_token: None,
             doc_scope: vec![],

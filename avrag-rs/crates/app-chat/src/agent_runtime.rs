@@ -150,6 +150,18 @@ impl ChatContext {
                 .map(agent_loop::runtime::AgentUserPreferences::from_layer3)
         });
         let messages = self.resolve_agent_messages(req).await;
+        let mut metadata = BTreeMap::new();
+        if let Some(ip) = req.client_ip.as_ref().filter(|s| !s.is_empty()) {
+            metadata.insert("client_ip".to_string(), serde_json::json!(ip));
+        }
+        if let Some(ctx) = req.client_context.as_ref() {
+            if let Some(t) = ctx.local_time.as_ref() {
+                metadata.insert("client_local_time".to_string(), serde_json::json!(t));
+            }
+            if let Some(tz) = ctx.timezone.as_ref() {
+                metadata.insert("client_timezone".to_string(), serde_json::json!(tz));
+            }
+        }
         agent_loop::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
@@ -163,7 +175,7 @@ impl ChatContext {
             language: req.language.clone(),
             auth: self.auth.clone(),
             docscope_metadata: None,
-            metadata: BTreeMap::new(),
+            metadata,
             cancellation_token: None,
             guard_pipeline: None,
             preferred_tools: vec![],

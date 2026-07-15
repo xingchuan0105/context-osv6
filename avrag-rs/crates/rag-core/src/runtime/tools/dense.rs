@@ -63,6 +63,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         agent_type: "chat".to_string(),
         capabilities: None,
         client_context: None,
+        client_ip: None,
         source_type: None,
         source_token: None,
         doc_scope: args.doc_scope.clone(),

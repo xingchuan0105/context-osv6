@@ -55,8 +55,15 @@ pub(crate) async fn runtime_execute_handler(
 pub(crate) async fn chat_post_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,
-    Json(req): Json<ChatRequest>,
+    Json(mut req): Json<ChatRequest>,
 ) -> Response {
+    // Server-authoritative client IP for user_context geo (overwrite any client value).
+    let edge_ip = crate::middleware::extract_client_ip(&headers);
+    if edge_ip != "unknown" {
+        req.client_ip = Some(edge_ip);
+    } else {
+        req.client_ip = None;
+    }
     let should_stream = req.stream || accepts_sse(&headers);
     let source_type = req.source_type.clone();
     let workspace_id = req

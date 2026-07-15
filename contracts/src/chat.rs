@@ -30,6 +30,9 @@ pub struct ChatRequest {
     pub capabilities: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_context: Option<ClientContext>,
+    /// Client IP for `user_context` geo. Server overwrites any client-supplied value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_ip: Option<String>,
     #[serde(default)]
     pub source_type: Option<String>,
     #[serde(default)]
