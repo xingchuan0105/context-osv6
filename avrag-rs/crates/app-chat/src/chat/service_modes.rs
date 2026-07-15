@@ -59,8 +59,12 @@ pub(crate) fn build_chat_execution_from_result(
     agent_result: &agent_loop::runtime::AgentRunResult,
     params: BuildChatExecutionParams<'_>,
 ) -> ChatExecution {
-    let answer = agent_result.answer.clone();
-    let answer_blocks = if agent_result.answer_blocks.is_empty() {
+    // Final belt: never persist a synthesis JSON envelope as the user-visible answer.
+    let answer =
+        agent_loop::answer_contract::ensure_user_visible_answer_text(&agent_result.answer);
+    let answer_blocks = if agent_result.answer.trim() != answer {
+        common::plain_text_answer_blocks(&answer)
+    } else if agent_result.answer_blocks.is_empty() {
         common::plain_text_answer_blocks(&answer)
     } else {
         agent_result.answer_blocks.clone()

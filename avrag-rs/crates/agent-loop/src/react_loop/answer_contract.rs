@@ -698,19 +698,23 @@ fn lift_unified_prose(
     if text.trim().is_empty() {
         return None;
     }
-    // Prefer structured lift from markers.
-    let upgraded = upgrade_rag_json_to_unified_from_text(&text, Some("full".into()), None);
-    if upgraded.citations.is_empty() && !text.contains("[[cite:") && !text.contains("[[web:") {
-        // Still allow pure prose under unified (no cites required if no markers).
-        return Some(ParsedSynthesisAnswer::Unified(InternalAnswerUnifiedV1 {
-            schema_version: "internal_answer_unified_v1".into(),
-            answer_text: rewrite_legacy_web_markers(&text),
-            citations: vec![],
-            coverage: Some("full".into()),
-            refusal_reason: None,
-        }));
-    }
+    // Never treat a full synthesis JSON envelope as answer_text (common failure mode
+    // when parse fails and we fall through to lift with the raw model string).
+    let text = if text.trim_start().starts_with('{') {
+        if let Some(inner) = unwrap_synthesis_json_envelope(&text) {
+            inner
+        } else if let Ok(parsed) =
+            parse_unified_or_legacy(&normalize_synthesis_json_text(&strip_json_fences(&text)))
+        {
+            return Some(parsed);
+        } else {
+            text
+        }
+    } else {
+        text
+    };
     let _ = (tool_results, messages);
+    let upgraded = upgrade_rag_json_to_unified_from_text(&text, Some("full".into()), None);
     Some(ParsedSynthesisAnswer::Unified(upgraded))
 }
 
@@ -842,7 +846,26 @@ pub fn render_synthesis_prose(answer: &ParsedSynthesisAnswer) -> String {
         ParsedSynthesisAnswer::Search(a) => a.answer_text.clone(),
         ParsedSynthesisAnswer::Unified(a) => a.answer_text.clone(),
     };
-    scrub_internal_answer_tokens(&rewrite_legacy_web_markers(&raw))
+    ensure_user_visible_answer_text(&raw)
+}
+
+/// Peel synthesis JSON envelopes until only user prose remains.
+pub fn ensure_user_visible_answer_text(raw: &str) -> String {
+    let mut text = scrub_internal_answer_tokens(raw);
+    // Peel nested / accidental envelope dumps (up to a few times).
+    for _ in 0..4 {
+        let trimmed = text.trim();
+        if !trimmed.starts_with('{') {
+            break;
+        }
+        match unwrap_synthesis_json_envelope(trimmed) {
+            Some(inner) if inner.trim() != trimmed => {
+                text = scrub_internal_answer_tokens(&inner);
+            }
+            _ => break,
+        }
+    }
+    rewrite_legacy_web_markers(&text)
 }
 
 const PARTIAL_EVIDENCE_INSUFFICIENT_ZH: &str = "资料不足以完整回答";
@@ -1297,6 +1320,28 @@ mod tests {
         assert!(!text.contains("EVIDENCEINSUFFICIENTFALLBACK"));
         assert!(text.contains("[[web:1]]") || text.contains("[[1]]"));
         assert!(!text.contains("schemaversion"));
+    }
+
+    #[test]
+    fn ensure_user_visible_peels_full_unified_envelope() {
+        let raw = r##"{ "schema_version": "internal_answer_unified_v1", "answer_text": "差距分析：正文[[web:1]]", "citations": [ {"kind": "web", "id": "1"} ], "coverage": "full", "refusal_reason": null }"##;
+        let text = ensure_user_visible_answer_text(raw);
+        assert!(text.contains("差距分析"));
+        assert!(text.contains("[[web:1]]"));
+        assert!(!text.contains("schema_version"));
+        assert!(!text.trim_start().starts_with('{'));
+    }
+
+    #[test]
+    fn lift_unified_does_not_keep_envelope_as_answer_text() {
+        let mut mode = super::super::config::load_mode_config("rag").unwrap();
+        mode.synthesis_output.contract = AnswerContractKind::InternalAnswerUnifiedV1;
+        let raw = r#"{"schema_version":"internal_answer_unified_v1","answer_text":"仅正文[[web:2]]","citations":[{"kind":"web","id":"2"}],"coverage":"full","refusal_reason":null}"#;
+        let lifted = lift_prose_to_contract(raw, &[], &[], &mode).expect("lift");
+        let prose = render_synthesis_prose(&lifted);
+        assert_eq!(prose.contains("schema_version"), false);
+        assert!(prose.contains("仅正文"));
+        assert!(prose.contains("[[web:2]]"));
     }
 
     #[test]

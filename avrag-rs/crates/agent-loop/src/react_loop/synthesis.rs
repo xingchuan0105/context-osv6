@@ -8,7 +8,7 @@ const DEFAULT_SYNTHESIS_REPAIR_ROUNDS: usize = 2;
 
 /// Never show a raw synthesis JSON envelope in the product UI.
 fn ensure_user_facing_prose(text: String) -> String {
-    unwrap_synthesis_json_envelope(&text).unwrap_or(text)
+    super::answer_contract::ensure_user_visible_answer_text(&text)
 }
 use super::assembler::AssembledContext;
 use super::config::{AnswerContractKind, ModeConfig};
