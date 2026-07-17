@@ -11,6 +11,7 @@ pub mod agent_runtime;
 pub mod agents;
 pub mod capabilities;
 pub mod mode_assemble;
+pub mod orchestrator;
 pub mod chat;
 pub mod chat_private;
 pub mod chat_streaming;

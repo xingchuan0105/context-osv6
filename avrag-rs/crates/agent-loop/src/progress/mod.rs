@@ -55,6 +55,8 @@ pub enum ProgressKind {
     WriteValidate,
     ComposeAnswer,
     ReasonPreview,
+    DelegateRag,
+    DelegateSearch,
 }
 
 impl ProgressKind {
@@ -75,6 +77,8 @@ impl ProgressKind {
             Self::WriteValidate => "write_validate",
             Self::ComposeAnswer => "compose_answer",
             Self::ReasonPreview => "reason_preview",
+            Self::DelegateRag => "delegate_rag",
+            Self::DelegateSearch => "delegate_search",
         }
     }
 }
@@ -132,6 +136,21 @@ impl WorkFact {
             kind: ProgressKind::ComposeAnswer,
             title: Self::message_key(ProgressKind::ComposeAnswer, ""),
             detail: None,
+            hits: None,
+            previews: Vec::new(),
+            status: ProgressStatus::Started,
+        }
+    }
+
+    /// Orchestrator dispatched a channel worker (AGENT_ORCHESTRATOR_V1).
+    /// `kind` must be `DelegateRag` or `DelegateSearch`; detail carries the brief goal.
+    pub fn delegate(kind: ProgressKind, brief_goal: &str) -> Self {
+        let g = truncate_chars(brief_goal.trim(), 48);
+        Self {
+            phase: ProgressPhase::Act,
+            kind,
+            title: Self::message_key(kind, ""),
+            detail: if g.is_empty() { None } else { Some(g) },
             hits: None,
             previews: Vec::new(),
             status: ProgressStatus::Started,
@@ -384,5 +403,29 @@ mod tests {
         assert_eq!(message, "progress.retrieve_semantic.done");
         assert_eq!(counts.get("hits"), Some(&12));
         assert_eq!(sources_preview.len(), 1);
+    }
+
+    #[test]
+    fn delegate_facts_emit_progress_keys() {
+        let fact = WorkFact::delegate(ProgressKind::DelegateRag, "总结报告结构");
+        let AgentEvent::Activity {
+            message,
+            stage,
+            detail,
+            ..
+        } = fact.into_activity()
+        else {
+            panic!("expected activity");
+        };
+        assert_eq!(message, "progress.delegate_rag");
+        assert_eq!(stage, "act:delegate_rag");
+        assert_eq!(detail.as_deref(), Some("总结报告结构"));
+
+        let fact = WorkFact::delegate(ProgressKind::DelegateSearch, "best practices");
+        let AgentEvent::Activity { message, stage, .. } = fact.into_activity() else {
+            panic!("expected activity");
+        };
+        assert_eq!(message, "progress.delegate_search");
+        assert_eq!(stage, "act:delegate_search");
     }
 }

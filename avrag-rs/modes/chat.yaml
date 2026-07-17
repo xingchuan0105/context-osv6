@@ -12,7 +12,8 @@ budget:
     free: 2
     pro: 3
     enterprise: 3
-temperature: 0.7
+# Unified with rag/search so capability stack does not change sampling policy.
+temperature: 0.4
 query_normalization:
   enabled: true
   max_prior_turns: 6

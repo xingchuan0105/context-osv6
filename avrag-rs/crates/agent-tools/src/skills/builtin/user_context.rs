@@ -18,8 +18,12 @@ impl SkillComponent for UserContextSkill {
         "1.0"
     }
 
+    /// Index-tier routing trigger (tool catalog / progressive disclosure).
     fn description(&self) -> &str {
-        "Load when the user asks about local time, today/tomorrow, nearby weather, or location-dependent facts without giving a city."
+        "Use when the user needs local time, 'today/tomorrow', nearby weather, or other \
+         location/time-dependent facts and has not given a city or calendar date. \
+         Skip when the user already provided city and date/time, or the question needs \
+         neither local clock nor city."
     }
 
     fn spec(&self) -> ToolSpec {
@@ -27,9 +31,15 @@ impl SkillComponent for UserContextSkill {
             name: "user_context".to_string(),
             version: "1.0".to_string(),
             description: concat!(
-                "Return the user's local time/timezone (from the client) and city-level location ",
-                "inferred from request IP via MaxMind GeoLite2. Call this before weather_query when ",
-                "the user does not specify a city or date. Never invent a city if geo.confidence is not city."
+                "Use when: local clock, 'today/tomorrow', nearby/local weather, or city-dependent ",
+                "facts, and the user did not supply city and/or date.\n",
+                "Skip when: city and date/time already in the user message, or neither time nor ",
+                "location is needed.\n",
+                "Returns: local_time + timezone from the client; city-level geo from request IP ",
+                "(MaxMind GeoLite2).\n",
+                "Rules: do not invent a city unless geo.confidence is city; if confidence is lower, ",
+                "ask the user or say location is unknown. Do not echo raw IP to the user. ",
+                "Call before weather_query when city is missing."
             )
             .to_string(),
             input_schema: serde_json::json!({
@@ -60,8 +70,10 @@ impl SkillComponent for UserContextSkill {
 
     fn gotchas(&self) -> &[&str] {
         &[
-            "Never invent city when geo.confidence is none.",
-            "City is approximate (egress IP / VPN may differ from user location).",
+            "Use when local time/nearby/city is needed and user omitted city or date.",
+            "Never invent city unless geo.confidence is city; otherwise ask or admit unknown.",
+            "Do not surface raw IP to the user.",
+            "City is approximate (egress IP / VPN may differ from true location).",
             "Clock comes from the client; missing client_context leaves time fields null.",
         ]
     }

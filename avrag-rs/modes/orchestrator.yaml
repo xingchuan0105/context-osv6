@@ -1,0 +1,24 @@
+# Orchestrator agent (AGENT_ORCHESTRATOR_V1): allocate only — no channel tools.
+# STATUS: O2 artifact — NOT loaded by the runtime today.
+# The O1 host runs structural first-wave dispatches in code
+# (app-chat/src/orchestrator/host.rs); this YAML is kept for the future
+# LLM multi-hop controller (O2). Do not wire it into loaders yet.
+mode: orchestrator
+system_prompt_base: prompts/orchestrators/orchestrator-base.md
+tool_pool: []
+skill_catalog:
+  retrieve: []
+  synthesis: []
+budget:
+  max_iterations: 6
+  by_user_tier:
+    free: 4
+    pro: 6
+    enterprise: 8
+temperature: 0.4
+loop_exit:
+  require_evidence: false
+  allow_content_early_stop: true
+  skip_synthesis_on_direct_answer: true
+synthesis_output:
+  contract: prose_only

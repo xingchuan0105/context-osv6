@@ -81,8 +81,6 @@ pub(crate) async fn dispatch_agent_mode(
     stream_config: Option<&StreamConfig>,
 ) -> Result<ChatExecution, AppError> {
     let caps = crate::resolve_capabilities(request.capabilities.as_deref(), &request.agent_type)?;
-    let assembled = crate::assemble_mode(caps)?;
-    let kind = agent_kind_for(caps);
     let agent_type_label = caps.agent_type_label();
 
     // Doc-scope clarify only when RAG capability is on (not pure chat / search-only).
@@ -97,6 +95,14 @@ pub(crate) async fn dispatch_agent_mode(
             merge_capabilities_turn_metadata(execution.assistant_turn_metadata, caps);
         return Ok(execution);
     }
+
+    // O1: orchestrator host (flag) — materialize workers → chat exit (Option B).
+    if crate::orchestrator::orchestrator_v1_enabled() {
+        return run_orchestrator_v1(state, request, session, stream_config, caps).await;
+    }
+
+    let assembled = crate::assemble_mode(caps)?;
+    let kind = agent_kind_for(caps);
 
     match kind {
         crate::agents::AgentKind::Chat => {
@@ -151,6 +157,163 @@ pub(crate) async fn dispatch_mode(
     stream_config: Option<&StreamConfig>,
 ) -> Result<ChatExecution, AppError> {
     dispatch_agent_mode(state, request, session, stream_config).await
+}
+
+/// AGENT_ORCHESTRATOR_V1: materialize channels → workers → chat exit (Option B).
+async fn run_orchestrator_v1(
+    state: &ChatContext,
+    request: &ChatRequest,
+    session: &ChatSession,
+    stream_config: Option<&StreamConfig>,
+    caps: CapabilitySet,
+) -> Result<ChatExecution, AppError> {
+    use crate::orchestrator::{
+        run_orchestrated_turn, AgentServiceExecutor,
+    };
+
+    let Some(agent_service) = state.agent_service() else {
+        return Err(AppError::internal("agent service is not configured"));
+    };
+
+    let agent_type = caps.agent_type_label();
+    // Base request uses chat kind shell; host rewrites per channel / chat exit.
+    let mut agent_request = agent_request_with_resolved_session(
+        state
+            .build_agent_request(
+                request,
+                crate::agents::AgentKind::Chat,
+                Some(session.id.clone()),
+            )
+            .await,
+        session,
+    );
+    agent_request.metadata.insert(
+        "capabilities".to_string(),
+        serde_json::to_value(caps.as_string_list()).unwrap_or_else(|_| serde_json::json!([])),
+    );
+    agent_request.metadata.insert(
+        "orchestrator_v1".to_string(),
+        serde_json::json!(true),
+    );
+    if let Some(config) = stream_config {
+        agent_request.stream = true;
+        agent_request.cancellation_token = Some(config.token.clone());
+    }
+    let emit_debug_trace = agent_request.debug;
+
+    let executor = AgentServiceExecutor {
+        agent_service: agent_service.clone(),
+    };
+
+    if let Some(config) = stream_config {
+        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
+            config.sender.clone(),
+            config.request_id.clone(),
+            session.id.clone(),
+            STREAM_PLACEHOLDER_MESSAGE_ID,
+            agent_type.to_string(),
+        )
+        .without_done_event()
+        .with_debug_trace(emit_debug_trace);
+
+        let turn = run_orchestrated_turn(caps, &agent_request, &executor, &sink).await?;
+        crate::emit_buffered_agent_answer_if_needed(&sink, &turn.answer_result.answer).await;
+
+        let mut execution = crate::chat::build_chat_execution_from_result(
+            &turn.answer_result,
+            crate::chat::BuildChatExecutionParams {
+                mode: agent_type,
+                agent_type,
+                session_id: &session.id,
+                input_usage_text: request.query.trim(),
+                apply_output_guard: true,
+                mode_debug: Some(ModeDebug {
+                    rag: None,
+                    search: None,
+                    general: Some(orchestrator_debug_map(&turn)),
+                }),
+                debug_metadata: turn.answer_result.debug_payload.clone(),
+            },
+        );
+        execution.tokens_emitted = true;
+        execution.citations_emitted = sink.has_citations_emitted();
+        let mut meta = merge_capabilities_turn_metadata(sink.progress_turn_metadata(), caps);
+        meta = merge_orchestrator_turn_metadata(meta, &turn);
+        execution.assistant_turn_metadata = meta;
+        return Ok(execution);
+    }
+
+    let sink = agent_loop::events::CollectingSink::new();
+    let turn = run_orchestrated_turn(caps, &agent_request, &executor, &sink).await?;
+
+    let mut execution = crate::chat::build_chat_execution_from_result(
+        &turn.answer_result,
+        crate::chat::BuildChatExecutionParams {
+            mode: agent_type,
+            agent_type,
+            session_id: &session.id,
+            input_usage_text: request.query.trim(),
+            apply_output_guard: true,
+            mode_debug: Some(ModeDebug {
+                rag: None,
+                search: None,
+                general: Some(orchestrator_debug_map(&turn)),
+            }),
+            debug_metadata: turn.answer_result.debug_payload.clone(),
+        },
+    );
+    if emit_debug_trace {
+        attach_debug_trace_from_sink(&mut execution, &sink);
+    }
+    let mut meta = merge_capabilities_turn_metadata(
+        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
+        caps,
+    );
+    meta = merge_orchestrator_turn_metadata(meta, &turn);
+    execution.assistant_turn_metadata = meta;
+    Ok(execution)
+}
+
+fn orchestrator_debug_map(
+    turn: &crate::orchestrator::OrchestratedTurn,
+) -> BTreeMap<String, serde_json::Value> {
+    let mut m = BTreeMap::new();
+    m.insert("orchestrator_v1".into(), serde_json::json!(true));
+    m.insert(
+        "dispatches".into(),
+        serde_json::to_value(&turn.records).unwrap_or(serde_json::json!([])),
+    );
+    m
+}
+
+fn merge_orchestrator_turn_metadata(
+    existing: Option<serde_json::Value>,
+    turn: &crate::orchestrator::OrchestratedTurn,
+) -> Option<serde_json::Value> {
+    let orch = serde_json::json!({
+        "orchestrator": true,
+        "dispatches": turn.records,
+        "pack_statuses": turn.packs.iter().map(|p| {
+            serde_json::json!({
+                "channel": p.channel,
+                "status": p.status,
+                "item_count": p.items.len(),
+            })
+        }).collect::<Vec<_>>(),
+    });
+    match existing {
+        Some(mut v) => {
+            if let Some(obj) = v.as_object_mut() {
+                if let Some(o) = orch.as_object() {
+                    for (k, val) in o {
+                        obj.insert(k.clone(), val.clone());
+                    }
+                }
+            }
+            Some(v)
+        }
+        None => Some(orch),
+    }
 }
 
 async fn run_general_mode(

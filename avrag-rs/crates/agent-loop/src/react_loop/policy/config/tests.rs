@@ -31,12 +31,11 @@ fn search_mode_config_has_search_cluster() {
 }
 
 #[test]
-fn chat_mode_config_has_empty_retrieve_tool_pool() {
+fn chat_mode_config_has_only_user_context_tool() {
     let config = load_mode_config("chat").expect("chat mode should load");
-    assert!(
-        config.tool_pool.is_empty(),
-        "chat memory tools are on-demand via memory cluster disclosure"
-    );
+    // user_context is the always-on base tool (local clock / IP geo);
+    // memory tools stay on-demand via memory cluster disclosure.
+    assert_eq!(config.tool_pool, vec!["user_context".to_string()]);
     assert!(
         config
             .skill_catalog

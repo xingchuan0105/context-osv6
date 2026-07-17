@@ -22,14 +22,24 @@ pub struct AssembledMode {
 }
 
 /// Build a `ModeConfig` by unioning capability mode YAML on top of chat defaults.
+///
+/// Budget: pure chat keeps `chat` YAML; with capabilities, **sum** selected
+/// capability modes' `max_iterations` / tier maps (not max, not +chat base).
+/// Temperature: chat/rag/search YAML are unified; last applied value is fine.
 pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
     // Base: pure-chat loop_exit / skill catalog / budget defaults.
     let mut config = load_mode_config("chat")?;
     let mut system_prompt_parts = vec![AGENT_BASE.to_string()];
 
-    // Always start with user_context in the tool pool (chat YAML is empty).
+    // Always start with user_context in the tool pool.
     config.tool_pool = vec![USER_CONTEXT_TOOL.to_string()];
     config.system_prompt_base = AGENT_BASE.to_string();
+
+    // Capability path: iterations = sum of selected modes only (exclude chat base).
+    if caps.rag || caps.search {
+        config.budget.max_iterations = 0;
+        config.budget.by_user_tier = None;
+    }
 
     if caps.rag {
         let rag = load_mode_config("rag")?;
@@ -41,7 +51,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
             .mandatory
             .synthesis
             .retain(|s| s != "chat");
-        merge_max_budget(&mut config, &rag);
+        add_budget(&mut config, &rag);
         config.inject_retrieval_query = true;
         config.loop_exit.require_evidence = true;
         config.loop_exit.allow_content_early_stop = false;
@@ -58,7 +68,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         let search = load_mode_config("search")?;
         merge_tool_pool(&mut config.tool_pool, &search.tool_pool);
         merge_skill_catalog(&mut config.skill_catalog, &search.skill_catalog);
-        merge_max_budget(&mut config, &search);
+        add_budget(&mut config, &search);
         config.inject_retrieval_query = true;
         config.loop_exit.require_evidence = true;
         config.loop_exit.allow_content_early_stop = false;
@@ -73,11 +83,9 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
             config.auto_fallback = search.auto_fallback.clone();
             config.skill_catalog.mandatory.synthesis = vec!["search-answer".to_string()];
         }
+        // Temperature is unified across mode YAMLs; still accept search value.
         if let Some(t) = search.temperature {
-            // Search-only uses search temp; dual keeps rag temp already set.
-            if !caps.rag {
-                config.temperature = Some(t);
-            }
+            config.temperature = Some(t);
         }
         system_prompt_parts.push(CAPABILITY_SEARCH.to_string());
     }
@@ -133,21 +141,30 @@ fn union_strings(dst: &mut Vec<String>, src: &[String]) {
     }
 }
 
-fn merge_max_budget(dst: &mut ModeConfig, src: &ModeConfig) {
-    dst.budget.max_iterations = dst.budget.max_iterations.max(src.budget.max_iterations);
+/// Sum iteration budgets from a selected capability mode into `dst`.
+/// Used for multi-select: dual = rag.budget + search.budget (not max).
+fn add_budget(dst: &mut ModeConfig, src: &ModeConfig) {
+    dst.budget.max_iterations = dst
+        .budget
+        .max_iterations
+        .saturating_add(src.budget.max_iterations);
     match (&mut dst.budget.by_user_tier, &src.budget.by_user_tier) {
         (Some(dst_map), Some(src_map)) => {
             for (k, v) in src_map {
                 dst_map
                     .entry(k.clone())
-                    .and_modify(|cur| *cur = (*cur).max(*v))
+                    .and_modify(|cur| *cur = (*cur).saturating_add(*v))
                     .or_insert(*v);
             }
         }
         (None, Some(src_map)) => {
             dst.budget.by_user_tier = Some(src_map.clone());
         }
-        _ => {}
+        (Some(dst_map), None) => {
+            // Cap-level max_iterations already summed; keep existing tier map.
+            let _ = dst_map;
+        }
+        (None, None) => {}
     }
 }
 
@@ -248,14 +265,45 @@ mod tests {
         assert!(assembled.config.inject_retrieval_query);
         assert!(assembled.config.loop_exit.require_evidence);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        // Budget is max of chat(2) and rag(4)/search(3) → 4
-        assert_eq!(assembled.config.budget.max_iterations, 4);
+        // Budget is sum of rag(4) + search(3) = 7 (not max; chat base not included)
+        assert_eq!(assembled.config.budget.max_iterations, 7);
         // Skill catalog union includes codegen (rag) and search cluster.
         assert!(assembled.config.skill_catalog.cluster_by_id("codegen").is_some());
         assert!(assembled.config.skill_catalog.cluster_by_id("search").is_some());
         // auto_fallback from rag when dual
         let fb = assembled.config.auto_fallback.expect("rag fallback");
         assert_eq!(fb.tool_id, "dense_retrieval");
+        // Temperature unified across modes
+        assert_eq!(assembled.config.temperature, Some(0.4));
+    }
+
+    #[test]
+    fn rag_only_budget_is_rag_not_sum_with_chat() {
+        let assembled = assemble_mode(CapabilitySet {
+            rag: true,
+            search: false,
+        })
+        .expect("assemble rag");
+        assert_eq!(assembled.config.budget.max_iterations, 4);
+        assert_eq!(assembled.config.temperature, Some(0.4));
+    }
+
+    #[test]
+    fn search_only_budget_is_search() {
+        let assembled = assemble_mode(CapabilitySet {
+            rag: false,
+            search: true,
+        })
+        .expect("assemble search");
+        assert_eq!(assembled.config.budget.max_iterations, 3);
+        assert_eq!(assembled.config.temperature, Some(0.4));
+    }
+
+    #[test]
+    fn pure_chat_keeps_chat_budget_and_unified_temp() {
+        let assembled = assemble_mode(CapabilitySet::default()).expect("pure chat");
+        assert_eq!(assembled.config.budget.max_iterations, 2);
+        assert_eq!(assembled.config.temperature, Some(0.4));
     }
 
     #[test]
