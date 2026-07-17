@@ -834,6 +834,14 @@ export const workspaceMessages = {
     zh: "正在整理回答",
     en: "Writing the answer",
   },
+  "progress.delegate_rag": {
+    zh: "正在检索工作区文档",
+    en: "Retrieving workspace documents",
+  },
+  "progress.delegate_search": {
+    zh: "正在检索网页",
+    en: "Retrieving web sources",
+  },
   "progress.memory": {
     zh: "正在回忆相关上下文",
     en: "Recalling relevant context",

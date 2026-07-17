@@ -99,7 +99,13 @@ export function progressSnapshotFromTurnMetadata(
   }
   const p = progress as Record<string, unknown>;
   const modeRaw = typeof p.mode === "string" ? p.mode : null;
-  if (modeRaw !== "rag" && modeRaw !== "search" && modeRaw !== "write" && modeRaw !== "chat") {
+  if (
+    modeRaw !== "rag" &&
+    modeRaw !== "search" &&
+    modeRaw !== "write" &&
+    modeRaw !== "chat" &&
+    modeRaw !== "rag+search"
+  ) {
     return null;
   }
   const mode = modeRaw as WorkspaceChatMode;

@@ -73,4 +73,25 @@ describe("progressSnapshotFromTurnMetadata", () => {
     expect(snap?.activities[0]?.title).toBe("完成语义检索");
     expect(snap?.activities[0]?.detail).toContain("模块");
   });
+
+  it("restores dual rag+search mode snapshots", () => {
+    const snap = progressSnapshotFromTurnMetadata("zh-CN", {
+      progress: {
+        mode: "rag+search",
+        collapsed: false,
+        activities: [
+          {
+            id: "act-0",
+            phase: "act:delegate_rag",
+            title: "progress.delegate_rag",
+            detail: "报告结构",
+            counts: {},
+            sources_preview: [],
+          },
+        ],
+      },
+    });
+    expect(snap?.mode).toBe("rag+search");
+    expect(snap?.activities).toHaveLength(1);
+  });
 });
