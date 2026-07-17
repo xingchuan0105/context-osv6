@@ -416,7 +416,7 @@ git commit -m "docs(prompts): add agent-base and capability manuals for composit
 
 ---
 
-### Task 5: Mode assembly (union tools, max budget, hybrid contract)
+### Task 5: Mode assembly (union tools, sum budget, hybrid contract)
 
 **Files:**
 - Create: `avrag-rs/crates/app-chat/src/mode_assemble.rs`

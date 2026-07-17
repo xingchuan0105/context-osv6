@@ -4,6 +4,8 @@
 **Status:** Approved (product design)  
 **Scope:** Product chat mode selection, agent tool exposure, write lane product removal, base locale tool  
 
+**Runtime follow-on (2026-07-16):** Agent-lane execute shape moves from single unioned ReAct + `mode_assemble` to **Orchestrator + channel workers + Chat exit** — see [ORCHESTRATOR_SUBAGENT_CHAT_DESIGN_2026-07-16.md](./ORCHESTRATOR_SUBAGENT_CHAT_DESIGN_2026-07-16.md). Product `capabilities[]` surface (RAG/Search tags) is unchanged.
+
 ---
 
 ## 1. Goals and non-goals
@@ -31,7 +33,7 @@
 |------|----------|
 | Capability tags | **RAG** (workspace knowledge retrieval), **Search** (web) only; multi-select |
 | Default | Both off → pure chat |
-| Dual select | Tool/skill **union**; budget take **max** (looser); **merged synthesis contract** |
+| Dual select | Tool/skill **union**; budget **sum** selected capability modes (not max, not +chat base); **merged synthesis contract** |
 | Prompts | `agent-base` + optional RAG manual + optional Search manual |
 | API | New field `capabilities: string[]` |
 | Legacy `agent_type` | **Limited compatibility** (see §3.2); `write` rejected |
@@ -130,7 +132,7 @@ Pure chat must **not** expose RAG or websearch tool interfaces to the model.
 | Case | Behavior |
 |------|----------|
 | Single capability | Keep that capability’s existing budget / evidence / synthesis contract intent |
-| Both | tool/skill **union**; numeric budgets (e.g. `max_iterations`) take **max**; use a **new merged synthesis contract** id (not hard-bind only rag or only search) |
+| Both | tool/skill **union**; numeric budgets (e.g. `max_iterations`) **sum** rag + search (exclude pure-chat base); temperature unified across chat/rag/search YAML; use a **new merged synthesis contract** id (not hard-bind only rag or only search) |
 | Pure chat | No evidence requirement; allow content early stop / skip synthesis-on-direct-answer (chat-like) |
 
 Exact numeric tables can mirror current `modes/rag.yaml` and `modes/search.yaml` at implementation time.
