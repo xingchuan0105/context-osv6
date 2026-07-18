@@ -205,6 +205,17 @@ async fn run_orchestrator_v1(
         agent_service: agent_service.clone(),
     };
 
+    // Source-document identity (file names + genres) for the evidence store —
+    // what lets the chat exit judge doc genre instead of guessing from snippets.
+    let docscope = if !request.doc_scope.is_empty() {
+        state
+            .load_docscope_metadata(&request.doc_scope)
+            .await
+            .ok()
+    } else {
+        None
+    };
+
     if let Some(config) = stream_config {
         let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
             config.sender.clone(),
@@ -216,7 +227,8 @@ async fn run_orchestrator_v1(
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
 
-        let turn = run_orchestrated_turn(caps, &agent_request, &executor, &sink).await?;
+        let turn =
+            run_orchestrated_turn(caps, &agent_request, &executor, &sink, docscope.as_ref()).await?;
         crate::emit_buffered_agent_answer_if_needed(&sink, &turn.answer_result.answer).await;
 
         let mut execution = crate::chat::build_chat_execution_from_result(
@@ -244,7 +256,8 @@ async fn run_orchestrator_v1(
     }
 
     let sink = agent_loop::events::CollectingSink::new();
-    let turn = run_orchestrated_turn(caps, &agent_request, &executor, &sink).await?;
+    let turn =
+        run_orchestrated_turn(caps, &agent_request, &executor, &sink, docscope.as_ref()).await?;
 
     let mut execution = crate::chat::build_chat_execution_from_result(
         &turn.answer_result,
@@ -293,13 +306,14 @@ fn merge_orchestrator_turn_metadata(
     let orch = serde_json::json!({
         "orchestrator": true,
         "dispatches": turn.records,
-        "pack_statuses": turn.packs.iter().map(|p| {
+        "pack_statuses": turn.records.iter().map(|r| {
             serde_json::json!({
-                "channel": p.channel,
-                "status": p.status,
-                "item_count": p.items.len(),
+                "channel": r.channel,
+                "status": r.status,
+                "item_count": r.item_count,
             })
         }).collect::<Vec<_>>(),
+        "evidence_count": turn.store.entries().len(),
     });
     match existing {
         Some(mut v) => {

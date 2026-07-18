@@ -2,6 +2,11 @@
 //!
 //! O1: first wave runs **all** materialized channels with [`default_brief`]
 //! (§7.1 structure + §7.2 invariant by construction). Multi-hop LLM re-dispatch is O2.
+//!
+//! V1 (evidence store): worker tool results are normalized into a shared
+//! [`EvidenceStore`] (monotonic `E{n}` ids, doc identity joined from docscope
+//! metadata); the chat exit receives listings + worker digests and cites
+//! `[[E:id]]`; the host rewrites markers to product citations after the run.
 
 use agent_loop::events::{AgentEventSink, CollectingSink};
 use agent_loop::runtime::{AgentRequest, AgentRunResult};
@@ -11,8 +16,11 @@ use common::AppError;
 use super::chat_exit::{direct_handoff, query_for_agent, synthesize_handoff};
 use super::invariant::{assert_complete, default_brief};
 use super::materialize::materialize_channels;
-use super::types::{Channel, ChatHandoff, DispatchRecord, EvidencePack, TaskBrief};
-use super::workers::{attach_worker_evidence, pack_error, pack_from_run};
+use super::store::EvidenceStore;
+use super::types::{
+    Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
+};
+use super::workers::{channel_note_from_run, finalize_answer_evidence};
 use crate::capabilities::CapabilitySet;
 
 /// Abstraction so tests can mock channel + chat runs without LLM.
@@ -33,10 +41,10 @@ pub trait OrchestratorExecutor: Send + Sync {
 }
 
 /// Result of an orchestrated turn.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OrchestratedTurn {
     pub answer_result: AgentRunResult,
-    pub packs: Vec<EvidencePack>,
+    pub store: EvidenceStore,
     pub records: Vec<DispatchRecord>,
     pub handoff: ChatHandoff,
     pub agent_type_label: String,
@@ -62,12 +70,88 @@ fn delegate_fact(channel: Channel, brief: &TaskBrief) -> agent_loop::progress::W
     agent_loop::progress::WorkFact::delegate(kind, &brief.goal)
 }
 
+struct ChannelOutcome {
+    record: DispatchRecord,
+    note: ChannelNote,
+}
+
+/// Run one channel dispatch: worker run → store insert → ledger entry.
+async fn dispatch_channel(
+    channel: Channel,
+    query: &str,
+    base_request: &AgentRequest,
+    executor: &dyn OrchestratorExecutor,
+    store: &mut EvidenceStore,
+    sink: &dyn AgentEventSink,
+) -> ChannelOutcome {
+    let brief = default_brief(channel, query);
+    agent_loop::progress::emit_work_fact(sink, delegate_fact(channel, &brief)).await;
+
+    let dispatch_id = uuid::Uuid::new_v4().to_string();
+    match executor.run_channel(channel, &brief, base_request).await {
+        Ok(run) => {
+            let inserted = store.insert_from_tool_results(channel, &run.tool_results);
+            let status = if inserted > 0 {
+                PackStatus::Ok
+            } else {
+                PackStatus::Empty
+            };
+            tracing::info!(
+                channel = channel.as_str(),
+                status = ?status,
+                item_count = inserted,
+                "orchestrator dispatch finished"
+            );
+            ChannelOutcome {
+                record: DispatchRecord {
+                    channel,
+                    dispatch_id,
+                    status,
+                    item_count: inserted,
+                    error: None,
+                },
+                note: ChannelNote {
+                    channel,
+                    status,
+                    item_count: inserted,
+                    note: channel_note_from_run(&run),
+                    error: None,
+                },
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                channel = channel.as_str(),
+                error = %e,
+                "orchestrator dispatch failed"
+            );
+            ChannelOutcome {
+                record: DispatchRecord {
+                    channel,
+                    dispatch_id,
+                    status: PackStatus::Error,
+                    item_count: 0,
+                    error: Some(e.to_string()),
+                },
+                note: ChannelNote {
+                    channel,
+                    status: PackStatus::Error,
+                    item_count: 0,
+                    note: None,
+                    error: Some(e.to_string()),
+                },
+            }
+        }
+    }
+}
+
 /// Run orchestrated turn: materialize → workers → chat.
 pub async fn run_orchestrated_turn(
     caps: CapabilitySet,
     base_request: &AgentRequest,
     executor: &dyn OrchestratorExecutor,
     sink: &dyn AgentEventSink,
+    docscope: Option<&common::DocScopeMetadata>,
 ) -> Result<OrchestratedTurn, AppError> {
     let label = caps.agent_type_label().to_string();
     let channels = materialize_channels(caps);
@@ -84,32 +168,22 @@ pub async fn run_orchestrated_turn(
         let answer_result = executor.run_chat(&handoff, base_request).await?;
         return Ok(OrchestratedTurn {
             answer_result,
-            packs: vec![],
+            store: EvidenceStore::from_docscope(docscope),
             records: vec![],
             handoff,
             agent_type_label: label,
         });
     }
 
-    let mut packs: Vec<EvidencePack> = Vec::new();
+    let mut store = EvidenceStore::from_docscope(docscope);
     let mut records: Vec<DispatchRecord> = Vec::new();
-    // Retained for the citation rebuild after the chat exit (Option B).
-    let mut worker_tool_results: Vec<contracts::ToolResult> = Vec::new();
+    let mut channel_notes: Vec<ChannelNote> = Vec::new();
 
     // §7.1 first wave: every materialized channel
     for ch in &channels {
-        let brief = default_brief(*ch, &query);
-        agent_loop::progress::emit_work_fact(sink, delegate_fact(*ch, &brief)).await;
-
-        let pack = match executor.run_channel(*ch, &brief, base_request).await {
-            Ok(run) => {
-                worker_tool_results.extend(run.tool_results.iter().cloned());
-                pack_from_run(*ch, brief, &run, None)
-            }
-            Err(e) => pack_error(*ch, brief, e.to_string()),
-        };
-        records.push(DispatchRecord::from(&pack));
-        packs.push(pack);
+        let outcome = dispatch_channel(*ch, &query, base_request, executor, &mut store, sink).await;
+        records.push(outcome.record);
+        channel_notes.push(outcome.note);
     }
 
     // §7.2 assert. The first wave above always pushes a record per materialized
@@ -118,23 +192,24 @@ pub async fn run_orchestrated_turn(
     // orchestrator may skip a channel and the invariant must force a default run.
     if let Err(missing) = assert_complete(&channels, &records) {
         for ch in missing.channels {
-            let brief = default_brief(ch, &query);
-            let pack = match executor.run_channel(ch, &brief, base_request).await {
-                Ok(run) => {
-                    worker_tool_results.extend(run.tool_results.iter().cloned());
-                    pack_from_run(ch, brief, &run, None)
-                }
-                Err(e) => pack_error(ch, brief, e.to_string()),
-            };
-            records.push(DispatchRecord::from(&pack));
-            packs.push(pack);
+            let outcome =
+                dispatch_channel(ch, &query, base_request, executor, &mut store, sink).await;
+            records.push(outcome.record);
+            channel_notes.push(outcome.note);
         }
     }
     assert_complete(&channels, &records).map_err(|m| {
         AppError::internal(format!("orchestrator completion invariant failed: {m}"))
     })?;
 
-    let handoff = synthesize_handoff(&query, packs.clone(), None);
+    let handoff = synthesize_handoff(
+        &query,
+        store.source_docs().to_vec(),
+        store.listings(),
+        channel_notes,
+        &records,
+        None,
+    );
     agent_loop::progress::emit_work_fact(
         sink,
         agent_loop::progress::WorkFact::compose_answer(),
@@ -142,13 +217,13 @@ pub async fn run_orchestrated_turn(
     .await;
 
     let mut answer_result = executor.run_chat(&handoff, base_request).await?;
-    // Rebuild citations/sources from worker evidence, filtered to the markers
-    // the chat answer actually emitted (see chat_exit citation contract).
-    attach_worker_evidence(&mut answer_result, worker_tool_results);
+    // Single point where E-markers become product markers + citations; dangling
+    // or fabricated markers are stripped here.
+    finalize_answer_evidence(&mut answer_result, &store);
 
     Ok(OrchestratedTurn {
         answer_result,
-        packs,
+        store,
         records,
         handoff,
         agent_type_label: label,
@@ -264,7 +339,6 @@ mod tests {
 
     struct MockExec {
         channels_run: Mutex<Vec<Channel>>,
-        skip_rag: bool,
     }
 
     #[async_trait]
@@ -276,9 +350,6 @@ mod tests {
             _base: &AgentRequest,
         ) -> Result<AgentRunResult, AppError> {
             self.channels_run.lock().unwrap().push(channel);
-            if self.skip_rag && channel == Channel::Rag {
-                // Still returns Ok empty — host always calls; test invariant via empty only
-            }
             let mut r = AgentRunResult::default();
             if channel == Channel::Search {
                 r.tool_results = vec![contracts::ToolResult {
@@ -340,10 +411,9 @@ mod tests {
     async fn pure_chat_skips_workers() {
         let ex = MockExec {
             channels_run: Mutex::new(vec![]),
-            skip_rag: false,
         };
         let sink = CollectingSink::new();
-        let turn = run_orchestrated_turn(CapabilitySet::default(), &base_req("hi"), &ex, &sink)
+        let turn = run_orchestrated_turn(CapabilitySet::default(), &base_req("hi"), &ex, &sink, None)
             .await
             .unwrap();
         assert!(ex.channels_run.lock().unwrap().is_empty());
@@ -355,36 +425,37 @@ mod tests {
     async fn dual_runs_both_channels() {
         let ex = MockExec {
             channels_run: Mutex::new(vec![]),
-            skip_rag: false,
         };
         let sink = CollectingSink::new();
         let caps = CapabilitySet {
             rag: true,
             search: true,
         };
-        let turn = run_orchestrated_turn(caps, &base_req("报告与最佳实践差距"), &ex, &sink)
+        let turn = run_orchestrated_turn(caps, &base_req("报告与最佳实践差距"), &ex, &sink, None)
             .await
             .unwrap();
         let ran = ex.channels_run.lock().unwrap().clone();
         assert!(ran.contains(&Channel::Rag));
         assert!(ran.contains(&Channel::Search));
         assert_eq!(turn.records.len(), 2);
-        // rag empty, search ok → partial notices
+        // rag empty → partial notice with 未命中 wording
         assert!(
             turn.handoff.partial_notices.iter().any(|n| n.contains("未命中") || n.contains("empty")),
             "notices={:?}",
             turn.handoff.partial_notices
         );
+        // search returned one web entry → it is in the store + handoff listings
+        assert_eq!(turn.store.count_channel(Channel::Search), 1);
+        assert!(turn.handoff.listings.iter().any(|l| l.channel == Channel::Search));
         assert!(!crate::orchestrator::invariant::looks_like_user_did_not_provide_doc(
             &turn.answer_result.answer
         ));
     }
 
     #[tokio::test]
-    async fn rag_only_one_dispatch() {
+    async fn rag_only_empty_records_empty_status() {
         let ex = MockExec {
             channels_run: Mutex::new(vec![]),
-            skip_rag: false,
         };
         let sink = CollectingSink::new();
         let turn = run_orchestrated_turn(
@@ -395,11 +466,89 @@ mod tests {
             &base_req("总结文档"),
             &ex,
             &sink,
+            None,
         )
         .await
         .unwrap();
         assert_eq!(*ex.channels_run.lock().unwrap(), vec![Channel::Rag]);
-        assert_eq!(turn.packs[0].status, PackStatus::Empty);
+        assert_eq!(turn.records[0].status, PackStatus::Empty);
+        assert_eq!(turn.records[0].item_count, 0);
+    }
+
+    #[tokio::test]
+    async fn citations_rebuilt_from_store_eids() {
+        struct CiteMockExec;
+        #[async_trait]
+        impl OrchestratorExecutor for CiteMockExec {
+            async fn run_channel(
+                &self,
+                channel: Channel,
+                _brief: &TaskBrief,
+                _base: &AgentRequest,
+            ) -> Result<AgentRunResult, AppError> {
+                let mut r = AgentRunResult::default();
+                r.tool_results = vec![match channel {
+                    Channel::Rag => contracts::ToolResult {
+                        tool: "dense_retrieval".into(),
+                        version: "1".into(),
+                        status: contracts::ToolStatus::Ok,
+                        data: Some(serde_json::json!([
+                            {"chunk_id": "chunk-a", "doc_id": "doc1", "text": "doc evidence", "score": 0.9, "page": 4}
+                        ])),
+                        trace: None,
+                    },
+                    Channel::Search => contracts::ToolResult {
+                        tool: "web_search".into(),
+                        version: "1".into(),
+                        status: contracts::ToolStatus::Ok,
+                        data: Some(serde_json::json!({
+                            "results": [
+                                {"url": "https://a.example", "title": "A", "snippet": "web evidence"}
+                            ]
+                        })),
+                        trace: None,
+                    },
+                }];
+                Ok(r)
+            }
+
+            async fn run_chat(
+                &self,
+                _handoff: &ChatHandoff,
+                _base: &AgentRequest,
+            ) -> Result<AgentRunResult, AppError> {
+                let mut r = AgentRunResult::default();
+                r.answer = "文档证据 [[E1]]，网页佐证 [[E2]]。编造 [[E9]]。".into();
+                Ok(r)
+            }
+        }
+
+        let caps = CapabilitySet {
+            rag: true,
+            search: true,
+        };
+        let sink = CollectingSink::new();
+        let turn = run_orchestrated_turn(caps, &base_req("对比"), &CiteMockExec, &sink, None)
+            .await
+            .unwrap();
+        // Valid E-ids became product markers; fabricated E9 stripped.
+        assert!(turn.answer_result.answer.contains("[[cite:chunk-a]]"));
+        assert!(turn.answer_result.answer.contains("[[web:1]]"));
+        assert!(!turn.answer_result.answer.contains("[[E"));
+        assert_eq!(turn.answer_result.citations.len(), 2);
+        assert!(
+            turn.answer_result
+                .citations
+                .iter()
+                .any(|c| c.chunk_id.as_deref() == Some("chunk-a") && c.page == Some(4))
+        );
+        assert!(
+            turn.answer_result
+                .citations
+                .iter()
+                .any(|c| c.layer.as_deref() == Some("search") && c.doc_id == "https://a.example")
+        );
+        assert_eq!(turn.answer_result.sources.len(), 1);
     }
 
     #[tokio::test]
@@ -450,80 +599,5 @@ mod tests {
                 .any(|s| s.contains("brief goal text") && s.contains("internal hand-off")),
             "brief part missing: {parts:?}"
         );
-    }
-
-    #[tokio::test]
-    async fn citations_rebuilt_from_worker_evidence() {
-        struct CiteMockExec;
-        #[async_trait]
-        impl OrchestratorExecutor for CiteMockExec {
-            async fn run_channel(
-                &self,
-                _channel: Channel,
-                _brief: &TaskBrief,
-                _base: &AgentRequest,
-            ) -> Result<AgentRunResult, AppError> {
-                let mut r = AgentRunResult::default();
-                r.tool_results = vec![
-                    contracts::ToolResult {
-                        tool: "dense_retrieval".into(),
-                        version: "1".into(),
-                        status: contracts::ToolStatus::Ok,
-                        data: Some(serde_json::json!([
-                            {"chunk_id": "chunk-a", "doc_id": "doc1", "text": "doc evidence", "score": 0.9}
-                        ])),
-                        trace: None,
-                    },
-                    contracts::ToolResult {
-                        tool: "web_search".into(),
-                        version: "1".into(),
-                        status: contracts::ToolStatus::Ok,
-                        data: Some(serde_json::json!({
-                            "query_type": "web",
-                            "sub_queries": ["q"],
-                            "results": [
-                                {"url": "https://a.example", "title": "A", "snippet": "web evidence", "citation_index": 1}
-                            ],
-                            "synthesized_answer": ""
-                        })),
-                        trace: None,
-                    },
-                ];
-                Ok(r)
-            }
-
-            async fn run_chat(
-                &self,
-                _handoff: &ChatHandoff,
-                _base: &AgentRequest,
-            ) -> Result<AgentRunResult, AppError> {
-                let mut r = AgentRunResult::default();
-                r.answer = "文档证据 [[cite:chunk-a]]，网页佐证 [[web:1]]。".into();
-                Ok(r)
-            }
-        }
-
-        let caps = CapabilitySet {
-            rag: true,
-            search: true,
-        };
-        let sink = CollectingSink::new();
-        let turn = run_orchestrated_turn(caps, &base_req("对比"), &CiteMockExec, &sink)
-            .await
-            .unwrap();
-        assert_eq!(turn.answer_result.citations.len(), 2);
-        assert!(
-            turn.answer_result
-                .citations
-                .iter()
-                .any(|c| c.chunk_id.as_deref() == Some("chunk-a"))
-        );
-        assert!(
-            turn.answer_result
-                .citations
-                .iter()
-                .any(|c| c.layer.as_deref() == Some("search"))
-        );
-        assert!(!turn.answer_result.sources.is_empty());
     }
 }

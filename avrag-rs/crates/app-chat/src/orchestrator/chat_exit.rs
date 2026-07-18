@@ -1,32 +1,46 @@
 //! Option B: Chat agent is the sole user-facing answer exit.
+//!
+//! The synthesize brief carries evidence **by reference** (store `E{n}`
+//! listings) plus worker digests and source-document identity — never raw
+//! chunk dumps (design §3.5). The chat cites `[[E:id]]`; the host rewrites
+//! those to product markers after the run (`workers::finalize_answer_evidence`).
 
-use super::invariant::partial_notices_from_packs;
-use super::types::{ChatExitMode, ChatHandoff, EvidencePack, PackStatus};
+use super::invariant::partial_notices_from_records;
+use super::store::{EvidenceListing, SourceDoc};
+use super::types::{Channel, ChannelNote, ChatExitMode, ChatHandoff, DispatchRecord, PackStatus};
 
-/// Build synthesize handoff from packs (fills partial_notices from §7.3).
+/// Build synthesize handoff from the evidence store + dispatch ledger.
 pub fn synthesize_handoff(
     user_query: &str,
-    packs: Vec<EvidencePack>,
+    source_docs: Vec<SourceDoc>,
+    listings: Vec<EvidenceListing>,
+    channel_notes: Vec<ChannelNote>,
+    records: &[DispatchRecord],
     instruction: Option<String>,
 ) -> ChatHandoff {
-    let mut notices = partial_notices_from_packs(&packs);
+    let mut notices = partial_notices_from_records(records);
     // Human-readable product notices (short)
-    for p in &packs {
-        match p.status {
-            PackStatus::Empty if p.channel == super::types::Channel::Rag => {
+    for note in &channel_notes {
+        match note.status {
+            PackStatus::Empty if note.channel == Channel::Rag => {
                 notices.push(
                     "工作区未命中相关段落（已检索）。请基于可用证据作答；勿将未命中归因为用户未粘贴文档。"
                         .into(),
                 );
             }
-            PackStatus::Empty if p.channel == super::types::Channel::Search => {
-                notices.push("网络检索未返回可用结果。".into());
+            PackStatus::Empty if note.channel == Channel::Search => {
+                notices.push(
+                    "网络检索未返回可用结果。网页侧内容只能表述为未检索到，禁止给出网页编号引用。"
+                        .into(),
+                );
             }
-            PackStatus::Error if p.channel == super::types::Channel::Rag => {
+            PackStatus::Error if note.channel == Channel::Rag => {
                 notices.push("工作区检索失败；若有网页证据可仅用网页并说明。".into());
             }
-            PackStatus::Error if p.channel == super::types::Channel::Search => {
-                notices.push("网络检索失败；若有文档证据可仅用文档并说明。".into());
+            PackStatus::Error if note.channel == Channel::Search => {
+                notices.push(
+                    "网络检索失败；网页侧内容只能表述为未检索到，禁止给出网页编号引用。".into(),
+                );
             }
             _ => {}
         }
@@ -39,7 +53,9 @@ pub fn synthesize_handoff(
         mode: ChatExitMode::Synthesize,
         user_query: user_query.to_string(),
         instruction,
-        packs,
+        source_docs,
+        listings,
+        channel_notes,
         partial_notices: notices,
     }
 }
@@ -49,23 +65,75 @@ pub fn direct_handoff(user_query: &str) -> ChatHandoff {
         mode: ChatExitMode::Direct,
         user_query: user_query.to_string(),
         instruction: None,
-        packs: vec![],
+        source_docs: vec![],
+        listings: vec![],
+        channel_notes: vec![],
         partial_notices: vec![],
     }
 }
 
-/// System-side instruction block for Chat synthesize (injected into agent query/metadata).
+/// System-side instruction block for Chat synthesize (injected into agent query).
 pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
     let mut s = String::new();
     s.push_str("## Chat synthesize (internal)\n");
     s.push_str(
-        "You are the sole user-facing answer agent. Use evidence packs below. \
-         Do not claim the user failed to provide a document if a rag pack exists \
-         (even when empty — say 未命中). Partial packs: answer from available evidence and state limits.\n\n",
+        "You are the sole user-facing answer agent. Answer from the evidence below. \
+         If the question is ambiguous, state your reading of it in one short sentence first \
+         (理解口径). Do not claim the user failed to provide a document when workspace \
+         retrieval ran — say 未命中 instead. Use the same language as the user.\n\n",
     );
-    // Citation marker contract (design §4.3): only for channels with usable items.
-    s.push_str(&render_citation_contract(&handoff.packs));
+
+    // Source-document identity: genre judgment must not be guessed from snippets.
+    if !handoff.source_docs.is_empty() {
+        s.push_str("### Source documents\n");
+        for doc in &handoff.source_docs {
+            match &doc.genre {
+                Some(g) => s.push_str(&format!("- 《{}》(genre: {})\n", doc.file_name, g)),
+                None => s.push_str(&format!("- 《{}》\n", doc.file_name)),
+            }
+        }
+        s.push('\n');
+    }
+
+    // Channel outcomes: what ran and what came back (worker digests).
+    if !handoff.channel_notes.is_empty() {
+        s.push_str("### Channel outcomes\n");
+        for note in &handoff.channel_notes {
+            let status = match note.status {
+                PackStatus::Ok => format!("ok, {} evidence items", note.item_count),
+                PackStatus::Empty => "empty (ran, nothing usable)".to_string(),
+                PackStatus::Error => format!(
+                    "error ({})",
+                    note.error.as_deref().unwrap_or("unknown")
+                ),
+            };
+            s.push_str(&format!("- {}: {}\n", note.channel.as_str(), status));
+            if let Some(n) = note.note.as_deref().filter(|n| !n.trim().is_empty()) {
+                s.push_str("  worker digest: ");
+                s.push_str(n);
+                s.push('\n');
+            }
+        }
+        s.push('\n');
+    }
+
+    // Evidence listings (references only).
+    if !handoff.listings.is_empty() {
+        s.push_str("### Evidence (cite by id)\n");
+        for l in &handoff.listings {
+            s.push_str(&format!(
+                "- [{}] {} | {}\n",
+                l.eid,
+                l.label,
+                l.preview.trim()
+            ));
+        }
+        s.push('\n');
+    }
+
+    s.push_str(&render_citation_contract(handoff));
     s.push('\n');
+
     if let Some(ins) = &handoff.instruction {
         s.push_str("### Orchestrator instruction\n");
         s.push_str(ins);
@@ -80,29 +148,16 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         }
         s.push('\n');
     }
-    s.push_str("### Evidence packs (JSON)\n```json\n");
-    s.push_str(
-        &serde_json::to_string_pretty(&handoff.packs).unwrap_or_else(|_| "[]".into()),
-    );
-    s.push_str("\n```\n\n### User question\n");
+    s.push_str("### User question\n");
     s.push_str(&handoff.user_query);
     s
 }
 
-/// Citation marker rules for the packs that actually carry items.
-///
-/// Markers must line up with what the host can rebuild downstream
-/// (`attach_worker_evidence`): doc `[[cite:id]]` ↔ rag item `id` (chunk_id),
-/// web `[[web:n]]` ↔ 1-based position in the search pack `items` array
-/// (matches `citation_index` from `web_search`).
-fn render_citation_contract(packs: &[EvidencePack]) -> String {
-    use super::types::Channel;
-    let has_doc = packs
-        .iter()
-        .any(|p| p.channel == Channel::Rag && !p.items.is_empty());
-    let has_web = packs
-        .iter()
-        .any(|p| p.channel == Channel::Search && !p.items.is_empty());
+/// Citation marker rules: `[[E:id]]` only, only for listed ids, only for
+/// channels that actually returned evidence.
+fn render_citation_contract(handoff: &ChatHandoff) -> String {
+    let has_doc = handoff.listings.iter().any(|l| l.channel == Channel::Rag);
+    let has_web = handoff.listings.iter().any(|l| l.channel == Channel::Search);
 
     let mut s = String::new();
     s.push_str("### Citation markers (required)\n");
@@ -110,22 +165,24 @@ fn render_citation_contract(packs: &[EvidencePack]) -> String {
         s.push_str("No usable evidence retrieved — do not emit any citation markers.\n");
         return s;
     }
-    if has_doc {
-        s.push_str(
-            "- Workspace document facts: append `[[cite:ID]]` right after the claim, where `ID` \
-             is the `id` of an item in the rag pack (copy verbatim). Every doc-grounded claim \
-             needs its marker.\n",
-        );
+    s.push_str(
+        "- Ground every evidence-based claim with `[[E:id]]` right after it, where `id` is one \
+         of the evidence ids listed above (copy exactly, e.g. `[[E3]]`). One claim may carry \
+         several markers: `[[E2]][[E5]]`.\n",
+    );
+    if !has_doc {
+        s.push_str("- Workspace retrieval returned nothing usable: say 未命中 for document-side \
+                    facts; do not cite document evidence.\n");
     }
-    if has_web {
+    if !has_web {
         s.push_str(
-            "- Web facts: append `[[web:n]]` right after the claim, where `n` is the 1-based \
-             position of the item in the search pack `items` array.\n",
+            "- Web retrieval returned nothing usable: web-side content may only be presented as \
+             general knowledge or 未检索到; do not cite web evidence.\n",
         );
     }
     s.push_str(
-        "- Never invent markers for packs that are empty or errored; never use `[[web:n]]` \
-         for document facts or `[[cite:...]]` for web facts.\n",
+        "- Never invent ids not listed above; never emit `[[cite:...]]` or `[[web:n]]` — the \
+         runtime converts your `[[E:id]]` markers itself.\n",
     );
     s
 }
@@ -141,71 +198,96 @@ pub fn query_for_agent(handoff: &ChatHandoff) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::orchestrator::types::{Channel, TaskBrief};
+    use crate::orchestrator::store::EvidenceListing;
 
-    #[test]
-    fn empty_rag_adds_notice() {
-        let packs = vec![EvidencePack {
-            channel: Channel::Rag,
-            status: PackStatus::Empty,
-            dispatch_id: "1".into(),
-            task_brief: TaskBrief::new("g"),
-            items: vec![],
-            notes: None,
-            error: None,
-        }];
-        let h = synthesize_handoff("q", packs, None);
-        assert!(h.partial_notices.iter().any(|n| n.contains("未命中")));
-        let ctx = render_synthesize_context(&h);
-        assert!(ctx.contains("Evidence packs"));
+    fn listing(eid: &str, channel: Channel) -> EvidenceListing {
+        EvidenceListing {
+            eid: eid.into(),
+            channel,
+            label: "《立项报告》p5".into(),
+            preview: "现状诊断内容".into(),
+        }
     }
 
-    fn pack_with_item(channel: Channel) -> EvidencePack {
-        EvidencePack {
+    fn note(channel: Channel, status: PackStatus, item_count: usize) -> ChannelNote {
+        ChannelNote {
             channel,
-            status: PackStatus::Ok,
-            dispatch_id: "1".into(),
-            task_brief: TaskBrief::new("g"),
-            items: vec![super::super::types::EvidenceItem {
-                id: "chunk-a".into(),
-                title: None,
-                text: "evidence".into(),
-                score: None,
-                uri: None,
-            }],
-            notes: None,
+            status,
+            item_count,
+            note: None,
+            error: None,
+        }
+    }
+
+    fn rec(channel: Channel, status: PackStatus) -> DispatchRecord {
+        DispatchRecord {
+            channel,
+            dispatch_id: "d1".into(),
+            status,
+            item_count: 0,
             error: None,
         }
     }
 
     #[test]
-    fn citation_contract_matches_available_packs() {
-        // Dual with items: both marker rules present.
+    fn brief_has_doc_identity_listings_and_policy() {
         let h = synthesize_handoff(
             "q",
-            vec![pack_with_item(Channel::Rag), pack_with_item(Channel::Search)],
+            vec![SourceDoc {
+                doc_id: "d1".into(),
+                file_name: "数字化转型IT立项报告.docx".into(),
+                genre: Some("report".into()),
+            }],
+            vec![listing("E1", Channel::Rag), listing("E2", Channel::Search)],
+            vec![note(Channel::Rag, PackStatus::Ok, 1)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
             None,
         );
         let ctx = render_synthesize_context(&h);
-        assert!(ctx.contains("[[cite:ID]]"), "doc rule missing: {ctx}");
-        assert!(ctx.contains("[[web:n]]"), "web rule missing: {ctx}");
+        assert!(ctx.contains("数字化转型IT立项报告.docx"), "doc identity: {ctx}");
+        assert!(ctx.contains("genre: report"), "genre: {ctx}");
+        assert!(ctx.contains("[E1]"), "listing: {ctx}");
+        assert!(ctx.contains("[[E:id]]"), "E-marker rule: {ctx}");
+        assert!(ctx.contains("理解口径"), "interpretation rule: {ctx}");
+    }
 
-        // Rag empty: no doc marker rule, web rule stays, no-marker ban present.
-        let mut rag_empty = pack_with_item(Channel::Rag);
-        rag_empty.status = PackStatus::Empty;
-        rag_empty.items = vec![];
-        let h = synthesize_handoff("q", vec![rag_empty, pack_with_item(Channel::Search)], None);
+    #[test]
+    fn empty_search_forbids_web_markers() {
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![
+                note(Channel::Rag, PackStatus::Ok, 1),
+                note(Channel::Search, PackStatus::Empty, 0),
+            ],
+            &[
+                rec(Channel::Rag, PackStatus::Ok),
+                rec(Channel::Search, PackStatus::Empty),
+            ],
+            None,
+        );
         let ctx = render_synthesize_context(&h);
-        assert!(!ctx.contains("[[cite:ID]]"));
-        assert!(ctx.contains("[[web:n]]"));
-        assert!(ctx.contains("Never invent markers"));
+        assert!(ctx.contains("do not cite web evidence"), "web ban: {ctx}");
+        assert!(
+            h.partial_notices.iter().any(|n| n.contains("禁止给出网页编号引用")),
+            "notice: {:?}",
+            h.partial_notices
+        );
+    }
 
-        // No usable evidence at all: explicit no-marker instruction.
-        let mut search_empty = pack_with_item(Channel::Search);
-        search_empty.status = PackStatus::Empty;
-        search_empty.items = vec![];
-        let h = synthesize_handoff("q", vec![search_empty], None);
+    #[test]
+    fn no_evidence_no_markers() {
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![],
+            vec![note(Channel::Rag, PackStatus::Empty, 0)],
+            &[rec(Channel::Rag, PackStatus::Empty)],
+            None,
+        );
         let ctx = render_synthesize_context(&h);
         assert!(ctx.contains("do not emit any citation markers"));
+        assert!(h.partial_notices.iter().any(|n| n.contains("未命中")));
     }
 }

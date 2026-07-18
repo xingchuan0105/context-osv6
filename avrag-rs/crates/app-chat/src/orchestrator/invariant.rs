@@ -48,12 +48,14 @@ pub fn default_brief(channel: Channel, user_query: &str) -> TaskBrief {
     let q = user_query.trim();
     let goal = match channel {
         Channel::Rag => format!(
-            "Retrieve workspace document evidence relevant to: {q}. \
-             Extract structure, key claims, and distinctive facts for answering. \
+            "First identify the document's type, purpose, and structure \
+             (use doc profile/summary tools if available); then retrieve workspace evidence \
+             relevant to: {q}. Extract key claims and distinctive facts for answering. \
              Do not write the final user-facing answer."
         ),
         Channel::Search => format!(
             "Search the web for evidence relevant to: {q}. \
+             Use both Chinese and English query terms (translate to industry terminology). \
              Prefer authoritative / best-practice sources when the question implies comparison. \
              Do not write the final user-facing answer."
         ),
@@ -61,24 +63,21 @@ pub fn default_brief(channel: Channel, user_query: &str) -> TaskBrief {
     TaskBrief::new(goal)
 }
 
-/// §7.3 partial notices from pack statuses (Chat synthesize policy input).
-pub fn partial_notices_from_packs(
-    packs: &[super::types::EvidencePack],
-) -> Vec<String> {
-    use super::types::PackStatus;
+/// §7.3 partial notices from the dispatch ledger (Chat synthesize policy input).
+pub fn partial_notices_from_records(records: &[DispatchRecord]) -> Vec<String> {
     let mut notices = Vec::new();
-    for p in packs {
-        match p.status {
-            PackStatus::Empty => notices.push(format!(
-                "{}: empty (no items retrieved; use 未命中 wording, not user-blame)",
-                p.channel.as_str()
+    for r in records {
+        match r.status {
+            super::types::PackStatus::Empty => notices.push(format!(
+                "{}: empty (no evidence retrieved; use 未命中 wording, not user-blame)",
+                r.channel.as_str()
             )),
-            PackStatus::Error => notices.push(format!(
+            super::types::PackStatus::Error => notices.push(format!(
                 "{}: error ({})",
-                p.channel.as_str(),
-                p.error.as_deref().unwrap_or("unknown")
+                r.channel.as_str(),
+                r.error.as_deref().unwrap_or("unknown")
             )),
-            PackStatus::Ok => {}
+            super::types::PackStatus::Ok => {}
         }
     }
     notices
@@ -101,13 +100,15 @@ pub fn looks_like_user_did_not_provide_doc(answer: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::types::{EvidencePack, PackStatus, TaskBrief};
+    use super::super::types::PackStatus;
 
     fn rec(ch: Channel) -> DispatchRecord {
         DispatchRecord {
             channel: ch,
             dispatch_id: "d1".into(),
             status: PackStatus::Ok,
+            item_count: 1,
+            error: None,
         }
     }
 
@@ -133,23 +134,36 @@ mod tests {
     }
 
     #[test]
-    fn default_brief_non_empty() {
+    fn default_brief_rag_requires_orientation_first() {
         let b = default_brief(Channel::Rag, "方案差距");
         assert!(b.goal.contains("方案差距"));
+        assert!(
+            b.goal.contains("identify the document's type"),
+            "orientation-first: {}",
+            b.goal
+        );
     }
 
     #[test]
-    fn partial_notices_for_empty_pack() {
-        let packs = vec![EvidencePack {
+    fn default_brief_search_requires_bilingual() {
+        let b = default_brief(Channel::Search, "最佳实践");
+        assert!(
+            b.goal.contains("Chinese and English"),
+            "bilingual: {}",
+            b.goal
+        );
+    }
+
+    #[test]
+    fn partial_notices_for_empty_channel() {
+        let records = vec![DispatchRecord {
             channel: Channel::Rag,
-            status: PackStatus::Empty,
             dispatch_id: "x".into(),
-            task_brief: TaskBrief::new("g"),
-            items: vec![],
-            notes: None,
+            status: PackStatus::Empty,
+            item_count: 0,
             error: None,
         }];
-        let n = partial_notices_from_packs(&packs);
+        let n = partial_notices_from_records(&records);
         assert_eq!(n.len(), 1);
         assert!(n[0].contains("rag"));
     }
