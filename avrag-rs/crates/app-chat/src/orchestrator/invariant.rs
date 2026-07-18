@@ -43,24 +43,16 @@ pub fn assert_complete(
     }
 }
 
-/// Default brief when recovering a skipped channel or first-wave dispatch.
+/// Default brief: the finish-gate fallback when a channel must be dispatched
+/// but no LLM-written brief exists (O1 structural first wave / §7.2 recovery).
+///
+/// Deliberately **policy-free**: retrieval doctrine (document orientation,
+/// bilingual queries, de-referencing) lives in the prompt layer
+/// (`capability-rag.md` / `capability-search.md` / `orchestrator-base.md`),
+/// not in code. V2's ReAct orchestrator writes real briefs itself.
 pub fn default_brief(channel: Channel, user_query: &str) -> TaskBrief {
-    let q = user_query.trim();
-    let goal = match channel {
-        Channel::Rag => format!(
-            "First identify the document's type, purpose, and structure \
-             (use doc profile/summary tools if available); then retrieve workspace evidence \
-             relevant to: {q}. Extract key claims and distinctive facts for answering. \
-             Do not write the final user-facing answer."
-        ),
-        Channel::Search => format!(
-            "Search the web for evidence relevant to: {q}. \
-             Use both Chinese and English query terms (translate to industry terminology). \
-             Prefer authoritative / best-practice sources when the question implies comparison. \
-             Do not write the final user-facing answer."
-        ),
-    };
-    TaskBrief::new(goal)
+    let _ = channel;
+    TaskBrief::new(user_query.trim())
 }
 
 /// §7.3 partial notices from the dispatch ledger (Chat synthesize policy input).
@@ -134,24 +126,13 @@ mod tests {
     }
 
     #[test]
-    fn default_brief_rag_requires_orientation_first() {
+    fn default_brief_is_policy_free_passthrough() {
+        // Retrieval doctrine lives in prompt files, not in code (2026-07-18
+        // layering review). The fallback brief is just the user query.
         let b = default_brief(Channel::Rag, "方案差距");
-        assert!(b.goal.contains("方案差距"));
-        assert!(
-            b.goal.contains("identify the document's type"),
-            "orientation-first: {}",
-            b.goal
-        );
-    }
-
-    #[test]
-    fn default_brief_search_requires_bilingual() {
-        let b = default_brief(Channel::Search, "最佳实践");
-        assert!(
-            b.goal.contains("Chinese and English"),
-            "bilingual: {}",
-            b.goal
-        );
+        assert_eq!(b.goal, "方案差距");
+        let b = default_brief(Channel::Search, "  最佳实践  ");
+        assert_eq!(b.goal, "最佳实践");
     }
 
     #[test]

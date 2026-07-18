@@ -43,6 +43,7 @@ Deviation from "all four are ReAct": chat stays 1-shot+repair in V2 because its 
 ### 3.2 Orchestrator loop mechanics
 
 - Tools (host-intercepted, **not** registered on the global catalog): `delegate_rag`, `delegate_search`, `delegate_chat`, `evidence_fetch`, `finish_with_chat`.
+- **Briefs are LLM-written, prompt-guided.** De-referencing ("这篇报告" → concrete doc identity/topic), channel-appropriate sub-questions, and bilingual query generation are the orchestrator's **reasoning**, instructed by `orchestrator-base.md` and the capability manuals — **no rule-based de-contextualization / query-rewriting code exists or may be added**. Code owns only: materialization, finish-gates, the store, and marker finalization. The sole code-generated brief is the finish-gate fallback (`default_brief` = the raw user query, policy-free).
 - Each round the model sees: strategy note (its own prior notes), dispatch ledger (channel, brief, status, evidence ids produced), and remaining budget. It outputs **one** tool call.
 - **Hard guards (code, not prompt):**
   - §7.1 materialization: selected channels must be dispatched ≥1 time before `delegate_chat` (§7.2 invariant becomes the loop's finish-gate; missing → host injects a default brief and continues, as today).

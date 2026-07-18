@@ -27,6 +27,8 @@ applicable_strategies: [rag]
 `remaining > 0` 且仍需证据时：只输出 **一个** `<code language="python">` 块（沙箱只执行第一个）。  
 块内可多条 `await client.*(...)`；不要夹杂自然语言。
 
+**先定向，后取证**：当任务涉及"这篇/该文档/这份报告"等指代，或对文档本身不熟悉时，先用 `doc_profile` / `doc_summary`（见 codegen skill）确认文档的**类型、目的与结构**，再按结构做目标检索——不要直接拿问题关键词盲捞。
+
 申请 skill 时只输出 JSON，例如：
 
 ```json
