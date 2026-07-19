@@ -173,6 +173,7 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 | R6 | 表格版 | 引用撞号 → 前端加载失败 |
 | R7 | rag 17 条；记忆/画像/docscope | 记忆工具可空转 |
 | R8 | 正常 | 空选择规则回归 |
+| R9/R10（2026-07-19 验收） | 质量合格，2 缺陷 | 七维度 + 16 doc cite + 8 web cite 全可解析；A4 流式未生效（direct_content 单 blob）；`[[E15]目录]` 残缺标记致 finalize 吞合法标记（见文末验收备注） |
 
 **2026-07-19 功能已合入；请用 §0 做正式验收（建议记为 R9+）。**
 
@@ -260,9 +261,13 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 
 ---
 
-**验收结论请写在本节末（可选）：**
+**验收结论（2026-07-19，api/worker 已按 §0.2 重编至 a2813d8）：**
 
-- [ ] A1–A7 通过 / 部分失败：________  
-- [ ] 主路径 A3 质量：合格 / 有条件合格 / 不合格  
-- [ ] 备注：________  
-- [ ] 验收人 / 日期：________  
+- [x] A1–A7：A1 ✅ · A2 ✅（vitest 7/7；实机 UI 因无登录凭据未跑）· A3 ✅（质量有条件，见备注）· **A4 ❌** · A5 ✅ · A6 ✅ · A7 ✅
+- [x] 主路径 A3 质量：**有条件合格** — §0.6 第 1/2/3/5 条全过（理解口径、身份正确、七维度+缺口明示、日志 round/dispatch/TOPK 齐全）；第 4 条引用 doc 16 + web 8 全部可解析，但见备注缺陷 2
+- [x] 备注：
+  1. **A4 流式未生效（结构性）**：两轮 A3（output/acceptance_a3_sse.log / acceptance_a3b_ts.log）compose 阶段均为**单 token 事件整段到达**（5184B / 4799B，分别在 compose 开始后 ~39s / ~18.6s），即"进度卡死后整段字"。接线（`run_chat` 透传外层 sink）正确，但 chat exit 内层 loop 走 `direct_content`（一次性非流式补全 → 单 MessageDelta），不经 `synthesis.rs` 的 delta 转发。修复方向：chat exit 的 direct_content 补全改流式转发，或强制走 synthesis 流式通道。
+  2. **finalize 吞标记（新缺陷）**：模型偶发写残缺 `[[E15]目录]`（单右括号），`rewrite_markers`（workers.rs:268-276）贪婪 `find("]]")` 把其后的合法 `[[E3]]`/`[[E26]]` 吞进"非标记透传"分支，raw E-id 残留进最终答案；`stripped` 不计数故无 dangling 告警。修复方向：扫描时若下一个 `[[` 先于 `]]` 出现，当前 `[[` 按普通文本处理并从下一 `[[` 重启。
+  3. 观察（非阻塞）：`/chat/citations/lookup` 对 web citation_id 返回 document_not_found —— UI 不可达（web 芯片走 sources 面板不查 lookup），仅裸 API 边界。
+  4. A6 证据：日志 `search retrieve early-stop: consecutive empty results empty_tail=2` + brain round1 直接 `delegate_chat`；答案诚实降级无编造。
+- [x] 验收人 / 日期：Claude（max effort）/ 2026-07-19。SSE 证据：`output/acceptance_{a1,a3,a3b_ts,a6,a7}*.log`
