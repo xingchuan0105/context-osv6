@@ -1,9 +1,9 @@
 # 状态：黄金测试集（Orchestrator 新范式 + 能力分组）扩充任务
 
-**日期:** 2026-07-19  
+**日期:** 2026-07-19（当日更新：P0 已清）  
 **范围:** 你在另一窗口下达的任务——基于 OneDrive 文档与现有 ADR，优化题目；覆盖 chat / rag / search **及 rag+search 综合**；按能力分组；含 codegen 通道与内置工具/记忆等  
 **检查人:** 本会话（只读核查工作树 + commit + 语料路径）  
-**状态总览:** **设计 + JSON + runner 接线大体完成（v4 未提交）；新语料 3 份 fixture 缺失 → 全量 E2E 尚不能跑通；未跑 nightly 实测**
+**状态总览:** **v4 已提交 `8e3e76e`（143 题 + 3 篇语料 fixture）；`realistic_corpus_full_eval`（skip network）首次冒烟运行中；P1 能力空洞（toc/geo/id/SSE 观测）待补**
 
 ---
 
@@ -17,8 +17,8 @@
 | 能力分组，每组测特定能力 | **完成（集内）** | 17 个 subset，见 §3 |
 | codegen：dense / bm25 / triplet / summary / toc / metadata | **部分** | 有 dense/lexical/graph/summary/profile 意图题；**无独立 toc 题**；graph 依赖 triplet 重灌 |
 | 计算器 / 天气 / 位置 / 时间 / 指代 / 记忆 | **部分** | 有 calculator、weather、时间(`client_time`)、指代+记忆(`prior_turns`)；**无独立「位置/geo」题** |
-| 提交可运行 | **未完成** | v4 改动仍在工作树；新 txt/docx fixture 缺失 |
-| 跑通生产评测 | **未验证** | 未见本任务的 `rag_quality_prod` 成功日志 |
+| 提交可运行 | **完成** | v4 = `8e3e76e`（json + design + golden_set.rs + runner + fixtures 13 文件） |
+| 跑通生产评测 | **验证中** | `E2E_SKIP_NETWORK_CASES=1 realistic_corpus_full_eval` 运行中（日志 `output/full_eval_smoke_r1.log`） |
 
 ---
 
@@ -111,9 +111,9 @@
 | 文件 | 状态 |
 |---|---|
 | thesis / adr×2 / consulting platform+compensation / ipd / baiyao（docx/md/xlsx/pdf + txt 抽取） | ✅ 在 |
-| `consulting_rbf_drc.txt` / `consulting_prepared_food.txt` / `consulting_craftsman_paradox.txt`（及 docx） | ❌ **目录中不存在** |
+| `consulting_rbf_drc.txt` / `consulting_prepared_food.txt` / `consulting_craftsman_paradox.txt`（及 docx） | ✅ **已入库（8e3e76e）**：docx 拷自 OneDrive 智遥咨询目录，txt 用 python-docx 抽取（4132/4365/1347 chars，与 runner 注释的预期大小一致） |
 
-设计文档 §7.1 / §7.5 写「OneDrive 原件已入库 fixtures」——**与磁盘不符**，是当前最大阻塞。
+设计文档 §7.1 / §7.5 写「OneDrive 原件已入库 fixtures」——**现已与磁盘相符**。
 
 Runner 已写死会上传这三份 `.txt`；缺文件时 `realistic_corpus_full_eval` 会在 upload 阶段失败。
 
@@ -121,11 +121,11 @@ Runner 已写死会上传这三份 `.txt`；缺文件时 `realistic_corpus_full_
 
 ## 5. 缺口清单（按优先级）
 
-### P0 — 阻塞全量跑
+### P0 — 阻塞全量跑（**已全部清除**）
 
-1. **入库 3 份新语料**：从 OneDrive 拷贝 docx，并生成 `.txt` 抽取版（与现有 thesis/ipd 一致，便于离线 office 也可跑）。
-2. **提交 v4 工作树**（json + design + golden_set.rs + runner + fixtures），避免只停留在未提交状态。
-3. **smoke 跑** `realistic_corpus_full_eval`（可先 `E2E_SKIP_NETWORK_CASES=1` 跳过 9 道联网题）。
+1. ~~入库 3 份新语料~~ ✅ `8e3e76e`（docx + txt 各 3 份，txt 用 python-docx 抽取，大小与 runner 注释一致）
+2. ~~提交 v4 工作树~~ ✅ `8e3e76e`（13 文件：json + design + golden_set.rs + metrics_v2.rs + tool_coverage.rs + runner + http.rs + 6 fixture）
+3. **smoke 跑** `realistic_corpus_full_eval` — `E2E_SKIP_NETWORK_CASES=1` 运行中（跳过 9 道联网题），日志 `output/full_eval_smoke_r1.log`
 
 ### P1 — 相对你需求的能力空洞
 
@@ -187,7 +187,7 @@ Runner 已写死会上传这三份 `.txt`；缺文件时 `realistic_corpus_full_
 
 ## 8. 一句话结论
 
-**另一窗口已把「Orchestrator 能力标签 + 分组黄金集」推进到 v4 设计与 143 题 JSON/runner 级，且单测可加载；但 3 份新咨询语料未进 fixtures、v4 未提交、全量 E2E 未跑——相对你给出的文档清单与「可执行的能力分组回归」，任务处于约 70%（集面齐、语料/落地未齐）。**
+**P0 已清：3 篇智遥咨询语料（docx+txt）入库、v4 以 `8e3e76e` 提交（143 题），`cargo test -p rag_quality --lib` 43 绿；全量 E2E 首次冒烟（skip network）运行中——剩余工作为 P1 能力空洞（toc/geo/稳定 id/SSE 工具观测）与开网全量复跑。**
 
 ---
 
@@ -195,7 +195,7 @@ Runner 已写死会上传这三份 `.txt`；缺文件时 `realistic_corpus_full_
 
 | 项 | |
 |---|---|
-| 集版本（工作树） | `4.0.0-orchestrator-groups` / 143 题 |
-| 已提交最高 | v3 / 119 / `ee73c9c` |
-| 阻塞 | 缺 3× consulting fixture txt/docx |
-| 下一动作 | 入库语料 → commit v4 → nightly smoke |
+| 集版本 | `4.0.0-orchestrator-groups` / 143 题（**已提交 `8e3e76e`**） |
+| 阻塞 | ~~缺 3× consulting fixture~~（已清除） |
+| 进行中 | `realistic_corpus_full_eval`（skip network）冒烟 |
+| 下一动作 | 等 smoke 结果 → 开网全量复跑 → 补 P1（toc/geo/id） |
