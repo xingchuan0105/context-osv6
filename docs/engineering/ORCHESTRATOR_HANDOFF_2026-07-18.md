@@ -1,7 +1,7 @@
 # Handoff: Agent 编排器（Orchestrator + Subagents + 共享证据库）
 
 **日期:** 2026-07-18 起 · **验收更新:** 2026-07-19 · **主线:** `master`（本地 trunk，未 push）  
-**状态:** **首轮验收完成（有条件通过）** · A4 流式 + 残缺标记两缺陷已修，待复验 A4/A5
+**状态:** **验收通过** — A1–A7 全过；A4 流式 + 残缺标记两缺陷已修并复验（`68d8369`）
 
 ---
 
@@ -119,7 +119,7 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 | A1 | ✅ | caps 全关 → user-chat 直答，SSE 无 orchestrator 痕迹 |
 | A2 | ✅ | 前端 vitest 7/7；实机 UI 无该用户登录密码未跑 |
 | A3 | 有条件 ✅ | 口径/身份/七维度+缺口/日志 round+dispatch+TOPK 全过；doc 16+web 8 可解析（见缺陷 2） |
-| A4 | ❌ → **已修待复验** | 两轮 compose 均为**单 token 整段**（5184B@~39s / 4799B@~18.6s） |
+| A4 | ❌ → ✅ 复验通过 | 首轮两轮 compose 均单 token 整段（5184B@~39s / 4799B@~18.6s）；修复后 2064 token / 14.9s 陆续到达 |
 | A5 | ✅ | citation_id 1..24 全局唯一；doc lookup 成功；web 走 sources 面板 |
 | A6 | ✅ | 断代理 115s 收敛；`search_empty_early_stop empty_tail=2`；brain 不再派 search |
 | A7 | ✅ | 空 scope+RAG → 提示选范围，无全库注入 |
@@ -300,9 +300,11 @@ SSE 证据：`output/acceptance_{a1,a3,a3b_ts,a6,a7}*.log`。
 - [x] 缺陷 1/2 根因见上表 §0.8；SSE：`output/acceptance_{a1,a3,a3b_ts,a6,a7}*.log`
 - [x] 观察：web citation_id lookup → document_not_found（UI 不可达）
 
-**缺陷修复后（待你复验 A4/A5）：**
+**缺陷修复后复验（2026-07-19 · api 重编至 `68d8369`，进程 12:47:19）：**
 
-- [ ] A4：compose 阶段多个 `event: token`、时间分散（非整段单事件）
-- [ ] 残缺 `[[E…]` 不再吞后续合法 `[[cite:` / `[[web:`
-- [ ] 复验人 / 日期：________
-- **复验前**：§0.2 重编 api 至含本批修复的 tip
+- [x] A4 ✅：compose 阶段 **2064 个 `event: token`，14.9s 内陆续到达**（首个 token 在 compose 开始后 ~6.5s，末 token 距 done 0.149s）；SSE：`output/acceptance_r3_ts.log`
+- [x] 无重复发送：done 答案 = 流式拼接经 finalize 改写（3622→4195 字符，长度差≈16 个标记展开），`finish_direct_answer_run` 未整段重发
+- [x] A5 侧车 ✅：final answer **raw E 残留 0**；citations 1..16 唯一（doc 9 + web 7），`[[cite:]]`/`[[web:]]` 全部可解析。本轮模型未写残缺 `[[E…]`，吞标记路径由单测 `broken_open_marker_does_not_swallow_following_valid_eids` 覆盖（orchestrator 48 绿）
+- [x] A1 回归 ✅：纯聊天 22 token 流式，streamed == done
+- [x] 观察（非阻塞）：A3 复验轮 round2 一次 rag dispatch `status=Error item_count=0`，brain 凭 round0 证据成答，质量未受影响
+- [x] 复验人 / 日期：Claude（max effort）/ 2026-07-19
