@@ -558,7 +558,12 @@ async fn realistic_corpus_full_eval() {
         );
         doc_ids.push(upload.document_id);
     }
-    assert_eq!(doc_ids.len(), 7, "should have 7 documents ingested");
+    assert_eq!(
+        doc_ids.len(),
+        corpus_files.len(),
+        "should have {} documents ingested",
+        corpus_files.len()
+    );
 
     // --- Load the realistic golden set ---
     let golden_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -580,6 +585,8 @@ async fn realistic_corpus_full_eval() {
     let mut hallucination_results = Vec::new();
     let mut scorecards = Vec::new();
     let mut failures: Vec<(String, String)> = Vec::new();
+    // E2E_FAIL_FAST=1: stop at the first failing case (per-question iteration).
+    let fail_fast = std::env::var("E2E_FAIL_FAST").is_ok();
     let mut per_subset_stats: std::collections::HashMap<String, (usize, usize, f64)> =
         std::collections::HashMap::new();
 
@@ -631,6 +638,9 @@ async fn realistic_corpus_full_eval() {
             Err(e) => {
                 failures.push((example.query.clone(), format!("chat: {e}")));
                 eprintln!("  FAIL: chat error: {e}");
+                if fail_fast {
+                    break;
+                }
                 continue;
             }
         };
@@ -648,6 +658,9 @@ async fn realistic_corpus_full_eval() {
                     resp_status,
                     &raw[..raw.len().min(500)]
                 );
+                if fail_fast {
+                    break;
+                }
                 continue;
             }
         };
@@ -683,6 +696,9 @@ async fn realistic_corpus_full_eval() {
                 );
                 eprintln!("  FAIL: {msg}");
                 failures.push((example.query.clone(), msg));
+                if fail_fast {
+                    break;
+                }
             }
         }
 
@@ -773,6 +789,10 @@ async fn realistic_corpus_full_eval() {
         for (q, err) in &failures {
             eprintln!("  - {:?}: {}", q.chars().take(50).collect::<String>(), err);
         }
+    }
+
+    if fail_fast && !failures.is_empty() {
+        panic!("E2E_FAIL_FAST: stopped at first failure: {:?}", failures[0]);
     }
 
     eprintln!();
