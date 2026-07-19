@@ -193,6 +193,57 @@ pub struct DocChunksArgs {
     pub doc_ids: Vec<String>,
 }
 
+/// Tolerate singular `doc_id` (string or array) as an alias for `doc_ids`.
+/// Models frequently emit the singular form; strict `deny_unknown_fields`
+/// rejection burns a whole retrieval retry (2026-07-18 incident).
+pub fn normalize_doc_id_alias(args: &mut serde_json::Value) {
+    let Some(obj) = args.as_object_mut() else {
+        return;
+    };
+    let Some(v) = obj.remove("doc_id") else {
+        return;
+    };
+    let mut ids: Vec<serde_json::Value> = match v {
+        serde_json::Value::String(s) => vec![serde_json::Value::String(s)],
+        serde_json::Value::Array(a) => a,
+        other => vec![other],
+    };
+    match obj.get_mut("doc_ids") {
+        Some(serde_json::Value::Array(existing)) => {
+            existing.append(&mut ids);
+        }
+        _ => {
+            obj.insert("doc_ids".to_string(), serde_json::Value::Array(ids));
+        }
+    }
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::normalize_doc_id_alias;
+
+    #[test]
+    fn singular_string_becomes_doc_ids() {
+        let mut v = serde_json::json!({"doc_id": "abc"});
+        normalize_doc_id_alias(&mut v);
+        assert_eq!(v, serde_json::json!({"doc_ids": ["abc"]}));
+    }
+
+    #[test]
+    fn singular_array_merges_with_existing() {
+        let mut v = serde_json::json!({"doc_ids": ["a"], "doc_id": ["b", "c"]});
+        normalize_doc_id_alias(&mut v);
+        assert_eq!(v, serde_json::json!({"doc_ids": ["a", "b", "c"]}));
+    }
+
+    #[test]
+    fn no_alias_no_change() {
+        let mut v = serde_json::json!({"doc_ids": ["a"]});
+        normalize_doc_id_alias(&mut v);
+        assert_eq!(v, serde_json::json!({"doc_ids": ["a"]}));
+    }
+}
+
 fn default_top_k() -> usize {
     10
 }

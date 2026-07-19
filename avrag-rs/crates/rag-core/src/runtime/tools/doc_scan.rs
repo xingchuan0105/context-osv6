@@ -7,7 +7,9 @@ use crate::RagRuntime;
 const MAX_SCAN_CHUNKS: usize = 16384;
 
 pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
-    let args: DocChunksArgs = match serde_json::from_value(args.clone()) {
+    let mut normalized = args.clone();
+    contracts::normalize_doc_id_alias(&mut normalized);
+    let args: DocChunksArgs = match serde_json::from_value(normalized) {
         Ok(a) => a,
         Err(e) => {
             return super::error_result("doc_scan", format!("invalid args: {e}"));

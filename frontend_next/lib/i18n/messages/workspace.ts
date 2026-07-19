@@ -85,6 +85,10 @@ export const workspaceMessages = {
     zh: "知识库",
     en: "RAG",
   },
+  workspaceChatCapRagNeedsSources: {
+    zh: "先在右侧选择要检索的文档，再使用知识库检索",
+    en: "Select documents in the right rail to enable RAG retrieval",
+  },
   workspaceChatCapSearch: {
     zh: "网络搜索",
     en: "Search",

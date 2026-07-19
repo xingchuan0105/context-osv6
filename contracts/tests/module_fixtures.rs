@@ -5,7 +5,7 @@ fn workspace_list_minimal_fixture_roundtrips() {
     let json = serde_json::json!({
         "workspaces": [{
             "id": "nb-1",
-            "org_id": "org-1",
+            "owner_user_id": "user-1",
             "owner_id": "user-1",
             "name": "demo",
             "title": "Demo",

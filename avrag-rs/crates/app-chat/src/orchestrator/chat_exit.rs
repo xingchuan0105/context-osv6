@@ -6,7 +6,7 @@
 //! those to product markers after the run (`workers::finalize_answer_evidence`).
 
 use super::invariant::partial_notices_from_records;
-use super::store::{EvidenceListing, SourceDoc};
+use super::store::{EvidenceEntry, EvidenceKind, EvidenceListing, SourceDoc};
 use super::types::{Channel, ChannelNote, ChatExitMode, ChatHandoff, DispatchRecord, PackStatus};
 
 /// Build synthesize handoff from the evidence store + dispatch ledger.
@@ -14,6 +14,7 @@ pub fn synthesize_handoff(
     user_query: &str,
     source_docs: Vec<SourceDoc>,
     listings: Vec<EvidenceListing>,
+    targeted: Vec<EvidenceEntry>,
     channel_notes: Vec<ChannelNote>,
     records: &[DispatchRecord],
     instruction: Option<String>,
@@ -55,6 +56,7 @@ pub fn synthesize_handoff(
         instruction,
         source_docs,
         listings,
+        targeted,
         channel_notes,
         partial_notices: notices,
     }
@@ -67,6 +69,7 @@ pub fn direct_handoff(user_query: &str) -> ChatHandoff {
         instruction: None,
         source_docs: vec![],
         listings: vec![],
+        targeted: vec![],
         channel_notes: vec![],
         partial_notices: vec![],
     }
@@ -117,10 +120,30 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         s.push('\n');
     }
 
-    // Evidence listings (references only).
-    if !handoff.listings.is_empty() {
+    // Targeted doc orientation (genre / section map / doc summary) — full text,
+    // orientation only: NOT citable (ids absent from the evidence list below).
+    if !handoff.targeted.is_empty() {
+        s.push_str("### 文档定向 (document targeting — orientation only, do NOT cite)\n");
+        for t in &handoff.targeted {
+            let name = t
+                .doc_name
+                .as_deref()
+                .or(t.doc_id.as_deref())
+                .unwrap_or("document");
+            s.push_str(&format!("- 《{name}》\n{}\n", t.full_text.trim()));
+        }
+        s.push('\n');
+    }
+
+    // Evidence listings (references only; targeted entries excluded — not citable).
+    let citable: Vec<&EvidenceListing> = handoff
+        .listings
+        .iter()
+        .filter(|l| l.kind != EvidenceKind::DocProfile)
+        .collect();
+    if !citable.is_empty() {
         s.push_str("### Evidence (cite by id)\n");
-        for l in &handoff.listings {
+        for l in citable {
             s.push_str(&format!(
                 "- [{}] {} | {}\n",
                 l.eid,
@@ -154,10 +177,17 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
 }
 
 /// Citation marker rules: `[[E:id]]` only, only for listed ids, only for
-/// channels that actually returned evidence.
+/// channels that actually returned evidence. Targeted (DocProfile) entries are
+/// orientation context, not evidence — never citable.
 fn render_citation_contract(handoff: &ChatHandoff) -> String {
-    let has_doc = handoff.listings.iter().any(|l| l.channel == Channel::Rag);
-    let has_web = handoff.listings.iter().any(|l| l.channel == Channel::Search);
+    let has_doc = handoff
+        .listings
+        .iter()
+        .any(|l| l.channel == Channel::Rag && l.kind != EvidenceKind::DocProfile);
+    let has_web = handoff
+        .listings
+        .iter()
+        .any(|l| l.channel == Channel::Search);
 
     let mut s = String::new();
     s.push_str("### Citation markers (required)\n");
@@ -198,14 +228,35 @@ pub fn query_for_agent(handoff: &ChatHandoff) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::orchestrator::store::EvidenceListing;
+    use crate::orchestrator::store::{EvidenceEntry, EvidenceListing};
 
     fn listing(eid: &str, channel: Channel) -> EvidenceListing {
         EvidenceListing {
             eid: eid.into(),
             channel,
+            kind: match channel {
+                Channel::Rag => EvidenceKind::DocChunk,
+                Channel::Search => EvidenceKind::WebPage,
+            },
             label: "《立项报告》p5".into(),
             preview: "现状诊断内容".into(),
+        }
+    }
+
+    fn targeted_entry(eid: &str) -> EvidenceEntry {
+        EvidenceEntry {
+            eid: eid.into(),
+            channel: Channel::Rag,
+            kind: EvidenceKind::DocProfile,
+            chunk_id: None,
+            doc_id: Some("d1".into()),
+            doc_name: Some("数字化转型IT立项报告.docx".into()),
+            page: None,
+            url: None,
+            title: None,
+            preview: "genre: report".into(),
+            full_text: "genre: report\nsections: 现状诊断 (p3), 基础设施选型 (p12)".into(),
+            score: None,
         }
     }
 
@@ -239,6 +290,7 @@ mod tests {
                 genre: Some("report".into()),
             }],
             vec![listing("E1", Channel::Rag), listing("E2", Channel::Search)],
+            vec![],
             vec![note(Channel::Rag, PackStatus::Ok, 1)],
             &[rec(Channel::Rag, PackStatus::Ok)],
             None,
@@ -257,6 +309,7 @@ mod tests {
             "q",
             vec![],
             vec![listing("E1", Channel::Rag)],
+            vec![],
             vec![
                 note(Channel::Rag, PackStatus::Ok, 1),
                 note(Channel::Search, PackStatus::Empty, 0),
@@ -282,6 +335,7 @@ mod tests {
             "q",
             vec![],
             vec![],
+            vec![],
             vec![note(Channel::Rag, PackStatus::Empty, 0)],
             &[rec(Channel::Rag, PackStatus::Empty)],
             None,
@@ -289,5 +343,27 @@ mod tests {
         let ctx = render_synthesize_context(&h);
         assert!(ctx.contains("do not emit any citation markers"));
         assert!(h.partial_notices.iter().any(|n| n.contains("未命中")));
+    }
+
+    #[test]
+    fn targeted_entries_render_orientation_but_not_citable() {
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E2", Channel::Rag)],
+            vec![targeted_entry("E1")],
+            vec![note(Channel::Rag, PackStatus::Ok, 2)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(ctx.contains("文档定向"), "targeting section: {ctx}");
+        assert!(ctx.contains("基础设施选型 (p12)"), "full text: {ctx}");
+        assert!(ctx.contains("do NOT cite"), "not-citable rule: {ctx}");
+        // Targeted id E1 is absent from the citable evidence list.
+        let evidence = ctx.split("### Evidence (cite by id)").nth(1).expect("evidence section");
+        let evidence = evidence.split("###").next().unwrap();
+        assert!(!evidence.contains("[E1]"), "E1 must not be citable: {evidence}");
+        assert!(evidence.contains("[E2]"), "E2 stays citable: {evidence}");
     }
 }

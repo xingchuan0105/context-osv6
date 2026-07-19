@@ -7,11 +7,27 @@ use common::AppError;
 /// tests may inject custom `dyn Agent` implementations.
 pub struct UnifiedAgentService {
     agent: Box<dyn Agent>,
+    orchestrator_llm: Option<avrag_llm::LlmClient>,
 }
 
 impl UnifiedAgentService {
     pub fn new(agent: Box<dyn Agent>) -> Self {
-        Self { agent }
+        Self {
+            agent,
+            orchestrator_llm: None,
+        }
+    }
+
+    /// LLM client for the V2 ReAct orchestrator brain (AGENT_ORCHESTRATOR_V2).
+    /// The brain only calls delegate_*/evidence_fetch tools, intercepted by the
+    /// orchestrator host — prompt-guided, no rule-based planning code.
+    pub fn with_orchestrator_llm(mut self, llm: Option<avrag_llm::LlmClient>) -> Self {
+        self.orchestrator_llm = llm;
+        self
+    }
+
+    pub fn orchestrator_llm(&self) -> Option<avrag_llm::LlmClient> {
+        self.orchestrator_llm.clone()
     }
 
     #[tracing::instrument(skip(self, sink), fields(agent_kind = ?request.kind))]

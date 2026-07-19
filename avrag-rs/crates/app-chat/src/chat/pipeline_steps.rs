@@ -159,6 +159,36 @@ pub(crate) async fn dispatch_mode(
     dispatch_agent_mode(state, request, session, stream_config).await
 }
 
+/// Pick the V2 LLM brain when enabled + configured, else the structural host.
+async fn run_orchestrator_turn(
+    caps: CapabilitySet,
+    agent_request: &agent_loop::runtime::AgentRequest,
+    executor: &crate::orchestrator::AgentServiceExecutor,
+    agent_service: &std::sync::Arc<crate::agents::service::UnifiedAgentService>,
+    sink: &dyn agent_loop::events::AgentEventSink,
+    docscope: Option<&common::DocScopeMetadata>,
+    memory: Option<&std::sync::Arc<dyn app_core::ChatPersistencePort>>,
+) -> Result<crate::orchestrator::OrchestratedTurn, AppError> {
+    if crate::orchestrator::orchestrator_v2_enabled() {
+        if let Some(llm) = agent_service.orchestrator_llm() {
+            return crate::orchestrator::run_llm_orchestrated_turn(
+                caps,
+                agent_request,
+                executor,
+                sink,
+                docscope,
+                &llm,
+                memory,
+            )
+            .await;
+        }
+        tracing::warn!(
+            "AGENT_ORCHESTRATOR_V2 on but no orchestrator llm configured; structural host fallback"
+        );
+    }
+    crate::orchestrator::run_orchestrated_turn(caps, agent_request, executor, sink, docscope).await
+}
+
 /// AGENT_ORCHESTRATOR_V1: materialize channels → workers → chat exit (Option B).
 async fn run_orchestrator_v1(
     state: &ChatContext,
@@ -167,9 +197,7 @@ async fn run_orchestrator_v1(
     stream_config: Option<&StreamConfig>,
     caps: CapabilitySet,
 ) -> Result<ChatExecution, AppError> {
-    use crate::orchestrator::{
-        run_orchestrated_turn, AgentServiceExecutor,
-    };
+    use crate::orchestrator::AgentServiceExecutor;
 
     let Some(agent_service) = state.agent_service() else {
         return Err(AppError::internal("agent service is not configured"));
@@ -215,6 +243,13 @@ async fn run_orchestrator_v1(
     } else {
         None
     };
+    // PG-backed memory (conversation history + user profile) for the V2 brain.
+    let memory = state.chat_persistence();
+    // Hand the same docscope to the agent loop: workers' `metadata` skill can
+    // then inject <docscope_metadata> (was store-only — workers ran blind).
+    if let Some(meta) = docscope.clone() {
+        agent_request.docscope_metadata = Some(meta);
+    }
 
     if let Some(config) = stream_config {
         let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
@@ -227,8 +262,16 @@ async fn run_orchestrator_v1(
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
 
-        let turn =
-            run_orchestrated_turn(caps, &agent_request, &executor, &sink, docscope.as_ref()).await?;
+        let turn = run_orchestrator_turn(
+            caps,
+            &agent_request,
+            &executor,
+            &agent_service,
+            &sink,
+            docscope.as_ref(),
+            memory.as_ref(),
+        )
+        .await?;
         crate::emit_buffered_agent_answer_if_needed(&sink, &turn.answer_result.answer).await;
 
         let mut execution = crate::chat::build_chat_execution_from_result(
@@ -256,8 +299,16 @@ async fn run_orchestrator_v1(
     }
 
     let sink = agent_loop::events::CollectingSink::new();
-    let turn =
-        run_orchestrated_turn(caps, &agent_request, &executor, &sink, docscope.as_ref()).await?;
+    let turn = run_orchestrator_turn(
+        caps,
+        &agent_request,
+        &executor,
+        &agent_service,
+        &sink,
+        docscope.as_ref(),
+        memory.as_ref(),
+    )
+    .await?;
 
     let mut execution = crate::chat::build_chat_execution_from_result(
         &turn.answer_result,

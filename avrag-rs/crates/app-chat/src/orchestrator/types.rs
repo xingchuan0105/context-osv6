@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::store::{EvidenceListing, SourceDoc};
+use super::store::{EvidenceEntry, EvidenceListing, SourceDoc};
 
 /// Product channel that can be materialized from `capabilities[]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -101,6 +101,9 @@ pub struct ChatHandoff {
     /// Evidence stubs (`E{n}` + label + preview) the chat may cite.
     #[serde(default)]
     pub listings: Vec<EvidenceListing>,
+    /// Targeted doc-orientation entries (full text; orientation only, never citable).
+    #[serde(default)]
+    pub targeted: Vec<EvidenceEntry>,
     /// Per-channel worker outcomes (summary + status).
     #[serde(default)]
     pub channel_notes: Vec<ChannelNote>,

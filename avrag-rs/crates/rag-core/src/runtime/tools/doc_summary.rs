@@ -5,7 +5,9 @@ use uuid::Uuid;
 use crate::RagRuntime;
 
 pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
-    let args: DocSummaryArgs = match serde_json::from_value(args.clone()) {
+    let mut normalized = args.clone();
+    contracts::normalize_doc_id_alias(&mut normalized);
+    let args: DocSummaryArgs = match serde_json::from_value(normalized) {
         Ok(a) => a,
         Err(e) => {
             return super::error_result("doc_summary", format!("invalid args: {e}"));

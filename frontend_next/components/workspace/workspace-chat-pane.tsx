@@ -79,6 +79,17 @@ export function WorkspaceChatPane({
     setCapabilities(loadStoredCapabilities(workspaceId));
   }, [workspaceId]);
 
+  // RAG requires an explicit source selection: strip it when the selection
+  // becomes empty (product rule 2026-07-18 — no implicit whole-workspace scope).
+  useEffect(() => {
+    if (selectedSourceIds.length > 0 || !capabilities.includes("rag")) {
+      return;
+    }
+    const next = capabilities.filter((cap) => cap !== "rag");
+    setCapabilities(next);
+    storeCapabilities(workspaceId, next);
+  }, [selectedSourceIds, capabilities, workspaceId]);
+
   const handleCapabilitiesChange = useCallback(
     (next: WorkspaceCapability[]) => {
       setCapabilities(next);
@@ -228,6 +239,7 @@ export function WorkspaceChatPane({
         capabilities={capabilities}
         locale={locale}
         workspaceId={workspaceId}
+        ragDisabled={selectedSourceIds.length === 0}
         onSubmit={handleSend}
         onStop={chatSession.stop}
         onCapabilitiesChange={handleCapabilitiesChange}

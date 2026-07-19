@@ -46,3 +46,4 @@ applicable_strategies: [rag]
 
 - 检索入口只有 `<code language="python">` + `client.*`。
 - 未启用 Search 时不要编造网页来源。
+- **禁止对中大文档整篇全读**（doc_scan / 全文 doc_chunks 遍历）：定向用 `doc_profile` / `doc_summary`；取证用带 `top_k` 的定向检索（dense / lexical），按需多次、每次聚焦一个子问题。全读返回的全量 chunk 会被运行时 TOPK 闸截断，等于白烧轮次。

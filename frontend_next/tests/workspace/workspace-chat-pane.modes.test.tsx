@@ -149,6 +149,7 @@ describe("WorkspaceChatPane capabilities", () => {
       />,
     );
 
+
     expect(screen.getByTestId("workspace-chat-cap-rag")).toBeTruthy();
     expect(screen.getByTestId("workspace-chat-cap-search")).toBeTruthy();
     expect(screen.queryByTestId("workspace-chat-mode-write")).toBeNull();
@@ -159,6 +160,58 @@ describe("WorkspaceChatPane capabilities", () => {
     expect(screen.getByTestId("workspace-chat-cap-search").getAttribute("aria-pressed")).toBe(
       "false",
     );
+  });
+
+  it("disables RAG with a hint when no sources are selected", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+
+    render(
+      <WorkspaceChatPane
+        workspaceId="ws-noselect"
+        sessionId={null}
+        selectedSourceIds={[]}
+      />,
+    );
+
+    const ragChip = screen.getByTestId("workspace-chat-cap-rag");
+    expect((ragChip as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("workspace-chat-rag-needs-sources").textContent).toContain("选择");
+    // Search stays available.
+    expect((screen.getByTestId("workspace-chat-cap-search") as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it("strips RAG when the selection becomes empty", async () => {
+    const user = userEvent.setup();
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+
+    const { rerender } = render(
+      <WorkspaceChatPane
+        workspaceId="ws-strip"
+        sessionId={null}
+        selectedSourceIds={["doc-1"]}
+      />,
+    );
+
+    // Enable RAG while a source is selected.
+    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe("true");
+
+    // Deselect all sources → RAG is stripped and the chip becomes disabled.
+    rerender(
+      <WorkspaceChatPane
+        workspaceId="ws-strip"
+        sessionId={null}
+        selectedSourceIds={[]}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "false",
+      );
+    });
+    expect((screen.getByTestId("workspace-chat-cap-rag") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("toggles capabilities multiselect and sends derived agent_type", async () => {
@@ -194,7 +247,7 @@ describe("WorkspaceChatPane capabilities", () => {
       <WorkspaceChatPane
         workspaceId="ws-toggle-caps"
         sessionId={null}
-        selectedSourceIds={[]}
+        selectedSourceIds={["doc-1"]}
       />,
     );
 

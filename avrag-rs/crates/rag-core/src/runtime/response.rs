@@ -64,28 +64,16 @@ impl RagRuntime {
             .into_iter()
             .collect::<Vec<_>>();
         let doc_scope_ids = super::planner::request_doc_ids(request);
-        let workspace_id = request
-            .workspace_id
-            .as_deref()
-            .and_then(|id| Uuid::parse_str(id).ok());
 
         let summary_target_ids = if summary_mode == "related" {
             unique_doc_ids
         } else if summary_mode == "all" {
-            if let Some(scope_ids) = doc_scope_ids.as_deref() {
-                scope_ids.to_vec()
-            } else if let Some(workspace_id) = workspace_id {
-                content_store
-                    .list_documents(auth, Some(workspace_id), None)
-                    .await
-                    .inspect_err(|e| tracing::warn!(error = %e, "content_store.list_documents failed, degrading"))
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter_map(|document| Uuid::parse_str(&document.id).ok())
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            }
+            // 空选择 = 不给全量（2026-07-18 产品规则）：未选文档时不注入任何
+            // 摘要——全工作区摘要会淹没目标文档信号、污染上下文。
+            doc_scope_ids
+                .as_deref()
+                .map(|ids| ids.to_vec())
+                .unwrap_or_default()
         } else {
             Vec::new()
         };

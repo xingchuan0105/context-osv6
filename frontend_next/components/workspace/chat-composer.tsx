@@ -36,6 +36,8 @@ type ChatComposerProps = {
   capabilities: WorkspaceCapability[];
   locale: "zh-CN" | "en";
   workspaceId: string;
+  /** No sources selected: RAG chip disabled + hint (2026-07-18 product rule). */
+  ragDisabled?: boolean;
   onSubmit: () => void;
   onStop?: () => void;
   onCapabilitiesChange: (next: WorkspaceCapability[]) => void;
@@ -50,6 +52,7 @@ export function ChatComposer({
   capabilities,
   locale,
   workspaceId,
+  ragDisabled = false,
   onSubmit,
   onStop,
   onCapabilitiesChange,
@@ -126,10 +129,13 @@ export function ChatComposer({
 
   const handleToggleCapability = useCallback(
     (cap: WorkspaceCapability) => {
+      if (cap === "rag" && ragDisabled) {
+        return;
+      }
       onCapabilitiesChange(toggleCapability(capabilities, cap));
       textareaRef.current?.focus();
     },
-    [capabilities, onCapabilitiesChange, textareaRef],
+    [capabilities, onCapabilitiesChange, ragDisabled, textareaRef],
   );
 
   function handleComposerResizeStart(event: ReactMouseEvent<HTMLButtonElement>) {
@@ -238,6 +244,7 @@ export function ChatComposer({
             >
               {CAPABILITY_TOGGLES.map((cap) => {
                 const pressed = capabilities.includes(cap.id);
+                const disabled = cap.id === "rag" && ragDisabled;
                 return (
                   <button
                     key={cap.id}
@@ -245,6 +252,12 @@ export function ChatComposer({
                     className={`${styles.capTag}${pressed ? ` ${styles.capTagPressed}` : ""}`}
                     data-testid={cap.testId}
                     aria-pressed={pressed}
+                    disabled={disabled}
+                    title={
+                      disabled
+                        ? formatUiMessage(locale, "workspaceChatCapRagNeedsSources")
+                        : undefined
+                    }
                     onClick={() => handleToggleCapability(cap.id)}
                   >
                     {formatUiMessage(locale, cap.labelKey)}
@@ -252,6 +265,12 @@ export function ChatComposer({
                 );
               })}
             </div>
+
+            {ragDisabled ? (
+              <p className={styles.hint} data-testid="workspace-chat-rag-needs-sources">
+                {formatUiMessage(locale, "workspaceChatCapRagNeedsSources")}
+              </p>
+            ) : null}
 
             <p className={styles.hint}>{formatUiMessage(locale, "workspaceChatComposerHint")}</p>
           </div>

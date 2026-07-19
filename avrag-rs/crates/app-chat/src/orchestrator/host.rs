@@ -20,7 +20,7 @@ use super::store::EvidenceStore;
 use super::types::{
     Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
 };
-use super::workers::{channel_note_from_run, finalize_answer_evidence};
+use super::workers::{channel_note_from_run, finalize_answer_evidence, tool_failures};
 use crate::capabilities::CapabilitySet;
 
 /// Abstraction so tests can mock channel + chat runs without LLM.
@@ -62,7 +62,7 @@ pub fn orchestrator_v1_enabled() -> bool {
 }
 
 /// Map a materialized channel to its localized delegate progress fact.
-fn delegate_fact(channel: Channel, brief: &TaskBrief) -> agent_loop::progress::WorkFact {
+pub(crate) fn delegate_fact(channel: Channel, brief: &TaskBrief) -> agent_loop::progress::WorkFact {
     let kind = match channel {
         Channel::Rag => agent_loop::progress::ProgressKind::DelegateRag,
         Channel::Search => agent_loop::progress::ProgressKind::DelegateSearch,
@@ -70,13 +70,13 @@ fn delegate_fact(channel: Channel, brief: &TaskBrief) -> agent_loop::progress::W
     agent_loop::progress::WorkFact::delegate(kind, &brief.goal)
 }
 
-struct ChannelOutcome {
-    record: DispatchRecord,
-    note: ChannelNote,
+pub(crate) struct ChannelOutcome {
+    pub record: DispatchRecord,
+    pub note: ChannelNote,
 }
 
 /// Run one channel dispatch: worker run → store insert → ledger entry.
-async fn dispatch_channel(
+pub(crate) async fn dispatch_channel(
     channel: Channel,
     query: &str,
     base_request: &AgentRequest,
@@ -91,10 +91,21 @@ async fn dispatch_channel(
     match executor.run_channel(channel, &brief, base_request).await {
         Ok(run) => {
             let inserted = store.insert_from_tool_results(channel, &run.tool_results);
-            let status = if inserted > 0 {
-                PackStatus::Ok
+            let failures = tool_failures(&run.tool_results);
+            let (status, error) = if inserted > 0 {
+                if !failures.is_empty() {
+                    tracing::warn!(
+                        channel = channel.as_str(),
+                        failures = ?failures,
+                        "orchestrator dispatch partial tool failures"
+                    );
+                }
+                (PackStatus::Ok, None)
+            } else if !failures.is_empty() {
+                // Retrieval itself failed (e.g. network/tool error) — NOT 未命中.
+                (PackStatus::Error, Some(failures.join("; ")))
             } else {
-                PackStatus::Empty
+                (PackStatus::Empty, None)
             };
             tracing::info!(
                 channel = channel.as_str(),
@@ -108,14 +119,14 @@ async fn dispatch_channel(
                     dispatch_id,
                     status,
                     item_count: inserted,
-                    error: None,
+                    error: error.clone(),
                 },
                 note: ChannelNote {
                     channel,
                     status,
                     item_count: inserted,
                     note: channel_note_from_run(&run),
-                    error: None,
+                    error,
                 },
             }
         }
@@ -206,6 +217,7 @@ pub async fn run_orchestrated_turn(
         &query,
         store.source_docs().to_vec(),
         store.listings(),
+        store.targeted_entries(),
         channel_notes,
         &records,
         None,
@@ -244,9 +256,11 @@ impl OrchestratorExecutor for AgentServiceExecutor {
         base: &AgentRequest,
     ) -> Result<AgentRunResult, AppError> {
         let mut req = base.clone();
-        // Keep the original user query: retrieval (`inject_retrieval_query` /
-        // codegen) must run on the user's words, not on the English brief
-        // wrapper. The brief travels via system prompt parts instead.
+        // The worker's query IS the brief goal: V1 default briefs are the
+        // policy-free passthrough of the user query (no change), and V2 LLM
+        // briefs are self-contained + de-referenced, so retrieval / injection
+        // runs on the orchestrator's words rather than the raw utterance.
+        req.query = brief.goal.clone();
         req.kind = match channel {
             Channel::Rag => crate::agents::AgentKind::Rag,
             Channel::Search => crate::agents::AgentKind::Search,
@@ -533,7 +547,7 @@ mod tests {
             .unwrap();
         // Valid E-ids became product markers; fabricated E9 stripped.
         assert!(turn.answer_result.answer.contains("[[cite:chunk-a]]"));
-        assert!(turn.answer_result.answer.contains("[[web:1]]"));
+        assert!(turn.answer_result.answer.contains("[[web:2]]"));
         assert!(!turn.answer_result.answer.contains("[[E"));
         assert_eq!(turn.answer_result.citations.len(), 2);
         assert!(
@@ -552,7 +566,80 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn worker_keeps_user_query_brief_goes_to_prompt_parts() {
+    async fn tool_failure_marks_channel_error_not_empty() {
+        struct FailExec;
+        #[async_trait]
+        impl OrchestratorExecutor for FailExec {
+            async fn run_channel(
+                &self,
+                _channel: Channel,
+                _brief: &TaskBrief,
+                _base: &AgentRequest,
+            ) -> Result<AgentRunResult, AppError> {
+                let mut r = AgentRunResult::default();
+                r.tool_results = vec![contracts::ToolResult {
+                    tool: "web_search".into(),
+                    version: "1".into(),
+                    status: contracts::ToolStatus::Timeout,
+                    data: Some(serde_json::json!({"error": "dns poisoned"})),
+                    trace: None,
+                }];
+                Ok(r)
+            }
+
+            async fn run_chat(
+                &self,
+                _handoff: &ChatHandoff,
+                _base: &AgentRequest,
+            ) -> Result<AgentRunResult, AppError> {
+                Ok(AgentRunResult::default())
+            }
+        }
+
+        let sink = CollectingSink::new();
+        let turn = run_orchestrated_turn(
+            CapabilitySet {
+                rag: true,
+                search: false,
+            },
+            &base_req("q"),
+            &FailExec,
+            &sink,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(turn.records[0].status, PackStatus::Error);
+        assert!(
+            turn.records[0]
+                .error
+                .as_deref()
+                .unwrap_or("")
+                .contains("Timeout")
+        );
+        // Notice must say 检索失败, not 未命中.
+        assert!(
+            turn
+                .handoff
+                .partial_notices
+                .iter()
+                .any(|n| n.contains("检索失败")),
+            "notices: {:?}",
+            turn.handoff.partial_notices
+        );
+        assert!(
+            !turn
+                .handoff
+                .partial_notices
+                .iter()
+                .any(|n| n.contains("未命中")),
+            "notices: {:?}",
+            turn.handoff.partial_notices
+        );
+    }
+
+    #[tokio::test]
+    async fn worker_query_is_brief_goal_and_brief_reaches_prompt_parts() {
         use agent_loop::runtime::Agent;
 
         struct CaptureAgent(std::sync::Arc<Mutex<Option<AgentRequest>>>);
@@ -584,8 +671,8 @@ mod tests {
         .unwrap();
 
         let req = captured.lock().unwrap().clone().expect("captured request");
-        // Query stays the user's words (retrieval must not see the brief wrapper).
-        assert_eq!(req.query, "用户原始问题");
+        // Worker query = the (self-contained) brief goal, not the raw utterance.
+        assert_eq!(req.query, "brief goal text");
         let parts = req
             .metadata
             .get("system_prompt_parts")

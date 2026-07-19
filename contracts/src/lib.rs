@@ -73,10 +73,10 @@ pub use share::{
     SharedSource,
 };
 pub use tool_call::{
-    DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs, DocMetadataArgs, DocProfileArgs,
-    DocSummaryArgs, DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs,
-    MergeConfig, NextStep, RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse,
-    ToolCall, ToolSpec,
+    normalize_doc_id_alias, DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs,
+    DocMetadataArgs, DocProfileArgs, DocSummaryArgs, DocSummaryLevel, GraphRetrievalArgs,
+    IndexLookupArgs, LexicalRetrievalArgs, MergeConfig, NextStep, RetrievalPlannerOutput,
+    RuntimeExecuteRequest, RuntimeExecuteResponse, ToolCall, ToolSpec,
 };
 pub use usage_limit::{
     UsageLimitPolicy, UsageLimitResponse, UsageScope, UsageWindow, UsageWindows,
