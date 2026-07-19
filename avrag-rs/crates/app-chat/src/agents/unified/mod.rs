@@ -397,4 +397,39 @@ mod tests {
         assert!(agent.rag_runtime.is_none());
         assert!(agent.search_executor.is_none());
     }
+
+    #[test]
+    fn assembled_mode_config_roundtrip_keeps_mandatory_codegen() {
+        // Probe for the 2026-07-19 eval finding: orchestrator RAG workers ran
+        // without the codegen SDK in their retrieve prompt.
+        let assembled = crate::assemble_mode(crate::capabilities::CapabilitySet {
+            rag: true,
+            search: false,
+        })
+        .expect("assemble rag");
+        assert!(
+            assembled
+                .config
+                .skill_catalog
+                .mandatory
+                .retrieve
+                .iter()
+                .any(|s| s == "codegen"),
+            "assemble_mode lost mandatory codegen: {:?}",
+            assembled.config.skill_catalog.mandatory.retrieve
+        );
+        // Same JSON round-trip the orchestrator worker request goes through
+        // (host.rs run_channel → metadata → resolve_mode_config).
+        let value = serde_json::to_value(&assembled.config).expect("serialize");
+        let cfg: agent_loop::r#loop::config::ModeConfig =
+            serde_json::from_value(value).expect("deserialize");
+        assert!(
+            cfg.skill_catalog
+                .mandatory
+                .retrieve
+                .iter()
+                .any(|s| s == "codegen"),
+            "metadata round-trip lost mandatory codegen"
+        );
+    }
 }

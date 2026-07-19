@@ -666,6 +666,24 @@ async fn realistic_corpus_full_eval() {
         };
         let retrieved = extract_retrieved_chunks(&chat.tool_results);
         let cited = extract_cited_chunks(&chat.citations);
+        // Per-question evidence dump (fail-fast iteration loop): full response
+        // JSON so a stopped run leaves answer-level artifacts behind.
+        if let Ok(json) = serde_json::to_string_pretty(&serde_json::json!({
+            "subset": subset_name,
+            "query": example.query,
+            "doc_scope": scope,
+            "capabilities": caps,
+            "answer": chat.answer.clone(),
+            "citations": chat.citations.clone(),
+            "sources": chat.sources.clone(),
+            "tool_results_count": chat.tool_results.len(),
+        })) {
+            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/e2e_output/realistic_corpus_full_eval");
+            if std::fs::create_dir_all(&dir).is_ok() {
+                let _ = std::fs::write(dir.join(format!("q{:03}.json", idx + 1)), json);
+            }
+        }
         let chunks: Vec<String> = retrieved.contents();
         let chunk_to_cite: std::collections::HashMap<String, i64> = chat
             .citations
