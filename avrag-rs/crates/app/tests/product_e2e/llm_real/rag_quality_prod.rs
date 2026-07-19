@@ -501,23 +501,36 @@ async fn realistic_corpus_full_eval() {
 
     // Fixed identity → stable Milvus collection prefix + PG owner across runs,
     // which is what makes corpus reuse possible:
+    // - persistent PG + object store + preserved Milvus vectors (ingestion is
+    //   LLM-expensive — nothing may be thrown away at teardown);
     // - first run ingests and writes the corpus cache;
-    // - every later run reuses the cache by default (ingestion is expensive —
-    //   LLM profile/summary + embedding per document);
-    // - E2E_FORCE_INGEST=1 forces a fresh ingest (combine with
-    //   E2E_PRESERVE_MILVUS_ON_DROP=1 so the fresh vectors survive teardown);
+    // - every later run reuses the cache by default (E2E_FORCE_INGEST=1 to
+    //   force a fresh ingest);
     // - E2E_START_AT=N → resume at question N (fail-fast iteration loop).
+    unsafe {
+        std::env::set_var("E2E_PRESERVE_MILVUS_ON_DROP", "1");
+    }
+    let infra = super::super::test_context::PersistentSmokeInfra {
+        postgres_url: super::super::setup::resolve_persistent_smoke_postgres_url().await,
+        object_store_path: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/e2e_output/realistic_object_store"),
+    };
+    eprintln!(
+        "[realistic_corpus] persistent infra: pg={} object_store={}",
+        infra.postgres_url,
+        infra.object_store_path.display()
+    );
     let identity = Some((
         crate::product_e2e::DEFAULT_TEST_ORG_ID.to_string(),
         crate::product_e2e::DEFAULT_TEST_USER_ID.to_string(),
     ));
     // Use the PDF profile for longer ingestion timeout (large corpus).
-    let mut ctx = TestContext::new_with_real_llm_pdf_with_identity(identity).await;
+    let mut ctx = TestContext::new_with_real_llm_pdf_persistent_corpus(identity, &infra).await;
 
     let corpus_files = [
         ("thesis_y_refrigeration.txt", 600),         // 52K chars, thesis
         ("adr-0004-rag-agent-loop.md", 120),         // 4.8KB MD
-        ("adr-0009-codegen-sandbox-bridge.md", 120), // 13.6KB MD
+        ("adr-0009-codegen-sandbox-bridge.md", 300), // 13.6KB MD (materialize+summary LLM can exceed 120s)
         ("consulting_platform_network_effects.txt", 300), // 18K chars
         ("consulting_compensation_design.txt", 120), // 3K chars
         ("huawei_ipd_370_activities.txt", 300),      // 54K chars, table as TSV
@@ -543,76 +556,74 @@ async fn realistic_corpus_full_eval() {
 
     let cache_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/e2e_output/realistic_corpus_cache.json");
-    let mut doc_ids: Vec<String> = Vec::new();
-    let workspace_id = if std::env::var("E2E_FORCE_INGEST").is_err()
-        && let Ok(raw) = std::fs::read_to_string(&cache_path)
-        && let Ok(cache) = serde_json::from_str::<serde_json::Value>(&raw)
-    {
-        eprintln!("[realistic_corpus] reusing cached corpus (ingestion skipped; E2E_FORCE_INGEST=1 to override)");
-        doc_ids = cache["doc_ids"]
-            .as_array()
-            .expect("cache doc_ids")
-            .iter()
-            .map(|v| v.as_str().expect("doc id str").to_string())
-            .collect();
-        assert_eq!(
-            doc_ids.len(),
-            corpus_files.len(),
-            "corpus cache doc count mismatch — delete cache and re-ingest"
-        );
-        cache["workspace_id"]
-            .as_str()
-            .expect("cache workspace_id")
-            .to_string()
+    // Progressive per-document cache: every successfully ingested doc is
+    // persisted immediately, so a crash/timeout mid-ingestion never costs the
+    // already-ingested (LLM-expensive) documents again.
+    let mut cache: serde_json::Value = if std::env::var("E2E_FORCE_INGEST").is_err() {
+        std::fs::read_to_string(&cache_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_else(|| serde_json::json!({"docs": {}}))
     } else {
-        // --- Upload all corpus files to a single notebook ---
-        let notebook = ctx
-            .create_workspace("rag-quality-realistic-corpus")
-            .await
-            .expect("create notebook");
-        let workspace_id = notebook.id.clone();
-        for (filename, timeout_secs) in &corpus_files {
-            eprintln!("[realistic_corpus] uploading {filename} ...");
-            let upload = ctx
-                .upload_document_to_notebook(filename, &workspace_id)
-                .await
-                .unwrap_or_else(|e| panic!("upload {filename}: {e}"));
-            let status = ctx
-                .wait_for_ingestion(&upload.document_id, Duration::from_secs(*timeout_secs))
-                .await
-                .unwrap_or_else(|e| panic!("wait_for_ingestion {filename}: {e}"));
-            assert_eq!(
-                status,
-                DocumentStatus::Completed,
-                "ingestion failed for {filename}"
-            );
-            eprintln!(
-                "[realistic_corpus] {filename} ingested (doc_id={})",
-                upload.document_id
-            );
-            doc_ids.push(upload.document_id);
-        }
-        assert_eq!(
-            doc_ids.len(),
-            corpus_files.len(),
-            "should have {} documents ingested",
-            corpus_files.len()
-        );
+        serde_json::json!({"docs": {}})
+    };
+    let save_cache = |cache: &serde_json::Value| {
         if let Some(parent) = cache_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
         std::fs::write(
             &cache_path,
-            serde_json::to_string_pretty(&serde_json::json!({
-                "workspace_id": workspace_id,
-                "doc_ids": doc_ids,
-            }))
-            .expect("serialize corpus cache"),
+            serde_json::to_string_pretty(cache).expect("serialize corpus cache"),
         )
         .expect("write corpus cache");
-        eprintln!("[realistic_corpus] corpus cached → {}", cache_path.display());
-        workspace_id
     };
+    let workspace_id = if let Some(ws) = cache["workspace_id"].as_str() {
+        eprintln!("[realistic_corpus] reusing cached workspace {ws}");
+        ws.to_string()
+    } else {
+        let notebook = ctx
+            .create_workspace("rag-quality-realistic-corpus")
+            .await
+            .expect("create notebook");
+        cache["workspace_id"] = serde_json::json!(notebook.id);
+        save_cache(&cache);
+        notebook.id
+    };
+    let mut doc_ids: Vec<String> = Vec::new();
+    for (filename, timeout_secs) in &corpus_files {
+        if let Some(id) = cache["docs"][filename].as_str() {
+            eprintln!("[realistic_corpus] reusing {filename} (doc_id={id})");
+            doc_ids.push(id.to_string());
+            continue;
+        }
+        eprintln!("[realistic_corpus] uploading {filename} ...");
+        let upload = ctx
+            .upload_document_to_notebook(filename, &workspace_id)
+            .await
+            .unwrap_or_else(|e| panic!("upload {filename}: {e}"));
+        let status = ctx
+            .wait_for_ingestion(&upload.document_id, Duration::from_secs(*timeout_secs))
+            .await
+            .unwrap_or_else(|e| panic!("wait_for_ingestion {filename}: {e}"));
+        assert_eq!(
+            status,
+            DocumentStatus::Completed,
+            "ingestion failed for {filename}"
+        );
+        eprintln!(
+            "[realistic_corpus] {filename} ingested (doc_id={})",
+            upload.document_id
+        );
+        cache["docs"][filename] = serde_json::json!(upload.document_id);
+        save_cache(&cache);
+        doc_ids.push(upload.document_id);
+    }
+    assert_eq!(
+        doc_ids.len(),
+        corpus_files.len(),
+        "should have {} documents ingested",
+        corpus_files.len()
+    );
 
     // --- Load the realistic golden set ---
     let golden_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
