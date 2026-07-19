@@ -305,6 +305,24 @@ fn guard_error(call_id: &str, name: &str, msg: impl Into<String>) -> ChatMessage
     tool_result_msg(call_id, name, false, serde_json::json!({"error": msg.into()}))
 }
 
+/// True when search has already run ≥2 times without usable evidence.
+/// Blocks further `delegate_search` so the brain does not burn redispatches on 空转
+/// (first empty may still re-dispatch with a different goal once).
+fn search_channel_exhausted(records: &[DispatchRecord]) -> bool {
+    let search: Vec<&DispatchRecord> = records
+        .iter()
+        .filter(|r| r.channel == Channel::Search)
+        .collect();
+    if search.iter().any(|r| r.status == PackStatus::Ok && r.item_count > 0) {
+        return false;
+    }
+    search
+        .iter()
+        .filter(|r| matches!(r.status, PackStatus::Empty | PackStatus::Error))
+        .count()
+        >= 2
+}
+
 /// V2 entry: step-wise LLM orchestrated turn.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_llm_orchestrated_turn(
@@ -328,7 +346,7 @@ pub async fn run_llm_orchestrated_turn(
             agent_loop::progress::WorkFact::understand(&query),
         )
         .await;
-        let answer_result = executor.run_chat(&handoff, base_request).await?;
+        let answer_result = executor.run_chat(&handoff, base_request, sink).await?;
         return Ok(OrchestratedTurn {
             answer_result,
             store: EvidenceStore::from_docscope(docscope),
@@ -436,6 +454,18 @@ pub async fn run_llm_orchestrated_turn(
                             channel.as_str(),
                             MAX_REDISPATCH_PER_CHANNEL
                         ),
+                    ),
+                ));
+                continue;
+            }
+            // Search 空转早收敛（编排层）：已有 Empty/Error 且从未 Ok 时，禁止再派 search。
+            if channel == Channel::Search && search_channel_exhausted(&records) {
+                tool_msgs.push((
+                    call_id.clone(),
+                    guard_error(
+                        call_id,
+                        &call.tool,
+                        "search 已连续空结果/失败且无可用网页证据；不要再 delegate_search，请用已有证据 delegate_chat 并说明网页侧未命中",
                     ),
                 ));
                 continue;
@@ -730,7 +760,7 @@ pub async fn run_llm_orchestrated_turn(
                 agent_loop::progress::WorkFact::compose_answer(),
             )
             .await;
-            let mut answer_result = executor.run_chat(&handoff, base_request).await?;
+            let mut answer_result = executor.run_chat(&handoff, base_request, sink).await?;
             finalize_answer_evidence(&mut answer_result, &store);
             return Ok(OrchestratedTurn {
                 answer_result,
@@ -767,7 +797,7 @@ pub async fn run_llm_orchestrated_turn(
         agent_loop::progress::WorkFact::compose_answer(),
     )
     .await;
-    let mut answer_result = executor.run_chat(&handoff, base_request).await?;
+    let mut answer_result = executor.run_chat(&handoff, base_request, sink).await?;
     finalize_answer_evidence(&mut answer_result, &store);
     Ok(OrchestratedTurn {
         answer_result,
@@ -787,6 +817,52 @@ mod tests {
     use std::collections::VecDeque;
     use std::sync::Mutex;
     use uuid::Uuid;
+
+    #[test]
+    fn search_exhausted_after_two_empty_not_after_one() {
+        let one = vec![DispatchRecord {
+            channel: Channel::Search,
+            dispatch_id: "d1".into(),
+            status: PackStatus::Empty,
+            item_count: 0,
+            error: None,
+        }];
+        assert!(!search_channel_exhausted(&one));
+        let two = vec![
+            DispatchRecord {
+                channel: Channel::Search,
+                dispatch_id: "d1".into(),
+                status: PackStatus::Empty,
+                item_count: 0,
+                error: None,
+            },
+            DispatchRecord {
+                channel: Channel::Search,
+                dispatch_id: "d2".into(),
+                status: PackStatus::Error,
+                item_count: 0,
+                error: Some("timeout".into()),
+            },
+        ];
+        assert!(search_channel_exhausted(&two));
+        let ok_then = vec![
+            DispatchRecord {
+                channel: Channel::Search,
+                dispatch_id: "d1".into(),
+                status: PackStatus::Empty,
+                item_count: 0,
+                error: None,
+            },
+            DispatchRecord {
+                channel: Channel::Search,
+                dispatch_id: "d2".into(),
+                status: PackStatus::Ok,
+                item_count: 3,
+                error: None,
+            },
+        ];
+        assert!(!search_channel_exhausted(&ok_then));
+    }
 
     struct ScriptedLlm {
         responses: Mutex<VecDeque<avrag_llm::LlmResponse>>,
@@ -924,6 +1000,7 @@ mod tests {
             &self,
             _handoff: &ChatHandoff,
             _base: &AgentRequest,
+            _sink: &dyn AgentEventSink,
         ) -> Result<AgentRunResult, AppError> {
             let mut r = AgentRunResult::default();
             r.answer = "文档证据 [[E1]]，网页佐证 [[E2]]。".into();

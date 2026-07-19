@@ -44,7 +44,7 @@ impl ReActLoop {
     pub(super) async fn dispatch_native_tool_calls(
         &self,
         iteration: u8,
-        _mode: &ModeConfig,
+        mode: &ModeConfig,
         request: &AgentRequest,
         auth: &contracts::auth_runtime::AuthContext,
         _loop_exit: &super::config::LoopExitConfig,
@@ -114,6 +114,33 @@ impl ReActLoop {
             llm_response,
             tool_messages,
         );
+
+        // Search 空转早收敛: ≥2 consecutive empty web_search/web_fetch with no
+        // hits in the turn → leave retrieve early (handoff / synthesis) instead
+        // of burning the remaining iteration budget.
+        if super::exit_policy::should_early_stop_search_on_empty(mode, &state.tool_results) {
+            tracing::info!(
+                iteration,
+                empty_tail = super::exit_policy::consecutive_empty_search_tail(&state.tool_results),
+                "search retrieve early-stop: consecutive empty results"
+            );
+            let exit_reason = "search_empty_early_stop".to_string();
+            return Ok(IterationOutcome {
+                control: IterationControl::BreakToSynthesis {
+                    reason: exit_reason.clone(),
+                },
+                record: Some(ReActIterationRecord {
+                    iteration,
+                    disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                    action_type: exit_reason.clone(),
+                    observation_preview: "consecutive empty search results".into(),
+                    llm_usage: Some(llm_usage),
+                    elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                    exit_reason,
+                }),
+                sandbox_break: false,
+            });
+        }
 
         let exit_reason = "native_tool_call".to_string();
         Ok(IterationOutcome {

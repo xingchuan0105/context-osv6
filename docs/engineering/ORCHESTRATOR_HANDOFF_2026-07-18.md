@@ -125,8 +125,8 @@
 ## 9. 欠账（明确延期）
 
 - ~~Worker 结构化交接契约~~（2026-07-19 已实现；可继续加 eval 看模型是否稳定吐 JSON）
-- Chat 出口流式化（当前收集后整段重放，分钟级任务有"冻结感"）
-- search worker 空转预算行为（连续空结果应更早收敛）
+- ~~Chat 出口流式化~~（2026-07-19：`run_chat` 写入外层 SSE sink，不再 Collecting 后整段重放）
+- ~~search worker 空转早收敛~~（2026-07-19：空 `web_search` 不再算 evidence；连续 2 次空结果 `BreakToSynthesis`；编排层禁止 empty 后再 `delegate_search`）
 - 编排器/worker 温度决策（§7.5）
 - V3：引用校验 agent、对比类查询 eval 集、chat 成 loop（可选）
 - **DeepSeek 平台 revoke 旧 TRIPLET key**（见 §7.4）

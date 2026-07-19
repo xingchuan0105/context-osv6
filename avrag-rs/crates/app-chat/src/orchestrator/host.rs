@@ -33,10 +33,14 @@ pub trait OrchestratorExecutor: Send + Sync {
         base: &AgentRequest,
     ) -> Result<AgentRunResult, AppError>;
 
+    /// Chat exit (sole user-facing answer). `sink` receives live answer tokens
+    /// when `base.stream` is true — do not use a private CollectingSink here or
+    /// the client freezes until the whole answer is ready.
     async fn run_chat(
         &self,
         handoff: &ChatHandoff,
         base: &AgentRequest,
+        sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, AppError>;
 }
 
@@ -176,7 +180,7 @@ pub async fn run_orchestrated_turn(
             agent_loop::progress::WorkFact::understand(&query),
         )
         .await;
-        let answer_result = executor.run_chat(&handoff, base_request).await?;
+        let answer_result = executor.run_chat(&handoff, base_request, sink).await?;
         return Ok(OrchestratedTurn {
             answer_result,
             store: EvidenceStore::from_docscope(docscope),
@@ -228,9 +232,10 @@ pub async fn run_orchestrated_turn(
     )
     .await;
 
-    let mut answer_result = executor.run_chat(&handoff, base_request).await?;
+    let mut answer_result = executor.run_chat(&handoff, base_request, sink).await?;
     // Single point where E-markers become product markers + citations; dangling
-    // or fabricated markers are stripped here.
+    // or fabricated markers are stripped here. Streamed tokens may briefly show
+    // E-ids; the terminal `done` payload carries the rewritten answer.
     finalize_answer_evidence(&mut answer_result, &store);
 
     Ok(OrchestratedTurn {
@@ -323,6 +328,7 @@ impl OrchestratorExecutor for AgentServiceExecutor {
         &self,
         handoff: &ChatHandoff,
         base: &AgentRequest,
+        sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, AppError> {
         let mut req = base.clone();
         req.query = query_for_agent(handoff);
@@ -343,10 +349,10 @@ impl OrchestratorExecutor for AgentServiceExecutor {
                     .unwrap_or(serde_json::json!([])),
             );
         }
-        // Synthesize needs evidence in the prompt (already in query); use prose chat
+        // Live tokens go to the orchestrator sink (SSE when streaming). Workers
+        // still use a private CollectingSink — only the chat exit is user-facing.
         req.stream = base.stream;
-        let sink = CollectingSink::new();
-        self.agent_service.run(req, &sink).await
+        self.agent_service.run(req, sink).await
     }
 }
 
@@ -391,6 +397,7 @@ mod tests {
             &self,
             handoff: &ChatHandoff,
             _base: &AgentRequest,
+            _sink: &dyn AgentEventSink,
         ) -> Result<AgentRunResult, AppError> {
             let mut r = AgentRunResult::default();
             r.answer = if handoff.partial_notices.is_empty() {
@@ -538,6 +545,7 @@ mod tests {
                 &self,
                 _handoff: &ChatHandoff,
                 _base: &AgentRequest,
+                _sink: &dyn AgentEventSink,
             ) -> Result<AgentRunResult, AppError> {
                 let mut r = AgentRunResult::default();
                 r.answer = "文档证据 [[E1]]，网页佐证 [[E2]]。编造 [[E9]]。".into();
@@ -599,6 +607,7 @@ mod tests {
                 &self,
                 _handoff: &ChatHandoff,
                 _base: &AgentRequest,
+                _sink: &dyn AgentEventSink,
             ) -> Result<AgentRunResult, AppError> {
                 Ok(AgentRunResult::default())
             }

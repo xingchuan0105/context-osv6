@@ -131,6 +131,61 @@ pub fn tool_result_has_chunks(result: &ToolResult) -> bool {
     result.data.as_ref().is_some_and(chunk_array_non_empty)
 }
 
+/// True when a Search tool result carries usable hits (non-empty results / body).
+/// Empty `web_search` Ok responses must **not** count as evidence — that was
+/// the main driver of search-loop idle spinning (空转).
+pub fn tool_result_has_web_hits(result: &ToolResult) -> bool {
+    if result.status != ToolStatus::Ok {
+        return false;
+    }
+    match result.tool.as_str() {
+        "web_search" => result
+            .data
+            .as_ref()
+            .and_then(|d| d.get("results"))
+            .and_then(|r| r.as_array())
+            .is_some_and(|a| !a.is_empty()),
+        "web_fetch" => result.data.as_ref().is_some_and(|d| {
+            d.get("content")
+                .and_then(|c| c.as_str())
+                .is_some_and(|s| !s.trim().is_empty())
+                || d.get("text")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|s| !s.trim().is_empty())
+                || d.get("markdown")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|s| !s.trim().is_empty())
+        }),
+        _ => false,
+    }
+}
+
+/// How many trailing search-tool results are empty/failed with no hits in the
+/// whole trail (used to early-exit the search retrieve loop).
+pub fn consecutive_empty_search_tail(tool_results: &[ToolResult]) -> usize {
+    let mut n = 0usize;
+    for r in tool_results.iter().rev() {
+        if !SEARCH_EVIDENCE_TOOLS.contains(&r.tool.as_str()) {
+            break;
+        }
+        if tool_result_has_web_hits(r) {
+            break;
+        }
+        n += 1;
+    }
+    n
+}
+
+/// Stop the search retrieve loop after this many consecutive empty search
+/// tool results (saves the remaining iteration budget).
+pub const SEARCH_EMPTY_EARLY_STOP_THRESHOLD: usize = 2;
+
+pub fn should_early_stop_search_on_empty(mode: &ModeConfig, tool_results: &[ToolResult]) -> bool {
+    mode.id == "search"
+        && consecutive_empty_search_tail(tool_results) >= SEARCH_EMPTY_EARLY_STOP_THRESHOLD
+        && !tool_results.iter().any(tool_result_has_web_hits)
+}
+
 pub fn has_retrieval_observation(
     messages: &[ChatMessage],
     collected_tool_results: &[ToolResult],
@@ -147,12 +202,11 @@ pub fn has_retrieval_observation(
         return collected_tool_results.iter().any(tool_result_has_chunks);
     }
     if mode.id == "search" {
-        if collected_tool_results
-            .iter()
-            .any(|r| r.status == ToolStatus::Ok && SEARCH_EVIDENCE_TOOLS.contains(&r.tool.as_str()))
-        {
+        if collected_tool_results.iter().any(tool_result_has_web_hits) {
             return true;
         }
+        // Message-content fallback: only if a URL-bearing observation is present
+        // (keeps older fixtures working; empty result payloads without urls stay false).
         return messages.iter().any(|m| {
             m.content.contains("\"url\"")
                 && (m.content.contains("web_search") || m.content.contains("\"results\""))
@@ -285,5 +339,57 @@ mod tests {
             decide_post_loop(&loop_exit, true),
             PostLoopAction::EnterSynthesis
         );
+    }
+
+    fn search_mode() -> ModeConfig {
+        super::super::config::load_mode_config("search").unwrap()
+    }
+
+    fn empty_web_search() -> ToolResult {
+        ToolResult {
+            tool: "web_search".into(),
+            version: "1".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({"results": []})),
+            trace: None,
+        }
+    }
+
+    fn hit_web_search() -> ToolResult {
+        ToolResult {
+            tool: "web_search".into(),
+            version: "1".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "results": [{"url": "https://a.example", "title": "A", "snippet": "x"}]
+            })),
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn empty_web_search_ok_is_not_evidence() {
+        let mode = search_mode();
+        assert!(!has_retrieval_observation(&[], &[empty_web_search()], &mode));
+        assert!(!tool_result_has_web_hits(&empty_web_search()));
+    }
+
+    #[test]
+    fn web_search_with_results_is_evidence() {
+        let mode = search_mode();
+        assert!(has_retrieval_observation(&[], &[hit_web_search()], &mode));
+        assert!(tool_result_has_web_hits(&hit_web_search()));
+    }
+
+    #[test]
+    fn consecutive_empty_search_triggers_early_stop() {
+        let mode = search_mode();
+        let two = vec![empty_web_search(), empty_web_search()];
+        assert_eq!(consecutive_empty_search_tail(&two), 2);
+        assert!(should_early_stop_search_on_empty(&mode, &two));
+        // A hit resets the trail.
+        let mixed = vec![empty_web_search(), hit_web_search(), empty_web_search()];
+        assert_eq!(consecutive_empty_search_tail(&mixed), 1);
+        assert!(!should_early_stop_search_on_empty(&mode, &mixed));
     }
 }
