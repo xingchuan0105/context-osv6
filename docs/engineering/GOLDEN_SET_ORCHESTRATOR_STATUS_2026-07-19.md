@@ -1,193 +1,131 @@
 # 状态：黄金测试集（Orchestrator 新范式 + 能力分组）扩充任务
 
-**日期:** 2026-07-19（当日更新：P0 已清）  
-**范围:** 你在另一窗口下达的任务——基于 OneDrive 文档与现有 ADR，优化题目；覆盖 chat / rag / search **及 rag+search 综合**；按能力分组；含 codegen 通道与内置工具/记忆等  
-**检查人:** 本会话（只读核查工作树 + commit + 语料路径）  
-**状态总览:** **v4 已提交 `8e3e76e`（143 题 + 3 篇语料 fixture）；`realistic_corpus_full_eval`（skip network）首次冒烟运行中；P1 能力空洞（toc/geo/id/SSE 观测）待补**
+**日期:** 2026-07-19（当日多次更新，覆盖至 r7 + q1–q65 复盘）  
+**状态总览:** **v4 已提交（143 题 + 3 篇语料）；runner 已硬化为「语料只灌一次 + 每题失败即停 + 断点续跑」；r8 排程 2026-07-20 01:12（配额恢复后）从 q66 续跑；q1–q65 复盘完成，核心疑点是 RAG worker 取证系统性失效（见 §5）**
 
 ---
 
-## 1. 任务对照（你要什么 vs 当前有什么）
+## 1. 硬规则（本线铁律，后续会话必须遵守）
 
-| 你的要求 | 当前状态 | 证据 |
-|---|---|---|
-| 根据 OneDrive 文档优化/扩充题目 | **部分完成** | 设计文档已映射 10 份语料（含你给的论文/IPD/白药/RBF/预制菜/手艺人）；新 3 篇 **fixture 文件未入库** |
-| 新范式：chat / rag / search **及 rag+search** | **完成（集内）** | 子集 + `capabilities` 字段 |
-| 参考 ADR + 已有 golden 最佳实践 | **完成** | 沿用 `must_include` / 对抗 / 分 scope；扩展 `expect_citations`、环境 skip |
-| 能力分组，每组测特定能力 | **完成（集内）** | 17 个 subset，见 §3 |
-| codegen：dense / bm25 / triplet / summary / toc / metadata | **部分** | 有 dense/lexical/graph/summary/profile 意图题；**无独立 toc 题**；graph 依赖 triplet 重灌 |
-| 计算器 / 天气 / 位置 / 时间 / 指代 / 记忆 | **部分** | 有 calculator、weather、时间(`client_time`)、指代+记忆(`prior_turns`)；**无独立「位置/geo」题** |
-| 提交可运行 | **完成** | v4 = `8e3e76e`（json + design + golden_set.rs + runner + fixtures 13 文件） |
-| 跑通生产评测 | **验证中** | `E2E_SKIP_NETWORK_CASES=1 realistic_corpus_full_eval` 运行中（日志 `output/full_eval_smoke_r1.log`） |
+### 规则 1：语料只灌一次，默认复用，禁止重新灌库
 
----
+- 语料缓存在 `avrag-rs/crates/app/tests/e2e_output/realistic_corpus_cache.json`（`workspace_id` + `docs:{filename: doc_id}`，**渐进式**：每灌成一篇立即落盘）。
+- runner（`realistic_corpus_full_eval`）**默认复用缓存**：有缓存的文档直接跳过上传；只灌缺失的。**只有 `E2E_FORCE_INGEST=1` 才允许全量重灌**（换语料时才用）。
+- 灌库设施是**持久的**：PG = `avrag_rs_e2e_smoke`（`postgres://avrag:avrag@127.0.0.1:5432`）、object store = `tests/e2e_output/realistic_object_store`、Milvus 向量由 `E2E_PRESERVE_MILVUS_ON_DROP=1`（runner 内置设置）保留。**禁止恢复 teardown 删向量行为**。
+- 理由：灌库 = 每篇 LLM 画像 + 摘要 + embedding 的真金白银；2026-07-19 一天内 5 轮全量重灌直接烧穿测试身份滚动 5h 配额（429，`retry_after_secs=7756`）。
+- 复用前必须验证向量在场（PG 有 chunks ≠ 有向量；查 Milvus `avrag_e2e_00000000_rag_text_chunks` 的实体）。
 
-## 2. 交付物进度（版本线）
+### 规则 2：每题失败即停，从失败处续跑
 
-| 版本 | 位置 | 题量 | 提交状态 |
-|---|---|---|---|
-| v2 内容语料 | `golden_set_realistic.json` 前十子集 | 107 | 已在 master 历史中 |
-| **v3.0.0-orchestrator** | 同上 + 字段 + runner | **119**（+12 编排范式） | **已提交** `ee73c9c` |
-| **v4.0.0-orchestrator-groups** | 同上再拆组 + 新语料题 | **143**（+36） | **仅工作树，未 commit** |
+- 一律带 `E2E_FAIL_FAST=1`（chat 错误 / 解析错误 / expect_citations 不达标，任一即停，尾部 panic 打出首败详情）。
+- 续跑用 `E2E_START_AT=<失败题号>`（1-based），已通过的题不重跑。
+- 失败证据在 `avrag-rs/crates/app/tests/e2e_output/realistic_corpus_full_eval/qNNN.json`（答案/引用/scope/caps/mode_debug.dispatches）与 `qNNN.raw.json`（解析失败时的原始响应）。**先读证据再动手**，不允许凭猜修复。
+- 修复必须提交 commit 后再重启；日志写到 `output/full_eval_smoke_rN+1.log`。
 
-### 2.1 已提交（`ee73c9c`）
+### 规则 3：配额是信号，不是敌人
 
-- 全部旧题补 `capabilities:["rag"]`（mode 回退保留）
-- 新字段：`capabilities` / `doc_scope_hint` / `expect_citations{min_doc,min_web}` / `requires_network`
-- `orchestrator_paradigm` 12 题（后被 v4 拆成 8+联合组）
-- `realistic_corpus_full_eval`：按 hint 解析 scope + 请求带 capabilities
-- 设计文档 §6
-
-### 2.2 未提交（工作树 diff，相对 `ee73c9c`）
-
-| 路径 | 变更 |
-|---|---|
-| `avrag-rs/tests/rag_quality/golden_set_realistic.json` | v4 版本串 + 分组 + 约 +36 题 |
-| `GOLDEN_SET_REALISTIC_DESIGN.md` | §7 能力分组说明 + OneDrive 映射 |
-| `src/golden_set.rs` | `prior_turns` / `client_time` / PriorTurn；v4 加载单测 |
-| `rag_quality_prod.rs` | corpus 10 文件 + scope `rbf/prepared_food/craftsman` + `chat_v3` |
-| `test_context/http.rs` | `chat_v3`（capabilities + messages 历史 + client_context.local_time） |
-
-`cargo test -p rag_quality --lib realistic_v4`：**通过**（JSON 可加载、子集计数正确）。
+- 撞 `quota_exceeded`（429）时按 `retry_after_secs` 排程，**禁止盲目重试或换身份绕配额**——429 正在强制执行规则 1。
+- 当前配额窗口：2026-07-19 22:52 撞限，01:04 恢复。
 
 ---
 
-## 3. 当前集结构（v4 工作树）
+## 2. 运行手册（照抄即可）
 
-**版本串:** `4.0.0-orchestrator-groups`  
-**总计:** **143** 题 / **17** 子集
+### 常规续跑（默认路径）
 
-### 3.1 内容组（v2 遗留，107）
-
-| 子集 | n | 能力标签 |
-|---|---|---|
-| thesis_factual / synthesis / numeric / adversarial | 15+10+12+8 | rag |
-| adr_factual / cross_adr | 12+5 | rag |
-| consulting_factual | 14 | rag |
-| ipd_table | 12 | rag |
-| baiyao_pdf | 11 | rag |
-| cross_document | 8 | rag |
-
-### 3.2 新范式 / 能力组（v4，36）
-
-| 子集 | n | 测的能力 | caps / 备注 |
-|---|---|---|---|
-| `orchestrator_paradigm` | 8 | 空选择、纯聊天、跨文档张冠李戴、多 chunk | rag 或 `[]`；部分 `doc_scope_hint=empty` |
-| `rag_search_joint` | 6 | **RAG+Search 综合** + min_doc+min_web | `["rag","search"]`，`requires_network` |
-| `chat_builtin_tools` | 4 | calculator×2、时间(`client_time`)、weather | `[]`；1 题需网 |
-| `rag_codegen_channels` | 7 | dense×2、lexical×2、graph×1、summary、profile | rag；1 题 `requires_triplet_reingest` |
-| `memory_coreference` | 3 | prior_turns 指代/记忆 | rag 或 chat |
-| `search_web` | 2 | 纯 Search | `["search"]`，需网 |
-| `new_corpus_factual` | 6 | RBF / 预制菜 / 手艺人各 2 题 | rag + 对应 scope |
-
-**字段使用统计（全 143）：**
-
-| 字段 | 使用次数 |
-|---|---|
-| `prior_turns` | 3 |
-| `client_time` | 1 |
-| `requires_network` | 9（joint 6 + search 2 + weather 1） |
-| `requires_triplet_reingest` | 1 |
-| `expected_tool`（意图记录） | 12（内容门为主，非 SSE 工具观测） |
-| `expect_citations` | 新组普遍有；旧 107 多为 null |
-
----
-
-## 4. 语料与 OneDrive 映射
-
-### 4.1 你点名的路径（本机 `/mnt/e/OneDrive/...` 均可访问）
-
-| 原件 | 状态 |
-|---|---|
-| `.../答辩/41911407-邢川-林海芬格式2.docx` | ✅ 存在（= fixture thesis，484371 B） |
-| `.../H为-IPD流程各阶段370个活动详解(3)(1).xlsx` | ✅ 存在（= fixture ipd） |
-| `.../RBF、滴灌通和乐旋乒乓.docx` | ✅ 存在；**fixture 未拷入** |
-| `.../预制菜映射中国企业价值观困境.docx` | ✅ 存在；**fixture 未拷入** |
-| `.../手艺人模式的增长悖论.docx` | ✅ 存在；**fixture 未拷入** |
-| `.../【呈云南白药】…IT规划0411.pdf` | ✅ 存在（= fixture baiyao） |
-
-### 4.2 项目内 fixtures（`product_e2e/fixtures/`）
-
-| 文件 | 状态 |
-|---|---|
-| thesis / adr×2 / consulting platform+compensation / ipd / baiyao（docx/md/xlsx/pdf + txt 抽取） | ✅ 在 |
-| `consulting_rbf_drc.txt` / `consulting_prepared_food.txt` / `consulting_craftsman_paradox.txt`（及 docx） | ✅ **已入库（8e3e76e）**：docx 拷自 OneDrive 智遥咨询目录，txt 用 python-docx 抽取（4132/4365/1347 chars，与 runner 注释的预期大小一致） |
-
-设计文档 §7.1 / §7.5 写「OneDrive 原件已入库 fixtures」——**现已与磁盘相符**。
-
-Runner 已写死会上传这三份 `.txt`；缺文件时 `realistic_corpus_full_eval` 会在 upload 阶段失败。
-
----
-
-## 5. 缺口清单（按优先级）
-
-### P0 — 阻塞全量跑（**已全部清除**）
-
-1. ~~入库 3 份新语料~~ ✅ `8e3e76e`（docx + txt 各 3 份，txt 用 python-docx 抽取，大小与 runner 注释一致）
-2. ~~提交 v4 工作树~~ ✅ `8e3e76e`（13 文件：json + design + golden_set.rs + metrics_v2.rs + tool_coverage.rs + runner + http.rs + 6 fixture）
-3. **smoke 跑** `realistic_corpus_full_eval` — `E2E_SKIP_NETWORK_CASES=1` 运行中（跳过 9 道联网题），日志 `output/full_eval_smoke_r1.log`
-
-### P1 — 相对你需求的能力空洞
-
-| 能力 | 缺口 |
-|---|---|
-| codegen **toc** | 无独立题（`doc_profile`/sections 仅部分覆盖） |
-| **位置 / geo / IP 城市** | 无 `user_context` 位置题 |
-| **conversation_history_load** 编排器记忆工具 | 仅 content 层 prior_turns；未断言 SSE/工具调用 |
-| **dense/lexical/graph 真观测** | V2 worker 内通道不可见；题用内容门 + `expected_tool` 意图记录，**不是** tool_coverage SSE 门 |
-| graph 真数据 | 需 `INGESTION_TRIPLET_ENABLED=1` 并对新语料 reindex（基准转型报告已做过；**新 3 篇+全语料**未在本任务验证） |
-| 题 ID | 大量 example **无稳定 `id` 字段**（仅 query 文本），回归 diff 不便 |
-
-### P2 — 工程卫生
-
-- 旧 107 题多数无 `doc_scope_hint`（runner 默认 all）——跨文档干扰面大，可逐步收窄。
-- PRD 100–500：143 已过下限，但 skill/工具面仍偏薄（chat 工具组仅 4 题）。
-- `take(5)` 等历史限制：设计 §5 仍提生产子集限制，需确认 prod 入口是否已吃全量 143。
-
----
-
-## 6. 建议的「完成定义」与下一步
-
-### 完成定义（建议）
-
-1. fixtures 10 份齐 + v4 commit 在 master。  
-2. `cargo test -p rag_quality --lib` 全绿。  
-3. 至少一次 `E2E_MODE=nightly … rag_quality_prod … realistic_corpus_full_eval`：  
-   - 跳过网：≥ 非联网题全跑完有汇总；  
-   - 开网 + 代理：joint/search/weather 不因 DNS 红。  
-4. 可选：补 toc / geo / 稳定 id 字段的一小批增量题。
-
-### 建议执行顺序（下一窗口）
-
-```text
-1. 从 OneDrive 复制 3 篇 docx → fixtures/
-2. 抽取 txt（LibreOffice/现有解析脚本）
-3. git add fixtures + rag_quality v4 + runner → commit
-4. 本地 upload+ingest 10 份 → 跑 full_eval（先 skip network）
-5. 补 P1 空洞（toc、geo、id）按需
+```bash
+cd avrag-rs && E2E_MODE=nightly E2E_SKIP_NETWORK_CASES=1 E2E_FAIL_FAST=1 \
+  E2E_START_AT=<题号> \
+  cargo test -p app --test product_e2e realistic_corpus_full_eval \
+  --features product-e2e -- --ignored --test-threads=1 --nocapture \
+  2>&1 | tee ../output/full_eval_smoke_rN.log
 ```
 
----
+不需要其他 env。联网题（9 道）先跳过；开网复跑时去掉 `E2E_SKIP_NETWORK_CASES=1` 并确认代理（见 §6）。
 
-## 7. 关键路径速查
+### 环境变量速查
 
-| 用途 | 路径 |
+| 变量 | 语义 | 默认 |
+|---|---|---|
+| `E2E_FAIL_FAST=1` | 首败即停 | 必带 |
+| `E2E_START_AT=N` | 从第 N 题续跑 | 1 |
+| `E2E_FORCE_INGEST=1` | 全量重灌（换语料专用） | 关 |
+| `E2E_SKIP_NETWORK_CASES=1` | 跳过 `requires_network` 题 | 先带 |
+| `RAG_QUALITY_REALISTIC_TRIPLET_ENABLED=1` | 灌库时抽 triplet（graph 题前置） | 关 |
+
+### 当前排程
+
+| 时间 | 任务 |
 |---|---|
-| 黄金集 | `avrag-rs/tests/rag_quality/golden_set_realistic.json` |
-| 设计 | `avrag-rs/tests/rag_quality/GOLDEN_SET_REALISTIC_DESIGN.md` |
-| 类型/加载 | `avrag-rs/tests/rag_quality/src/golden_set.rs` |
-| 生产评测入口 | `avrag-rs/crates/app/tests/product_e2e/llm_real/rag_quality_prod.rs` |
-| HTTP 助手 | `…/test_context/http.rs`（`chat_v3`） |
-| 语料 | `avrag-rs/crates/app/tests/product_e2e/fixtures/` |
-| 工具面旧集 | `golden_set_tools.json`（与 realistic 并行，未在本任务合并） |
-| v3 提交 | `ee73c9c` |
-| 编排验收（另一线） | `docs/engineering/ORCHESTRATOR_HANDOFF_2026-07-18.md` |
+| 2026-07-20 01:12 | one-shot `2d9e62c8`：启动 r8（复用 3 篇 + 补灌 7 篇 + `E2E_START_AT=66`） |
+| 2026-07-20 01:22 | one-shot `20aed5f2`：确认 r8 起来，重建逐题监控 |
 
 ---
 
-## 8. 一句话结论
+## 3. 语料现状（每次动手前先核对）
 
-**P0 已清：3 篇智遥咨询语料（docx+txt）入库、v4 以 `8e3e76e` 提交（143 题），`cargo test -p rag_quality --lib` 43 绿；全量 E2E 首次冒烟（skip network）运行中——剩余工作为 P1 能力空洞（toc/geo/稳定 id/SSE 工具观测）与开网全量复跑。**
+### 可复用（PG chunks + Milvus 向量均已验证，已播种进缓存）
+
+| 文件 | doc_id |
+|---|---|
+| thesis_y_refrigeration.txt | `bc81ace5-bb3a-44f1-854c-cb99bd85fa63` |
+| huawei_ipd_370_activities.txt | `7481adae-a8ea-4e10-87af-adc2c28cd4de` |
+| baiyao_it_planning.txt | `04acb106-ba6a-4a8c-9266-32c5b4b607a9` |
+
+### 待补灌（r8 执行，7 篇）
+
+adr-0004 / adr-0009 / consulting_platform / consulting_compensation / **consulting_rbf_drc / consulting_prepared_food / consulting_craftsman_paradox**（后三篇为 v4 新语料，docx 原件 + txt 抽取版在 `product_e2e/fixtures/`，已随 v4 提交）。
+
+注意：持久库里还有 adr4/adr9/platform/compensation 的旧 doc（workspace `7b525929`）——**有 PG chunks 但向量已被旧轮删除，不可复用**，重灌会产生重复 doc（可容忍，retrieval 按 doc_scope 钉死）。
+
+## 4. 集与 runner 版本
+
+- 集：`golden_set_realistic.json` v`4.0.0-orchestrator-groups`，**143 题 / 17 子集**，commit `8e3e76e`
+- runner 关键能力（全部已提交）：
+  - 逐题 dump（qNNN.json，含 `mode_debug.dispatches` = 编排器派发记录 status/item_count）
+  - 解析失败落盘 qNNN.raw.json（字符安全）
+  - `expect_citations{min_doc,min_web}` 真门（引用计数来自 response.citations，非 tool_results）
+  - 渐进语料缓存 + 默认复用 + `E2E_START_AT` + `E2E_FAIL_FAST`
+- commits（时间序）：`8e3e76e` v4 集+语料 → `5011661` assert 修复+FAIL_FAST → `dbe801c` IPD 灌库超时 300s → `f7315a5` dump+codegen 探针 → `281cf20` 字符安全+raw dump → `094d541` 续跑机制 → `e0eb01f` 默认复用 → `fc70f30` 持久设施+渐进缓存 → `6a9e3b2` dump 加 mode_debug
+
+## 5. q1–q65 复盘结论（r4 轮，rag-only 模式）
+
+### 数字
+
+- 65 题全部 `capabilities:["rag"]`、doc_scope=全 10 篇、非流式
+- **10/65 有真实文档引用；55/65 零引用**；标签下限 PASS=7
+- 成功案例高度集中：**thesis_synthesis 10 题占 5 题**（引用数也最多）；短 factual 题几乎全军覆没
+
+### 三种失败形态（按恶劣程度）
+
+1. **无视语料的参数知识裸答**（q010 问两家领军企业，论文=烟台冰轮/大连冷冻，答 GEA/JBT）——比拒答更糟
+2. **蒙对但无据**（q030 数学对、q045 城市对，零引用）
+3. **该答不答**（q005/q064，语料里明明有）
+
+### 已达标的机制
+
+引用纪律（65 题零编造）、adversarial 拒答校准（7/8 干净拒答）。
+
+### 核心疑点（r8 验证点）
+
+- **worker 取证疑似退化为单发弱检索**（无 codegen 多跳精化）——synthesis 长锚点能中、短 factual 全空的分布形态与此吻合；codegen 配置链探针已证存活（`assembled_mode_config_roundtrip_keeps_mandatory_codegen`），但未证实 worker 运行时真的拿到/用到。
+- **txt Local 路由 vs docx 全管线**：评测语料是 txt（Local），TOC/profile 生成可能残缺，worker 的 `doc_profile` 定向先天受限；生产（docx，148 chunks）同模式表现好得多。
+- **q66 "missing field answer"**：degrade 响应无 `answer` 字段——r8 若复现，读 `q066.raw.json` 看 degrade 结构再定夺（产品 or 口径）。
+- 评测口径修正：`chunks=0` 是编排器架构假象（worker tool_results 不随响应走），recall/RETRIEVAL_MISS 标签只作下限；真指标看 citations 与 expect_citations。
+
+## 6. 环境速查
+
+- 测试栈：runner 自带（api+worker+PG `avrag_rs_e2e_smoke`+Milvus 共享实例）；**不要动 dev 栈**（tmux `context-os-dev`）
+- 代理（search 题必需）：`http://172.27.240.1:20000`（WSL 网关，网络重置后需更新）
+- 加载测试：`cargo test -p rag_quality --lib`（43 绿）；编译检查：`cargo test -p app --test product_e2e --features product-e2e --no-run`
+- 相关交接：`docs/engineering/ORCHESTRATOR_HANDOFF_2026-07-18.md`（编排器线，已收尾至 R8）
+
+## 7. 待办（按优先级）
+
+1. r8 起逐题诊断：首个失败题 → 读 dump/mode_debug → 区分 worker 无产出 / chat 未引用 / 语料形态 / 评测口径 → 修复续跑。
+2. 验证 worker codegen 多跳是否真实运作（§5 疑点 1）——若是配置/装配丢失，修；若是 prompt 引导弱，改 prompt 层。
+3. 跑完非联网题后：开网 + 代理复跑 9 道联网题（joint/search/weather）。
+4. P1 空洞（来自初版核查）：toc 题、geo/位置题、稳定 `id` 字段、codegen 通道 SSE 真观测（现为内容门）、graph 题需 triplet 重灌验证。
 
 ---
 
@@ -195,7 +133,8 @@ Runner 已写死会上传这三份 `.txt`；缺文件时 `realistic_corpus_full_
 
 | 项 | |
 |---|---|
-| 集版本 | `4.0.0-orchestrator-groups` / 143 题（**已提交 `8e3e76e`**） |
-| 阻塞 | ~~缺 3× consulting fixture~~（已清除） |
-| 进行中 | `realistic_corpus_full_eval`（skip network）冒烟 |
-| 下一动作 | 等 smoke 结果 → 开网全量复跑 → 补 P1（toc/geo/id） |
+| 集版本 | `4.0.0-orchestrator-groups` / 143 题（`8e3e76e`） |
+| 灌库 | 3/10 可复用（已缓存）；7/10 待 r8 补灌 |
+| 当前阻塞 | 配额窗口（01:04 恢复，r8 @01:12） |
+| 核心疑点 | RAG worker 取证系统性失效（§5） |
+| 下一动作 | r8 启动确认（01:22）→ 逐题 fail-fast 循环 |
