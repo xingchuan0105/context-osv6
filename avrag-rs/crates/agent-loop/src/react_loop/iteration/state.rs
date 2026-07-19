@@ -11,6 +11,9 @@ pub struct IterationState {
     pub total_tool_calls: u32,
     pub consecutive_sandbox_errors: u8,
     pub reasoning_acc: String,
+    /// True when retrieve already emitted live `MessageDelta`s (stream path).
+    /// `finish_direct_answer_run` must not re-emit the whole answer as one token.
+    pub answer_deltas_streamed: bool,
 }
 
 pub enum IterationControl {

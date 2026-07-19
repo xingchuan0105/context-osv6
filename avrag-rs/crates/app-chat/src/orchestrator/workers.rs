@@ -269,10 +269,22 @@ fn rewrite_markers(
         let (head, tail) = rest.split_at(start);
         out.push_str(head);
         let Some(end) = tail.find("]]") else {
+            // Unclosed [[… at end: keep as plain text (do not invent a close).
             out.push_str(tail);
             rest = "";
             break;
         };
+        // Malformed open: another `[[` appears before the first `]]`
+        // (e.g. `[[E15]目录]…[[E3]]`). Treating the span greedily would
+        // swallow the later valid marker into one token. Emit just `[[`
+        // and rescan so the inner marker can be rewritten.
+        if let Some(next_open) = tail[2..].find("[[") {
+            if next_open + 2 < end {
+                out.push_str("[[");
+                rest = &tail[2..];
+                continue;
+            }
+        }
         let token = tail[2..end].trim();
 
         if let Some(eid) = parse_e_marker(token) {
@@ -595,5 +607,34 @@ mod tests {
         let h = parse_worker_handoff(raw).expect("handoff");
         assert_eq!(h.summary, "s");
         assert_eq!(h.coverage, "full");
+    }
+
+    #[test]
+    fn broken_open_marker_does_not_swallow_following_valid_eids() {
+        // Acceptance defect: model wrote `[[E15]目录]` (one `]`), then valid
+        // `[[E1]]` / `[[E2]]`. Greedy `find("]]")` used to glue them into one
+        // token and drop the valid citations.
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer = "坏开 [[E15]目录] 然后合法 [[E1]] 与 [[E2]]。".into();
+        finalize_answer_evidence(&mut r, &store);
+
+        assert!(
+            r.answer.contains("[[cite:chunk-a]]"),
+            "doc marker must survive: {}",
+            r.answer
+        );
+        assert!(
+            r.answer.contains("[[web:"),
+            "web marker must survive: {}",
+            r.answer
+        );
+        assert_eq!(r.citations.len(), 2, "both valid eids cited: {:?}", r.citations);
+        // Broken opener remains as plain text (leading `[[` rescanned); no product markers invented.
+        assert!(
+            r.answer.contains("[[") || r.answer.contains("E15"),
+            "broken fragment still visible as text: {}",
+            r.answer
+        );
     }
 }

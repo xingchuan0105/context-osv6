@@ -1,7 +1,7 @@
 # Handoff: Agent 编排器（Orchestrator + Subagents + 共享证据库）
 
 **日期:** 2026-07-18 起 · **验收更新:** 2026-07-19 · **主线:** `master`（本地 trunk，未 push）  
-**状态:** **可验收** — V1+V2 已落地并提交；coverage handoff、流式 chat 出口、search 空转早收敛、triplet 重灌均完成
+**状态:** **首轮验收完成（有条件通过）** · A4 流式 + 残缺标记两缺陷已修，待复验 A4/A5
 
 ---
 
@@ -40,25 +40,27 @@ tmux new-window -t context-os-dev -n api "cd '/home/chuan/context-osv6/avrag-rs'
 
 | Commit | 内容 |
 |---|---|
-| `92baa67` | Chat 出口流式化 + search 空转早收敛 |
-| `dc23543` / `64da91d` | Worker 结构化 handoff + coverage prompt；交接文档状态 |
+| *(本批待提交)* | **A4 真流式**（chat/prose retrieve `complete_stream`）+ **残缺 `[[E` 不吞后续合法标记** |
+| `2dad134` | 首轮验收结论写入 |
+| `a2813d8` | 验收手册（本文件） |
+| `92baa67` | Chat sink 接线 + search 空转早收敛（A4 未完全生效，见 §0.9） |
+| `dc23543` / `64da91d` | Worker 结构化 handoff + coverage prompt |
 | `6fc8977` | V2 brain + TOPK + 定向证据 + 引用单计数器 + 空选择规则 |
-| `2dc00e3` | Alipay billing（旁线，与编排无关） |
+| `2dc00e3` | Alipay billing（旁线） |
 
-更早：`64ea155` O1 host · `7e7855d` V1 store · `0b714d4` 策略入 prompt · `ddb46ce` 前端进度。
+更早：`64ea155` O1 · `7e7855d` V1 store · `0b714d4` 策略入 prompt · `ddb46ce` 前端进度。
 
-### 0.4 自动化基线（提交时）
+### 0.4 自动化基线
 
 | 包 / 套件 | 结果 |
 |---|---|
-| `cargo test -p app-chat --lib` orchestrator 过滤 | **47** 绿 |
-| `cargo test -p agent-loop --lib exit_policy` | **12** 绿 |
-| 历史：`app-chat` 全 lib / `rag-core` / contracts / 前端 workspace vitest | 曾绿（本验收前可按需重跑） |
+| `cargo test -p app-chat --lib` orchestrator | **48** 绿（含 `broken_open_marker_does_not_swallow_following_valid_eids`） |
+| `cargo test -p agent-loop --lib` | **183** 绿 |
 
 关键单测名：
 
+- `broken_open_marker_does_not_swallow_following_valid_eids`（缺陷 2）
 - `citation_ids_are_unique_across_doc_and_web`
-- `doc_profile_and_summary_become_targeted_entries` / `targeted_entries_dedupe_and_survive_topk`
 - `parses_structured_worker_handoff_json` / `structured_handoff_renders_coverage_and_gaps`
 - `search_exhausted_after_two_empty_not_after_one`
 - `empty_web_search_ok_is_not_evidence` / `consecutive_empty_search_triggers_early_stop`
@@ -109,20 +111,48 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 
 历史对照：`output/retest_r{5..8}_sse.log`（若仍在）。
 
-### 0.7 已知可接受现象（非阻塞）
+### 0.7 首轮验收结论（2026-07-19 · commit `2dad134`）
+
+| # | 结果 | 关键证据 |
+|---|---|---|
+| 环境 | ✅ 已纠偏 | api/worker 原为旧 binary（10:01 编译 &lt; `92baa67`）；已重编至验收时 tip；自动化 47+12 重跑全绿 |
+| A1 | ✅ | caps 全关 → user-chat 直答，SSE 无 orchestrator 痕迹 |
+| A2 | ✅ | 前端 vitest 7/7；实机 UI 无该用户登录密码未跑 |
+| A3 | 有条件 ✅ | 口径/身份/七维度+缺口/日志 round+dispatch+TOPK 全过；doc 16+web 8 可解析（见缺陷 2） |
+| A4 | ❌ → **已修待复验** | 两轮 compose 均为**单 token 整段**（5184B@~39s / 4799B@~18.6s） |
+| A5 | ✅ | citation_id 1..24 全局唯一；doc lookup 成功；web 走 sources 面板 |
+| A6 | ✅ | 断代理 115s 收敛；`search_empty_early_stop empty_tail=2`；brain 不再派 search |
+| A7 | ✅ | 空 scope+RAG → 提示选范围，无全库注入 |
+
+SSE 证据：`output/acceptance_{a1,a3,a3b_ts,a6,a7}*.log`。
+
+### 0.8 首轮缺陷与修复（2026-07-19 同日）
+
+| # | 缺陷 | 根因 | 修复 |
+|---|---|---|---|
+| 1 | A4 流式未生效 | sink 接线正确，但 chat exit 走 `direct_content` → `complete_with_tools` 非流式 → 单 `MessageDelta` 整段 | `call_retrieve_llm`：`stream` 且（无 tools / chat / prose_only）走 `complete_stream` 并边生成边 emit；已 stream 则 `finish_direct_answer_run` 不再整段重发；若未 stream 则强制 synthesis prose 流 |
+| 2 | finalize 吞标记 | 残缺 `[[E15]目录]` 使 `find("]]")` 贪婪吃掉后续 `[[E3]]` | `rewrite_markers`：若 `[[` 先于 `]]` 再出现，只吐出 `[[` 并重扫 |
+
+**复验 A4：** 重编 api 后重跑 A3，compose 阶段应出现**多个** `event: token` 且时间分散（非整段一次到达）。  
+**复验 A5 侧车：** 答案中若模型再写残缺 `[[E…]`，后续合法 cite 仍应在 final answer 与芯片中。
+
+边界观察（不阻塞）：裸 API 用 **web** `citation_id` 调 lookup → `document_not_found`（UI 走 sources，不可达）。
+
+### 0.9 已知可接受现象（非阻塞）
 
 | 现象 | 说明 |
 |---|---|
 | 流式中短暂出现 `[[E:n]]` | finalize 在整段结束后改写；`done` 载荷为产品标记；前端用 final answer 覆盖 |
-| 答案详细程度仍有轮间方差 | coverage handoff 降低但不消灭方差（见 §5.1） |
-| 本次 reindex 曾跳过 LLM summary | 日志 `quota exhausted`；图谱已有（entity 254 / relation 195）；genre 若异常需补额度后重 reindex summary |
-| Search 依赖代理 | 无代理时 search 空/失败属环境，不是编排回归 |
-| worker 温度 0.3 未调 | 明确延期（§9） |
+| 答案详细程度仍有轮间方差 | coverage handoff 降低但不消灭方差 |
+| 本次 reindex 曾跳过 LLM summary | 日志 `quota exhausted`；图谱 entity 254 / relation 195 |
+| Search 依赖代理 | 无代理时 search 空/失败属环境 |
+| worker 温度 0.3 未调 | 延期 |
+| chat stream 本轮不调 user_context 工具 | 为真流式让步；synthesize brief 已自包含 |
 
-### 0.8 验收后建议你本地处理
+### 0.10 仍欠你本地处理
 
-1. **DeepSeek 控制台 revoke 旧 TRIPLET 专用 key**（配置侧已改用与 `INGESTION_LLM_API_KEY` 同值；平台侧需你操作）。
-2. 若 api 未重编：按 §0.2 重启后再判流式/空 search。
+1. **DeepSeek 控制台 revoke 旧 TRIPLET 专用 key**（§0.8 配置侧已换绑）。
+2. **复验 A4/A5**：按 §0.2 重启 api 至含缺陷修复的 commit 后再跑主路径。
 
 ---
 
@@ -218,8 +248,9 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 | 引用全局编号 | Done | `workers::rewrite_markers` |
 | 空选择禁 RAG | Done | 前端 workspace + response summary |
 | Coverage / handoff JSON | Done | `WorkerHandoff`，chat brief `coverage:` / `gaps:` |
-| Chat 出口流式 | Done | `run_chat(..., sink)` |
+| Chat 出口流式 | Done（首轮验收 A4 未过，已二次修） | sink 透传 + **chat/prose `complete_stream`**（`iteration/assemble.rs`） |
 | Search 空转早收敛 | Done | agent-loop exit_policy + brain `search_channel_exhausted` |
+| 残缺 `[[E` 扫描 | Done（验收缺陷 2） | `rewrite_markers` 遇嵌套 `[[` 只吐 `[[` 重扫 |
 | Triplet 基准文档 | Done | parse_run backend_summary entity/relation 非 0 |
 
 ## 7. 环境与运行
@@ -253,7 +284,8 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 
 | 现象 | 先查 |
 |---|---|
-| 仍整段蹦字 | api 是否旧 binary；`host.rs` `run_chat` 是否把 sink 传给 `agent_service.run` |
+| 仍整段蹦字 | api 是否含本批修复；`request.stream`；chat 是否走 `call_retrieve_llm_stream` / synthesis prose stream；勿停在旧 `direct_content` 单 delta |
+| 合法 cite 被吞 | `rewrite_markers` 是否含「`[[` 先于 `]]` 则重扫」分支 |
 | 引用 404 | `rewrite_markers` 是否单计数器；是否残留双计数器分支 |
 | Search 空转很久 | 代理；日志有无 `search_empty_early_stop`；brain 是否仍多次 `delegate_search` |
 | 维度只盖一章 | worker handoff `gaps` / chat brief 是否含 coverage；orchestrator instruction 是否要求逐章 |
@@ -261,13 +293,16 @@ curl -sN -X POST 'http://127.0.0.1:8080/api/v1/chat' \
 
 ---
 
-**验收结论（2026-07-19，api/worker 已按 §0.2 重编至 a2813d8）：**
+**首轮验收结论（2026-07-19 · `2dad134`，api 曾重编至 `a2813d8`）：**
 
-- [x] A1–A7：A1 ✅ · A2 ✅（vitest 7/7；实机 UI 因无登录凭据未跑）· A3 ✅（质量有条件，见备注）· **A4 ❌** · A5 ✅ · A6 ✅ · A7 ✅
-- [x] 主路径 A3 质量：**有条件合格** — §0.6 第 1/2/3/5 条全过（理解口径、身份正确、七维度+缺口明示、日志 round/dispatch/TOPK 齐全）；第 4 条引用 doc 16 + web 8 全部可解析，但见备注缺陷 2
-- [x] 备注：
-  1. **A4 流式未生效（结构性）**：两轮 A3（output/acceptance_a3_sse.log / acceptance_a3b_ts.log）compose 阶段均为**单 token 事件整段到达**（5184B / 4799B，分别在 compose 开始后 ~39s / ~18.6s），即"进度卡死后整段字"。接线（`run_chat` 透传外层 sink）正确，但 chat exit 内层 loop 走 `direct_content`（一次性非流式补全 → 单 MessageDelta），不经 `synthesis.rs` 的 delta 转发。修复方向：chat exit 的 direct_content 补全改流式转发，或强制走 synthesis 流式通道。
-  2. **finalize 吞标记（新缺陷）**：模型偶发写残缺 `[[E15]目录]`（单右括号），`rewrite_markers`（workers.rs:268-276）贪婪 `find("]]")` 把其后的合法 `[[E3]]`/`[[E26]]` 吞进"非标记透传"分支，raw E-id 残留进最终答案；`stripped` 不计数故无 dangling 告警。修复方向：扫描时若下一个 `[[` 先于 `]]` 出现，当前 `[[` 按普通文本处理并从下一 `[[` 重启。
-  3. 观察（非阻塞）：`/chat/citations/lookup` 对 web citation_id 返回 document_not_found —— UI 不可达（web 芯片走 sources 面板不查 lookup），仅裸 API 边界。
-  4. A6 证据：日志 `search retrieve early-stop: consecutive empty results empty_tail=2` + brain round1 直接 `delegate_chat`；答案诚实降级无编造。
-- [x] 验收人 / 日期：Claude（max effort）/ 2026-07-19。SSE 证据：`output/acceptance_{a1,a3,a3b_ts,a6,a7}*.log`
+- [x] A1–A7：A1 ✅ · A2 ✅（vitest 7/7）· A3 有条件 ✅ · **A4 ❌** · A5 ✅ · A6 ✅ · A7 ✅
+- [x] A3：**有条件合格**（§0.6 1/2/3/5 过；引用可解析但见缺陷 2）
+- [x] 缺陷 1/2 根因见上表 §0.8；SSE：`output/acceptance_{a1,a3,a3b_ts,a6,a7}*.log`
+- [x] 观察：web citation_id lookup → document_not_found（UI 不可达）
+
+**缺陷修复后（待你复验 A4/A5）：**
+
+- [ ] A4：compose 阶段多个 `event: token`、时间分散（非整段单事件）
+- [ ] 残缺 `[[E…]` 不再吞后续合法 `[[cite:` / `[[web:`
+- [ ] 复验人 / 日期：________
+- **复验前**：§0.2 重编 api 至含本批修复的 tip

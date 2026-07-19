@@ -120,6 +120,7 @@ impl ReActLoop {
             total_tool_calls: 0,
             consecutive_sandbox_errors: 0,
             reasoning_acc: String::new(),
+            answer_deltas_streamed: false,
         };
         let (iteration, direct_answer, telemetry_records, total_usage) = self
             .run_retrieval_loop(
@@ -141,6 +142,7 @@ impl ReActLoop {
         let mut collected_tool_results = state.tool_results;
         let total_tool_calls = state.total_tool_calls;
         let reasoning_summary_acc = state.reasoning_acc;
+        let answer_deltas_streamed = state.answer_deltas_streamed;
 
         if cancel.is_cancelled() {
             return Err(cancellation_error());
@@ -166,6 +168,7 @@ impl ReActLoop {
                 &total_usage,
                 &reasoning_summary_acc,
                 start_time,
+                answer_deltas_streamed,
             )
             .await?
         {

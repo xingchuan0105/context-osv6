@@ -35,7 +35,7 @@ impl ReActLoop {
             .await;
         let iter_start = std::time::Instant::now();
         let llm_response = self
-            .call_retrieve_llm(mode, state, total_usage, &assembled, sink)
+            .call_retrieve_llm(mode, request, state, total_usage, &assembled, sink)
             .await?;
 
         self.apply_llm_output(

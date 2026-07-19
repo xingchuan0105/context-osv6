@@ -33,6 +33,7 @@ impl ReActLoop {
         total_usage: &LlmUsage,
         reasoning_summary_acc: &str,
         start_time: std::time::Instant,
+        answer_deltas_streamed: bool,
     ) -> Result<Option<AgentRunResult>, AppError> {
         let mut has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
 
@@ -44,25 +45,42 @@ impl ReActLoop {
             retrieval_query,
         ) {
             SynthesisGate::SkipSynthesisUseDirect(answer) => {
-                return Ok(Some(
-                    self.finish_direct_answer_run(
-                        answer,
-                        request,
-                        disclosed_state,
-                        collected_tool_results,
-                        sink,
-                        iteration,
-                        max_iterations,
-                        total_tool_calls,
-                        telemetry_records,
-                        total_usage,
-                        reasoning_summary_acc,
-                        start_time,
-                        "skip_synthesis_direct",
-                        FinalDecision::DirectAnswer,
-                    )
-                    .await?,
-                ));
+                // Streaming request that did not live-stream retrieve tokens must
+                // not dump a single MessageDelta — fall through to synthesis
+                // (`run_prose_stream`) for true progressive tokens.
+                if request.stream && !answer_deltas_streamed {
+                    tracing::info!(
+                        "stream request: skip direct dump, enter synthesis for live tokens"
+                    );
+                    // Drop the retrieve-phase prose so synthesis is not polluted.
+                    if messages
+                        .last()
+                        .is_some_and(|m| m.role == "assistant" && m.content == answer)
+                    {
+                        messages.pop();
+                    }
+                } else {
+                    return Ok(Some(
+                        self.finish_direct_answer_run(
+                            answer,
+                            request,
+                            disclosed_state,
+                            collected_tool_results,
+                            sink,
+                            iteration,
+                            max_iterations,
+                            total_tool_calls,
+                            telemetry_records,
+                            total_usage,
+                            reasoning_summary_acc,
+                            start_time,
+                            "skip_synthesis_direct",
+                            FinalDecision::DirectAnswer,
+                            answer_deltas_streamed,
+                        )
+                        .await?,
+                    ));
+                }
             }
             SynthesisGate::RunFallbackThenCheck => {
                 if let Some(result) = self
@@ -113,6 +131,7 @@ impl ReActLoop {
         start_time: std::time::Instant,
         telemetry_label: &str,
         final_decision: FinalDecision,
+        content_already_streamed: bool,
     ) -> Result<AgentRunResult, AppError> {
         let disclosed_skills: Vec<String> = disclosed_state
             .disclosed_skill_ids
@@ -129,11 +148,15 @@ impl ReActLoop {
             telemetry_label,
         )
         .await;
-        let _ = sink
-            .emit(AgentEvent::MessageDelta {
-                text: answer.clone(),
-            })
-            .await;
+        // Avoid a second full-answer MessageDelta when retrieve already streamed
+        // live tokens (acceptance A4: one compose-stage blob felt frozen).
+        if !content_already_streamed {
+            let _ = sink
+                .emit(AgentEvent::MessageDelta {
+                    text: answer.clone(),
+                })
+                .await;
+        }
         let _ = sink
             .emit(AgentEvent::Done {
                 final_message: Some(answer.clone()),

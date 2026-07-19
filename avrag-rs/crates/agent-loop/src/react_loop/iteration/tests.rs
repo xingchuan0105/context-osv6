@@ -75,6 +75,7 @@ fn empty_state() -> IterationState {
         total_tool_calls: 0,
         consecutive_sandbox_errors: 0,
         reasoning_acc: String::new(),
+        answer_deltas_streamed: false,
     }
 }
 
