@@ -2,7 +2,7 @@ Status: extracted from AGENTS/CLAUDE for progressive disclosure. AGENTS.md links
 
 # Coding behavior (full text, human reference)
 
-Agent-facing minimalism is owned by the **ponytail** plugin; this file preserves the original long-form behavior essays for humans. Where they overlap, ponytail + the short deltas in `AGENTS.md` win for agents.
+Original long-form behavior essays for humans; the short deltas in `AGENTS.md` win for agents.
 
 ## 1. Think Before Coding
 

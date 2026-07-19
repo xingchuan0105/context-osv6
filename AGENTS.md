@@ -1,27 +1,15 @@
 # Agent rules — context-osv6
 
-> Coding minimalism is enforced by the **ponytail** plugin. This file states **repo law**. If both apply, repo law wins; still prefer the smallest diff that satisfies repo law.
-
 ## Precedence
 
 1. User's explicit request for this turn
 2. This repo's hard rules (Product T1–T8, workspace/org, `.env` reuse, solo trunk, graphify update after structural edits, deploy scripts only, service assumptions)
-3. Ponytail minimalism ladder (how to implement within 1–2)
-4. Generic style preferences
-
-If 2 and 3 conflict: **obey 2**, still take the smallest diff that satisfies 2.
-
-## Ponytail coexistence
-
-- Minimalism / YAGNI / "fewest lines": **ponytail plugin** (default `full`). Do not restate the ladder here; see `docs/agent/PONYTAIL.md`.
-- Never use ponytail to justify: violating Product hard rules, skipping `graphify update` after structural edits, re-asking `.env` credentials, ad-hoc VPS deploys, or removing unrelated dead code.
-- Recommended mode: `full`. `ultra` only if the user asks. Architecture/migration waves: `full` or `off`.
-- Optional: `/skill:ponytail-review` after large features to prune overbuild **without** breaking T1–T8.
+3. Generic style preferences
 
 ## Behavior (project deltas only)
 
 - State assumptions explicitly; **stop and ask** when a request is ambiguous. Push back with a simpler option when warranted.
-- Surgical edits: every changed line traces to the user's request. Match local style. Remove only unused symbols **you** introduced — **do not delete pre-existing dead code unless asked** (overrides ponytail's "deletion over addition").
+- Surgical edits: every changed line traces to the user's request. Match local style. Remove only unused symbols **you** introduced — **do not delete pre-existing dead code unless asked**.
 - Multi-step work: brief plan with verify gates; do not advance past a failing gate.
 
 ## Product hard rules (`avrag-rs`) — non-negotiable (formerly §8)
@@ -59,7 +47,6 @@ If 2 and 3 conflict: **obey 2**, still take the smallest diff that satisfies 2.
 - Frontend (`frontend_next`): `pnpm test` / typecheck.
 - WSL: respect `jobs=2`; never stack concurrent full `cargo test` runs. Details: `docs/agent/rust-resources.md`.
 - Real LLM / full Playwright: not required mid-wave (E2E semantics: `avrag-rs/docs/e2e-gates.md`).
-- Ponytail's "one micro-check" does **not** replace package tests for product paths.
 
 ## Repo map
 
@@ -73,5 +60,4 @@ If 2 and 3 conflict: **obey 2**, still take the smallest diff that satisfies 2.
 - `docs/agent/wsl-services.md` — services, ports, VPS
 - `docs/agent/rust-resources.md` — target/cache policy
 - `docs/agent/coding-behavior.md` — original long-form behavior essays (human reference)
-- `docs/agent/PONYTAIL.md` — coexistence details
 - `docs/engineering/SOLO_DISCIPLINE.md` · `docs/adr/0007-product-apps-composition-root.md`
