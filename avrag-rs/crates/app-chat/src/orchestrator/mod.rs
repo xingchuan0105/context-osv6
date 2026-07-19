@@ -25,4 +25,7 @@ pub use invariant::{
 pub use materialize::materialize_channels;
 pub use store::{EvidenceEntry, EvidenceKind, EvidenceListing, EvidenceStore, SourceDoc};
 pub use types::*;
-pub use workers::{channel_note_from_run, finalize_answer_evidence, tool_failures};
+pub use workers::{
+    channel_note_from_run, finalize_answer_evidence, parse_worker_handoff, tool_failures,
+    worker_handoff_from_run,
+};

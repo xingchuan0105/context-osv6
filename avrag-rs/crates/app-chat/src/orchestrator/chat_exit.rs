@@ -98,7 +98,7 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         s.push('\n');
     }
 
-    // Channel outcomes: what ran and what came back (worker digests).
+    // Channel outcomes: structured worker handoff (coverage/gaps visible).
     if !handoff.channel_notes.is_empty() {
         s.push_str("### Channel outcomes\n");
         for note in &handoff.channel_notes {
@@ -111,7 +111,34 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
                 ),
             };
             s.push_str(&format!("- {}: {}\n", note.channel.as_str(), status));
-            if let Some(n) = note.note.as_deref().filter(|n| !n.trim().is_empty()) {
+            if let Some(h) = note.handoff.as_ref() {
+                s.push_str(&format!("  coverage: {}\n", h.coverage));
+                if !h.summary.trim().is_empty() {
+                    s.push_str("  summary: ");
+                    s.push_str(h.summary.trim());
+                    s.push('\n');
+                }
+                if !h.key_facts.is_empty() {
+                    s.push_str("  key_facts:\n");
+                    for fact in &h.key_facts {
+                        if fact.evidence.is_empty() {
+                            s.push_str(&format!("  - {}\n", fact.claim));
+                        } else {
+                            s.push_str(&format!(
+                                "  - {} (evidence: {})\n",
+                                fact.claim,
+                                fact.evidence.join(", ")
+                            ));
+                        }
+                    }
+                }
+                if !h.gaps.is_empty() {
+                    s.push_str("  gaps:\n");
+                    for g in &h.gaps {
+                        s.push_str(&format!("  - {g}\n"));
+                    }
+                }
+            } else if let Some(n) = note.note.as_deref().filter(|n| !n.trim().is_empty()) {
                 s.push_str("  worker digest: ");
                 s.push_str(n);
                 s.push('\n');
@@ -261,13 +288,30 @@ mod tests {
     }
 
     fn note(channel: Channel, status: PackStatus, item_count: usize) -> ChannelNote {
-        ChannelNote {
+        ChannelNote::with_handoff(channel, status, item_count, None, None)
+    }
+
+    fn note_with_handoff(
+        channel: Channel,
+        status: PackStatus,
+        item_count: usize,
+        summary: &str,
+        coverage: &str,
+        gaps: &[&str],
+    ) -> ChannelNote {
+        use crate::orchestrator::types::WorkerHandoff;
+        ChannelNote::with_handoff(
             channel,
             status,
             item_count,
-            note: None,
-            error: None,
-        }
+            Some(WorkerHandoff {
+                summary: summary.into(),
+                key_facts: vec![],
+                coverage: coverage.into(),
+                gaps: gaps.iter().map(|s| (*s).to_string()).collect(),
+            }),
+            None,
+        )
     }
 
     fn rec(channel: Channel, status: PackStatus) -> DispatchRecord {
@@ -365,5 +409,30 @@ mod tests {
         let evidence = evidence.split("###").next().unwrap();
         assert!(!evidence.contains("[E1]"), "E1 must not be citable: {evidence}");
         assert!(evidence.contains("[E2]"), "E2 stays citable: {evidence}");
+    }
+
+    #[test]
+    fn structured_handoff_renders_coverage_and_gaps() {
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note_with_handoff(
+                Channel::Rag,
+                PackStatus::Ok,
+                3,
+                "覆盖现状与目标两章",
+                "partial",
+                &["未找到投资估算章节"],
+            )],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(ctx.contains("coverage: partial"), "{ctx}");
+        assert!(ctx.contains("覆盖现状与目标两章"), "{ctx}");
+        assert!(ctx.contains("未找到投资估算章节"), "{ctx}");
+        assert!(ctx.contains("gaps:"), "{ctx}");
     }
 }

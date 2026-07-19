@@ -1,6 +1,6 @@
 # Handoff: Agent 编排器（Orchestrator + Subagents + 共享证据库）工作流
 
-**日期:** 2026-07-18（当日多次更新，覆盖至 R8） · **状态:** V1 + V2 已落地，生产路径验证 8 轮（R1–R8）；R1–R3 修复、引用撞号修复、编排器记忆/画像、空选择产品规则全部完成并验证 · **主线分支:** `master`（本地 trunk，未 push） · **全部改动未提交，工作树混有他人 Alipay billing 改动（约 20 文件），提交时必须拆分**
+**日期:** 2026-07-18（当日多次更新，覆盖至 R8）· **续：** 2026-07-19 Wave 0 提交 + Wave 1a/1b coverage · **状态:** V1 + V2 已落地；**结构化 worker handoff + prompt coverage 已落地**；基准文档 reindex 已含 triplet（entity 254 / relation 195）· **主线分支:** `master`（本地 trunk）
 
 ---
 

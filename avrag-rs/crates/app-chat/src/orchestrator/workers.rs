@@ -13,8 +13,11 @@ use agent_loop::runtime::AgentRunResult;
 use contracts::chat::{AnswerBlock, Citation, SourceRef};
 
 use super::store::{EvidenceKind, EvidenceStore};
+use super::types::{WorkerHandoff, WorkerKeyFact};
 
 const MAX_NOTE_CHARS: usize = 2000;
+const MAX_GAPS: usize = 12;
+const MAX_KEY_FACTS: usize = 16;
 
 /// Non-Ok tool outcomes from a worker run, as short descriptions
 /// (`web_search: Timeout (detail)`). Used to distinguish "检索失败" (Error)
@@ -35,14 +38,178 @@ pub fn tool_failures(results: &[contracts::ToolResult]) -> Vec<String> {
         .collect()
 }
 
-/// Worker channel summary handed to the chat exit (its digested
-/// understanding of the channel — not raw chunks).
+/// Parse structured worker handoff from the worker's final message.
+///
+/// Accepts `internal_worker_handoff_v1` JSON, peels legacy `internal_answer_v1`,
+/// or falls back to free-form text as `summary` with `coverage = "partial"`.
+pub fn worker_handoff_from_run(result: &AgentRunResult) -> Option<WorkerHandoff> {
+    parse_worker_handoff(&result.answer)
+}
+
+/// Worker channel summary (flat string) — prefers structured handoff summary.
 pub fn channel_note_from_run(result: &AgentRunResult) -> Option<String> {
-    let t = result.answer.trim();
-    if t.is_empty() {
+    worker_handoff_from_run(result).map(|h| h.summary)
+}
+
+/// Parse a worker final message into [`WorkerHandoff`].
+pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
         return None;
     }
-    Some(t.chars().take(MAX_NOTE_CHARS).collect())
+    let body = strip_json_fence(trimmed);
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(h) = handoff_from_value(&v) {
+            return Some(cap_handoff(h));
+        }
+    }
+    // Free-form: keep text, mark coverage incomplete so orchestrator can re-dispatch.
+    Some(cap_handoff(WorkerHandoff::freeform_summary(
+        trimmed.chars().take(MAX_NOTE_CHARS).collect::<String>(),
+    )))
+}
+
+fn strip_json_fence(s: &str) -> &str {
+    let s = s.trim();
+    if !s.starts_with("```") {
+        return s;
+    }
+    let Some(first_nl) = s.find('\n') else {
+        return s;
+    };
+    let rest = &s[first_nl + 1..];
+    if let Some(end) = rest.rfind("```") {
+        rest[..end].trim()
+    } else {
+        rest.trim()
+    }
+}
+
+fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
+    let schema = v
+        .get("schema_version")
+        .and_then(|s| s.as_str())
+        .unwrap_or("");
+
+    // Preferred: internal_worker_handoff_v1 (summary required).
+    if schema == "internal_worker_handoff_v1" || v.get("summary").and_then(|s| s.as_str()).is_some()
+    {
+        let summary = v
+            .get("summary")
+            .and_then(|s| s.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?;
+        let coverage = v
+            .get("coverage")
+            .and_then(|s| s.as_str())
+            .unwrap_or("partial")
+            .trim()
+            .to_string();
+        let gaps = string_list(v.get("gaps"));
+        let key_facts = key_facts_from(v.get("key_facts"));
+        return Some(WorkerHandoff {
+            summary: summary.to_string(),
+            key_facts,
+            coverage: if coverage.is_empty() {
+                "partial".into()
+            } else {
+                coverage
+            },
+            gaps,
+        });
+    }
+
+    // Legacy unified answer envelope: map answer_text → summary.
+    if schema == "internal_answer_v1" || v.get("answer_text").is_some() {
+        let summary = v
+            .get("answer_text")
+            .and_then(|s| s.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?;
+        let coverage = v
+            .get("coverage")
+            .and_then(|s| s.as_str())
+            .unwrap_or("partial")
+            .to_string();
+        let mut gaps = string_list(v.get("gaps"));
+        if let Some(reason) = v
+            .get("refusal_reason")
+            .and_then(|s| s.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            gaps.push(reason.to_string());
+        }
+        return Some(WorkerHandoff {
+            summary: summary.to_string(),
+            key_facts: Vec::new(),
+            coverage,
+            gaps,
+        });
+    }
+
+    None
+}
+
+fn string_list(v: Option<&serde_json::Value>) -> Vec<String> {
+    v.and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|e| e.as_str().map(|s| s.trim().to_string()))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn key_facts_from(v: Option<&serde_json::Value>) -> Vec<WorkerKeyFact> {
+    let Some(arr) = v.and_then(|x| x.as_array()) else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|item| {
+            if let Some(s) = item.as_str() {
+                let t = s.trim();
+                if t.is_empty() {
+                    return None;
+                }
+                return Some(WorkerKeyFact {
+                    claim: t.to_string(),
+                    evidence: Vec::new(),
+                });
+            }
+            let claim = item
+                .get("claim")
+                .and_then(|c| c.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())?
+                .to_string();
+            let evidence = item
+                .get("evidence")
+                .and_then(|e| e.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(WorkerKeyFact { claim, evidence })
+        })
+        .collect()
+}
+
+fn cap_handoff(mut h: WorkerHandoff) -> WorkerHandoff {
+    if h.summary.chars().count() > MAX_NOTE_CHARS {
+        h.summary = h.summary.chars().take(MAX_NOTE_CHARS).collect();
+    }
+    if h.gaps.len() > MAX_GAPS {
+        h.gaps.truncate(MAX_GAPS);
+    }
+    if h.key_facts.len() > MAX_KEY_FACTS {
+        h.key_facts.truncate(MAX_KEY_FACTS);
+    }
+    h
 }
 
 /// Rewrite E-markers to product markers and rebuild citations/sources.
@@ -379,5 +546,54 @@ mod tests {
             panic!("text block");
         };
         assert!(text.contains("[[cite:chunk-a]]"));
+    }
+
+    #[test]
+    fn parses_structured_worker_handoff_json() {
+        let raw = r#"{
+          "schema_version": "internal_worker_handoff_v1",
+          "summary": "立项报告，结构：现状→目标→路径",
+          "key_facts": [
+            {"claim": "采用微服务", "evidence": ["chunk-a"]},
+            "预算约 2 亿"
+          ],
+          "coverage": "partial",
+          "gaps": ["未找到投资估算章节"]
+        }"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert_eq!(h.summary, "立项报告，结构：现状→目标→路径");
+        assert_eq!(h.coverage, "partial");
+        assert_eq!(h.gaps, vec!["未找到投资估算章节".to_string()]);
+        assert_eq!(h.key_facts.len(), 2);
+        assert_eq!(h.key_facts[0].claim, "采用微服务");
+        assert_eq!(h.key_facts[0].evidence, vec!["chunk-a".to_string()]);
+        assert_eq!(h.key_facts[1].claim, "预算约 2 亿");
+        assert!(!h.is_full_coverage());
+    }
+
+    #[test]
+    fn peels_legacy_internal_answer_v1() {
+        let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"结论正文","citations":[],"coverage":"full","refusal_reason":null}"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert_eq!(h.summary, "结论正文");
+        assert_eq!(h.coverage, "full");
+        assert!(h.gaps.is_empty());
+        assert!(h.is_full_coverage());
+    }
+
+    #[test]
+    fn freeform_falls_back_to_partial_summary() {
+        let h = parse_worker_handoff("散文式摘要：文档讲了三件事").expect("handoff");
+        assert!(h.summary.contains("散文式摘要"));
+        assert_eq!(h.coverage, "partial");
+        assert!(h.gaps.is_empty());
+    }
+
+    #[test]
+    fn fenced_json_handoff_is_accepted() {
+        let raw = "```json\n{\"summary\":\"s\",\"coverage\":\"full\",\"gaps\":[],\"key_facts\":[]}\n```";
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert_eq!(h.summary, "s");
+        assert_eq!(h.coverage, "full");
     }
 }

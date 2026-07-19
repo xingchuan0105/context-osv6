@@ -65,17 +65,80 @@ pub struct DispatchRecord {
     pub error: Option<String>,
 }
 
+/// One claim from a worker handoff, optionally grounded on evidence pointers
+/// (store `E{n}`, chunk ids, or free-form locators the worker had in view).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerKeyFact {
+    pub claim: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<String>,
+}
+
+/// Structured worker exit contract (V2 design §3.4).
+///
+/// Replaces free-form digest notes so coverage gaps are visible to the
+/// orchestrator and chat exit. Workers are prompted to emit this JSON;
+/// free-form answers fall back to `summary` + `coverage = "partial"`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerHandoff {
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_facts: Vec<WorkerKeyFact>,
+    /// `full` | `partial` | `insufficient` (open string; unknown treated as partial).
+    pub coverage: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gaps: Vec<String>,
+}
+
+impl WorkerHandoff {
+    pub fn freeform_summary(summary: impl Into<String>) -> Self {
+        Self {
+            summary: summary.into(),
+            key_facts: Vec::new(),
+            coverage: "partial".into(),
+            gaps: Vec::new(),
+        }
+    }
+
+    pub fn is_full_coverage(&self) -> bool {
+        self.coverage.eq_ignore_ascii_case("full") && self.gaps.is_empty()
+    }
+}
+
 /// Per-channel worker outcome handed to the chat exit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelNote {
     pub channel: Channel,
     pub status: PackStatus,
     pub item_count: usize,
-    /// Worker channel summary (its digested understanding — not raw chunks).
+    /// Flat summary (always mirrors `handoff.summary` when structured).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Structured handoff when the worker produced one (or freeform fallback).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<WorkerHandoff>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+impl ChannelNote {
+    pub fn with_handoff(
+        channel: Channel,
+        status: PackStatus,
+        item_count: usize,
+        handoff: Option<WorkerHandoff>,
+        error: Option<String>,
+    ) -> Self {
+        let note = handoff.as_ref().map(|h| h.summary.clone());
+        Self {
+            channel,
+            status,
+            item_count,
+            note,
+            handoff,
+            error,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

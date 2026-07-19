@@ -22,8 +22,8 @@ use super::host::{dispatch_channel, OrchestratedTurn, OrchestratorExecutor};
 use super::invariant::missing_dispatches;
 use super::materialize::materialize_channels;
 use super::store::EvidenceStore;
-use super::types::{Channel, ChatHandoff, DispatchRecord, PackStatus, TaskBrief};
-use super::workers::{channel_note_from_run, finalize_answer_evidence, tool_failures};
+use super::types::{Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief};
+use super::workers::{finalize_answer_evidence, tool_failures, worker_handoff_from_run};
 use crate::capabilities::CapabilitySet;
 
 /// Feature flag: `AGENT_ORCHESTRATOR_V2=1` (or true/yes/on). Requires V1 on.
@@ -503,14 +503,15 @@ pub async fn run_llm_orchestrated_turn(
                             item_count: inserted,
                             error: error.clone(),
                         });
-                        let note = channel_note_from_run(&run);
-                        channel_notes.push(super::types::ChannelNote {
-                            channel: *channel,
+                        let handoff = worker_handoff_from_run(&run);
+                        let note = ChannelNote::with_handoff(
+                            *channel,
                             status,
-                            item_count: inserted,
-                            note: note.clone(),
-                            error: error.clone(),
-                        });
+                            inserted,
+                            handoff.clone(),
+                            error.clone(),
+                        );
+                        channel_notes.push(note);
                         let new_listings: Vec<serde_json::Value> = store
                             .listings()
                             .into_iter()
@@ -525,6 +526,10 @@ pub async fn run_llm_orchestrated_turn(
                                 })
                             })
                             .collect();
+                        let handoff_json = handoff
+                            .as_ref()
+                            .and_then(|h| serde_json::to_value(h).ok())
+                            .unwrap_or(serde_json::Value::Null);
                         tool_msgs.push((
                             call_id.clone(),
                             tool_result_msg(
@@ -536,7 +541,8 @@ pub async fn run_llm_orchestrated_turn(
                                     "status": format!("{status:?}").to_lowercase(),
                                     "new_evidence_count": inserted,
                                     "new_evidence": new_listings,
-                                    "worker_digest": note,
+                                    "worker_handoff": handoff_json,
+                                    "worker_digest": handoff.as_ref().map(|h| &h.summary),
                                     "tool_errors": error,
                                     "total_evidence": {
                                         "rag": store.count_channel(Channel::Rag),
@@ -555,13 +561,13 @@ pub async fn run_llm_orchestrated_turn(
                             item_count: 0,
                             error: Some(e.to_string()),
                         });
-                        channel_notes.push(super::types::ChannelNote {
-                            channel: *channel,
-                            status: PackStatus::Error,
-                            item_count: 0,
-                            note: None,
-                            error: Some(e.to_string()),
-                        });
+                        channel_notes.push(ChannelNote::with_handoff(
+                            *channel,
+                            PackStatus::Error,
+                            0,
+                            None,
+                            Some(e.to_string()),
+                        ));
                         tool_msgs.push((
                             call_id.clone(),
                             tool_result_msg(

@@ -20,7 +20,7 @@ use super::store::EvidenceStore;
 use super::types::{
     Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
 };
-use super::workers::{channel_note_from_run, finalize_answer_evidence, tool_failures};
+use super::workers::{finalize_answer_evidence, tool_failures, worker_handoff_from_run};
 use crate::capabilities::CapabilitySet;
 
 /// Abstraction so tests can mock channel + chat runs without LLM.
@@ -121,13 +121,13 @@ pub(crate) async fn dispatch_channel(
                     item_count: inserted,
                     error: error.clone(),
                 },
-                note: ChannelNote {
+                note: ChannelNote::with_handoff(
                     channel,
                     status,
-                    item_count: inserted,
-                    note: channel_note_from_run(&run),
+                    inserted,
+                    worker_handoff_from_run(&run),
                     error,
-                },
+                ),
             }
         }
         Err(e) => {
@@ -144,13 +144,13 @@ pub(crate) async fn dispatch_channel(
                     item_count: 0,
                     error: Some(e.to_string()),
                 },
-                note: ChannelNote {
+                note: ChannelNote::with_handoff(
                     channel,
-                    status: PackStatus::Error,
-                    item_count: 0,
-                    note: None,
-                    error: Some(e.to_string()),
-                },
+                    PackStatus::Error,
+                    0,
+                    None,
+                    Some(e.to_string()),
+                ),
             }
         }
     }
@@ -291,10 +291,18 @@ impl OrchestratorExecutor for AgentServiceExecutor {
             // internal hand-off; the chat exit writes the user answer (Option B).
             parts.push(format!(
                 "## Task brief (orchestrator)\n{}\n\n\
-                 Execute only this brief. Your final message is an internal hand-off, \
-                 not the user-facing answer: keep it a concise evidence summary \
-                 (key facts with source pointers, bullet points); another agent \
-                 writes the user answer from your evidence.",
+                 Execute only this brief. Your final message is an **internal hand-off**, \
+                 not the user-facing answer — another agent writes the user answer.\n\n\
+                 Output **one JSON object only** (no markdown fence, no prose outside JSON):\n\
+                 {{\n\
+                   \"schema_version\": \"internal_worker_handoff_v1\",\n\
+                   \"summary\": \"concise channel understanding (what you found)\",\n\
+                   \"key_facts\": [{{\"claim\": \"…\", \"evidence\": [\"chunk_id or pointer\"]}}],\n\
+                   \"coverage\": \"full|partial|insufficient\",\n\
+                   \"gaps\": [\"what you could not find / sections not covered\"]\n\
+                 }}\n\
+                 Rules: `coverage=full` only when the brief is fully covered; list real gaps; \
+                 evidence pointers must come from your tool results.",
                 brief.goal
             ));
             req.metadata.insert(
@@ -683,7 +691,11 @@ mod tests {
             parts
                 .iter()
                 .filter_map(|p| p.as_str())
-                .any(|s| s.contains("brief goal text") && s.contains("internal hand-off")),
+                .any(|s| {
+                    s.contains("brief goal text")
+                        && s.contains("internal hand-off")
+                        && s.contains("internal_worker_handoff_v1")
+                }),
             "brief part missing: {parts:?}"
         );
     }
