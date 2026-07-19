@@ -755,6 +755,7 @@ async fn realistic_corpus_full_eval() {
             "citations": chat.citations.clone(),
             "sources": chat.sources.clone(),
             "tool_results_count": chat.tool_results.len(),
+            "mode_debug": chat.mode_debug,
         })) {
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/e2e_output/realistic_corpus_full_eval");
