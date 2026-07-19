@@ -120,6 +120,30 @@ adr-0004 / adr-0009 / consulting_platform / consulting_compensation / **consulti
 - 加载测试：`cargo test -p rag_quality --lib`（43 绿）；编译检查：`cargo test -p app --test product_e2e --features product-e2e --no-run`
 - 相关交接：`docs/engineering/ORCHESTRATOR_HANDOFF_2026-07-18.md`（编排器线，已收尾至 R8）
 
+### 6.1 测试身份无限额（`e2e` 内部档 · 2026-07-20）
+
+**评估结论：可实现，且不必改产品收银台。**
+
+| 层级 | 机制 | 无限额语义 |
+|---|---|---|
+| 滚动 5h/7d（撞 429 的主因） | `usage_limit_plan_policies` / `usage_limit_user_overrides` | **`rolling_*=0` → `UsageLimitService` 不 hard-block**（已有 enterprise 先例） |
+| 月度 metric | `quota_limits` | **无 `e2e` 行 → hard_limit=None → 月度 always allow** |
+| 身份 | 固定 `DEFAULT_TEST_USER_ID=00000000-…-0001` | 与语料缓存/Milvus 前缀一致；**复用已灌库，不换身份**（符合规则 3：不另开号绕配额） |
+
+**已落地：**
+
+1. PG 已授予：plan `e2e` 0/0 + user override 0/0 + active subscription `plan_id=e2e`（`billing_provider=creem` 仅满足 CHECK）。
+2. 幂等 SQL：`avrag-rs/scripts/grant-e2e-unlimited-quota.sql`
+3. runner 入口每次 `realistic_corpus_full_eval` 启动调用 `TestContext::grant_e2e_unlimited_quota`（再 seed 一次）。
+
+**不会：** 改 free/plus/pro 默认；关闭全局 `USAGE_LIMIT_ENFORCEMENT`；破坏 `quota_boundary` 测试（它们用随机 free 用户）。
+
+```bash
+# 手工重放（一般不必，runner 会自动做）
+psql 'postgres://avrag:avrag@127.0.0.1:5432/avrag_rs_e2e_smoke' \
+  -v ON_ERROR_STOP=1 -f avrag-rs/scripts/grant-e2e-unlimited-quota.sql
+```
+
 ## 7. 待办（按优先级）
 
 1. r8 起逐题诊断：首个失败题 → 读 dump/mode_debug → 区分 worker 无产出 / chat 未引用 / 语料形态 / 评测口径 → 修复续跑。
@@ -135,6 +159,6 @@ adr-0004 / adr-0009 / consulting_platform / consulting_compensation / **consulti
 |---|---|
 | 集版本 | `4.0.0-orchestrator-groups` / 143 题（`8e3e76e`） |
 | 灌库 | 3/10 可复用（已缓存）；7/10 待 r8 补灌 |
-| 当前阻塞 | 配额窗口（01:04 恢复，r8 @01:12） |
+| 测试身份配额 | **`e2e` 无限额已授予**（§6.1）；可立刻续跑，不必等 5h 窗口 |
 | 核心疑点 | RAG worker 取证系统性失效（§5） |
-| 下一动作 | r8 启动确认（01:22）→ 逐题 fail-fast 循环 |
+| 下一动作 | 带 `E2E_FAIL_FAST=1` + 默认复用缓存 从 `E2E_START_AT=66` 续跑 |

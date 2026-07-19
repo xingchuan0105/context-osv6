@@ -265,4 +265,105 @@ impl TestContext {
         .await?;
         Ok(())
     }
+
+    /// Grant the fixed realistic-corpus identity the internal **`e2e` plan**:
+    /// rolling 5h/7d limits = 0 (unlimited in `UsageLimitService`), active
+    /// subscription `plan_id=e2e`, and a user override belt-and-suspenders.
+    ///
+    /// Product checkout never lists `e2e` (only free/plus/pro). Monthly
+    /// `quota_limits` has no `e2e` rows → `hard_limit=None` → monthly check
+    /// always allows. Does **not** disable enforcement for other identities
+    /// (quota_boundary tests still use free + unique users).
+    ///
+    /// Idempotent; safe to call every `realistic_corpus_full_eval` start.
+    pub async fn grant_e2e_unlimited_quota(&self, user_id: &str) -> anyhow::Result<()> {
+        use sqlx::Connection;
+        let uid = Uuid::parse_str(user_id)?;
+        // Single connection so set_config(super_admin) sticks for the whole grant.
+        let mut conn = sqlx::PgConnection::connect(&self.pg_url).await?;
+        sqlx::query("SELECT set_config('app.current_role', 'super_admin', false)")
+            .execute(&mut conn)
+            .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO usage_limit_plan_policies
+                (plan_id, rolling_5h_limit_units, rolling_7d_limit_units, enabled)
+            VALUES ('e2e', 0, 0, true)
+            ON CONFLICT (plan_id) DO UPDATE
+            SET rolling_5h_limit_units = 0,
+                rolling_7d_limit_units = 0,
+                enabled = true,
+                updated_at = now()
+            "#,
+        )
+        .execute(&mut conn)
+        .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, email)
+            VALUES ($1, $2)
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(uid)
+        .bind(format!("{user_id}@local.dev"))
+        .execute(&mut conn)
+        .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO usage_limit_user_overrides
+                (user_id, rolling_5h_limit_units, rolling_7d_limit_units, enabled)
+            VALUES ($1, 0, 0, true)
+            ON CONFLICT (user_id) DO UPDATE
+            SET rolling_5h_limit_units = 0,
+                rolling_7d_limit_units = 0,
+                enabled = true,
+                updated_at = now()
+            "#,
+        )
+        .bind(uid)
+        .execute(&mut conn)
+        .await?;
+
+        // Prefer flipping any existing active sub; else insert one.
+        let updated = sqlx::query(
+            r#"
+            UPDATE subscriptions
+            SET plan_id = 'e2e',
+                status = 'active',
+                current_period_end = now() + interval '10 years',
+                updated_at = now()
+            WHERE user_id = $1 AND status = 'active'
+            "#,
+        )
+        .bind(uid)
+        .execute(&mut conn)
+        .await?
+        .rows_affected();
+
+        if updated == 0 {
+            sqlx::query(
+                r#"
+                INSERT INTO subscriptions (
+                    user_id, plan_id, status, billing_provider,
+                    current_period_start, current_period_end, cancel_at_period_end
+                ) VALUES (
+                    $1, 'e2e', 'active', 'creem',
+                    now() - interval '1 day', now() + interval '10 years', false
+                )
+                "#,
+            )
+            .bind(uid)
+            .execute(&mut conn)
+            .await?;
+        }
+
+        eprintln!(
+            "[e2e-quota] granted plan=e2e + override 0/0 (unlimited rolling) to user={user_id}"
+        );
+        Ok(())
+    }
 }

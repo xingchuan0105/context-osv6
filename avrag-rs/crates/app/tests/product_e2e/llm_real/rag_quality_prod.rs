@@ -526,6 +526,12 @@ async fn realistic_corpus_full_eval() {
     ));
     // Use the PDF profile for longer ingestion timeout (large corpus).
     let mut ctx = TestContext::new_with_real_llm_pdf_persistent_corpus(identity, &infra).await;
+    // Fixed realistic-corpus identity gets internal plan `e2e` (unlimited rolling
+    // 5h/7d). Reuses already-ingested docs; does not change free-tier product
+    // defaults for other users. See grant_e2e_unlimited_quota docs.
+    ctx.grant_e2e_unlimited_quota(crate::product_e2e::DEFAULT_TEST_USER_ID)
+        .await
+        .expect("grant e2e unlimited quota for fixed test identity");
 
     let corpus_files = [
         ("thesis_y_refrigeration.txt", 600),         // 52K chars, thesis
