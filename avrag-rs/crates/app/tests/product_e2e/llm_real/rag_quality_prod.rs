@@ -499,15 +499,17 @@ fn resolve_doc_scope(hint: &str, scope_keys: &[&str], doc_ids: &[String]) -> Vec
 async fn realistic_corpus_full_eval() {
     super::require_nightly_suite();
 
+    // Fixed identity → stable Milvus collection prefix + PG owner across runs,
+    // which is what makes corpus reuse possible:
+    // - ingest once with E2E_PRESERVE_MILVUS_ON_DROP=1 → cache written;
+    // - rerun with E2E_REUSE_CORPUS=1 → ingestion skipped entirely;
+    // - E2E_START_AT=N → resume at question N (fail-fast iteration loop).
+    let identity = Some((
+        crate::product_e2e::DEFAULT_TEST_ORG_ID.to_string(),
+        crate::product_e2e::DEFAULT_TEST_USER_ID.to_string(),
+    ));
     // Use the PDF profile for longer ingestion timeout (large corpus).
-    let mut ctx = TestContext::new_with_real_llm_pdf().await;
-
-    // --- Upload all 7 corpus files to a single notebook ---
-    let notebook = ctx
-        .create_workspace("rag-quality-realistic-corpus")
-        .await
-        .expect("create notebook");
-    let workspace_id = notebook.id.clone();
+    let mut ctx = TestContext::new_with_real_llm_pdf_with_identity(identity).await;
 
     let corpus_files = [
         ("thesis_y_refrigeration.txt", 600),         // 52K chars, thesis
@@ -536,34 +538,78 @@ async fn realistic_corpus_full_eval() {
         "craftsman",
     ];
 
+    let cache_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/e2e_output/realistic_corpus_cache.json");
     let mut doc_ids: Vec<String> = Vec::new();
-    for (filename, timeout_secs) in &corpus_files {
-        eprintln!("[realistic_corpus] uploading {filename} ...");
-        let upload = ctx
-            .upload_document_to_notebook(filename, &workspace_id)
-            .await
-            .unwrap_or_else(|e| panic!("upload {filename}: {e}"));
-        let status = ctx
-            .wait_for_ingestion(&upload.document_id, Duration::from_secs(*timeout_secs))
-            .await
-            .unwrap_or_else(|e| panic!("wait_for_ingestion {filename}: {e}"));
+    let workspace_id = if std::env::var("E2E_REUSE_CORPUS").is_ok()
+        && let Ok(raw) = std::fs::read_to_string(&cache_path)
+        && let Ok(cache) = serde_json::from_str::<serde_json::Value>(&raw)
+    {
+        eprintln!("[realistic_corpus] E2E_REUSE_CORPUS: reusing cached corpus (ingestion skipped)");
+        doc_ids = cache["doc_ids"]
+            .as_array()
+            .expect("cache doc_ids")
+            .iter()
+            .map(|v| v.as_str().expect("doc id str").to_string())
+            .collect();
         assert_eq!(
-            status,
-            DocumentStatus::Completed,
-            "ingestion failed for {filename}"
+            doc_ids.len(),
+            corpus_files.len(),
+            "corpus cache doc count mismatch — delete cache and re-ingest"
         );
-        eprintln!(
-            "[realistic_corpus] {filename} ingested (doc_id={})",
-            upload.document_id
+        cache["workspace_id"]
+            .as_str()
+            .expect("cache workspace_id")
+            .to_string()
+    } else {
+        // --- Upload all corpus files to a single notebook ---
+        let notebook = ctx
+            .create_workspace("rag-quality-realistic-corpus")
+            .await
+            .expect("create notebook");
+        let workspace_id = notebook.id.clone();
+        for (filename, timeout_secs) in &corpus_files {
+            eprintln!("[realistic_corpus] uploading {filename} ...");
+            let upload = ctx
+                .upload_document_to_notebook(filename, &workspace_id)
+                .await
+                .unwrap_or_else(|e| panic!("upload {filename}: {e}"));
+            let status = ctx
+                .wait_for_ingestion(&upload.document_id, Duration::from_secs(*timeout_secs))
+                .await
+                .unwrap_or_else(|e| panic!("wait_for_ingestion {filename}: {e}"));
+            assert_eq!(
+                status,
+                DocumentStatus::Completed,
+                "ingestion failed for {filename}"
+            );
+            eprintln!(
+                "[realistic_corpus] {filename} ingested (doc_id={})",
+                upload.document_id
+            );
+            doc_ids.push(upload.document_id);
+        }
+        assert_eq!(
+            doc_ids.len(),
+            corpus_files.len(),
+            "should have {} documents ingested",
+            corpus_files.len()
         );
-        doc_ids.push(upload.document_id);
-    }
-    assert_eq!(
-        doc_ids.len(),
-        corpus_files.len(),
-        "should have {} documents ingested",
-        corpus_files.len()
-    );
+        if let Some(parent) = cache_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(
+            &cache_path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "workspace_id": workspace_id,
+                "doc_ids": doc_ids,
+            }))
+            .expect("serialize corpus cache"),
+        )
+        .expect("write corpus cache");
+        eprintln!("[realistic_corpus] corpus cached → {}", cache_path.display());
+        workspace_id
+    };
 
     // --- Load the realistic golden set ---
     let golden_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -587,10 +633,22 @@ async fn realistic_corpus_full_eval() {
     let mut failures: Vec<(String, String)> = Vec::new();
     // E2E_FAIL_FAST=1: stop at the first failing case (per-question iteration).
     let fail_fast = std::env::var("E2E_FAIL_FAST").is_ok();
+    // E2E_START_AT=N: resume at question N (1-based) — skip already-passed
+    // questions when iterating on a fail-fast stop.
+    let start_at: usize = std::env::var("E2E_START_AT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    if start_at > 1 {
+        eprintln!("[realistic_corpus] E2E_START_AT={start_at}: skipping first {} questions", start_at - 1);
+    }
     let mut per_subset_stats: std::collections::HashMap<String, (usize, usize, f64)> =
         std::collections::HashMap::new();
 
     for (idx, example) in examples.iter().enumerate() {
+        if idx + 1 < start_at {
+            continue;
+        }
         let subset_name = dataset
             .subsets
             .iter()

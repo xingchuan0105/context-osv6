@@ -83,7 +83,11 @@ impl Drop for TestContext {
             setup::release_shared_postgres(&pg);
         }
         if let Some(ref prefix) = self.milvus_collection_prefix {
-            setup::sync_drop_milvus_collections(prefix);
+            // Corpus-reuse runs (E2E_PRESERVE_MILVUS_ON_DROP=1) keep vectors so
+            // the next run can skip ingestion entirely.
+            if std::env::var("E2E_PRESERVE_MILVUS_ON_DROP").is_err() {
+                setup::sync_drop_milvus_collections(prefix);
+            }
         }
         if let Some(milvus) = self.shared_milvus.take() {
             setup::release_shared_milvus(&milvus);
