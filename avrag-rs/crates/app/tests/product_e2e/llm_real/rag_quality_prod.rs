@@ -515,7 +515,7 @@ async fn realistic_corpus_full_eval() {
         ("adr-0009-codegen-sandbox-bridge.md", 120), // 13.6KB MD
         ("consulting_platform_network_effects.txt", 300), // 18K chars
         ("consulting_compensation_design.txt", 120), // 3K chars
-        ("huawei_ipd_370_activities.txt", 120),      // 54K chars, table as TSV
+        ("huawei_ipd_370_activities.txt", 300),      // 54K chars, table as TSV
         ("baiyao_it_planning.txt", 300),             // 20K chars, PDF->TXT
         // v4 增量语料（智遥咨询 3 篇，OneDrive 原件已入库 fixtures）
         ("consulting_rbf_drc.txt", 120),             // 4K chars, 滴灌通&RBF
