@@ -104,12 +104,12 @@
 
 ## 7. 下一步（按优先级）
 
-1. **提交拆分**：orchestrator 批次（app-chat orchestrator、rag-core tools+response、contracts、prompts、frontend workspace 三文件、docs）单独一个 commit；billing 不碰。
-2. **coverage 显式化**（治方差的真抓手，两选一或都做）：
-   - prompt 层：`orchestrator-base.md` 对对比/评价类查询的 instruction 加维度覆盖要求（对照"文档定向"段逐章核对）；
-   - 结构化 worker 交接 `{summary, key_facts, coverage, gaps}`（欠账 §8 已列，coverage 字段让缺口可见）。
-3. **triplet**：如需 `graph_search`，`INGESTION_TRIPLET_ENABLED=1` + 重新入库该文档。
-4. **安全**：本次会话中 `TRIPLET_LLM_API_KEY` 曾被打印到对话记录，**建议轮换该 key**（deepseek）。
+1. ~~**提交拆分**~~ **Done 2026-07-19**：`6fc8977` orchestrator V2 批次；`2dc00e3` Alipay billing 批次。
+2. ~~**coverage 显式化**~~ **Done 2026-07-19**：
+   - **1a** `orchestrator-base.md`：coverage/gaps 驱动 re-dispatch；对比类 query 要求对照文档定向逐章核对。
+   - **1b** `WorkerHandoff` / `internal_worker_handoff_v1`：`workers::parse_worker_handoff` + chat brief 渲染 + delegate 结果字段；free-form → `coverage=partial`。
+3. ~~**triplet**~~ **Done 2026-07-19**：`INGESTION_TRIPLET_ENABLED=1`；文档 `886de4b1-…` reindex 完成，`entity_count=254` / `relation_count=195` / `graph_passage_count=195`（先前为 0）。
+4. ~~**安全 key 轮换（配置侧）**~~ **Done 2026-07-19**：`TRIPLET_LLM_API_KEY` 已改为与 `INGESTION_LLM_API_KEY` 同值（配置不再使用曾暴露的独立 secret）。**仍需你在 DeepSeek 控制台 revoke 旧 TRIPLET 专用 key**（平台侧失效，本地无法代办）。
 5. worker 温度（0.3 → 0~0.1）：可选的战术手段，单独做、复测两轮对比方差；未做。
 
 ## 8. 环境与运行
@@ -124,11 +124,12 @@
 
 ## 9. 欠账（明确延期）
 
-- Worker 结构化交接契约 `{summary, key_facts, coverage, gaps}`（V2 设计已定，未实现）
+- ~~Worker 结构化交接契约~~（2026-07-19 已实现；可继续加 eval 看模型是否稳定吐 JSON）
 - Chat 出口流式化（当前收集后整段重放，分钟级任务有"冻结感"）
 - search worker 空转预算行为（连续空结果应更早收敛）
 - 编排器/worker 温度决策（§7.5）
 - V3：引用校验 agent、对比类查询 eval 集、chat 成 loop（可选）
+- **DeepSeek 平台 revoke 旧 TRIPLET key**（见 §7.4）
 
 ## 10. 不要踩的坑（本线实测）
 
