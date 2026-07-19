@@ -187,6 +187,24 @@ impl<'a> BillingApp<'a> {
         avrag_billing::handle_create_portal(store, UserId::from(actor_id.into_uuid())).await
     }
 
+    pub async fn get_order_status(
+        &self,
+        order_id: &str,
+    ) -> ApiResponse<avrag_billing::OrderStatusResponse> {
+        let Some(store) = self.billing_store() else {
+            return Self::postgres_not_configured();
+        };
+        let Some(actor_id) = self.auth.actor_id() else {
+            return Self::auth_required();
+        };
+        avrag_billing::handle_get_order_status(
+            store,
+            UserId::from(actor_id.into_uuid()),
+            order_id,
+        )
+        .await
+    }
+
     pub async fn handle_webhook(
         &self,
         provider: avrag_billing::BillingProvider,

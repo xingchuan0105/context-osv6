@@ -228,6 +228,46 @@ impl BillingStorePort for PgBillingStoreAdapter {
         Ok(())
     }
 
+    async fn load_alipay_order_status(
+        &self,
+        user_id: UserId,
+        out_trade_no: &str,
+    ) -> Result<Option<(String, String)>, AppError> {
+        let mut tx = self
+            .repo
+            .raw()
+            .begin()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        billing_sql::set_current_user(tx.as_mut(), &user_id.to_string())
+            .await
+            .map_err(map_err)?;
+        let row = sqlx::query(
+            r#"
+            select status, plan_id
+            from billing_orders
+            where provider = 'alipay' and provider_order_id = $1 and user_id = $2
+            "#,
+        )
+        .bind(out_trade_no)
+        .bind(user_id.into_uuid())
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        match row {
+            Some(row) => Ok(Some((
+                row.try_get::<String, _>("status")
+                    .map_err(|error| AppError::internal(error.to_string()))?,
+                row.try_get::<String, _>("plan_id")
+                    .map_err(|error| AppError::internal(error.to_string()))?,
+            ))),
+            None => Ok(None),
+        }
+    }
+
     async fn claim_webhook_with_lease(
         &self,
         provider: BillingProvider,
@@ -237,7 +277,6 @@ impl BillingStorePort for PgBillingStoreAdapter {
             .await
             .map_err(map_err)
     }
-
     async fn update_webhook_lease_status(
         &self,
         provider: BillingProvider,

@@ -101,4 +101,28 @@ export const pricingMessages = {
     zh: "下载客户端",
     en: "Download client",
   },
+  alipayQrTitle: {
+    zh: "支付宝扫码支付",
+    en: "Pay with Alipay",
+  },
+  alipayQrScanHint: {
+    zh: "请打开支付宝 App 扫码支付",
+    en: "Open the Alipay app and scan the QR code to pay",
+  },
+  alipayQrWaiting: {
+    zh: "等待支付确认…",
+    en: "Waiting for payment confirmation…",
+  },
+  alipayQrPaid: {
+    zh: "支付成功",
+    en: "Payment successful",
+  },
+  alipayQrCancel: {
+    zh: "取消支付",
+    en: "Cancel payment",
+  },
+  alipayQrTimeout: {
+    zh: "支付超时，请重新发起支付",
+    en: "Payment timed out. Please start a new payment.",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

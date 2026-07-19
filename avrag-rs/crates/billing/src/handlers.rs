@@ -8,8 +8,8 @@ use crate::core::{
     load_usage_window,
 };
 use crate::service::{
-    BillingService, CheckoutResponse, CreateCheckoutRequest, PortalResponse, QuotaDecision,
-    SubscriptionResponse, UsageResponse,
+    BillingService, CheckoutResponse, CreateCheckoutRequest, OrderStatusResponse, PortalResponse,
+    QuotaDecision, SubscriptionResponse, UsageResponse,
 };
 use crate::types::{
     CreateUsageExportRequest, UsageExportAccepted, UsageExportStatusResponse,
@@ -93,6 +93,16 @@ pub async fn handle_create_portal(
     user_id: UserId,
 ) -> ApiResponse<PortalResponse> {
     BillingService::shared().create_portal(store, user_id).await
+}
+
+pub async fn handle_get_order_status(
+    store: Arc<dyn BillingStorePort>,
+    user_id: UserId,
+    order_id: &str,
+) -> ApiResponse<OrderStatusResponse> {
+    BillingService::shared()
+        .get_order_status(store, user_id, order_id)
+        .await
 }
 
 pub async fn handle_webhook(

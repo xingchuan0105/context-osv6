@@ -299,3 +299,18 @@ export async function createCheckoutSession(token: string, requestPayload: Check
   );
 }
 
+export type BillingOrderStatusResponse = {
+  order_id: string;
+  status: "pending" | "paid";
+  plan_id: string;
+};
+
+export async function getBillingOrderStatus(token: string, orderId: string) {
+  return requestEnvelope<BillingOrderStatusResponse>(
+    `/api/v1/billing/orders/${orderId}`,
+    { method: "GET" },
+    token,
+    "Failed to load billing order",
+  );
+}
+

@@ -70,9 +70,9 @@ impl BillingConfig {
             creem_product_desktop_pro: std::env::var("CREEM_PRODUCT_DESKTOP_PRO")
                 .unwrap_or_default(),
             creem_price_pro: std::env::var("CREEM_PRICE_PRO")
-                .unwrap_or_else(|_| "5.99".to_string()),
+                .unwrap_or_else(|_| "19.00".to_string()),
             creem_price_plus: std::env::var("CREEM_PRICE_PLUS")
-                .unwrap_or_else(|_| "3.19".to_string()),
+                .unwrap_or_else(|_| "9.00".to_string()),
 
             // Alipay Config
             alipay_app_id: std::env::var("ALIPAY_APP_ID").unwrap_or_default(),
@@ -85,9 +85,9 @@ impl BillingConfig {
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
             alipay_price_pro: std::env::var("ALIPAY_PRICE_PRO")
-                .unwrap_or_else(|_| "39.00".to_string()),
+                .unwrap_or_else(|_| "129.00".to_string()),
             alipay_price_plus: std::env::var("ALIPAY_PRICE_PLUS")
-                .unwrap_or_else(|_| "19.00".to_string()),
+                .unwrap_or_else(|_| "49.00".to_string()),
             alipay_price_desktop_standard: std::env::var("ALIPAY_PRICE_DESKTOP_STANDARD")
                 .unwrap_or_else(|_| "299.00".to_string()),
             alipay_price_desktop_pro: std::env::var("ALIPAY_PRICE_DESKTOP_PRO")

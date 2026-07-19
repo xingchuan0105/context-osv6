@@ -97,3 +97,9 @@
   color: hsl(var(--destructive));
   font-size: var(--font-size-caption-strong);
 }
+
+.checkoutNotice {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-caption-strong);
+}

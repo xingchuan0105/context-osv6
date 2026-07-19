@@ -42,7 +42,9 @@ pub fn build_unified_agent_service(
         agent = agent.with_usage_observer(observer);
     }
 
-    Arc::new(UnifiedAgentService::new(Box::new(agent)))
+    Arc::new(
+        UnifiedAgentService::new(Box::new(agent)).with_orchestrator_llm(llm_client),
+    )
 }
 
 pub fn make_embedding_client(

@@ -28,6 +28,7 @@ pub(crate) fn router() -> Router<AppState> {
             "/billing/portal-session",
             axum::routing::post(create_portal),
         )
+        .route("/billing/orders/{order_id}", get(get_order_status))
 }
 
 async fn get_plans(
@@ -65,6 +66,13 @@ async fn create_portal(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::PortalResponse>> {
     Json(state.billing_api().create_portal().await)
+}
+
+async fn get_order_status(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(order_id): Path<String>,
+) -> Json<ApiResponse<avrag_billing::OrderStatusResponse>> {
+    Json(state.billing_api().get_order_status(&order_id).await)
 }
 
 #[derive(Deserialize)]

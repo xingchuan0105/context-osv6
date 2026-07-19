@@ -37,11 +37,32 @@ fn billing_config_price_labels_without_stripe() {
 
     let config = BillingConfig::from_env();
 
-    // Defaults from from_env when Alipay/Creem price envs empty:
+    // Defaults from from_env when Alipay/Creem price envs empty (frozen pricing: Pro ¥129 / $19).
     assert_eq!(
         config.price_label_for_plan(PLAN_PRO),
-        "¥39.00 / 月 · $5.99 / 月"
+        "¥129.00 / 月 · $19.00 / 月"
     );
+}
+
+#[test]
+fn percent_decode_preserves_multibyte_utf8() {
+    use crate::service::percent_decode;
+
+    // "中" percent-encoded (as Alipay notify form params arrive).
+    assert_eq!(percent_decode("%E4%B8%AD%E6%96%87"), "中文");
+    assert_eq!(percent_decode("a+b%20c"), "a b c");
+    // Invalid sequences pass through literally.
+    assert_eq!(percent_decode("100%zz%"), "100%zz%");
+    assert_eq!(percent_decode("plain"), "plain");
+}
+
+#[test]
+fn alipay_amount_compare_uses_cents() {
+    // process.rs compares notify total_amount against billing_orders.amount_cents.
+    assert_eq!(BillingConfig::decimal_price_to_cents("129.00"), 12900);
+    assert_eq!(BillingConfig::decimal_price_to_cents("49.00"), 4900);
+    assert_eq!(BillingConfig::decimal_price_to_cents("0.01"), 1);
+    assert_eq!(BillingConfig::decimal_price_to_cents(""), 0);
 }
 
 #[test]

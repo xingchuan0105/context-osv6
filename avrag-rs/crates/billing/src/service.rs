@@ -30,6 +30,13 @@ pub struct CheckoutResponse {
 }
 
 #[derive(Serialize)]
+pub struct OrderStatusResponse {
+    pub order_id: String,
+    pub status: String,
+    pub plan_id: String,
+}
+
+#[derive(Serialize)]
 pub struct PortalResponse {
     pub url: String,
 }
@@ -259,6 +266,29 @@ impl BillingService {
         }
     }
 
+    /// Poll-friendly order status for the Alipay F2F (QR) checkout flow: the
+    /// frontend shows the QR code and polls until the webhook marks the order paid.
+    pub async fn get_order_status(
+        &self,
+        store: Arc<dyn BillingStorePort>,
+        user_id: UserId,
+        order_id: &str,
+    ) -> ApiResponse<OrderStatusResponse> {
+        let order_id = order_id.trim();
+        if order_id.is_empty() {
+            return ApiResponse::err("billing_order_invalid", "order id is required");
+        }
+        match store.load_alipay_order_status(user_id, order_id).await {
+            Ok(Some((status, plan_id))) => ApiResponse::ok(OrderStatusResponse {
+                order_id: order_id.to_string(),
+                status,
+                plan_id,
+            }),
+            Ok(None) => ApiResponse::err("billing_order_not_found", "order not found"),
+            Err(error) => ApiResponse::err("billing_order_status_failed", &error.to_string()),
+        }
+    }
+
     pub async fn handle_webhook(
         &self,
         store: Arc<dyn BillingStorePort>,
@@ -352,6 +382,20 @@ impl BillingService {
             return ApiResponse::err("billing_webhook_invalid", "missing event/notify id");
         }
 
+        // Alipay: the notify must target *this* app (anti spoofing / cross-merchant replay).
+        if provider == BillingProvider::Alipay {
+            let payload_app_id = json
+                .get("app_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            if payload_app_id.is_empty() || payload_app_id != config.alipay_app_id.trim() {
+                return ApiResponse::err(
+                    "billing_webhook_invalid",
+                    "alipay notify app_id mismatch",
+                );
+            }
+        }
+
         // 3. Lease-based idempotence check
         let claim = match claim_webhook_with_lease(store.clone(), provider, &event_id).await {
             Ok(claim) => claim,
@@ -416,37 +460,31 @@ impl BillingService {
     }
 }
 
-fn percent_decode(s: &str) -> String {
-    let mut res = String::new();
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let h1 = chars.next();
-            let h2 = chars.next();
-            if let (Some(a), Some(b)) = (h1, h2) {
-                if let Ok(hex) = u8::from_str_radix(&format!("{}{}", a, b), 16) {
-                    res.push(hex as char);
-                } else {
-                    res.push('%');
-                    res.push(a);
-                    res.push(b);
-                }
-            } else {
-                res.push('%');
-                if let Some(a) = h1 {
-                    res.push(a);
-                }
-                if let Some(b) = h2 {
-                    res.push(b);
-                }
+/// Byte-level percent-decoding so multi-byte UTF-8 values (e.g. Chinese
+/// subjects in Alipay notify params) survive signature verification.
+pub(crate) fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'%' && i + 2 < bytes.len() {
+            if let Ok(hex) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(hex);
+                i += 3;
+                continue;
             }
-        } else if c == '+' {
-            res.push(' ');
+            out.push(b);
+            i += 1;
+        } else if b == b'+' {
+            out.push(b' ');
+            i += 1;
         } else {
-            res.push(c);
+            out.push(b);
+            i += 1;
         }
     }
-    res
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn webhook_db_unavailable(error: &anyhow::Error) -> bool {

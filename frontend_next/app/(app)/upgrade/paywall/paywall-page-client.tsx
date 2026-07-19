@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AlipayQrDialog } from "@/components/billing/AlipayQrDialog";
 import { PaywallModal } from "@/components/billing/PaywallModal";
 import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { billingApi } from "@/lib/billing/api";
@@ -14,6 +15,7 @@ import { createCheckoutSession } from "@/lib/settings/client";
 import { recordPaymentLegalAcceptance } from "@/lib/legal/client";
 import { describeAuthError } from "@/lib/auth/errors";
 import { useAuth } from "@/lib/auth/context";
+import { billingProviderForLocale, planPriceLabel } from "@/lib/billing/provider";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./paywall-page.module.css";
@@ -23,6 +25,12 @@ type PaywallLoadState =
   | { kind: "ready"; window: UsageWindowResponse; plans: BillingPlan[] }
   | { kind: "error" };
 
+type AlipaySession = {
+  qrCode: string;
+  orderId: string;
+  planId: string;
+};
+
 export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const auth = useAuth();
   const router = useRouter();
@@ -31,6 +39,7 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const [state, setState] = useState<PaywallLoadState>({ kind: "loading" });
   const [paymentConsented, setPaymentConsented] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [alipaySession, setAlipaySession] = useState<AlipaySession | null>(null);
 
   useEffect(() => {
     if (!ready || !enabled || !auth.token) {
@@ -103,8 +112,13 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     setCheckoutError("");
     try {
       await recordPaymentLegalAcceptance(auth.token, paymentConsented);
-      const checkout = await createCheckoutSession(auth.token, { plan_id: planId });
-      if (checkout.url) {
+      const checkout = await createCheckoutSession(auth.token, {
+        plan_id: planId,
+        provider: billingProviderForLocale(locale),
+      });
+      if (checkout.qr_code && checkout.order_id) {
+        setAlipaySession({ qrCode: checkout.qr_code, orderId: checkout.order_id, planId });
+      } else if (checkout.url) {
         router.push(checkout.url);
       }
     } catch (error) {
@@ -118,9 +132,18 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     }
   }
 
+  function handleAlipayPaid() {
+    setAlipaySession(null);
+    router.push("/dashboard");
+  }
+
   function handleContinueFree() {
     router.push("/dashboard");
   }
+
+  const alipayPlan = alipaySession
+    ? plans.find((plan) => plan.plan_id === alipaySession.planId)
+    : undefined;
 
   return (
     <>
@@ -137,6 +160,18 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
         <ConsentCheckbox onConsentChange={setPaymentConsented} />
         {checkoutError ? <p className={styles.errorText}>{checkoutError}</p> : null}
       </div>
+      {alipaySession && auth.token ? (
+        <AlipayQrDialog
+          token={auth.token}
+          qrCode={alipaySession.qrCode}
+          orderId={alipaySession.orderId}
+          planName={alipayPlan?.name ?? alipaySession.planId}
+          priceLabel={alipayPlan ? planPriceLabel(alipayPlan, locale) : ""}
+          locale={locale}
+          onPaid={handleAlipayPaid}
+          onCancel={() => setAlipaySession(null)}
+        />
+      ) : null}
     </>
   );
 }

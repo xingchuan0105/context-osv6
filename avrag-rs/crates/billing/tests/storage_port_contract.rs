@@ -7,7 +7,7 @@ use app_core::{
     WebhookClaim,
 };
 use async_trait::async_trait;
-use avrag_billing::handle_get_subscription;
+use avrag_billing::{handle_get_order_status, handle_get_subscription};
 use common::{AppError, UserId};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -16,7 +16,8 @@ use uuid::Uuid;
 fn billing_modules_do_not_call_storage_pg_escape_hatch() {
     let forbidden = concat!("storage.", "pg(");
     let sources = [
-        include_str!("../src/api.rs"),
+        include_str!("../src/service.rs"),
+        include_str!("../src/handlers.rs"),
         include_str!("../src/core.rs"),
         include_str!("../src/quota_service.rs"),
     ];
@@ -50,6 +51,8 @@ fn free_subscription(user_id: UserId) -> Subscription {
 #[derive(Clone, Default)]
 struct MemoryBillingStore {
     subscriptions: Arc<RwLock<HashMap<UserId, Subscription>>>,
+    /// out_trade_no → (user_id, status, plan_id)
+    alipay_orders: Arc<RwLock<HashMap<String, (UserId, String, String)>>>,
 }
 
 impl MemoryBillingStore {
@@ -135,12 +138,30 @@ impl BillingStorePort for MemoryBillingStore {
 
     async fn insert_pending_alipay_order(
         &self,
-        _user_id: UserId,
-        _out_trade_no: &str,
-        _plan_id: &str,
+        user_id: UserId,
+        out_trade_no: &str,
+        plan_id: &str,
         _amount_cents: i64,
     ) -> Result<(), AppError> {
+        self.alipay_orders.write().await.insert(
+            out_trade_no.to_string(),
+            (user_id, "pending".to_string(), plan_id.to_string()),
+        );
         Ok(())
+    }
+
+    async fn load_alipay_order_status(
+        &self,
+        user_id: UserId,
+        out_trade_no: &str,
+    ) -> Result<Option<(String, String)>, AppError> {
+        Ok(self
+            .alipay_orders
+            .read()
+            .await
+            .get(out_trade_no)
+            .filter(|(owner, _, _)| *owner == user_id)
+            .map(|(_, status, plan_id)| (status.clone(), plan_id.clone())))
     }
 
     async fn claim_webhook_with_lease(
@@ -228,4 +249,41 @@ async fn get_current_subscription_returns_stored_subscription() {
     let subscription = response.data.expect("subscription payload").subscription;
     assert_eq!(subscription.plan_id, PLAN_PRO);
     assert_eq!(subscription.id, "sub-contract-1");
+}
+
+#[tokio::test]
+async fn get_order_status_returns_pending_order_for_owner() {
+    let store = Arc::new(MemoryBillingStore::new());
+    let user_id = UserId::new(Uuid::new_v4());
+    store
+        .insert_pending_alipay_order(user_id, "trade-1", PLAN_PRO, 12900)
+        .await
+        .expect("seed pending order");
+
+    let response = handle_get_order_status(store, user_id, "trade-1").await;
+
+    assert!(response.ok);
+    let data = response.data.expect("order status payload");
+    assert_eq!(data.order_id, "trade-1");
+    assert_eq!(data.status, "pending");
+    assert_eq!(data.plan_id, PLAN_PRO);
+}
+
+#[tokio::test]
+async fn get_order_status_hides_other_users_orders() {
+    let store = Arc::new(MemoryBillingStore::new());
+    let owner = UserId::new(Uuid::new_v4());
+    let stranger = UserId::new(Uuid::new_v4());
+    store
+        .insert_pending_alipay_order(owner, "trade-2", PLAN_PRO, 12900)
+        .await
+        .expect("seed pending order");
+
+    let response = handle_get_order_status(store, stranger, "trade-2").await;
+
+    assert!(!response.ok);
+    assert_eq!(
+        response.error.as_ref().map(|e| e.code.as_str()),
+        Some("billing_order_not_found")
+    );
 }

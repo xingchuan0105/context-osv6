@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AlipayQrDialog } from "@/components/billing/AlipayQrDialog";
 import { PricingCards } from "@/components/billing/PricingCards";
 import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { createCheckoutSession } from "@/lib/settings/client";
@@ -12,9 +13,16 @@ import { useAuth } from "@/lib/auth/context";
 import type { BillingPlan } from "@/lib/billing/api";
 import { billingApi } from "@/lib/billing/api";
 import { MARKETING_BILLING_PLANS } from "@/lib/billing/publicPlans";
+import { billingProviderForLocale, planPriceLabel } from "@/lib/billing/provider";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./pricing.module.css";
+
+type AlipaySession = {
+  qrCode: string;
+  orderId: string;
+  planId: string;
+};
 
 export function PricingPageClient() {
   const auth = useAuth();
@@ -23,6 +31,8 @@ export function PricingPageClient() {
   const [plans, setPlans] = useState<BillingPlan[]>(MARKETING_BILLING_PLANS);
   const [paymentConsented, setPaymentConsented] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutNotice, setCheckoutNotice] = useState("");
+  const [alipaySession, setAlipaySession] = useState<AlipaySession | null>(null);
 
   useEffect(() => {
     void billingApi
@@ -37,10 +47,16 @@ export function PricingPageClient() {
     }
 
     setCheckoutError("");
+    setCheckoutNotice("");
     try {
       await recordPaymentLegalAcceptance(auth.token, paymentConsented);
-      const checkout = await createCheckoutSession(auth.token, { plan_id: planId });
-      if (checkout.url) {
+      const checkout = await createCheckoutSession(auth.token, {
+        plan_id: planId,
+        provider: billingProviderForLocale(locale),
+      });
+      if (checkout.qr_code && checkout.order_id) {
+        setAlipaySession({ qrCode: checkout.qr_code, orderId: checkout.order_id, planId });
+      } else if (checkout.url) {
         router.push(checkout.url);
       }
     } catch (error) {
@@ -53,6 +69,19 @@ export function PricingPageClient() {
       );
     }
   }
+
+  function handleAlipayPaid() {
+    setAlipaySession(null);
+    setCheckoutNotice(formatUiMessage(locale, "alipayQrPaid"));
+    void billingApi
+      .getPlans()
+      .then((response) => setPlans(response.plans))
+      .catch(() => {});
+  }
+
+  const alipayPlan = alipaySession
+    ? plans.find((plan) => plan.plan_id === alipaySession.planId)
+    : undefined;
 
   return (
     <div className={styles.page}>
@@ -78,7 +107,25 @@ export function PricingPageClient() {
               {checkoutError}
             </p>
           ) : null}
+          {checkoutNotice ? (
+            <p className={styles.checkoutNotice} role="status">
+              {checkoutNotice}
+            </p>
+          ) : null}
         </div>
+      ) : null}
+
+      {alipaySession && auth.token ? (
+        <AlipayQrDialog
+          token={auth.token}
+          qrCode={alipaySession.qrCode}
+          orderId={alipaySession.orderId}
+          planName={alipayPlan?.name ?? alipaySession.planId}
+          priceLabel={alipayPlan ? planPriceLabel(alipayPlan, locale) : ""}
+          locale={locale}
+          onPaid={handleAlipayPaid}
+          onCancel={() => setAlipaySession(null)}
+        />
       ) : null}
 
       <section className={styles.faq}>

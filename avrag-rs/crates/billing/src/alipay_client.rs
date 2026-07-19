@@ -89,9 +89,11 @@ impl AlipayClient {
     pub fn sign(&self, params: &[(String, String)]) -> Result<String> {
         let mut sorted = params.to_vec();
         sorted.sort_by(|a, b| a.0.cmp(&b.0));
+        // Request signing excludes ONLY `sign` itself — `sign_type` is part of
+        // the signed content (unlike notify verification, which excludes both).
         let data_to_sign = sorted
             .iter()
-            .filter(|(k, _)| k != "sign" && k != "sign_type")
+            .filter(|(k, _)| k != "sign")
             .map(|(k, v)| format!("{}={}", k, v))
             .collect::<Vec<_>>()
             .join("&");
@@ -109,6 +111,7 @@ impl AlipayClient {
     ) -> Result<()> {
         let mut sorted = params.to_vec();
         sorted.sort_by(|a, b| a.0.cmp(&b.0));
+        // Alipay async-notify verification excludes BOTH `sign` and `sign_type`.
         let data_to_sign = sorted
             .iter()
             .filter(|(k, _)| k != "sign" && k != "sign_type")
@@ -148,7 +151,11 @@ impl AlipayClient {
         })
         .to_string();
 
-        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        // Alipay expects Beijing time (UTC+8) regardless of server timezone.
+        let timestamp = chrono::Utc::now()
+            .with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).expect("UTC+8 is valid"))
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
 
         let mut params = vec![
             ("app_id".to_string(), self.config.alipay_app_id.clone()),
@@ -167,7 +174,10 @@ impl AlipayClient {
         let response = self
             .http
             .post(&self.config.alipay_gateway_url)
-            .form(&params)
+            // Alipay requires the common params (charset, sign, …) in the URL
+            // query string, not the POST form body — otherwise it answers
+            // "验签出错，请确认charset参数放在了URL查询字符串中".
+            .query(&params)
             .send()
             .await?;
 

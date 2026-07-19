@@ -90,6 +90,13 @@ pub trait BillingStorePort: Send + Sync {
         amount_cents: i64,
     ) -> Result<(), AppError>;
 
+    /// Returns `(status, plan_id)` for the user's own Alipay order, or `None` when absent.
+    async fn load_alipay_order_status(
+        &self,
+        user_id: UserId,
+        out_trade_no: &str,
+    ) -> Result<Option<(String, String)>, AppError>;
+
     async fn claim_webhook_with_lease(
         &self,
         provider: BillingProvider,

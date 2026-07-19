@@ -17,7 +17,8 @@ export type SiteLinkId =
   | "help"
   | "blog"
   | "why"
-  | "canju";
+  | "canju"
+  | "elo";
 
 type SiteLinkDef = {
   id: SiteLinkId;
@@ -70,6 +71,7 @@ export const EXTERNAL = {
   blog: "https://blog.contextlm.top",
   why: "https://whyimright.contextlm.top",
   canju: "https://canju.contextlm.top",
+  elo: "https://elo.contextlm.top",
   appLogin: () => appAbsoluteUrl(`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`),
   appDesktop: () => appAbsoluteUrl(APP_PATHS.desktop),
   appDesktopBuy: () => appAbsoluteUrl(APP_PATHS.desktopBuy),
@@ -132,6 +134,12 @@ export const SITE_LINKS: SiteLinkDef[] = [
     label: { zh: "象棋", en: "Xiangqi" },
     discovery: ["family_nav"],
   },
+  {
+    id: "elo",
+    href: EXTERNAL.elo,
+    label: { zh: "ELO-everything", en: "ELO-everything" },
+    discovery: ["family_nav"],
+  },
 ];
 
 export function siteLinkLabel(id: SiteLinkId, locale: SiteLocale = "zh"): string {
@@ -147,5 +155,6 @@ export function familyNavLinks(locale: SiteLocale = "zh"): Array<{ id: string; l
     { id: "blog", label: locale === "zh" ? "博客" : "Blog", href: EXTERNAL.blog },
     { id: "why", label: "Why I Am Right", href: EXTERNAL.why },
     { id: "canju", label: locale === "zh" ? "象棋" : "Xiangqi", href: EXTERNAL.canju },
+    { id: "elo", label: "ELO", href: EXTERNAL.elo },
   ];
 }

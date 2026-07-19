@@ -33,11 +33,12 @@ pub use types::{
 
 pub use handlers::{
     check_quota, handle_create_checkout, handle_create_portal, handle_create_usage_export,
-    handle_get_plans, handle_get_subscription, handle_get_usage, handle_get_usage_export,
-    handle_get_usage_forecast, handle_get_usage_history, handle_get_usage_window, handle_webhook,
+    handle_get_order_status, handle_get_plans, handle_get_subscription, handle_get_usage,
+    handle_get_usage_export, handle_get_usage_forecast, handle_get_usage_history,
+    handle_get_usage_window, handle_webhook,
 };
 pub use service::{
-    CheckoutResponse, CreateCheckoutRequest, PortalResponse, QuotaDecision,
+    CheckoutResponse, CreateCheckoutRequest, OrderStatusResponse, PortalResponse, QuotaDecision,
     SubscriptionResponse, UsageResponse,
 };
 

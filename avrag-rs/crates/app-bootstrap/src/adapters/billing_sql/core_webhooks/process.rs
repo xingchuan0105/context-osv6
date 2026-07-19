@@ -204,13 +204,30 @@ pub(super) async fn process_webhook_event(
                 let mut tx = repo.raw().begin().await?;
                 set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
 
-                let row = sqlx::query("SELECT user_id, plan_id FROM billing_orders WHERE provider = 'alipay' AND provider_order_id = $1")
+                let row = sqlx::query("SELECT user_id, plan_id, amount_cents FROM billing_orders WHERE provider = 'alipay' AND provider_order_id = $1")
                     .bind(out_trade_no)
                     .fetch_one(tx.as_mut())
                     .await?;
 
                 let user_id = row.try_get::<Uuid, _>("user_id")?;
                 let plan_id = row.try_get::<String, _>("plan_id")?;
+
+                // Anti-forgery: the paid amount must match the pending order we created.
+                let expected_cents = i64::from(row.try_get::<i32, _>("amount_cents")?);
+                let paid_cents = BillingConfig::decimal_price_to_cents(
+                    payload
+                        .get("total_amount")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(""),
+                );
+                if paid_cents <= 0 || paid_cents != expected_cents {
+                    bail!(
+                        "alipay amount mismatch for {}: notify total_amount={} cents vs order amount_cents={}",
+                        out_trade_no,
+                        paid_cents,
+                        expected_cents
+                    );
+                }
 
                 sqlx::query(
                     r#"
