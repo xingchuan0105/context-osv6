@@ -501,8 +501,11 @@ async fn realistic_corpus_full_eval() {
 
     // Fixed identity → stable Milvus collection prefix + PG owner across runs,
     // which is what makes corpus reuse possible:
-    // - ingest once with E2E_PRESERVE_MILVUS_ON_DROP=1 → cache written;
-    // - rerun with E2E_REUSE_CORPUS=1 → ingestion skipped entirely;
+    // - first run ingests and writes the corpus cache;
+    // - every later run reuses the cache by default (ingestion is expensive —
+    //   LLM profile/summary + embedding per document);
+    // - E2E_FORCE_INGEST=1 forces a fresh ingest (combine with
+    //   E2E_PRESERVE_MILVUS_ON_DROP=1 so the fresh vectors survive teardown);
     // - E2E_START_AT=N → resume at question N (fail-fast iteration loop).
     let identity = Some((
         crate::product_e2e::DEFAULT_TEST_ORG_ID.to_string(),
@@ -541,11 +544,11 @@ async fn realistic_corpus_full_eval() {
     let cache_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/e2e_output/realistic_corpus_cache.json");
     let mut doc_ids: Vec<String> = Vec::new();
-    let workspace_id = if std::env::var("E2E_REUSE_CORPUS").is_ok()
+    let workspace_id = if std::env::var("E2E_FORCE_INGEST").is_err()
         && let Ok(raw) = std::fs::read_to_string(&cache_path)
         && let Ok(cache) = serde_json::from_str::<serde_json::Value>(&raw)
     {
-        eprintln!("[realistic_corpus] E2E_REUSE_CORPUS: reusing cached corpus (ingestion skipped)");
+        eprintln!("[realistic_corpus] reusing cached corpus (ingestion skipped; E2E_FORCE_INGEST=1 to override)");
         doc_ids = cache["doc_ids"]
             .as_array()
             .expect("cache doc_ids")
