@@ -653,11 +653,17 @@ async fn realistic_corpus_full_eval() {
                     .unwrap_or_else(|_| "<serialize failed>".to_string());
                 failures.push((example.query.clone(), format!("parse: {e}")));
                 eprintln!("  FAIL: parse error: {e}");
-                eprintln!(
-                    "  raw response (status={}): {}",
-                    resp_status,
-                    &raw[..raw.len().min(500)]
-                );
+                // Char-boundary-safe truncation + full raw dump for the loop.
+                let preview: String = raw.chars().take(500).collect();
+                eprintln!("  raw response (status={}): {}", resp_status, preview);
+                let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/e2e_output/realistic_corpus_full_eval");
+                if std::fs::create_dir_all(&dir).is_ok() {
+                    let _ = std::fs::write(
+                        dir.join(format!("q{:03}.raw.json", idx + 1)),
+                        raw,
+                    );
+                }
                 if fail_fast {
                     break;
                 }
