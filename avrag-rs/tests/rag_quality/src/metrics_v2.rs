@@ -776,6 +776,10 @@ mod tests {
             expected_tool: None,
             expected_tool_sequence: None,
             requires_triplet_reingest: false,
+            capabilities: vec![],
+            doc_scope_hint: "all".to_string(),
+            expect_citations: None,
+            requires_network: false,
         }
     }
 

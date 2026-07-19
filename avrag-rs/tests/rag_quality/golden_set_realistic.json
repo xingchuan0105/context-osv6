@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0-realistic-corpus",
+  "version": "3.0.0-orchestrator",
   "created_at": "2026-06-29T00:00:00Z",
-  "description": "Realistic RAG golden set built on 7 private documents the LLM has never seen in training (no parametric-knowledge contamination). Corpus: (1) MBA thesis on Y Refrigeration Company marketing strategy (3.7万字, 6 chapters, DOCX), (2) ADR-0004 RAG Agent Loop (MD), (3) ADR-0009 Codegen Sandbox Bridge (MD), (4) consulting article on platform network effects (1.5万字, DOCX), (5) compensation design article (2.7K字, DOCX), (6) Huawei IPD 370 activities (372-row spreadsheet, XLSX), (7) Yunnan Baiyao IT planning (1.9MB, PDF). Subsets: thesis_factual, thesis_synthesis, thesis_numeric, thesis_adversarial, adr_factual, cross_adr, consulting_factual, ipd_table, baiyao_pdf, cross_document. Total: 110 examples. All source_chunks substrings verified present in corpus. Adversarial questions verified absent.",
+  "description": "v3.0.0-orchestrator：语料与 v2 相同（7 份私有文档，无训练污染）：(1) MBA 论文 Y 制冷营销 (DOCX), (2) ADR-0004 RAG Agent Loop (MD), (3) ADR-0009 Codegen Bridge (MD), (4) 咨询文章·平台网络效应 (DOCX), (5) 薪酬设计文章 (DOCX), (6) 华为 IPD 370 活动 (XLSX), (7) 云南白药 IT 规划 (PDF)。v3 变化：全部 107 题补 capabilities:[rag]；新增 orchestrator_paradigm 子集 12 题（空选择规则 2、纯聊天边界 2、RAG+Search 联合 4、跨文档张冠李戴对抗 2、多 chunk 覆盖 2）；新增字段 capabilities / doc_scope_hint / expect_citations{min_doc,min_web} / requires_network（均为 runner 可选消费，旧文件语义不变）。子集：thesis_factual, thesis_synthesis, thesis_numeric, thesis_adversarial, adr_factual, cross_adr, consulting_factual, ipd_table, baiyao_pdf, cross_document, orchestrator_paradigm。Total: 119 examples。",
   "subsets": [
     {
       "name": "thesis_factual",
@@ -24,6 +24,9 @@
           "expected_should_answer": true,
           "must_include": [
             "2019年"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -43,6 +46,9 @@
           "expected_should_answer": true,
           "must_include": [
             "南京"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -62,6 +68,9 @@
           "expected_should_answer": true,
           "must_include": [
             "螺旋式速冻机和隧道式速冻机"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -81,6 +90,9 @@
           "expected_should_answer": true,
           "must_include": [
             "-18℃"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -100,6 +112,9 @@
           "expected_should_answer": true,
           "must_include": [
             "林海芬"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -119,6 +134,9 @@
           "expected_should_answer": true,
           "must_include": [
             "邢川，学号41911407"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -138,6 +156,9 @@
           "expected_should_answer": true,
           "must_include": [
             "2000㎡"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -157,6 +178,9 @@
           "expected_should_answer": true,
           "must_include": [
             "25人"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -176,6 +200,9 @@
           "expected_should_answer": true,
           "must_include": [
             "10台"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -195,6 +222,9 @@
           "expected_should_answer": true,
           "must_include": [
             "南通四方和烟台冰轮"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -226,6 +256,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PEST分析、波特五力模型、STP理论、4R营销策略"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -245,6 +278,9 @@
           "expected_should_answer": true,
           "must_include": [
             "关联、反应、关系、回报"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -264,6 +300,9 @@
           "expected_should_answer": true,
           "must_include": [
             "韩国京畿道始兴市"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -283,6 +322,9 @@
           "expected_should_answer": true,
           "must_include": [
             "速冻库"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -302,6 +344,9 @@
           "expected_should_answer": true,
           "must_include": [
             "专业化市场"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -336,6 +381,9 @@
           "must_include": [
             "2019年550万，2020年370万",
             "因为缺少大项目支撑，营业收入急速下滑，导致两年累计亏损700万元"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -367,6 +415,9 @@
           "expected_should_answer": true,
           "must_include": [
             "获取客户看重数量轻视质量、不重视渠道和推广、设计团队过于主观、过于追求短期利益"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -394,6 +445,9 @@
           "expected_should_answer": true,
           "must_include": [
             "对产品进行模块化设计、建立零部件信息资料库、组建多功能团队"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -417,6 +471,9 @@
           "expected_should_answer": true,
           "must_include": [
             "信息系统建设、研发能力建设（含研发硬件设施、大数据指导研发、增强研发团队能力）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -448,6 +505,9 @@
             "需要螺旋式速冻机产品较为单一",
             "门槛较高竞争对手少",
             "对产品综合条件要求高而非单一考虑价格"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -475,6 +535,9 @@
           "expected_should_answer": true,
           "must_include": [
             "利用自媒体保持与客户沟通、开放技术资料促进相互信任、开展与客户共同研究课题"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -506,6 +569,9 @@
           "expected_should_answer": true,
           "must_include": [
             "客户接触指标、客户满意指标、客户互动指标、客户回报指标"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -525,6 +591,9 @@
           "expected_should_answer": true,
           "must_include": [
             "原材料、制冷组件、电控组件、网带、电机"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -549,6 +618,9 @@
           "must_include": [
             "按结构：隧道式、螺旋式、液化床式、平板式",
             "按冻结方式：空气循环式、接触式、喷淋式、浸渍式"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -572,6 +644,9 @@
           "expected_should_answer": true,
           "must_include": [
             "总收入约3000万元，总利润接近1000万元"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -597,6 +672,9 @@
           "expected_should_answer": true,
           "must_include": [
             "1467亿元"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -616,6 +694,9 @@
           "expected_should_answer": true,
           "must_include": [
             "速冻米面制品52.4%，速冻火锅料33.3%，速冻菜肴及其他14.3%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -635,6 +716,9 @@
           "expected_should_answer": true,
           "must_include": [
             "10.56元/kg"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -654,6 +738,9 @@
           "expected_should_answer": true,
           "must_include": [
             "17709.23元/吨"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -673,6 +760,9 @@
           "expected_should_answer": true,
           "must_include": [
             "2800吨"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -696,6 +786,9 @@
           "expected_should_answer": true,
           "must_include": [
             "总需求约1849台，市场规模约16.64亿元"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -715,6 +808,9 @@
           "expected_should_answer": true,
           "must_include": [
             "14.72万亿美元"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -738,6 +834,9 @@
           "expected_should_answer": true,
           "must_include": [
             "年产量2000万吨，人均年消费量60千克以上"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -761,6 +860,9 @@
           "expected_should_answer": true,
           "must_include": [
             "2015年峰值9.96亿，2020年下降到9.86亿"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -780,6 +882,9 @@
           "expected_should_answer": true,
           "must_include": [
             "88.51%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -803,6 +908,9 @@
           "expected_should_answer": true,
           "must_include": [
             "速冻米面约6%，速冻火锅料约13%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -822,6 +930,9 @@
           "expected_should_answer": true,
           "must_include": [
             "38万家"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -840,6 +951,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及注册资本"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -852,6 +966,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及韩方投资者姓名"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -864,6 +981,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及南通四方的营业收入"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -876,6 +996,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中提到了保修期的概念（指出行业通常停留在保修期内），但未说明Y冷冻设备公司产品的具体保修年限"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -888,6 +1011,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及具体访谈人数"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -900,6 +1026,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及策略实施后的实际效果数据"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -912,6 +1041,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及转毂直径具体数值"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -924,6 +1056,9 @@
           "expected_should_answer": false,
           "must_include": [
             "论文中未提及烟台冰轮总部所在城市"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -953,6 +1088,9 @@
           "expected_should_answer": true,
           "must_include": [
             "2026年6月6日"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -972,6 +1110,9 @@
           "expected_should_answer": true,
           "must_include": [
             "由原生工具调用（native tool calling）驱动"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -999,6 +1140,9 @@
           "expected_should_answer": true,
           "must_include": [
             "Plan、ExecuteRetrieve、Answer"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1022,6 +1166,9 @@
           "expected_should_answer": true,
           "must_include": [
             "parse_rag_plan_decision XML解析代码"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1045,6 +1192,9 @@
           "expected_should_answer": true,
           "must_include": [
             "EvidenceGate"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1064,6 +1214,9 @@
           "expected_should_answer": true,
           "must_include": [
             "complete_with_tools方法"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1087,6 +1240,9 @@
           "expected_should_answer": true,
           "must_include": [
             "fd3（Python到Host）和fd4（Host到Python）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1114,6 +1270,9 @@
           "expected_should_answer": true,
           "must_include": [
             "dense_search、lexical_search、graph_search、rerank、chunk_fetch、doc_summary"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1137,6 +1296,9 @@
           "expected_should_answer": true,
           "must_include": [
             "方案A（解封socket+真HTTP）和方案C（预取+变量注入）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1160,6 +1322,9 @@
           "expected_should_answer": true,
           "must_include": [
             "由宿主从request.doc_scope强制注入，防止越权"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1179,6 +1344,9 @@
           "expected_should_answer": true,
           "must_include": [
             "RuntimeBridge，持有runtime（Arc<RagRuntime>）、auth（AuthContext）、doc_scope（Vec<String>）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1202,6 +1370,9 @@
           "expected_should_answer": true,
           "must_include": [
             "code_gen_query.rs"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -1236,6 +1407,9 @@
           "must_include": [
             "ADR-0004解决了RAG管道从线性流水线转向Agent Loop+原生工具调用的问题",
             "ADR-0009解决了codegen沙箱封禁网络与SDK走HTTP冲突导致检索主路径不可用的问题"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1259,6 +1433,9 @@
           "expected_should_answer": true,
           "must_include": [
             "ADR-0004是2026年6月6日，ADR-0009是2026年6月9日"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1282,6 +1459,9 @@
           "expected_should_answer": true,
           "must_include": [
             "run_auto_fallback（dense/lexical兜底）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1309,6 +1489,9 @@
           "expected_should_answer": true,
           "must_include": [
             "ADR-0004分为3个Slice（native tools、loop flow、multi-iteration testing），ADR-0009分为4个Phase（P1 interpreter bridge、P2 rag-core bridge、P3 mock/e2e、P4 telemetry）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1332,6 +1515,9 @@
           "expected_should_answer": true,
           "must_include": [
             "ADR-0009废弃了code_gen_query.rs"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -1357,6 +1543,9 @@
           "expected_should_answer": true,
           "must_include": [
             "70%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1380,6 +1569,9 @@
           "expected_should_answer": true,
           "must_include": [
             "硅谷风投机构NFX发布的《网络效应圣经》（The Network Effects Bible）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1399,6 +1591,9 @@
           "expected_should_answer": true,
           "must_include": [
             "23%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1422,6 +1617,9 @@
           "expected_should_answer": true,
           "must_include": [
             "分成15%-25%，可获得超300万企业客户流量"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1441,6 +1639,9 @@
           "expected_should_answer": true,
           "must_include": [
             "300亿美元"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1460,6 +1661,9 @@
           "expected_should_answer": true,
           "must_include": [
             "80%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1483,6 +1687,9 @@
           "expected_should_answer": true,
           "must_include": [
             "425.02亿元，比2023年的549.15亿元大跌22.6%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1502,6 +1709,9 @@
           "expected_should_answer": true,
           "must_include": [
             "3846.74万元，为十多年来的最低点"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1529,6 +1739,9 @@
           "expected_should_answer": true,
           "must_include": [
             "竞争性原则、公平性原则、一致性原则"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1548,6 +1761,9 @@
           "expected_should_answer": true,
           "must_include": [
             "固定部分+浮动部分+补偿部分，其中浮动部分分为短期激励和长期激励"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1567,6 +1783,9 @@
           "expected_should_answer": true,
           "must_include": [
             "6000元（6千），前台文员岗位"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1595,6 +1814,9 @@
           "must_include": [
             "7000元",
             "因为违背了竞争性原则（对市场专员岗位不是高薪酬）、公平性原则（市场岗位应有浮动薪酬但小王仍是纯固薪）和一致性原则"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1614,6 +1836,9 @@
           "expected_should_answer": true,
           "must_include": [
             "90%以上"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1633,6 +1858,9 @@
           "expected_should_answer": true,
           "must_include": [
             "2~5倍"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -1678,6 +1906,9 @@
           "expected_should_answer": true,
           "must_include": [
             "概念阶段、计划阶段、开发阶段、验证阶段、发布阶段、生命周期"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1697,6 +1928,9 @@
           "expected_should_answer": true,
           "must_include": [
             "81个"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1716,6 +1950,9 @@
           "expected_should_answer": true,
           "must_include": [
             "开发阶段92个活动，是所有阶段中最多的"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1735,6 +1972,9 @@
           "expected_should_answer": true,
           "must_include": [
             "概念启动，在概念阶段"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1758,6 +1998,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PAC-20"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1781,6 +2024,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PAC-60"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1800,6 +2046,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PAC-100"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1823,6 +2072,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PAC-90"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1846,6 +2098,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PAC-40"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1869,6 +2124,9 @@
           "expected_should_answer": true,
           "must_include": [
             "接受概念阶段任务书、立项通知书，活动号LPDT-03"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1888,6 +2146,9 @@
           "expected_should_answer": true,
           "must_include": [
             "PAC-170"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1911,6 +2172,9 @@
           "expected_should_answer": true,
           "must_include": [
             "验证阶段59个，发布阶段30个"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -1936,6 +2200,9 @@
           "expected_should_answer": true,
           "must_include": [
             "4A架构"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1963,6 +2230,9 @@
           "expected_should_answer": true,
           "must_include": [
             "三个阶段：第一阶段4月18日-4月19日，第二阶段5月6日-5月10日，第三阶段5月13日-5月17日"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -1990,6 +2260,9 @@
           "expected_should_answer": true,
           "must_include": [
             "11大主题域分组（L1），100大主题域（L2），638个业务对象（L3）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2017,6 +2290,9 @@
           "expected_should_answer": true,
           "must_include": [
             "冒烟通过率≥95%，验证通过率≥90%，试点通过率≥90%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2040,6 +2316,9 @@
           "expected_should_answer": true,
           "must_include": [
             "立项通过率≥80%，立项驳回率≥50%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2063,6 +2342,9 @@
           "expected_should_answer": true,
           "must_include": [
             "项目预算偏差率≤20%，项目计划偏差率≤20%"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2082,6 +2364,9 @@
           "expected_should_answer": true,
           "must_include": [
             "项目投入≥500万或跨一级流程且项目投入≥300万"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2101,6 +2386,9 @@
           "expected_should_answer": true,
           "must_include": [
             "300万≤项目投入<500万或跨一级流程且100万≤项目投入<300万"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2128,6 +2416,9 @@
           "expected_should_answer": true,
           "must_include": [
             "包括LTC、IPD、ISC、D&S、HRM、财经、BP&DT、MCR、工自仪等"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2147,6 +2438,9 @@
           "expected_should_answer": true,
           "must_include": [
             "财经运营，共110个业务对象"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2170,6 +2464,9 @@
           "expected_should_answer": true,
           "must_include": [
             "引入4A架构，数据工作前移，以客户价值为中心，遵从企业架构"
+          ],
+          "capabilities": [
+            "rag"
           ]
         }
       ]
@@ -2200,6 +2497,9 @@
           "must_include": [
             "4R策略是关联、反应、关系、回报的营销策略框架",
             "4A架构是企业架构设计方法（业务架构、数据架构、应用架构、技术架构）"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2223,6 +2523,9 @@
           "expected_should_answer": true,
           "must_include": [
             "两者都指向'生产者导向/销售导向'而非'客户价值导向'的问题——Y冷冻公司以产定销忽视客户需求，国内软件商追求短期签约金额而非客户全生命周期价值"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2247,6 +2550,9 @@
           "must_include": [
             "薪酬的竞争性原则要求薪资水平与岗位市场水平匹配",
             "Y冷冻公司选择专业化市场也是基于自身资源条件与市场竞争格局的匹配，两者都强调'定位与自身条件相称'"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2271,6 +2577,9 @@
           "must_include": [
             "华为IPD中PAC是产品审批委员会，负责各阶段决策评审（PAC-05/20/40/60/100等）",
             "云南白药按项目投入金额分S/A/B级，不同级别有不同审批要求"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2301,6 +2610,9 @@
             "智遥咨询文章从平台效应角度强调用户生态价值",
             "薪酬解构从薪酬一致性原则角度强调岗位职责与薪酬匹配",
             "云南白药从IT规划角度强调以客户价值为中心"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2325,6 +2637,9 @@
           "must_include": [
             "Salesforce通过生态锁定深耕CRM细分领域占据23%份额",
             "Y冷冻公司选择专业化市场（肉制品加工企业）集中资源，两者都是聚焦细分市场建立竞争优势"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2349,6 +2664,9 @@
           "must_include": [
             "华为IPD有370个活动（372行含标题），云南白药有638个业务对象",
             "两者都将复杂业务拆解为大量结构化要素进行体系化管理"
+          ],
+          "capabilities": [
+            "rag"
           ]
         },
         {
@@ -2373,6 +2691,323 @@
           "must_include": [
             "ADR-0009通过管道fd3/fd4将沙箱与宿主解耦，沙箱不联网而通过RPC获取检索能力",
             "华为IPD模块化设计将速冻机拆为8个系统模块减少相互干涉，两者都是通过解耦降低复杂性"
+          ],
+          "capabilities": [
+            "rag"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "orchestrator_paradigm",
+      "description": "v3 新范式行为：空选择规则 / 纯聊天边界 / RAG+Search 联合（需 Brave 代理，E2E_SKIP_NETWORK_CASES=1 可跳过）/ 跨文档张冠李戴拒答 / 多 chunk 覆盖。引用走 doc [[cite:…]] + web [[web:…]] 单计数器协议。",
+      "examples": [
+        {
+          "query": "总结一下我选中的文档的主要内容",
+          "expected_answer": "请先选择要检索的文档范围，再执行知识库检索",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "capabilities": [
+            "rag"
+          ],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "description": "空选择规则：rag 能力 + 空 doc_scope → 引导选择文档，禁止全库注入",
+          "expected_should_answer": true,
+          "must_include": [
+            "选择"
+          ],
+          "must_not_include": [
+            "Y冷冻",
+            "云南白药",
+            "华为IPD",
+            "网络效应"
+          ]
+        },
+        {
+          "query": "根据文档，我们公司的核心技术优势是什么？",
+          "expected_answer": "请先选择要检索的文档范围，再执行知识库检索",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "capabilities": [
+            "rag"
+          ],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "description": "空选择规则：诱导性'根据文档'提问也不得全库检索",
+          "expected_should_answer": true,
+          "must_include": [
+            "选择"
+          ],
+          "must_not_include": [
+            "Y冷冻",
+            "云南白药",
+            "华为IPD",
+            "网络效应"
+          ]
+        },
+        {
+          "query": "你好，请用一句话介绍你自己",
+          "expected_answer": "我是 Context OS 的智能助手",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "capabilities": [],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "description": "纯聊天边界：caps 为空 → 不触发 worker/证据，答案零引用",
+          "expected_should_answer": true,
+          "must_include": [
+            "助手"
+          ]
+        },
+        {
+          "query": "HTTP 协议中 301 和 302 状态码有什么区别？",
+          "expected_answer": "301 是永久重定向，302 是临时重定向",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "capabilities": [],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "description": "纯聊天参数知识：无需语料，答案零引用",
+          "expected_should_answer": true,
+          "must_include": [
+            "永久"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的4R营销策略与营销学中的4C理论（顾客、成本、便利、沟通）相比，侧重点有何不同？",
+          "expected_answer": "4R策略强调关联、反应、关系、回报；4C理论强调顾客、成本、便利、沟通",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "关联、反应、关系、回报"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "capabilities": [
+            "rag",
+            "search"
+          ],
+          "doc_scope_hint": "thesis",
+          "expect_citations": {
+            "min_doc": 1,
+            "min_web": 1
+          },
+          "requires_network": true,
+          "description": "RAG+Search 联合：文档内 4R 框架 vs 外部营销理论对照，doc/web 引用齐备",
+          "expected_should_answer": true,
+          "must_include": [
+            "关联、反应、关系、回报"
+          ]
+        },
+        {
+          "query": "华为IPD流程的六个阶段与业界阶段门（Stage-Gate）产品开发模型有哪些对应关系？",
+          "expected_answer": "华为IPD为概念、计划、开发、验证、发布、生命周期六阶段，与 Stage-Gate 的阶段划分相对应",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "概念阶段"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "capabilities": [
+            "rag",
+            "search"
+          ],
+          "doc_scope_hint": "ipd",
+          "expect_citations": {
+            "min_doc": 1,
+            "min_web": 1
+          },
+          "requires_network": true,
+          "description": "RAG+Search 联合：表格内 IPD 阶段 vs 外部 Stage-Gate 模型",
+          "expected_should_answer": true,
+          "must_include": [
+            "概念阶段、计划阶段、开发阶段、验证阶段、发布阶段"
+          ]
+        },
+        {
+          "query": "云南白药IT规划的4A架构与TOGAF企业架构框架有哪些对应关系？",
+          "expected_answer": "4A架构（业务、数据、应用、技术架构）与 TOGAF 的架构域一一对应",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "4A架构"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "capabilities": [
+            "rag",
+            "search"
+          ],
+          "doc_scope_hint": "baiyao",
+          "expect_citations": {
+            "min_doc": 1,
+            "min_web": 1
+          },
+          "requires_network": true,
+          "description": "RAG+Search 联合：PDF 内 4A 架构 vs 外部 TOGAF 框架",
+          "expected_should_answer": true,
+          "must_include": [
+            "4A架构"
+          ]
+        },
+        {
+          "query": "咨询文章称“网络效应贡献了科技企业70%的价值创造”，这一量级与公开创投研究的结论是否一致？",
+          "expected_answer": "文章称网络效应贡献70%价值创造；公开研究（如NFX）亦将网络效应视为主要价值来源",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "网络效应贡献了科技企业70%的价值创造"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "capabilities": [
+            "rag",
+            "search"
+          ],
+          "doc_scope_hint": "consulting_platform",
+          "expect_citations": {
+            "min_doc": 1,
+            "min_web": 1
+          },
+          "requires_network": true,
+          "description": "RAG+Search 联合：文章论断 vs 外部公开研究交叉验证",
+          "expected_should_answer": true,
+          "must_include": [
+            "70%"
+          ]
+        },
+        {
+          "query": "云南白药IT规划中提到Y冷冻设备公司2019年在大连投资建厂，是在哪个章节？",
+          "expected_answer": "云南白药IT规划文档中未提及该内容",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "capabilities": [
+            "rag"
+          ],
+          "doc_scope_hint": "baiyao",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "description": "跨文档张冠李戴（对抗）：论文事实归于白药文档，scope 隔离下必须拒答",
+          "expected_should_answer": false,
+          "must_include": [
+            "未提及"
+          ],
+          "must_not_include": [
+            "2019年于大连市投资建厂"
+          ]
+        },
+        {
+          "query": "华为IPD活动表里，哪个活动号负责论证“网络效应贡献70%价值创造”？",
+          "expected_answer": "IPD活动表中未提及该内容",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "capabilities": [
+            "rag"
+          ],
+          "doc_scope_hint": "ipd",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "description": "跨文档张冠李戴（对抗）：咨询文章事实归于 IPD 表格，scope 隔离下必须拒答",
+          "expected_should_answer": false,
+          "must_include": [
+            "未提及"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司在产品、价格、渠道、宣传四个方面的营销策略分别是什么？",
+          "expected_answer": "产品：丰富产品线与组合；价格：成本优势、弱势市场低价/优势市场价格歧视；渠道：与压缩机组交叉销售并自建销售服务网络；宣传：保持专业媒体投入",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "在渠道策略上与压缩机组产品形成交叉销售"
+            },
+            {
+              "type": "substring",
+              "text": "在宣传策略上保持在专业媒体的投入"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "capabilities": [
+            "rag"
+          ],
+          "doc_scope_hint": "thesis",
+          "expect_citations": {
+            "min_doc": 2,
+            "min_web": 0
+          },
+          "description": "coverage：四维策略逐章覆盖，证据应来自多个 chunk",
+          "expected_should_answer": true,
+          "must_include": [
+            "交叉销售",
+            "专业媒体"
+          ]
+        },
+        {
+          "query": "云南白药IT规划的详细设计阶段的时间安排是怎样的？",
+          "expected_answer": "第一阶段：4月18日-4月19日；第二阶段：5月6日-5月10日；第三阶段：5月13日-5月17日",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "第一阶段：4月18日"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "capabilities": [
+            "rag"
+          ],
+          "doc_scope_hint": "baiyao",
+          "expect_citations": {
+            "min_doc": 1,
+            "min_web": 0
+          },
+          "description": "coverage：PDF 时间表三阶段完整提取",
+          "expected_should_answer": true,
+          "must_include": [
+            "4月18日",
+            "5月6日",
+            "5月13日"
           ]
         }
       ]

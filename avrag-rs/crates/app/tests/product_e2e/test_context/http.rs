@@ -235,7 +235,20 @@ impl TestContext {
         workspace_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, workspace_id, doc_scope, None, true)
+        self.post_rag_chat(query, workspace_id, doc_scope, None, true, None)
+            .await
+    }
+
+    /// Non-streaming chat with explicit new-paradigm capability tags
+    /// (orchestrator acceptance surface). `None` keeps legacy agent_type routing.
+    pub async fn chat_with_capabilities(
+        &self,
+        query: &str,
+        workspace_id: &str,
+        doc_scope: &[String],
+        capabilities: Option<&[String]>,
+    ) -> anyhow::Result<HttpResponse> {
+        self.post_rag_chat(query, workspace_id, doc_scope, None, false, capabilities)
             .await
     }
 
@@ -245,7 +258,7 @@ impl TestContext {
         workspace_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, workspace_id, doc_scope, None, false)
+        self.post_rag_chat(query, workspace_id, doc_scope, None, false, None)
             .await
     }
 
@@ -256,7 +269,7 @@ impl TestContext {
         doc_scope: &[String],
         format_hint: Option<&str>,
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, workspace_id, doc_scope, format_hint, true)
+        self.post_rag_chat(query, workspace_id, doc_scope, format_hint, true, None)
             .await
     }
 
@@ -267,7 +280,7 @@ impl TestContext {
         doc_scope: &[String],
         format_hint: Option<&str>,
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, workspace_id, doc_scope, format_hint, false)
+        self.post_rag_chat(query, workspace_id, doc_scope, format_hint, false, None)
             .await
     }
 
@@ -278,6 +291,7 @@ impl TestContext {
         doc_scope: &[String],
         format_hint: Option<&str>,
         pin_mock_chunk_ids: bool,
+        capabilities: Option<&[String]>,
     ) -> anyhow::Result<HttpResponse> {
         set_mock_rag_codegen_query(query);
         let mut body = serde_json::json!({
@@ -287,6 +301,9 @@ impl TestContext {
             "doc_scope": doc_scope,
             "stream": false,
         });
+        if let Some(caps) = capabilities {
+            body["capabilities"] = serde_json::json!(caps);
+        }
         if let Some(hint) = format_hint {
             body["format_hint"] = serde_json::json!(hint);
         }

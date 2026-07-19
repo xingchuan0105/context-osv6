@@ -469,6 +469,28 @@ async fn production_rag_evaluator_runs_real_retrieval_against_golden_set() {
 /// E2E_MODE=nightly cargo test -p app --test product_e2e realistic_corpus \
 ///   --features product-e2e -- --ignored --test-threads=1 --nocapture
 /// ```
+/// v3: map `doc_scope_hint` to concrete doc ids (orchestrator golden set).
+/// `"all"`/unknown → full corpus; `"empty"` → no docs (empty-selection rule);
+/// corpus keys restrict scope (cross-doc isolation probes).
+fn resolve_doc_scope(hint: &str, scope_keys: &[&str], doc_ids: &[String]) -> Vec<String> {
+    let pick = |key: &str| {
+        scope_keys
+            .iter()
+            .position(|k| *k == key)
+            .map(|i| doc_ids[i].clone())
+    };
+    match hint {
+        "empty" => Vec::new(),
+        "thesis" => pick("thesis").into_iter().collect(),
+        "adr_pair" => ["adr4", "adr9"].iter().filter_map(|k| pick(k)).collect(),
+        "consulting_platform" => pick("consulting_platform").into_iter().collect(),
+        "consulting_compensation" => pick("consulting_compensation").into_iter().collect(),
+        "ipd" => pick("ipd").into_iter().collect(),
+        "baiyao" => pick("baiyao").into_iter().collect(),
+        _ => doc_ids.to_vec(),
+    }
+}
+
 #[tokio::test]
 #[ignore = "requires real LLM + embedding API keys; run with --ignored --test-threads=1"]
 async fn realistic_corpus_full_eval() {
@@ -492,6 +514,16 @@ async fn realistic_corpus_full_eval() {
         ("consulting_compensation_design.txt", 120), // 3K chars
         ("huawei_ipd_370_activities.txt", 120),      // 54K chars, table as TSV
         ("baiyao_it_planning.txt", 300),             // 20K chars, PDF->TXT
+    ];
+    // v3 scope keys — parallel to `corpus_files` order (doc_scope_hint → ids).
+    let scope_keys = [
+        "thesis",
+        "adr4",
+        "adr9",
+        "consulting_platform",
+        "consulting_compensation",
+        "ipd",
+        "baiyao",
     ];
 
     let mut doc_ids: Vec<String> = Vec::new();
@@ -532,7 +564,7 @@ async fn realistic_corpus_full_eval() {
     assert!(!examples.is_empty(), "golden set is empty");
 
     // --- Run evaluation ---
-    let doc_scope: Vec<String> = doc_ids.clone();
+    // v3: doc_scope is resolved per example from `doc_scope_hint` (default: full corpus).
     let mut recall_results = Vec::new();
     let mut citation_results = Vec::new();
     let mut hallucination_results = Vec::new();
@@ -562,8 +594,15 @@ async fn realistic_corpus_full_eval() {
         // Non-streaming mode runs the full RAG agent loop and returns a complete JSON
         // response — some queries may return a degrade response without an `answer`
         // field, which we catch and record as a failure with the raw JSON for debugging.
+        // v3: per-example doc_scope + capability tags (orchestrator paradigm).
+        if example.requires_network && std::env::var("E2E_SKIP_NETWORK_CASES").is_ok() {
+            eprintln!("  SKIP: requires_network and E2E_SKIP_NETWORK_CASES is set");
+            continue;
+        }
+        let scope = resolve_doc_scope(&example.doc_scope_hint, &scope_keys, &doc_ids);
+        let caps = example.resolved_capabilities();
         let resp = match ctx
-            .chat_without_mock_chunk_pin(&example.query, &workspace_id, &doc_scope)
+            .chat_with_capabilities(&example.query, &workspace_id, &scope, Some(&caps))
             .await
         {
             Ok(r) => r,
@@ -599,6 +638,31 @@ async fn realistic_corpus_full_eval() {
             .filter_map(|c| c.chunk_id.clone().map(|id| (id, c.citation_id)))
             .collect();
         let answer = rewrite_citations(&chat.answer, &chunk_to_cite);
+
+        // v3: typed citation minimums (doc `[[cite:…]]` / web `[[web:…]]` protocol).
+        if let Some(expect) = example.expect_citations {
+            let doc_n = chat
+                .citations
+                .iter()
+                .filter(|c| c.chunk_id.is_some())
+                .count() as u32;
+            let web_n = chat
+                .citations
+                .iter()
+                .filter(|c| {
+                    c.chunk_id.is_none()
+                        && (c.chunk_type.as_deref() == Some("web") || c.source_locator.is_some())
+                })
+                .count() as u32;
+            if doc_n < expect.min_doc || web_n < expect.min_web {
+                let msg = format!(
+                    "expect_citations min_doc={} min_web={} got doc={} web={}",
+                    expect.min_doc, expect.min_web, doc_n, web_n
+                );
+                eprintln!("  FAIL: {msg}");
+                failures.push((example.query.clone(), msg));
+            }
+        }
 
         let citation_indices = EvaluationMetrics::extract_citation_indices(&answer);
         let recall = EvaluationMetrics::recall_at_k(&example.query, &chunks, example, 15);

@@ -84,6 +84,58 @@ pub struct GoldenExample {
     /// When true, probe needs `INGESTION_TRIPLET_ENABLED=1` corpus re-ingest (graph tools).
     #[serde(default)]
     pub requires_triplet_reingest: bool,
+
+    /// New-paradigm capability tags (`["rag"]`, `["search"]`, `["rag","search"]`,
+    /// `[]` = pure chat). Empty = derive from legacy `mode` (rag/search/chat).
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+
+    /// Scope the runner should use for this example: `"all"` (default — all
+    /// corpus docs, matching the historical runner), `"empty"` (no docs — tests
+    /// the empty-selection rule), or a corpus key (`"thesis"`, `"adr_pair"`,
+    /// `"consulting_platform"`, `"consulting_compensation"`, `"ipd"`, `"baiyao"`).
+    #[serde(default = "default_doc_scope_hint")]
+    pub doc_scope_hint: String,
+
+    /// Typed citation minimums for the orchestrator citation protocol
+    /// (`[[cite:chunk]]` doc / `[[web:n]]` web). `None` = legacy
+    /// `expected_citations` presence semantics only.
+    #[serde(default)]
+    pub expect_citations: Option<CitationExpectation>,
+
+    /// Case needs outbound web search (Brave proxy). Runner may skip when the
+    /// environment has no search network (`E2E_SKIP_NETWORK_CASES=1`).
+    #[serde(default)]
+    pub requires_network: bool,
+}
+
+/// Typed citation minimums under the orchestrator paradigm.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct CitationExpectation {
+    #[serde(default)]
+    pub min_doc: u32,
+    #[serde(default)]
+    pub min_web: u32,
+}
+
+fn default_doc_scope_hint() -> String {
+    "all".to_string()
+}
+
+impl GoldenExample {
+    /// Capabilities to send on the wire. Falls back to the legacy `mode`
+    /// mapping (`rag`/`search` → single capability, anything else → pure chat)
+    /// so pre-v3 golden files behave exactly as before.
+    pub fn resolved_capabilities(&self) -> Vec<String> {
+        if !self.capabilities.is_empty() {
+            return self.capabilities.clone();
+        }
+        match self.mode.as_str() {
+            "rag" => vec!["rag".to_string()],
+            "search" => vec!["search".to_string()],
+            _ => Vec::new(),
+        }
+    }
 }
 
 fn default_expected_should_answer() -> bool {
@@ -281,6 +333,46 @@ mod tests {
         for ex in &summary_probes {
             assert_eq!(ex.expected_tool.as_deref(), Some("doc_summary"));
         }
+    }
+
+    #[test]
+    fn realistic_v3_loads_orchestrator_fields() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden_set_realistic.json");
+        let dataset = GoldenDataset::load(&path).expect("load realistic v3 golden set");
+        assert_eq!(dataset.len(), 119, "107 legacy + 12 orchestrator_paradigm");
+
+        let subset = dataset
+            .subsets
+            .iter()
+            .find(|s| s.name == "orchestrator_paradigm")
+            .expect("orchestrator_paradigm subset");
+        assert_eq!(subset.examples.len(), 12);
+
+        let joint = subset
+            .examples
+            .iter()
+            .filter(|e| e.capabilities == ["rag", "search"])
+            .count();
+        assert_eq!(joint, 4, "4 RAG+Search joint cases");
+        assert!(
+            subset
+                .examples
+                .iter()
+                .filter(|e| e.doc_scope_hint == "empty")
+                .count()
+                >= 2,
+            "empty-scope rule cases present"
+        );
+        // Legacy examples keep working: no capabilities field consumed → mode fallback.
+        let legacy = dataset
+            .subsets
+            .iter()
+            .find(|s| s.name == "thesis_factual")
+            .unwrap()
+            .examples[0]
+            .clone();
+        assert_eq!(legacy.resolved_capabilities(), vec!["rag".to_string()]);
     }
 
     #[test]

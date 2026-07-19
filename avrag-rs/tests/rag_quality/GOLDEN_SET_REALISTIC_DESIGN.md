@@ -141,3 +141,51 @@ E2E_MODE=nightly cargo test -p app --test product_e2e rag_quality_prod \
 6. **规模已达标**：107 条满足 PRD §13.2 的 100~500 条下限，后续可根据运行结果继续扩充到 200+。
 7. **生产测试的 5 条限制**：`rag_quality_prod.rs` 的 `take(5)` 需在本 golden set 验证稳定后移除，改为跑全部 107 条。
 8. **跨文档题的 doc_scope**：`cross_document` 子集需要同时检索多份文档，测试时 doc_scope 需包含所有 7 份文档的 ID。
+
+---
+
+## 6. v3.0.0-orchestrator（2026-07-19，对齐 Orchestrator 新范式）
+
+### 6.1 为什么升级
+
+产品面已从「三 agent 显式切换」改为 **能力标签（RAG / Search 多选，不选=纯聊天）+ Orchestrator（ReAct）→ Worker 取证 → Chat exit 唯一出口**。v2 的 `mode:"rag"` 只能经 `agent_type` 兼容路径单通道，表达不了新范式的关键行为。v3 在**不动 107 道旧题语义**的前提下补齐新范式覆盖。
+
+### 6.2 新字段（runner 可选消费，旧 golden 文件语义不变）
+
+| 字段 | 默认 | 含义 |
+|---|---|---|
+| `capabilities` | `[]` | 能力标签：`["rag"]` / `["search"]` / `["rag","search"]` / `[]`（纯聊天）。空时按旧 `mode` 映射（rag/search→单能力，其余→纯聊天），见 `GoldenExample::resolved_capabilities` |
+| `doc_scope_hint` | `"all"` | 该题的文档范围：`all`（全语料，旧 runner 行为）/ `empty`（空选择规则）/ `thesis` / `adr_pair` / `consulting_platform` / `consulting_compensation` / `ipd` / `baiyao` |
+| `expect_citations` | `null` | 新引用协议的类型化下限 `{min_doc, min_web}`（doc=`[[cite:chunk]]`，web=`[[web:…]]`，单计数器）。`null` 时只用旧 `expected_citations` 存在性语义 |
+| `requires_network` | `false` | 需要 Brave 外网（联合题）。`E2E_SKIP_NETWORK_CASES=1` 时 runner 跳过 |
+
+### 6.3 新增子集 `orchestrator_paradigm`（12 题，总计 107→**119**）
+
+| 组 | 题数 | 验证点 |
+|---|---|---|
+| 空选择规则 | 2 | `capabilities:["rag"]` + 空 scope → 引导选择文档；`must_not_include` 语料专有名词兜底「全库注入」 |
+| 纯聊天边界 | 2 | `capabilities:[]` → 不触发检索，答案零引用 |
+| RAG+Search 联合 | 4 | 语料内框架 vs 外部最佳实践（4R/4C、IPD/Stage-Gate、4A/TOGAF、网络效应 70%），要求 `min_doc≥1 且 min_web≥1` |
+| 跨文档张冠李戴 | 2 | A 文档事实安到 B 文档头上；scope 限定 B → 必须拒答（证据库不越界） |
+| 多 chunk 覆盖 | 2 | 四维营销策略（产品/价格/渠道/宣传）、白药三阶段时间表，要求多 chunk 证据 |
+
+### 6.4 runner 变更（`realistic_corpus_full_eval`）
+
+- 按 `doc_scope_hint` 逐题解析范围（`resolve_doc_scope`），不再一律全语料；
+- 请求带 `capabilities`（`TestContext::chat_with_capabilities`，`post_rag_chat` 增加可选参数）；
+- `expect_citations` 按 citations 数组统计 doc/web 计数，不达标记入 failures（calibration 语义，不硬门）；
+- `requires_network` + `E2E_SKIP_NETWORK_CASES=1` → 跳过联网题。
+
+### 6.5 语料原文档地址
+
+| 文档 | 项目内地址（canonical） | 库外原件 |
+|---|---|---|
+| `thesis_y_refrigeration.docx` | `crates/app/tests/product_e2e/fixtures/`（另有同名 `.txt` 抽取对照） | 未在本机检出（作者私有 MBA 论文，OneDrive 知境笔记目录无） |
+| `adr-0004-rag-agent-loop.md` | 同上 | `avrag-rs/docs/adr/0004-rag-agent-loop-native-tools.md`（逐字节一致） |
+| `adr-0009-codegen-sandbox-bridge.md` | 同上 | `avrag-rs/docs/adr/0009-codegen-sandbox-retrieval-bridge.md`（逐字节一致） |
+| `consulting_platform_network_effects.docx` | 同上（+`.txt`） | 未在本机检出 |
+| `consulting_compensation_design.docx` | 同上（+`.txt`） | 未在本机检出 |
+| `huawei_ipd_370_activities.xlsx` | 同上（+`.txt`） | 未在本机检出 |
+| `baiyao_it_planning.pdf` | 同上（+`.txt`） | 未在本机检出 |
+
+> 注意：runner 当前上传的是 `.txt` 抽取版（office parser 离线时可跑）；要测完整多模态管线，起 office parser 后把 `corpus_files` 切回 DOCX/XLSX/PDF 原件。
