@@ -107,6 +107,23 @@ pub struct GoldenExample {
     /// environment has no search network (`E2E_SKIP_NETWORK_CASES=1`).
     #[serde(default)]
     pub requires_network: bool,
+
+    /// Same-session history to send before `query` (memory / coreference cases):
+    /// flattened to `messages: [{role:user|assistant, content}]` in order.
+    #[serde(default)]
+    pub prior_turns: Vec<PriorTurn>,
+
+    /// When set, runner injects `client_context.local_time` so time-aware
+    /// answers (via `user_context`) become deterministic (e.g. "2026-07-19 15:04").
+    #[serde(default)]
+    pub client_time: Option<String>,
+}
+
+/// A scripted prior user→assistant exchange (see `prior_turns`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriorTurn {
+    pub query: String,
+    pub answer: String,
 }
 
 /// Typed citation minimums under the orchestrator paradigm.
@@ -336,35 +353,56 @@ mod tests {
     }
 
     #[test]
-    fn realistic_v3_loads_orchestrator_fields() {
+    fn realistic_v4_loads_grouped_orchestrator_fields() {
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden_set_realistic.json");
-        let dataset = GoldenDataset::load(&path).expect("load realistic v3 golden set");
-        assert_eq!(dataset.len(), 119, "107 legacy + 12 orchestrator_paradigm");
+        let dataset = GoldenDataset::load(&path).expect("load realistic v4 golden set");
+        assert_eq!(dataset.len(), 143, "107 legacy + 36 paradigm/group cases");
 
-        let subset = dataset
+        let expect = [
+            ("orchestrator_paradigm", 8),
+            ("rag_search_joint", 6),
+            ("chat_builtin_tools", 4),
+            ("rag_codegen_channels", 7),
+            ("memory_coreference", 3),
+            ("search_web", 2),
+            ("new_corpus_factual", 6),
+        ];
+        for (name, n) in expect {
+            let subset = dataset
+                .subsets
+                .iter()
+                .find(|s| s.name == name)
+                .unwrap_or_else(|| panic!("missing subset {name}"));
+            assert_eq!(subset.examples.len(), n, "subset {name} size");
+        }
+
+        // Capability tags drive the new paradigm surface.
+        let joint = dataset
             .subsets
             .iter()
-            .find(|s| s.name == "orchestrator_paradigm")
-            .expect("orchestrator_paradigm subset");
-        assert_eq!(subset.examples.len(), 12);
-
-        let joint = subset
-            .examples
-            .iter()
-            .filter(|e| e.capabilities == ["rag", "search"])
-            .count();
-        assert_eq!(joint, 4, "4 RAG+Search joint cases");
+            .find(|s| s.name == "rag_search_joint")
+            .unwrap();
         assert!(
-            subset
+            joint
                 .examples
                 .iter()
-                .filter(|e| e.doc_scope_hint == "empty")
-                .count()
-                >= 2,
-            "empty-scope rule cases present"
+                .all(|e| e.capabilities == ["rag", "search"])
         );
-        // Legacy examples keep working: no capabilities field consumed → mode fallback.
+        // Memory cases carry scripted history; time case carries client_context.
+        let mem = dataset
+            .subsets
+            .iter()
+            .find(|s| s.name == "memory_coreference")
+            .unwrap();
+        assert!(mem.examples.iter().all(|e| !e.prior_turns.is_empty()));
+        let tools = dataset
+            .subsets
+            .iter()
+            .find(|s| s.name == "chat_builtin_tools")
+            .unwrap();
+        assert!(tools.examples.iter().any(|e| e.client_time.is_some()));
+        // Legacy fallback unchanged.
         let legacy = dataset
             .subsets
             .iter()

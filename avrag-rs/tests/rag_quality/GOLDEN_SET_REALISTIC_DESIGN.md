@@ -189,3 +189,52 @@ E2E_MODE=nightly cargo test -p app --test product_e2e rag_quality_prod \
 | `baiyao_it_planning.pdf` | 同上（+`.txt`） | 未在本机检出 |
 
 > 注意：runner 当前上传的是 `.txt` 抽取版（office parser 离线时可跑）；要测完整多模态管线，起 office parser 后把 `corpus_files` 切回 DOCX/XLSX/PDF 原件。
+
+---
+
+## 7. v4.0.0-orchestrator-groups（2026-07-19，能力分组扩充）
+
+### 7.1 变更要点
+
+- **语料 7→10 份**：新增智遥咨询 3 篇（`consulting_rbf_drc` / `consulting_prepared_food` / `consulting_craftsman_paradox`，OneDrive 原件已入库 fixtures，见 §7.5 映射）。
+- **按能力分组**（每组测一种特定能力）：v2 十个 rag 内容组（107 题）不动，新范式相关题拆为 7 组共 36 题，总计 **143**。
+- **新字段**：`prior_turns`（会话历史注入，测记忆/指代）、`client_time`（`client_context.local_time` 注入，时间题确定性）；`expected_tool` 在 V2 编排下转为**调用意图记录**（worker 内部通道不可外部观测，判分以内容门为准）。
+
+### 7.2 分组总览（v4 新增/调整）
+
+| 子集 | 题数 | 测的能力 |
+|---|---|---|
+| `orchestrator_paradigm` | 8 | 编排行为：空选择规则、纯聊天边界、跨文档张冠李戴拒答、多 chunk 覆盖 |
+| `rag_search_joint` | 6 | RAG+Search 综合：语料事实 vs 外部公开知识对照互证（min_doc+min_web 引用齐备） |
+| `chat_builtin_tools` | 4 | 内置工具：calculator×2（确定性数值）、user_context 时间（注入复现）、weather_query（通路冒烟） |
+| `rag_codegen_channels` | 7 | codegen 通道形态：dense×2（无关键词重叠）、lexical×2（精确编号/数字）、graph×1（DRC-DRO/DRP，需 triplet 重灌）、summary×1、metadata×1 |
+| `memory_coreference` | 3 | 记忆+指代消解：prior_turns 注入历史，承接上文+检索融合、会话事实复述 |
+| `search_web` | 2 | 纯 Search：仅 search 标签，web 引用必备 |
+| `new_corpus_factual` | 6 | 新语料事实：RBF/预制菜/手艺人逐篇 2 题 |
+
+### 7.3 最佳实践落法
+
+- **确定性门优先**：must_include 用语料原子事实或注入值（时间/算术），避免语义漂移误判；`must_not_include` 抓张冠李戴与全库注入。
+- **环境依赖显式化**：`requires_network`（Brave 代理）、`requires_triplet_reingest`（graph 题）由 runner 分别用 `E2E_SKIP_NETWORK_CASES=1` / 提示跳过，不产生环境性红。
+- **多轮确定性**：记忆/指代不用真实跨会话状态（flaky），用 `prior_turns` 以 `messages` 注入同会话历史。
+- **V2 可观测性边界**：编排器 worker 内部通道（dense/lexical/graph）不进外层 SSE——通道题以**答案内容门**判分，`expected_tool` 仅记录意图（tools runner 的 SSE 观测在 V3 欠账项）。
+
+### 7.4 runner 变更（`realistic_corpus_full_eval` / `TestContext`）
+
+- `corpus_files` 增至 10 份（新增 3 篇 txt 抽取版）；`scope_keys` 同步增 `rbf/prepared_food/craftsman`。
+- `chat_v3`：capabilities + `prior_turns`→`messages` + `client_time`→`client_context.local_time`（管线：`agent_runtime.rs` 将其写入 metadata 供 `user_context` 读取）。
+
+### 7.5 语料 OneDrive 原件映射（2026-07-19 核实）
+
+| Fixture | OneDrive 原件 | 关系 |
+|---|---|---|
+| `thesis_y_refrigeration.docx` | `邢川/MBA/论文/答辩/41911407-邢川-林海芬格式2.docx` | 同尺寸（484,371 B） |
+| `adr-0004-rag-agent-loop.md` | 库内 `avrag-rs/docs/adr/0004-rag-agent-loop-native-tools.md` | 逐字节一致 |
+| `adr-0009-codegen-sandbox-bridge.md` | 库内 `avrag-rs/docs/adr/0009-codegen-sandbox-retrieval-bridge.md` | 逐字节一致 |
+| `consulting_platform_network_effects.docx` | `邢川/咨询/智遥咨询/智遥咨询文章.docx` | 内容核实（平台网络效应文） |
+| `consulting_compensation_design.docx` | `邢川/咨询/智遥咨询/薪酬解构.docx` | 内容核实（薪酬解构文） |
+| `huawei_ipd_370_activities.xlsx` | `邢川/咨询/智遥咨询/H为-IPD流程各阶段370个活动详解(3)(1).xlsx` | 同尺寸（90,071 B） |
+| `baiyao_it_planning.pdf` | `邢川/咨询/佰世方略/【呈云南白药】…IT规划0411.pdf` | 同尺寸（1,904,005 B） |
+| `consulting_rbf_drc.docx` | `邢川/咨询/智遥咨询/RBF、滴灌通和乐旋乒乓.docx` | **v4 新增** |
+| `consulting_prepared_food.docx` | `邢川/咨询/智遥咨询/预制菜映射中国企业价值观困境.docx` | **v4 新增** |
+| `consulting_craftsman_paradox.docx` | `邢川/咨询/智遥咨询/手艺人模式的增长悖论.docx` | **v4 新增** |

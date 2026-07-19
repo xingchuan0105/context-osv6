@@ -248,8 +248,53 @@ impl TestContext {
         doc_scope: &[String],
         capabilities: Option<&[String]>,
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, workspace_id, doc_scope, None, false, capabilities)
+        self.chat_v3(query, workspace_id, doc_scope, capabilities, None, None)
             .await
+    }
+
+    /// v3 full surface: capabilities + scripted prior turns (memory/coreference)
+    /// + deterministic client time injection (metadata.client_local_time).
+    pub async fn chat_v3(
+        &self,
+        query: &str,
+        workspace_id: &str,
+        doc_scope: &[String],
+        capabilities: Option<&[String]>,
+        prior_turns: Option<&[(String, String)]>,
+        client_time: Option<&str>,
+    ) -> anyhow::Result<HttpResponse> {
+        set_mock_rag_codegen_query(query);
+        let mut body = serde_json::json!({
+            "query": query,
+            "agent_type": "rag",
+            "workspace_id": workspace_id,
+            "doc_scope": doc_scope,
+            "stream": false,
+        });
+        if let Some(caps) = capabilities {
+            body["capabilities"] = serde_json::json!(caps);
+        }
+        if let Some(turns) = prior_turns {
+            let mut messages = Vec::with_capacity(turns.len() * 2);
+            for (q, a) in turns {
+                messages.push(serde_json::json!({"role": "user", "content": q}));
+                messages.push(serde_json::json!({"role": "assistant", "content": a}));
+            }
+            body["messages"] = serde_json::json!(messages);
+        }
+        if let Some(t) = client_time {
+            body["client_context"] =
+                serde_json::json!({"local_time": t, "timezone": "Asia/Shanghai"});
+        }
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
     }
 
     pub async fn chat_without_mock_chunk_pin(

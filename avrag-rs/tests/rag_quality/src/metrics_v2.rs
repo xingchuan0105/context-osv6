@@ -780,6 +780,8 @@ mod tests {
             doc_scope_hint: "all".to_string(),
             expect_citations: None,
             requires_network: false,
+            prior_turns: vec![],
+            client_time: None,
         }
     }
 

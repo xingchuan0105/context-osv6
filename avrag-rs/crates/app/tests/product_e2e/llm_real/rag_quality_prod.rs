@@ -487,6 +487,9 @@ fn resolve_doc_scope(hint: &str, scope_keys: &[&str], doc_ids: &[String]) -> Vec
         "consulting_compensation" => pick("consulting_compensation").into_iter().collect(),
         "ipd" => pick("ipd").into_iter().collect(),
         "baiyao" => pick("baiyao").into_iter().collect(),
+        "rbf" => pick("rbf").into_iter().collect(),
+        "prepared_food" => pick("prepared_food").into_iter().collect(),
+        "craftsman" => pick("craftsman").into_iter().collect(),
         _ => doc_ids.to_vec(),
     }
 }
@@ -514,6 +517,10 @@ async fn realistic_corpus_full_eval() {
         ("consulting_compensation_design.txt", 120), // 3K chars
         ("huawei_ipd_370_activities.txt", 120),      // 54K chars, table as TSV
         ("baiyao_it_planning.txt", 300),             // 20K chars, PDF->TXT
+        // v4 增量语料（智遥咨询 3 篇，OneDrive 原件已入库 fixtures）
+        ("consulting_rbf_drc.txt", 120),             // 4K chars, 滴灌通&RBF
+        ("consulting_prepared_food.txt", 120),       // 4.3K chars, 预制菜
+        ("consulting_craftsman_paradox.txt", 120),   // 1.4K chars, 手艺人模式
     ];
     // v3 scope keys — parallel to `corpus_files` order (doc_scope_hint → ids).
     let scope_keys = [
@@ -524,6 +531,9 @@ async fn realistic_corpus_full_eval() {
         "consulting_compensation",
         "ipd",
         "baiyao",
+        "rbf",
+        "prepared_food",
+        "craftsman",
     ];
 
     let mut doc_ids: Vec<String> = Vec::new();
@@ -601,8 +611,20 @@ async fn realistic_corpus_full_eval() {
         }
         let scope = resolve_doc_scope(&example.doc_scope_hint, &scope_keys, &doc_ids);
         let caps = example.resolved_capabilities();
+        let turns: Vec<(String, String)> = example
+            .prior_turns
+            .iter()
+            .map(|t| (t.query.clone(), t.answer.clone()))
+            .collect();
         let resp = match ctx
-            .chat_with_capabilities(&example.query, &workspace_id, &scope, Some(&caps))
+            .chat_v3(
+                &example.query,
+                &workspace_id,
+                &scope,
+                Some(&caps),
+                if turns.is_empty() { None } else { Some(&turns) },
+                example.client_time.as_deref(),
+            )
             .await
         {
             Ok(r) => r,
