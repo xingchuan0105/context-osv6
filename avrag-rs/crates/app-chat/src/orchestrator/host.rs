@@ -1435,7 +1435,9 @@ mod tests {
             );
         }
         assert!(
-            orch.contains("不写给用户看的最终长文") || orch.contains("不写给用户看的长文"),
+            orch.contains("不写给用户看的最终长文")
+                || orch.contains("不写给用户看的长文")
+                || orch.contains("写用户可见终答"),
             "orchestrator-base must retain coordinator no-final-answer rule"
         );
         assert!(

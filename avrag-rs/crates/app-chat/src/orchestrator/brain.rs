@@ -1480,7 +1480,7 @@ mod tests {
             .expect("system message");
         // rag + search 都物化 → 两份「给任务分配者」小节都在编排 system 里。
         assert_eq!(system.content.matches("## 给任务分配者").count(), 2, "{}", system.content);
-        assert!(system.content.contains("公网检索"), "{}", system.content);
+        assert!(system.content.contains("公网 web search"), "{}", system.content);
         assert!(system.content.contains("已开启的检索通道"), "{}", system.content);
     }
 
