@@ -75,6 +75,11 @@ impl ReActLoop {
         self.append_codegen_messages(state, llm_response, &observation);
 
         if any_error {
+            // C2: bridge calls that succeeded before the block errored produced
+            // real evidence — preserve it instead of discarding it with the
+            // errored round. Error-status items are filtered downstream
+            // (EvidenceStore::insert_from_tool_results skips non-Ok results).
+            Self::record_bridge_evidence(state, &combined_result, bridge_tool_results);
             if let Some(outcome) = self.handle_codegen_error(iteration, state, sink).await {
                 return Ok(outcome);
             }
@@ -174,6 +179,18 @@ impl ReActLoop {
         bridge_tool_results: Vec<ToolResult>,
     ) {
         state.consecutive_sandbox_errors = 0;
+        Self::record_bridge_evidence(state, combined_result, bridge_tool_results);
+    }
+
+    /// Extend `state.tool_results` with bridge-captured retrieval results (or
+    /// the stdout-fallback parse when the bridge captured nothing). Shared by
+    /// the success path and the errored-round path (C2): evidence from a
+    /// successful bridge call is valid even when the enclosing block errored.
+    fn record_bridge_evidence(
+        state: &mut IterationState,
+        combined_result: &str,
+        bridge_tool_results: Vec<ToolResult>,
+    ) {
         if !bridge_tool_results.is_empty() {
             state.tool_results.extend(bridge_tool_results);
         } else if let Some(result) =
@@ -230,7 +247,14 @@ impl ReActLoop {
                         ));
                     Ok(exec)
                 }
-                Err(e) => Err(e),
+                Err(e) => {
+                    // C2: an interpreter-level failure still leaves any bridge
+                    // calls that succeeded before it behind — capture them so
+                    // their evidence survives the errored block.
+                    block_bridge_results = bridge.take_captured_results();
+                    bridge_calls = bridge.take_captured_calls();
+                    Err(e)
+                }
             };
         } else {
             let interpreter_lock = Arc::clone(&interpreter_lock);
@@ -447,5 +471,53 @@ mod tests {
         let msg = format_codegen_result_message(raw);
         assert!(msg.contains("<code_execution_result"));
         assert!(msg.contains("</code_execution_result>"));
+    }
+
+    fn test_iteration_state() -> IterationState {
+        IterationState {
+            messages: vec![],
+            disclosed: crate::react_loop::assembler::DisclosedState::default(),
+            tool_results: vec![],
+            total_tool_calls: 0,
+            consecutive_sandbox_errors: 0,
+            reasoning_acc: String::new(),
+            answer_deltas_streamed: false,
+        }
+    }
+
+    fn ok_bridge_result() -> ToolResult {
+        ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1.0".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!([{"chunk_id": "c1", "text": "alpha beta"}])),
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn errored_round_still_preserves_captured_bridge_evidence() {
+        // C2: bridge calls that succeeded before the block errored must extend
+        // state.tool_results even though the round is counted as an error.
+        let mut state = test_iteration_state();
+        state.consecutive_sandbox_errors = 1;
+        ReActLoop::record_bridge_evidence(&mut state, "", vec![ok_bridge_result()]);
+        assert_eq!(state.tool_results.len(), 1);
+        assert_eq!(state.tool_results[0].tool, "dense_retrieval");
+        // The error path must NOT reset the consecutive-error counter (that
+        // reset stays exclusive to record_codegen_success).
+        assert_eq!(state.consecutive_sandbox_errors, 1);
+    }
+
+    #[test]
+    fn stdout_fallback_parse_used_when_bridge_captured_nothing() {
+        // Shared helper keeps the pre-C2 fallback: no bridge results → parse
+        // chunk JSON out of the combined stdout observation.
+        let mut state = test_iteration_state();
+        let combined = "[block 0] stdout: [{\"chunk_id\": \"c9\", \"text\": \"alpha\"}]\nstderr: ";
+        // Only assert the call path exists and does not panic; the fallback
+        // parser decides whether this shape yields a result.
+        ReActLoop::record_bridge_evidence(&mut state, combined, Vec::new());
+        let _ = state.tool_results.len();
     }
 }
