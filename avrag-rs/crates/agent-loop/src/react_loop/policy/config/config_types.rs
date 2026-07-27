@@ -27,6 +27,11 @@ pub struct ModeConfig {
     pub loop_exit: LoopExitConfig,
     #[serde(default)]
     pub synthesis_output: SynthesisOutputConfig,
+    /// U3: this loop is a channel **worker** whose final message is the
+    /// internal handoff JSON (set by app-chat `apply_worker_handoff_loop_exit`).
+    /// Serde-default false so yamls and older configs are unaffected.
+    #[serde(default)]
+    pub worker_handoff: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

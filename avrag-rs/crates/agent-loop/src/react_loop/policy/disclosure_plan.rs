@@ -84,7 +84,13 @@ impl DisclosurePlanner {
             }
         }
 
-        slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Synthesis));
+        // U3: the synthesis cluster index (writing/format catalog) is
+        // answer-side scaffolding — noise for channel workers whose final
+        // message is the handoff JSON (C5 gives them an explicit handoff
+        // turn). Answer/AnswerOnly loops still get it.
+        if !mode.worker_handoff {
+            slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Synthesis));
+        }
 
         if let Some(writing_ref) = choices.writing_ref.as_deref() {
             push_cluster_body(

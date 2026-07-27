@@ -292,6 +292,17 @@ impl OrchestratorExecutor for AgentServiceExecutor {
         };
         if let Ok(assembled) = crate::assemble_mode(cap_set) {
             let mut parts = assembled.system_prompt_parts;
+            // U12: the evidence-pointer rule varies by channel — rag workers
+            // ground on code-execution observations; search workers have no
+            // codegen and ground on native tool results.
+            let evidence_rule = match channel {
+                Channel::Rag => "evidence pointers must come from your **code-execution observations** \
+                 (`<code_execution_result>` / retrieval chunks), not from inventing native \
+                 tool calls. Workspace retrieval is `<code language=\"python\">` + \
+                 `await client.…` only.",
+                Channel::Search => "evidence pointers must come from your **native tool results** \
+                 (`web_search` / `web_fetch` observations), not from inventing tool calls.",
+            };
             // Brief + worker-output slim: the worker's final message is an
             // internal hand-off; the chat exit writes the user answer (Option B).
             parts.push(format!(
@@ -307,7 +318,7 @@ impl OrchestratorExecutor for AgentServiceExecutor {
                    \"gaps\": [\"what you could not find / sections not covered\"]\n\
                  }}\n\
                  Rules: `coverage=full` only when the brief is fully covered; list real gaps; \
-                 evidence pointers must come from your tool results.",
+                 {evidence_rule}",
                 brief.goal
             ));
             req.metadata.insert(
