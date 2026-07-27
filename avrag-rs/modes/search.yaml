@@ -14,10 +14,6 @@ budget:
     enterprise: 3
 # Unified with chat/rag so capability stack does not change sampling policy.
 temperature: 0.4
-query_normalization:
-  enabled: true
-  max_prior_turns: 6
-  llm_fallback: true
 loop_exit:
   require_evidence: true
   allow_content_early_stop: false
