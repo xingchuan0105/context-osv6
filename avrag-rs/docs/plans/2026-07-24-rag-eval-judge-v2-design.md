@@ -178,7 +178,9 @@ User:   [question, reference_answer, expected_should_answer,
    - 是否在回答所问；文不对题即使「正确事实」也低分。
 
 4. **refusal**  
-   - 对齐 `expected_should_answer`；拒答话术多样化仍算拒答。
+   - 对齐 `expected_should_answer`；拒答话术多样化仍算拒答。  
+   - **实质重于形式**（2026-07-27 契约）：只要答案核心信息是「材料未记载所问内容」即判 `is_refusal=true`——解释型、委婉型、部分帮助型（声明未记载同时提供相关背景）与直白拒答等价；声明「未记载」后继续给出 context 没有的具体信息则判 `is_refusal=false`（实质是编造，由 faithfulness 扣分）。  
+   - `expected_should_answer=false` 且模型实质拒答时：`answer_correctness.verdict=not_applicable`、score 填 1.0 占位（不得给 0）；聚合层对 `not_applicable` 视为 correctness 缺失，不参与 SELECTION_MISS / INCORRECT / PARTIAL 判定。
 
 5. **禁止**  
    - 不要因「未出现某个精确字符串」扣 correctness。  

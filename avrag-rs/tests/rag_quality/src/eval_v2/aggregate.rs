@@ -3,6 +3,19 @@
 //! Phase 0 semantics (design §7.2): labels and summaries are **report-only** —
 //! nothing here gates or fails a run. Thresholds are the uncalibrated initial
 //! values in `JudgeThresholds::default`.
+//!
+//! Refusal contract (SUBSTANCE over FORM): the judge marks `is_refusal` for
+//! any answer whose core message is "the material does not contain X"
+//! (explanatory variants included), and `false` for declare-then-fabricate
+//! answers. The label layer never trusts the judge's raw
+//! `correct_for_expectation` — REFUSAL_WRONG is derived deterministically as
+//! `is_refusal == expected_should_answer`. Interplay: a refuse-then-fabricate
+//! answer gets `is_refusal=false` from the judge, so an
+//! `expected_should_answer=false` question lands REFUSAL_WRONG (with the
+//! fabrication also visible in faithfulness unsupported_claims). A correct
+//! substantive refusal carries `correctness.verdict=not_applicable` — treated
+//! as correctness ABSENT below, so it cannot trigger SELECTION_MISS /
+//! INCORRECT / PARTIAL and the question lands PASS.
 
 use std::collections::BTreeMap;
 
@@ -73,8 +86,16 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
         return LabelV2::JudgeError;
     };
     let t = input.thresholds;
+    // `not_applicable` correctness (the correct-substantive-refusal case) is
+    // treated as ABSENT: it must not feed SELECTION_MISS / INCORRECT /
+    // PARTIAL, otherwise a correct refusal with a 0 placeholder score would
+    // be mislabeled (the q041/q043 failure mode).
+    let correctness_na = judge.answer_correctness.verdict == CorrectnessVerdict::NotApplicable;
     let correctness = judge.answer_correctness.score;
-    if input.retrieval_recall > 0.0 && input.cited_gold_hits == 0 && correctness < t.tau_correctness
+    if input.retrieval_recall > 0.0
+        && input.cited_gold_hits == 0
+        && !correctness_na
+        && correctness < t.tau_correctness
     {
         return LabelV2::SelectionMiss;
     }
@@ -93,11 +114,12 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     {
         return LabelV2::Ungrounded;
     }
-    if correctness < t.partial_min {
+    if !correctness_na && correctness < t.partial_min {
         return LabelV2::Incorrect;
     }
-    if correctness < t.tau_correctness
-        || judge.answer_correctness.verdict == CorrectnessVerdict::Partial
+    if !correctness_na
+        && (correctness < t.tau_correctness
+            || judge.answer_correctness.verdict == CorrectnessVerdict::Partial)
     {
         return LabelV2::Partial;
     }
@@ -549,6 +571,44 @@ mod tests {
             true,
         );
         assert_eq!(label_for(&base_input(&judge)), LabelV2::Pass);
+    }
+
+    #[test]
+    fn correct_substantive_refusal_with_na_correctness_passes() {
+        // q043/q112 shape: esa=false, the model substantively declined
+        // (is_refusal=true), judge marked correctness verdict=not_applicable
+        // with a 0 placeholder score, retrieval found chunks but nothing
+        // golden was cited. Before the NA fix this landed SELECTION_MISS
+        // (correctness 0 < τ_c); the correct label is PASS.
+        let judge = judge_output_full(
+            0.0,
+            CorrectnessVerdict::NotApplicable,
+            1.0,
+            FaithfulnessVerdict::Grounded,
+            &[],
+            true,
+            true,
+        );
+        let mut input = base_input(&judge);
+        input.expected_should_answer = false;
+        input.retrieval_recall = 1.0;
+        input.cited_gold_hits = 0;
+        assert_eq!(label_for(&input), LabelV2::Pass);
+
+        // Same shape but the refusal is wrong (answered despite esa=false,
+        // is_refusal=false) → REFUSAL_WRONG still fires on the derived rule.
+        let judge = judge_output_full(
+            0.0,
+            CorrectnessVerdict::NotApplicable,
+            1.0,
+            FaithfulnessVerdict::Grounded,
+            &[],
+            false,
+            false,
+        );
+        let mut input = base_input(&judge);
+        input.expected_should_answer = false;
+        assert_eq!(label_for(&input), LabelV2::RefusalWrong);
     }
 
     #[test]
