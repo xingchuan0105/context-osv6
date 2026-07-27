@@ -37,3 +37,4 @@ tree-sitter-java = "0.23.5"
 avrag-cache-redis = { path = "../cache-redis" }
 axum = { version = "0.8", features = ["macros"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+dotenvy = "0.15"
