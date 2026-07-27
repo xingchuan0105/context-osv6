@@ -600,6 +600,18 @@ mod tests {
     }
 
     #[test]
+    fn c5_final_turn_output_shape_parses_as_handoff() {
+        // The budget-exhaustion final turn (agent-loop C5) asks for the bare
+        // internal_worker_handoff_v1 JSON object — no fences, no code blocks.
+        // Prove that exact shape reaches the handoff parser as structured JSON.
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"论文未记载保修年限","key_facts":[],"coverage":"insufficient","gaps":["保修年限"]}"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert_eq!(h.summary, "论文未记载保修年限");
+        assert_eq!(h.coverage, "insufficient");
+        assert_eq!(h.gaps, vec!["保修年限".to_string()]);
+    }
+
+    #[test]
     fn broken_open_marker_does_not_swallow_following_valid_eids() {
         // Acceptance defect: model wrote `[[E15]目录]` (one `]`), then valid
         // `[[E1]]` / `[[E2]]`. Greedy `find("]]")` used to glue them into one
