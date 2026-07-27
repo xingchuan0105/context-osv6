@@ -21,7 +21,7 @@ use super::chat_exit::{direct_handoff, synthesize_handoff};
 use super::host::{dispatch_channel, OrchestratedTurn, OrchestratorExecutor};
 use super::invariant::missing_dispatches;
 use super::materialize::materialize_channels;
-use super::store::EvidenceStore;
+use super::store::{EvidenceKind, EvidenceStore};
 use super::types::{Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief};
 use super::workers::{finalize_answer_evidence, tool_failures, worker_handoff_from_run};
 use crate::capabilities::CapabilitySet;
@@ -77,6 +77,16 @@ fn tool_spec(name: &str, description: &str, input_schema: serde_json::Value) -> 
         input_schema,
         output_schema: serde_json::json!({}),
     }
+}
+
+/// True when the store holds at least one CITABLE entry (DocChunk / WebPage;
+/// DocProfile orientation entries are never citable and do not count).
+/// Drives the C1 finish_answer mode=direct guard.
+fn store_has_citable_evidence(store: &EvidenceStore) -> bool {
+    store
+        .entries()
+        .iter()
+        .any(|e| matches!(e.kind, EvidenceKind::DocChunk | EvidenceKind::WebPage))
 }
 
 /// Tool surface for the orchestrator: only materialized channels are offered
@@ -742,6 +752,22 @@ pub async fn run_llm_orchestrated_turn(
                 .get("instruction")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
+            // C1: mode=direct is only valid for zero-evidence pure-chat turns.
+            // When the store already holds CITABLE evidence (DocChunk/WebPage
+            // — DocProfile orientation entries do not count), a direct handoff
+            // would discard the whole evidence package and the Answer phase
+            // truthfully reports "no materials" (2026-07-27 autopsy class).
+            // Override to synthesize and trace the reason.
+            let mode = if mode == "direct" && store_has_citable_evidence(&store) {
+                tracing::warn!(
+                    citable = true,
+                    "finish_answer mode=direct overridden to synthesize: \
+                     evidence store holds citable evidence"
+                );
+                "synthesize"
+            } else {
+                mode
+            };
             let handoff: ChatHandoff = if mode == "direct" {
                 direct_handoff(&query)
             } else {
