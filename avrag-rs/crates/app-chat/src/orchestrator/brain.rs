@@ -1,11 +1,12 @@
 //! V2 ReAct orchestrator brain (AGENT_ORCHESTRATOR_V2).
 //!
 //! Step-wise LLM dispatch loop: the model calls `delegate_rag` /
-//! `delegate_search` / `delegate_chat` / `evidence_fetch` (host-intercepted,
-//! never registered on the global catalog) and observes each result before
-//! choosing the next action. No rule-based planning or query-rewriting code —
-//! de-referencing and channel-appropriate briefs are the model's reasoning,
-//! guided by `prompts/orchestrators/orchestrator-base.md` (design §3.2).
+//! `delegate_search` / `finish_answer` / `evidence_fetch`
+//! (host-intercepted, never registered on the global catalog) and observes each
+//! result before choosing the next action. No rule-based planning or
+//! query-rewriting code — de-referencing and channel-appropriate briefs are the
+//! model's reasoning, guided by `prompts/orchestrators/orchestrator-base.md`
+//! (design §3.2).
 //!
 //! Code owns only: materialization, finish-gates, loop guards, the evidence
 //! store, and marker finalization.
@@ -22,11 +23,17 @@ use super::host::{dispatch_channel, OrchestratedTurn, OrchestratorExecutor};
 use super::invariant::missing_dispatches;
 use super::materialize::materialize_channels;
 use super::store::{EvidenceKind, EvidenceStore};
-use super::types::{Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief};
-use super::workers::{finalize_answer_evidence, tool_failures, worker_handoff_from_run};
+use super::types::{
+    Channel, ChannelNote, ChatExitMode, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
+};
+use super::workers::{
+    attach_store_retrieval_tool_results, finalize_answer_evidence, tool_failures,
+    worker_handoff_from_run, worker_observability_from_run, WorkerRunObservability,
+};
 use crate::capabilities::CapabilitySet;
 
-/// Feature flag: `AGENT_ORCHESTRATOR_V2=1` (or true/yes/on). Requires V1 on.
+/// Feature flag: `AGENT_ORCHESTRATOR_V2=1` (or true/yes/on). Falls back to the
+/// structural first-wave host when off or when no orchestrator llm is configured.
 pub fn orchestrator_v2_enabled() -> bool {
     match std::env::var("AGENT_ORCHESTRATOR_V2") {
         Ok(v) => {
@@ -61,7 +68,7 @@ fn orchestrator_loop_config() -> LoopConfig {
     let base_prompt = agent_loop::r#loop::config::load_system_prompt(
         "prompts/orchestrators/orchestrator-base.md",
     )
-    .unwrap_or_else(|_| "你是 Context OS 的编排 Agent。你只分配任务，不检索、不写最终答案。".into());
+    .unwrap_or_else(|_| "你是 Context OS 的协调者：读懂问题、派活给检索同事、再移交答案撰写。".into());
     LoopConfig {
         max_rounds,
         temperature,
@@ -76,6 +83,62 @@ fn tool_spec(name: &str, description: &str, input_schema: serde_json::Value) -> 
         description: description.to_string(),
         input_schema,
         output_schema: serde_json::json!({}),
+    }
+}
+
+/// Orchestrator-facing dispatch notes (`## 给任务分配者`) of a channel's
+/// capability manual — what the coordinator must know to write briefs
+/// (2026-07-20 prompt design §3.2 / §5-A). Falls back to the full manual
+/// (with a warning) when the section heading is missing.
+fn channel_dispatch_manual(channel: Channel) -> Option<String> {
+    let path = match channel {
+        // U1: the orchestrator-facing section lives in its own dispatch file —
+        // workers receive the capability manual without it.
+        Channel::Rag => "prompts/orchestrators/capability-rag.dispatch.md",
+        Channel::Search => "prompts/orchestrators/capability-search.dispatch.md",
+    };
+    let manual = agent_loop::r#loop::config::load_system_prompt(path)
+        .map_err(|e| {
+            tracing::warn!(path, error = %e, "capability manual load failed; dispatch notes skipped");
+            e
+        })
+        .ok()?;
+    dispatch_note_from_manual(path, &manual)
+}
+
+/// C8b: extract the `## 给任务分配者` section from a capability manual, or
+/// fail loud — a manual without the section is a broken asset, so the channel
+/// gets NOTHING injected (no silent full-manual dump into the coordinator
+/// prompt) and the misconfiguration is logged with the manual path and the
+/// missing heading. Split out so the behavior is unit-testable without
+/// touching the prompt files.
+fn dispatch_note_from_manual(path: &str, manual: &str) -> Option<String> {
+    extract_dispatch_section(manual).or_else(|| {
+        tracing::warn!(
+            path,
+            heading = "## 给任务分配者",
+            "capability manual missing dispatch section; channel gets no manual injected"
+        );
+        None
+    })
+}
+
+/// Slice the `## 给任务分配者` section out of a capability manual: from that
+/// heading to the next `## ` heading (or EOF). `None` when absent — or when
+/// the heading has no body, which is useless to the coordinator.
+fn extract_dispatch_section(manual: &str) -> Option<String> {
+    const HEADING: &str = "## 给任务分配者";
+    let start = manual.find(HEADING)?;
+    let section = &manual[start..];
+    let end = section[HEADING.len()..]
+        .find("\n## ")
+        .map(|i| HEADING.len() + i)
+        .unwrap_or(section.len());
+    let section = section[..end].trim();
+    if section[HEADING.len()..].trim().is_empty() {
+        None
+    } else {
+        Some(section.to_string())
     }
 }
 
@@ -134,13 +197,13 @@ fn orchestrator_tools(channels: &[Channel], has_memory: bool) -> Vec<contracts::
         }),
     ));
     tools.push(tool_spec(
-        "delegate_chat",
-        "移交 Chat exit 写最终回答（唯一用户出口）。所有已物化通道必须至少派发过一次才能调用（finish-gate）。",
+        "finish_answer",
+        "结束派活并进入答案撰写阶段（唯一用户出口）。所有已开启的检索通道必须至少派发过一次才能调用（否则被运行时拦截）。mode=synthesize 时携带证据清单与写作说明；mode=direct 时直接回答。注意：mode=direct 仅在证据库为空（纯聊天）时生效；证据库已有可引用证据时 direct 会被运行时改判为 synthesize。",
         serde_json::json!({
             "type": "object",
             "properties": {
                 "mode": {"type": "string", "enum": ["synthesize", "direct"]},
-                "instruction": {"type": "string", "description": "给 Chat 的写作指令：必须显式写明理解口径（问题的多种读法中你选择了哪种，一句话）+ 证据组织方式 + 对比维度"}
+                "instruction": {"type": "string", "description": "给答案撰写者的写作指令：必须显式写明理解口径（问题的多种读法中你选择了哪种，一句话）+ 证据组织方式 + 对比维度"}
             },
             "required": ["mode"]
         }),
@@ -183,9 +246,11 @@ fn chat_message(role: &str, content: impl Into<String>) -> ChatMessage {
     }
 }
 
-/// Refresh-per-round system message: base doctrine + live turn state.
+/// Refresh-per-round system message: base doctrine + dispatch-view capability
+/// notes + live turn state.
 fn render_system_message(
     base_prompt: &str,
+    dispatch_manuals: &[String],
     channels: &[Channel],
     store: &EvidenceStore,
     records: &[DispatchRecord],
@@ -195,12 +260,16 @@ fn render_system_message(
 ) -> ChatMessage {
     let mut s = String::new();
     s.push_str(base_prompt);
+    for manual in dispatch_manuals {
+        s.push_str("\n\n");
+        s.push_str(manual);
+    }
     s.push_str("\n\n## 本轮状态（运行时注入，每轮刷新）\n");
     if let Some(profile) = prefs.and_then(render_user_profile) {
         s.push_str(&profile);
     }
     s.push_str(&format!(
-        "- 已物化通道（各至少派发一次后才能 delegate_chat）：{}\n",
+        "- 已开启的检索通道（各至少派发一次后才能 finish_answer）：{}\n",
         channels
             .iter()
             .map(|c| c.as_str())
@@ -363,14 +432,26 @@ pub async fn run_llm_orchestrated_turn(
             records: vec![],
             handoff,
             agent_type_label: label,
+            worker_observability: vec![],
         });
     }
 
     let config = orchestrator_loop_config();
     let tools = orchestrator_tools(&channels, memory.is_some());
+    // Dispatch-view capability notes for the coordinator, loaded once per turn
+    // (2026-07-20 prompt design §5-A); injected into every round's system.
+    let dispatch_manuals: Vec<String> = channels
+        .iter()
+        .filter_map(|ch| channel_dispatch_manual(*ch))
+        .collect();
+    // Turn-start fact (2026-07-23): the brain's round-0 LLM call can take tens
+    // of seconds — the client gets an immediate step instead of dead air.
+    agent_loop::progress::emit_work_fact(sink, agent_loop::progress::WorkFact::understand(&query))
+        .await;
     let mut store = EvidenceStore::from_docscope(docscope);
     let mut records: Vec<DispatchRecord> = Vec::new();
     let mut channel_notes = Vec::new();
+    let mut worker_observability: Vec<WorkerRunObservability> = Vec::new();
     let mut dispatch_counts: HashMap<Channel, usize> = HashMap::new();
     let mut seen_goals: HashSet<(Channel, String)> = HashSet::new();
 
@@ -385,8 +466,16 @@ pub async fn run_llm_orchestrated_turn(
     let mut nudge_rounds = 0u8;
 
     for round in 0..config.max_rounds {
+        // Per-round thinking fact (2026-07-23): the brain's LLM call below is
+        // the last silent stretch between retrieval facts and the answer.
+        agent_loop::progress::emit_work_fact(
+            sink,
+            agent_loop::progress::WorkFact::thinking(None),
+        )
+        .await;
         messages[0] = render_system_message(
             &config.base_prompt,
+            &dispatch_manuals,
             &channels,
             &store,
             &records,
@@ -416,7 +505,7 @@ pub async fn run_llm_orchestrated_turn(
             }
             messages.push(chat_message(
                 "user",
-                "继续：请调用一个工具（delegate_* / evidence_fetch / delegate_chat）。",
+                "继续：请调用一个工具（delegate_* / evidence_fetch / finish_answer）。",
             ));
             continue;
         }
@@ -460,7 +549,7 @@ pub async fn run_llm_orchestrated_turn(
                         call_id,
                         &call.tool,
                         format!(
-                            "通道 {} 已派发 {} 次（上限）。用 evidence_fetch 深读已有证据，或 delegate_chat",
+                            "通道 {} 已派发 {} 次（上限）。用 evidence_fetch 深读已有证据，或 finish_answer",
                             channel.as_str(),
                             MAX_REDISPATCH_PER_CHANNEL
                         ),
@@ -475,7 +564,7 @@ pub async fn run_llm_orchestrated_turn(
                     guard_error(
                         call_id,
                         &call.tool,
-                        "search 已连续空结果/失败且无可用网页证据；不要再 delegate_search，请用已有证据 delegate_chat 并说明网页侧未命中",
+                        "search 已连续空结果/失败且无可用网页证据；不要再 delegate_search，请用已有证据 finish_answer 并说明网页侧未命中",
                     ),
                 ));
                 continue;
@@ -534,6 +623,7 @@ pub async fn run_llm_orchestrated_turn(
                             channel = channel.as_str(),
                             status = ?status,
                             item_count = inserted,
+                            worker_tools = ?run.tool_results.iter().map(|t| t.tool.as_str()).collect::<Vec<_>>(),
                             "orchestrator dispatch finished"
                         );
                         records.push(DispatchRecord {
@@ -543,6 +633,8 @@ pub async fn run_llm_orchestrated_turn(
                             item_count: inserted,
                             error: error.clone(),
                         });
+                        worker_observability
+                            .push(worker_observability_from_run(*channel, &run));
                         let handoff = worker_handoff_from_run(&run);
                         let note = ChannelNote::with_handoff(
                             *channel,
@@ -664,7 +756,7 @@ pub async fn run_llm_orchestrated_turn(
                         ),
                     ));
                 }
-                "delegate_chat" => {
+                "finish_answer" => {
                     chat_call = Some((call, call_id.clone()));
                 }
                 "conversation_history_load" => {
@@ -720,7 +812,7 @@ pub async fn run_llm_orchestrated_turn(
             }
         }
 
-        // 4) delegate_chat last (it may finish the turn).
+        // 4) finish_answer / delegate_chat last (it may finish the turn).
         if let Some((call, call_id)) = chat_call {
             let missing = missing_dispatches(&channels, &records);
             if !missing.is_empty() {
@@ -728,7 +820,7 @@ pub async fn run_llm_orchestrated_turn(
                     call_id.clone(),
                     guard_error(
                         &call_id,
-                        "delegate_chat",
+                        call.tool.as_str(),
                         format!(
                             "finish-gate：通道 {} 尚未派发，先 delegate 这些通道",
                             missing
@@ -747,6 +839,20 @@ pub async fn run_llm_orchestrated_turn(
                 .get("mode")
                 .and_then(|v| v.as_str())
                 .unwrap_or("synthesize");
+            // Strict validation: unknown mode values are rejected instead of
+            // silently falling back to synthesize.
+            if mode != "synthesize" && mode != "direct" {
+                tool_msgs.push((
+                    call_id.clone(),
+                    guard_error(
+                        &call_id,
+                        call.tool.as_str(),
+                        format!("未知 mode={mode}；只支持 synthesize 或 direct"),
+                    ),
+                ));
+                messages.extend(tool_msgs.into_iter().map(|(_, m)| m));
+                continue;
+            }
             let instruction = call
                 .args
                 .get("instruction")
@@ -787,13 +893,23 @@ pub async fn run_llm_orchestrated_turn(
             )
             .await;
             let mut answer_result = executor.run_chat(&handoff, base_request, sink).await?;
-            finalize_answer_evidence(&mut answer_result, &store);
+            // En→cite finalize only for synthesize: a direct handoff carries no
+            // evidence pack in the query, so markers must not be rewritten into
+            // citations for passages the answer never grounded on (§5.3.1).
+            // Still attach store→retrieval tool_results when workers filled the
+            // store (eval bridge / observability); direct does not invent cites.
+            if handoff.mode == ChatExitMode::Synthesize {
+                finalize_answer_evidence(&mut answer_result, &store);
+            } else {
+                attach_store_retrieval_tool_results(&mut answer_result, &store);
+            }
             return Ok(OrchestratedTurn {
                 answer_result,
                 store,
                 records,
                 handoff,
                 agent_type_label: label,
+                worker_observability,
             });
         }
 
@@ -808,6 +924,9 @@ pub async fn run_llm_orchestrated_turn(
         let outcome = dispatch_channel(ch, &query, base_request, executor, &mut store, sink).await;
         records.push(outcome.record);
         channel_notes.push(outcome.note);
+        if let Some(obs) = outcome.observability {
+            worker_observability.push(obs);
+        }
     }
     let handoff = synthesize_handoff(
         &query,
@@ -831,6 +950,7 @@ pub async fn run_llm_orchestrated_turn(
         records,
         handoff,
         agent_type_label: label,
+        worker_observability,
     })
 }
 
@@ -888,6 +1008,73 @@ mod tests {
             },
         ];
         assert!(!search_channel_exhausted(&ok_then));
+    }
+
+    #[test]
+    fn dispatch_section_runs_from_heading_to_next_heading() {
+        let manual = "## 能力：X\n\n执行协议正文\n\n## 给任务分配者\n\n- 能做什么：测试\n- 何时再派：必要时\n\n## 约束\n\n尾部\n";
+        let section = extract_dispatch_section(manual).expect("section present");
+        assert!(section.starts_with("## 给任务分配者"));
+        assert!(section.contains("能做什么：测试"));
+        assert!(!section.contains("执行协议正文"));
+        assert!(!section.contains("尾部"));
+    }
+
+    #[test]
+    fn dispatch_section_absent_or_empty_returns_none() {
+        assert!(extract_dispatch_section("## 只有执行协议\n正文").is_none());
+        assert!(extract_dispatch_section("## 给任务分配者\n\n## 约束\nx").is_none());
+    }
+
+    #[test]
+    fn dispatch_manual_loads_from_real_capability_files() {
+        // 派活小节是编排 system 的能力来源；文件缺节时该通道什么都拿不到
+        //（C8b fail-loud），所以正式 prompts 必须带 `## 给任务分配者`（本测试锁死这一约定）。
+        let rag = channel_dispatch_manual(Channel::Rag).expect("rag manual");
+        assert!(rag.starts_with("## 给任务分配者"), "{rag}");
+        assert!(rag.contains("coverage"), "{rag}");
+        let search = channel_dispatch_manual(Channel::Search).expect("search manual");
+        assert!(search.starts_with("## 给任务分配者"), "{search}");
+    }
+
+    #[test]
+    fn manual_without_dispatch_heading_injects_nothing() {
+        // C8b: broken manual (no 给任务分配者 section, or an empty one) →
+        // fail loud: no injection at all (previously the FULL worker manual
+        // was silently dumped into the coordinator prompt).
+        let no_heading = "# capability-rag\n\n只做检索的工作说明，没有派活小节。";
+        assert!(
+            dispatch_note_from_manual("prompts/orchestrators/capability-rag.md", no_heading)
+                .is_none()
+        );
+        let empty_heading = "## 给任务分配者\n\n## 其他\n\n正文";
+        assert!(
+            dispatch_note_from_manual("prompts/orchestrators/capability-rag.md", empty_heading)
+                .is_none()
+        );
+        // Sanity: a proper manual still yields its section.
+        let good = "## 给任务分配者\n\n- 能做什么：测试\n";
+        let note = dispatch_note_from_manual("x.md", good).expect("section");
+        assert!(note.contains("能做什么：测试"));
+    }
+
+    #[test]
+    fn system_message_orders_base_then_manuals_then_state() {
+        let msg = render_system_message(
+            "BASE",
+            &["## 给任务分配者\n\n- 能做什么：测试".to_string()],
+            &[Channel::Rag],
+            &EvidenceStore::default(),
+            &[],
+            0,
+            6,
+            None,
+        );
+        let base = msg.content.find("BASE").expect("base");
+        let manual = msg.content.find("给任务分配者").expect("manual");
+        let state = msg.content.find("本轮状态").expect("state");
+        assert!(base < manual && manual < state, "{}", msg.content);
+        assert!(msg.content.contains("已开启的检索通道"), "{}", msg.content);
     }
 
     struct ScriptedLlm {
@@ -983,8 +1170,29 @@ mod tests {
 
     fn chat_call() -> (&'static str, serde_json::Value) {
         (
-            "delegate_chat",
+            "finish_answer",
             serde_json::json!({"mode": "synthesize", "instruction": "对比分析"}),
+        )
+    }
+
+    fn finish_answer_call() -> (&'static str, serde_json::Value) {
+        (
+            "finish_answer",
+            serde_json::json!({"mode": "synthesize", "instruction": "对比分析"}),
+        )
+    }
+
+    fn finish_answer_direct_call() -> (&'static str, serde_json::Value) {
+        (
+            "finish_answer",
+            serde_json::json!({"mode": "direct"}),
+        )
+    }
+
+    fn finish_answer_invalid_mode_call() -> (&'static str, serde_json::Value) {
+        (
+            "finish_answer",
+            serde_json::json!({"mode": "unknown_mode"}),
         )
     }
 
@@ -1024,12 +1232,17 @@ mod tests {
 
         async fn run_chat(
             &self,
-            _handoff: &ChatHandoff,
+            handoff: &ChatHandoff,
             _base: &AgentRequest,
             _sink: &dyn AgentEventSink,
         ) -> Result<AgentRunResult, AppError> {
             let mut r = AgentRunResult::default();
-            r.answer = "文档证据 [[E1]]，网页佐证 [[E2]]。".into();
+            // A real answer writer only emits E-markers when it saw evidence
+            // (synthesize); direct answers cite nothing.
+            r.answer = match handoff.mode {
+                ChatExitMode::Synthesize => "文档证据 [[E1]]，网页佐证 [[E2]]。".into(),
+                ChatExitMode::Direct => "直接回答，无引用。".into(),
+            };
             Ok(r)
         }
     }
@@ -1087,6 +1300,338 @@ mod tests {
         assert!(turn.answer_result.answer.contains("[[cite:chunk-a]]"));
         assert!(turn.answer_result.answer.contains("[[web:2]]"));
         assert_eq!(turn.answer_result.citations.len(), 2);
+    }
+
+    /// C1: worker filled the store with a citable doc chunk, yet the brain
+    /// asks finish_answer(mode=direct) → runtime must override to synthesize
+    /// so the evidence package survives (2026-07-27 autopsy empty-desk class).
+    #[tokio::test]
+    async fn direct_finish_overridden_when_store_has_citable_evidence() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "文档结构")]),
+            tool_call_response(vec![delegate("search", "best practices")]),
+            tool_call_response(vec![finish_answer_direct_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &BrainMockExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        // BrainMockExec answers with E-markers only for Synthesize handoffs —
+        // a citation in the final answer proves the override fired.
+        assert!(
+            turn.answer_result.answer.contains("[[cite:chunk-a]]"),
+            "{}",
+            turn.answer_result.answer
+        );
+        assert_eq!(turn.handoff.mode, ChatExitMode::Synthesize);
+    }
+
+    /// Executor whose worker returns nothing (zero-evidence turn).
+    struct EmptyStoreExec;
+    #[async_trait::async_trait]
+    impl OrchestratorExecutor for EmptyStoreExec {
+        async fn run_channel(
+            &self,
+            _channel: Channel,
+            _brief: &TaskBrief,
+            _base: &AgentRequest,
+        ) -> Result<AgentRunResult, AppError> {
+            Ok(AgentRunResult::default())
+        }
+
+        async fn run_chat(
+            &self,
+            handoff: &ChatHandoff,
+            _base: &AgentRequest,
+            _sink: &dyn AgentEventSink,
+        ) -> Result<AgentRunResult, AppError> {
+            let mut r = AgentRunResult::default();
+            r.answer = match handoff.mode {
+                ChatExitMode::Synthesize => "文档证据 [[E1]]。".into(),
+                ChatExitMode::Direct => "直接回答，无引用。".into(),
+            };
+            Ok(r)
+        }
+    }
+
+    #[tokio::test]
+    async fn direct_finish_passes_when_store_is_empty() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "文档结构")]),
+            tool_call_response(vec![delegate("search", "best practices")]),
+            tool_call_response(vec![finish_answer_direct_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &EmptyStoreExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(turn.handoff.mode, ChatExitMode::Direct);
+        assert!(turn.answer_result.answer.contains("直接回答"));
+    }
+
+    /// Executor whose worker returns only a doc_profile (orientation-only,
+    /// never citable) — direct must still pass through.
+    struct DocProfileOnlyExec;
+    #[async_trait::async_trait]
+    impl OrchestratorExecutor for DocProfileOnlyExec {
+        async fn run_channel(
+            &self,
+            _channel: Channel,
+            _brief: &TaskBrief,
+            _base: &AgentRequest,
+        ) -> Result<AgentRunResult, AppError> {
+            let mut r = AgentRunResult::default();
+            r.tool_results = vec![contracts::ToolResult {
+                tool: "doc_profile".into(),
+                version: "1".into(),
+                status: contracts::ToolStatus::Ok,
+                data: Some(serde_json::json!([
+                    {"doc_id": "d1", "doc_name": "thesis.txt", "summary": "orientation"}
+                ])),
+                trace: None,
+            }];
+            Ok(r)
+        }
+
+        async fn run_chat(
+            &self,
+            handoff: &ChatHandoff,
+            _base: &AgentRequest,
+            _sink: &dyn AgentEventSink,
+        ) -> Result<AgentRunResult, AppError> {
+            let mut r = AgentRunResult::default();
+            r.answer = match handoff.mode {
+                ChatExitMode::Synthesize => "文档证据 [[E1]]。".into(),
+                ChatExitMode::Direct => "直接回答，无引用。".into(),
+            };
+            Ok(r)
+        }
+    }
+
+    #[tokio::test]
+    async fn direct_finish_passes_when_store_has_orientation_only() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "文档结构")]),
+            tool_call_response(vec![delegate("search", "best practices")]),
+            tool_call_response(vec![finish_answer_direct_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &DocProfileOnlyExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(turn.handoff.mode, ChatExitMode::Direct);
+        assert!(turn.answer_result.answer.contains("直接回答"));
+    }
+
+    #[tokio::test]
+    async fn system_message_carries_dispatch_sections() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![
+                delegate("rag", "文档结构"),
+                delegate("search", "best practices"),
+            ]),
+            tool_call_response(vec![chat_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &BrainMockExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        let recorded = llm.recorded();
+        let system = recorded[0]
+            .iter()
+            .find(|m| m.role == "system")
+            .expect("system message");
+        // rag + search 都物化 → 两份「给任务分配者」小节都在编排 system 里。
+        assert_eq!(system.content.matches("## 给任务分配者").count(), 2, "{}", system.content);
+        assert!(system.content.contains("公网检索"), "{}", system.content);
+        assert!(system.content.contains("已开启的检索通道"), "{}", system.content);
+    }
+
+    /// P3 probe: worker answers with a structured partial-coverage handoff.
+    struct PartialCoverageExec;
+    #[async_trait::async_trait]
+    impl OrchestratorExecutor for PartialCoverageExec {
+        async fn run_channel(
+            &self,
+            channel: Channel,
+            _brief: &TaskBrief,
+            _base: &AgentRequest,
+        ) -> Result<AgentRunResult, AppError> {
+            let mut r = AgentRunResult::default();
+            r.answer = serde_json::json!({
+                "schema_version": "internal_worker_handoff_v1",
+                "summary": format!("{} 摘要", channel.as_str()),
+                "key_facts": [],
+                "coverage": "partial",
+                "gaps": ["投资估算章节未覆盖"]
+            })
+            .to_string();
+            r.tool_results = vec![match channel {
+                Channel::Rag => contracts::ToolResult {
+                    tool: "dense_retrieval".into(),
+                    version: "1".into(),
+                    status: contracts::ToolStatus::Ok,
+                    data: Some(serde_json::json!([
+                        {"chunk_id": "chunk-a", "doc_id": "d1", "text": "doc evidence", "score": 0.9}
+                    ])),
+                    trace: None,
+                },
+                Channel::Search => contracts::ToolResult {
+                    tool: "web_search".into(),
+                    version: "1".into(),
+                    status: contracts::ToolStatus::Ok,
+                    data: Some(serde_json::json!({
+                        "results": [{"url": "https://a.example", "title": "A", "snippet": "web evidence"}]
+                    })),
+                    trace: None,
+                },
+            }];
+            Ok(r)
+        }
+
+        async fn run_chat(
+            &self,
+            _handoff: &ChatHandoff,
+            _base: &AgentRequest,
+            _sink: &dyn AgentEventSink,
+        ) -> Result<AgentRunResult, AppError> {
+            Ok(AgentRunResult::default())
+        }
+    }
+
+    /// P3 探针（coverage=partial）：gaps 必须进入编排器的观察（它据此决定
+    /// 再派），且换一个新 goal 的再派不被守卫拦截。
+    #[tokio::test]
+    async fn partial_coverage_is_observable_and_redispatch_allowed() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "第一轮取证")]),
+            tool_call_response(vec![delegate("rag", "专查投资估算章节")]), // 新 goal → 必须放行
+            tool_call_response(vec![delegate("search", "web 侧")]),
+            tool_call_response(vec![chat_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &PartialCoverageExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        let rag_records = turn
+            .records
+            .iter()
+            .filter(|r| r.channel == Channel::Rag)
+            .count();
+        assert_eq!(rag_records, 2, "re-dispatch with a new goal must run");
+        // 编排器在 tool 观察里看到了 coverage=partial 与 gaps。
+        let recorded = llm.recorded();
+        let obs: String = recorded[1]
+            .iter()
+            .filter(|m| m.role == "tool")
+            .map(|m| m.content.clone())
+            .collect();
+        assert!(obs.contains("partial"), "{obs}");
+        assert!(obs.contains("投资估算章节未覆盖"), "{obs}");
+        // gaps 随 channel_notes 流入 Chat handoff。
+        assert!(
+            turn.handoff.channel_notes.iter().any(|n| {
+                n.handoff
+                    .as_ref()
+                    .map(|h| h.gaps.iter().any(|g| g.contains("投资估算")))
+                    .unwrap_or(false)
+            }),
+            "gaps must reach the chat handoff: {:?}",
+            turn.handoff.channel_notes
+        );
+    }
+
+    /// P3 探针（空 handoff）：首次 Empty 不封锁 rag 换 goal 再派
+    /// （search 侧连续空结果的强制收敛已由 search_exhausted 系列测试覆盖）。
+    #[tokio::test]
+    async fn empty_first_result_does_not_block_rag_redispatch() {
+        struct EmptyExec;
+        #[async_trait::async_trait]
+        impl OrchestratorExecutor for EmptyExec {
+            async fn run_channel(
+                &self,
+                _channel: Channel,
+                _brief: &TaskBrief,
+                _base: &AgentRequest,
+            ) -> Result<AgentRunResult, AppError> {
+                Ok(AgentRunResult::default())
+            }
+
+            async fn run_chat(
+                &self,
+                _handoff: &ChatHandoff,
+                _base: &AgentRequest,
+                _sink: &dyn AgentEventSink,
+            ) -> Result<AgentRunResult, AppError> {
+                Ok(AgentRunResult::default())
+            }
+        }
+
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "第一次")]),
+            tool_call_response(vec![delegate("rag", "换个角度再查")]),
+            tool_call_response(vec![delegate("search", "web")]),
+            tool_call_response(vec![chat_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &EmptyExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        let rag: Vec<&DispatchRecord> = turn
+            .records
+            .iter()
+            .filter(|r| r.channel == Channel::Rag)
+            .collect();
+        assert_eq!(rag.len(), 2, "empty first result must not block re-dispatch");
+        assert!(rag.iter().all(|r| r.status == PackStatus::Empty));
     }
 
     #[tokio::test]
@@ -1306,5 +1851,230 @@ mod tests {
         );
         assert!(tool_text.contains("message_count"), "{tool_text}");
         assert!(!tool_text.contains("存储未配置"), "{tool_text}");
+    }
+
+    #[tokio::test]
+    async fn finish_answer_alias_works() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "取证")]),
+            tool_call_response(vec![delegate("search", "web")]),
+            tool_call_response(vec![finish_answer_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &BrainMockExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(turn.records.len(), 2);
+        assert!(turn.answer_result.answer.contains("[[cite:chunk-a]]"));
+    }
+
+    #[tokio::test]
+    async fn finish_answer_direct_overridden_to_synthesize_with_evidence() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "取证")]),
+            tool_call_response(vec![delegate("search", "web")]),
+            tool_call_response(vec![finish_answer_direct_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &BrainMockExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(turn.records.len(), 2);
+        // C1 (supersedes the old "direct skips evidence" contract): direct is
+        // overridden to synthesize when the store holds citable evidence, so
+        // the evidence package reaches the Answer phase and citations exist.
+        assert!(turn.answer_result.answer.contains("[[cite:chunk-a]]"));
+        assert!(!turn.answer_result.citations.is_empty());
+        // Observability / eval: store→retrieval tool_results still attached when
+        // workers filled the store (attach_store_retrieval_tool_results).
+        assert!(
+            turn.answer_result
+                .tool_results
+                .iter()
+                .any(|t| t.tool == "dense_retrieval" || t.tool == "web_search"),
+            "direct mode still surfaces store for eval when workers returned evidence: {:?}",
+            turn.answer_result
+                .tool_results
+                .iter()
+                .map(|t| &t.tool)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn finish_answer_invalid_mode_rejected() {
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "取证")]),
+            tool_call_response(vec![delegate("search", "web")]),
+            tool_call_response(vec![finish_answer_invalid_mode_call()]),
+            // After rejection, LLM calls finish_answer correctly.
+            tool_call_response(vec![finish_answer_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        let turn = run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &BrainMockExec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(turn.records.len(), 2);
+        assert!(turn.answer_result.answer.contains("[[cite:chunk-a]]"));
+    }
+
+    /// G-02: V2 path through real [`AgentServiceExecutor`] must assemble Option D Answer pack.
+    #[tokio::test]
+    async fn v2_answer_phase_uses_product_answer_pack_via_real_executor() {
+        use crate::orchestrator::AgentServiceExecutor;
+        use agent_loop::runtime::Agent;
+        use crate::agents::AgentKind;
+
+        /// Captures the last Chat-kind request (Answer phase); workers are Rag/Search.
+        struct CaptureChatAgent {
+            last_chat: std::sync::Arc<Mutex<Option<AgentRequest>>>,
+        }
+        #[async_trait::async_trait]
+        impl Agent for CaptureChatAgent {
+            async fn run(
+                &self,
+                request: AgentRequest,
+                _sink: &dyn AgentEventSink,
+            ) -> Result<AgentRunResult, AppError> {
+                if request.kind == AgentKind::Chat {
+                    *self.last_chat.lock().unwrap() = Some(request.clone());
+                }
+                // Workers need tool_results so store/finalize has something;
+                // Answer phase can return empty prose.
+                let mut r = AgentRunResult::default();
+                match request.kind {
+                    AgentKind::Rag => {
+                        r.tool_results = vec![contracts::ToolResult {
+                            tool: "dense_retrieval".into(),
+                            version: "1".into(),
+                            status: contracts::ToolStatus::Ok,
+                            data: Some(serde_json::json!([{
+                                "chunk_id": "chunk-a",
+                                "doc_id": "d1",
+                                "text": "doc evidence for pack",
+                                "score": 0.9
+                            }])),
+                            trace: None,
+                        }];
+                    }
+                    AgentKind::Search => {
+                        r.tool_results = vec![contracts::ToolResult {
+                            tool: "web_search".into(),
+                            version: "1".into(),
+                            status: contracts::ToolStatus::Ok,
+                            data: Some(serde_json::json!({
+                                "results": [{
+                                    "url": "https://a.example",
+                                    "title": "A",
+                                    "snippet": "web evidence"
+                                }]
+                            })),
+                            trace: None,
+                        }];
+                    }
+                    AgentKind::Chat => {
+                        r.answer = "ok".into();
+                    }
+                    _ => {}
+                }
+                Ok(r)
+            }
+        }
+
+        let last_chat = std::sync::Arc::new(Mutex::new(None));
+        let exec = AgentServiceExecutor::new(std::sync::Arc::new(
+            crate::agents::service::UnifiedAgentService::new(Box::new(CaptureChatAgent {
+                last_chat: last_chat.clone(),
+            })),
+        ));
+        let llm = ScriptedLlm::new(vec![
+            tool_call_response(vec![delegate("rag", "取证")]),
+            tool_call_response(vec![delegate("search", "web")]),
+            tool_call_response(vec![finish_answer_call()]),
+        ]);
+        let sink = CollectingSink::new();
+        run_llm_orchestrated_turn(
+            dual(),
+            &base_req("差距在哪"),
+            &exec,
+            &sink,
+            None,
+            &llm,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let req = last_chat
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("V2 must invoke Answer phase Chat agent");
+        let parts: Vec<String> = req
+            .metadata
+            .get("system_prompt_parts")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            parts.iter().any(|p| p.contains("product-answer-base.md")),
+            "V2 Answer pack must include product-answer-base: {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("chat-base.md")),
+            "P1-2: V2 Answer pack must not include full chat-base: {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("orchestrator-base")),
+            "Answer phase must not load orchestrator-base: {parts:?}"
+        );
+        // Synthesize path: evidence in query (KD-16).
+        assert!(
+            req.query.contains("### Evidence") || req.query.contains("doc evidence"),
+            "V2 synthesize Answer query should carry evidence context: {}",
+            req.query.chars().take(240).collect::<String>()
+        );
+
+        // G-04 Dispatch side: brain system must not load answer-from blocks.
+        let recorded = llm.recorded();
+        assert!(!recorded.is_empty());
+        let system = recorded[0]
+            .iter()
+            .find(|m| m.role == "system")
+            .expect("brain records a system message");
+        assert!(
+            !system.content.contains("answer-from-workspace")
+                && !system.content.contains("### Evidence (complete set"),
+            "Dispatch system must not embed Answer evidence pack: {}",
+            system.content.chars().take(200).collect::<String>()
+        );
     }
 }

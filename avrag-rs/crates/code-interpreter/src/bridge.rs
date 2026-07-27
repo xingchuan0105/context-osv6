@@ -60,11 +60,13 @@ class _Client:
         if fields:
             payload["fields"] = fields
         return _rpc("doc_profile", payload)["chunks"]
-    async def doc_chunks(self, doc_ids=None):
+    async def doc_scan(self, doc_ids=None):
+        """Load document material into the sandbox for code-side scan/count/filter.
+        Prefer printing compact numbers or short lists — not full text dumps."""
         payload = {}
         if doc_ids is not None:
             payload["doc_ids"] = doc_ids
-        return _rpc("doc_chunks", payload)["chunks"]
+        return _rpc("doc_scan", payload)["chunks"]
 
 client = _Client()
 "#
@@ -79,7 +81,7 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
         "chunk_fetch",
         "doc_summary",
         "doc_profile",
-        "doc_chunks",
+        "doc_scan",
     ]
 }
 
@@ -218,6 +220,25 @@ mod unix_impl {
         })
     }
 
+    /// `pre_exec` pins the bridge pipes onto fd 3/4 via `dup2` + `close`.
+    /// If the OS allocated a pipe at fd 3/4 already, `dup2(x, x)` is a no-op and
+    /// the following `close(x)` kills the very fd the sandbox needs — python's
+    /// `open(3)` then fails with EBADF (flaky under parallel fd pressure).
+    /// Lift such fds above the 3/4 range so dup2-then-close is always safe.
+    pub(crate) fn lift_fd_out_of_range(
+        fd: std::os::unix::io::RawFd,
+    ) -> Result<std::os::unix::io::RawFd, InterpreterError> {
+        if fd > 4 {
+            return Ok(fd);
+        }
+        let moved = unsafe { libc::fcntl(fd, libc::F_DUPFD, 10) };
+        if moved == -1 {
+            return Err(InterpreterError::Io(std::io::Error::last_os_error()));
+        }
+        unsafe { libc::close(fd) };
+        Ok(moved)
+    }
+
     pub async fn execute_with_bridge(
         python_path: &str,
         timeout_secs: u64,
@@ -231,8 +252,8 @@ mod unix_impl {
         let (req_reader, req_writer) = std::io::pipe().map_err(InterpreterError::Io)?;
         let (resp_reader, resp_writer) = std::io::pipe().map_err(InterpreterError::Io)?;
 
-        let req_write_fd = req_writer.into_raw_fd();
-        let resp_read_fd = resp_reader.into_raw_fd();
+        let req_write_fd = lift_fd_out_of_range(req_writer.into_raw_fd())?;
+        let resp_read_fd = lift_fd_out_of_range(resp_reader.into_raw_fd())?;
 
         // Prevent Rust's pre-exec fd sweep from closing bridge fds before dup2.
         unsafe {
@@ -421,6 +442,46 @@ mod unix_impl {
         }
         Ok(())
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// High fds pass through untouched; low fds must be moved out of the
+        /// 3/4 pin range and stay usable (the 2026-07-21 EBADF flake).
+        #[test]
+        fn lift_fd_moves_low_fd_and_keeps_it_writable() {
+            let (_read_end, write_end) = std::io::pipe().unwrap();
+            let fd = write_end.into_raw_fd();
+            // Force the fd as low as the OS allows (>=3) to exercise both paths.
+            let low = unsafe { libc::fcntl(fd, libc::F_DUPFD, 3) };
+            assert!(low >= 3);
+            unsafe { libc::close(fd) };
+
+            let moved = lift_fd_out_of_range(low).expect("lift");
+            assert!(
+                moved > 4,
+                "bridge fd must end outside the 3/4 pin range, got {moved}"
+            );
+            // The (possibly moved) fd still refers to the same pipe.
+            let n = unsafe { libc::write(moved, b"x".as_ptr() as *const libc::c_void, 1) };
+            assert_eq!(n, 1);
+            unsafe { libc::close(moved) };
+        }
+
+        #[test]
+        fn lift_fd_keeps_high_fd_unchanged() {
+            let (_read_end, write_end) = std::io::pipe().unwrap();
+            let fd = write_end.into_raw_fd();
+            // Place a duplicate at >=10 so the no-op path is deterministic.
+            let high = unsafe { libc::fcntl(fd, libc::F_DUPFD, 10) };
+            assert!(high >= 10);
+            unsafe { libc::close(fd) };
+
+            assert_eq!(lift_fd_out_of_range(high).expect("lift"), high);
+            unsafe { libc::close(high) };
+        }
+    }
 }
 
 #[cfg(not(unix))]
@@ -455,7 +516,7 @@ mod bridge_shim_tests {
                 "chunk_fetch",
                 "doc_summary",
                 "doc_profile",
-                "doc_chunks",
+                "doc_scan",
             ]
         );
         assert!(!bridge_shim_client_method_names().contains(&"rerank"));
@@ -472,7 +533,10 @@ mod spawn_tests {
     #[test]
     fn python_can_write_inherited_bridge_fd() {
         let (mut read_end, write_end) = std::io::pipe().unwrap();
-        let write_fd = write_end.into_raw_fd();
+        // Same lift as the production spawn path: fd 3/4 must never be the
+        // dup2 source, or dup2-then-close would kill the pinned fd.
+        let write_fd = super::unix_impl::lift_fd_out_of_range(write_end.into_raw_fd())
+            .expect("lift bridge fd");
         unsafe {
             libc::fcntl(write_fd, libc::F_SETFD, 0);
         }

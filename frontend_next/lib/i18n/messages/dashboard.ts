@@ -21,45 +21,13 @@ export const dashboardMessages = {
     zh: "工作区控制台",
     en: "Workspace Dashboard",
   },
-  dashboardCardFavoriteBadge: {
-    zh: "已收藏",
-    en: "Favorited",
-  },
-  dashboardCardMemberBadge: {
-    zh: "成员工作区",
-    en: "Member workspace",
-  },
-  dashboardCardMineBadge: {
-    zh: "我的工作区",
-    en: "My workspace",
-  },
   dashboardCloseSearch: {
     zh: "关闭搜索",
     en: "Close search",
   },
-  dashboardConfirmDelete: {
-    zh: "删除 {title}?",
-    en: "Delete {title}?",
-  },
-  dashboardCreateAction: {
-    zh: "创建工作区",
-    en: "Create workspace",
-  },
-  dashboardCreateDialogLabel: {
-    zh: "新建工作区",
-    en: "Create workspace",
-  },
   dashboardCreateFirst: {
     zh: "创建第一个工作区",
     en: "Create the first workspace",
-  },
-  dashboardCreateLoading: {
-    zh: "创建中...",
-    en: "Creating...",
-  },
-  dashboardCreateTitle: {
-    zh: "新建工作区",
-    en: "Create workspace",
   },
   dashboardEmptyAllTitle: {
     zh: "还没有工作区",
@@ -76,10 +44,6 @@ export const dashboardMessages = {
   dashboardEmptyFavoritesTitle: {
     zh: "还没有收藏的工作区",
     en: "No favorited workspaces yet",
-  },
-  dashboardGenerateNameError: {
-    zh: "无法生成工作区名称",
-    en: "Unable to generate a workspace name.",
   },
   dashboardHeadingAll: {
     zh: "全部工作区",
@@ -105,17 +69,33 @@ export const dashboardMessages = {
     zh: "加载工作区失败",
     en: "Failed to load workspaces.",
   },
-  dashboardLoading: {
-    zh: "正在加载工作区...",
-    en: "Loading workspaces...",
+  dashboardActionFailed: {
+    zh: "操作失败，请稍后重试。",
+    en: "Something went wrong. Please try again.",
+  },
+  dashboardActionRetry: {
+    zh: "重试",
+    en: "Retry",
+  },
+  dashboardDeleteDialogTitle: {
+    zh: "删除工作区",
+    en: "Delete workspace",
+  },
+  dashboardDeleteDialogBody: {
+    zh: "确定删除 {title} 吗？此操作无法撤销。",
+    en: "Delete {title}? This cannot be undone.",
+  },
+  dashboardRenameDialogTitle: {
+    zh: "重命名工作区",
+    en: "Rename workspace",
+  },
+  dashboardRenameSubmit: {
+    zh: "保存",
+    en: "Save",
   },
   dashboardLoginRequired: {
     zh: "请先登录",
     en: "Please sign in first.",
-  },
-  dashboardPromptRename: {
-    zh: "重命名 {title}",
-    en: "Rename {title}",
   },
   dashboardRoleMember: {
     zh: "成员",
@@ -137,10 +117,6 @@ export const dashboardMessages = {
     zh: "角色",
     en: "Role",
   },
-  dashboardSettingsLink: {
-    zh: "设置",
-    en: "Settings",
-  },
   dashboardAccountLink: {
     zh: "账户",
     en: "Account",
@@ -154,20 +130,16 @@ export const dashboardMessages = {
     en: "Profile",
   },
   dashboardBillingLink: {
-    zh: "账单",
-    en: "Billing",
+    zh: "订阅与用量",
+    en: "Subscription & Usage",
   },
   dashboardLogout: {
     zh: "退出登录",
     en: "Log out",
   },
-  dashboardOpenAccountMenu: {
-    zh: "打开账户菜单",
-    en: "Open account menu",
-  },
   dashboardBackToWorkspaces: {
-    zh: "← 工作区",
-    en: "← Workspaces",
+    zh: "返回工作台",
+    en: "Back to workspace",
   },
   dashboardSearchEmptyIdle: {
     zh: "输入关键词搜索工作区",
@@ -256,10 +228,6 @@ export const dashboardMessages = {
   dashboardWorkspaceNameField: {
     zh: "名称",
     en: "Name",
-  },
-  dashboardWorkspaceDescriptionField: {
-    zh: "描述",
-    en: "Description",
   },
   dashboardNewWorkspace: {
     zh: "新建工作区",

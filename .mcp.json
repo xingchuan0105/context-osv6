@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "semble": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "semble[mcp]", "semble"]
+    },
+    "graphify": {
+      "type": "stdio",
+      "command": "/home/chuan/.local/share/pipx/venvs/graphifyy/bin/python",
+      "args": [
+        "-m",
+        "graphify.serve",
+        "/home/chuan/context-osv6/graphify-out/graph.json"
+      ]
+    }
+  }
+}

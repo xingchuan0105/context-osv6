@@ -27,6 +27,8 @@ import {
   sortAccounts,
 } from "./admin-utils";
 
+import styles from "./admin-accounts-surface.module.css";
+
 export function AdminAccountsSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
@@ -81,7 +83,7 @@ export function AdminAccountsSurface() {
   }
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={styles.container}>
       <AdminPageHeading
         title={adminText(locale, "admin.nav.accounts")}
         subtitle={adminText(locale, "accounts.subtitle")}
@@ -93,7 +95,7 @@ export function AdminAccountsSurface() {
         <EmptyState copy={adminText(locale, "accounts.empty")} />
       ) : (
         <>
-          <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
+          <div className={styles.metricsGrid}>
             <AdminMetricCard label={adminText(locale, "admin.metrics.totalAccounts")} tone="primary" value={accounts.length.toString()} />
             <AdminMetricCard label={adminText(locale, "accounts.activeAccounts")} tone="success" value={activeCount.toString()} />
             <AdminMetricCard label={adminText(locale, "accounts.blockedAccounts")} tone="danger" value={blockedCount.toString()} />
@@ -105,8 +107,8 @@ export function AdminAccountsSurface() {
             />
           </div>
 
-          <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-            <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "minmax(0, 1fr) repeat(2, minmax(12rem, 14rem))" }}>
+          <section className={`app-inline-surface ${styles.panel}`}>
+            <div className={styles.filtersGrid}>
               <div>
                 <label className="app-form-label" htmlFor="admin-org-search">
                   {adminText(locale, "admin.searchLabel")}
@@ -148,7 +150,7 @@ export function AdminAccountsSurface() {
                 </select>
               </div>
             </div>
-            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
+            <div className={styles.metaRow}>
               <span>{adminText(locale, "accounts.matching")} {filteredAccounts.length}/{accounts.length}</span>
               <span>{adminText(locale, "accounts.usersCovered")} {filteredAccounts.reduce((total, account) => total + account.user_count, 0)}</span>
             </div>
@@ -157,9 +159,9 @@ export function AdminAccountsSurface() {
           {filteredAccounts.length === 0 ? (
             <EmptyState copy={adminText(locale, "accounts.noMatch")} />
           ) : (
-            <section className="app-inline-surface" style={{ overflowX: "auto", padding: 0 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead style={{ background: "hsl(var(--surface-muted))" }}>
+            <section className={`app-inline-surface ${styles.tableWrapper}`}>
+              <table className={styles.table}>
+                <thead className={styles.tableHead}>
                   <tr>
                     {[
                       adminText(locale, "common.name"),
@@ -170,7 +172,7 @@ export function AdminAccountsSurface() {
                       adminText(locale, "admin.table.status"),
                       adminText(locale, "common.actions"),
                     ].map((heading) => (
-                      <th key={heading} style={{ padding: "0.85rem 1rem", textAlign: "left", fontSize: "0.76rem", color: "hsl(var(--muted-foreground))" }}>
+                      <th className={styles.tableHeaderCell} key={heading}>
                         {heading}
                       </th>
                     ))}
@@ -181,34 +183,27 @@ export function AdminAccountsSurface() {
                     const isBusy = rowBusy(account.id, busyOrgId, toggleBlockedMutation.isPending);
 
                     return (
-                      <tr key={account.id} style={{ borderTop: "1px solid hsl(var(--border))" }}>
-                        <td style={{ padding: "1rem" }}>
-                          <Link href={`/admin/accounts/${account.id}`} style={{ fontWeight: 600 }}>
+                      <tr className={styles.tableRow} key={account.id}>
+                        <td className={styles.tableCell}>
+                          <Link className={styles.accountLink} href={`/admin/accounts/${account.id}`}>
                             {account.name}
                           </Link>
-                          <div style={{ fontSize: "0.78rem", color: "hsl(var(--muted-foreground))", marginTop: "0.2rem" }}>
+                          <div className={styles.accountId}>
                             ID: {account.id.slice(0, 8)}...
                           </div>
                         </td>
-                        <td style={{ padding: "1rem" }}>{planLabel(locale, account.plan)}</td>
-                        <td style={{ padding: "1rem" }}>{account.user_count}</td>
-                        <td style={{ padding: "1rem" }}>{account.workspace_count}</td>
-                        <td style={{ padding: "1rem" }}>{account.query_count}</td>
-                        <td style={{ padding: "1rem" }}>
+                        <td className={styles.tableCell}>{planLabel(locale, account.plan)}</td>
+                        <td className={styles.tableCell}>{account.user_count}</td>
+                        <td className={styles.tableCell}>{account.workspace_count}</td>
+                        <td className={styles.tableCell}>{account.query_count}</td>
+                        <td className={styles.tableCell}>
                           <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              padding: "0.25rem 0.6rem",
-                              borderRadius: "999px",
-                              background: account.blocked ? "rgba(197, 48, 48, 0.1)" : "rgba(25, 135, 84, 0.1)",
-                              color: account.blocked ? "hsl(var(--destructive))" : "hsl(var(--success))",
-                            }}
+                            className={`${styles.badge} ${account.blocked ? styles.badgeBlocked : styles.badgeActive}`}
                           >
                             {accountStatusLabel(locale, account.blocked)}
                           </span>
                         </td>
-                        <td style={{ padding: "1rem" }}>
+                        <td className={styles.tableCell}>
                           <button
                             className="app-button-ghost"
                             disabled={isBusy}

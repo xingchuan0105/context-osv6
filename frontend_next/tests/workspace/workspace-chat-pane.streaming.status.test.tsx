@@ -131,24 +131,33 @@ describe("WorkspaceChatPane streaming status hints", () => {
     await user.type(composer, "Give me a quick answer");
     await user.keyboard("{Enter}");
 
-    await waitFor(() => {
-      expect(tokenReady).toBe(true);
-      const statusHint = screen.getByTestId("workspace-status-hint");
-      expect(statusHint.closest("article")).toBeNull();
-      // Card-level header (may also appear as step title when card body is open).
-      expect(within(statusHint).getAllByText("正在思考").length).toBeGreaterThanOrEqual(1);
-      expect(statusHint.getAttribute("data-card-collapsed")).toBe("false");
-      expect(within(statusHint).queryByText("即时回答")).toBeNull();
-      expect(screen.queryByTestId("workspace-progress-card")).toBeNull();
+    await waitFor(
+      () => {
+        const line = document.querySelector('[data-testid="workspace-progress-status-line"]');
+        if (!line) {
+          console.log(
+            "PROBE no-line yet; any progress-state els:",
+            document.querySelectorAll('[data-progress-state]').length,
+            "records children:",
+            document.querySelector('[aria-label="工作区记录"]')?.childElementCount,
+          );
+        }
+        expect(tokenReady).toBe(true);
+        const statusLine = screen.getByTestId("workspace-progress-status-line");
+      expect(statusLine.closest("article")).toBeNull();
+      // Single-line indicator: no placeholder step — fallback line until the
+      // first fact arrives; no card header, no expandable sections.
+      expect(within(statusLine).getByText("正在理解问题")).toBeTruthy();
+      expect(within(statusLine).queryByRole("button")).toBeNull();
     });
 
     releaseToken();
 
-    // All 4 modes keep the progress/status card until stream finalize (not hide on first token).
+    // All 4 modes keep the status line until stream finalize (not hide on first token).
     await waitFor(() => {
       expect(screen.getAllByText("Hi")).toHaveLength(1);
-      const statusHint = screen.getByTestId("workspace-status-hint");
-      expect(statusHint.getAttribute("data-progress-state")).toBe("completed");
+      const statusLine = screen.getByTestId("workspace-progress-status-line");
+      expect(statusLine.getAttribute("data-progress-state")).toBe("completed");
     });
   });
 
@@ -234,8 +243,8 @@ describe("WorkspaceChatPane streaming status hints", () => {
     await waitFor(() => {
       expect(activityReady).toBe(true);
       expect(liftedSessionId).toBe("sess-rag-new");
-      const progress = screen.getByTestId("workspace-progress-card");
-      expect(within(progress).getByText("知识库检索中")).toBeTruthy();
+      const statusLine = screen.getByTestId("workspace-progress-status-line");
+      expect(within(statusLine).getByText("正在语义检索")).toBeTruthy();
     });
 
     // Parent re-renders with the new session id (this used to hide progress + reset transcript).
@@ -249,8 +258,8 @@ describe("WorkspaceChatPane streaming status hints", () => {
     });
 
     await waitFor(() => {
-      const progress = screen.getByTestId("workspace-progress-card");
-      expect(within(progress).getByText("知识库检索中")).toBeTruthy();
+      const statusLine = screen.getByTestId("workspace-progress-status-line");
+      expect(within(statusLine).getByText("正在语义检索")).toBeTruthy();
       // User turn still present — not wiped by history reload.
       expect(screen.getByText("方案有哪些主要模块")).toBeTruthy();
     });
@@ -259,8 +268,8 @@ describe("WorkspaceChatPane streaming status hints", () => {
 
     await waitFor(() => {
       expect(screen.getByText("模块包括")).toBeTruthy();
-      const progress = screen.getByTestId("workspace-progress-card");
-      expect(progress.getAttribute("data-progress-state")).toBe("completed");
+      const statusLine = screen.getByTestId("workspace-progress-status-line");
+      expect(statusLine.getAttribute("data-progress-state")).toBe("completed");
     });
   });
 
@@ -363,16 +372,16 @@ describe("WorkspaceChatPane streaming status hints", () => {
 
     await waitFor(() => {
       expect(activityReady).toBe(true);
-      const progress = screen.getByTestId("workspace-progress-card");
-      expect(within(progress).getByText("知识库检索中")).toBeTruthy();
+      const statusLine = screen.getByTestId("workspace-progress-status-line");
+      expect(within(statusLine).getByText("正在语义检索")).toBeTruthy();
 
-      const transcript = progress.closest("[aria-label]") ?? progress.parentElement;
+      const transcript = statusLine.closest("[aria-label]") ?? statusLine.parentElement;
       expect(transcript).toBeTruthy();
       const textOrder = (transcript as HTMLElement).textContent ?? "";
       // Progress must sit after the new user turn, not above the previous answer.
       const prevAnswerAt = textOrder.indexOf("第一轮回答内容");
       const newUserAt = textOrder.indexOf("第二轮问题");
-      const progressAt = textOrder.indexOf("知识库检索中");
+      const progressAt = textOrder.indexOf("正在语义检索");
       expect(prevAnswerAt).toBeGreaterThanOrEqual(0);
       expect(newUserAt).toBeGreaterThan(prevAnswerAt);
       expect(progressAt).toBeGreaterThan(newUserAt);

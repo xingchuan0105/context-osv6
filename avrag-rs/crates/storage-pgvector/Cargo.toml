@@ -1,0 +1,23 @@
+[package]
+name = "avrag-storage-pgvector"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+contracts = { path = "../../../contracts" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
+pgvector = { version = "0.4", features = ["sqlx"] }
+serde.workspace = true
+serde_json.workspace = true
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json", "macros"] }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

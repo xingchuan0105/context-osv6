@@ -273,27 +273,37 @@ bm25_keywords = ["明斯基", "心智社会", "框架"]
 
 图关系结果应参与最终排序，但第一版不建议完全无保护混排。
 
-推荐预算：
+> **2026-07-23 收窄（图通道触发）**  
+> 产品现行：**不**把「显式四通道并行 graph」与「强制图增强」混为一谈。  
+> - **正文通道**（BM25 / text dense / multimodal）：可并行、RRF/rerank 候选池。  
+> - **词法图增强**：仅挂在 **BM25/lexical** 上，强制 **1 跳**，结果进 **`graph_context`**，  
+>   **不**进入 dense 正文 cross-encoder 混排；证据用 **得分落差（相对 TOP1）** 截断。  
+> - **dense 不强制带图**。多跳靠 Agent ReAct，不靠单次深 BFS。  
+> - 显式 `graph_search` 仍可作工具通道（可 hop>1）。  
+> Canonical：[`docs/plans/2026-07-23-lexical-graph-augment-scoring-design.md`](../../plans/2026-07-23-lexical-graph-augment-scoring-design.md)。
+
+推荐预算（**正文候选池**；图侧车单独计 token，不占下表混排配额的硬比例）：
 
 ```text
 text dense: 30-35%
 BM25: 20-25%
 multimodal: 10-15%
-graph-supported chunks: 20-30%
+# graph-supported：优先经 lexical 强制增强写入 graph_context；
+# 勿再假设「与 dense 同池 20-30% 混排」为默认
 ```
 
 推荐流程：
 
 ```text
-1. 并行执行 BM25、text dense、multimodal dense、graph retrieval。
-2. 构建带 source label 和 score breakdown 的候选池。
-3. 使用 RRF 或 channel-aware normalization 做第一层融合。
-4. 对可比较的 chunk candidates 复用现有 reranker。
-5. 保留 graph-supported chunks 的最低预算。
-6. 在 token budget 内裁剪最终上下文。
+1. 并行执行 BM25、text dense、multimodal dense（显式 graph_search 仅当工具被调用）。
+2. 若 lexical/BM25 且 RETRIEVAL_GRAPH_AUGMENT on：并发 1 跳词法图增强 → graph_context。
+3. 正文构建带 source label 的候选池；RRF / channel-aware normalization。
+4. 对可比较的正文 chunk 复用 reranker；graph_context 不进该池。
+5. graph_context 内证据：本跳 terms 打分 + 相对 TOP1 得分落差截断 + 小 K_max。
+6. 在 token budget 内裁剪最终上下文（正文 + 分层图补充）。
 ```
 
-原因：图检索常找到的是"推理链条中的必要桥"，不一定是词面或语义上最相似的 chunk。完全混排可能把关键桥接证据排掉。
+原因：图检索常找到的是"推理链条中的必要桥"，不一定是词面或语义上最相似的 chunk。完全混排可能把关键桥接证据排掉；强制增强绑 lexical/关键词比绑 dense 整句语义更贴图接口。
 
 ---
 

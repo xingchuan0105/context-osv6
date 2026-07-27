@@ -9,6 +9,7 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import { SettingsPanel } from "./settings-panel";
 import { SettingsTabBar } from "./settings-tab-bar";
 import type { SettingsTab } from "./settings-tabs";
+import styles from "./settings-surface.module.css";
 
 export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
   const { locale } = useUiPreferences();
@@ -18,9 +19,9 @@ export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
       title={formatUiMessage(locale, "settings.pageTitle")}
       subtitle={formatUiMessage(locale, "settings.pageSubtitle")}
     >
-      <div className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
-        <div style={{ display: "flex", justifyContent: "flex-start" }}>
-          <Link className="app-link app-link-muted" href="/dashboard" data-testid="settings-back-dashboard">
+      <div className={`app-surface-card ${styles.card}`}>
+        <div className={styles.backRow}>
+          <Link className="app-button-ghost" href="/dashboard" data-testid="settings-back-dashboard">
             {formatUiMessage(locale, "dashboardBackToWorkspaces")}
           </Link>
         </div>

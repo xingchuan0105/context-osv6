@@ -77,8 +77,11 @@ export function panelChoiceStyle(selected: boolean): CSSProperties {
     width: "100%",
     padding: "1rem",
     borderRadius: "1rem",
-    border: `1px solid ${selected ? "hsl(var(--primary))" : "hsl(var(--border))"}`,
+    // Unselected choices separate via background + elevation, not a 1px border;
+    // the accent border stays only as the selected-state indicator.
+    border: `1px solid ${selected ? "hsl(var(--accent))" : "transparent"}`,
     background: selected ? "hsl(var(--surface-muted))" : "hsl(var(--card))",
+    boxShadow: selected ? "none" : "var(--shadow-sm)",
     color: "inherit",
     textAlign: "left",
   };

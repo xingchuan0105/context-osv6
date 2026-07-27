@@ -75,7 +75,7 @@ describe("WorkspaceSurface shell", () => {
     fireEvent.mouseMove(window, { clientX: 180 });
     fireEvent.mouseUp(window);
 
-    expect(workspaceUiStore.getState().workspaces["ws-1"]?.historyRailWidth).toBe(300);
+    expect(workspaceUiStore.getState().workspaces["ws-1"]?.historyRailWidth).toBe(260);
   });
 
   it("supports pointer-based rail resizing for webview-style input", async () => {
@@ -83,13 +83,13 @@ describe("WorkspaceSurface shell", () => {
 
     await screen.findByLabelText("工作区标题");
 
-    const [, rightResizer] = screen.getAllByRole("separator");
+    const rightResizer = screen.getByRole("separator", { name: "调整右侧栏宽度" });
 
     fireEvent.pointerDown(rightResizer, { clientX: 1200 });
     fireEvent.pointerMove(window, { clientX: 1120 });
     fireEvent.pointerUp(window);
 
-    expect(workspaceUiStore.getState().workspaces["ws-1"]?.rightRailWidth).toBe(392);
+    expect(workspaceUiStore.getState().workspaces["ws-1"]?.rightRailWidth).toBe(360);
   });
 
   it("supports touch-based rail resizing for embedded webviews", async () => {

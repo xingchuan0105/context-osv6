@@ -76,6 +76,9 @@ impl E2eBootstrapConfig {
         config.object_root = self.object_root.clone();
         config.public_base_url = base_url.to_string();
         config.enable_rag = self.enable_rag;
+        if let Ok(backend) = std::env::var("RETRIEVAL_BACKEND") {
+            config.retrieval_backend = app_core::RetrievalBackend::parse(&backend);
+        }
         config.redis.url = self.redis_url.clone();
         config.redis.addr = self.redis_url.clone();
         Self::force_local_object_store(config);
@@ -215,6 +218,10 @@ impl E2eBootstrapConfig {
                 "AVRAG_ENABLE_RAG",
                 if self.enable_rag { "true" } else { "false" },
             )
+            .env(
+                "RETRIEVAL_BACKEND",
+                std::env::var("RETRIEVAL_BACKEND").unwrap_or_else(|_| "milvus".to_string()),
+            )
             .env("REDIS_URL", &self.redis_url)
             .env("AVRAG_PUBLIC_BASE_URL", base_url)
             .env("AVRAG_WORKER_ID", worker_id)
@@ -271,6 +278,7 @@ impl E2eBootstrapConfig {
                 "INGESTION_VLM_TRIPLET_ENABLED",
                 "INGESTION_VLM_SUMMARY_ENABLED",
                 "INGESTION_TRIPLET_MIN_CONFIDENCE",
+                "RETRIEVAL_BACKEND",
                 "DASHSCOPE_API_KEY",
                 "MM_EMBEDDING_BASE_URL",
                 "MM_EMBEDDING_API_KEY",

@@ -1,7 +1,9 @@
 use contracts::auth_runtime::AuthContext;
 use contracts::chat::{ChatRequest, RagPlan, RagPlanItem};
 use contracts::{LexicalRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
+use serde_json::json;
 
+use super::graph_augment::{self, GraphAugmentConfig};
 use crate::RagRuntime;
 
 pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
@@ -35,6 +37,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         format_hint: None,
     };
 
+    let terms_for_augment = args.terms.clone();
     let rag_plan = RagPlan {
         plan_version: "rag-item-v2".to_string(),
         plan_confidence: 1.0,
@@ -49,23 +52,52 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     };
 
     let started = std::time::Instant::now();
-    match runtime.retrieve_bm25_stage(&request, auth, &rag_plan).await {
+    let cfg = GraphAugmentConfig::resolve();
+    let augment_fut = async {
+        if cfg.enabled {
+            graph_augment::graph_augment_from_terms(
+                runtime,
+                auth,
+                &terms_for_augment,
+                &args.doc_scope,
+                &cfg,
+            )
+            .await
+        } else {
+            Vec::new()
+        }
+    };
+
+    let (bm25_result, graph_context) = tokio::join!(
+        runtime.retrieve_bm25_stage(&request, auth, &rag_plan),
+        augment_fut
+    );
+
+    match bm25_result {
         Ok((lists, degrade_trace)) => {
             let chunks: Vec<crate::ScoredChunk> =
                 lists.into_iter().flat_map(|list| list.chunks).collect();
+            let chunk_json: Vec<_> = chunks
+                .iter()
+                .map(super::scored_chunk_to_json)
+                .collect();
+            // Prefer object shape when graph_context present so native path matches bridge.
+            // Backward-compatible array when empty (legacy extractors / tests).
+            // Object shape when graph_context present so native ToolCatalog path matches bridge.
+            // Array when empty (legacy extractors / tests).
+            let data = if graph_context.is_empty() {
+                serde_json::to_value(chunk_json).unwrap_or_default()
+            } else {
+                json!({
+                    "chunks": chunk_json,
+                    "graph_context": graph_context,
+                })
+            };
             ToolResult {
                 tool: "lexical_retrieval".to_string(),
                 version: "1.0".to_string(),
                 status: ToolStatus::Ok,
-                data: Some(
-                    serde_json::to_value(
-                        chunks
-                            .iter()
-                            .map(super::scored_chunk_to_json)
-                            .collect::<Vec<_>>(),
-                    )
-                    .unwrap_or_default(),
-                ),
+                data: Some(data),
                 trace: Some(ToolTrace {
                     elapsed_ms: Some(started.elapsed().as_millis() as u64),
                     raw_hit_count: Some(chunks.len()),

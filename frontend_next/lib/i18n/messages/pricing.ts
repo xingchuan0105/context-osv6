@@ -17,29 +17,21 @@ export const pricingMessages = {
     zh: "年付暂未开放",
     en: "Yearly coming soon",
   },
-  pricingTierFreeName: {
-    zh: "Free",
-    en: "Free",
-  },
-  pricingTierPlusName: {
-    zh: "Plus",
-    en: "Plus",
-  },
-  pricingTierProName: {
-    zh: "Pro",
-    en: "Pro",
-  },
   pricingTierPlusBadge: {
     zh: "推荐",
     en: "Recommended",
   },
-  pricingTierPlusTagline: {
-    zh: "深度研究首选",
-    en: "Best for deep research",
+  pricingPlanFreeDescription: {
+    zh: "入门方案，适合较小的个人知识库与试用。",
+    en: "Starter plan for smaller personal notebooks and trial usage.",
   },
-  pricingTierProTagline: {
-    zh: "重度无忧",
-    en: "For power users",
+  pricingPlanPlusDescription: {
+    zh: "面向活跃文档摄入与对话工作流的每日额度。",
+    en: "Daily quotas for active document ingestion and chat workflows.",
+  },
+  pricingPlanProDescription: {
+    zh: "不限量额度策略，应对更重的工作负载。",
+    en: "Unlimited quota posture for heavier workloads.",
   },
   pricingFaqToken: {
     zh: "token 用量怎么算？",

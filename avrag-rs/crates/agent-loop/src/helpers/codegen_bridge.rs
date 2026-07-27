@@ -71,8 +71,12 @@ fn normalize_retrieval_items(items: Vec<serde_json::Value>) -> Vec<serde_json::V
 
 /// When sandbox stdout is empty but bridge captured retrieval chunks, serialize them for
 /// `<code_execution_result>` so the model and exit policy see the same evidence as `tool_results`.
+///
+/// Includes compact `graph_context` from lexical force-augment telemetry so the model still
+/// sees 1-hop structure when it did not print the bridge return value.
 pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) -> Option<String> {
     let mut items = Vec::new();
+    let mut graph_context = Vec::new();
     let mut doc_scan_only = true;
     let mut doc_scan_chunk_count = 0usize;
 
@@ -85,6 +89,15 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
         if result.status != ToolStatus::Ok {
             continue;
         }
+        // Force-augment telemetry: collect graph_context only (not as cite chunks).
+        if is_graph_augment_telemetry(result) {
+            if let Some(data) = &result.data {
+                if let Some(arr) = data.get("graph_context").and_then(|v| v.as_array()) {
+                    graph_context.extend(arr.iter().cloned());
+                }
+            }
+            continue;
+        }
         let Some(data) = &result.data else {
             continue;
         };
@@ -94,19 +107,47 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
                 if let Some(arr) = map.get("chunks").and_then(|v| v.as_array()) {
                     items.extend(normalize_retrieval_items(arr.clone()));
                 }
+                if let Some(arr) = map.get("graph_context").and_then(|v| v.as_array()) {
+                    graph_context.extend(arr.iter().cloned());
+                }
             }
             _ => {}
         }
     }
     if !items.is_empty() {
-        return serde_json::to_string(&items).ok();
+        if graph_context.is_empty() {
+            return serde_json::to_string(&items).ok();
+        }
+        return serde_json::to_string(&serde_json::json!({
+            "chunks": items,
+            "graph_context": graph_context,
+        }))
+        .ok();
+    }
+    if !graph_context.is_empty() {
+        return serde_json::to_string(&serde_json::json!({
+            "chunks": [],
+            "graph_context": graph_context,
+        }))
+        .ok();
     }
     if doc_scan_only && doc_scan_chunk_count > 0 {
+        // Material is in the sandbox for code-side scan; only a compact hint
+        // goes back into the LLM observation (not the full chunk dump).
         return Some(format!(
-            "doc_chunks loaded {doc_scan_chunk_count} chunks; print compact summary (do not print full chunks)"
+            "doc_scan loaded {doc_scan_chunk_count} segments into the sandbox for code-side scan/count; print a compact result (numbers or a short list)"
         ));
     }
     None
+}
+
+fn is_graph_augment_telemetry(result: &ToolResult) -> bool {
+    result.tool == "graph_retrieval"
+        && result
+            .trace
+            .as_ref()
+            .and_then(|t| t.degrade_reason.as_deref())
+            == Some("graph_augment")
 }
 
 fn should_skip_bridge_tool_result(result: &ToolResult) -> bool {
@@ -185,6 +226,47 @@ mod tests {
     }
 
     #[test]
+    fn test_observation_includes_graph_context_from_augment_telemetry() {
+        use contracts::ToolTrace;
+        let bridge = vec![
+            tr(
+                "lexical_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "c1", "doc_id": "d1", "content": "body", "score": 0.9}
+                ])),
+            ),
+            ToolResult {
+                tool: "graph_retrieval".into(),
+                version: "1.0".into(),
+                status: ToolStatus::Ok,
+                data: Some(serde_json::json!({
+                    "graph_context": [{
+                        "subject": "DRC",
+                        "object": "DRO",
+                        "hop": 1,
+                        "evidence_chunks": [{"score": 1.0, "score_gap_to_top1": 0.0, "kept_reason": "top1"}]
+                    }]
+                })),
+                trace: Some(ToolTrace {
+                    elapsed_ms: Some(2),
+                    raw_hit_count: Some(1),
+                    hydrated_hit_count: Some(1),
+                    degrade_reason: Some("graph_augment".into()),
+                }),
+            },
+        ];
+        let stdout = bridge_tool_results_to_observation_stdout(&bridge).expect("stdout");
+        let v: serde_json::Value = serde_json::from_str(&stdout).expect("json");
+        assert_eq!(v["chunks"][0]["chunk_id"], "c1");
+        assert_eq!(v["graph_context"][0]["subject"], "DRC");
+        assert_eq!(
+            v["graph_context"][0]["evidence_chunks"][0]["score_gap_to_top1"],
+            0.0
+        );
+    }
+
+    #[test]
     fn test_codegen_observation_stdout_keeps_exec_stdout_when_present() {
         let bridge = vec![tr(
             "dense_retrieval",
@@ -222,10 +304,13 @@ stderr:
         )];
         let stdout = codegen_observation_stdout("", &bridge);
         assert!(
-            stdout.contains("doc_chunks loaded 2 chunks"),
+            stdout.contains("doc_scan loaded 2 segments"),
             "stdout={stdout}"
         );
-        assert!(stdout.contains("print compact summary"));
+        assert!(
+            stdout.contains("code-side scan") || stdout.contains("compact"),
+            "stdout={stdout}"
+        );
         assert!(!stdout.contains("full body"));
     }
 

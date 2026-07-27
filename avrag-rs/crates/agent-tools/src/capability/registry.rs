@@ -374,9 +374,12 @@ mod tests {
     #[test]
     fn can_lookup_skills() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.skill("rag-answer").is_some());
-        assert!(registry.skill("chat").is_some());
-        assert!(registry.skill("rag-system").is_some());
+        assert!(registry.skill("codegen").is_some());
+        assert!(registry.skill("metadata").is_some());
+        assert!(registry.skill("capability-rag").is_some());
+        // U9 (2026-07): synthesis answer skills retired to prompts/deprecated/.
+        assert!(registry.skill("rag-answer").is_none());
+        assert!(registry.skill("chat").is_none());
     }
 
     #[test]
@@ -391,6 +394,15 @@ mod tests {
             "rag-memory-mgmt",
             "rag-citation-format",
             "url-citation-format",
+            // P2 (2026-07-20): monomode *-system prompts retired to prompts/deprecated/.
+            "rag-system",
+            "search-system",
+            "chat-system",
+            // U9 (2026-07): prompts/synthesis/* retired to prompts/deprecated/synthesis/.
+            "chat",
+            "rag-answer",
+            "search-answer",
+            "grounded-answer",
         ] {
             assert!(
                 registry.skill(id).is_none(),
@@ -451,9 +463,9 @@ mod tests {
     }
 
     #[test]
-    fn rag_system_reads_frontmatter_strategies() {
+    fn capability_rag_reads_frontmatter_strategies() {
         let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("rag-system").unwrap();
+        let skill = registry.skill("capability-rag").unwrap();
         assert_eq!(skill.applicable_strategies, vec!["rag"]);
     }
 
@@ -467,9 +479,13 @@ mod tests {
     #[test]
     fn skills_without_frontmatter_fields_use_inference() {
         let registry = CapabilityRegistry::standard();
-        // chat skill has no applicable_strategies in frontmatter — should infer from id
-        let skill = registry.skill("chat").unwrap();
-        assert!(skill.applicable_strategies.contains(&"chat".to_string()));
+        // capability-rag.dispatch has no applicable_strategies in frontmatter —
+        // should infer from id (falls through to the all-strategies default).
+        let skill = registry.skill("capability-rag.dispatch").unwrap();
+        assert_eq!(
+            skill.applicable_strategies,
+            vec!["chat".to_string(), "rag".to_string(), "search".to_string()]
+        );
     }
 
     #[test]

@@ -118,7 +118,7 @@ export function AlipayQrDialog({
               <div className={styles.qrPlaceholder} aria-hidden="true" />
             )}
             <p className={styles.hint}>{formatUiMessage(locale, "alipayQrScanHint")}</p>
-            <p className={styles.status} role="status">
+            <p className={`${styles.status} ${state === "paid" ? styles.statusPaid : ""}`} role="status">
               {state === "paid"
                 ? formatUiMessage(locale, "alipayQrPaid")
                 : formatUiMessage(locale, "alipayQrWaiting")}

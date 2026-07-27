@@ -150,8 +150,10 @@ function WorkspaceActions({
         type="button"
         onClick={() => setMenuOpen((current) => !current)}
       >
-        <svg aria-hidden="true" className="dashboard-menu-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M12 6h.01M12 12h.01M12 18h.01" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+        <svg aria-hidden="true" className="dashboard-menu-icon" viewBox="0 0 24 24">
+          <circle cx="12" cy="5.5" r="1.7" fill="currentColor" />
+          <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+          <circle cx="12" cy="18.5" r="1.7" fill="currentColor" />
         </svg>
       </button>
       {menuOpen ? (
@@ -220,7 +222,7 @@ export function WorkspaceListItem({
 
   if (mode === "list") {
     return (
-      <li className="dashboard-list-item animate-card-enter" style={{ animationDelay: `${index * 50}ms` }}>
+      <li className="dashboard-list-item animate-card-enter" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
         <article className="dashboard-workspace-card" data-testid="dashboard-workspace-item" data-workspace-id={workspace.id}>
           <DashboardWorkspaceCardLink
             className="dashboard-workspace-card-link dashboard-workspace-card-link-list"
@@ -258,7 +260,7 @@ export function WorkspaceListItem({
   }
 
   return (
-    <li className={`${mode === "card" ? "dashboard-card-item" : "dashboard-list-item"} animate-card-enter`} role={mode === "card" ? "gridcell" : undefined} style={{ animationDelay: `${index * 50}ms` }}>
+    <li className={`${mode === "card" ? "dashboard-card-item" : "dashboard-list-item"} animate-card-enter`} role={mode === "card" ? "gridcell" : undefined} style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
       <article className="dashboard-workspace-card" data-testid="dashboard-workspace-item" data-workspace-id={workspace.id}>
         <DashboardWorkspaceCardLink
           className="dashboard-workspace-card-link dashboard-workspace-card-link-card"

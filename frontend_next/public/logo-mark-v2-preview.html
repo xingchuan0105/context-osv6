@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: "IBM Plex Sans", "PingFang SC", sans-serif; background: #fafbfd; margin: 0; padding: 32px; }
+  h3 { font-size: 13px; color: #68708a; font-weight: 500; margin: 20px 0 12px; }
+  .grid { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 8px; }
+  .opt { background: #fff; border: 1px solid #e3e6ee; border-radius: 12px; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .sizes { display: flex; align-items: flex-end; gap: 18px; }
+  .lockup { display: flex; align-items: center; gap: 10px; }
+  .word { font-family: "Space Grotesk", "IBM Plex Sans", sans-serif; font-weight: 600; font-size: 20px; color: #1b2138; }
+  .label { font-size: 12px; color: #68708a; max-width: 240px; }
+  .plate-row { display: flex; gap: 14px; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- 现状:细线版 -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="m-current">
+  <path d="M34 16C26.82 16 21 21.82 21 29V47C21 54.18 26.82 60 34 60" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
+  <path d="M42 16C49.18 16 55 21.82 55 29V47C55 54.18 49.18 60 42 60" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
+  <path d="M38 17.5V58.5" stroke-linecap="round" stroke-width="2.2"/>
+  <path d="M29.5 31.5H38" stroke-linecap="round" stroke-width="2"/>
+  <path d="M38 25.5H45" stroke-linecap="round" stroke-width="2"/>
+  <path d="M38 44.5H47" stroke-linecap="round" stroke-width="2"/>
+  <path d="M38 52H45" stroke-linecap="round" stroke-width="2"/>
+  <circle cx="29.5" cy="31.5" r="2.6" stroke="none"/>
+  <circle cx="45" cy="25.5" r="2.6" stroke="none"/>
+  <circle cx="47" cy="44.5" r="2.6" stroke="none"/>
+  <circle cx="45" cy="52" r="2.3" stroke="none"/>
+</g>
+
+<!-- V1 加粗简化版:弧5px + 脊4.5px + 3个粗节点,去掉连接细线 -->
+<g id="m-v1">
+  <path d="M33 17C26.5 17 21.5 22.5 21.5 29.5V46.5C21.5 53.5 26.5 59 33 59" fill="none" stroke-linecap="round" stroke-width="5"/>
+  <path d="M43 17C49.5 17 54.5 22.5 54.5 29.5V46.5C54.5 53.5 49.5 59 43 59" fill="none" stroke-linecap="round" stroke-width="5"/>
+  <path d="M38 19V57" stroke-linecap="round" stroke-width="4.5"/>
+  <circle cx="28.5" cy="32" r="4" stroke="none"/>
+  <circle cx="47.5" cy="26" r="4" stroke="none"/>
+  <circle cx="47.5" cy="50" r="4" stroke="none"/>
+</g>
+
+<!-- V2 极简版:只有双弧 + 脊,3 笔,6/5px,Claude 式 -->
+<g id="m-v2">
+  <path d="M32 16C24.5 16 19.5 22 19.5 29.5V46.5C19.5 54 24.5 60 32 60" fill="none" stroke-linecap="round" stroke-width="6"/>
+  <path d="M44 16C51.5 16 56.5 22 56.5 29.5V46.5C56.5 54 51.5 60 44 60" fill="none" stroke-linecap="round" stroke-width="6"/>
+  <path d="M38 18V58" stroke-linecap="round" stroke-width="5"/>
+</g>
+
+<!-- V3 弧上带节:双弧 5px,节点融入弧线端点感,脊 4.5,左右各一节 -->
+<g id="m-v3">
+  <path d="M33 17C26 17 21 22.5 21 30V46C21 53.5 26 59 33 59" fill="none" stroke-linecap="round" stroke-width="5"/>
+  <path d="M43 17C50 17 55 22.5 55 30V46C55 53.5 50 59 43 59" fill="none" stroke-linecap="round" stroke-width="5"/>
+  <path d="M38 19V57" stroke-linecap="round" stroke-width="4.5"/>
+  <circle cx="27.5" cy="38" r="5" stroke="none"/>
+  <circle cx="48.5" cy="38" r="5" stroke="none"/>
+</g>
+</defs></svg>
+
+<h3>小尺寸 28px（实际导航尺寸）— 这是判断粗细的关键场景</h3>
+<div class="grid">
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-current"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">现状（细线 2-2.4px,11 元素)</span>
+  </div>
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v1"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">V1 · 加粗简化(弧 5px + 脊 + 3 节点,去连接线)</span>
+  </div>
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v2"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">V2 · 极简 3 笔(双弧 6px + 脊 5px,最 Claude)</span>
+  </div>
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v3"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">V3 · 弧 5px + 双节点(居中大脑感)</span>
+  </div>
+</div>
+
+<h3>大尺寸 76px(登录页/营销页)</h3>
+<div class="grid">
+  <div class="opt"><div class="sizes">
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-current"/></g></svg>
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v1"/></g></svg>
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v2"/></g></svg>
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v3"/></g></svg>
+  </div><span class="label">左起:现状 / V1 / V2 / V3(靛蓝线稿)</span></div>
+</div>
+
+<h3>靛蓝底白线（favicon / 胶囊场景,34px)</h3>
+<div class="grid">
+  <div class="opt"><div class="plate-row">
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-current"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-v1"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-v2"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-v3"/></g></svg>
+  </div><span class="label">左起:现状 / V1 / V2 / V3(白线蓝底)</span></div>
+  <div class="opt"><div class="plate-row">
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#232a5e"/><g stroke="#fff" fill="#fff"><use href="#m-current"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#232a5e"/><g stroke="#fff" fill="#fff"><use href="#m-v1"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#232a5e"/><g stroke="#fff" fill="#fff"><use href="#m-v2"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#232a5e"/><g stroke="#fff" fill="#fff"><use href="#m-v3"/></g></svg>
+  </div><span class="label">同上,深靛墨底对照</span></div>
+</div>
+
+</body>
+</html>

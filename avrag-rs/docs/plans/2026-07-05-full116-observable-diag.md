@@ -1,5 +1,11 @@
 # Full116 Observable 批跑离线诊断（2026-07-05）
 
+> **文档性质**：历史跑批观测记录，**不是**现行图增强产品规范。  
+> 当时配置 `RETRIEVAL_GRAPH_AUGMENT=on` 会在 **dense + lexical** 两侧车 `graph_augment`  
+> （评测曾把 augment 记成 graph 调用 → NC 误触）。  
+> **现行**（仅 lexical 强制 1 跳、得分落差、dense 不带图）：  
+> [`2026-07-23-lexical-graph-augment-scoring-design.md`](./2026-07-23-lexical-graph-augment-scoring-design.md)。
+
 > Run：`e2e_20260704-172230_local_edb73279542c4f86a634086cf1f6eaa2`  
 > 配置：`RETRIEVAL_GRAPH_AUGMENT=on`，复用 7 篇 realistic 语料，零灌库  
 > 模式：只跑不评（observable 产物 + 事后 `e2e-analyzer rag-diag`）  
@@ -626,14 +632,18 @@ Golden：4 条 **定制句式** `must_include`（Y冷冻/智遥咨询/薪酬解�
 
 实际 `tool_results` 仍出现 `graph_retrieval`（`degrade_reason: graph_augment`，`raw_hit_count: 5`），`metadata.json` 记 `stage=graph_retrieval, reason=graph_augment`。
 
-**机理**（`crates/rag-core/src/runtime/bridge.rs` + `graph_augment.rs`）：
+**机理**（**本跑批时** 的 `bridge.rs` + `graph_augment.rs`；**非现行目标行为**）：
 
 1. Agent 只调 `dense_search` / `lexical_search`（codegen 沙箱）。
-2. Bridge 在 `RETRIEVAL_GRAPH_AUGMENT=on` 时**并发**跑 `graph_augment`，用 primary 命中的 chunk 作种子做 BFS。
+2. Bridge 在 `RETRIEVAL_GRAPH_AUGMENT=on` 时对 **dense 与 lexical 均**并发 `graph_augment`（种子/ hop 依当时实现）。
 3. Augment 产出写入 `graph_context` + 遥测 `ToolResult{ tool: "graph_retrieval", degrade_reason: "graph_augment" }`。
-4. Eval 的 `graph_called` = trace 里**任意** `graph_retrieval`（`rag_quality_prod.rs:2285`）→ NC 4 题全计为 false positive。
+4. Eval 的 `graph_called` = trace 里**任意** `graph_retrieval` → NC 4 题全计为 false positive。
 
 **对照**：`v5_off` 下同样 4 题 NC **`graph_false_positive=0/4`**，说明 v2 prompt 收窄后 agent **已不再误调 graph_search**；full116 的 4/4 是 **augment 侧车** 触发的统计假象。
+
+> **现行规格**（2026-07-23）：仅 **lexical** 强制 1 跳带图；dense 不侧车；评测必须拆  
+> `graph_augment_hit` vs `graph_explicit_called`。见  
+> [`2026-07-23-lexical-graph-augment-scoring-design.md`](./2026-07-23-lexical-graph-augment-scoring-design.md)。
 
 ### 10.3 `graph_cited=0/9`——合成策略 + 评测定义
 

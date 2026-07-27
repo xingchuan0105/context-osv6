@@ -252,8 +252,8 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
 
   return (
     <main className="app-page-shell">
-      <div className="app-page-center" style={{ display: "grid", gap: "1rem" }}>
-        <header style={{ display: "grid", gap: "0.75rem" }}>
+      <div className={`app-page-center ${styles.pageStack}`}>
+        <header className={styles.header}>
           <Link className="app-link app-link-muted" href="/">
             {formatUiMessage(locale, "sharedPublic.backHomeAction")}
           </Link>
@@ -267,11 +267,11 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
 
         {loading ? (
           <section className="app-surface-card" role="status">
-            <p style={{ margin: 0 }}>{formatUiMessage(locale, "sharedPublic.loading")}</p>
+            <p className={styles.flushText}>{formatUiMessage(locale, "sharedPublic.loading")}</p>
           </section>
         ) : loadError || !payload ? (
-          <section className="app-surface-card" style={{ display: "grid", gap: "0.75rem" }}>
-            <h2 className="app-page-title" style={{ fontSize: "1.15rem", marginBottom: 0 }}>
+          <section className={`app-surface-card ${styles.errorCard}`}>
+            <h2 className={`app-page-title ${styles.errorTitle}`}>
               {formatUiMessage(locale, "sharedPublic.invalidLinkTitle")}
             </h2>
             <p className="app-page-subtitle">{formatUiMessage(locale, "sharedPublic.invalidLinkBody")}</p>
@@ -285,7 +285,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
             <section className={`app-surface-card ${styles.sectionStack}`}>
               <div className={styles.overviewHeader}>
                 <div>
-                  <h2 className="app-page-title" style={{ fontSize: "1.3rem", marginBottom: "0.5rem" }}>
+                  <h2 className={`app-page-title ${styles.sectionTitle}`}>
                     {payload.knowledge_base.title}
                   </h2>
                   <p className="app-page-subtitle">{payload.knowledge_base.description?.trim() || formatUiMessage(locale, "sharedPublic.pageSubtitle")}</p>
@@ -339,7 +339,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
 
             <section className={`app-surface-card ${styles.sectionStack}`}>
               <div>
-                <h2 className="app-page-title" style={{ fontSize: "1.3rem", marginBottom: "0.5rem" }}>
+                <h2 className={`app-page-title ${styles.sectionTitle}`}>
                   {formatUiMessage(locale, "sharedPublic.sourcesSectionTitle")}
                 </h2>
                 <p className="app-page-subtitle">{formatUiMessage(locale, "sharedPublic.sourcesSectionSubtitle")}</p>
@@ -348,7 +348,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
               {payload.sources.length === 0 ? (
                 <div className={styles.emptyState}>
                   <strong>{formatUiMessage(locale, "sharedPublic.sourcesEmptyTitle")}</strong>
-                  <p style={{ margin: 0 }}>{formatUiMessage(locale, "sharedPublic.sourcesEmptyBody")}</p>
+                  <p className={styles.flushText}>{formatUiMessage(locale, "sharedPublic.sourcesEmptyBody")}</p>
                 </div>
               ) : (
                 <div className={styles.sourceList}>
@@ -356,7 +356,9 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                     <article className={styles.sourceCard} key={source.id}>
                       <div className={styles.sourceTitleRow}>
                         <strong>{source.file_name}</strong>
-                        <code className={styles.semanticCode}>{normalizeSemanticValue(source.status)}</code>
+                        <code className={styles.semanticCode} data-status={normalizeSemanticValue(source.status)}>
+                          {normalizeSemanticValue(source.status)}
+                        </code>
                       </div>
                     </article>
                   ))}
@@ -366,7 +368,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
 
             <section className={`app-surface-card ${styles.sectionStack}`}>
               <div>
-                <h2 className="app-page-title" style={{ fontSize: "1.3rem", marginBottom: "0.5rem" }}>
+                <h2 className={`app-page-title ${styles.sectionTitle}`}>
                   {formatUiMessage(locale, "sharedPublic.chatSectionTitle")}
                 </h2>
                 <p className="app-page-subtitle">{formatUiMessage(locale, "sharedPublic.chatSectionSubtitle")}</p>
@@ -390,7 +392,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
               {chatError ? <p className="app-notice-banner">{chatError}</p> : null}
 
               {canInteract ? (
-                <form onSubmit={handleSubmit} style={{ display: "grid", gap: "1rem" }}>
+                <form className={styles.chatForm} onSubmit={handleSubmit}>
                   <div>
                     <label className="app-form-label" htmlFor="shared-query">
                       {formatUiMessage(locale, "sharedPublic.questionLabel")}
@@ -411,9 +413,9 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                   </div>
                 </form>
               ) : (
-                <div className="app-inline-surface" style={{ display: "grid", gap: "0.75rem" }}>
+                <div className={`app-inline-surface ${styles.signInBox}`}>
                   <strong>{formatUiMessage(locale, "sharedPublic.signInRequiredTitle")}</strong>
-                  <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+                  <p className={styles.mutedText}>
                     {formatUiMessage(locale, "sharedPublic.signInRequiredBody")}
                   </p>
                   <div className="app-button-row">
@@ -445,7 +447,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                   {answerText ? (
                     <section className={styles.resultCard}>
                       <div className={styles.resultHeader}>
-                        <h3 style={{ margin: 0 }}>{formatUiMessage(locale, "sharedPublic.answerTitle")}</h3>
+                        <h3 className={styles.resultTitle}>{formatUiMessage(locale, "sharedPublic.answerTitle")}</h3>
                       </div>
                       <p className={styles.answerCopy}>{answerText}</p>
                     </section>
@@ -454,7 +456,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                   {citations.length > 0 ? (
                     <section className={styles.resultCard}>
                       <div className={styles.resultHeader}>
-                        <h3 style={{ margin: 0 }}>{formatUiMessage(locale, "sharedPublic.citationsTitle")}</h3>
+                        <h3 className={styles.resultTitle}>{formatUiMessage(locale, "sharedPublic.citationsTitle")}</h3>
                         <span className={styles.resultCount}>{citations.length}</span>
                       </div>
                       <div className={styles.resultList}>
@@ -474,7 +476,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                   {sources.length > 0 ? (
                     <section className={styles.resultCard}>
                       <div className={styles.resultHeader}>
-                        <h3 style={{ margin: 0 }}>{formatUiMessage(locale, "workspaceRightRail.sourcesSectionTitle")}</h3>
+                        <h3 className={styles.resultTitle}>{formatUiMessage(locale, "workspaceRightRail.sourcesSectionTitle")}</h3>
                         <span className={styles.resultCount}>{sources.length}</span>
                       </div>
                       <div className={styles.resultList}>

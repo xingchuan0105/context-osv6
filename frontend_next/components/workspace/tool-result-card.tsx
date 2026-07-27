@@ -104,7 +104,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {stderr ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>stderr</div>
-              <pre style={{ color: "hsl(var(--destructive))" }}>{stderr}</pre>
+              <pre className={styles.toolResultStderr}>{stderr}</pre>
             </div>
           ) : null}
           {!success && data.exit_code !== undefined ? (
@@ -165,7 +165,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
       return (
         <div className={styles.toolResultBody}>
           {location || description ? (
-            <div style={{ fontWeight: 600, marginBottom: "0.4rem" }}>
+            <div className={styles.toolResultWeatherHeader}>
               {location}
               {location && description ? " — " : ""}
               {description}
@@ -239,7 +239,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
               <div className={styles.toolResultSectionLabel}>
                 {locale === "zh-CN" ? "摘要" : "Summary"}
               </div>
-              <div style={{ lineHeight: 1.5 }}>{answer}</div>
+              <div className={styles.toolResultAnswer}>{answer}</div>
             </div>
           ) : null}
           {results.length > 0 ? (
@@ -247,7 +247,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
               <div className={styles.toolResultSectionLabel}>
                 {locale === "zh-CN" ? "搜索结果" : "Search Results"}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div className={styles.toolResultSearchList}>
                 {results.map((r: SearchResultRow, i: number) => {
                   const safeUrl = toSafeHttpUrl(typeof r.url === "string" ? r.url : null);
                   return (

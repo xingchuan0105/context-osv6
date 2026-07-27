@@ -1,0 +1,9 @@
+.card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.backRow {
+  display: flex;
+  justify-content: flex-start;
+}

@@ -1,13 +1,49 @@
 import type { UiMessageDescriptor } from "./types";
 
 export const commonMessages = {
+  "appModal.close": {
+    zh: "关闭",
+    en: "Close",
+  },
+  "apiAccessModal.title": {
+    zh: "API 访问",
+    en: "API access",
+  },
+  "apiAccessModal.openFullPage": {
+    zh: "打开完整页面 →",
+    en: "Open full page →",
+  },
+  "upgradeModal.title": {
+    zh: "升级方案",
+    en: "Upgrade plan",
+  },
+  "upgradeModal.subtitle": {
+    zh: "选择适合你的方案，支付完成后即可立即生效。",
+    en: "Pick a plan. Access updates as soon as payment completes.",
+  },
+  "upgradeModal.openFullPage": {
+    zh: "查看完整定价页 →",
+    en: "View full pricing page →",
+  },
+  "settingsQuickModal.openFullPage": {
+    zh: "打开设置页 →",
+    en: "Open settings page →",
+  },
+  "settingsQuickModal.moreSettings": {
+    zh: "更多设置",
+    en: "More settings",
+  },
+  "settingsQuickModal.securityLink": {
+    zh: "安全",
+    en: "Security",
+  },
+  "settingsQuickModal.notificationsLink": {
+    zh: "通知",
+    en: "Notifications",
+  },
   commonCancel: {
     zh: "取消",
     en: "Cancel",
-  },
-  commonSave: {
-    zh: "保存",
-    en: "Save",
   },
   commonUnlimited: {
     zh: "不限",

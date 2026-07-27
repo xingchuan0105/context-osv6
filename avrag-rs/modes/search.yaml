@@ -1,11 +1,14 @@
 mode: search
-system_prompt_base: prompts/orchestrators/search-system.md
+# P2 (2026-07-20): main-path system source is capability-search (self-contained);
+# monomode search-system retired to prompts/deprecated/monomode-system/.
+system_prompt_base: prompts/orchestrators/capability-search.md
 tool_pool: [web_search, web_fetch]
 inject_retrieval_query: true
 skill_catalog:
   retrieve: [search, memory]
   synthesis: [writing, format]
-  mandatory_synthesis: [search-answer]
+  # PR-A: no monomode search-answer mandatory (worker handoff is final).
+  mandatory_synthesis: []
 budget:
   max_iterations: 3
   by_user_tier:
@@ -16,10 +19,10 @@ budget:
 temperature: 0.4
 loop_exit:
   require_evidence: true
-  allow_content_early_stop: false
-  skip_synthesis_on_direct_answer: false
+  allow_content_early_stop: true
+  skip_synthesis_on_direct_answer: true
 synthesis_output:
-  contract: internal_search_answer_v1
+  contract: prose_only
 auto_fallback:
   enabled: true
   tool_id: web_search

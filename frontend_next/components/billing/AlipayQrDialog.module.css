@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 300;
+  z-index: var(--z-toast);
   padding: 1rem;
 }
 
@@ -69,6 +69,11 @@
   text-align: center;
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-caption);
+}
+
+.statusPaid {
+  color: hsl(var(--success));
+  font-weight: var(--font-weight-semibold);
 }
 
 .timeoutText {

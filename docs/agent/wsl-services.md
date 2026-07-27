@@ -15,12 +15,21 @@ Status: extracted from AGENTS/CLAUDE for progressive disclosure. AGENTS.md links
 | **Redis** | System service | Running | `redis-cli ping` |
 | **MinIO (Dev)** | Standalone process | On-demand | `scripts/dev-services-up.sh` |
 
+## Retrieval backend (local)
+
+| `RETRIEVAL_BACKEND` (in `avrag-rs/.env`) | Needs | Notes |
+|----------------------------------------|-------|--------|
+| **`pgvector`** (local default / private) | Postgres + `vector` extension + migration `0060` | **No Milvus.** Package e.g. `postgresql-16-pgvector`. |
+| **`milvus`** (SaaS / scale) | Docker stack on `:19530` | `docker compose -f avrag-rs/docker-compose.milvus.yml up -d` |
+
+`scripts/product-dev-up.sh` reads `.env`: for pgvector it skips Milvus health as a hard dependency; for milvus it warns if `:19530` is down.
+
 ## Rules for agents
 
-1. **Milvus stack (Docker)**: long-running containers (`milvus-standalone`, `milvus-etcd`, `milvus-minio`). **Do not** `docker-compose up` unless a container is actually stopped. Status via `docker ps | grep milvus` (not `docker-compose ps`).
-2. **PostgreSQL & Redis**: system services, **not** Docker. `sudo pg_ctlcluster 16 main start` / `sudo service redis-server start` only if confirmed down.
+1. **Milvus stack (Docker)**: only required when `RETRIEVAL_BACKEND=milvus` (or RAG E2E that assumes Milvus). Long-running containers (`milvus-standalone`, `milvus-etcd`, `milvus-minio`). **Do not** `docker-compose up` unless a container is actually stopped *and* the backend needs it. Status via `docker ps | grep milvus` (not `docker-compose ps`).
+2. **PostgreSQL & Redis**: system services, **not** Docker. `sudo pg_ctlcluster 16 main start` / `sudo service redis-server start` only if confirmed down. For **pgvector**, also ensure `CREATE EXTENSION vector` and migrations.
 3. **Test PostgreSQL containers** (`avrag-test-pg-*`): intentionally left running between E2E runs. **Do not** stop or prune unless asked.
-4. **If a service appears down, check in order**: `docker ps` → `pg_isready -h 127.0.0.1` → `redis-cli ping`. Only then use startup scripts: Milvus `docker-compose -f avrag-rs/docker-compose.milvus.yml up -d`; dev services `bash scripts/dev-services-up.sh`.
+4. **If a service appears down, check in order**: `pg_isready -h 127.0.0.1` → `redis-cli ping` → (if milvus backend) `docker ps` / compose up. Dev stack: `bash scripts/product-dev-up.sh`.
 
 ## Port bindings (reference — do not remap without user request)
 

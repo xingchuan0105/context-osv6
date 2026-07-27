@@ -188,6 +188,137 @@ fn mock_write_refine_finish_call() -> serde_json::Value {
     })
 }
 
+/// G-17: normalize user text into a calculator expression when it looks like math.
+fn extract_calculator_expression(user_prompt: &str) -> Option<String> {
+    let mut s = user_prompt
+        .replace('×', "*")
+        .replace('÷', "/")
+        .replace('（', "(")
+        .replace('）', ")")
+        .replace('，', ",")
+        .replace('＋', "+")
+        .replace('－', "-");
+    for noise in [
+        "请计算",
+        "计算",
+        "等于多少",
+        "是多少",
+        "等于",
+        "多少",
+        "？",
+        "?",
+        "：",
+        ":",
+        "。",
+    ] {
+        s = s.replace(noise, " ");
+    }
+    let s = s.trim();
+    // Keep chars that form expressions; drop pure Chinese leftovers.
+    let cleaned: String = s
+        .chars()
+        .filter(|c| {
+            c.is_ascii_digit()
+                || matches!(
+                    *c,
+                    '+' | '-' | '*' | '/' | '%' | '^' | '(' | ')' | '.' | ' ' | 'e' | 'E'
+                )
+        })
+        .collect();
+    let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join("");
+    if cleaned.chars().any(|c| c.is_ascii_digit())
+        && cleaned.chars().any(|c| matches!(c, '+' | '-' | '*' | '/' | '%' | '^' | '('))
+    {
+        Some(cleaned)
+    } else if cleaned.chars().all(|c| c.is_ascii_digit() || c == '.') && !cleaned.is_empty() {
+        // bare number — still not a compute request
+        None
+    } else {
+        None
+    }
+}
+
+fn looks_like_weather_query(user_prompt: &str) -> bool {
+    let lower = user_prompt.to_ascii_lowercase();
+    lower.contains("天气")
+        || lower.contains("weather")
+        || lower.contains("气温")
+        || lower.contains("温度")
+}
+
+fn extract_weather_location(user_prompt: &str) -> String {
+    for city in ["北京", "上海", "深圳", "广州", "Tokyo", "Beijing", "Shanghai"] {
+        if user_prompt.contains(city) {
+            return city.to_string();
+        }
+    }
+    "Beijing".to_string()
+}
+
+/// After calculator tool result messages, surface the numeric result in prose.
+fn mock_calculator_followup(messages: &[serde_json::Value]) -> Option<String> {
+    for message in messages.iter().rev() {
+        if message.get("role").and_then(|r| r.as_str()) != Some("tool") {
+            continue;
+        }
+        let content = message.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        // Tool content may be JSON string or nested JSON.
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+            if let Some(result) = v
+                .pointer("/result")
+                .or_else(|| v.pointer("/data/result"))
+                .and_then(|x| x.as_f64().or_else(|| x.as_i64().map(|i| i as f64)))
+            {
+                // Prefer integer display when exact.
+                if (result - result.round()).abs() < 1e-9 {
+                    return Some(format!("计算结果是 {}。", result.round() as i64));
+                }
+                return Some(format!("计算结果是 {result}。"));
+            }
+        }
+        // Loose parse: "result": 6245
+        if let Some(idx) = content.find("\"result\"") {
+            let tail = &content[idx..];
+            if let Some(num) = tail
+                .split(|c: char| c == ',' || c == '}' || c == '\n')
+                .next()
+                .and_then(|frag| {
+                    frag.split(':')
+                        .nth(1)
+                        .map(str::trim)
+                        .and_then(|n| n.parse::<f64>().ok())
+                })
+            {
+                if (num - num.round()).abs() < 1e-9 {
+                    return Some(format!("计算结果是 {}。", num.round() as i64));
+                }
+                return Some(format!("计算结果是 {num}。"));
+            }
+        }
+    }
+    None
+}
+
+fn mock_weather_followup(messages: &[serde_json::Value]) -> Option<String> {
+    for message in messages.iter().rev() {
+        if message.get("role").and_then(|r| r.as_str()) != Some("tool") {
+            continue;
+        }
+        let content = message.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        if content.contains("temperature")
+            || content.contains("天气")
+            || content.contains("description")
+            || content.contains("°")
+        {
+            return Some(format!("根据查询，当前天气实况：{content}"));
+        }
+        if content.contains("Beijing") || content.contains("北京") {
+            return Some("北京当前天气晴，约 25°C。".to_string());
+        }
+    }
+    Some("当前天气查询完成：晴，温度适宜。".to_string())
+}
+
 fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<serde_json::Value> {
     // WriteRefine control ring (not ToolCatalog): finish on first tools turn
     // so the refine loop exits in ≤1 ReAct iteration under mock LLM.
@@ -214,6 +345,52 @@ fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<ser
     } else {
         query
     };
+
+    // G-17: pure-chat / AnswerOnly utility tools (before web_search default).
+    if tool_names.iter().any(|name| name == "calculator") {
+        if let Some(expression) = extract_calculator_expression(&query) {
+            return Some(json!({
+                "id": "call_calculator_0",
+                "type": "function",
+                "function": {
+                    "name": "calculator",
+                    "arguments": serde_json::to_string(&json!({
+                        "expression": expression,
+                    })).unwrap_or_else(|_| "{}".to_string()),
+                }
+            }));
+        }
+    }
+    if tool_names.iter().any(|name| name == "weather_query") && looks_like_weather_query(&query)
+    {
+        let location = extract_weather_location(&query);
+        return Some(json!({
+            "id": "call_weather_0",
+            "type": "function",
+            "function": {
+                "name": "weather_query",
+                "arguments": serde_json::to_string(&json!({
+                    "location": location,
+                    "units": "metric",
+                })).unwrap_or_else(|_| "{}".to_string()),
+            }
+        }));
+    }
+    if tool_names.iter().any(|name| name == "user_context")
+        && (query.contains("时间")
+            || query.contains("日期")
+            || query.to_ascii_lowercase().contains("time")
+            || query.to_ascii_lowercase().contains("date"))
+    {
+        return Some(json!({
+            "id": "call_user_context_0",
+            "type": "function",
+            "function": {
+                "name": "user_context",
+                "arguments": "{}".to_string(),
+            }
+        }));
+    }
 
     if tool_names.iter().any(|name| name == "web_search") {
         return Some(json!({
@@ -563,6 +740,49 @@ fn detect_synthesis_route(
     None
 }
 
+/// Option D Answer phase (product-answer-base + prose) — not monomode JSON synthesis.
+fn is_option_d_answer_phase(system_prompt: &str) -> bool {
+    system_prompt.contains("product-answer-base")
+        || system_prompt.contains("当前阶段：撰写最终答案")
+        || system_prompt.contains("撰写最终答案")
+}
+
+/// G-13: prose answer for Option D; cite `[[E1]]` when user carried Evidence listings.
+fn mock_option_d_answer_prose(user_prompt: &str) -> String {
+    if user_prompt.contains("### Evidence") || user_prompt.contains("#### [E") {
+        // Prefer first E-marker id if present in the evidence headings.
+        if user_prompt.contains("[E1]") || user_prompt.contains("[[E:1]]") {
+            return "根据材料，结论如下[[E1]]。".to_string();
+        }
+        return "根据材料，结论如下[[E1]]。".to_string();
+    }
+    // direct / no evidence: plain prose, no invent citations
+    MockLlmRoute::ChatAnswer.canned_response().to_string()
+}
+
+/// G-14: worker internal handoff JSON (orchestrator channel workers).
+fn mock_worker_handoff_json(channel: &str) -> String {
+    let summary = if channel == "search" {
+        "公网检索摘要：找到相关最佳实践"
+    } else {
+        "工作区检索摘要：命中文档相关段落"
+    };
+    serde_json::json!({
+        "schema_version": "internal_worker_handoff_v1",
+        "summary": summary,
+        "key_facts": [{"claim": "mock fact", "evidence": ["chunk-mock"]}],
+        "coverage": "full",
+        "gaps": []
+    })
+    .to_string()
+}
+
+fn is_worker_handoff_prompt(system_prompt: &str) -> bool {
+    system_prompt.contains("internal_worker_handoff_v1")
+        || system_prompt.contains("internal hand-off")
+        || system_prompt.contains("internal handoff")
+}
+
 fn messages_have_memory_skill_request(messages: &[serde_json::Value]) -> bool {
     messages.iter().any(|message| {
         message.get("role").and_then(|r| r.as_str()) == Some("assistant")
@@ -598,14 +818,20 @@ async fn mock_llm_handler(
         .iter()
         .any(|m| m.get("role").and_then(|r| r.as_str()) == Some("tool"));
 
-    // Synthesis phase injects answer skills ("合成输出" / Web Search answer agent).
-    // Do NOT treat the base orchestrator alone as synthesis: rag-system.md documents
-    // `internal_answer_v1` in the retrieve prompt, which previously forced
-    // is_rag_retrieve=false and fell through to dense auto_fallback (F2/F3).
+    // Synthesis phase injects answer skills ("合成输出（Synthesis）" / Web Search answer agent).
+    // Do NOT treat the base orchestrator alone as synthesis: the retired rag-system.md
+    // documented `internal_answer_v1` in the retrieve prompt (capability-rag.md now defers
+    // the contract to the synthesis stage), which previously forced is_rag_retrieve=false
+    // and fell through to dense auto_fallback (F2/F3).
     let is_synthesis_contract = system_prompt.contains("合成输出（Synthesis）")
         || system_prompt.contains("Context OS Web Search answer agent")
         || system_prompt.contains("Context OS RAG answer agent");
+    // Option D Answer pack is prose-only — never treat as monomode JSON synthesis.
+    let is_option_d_answer = is_option_d_answer_phase(system_prompt);
+    let is_worker_handoff = is_worker_handoff_prompt(system_prompt);
     let is_rag_retrieve = !is_synthesis_contract
+        && !is_option_d_answer
+        && !is_worker_handoff
         && (system_prompt.contains("检索 → 评估 → 合成")
             || system_prompt.contains("RAG agent")
             || system_prompt.contains("**检索轮**")
@@ -615,7 +841,55 @@ async fn mock_llm_handler(
     // Empty content without tool_calls is EmptyStream in openai_chat finalize and
     // surfaces as HTTP 500 "llm completion failed" in product smoke (F1).
     if !is_stream && !tool_names.is_empty() && has_tool_results {
-        let content = if is_synthesis_contract
+        // G-17: utility tool follow-ups (pure chat / AnswerOnly) before monomode synthesis.
+        if let Some(calc) = mock_calculator_followup(&messages) {
+            if tool_names.iter().any(|n| n == "calculator")
+                || messages.iter().any(|m| {
+                    m.get("name").and_then(|n| n.as_str()) == Some("calculator")
+                        || m.get("tool_call_id")
+                            .and_then(|id| id.as_str())
+                            .is_some_and(|id| id.contains("calculator"))
+                })
+            {
+                return axum::Json(json!({
+                    "choices": [{"message": {"role": "assistant", "content": calc}}],
+                    "usage": {
+                        "prompt_tokens": 40,
+                        "completion_tokens": calc.len().max(1),
+                        "total_tokens": 41
+                    },
+                    "model": "mock-llm"
+                }))
+                .into_response();
+            }
+        }
+        if tool_names.iter().any(|n| n == "weather_query") && looks_like_weather_query(user_prompt)
+        {
+            if let Some(wx) = mock_weather_followup(&messages) {
+                return axum::Json(json!({
+                    "choices": [{"message": {"role": "assistant", "content": wx}}],
+                    "usage": {
+                        "prompt_tokens": 40,
+                        "completion_tokens": wx.len().max(1),
+                        "total_tokens": 41
+                    },
+                    "model": "mock-llm"
+                }))
+                .into_response();
+            }
+        }
+        let content = if is_option_d_answer {
+            mock_option_d_answer_prose(user_prompt)
+        } else if is_worker_handoff {
+            let channel = if system_prompt.contains("capability-search")
+                || tool_names.iter().any(|n| n == "web_search" || n == "web_fetch")
+            {
+                "search"
+            } else {
+                "rag"
+            };
+            mock_worker_handoff_json(channel)
+        } else if is_synthesis_contract
             || system_prompt.contains("internal_search_answer_v1")
             || system_prompt.contains("Context OS Web Search answer agent")
             || tool_names.iter().any(|n| n == "web_search" || n == "web_fetch")
@@ -692,7 +966,9 @@ async fn mock_llm_handler(
     }
 
     // ReAct loop: first tools-enabled turn should emit native tool calls (search, etc.).
-    if !is_stream && !tool_names.is_empty() && !has_tool_results {
+    // Option D Answer with utility tools only: prefer prose (early stop) unless the
+    // user clearly asks for calc/weather — avoid inventing retrieval tool_calls.
+    if !is_stream && !tool_names.is_empty() && !has_tool_results && !is_option_d_answer {
         if let Some(tool_call) = mock_native_tool_call(&tool_names, user_prompt) {
             return axum::Json(json!({
                 "choices": [{
@@ -708,6 +984,26 @@ async fn mock_llm_handler(
             .into_response();
         }
     }
+
+    // G-13: Option D Answer phase with empty tools (or utility-only, no tool results)
+    // → prose with optional [[E1]] when Evidence is in the user message.
+    if !is_stream && is_option_d_answer {
+        let content = mock_option_d_answer_prose(user_prompt);
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "usage": {
+                "prompt_tokens": 50,
+                "completion_tokens": content.len().max(1),
+                "total_tokens": 51
+            },
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
+
+    // G-14: worker handoff without tools in the schema still needs JSON shape when
+    // the system prompt demands internal_worker_handoff_v1 (rare); primary path is
+    // post-tool above.
 
     if !is_stream
         && tool_names.is_empty()
@@ -806,5 +1102,46 @@ async fn mock_llm_handler(
             "model": "mock-llm"
         }))
         .into_response()
+    }
+}
+
+#[cfg(test)]
+mod g17_utility_mock_tests {
+    use super::*;
+
+    #[test]
+    fn extract_classic_1_plus_2_times_3() {
+        let e = extract_calculator_expression("请计算：1+2*3 等于多少？").expect("expr");
+        assert_eq!(e, "1+2*3");
+    }
+
+    #[test]
+    fn extract_chinese_times_and_fullwidth_parens() {
+        let e = extract_calculator_expression("请计算：128×46+357 等于多少？").expect("expr");
+        assert_eq!(e, "128*46+357");
+        let e2 = extract_calculator_expression("（1587+2933）×1.13 是多少？").expect("expr");
+        assert_eq!(e2, "(1587+2933)*1.13");
+    }
+
+    #[test]
+    fn extract_rejects_plain_chat() {
+        assert!(extract_calculator_expression("用一句话解释什么是复利？").is_none());
+    }
+
+    #[test]
+    fn weather_and_location_helpers() {
+        assert!(looks_like_weather_query("北京现在的天气怎么样？"));
+        assert_eq!(extract_weather_location("北京现在的天气怎么样？"), "北京");
+    }
+
+    #[test]
+    fn calculator_followup_reads_result_json() {
+        let messages = vec![json!({
+            "role": "tool",
+            "name": "calculator",
+            "content": r#"{"result":7.0,"expression":"1+2*3"}"#
+        })];
+        let ans = mock_calculator_followup(&messages).expect("followup");
+        assert!(ans.contains('7'), "{ans}");
     }
 }

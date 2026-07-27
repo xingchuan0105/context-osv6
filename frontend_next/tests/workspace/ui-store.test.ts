@@ -44,7 +44,7 @@ describe("workspaceUiStore", () => {
         workspaces: {
           "ws-1": {
             historyRailWidth: 236,
-            rightRailWidth: 392,
+            rightRailWidth: 360,
             rightRailSplitRatio: 0.8,
             chatModePreference: "auto",
           },

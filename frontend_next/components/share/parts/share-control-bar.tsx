@@ -1,7 +1,9 @@
 "use client";
 
 import { formatUiMessage } from "../../../lib/i18n/messages";
-import { shareStatusBadgeStyle } from "./share-center-ui";
+import { shareStatusBadgeClass } from "./share-center-ui";
+import badgeStyles from "./share-center-ui.module.css";
+import styles from "./share-control-bar.module.css";
 import { shareValidityLabel, type ShareValidityOption } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
 
@@ -29,65 +31,29 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
 
   return (
     <div data-testid="share-control-bar">
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "0.6rem",
-                    justifyContent: "space-between",
-                  }}
-                >
+      <div className={styles.stack}>
+                <div className={styles.headerRow}>
                   <strong>{formatUiMessage(locale, "shareCenter.controlBarTitle")}</strong>
                   <span
-                    style={{
-                      ...shareStatusBadgeStyle(shareStatus),
-                      borderRadius: "999px",
-                      fontSize: "0.76rem",
-                      fontWeight: 600,
-                      letterSpacing: "-0.01em",
-                      padding: "0.28rem 0.62rem",
-                      whiteSpace: "nowrap",
-                    }}
+                    className={`${badgeStyles.statusBadge} ${shareStatusBadgeClass(shareStatus)}`}
                   >
                     {shareStatusText}
                   </span>
                 </div>
-                <p
-                  style={{
-                    color: "hsl(var(--muted-foreground))",
-                    margin: 0,
-                    fontSize: "0.96rem",
-                    lineHeight: 1.5,
-                  }}
-                >
+                <p className={styles.subtitle}>
                   {formatUiMessage(locale, "shareCenter.controlBarSubtitle")}
                 </p>
               </div>
 
               <div
-                className="app-inline-surface"
-                style={{
-                  display: "grid",
-                  gap: "0.8rem",
-                  padding: "0.78rem 0.88rem 0.82rem",
-                }}
+                className={`app-inline-surface ${styles.panel}`}
               >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "0.8rem",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div style={{ display: "grid", gap: "0.2rem" }}>
-                    <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.82rem" }}>
+                <div className={styles.switchRow}>
+                  <div className={styles.switchLabelStack}>
+                    <span className={styles.switchLabel}>
                       {formatUiMessage(locale, "shareCenter.shareSwitchLabel")}
                     </span>
-                    <strong style={{ fontSize: "0.92rem", letterSpacing: "-0.01em" }}>
+                    <strong className={styles.switchState}>
                       {shareSwitchChecked
                         ? formatUiMessage(locale, "shareCenter.statusActive")
                         : formatUiMessage(locale, "shareCenter.statusInactive")}
@@ -95,40 +61,30 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                   </div>
                   <button
                     aria-checked={shareSwitchChecked}
-                    className="app-button-ghost"
+                    className={`app-button-ghost ${styles.switchTrack}`}
                     disabled={toggleShareMutation.isPending || settingsQuery.isLoading}
                     role="switch"
                     style={{
-                      alignItems: "center",
                       background: shareSwitchChecked
-                        ? "hsl(var(--foreground))"
+                        ? "hsl(var(--accent))"
                         : "hsl(var(--muted))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "999px",
-                      display: "inline-flex",
-                      height: "2rem",
                       justifyContent: shareSwitchChecked ? "flex-end" : "flex-start",
-                      minWidth: "3.55rem",
-                      padding: "0.16rem",
                     }}
                     type="button"
                     onClick={() => void handleToggleShare()}
                   >
                     <span
                       aria-hidden="true"
+                      className={styles.switchKnob}
                       style={{
                         background: shareSwitchChecked
                           ? "hsl(var(--background))"
-                          : "hsl(var(--foreground))",
-                        borderRadius: "999px",
-                        display: "block",
-                        height: "1.52rem",
-                        width: "1.52rem",
+                          : "hsl(var(--muted-foreground))",
                       }}
                     />
                   </button>
                 </div>
-                <div style={{ display: "grid", gap: "0.35rem" }}>
+                <div className={styles.fieldStack}>
                   <label className="app-form-label" htmlFor="share-validity">
                     {formatUiMessage(locale, "shareCenter.validityLabel")}
                   </label>
@@ -147,28 +103,17 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                       </option>
                     ))}
                   </select>
-                  <p className="app-form-footnote" style={{ fontSize: "0.82rem", margin: 0 }}>
+                  <p className={`app-form-footnote ${styles.footnote}`}>
                     {formatUiMessage(locale, "shareCenter.validityHint")}
                   </p>
                 </div>
-                <div
-                  style={{
-                    color: "hsl(var(--muted-foreground))",
-                    display: "grid",
-                    gap: "0.3rem",
-                  }}
-                >
-                  <span style={{ fontSize: "0.82rem" }}>
+                <div className={styles.urlStack}>
+                  <span className={styles.urlLabel}>
                     {formatUiMessage(locale, "shareCenter.shareUrlLabel")}
                   </span>
                   <div
+                    className={styles.shareUrl}
                     data-testid="share-link"
-                    style={{
-                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                      fontSize: "0.84rem",
-                      lineHeight: 1.5,
-                      overflowWrap: "anywhere",
-                    }}
                   >
                     {shareUrl ||
                       formatUiMessage(locale, "shareCenter.controlBarNoLink")}
@@ -177,57 +122,31 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
               </div>
 
               <div
-                className="app-button-row"
-                style={{
-                  display: "grid",
-                  gap: "0.6rem",
-                  gridTemplateColumns: "minmax(0, 1fr)",
-                }}
+                className={`app-button-row ${styles.actions}`}
               >
                 <button
-                  className="app-button-ghost"
+                  className={`app-button-ghost ${styles.actionButton}`}
                   disabled={!canUseShareLink}
-                  style={{
-                    fontSize: "0.9rem",
-                    justifyContent: "center",
-                    minHeight: "2.4rem",
-                    padding: "0.62rem 0.8rem",
-                    width: "100%",
-                  }}
                   type="button"
                   onClick={() => void handleCopyShareLink()}
                 >
                   {formatUiMessage(locale, "shareCenter.copyLinkAction")}
                 </button>
                 <button
-                  className="app-button-secondary"
+                  className={`app-button-secondary ${styles.actionButton}`}
                   disabled={!canUseShareLink}
-                  style={{
-                    fontSize: "0.9rem",
-                    justifyContent: "center",
-                    minHeight: "2.4rem",
-                    padding: "0.62rem 0.8rem",
-                    width: "100%",
-                  }}
                   type="button"
                   onClick={() => handleOpenSharePage()}
                 >
                   {formatUiMessage(locale, "shareCenter.openShareAction")}
                 </button>
                 <button
-                  className="app-button-primary"
+                  className={`app-button-primary ${styles.actionButton}`}
                   disabled={
                     refreshShareMutation.isPending ||
                     settingsQuery.isLoading ||
                     !settingsQuery.data?.share_token
                   }
-                  style={{
-                    fontSize: "0.9rem",
-                    justifyContent: "center",
-                    minHeight: "2.4rem",
-                    padding: "0.62rem 0.8rem",
-                    width: "100%",
-                  }}
                   type="button"
                   onClick={() => void handleRefreshShare()}
                 >

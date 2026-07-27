@@ -3,6 +3,7 @@
 import {
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -43,6 +44,8 @@ type ChatComposerProps = {
   onCapabilitiesChange: (next: WorkspaceCapability[]) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   onHeightChange?: (height: number) => void;
+  /** Empty-thread hero content rendered above the composer (centered layout). */
+  hero?: ReactNode;
 };
 
 export function ChatComposer({
@@ -58,6 +61,7 @@ export function ChatComposer({
   onCapabilitiesChange,
   textareaRef: externalTextareaRef,
   onHeightChange,
+  hero,
 }: ChatComposerProps) {
   const internalTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
@@ -197,12 +201,47 @@ export function ChatComposer({
     }
   }
 
+  function handleComposerResizeKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
+
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    event.preventDefault();
+    const startingHeight = Math.max(
+      Number.parseFloat(textarea.style.height) || 0,
+      textarea.clientHeight,
+      MIN_COMPOSER_TEXTAREA_HEIGHT,
+    );
+    const delta = event.key === "ArrowUp" ? 16 : -16;
+    const nextHeight = Math.min(
+      Math.max(startingHeight + delta, MIN_COMPOSER_TEXTAREA_HEIGHT),
+      MANUAL_COMPOSER_TEXTAREA_MAX_HEIGHT,
+    );
+    setComposerTextareaHeight(nextHeight);
+  }
+
   return (
-    <div className={styles.composerCard} ref={composerCardRef}>
+    <div
+      className={`${styles.composerCard}${hero ? ` ${styles.composerCardHero}` : ""}`}
+      ref={composerCardRef}
+    >
+      {hero}
       <button
-        aria-label={locale === "zh-CN" ? "调整输入框高度" : "Resize composer"}
+        aria-label={formatUiMessage(locale, "workspaceChatComposerResize")}
+        aria-orientation="horizontal"
+        aria-valuemax={MANUAL_COMPOSER_TEXTAREA_MAX_HEIGHT}
+        aria-valuemin={MIN_COMPOSER_TEXTAREA_HEIGHT}
+        aria-valuenow={Math.round(composerTextareaHeight ?? MIN_COMPOSER_TEXTAREA_HEIGHT)}
         className={`${styles.composerResizeHandle}${isComposerResizing ? ` ${styles.composerResizeHandleActive}` : ""}`}
+        onKeyDown={handleComposerResizeKeyDown}
         onMouseDown={handleComposerResizeStart}
+        role="separator"
+        tabIndex={0}
         type="button"
       >
         <span className={styles.composerResizeGrip} aria-hidden="true" />
@@ -277,7 +316,7 @@ export function ChatComposer({
 
           {isStreaming ? (
             <button
-              aria-label={locale === "zh-CN" ? "停止" : "Stop"}
+              aria-label={formatUiMessage(locale, "workspaceChatStop")}
               className={styles.sendButton}
               data-testid="workspace-chat-stop"
               onClick={(event) => {
@@ -287,7 +326,7 @@ export function ChatComposer({
               type="button"
             >
               <IconStop className={styles.sendIcon} />
-              <span className={styles.srOnly}>{locale === "zh-CN" ? "停止" : "Stop"}</span>
+              <span className={styles.srOnly}>{formatUiMessage(locale, "workspaceChatStop")}</span>
             </button>
           ) : (
             <button

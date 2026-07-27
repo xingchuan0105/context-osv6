@@ -28,7 +28,6 @@ vi.mock("../../lib/runtime/transport", () => ({
 import { mockReducedMotionPreference, resetWorkspaceChatPaneMocks } from "./helpers/workspace-chat-pane.setup";
 
 import { WorkspaceChatPane } from "../../components/workspace/workspace-chat-pane";
-import { queryLibraryStore } from "../../lib/workspace/query-library/store";
 import { workspaceUiStore } from "../../lib/workspace/ui-store";
 
 beforeEach(() => {
@@ -47,7 +46,7 @@ describe("WorkspaceChatPane composer", () => {
     render(<WorkspaceChatPane workspaceId="ws-resize" sessionId={null} selectedSourceIds={[]} />);
 
     const composer = await screen.findByRole("textbox", { name: "工作区对话输入框" });
-    const resizeHandle = screen.getByRole("button", { name: "调整输入框高度" });
+    const resizeHandle = screen.getByRole("separator", { name: "调整输入框高度" });
     const initialHeight = Number.parseFloat((composer as HTMLTextAreaElement).style.height || "0");
 
     fireEvent.mouseDown(resizeHandle, { button: 0, clientY: 240 });
@@ -78,7 +77,6 @@ describe("WorkspaceChatPane composer", () => {
     await waitFor(() => {
       expect(mocks.streamWorkspaceChatMock).toHaveBeenCalled();
     });
-    expect(queryLibraryStore.getState().workspaces["ws-capture"]).toBeUndefined();
   });
 
   it("does not capture prompts when auth token is missing", async () => {
@@ -108,7 +106,6 @@ describe("WorkspaceChatPane composer", () => {
     fireEvent.keyDown(composer, { key: "Enter", code: "Enter" });
 
     expect(mocks.streamWorkspaceChatMock).not.toHaveBeenCalled();
-    expect(queryLibraryStore.getState().workspaces["ws-no-token"]).toBeUndefined();
   });
 
   it("returns false from composer insert while streaming", async () => {

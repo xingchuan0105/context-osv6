@@ -291,7 +291,7 @@ pub trait RetrievalReadPort: Send + Sync {
 
     /// List ALL text (body) chunks for the given doc scope with full content.
     ///
-    /// Backs the `doc_chunks` agent tool: lets the codegen sandbox run arbitrary
+    /// Backs host `doc_scan` / sandbox `client.doc_scan`: code-side scan over
     /// traversal/aggregate operators (re, collections, set, ...) over a doc's
     /// entire chunk set — for "how many / count / distribution" queries that
     /// dense/lexical top-K cannot answer. Returns empty by default so stubs and

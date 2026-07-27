@@ -197,8 +197,10 @@ describe("WorkspaceHistoryPane", () => {
         name: "Delete",
       }),
     );
-    expect(onDeleteSession).toHaveBeenCalledWith(expect.objectContaining({ id: "sess-2" }));
     expect(screen.queryByRole("menu", { name: "General thread actions" })).toBeNull();
+    const deleteDialog = await screen.findByRole("dialog", { name: "Delete session" });
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete" }));
+    expect(onDeleteSession).toHaveBeenCalledWith(expect.objectContaining({ id: "sess-2" }));
   });
 
   it("opens the search dialog and finds sessions by chat body text", async () => {

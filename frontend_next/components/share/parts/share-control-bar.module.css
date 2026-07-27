@@ -1,0 +1,112 @@
+.stack {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.headerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.96rem;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0.78rem 0.88rem 0.82rem;
+}
+
+.switchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.switchLabelStack {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.switchLabel {
+  font-size: var(--font-size-control);
+  color: hsl(var(--muted-foreground));
+}
+
+.switchState {
+  font-size: var(--font-size-body-strong);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+/* background and justify-content stay inline (runtime state). The :hover
+   rule preserves the static border against .app-button-ghost:hover. */
+.switchTrack {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  min-width: 3.55rem;
+  padding: 0.16rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-badge);
+}
+
+.switchTrack:hover {
+  border-color: hsl(var(--border));
+}
+
+.switchKnob {
+  display: block;
+  width: 1.52rem;
+  height: 1.52rem;
+  border-radius: var(--radius-badge);
+}
+
+.fieldStack {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.footnote {
+  margin: 0;
+  font-size: var(--font-size-control);
+}
+
+.urlStack {
+  display: grid;
+  gap: 0.3rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.urlLabel {
+  font-size: var(--font-size-control);
+}
+
+.shareUrl {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.actionButton {
+  justify-content: center;
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0.62rem var(--space-3);
+  font-size: 0.9rem;
+}

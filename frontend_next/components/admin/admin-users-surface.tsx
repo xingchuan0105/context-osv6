@@ -25,6 +25,8 @@ import {
   sortUsers,
 } from "./admin-utils";
 
+import styles from "./admin-users-surface.module.css";
+
 export function AdminUsersSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
@@ -64,14 +66,14 @@ export function AdminUsersSurface() {
   const usersLoading = Boolean(token && effectiveSelectedOrgId) && usersQuery.isPending;
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={styles.container}>
       <AdminPageHeading
         title={adminText(locale, "admin.nav.users")}
         subtitle={adminText(locale, "users.subtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+      <section className={`app-inline-surface ${styles.panel}`}>
+        <div className={styles.filtersGrid}>
           <div>
             <label className="app-form-label" htmlFor="admin-users-org">
               {adminText(locale, "admin.table.account")}
@@ -130,7 +132,7 @@ export function AdminUsersSurface() {
             </select>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
+        <div className={styles.metaRow}>
           <span>{selectedOrg ? `${adminText(locale, "users.currentAccount")} ${selectedOrg.name}` : adminText(locale, "users.noAccountSelected")}</span>
           {selectedOrg ? <span>{adminText(locale, "users.members")} {users.length}</span> : null}
         </div>
@@ -144,15 +146,15 @@ export function AdminUsersSurface() {
         <EmptyState copy={adminText(locale, "users.noMatch")} />
       ) : (
         <>
-          <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
+          <div className={styles.metricsGrid}>
             <AdminMetricCard label={adminText(locale, "common.owners")} value={users.filter((user) => user.role === "owner").length.toString()} />
             <AdminMetricCard label={adminText(locale, "common.admins")} tone="warning" value={users.filter((user) => user.role === "admin").length.toString()} />
             <AdminMetricCard label={adminText(locale, "users.memberRoles")} tone="success" value={users.filter((user) => ["member", "viewer", "editor"].includes(user.role)).length.toString()} />
             <AdminMetricCard label={adminText(locale, "common.neverActive")} tone="danger" value={users.filter((user) => user.last_active_at === null).length.toString()} />
           </div>
-          <section className="app-inline-surface" style={{ overflowX: "auto", padding: 0 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead style={{ background: "hsl(var(--surface-muted))" }}>
+          <section className={`app-inline-surface ${styles.tableWrapper}`}>
+            <table className={styles.table}>
+              <thead className={styles.tableHead}>
                 <tr>
                   {[
                     adminText(locale, "common.email"),
@@ -161,7 +163,7 @@ export function AdminUsersSurface() {
                     adminText(locale, "admin.table.createdAt"),
                     adminText(locale, "admin.table.lastActive"),
                   ].map((heading) => (
-                    <th key={heading} style={{ padding: "0.85rem 1rem", textAlign: "left", fontSize: "0.76rem", color: "hsl(var(--muted-foreground))" }}>
+                    <th className={styles.tableHeaderCell} key={heading}>
                       {heading}
                     </th>
                   ))}
@@ -169,12 +171,12 @@ export function AdminUsersSurface() {
               </thead>
               <tbody>
                 {filteredUsers.map((user) => (
-                  <tr key={user.id} style={{ borderTop: "1px solid hsl(var(--border))" }}>
-                    <td style={{ padding: "1rem" }}>{user.email}</td>
-                    <td style={{ padding: "1rem" }}>{user.full_name || "—"}</td>
-                    <td style={{ padding: "1rem" }}>{userRoleLabel(locale, user.role)}</td>
-                    <td style={{ padding: "1rem" }}>{formatUnixDate(user.created_at, locale)}</td>
-                    <td style={{ padding: "1rem" }}>
+                  <tr className={styles.tableRow} key={user.id}>
+                    <td className={styles.tableCell}>{user.email}</td>
+                    <td className={styles.tableCell}>{user.full_name || "—"}</td>
+                    <td className={styles.tableCell}>{userRoleLabel(locale, user.role)}</td>
+                    <td className={styles.tableCell}>{formatUnixDate(user.created_at, locale)}</td>
+                    <td className={styles.tableCell}>
                       {user.last_active_at ? formatUnixDate(user.last_active_at, locale) : adminText(locale, "common.never")}
                     </td>
                   </tr>

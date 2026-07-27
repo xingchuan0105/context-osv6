@@ -39,7 +39,6 @@
 .unitHint {
   margin-left: 0.25rem;
   font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-regular);
   color: hsl(var(--muted-foreground));
 }
 
@@ -64,11 +63,11 @@
   height: 100%;
   background: hsl(var(--accent));
   border-radius: 999px;
-  transition: width 300ms ease;
+  transition: width var(--duration-slow) var(--ease-standard);
 }
 
-.barFill.warning { background: hsl(var(--warning)); }
-.barFill.danger { background: hsl(var(--destructive)); }
+.barFill[data-level="warn"] { background: hsl(var(--warning)); }
+.barFill[data-level="danger"] { background: hsl(var(--destructive)); }
 
 .warningText {
   font-size: var(--font-size-caption);

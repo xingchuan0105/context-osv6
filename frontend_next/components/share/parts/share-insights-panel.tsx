@@ -2,6 +2,7 @@
 
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import { InsightMetricCard, SectionHeader } from "./share-center-ui";
+import styles from "./share-insights-panel.module.css";
 import { formatDayLabel } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
 
@@ -25,16 +26,8 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
   return (
     <>
       <section
-          className="app-surface-card"
+          className={`app-surface-card ${styles.overviewSection}`}
           id="insights"
-          style={{
-            background:
-              "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.42) 100%)",
-            display: "grid",
-            gap: "0.95rem",
-            padding: "0.95rem 1rem 1rem",
-            scrollMarginTop: "6rem",
-          }}
         >
           <SectionHeader
             subtitle={formatUiMessage(locale, "shareCenter.overviewSectionSubtitle")}
@@ -42,7 +35,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
           />
 
           {analyticsQuery.error && !analyticsQuery.data ? (
-            <p className="app-notice-banner" style={{ margin: 0 }}>
+            <p className="app-notice-banner">
               {analyticsQuery.error instanceof Error
                 ? analyticsQuery.error.message
                 : formatUiMessage(locale, "shareCenter.analyticsLoadError")}
@@ -50,20 +43,14 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
           ) : null}
 
           {accessLogsQuery.error && !accessLogsQuery.data ? (
-            <p className="app-notice-banner" style={{ margin: 0 }}>
+            <p className="app-notice-banner">
               {accessLogsQuery.error instanceof Error
                 ? accessLogsQuery.error.message
                 : formatUiMessage(locale, "shareCenter.accessLogsLoadError")}
             </p>
           ) : null}
 
-          <div
-            style={{
-              display: "grid",
-              gap: "1rem",
-              gridTemplateColumns: "minmax(0, 1fr)",
-            }}
-          >
+          <div className={styles.metricGrid}>
             <InsightMetricCard
               title={formatUiMessage(locale, "shareCenter.overviewCurrentStatus")}
               value={shareStatusText}
@@ -89,13 +76,13 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
 
         {analyticsQuery.isLoading && !analyticsQuery.data ? (
           <section className="app-surface-card">
-            <p style={{ margin: 0 }}>
+            <p className={styles.flushText}>
               {formatUiMessage(locale, "shareCenter.analyticsLoading")}
             </p>
           </section>
         ) : analyticsQuery.error && !analyticsQuery.data ? (
           <section className="app-surface-card">
-            <p className="app-notice-banner" style={{ margin: 0 }}>
+            <p className="app-notice-banner">
               {analyticsQuery.error instanceof Error
                 ? analyticsQuery.error.message
                 : formatUiMessage(locale, "shareCenter.analyticsLoadError")}
@@ -103,47 +90,25 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
           </section>
         ) : (
           <section
-            className="app-surface-card"
-            style={{
-              background:
-                "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.28) 100%)",
-              display: "grid",
-              gap: "0.95rem",
-              padding: "0.95rem 1rem 1rem",
-            }}
+            className={`app-surface-card ${styles.trendSection}`}
           >
-            <div
-              style={{
-                display: "grid",
-                gap: "1rem",
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
+            <div className={styles.trendHeader}>
+              <div className={styles.trendHeaderTitle}>
                 <SectionHeader
                   subtitle={formatUiMessage(locale, "shareCenter.trendSectionSubtitle")}
                   title={formatUiMessage(locale, "shareCenter.trendSectionTitle")}
                 />
               </div>
-              <div className="app-button-row" style={{ justifyContent: "flex-start" }}>
+              <div className={`app-button-row ${styles.trendRangeRow}`}>
                 <button
-                  className={trendWindowDays === 7 ? "app-button-secondary" : "app-button-ghost"}
-                  style={{
-                    fontSize: "0.84rem",
-                    minHeight: "2.18rem",
-                    padding: "0.48rem 0.72rem",
-                  }}
+                  className={`${trendWindowDays === 7 ? "app-button-secondary" : "app-button-ghost"} ${styles.trendRangeButton}`}
                   type="button"
                   onClick={() => setTrendWindowDays(7)}
                 >
                   {formatUiMessage(locale, "shareCenter.trendRange7")}
                 </button>
                 <button
-                  className={trendWindowDays === 30 ? "app-button-secondary" : "app-button-ghost"}
-                  style={{
-                    fontSize: "0.84rem",
-                    minHeight: "2.18rem",
-                    padding: "0.48rem 0.72rem",
-                  }}
+                  className={`${trendWindowDays === 30 ? "app-button-secondary" : "app-button-ghost"} ${styles.trendRangeButton}`}
                   type="button"
                   onClick={() => setTrendWindowDays(30)}
                 >
@@ -154,39 +119,22 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
 
             {trendSeries.some((entry) => entry.views > 0) ? (
               <div
-                className="app-inline-surface"
+                className={`app-inline-surface ${styles.chartPanel}`}
                 data-testid="analyze-chart"
-                style={{
-                  display: "grid",
-                  gap: "0.52rem",
-                  padding: "0.82rem 0.9rem 0.88rem",
-                }}
               >
                 {trendSeries.map((entry) => (
                   <div
+                    className={styles.chartRow}
                     key={entry.day}
-                    style={{
-                      alignItems: "center",
-                      display: "grid",
-                      gap: "0.6rem",
-                      gridTemplateColumns: "4.2rem 1fr auto",
-                    }}
                   >
                     <span>{formatDayLabel(locale, entry.day)}</span>
                     <div
                       aria-hidden="true"
-                      style={{
-                        background: "hsl(var(--muted))",
-                        borderRadius: "999px",
-                        height: "0.65rem",
-                        overflow: "hidden",
-                      }}
+                      className={styles.chartTrack}
                     >
                       <div
+                        className={styles.chartFill}
                         style={{
-                          background: "hsl(var(--primary))",
-                          borderRadius: "999px",
-                          height: "100%",
                           width: `${Math.max(
                             entry.views === 0 ? 0 : 8,
                             (entry.views /
@@ -201,9 +149,9 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
                 ))}
               </div>
             ) : (
-              <div className="app-inline-surface" style={{ display: "grid", gap: "0.25rem" }}>
+              <div className={`app-inline-surface ${styles.emptyPanel}`}>
                 <strong>{formatUiMessage(locale, "shareCenter.trendEmptyTitle")}</strong>
-                <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+                <p className={styles.mutedText}>
                   {formatUiMessage(locale, "shareCenter.trendEmptyBody")}
                 </p>
               </div>

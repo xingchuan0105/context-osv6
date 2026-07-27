@@ -30,9 +30,34 @@ pub struct AppConfig {
     pub usage_limit: UsageLimitConfig,
     /// Maximum allowed file size for a single upload in bytes (default: 100 MB).
     pub max_upload_file_size_bytes: u64,
-    /// Whether to enable RAG / Milvus retrieval pipeline.
+    /// Whether to enable RAG / retrieval pipeline.
     /// When false, PG-backed ingestion still runs but vectors are not indexed.
     pub enable_rag: bool,
+    /// Retrieval backend: `milvus` (default, SaaS) or `pgvector` (local/private).
+    pub retrieval_backend: RetrievalBackend,
+}
+
+/// Where vector + graph retrieval is stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetrievalBackend {
+    Milvus,
+    Pgvector,
+}
+
+impl RetrievalBackend {
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "pgvector" | "postgres" | "pg" => Self::Pgvector,
+            _ => Self::Milvus,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Milvus => "milvus",
+            Self::Pgvector => "pgvector",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -304,6 +329,7 @@ impl Default for AppConfig {
             },
             max_upload_file_size_bytes: 100 * 1024 * 1024,
             enable_rag: true,
+            retrieval_backend: RetrievalBackend::Milvus,
         }
     }
 }
@@ -438,6 +464,10 @@ impl AppConfig {
             config.max_upload_file_size_bytes,
         );
         config.enable_rag = env_bool("AVRAG_ENABLE_RAG", config.enable_rag);
+        config.retrieval_backend = RetrievalBackend::parse(&env_string(
+            "RETRIEVAL_BACKEND",
+            config.retrieval_backend.as_str(),
+        ));
 
         config
     }

@@ -106,7 +106,7 @@ function DashboardSortMenu({
             : formatUiMessage(locale, "dashboardSortTitle")}
         </span>
         <svg aria-hidden="true" className="dashboard-sort-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="m7 10 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+          <path d="m7 10 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
         </svg>
       </button>
       {menuOpen ? (
@@ -175,8 +175,8 @@ export function DashboardToolbar({
           onClick={onSearch}
         >
           <svg aria-hidden="true" className="dashboard-control-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="m21 21-4.35-4.35" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
-            <circle cx="11" cy="11" r="6" strokeWidth="2.2" />
+            <path d="m21 21-4.35-4.35" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+            <circle cx="11" cy="11" r="6" strokeWidth="1.8" />
           </svg>
           <span className="dashboard-sr-only">{formatUiMessage(locale, "dashboardToolbarSearch")}</span>
         </button>
@@ -202,15 +202,15 @@ export function DashboardToolbar({
             onClick={() => onViewChange("list")}
           >
             <svg aria-hidden="true" className="dashboard-control-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M5 7h14M5 12h14M5 17h14" strokeLinecap="round" strokeWidth="2.2" />
+              <path d="M5 7h14M5 12h14M5 17h14" strokeLinecap="round" strokeWidth="1.8" />
             </svg>
             <span className="dashboard-sr-only">{formatUiMessage(locale, "dashboardViewList")}</span>
           </button>
         </div>
         <DashboardSortMenu onChange={onSortChange} sortMode={sortMode} />
-        <button className="app-button-primary dashboard-create-button" data-testid="dashboard-create-workspace" disabled={creating} type="button" onClick={onCreate}>
+        <button className="app-button-primary app-button-create dashboard-create-button" data-testid="dashboard-create-workspace" disabled={creating} type="button" onClick={onCreate}>
           <svg aria-hidden="true" className="dashboard-create-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+            <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
           </svg>
           {formatUiMessage(locale, "dashboardNewWorkspace")}
         </button>

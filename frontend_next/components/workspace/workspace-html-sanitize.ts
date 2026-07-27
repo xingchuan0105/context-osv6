@@ -31,6 +31,7 @@ export const WORKSPACE_HTML_SANITIZE_CONFIG: DOMPurifyConfig = {
     "checked",
     "class",
     "data-inline-citation-token-index",
+    "data-language",
     "data-testid",
     "disabled",
     "href",

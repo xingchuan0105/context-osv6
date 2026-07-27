@@ -4,6 +4,7 @@ pub mod doc_profile;
 pub mod doc_scan;
 pub mod doc_summary;
 pub mod graph;
+pub mod graph_augment;
 pub mod index_lookup;
 pub mod lexical;
 

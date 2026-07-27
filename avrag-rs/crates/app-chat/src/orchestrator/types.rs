@@ -170,10 +170,11 @@ pub enum ChatExitMode {
     Synthesize,
 }
 
-/// Handoff orchestrator → chat agent (Option B sole user-facing exit).
+/// Handoff orchestrator → chat agent (Product Agent Answer phase).
 ///
-/// Carries evidence **by reference** (store listings / eids) plus worker
-/// digests — never raw chunk dumps (design §3.5).
+/// Carries the **host-decided evidence set** in full (`listings[].full_text`)
+/// plus worker digests. Chat must ground only on that set — not re-retrieve
+/// or invent other passages (2026-07-20).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatHandoff {
     pub mode: ChatExitMode,
@@ -183,7 +184,7 @@ pub struct ChatHandoff {
     /// Source documents in scope (identity for genre judgment).
     #[serde(default)]
     pub source_docs: Vec<SourceDoc>,
-    /// Evidence stubs (`E{n}` + label + preview) the chat may cite.
+    /// Decided evidence (`E{n}` + label + full body). Chat cites these ids only.
     #[serde(default)]
     pub listings: Vec<EvidenceListing>,
     /// Targeted doc-orientation entries (full text; orientation only, never citable).

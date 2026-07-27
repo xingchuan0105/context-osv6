@@ -1,10 +1,26 @@
 "use client";
 
+import styles from "./admin-shared-ui.module.css";
+
+const METRIC_DOT_TONE_CLASS = {
+  primary: styles.metricDotPrimary,
+  success: styles.metricDotSuccess,
+  warning: styles.metricDotWarning,
+  danger: styles.metricDotDanger,
+} as const;
+
+const METRIC_VALUE_TONE_CLASS = {
+  primary: styles.metricValuePrimary,
+  success: styles.metricValueSuccess,
+  warning: styles.metricValueWarning,
+  danger: styles.metricValueDanger,
+} as const;
+
 export function AdminPageHeading({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <header style={{ display: "grid", gap: "0.35rem", marginBottom: "1rem" }}>
-      <h1 style={{ margin: 0, fontSize: "clamp(1.8rem, 2.5vw, 2.4rem)", lineHeight: 1.05 }}>{title}</h1>
-      <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>{subtitle}</p>
+    <header className={styles.headingBlock}>
+      <h1 className={styles.headingTitle}>{title}</h1>
+      <p className={styles.headingSubtitle}>{subtitle}</p>
     </header>
   );
 }
@@ -20,30 +36,21 @@ export function AdminMetricCard({
   tone?: "primary" | "success" | "warning" | "danger";
   detail?: string;
 }) {
-  const palette =
-    tone === "success"
-      ? { dot: "hsl(var(--success))", value: "hsl(var(--success))" }
-      : tone === "warning"
-        ? { dot: "hsl(var(--warning))", value: "hsl(var(--warning))" }
-        : tone === "danger"
-          ? { dot: "hsl(var(--destructive))", value: "hsl(var(--destructive))" }
-          : { dot: "hsl(var(--info))", value: "hsl(var(--foreground))" };
-
   return (
-    <section className="app-inline-surface" style={{ display: "grid", gap: "0.6rem" }}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", fontSize: "0.78rem", color: "hsl(var(--muted-foreground))" }}>
-        <span style={{ width: "0.6rem", height: "0.6rem", borderRadius: "999px", background: palette.dot }} />
+    <section className={`app-inline-surface ${styles.metricCard}`}>
+      <div className={styles.metricLabel}>
+        <span className={`${styles.metricDot} ${METRIC_DOT_TONE_CLASS[tone]}`} />
         <span>{label}</span>
       </div>
-      <strong style={{ fontSize: "1.5rem", color: palette.value }}>{value}</strong>
-      {detail ? <span style={{ fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>{detail}</span> : null}
+      <strong className={`${styles.metricValue} ${METRIC_VALUE_TONE_CLASS[tone]}`}>{value}</strong>
+      {detail ? <span className={styles.metricDetail}>{detail}</span> : null}
     </section>
   );
 }
 
 export function LoadingState({ copy }: { copy: string }) {
   return (
-    <section className="app-inline-surface" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))" }}>
+    <section className={`app-inline-surface ${styles.loadingState}`}>
       {copy}
     </section>
   );
@@ -51,14 +58,7 @@ export function LoadingState({ copy }: { copy: string }) {
 
 export function EmptyState({ copy }: { copy: string }) {
   return (
-    <section
-      className="app-inline-surface"
-      style={{
-        textAlign: "center",
-        borderStyle: "dashed",
-        color: "hsl(var(--muted-foreground))",
-      }}
-    >
+    <section className={`app-inline-surface ${styles.emptyState}`}>
       {copy}
     </section>
   );

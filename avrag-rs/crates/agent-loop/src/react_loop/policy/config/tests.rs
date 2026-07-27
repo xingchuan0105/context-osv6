@@ -14,12 +14,12 @@ fn rag_mode_config_deserializes_with_tool_pool_and_clusters() {
         .expect("codegen cluster");
     assert!(codegen.atomic);
     assert_eq!(codegen.skills, vec!["codegen".to_string()]);
-    assert!(
-        config
-            .skill_catalog
-            .mandatory
-            .synthesis
-            .contains(&"rag-answer".to_string())
+    // P0-1 (2026-07-20): worker synthesis skills unhooked — the final message is
+    // the brief's internal_worker_handoff_v1 JSON, not a monomode answer envelope.
+    assert!(config.skill_catalog.mandatory.synthesis.is_empty());
+    assert_eq!(
+        config.synthesis_output.contract,
+        super::super::config::AnswerContractKind::ProseOnly
     );
 }
 
@@ -33,16 +33,15 @@ fn search_mode_config_has_search_cluster() {
 #[test]
 fn chat_mode_config_has_only_user_context_tool() {
     let config = load_mode_config("chat").expect("chat mode should load");
-    // user_context is the always-on base tool (local clock / IP geo);
-    // memory tools stay on-demand via memory cluster disclosure.
+    // YAML baseline only: `modes/chat.yaml` lists `user_context`.
+    // Effective AnswerOnly / Answer pool is finalized in app-chat
+    // `mode_assemble::utility_tool_pool()` (user_context + calculator +
+    // weather_query). Do not treat this YAML assert as the product whitelist.
+    // IP geo / "定位" for pure chat is via `user_context`, not a separate tool.
     assert_eq!(config.tool_pool, vec!["user_context".to_string()]);
-    assert!(
-        config
-            .skill_catalog
-            .mandatory
-            .synthesis
-            .contains(&"chat".to_string())
-    );
+    // P0-2 (2026-07-20): no mandatory synthesis/chat.md — chat-base is the sole
+    // pure-chat voice; writing/format stay optional clusters.
+    assert!(config.skill_catalog.mandatory.synthesis.is_empty());
 }
 
 #[test]
@@ -70,7 +69,7 @@ fn skill_catalog_yaml_ids_exist_in_registry() {
 fn legacy_flat_skill_catalog_deserializes() {
     let yaml = r#"
 mode: test
-system_prompt_base: prompts/orchestrators/chat-system.md
+system_prompt_base: prompts/orchestrators/chat-base.md
 skill_catalog:
   - foo
   - bar

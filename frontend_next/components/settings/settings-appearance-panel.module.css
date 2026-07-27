@@ -1,0 +1,15 @@
+.choiceGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.mutedSpan {
+  color: hsl(var(--muted-foreground));
+}
+
+.summaryCard {
+  display: grid;
+  gap: 0.45rem;
+}
+

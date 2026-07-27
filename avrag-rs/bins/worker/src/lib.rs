@@ -155,7 +155,8 @@ pub async fn run() -> Result<()> {
             repo.raw().clone(),
             orphan_object_store,
         );
-        let retrieval_data_plane = build_worker_retrieval_data_plane(&config).await?;
+        let retrieval_data_plane =
+            build_worker_retrieval_data_plane(&config, Some(repo.raw())).await?;
         let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
         let cleanup_repo = repo.clone();
         let mut worker = WorkerRuntime::new(

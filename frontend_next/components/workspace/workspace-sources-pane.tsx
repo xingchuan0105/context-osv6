@@ -172,7 +172,7 @@ export function WorkspaceSourcesPane({
 
       <div className={styles.sectionControls}>
         <button
-          className={`${styles.sectionActionButton} ${styles.sectionActionButtonLight}`}
+          className={`${styles.sectionActionButton} ${styles.sectionActionButtonLight} app-button-create-soft`}
           type="button"
           onClick={() => {
             setActiveDialogTab("upload");
@@ -278,7 +278,7 @@ export function WorkspaceSourcesPane({
                           <span className={styles.sourceStatusSpinner} />
                         ) : failed ? (
                           <svg className={styles.sourceStatusErrorIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 7l10 10M17 7 7 17" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+                            <path d="M7 7l10 10M17 7 7 17" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
                           </svg>
                         ) : selected ? (
                           <svg className={styles.selectionMarkIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -15,7 +15,7 @@ import {
 import styles from "./workspace-chat.module.css";
 import type { ProgressEntry, UiChatMessage, UiProgressSnapshot } from "../../hooks/use-chat-session";
 import {
-  IconChatEmpty,
+  IconCheck,
   IconCopy,
   IconEdit,
   IconNote,
@@ -24,11 +24,12 @@ import {
   IconThumbUp,
 } from "./chat-icons";
 import { CitationRenderer, collectWebSources, getCitationAnchorRect } from "./citation-renderer";
-import { ProgressTimeline } from "./progress-timeline";
+import { ProgressStatusLine } from "./progress-status-line";
 
 export { ToolResultCard, ToolResultsPanel } from "./tool-result-card";
 
-/** Completed-turn progress card with local card-level collapse (restored after refresh). */
+/** Completed-turn progress line, restored after refresh/done (single-line,
+ * same component as the live indicator — 2026-07-23 product direction). */
 function MessageProgressCard({
   locale,
   snapshot,
@@ -36,16 +37,13 @@ function MessageProgressCard({
   locale: "zh-CN" | "en";
   snapshot: UiProgressSnapshot;
 }) {
-  const [collapsed, setCollapsed] = useState(snapshot.collapsed);
   return (
-    <ProgressTimeline
+    <ProgressStatusLine
       activities={snapshot.activities}
-      collapsed={collapsed}
-      endedAtMs={snapshot.endedAtMs}
       locale={locale}
       mode={snapshot.mode}
       startedAtMs={snapshot.startedAtMs}
-      onToggleCollapsed={() => setCollapsed((value: boolean) => !value)}
+      endedAtMs={snapshot.endedAtMs}
     />
   );
 }
@@ -145,9 +143,6 @@ type ChatMessageListProps = {
   };
   isStreaming: boolean;
   locale: "zh-CN" | "en";
-  /** Current mode label for empty-state hint (U12). */
-  activeModeLabel?: string;
-  onToggleProgressCollapsed: () => void;
   onSelectCitation: (request: WorkspaceCitationRequest) => void;
   onOpenWebSources: (request: WorkspaceWebSourcesRequest) => void;
   onCopyMessage: (content: string) => void;
@@ -160,8 +155,6 @@ export function ChatMessageList({
   progress,
   isStreaming,
   locale,
-  activeModeLabel,
-  onToggleProgressCollapsed,
   onSelectCitation,
   onOpenWebSources,
   onCopyMessage,
@@ -169,16 +162,72 @@ export function ChatMessageList({
   onSubmitFeedback,
 }: ChatMessageListProps) {
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const isNearBottomRef = useRef(true);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [feedbackRatings, setFeedbackRatings] = useState<Record<string, "up" | "down">>({});
+  const [copiedMessageIds, setCopiedMessageIds] = useState<Record<string, boolean>>({});
+  const copyResetTimeoutsRef = useRef<Map<string, number>>(new Map());
 
-  // Auto-scroll to bottom on new messages / streaming / progress steps
+  useEffect(() => {
+    const timeouts = copyResetTimeoutsRef.current;
+    return () => {
+      timeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      timeouts.clear();
+    };
+  }, []);
+
+  // Auto-scroll to bottom on new messages / streaming / progress steps,
+  // unless the user has scrolled away from the bottom.
+  // Sending a new message (fresh user message appended) always snaps back
+  // to the bottom and clears the "back to bottom" button.
   useEffect(() => {
     const transcript = transcriptRef.current;
     if (!transcript) {
       return;
     }
+    const lastMessage = messages[messages.length - 1];
+    const isNewUserMessage =
+      lastMessage?.role === "user" && lastMessage.id !== lastMessageIdRef.current;
+    if (lastMessage) {
+      lastMessageIdRef.current = lastMessage.id;
+    }
+    if (isNewUserMessage) {
+      isNearBottomRef.current = true;
+      setShowScrollToBottom(false);
+    }
+    if (!isNearBottomRef.current) {
+      return;
+    }
     transcript.scrollTop = transcript.scrollHeight;
   }, [messages, isStreaming, progress.activities.length]);
+
+  function handleTranscriptScroll() {
+    const transcript = transcriptRef.current;
+    if (!transcript) {
+      return;
+    }
+    const nearBottom =
+      transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
+    isNearBottomRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom);
+  }
+
+  function handleScrollToBottomClick() {
+    const transcript = transcriptRef.current;
+    if (!transcript) {
+      return;
+    }
+    isNearBottomRef.current = true;
+    setShowScrollToBottom(false);
+    const prefersReducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    transcript.scrollTo({
+      top: transcript.scrollHeight,
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
+  }
 
   function handleCitationSelect(message: UiChatMessage, citation: Citation, target?: HTMLElement | null) {
     if (message.sessionId && message.messageId !== null) {
@@ -194,6 +243,23 @@ export function ChatMessageList({
   function handleFeedback(messageId: string, rating: "up" | "down") {
     setFeedbackRatings((prev) => ({ ...prev, [messageId]: rating }));
     onSubmitFeedback(messageId, rating);
+  }
+
+  function handleCopyFeedback(messageId: string) {
+    setCopiedMessageIds((prev) => ({ ...prev, [messageId]: true }));
+    const existingTimeout = copyResetTimeoutsRef.current.get(messageId);
+    if (existingTimeout !== undefined) {
+      window.clearTimeout(existingTimeout);
+    }
+    const timeoutId = window.setTimeout(() => {
+      copyResetTimeoutsRef.current.delete(messageId);
+      setCopiedMessageIds((prev) => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+    }, 1500);
+    copyResetTimeoutsRef.current.set(messageId, timeoutId);
   }
 
   // Live process strip for the in-flight turn — after the latest user message.
@@ -220,14 +286,12 @@ export function ChatMessageList({
 
   const liveProgressTimeline =
     showLiveProgress && progress.mode != null ? (
-    <ProgressTimeline
+    <ProgressStatusLine
       activities={progress.activities}
-      collapsed={progress.collapsed}
       locale={locale}
       mode={progress.mode}
       startedAtMs={progress.startedAtMs}
       endedAtMs={progress.endedAtMs}
-      onToggleCollapsed={onToggleProgressCollapsed}
     />
   ) : null;
 
@@ -235,30 +299,10 @@ export function ChatMessageList({
     <div
       className={styles.transcript}
       aria-label={formatUiMessage(locale, "workspaceTranscriptLabel")}
+      onScroll={handleTranscriptScroll}
       ref={transcriptRef}
     >
       <div className={styles.transcriptInner}>
-        {messages.length === 0 && !progress.mode ? (
-          <div className={styles.emptyStateCard} data-testid="workspace-chat-empty">
-            <div className={styles.emptyStateIcon} aria-hidden="true">
-              <IconChatEmpty />
-            </div>
-            <p className={styles.emptyStateTitle}>
-              {formatUiMessage(locale, "workspaceNoMessages")}
-            </p>
-            <p className={styles.emptyState}>
-              {formatUiMessage(locale, "workspaceEmptyStateBody")}
-            </p>
-            {activeModeLabel ? (
-              <p className={styles.emptyStateModeHint}>
-                {formatUiMessage(locale, "workspaceEmptyStateModeHint", {
-                  mode: activeModeLabel,
-                })}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
         {messages.map((message, index) => (
           <Fragment key={message.id}>
             {liveProgressBeforeIndex === index ? liveProgressTimeline : null}
@@ -407,24 +451,33 @@ export function ChatMessageList({
                 ) ? (
                 <div className={styles.messageActions}>
                   {getMessageActionIds(message.role).map((action) => {
-                    const label = getActionLabel(locale, action);
+                    const copied = action === "copy" && Boolean(copiedMessageIds[message.id]);
+                    const label = copied
+                      ? formatUiMessage(locale, "workspaceChatActionCopied")
+                      : getActionLabel(locale, action);
                     return (
                       <button
                         aria-label={label}
-                        className={styles.messageActionButton}
+                        className={[
+                          styles.messageActionButton,
+                          copied ? styles.messageActionButtonActive : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                         key={`${message.id}-${action}`}
                         title={label}
                         type="button"
                         onClick={() => {
                           if (action === "copy") {
                             onCopyMessage(getCopyableMessageContent(message));
+                            handleCopyFeedback(message.id);
                           }
                           if (action === "edit" && message.role === "user") {
                             onEditMessage(message.content);
                           }
                         }}
                       >
-                        {getActionIcon(action)}
+                        {copied ? <IconCheck className={styles.messageActionIcon} /> : getActionIcon(action)}
                       </button>
                     );
                   })}
@@ -493,6 +546,17 @@ export function ChatMessageList({
 
         {liveProgressBeforeIndex === messages.length ? liveProgressTimeline : null}
       </div>
+
+      {showScrollToBottom ? (
+        <button
+          className={styles.scrollToBottomButton}
+          data-testid="scroll-to-bottom"
+          onClick={handleScrollToBottomClick}
+          type="button"
+        >
+          {formatUiMessage(locale, "workspaceChatBackToBottom")}
+        </button>
+      ) : null}
     </div>
   );
 }

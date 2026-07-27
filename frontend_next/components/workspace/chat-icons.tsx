@@ -15,12 +15,14 @@ function BaseIcon({ className, title, children }: IconProps & { children: ReactN
       aria-hidden={title ? undefined : true}
       className={className}
       fill="none"
+      height="1em"
       role={title ? "img" : undefined}
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth={STROKE}
       viewBox="0 0 24 24"
+      width="1em"
     >
       {title ? <title>{title}</title> : null}
       {children}
@@ -33,6 +35,14 @@ export function IconCopy({ className }: IconProps) {
     <BaseIcon className={className}>
       <rect height="12" rx="2" width="12" x="8" y="8" />
       <path d="M6 16V6a2 2 0 0 1 2-2h10" />
+    </BaseIcon>
+  );
+}
+
+export function IconCheck({ className }: IconProps) {
+  return (
+    <BaseIcon className={className}>
+      <path d="m4.5 12.5 5 5 10-11" />
     </BaseIcon>
   );
 }
@@ -103,14 +113,6 @@ export function IconChevronUp({ className }: IconProps) {
   return (
     <BaseIcon className={className}>
       <path d="m7 14 5-5 5 5" />
-    </BaseIcon>
-  );
-}
-
-export function IconChatEmpty({ className }: IconProps) {
-  return (
-    <BaseIcon className={className}>
-      <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7A2.5 2.5 0 0 1 16.5 16H12l-4 3.5V16H7.5A2.5 2.5 0 0 1 5 13.5v-7Z" />
     </BaseIcon>
   );
 }

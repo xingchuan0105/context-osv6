@@ -12,19 +12,12 @@ import {
   type CreateApiKeyRequest,
 } from "../../lib/api-access/client";
 
+import styles from "./workspace-api-access-surface.module.css";
+
 type WorkspaceApiAccessSurfaceProps = {
   workspaceId: string;
-};
-
-const codeBlockStyle = {
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "1rem",
-  background: "hsl(var(--surface-muted))",
-  margin: 0,
-  overflowX: "auto" as const,
-  padding: "1rem",
-  whiteSpace: "pre-wrap" as const,
-  wordBreak: "break-all" as const,
+  /** When true, drop page chrome so the surface can sit inside a modal. */
+  embedded?: boolean;
 };
 
 function apiPermissionLabel(permission: string) {
@@ -64,7 +57,10 @@ function getWorkspaceIdValidationError(workspaceId: string) {
   return "";
 }
 
-export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSurfaceProps) {
+export function WorkspaceApiAccessSurface({
+  workspaceId,
+  embedded = false,
+}: WorkspaceApiAccessSurfaceProps) {
   const auth = useAuth();
   const workspaceIdValue = typeof workspaceId === "string" ? workspaceId.trim() : "";
   const workspaceIdValidationError = getWorkspaceIdValidationError(workspaceIdValue);
@@ -215,241 +211,185 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
     }
   }
 
-  return (
-    <main className="app-page-shell">
-      <div className="app-page-center" style={{ display: "grid", gap: "1.25rem", maxWidth: "56rem" }}>
-        <header style={{ display: "grid", gap: "0.85rem" }}>
+  const body = (
+    <>
+      {embedded ? null : (
+        <header className={styles.header}>
           <Link className="app-link app-link-muted" href={`/dashboard/${workspaceIdValue}`}>
             返回 Workspace
           </Link>
-          <div style={{ display: "grid", gap: "0.5rem", maxWidth: "42rem" }}>
-            <p
-              style={{
-                color: "hsl(var(--muted-foreground))",
-                fontSize: "0.82rem",
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                margin: 0,
-                textTransform: "uppercase",
-              }}
-            >
-              Workspace API
-            </p>
+          <div className={styles.intro}>
+            <p className={styles.overline}>Workspace API</p>
             <div>
               <h1 className="app-page-title">API 访问</h1>
               <p className="app-page-subtitle">
                 为这个 Workspace 创建 API 密钥，并查看面向开发者与 LLM agents 的接入说明。
               </p>
             </div>
-            <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.92rem", margin: 0 }}>
+            <p className={styles.note}>
               在 API 路径中，这个 Workspace 对应 <code>workspace_id</code>。
             </p>
           </div>
         </header>
+      )}
 
-        {error ? <p className="app-notice-banner">{error}</p> : null}
+      {embedded ? (
+        <p className="app-page-subtitle" style={{ marginTop: 0 }}>
+          为这个 Workspace 创建 API 密钥。完整说明与 agent 文档可在完整页面查看。
+        </p>
+      ) : null}
 
-        <div
-          style={{
-            display: "grid",
-            gap: "1.25rem",
-          }}
-        >
-          <section className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
-            <div>
-              <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.25rem" }}>创建 API 密钥</h2>
-              <p className="app-page-subtitle">按 Workspace 粒度创建密钥，控制索引能力和频率限制。</p>
-            </div>
-            <form onSubmit={handleCreate} style={{ display: "grid", gap: "0.9rem" }}>
-              <label>
-                <span className="app-form-label">密钥名称</span>
-                <input
-                  aria-label="密钥名称"
-                  className="app-input"
-                  value={nameDraft}
-                  onChange={(event) => setNameDraft(event.target.value)}
-                />
-              </label>
-              <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-                <legend className="app-form-label">权限</legend>
-                <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.35rem" }}>
-                  <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                    <input
-                      checked={indexPermissionEnabled}
-                      type="checkbox"
-                      onChange={(event) => setIndexPermissionEnabled(event.target.checked)}
-                    />
-                    <span>索引（index）</span>
-                  </label>
-                  <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                    <input
-                      checked={queryPermissionEnabled}
-                      type="checkbox"
-                      onChange={(event) => setQueryPermissionEnabled(event.target.checked)}
-                    />
-                    <span>查询（query）</span>
-                  </label>
-                </div>
-              </fieldset>
-              <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.92rem", margin: 0 }}>
-                API 密钥只支持资料管理与 RAG 查询，聊天和搜索代理默认不可用。
-              </p>
-              <label>
-                <span className="app-form-label">速率限制（RPM）</span>
-                <input
-                  aria-label="速率限制（RPM）"
-                  className="app-input"
-                  inputMode="numeric"
-                  type="number"
-                  value={rateLimitDraft}
-                  onChange={(event) => setRateLimitDraft(event.target.value)}
-                />
-              </label>
-              <label>
-                <span className="app-form-label">过期时间 RFC3339（可选）</span>
-                <input
-                  aria-label="过期时间 RFC3339（可选）"
-                  className="app-input"
-                  placeholder="2026-03-31T18:00:00Z"
-                  value={expiresAtDraft}
-                  onChange={(event) => setExpiresAtDraft(event.target.value)}
-                />
-              </label>
-              <div className="app-button-row">
-                <button className="app-button-primary" disabled={submitting} type="submit">
-                  {submitting ? "创建中..." : "创建密钥"}
-                </button>
-              </div>
-            </form>
+      {error ? <p className="app-notice-banner">{error}</p> : null}
 
-            {plaintextKey ? (
-              <div className="app-inline-surface" style={{ display: "grid", gap: "0.75rem" }}>
-                <div>
-                  <strong>新密钥</strong>
-                  <p style={{ color: "hsl(var(--muted-foreground))", margin: "0.35rem 0 0" }}>
-                    明文只会返回这一次。
-                  </p>
-                </div>
-                <pre style={codeBlockStyle}>{plaintextKey}</pre>
-              </div>
-            ) : null}
-          </section>
-        </div>
-
-        <section className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
-          <div style={{ alignItems: "center", display: "flex", gap: "0.75rem", justifyContent: "space-between" }}>
-            <div>
-              <h2 style={{ margin: "0 0 0.35rem", fontSize: "1.25rem" }}>已创建密钥</h2>
-              <p className="app-page-subtitle">仅展示当前仍处于生效状态的 Workspace API 密钥。</p>
-            </div>
-            {loading ? <span style={{ color: "hsl(var(--muted-foreground))" }}>加载中...</span> : null}
+      <div className={styles.stackLarge}>
+        <section className={`app-surface-card ${styles.card}`}>
+          <div>
+            <h2 className={styles.cardTitle}>创建 API 密钥</h2>
+            <p className="app-page-subtitle">按 Workspace 粒度创建密钥，控制索引能力和频率限制。</p>
           </div>
+          <form className={styles.form} onSubmit={handleCreate}>
+            <label>
+              <span className="app-form-label">密钥名称</span>
+              <input
+                aria-label="密钥名称"
+                className="app-input"
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+              />
+            </label>
+            <fieldset className={styles.fieldset}>
+              <legend className="app-form-label">权限</legend>
+              <div className={styles.checkboxGroup}>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    checked={indexPermissionEnabled}
+                    type="checkbox"
+                    onChange={(event) => setIndexPermissionEnabled(event.target.checked)}
+                  />
+                  <span>索引（index）</span>
+                </label>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    checked={queryPermissionEnabled}
+                    type="checkbox"
+                    onChange={(event) => setQueryPermissionEnabled(event.target.checked)}
+                  />
+                  <span>查询（query）</span>
+                </label>
+              </div>
+            </fieldset>
+            <p className={styles.note}>
+              API 密钥只支持资料管理与 RAG 查询，聊天和搜索代理默认不可用。
+            </p>
+            <label>
+              <span className="app-form-label">速率限制（RPM）</span>
+              <input
+                aria-label="速率限制（RPM）"
+                className="app-input"
+                inputMode="numeric"
+                type="number"
+                value={rateLimitDraft}
+                onChange={(event) => setRateLimitDraft(event.target.value)}
+              />
+            </label>
+            <label>
+              <span className="app-form-label">过期时间 RFC3339（可选）</span>
+              <input
+                aria-label="过期时间 RFC3339（可选）"
+                className="app-input"
+                placeholder="2026-03-31T18:00:00Z"
+                value={expiresAtDraft}
+                onChange={(event) => setExpiresAtDraft(event.target.value)}
+              />
+            </label>
+            <div className="app-button-row">
+              <button className="app-button-primary" disabled={submitting} type="submit">
+                {submitting ? "创建中..." : "创建密钥"}
+              </button>
+            </div>
+          </form>
 
-          {!loading && keys.length === 0 ? (
-            <div className="app-inline-surface">
-              <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>还没有 API 密钥。</p>
+          {plaintextKey ? (
+            <div className={`app-inline-surface ${styles.stack}`}>
+              <div>
+                <strong>新密钥</strong>
+                <p className={styles.mutedTextSpaced}>
+                  明文只会返回这一次。
+                </p>
+              </div>
+              <pre className={styles.codeBlock}>{plaintextKey}</pre>
             </div>
           ) : null}
-
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            {keys.map((key) => (
-              <div
-                className="app-inline-surface"
-                data-testid="api-key-item"
-                key={key.id}
-                style={{
-                  alignItems: "start",
-                  display: "flex",
-                  gap: "1rem",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{key.name}</div>
-                  <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.92rem", marginTop: "0.25rem" }}>
-                    {key.key_prefix} · {key.permissions.map(apiPermissionLabel).join(" / ")} · {key.rate_limit_rpm} RPM
-                  </div>
-                  <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.92rem", marginTop: "0.35rem" }}>
-                    {apiKeyStatusLabel(key.is_active)} · 过期时间 {key.expires_at ?? "永不"} · 最近使用{" "}
-                    {key.last_used_at ?? "从未"}
-                  </div>
-                </div>
-                <button
-                  className="app-button-secondary"
-                  disabled={revokingKeyId === key.id}
-                  type="button"
-                  onClick={() => void handleRevoke(key.id)}
-                >
-                  {revokingKeyId === key.id ? "撤销中..." : "撤销"}
-                </button>
-              </div>
-            ))}
-          </div>
         </section>
+      </div>
 
-        <section className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
+      <section className={`app-surface-card ${styles.card}`}>
+        <div className={styles.sectionHeader}>
           <div>
-            <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.25rem" }}>For LLM Agents</h2>
+            <h2 className={styles.cardTitleCompact}>已创建密钥</h2>
+            <p className="app-page-subtitle">仅展示当前仍处于生效状态的 Workspace API 密钥。</p>
+          </div>
+          {loading ? <span className={styles.muted}>加载中...</span> : null}
+        </div>
+
+        {!loading && keys.length === 0 ? (
+          <div className="app-inline-surface">
+            <p className={styles.mutedText}>还没有 API 密钥。</p>
+          </div>
+        ) : null}
+
+        <div className={styles.stack}>
+          {keys.map((key) => (
+            <div
+              className={`app-inline-surface ${styles.keyItem}`}
+              data-testid="api-key-item"
+              key={key.id}
+            >
+              <div className={styles.keyItemBody}>
+                <div className={styles.keyName}>{key.name}</div>
+                <div className={styles.keyMeta}>
+                  {key.key_prefix} · {key.permissions.map(apiPermissionLabel).join(" / ")} · {key.rate_limit_rpm} RPM
+                </div>
+                <div className={styles.keyMetaSpaced}>
+                  {apiKeyStatusLabel(key.is_active)} · 过期时间 {key.expires_at ?? "永不"} · 最近使用{" "}
+                  {key.last_used_at ?? "从未"}
+                </div>
+              </div>
+              <button
+                className="app-button-secondary"
+                disabled={revokingKeyId === key.id}
+                type="button"
+                onClick={() => void handleRevoke(key.id)}
+              >
+                {revokingKeyId === key.id ? "撤销中..." : "撤销"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {embedded ? null : (
+        <section className={`app-surface-card ${styles.card}`}>
+          <div>
+            <h2 className={styles.cardTitle}>For LLM Agents</h2>
             <p className="app-page-subtitle">给要接入这个 Workspace 的 agent 看的入口卡。先理解边界，再读取稳定文档。</p>
           </div>
-          <div
-            className="app-inline-surface"
-            style={{
-              background: "linear-gradient(180deg, hsl(var(--surface)) 0%, hsl(var(--surface-muted)) 100%)",
-              border: "1px solid hsl(var(--border))",
-              display: "grid",
-              gap: "1rem",
-              padding: "1.1rem 1.15rem",
-            }}
-          >
-            <div style={{ display: "grid", gap: "0.45rem" }}>
-              <p
-                style={{
-                  color: "hsl(var(--muted-foreground))",
-                  fontSize: "0.76rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  margin: 0,
-                  textTransform: "uppercase",
-                }}
-              >
-                Agent onboarding
-              </p>
+          <div className={`app-inline-surface ${styles.agentCard}`}>
+            <div className={styles.agentIntro}>
+              <p className={styles.overlineSmall}>Agent onboarding</p>
               <div>
                 <strong>推荐顺序</strong>
-                <p style={{ color: "hsl(var(--muted-foreground))", margin: "0.35rem 0 0" }}>
+                <p className={styles.mutedTextSpaced}>
                   如果你的 agent 要直连这个 Workspace，先读人类说明确认作用域，再读取稳定 agent 文档执行。
                 </p>
               </div>
             </div>
-            <div style={{ display: "grid", gap: "0.75rem" }}>
-              <div
-                style={{
-                  alignItems: "start",
-                  display: "grid",
-                  gap: "0.65rem",
-                  gridTemplateColumns: "2rem minmax(0, 1fr)",
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    background: "hsl(var(--foreground))",
-                    borderRadius: "999px",
-                    color: "hsl(var(--background))",
-                    display: "grid",
-                    fontSize: "0.88rem",
-                    fontWeight: 700,
-                    height: "2rem",
-                    justifyItems: "center",
-                    width: "2rem",
-                  }}
-                >
-                  1
-                </div>
-                <div style={{ display: "grid", gap: "0.25rem", minWidth: 0 }}>
+            <div className={styles.stack}>
+              <div className={styles.step}>
+                <div className={styles.stepBadge}>1</div>
+                <div className={styles.stepBody}>
                   <strong>先读说明页</strong>
-                  <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
+                  <p className={styles.mutedText}>
                     看清支持范围、认证方式，以及 Workspace 与 <code>workspace_id</code> 的映射。
                   </p>
                   <Link className="app-link" href="/help/api-access">
@@ -457,34 +397,11 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
                   </Link>
                 </div>
               </div>
-              <div
-                style={{
-                  alignItems: "start",
-                  display: "grid",
-                  gap: "0.65rem",
-                  gridTemplateColumns: "2rem minmax(0, 1fr)",
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    background: "hsl(var(--surface-muted))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "999px",
-                    color: "hsl(var(--foreground))",
-                    display: "grid",
-                    fontSize: "0.88rem",
-                    fontWeight: 700,
-                    height: "2rem",
-                    justifyItems: "center",
-                    width: "2rem",
-                  }}
-                >
-                  2
-                </div>
-                <div style={{ display: "grid", gap: "0.25rem", minWidth: 0 }}>
+              <div className={styles.step}>
+                <div className={styles.stepBadgeMuted}>2</div>
+                <div className={styles.stepBody}>
                   <strong>再读稳定 agent 文档</strong>
-                  <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
+                  <p className={styles.mutedText}>
                     这份链接适合 agent 直接抓取，内容更短，也更适合程序化读取。
                   </p>
                   <Link className="app-link" href="/docs/api-access-for-agents.md">
@@ -495,7 +412,17 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
             </div>
           </div>
         </section>
-      </div>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className={styles.container}>{body}</div>;
+  }
+
+  return (
+    <main className="app-page-shell">
+      <div className={`app-page-center ${styles.container}`}>{body}</div>
     </main>
   );
 }

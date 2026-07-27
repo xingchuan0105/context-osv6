@@ -1,0 +1,51 @@
+.sectionAnchor {
+  scroll-margin-top: 6rem;
+}
+
+.activitySection {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) 1rem 1rem;
+  scroll-margin-top: 6rem;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--background)) 0%,
+    hsl(var(--muted) / 0.24) 100%
+  );
+}
+
+.logList {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.logItem {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0.72rem 0.82rem 0.78rem;
+  border-left: 3px solid hsl(var(--primary) / 0.24);
+}
+
+.logField {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.logLabel {
+  color: hsl(var(--muted-foreground));
+}
+
+.emptyPanel {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.flushText {
+  margin: 0;
+}
+
+.mutedText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}

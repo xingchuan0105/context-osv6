@@ -15,6 +15,26 @@ import type { UiLocale } from "../../lib/i18n/config";
 import type { UsageMeterProps } from "../../lib/billing/types";
 export type { UsageMeterProps };
 
+/** Usage bar three-state thresholds (percent of window limit). */
+export const USAGE_WARN_THRESHOLD = 80;
+export const USAGE_DANGER_THRESHOLD = 100;
+
+export type UsageLevel = "normal" | "warn" | "danger";
+
+/**
+ * Bar color level: backend soft/hard hit flags take precedence, otherwise the
+ * percentage thresholds decide (< 80 accent, 80–99 warning, >= 100 destructive).
+ */
+export function resolveUsageLevel(
+  percentage: number,
+  isSoftHit: boolean,
+  isHardHit: boolean,
+): UsageLevel {
+  if (isHardHit || percentage >= USAGE_DANGER_THRESHOLD) return "danger";
+  if (isSoftHit || percentage >= USAGE_WARN_THRESHOLD) return "warn";
+  return "normal";
+}
+
 function useCountdown(resetAt: string) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -44,11 +64,7 @@ function BucketCard({
   const unlimitedLabel = formatUiMessage(locale, "usageUnlimited");
   const usedApprox = bucketUsedTokensApprox(bucket);
   const limitApprox = bucketLimitTokensApprox(bucket);
-  const fillClass = isHardHit
-    ? styles.barFill + " " + styles.danger
-    : isSoftHit
-      ? styles.barFill + " " + styles.warning
-      : styles.barFill;
+  const level = resolveUsageLevel(bucket.percentage, isSoftHit, isHardHit);
   return (
     <div className={`${styles.card} ${compact ? styles.compact : ""}`}>
       <h3 className={styles.title}>{title}</h3>
@@ -69,7 +85,7 @@ function BucketCard({
           limit: formatLimitToken(limitApprox, unlimitedLabel),
         })}
       >
-        <div className={fillClass} style={{ width: `${bucket.percentage}%` }} />
+        <div className={styles.barFill} data-level={level} style={{ width: `${bucket.percentage}%` }} />
       </div>
       <div className={styles.resetText}>
         {formatUiMessage(locale, "usageEstimatedReset", { time: countdown })}

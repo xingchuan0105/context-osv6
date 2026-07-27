@@ -492,25 +492,10 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               Desktop）。一键「启动并迁移」会拉起 compose 栈、写出 client.env，并执行 migrations。
             </p>
 
-            <div
-              style={{
-                marginBottom: "0.85rem",
-                padding: "0.75rem",
-                borderRadius: "0.5rem",
-                border: "1px solid hsl(var(--border))",
-                display: "grid",
-                gap: "0.4rem",
-              }}
-            >
-              <p style={{ margin: 0 }}>
+            <div className={styles.dockerStatusCard}>
+              <p className={styles.flushParagraph}>
                 <strong>Docker</strong> —{" "}
-                <span
-                  style={{
-                    color: docker?.overall_ok
-                      ? "hsl(var(--success))"
-                      : "hsl(var(--destructive))",
-                  }}
-                >
+                <span className={docker?.overall_ok ? styles.statusActive : styles.statusError}>
                   {docker
                     ? docker.overall_ok
                       ? "就绪"
@@ -522,13 +507,13 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                     : "未探测"}
                 </span>
               </p>
-              {docker ? <p className={styles.subtitle} style={{ margin: 0 }}>{docker.detail}</p> : null}
+              {docker ? <p className={styles.subtitle}>{docker.detail}</p> : null}
               {docker && !docker.overall_ok ? (
                 <>
-                  <p className={styles.subtitle} style={{ margin: 0 }}>
+                  <p className={styles.subtitle}>
                     {docker.install_hint}
                   </p>
-                  <div className="app-button-row" style={{ flexWrap: "wrap" }}>
+                  <div className={`app-button-row ${styles.buttonRowWrap}`}>
                     <button
                       type="button"
                       className="app-button-primary"
@@ -550,11 +535,11 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
             </div>
 
             {stack ? (
-              <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.5rem" }}>
+              <ul className={styles.serviceList}>
                 {stack.services.map((s) => (
                   <li key={s.id}>
                     <strong>{s.label}</strong> {s.endpoint} —{" "}
-                    <span style={{ color: s.ok ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                    <span className={s.ok ? styles.statusActive : styles.statusError}>
                       {s.ok ? "OK" : "DOWN"}
                     </span>
                     <div className={styles.subtitle}>{s.detail}</div>
@@ -564,7 +549,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
             ) : (
               <p className={styles.subtitle}>尚未探测（仅桌面运行时可用）</p>
             )}
-            <div className="app-button-row" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+            <div className={`app-button-row ${styles.stackActions}`}>
               <button
                 type="button"
                 className="app-button-primary"
@@ -596,48 +581,48 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               </button>
             </div>
             {runtimeConfig ? (
-              <div style={{ marginTop: "0.85rem", display: "grid", gap: "0.35rem" }}>
-                <p className={styles.subtitle} style={{ margin: 0 }}>
+              <div className={styles.runtimeConfig}>
+                <p className={styles.subtitle}>
                   <strong>运行时连接</strong>
                   {runtimeConfig.env_file_exists ? " · client.env 已生成" : " · client.env 未生成"}
                 </p>
-                <code className={styles.subtitle} style={{ display: "block", wordBreak: "break-all" }}>
+                <code className={`${styles.subtitle} ${styles.codeBlock}`}>
                   DATABASE_URL={runtimeConfig.database_url}
                 </code>
-                <code className={styles.subtitle} style={{ display: "block", wordBreak: "break-all" }}>
+                <code className={`${styles.subtitle} ${styles.codeBlock}`}>
                   REDIS_URL={runtimeConfig.redis_url}
                 </code>
-                <code className={styles.subtitle} style={{ display: "block", wordBreak: "break-all" }}>
+                <code className={`${styles.subtitle} ${styles.codeBlock}`}>
                   MILVUS_URL={runtimeConfig.milvus_url}
                 </code>
                 {runtimeConfig.env_file_path ? (
-                  <p className={styles.subtitle} style={{ margin: 0 }}>
+                  <p className={styles.subtitle}>
                     env 文件：{runtimeConfig.env_file_path}
                   </p>
                 ) : null}
-                <p className={styles.subtitle} style={{ margin: 0 }}>
+                <p className={styles.subtitle}>
                   {runtimeConfig.note}
                 </p>
               </div>
             ) : null}
 
-            <div style={{ marginTop: "1rem", borderTop: "1px solid hsl(var(--border))", paddingTop: "0.85rem" }}>
-              <p className={styles.subtitle} style={{ marginTop: 0 }}>
+            <div className={styles.productSection}>
+              <p className={styles.subtitle}>
                 <strong>本机产品进程</strong>（avrag-api + worker，默认 :18080）。先起数据栈，再启动产品；REST 经桌面{" "}
                 <code>api_call</code> 代理。
               </p>
               {product ? (
-                <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.4rem" }}>
+                <ul className={styles.productList}>
                   <li>
                     <strong>API</strong> {product.api_base_url} —{" "}
-                    <span style={{ color: product.api_ok ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                    <span className={product.api_ok ? styles.statusActive : styles.statusError}>
                       {product.api_ok ? "OK" : "DOWN"}
                     </span>
                     <div className={styles.subtitle}>{product.health_detail}</div>
                   </li>
                   <li>
                     <strong>Worker</strong> —{" "}
-                    <span style={{ color: product.worker_ok ? "hsl(var(--success))" : "hsl(var(--destructive))" }}>
+                    <span className={product.worker_ok ? styles.statusActive : styles.statusError}>
                       {product.worker_ok ? "OK" : "DOWN"}
                     </span>
                     <div className={styles.subtitle}>{product.worker_detail}</div>
@@ -646,7 +631,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               ) : (
                 <p className={styles.subtitle}>尚未探测产品进程</p>
               )}
-              <div className="app-button-row" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+              <div className={`app-button-row ${styles.stackActions}`}>
                 <button
                   type="button"
                   className="app-button-primary"
@@ -665,22 +650,22 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                 </button>
               </div>
               {product?.log_dir ? (
-                <p className={styles.subtitle} style={{ marginTop: "0.5rem" }}>
+                <p className={`${styles.subtitle} ${styles.logDirNote}`}>
                   日志：{product.log_dir}
                 </p>
               ) : null}
 
-              <div style={{ marginTop: "0.85rem" }}>
-                <p className={styles.subtitle} style={{ margin: 0 }}>
+              <div className={styles.sessionSection}>
+                <p className={styles.subtitle}>
                   <strong>本机个人账户</strong>（B2C · 无云登录）
                   {isAuthenticated && authUser ? ` · ${authUser.email}` : ""}
                 </p>
                 {localSession ? (
-                  <p className={styles.subtitle} style={{ margin: "0.35rem 0 0" }}>
+                  <p className={`${styles.subtitle} ${styles.sessionStatus}`}>
                     {localSession.ready ? "会话就绪" : "会话未就绪"} — {localSession.message}
                   </p>
                 ) : null}
-                <div className="app-button-row" style={{ marginTop: "0.5rem" }}>
+                <div className={`app-button-row ${styles.sessionActions}`}>
                   <button
                     type="button"
                     className="app-button-secondary"
@@ -693,7 +678,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               </div>
             </div>
 
-            <p className={styles.subtitle} style={{ marginTop: "0.75rem" }}>
+            <p className={`${styles.subtitle} ${styles.cliHint}`}>
               CLI 栈：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh ensure"}</code>
               <br />
               CLI 产品：

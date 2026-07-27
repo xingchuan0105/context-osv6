@@ -241,9 +241,135 @@ impl AgentEventSink for ChannelSink<AgentEvent> {
     }
 }
 
+/// Tee sink (2026-07-23, dispatch-phase UX): every event still lands in
+/// `local` (worker-local collection), and **only** user-facing progress
+/// (`Activity`) is additionally forwarded to `progress` — the orchestrator's
+/// client-facing sink. Worker prose (`MessageDelta`), tool payloads, traces,
+/// usage, and terminal events stay worker-local, so the client stream gains
+/// retrieval progress without leaking internal text.
+///
+/// The progress fan-out is best-effort: a closed client channel never fails
+/// the worker loop (local emit remains authoritative).
+pub struct ProgressTeeSink {
+    local: Box<dyn AgentEventSink>,
+    progress: Box<dyn AgentEventSink>,
+}
+
+impl ProgressTeeSink {
+    pub fn new(local: Box<dyn AgentEventSink>, progress: Box<dyn AgentEventSink>) -> Self {
+        Self { local, progress }
+    }
+}
+
+#[async_trait::async_trait]
+impl AgentEventSink for ProgressTeeSink {
+    async fn emit(&self, event: AgentEvent) -> Result<(), ()> {
+        // Forward only WorkFact progress (message carries the `progress.*`
+        // i18n key). Internal diagnostics (sandbox_error / budget_exhausted /
+        // telemetry activities) are English operator text — noise on the
+        // client progress card, so they stay worker-local.
+        if let AgentEvent::Activity { message, .. } = &event {
+            if message.starts_with("progress.") {
+                let _ = self.progress.emit(event.clone()).await;
+            }
+        }
+        self.local.emit(event).await
+    }
+
+    fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
+        Box::new(Self::new(self.local.clone_boxed(), self.progress.clone_boxed()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn activity(stage: &str) -> AgentEvent {
+        AgentEvent::Activity {
+            stage: stage.to_string(),
+            message: format!("progress.{stage}"),
+            detail: None,
+            counts: Default::default(),
+            sources_preview: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn progress_tee_forwards_only_activity() {
+        let local = CollectingSink::new();
+        let progress = CollectingSink::new();
+        let tee = ProgressTeeSink::new(local.clone_boxed(), progress.clone_boxed());
+
+        tee.emit(activity("act:retrieve_semantic")).await.unwrap();
+        tee.emit(AgentEvent::MessageDelta { text: "worker prose".into() })
+            .await
+            .unwrap();
+        tee.emit(AgentEvent::Done {
+            final_message: Some("handoff".into()),
+            usage: None,
+        })
+        .await
+        .unwrap();
+
+        // Local keeps everything.
+        assert_eq!(local.events().len(), 3);
+        // Progress receives only the Activity event — never prose or Done.
+        let forwarded = progress.events();
+        assert_eq!(forwarded.len(), 1);
+        assert!(matches!(forwarded[0], AgentEvent::Activity { .. }));
+        let AgentEvent::Activity { message, .. } = &forwarded[0] else {
+            unreachable!()
+        };
+        assert_eq!(message, "progress.act:retrieve_semantic");
+    }
+
+    #[tokio::test]
+    async fn progress_tee_drops_non_workfact_activities() {
+        let local = CollectingSink::new();
+        let progress = CollectingSink::new();
+        let tee = ProgressTeeSink::new(local.clone_boxed(), progress.clone_boxed());
+
+        // Internal diagnostics use free English text (not a progress.* key).
+        tee.emit(AgentEvent::Activity {
+            stage: "budget_exhausted".into(),
+            message: "iteration budget exhausted, evaluating exit policy".into(),
+            detail: None,
+            counts: Default::default(),
+            sources_preview: vec![],
+        })
+        .await
+        .unwrap();
+        tee.emit(activity("act:search_web")).await.unwrap();
+
+        assert_eq!(local.events().len(), 2, "local keeps everything");
+        let forwarded = progress.events();
+        assert_eq!(
+            forwarded.len(),
+            1,
+            "only WorkFact progress reaches the client: {forwarded:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn progress_tee_survives_closed_progress_channel() {
+        let local = CollectingSink::new();
+        // A progress sink that always fails (client gone): worker must not fail.
+        struct DeadSink;
+        #[async_trait::async_trait]
+        impl AgentEventSink for DeadSink {
+            async fn emit(&self, _event: AgentEvent) -> Result<(), ()> {
+                Err(())
+            }
+            fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
+                Box::new(DeadSink)
+            }
+        }
+        let dead = DeadSink;
+        let tee = ProgressTeeSink::new(local.clone_boxed(), Box::new(dead));
+        assert!(tee.emit(activity("act:search_web")).await.is_ok());
+        assert_eq!(local.events().len(), 1);
+    }
 
     #[test]
     fn test_agent_event_serde_roundtrip() {

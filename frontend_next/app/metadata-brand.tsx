@@ -5,7 +5,7 @@ const brandSquareStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   borderRadius: "24%",
-  background: "#171717",
+  background: "#1b1f2d",
   border: "1px solid rgba(255,255,255,0.14)",
   position: "relative",
   overflow: "hidden",
@@ -60,7 +60,7 @@ export function MetadataBrandIcon(): ReactElement {
       <div style={lineStyle("49.2%", "68.2%", "10%", "2.7%")} />
       <div style={dotStyle("34.6%", "39.4%", "6.6%")} />
       <div style={dotStyle("55.4%", "31.8%", "6.6%")} />
-      <div style={dotStyle("59.4%", "56.8%", "6.6%")} />
+      <div style={{ ...dotStyle("59.4%", "56.8%", "6.6%"), background: "#4f7cf3" }} />
       <div style={dotStyle("55.6%", "66.2%", "5.8%")} />
     </div>
   );
@@ -165,7 +165,7 @@ export function MetadataPreviewCard(): ReactElement {
               width: "12px",
               height: "12px",
               borderRadius: "999px",
-              background: "#171717",
+              background: "#3542d4",
             }}
           />
           Second-brain workspace for organizing, distributing, and querying knowledge

@@ -16,6 +16,11 @@
 .icon {
   font-size: 1.25rem;
   line-height: 1;
+  color: hsl(var(--success));
+}
+
+.card.warn .icon {
+  color: hsl(var(--warning));
 }
 
 .body {

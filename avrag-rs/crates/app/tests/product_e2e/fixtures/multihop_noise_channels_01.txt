@@ -1,0 +1,8 @@
+# 通道→机柜索引（历史归档批次-01）
+
+- CH-A1 → RACK-A1 → 站点码 ZZ-1
+- CH-A2 → RACK-A2 → 站点码 ZZ-2
+- CH-A3 → RACK-A3 → 站点码 ZZ-3
+- CH-A4 → RACK-A4 → 站点码 AT-N
+- CH-A5 → RACK-A5 → 站点码 ZZ-5
+无审批单号。无 CH-XPIPE-09。

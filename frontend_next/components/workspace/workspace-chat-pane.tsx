@@ -117,6 +117,24 @@ export function WorkspaceChatPane({
       ? { "--workspace-chat-bottom-clearance": `${composerClearance}px` } as CSSProperties
       : undefined;
 
+  // Empty thread: lift the composer into a centered hero layout (Grok-style).
+  const showComposerHero = chatSession.messages.length === 0 && !chatSession.progress.mode;
+  const composerHero = showComposerHero ? (
+    <div className={styles.heroBlock} data-testid="workspace-chat-empty">
+      <h1 className={styles.heroTitle}>
+        {formatUiMessage(locale, "workspaceChatHeroTitle")}
+      </h1>
+      <p className={styles.heroSubtitle}>
+        {formatUiMessage(locale, "workspaceChatHeroSubtitle")}
+      </p>
+      <p className={styles.heroModeHint}>
+        {formatUiMessage(locale, "workspaceEmptyStateModeHint", {
+          mode: activeModeLabel,
+        })}
+      </p>
+    </div>
+  ) : null;
+
   const handleCopyMessage = useCallback((content: string) => {
     if (typeof navigator === "undefined" || !navigator.clipboard) {
       return;
@@ -219,12 +237,11 @@ export function WorkspaceChatPane({
       )}
 
       <ChatMessageList
+        key={sessionId ?? "new-thread"}
         messages={chatSession.messages}
         progress={chatSession.progress}
         isStreaming={chatSession.isStreaming}
         locale={locale}
-        activeModeLabel={activeModeLabel}
-        onToggleProgressCollapsed={chatSession.toggleProgressCollapsed}
         onSelectCitation={onSelectCitation ?? (() => {})}
         onOpenWebSources={onOpenWebSources ?? (() => {})}
         onCopyMessage={handleCopyMessage}
@@ -245,6 +262,7 @@ export function WorkspaceChatPane({
         onCapabilitiesChange={handleCapabilitiesChange}
         textareaRef={textareaRef}
         onHeightChange={setComposerClearance}
+        hero={composerHero}
       />
     </section>
   );

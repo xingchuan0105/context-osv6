@@ -1,9 +1,13 @@
-//! Option B: Chat agent is the sole user-facing answer exit.
+//! Answer phase helpers for the Product Agent runtime (Option D).
 //!
-//! The synthesize brief carries evidence **by reference** (store `E{n}`
-//! listings) plus worker digests and source-document identity — never raw
-//! chunk dumps (design §3.5). The chat cites `[[E:id]]`; the host rewrites
-//! those to product markers after the run (`workers::finalize_answer_evidence`).
+//! The synthesize brief carries the **full host-decided evidence set**
+//! (store `E{n}` + full bodies) plus worker digests and source-document
+//! identity on the **agent query** (not system). Answer must not re-select
+//! or invent evidence (2026-07-20). Cites `[[E:id]]`; the host rewrites those
+//! to product markers after the run (`workers::finalize_answer_evidence`).
+//!
+//! Option D: Answer pack = `product-answer-base` + material blocks (P1-2: no
+//! full `chat-base`); utility tools via custom ModeConfig; prose-only contract.
 
 use super::invariant::partial_notices_from_records;
 use super::store::{EvidenceEntry, EvidenceKind, EvidenceListing, SourceDoc};
@@ -143,23 +147,29 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         s.push('\n');
     }
 
-    // Evidence listings (references only; targeted entries excluded — not citable).
+    // Full evidence bodies — intact chunks already filtered by the RAG pipeline
+    // (dynamic TOPK/TOPN). Chat must use only these; do not re-fetch or invent.
     let citable: Vec<&EvidenceListing> = handoff
         .listings
         .iter()
         .filter(|l| l.kind != EvidenceKind::DocProfile)
         .collect();
     if !citable.is_empty() {
-        s.push_str("### Evidence (cite by id)\n");
+        s.push_str("### Evidence (complete set — cite by id only)\n");
+        s.push_str(
+            "The following is the **entire** evidence set for this turn (already selected by \
+             the retrieval pipeline). Bodies are whole chunks — do not assume truncation. \
+             Use only these passages. Do not claim you lack documents when this section is \
+             non-empty. Cite with `[[E:id]]` using the id in brackets (e.g. `[[E3]]`).\n\n",
+        );
         for l in citable {
-            s.push_str(&format!(
-                "- [{}] {} | {}\n",
-                l.eid,
-                l.label,
+            let body = if l.full_text.trim().is_empty() {
                 l.preview.trim()
-            ));
+            } else {
+                l.full_text.trim()
+            };
+            s.push_str(&format!("#### [{}] {}\n{}\n\n", l.eid, l.label, body));
         }
-        s.push('\n');
     }
 
     s.push_str(&render_citation_contract(handoff));
@@ -204,9 +214,9 @@ fn render_citation_contract(handoff: &ChatHandoff) -> String {
         return s;
     }
     s.push_str(
-        "- Ground every evidence-based claim with `[[E:id]]` right after it, where `id` is one \
-         of the evidence ids listed above (copy exactly, e.g. `[[E3]]`). One claim may carry \
-         several markers: `[[E2]][[E5]]`.\n",
+        "- Ground every evidence-based claim with `[[E:id]]` right after it, where `id` is the \
+         short store id listed above (copy exactly: `[[E3]]` — never paste chunk UUIDs into \
+         the E-marker). One claim may carry several markers: `[[E2]][[E5]]`.\n",
     );
     if !has_doc {
         s.push_str("- Workspace retrieval returned nothing usable: say 未命中 for document-side \
@@ -248,6 +258,11 @@ mod tests {
             },
             label: "《立项报告》p5".into(),
             preview: "现状诊断内容".into(),
+            full_text: "现状诊断内容 — 完整证据正文用于作答".into(),
+            chunk_id: Some("chunk-1".into()),
+            doc_id: Some("d1".into()),
+            score: Some(0.9),
+            url: None,
         }
     }
 
@@ -325,7 +340,12 @@ mod tests {
         assert!(ctx.contains("数字化转型IT立项报告.docx"), "doc identity: {ctx}");
         assert!(ctx.contains("genre: report"), "genre: {ctx}");
         assert!(ctx.contains("[E1]"), "listing: {ctx}");
-        assert!(ctx.contains("[[E:id]]"), "E-marker rule: {ctx}");
+        assert!(
+            ctx.contains("完整证据正文用于作答"),
+            "full evidence body must be injected: {ctx}"
+        );
+        assert!(ctx.contains("complete set"), "complete-set rule: {ctx}");
+        assert!(ctx.contains("[[E:id]]") || ctx.contains("[[E3]]"), "E-marker rule: {ctx}");
         assert!(ctx.contains("理解口径"), "interpretation rule: {ctx}");
     }
 
@@ -386,11 +406,17 @@ mod tests {
         assert!(ctx.contains("文档定向"), "targeting section: {ctx}");
         assert!(ctx.contains("基础设施选型 (p12)"), "full text: {ctx}");
         assert!(ctx.contains("do NOT cite"), "not-citable rule: {ctx}");
-        // Targeted id E1 is absent from the citable evidence list.
-        let evidence = ctx.split("### Evidence (cite by id)").nth(1).expect("evidence section");
-        let evidence = evidence.split("###").next().unwrap();
-        assert!(!evidence.contains("[E1]"), "E1 must not be citable: {evidence}");
-        assert!(evidence.contains("[E2]"), "E2 stays citable: {evidence}");
+        // Targeted orientation mentions doc name but citable list is E2 only.
+        assert!(ctx.contains("#### [E2]"), "E2 stays citable: {ctx}");
+        // E1 is only under 文档定向, not as a citable #### heading.
+        let after_evidence = ctx
+            .split("### Evidence (complete set")
+            .nth(1)
+            .expect("evidence section");
+        assert!(
+            !after_evidence.contains("#### [E1]"),
+            "E1 must not be citable heading: {after_evidence}"
+        );
     }
 
     #[test]

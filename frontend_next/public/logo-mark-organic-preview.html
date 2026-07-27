@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: "IBM Plex Sans", "PingFang SC", sans-serif; background: #fafbfd; margin: 0; padding: 32px; }
+  h3 { font-size: 13px; color: #68708a; font-weight: 500; margin: 20px 0 12px; }
+  .grid { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 8px; }
+  .opt { background: #fff; border: 1px solid #e3e6ee; border-radius: 12px; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .lockup { display: flex; align-items: center; gap: 10px; }
+  .word { font-family: "Space Grotesk", "IBM Plex Sans", sans-serif; font-weight: 600; font-size: 20px; color: #1b2138; }
+  .label { font-size: 12px; color: #68708a; max-width: 240px; }
+  .plate-row { display: flex; gap: 14px; align-items: center; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+<!-- V2 基准:几何弧(对照) -->
+<g id="m-v2">
+  <path d="M32 16C24.5 16 19.5 22 19.5 29.5V46.5C19.5 54 24.5 60 32 60" fill="none" stroke-linecap="round" stroke-width="6"/>
+  <path d="M44 16C51.5 16 56.5 22 56.5 29.5V46.5C56.5 54 51.5 60 44 60" fill="none" stroke-linecap="round" stroke-width="6"/>
+  <path d="M38 18V58" stroke-linecap="round" stroke-width="5"/>
+</g>
+
+<!-- W1 有机双弧 + 直脊:弧线带 S 形呼吸感,左右不对称 -->
+<g id="m-w1">
+  <path d="M32 15C25 14 18 21 20 29C21.5 34 18.5 40 20.5 46C22.5 53 26 61 33 60" fill="none" stroke-linecap="round" stroke-width="5.5"/>
+  <path d="M44 16C51 17 57 24 55.5 31C54.5 36 57.5 42 55.5 48C53.5 54 50 60 43 60" fill="none" stroke-linecap="round" stroke-width="5.5"/>
+  <path d="M38 18V58" stroke-linecap="round" stroke-width="5"/>
+</g>
+
+<!-- W2 有机双弧 + 波浪脊:更手绘 -->
+<g id="m-w2">
+  <path d="M31 16C24 15 18.5 22 20.5 30C22 35 19 41 21 47C23 54 26.5 60 33 59" fill="none" stroke-linecap="round" stroke-width="5.5"/>
+  <path d="M45 15C52 16 57 23 55 30C53.5 36 57 42 55 48C53 55 50.5 61 43 60" fill="none" stroke-linecap="round" stroke-width="5.5"/>
+  <path d="M38 17C36 25 40 33 38 41C36 49 40 53 38 59" fill="none" stroke-linecap="round" stroke-width="4.5"/>
+</g>
+
+<!-- W3 单笔环绕:一条连续有机曲线收成脑形,内一点 -->
+<g id="m-w3">
+  <path d="M30 17C22 19 16.5 27 18.5 36C20.5 44 17.5 52 24.5 58C30.5 63 39 61 43.5 55.5C48 50 55.5 51 57.5 43C59.5 35 55 27 47.5 23.5C42.5 21 36.5 15.5 30 17Z" fill="none" stroke-linecap="round" stroke-width="5.5"/>
+  <circle cx="37" cy="39" r="4.5" stroke="none"/>
+</g>
+</defs></svg>
+
+<h3>小尺寸 28px(导航实际尺寸)</h3>
+<div class="grid">
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v2"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">V2 几何弧(对照)</span>
+  </div>
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-w1"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">W1 · 有机双弧 + 直脊(微 S 曲线,不对称)</span>
+  </div>
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-w2"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">W2 · 有机双弧 + 波浪脊(更手绘)</span>
+  </div>
+  <div class="opt">
+    <div class="lockup"><svg width="28" height="28" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-w3"/></g></svg><span class="word">Context-OS</span></div>
+    <span class="label">W3 · 单笔环绕脑形 + 一点</span>
+  </div>
+</div>
+
+<h3>大尺寸 76px</h3>
+<div class="grid">
+  <div class="opt"><div class="plate-row">
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-v2"/></g></svg>
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-w1"/></g></svg>
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-w2"/></g></svg>
+    <svg width="76" height="76" viewBox="0 0 76 76"><g stroke="#3542d4" fill="#3542d4"><use href="#m-w3"/></g></svg>
+  </div><span class="label">左起:V2 几何 / W1 / W2 / W3(靛蓝线稿)</span></div>
+</div>
+
+<h3>靛蓝底白线(34px,胶囊场景)</h3>
+<div class="grid">
+  <div class="opt"><div class="plate-row">
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-v2"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-w1"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-w2"/></g></svg>
+    <svg width="34" height="34" viewBox="0 0 76 76"><rect width="76" height="76" rx="18" fill="#3542d4"/><g stroke="#fff" fill="#fff"><use href="#m-w3"/></g></svg>
+  </div><span class="label">左起:V2 / W1 / W2 / W3</span></div>
+</div>
+
+</body>
+</html>

@@ -11,6 +11,8 @@ import { formatUiMessage } from "../../lib/i18n/messages";
 import { updateProfile } from "../../lib/settings/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { applyZodErrors, bannerStyle, type ProfileFormValues } from "./settings-shared";
+import styles from "./settings-profile-panel.module.css";
+import shared from "./settings-ui-shared.module.css";
 
 export function ProfilePanel() {
   const auth = useAuth();
@@ -81,19 +83,19 @@ export function ProfilePanel() {
   }
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
-      <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
-        <div style={{ display: "grid", gap: "0.35rem" }}>
-          <h2 style={{ margin: 0 }}>
+    <section className={shared.section}>
+      <section className={`app-inline-surface ${shared.section}`}>
+        <div className={shared.headerText}>
+          <h2 className={shared.flushTitle}>
             {formatUiMessage(locale, "settings.profile.sectionTitle")}
           </h2>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+          <p className={shared.mutedText}>
             {formatUiMessage(locale, "settings.profile.sectionSubtitle")}
           </p>
         </div>
         <form
+          className={shared.formGrid}
           noValidate
-          style={{ display: "grid", gap: "1rem" }}
           onSubmit={profileForm.handleSubmit(handleSubmit)}
         >
           <div>
@@ -101,10 +103,9 @@ export function ProfilePanel() {
               {formatUiMessage(locale, "settings.profile.emailLabel")}
             </label>
             <input
-              className="app-input"
+              className={`app-input ${styles.readonlyInput}`}
               id="settings-profile-email"
               readOnly
-              style={{ color: "hsl(var(--muted-foreground))" }}
               type="email"
               value={auth.user?.email ?? ""}
             />
@@ -121,7 +122,7 @@ export function ProfilePanel() {
               {...profileForm.register("fullName")}
             />
             {profileForm.formState.errors.fullName?.message ? (
-              <p className="app-form-footnote" style={{ color: "hsl(var(--destructive))" }}>
+              <p className={`app-form-footnote ${styles.errorText}`}>
                 {profileForm.formState.errors.fullName.message}
               </p>
             ) : null}

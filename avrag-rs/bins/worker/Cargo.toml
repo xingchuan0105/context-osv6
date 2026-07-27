@@ -15,6 +15,7 @@ avrag-cache-redis = { path = "../../crates/cache-redis" }
 avrag-llm = { path = "../../crates/llm" }
 avrag-retrieval-data-plane = { path = "../../crates/retrieval-data-plane" }
 avrag-storage-milvus = { path = "../../crates/storage-milvus" }
+avrag-storage-pgvector = { path = "../../crates/storage-pgvector" }
 avrag-storage-pg = { path = "../../crates/storage-pg" }
 chrono.workspace = true
 common = { path = "../../crates/common" }

@@ -1,0 +1,15 @@
+.planSection {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.headerRow {
+  margin-bottom: 0;
+  align-items: start;
+}
+
+.planCard {
+  display: grid;
+  gap: var(--space-2);
+}
+

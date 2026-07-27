@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type Dispatch,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
@@ -21,7 +22,14 @@ import { probePricingRevampUsageWindow } from "../../lib/billing/featureFlag";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
-import { DEFAULT_WORKSPACE_UI_STATE, useWorkspaceUi } from "../../lib/workspace/ui-store";
+import {
+  DEFAULT_WORKSPACE_UI_STATE,
+  HISTORY_RAIL_MAX_WIDTH,
+  HISTORY_RAIL_MIN_WIDTH,
+  RIGHT_RAIL_MAX_WIDTH,
+  RIGHT_RAIL_MIN_WIDTH,
+  useWorkspaceUi,
+} from "../../lib/workspace/ui-store";
 import styles from "./workspace-shell.module.css";
 import { WorkspaceChatPane } from "./workspace-chat-pane";
 import { WorkspaceCitationModal } from "./workspace-citation-modal";
@@ -134,7 +142,14 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     renameSessionTarget, renameSessionTitle, setRenameSessionTitle,
     reloadSessions, saveWorkspaceTitle, createWorkspaceFlow, startNewThread: rawStartNewThread,
     toggleSessionPin, renameSession, dismissRename, submitRenameSession, removeSession,
+    renameSubmitting,
   } = useWorkspaceData(workspaceId);
+  const [renameSessionError, setRenameSessionError] = useState("");
+
+  function handleDismissRename() {
+    dismissRename();
+    setRenameSessionError("");
+  }
 
   function startNewThread() {
     rawStartNewThread();
@@ -241,9 +256,10 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const historyPane = (
     <WorkspaceHistoryPane
       activeSessionId={activeSessionId}
-      onDeleteSession={(session) => void removeSession(session)}
+      onDeleteSession={(session) => removeSession(session)}
       onNewThread={() => void startNewThread()}
       onRenameSession={(session) => {
+        setRenameSessionError("");
         renameSession(session);
       }}
       onRequestClose={() => workspaceUi.setHistoryRailOpen(false)}
@@ -357,6 +373,22 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     beginDesktopResize(side, touch.clientX, "touch");
   }
 
+  function handleRailResizeKeyDown(side: "history" | "right", event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+
+    event.preventDefault();
+    const step = event.key === "ArrowRight" ? 16 : -16;
+
+    if (side === "history") {
+      workspaceUi.setHistoryRailWidth(workspaceUi.historyRailWidth + step);
+      return;
+    }
+
+    workspaceUi.setRightRailWidth(workspaceUi.rightRailWidth - step);
+  }
+
   const bodyStyle = {
     "--workspace-history-rail-width": `${workspaceUi.historyRailWidth}px`,
     "--workspace-right-rail-width": `${workspaceUi.rightRailWidth}px`,
@@ -402,12 +434,18 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
             </aside>
 
             <div
-              aria-label="Resize history rail"
+              aria-label={formatUiMessage(locale, "workspaceResizeHistoryRailLabel")}
+              aria-orientation="vertical"
+              aria-valuemax={HISTORY_RAIL_MAX_WIDTH}
+              aria-valuemin={HISTORY_RAIL_MIN_WIDTH}
+              aria-valuenow={Math.round(workspaceUi.historyRailWidth)}
               className={styles.desktopRailResizer}
+              onKeyDown={(event) => handleRailResizeKeyDown("history", event)}
               onMouseDown={(event) => startDesktopMouseResize("history", event)}
               onPointerDown={(event) => startDesktopPointerResize("history", event)}
               onTouchStart={(event) => startDesktopTouchResize("history", event)}
               role="separator"
+              tabIndex={0}
             />
 
             <section className={styles.panePanel}>
@@ -445,12 +483,18 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
             </section>
 
             <div
-              aria-label="Resize right rail"
+              aria-label={formatUiMessage(locale, "workspaceResizeRightRailLabel")}
+              aria-orientation="vertical"
+              aria-valuemax={RIGHT_RAIL_MAX_WIDTH}
+              aria-valuemin={RIGHT_RAIL_MIN_WIDTH}
+              aria-valuenow={Math.round(workspaceUi.rightRailWidth)}
               className={styles.desktopRailResizer}
+              onKeyDown={(event) => handleRailResizeKeyDown("right", event)}
               onMouseDown={(event) => startDesktopMouseResize("right", event)}
               onPointerDown={(event) => startDesktopPointerResize("right", event)}
               onTouchStart={(event) => startDesktopTouchResize("right", event)}
               role="separator"
+              tabIndex={0}
             />
 
             <aside
@@ -503,20 +547,35 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
         <div
           className={styles.modalBackdrop}
           onClick={() => {
-            dismissRename();
+            handleDismissRename();
           }}
         >
           <div
             className={styles.modalCard}
             role="dialog"
+            aria-modal="true"
             aria-label={formatUiMessage(locale, "workspaceRenameSessionDialogLabel")}
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                handleDismissRename();
+              }
+            }}
           >
             <form
               className={styles.dialogForm}
               onSubmit={(event) => {
                 event.preventDefault();
-                void submitRenameSession();
+                if (renameSubmitting) {
+                  return;
+                }
+                setRenameSessionError("");
+                void submitRenameSession().then((ok) => {
+                  if (!ok) {
+                    setRenameSessionError(formatUiMessage(locale, "workspaceRenameSessionFailed"));
+                  }
+                });
               }}
             >
               <div className={styles.dialogField}>
@@ -528,17 +587,22 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                   onChange={(event) => setRenameSessionTitle(event.target.value)}
                 />
               </div>
+              {renameSessionError ? (
+                <p className="app-notice-banner" role="alert">
+                  {renameSessionError}
+                </p>
+              ) : null}
               <div className={styles.dialogActions}>
                 <button
                   className={styles.secondaryButton}
                   type="button"
                   onClick={() => {
-                    dismissRename();
+                    handleDismissRename();
                   }}
                 >
                   {formatUiMessage(locale, "commonCancel")}
                 </button>
-                <button className={styles.primaryButton} type="submit">
+                <button className={styles.primaryButton} disabled={renameSubmitting} type="submit">
                   {formatUiMessage(locale, "workspaceRenameSessionSubmit")}
                 </button>
               </div>

@@ -70,6 +70,9 @@ export const metadata: Metadata = {
 // 桌面端构建时使用客户端 i18n Provider
 const isDesktopBuild = process.env.BUILD_TARGET === "desktop";
 
+// 避免主题 FOUC：与 lib/ui-preferences.tsx 的 THEME_STORAGE_KEY 保持一致
+const THEME_INIT_SCRIPT = `(function(){try{var t=window.localStorage.getItem("avrag.ui.theme.v1");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t)}else{document.documentElement.removeAttribute("data-theme")}}catch(e){}})();`;
+
 export default async function RootLayout({ children }: { children: ReactNode }) {
   // 桌面端：使用默认 locale，客户端会从 cookie 读取
   // Web 端：使用服务端获取的 locale
@@ -91,6 +94,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     return (
       <html lang={locale} suppressHydrationWarning>
         <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
+          {/* 避免主题 FOUC：与 lib/ui-preferences.tsx 的 THEME_STORAGE_KEY 保持一致 */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: THEME_INIT_SCRIPT,
+            }}
+          />
           <QueryProvider>
             <ClientI18nProvider>
               <UiPreferencesProvider initialLocale={locale}>
@@ -110,6 +119,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
+        {/* 避免主题 FOUC：与 lib/ui-preferences.tsx 的 THEME_STORAGE_KEY 保持一致 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: THEME_INIT_SCRIPT,
+          }}
+        />
         <QueryProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <UiPreferencesProvider initialLocale={locale}>

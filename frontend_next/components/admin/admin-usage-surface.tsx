@@ -27,6 +27,8 @@ import {
   USAGE_PERIOD_OPTIONS,
 } from "./admin-utils";
 
+import styles from "./admin-usage-surface.module.css";
+
 export function AdminUsageSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
@@ -56,7 +58,7 @@ export function AdminUsageSurface() {
   const usageLoading = Boolean(token) && (accountsQuery.isPending || usageScopeQuery.isPending);
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={styles.container}>
       <AdminPageHeading
         title={adminText(locale, "admin.nav.usage")}
         subtitle={adminText(locale, "usage.subtitle")}
@@ -64,8 +66,8 @@ export function AdminUsageSurface() {
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       {warning ? <ErrorState message={warning} /> : null}
 
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "minmax(16rem, 18rem) minmax(0, 1fr)" }}>
+      <section className={`app-inline-surface ${styles.panel}`}>
+        <div className={styles.filtersGrid}>
           <div>
             <label className="app-form-label" htmlFor="admin-usage-scope">
               {adminText(locale, "common.scope")}
@@ -101,7 +103,7 @@ export function AdminUsageSurface() {
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
+        <div className={styles.metaRow}>
           <span>{adminText(locale, "common.currentView")}{scopeLabel}</span>
           <span>{adminText(locale, "common.timeWindow")}{selectedPeriod}</span>
           {effectiveSelectedOrgId === ADMIN_ALL_ORGS_VALUE && accounts.length > 0 ? (
@@ -116,22 +118,22 @@ export function AdminUsageSurface() {
         <EmptyState copy={adminText(locale, "usage.noData")} />
       ) : (
         <>
-          <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
+          <div className={styles.metricsGrid}>
             <AdminMetricCard label={adminText(locale, "admin.metrics.totalRequests")} tone="primary" value={formatCompactNumber(usage.total_requests)} />
             <AdminMetricCard label={adminText(locale, "common.totalTokens")} tone="success" value={formatCompactNumber(usage.total_tokens)} />
             <AdminMetricCard label={adminText(locale, "admin.metrics.totalDocuments")} tone="warning" value={formatCompactNumber(usage.total_documents)} />
           </div>
-          <section className="app-inline-surface" style={{ display: "grid", gap: "0.7rem" }}>
-            <h2 style={{ margin: 0 }}>{adminText(locale, "common.platformStatistics")}</h2>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+          <section className={`app-inline-surface ${styles.statsPanel}`}>
+            <h2 className={styles.heading}>{adminText(locale, "common.platformStatistics")}</h2>
+            <div className={`app-inline-row ${styles.inlineRowFlat}`}>
               <span>{adminText(locale, "admin.metrics.totalRequests")}</span>
               <strong>{usage.total_requests}</strong>
             </div>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${styles.inlineRowFlat}`}>
               <span>{adminText(locale, "common.totalTokensProcessed")}</span>
               <strong>{usage.total_tokens}</strong>
             </div>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${styles.inlineRowFlat}`}>
               <span>{adminText(locale, "common.totalIndexedDocuments")}</span>
               <strong>{usage.total_documents}</strong>
             </div>

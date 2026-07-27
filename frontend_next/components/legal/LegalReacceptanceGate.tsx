@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth/context";
 import { fetchLegalStatus, recordLegalAcceptance } from "@/lib/legal/client";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
+import styles from "./legal-reacceptance-gate.module.css";
 
 type GateState =
   | { kind: "loading" }
@@ -69,8 +70,8 @@ export function LegalReacceptanceGate({ children }: { children: ReactNode }) {
   if (state.kind === "loading") {
     return (
       <main className="app-auth-shell">
-        <section className="app-surface-card" style={{ maxWidth: "28rem", textAlign: "center" }}>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+        <section className={`app-surface-card ${styles.loadingCard}`}>
+          <p className={styles.loadingText}>
             {formatUiMessage(locale, "gateCheckingSession")}
           </p>
         </section>
@@ -109,12 +110,12 @@ export function LegalReacceptanceGate({ children }: { children: ReactNode }) {
 
   return (
     <main className="app-auth-shell">
-      <section className="app-surface-card" style={{ maxWidth: "32rem", display: "grid", gap: "1rem" }}>
+      <section className={`app-surface-card ${styles.gateCard}`}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "1.25rem" }}>
+          <h1 className={styles.title}>
             {formatUiMessage(locale, "legalReacceptanceTitle")}
           </h1>
-          <p style={{ margin: "0.5rem 0 0", color: "hsl(var(--muted-foreground))" }}>
+          <p className={styles.body}>
             {formatUiMessage(locale, "legalReacceptanceBody")}
           </p>
         </div>

@@ -1,0 +1,59 @@
+.container {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.filtersGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1.2fr repeat(4, minmax(10rem, 1fr)) 8rem;
+}
+
+.footerRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: var(--font-size-control);
+  color: hsl(var(--muted-foreground));
+}
+
+.footerMeta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  padding: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableHead {
+  background: hsl(var(--surface-muted));
+}
+
+.tableHeaderCell {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.tableRow {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.tableCell {
+  padding: 1rem;
+}

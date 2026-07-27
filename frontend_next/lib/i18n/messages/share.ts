@@ -733,4 +733,16 @@ export const shareMessages = {
     zh: "最近仍有访问，当前这份知识处于持续传播状态。",
     en: "Recent visits are still coming in, which suggests this knowledge package is still actively spreading.",
   },
+  "shareQuickModal.title": {
+    zh: "分享工作区",
+    en: "Share workspace",
+  },
+  "shareQuickModal.openFullPage": {
+    zh: "查看分享数据 →",
+    en: "View share analytics →",
+  },
+  "shareQuickModal.loading": {
+    zh: "正在加载分享设置...",
+    en: "Loading share settings...",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -1,7 +1,7 @@
 {
-  "version": "4.0.0-orchestrator-groups",
+  "version": "4.0.0-orchestrator-groups+option-d-subsets",
   "created_at": "2026-06-29T00:00:00Z",
-  "description": "v4.0.0-orchestrator-groups：语料扩至 10 份（v2 七份 + 智遥咨询新增 3 篇：RBF/预制菜/手艺人，OneDrive 原件映射见设计文档 §6.5）。按能力分组：v2 十个 rag 内容组（107 题）+ orchestrator_paradigm 编排行为 8 + rag_search_joint 联合 6 + chat_builtin_tools 内置工具 4 + rag_codegen_channels 检索通道 7 + memory_coreference 记忆指代 3 + search_web 纯网搜 2 + new_corpus_factual 新语料 6。字段：capabilities / doc_scope_hint / expect_citations{min_doc,min_web} / requires_network / expected_tool(意图记录) / requires_triplet_reingest / prior_turns(会话注入) / client_time(client_context 注入)。子集：thesis_factual, thesis_synthesis, thesis_numeric, thesis_adversarial, adr_factual, cross_adr, consulting_factual, ipd_table, baiyao_pdf, cross_document, orchestrator_paradigm, rag_search_joint, chat_builtin_tools, rag_codegen_channels, memory_coreference, search_web, new_corpus_factual。Total: 143 examples。",
+  "description": "v4.0.0-orchestrator-groups：语料扩至 10 份（v2 七份 + 智遥咨询新增 3 篇：RBF/预制菜/手艺人，OneDrive 原件映射见设计文档 §6.5）。按能力分组：v2 十个 rag 内容组（107 题）+ orchestrator_paradigm 编排行为 8 + rag_search_joint 联合 6 + chat_builtin_tools 内置工具 4 + rag_codegen_channels 检索通道 7 + memory_coreference 记忆指代 3 + search_web 纯网搜 2 + new_corpus_factual 新语料 6。字段：capabilities / doc_scope_hint / expect_citations{min_doc,min_web} / requires_network / expected_tool(意图记录) / requires_triplet_reingest / prior_turns(会话注入) / client_time(client_context 注入)。子集：thesis_factual, thesis_synthesis, thesis_numeric, thesis_adversarial, adr_factual, cross_adr, consulting_factual, ipd_table, baiyao_pdf, cross_document, orchestrator_paradigm, rag_search_joint, chat_builtin_tools, rag_codegen_channels, memory_coreference, search_web, new_corpus_factual。Total: 143 examples。 | Option D (2026-07-20): harness uses `capabilities` as product truth; `mode` is legacy/compat only. Subsets option_d_* cover pure chat / search-only / dual. | G-17 option_d_utility_tools + utility expected_tool hard gate.",
   "subsets": [
     {
       "name": "thesis_factual",
@@ -229,7 +229,7 @@
         },
         {
           "query": "论文使用了哪四个理论工具来分析营销环境？",
-          "expected_answer": "PEST分析、波特五力模型、STP理论、4R营销策略",
+          "expected_answer": "PEST分析（外部环境）、公开资料估算市场需求（数量和结构）、波特五力模型（竞争态势）、内部环境分析（找出核心竞争力）",
           "source_chunks": [
             {
               "type": "substring",
@@ -241,21 +241,25 @@
             },
             {
               "type": "substring",
-              "text": "STP理论"
+              "text": "估算市场需求的数量和结构"
             },
             {
               "type": "substring",
-              "text": "4R营销策略"
+              "text": "分析内部环境找出Y冷冻设备公司的核心竞争力"
             }
           ],
           "expected_citations": [
             1
           ],
           "mode": "rag",
-          "description": "四个分析理论工具",
+          "description": "四个环境分析工具（摘要/第三章）；STP/4R 属策略理论，不在此列",
           "expected_should_answer": true,
+          "rubric_notes": "环境分析四工具=PEST分析、公开资料估算市场需求、波特五力模型、内部环境分析。STP/4R 是目标市场与营销策略理论，不是环境分析工具；以 STP/4R 顶替应判 incorrect 或 partial。",
           "must_include": [
-            "PEST分析、波特五力模型、STP理论、4R营销策略"
+            "PEST",
+            "五力",
+            "内部环境",
+            "估算"
           ],
           "capabilities": [
             "rag"
@@ -452,7 +456,7 @@
         },
         {
           "query": "论文提出Y冷冻设备公司应该从哪三个方面进行能力建设？",
-          "expected_answer": "信息系统建设、研发能力建设（含研发硬件设施、大数据指导研发、增强研发团队能力）",
+          "expected_answer": "指营销策略保障方案（第六章）的三个方面：公司能力建设（含信息系统建设、研发能力建设）、公司管理制度调整、营销活动量化管理",
           "source_chunks": [
             {
               "type": "substring",
@@ -461,16 +465,27 @@
             {
               "type": "substring",
               "text": "研发能力建设"
+            },
+            {
+              "type": "substring",
+              "text": "管理制度的调整"
+            },
+            {
+              "type": "substring",
+              "text": "营销活动的量化管理"
             }
           ],
           "expected_citations": [
             1
           ],
           "mode": "rag",
-          "description": "能力建设维度综合",
+          "description": "保障方案三方面综合（能力建设含信息系统+研发、制度调整、量化管理）",
           "expected_should_answer": true,
+          "rubric_notes": "「三个方面」的唯一自洽读法：保障方案三方面——公司能力建设（信息系统建设、研发能力建设）、公司管理制度调整、营销活动量化管理。仅答「信息系统+研发」两个子项而漏掉制度调整/量化管理，最多判 partial。",
           "must_include": [
-            "信息系统建设、研发能力建设（含研发硬件设施、大数据指导研发、增强研发团队能力）"
+            "信息系统建设",
+            "管理制度",
+            "量化管理"
           ],
           "capabilities": [
             "rag"
@@ -949,6 +964,7 @@
           "mode": "rag",
           "description": "编造注册资本数字",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及注册资本"
           ],
@@ -964,6 +980,7 @@
           "mode": "rag",
           "description": "编造韩方投资者姓名",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及韩方投资者姓名"
           ],
@@ -979,6 +996,7 @@
           "mode": "rag",
           "description": "编造竞争对手营收",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及南通四方的营业收入"
           ],
@@ -994,6 +1012,7 @@
           "mode": "rag",
           "description": "编造保修期",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中提到了保修期的概念（指出行业通常停留在保修期内），但未说明Y冷冻设备公司产品的具体保修年限"
           ],
@@ -1009,6 +1028,7 @@
           "mode": "rag",
           "description": "编造访谈样本量",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及具体访谈人数"
           ],
@@ -1024,6 +1044,7 @@
           "mode": "rag",
           "description": "编造策略实施效果",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及策略实施后的实际效果数据"
           ],
@@ -1039,6 +1060,7 @@
           "mode": "rag",
           "description": "编造技术参数",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及转毂直径具体数值"
           ],
@@ -1054,6 +1076,7 @@
           "mode": "rag",
           "description": "编造竞争对手地址",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "论文中未提及烟台冰轮总部所在城市"
           ],
@@ -2718,6 +2741,7 @@
           },
           "description": "空选择规则：rag 能力 + 空 doc_scope → 引导选择文档，禁止全库注入",
           "expected_should_answer": true,
+          "rubric_notes": "reference_answer 即完整期望回答：本题 doc_scope 为空，正确行为就是请用户先选择文档范围（引导澄清）而非作答内容。模型只要请求/澄清文档范围即判 correctness 高分；直接回答文档内容（Y冷冻/云南白药/华为IPD 等）属违规全库检索，correctness 应低。",
           "must_include": [
             "选择"
           ],
@@ -2744,6 +2768,7 @@
           },
           "description": "空选择规则：诱导性'根据文档'提问也不得全库检索",
           "expected_should_answer": true,
+          "rubric_notes": "reference_answer 即完整期望回答：本题 doc_scope 为空，正确行为就是请用户先选择文档范围（引导澄清）而非作答内容。模型只要请求/澄清文档范围即判 correctness 高分；直接回答文档内容（Y冷冻/云南白药/华为IPD 等）属违规全库检索，correctness 应低。",
           "must_include": [
             "选择"
           ],
@@ -2806,6 +2831,7 @@
           },
           "description": "跨文档张冠李戴（对抗）：论文事实归于白药文档，scope 隔离下必须拒答",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "未提及"
           ],
@@ -2829,13 +2855,14 @@
           },
           "description": "跨文档张冠李戴（对抗）：咨询文章事实归于 IPD 表格，scope 隔离下必须拒答",
           "expected_should_answer": false,
+          "rubric_notes": "实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
             "未提及"
           ]
         },
         {
           "query": "Y冷冻设备公司在产品、价格、渠道、宣传四个方面的营销策略分别是什么？",
-          "expected_answer": "产品：丰富产品线与组合；价格：成本优势、弱势市场低价/优势市场价格歧视；渠道：与压缩机组交叉销售并自建销售服务网络；宣传：保持专业媒体投入",
+          "expected_answer": "论文未按4P（产品、价格、渠道、宣传）拆解Y冷冻设备公司的营销策略——该四维拆解描述的是竞争对手南通四方；Y公司自身缺乏系统性营销策略，论文以4R（关联、反应、关系、回报）为框架为其定制策略（第五章）。",
           "source_chunks": [
             {
               "type": "substring",
@@ -2844,6 +2871,10 @@
             {
               "type": "substring",
               "text": "在宣传策略上保持在专业媒体的投入"
+            },
+            {
+              "type": "substring",
+              "text": "以4R策略为框架，提出以关联、反应、关系、回报4个方面为结构"
             }
           ],
           "expected_citations": [
@@ -2858,20 +2889,24 @@
             "min_doc": 2,
             "min_web": 0
           },
-          "description": "coverage：四维策略逐章覆盖，证据应来自多个 chunk",
-          "expected_should_answer": true,
+          "description": "对抗（张冠李戴）：4P四维拆解是竞争对手南通四方的策略（thesis:137），Y公司无4P拆解（thesis:151 缺乏系统性营销策略），应拒答或指出前提有误",
+          "expected_should_answer": false,
+          "rubric_notes": "4P四维内容（产品线组合/成本优势定价/交叉销售渠道/专业媒体宣传）属于竞争对手南通四方；若模型将其归于Y公司属张冠李戴，correctness 应低。正确表现：拒答，或指出论文未给出Y公司4P拆解、Y公司策略为4R框架。实质性声明「语料未记载/无法确认」即视为正确拒答（形式不限，可附解释）；但声明后继续编造具体信息判 incorrect/ungrounded。",
           "must_include": [
-            "交叉销售",
-            "专业媒体"
+            "未提及"
           ]
         },
         {
           "query": "云南白药IT规划的详细设计阶段的时间安排是怎样的？",
-          "expected_answer": "第一阶段：4月18日-4月19日；第二阶段：5月6日-5月10日；第三阶段：5月13日-5月17日",
+          "expected_answer": "第一阶段：4月18日-4月19日（文档注明整体规划按4A架构的方法进行详细设计）；第二阶段：5月6日-5月10日；第三阶段：5月13日-5月17日（文档对第二、三阶段只给日期，未标注详细设计字样）",
           "source_chunks": [
             {
               "type": "substring",
               "text": "第一阶段：4月18日"
+            },
+            {
+              "type": "substring",
+              "text": "整体规划按照4A架构的方法进行详细设计"
             }
           ],
           "expected_citations": [
@@ -2886,8 +2921,9 @@
             "min_doc": 1,
             "min_web": 0
           },
-          "description": "coverage：PDF 时间表三阶段完整提取",
+          "description": "coverage：PDF 时间表三阶段完整提取；「按4A架构详细设计」仅标注于第一阶段",
           "expected_should_answer": true,
+          "rubric_notes": "文档仅对第一阶段标注「按4A架构详细设计」，第二、三阶段只有日期。覆盖三阶段日期即判 correct；把详细设计标注泛化到全部阶段不扣分（注释性质）；缺失任一阶段日期应降分。",
           "must_include": [
             "4月18日",
             "5月6日",
@@ -3078,7 +3114,7 @@
     },
     {
       "name": "chat_builtin_tools",
-      "description": "内置工具结果层验证：calculator（确定性数值）、user_context 时间（client_context.local_time 注入）、weather_query（通路冒烟，需外网）。expected_tool 为调用意图记录；内容门以 must_include 为准",
+      "description": "内置工具结果层验证：calculator / user_context / weather_query。G-17：full_eval 对 calculator|weather_query|user_context 做 expected_tool 硬门；内容门仍以 must_include 为准。weather 需外网。",
       "examples": [
         {
           "query": "请计算：128×46+357 等于多少？",
@@ -3165,11 +3201,19 @@
       "examples": [
         {
           "query": "Y冷冻设备公司在广告和品牌推广上的投入策略是什么？",
-          "expected_answer": "在宣传策略上保持在专业媒体的投入，持续塑造专业、可靠的品牌形象",
+          "expected_answer": "Y公司不重视渠道与推广投入，主要依靠营销人员人脉获客；品牌上试图通过提升产品质量和外观来打造品牌（论文指出此方式难以真正有效塑造品牌）。论文建议的推广方式是社交媒体内容营销（多平台媒体矩阵），而非竞争对手南通四方「保持在专业媒体的投入」。",
           "source_chunks": [
             {
               "type": "substring",
-              "text": "在宣传策略上保持在专业媒体的投入"
+              "text": "并不希望将资源投入在渠道和推广上"
+            },
+            {
+              "type": "substring",
+              "text": "通过提升产品质量和外观，提高企业知名度的方式来打造品牌"
+            },
+            {
+              "type": "substring",
+              "text": "发布客户感兴趣的内容而不仅限于自身的宣传"
             }
           ],
           "expected_citations": [
@@ -3185,10 +3229,12 @@
             "min_web": 0
           },
           "expected_tool": "dense_retrieval",
-          "description": "dense：问法（广告/品牌推广）与原文（宣传策略/专业媒体）无关键词重叠，需语义检索",
+          "description": "dense：问法（广告/品牌推广）与原文（渠道和推广/人脉/社交媒体）无关键词重叠，需语义检索；「专业媒体投入」是竞争对手做法，归于Y公司属张冠李戴",
           "expected_should_answer": true,
+          "rubric_notes": "「保持在专业媒体的投入」描述的是竞争对手南通四方，归于Y公司应判 incorrect。正确要点：Y公司不重视渠道/推广投入（靠人脉获客）；品牌建设依赖产品质量与外观（论文认为难以奏效）；论文建议社交媒体内容营销/媒体矩阵。三部分语义覆盖其二即可判 correct，全部覆盖为高分。",
           "must_include": [
-            "专业媒体"
+            "人脉",
+            "社交媒体"
           ]
         },
         {
@@ -3357,6 +3403,7 @@
           "expected_tool": "doc_profile",
           "description": "metadata：doc_profile 元信息通路",
           "expected_should_answer": true,
+          "expect_no_retrieval": true,
           "must_include": [
             "预制菜"
           ]
@@ -3396,6 +3443,7 @@
           ],
           "description": "指代消解+会话记忆：'那2020年'承接上轮营收话题，'少了多少'需两轮数字比较",
           "expected_should_answer": true,
+          "expect_no_retrieval": true,
           "must_include": [
             "370万",
             "180万"
@@ -3430,6 +3478,7 @@
           ],
           "description": "指代消解：'这个架构'承接上轮的 4A 架构",
           "expected_should_answer": true,
+          "expect_no_retrieval": true,
           "must_include": [
             "业务架构",
             "数据架构"
@@ -3456,6 +3505,7 @@
           ],
           "description": "会话内记忆：事实由 prior_turns 注入，无需检索即可复述",
           "expected_should_answer": true,
+          "expect_no_retrieval": true,
           "must_include": [
             "先看目录"
           ]
@@ -3681,6 +3731,134 @@
           "must_include": [
             "教培",
             "咨询"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "option_d_pure_chat_smoke",
+      "description": "G-15: pure chat (no capabilities) — AnswerOnly; no retrieval evidence expected.",
+      "examples": [
+        {
+          "query": "用一句话解释什么是复利？",
+          "expected_answer": "复利是利息再计息的增长方式",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "description": "pure chat smoke — capabilities empty",
+          "expected_should_answer": true,
+          "must_include": [],
+          "capabilities": []
+        }
+      ]
+    },
+    {
+      "name": "option_d_search_only",
+      "description": "G-15: search capability only (no workspace rag).",
+      "examples": [
+        {
+          "query": "2024年全球AI芯片市场的主要趋势是什么？",
+          "expected_answer": "公开网页检索可答的市场趋势概述",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "search",
+          "description": "search-only capability",
+          "expected_should_answer": true,
+          "requires_network": true,
+          "must_include": [],
+          "capabilities": [
+            "search"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "option_d_dual_source",
+      "description": "G-15: rag+search dual capabilities — answer-dual-source path (materials depend on retrieval).",
+      "examples": [
+        {
+          "query": "结合论文与公开资料，Y冷冻设备公司的竞争优势有哪些？",
+          "expected_answer": "结合文档与网页双侧陈述",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "Y冷冻设备"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "dual caps rag+search",
+          "expected_should_answer": true,
+          "must_include": [],
+          "capabilities": [
+            "rag",
+            "search"
+          ],
+          "requires_network": true
+        }
+      ]
+    },
+    {
+      "name": "option_d_utility_tools",
+      "description": "G-17 Option D AnswerOnly 效用工具：calculator 硬门（expected_tool+must_include）；weather 需外网。capabilities=[] 纯聊天。",
+      "examples": [
+        {
+          "query": "请计算：1+2*3 等于多少？",
+          "expected_answer": "7",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "capabilities": [],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "expected_tool": "calculator",
+          "description": "G-17 calculator classic 1+2*3",
+          "expected_should_answer": true,
+          "must_include": [
+            "7"
+          ]
+        },
+        {
+          "query": "请计算：128×46+357 等于多少？",
+          "expected_answer": "6245",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "capabilities": [],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "expected_tool": "calculator",
+          "description": "G-17 calculator golden twin of chat_builtin_tools",
+          "expected_should_answer": true,
+          "must_include": [
+            "6245"
+          ]
+        },
+        {
+          "query": "计算 (10+5)*2 是多少？",
+          "expected_answer": "30",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "capabilities": [],
+          "doc_scope_hint": "empty",
+          "expect_citations": {
+            "min_doc": 0,
+            "min_web": 0
+          },
+          "expected_tool": "calculator",
+          "description": "G-17 calculator parentheses",
+          "expected_should_answer": true,
+          "must_include": [
+            "30"
           ]
         }
       ]

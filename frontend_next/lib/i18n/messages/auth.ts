@@ -5,10 +5,6 @@ export const authMessages = {
     zh: "确认密码",
     en: "Confirm password",
   },
-  authContinueToLogin: {
-    zh: "去登录",
-    en: "Go to sign in",
-  },
   authCreateAccount: {
     zh: "创建账号",
     en: "Create account",
@@ -200,10 +196,6 @@ export const authMessages = {
   authSignUp: {
     zh: "去注册",
     en: "Sign up",
-  },
-  authVerificationRequired: {
-    zh: "请先完成验证码验证。",
-    en: "Complete verification first.",
   },
   authErrorAccountNotRegistered: {
     zh: "此账号还未注册，请先注册。",

@@ -8,6 +8,8 @@ import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import styles from "./settings-security-panel.module.css";
+import shared from "./settings-ui-shared.module.css";
 
 export function SecurityPanel() {
   const router = useRouter();
@@ -59,17 +61,17 @@ export function SecurityPanel() {
   }
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
-      <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
-        <div style={{ display: "grid", gap: "0.35rem" }}>
-          <h2 style={{ margin: 0 }}>
+    <section className={shared.section}>
+      <section className={`app-inline-surface ${shared.section}`}>
+        <div className={shared.headerText}>
+          <h2 className={shared.flushTitle}>
             {formatUiMessage(locale, "settings.security.sectionTitle")}
           </h2>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+          <p className={shared.mutedText}>
             {formatUiMessage(locale, "settings.security.sectionSubtitle")}
           </p>
         </div>
-        <form style={{ display: "grid", gap: "1rem" }} onSubmit={handleSubmit}>
+        <form className={shared.formGrid} onSubmit={handleSubmit}>
           <div>
             <label className="app-form-label" htmlFor="settings-current-password">
               {formatUiMessage(locale, "settings.security.currentPasswordLabel")}
@@ -110,18 +112,18 @@ export function SecurityPanel() {
         </form>
       </section>
 
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <h3 style={{ margin: 0 }}>
+      <section className={`app-inline-surface ${styles.sessionSection}`}>
+        <h3 className={shared.flushTitle}>
           {formatUiMessage(locale, "settings.security.currentSessionTitle")}
         </h3>
-        <div className="app-inline-row" style={{ marginBottom: 0 }}>
+        <div className={`app-inline-row ${shared.summaryRow}`}>
           <span>{formatUiMessage(locale, "settings.security.signedInAs")}</span>
           <strong>
             {user?.email ??
               formatUiMessage(locale, "settings.security.unknownAccount")}
           </strong>
         </div>
-        <div className="app-inline-row" style={{ marginBottom: 0 }}>
+        <div className={`app-inline-row ${shared.summaryRow}`}>
           <span>{formatUiMessage(locale, "settings.appearance.currentLanguage")}</span>
           <strong>
             {locale === "zh-CN"
@@ -129,7 +131,7 @@ export function SecurityPanel() {
               : formatUiMessage(locale, "workspaceLanguageEnglish")}
           </strong>
         </div>
-        <div className="app-inline-row" style={{ marginBottom: 0 }}>
+        <div className={`app-inline-row ${shared.summaryRow}`}>
           <span>{formatUiMessage(locale, "settings.appearance.currentTheme")}</span>
           <strong>
             {{

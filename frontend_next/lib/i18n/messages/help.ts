@@ -114,8 +114,8 @@ export const helpMessages = {
     en: "The history list supports filtering, and opening a thread restores its messages.",
   },
   helpItemWorkspace3: {
-    zh: "顶栏现在提供合并后的传播入口、API Access 和新建工作区快捷入口。",
-    en: "The top bar now provides the merged propagation entry, API Access, and New Workspace shortcuts.",
+    zh: "顶栏现在提供分享、API Access 和新建工作区快捷入口，账户相关设置收进右侧账户菜单。",
+    en: "The top bar now provides Share, API Access, and New Workspace shortcuts; account settings live in the account menu on the right.",
   },
   helpSectionAccountTitle: {
     zh: "1. 账户与认证",

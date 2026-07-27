@@ -1,0 +1,56 @@
+/* Billing / plan entry (.plan-entry*) — extracted from app/globals.css (mechanical split, rules unchanged).
+ * globals.css L638-684. Originally between two .dashboard-header-settings
+ * rules; those selectors are disjoint, order-independent. Must stay AFTER
+ * _app-shared.css: .plan-entry-default/-compact override min-height/
+ * padding/border-radius of .app-button-primary on the same element. */
+
+.plan-entry {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.plan-entry-default {
+  min-height: calc(var(--font-size-shell-title) * 2.1);
+  padding: 0 0.9rem;
+  border-radius: var(--radius-button);
+}
+
+.plan-entry-compact {
+  min-height: calc(var(--font-size-shell-title) * 2.1);
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--radius-button);
+  font-size: var(--font-size-control);
+}
+
+.plan-entry-badge {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--accent) / 0.18);
+  border-radius: var(--radius-button);
+  background: hsl(var(--accent-soft));
+  color: hsl(var(--accent-text));
+  font: inherit;
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-meta);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.plan-entry-badge.plan-entry-default {
+  min-height: calc(var(--font-size-shell-title) * 2.1);
+  padding: 0 0.9rem;
+}
+
+.plan-entry-badge.plan-entry-compact {
+  min-height: 1.9rem;
+  padding: 0.2rem 0.7rem;
+}
+
+.plan-entry-badge:hover {
+  border-color: hsl(var(--accent) / 0.35);
+}
+

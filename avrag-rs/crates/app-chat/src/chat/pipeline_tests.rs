@@ -19,9 +19,7 @@ mod tests {
     use tokio::sync::RwLock;
     use uuid::Uuid;
 
-    use crate::chat::pipeline_steps::{
-        agent_kind_for, dispatch_mode, inject_assembled_metadata,
-    };
+    use crate::chat::pipeline_steps::{dispatch_mode, inject_assembled_metadata};
     use crate::{
         assemble_mode, resolve_capabilities, CapabilitySet, ChatContext, LlmContext,
         OrchestratorContext,
@@ -238,33 +236,31 @@ mod tests {
             .await
             .unwrap();
 
+        // Product path: rag capability always enters orchestrator (worker + chat exit).
         assert_eq!(execution.mode, "rag");
         assert_eq!(execution.response.session_id, session.id);
         assert!(execution.apply_output_guard);
-        assert_eq!(execution.response.answer, "test");
         assert_eq!(execution.response.agent_type, "rag");
+        // The mock agent echoes its query; the chat exit's query is the
+        // synthesize context, which always ends with the user-question block.
+        assert!(
+            execution.response.answer.contains("### User question"),
+            "answer must come from the chat exit synthesize query: {}",
+            execution.response.answer
+        );
         let caps = execution
             .assistant_turn_metadata
             .as_ref()
             .and_then(|m| m.get("capabilities"))
             .cloned();
         assert_eq!(caps, Some(serde_json::json!(["rag"])));
-    }
-
-    #[test]
-    fn agent_kind_for_dual_is_rag() {
-        let dual = CapabilitySet {
-            rag: true,
-            search: true,
-        };
-        assert_eq!(agent_kind_for(dual), crate::agents::AgentKind::Rag);
-        assert_eq!(agent_kind_for(CapabilitySet::default()), crate::agents::AgentKind::Chat);
         assert_eq!(
-            agent_kind_for(CapabilitySet {
-                rag: false,
-                search: true
-            }),
-            crate::agents::AgentKind::Search
+            execution
+                .assistant_turn_metadata
+                .as_ref()
+                .and_then(|m| m.get("orchestrator"))
+                .and_then(|v| v.as_bool()),
+            Some(true)
         );
     }
 
@@ -309,7 +305,7 @@ mod tests {
             .get("system_prompt_parts")
             .and_then(|v| v.as_array())
             .expect("system_prompt_parts");
-        assert_eq!(parts.len(), 3);
+        assert_eq!(parts.len(), 2);
 
         let cfg_val = req
             .metadata
@@ -320,7 +316,11 @@ mod tests {
             serde_json::from_value(cfg_val).expect("deserialize ModeConfig");
         assert_eq!(cfg.id, "rag+search");
         assert!(cfg.tool_pool.iter().any(|t| t == "web_search"));
-        assert!(cfg.tool_pool.iter().any(|t| t == "user_context"));
+        assert!(
+            !cfg.tool_pool.iter().any(|t| t == "user_context"),
+            "capability assemble must not seed chat user_context: {:?}",
+            cfg.tool_pool
+        );
     }
 
     #[tokio::test]
@@ -369,6 +369,8 @@ mod tests {
             .cloned();
         assert_eq!(caps_meta, Some(serde_json::json!(["rag", "search"])));
 
+        // Last agent invocation is the chat exit (Product Agent Answer phase),
+        // not the removed flat assemble path.
         let captured = capture.lock().unwrap().take().expect("agent ran");
         assert!(
             captured.metadata.contains_key("assembled_mode_config"),
@@ -378,16 +380,26 @@ mod tests {
             captured.metadata.contains_key("system_prompt_parts"),
             "system_prompt_parts must reach agent"
         );
-        let cfg: agent_loop::r#loop::config::ModeConfig = serde_json::from_value(
-            captured
-                .metadata
-                .get("assembled_mode_config")
-                .cloned()
-                .unwrap(),
-        )
-        .expect("ModeConfig");
-        assert_eq!(cfg.id, "rag+search");
-        assert_eq!(captured.kind, crate::agents::AgentKind::Rag);
+        let parts: Vec<String> = captured
+            .metadata
+            .get("system_prompt_parts")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            parts.iter().any(|p| p.contains("product-answer-base.md")),
+            "Answer phase product-answer-base expected, got {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("chat-base.md")),
+            "P1-2: full chat-base must not load in Answer pack, got {parts:?}"
+        );
+        assert_eq!(captured.kind, crate::agents::AgentKind::Chat);
+        assert_eq!(execution.mode, "rag+search");
     }
 
     #[tokio::test]
@@ -403,15 +415,329 @@ mod tests {
 
         assert_eq!(execution.mode, "search");
         assert_eq!(execution.response.agent_type, "search");
-        // Search path applies output guard (not clarify).
+        // Search (orchestrated) applies output guard; no doc-scope clarify required.
         assert!(execution.apply_output_guard);
-        assert_eq!(execution.response.answer, "test");
+        assert!(!execution.response.answer.is_empty());
+        assert_eq!(
+            execution
+                .assistant_turn_metadata
+                .as_ref()
+                .and_then(|m| m.get("orchestrator"))
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
     }
 
     #[test]
     fn resolve_empty_capabilities_wins_over_rag_agent_type() {
         let caps = resolve_capabilities(Some(&[]), "rag").unwrap();
         assert!(caps.is_pure_chat());
-        assert_eq!(agent_kind_for(caps), crate::agents::AgentKind::Chat);
+    }
+
+    // -----------------------------------------------------------------------
+    // PR-D4: Option D phase matrix + eval bridge + error envelope tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn answer_only_never_loads_orchestrator_prompts() {
+        let capture = Arc::new(Mutex::new(None));
+        let agent = MetadataCaptureAgent {
+            last: capture.clone(),
+        };
+        let state = test_chat_context(None);
+        let state = ChatContext {
+            orchestrator: OrchestratorContext::new(
+                Some(Arc::new(UnifiedAgentService::new(Box::new(agent)))),
+                None,
+                Arc::new(GuardPipeline::new()),
+                None,
+            ),
+            ..state
+        };
+        let request = request_with_mode("chat", vec![]);
+        let session = session_for("chat");
+
+        let execution = dispatch_mode(&state, &request, &session, None)
+            .await
+            .unwrap();
+
+        assert_eq!(execution.mode, "chat");
+        let captured = capture.lock().unwrap().take().expect("agent ran");
+        let parts: Vec<String> = captured
+            .metadata
+            .get("system_prompt_parts")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Pure chat: no orchestrator-base, no capability-*, no answer-* blocks.
+        assert!(
+            !parts.iter().any(|p| p.contains("orchestrator-base")),
+            "orchestrator-base must not load for pure chat: {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("capability-")),
+            "capability-* must not load for pure chat: {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("answer-")),
+            "answer-* blocks must not load for pure chat: {parts:?}"
+        );
+        assert!(
+            parts.iter().any(|p| p.contains("chat-base.md")),
+            "chat-base must load for pure chat: {parts:?}"
+        );
+        // No evidence finalize for pure chat.
+        assert!(execution.response.citations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn dispatch_phase_loads_orchestrator_and_capability_prompts() {
+        let capture = Arc::new(Mutex::new(None));
+        let agent = MetadataCaptureAgent {
+            last: capture.clone(),
+        };
+        let workspace_id = new_id();
+        let notebook = Workspace {
+            id: workspace_id.clone(),
+            owner_user_id: test_auth().user_id().to_string(),
+            owner_id: Uuid::nil().to_string(),
+            name: "Test Workspace".to_string(),
+            title: "Test Workspace".to_string(),
+            description: String::new(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            document_count: 0,
+            status_summary: Default::default(),
+            shared: false,
+        };
+        let mut state = test_chat_context(Some(notebook));
+        state.orchestrator = OrchestratorContext::new(
+            Some(Arc::new(UnifiedAgentService::new(Box::new(agent)))),
+            None,
+            Arc::new(GuardPipeline::new()),
+            None,
+        );
+        let mut request = request_with_mode("chat", vec![workspace_id.clone()]);
+        request.capabilities = Some(vec!["rag".into()]);
+        let mut session = session_for("chat");
+        session.workspace_id = workspace_id;
+
+        let execution = dispatch_mode(&state, &request, &session, None)
+            .await
+            .unwrap();
+
+        assert_eq!(execution.mode, "rag");
+        assert_eq!(
+            execution
+                .assistant_turn_metadata
+                .as_ref()
+                .and_then(|m| m.get("orchestrator"))
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        // Workers run; last agent invocation is the chat exit (Answer phase).
+        let captured = capture.lock().unwrap().take().expect("agent ran");
+        let parts: Vec<String> = captured
+            .metadata
+            .get("system_prompt_parts")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Answer phase: product-answer-base (P1-2: no full chat-base, no orchestrator-base).
+        assert!(
+            parts.iter().any(|p| p.contains("product-answer-base.md")),
+            "product-answer-base must load for Answer phase: {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("chat-base.md")),
+            "P1-2: full chat-base must not load in Answer pack: {parts:?}"
+        );
+        assert!(
+            !parts.iter().any(|p| p.contains("orchestrator-base")),
+            "orchestrator-base must NOT load for Answer phase: {parts:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn eval_bridge_store_becomes_retrieval_tool_results() {
+        use crate::orchestrator::Channel;
+        use crate::orchestrator::EvidenceStore;
+        use crate::orchestrator::finalize_answer_evidence;
+
+        let mut store = EvidenceStore::default();
+        let tr = contracts::ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1".into(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "chunks": [{
+                    "chunk_id": "chunk-1",
+                    "doc_id": "doc-1",
+                    "text": "转型报告提到三年规划",
+                    "score": 0.9
+                }]
+            })),
+            trace: None,
+        };
+        store.insert_from_tool_results(Channel::Rag, &[tr]);
+
+        let mut result = AgentRunResult::default();
+        result.answer = "报告提到三年规划[[E1]]".into();
+        finalize_answer_evidence(&mut result, &store);
+
+        // E-marker rewritten to product cite.
+        assert!(result.answer.contains("[[cite:chunk-1]]"));
+        assert!(!result.answer.contains("[[E1]]"));
+        // Store bridged into tool_results for eval.
+        assert!(
+            result
+                .tool_results
+                .iter()
+                .any(|tr| tr.tool == "dense_retrieval"),
+            "store must bridge to retrieval tool_results"
+        );
+        assert_eq!(result.citations.len(), 1);
+    }
+
+    /// Function-level bridge shape for web evidence. Call sites gate finalize
+    /// by exit mode — direct skips it entirely (brain::finish_answer_direct_mode_skips_evidence).
+    #[tokio::test]
+    async fn finalize_bridges_web_store_for_eval() {
+        use crate::orchestrator::Channel;
+        use crate::orchestrator::EvidenceStore;
+        use crate::orchestrator::finalize_answer_evidence;
+
+        let mut store = EvidenceStore::default();
+        let tr = contracts::ToolResult {
+            tool: "web_search".into(),
+            version: "1".into(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "results": [{
+                    "url": "https://example.com",
+                    "title": "Example",
+                    "snippet": "best practice"
+                }]
+            })),
+            trace: None,
+        };
+        store.insert_from_tool_results(Channel::Search, &[tr]);
+
+        let mut result = AgentRunResult::default();
+        result.answer = "直接回答，无引用".into();
+        finalize_answer_evidence(&mut result, &store);
+
+        // No markers to rewrite, but the store bridges when finalize runs.
+        assert!(
+            result
+                .tool_results
+                .iter()
+                .any(|tr| tr.tool == "web_search"),
+            "finalize must bridge web store to tool_results"
+        );
+        assert!(result.citations.is_empty());
+    }
+
+    /// PR-D4: an internal agent error must surface as an error (fail-fast),
+    /// never swallowed or rewritten into a user-facing answer / guide.
+    #[tokio::test]
+    async fn agent_internal_error_propagates_fail_fast() {
+        struct FailingAgent;
+
+        #[async_trait]
+        impl Agent for FailingAgent {
+            async fn run(
+                &self,
+                _request: AgentRequest,
+                _sink: &dyn agent_loop::events::AgentEventSink,
+            ) -> Result<AgentRunResult, AppError> {
+                Err(AppError::internal("boom: llm transport down"))
+            }
+        }
+
+        let state = test_chat_context(None);
+        let state = ChatContext {
+            orchestrator: OrchestratorContext::new(
+                Some(Arc::new(UnifiedAgentService::new(Box::new(FailingAgent)))),
+                None,
+                Arc::new(GuardPipeline::new()),
+                None,
+            ),
+            ..state
+        };
+        let request = request_with_mode("chat", vec![]);
+        let session = session_for("chat");
+
+        let err = dispatch_mode(&state, &request, &session, None)
+            .await
+            .expect_err("internal agent error must propagate, not be answered");
+        assert!(
+            err.to_string().contains("boom: llm transport down"),
+            "original error must not be wrapped away: {err}"
+        );
+    }
+
+    /// G-09: orchestrated (rag) path also fail-fasts on agent internal error.
+    #[tokio::test]
+    async fn orchestrated_agent_internal_error_propagates_fail_fast() {
+        struct FailingAgent;
+
+        #[async_trait]
+        impl Agent for FailingAgent {
+            async fn run(
+                &self,
+                _request: AgentRequest,
+                _sink: &dyn agent_loop::events::AgentEventSink,
+            ) -> Result<AgentRunResult, AppError> {
+                Err(AppError::internal("boom: orchestrated llm down"))
+            }
+        }
+
+        let workspace_id = new_id();
+        let notebook = Workspace {
+            id: workspace_id.clone(),
+            owner_user_id: test_auth().user_id().to_string(),
+            owner_id: Uuid::nil().to_string(),
+            name: "Test Workspace".to_string(),
+            title: "Test Workspace".to_string(),
+            description: String::new(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            document_count: 0,
+            status_summary: Default::default(),
+            shared: false,
+        };
+        let mut state = test_chat_context(Some(notebook));
+        state.orchestrator = OrchestratorContext::new(
+            Some(Arc::new(UnifiedAgentService::new(Box::new(FailingAgent)))),
+            None,
+            Arc::new(GuardPipeline::new()),
+            None,
+        );
+        let mut request = request_with_mode("chat", vec![workspace_id.clone()]);
+        request.capabilities = Some(vec!["rag".into()]);
+        let mut session = session_for("chat");
+        session.workspace_id = workspace_id;
+
+        let err = dispatch_mode(&state, &request, &session, None)
+            .await
+            .expect_err("orchestrated internal error must not become a soft answer");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("boom: orchestrated llm down") || msg.contains("orchestrated llm"),
+            "original error must surface: {msg}"
+        );
+        assert!(
+            !msg.contains("agent_operation_guide"),
+            "error path must not rewrite into operation guide: {msg}"
+        );
     }
 }

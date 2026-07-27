@@ -29,7 +29,8 @@ type WorkspaceHistoryPaneProps = {
   onSelectSession: (sessionId: string) => void;
   onTogglePinSession: (session: WorkspaceSession) => void;
   onRenameSession: (session: WorkspaceSession) => void;
-  onDeleteSession: (session: WorkspaceSession) => void;
+  /** Resolves to `true` when the delete succeeded; `false` keeps the dialog open with an inline error. */
+  onDeleteSession: (session: WorkspaceSession) => Promise<boolean>;
   onRequestClose?: () => void;
 };
 
@@ -54,19 +55,15 @@ export function WorkspaceHistoryPane({
   const [derivedSessionTitles, setDerivedSessionTitles] = useState<Record<string, string>>({});
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [deleteSessionTarget, setDeleteSessionTarget] = useState<WorkspaceSession | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const openMenuRef = useRef<HTMLDivElement | null>(null);
   const searchLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const titleLoadingSessionIdsRef = useRef<Set<string>>(new Set());
   const titleSyncAttemptedSessionIdsRef = useRef<Set<string>>(new Set());
   const sortedSessions = useMemo(() => sortWorkspaceSessions(sessions), [sessions]);
-  const visibleSessions = useMemo(
-    () =>
-      sortedSessions.filter((session) => {
-        const title = session.title?.trim() || derivedSessionTitles[session.id] || "";
-        return Boolean(title);
-      }),
-    [derivedSessionTitles, sortedSessions],
-  );
+  const visibleSessions = sortedSessions;
   const searchResults = useMemo<SessionSearchResult[]>(() => {
     const normalizedQuery = normalizeSearchText(searchQuery);
 
@@ -358,6 +355,30 @@ export function WorkspaceHistoryPane({
     };
   }, [auth.token, locale, searchDocuments, searchOpen, sortedSessions]);
 
+  function closeDeleteDialog() {
+    setDeleteSessionTarget(null);
+    setDeleteError("");
+    setDeleteSubmitting(false);
+  }
+
+  function handleConfirmDeleteSession() {
+    if (!deleteSessionTarget || deleteSubmitting) {
+      return;
+    }
+
+    setDeleteSubmitting(true);
+    setDeleteError("");
+
+    void Promise.resolve(onDeleteSession(deleteSessionTarget)).then((ok) => {
+      setDeleteSubmitting(false);
+      if (ok) {
+        setDeleteSessionTarget(null);
+        return;
+      }
+      setDeleteError(formatUiMessage(locale, "workspaceDeleteSessionFailed"));
+    });
+  }
+
   function closeMenu() {
     setOpenMenuSessionId(null);
   }
@@ -408,9 +429,9 @@ export function WorkspaceHistoryPane({
   return (
     <section className={styles.railPanel} aria-label={formatUiMessage(locale, "workspaceHistoryLabel")}>
       <div className={styles.railHeader}>
-        <button className={styles.railPrimaryButton} type="button" onClick={handleNewThread}>
+        <button className={`${styles.railPrimaryButton} app-button-create`} type="button" onClick={handleNewThread}>
           <svg aria-hidden="true" className={styles.railActionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="2.2" />
+            <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
           </svg>
           {formatUiMessage(locale, "workspaceNewThread")}
         </button>
@@ -431,7 +452,10 @@ export function WorkspaceHistoryPane({
       <div className={styles.historyList}>
         {visibleSessions.length > 0 ? (
           visibleSessions.map((session) => {
-            const title = session.title?.trim() || derivedSessionTitles[session.id] || "";
+            const title =
+              session.title?.trim() ||
+              derivedSessionTitles[session.id] ||
+              formatUiMessage(locale, "workspaceUntitledSession");
             const menuOpen = session.id === openMenuSessionId;
             const itemClassName = [
               session.id === activeSessionId ? styles.historyItemActive : styles.historyItem,
@@ -505,7 +529,8 @@ export function WorkspaceHistoryPane({
                         type="button"
                         onClick={() => {
                           closeMenu();
-                          onDeleteSession(session);
+                          setDeleteError("");
+                          setDeleteSessionTarget(session);
                         }}
                       >
                         {formatUiMessage(locale, "workspaceDeleteSessionAction", { title })}
@@ -584,7 +609,7 @@ export function WorkspaceHistoryPane({
                     {searchResults.map((result) => (
                       <li key={result.id} className="dashboard-search-item">
                         <button
-                          aria-label={result.title}
+                          aria-label={result.title.trim() ? result.title : formatUiMessage(locale, "workspaceUntitledSession")}
                           className={`dashboard-search-link ${styles.searchResultButton}`}
                           type="button"
                           onClick={() => handleSearchSelectSession(result.id)}
@@ -602,6 +627,65 @@ export function WorkspaceHistoryPane({
               )}
             </div>
           </section>
+        </div>
+      ) : null}
+
+      {deleteSessionTarget ? (
+        <div
+          className={styles.modalBackdrop}
+          onClick={() => {
+            closeDeleteDialog();
+          }}
+        >
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-label={formatUiMessage(locale, "workspaceDeleteSessionDialogTitle")}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeDeleteDialog();
+              }
+            }}
+          >
+            <div className={styles.dialogForm}>
+              <p className={styles.dialogDescription}>
+                {formatUiMessage(locale, "workspaceDeleteSessionDialogBody", {
+                  title:
+                    deleteSessionTarget.title?.trim() ||
+                    derivedSessionTitles[deleteSessionTarget.id] ||
+                    formatUiMessage(locale, "workspaceUntitledSession"),
+                })}
+              </p>
+              {deleteError ? (
+                <p className="app-notice-banner" role="alert">
+                  {deleteError}
+                </p>
+              ) : null}
+              <div className={styles.dialogActions}>
+                <button
+                  autoFocus
+                  className={styles.secondaryButton}
+                  type="button"
+                  onClick={() => {
+                    closeDeleteDialog();
+                  }}
+                >
+                  {formatUiMessage(locale, "commonCancel")}
+                </button>
+                <button
+                  className={styles.destructiveButton}
+                  disabled={deleteSubmitting}
+                  type="button"
+                  onClick={handleConfirmDeleteSession}
+                >
+                  {formatUiMessage(locale, "workspaceDeleteSessionAction")}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

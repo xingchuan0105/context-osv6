@@ -5,6 +5,7 @@ import type { BillingPlan } from "../../lib/billing/api";
 import { formatCompactToken } from "../../lib/billing/format";
 import { getPlanMarginMultiplier, getPlanRollingLimits } from "../../lib/billing/planLimits";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiMessageKey } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
 
 export type PricingCardsProps = {
@@ -16,13 +17,23 @@ export type PricingCardsProps = {
 };
 
 export function PricingCards({ plans, highlightTier, locale, onSelect, compact = false }: PricingCardsProps) {
+  const descriptionKeyByPlan: Record<string, UiMessageKey> = {
+    free: "pricingPlanFreeDescription",
+    plus: "pricingPlanPlusDescription",
+    pro: "pricingPlanProDescription",
+  };
   return (
     <div className={`${styles.grid} ${compact ? styles.compactGrid : ""}`}>
       {plans.map((plan) => {
         const isHighlight = plan.plan_id === highlightTier;
         const isCurrent = plan.current;
+        const isPro = plan.plan_id === "pro";
         const limits = getPlanRollingLimits(plan.plan_id);
         const margin = getPlanMarginMultiplier(plan.plan_id);
+        const descriptionKey = descriptionKeyByPlan[plan.plan_id];
+        const description = descriptionKey
+          ? formatUiMessage(locale, descriptionKey)
+          : plan.description;
         const buttonLabel = isCurrent
           ? formatUiMessage(locale, "currentPlan")
           : plan.plan_id === "free"
@@ -31,10 +42,12 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
         return (
           <div
             key={plan.plan_id}
-            className={`${styles.card} ${isHighlight ? styles.highlight : ""} ${compact ? styles.compact : ""}`}
+            className={`${styles.card} ${isHighlight ? styles.highlight : ""} ${isPro && !isHighlight ? styles.pro : ""} ${compact ? styles.compact : ""}`}
           >
             {isHighlight && (
-              <div className={styles.badge}>{formatUiMessage(locale, "pricingTierPlusBadge")}</div>
+              <div className={`${styles.badge} ${isPro ? styles.badgePro : ""}`}>
+                {formatUiMessage(locale, "pricingTierPlusBadge")}
+              </div>
             )}
             <h3 className={styles.name}>{plan.name}</h3>
             <div className={styles.prices}>
@@ -56,7 +69,7 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
                 <li>{formatUiMessage(locale, "pricingMarginLabel", { m: String(margin) })}</li>
               </ul>
             )}
-            <div className={styles.description}>{plan.description}</div>
+            <div className={styles.description}>{description}</div>
             {!compact && (
               <div className={styles.interval}>{formatUiMessage(locale, "pricingMonthlyInterval")}</div>
             )}

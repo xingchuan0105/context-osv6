@@ -1,0 +1,58 @@
+.container {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.filtersGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metaRow {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: var(--font-size-control);
+  color: hsl(var(--muted-foreground));
+}
+
+.metricsGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  padding: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableHead {
+  background: hsl(var(--surface-muted));
+}
+
+.tableHeaderCell {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.tableRow {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.tableCell {
+  padding: 1rem;
+}

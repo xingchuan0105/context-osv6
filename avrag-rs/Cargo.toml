@@ -34,6 +34,7 @@ members = [
   "crates/storage-local",
   "crates/storage-pg",
   "crates/storage-milvus",
+  "crates/storage-pgvector",
   "crates/telemetry",
   "crates/transport-http",
   "crates/e2e-analyzer",

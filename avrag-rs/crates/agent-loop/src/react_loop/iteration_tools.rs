@@ -71,27 +71,51 @@ impl ReActLoop {
                 )
                 .await;
             }
-            let result = self
-                .dispatch_tool_call(
+            // Hard gate (2026-07-20): codegen SDK method names must not be
+            // dispatched as native tools — return a corrective Error result so
+            // the model retries with `<code language="python">await client.…`.
+            let result = if super::iteration_codegen::is_codegen_sdk_method_as_native_tool(
+                &call.tool,
+            ) {
+                tracing::warn!(
+                    tool = %call.tool,
+                    iteration,
+                    "rejecting codegen SDK method issued as native tool_call"
+                );
+                super::iteration_codegen::reject_codegen_method_as_native_tool(&call.tool)
+            } else {
+                self.dispatch_tool_call(
                     call,
                     auth,
                     &request.doc_scope,
                     request.session_id.as_deref(),
                     request,
                 )
-                .await;
+                .await
+            };
             let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;
 
             if let Some((kind, product)) = crate::progress::native_tool_progress(&call.tool) {
-                let q = crate::progress::query_from_tool_args(&call.tool, &call.args);
-                let hits = crate::progress::hits_from_tool_data(result.data.as_ref());
-                // Search: empty doc labels (no domain chips per product decision).
-                let docs: Vec<String> = Vec::new();
-                crate::progress::emit_work_fact(
-                    sink,
-                    crate::progress::WorkFact::retrieval_finished(kind, product, &q, hits, &docs),
-                )
-                .await;
+                // Only Ok results resolve the "running" step: a failed call is
+                // not an empty result (2026-07-23 — fast tool errors were
+                // mislabeled as 未找到相关网页 in the client progress card).
+                if result.status == contracts::ToolStatus::Ok {
+                    let q = crate::progress::query_from_tool_args(&call.tool, &call.args);
+                    let hits = crate::progress::hits_from_tool_data(result.data.as_ref());
+                    // fetch_url empty (page blocked / unreadable) is operator
+                    // noise, not a user state — suppress it (2026-07-23).
+                    // search_web.empty stays: 未检索到 is an honest user state.
+                    let suppress = kind == crate::progress::ProgressKind::FetchUrl && hits == 0;
+                    if !suppress {
+                        // Search: empty doc labels (no domain chips per product decision).
+                        let docs: Vec<String> = Vec::new();
+                        crate::progress::emit_work_fact(
+                            sink,
+                            crate::progress::WorkFact::retrieval_finished(kind, product, &q, hits, &docs),
+                        )
+                        .await;
+                    }
+                }
             }
 
             let _ = sink

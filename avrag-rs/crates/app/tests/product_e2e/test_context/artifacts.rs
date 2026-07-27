@@ -361,6 +361,36 @@ impl TestContext {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // Sub-agent white-box (tools + thinking) lives under mode_debug.general.workers.
+        let workers = resp
+            .mode_debug
+            .as_ref()
+            .and_then(|m| m.general.as_ref())
+            .and_then(|g| g.get("workers"))
+            .cloned()
+            .unwrap_or(serde_json::json!([]));
+        let _ = std::fs::write(
+            out_dir.join("worker_observability.json"),
+            serde_json::to_string_pretty(&workers).unwrap_or_default(),
+        );
+        // Prefer sub-agent reasoning_summary when exit-level stream capture is empty.
+        if capture.summary.is_empty() {
+            if let Some(arr) = workers.as_array() {
+                let joined: String = arr
+                    .iter()
+                    .filter_map(|w| {
+                        w.get("reasoning_summary")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n---\n");
+                if !joined.is_empty() {
+                    let _ = std::fs::write(out_dir.join("worker_reasoning_summary.txt"), &joined);
+                }
+            }
+        }
+
         let metadata = serde_json::json!({
             "test_name": test_name,
             "run_id": self.artifact_run_id,
@@ -378,6 +408,17 @@ impl TestContext {
             "prompt_snapshot_count": capture.prompt_snapshots.len(),
             "reasoning_empty_warning": reasoning_empty_warning,
             "stream_error_with_done": stream_error_with_done,
+            "worker_count": workers.as_array().map(|a| a.len()).unwrap_or(0),
+            "worker_tools": workers.as_array().map(|arr| {
+                arr.iter().map(|w| serde_json::json!({
+                    "channel": w.get("channel"),
+                    "tools": w.get("tools").and_then(|t| t.as_array()).map(|tools| {
+                        tools.iter().filter_map(|x| x.get("tool").and_then(|n| n.as_str())).collect::<Vec<_>>()
+                    }),
+                    "has_reasoning": w.get("reasoning_summary").and_then(|s| s.as_str()).is_some_and(|s| !s.is_empty()),
+                    "thinking_steps": w.get("thinking").and_then(|t| t.as_array()).map(|a| a.len()).unwrap_or(0),
+                })).collect::<Vec<_>>()
+            }).unwrap_or_default(),
             "models": {
                 "agent_llm": std::env::var("AGENT_LLM_MODEL").unwrap_or_default(),
                 "embedding": std::env::var("EMBEDDING_MODEL").unwrap_or_default(),

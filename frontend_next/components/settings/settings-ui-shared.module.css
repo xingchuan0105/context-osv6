@@ -1,0 +1,30 @@
+/* Shared layout primitives for settings panels. Panels import this module
+   alongside their own: import shared from "./settings-ui-shared.module.css". */
+
+.section {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.headerText {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.flushTitle {
+  margin: 0;
+}
+
+.mutedText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.formGrid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.summaryRow {
+  margin-bottom: 0;
+}

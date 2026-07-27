@@ -56,6 +56,7 @@ pub fn default_brief(channel: Channel, user_query: &str) -> TaskBrief {
 }
 
 /// §7.3 partial notices from the dispatch ledger (Chat synthesize policy input).
+///
 /// R7: THE single partial-notice generator (previously double-fired with
 /// chat_exit's ChannelNote loop, now removed). Empty channels carry the hard
 /// zero-evidence instruction (P3): declare uncovered only — never fill from

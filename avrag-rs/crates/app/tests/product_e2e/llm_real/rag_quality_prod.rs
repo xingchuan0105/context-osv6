@@ -2258,3 +2258,123 @@ async fn triplet_benchmark_huawei_ipd() {
         "triplet pipeline produced no graph output — check TRIPLET_LLM_* / INGESTION_TRIPLET_ENABLED"
     );
 }
+
+/// One-shot: reindex cached docs with triplet on. Default targets: ipd + baiyao
+/// (thesis already reindexed). Override with `TRIPLET_REINDEX_DOCS=a.txt,b.txt`.
+/// Requires object files under `realistic_object_store` and `INGESTION_TRIPLET_ENABLED=1`.
+#[tokio::test]
+#[ignore = "ops: reindex cached docs with triplet; not part of nightly suite"]
+async fn reindex_three_cached_docs_with_triplet() {
+    super::require_nightly_suite();
+    unsafe {
+        std::env::set_var("E2E_PRESERVE_MILVUS_ON_DROP", "1");
+        std::env::set_var("INGESTION_TRIPLET_ENABLED", "1");
+        std::env::set_var("RAG_QUALITY_REALISTIC_TRIPLET_ENABLED", "1");
+    }
+
+    let cache_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/e2e_output/realistic_corpus_cache.json");
+    let cache: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&cache_path).expect("read corpus cache"),
+    )
+    .expect("parse corpus cache");
+    let docs = cache["docs"]
+        .as_object()
+        .expect("cache.docs object");
+    // Remaining after thesis completed; override via TRIPLET_REINDEX_DOCS.
+    let need: Vec<String> = std::env::var("TRIPLET_REINDEX_DOCS")
+        .ok()
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|x| !x.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .filter(|v: &Vec<String>| !v.is_empty())
+        .unwrap_or_else(|| {
+            vec![
+                "huawei_ipd_370_activities.txt".to_string(),
+                "baiyao_it_planning.txt".to_string(),
+            ]
+        });
+    let targets: Vec<(String, String)> = need
+        .iter()
+        .map(|name| {
+            let id = docs
+                .get(name.as_str())
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| panic!("cache missing {name}"))
+                .to_string();
+            (name.clone(), id)
+        })
+        .collect();
+
+    let infra = super::super::test_context::PersistentSmokeInfra {
+        postgres_url: super::super::setup::resolve_persistent_smoke_postgres_url().await,
+        object_store_path: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/e2e_output/realistic_object_store"),
+    };
+    let identity = Some((
+        crate::product_e2e::DEFAULT_TEST_ORG_ID.to_string(),
+        crate::product_e2e::DEFAULT_TEST_USER_ID.to_string(),
+    ));
+    let mut ctx = TestContext::new_with_real_llm_pdf_persistent_corpus(identity, &infra).await;
+    ctx.grant_e2e_unlimited_quota(crate::product_e2e::DEFAULT_TEST_USER_ID)
+        .await
+        .expect("grant e2e unlimited quota");
+
+    for (name, doc_id) in &targets {
+        eprintln!("[triplet-reindex] reindex {name} ({doc_id}) ...");
+        let resp = ctx
+            .reindex_document(doc_id)
+            .await
+            .unwrap_or_else(|e| panic!("reindex {name}: {e}"));
+        assert!(
+            (200..300).contains(&resp.status),
+            "reindex {name} status={} body={}",
+            resp.status,
+            resp.body_json
+        );
+        // Large docs + triplet LLM: allow up to 15 min each.
+        let status = ctx
+            .wait_for_ingestion(doc_id, Duration::from_secs(900))
+            .await
+            .unwrap_or_else(|e| panic!("wait reindex {name}: {e}"));
+        assert_eq!(
+            status,
+            DocumentStatus::Completed,
+            "reindex did not complete for {name}"
+        );
+        // Optional: RLS may hide parse_runs from bare sqlx connect — never fail the ops job.
+        match ctx.query_latest_backend_summary(doc_id).await {
+            Ok(summary) => {
+                let outputs = summary
+                    .get("outputs")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                let entities = outputs
+                    .get("entity_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let relations = outputs
+                    .get("relation_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let degrades = outputs
+                    .get("graph_degrade_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                eprintln!(
+                    "[triplet-reindex] {name} completed entities={entities} relations={relations} degrades={degrades}"
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "[triplet-reindex] {name} completed (backend_summary unavailable: {e})"
+                );
+            }
+        }
+    }
+    eprintln!("[triplet-reindex] done");
+}

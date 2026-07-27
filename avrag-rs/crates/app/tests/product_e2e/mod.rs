@@ -27,6 +27,7 @@ mod mock_rag_codegen;
 mod mock_rag_state;
 mod mock_search_server;
 mod mock_servers;
+mod mock_weather_server;
 mod persistent_runtime;
 mod pg_queries;
 mod test_context;

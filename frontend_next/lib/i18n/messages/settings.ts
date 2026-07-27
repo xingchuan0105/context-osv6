@@ -6,12 +6,12 @@ export const settingsMessages = {
     en: "Settings tabs",
   },
   "settings.tabs.profile": {
-    zh: "资料",
+    zh: "个人资料",
     en: "Profile",
   },
   "settings.tabs.billing": {
-    zh: "账单",
-    en: "Billing",
+    zh: "订阅与用量",
+    en: "Subscription & Usage",
   },
   "settings.tabs.appearance": {
     zh: "外观",
@@ -108,6 +108,10 @@ export const settingsMessages = {
   "settings.appearance.sectionSubtitle": {
     zh: "控制工作台和后台页面的明暗观感。",
     en: "Control how the workspace and admin surfaces look.",
+  },
+  "settings.appearance.localeSubtitle": {
+    zh: "选择界面显示语言。",
+    en: "Choose the interface display language.",
   },
   "settings.appearance.themeLabel": {
     zh: "主题",

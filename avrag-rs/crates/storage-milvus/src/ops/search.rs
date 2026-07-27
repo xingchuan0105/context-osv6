@@ -111,7 +111,7 @@ impl MilvusDataPlane {
 
     /// List all text (body) chunks for a doc scope with full content.
     ///
-    /// Backs the `doc_chunks` agent tool. Uses the same scalar query as
+    /// Backs host `doc_scan` (sandbox `client.doc_scan`). Uses the same scalar query as
     /// `count_text_chunks` but pulls `TEXT_OUTPUT_FIELDS` (incl. `text`) so the
     /// codegen sandbox can run arbitrary traversal/aggregate operators over the
     /// full chunk set. Empty doc_ids short-circuits to an empty list. The

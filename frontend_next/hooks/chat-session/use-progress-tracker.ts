@@ -4,7 +4,6 @@ import { useCallback, useRef, useState } from "react";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import type { ChatEvent } from "../../lib/contracts";
 import { formatUiMessage } from "../../lib/i18n/messages";
-import { getInitialProgressEntry } from "./helpers";
 import { localizeProgressActivity } from "./progress-i18n";
 import type { ProgressEntry, UiProgressSnapshot } from "./types";
 
@@ -41,8 +40,10 @@ export function useProgressTracker(locale: "zh-CN" | "en") {
     (m: WorkspaceChatMode) => {
       const now = Date.now();
       modeRef.current = m;
-      const initial = getInitialProgressEntry(locale, m);
-      const seed: ProgressEntry[] = [{ ...initial, startedAtMs: now }];
+      // 2026-07-23 product direction: no placeholder step — the single-line
+      // indicator starts empty and the first real work fact (turn-start
+      // `understand`, ~0.5s in) drives it.
+      const seed: ProgressEntry[] = [];
       activitiesRef.current = seed;
       startedAtMsRef.current = now;
       endedAtMsRef.current = null;
@@ -51,7 +52,7 @@ export function useProgressTracker(locale: "zh-CN" | "en") {
       setStartedAtMs(now);
       setEndedAtMs(null);
       setActivities(seed);
-      // Level-1 card: default expanded. Level-2 sections default collapsed in UI.
+      // Level-1 card removed: single-line indicator only (ProgressStatusLine).
       setCollapsed(false);
     },
     [locale],

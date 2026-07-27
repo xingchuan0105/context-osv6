@@ -1,0 +1,19 @@
+.container {
+  display: grid;
+  gap: 1rem;
+}
+
+.metricsGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.panel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.inlineRowFlat {
+  margin-bottom: 0;
+}

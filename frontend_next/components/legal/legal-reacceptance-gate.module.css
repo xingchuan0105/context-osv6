@@ -1,0 +1,25 @@
+.loadingCard {
+  max-width: 28rem;
+  text-align: center;
+}
+
+.loadingText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateCard {
+  max-width: 32rem;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.body {
+  margin: var(--space-2) 0 0;
+  color: hsl(var(--muted-foreground));
+}

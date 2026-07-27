@@ -35,6 +35,16 @@ impl ReActLoop {
         let mut bridge_tool_results = Vec::new();
 
         for (idx, code) in codes.iter().enumerate() {
+            // User-facing "running" progress before the sandbox executes
+            // (2026-07-23: dispatch-phase silence — retrieval now announces
+            // start, not just finish). One step per detected client.* call.
+            for (kind, product, query) in preview_codegen_client_calls(code) {
+                crate::progress::emit_work_fact(
+                    sink,
+                    crate::progress::WorkFact::retrieval_started(kind, product, &query),
+                )
+                .await;
+            }
             let (block_status, block_text, is_err, block_bridge_results, bridge_calls, block_had_output) = self
                 .execute_codegen_block(idx, code, request, auth, &interpreter_lock)
                 .await;
@@ -42,6 +52,10 @@ impl ReActLoop {
             for call in &bridge_calls {
                 if let Some((kind, product)) = crate::progress::bridge_method_progress(&call.method)
                 {
+                    // Same guard as native tools: failed calls are not empty results.
+                    if call.result.status != contracts::ToolStatus::Ok {
+                        continue;
+                    }
                     let query = call.query.as_deref().unwrap_or("");
                     let hits = crate::progress::hits_from_tool_data(call.result.data.as_ref());
                     let docs = crate::progress::doc_labels_from_tool_data(call.result.data.as_ref());
@@ -323,13 +337,52 @@ impl ReActLoop {
     }
 }
 
-const CODEGEN_CLIENT_METHODS: &str =
-    "dense_search, lexical_search, graph_search, chunk_fetch, doc_profile, doc_summary, doc_chunks";
+/// SDK methods that must appear only as `client.<name>(...)` inside a `<code>` block.
+/// Never registered as native tool schema names — rejecting bare tool_calls for these
+/// prevents "unknown tool: dense_search" pollution (Q55 / 2026-07-20).
+pub(crate) const CODEGEN_SDK_METHOD_NAMES: &[&str] = &[
+    "dense_search",
+    "lexical_search",
+    "graph_search",
+    "chunk_fetch",
+    "doc_profile",
+    "doc_summary",
+    "doc_scan",
+    // legacy client name — still reject if issued as native tool_call
+    "doc_chunks",
+];
 
 /// Maximum number of chars (not bytes) of sandbox/tool output re-injected into the LLM
 /// context. Bounds untrusted content (which may include retrieved document text) so a
 /// single malicious or oversized document cannot dominate the prompt.
 const CODEGEN_OBSERVATION_MAX_CHARS: usize = 8000;
+
+/// True when the model used a codegen SDK method name as a native tool_call.
+pub(crate) fn is_codegen_sdk_method_as_native_tool(tool_name: &str) -> bool {
+    CODEGEN_SDK_METHOD_NAMES
+        .iter()
+        .any(|n| *n == tool_name)
+}
+
+/// Tool-result payload when the model invents native tool_calls for SDK methods.
+pub(crate) fn reject_codegen_method_as_native_tool(tool_name: &str) -> contracts::ToolResult {
+    contracts::ToolResult {
+        tool: tool_name.to_string(),
+        version: "1.0".to_string(),
+        status: contracts::ToolStatus::Error,
+        data: Some(serde_json::json!({
+            "error": "not_a_native_tool",
+            "tool": tool_name,
+            "hint": format!(
+                "`{tool_name}` is a Python SDK method on `client`, not a native tool. \
+                 Do not emit function/tool calls for it. Output one \
+                 `<code language=\"python\">` block, e.g. \
+                 `chunks = await client.{tool_name}(...)` (adjust args per codegen skill)."
+            ),
+        })),
+        trace: None,
+    }
+}
 
 /// Wrap a codegen sandbox/tool observation for re-injection into the LLM, applying a
 /// length cap and an explicit untrusted-content marker. This is a defense-in-depth measure
@@ -370,16 +423,65 @@ fn format_codegen_observation(combined_result: &str, had_error: bool, no_output:
     if !had_error {
         return out;
     }
-    out.push_str(&format!(
+    // Always show `client.*` form — bare method names pollute the model into
+    // inventing native tool_calls (dense_search as tool schema).
+    out.push_str(
         "\n\n\
          [sandbox_error]\n\
-         Code execution failed. Read stderr in the block above and fix your next code block.\n\
-         Allowed client methods ONLY: {CODEGEN_CLIENT_METHODS}.\n\
-         NOT available: hybrid_search, dense_retrieval, lexical_retrieval, graph_retrieval, \
-         rerank, or any internal host tool name.\n\
-         [/sandbox_error]"
-    ));
+         Code execution failed. Read stderr in the block above and fix your next \
+         `<code language=\"python\">` block.\n\
+         Write the next turn as one `<code language=\"python\">` block using `client`.\n\
+         Common methods: client.dense_search, client.lexical_search, client.graph_search,\n\
+         client.chunk_fetch, client.doc_profile, client.doc_summary, client.doc_scan.\n\
+         doc_scan loads material into the sandbox for code-side count/filter — print\n\
+         compact results, not full text. Prefer client.* code, not function/tool calls\n\
+         with those method names.\n\
+         [/sandbox_error]",
+    );
     out
+}
+
+/// Pre-scan a `<code>` block for `client.<method>(` calls so a "running"
+/// progress step can be emitted before sandbox execution (2026-07-23).
+/// Returns (kind, product label, best-effort query arg) per detected call.
+fn preview_codegen_client_calls(
+    code: &str,
+) -> Vec<(crate::progress::ProgressKind, &'static str, String)> {
+    let mut out = Vec::new();
+    let mut rest = code;
+    while let Some(pos) = rest.find("client.") {
+        let after = &rest[pos + "client.".len()..];
+        let name_end = after
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(after.len());
+        let name = &after[..name_end];
+        if let Some((kind, product)) = crate::progress::bridge_method_progress(name) {
+            out.push((kind, product, extract_query_arg(&after[name_end..])));
+        }
+        rest = &after[name_end.max(1)..];
+    }
+    out
+}
+
+/// Naive best-effort `query="..."` extraction for a progress label — display
+/// only, never parsed for execution.
+fn extract_query_arg(s: &str) -> String {
+    // Char-safe window: never slice mid multi-byte UTF-8 (Chinese progress labels).
+    let window: String = s.chars().take(240).collect();
+    let Some(pos) = window.find("query=") else {
+        return String::new();
+    };
+    let rest = window[pos + "query=".len()..].trim_start();
+    let Some(q) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+        return String::new();
+    };
+    let body = &rest[1..];
+    let end = body
+        .find(q)
+        .unwrap_or_else(|| body.chars().take(48).map(|c| c.len_utf8()).sum());
+    // `end` is a byte index into `body` only when found via `find`; for the
+    // char-count fallback it is already a safe sum of utf8 lengths.
+    body.get(..end).unwrap_or("").to_string()
 }
 
 /// Decide whether a sandbox execution should be treated as a failure.
@@ -408,9 +510,11 @@ mod tests {
     fn sandbox_error_observation_includes_sdk_reminder() {
         let raw = "[block 0] stdout: \nstderr: AttributeError: no attribute 'hybrid_search'\n";
         let obs = format_codegen_observation(raw, true, false);
-        assert!(obs.contains("hybrid_search"));
-        assert!(obs.contains("dense_search"));
+        assert!(obs.contains("client.dense_search"));
+        assert!(obs.contains("client.hybrid_search") || obs.contains("hybrid_search"));
         assert!(obs.contains("[sandbox_error]"));
+        // Bare method-as-tool should be discouraged in the same hint.
+        assert!(obs.contains("function/tool") || obs.contains("native tools"));
     }
 
     #[test]
@@ -427,6 +531,20 @@ mod tests {
         // Note composes with the sandbox-error hint.
         let obs = format_codegen_observation(raw, true, true);
         assert!(obs.contains("[no_output]") && obs.contains("[sandbox_error]"));
+    }
+
+    #[test]
+    fn codegen_sdk_method_names_are_detected_as_fake_native_tools() {
+        assert!(is_codegen_sdk_method_as_native_tool("dense_search"));
+        assert!(is_codegen_sdk_method_as_native_tool("doc_scan"));
+        assert!(is_codegen_sdk_method_as_native_tool("doc_chunks"));
+        assert!(!is_codegen_sdk_method_as_native_tool("dense_retrieval"));
+        assert!(!is_codegen_sdk_method_as_native_tool("web_search"));
+        let r = reject_codegen_method_as_native_tool("dense_search");
+        assert_eq!(r.status, contracts::ToolStatus::Error);
+        let hint = r.data.as_ref().unwrap()["hint"].as_str().unwrap();
+        assert!(hint.contains("client.dense_search") || hint.contains("await client.dense_search"));
+        assert!(hint.contains("<code"));
     }
 
     #[test]

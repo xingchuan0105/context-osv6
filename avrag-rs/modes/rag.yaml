@@ -1,5 +1,7 @@
 mode: rag
-system_prompt_base: prompts/orchestrators/rag-system.md
+# P2 (2026-07-20): main-path system source is capability-rag (self-contained);
+# monomode rag-system retired to prompts/deprecated/monomode-system/.
+system_prompt_base: prompts/orchestrators/capability-rag.md
 # Intentionally empty: retrieve tools are disclosed on-demand via skill clusters
 # (codegen/memory). Product capabilities still list auto_fallback.tool_id.
 tool_pool: []
@@ -9,7 +11,9 @@ skill_catalog:
   synthesis: [writing, format]
   mandatory:
     retrieve: [codegen]
-    synthesis: [rag-answer]
+    # PR-A (2026-07-20): no monomode rag-answer — worker final is handoff JSON
+    # (assemble_mode forces ProseOnly + early-stop; see diagnosis prompt-stack).
+    synthesis: []
 budget:
   max_iterations: 4
   by_user_tier:
@@ -24,7 +28,9 @@ auto_fallback:
 temperature: 0.4
 loop_exit:
   require_evidence: true
-  allow_content_early_stop: false
-  skip_synthesis_on_direct_answer: false
+  # Handoff JSON can finish the loop without monomode JSON synthesis.
+  allow_content_early_stop: true
+  skip_synthesis_on_direct_answer: true
 synthesis_output:
-  contract: internal_answer_v1
+  # assemble_mode re-asserts ProseOnly for capability paths.
+  contract: prose_only

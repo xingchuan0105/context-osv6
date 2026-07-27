@@ -1,0 +1,24 @@
+.card {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 34rem;
+}
+
+.title {
+  margin-bottom: 0;
+  font-size: 1.8rem;
+}
+
+.authBox {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.flushText {
+  margin: 0;
+}
+
+.mutedText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}

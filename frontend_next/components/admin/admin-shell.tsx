@@ -8,6 +8,8 @@ import { ContextOsMark } from "../context-os-mark";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 
+import styles from "./admin-shell.module.css";
+
 type AdminNavItem = {
   href: string;
   label: {
@@ -86,36 +88,20 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const { locale } = useUiPreferences();
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        gridTemplateColumns: "16rem minmax(0, 1fr)",
-        background: "hsl(var(--surface-muted))",
-      }}
-    >
-      <aside
-        style={{
-          borderRight: "1px solid hsl(var(--border))",
-          background: "hsl(var(--card))",
-          padding: "1.25rem 1rem",
-          display: "grid",
-          gap: "1rem",
-          alignContent: "start",
-        }}
-      >
-        <div style={{ display: "grid", gap: "0.6rem" }}>
-          <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
+    <main className={styles.main}>
+      <aside className={styles.sidebar}>
+        <div className={styles.brandRow}>
+          <Link className={styles.brandLink} href="/dashboard">
             <ContextOsMark size={28} />
-            <div style={{ display: "grid", gap: "0.15rem" }}>
+            <div className={styles.brandText}>
               <strong>Context OS</strong>
-              <span style={{ fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
+              <span className={styles.brandSubtitle}>
                 {formatUiMessage(locale, "adminShellTitle")}
               </span>
             </div>
           </Link>
         </div>
-        <nav aria-label={formatUiMessage(locale, "adminNavLabel")} style={{ display: "grid", gap: "0.35rem" }}>
+        <nav aria-label={formatUiMessage(locale, "adminNavLabel")} className={styles.nav}>
           {ADMIN_NAV_ITEMS.map((item) => {
             const active = isActivePath(pathname, item.prefixes);
             const labelKey =
@@ -141,19 +127,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
             return (
               <Link
+                className={active ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
                 href={item.href}
                 key={item.href}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.65rem",
-                  minHeight: "2.5rem",
-                  padding: "0.7rem 0.85rem",
-                  borderRadius: "0.9rem",
-                  border: `1px solid ${active ? "hsl(var(--primary))" : "transparent"}`,
-                  background: active ? "hsl(var(--primary))" : "transparent",
-                  color: active ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
-                }}
               >
                 {formatUiMessage(locale, labelKey)}
               </Link>
@@ -161,7 +137,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           })}
         </nav>
       </aside>
-      <section style={{ minWidth: 0, padding: "1.5rem" }}>{children}</section>
+      <section className={styles.content}>{children}</section>
     </main>
   );
 }

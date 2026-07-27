@@ -1,0 +1,7 @@
+.readonlyInput {
+  color: hsl(var(--muted-foreground));
+}
+
+.errorText {
+  color: hsl(var(--destructive));
+}

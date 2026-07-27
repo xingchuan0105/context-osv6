@@ -8,7 +8,7 @@ pub fn product_action_for_bridge_method(method: &str) -> Option<&'static str> {
         "graph_search" => Some("关系检索"),
         "doc_summary" => Some("阅读文档摘要"),
         "doc_profile" => Some("查看文档结构"),
-        "doc_chunks" => Some("通读文档片段"),
+        "doc_scan" | "doc_chunks" => Some("代码侧扫读文档"),
         "chunk_fetch" => Some("展开原文片段"),
         _ => None,
     }

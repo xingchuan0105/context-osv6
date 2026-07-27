@@ -78,10 +78,18 @@ mod tests {
         assert!(registry.skill("format").is_some());
         assert!(registry.skill("memory").is_some());
         assert!(registry.skill("search").is_some());
-        assert!(registry.skill("rag-answer").is_some());
-        assert!(registry.skill("search-answer").is_some());
-        assert!(registry.skill("chat").is_some());
-        assert!(registry.skill("rag-system").is_some());
+        assert!(registry.skill("capability-rag").is_some());
+        assert!(registry.skill("capability-search").is_some());
+        assert!(registry.skill("chat-base").is_some());
+        // P2 (2026-07-20): monomode *-system prompts retired to prompts/deprecated/.
+        assert!(registry.skill("rag-system").is_none());
+        assert!(registry.skill("search-system").is_none());
+        assert!(registry.skill("chat-system").is_none());
+        // U9 (2026-07): prompts/synthesis/* retired to prompts/deprecated/synthesis/.
+        assert!(registry.skill("chat").is_none());
+        assert!(registry.skill("rag-answer").is_none());
+        assert!(registry.skill("search-answer").is_none());
+        assert!(registry.skill("grounded-answer").is_none());
         assert!(registry.skill("dense-retrieval").is_none());
         assert!(registry.skill("doc-index").is_none());
         assert!(registry.skill("rag-plan").is_none());

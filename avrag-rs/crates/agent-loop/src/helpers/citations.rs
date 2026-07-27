@@ -1,7 +1,7 @@
 use contracts::chat::{Citation, DegradeReason, DegradeTraceItem};
 use contracts::{ToolResult, ToolStatus};
 
-use super::retrieval::chunk_text_field;
+use super::retrieval::{chunk_text_field, tool_result_chunk_items};
 
 pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Citation> {
     let mut citations = Vec::new();
@@ -12,7 +12,17 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
         if result.status != ToolStatus::Ok {
             continue;
         }
-        let Some(items) = result.data.as_ref().and_then(|data| data.as_array()) else {
+        // Skip force-augment telemetry: graph_context is structural, not cite-primary chunks.
+        if result.tool == "graph_retrieval"
+            && result
+                .trace
+                .as_ref()
+                .and_then(|t| t.degrade_reason.as_deref())
+                == Some("graph_augment")
+        {
+            continue;
+        }
+        let Some(items) = result.data.as_ref().and_then(tool_result_chunk_items) else {
             continue;
         };
         for item in items {

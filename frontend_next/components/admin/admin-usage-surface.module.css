@@ -1,0 +1,42 @@
+.container {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.filtersGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr);
+}
+
+.metaRow {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: var(--font-size-control);
+  color: hsl(var(--muted-foreground));
+}
+
+.metricsGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.statsPanel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.heading {
+  margin: 0;
+}
+
+.inlineRowFlat {
+  margin-bottom: 0;
+}

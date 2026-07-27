@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import styles from "./desktop.module.css";
 import {
   DESKTOP_LATEST_JSON_URL,
   formatBytes,
@@ -63,12 +64,12 @@ export function DesktopDownloadButton({
 
   if (state.status === "missing" || state.status === "error") {
     return (
-      <div style={{ display: "grid", gap: "0.35rem" }}>
+      <div className={styles.downloadWrap}>
         <button type="button" className={className} disabled>
           {formatUiMessage(locale, "desktop.downloadUnavailable")}
         </button>
         {!compact ? (
-          <p className="app-page-subtitle" style={{ margin: 0, fontSize: "0.85rem" }}>
+          <p className={`app-page-subtitle ${styles.downloadHint}`}>
             {formatUiMessage(locale, "desktop.downloadUnavailableHint")}
           </p>
         ) : null}
@@ -83,7 +84,7 @@ export function DesktopDownloadButton({
   });
 
   return (
-    <div style={{ display: "grid", gap: "0.35rem", justifyItems: compact ? "start" : "center" }}>
+    <div className={`${styles.downloadWrap} ${compact ? styles.justifyStart : styles.justifyCenter}`}>
       <a
         className={className}
         data-testid="desktop-download-windows"
@@ -93,12 +94,12 @@ export function DesktopDownloadButton({
         {formatUiMessage(locale, "desktop.downloadWindows")}
       </a>
       {!compact ? (
-        <p className="app-page-subtitle" style={{ margin: 0, fontSize: "0.85rem" }}>
+        <p className={`app-page-subtitle ${styles.downloadHint}`}>
           {meta}
           {state.manifest.min_os ? ` · ${state.manifest.min_os}` : ""}
         </p>
       ) : (
-        <span style={{ fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>{meta}</span>
+        <span className={styles.downloadMetaCompact}>{meta}</span>
       )}
     </div>
   );
@@ -125,34 +126,18 @@ export function DesktopReleaseDetails() {
   if (!manifest || !win) return null;
 
   return (
-    <dl
-      data-testid="desktop-release-details"
-      style={{
-        margin: "1rem 0 0",
-        display: "grid",
-        gap: "0.35rem",
-        fontSize: "0.85rem",
-        color: "hsl(var(--muted-foreground))",
-      }}
-    >
+    <dl data-testid="desktop-release-details" className={styles.releaseDetails}>
       <div>
-        <dt style={{ display: "inline", fontWeight: 600 }}>
+        <dt className={styles.releaseTerm}>
           {formatUiMessage(locale, "desktop.versionLabel")}:{" "}
         </dt>
-        <dd style={{ display: "inline", margin: 0 }}>v{manifest.version}</dd>
+        <dd className={styles.releaseValue}>v{manifest.version}</dd>
       </div>
       <div>
-        <dt style={{ display: "inline", fontWeight: 600 }}>
+        <dt className={styles.releaseTerm}>
           {formatUiMessage(locale, "desktop.sha256Label")}:{" "}
         </dt>
-        <dd
-          style={{
-            display: "inline",
-            margin: 0,
-            fontFamily: "var(--font-mono)",
-            wordBreak: "break-all",
-          }}
-        >
+        <dd className={styles.releaseHash}>
           {win.sha256}
         </dd>
       </div>

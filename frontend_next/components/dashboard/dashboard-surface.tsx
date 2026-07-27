@@ -26,6 +26,7 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import { ProductChromeFooter } from "../product-chrome-footer";
 import { DashboardHeader } from "./parts/dashboard-header";
 import { DashboardSearchDialog } from "./parts/dashboard-search-dialog";
+import { DashboardSkeleton } from "./dashboard-skeleton";
 import { DashboardToolbar } from "./parts/dashboard-toolbar";
 import {
   type DashboardViewMode,
@@ -42,13 +43,18 @@ export function DashboardSurface() {
   const [workspaces, setWorkspaces] = useState<DashboardWorkspace[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ message: string; retry: (() => void) | null } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<DashboardWorkspaceView | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<DashboardWorkspaceView | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>("all");
   const [sortMode, setSortMode] = useState<DashboardSortMode>("recent");
   const [viewMode, setViewMode] = useState<DashboardViewMode>("card");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [renameSubmitting, setRenameSubmitting] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -61,7 +67,7 @@ export function DashboardSurface() {
       }
 
       setLoading(true);
-      setError("");
+      setError(null);
 
       const [workspaceResult, favoriteResult] = await Promise.allSettled([
         listWorkspaces(auth.token),
@@ -75,7 +81,11 @@ export function DashboardSurface() {
       if (workspaceResult.status === "fulfilled") {
         setWorkspaces(workspaceResult.value.workspaces);
       } else {
-        setError(formatUiMessage(locale, "dashboardLoadError"));
+        console.error(workspaceResult.reason);
+        setError({
+          message: formatUiMessage(locale, "dashboardLoadError"),
+          retry: () => setRefreshKey((key) => key + 1),
+        });
       }
 
       if (favoriteResult.status === "fulfilled") {
@@ -129,9 +139,14 @@ export function DashboardSurface() {
   const avatarInitial = (auth.user?.full_name?.trim() || auth.user?.email?.trim() || "U").slice(0, 1).toUpperCase();
   const sourcesColumnLabel = locale === "zh-CN" ? "\u6765\u6e90" : "Sources";
 
+  function reportError(actionError: unknown, retry: (() => void) | null) {
+    console.error(actionError);
+    setError({ message: formatUiMessage(locale, "dashboardActionFailed"), retry });
+  }
+
   async function handleCreateWorkspace() {
     if (!auth.token) {
-      setError(formatUiMessage(locale, "dashboardLoginRequired"));
+      setError({ message: formatUiMessage(locale, "dashboardLoginRequired"), retry: null });
       return;
     }
 
@@ -153,7 +168,7 @@ export function DashboardSurface() {
       markDefaultWorkspaceTitleUsed(locale, "");
       router.push(`/dashboard/${response.workspace.workspace_id}`);
     } catch (submitError) {
-      setError(String(submitError));
+      reportError(submitError, () => void handleCreateWorkspace());
     } finally {
       setCreatingWorkspace(false);
     }
@@ -161,7 +176,7 @@ export function DashboardSurface() {
 
   async function toggleFavorite(workspaceId: string) {
     if (!auth.token) {
-      setError(formatUiMessage(locale, "dashboardLoginRequired"));
+      setError({ message: formatUiMessage(locale, "dashboardLoginRequired"), retry: null });
       return;
     }
 
@@ -177,64 +192,102 @@ export function DashboardSurface() {
       setFavoriteIds(updated);
     } catch (toggleError) {
       setFavoriteIds(previous);
-      setError(String(toggleError));
+      reportError(toggleError, () => void toggleFavorite(workspaceId));
     }
   }
 
-  async function renameWorkspace(workspace: DashboardWorkspaceView) {
-    const currentTitle = formatWorkspaceTitle(locale, workspace);
-    const nextTitle = window.prompt(formatUiMessage(locale, "dashboardPromptRename", { title: currentTitle }), currentTitle);
+  function openRenameDialog(workspace: DashboardWorkspaceView) {
+    setRenameTarget(workspace);
+    setRenameTitle(formatWorkspaceTitle(locale, workspace));
+  }
 
-    if (nextTitle === null) {
+  function dismissRenameDialog() {
+    setRenameTarget(null);
+    setRenameTitle("");
+  }
+
+  async function submitRenameWorkspace() {
+    if (!renameTarget) {
       return;
     }
 
-    const trimmedTitle = nextTitle.trim();
-    if (!trimmedTitle || trimmedTitle === currentTitle || !auth.token) {
+    const currentTitle = formatWorkspaceTitle(locale, renameTarget);
+    const trimmedTitle = renameTitle.trim();
+
+    if (!trimmedTitle || trimmedTitle === currentTitle) {
+      dismissRenameDialog();
       return;
     }
 
-    const sourceWorkspace = workspaces.find((item) => item.workspace_id === workspace.id);
+    if (!auth.token) {
+      setError({ message: formatUiMessage(locale, "dashboardLoginRequired"), retry: null });
+      return;
+    }
+
+    const sourceWorkspace = workspaces.find((item) => item.workspace_id === renameTarget.id);
+
+    if (renameSubmitting) {
+      return;
+    }
+
+    setRenameSubmitting(true);
 
     try {
-      const response = await updateWorkspace(auth.token, workspace.id, {
+      const response = await updateWorkspace(auth.token, renameTarget.id, {
         name: trimmedTitle,
         description: sourceWorkspace?.description ?? "",
       });
 
       setWorkspaces((current) =>
-        current.map((item) => (item.workspace_id === workspace.id ? response.workspace : item)),
+        current.map((item) => (item.workspace_id === renameTarget.id ? response.workspace : item)),
       );
+      dismissRenameDialog();
     } catch (renameError) {
-      setError(String(renameError));
+      // Retry re-opens the confirmation dialog with the attempted target/title
+      // instead of re-running the mutation behind the user's back.
+      reportError(renameError, () => {
+        setRenameTarget(renameTarget);
+        setRenameTitle(trimmedTitle);
+      });
+    } finally {
+      setRenameSubmitting(false);
     }
   }
 
-  async function deleteWorkspaceById(workspace: DashboardWorkspaceView) {
-    const currentTitle = formatWorkspaceTitle(locale, workspace);
-    if (!window.confirm(formatUiMessage(locale, "dashboardConfirmDelete", { title: currentTitle }))) {
+  async function confirmDeleteWorkspace() {
+    if (!deleteTarget) {
       return;
     }
 
     if (!auth.token) {
-      setError(formatUiMessage(locale, "dashboardLoginRequired"));
+      setError({ message: formatUiMessage(locale, "dashboardLoginRequired"), retry: null });
       return;
     }
 
+    if (deleteSubmitting) {
+      return;
+    }
+
+    setDeleteSubmitting(true);
+
     try {
-      await deleteWorkspace(auth.token, workspace.id);
-      const nextFavoriteIds = favoriteIds.filter((item) => item !== workspace.id);
-      setWorkspaces((current) => current.filter((item) => item.workspace_id !== workspace.id));
+      await deleteWorkspace(auth.token, deleteTarget.id);
+      const nextFavoriteIds = favoriteIds.filter((item) => item !== deleteTarget.id);
+      setWorkspaces((current) => current.filter((item) => item.workspace_id !== deleteTarget.id));
       setFavoriteIds(nextFavoriteIds);
-      if (favoriteIds.includes(workspace.id)) {
+      if (favoriteIds.includes(deleteTarget.id)) {
         const updatedFavorites = await updateFavoriteWorkspaceIds(auth.token, nextFavoriteIds);
         setFavoriteIds(updatedFavorites);
       }
+      setDeleteTarget(null);
     } catch (deleteError) {
-      setError(String(deleteError));
+      // Retry re-opens the delete confirmation dialog for the same target rather
+      // than deleting without a fresh confirmation.
+      reportError(deleteError, () => setDeleteTarget(deleteTarget));
+    } finally {
+      setDeleteSubmitting(false);
     }
   }
-
 
   return (
     <main className="dashboard-shell">
@@ -264,12 +317,19 @@ export function DashboardSurface() {
           <p className="dashboard-heading-meta">{formatUiMessage(locale, "dashboardHeadingCount", { count: visibleWorkspaces.length })}</p>
         </div>
 
-        {error ? <p className="app-notice-banner dashboard-error">{error}</p> : null}
+        {error ? (
+          <p className="app-notice-banner dashboard-error">
+            {error.message}
+            {error.retry ? (
+              <button className="dashboard-error-retry" type="button" onClick={error.retry}>
+                {formatUiMessage(locale, "dashboardActionRetry")}
+              </button>
+            ) : null}
+          </p>
+        ) : null}
 
         {loading ? (
-          <section className="dashboard-empty-state">
-            <p>{formatUiMessage(locale, "dashboardLoading")}</p>
-          </section>
+          <DashboardSkeleton />
         ) : visibleWorkspaces.length === 0 ? (
           <section className="dashboard-empty-state">
             <h2>{activeTab === "favorites" ? formatUiMessage(locale, "dashboardEmptyFavoritesTitle") : formatUiMessage(locale, "dashboardEmptyAllTitle")}</h2>
@@ -287,21 +347,21 @@ export function DashboardSurface() {
                   key={workspace.id}
                   index={index}
                   mode="card"
-                  onDelete={() => void deleteWorkspaceById(workspace)}
+                  onDelete={() => setDeleteTarget(workspace)}
                   onFavoriteToggle={() => void toggleFavorite(workspace.id)}
-                  onRename={() => void renameWorkspace(workspace)}
+                  onRename={() => openRenameDialog(workspace)}
                   workspace={workspace}
                 />
               );
             })}
           </section>
         ) : (
-          <section className="dashboard-list-shell">
-            <div className="dashboard-list-header" aria-hidden="true">
-              <div>{formatUiMessage(locale, "dashboardWorkspaceNameField")}</div>
-              <div>{sourcesColumnLabel}</div>
-              <div>{formatUiMessage(locale, "dashboardCreatedAtColumn")}</div>
-              <div>{formatUiMessage(locale, "dashboardRoleColumn")}</div>
+          <section className="dashboard-list-shell" role="table">
+            <div className="dashboard-list-header" role="row">
+              <div role="columnheader">{formatUiMessage(locale, "dashboardWorkspaceNameField")}</div>
+              <div role="columnheader">{sourcesColumnLabel}</div>
+              <div role="columnheader">{formatUiMessage(locale, "dashboardCreatedAtColumn")}</div>
+              <div role="columnheader">{formatUiMessage(locale, "dashboardRoleColumn")}</div>
             </div>
             <ul aria-label={formatUiMessage(locale, "dashboardListLabel")} className="dashboard-list" data-testid="notebook-list">
               {visibleWorkspaces.map((workspace, index) => (
@@ -309,9 +369,9 @@ export function DashboardSurface() {
                   key={workspace.id}
                   index={index}
                   mode="list"
-                  onDelete={() => void deleteWorkspaceById(workspace)}
+                  onDelete={() => setDeleteTarget(workspace)}
                   onFavoriteToggle={() => void toggleFavorite(workspace.id)}
-                  onRename={() => void renameWorkspace(workspace)}
+                  onRename={() => openRenameDialog(workspace)}
                   workspace={workspace}
                 />
               ))}
@@ -319,6 +379,90 @@ export function DashboardSurface() {
           </section>
         )}
       </section>
+
+      {renameTarget ? (
+        <div className="dashboard-modal-backdrop" onClick={dismissRenameDialog} role="presentation">
+          <section
+            aria-label={formatUiMessage(locale, "dashboardRenameDialogTitle")}
+            aria-modal="true"
+            className="dashboard-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                dismissRenameDialog();
+              }
+            }}
+          >
+            <h2 className="dashboard-modal-title">{formatUiMessage(locale, "dashboardRenameDialogTitle")}</h2>
+            <form
+              className="dashboard-modal-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitRenameWorkspace();
+              }}
+            >
+              <input
+                aria-label={formatUiMessage(locale, "dashboardWorkspaceNameField")}
+                autoComplete="off"
+                autoFocus
+                className="app-input"
+                id="dashboard-rename-title"
+                name="title"
+                onChange={(event) => setRenameTitle(event.target.value)}
+                value={renameTitle}
+              />
+              <div className="dashboard-modal-actions">
+                <button className="dashboard-action-button" type="button" onClick={dismissRenameDialog}>
+                  {formatUiMessage(locale, "commonCancel")}
+                </button>
+                <button className="app-button-primary" disabled={renameSubmitting} type="submit">
+                  {formatUiMessage(locale, "dashboardRenameSubmit")}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div className="dashboard-modal-backdrop" onClick={() => setDeleteTarget(null)} role="presentation">
+          <section
+            aria-label={formatUiMessage(locale, "dashboardDeleteDialogTitle")}
+            aria-modal="true"
+            className="dashboard-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setDeleteTarget(null);
+              }
+            }}
+          >
+            <h2 className="dashboard-modal-title">{formatUiMessage(locale, "dashboardDeleteDialogTitle")}</h2>
+            <p className="dashboard-modal-body">
+              {formatUiMessage(locale, "dashboardDeleteDialogBody", {
+                title: formatWorkspaceTitle(locale, deleteTarget),
+              })}
+            </p>
+            <div className="dashboard-modal-actions">
+              <button autoFocus className="dashboard-action-button" type="button" onClick={() => setDeleteTarget(null)}>
+                {formatUiMessage(locale, "commonCancel")}
+              </button>
+              <button
+                className="dashboard-button-danger"
+                disabled={deleteSubmitting}
+                type="button"
+                onClick={() => void confirmDeleteWorkspace()}
+              >
+                {formatUiMessage(locale, "dashboardActionDelete")}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {searchOpen ? (
         <DashboardSearchDialog

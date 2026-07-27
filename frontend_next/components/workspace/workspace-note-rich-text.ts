@@ -99,6 +99,7 @@ export function markdownToRichTextHtml(markdown: string | null | undefined) {
     }
 
     if (/^```/.test(line)) {
+      const language = line.match(/^```([A-Za-z0-9_+#.-]{1,32})/)?.[1] ?? "";
       const codeLines: string[] = [];
       index += 1;
       while (index < lines.length && !/^```/.test(lines[index] ?? "")) {
@@ -108,7 +109,9 @@ export function markdownToRichTextHtml(markdown: string | null | undefined) {
       if (index < lines.length && /^```/.test(lines[index] ?? "")) {
         index += 1;
       }
-      blocks.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      const languageAttr = language ? ` data-language="${escapeHtml(language)}"` : "";
+      const languageClass = language ? ` class="language-${escapeHtml(language)}"` : "";
+      blocks.push(`<pre${languageAttr}><code${languageClass}>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
       continue;
     }
 

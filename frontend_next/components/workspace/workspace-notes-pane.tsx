@@ -161,7 +161,7 @@ export function WorkspaceNotesPane({
       </div>
 
       <div className={styles.sectionControls}>
-        <button className={`${styles.sectionActionButton} ${styles.sectionActionButtonDark}`} onClick={onCreateNote} type="button">
+        <button className={`${styles.sectionActionButton} ${styles.sectionActionButtonDark} app-button-create`} onClick={onCreateNote} type="button">
           <svg aria-hidden="true" className={styles.sectionActionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
           </svg>

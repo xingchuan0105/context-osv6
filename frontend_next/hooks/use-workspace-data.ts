@@ -45,6 +45,7 @@ export function useWorkspaceData(workspaceId: string) {
   const [workspaceLoadError, setWorkspaceLoadError] = useState("");
   const [renameSessionTarget, setRenameSessionTarget] = useState<WorkspaceSession | null>(null);
   const [renameSessionTitle, setRenameSessionTitle] = useState("");
+  const [renameSubmitting, setRenameSubmitting] = useState(false);
 
   useEffect(() => {
     if (!auth.initialized || !auth.token) return;
@@ -150,19 +151,34 @@ export function useWorkspaceData(workspaceId: string) {
     setRenameSessionTitle("");
   }, []);
 
-  const submitRenameSession = useCallback(async () => {
-    if (!auth.token || !renameSessionTarget) return;
-    const updated = await updateWorkspaceSession(auth.token, renameSessionTarget.id, {
-      title: renameSessionTitle.trim(),
-    });
-    setSessions((cur) => cur.map((s) => (s.id === updated.id ? updated : s)));
-    setRenameSessionTarget(null);
-    setRenameSessionTitle("");
-  }, [auth.token, renameSessionTarget, renameSessionTitle]);
+  const submitRenameSession = useCallback(async (): Promise<boolean> => {
+    if (!auth.token || !renameSessionTarget || renameSubmitting) return false;
+    setRenameSubmitting(true);
+    try {
+      const updated = await updateWorkspaceSession(auth.token, renameSessionTarget.id, {
+        title: renameSessionTitle.trim(),
+      });
+      setSessions((cur) => cur.map((s) => (s.id === updated.id ? updated : s)));
+      setRenameSessionTarget(null);
+      setRenameSessionTitle("");
+      return true;
+    } catch (error) {
+      // Keep the dialog open so the caller can surface an inline error.
+      console.error(error);
+      return false;
+    } finally {
+      setRenameSubmitting(false);
+    }
+  }, [auth.token, renameSessionTarget, renameSessionTitle, renameSubmitting]);
 
-  const removeSession = useCallback(async (session: WorkspaceSession) => {
-    if (!auth.token) return;
-    await deleteWorkspaceSession(auth.token, session.id);
+  const removeSession = useCallback(async (session: WorkspaceSession): Promise<boolean> => {
+    if (!auth.token) return false;
+    try {
+      await deleteWorkspaceSession(auth.token, session.id);
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
     setRenameSessionTarget((cur) => {
       if (cur?.id === session.id) {
         setRenameSessionTitle("");
@@ -178,6 +194,7 @@ export function useWorkspaceData(workspaceId: string) {
       });
       return next;
     });
+    return true;
   }, [auth.token]);
 
   return {
@@ -193,6 +210,7 @@ export function useWorkspaceData(workspaceId: string) {
     renameSessionTarget,
     renameSessionTitle,
     setRenameSessionTitle,
+    renameSubmitting,
     reloadSessions,
     saveWorkspaceTitle,
     createWorkspaceFlow,

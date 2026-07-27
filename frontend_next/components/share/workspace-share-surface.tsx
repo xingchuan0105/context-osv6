@@ -9,6 +9,7 @@ import { ShareControlBar } from "./parts/share-control-bar";
 import { ShareInsightsPanel } from "./parts/share-insights-panel";
 import { ShareInvitePanel } from "./parts/share-invite-panel";
 import { useShareCenter } from "./parts/use-share-center";
+import styles from "./workspace-share-surface.module.css";
 
 type WorkspaceShareCenterSurfaceProps = {
   workspaceId: string;
@@ -24,39 +25,25 @@ export function WorkspaceShareCenterSurface({
   return (
     <main className="app-page-shell">
       <div
-        className="app-page-center"
-        style={{ display: "grid", gap: "0.85rem", maxWidth: "54rem", width: "100%" }}
+        className={`app-page-center ${styles.pageCenter}`}
       >
-        <header style={{ display: "grid", gap: "0.65rem" }}>
+        <header className={styles.header}>
           <Link className="app-link app-link-muted" href={`/dashboard/${workspaceId}`}>
             {formatUiMessage(locale, "shareCenter.backToWorkspace")}
           </Link>
-          <div
-            style={{
-              alignItems: "start",
-              display: "grid",
-              gap: "1rem",
-              gridTemplateColumns: "minmax(0, 1fr)",
-            }}
-          >
+          <div className={styles.headerGrid}>
             <div>
-              <h1 className="app-page-title" style={{ fontSize: "clamp(2.15rem, 5vw, 2.8rem)" }}>
+              <h1 className={`app-page-title ${styles.pageTitle}`}>
                 {formatUiMessage(locale, "shareCenter.pageTitle")}
               </h1>
               <p
-                className="app-page-subtitle"
-                style={{ fontSize: "1rem", lineHeight: 1.55, marginTop: "0.25rem" }}
+                className={`app-page-subtitle ${styles.pageSubtitle}`}
               >
                 {formatUiMessage(locale, "shareCenter.pageSubtitle")}
               </p>
             </div>
             <section
-              className="app-surface-card"
-              style={{
-                display: "grid",
-                gap: "0.85rem",
-                padding: "0.9rem 0.95rem 0.95rem",
-              }}
+              className={`app-surface-card ${styles.controlCard}`}
             >
               <ShareControlBar center={center} />
             </section>
@@ -68,22 +55,24 @@ export function WorkspaceShareCenterSurface({
         ) : null}
 
         {actionMessage ? (
-          <p className="app-inline-surface" style={{ margin: 0 }}>
+          <p className={`app-inline-surface ${styles.actionMessage}`}>
             {actionMessage}
           </p>
         ) : null}
 
         {settingsQuery.isLoading && !settingsQuery.data ? (
           <section className="app-surface-card">
-            <p style={{ margin: 0 }}>
-              {formatUiMessage(locale, "shareCenter.loading")}
-            </p>
+            <div aria-hidden="true" className={styles.skeletonStack}>
+              <div className={`dashboard-skeleton-line ${styles.skeletonShort}`} />
+              <div className={`dashboard-skeleton-line ${styles.skeletonLong}`} />
+              <div className={`dashboard-skeleton-line ${styles.skeletonMid}`} />
+            </div>
           </section>
         ) : null}
 
         {settingsQuery.error && !settingsQuery.data ? (
           <section className="app-surface-card">
-            <p className="app-notice-banner" style={{ margin: 0 }}>
+            <p className="app-notice-banner">
               {settingsQuery.error instanceof Error
                 ? settingsQuery.error.message
                 : formatUiMessage(locale, "shareCenter.settingsLoadError")}

@@ -16,6 +16,8 @@ import {
   LoadingState,
 } from "./admin-shared-ui";
 
+import styles from "./admin-health-surface.module.css";
+
 export function AdminHealthSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
@@ -26,7 +28,7 @@ export function AdminHealthSurface() {
   const loading = Boolean(token) && healthQuery.isPending;
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={styles.container}>
       <AdminPageHeading
         title={adminText(locale, "admin.health.sectionTitle")}
         subtitle={adminText(locale, "admin.health.sectionSubtitle")}
@@ -38,21 +40,21 @@ export function AdminHealthSurface() {
         <EmptyState copy={adminText(locale, "common.emptyData")} />
       ) : (
         <>
-          <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
+          <div className={styles.metricsGrid}>
             <AdminMetricCard label={adminText(locale, "common.status")} tone={healthy ? "success" : "danger"} value={healthStatusLabel(locale, health.status)} />
             <AdminMetricCard label={adminText(locale, "common.service")} value={health.service} />
             <AdminMetricCard label={adminText(locale, "common.version")} tone="warning" value={health.version} />
           </div>
-          <section className="app-inline-surface" style={{ display: "grid", gap: "0.7rem" }}>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+          <section className={`app-inline-surface ${styles.panel}`}>
+            <div className={`app-inline-row ${styles.inlineRowFlat}`}>
               <span>{adminText(locale, "common.serviceStatus")}</span>
               <strong>{healthStatusLabel(locale, health.status)}</strong>
             </div>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${styles.inlineRowFlat}`}>
               <span>{adminText(locale, "common.service")}</span>
               <strong>{health.service}</strong>
             </div>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${styles.inlineRowFlat}`}>
               <span>{adminText(locale, "common.version")}</span>
               <strong>{health.version}</strong>
             </div>

@@ -8,16 +8,407 @@
 //! channel can never fabricate citations (2026-07-17 incident). Markers
 //! pointing at targeted (DocProfile, orientation-only) entries are stripped
 //! silently.
+//!
+//! Sub-agent observability (2026-07-24): channel workers keep their **raw**
+//! tool trajectory + thinking process in [`WorkerRunObservability`]. The
+//! chat-exit store bridge still collapses evidence to `dense_retrieval` for
+//! eval recall@k — do **not** use `ChatResponse.tool_results` alone to audit
+//! RAG/Search sub-agent behaviour; read `mode_debug.general.workers`.
 
-use agent_loop::runtime::AgentRunResult;
+use agent_loop::events::AgentEvent;
+use agent_loop::runtime::{AgentRunResult, FinalDecision};
 use contracts::chat::{AnswerBlock, Citation, SourceRef};
+use serde::{Deserialize, Serialize};
 
 use super::store::{EvidenceKind, EvidenceStore};
-use super::types::{WorkerHandoff, WorkerKeyFact};
+use super::types::{Channel, WorkerHandoff, WorkerKeyFact};
 
 const MAX_NOTE_CHARS: usize = 2000;
 const MAX_GAPS: usize = 12;
 const MAX_KEY_FACTS: usize = 16;
+/// Cap stored worker reasoning text in mode_debug (full CoT can be large).
+const MAX_REASONING_OBS_CHARS: usize = 8_000;
+/// Cap per-tool data_summary string previews.
+const MAX_DATA_PREVIEW_CHARS: usize = 400;
+const MAX_THINKING_STEPS: usize = 48;
+const MAX_ITERATIONS_OBS: usize = 32;
+
+/// Compact tool row for sub-agent observability (not the eval store bridge).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerToolObs {
+    pub tool: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degrade_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_hit_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydrated_hit_count: Option<usize>,
+    /// Compact shape (hit counts, code preview, graph source) — never full chunks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_summary: Option<serde_json::Value>,
+}
+
+/// One plan / eval / terminal thinking step from the worker event sink.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerThinkingStep {
+    /// `plan` | `eval` | `terminal` | `tool_call` | `codegen`
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reasoning: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<serde_json::Value>,
+}
+
+/// Per-iteration white-box row (plan snapshot + exit decision).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerIterationObs {
+    pub iteration: u8,
+    pub decision: String,
+    pub elapsed_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_evaluation: Option<serde_json::Value>,
+}
+
+/// White-box snapshot of one channel sub-agent run (tools **and** thinking).
+///
+/// Surfaced on `mode_debug.general.workers[]`. Independent of the store→eval
+/// bridge that labels host evidence as `dense_retrieval`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerRunObservability {
+    pub channel: Channel,
+    /// Real worker tool names (`lexical_retrieval`, `graph_retrieval`, …).
+    pub tools: Vec<WorkerToolObs>,
+    /// Accumulated model reasoning / CoT summary from the ReAct loop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_summary: Option<String>,
+    /// Plan/eval/terminal/codegen thinking steps (from sink + iterations).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thinking: Vec<WorkerThinkingStep>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iterations: Vec<WorkerIterationObs>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_decision: Option<String>,
+    pub total_tool_calls: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_elapsed_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff_summary: Option<String>,
+}
+
+/// Harvest plan/eval/codegen thinking from a worker's local event sink into
+/// `AgentRunResult.debug_payload.worker_thinking` so dispatch can build
+/// [`WorkerRunObservability`] without changing the executor trait.
+pub fn attach_worker_thinking_events(run: &mut AgentRunResult, events: &[AgentEvent]) {
+    let steps = thinking_steps_from_events(events);
+    if steps.is_empty() {
+        return;
+    }
+    let thinking_val = serde_json::to_value(&steps).unwrap_or(serde_json::json!([]));
+    match run.debug_payload.as_mut() {
+        Some(serde_json::Value::Object(map)) => {
+            map.insert("worker_thinking".into(), thinking_val);
+        }
+        Some(other) => {
+            *other = serde_json::json!({
+                "prior": other.clone(),
+                "worker_thinking": thinking_val,
+            });
+        }
+        None => {
+            run.debug_payload = Some(serde_json::json!({
+                "worker_thinking": thinking_val,
+            }));
+        }
+    }
+}
+
+/// Build a compact observability snapshot for one channel worker run.
+pub fn worker_observability_from_run(
+    channel: Channel,
+    run: &AgentRunResult,
+) -> WorkerRunObservability {
+    let handoff_summary = worker_handoff_from_run(run).map(|h| h.summary);
+    let mut thinking = thinking_steps_from_debug_payload(run.debug_payload.as_ref());
+    // Iterations are themselves a thinking timeline when sink harvest is empty.
+    if thinking.is_empty() {
+        for it in run.iterations.iter().take(MAX_ITERATIONS_OBS) {
+            thinking.push(WorkerThinkingStep {
+                kind: "iteration".into(),
+                decision: Some(it.decision.clone()),
+                reasoning: it
+                    .plan
+                    .get("observation_preview")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                skills: it
+                    .plan
+                    .get("disclosed_skills")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                tool: it
+                    .plan
+                    .get("action_type")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                detail: Some(it.plan.clone()),
+            });
+        }
+    }
+    WorkerRunObservability {
+        channel,
+        tools: run
+            .tool_results
+            .iter()
+            .map(tool_obs_from_result)
+            .collect(),
+        reasoning_summary: run
+            .reasoning_summary
+            .as_ref()
+            .map(|s| truncate_chars(s, MAX_REASONING_OBS_CHARS)),
+        thinking,
+        iterations: run
+            .iterations
+            .iter()
+            .take(MAX_ITERATIONS_OBS)
+            .map(|it| WorkerIterationObs {
+                iteration: it.iteration,
+                decision: it.decision.clone(),
+                elapsed_ms: it.elapsed_ms,
+                plan: Some(it.plan.clone()),
+                llm_evaluation: it.llm_evaluation.clone(),
+            })
+            .collect(),
+        final_decision: run.final_decision.as_ref().map(final_decision_label),
+        total_tool_calls: run.total_tool_calls,
+        total_elapsed_ms: run.total_elapsed_ms,
+        handoff_summary,
+    }
+}
+
+fn final_decision_label(d: &FinalDecision) -> String {
+    match d {
+        FinalDecision::Synthesized => "synthesized".into(),
+        FinalDecision::DirectAnswer => "direct_answer".into(),
+        FinalDecision::Clarified { .. } => "clarified".into(),
+        FinalDecision::Degraded { reason } => format!("degraded:{reason:?}"),
+    }
+}
+
+fn tool_obs_from_result(tr: &contracts::ToolResult) -> WorkerToolObs {
+    let status = format!("{:?}", tr.status).to_lowercase();
+    let (degrade_reason, elapsed_ms, raw_hit_count, hydrated_hit_count) = match &tr.trace {
+        Some(t) => (
+            t.degrade_reason.clone(),
+            t.elapsed_ms,
+            t.raw_hit_count,
+            t.hydrated_hit_count,
+        ),
+        None => (None, None, None, None),
+    };
+    WorkerToolObs {
+        tool: tr.tool.clone(),
+        status,
+        degrade_reason,
+        elapsed_ms,
+        raw_hit_count,
+        hydrated_hit_count,
+        data_summary: tr.data.as_ref().map(summarize_tool_data),
+    }
+}
+
+fn summarize_tool_data(data: &serde_json::Value) -> serde_json::Value {
+    if let Some(arr) = data.as_array() {
+        return serde_json::json!({
+            "kind": "array",
+            "len": arr.len(),
+        });
+    }
+    let obj = match data.as_object() {
+        Some(o) => o,
+        None => {
+            return serde_json::json!({
+                "kind": "scalar",
+                "preview": truncate_chars(&data.to_string(), MAX_DATA_PREVIEW_CHARS),
+            });
+        }
+    };
+    let mut out = serde_json::Map::new();
+    if let Some(src) = obj.get("source").and_then(|v| v.as_str()) {
+        out.insert("source".into(), serde_json::json!(src));
+    }
+    for key in ["chunks", "results", "items", "graph_context", "hits"] {
+        if let Some(arr) = obj.get(key).and_then(|v| v.as_array()) {
+            out.insert(format!("{key}_len"), serde_json::json!(arr.len()));
+        }
+    }
+    if let Some(code) = obj.get("code").and_then(|v| v.as_str()) {
+        out.insert(
+            "code_preview".into(),
+            serde_json::json!(truncate_chars(code, MAX_DATA_PREVIEW_CHARS)),
+        );
+    }
+    if let Some(result) = obj.get("result").and_then(|v| v.as_str()) {
+        out.insert(
+            "result_preview".into(),
+            serde_json::json!(truncate_chars(result, MAX_DATA_PREVIEW_CHARS)),
+        );
+    }
+    if let Some(lang) = obj.get("language").and_then(|v| v.as_str()) {
+        out.insert("language".into(), serde_json::json!(lang));
+    }
+    if let Some(err) = obj.get("error").and_then(|v| v.as_str()) {
+        out.insert(
+            "error".into(),
+            serde_json::json!(truncate_chars(err, MAX_DATA_PREVIEW_CHARS)),
+        );
+    }
+    if out.is_empty() {
+        out.insert(
+            "keys".into(),
+            serde_json::json!(obj.keys().cloned().collect::<Vec<_>>()),
+        );
+    }
+    serde_json::Value::Object(out)
+}
+
+fn thinking_steps_from_debug_payload(
+    payload: Option<&serde_json::Value>,
+) -> Vec<WorkerThinkingStep> {
+    payload
+        .and_then(|p| p.get("worker_thinking"))
+        .and_then(|v| serde_json::from_value::<Vec<WorkerThinkingStep>>(v.clone()).ok())
+        .unwrap_or_default()
+}
+
+fn thinking_steps_from_events(events: &[AgentEvent]) -> Vec<WorkerThinkingStep> {
+    let mut steps = Vec::new();
+    for ev in events {
+        if steps.len() >= MAX_THINKING_STEPS {
+            break;
+        }
+        match ev {
+            AgentEvent::PlanDecision {
+                selected_skills,
+                reasoning,
+                selected_tools,
+                behavior_mode,
+                ..
+            } => {
+                steps.push(WorkerThinkingStep {
+                    kind: "plan".into(),
+                    decision: behavior_mode.clone(),
+                    reasoning: truncate_chars(reasoning, MAX_REASONING_OBS_CHARS),
+                    skills: selected_skills.clone(),
+                    tool: None,
+                    detail: Some(serde_json::json!({
+                        "selected_tools": selected_tools.iter().map(|t| &t.tool).collect::<Vec<_>>(),
+                    })),
+                });
+            }
+            AgentEvent::Evaluation {
+                decision,
+                reasoning,
+                signals,
+            } => {
+                steps.push(WorkerThinkingStep {
+                    kind: "eval".into(),
+                    decision: Some(decision.clone()),
+                    reasoning: truncate_chars(reasoning, MAX_REASONING_OBS_CHARS),
+                    skills: signals
+                        .as_ref()
+                        .and_then(|s| s.get("disclosed_skills"))
+                        .and_then(|v| v.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|x| x.as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    tool: signals
+                        .as_ref()
+                        .and_then(|s| s.get("action_type"))
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string),
+                    detail: signals.clone(),
+                });
+            }
+            AgentEvent::Terminal { decision, reason } => {
+                steps.push(WorkerThinkingStep {
+                    kind: "terminal".into(),
+                    decision: Some(decision.clone()),
+                    reasoning: reason.clone().unwrap_or_default(),
+                    skills: Vec::new(),
+                    tool: None,
+                    detail: None,
+                });
+            }
+            AgentEvent::ToolCall { tool, args } => {
+                // code_gen / native tools as thinking timeline (args truncated).
+                let is_codegen = tool == "code_gen" || tool == "code_execution";
+                steps.push(WorkerThinkingStep {
+                    kind: if is_codegen {
+                        "codegen".into()
+                    } else {
+                        "tool_call".into()
+                    },
+                    decision: None,
+                    reasoning: String::new(),
+                    skills: Vec::new(),
+                    tool: Some(tool.clone()),
+                    detail: args.as_ref().map(|a| summarize_tool_data(a)),
+                });
+            }
+            AgentEvent::ToolResult {
+                tool,
+                status,
+                data,
+                elapsed_ms,
+            } if tool == "code_gen" || tool == "code_execution" => {
+                steps.push(WorkerThinkingStep {
+                    kind: "codegen".into(),
+                    decision: Some(format!("{status:?}").to_lowercase()),
+                    reasoning: data
+                        .as_ref()
+                        .and_then(|d| d.get("result").and_then(|r| r.as_str()))
+                        .map(|s| truncate_chars(s, MAX_DATA_PREVIEW_CHARS))
+                        .unwrap_or_default(),
+                    skills: Vec::new(),
+                    tool: Some(tool.clone()),
+                    detail: Some(serde_json::json!({ "elapsed_ms": elapsed_ms })),
+                });
+            }
+            _ => {}
+        }
+    }
+    steps
+}
+
+fn truncate_chars(s: &str, max: usize) -> String {
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max).collect();
+    out.push('…');
+    out
+}
 
 /// Non-Ok tool outcomes from a worker run, as short descriptions
 /// (`web_search: Timeout (detail)`). Used to distinguish "检索失败" (Error)
@@ -41,7 +432,7 @@ pub fn tool_failures(results: &[contracts::ToolResult]) -> Vec<String> {
 /// Parse structured worker handoff from the worker's final message.
 ///
 /// Accepts `internal_worker_handoff_v1` JSON, peels legacy `internal_answer_v1`,
-/// or falls back to free-form text as `summary` with `coverage = "partial"`.
+/// and sanitizes the result against the run's real tool observations (C4).
 pub fn worker_handoff_from_run(result: &AgentRunResult) -> Option<WorkerHandoff> {
     let handoff = parse_worker_handoff(&result.answer)?;
     Some(sanitize_worker_handoff(handoff, &result.tool_results))
@@ -53,6 +444,11 @@ pub fn channel_note_from_run(result: &AgentRunResult) -> Option<String> {
 }
 
 /// Parse a worker final message into [`WorkerHandoff`].
+///
+/// C4 (deterministic handoff validation): the message MUST parse as
+/// structured JSON after the shared fence strip. Anything else — raw code
+/// blocks (q087), prose, fabricated `<code_execution_result>` dumps (q039) —
+/// is NOT ingested as summary text; the worker is marked degraded instead.
 pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -287,10 +683,90 @@ fn cap_handoff(mut h: WorkerHandoff) -> WorkerHandoff {
     h
 }
 
-/// Rewrite E-markers to product markers and rebuild citations/sources.
+/// Attach store evidence as retrieval `tool_results` (eval / clients).
+/// Does **not** rewrite E-markers or build citations — safe for `mode=direct`.
+///
+/// V2 may finish with `finish_answer(mode=direct)` even after workers filled the
+/// store; without this, full_eval sees `tool_results_count=0` despite
+/// `dispatches[].item_count > 0` (G-16 / 2026-07-20 fail-fast).
+pub fn attach_store_retrieval_tool_results(
+    answer_result: &mut AgentRunResult,
+    store: &EvidenceStore,
+) {
+    let mut retrieval = store.as_retrieval_tool_results();
+    if retrieval.is_empty() {
+        return;
+    }
+    retrieval.append(&mut answer_result.tool_results);
+    answer_result.tool_results = retrieval;
+}
+
+/// Normalize common LLM slips around E-ids into canonical `[[En]]` form.
+///
+/// Real models often emit markdown-bold or single-bracket variants
+/// (`**[E3]**`, `[**[E3]**]`, bare `[E3]`) instead of protocol `[[E3]]`.
+/// Without this pass, finalize drops them and `expect_citations` fails even
+/// when the model *did* ground on store ids (full_eval Q142, 2026-07-20).
+fn normalize_loose_e_markers(answer: &str) -> String {
+    use std::sync::OnceLock;
+    use regex::Regex;
+
+    struct Patterns {
+        bracket_bold: Regex,
+        bold_double: Regex,
+        bold_single: Regex,
+        double_bold_inner: Regex,
+        protected: Regex,
+        bare_single: Regex,
+    }
+    static PATS: OnceLock<Patterns> = OnceLock::new();
+    let p = PATS.get_or_init(|| Patterns {
+        // [**[E3]**] / [**[E:3]**]
+        bracket_bold: Regex::new(r"\[\*\*\[E:?(\d+)\]\*\*\]").expect("e-marker re"),
+        // **[[E3]]** / **[[E:3]]**
+        bold_double: Regex::new(r"\*\*\[\[E:?(\d+)\]\]\*\*").expect("e-marker re"),
+        // **[E3]** / **[E:3]**
+        bold_single: Regex::new(r"\*\*\[E:?(\d+)\]\*\*").expect("e-marker re"),
+        // [[**E3**]] / [[**E:3**]]
+        double_bold_inner: Regex::new(r"\[\[\*\*E:?(\d+)\*\*\]\]").expect("e-marker re"),
+        // already-canonical [[E3]] / [[E:3]]
+        protected: Regex::new(r"\[\[E:?(\d+)\]\]").expect("e-marker re"),
+        // bare [E3] / [E:3]
+        bare_single: Regex::new(r"\[E:?(\d+)\]").expect("e-marker re"),
+    });
+
+    let mut s = p
+        .bracket_bold
+        .replace_all(answer, "[[E$1]]")
+        .into_owned();
+    s = p.bold_double.replace_all(&s, "[[E$1]]").into_owned();
+    s = p.bold_single.replace_all(&s, "[[E$1]]").into_owned();
+    s = p.double_bold_inner.replace_all(&s, "[[E$1]]").into_owned();
+
+    // Protect canonical doubles, convert remaining singles, restore.
+    let mut placeholders: Vec<String> = Vec::new();
+    let tmp = p
+        .protected
+        .replace_all(&s, |caps: &regex::Captures| {
+            let i = placeholders.len();
+            placeholders.push(format!("[[E{}]]", &caps[1]));
+            format!("\u{E000}{i}\u{E001}")
+        })
+        .into_owned();
+    let mut out = p.bare_single.replace_all(&tmp, "[[E$1]]").into_owned();
+    for (i, ph) in placeholders.iter().enumerate() {
+        out = out.replace(&format!("\u{E000}{i}\u{E001}"), ph);
+    }
+    out
+}
+
+/// Rewrite E-markers to product markers, rebuild citations/sources, and attach
+/// store evidence as retrieval `tool_results` so eval / clients can score the
+/// host-decided retrieval layer (not the chat-exit tool trace alone).
 pub fn finalize_answer_evidence(answer_result: &mut AgentRunResult, store: &EvidenceStore) {
-    let original_answer = answer_result.answer.clone();
-    let (rewritten, citations, stripped) = rewrite_markers(&original_answer, store);
+    let raw_answer = answer_result.answer.clone();
+    let normalized = normalize_loose_e_markers(&raw_answer);
+    let (rewritten, citations, stripped) = rewrite_markers(&normalized, store);
     if stripped > 0 {
         tracing::warn!(
             stripped,
@@ -300,11 +776,12 @@ pub fn finalize_answer_evidence(answer_result: &mut AgentRunResult, store: &Evid
     answer_result.answer = rewritten.clone();
     for block in &mut answer_result.answer_blocks {
         if let AnswerBlock::Text { text, .. } = block {
-            if *text == original_answer {
+            if *text == raw_answer || *text == normalized {
                 *text = rewritten.clone();
-            } else if text.contains("[[") {
-                // Divergent block text: rewrite standalone (numbering recomputed).
-                let (t, _, _) = rewrite_markers(text, store);
+            } else if text.contains('[') {
+                // Divergent block text: normalize + rewrite standalone.
+                let norm = normalize_loose_e_markers(text);
+                let (t, _, _) = rewrite_markers(&norm, store);
                 *text = t;
             }
         }
@@ -322,6 +799,9 @@ pub fn finalize_answer_evidence(answer_result: &mut AgentRunResult, store: &Evid
             page: None,
         })
         .collect();
+    // Prepend store-backed retrieval results so ChatResponse.tool_results
+    // reflects the orchestrator-decided evidence set (eval extract_retrieved_chunks).
+    attach_store_retrieval_tool_results(answer_result, store);
 }
 
 /// Scan `[[...]]` tokens; returns (rewritten text, citations, stripped count).
@@ -561,6 +1041,28 @@ mod tests {
     }
 
     #[test]
+    fn loose_markdown_e_markers_are_normalized_and_cited() {
+        // full_eval Q142 style: model wraps E-ids in markdown bold / single brackets.
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer =
+            "直接根源[**[E1]**]。模式层**[E1]**。底层[E1]。规范 [[E1]] 不双写。".into();
+        finalize_answer_evidence(&mut r, &store);
+
+        assert!(
+            r.answer.contains("[[cite:chunk-a]]"),
+            "loose E markers must rewrite: {}",
+            r.answer
+        );
+        assert!(
+            !r.answer.contains("[E1]") && !r.answer.contains("**[E"),
+            "loose forms must be gone: {}",
+            r.answer
+        );
+        assert_eq!(r.citations.len(), 1, "dedupe across loose forms");
+    }
+
+    #[test]
     fn citation_ids_are_unique_across_doc_and_web() {
         // 2026-07-18 incident: per-kind counters collided — lookup by
         // citation_id returned the wrong entry (web before doc → 404).
@@ -591,6 +1093,55 @@ mod tests {
 
         assert!(!r.answer.contains("[["), "{}", r.answer);
         assert!(r.citations.is_empty());
+    }
+
+    #[test]
+    fn finalize_prepends_store_as_retrieval_tool_results() {
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer = "ok".into();
+        r.tool_results = vec![ToolResult {
+            tool: "user_context".into(),
+            version: "1".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({})),
+            trace: None,
+        }];
+        finalize_answer_evidence(&mut r, &store);
+        assert!(
+            r.tool_results
+                .iter()
+                .any(|t| t.tool == "dense_retrieval"),
+            "store doc chunks must surface as dense_retrieval: {:?}",
+            r.tool_results.iter().map(|t| &t.tool).collect::<Vec<_>>()
+        );
+        let dense = r
+            .tool_results
+            .iter()
+            .find(|t| t.tool == "dense_retrieval")
+            .unwrap();
+        let arr = dense.data.as_ref().and_then(|d| d.as_array()).unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["chunk_id"], "chunk-a");
+        assert_eq!(arr[0]["text"], "doc evidence");
+        // Original chat tools preserved after retrieval results.
+        assert_eq!(r.tool_results.last().unwrap().tool, "user_context");
+    }
+
+    /// Direct exit path: attach retrieval for eval without inventing citations.
+    #[test]
+    fn attach_store_retrieval_without_cite_rewrite() {
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer = "直接回答，无引用。".into();
+        attach_store_retrieval_tool_results(&mut r, &store);
+        assert!(
+            r.tool_results.iter().any(|t| t.tool == "dense_retrieval"),
+            "{:?}",
+            r.tool_results.iter().map(|t| &t.tool).collect::<Vec<_>>()
+        );
+        assert!(r.citations.is_empty());
+        assert_eq!(r.answer, "直接回答，无引用。");
     }
 
     #[test]
@@ -733,7 +1284,7 @@ mod tests {
         // q039: an otherwise valid handoff carrying a fabricated
         // <code_execution_result> block — content must be stripped, handoff
         // marked degraded.
-        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"见 <code_execution_result>韩方投资者 B株式会社 持股40%</code_execution_result> 所示\",\"key_facts\":[],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"见 <code_execution_result>韩方投资者 B株式会社 持股40%</code_execution_result> 所示","key_facts":[],"coverage":"full","gaps":[]}"#;
         let h = worker_handoff_from_run(&run_with(raw, vec![])).expect("handoff");
         assert!(!h.summary.contains("B株式会社"), "{}", h.summary);
         assert!(!h.summary.contains("code_execution_result"));
@@ -742,7 +1293,7 @@ mod tests {
 
     #[test]
     fn valid_handoff_with_observed_chunk_ids_passes_untouched() {
-        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"2019年建厂\",\"key_facts\":[{\"claim\":\"2019年建厂\",\"evidence\":[\"c1\"]}],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"2019年建厂","key_facts":[{"claim":"2019年建厂","evidence":["c1"]}],"coverage":"full","gaps":[]}"#;
         let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert!(!h.handoff_degraded);
         assert_eq!(h.key_facts.len(), 1);
@@ -752,7 +1303,7 @@ mod tests {
 
     #[test]
     fn facts_citing_unobserved_ids_are_dropped() {
-        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"s\",\"key_facts\":[{\"claim\":\"real\",\"evidence\":[\"c1\"]},{\"claim\":\"fake\",\"evidence\":[\"c999\"]}],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"real","evidence":["c1"]},{"claim":"fake","evidence":["c999"]}],"coverage":"full","gaps":[]}"#;
         let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert_eq!(h.key_facts.len(), 1);
         assert_eq!(h.key_facts[0].claim, "real");
@@ -763,7 +1314,7 @@ mod tests {
 
     #[test]
     fn coverage_downgrades_when_every_fact_is_dropped() {
-        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"s\",\"key_facts\":[{\"claim\":\"fake\",\"evidence\":[\"c999\"]}],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"fake","evidence":["c999"]}],"coverage":"full","gaps":[]}"#;
         let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert!(h.key_facts.is_empty());
         assert_eq!(h.coverage, "insufficient");
@@ -797,5 +1348,163 @@ mod tests {
             "broken fragment still visible as text: {}",
             r.answer
         );
+    }
+
+    #[test]
+    fn worker_observability_keeps_real_tools_and_thinking() {
+        use agent_loop::events::AgentEvent;
+        use agent_loop::runtime::{FinalDecision, IterationRecord};
+        use contracts::{ToolResult, ToolStatus, ToolTrace};
+
+        let mut run = AgentRunResult::default();
+        run.reasoning_summary = Some("先用关键词检索再图扩展".into());
+        run.total_tool_calls = 2;
+        run.total_elapsed_ms = Some(1200);
+        run.final_decision = Some(FinalDecision::Synthesized);
+        run.tool_results = vec![
+            ToolResult {
+                tool: "lexical_retrieval".into(),
+                version: "1.0".into(),
+                status: ToolStatus::Ok,
+                data: Some(serde_json::json!([{"chunk_id": "c1"}])),
+                trace: Some(ToolTrace {
+                    elapsed_ms: Some(40),
+                    raw_hit_count: Some(1),
+                    hydrated_hit_count: Some(1),
+                    degrade_reason: None,
+                }),
+            },
+            ToolResult {
+                tool: "graph_retrieval".into(),
+                version: "1.0".into(),
+                status: ToolStatus::Ok,
+                data: Some(serde_json::json!({
+                    "graph_context": [{"id": "e1"}],
+                    "source": "graph_augment",
+                })),
+                trace: Some(ToolTrace {
+                    elapsed_ms: Some(12),
+                    raw_hit_count: Some(1),
+                    hydrated_hit_count: None,
+                    degrade_reason: Some("graph_augment".into()),
+                }),
+            },
+        ];
+        run.iterations = vec![IterationRecord {
+            iteration: 0,
+            plan: serde_json::json!({
+                "action_type": "codegen",
+                "observation_preview": "lexical hits",
+                "disclosed_skills": ["codegen"],
+                "exit_reason": "native_tool_call",
+            }),
+            signals: Default::default(),
+            decision: "continue".into(),
+            elapsed_ms: 900,
+            llm_evaluation: None,
+            usage: None,
+        }];
+        run.answer = r#"{"schema_version":"internal_worker_handoff_v1","summary":"找到了站点编码","coverage":"partial","gaps":[],"key_facts":[]}"#.into();
+
+        let events = vec![
+            AgentEvent::PlanDecision {
+                selected_tools: vec![],
+                selected_skills: vec!["codegen".into()],
+                selected_writing_styles: vec![],
+                behavior_mode: None,
+                reasoning: "retrieve iteration 0, skills: [codegen]".into(),
+            },
+            AgentEvent::Evaluation {
+                signals: Some(serde_json::json!({
+                    "action_type": "codegen",
+                    "disclosed_skills": ["codegen"],
+                })),
+                decision: "continue".into(),
+                reasoning: "need more evidence".into(),
+            },
+            AgentEvent::ToolResult {
+                tool: "code_gen".into(),
+                status: ToolStatus::Ok,
+                data: Some(serde_json::json!({ "result": "await client.lexical_search(...)" })),
+                elapsed_ms: 50,
+            },
+        ];
+        attach_worker_thinking_events(&mut run, &events);
+
+        let obs = worker_observability_from_run(Channel::Rag, &run);
+        assert_eq!(obs.channel, Channel::Rag);
+        assert_eq!(
+            obs.tools
+                .iter()
+                .map(|t| t.tool.as_str())
+                .collect::<Vec<_>>(),
+            vec!["lexical_retrieval", "graph_retrieval"]
+        );
+        assert_eq!(
+            obs.tools[1].degrade_reason.as_deref(),
+            Some("graph_augment")
+        );
+        assert_eq!(
+            obs.reasoning_summary.as_deref(),
+            Some("先用关键词检索再图扩展")
+        );
+        assert!(
+            obs.thinking.iter().any(|s| s.kind == "plan"),
+            "plan thinking: {:?}",
+            obs.thinking
+        );
+        assert!(
+            obs.thinking.iter().any(|s| s.kind == "eval"),
+            "eval thinking: {:?}",
+            obs.thinking
+        );
+        assert!(
+            obs.thinking.iter().any(|s| s.kind == "codegen"),
+            "codegen thinking: {:?}",
+            obs.thinking
+        );
+        assert_eq!(obs.handoff_summary.as_deref(), Some("找到了站点编码"));
+        assert_eq!(obs.final_decision.as_deref(), Some("synthesized"));
+        assert_eq!(obs.iterations.len(), 1);
+
+        // Store bridge may collapse citable chunks to dense_retrieval for eval —
+        // worker obs must stay independent of that label.
+        let mut store = EvidenceStore::default();
+        let _ = store.insert_from_tool_results(Channel::Rag, &run.tool_results);
+        let bridged = store.as_retrieval_tool_results();
+        if !bridged.is_empty() {
+            assert!(
+                bridged.iter().any(|t| t.tool == "dense_retrieval"),
+                "eval bridge labels store evidence as dense_retrieval"
+            );
+        }
+        assert!(
+            !obs.tools.iter().any(|t| t.tool == "dense_retrieval"),
+            "worker obs must keep real tool names, not store bridge labels"
+        );
+    }
+
+    #[test]
+    fn worker_observability_falls_back_to_iterations_when_no_sink() {
+        use agent_loop::runtime::IterationRecord;
+
+        let mut run = AgentRunResult::default();
+        run.iterations = vec![IterationRecord {
+            iteration: 0,
+            plan: serde_json::json!({
+                "action_type": "codegen",
+                "observation_preview": "empty",
+                "disclosed_skills": ["codegen"],
+            }),
+            signals: Default::default(),
+            decision: "synthesize".into(),
+            elapsed_ms: 10,
+            llm_evaluation: None,
+            usage: None,
+        }];
+        let obs = worker_observability_from_run(Channel::Search, &run);
+        assert_eq!(obs.thinking.len(), 1);
+        assert_eq!(obs.thinking[0].kind, "iteration");
+        assert_eq!(obs.thinking[0].decision.as_deref(), Some("synthesize"));
     }
 }

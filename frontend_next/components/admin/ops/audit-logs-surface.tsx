@@ -20,6 +20,8 @@ import {
   useUiPreferences,
 } from "./shared";
 
+import styles from "./audit-logs-surface.module.css";
+
 export function AdminAuditLogsSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
@@ -61,14 +63,14 @@ export function AdminAuditLogsSurface() {
   }
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={styles.container}>
       <AdminPageHeading
         title={adminText(locale, "admin.auditLogs.sectionTitle")}
         subtitle={adminText(locale, "admin.auditLogs.sectionSubtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "1.2fr repeat(4, minmax(10rem, 1fr)) 8rem" }}>
+      <section className={`app-inline-surface ${styles.panel}`}>
+        <div className={styles.filtersGrid}>
           <div>
             <label className="app-form-label" htmlFor="admin-audit-query">
               {adminText(locale, "admin.searchLabel")}
@@ -116,8 +118,8 @@ export function AdminAuditLogsSurface() {
             </select>
           </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+        <div className={styles.footerRow}>
+          <div className={styles.footerMeta}>
             <span>{adminText(locale, "audit.matchingLogs")} {response?.total ?? 0}</span>
             <span>{adminText(locale, "common.page")} {Math.min(page, totalPages)}/{totalPages}</span>
           </div>
@@ -133,9 +135,9 @@ export function AdminAuditLogsSurface() {
         <EmptyState copy={adminText(locale, "audit.empty")} />
       ) : (
         <>
-          <section className="app-inline-surface" style={{ overflowX: "auto", padding: 0 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead style={{ background: "hsl(var(--surface-muted))" }}>
+          <section className={`app-inline-surface ${styles.tableWrapper}`}>
+            <table className={styles.table}>
+              <thead className={styles.tableHead}>
                 <tr>
                   {[
                     adminText(locale, "common.action"),
@@ -145,7 +147,7 @@ export function AdminAuditLogsSurface() {
                     adminText(locale, "common.actor"),
                     adminText(locale, "common.time"),
                   ].map((heading) => (
-                    <th key={heading} style={{ padding: "0.85rem 1rem", textAlign: "left", fontSize: "0.76rem", color: "hsl(var(--muted-foreground))" }}>
+                    <th className={styles.tableHeaderCell} key={heading}>
                       {heading}
                     </th>
                   ))}
@@ -153,13 +155,13 @@ export function AdminAuditLogsSurface() {
               </thead>
               <tbody>
                 {items.map((entry: AdminAuditLogEntry) => (
-                  <tr key={entry.id} style={{ borderTop: "1px solid hsl(var(--border))" }}>
-                    <td style={{ padding: "1rem" }}>{auditActionLabel(locale, entry.action)}</td>
-                    <td style={{ padding: "1rem" }}>{auditResourceTypeLabel(locale, entry.resource_type)}</td>
-                    <td style={{ padding: "1rem" }}>{entry.resource_id}</td>
-                    <td style={{ padding: "1rem" }}>{entry.owner_user_id ?? "—"}</td>
-                    <td style={{ padding: "1rem" }}>{entry.actor_id ?? "—"}</td>
-                    <td style={{ padding: "1rem" }}>{formatTimestamp(entry.created_at, locale)}</td>
+                  <tr className={styles.tableRow} key={entry.id}>
+                    <td className={styles.tableCell}>{auditActionLabel(locale, entry.action)}</td>
+                    <td className={styles.tableCell}>{auditResourceTypeLabel(locale, entry.resource_type)}</td>
+                    <td className={styles.tableCell}>{entry.resource_id}</td>
+                    <td className={styles.tableCell}>{entry.owner_user_id ?? "—"}</td>
+                    <td className={styles.tableCell}>{entry.actor_id ?? "—"}</td>
+                    <td className={styles.tableCell}>{formatTimestamp(entry.created_at, locale)}</td>
                   </tr>
                 ))}
               </tbody>

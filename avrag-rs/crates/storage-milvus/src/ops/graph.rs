@@ -8,10 +8,13 @@ use avrag_retrieval_data_plane::{
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Score assigned to graph-derived relation/supporting chunks.
-/// Kept below the dense rerank ceiling (0.7-1.0) so graph chunks don't dominate
-/// citation ordering and threshold filtering. Graph chunks bypass the cross-encoder
-/// reranker, so this is a fixed confidence proxy, not a calibrated similarity.
+/// Storage **channel_proxy** score for graph-derived relation/supporting rows.
+///
+/// Not a calibrated similarity. Do **not** use for lexical graph-augment evidence
+/// keep/drop (that uses terms score + TOP1 得分落差 — see
+/// `docs/plans/2026-07-23-lexical-graph-augment-scoring-design.md`).
+/// Kept below the dense rerank ceiling so raw graph rows do not dominate citation
+/// ordering if mixed incorrectly.
 const GRAPH_CHUNK_SCORE: f64 = 0.85;
 
 impl MilvusDataPlane {

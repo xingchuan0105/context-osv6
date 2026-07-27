@@ -1,5 +1,6 @@
 "use client";
 
+import { type MouseEvent, useEffect, useRef } from "react";
 import type {
   WorkspaceCitationAnchor,
   WorkspaceWebSourcesRequest,
@@ -9,6 +10,7 @@ import {
   type AnswerBlock,
   type Citation,
 } from "../../lib/workspace/stream";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { toSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
 import { markdownToInlineHtml, markdownToRichTextHtml } from "./workspace-note-rich-text";
 import { sanitizeWorkspaceHtml } from "./workspace-html-sanitize";
@@ -288,6 +290,84 @@ function markdownToRichTextHtmlWithCitationButtons(
 // Sub-components
 // =============================================================================
 
+/** Wrap rendered code blocks with a language label + copy button (done in JS so
+ *  sanitize-safe markdown HTML stays unchanged). */
+function enhanceCodeBlocks(container: HTMLElement, locale: "zh-CN" | "en") {
+  container.querySelectorAll("pre").forEach((pre) => {
+    const existingWrapper = pre.parentElement;
+    if (existingWrapper?.classList.contains(styles.codeBlockWrapper)) {
+      // Already wrapped (e.g. locale switched): refresh the copy button label
+      // instead of skipping, so the text follows the active locale.
+      const existingButton = existingWrapper.querySelector<HTMLButtonElement>(
+        `.${styles.codeBlockCopyButton}`,
+      );
+      if (existingButton && existingButton.dataset.copied !== "true") {
+        existingButton.textContent = formatUiMessage(locale, "workspaceChatCodeCopy");
+      }
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = styles.codeBlockWrapper;
+    pre.parentNode?.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
+
+    const language = pre.getAttribute("data-language")?.trim();
+    if (language) {
+      const label = document.createElement("span");
+      label.className = styles.codeBlockLanguage;
+      label.textContent = language;
+      wrapper.appendChild(label);
+    }
+
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = styles.codeBlockCopyButton;
+    copyButton.textContent = formatUiMessage(locale, "workspaceChatCodeCopy");
+    copyButton.addEventListener("click", () => {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        return;
+      }
+      void navigator.clipboard.writeText(pre.textContent ?? "").then(() => {
+        copyButton.dataset.copied = "true";
+        copyButton.textContent = formatUiMessage(locale, "workspaceChatCodeCopied");
+        window.setTimeout(() => {
+          copyButton.dataset.copied = "false";
+          copyButton.textContent = formatUiMessage(locale, "workspaceChatCodeCopy");
+        }, 1500);
+      });
+    });
+    wrapper.appendChild(copyButton);
+  });
+}
+
+function MarkdownContent({
+  html,
+  locale,
+  onClick,
+}: {
+  html: string;
+  locale: "zh-CN" | "en";
+  onClick?: (event: MouseEvent<HTMLDivElement>) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      enhanceCodeBlocks(containerRef.current, locale);
+    }
+  }, [html, locale]);
+
+  return (
+    <div
+      className={styles.markdownContent}
+      onClick={onClick}
+      ref={containerRef}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 
 type CitationRendererProps = {
   locale: "zh-CN" | "en";
@@ -377,6 +457,22 @@ export function CitationRenderer({
     );
   }
 
+  if (message.pending) {
+    // Streaming in progress: lightweight plain-text render — skip full markdown
+    // parsing and citation buttons until the message completes.
+    const streamText =
+      message.answerBlocks.length > 0
+        ? getAnswerBlockText(message.answerBlocks)
+        : message.content;
+
+    return (
+      <>
+        <div className={styles.streamingPlaintext}>{streamText || "..."}</div>
+        <ToolResultsPanel locale={locale} results={message.toolResults} />
+      </>
+    );
+  }
+
   if (message.answerBlocks.length > 0) {
     if (hasOnlyTextAnswerBlocks(message.answerBlocks)) {
       const mergedText = getAnswerBlockText(message.answerBlocks);
@@ -388,8 +484,9 @@ export function CitationRenderer({
 
       return (
         <>
-          <div
-            className={styles.markdownContent}
+          <MarkdownContent
+            html={sanitizeWorkspaceHtml(richMarkdown.html)}
+            locale={locale}
             onClick={(event) => {
               const target = event.target as HTMLElement;
               const button = target.closest<HTMLButtonElement>(
@@ -404,10 +501,9 @@ export function CitationRenderer({
                 handleCitationClick(citation, button);
               }
             }}
-            dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(richMarkdown.html) }}
           />
           {trailingCitations.length > 0 ? (
-            <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+            <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
               {trailingCitations.map((citation, idx) =>
                 renderCitationButton(citation, `trailing-${idx}`),
               )}
@@ -475,8 +571,9 @@ export function CitationRenderer({
 
     return (
       <>
-        <div
-          className={styles.markdownContent}
+        <MarkdownContent
+          html={sanitizeWorkspaceHtml(richMarkdown.html)}
+          locale={locale}
           onClick={(event) => {
             const target = event.target as HTMLElement;
             const button = target.closest<HTMLButtonElement>(
@@ -491,10 +588,9 @@ export function CitationRenderer({
               handleCitationClick(citation, button);
             }
           }}
-          dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(richMarkdown.html) }}
         />
         {trailingCitationsMarkup.length > 0 ? (
-          <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+          <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
             {trailingCitationsMarkup.map((citation, idx) =>
               renderCitationButton(citation, `trailing-${idx}`),
             )}
@@ -513,12 +609,9 @@ export function CitationRenderer({
   if (looksLikeHtml) {
     return (
       <>
-        <div
-          className={styles.markdownContent}
-          dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(rawContent) }}
-        />
+        <MarkdownContent html={sanitizeWorkspaceHtml(rawContent)} locale={locale} />
         {trailingCitationsFallback.length > 0 ? (
-          <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+          <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
             {trailingCitationsFallback.map((citation, idx) =>
               renderCitationButton(citation, `trailing-${idx}`),
             )}
@@ -531,12 +624,9 @@ export function CitationRenderer({
 
   return (
     <>
-      <div
-        className={styles.markdownContent}
-        dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(markdownToRichTextHtml(rawContent)) }}
-      />
+      <MarkdownContent html={sanitizeWorkspaceHtml(markdownToRichTextHtml(rawContent))} locale={locale} />
       {trailingCitationsFallback.length > 0 ? (
-        <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+        <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
           {trailingCitationsFallback.map((citation, idx) =>
             renderCitationButton(citation, `trailing-${idx}`),
           )}

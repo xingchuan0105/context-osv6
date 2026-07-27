@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{IterationControl, IterationOutcome, IterationState};
+use super::{IterationControl, IterationState};
 use crate::AgentKind;
 use agent_tools::capability::CapabilityRegistry;
 use crate::events::CollectingSink;
@@ -124,6 +124,76 @@ async fn native_tool_call_returns_continue_with_record() {
     );
     assert_eq!(state.messages.len(), 3);
     assert_eq!(state.total_tool_calls, 1);
+}
+
+/// Q55 pollution: model emits dense_search as native tool — hard-reject with
+/// corrective observation (do not fall through to unknown tool NotImplemented).
+#[tokio::test]
+async fn rejects_codegen_sdk_method_as_native_tool_call() {
+    let loop_ = test_loop();
+    let mode = rag_mode();
+    let mut state = empty_state();
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let mut response = fake_llm_response("");
+    response.tool_calls = Some(vec![
+        contracts::ToolCall {
+            tool: "dense_search".to_string(),
+            version: "1".to_string(),
+            args: serde_json::json!({"query": "doc_scope"}),
+        },
+        contracts::ToolCall {
+            tool: "doc_scan".to_string(),
+            version: "1".to_string(),
+            args: serde_json::json!({}),
+        },
+    ]);
+
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(state.tool_results.len(), 2);
+    for r in &state.tool_results {
+        assert_eq!(r.status, contracts::ToolStatus::Error, "{r:?}");
+        let err = r
+            .data
+            .as_ref()
+            .and_then(|d| d.get("error"))
+            .and_then(|e| e.as_str())
+            .unwrap_or("");
+        assert_eq!(err, "not_a_native_tool", "{r:?}");
+        let hint = r
+            .data
+            .as_ref()
+            .and_then(|d| d.get("hint"))
+            .and_then(|h| h.as_str())
+            .unwrap_or("");
+        assert!(
+            hint.contains("client.") && hint.contains("<code"),
+            "hint must point at client.* code block: {hint}"
+        );
+    }
+    // Tool messages pushed so the next LLM turn sees the correction.
+    assert!(
+        state.messages.iter().any(|m| m.content.contains("not_a_native_tool")
+            || m.content.contains("client.dense_search")
+            || m.content.contains("await client.")),
+        "state messages should carry rejection: {:?}",
+        state.messages.iter().map(|m| &m.content).collect::<Vec<_>>()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -364,7 +434,13 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
 #[tokio::test]
 async fn content_without_evidence_in_rag_is_blocked() {
     let loop_ = test_loop();
-    let mode = rag_mode();
+    // Policy guard coverage with early-stop disallowed. Note: modes/rag.yaml
+    // itself now ALLOWS no-evidence early stop (PR-A 2026-07-20) so empty-result
+    // workers can still finish their handoff JSON; this test pins the guard
+    // under the strict config (require evidence + no early stop).
+    let mut mode = rag_mode();
+    mode.loop_exit.allow_content_early_stop = false;
+    mode.loop_exit.skip_synthesis_on_direct_answer = false;
     let mut state = empty_state();
     let sink = CollectingSink::new();
     let auth = test_auth();
@@ -395,6 +471,41 @@ async fn content_without_evidence_in_rag_is_blocked() {
             .messages
             .iter()
             .any(|m| { m.role == "user" && m.content.contains("retrieve evidence") })
+    );
+}
+
+/// PR-A (2026-07-20): rag.yaml default allows a no-evidence early stop so a
+/// worker that found nothing can still emit its handoff JSON as the final
+/// message (coverage=gaps), instead of being force-looped.
+#[tokio::test]
+async fn content_without_evidence_in_rag_early_stops_by_default() {
+    let loop_ = test_loop();
+    let mode = rag_mode();
+    assert!(mode.loop_exit.allow_content_early_stop);
+    assert!(mode.loop_exit.skip_synthesis_on_direct_answer);
+    let mut state = empty_state();
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Handoff: nothing found, coverage=insufficient.");
+
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        !matches!(outcome.control, IterationControl::Continue),
+        "no-evidence content must not be blocked under PR-A defaults"
     );
 }
 

@@ -15,7 +15,9 @@
 - `RAG API` 是检索服务，不是面向用户的自主 agent。
 - `RAG API` 可以运行有边界的模型辅助检索算子，例如三元组抽取、query entity extraction、relation/path rerank、chunk rerank。
 - Postgres 是产品控制面。
-- Milvus 是目标检索数据面，承载 BM25 sparse、text dense、multimodal dense 与 graph relation retrieval。
+- 检索数据面：云端默认 **Milvus**；本地/桌面可选 **pgvector**（`RETRIEVAL_BACKEND`）。承载 BM25/FTS、text dense、multimodal dense 与 graph relation retrieval。
+- **图增强（现行）**：仅 **lexical/BM25 强制 1 跳**；证据 **得分落差（相对 TOP1）** 截断；dense **不**自动带图。Canonical：
+  [词法图增强与得分落差截断（2026-07-23）](/home/chuan/context-osv6/avrag-rs/docs/plans/2026-07-23-lexical-graph-augment-scoring-design.md)。
 
 ## 被覆盖的旧检索描述
 

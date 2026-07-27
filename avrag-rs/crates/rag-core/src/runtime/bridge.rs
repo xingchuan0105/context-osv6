@@ -87,6 +87,8 @@ impl RuntimeBridge {
             "chunk_fetch",
             "doc_summary",
             "doc_profile",
+            "doc_scan",
+            // legacy alias — prefer doc_scan in prompts/client
             "doc_chunks",
         ]
     }
@@ -302,7 +304,9 @@ impl RuntimeBridge {
                         .unwrap_or_default(),
                 })
             }
-            "doc_chunks" => {
+            // doc_scan: sandbox-side material for code scan/count/filter (not chat dump).
+            // doc_chunks: legacy RPC alias — same host tool.
+            "doc_scan" | "doc_chunks" => {
                 let caller_doc_ids = args
                     .get("doc_ids")
                     .and_then(|v| v.as_array())
@@ -349,7 +353,26 @@ impl RuntimeBridge {
         };
 
         match result.tool.as_str() {
-            "dense_retrieval" | "lexical_retrieval" | "index_lookup" | "doc_scan" => {
+            "dense_retrieval" | "index_lookup" | "doc_scan" => {
+                json!({ "chunks": chunks_with_content_field(data) })
+            }
+            // lexical may already be `{ chunks, graph_context }` (native path alignment).
+            "lexical_retrieval" => {
+                if let Some(obj) = data.as_object() {
+                    if obj.contains_key("chunks") {
+                        let mut out = json!({
+                            "chunks": chunks_with_content_field(
+                                obj.get("chunks").unwrap_or(&Value::Null)
+                            )
+                        });
+                        if let Some(gc) = obj.get("graph_context") {
+                            out.as_object_mut()
+                                .expect("object")
+                                .insert("graph_context".to_string(), gc.clone());
+                        }
+                        return out;
+                    }
+                }
                 json!({ "chunks": chunks_with_content_field(data) })
             }
             "graph_retrieval" => json!({ "chunks": data }),
@@ -444,7 +467,33 @@ impl HostBridge for RuntimeBridge {
                 query: Self::extract_query(method, &args),
                 result: result.clone(),
             });
-        let data = Self::tool_result_to_bridge_data(&result);
+        let mut data = Self::tool_result_to_bridge_data(&result);
+
+        // Telemetry for eval: non-empty graph_context → side-car with degrade_reason=graph_augment.
+        let graph_context_count = if method == "lexical_search" {
+            let gc = data
+                .get("graph_context")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            if !gc.is_empty() {
+                let elapsed = started.elapsed().as_millis() as u64;
+                let telemetry = tools::graph_augment::telemetry_tool_result(&gc, elapsed);
+                self.captured_results
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(telemetry);
+            }
+            gc.len()
+        } else {
+            // Ensure dense never leaks a graph_context key.
+            if method == "dense_search" {
+                if let Some(obj) = data.as_object_mut() {
+                    obj.remove("graph_context");
+                }
+            }
+            0
+        };
         let chunk_count = data
             .get("chunks")
             .and_then(|c| c.as_array())
@@ -456,6 +505,7 @@ impl HostBridge for RuntimeBridge {
             bridge_tool = %tool_call.tool,
             bridge_elapsed_ms = started.elapsed().as_millis() as u64,
             bridge_chunk_count = chunk_count,
+            bridge_graph_context_count = graph_context_count,
             "sandbox retrieval bridge call"
         );
 
@@ -478,6 +528,8 @@ mod tests {
     struct StubDataPlane {
         chunk_id: uuid::Uuid,
         doc_id: uuid::Uuid,
+        /// When true, search_graph returns a fixed DRC→DRO relation for seed tests.
+        graph_edge: bool,
     }
 
     #[async_trait]
@@ -542,11 +594,47 @@ mod tests {
 
         async fn search_graph(
             &self,
-            _request: GraphSearchRequest,
+            request: GraphSearchRequest,
         ) -> anyhow::Result<GraphSearchOutput> {
+            if !self.graph_edge {
+                return Ok(GraphSearchOutput {
+                    relation_paths: Vec::<RelationPathCandidate>::new(),
+                    supporting_chunks: Vec::new(),
+                });
+            }
+            // Only seed when caller asked for DRC/DRO style entities (terms path).
+            let has_seed = request
+                .entity_names
+                .iter()
+                .chain(request.query_entities.iter())
+                .any(|n| n.eq_ignore_ascii_case("DRC") || n.eq_ignore_ascii_case("DRO"));
+            if !has_seed {
+                return Ok(GraphSearchOutput::default());
+            }
+            let rel_id = Uuid::from_u128(42);
             Ok(GraphSearchOutput {
-                relation_paths: Vec::<RelationPathCandidate>::new(),
-                supporting_chunks: Vec::new(),
+                relation_paths: vec![RelationPathCandidate {
+                    subject: "DRC".to_string(),
+                    predicate: "maps_to".to_string(),
+                    object: "DRO".to_string(),
+                    score: 0.85,
+                    supporting_chunk_ids: vec![rel_id],
+                }],
+                supporting_chunks: vec![ScoredChunk {
+                    chunk_id: rel_id,
+                    doc_id: self.doc_id,
+                    content: "DRC maps_to DRO in catalog".to_string(),
+                    score: 0.85,
+                    source: "stub_graph".to_string(),
+                    page: None,
+                    chunk_type: "graph_relation".to_string(),
+                    asset_id: None,
+                    caption: None,
+                    image_path: None,
+                    parser_backend: None,
+                    source_locator: None,
+                    parse_run_id: None,
+                }],
             })
         }
 
@@ -577,11 +665,19 @@ mod tests {
     }
 
     fn make_runtime() -> Arc<RagRuntime> {
+        make_runtime_with_graph(false)
+    }
+
+    fn make_runtime_with_graph(graph_edge: bool) -> Arc<RagRuntime> {
         let config = crate::test_doubles::test_rag_config();
         let chunk_id = Uuid::from_u128(1);
         let doc_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
         let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =
-            Arc::new(StubDataPlane { chunk_id, doc_id });
+            Arc::new(StubDataPlane {
+                chunk_id,
+                doc_id,
+                graph_edge,
+            });
         Arc::new(RagRuntime::with_data_plane(config, data_plane))
     }
 
@@ -591,9 +687,20 @@ mod tests {
 
     #[test]
     fn bridge_host_methods_match_python_shim() {
-        assert_eq!(
-            RuntimeBridge::supported_method_names(),
-            avrag_code_interpreter::bridge_shim_client_method_names()
+        let host = RuntimeBridge::supported_method_names();
+        let shim = avrag_code_interpreter::bridge_shim_client_method_names();
+        // Every shim-advertised method must be host-supported. The host
+        // additionally keeps legacy RPC aliases (doc_chunks → doc_scan, see
+        // `method_to_tool_call`) that the shim no longer advertises (2026-07-20).
+        for m in shim {
+            assert!(
+                host.contains(m),
+                "shim method {m} missing from host bridge: {host:?}"
+            );
+        }
+        assert!(
+            host.contains(&"doc_chunks"),
+            "legacy alias doc_chunks must stay host-side: {host:?}"
         );
     }
 
@@ -618,14 +725,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_bridge_doc_chunks_returns_chunks_with_content() {
-        // doc_chunks is the codegen sandbox entry for全量计数/枚举. The agent's
-        // parsing code does `c["content"]`, so the bridge MUST surface the body
-        // under a `content` key (not the raw `text` from scored_chunk_to_json).
+    async fn runtime_bridge_doc_scan_returns_chunks_with_content() {
+        // doc_scan: sandbox material for code-side count/filter. Agent code uses
+        // `c["content"]`, so the bridge MUST surface body under `content`.
         let runtime = make_runtime();
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge.call("doc_chunks", json!({})).await;
+        let data = bridge.call("doc_scan", json!({})).await;
         let chunks = data["chunks"].as_array().expect("chunks array");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0]["content"], "scan hit");
@@ -648,6 +754,159 @@ mod tests {
         );
         let err = result.expect_err("expected scope error");
         assert_eq!(err["error"]["code"], "invalid_scope");
+    }
+
+    /// Minimal ContentStore stub for chunk_fetch tests: serves exactly one
+    /// chunk (`chunk_id`) living in `doc_id`.
+    struct StubContentStore {
+        chunk_id: uuid::Uuid,
+        doc_id: uuid::Uuid,
+    }
+
+    #[async_trait]
+    impl common::content_store::ContentStore for StubContentStore {
+        async fn get_chunks_by_ids(
+            &self,
+            _auth: &AuthContext,
+            chunk_ids: &[uuid::Uuid],
+        ) -> anyhow::Result<
+            std::collections::HashMap<uuid::Uuid, common::content_store::IndexedChunk>,
+            common::content_store::ContentStoreError,
+        > {
+            let mut map = std::collections::HashMap::new();
+            for id in chunk_ids {
+                if *id == self.chunk_id {
+                    map.insert(
+                        *id,
+                        common::content_store::IndexedChunk {
+                            chunk_id: self.chunk_id.to_string(),
+                            doc_id: self.doc_id.to_string(),
+                            page: Some(1),
+                            content: "second-doc body".to_string(),
+                            score: Some(0.9),
+                            metadata: serde_json::json!({}),
+                        },
+                    );
+                }
+            }
+            Ok(map)
+        }
+
+        async fn get_document_metadata_by_ids(
+            &self,
+            _auth: &AuthContext,
+            _doc_ids: &[uuid::Uuid],
+        ) -> anyhow::Result<Vec<common::DocumentMetadata>, common::content_store::ContentStoreError>
+        {
+            Ok(vec![])
+        }
+
+        async fn get_summary_metadata(
+            &self,
+            _auth: &AuthContext,
+            _doc_ids: &[uuid::Uuid],
+        ) -> anyhow::Result<Vec<common::SummaryMetadata>, common::content_store::ContentStoreError>
+        {
+            Ok(vec![])
+        }
+
+        async fn get_document_toc_entries(
+            &self,
+            _auth: &AuthContext,
+            _doc_ids: &[uuid::Uuid],
+        ) -> anyhow::Result<
+            Vec<(uuid::Uuid, common::TocEntry)>,
+            common::content_store::ContentStoreError,
+        > {
+            Ok(vec![])
+        }
+
+        async fn get_summary_chunks(
+            &self,
+            _auth: &AuthContext,
+            _doc_ids: &[uuid::Uuid],
+        ) -> anyhow::Result<Vec<(uuid::Uuid, String)>, common::content_store::ContentStoreError>
+        {
+            Ok(vec![])
+        }
+
+        async fn list_documents(
+            &self,
+            _auth: &AuthContext,
+            _workspace_id: Option<uuid::Uuid>,
+            _document_id: Option<uuid::Uuid>,
+        ) -> anyhow::Result<Vec<common::Document>, common::content_store::ContentStoreError>
+        {
+            Ok(vec![])
+        }
+
+        async fn get_document_names(
+            &self,
+            _auth: &AuthContext,
+            _doc_ids: &[uuid::Uuid],
+        ) -> anyhow::Result<
+            std::collections::HashMap<uuid::Uuid, String>,
+            common::content_store::ContentStoreError,
+        > {
+            Ok(std::collections::HashMap::new())
+        }
+    }
+
+    fn make_runtime_with_content_store(
+        chunk_id: uuid::Uuid,
+        doc_id: uuid::Uuid,
+    ) -> Arc<RagRuntime> {
+        let mut config = crate::test_doubles::test_rag_config();
+        config.content_store = Some(Arc::new(StubContentStore { chunk_id, doc_id }));
+        let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =
+            Arc::new(StubDataPlane {
+                chunk_id,
+                doc_id,
+                graph_edge: false,
+            });
+        Arc::new(RagRuntime::with_data_plane(config, data_plane))
+    }
+
+    #[tokio::test]
+    async fn chunk_fetch_resolves_chunk_in_second_scoped_doc() {
+        // C10: chunk lives in the SECOND scoped doc — the old first-doc
+        // shortcut silently returned []; the full-scope fan-out must find it.
+        let chunk_id = uuid::Uuid::from_u128(1);
+        let real_doc = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000aa").unwrap();
+        let other_doc = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000bb").unwrap();
+        let runtime = make_runtime_with_content_store(chunk_id, real_doc);
+        let bridge = RuntimeBridge::new(
+            runtime,
+            make_auth(),
+            vec![other_doc.to_string(), real_doc.to_string()],
+        );
+        let data = bridge
+            .call("chunk_fetch", json!({"chunk_id": chunk_id.to_string()}))
+            .await;
+        let chunks = data["chunks"].as_array().expect("chunks array");
+        assert_eq!(chunks.len(), 1, "{data}");
+        assert_eq!(chunks[0]["content"], "second-doc body");
+    }
+
+    #[tokio::test]
+    async fn chunk_fetch_out_of_scope_chunk_still_rejected() {
+        // C10: scope contains two docs, neither owning the chunk → still an
+        // honest empty (no wildcard leak outside the scope).
+        let chunk_id = uuid::Uuid::from_u128(1);
+        let real_doc = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000aa").unwrap();
+        let doc_b = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000bb").unwrap();
+        let doc_c = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000cc").unwrap();
+        let runtime = make_runtime_with_content_store(chunk_id, real_doc);
+        let bridge = RuntimeBridge::new(
+            runtime,
+            make_auth(),
+            vec![doc_b.to_string(), doc_c.to_string()],
+        );
+        let data = bridge
+            .call("chunk_fetch", json!({"chunk_id": chunk_id.to_string()}))
+            .await;
+        let chunks = data["chunks"].as_array().expect("chunks array");
+        assert!(chunks.is_empty(), "{data}");
     }
 
     #[test]
@@ -752,6 +1011,110 @@ print(json.dumps(chunks))
             result
                 .stdout
                 .contains("00000000-0000-0000-0000-000000000001")
+        );
+    }
+
+    /// A1: lexical_search with augment on may return graph_context.
+    #[tokio::test]
+    async fn lexical_search_graph_augment_attaches_graph_context() {
+        let _serial = tools::graph_augment::TEST_CONFIG_SERIAL
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        tools::graph_augment::install_test_config(tools::graph_augment::GraphAugmentConfig {
+            enabled: true,
+            ..Default::default()
+        });
+
+        let runtime = make_runtime_with_graph(true);
+        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
+        let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
+        let data = bridge
+            .call("lexical_search", json!({"query": "DRC DRO", "top_k": 5}))
+            .await;
+
+        tools::graph_augment::clear_test_config();
+
+        assert!(
+            data.get("chunks").and_then(|c| c.as_array()).is_some(),
+            "chunks present: {data}"
+        );
+        let gc = data
+            .get("graph_context")
+            .and_then(|c| c.as_array())
+            .expect("graph_context array");
+        assert!(!gc.is_empty(), "expected non-empty graph_context: {data}");
+        assert_eq!(gc[0]["subject"], "DRC");
+        assert_eq!(gc[0]["object"], "DRO");
+        assert_eq!(gc[0]["hop"], 1);
+        let evidence = gc[0]["evidence_chunks"]
+            .as_array()
+            .expect("evidence_chunks");
+        assert!(!evidence.is_empty());
+        assert_eq!(evidence[0]["kept_reason"], "top1");
+
+        // P2: non-empty augment may emit telemetry graph_retrieval with degrade_reason=graph_augment.
+        let captured = bridge.take_captured_results();
+        assert_eq!(captured[0].tool, "lexical_retrieval");
+        assert!(
+            tools::graph_augment::graph_augment_hit(&captured),
+            "expected graph_augment telemetry: {captured:?}"
+        );
+        assert!(
+            !tools::graph_augment::graph_explicit_called(&captured),
+            "augment must not count as explicit graph call: {captured:?}"
+        );
+    }
+
+    /// A2: dense_search never attaches graph_context from augment.
+    #[tokio::test]
+    async fn dense_search_never_gets_graph_augment_sidecar() {
+        let _serial = tools::graph_augment::TEST_CONFIG_SERIAL
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        tools::graph_augment::install_test_config(tools::graph_augment::GraphAugmentConfig {
+            enabled: true,
+            ..Default::default()
+        });
+
+        let runtime = make_runtime_with_graph(true);
+        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
+        let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
+        let data = bridge
+            .call("dense_search", json!({"query": "DRC DRO", "top_k": 5}))
+            .await;
+
+        tools::graph_augment::clear_test_config();
+
+        assert!(data.get("chunks").is_some());
+        assert!(
+            data.get("graph_context").is_none(),
+            "dense must not get graph_context: {data}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lexical_search_graph_augment_off_has_no_graph_context_key() {
+        let _serial = tools::graph_augment::TEST_CONFIG_SERIAL
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        tools::graph_augment::install_test_config(tools::graph_augment::GraphAugmentConfig {
+            enabled: false,
+            ..Default::default()
+        });
+
+        let runtime = make_runtime_with_graph(true);
+        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
+        let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
+        let data = bridge
+            .call("lexical_search", json!({"query": "DRC DRO", "top_k": 5}))
+            .await;
+
+        tools::graph_augment::clear_test_config();
+
+        assert!(data.get("chunks").is_some());
+        assert!(
+            data.get("graph_context").is_none(),
+            "switch off must not attach graph_context: {data}"
         );
     }
 }

@@ -14,6 +14,8 @@ import {
   subscriptionStatusLabel,
 } from "./settings-shared";
 import { UsageLimitPanel } from "./settings-usage-limit-panel";
+import styles from "./settings-billing-panel.module.css";
+import shared from "./settings-ui-shared.module.css";
 
 function planLabel(planId: string | null | undefined): string | null {
   if (!planId) {
@@ -27,7 +29,7 @@ function planLabel(planId: string | null | undefined): string | null {
   return known[planId.toLowerCase()] ?? planId;
 }
 
-export function BillingPanel() {
+export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: boolean } = {}) {
   const { token } = useAuth();
   const { locale } = useUiPreferences();
 
@@ -60,38 +62,39 @@ export function BillingPanel() {
   const currentPlanName = planLabel(billingQuery.data?.subscription?.plan_id);
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={shared.section}>
       <UsageLimitPanel />
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.75rem" }}>
-        <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <h2 style={{ margin: 0 }}>
+      <section className={`app-inline-surface ${styles.planSection}`}>
+        <div className={`app-inline-row ${styles.headerRow}`}>
+          <div className={shared.headerText}>
+            <h2 className={shared.flushTitle}>
               {formatUiMessage(locale, "settings.billing.sectionTitle")}
             </h2>
-            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+            <p className={shared.mutedText}>
               {formatUiMessage(locale, "settings.billing.sectionSubtitle")}
             </p>
           </div>
-          <Link
-            className="app-button-primary"
-            data-testid="settings-manage-subscription"
-            href="/pricing"
-          >
-            {formatUiMessage(locale, "settings.billing.managePlanAction")}
-          </Link>
+          {hideManagePlan ? null : (
+            <Link
+              className="app-button-primary app-button-accent"
+              data-testid="settings-manage-subscription"
+              href="/pricing"
+            >
+              {formatUiMessage(locale, "settings.billing.managePlanAction")}
+            </Link>
+          )}
         </div>
         {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
         {billingQuery.isLoading ? (
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+          <p className={shared.mutedText}>
             {formatUiMessage(locale, "settings.billing.loading")}
           </p>
         ) : (
           <div
-            className="app-inline-surface"
+            className={`app-inline-surface ${styles.planCard}`}
             data-testid="plan-display"
-            style={{ display: "grid", gap: "0.5rem" }}
           >
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
               <span>
                 {formatUiMessage(locale, "settings.billing.currentPlanLabel")}
               </span>
@@ -100,7 +103,7 @@ export function BillingPanel() {
                   formatUiMessage(locale, "settings.billing.notActive")}
               </strong>
             </div>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
               <span>{formatUiMessage(locale, "settings.billing.statusLabel")}</span>
               <strong>
                 {billingQuery.data?.subscription
@@ -108,7 +111,7 @@ export function BillingPanel() {
                   : formatUiMessage(locale, "settings.billing.notActive")}
               </strong>
             </div>
-            <div className="app-inline-row" style={{ marginBottom: 0 }}>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
               <span>{formatUiMessage(locale, "settings.billing.renewsOnLabel")}</span>
               <strong>
                 {formatDate(

@@ -13,7 +13,7 @@
 }
 
 .card {
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--card));
   box-shadow: var(--shadow-sm);
@@ -33,7 +33,7 @@
   font-size: clamp(1.5rem, 2.4vw, 1.85rem);
   line-height: 1.1;
   letter-spacing: -0.03em;
-  color: rgba(0, 0, 0, 0.95);
+  color: hsl(var(--foreground));
 }
 
 .subtitle {
@@ -59,7 +59,7 @@
   display: grid;
   gap: 0.35rem;
   padding: 1rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
   cursor: pointer;
@@ -71,20 +71,15 @@
 }
 
 .choiceCard:hover {
-  border-color: rgba(0, 117, 222, 0.35);
+  border-color: var(--cos-accent-hover);
   background: hsl(var(--surface-elevated));
   transform: translateY(-1px);
-}
-
-.choiceCardActive {
-  border-color: hsl(var(--accent));
-  box-shadow: 0 0 0 1px rgba(0, 117, 222, 0.2);
 }
 
 .choiceTitle {
   margin: 0;
   font-weight: var(--font-weight-semibold);
-  color: rgba(0, 0, 0, 0.95);
+  color: hsl(var(--foreground));
 }
 
 .choiceHint {
@@ -102,7 +97,7 @@
 }
 
 .footerLink {
-  color: hsl(var(--accent));
+  color: hsl(var(--accent-text));
 }
 
 .footerLink:hover {
@@ -148,7 +143,7 @@
   display: grid;
   gap: 0.25rem;
   padding: 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: var(--radius-control);
   background: hsl(var(--surface-muted));
   cursor: pointer;
@@ -177,7 +172,7 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 0.65rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: 999px;
   background: hsl(var(--surface-muted));
   font-size: var(--font-size-label);
@@ -210,7 +205,7 @@
   align-items: flex-start;
   gap: 0.5rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-control);
   background: hsl(var(--surface-muted));
   font-size: var(--font-size-label);
@@ -238,14 +233,14 @@
   display: grid;
   gap: 0.75rem;
   padding: 1.25rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
 }
 
 .buyCardHighlight {
   border-color: hsl(var(--accent));
-  box-shadow: 0 0 0 1px rgba(0, 117, 222, 0.15);
+  box-shadow: 0 0 0 1px hsl(var(--accent) / 0.15);
 }
 
 .buyTier {
@@ -276,7 +271,7 @@
   display: grid;
   gap: 0.5rem;
   padding: 1rem 1.1rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
 }
@@ -292,7 +287,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-control);
   background: hsl(var(--card));
   font-size: var(--font-size-label);
@@ -318,7 +313,7 @@
   display: grid;
   gap: 0.5rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-control);
   background: hsl(var(--card));
 }
@@ -332,10 +327,10 @@
 .drawerOverlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-overlay);
   display: flex;
   justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.28);
+  background: hsl(var(--dashboard-overlay) / 0.28);
 }
 
 .drawerPanel {
@@ -345,7 +340,7 @@
   grid-template-rows: auto auto 1fr;
   gap: 0.75rem;
   padding: 1rem;
-  border-left: 1px solid rgba(0, 0, 0, 0.1);
+  border-left: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   box-shadow: var(--shadow-lg);
   overflow-y: auto;
@@ -373,7 +368,7 @@
 .drawerTab,
 .drawerTabActive {
   padding: 0.35rem 0.65rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid hsl(var(--border));
   border-radius: var(--radius-control);
   background: hsl(var(--surface-muted));
   font-size: var(--font-size-label);
@@ -382,13 +377,134 @@
 
 .drawerTabActive {
   border-color: hsl(var(--accent));
-  background: rgba(0, 117, 222, 0.08);
-  color: hsl(var(--accent));
+  background: hsl(var(--accent-soft));
+  color: hsl(var(--accent-text));
 }
 
 .drawerSection {
   display: grid;
   gap: 0.65rem;
+}
+
+.flushParagraph {
+  margin: 0;
+}
+
+.dockerStatusCard {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-control);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.buttonRowWrap {
+  flex-wrap: wrap;
+}
+
+.serviceList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.stackActions {
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.runtimeConfig {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.codeBlock {
+  display: block;
+  word-break: break-all;
+}
+
+.productSection {
+  margin-top: 1rem;
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 0.85rem;
+}
+
+.productList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.logDirNote {
+  margin-top: 0.5rem;
+}
+
+.sessionSection {
+  margin-top: 0.85rem;
+}
+
+.sessionStatus {
+  margin: 0.35rem 0 0;
+}
+
+.sessionActions {
+  margin-top: 0.5rem;
+}
+
+.cliHint {
+  margin-top: 0.75rem;
+}
+
+.downloadWrap {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.justifyStart {
+  justify-items: start;
+}
+
+.justifyCenter {
+  justify-items: center;
+}
+
+.downloadHint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.downloadMetaCompact {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.releaseDetails {
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.releaseTerm {
+  display: inline;
+  font-weight: var(--font-weight-semibold);
+}
+
+.releaseValue {
+  display: inline;
+  margin: 0;
+}
+
+.releaseHash {
+  display: inline;
+  margin: 0;
+  font-family: var(--font-mono);
+  word-break: break-all;
 }
 
 @media (max-width: 640px) {

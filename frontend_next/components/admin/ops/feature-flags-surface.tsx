@@ -23,6 +23,16 @@ import {
   useUiPreferences,
 } from "./shared";
 
+import styles from "./feature-flags-surface.module.css";
+
+/** Change-request status badge classes (light tinted bg + matching text). */
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  pending: styles.statusPending,
+  approved: styles.statusApproved,
+  executed: styles.statusExecuted,
+  rejected: styles.statusRejected,
+};
+
 export function AdminFeatureFlagsSurface() {
   const { token, user } = useAuth();
   const actorId = user?.id;
@@ -96,7 +106,7 @@ export function AdminFeatureFlagsSurface() {
   }
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
+    <section className={styles.container}>
       <AdminPageHeading
         title={adminText(locale, "admin.featureFlags.sectionTitle")}
         subtitle={adminText(locale, "admin.featureFlags.sectionSubtitle")}
@@ -108,15 +118,15 @@ export function AdminFeatureFlagsSurface() {
         <EmptyState copy={adminText(locale, "featureFlags.empty")} />
       ) : (
         <>
-          <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
+          <div className={styles.metricsGrid}>
             <AdminMetricCard label={adminText(locale, "common.totalFlags")} value={flags.length.toString()} />
             <AdminMetricCard label={adminText(locale, "featureFlags.pendingRequests")} tone="warning" value={flags.filter((flag) => flag.has_pending_request).length.toString()} />
             <AdminMetricCard label={adminText(locale, "featureFlags.configBlockers")} tone="danger" value={flags.filter((flag) => flag.requires_config && !flag.config_ready).length.toString()} />
             <AdminMetricCard label={adminText(locale, "featureFlags.drift")} tone="success" value={flags.filter((flag) => flag.enabled !== flag.effective_enabled).length.toString()} />
           </div>
 
-          <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-            <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "minmax(0, 1fr) minmax(12rem, 14rem)" }}>
+          <section className={`app-inline-surface ${styles.panel}`}>
+            <div className={styles.filtersGrid}>
               <div>
                 <label className="app-form-label" htmlFor="admin-feature-flags-search">
                   {adminText(locale, "admin.searchLabel")}
@@ -148,14 +158,14 @@ export function AdminFeatureFlagsSurface() {
           {filteredFlags.length === 0 ? (
             <EmptyState copy={adminText(locale, "featureFlags.matchingEmpty")} />
           ) : (
-            <div style={{ display: "grid", gap: "0.8rem" }}>
+            <div className={styles.listStack}>
               {filteredFlags.map((flag) => (
-                <section className="app-inline-surface" key={flag.key} style={{ display: "grid", gap: "0.7rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "start" }}>
-                    <div style={{ display: "grid", gap: "0.45rem" }}>
+                <section className={`app-inline-surface ${styles.card}`} key={flag.key}>
+                  <div className={styles.headRow}>
+                    <div className={styles.titleStack}>
                       <strong>{flag.key}</strong>
-                      <span style={{ color: "hsl(var(--muted-foreground))" }}>{flag.description}</span>
-                      <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+                      <span className={styles.mutedText}>{flag.description}</span>
+                      <div className={styles.chipsRow}>
                         <span className="app-inline-surface">{featureFlagCategoryLabel(locale, flag.category)}</span>
                         <span className="app-inline-surface">{adminText(locale, "featureFlags.source")}{featureFlagSourceLabel(locale, flag.source)}</span>
                         <span className="app-inline-surface">{adminText(locale, "featureFlags.desired")}{flag.enabled ? adminText(locale, "common.on") : adminText(locale, "common.off")}</span>
@@ -164,13 +174,13 @@ export function AdminFeatureFlagsSurface() {
                         {flag.has_pending_request ? <span className="app-inline-surface">{adminText(locale, "common.pendingRequest")}</span> : null}
                       </div>
                     </div>
-                    <span style={{ fontSize: "0.78rem", color: "hsl(var(--muted-foreground))" }}>
+                    <span className={styles.smallMuted}>
                       {flag.updated_at ? `${adminText(locale, "common.updated")} ${formatTimestamp(flag.updated_at, locale)}` : adminText(locale, "featureFlags.seeded")}
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                  <div className={styles.actionRow}>
                     <input
-                      className="app-input"
+                      className={`app-input ${styles.flexInput}`}
                       onChange={(event) =>
                         setRequestReasons((currentReasons) => ({
                           ...currentReasons,
@@ -178,7 +188,6 @@ export function AdminFeatureFlagsSurface() {
                         }))
                       }
                       placeholder={adminText(locale, "featureFlags.reasonPlaceholder")}
-                      style={{ flex: 1 }}
                       type="text"
                       value={requestReasons[flag.key] ?? ""}
                     />
@@ -200,38 +209,40 @@ export function AdminFeatureFlagsSurface() {
             </div>
           )}
 
-          <section style={{ display: "grid", gap: "0.8rem" }}>
-            <h2 style={{ margin: 0 }}>{adminText(locale, "featureFlags.changeRequestsTitle")}</h2>
+          <section className={styles.listStack}>
+            <h2 className={styles.heading}>{adminText(locale, "featureFlags.changeRequestsTitle")}</h2>
             {requests.length === 0 ? (
               <EmptyState copy={requestStatus === "all" ? adminText(locale, "featureFlags.noRequests") : adminText(locale, "featureFlags.noRequestsForFilter")} />
             ) : (
-              <div style={{ display: "grid", gap: "0.8rem" }}>
+              <div className={styles.listStack}>
                 {requests.map((request) => (
-                  <section className="app-inline-surface" key={request.id} style={{ display: "grid", gap: "0.7rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "start" }}>
-                      <div style={{ display: "grid", gap: "0.45rem" }}>
-                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <section className={`app-inline-surface ${styles.card}`} key={request.id}>
+                    <div className={styles.headRow}>
+                      <div className={styles.titleStack}>
+                        <div className={styles.titleRow}>
                           <strong>{request.flag_key}</strong>
-                          <span className="app-inline-surface">{featureFlagStatusLabel(locale, request.status)}</span>
+                          <span className={`app-inline-surface ${STATUS_BADGE_CLASS[request.status] ?? ""}`}>
+                            {featureFlagStatusLabel(locale, request.status)}
+                          </span>
                         </div>
-                        <span style={{ color: "hsl(var(--muted-foreground))" }}>{request.reason}</span>
-                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
+                        <span className={styles.mutedText}>{request.reason}</span>
+                        <div className={styles.chipsRowMuted}>
                           <span>{adminText(locale, "featureFlags.requestedBy")}{request.requested_by}</span>
                           <span>{adminText(locale, "common.created")}: {formatTimestamp(request.created_at, locale)}</span>
                           {request.reviewed_by ? <span>{adminText(locale, "common.reviewedBy")}{request.reviewed_by}</span> : null}
                         </div>
                       </div>
-                      <span style={{ fontSize: "0.78rem", color: "hsl(var(--muted-foreground))" }}>#{request.id}</span>
+                      <span className={styles.smallMuted}>#{request.id}</span>
                     </div>
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+                    <div className={styles.chipsRowSpaced}>
                       <span className="app-inline-surface">{adminText(locale, "common.current")}: {request.current_enabled ? adminText(locale, "common.on") : adminText(locale, "common.off")}</span>
                       <span className="app-inline-surface">{adminText(locale, "featureFlags.requested")}{request.requested_enabled ? adminText(locale, "common.on") : adminText(locale, "common.off")}</span>
                     </div>
                     {request.review_note ? <div className="app-inline-surface">{adminText(locale, "featureFlags.reviewNote")}{request.review_note}</div> : null}
                     {request.status === "pending" ? (
-                      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                      <div className={styles.actionRow}>
                         <input
-                          className="app-input"
+                          className={`app-input ${styles.flexInput}`}
                           onChange={(event) =>
                             setReviewNotes((currentNotes) => ({
                               ...currentNotes,
@@ -239,7 +250,6 @@ export function AdminFeatureFlagsSurface() {
                             }))
                           }
                           placeholder={adminText(locale, "featureFlags.optionalReviewNote")}
-                          style={{ flex: 1 }}
                           type="text"
                           value={reviewNotes[request.id] ?? ""}
                         />

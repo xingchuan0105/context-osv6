@@ -27,6 +27,8 @@ import {
   settingsKeys,
   type NotificationFormValues,
 } from "./settings-shared";
+import styles from "./settings-notifications-panel.module.css";
+import shared from "./settings-ui-shared.module.css";
 
 export function NotificationsPanel() {
   const { token } = useAuth();
@@ -171,14 +173,14 @@ export function NotificationsPanel() {
   const notifications = notificationsQuery.data?.notifications ?? [];
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
-      <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
-        <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <h2 style={{ margin: 0 }}>
+    <section className={shared.section}>
+      <section className={`app-inline-surface ${shared.section}`}>
+        <div className={`app-inline-row ${styles.headerRow}`}>
+          <div className={shared.headerText}>
+            <h2 className={shared.flushTitle}>
               {formatUiMessage(locale, "settings.notifications.sectionTitle")}
             </h2>
-            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+            <p className={shared.mutedText}>
               {formatUiMessage(locale, "settings.notifications.sectionSubtitle")}
             </p>
           </div>
@@ -202,18 +204,12 @@ export function NotificationsPanel() {
           <p className="app-notice-banner">{actionError || loadError}</p>
         ) : null}
         <form
+          className={shared.formGrid}
           id="settings-notifications-form"
           noValidate
-          style={{ display: "grid", gap: "1rem" }}
           onSubmit={notificationsForm.handleSubmit(handleSave)}
         >
-          <div
-            style={{
-              display: "grid",
-              gap: "0.75rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(16rem, 1fr))",
-            }}
-          >
+          <div className={styles.choiceGrid}>
             {([
               ["email_enabled", formatUiMessage(locale, "settings.notifications.emailUpdatesLabel")],
               ["product_enabled", formatUiMessage(locale, "settings.notifications.productUpdatesLabel")],
@@ -221,28 +217,15 @@ export function NotificationsPanel() {
               ["weekly_digest_enabled", formatUiMessage(locale, "settings.notifications.weeklyDigestLabel")],
             ] as const).map(([key, title]) => (
               <label
-                className="app-inline-surface"
+                className={`app-inline-surface ${styles.toggleLabel}`}
                 key={key}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "1rem",
-                  cursor: "pointer",
-                }}
               >
                 <span>{title}</span>
                 <input type="checkbox" {...notificationsForm.register(key)} />
               </label>
             ))}
           </div>
-          <div
-            style={{
-              display: "grid",
-              gap: "0.75rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(16rem, 1fr))",
-            }}
-          >
+          <div className={styles.choiceGrid}>
             <div>
               <label className="app-form-label" htmlFor="settings-quiet-hours-start">
                 {formatUiMessage(locale, "settings.notifications.quietHoursStartLabel")}
@@ -258,7 +241,7 @@ export function NotificationsPanel() {
                 {...notificationsForm.register("quiet_hours_start")}
               />
               {notificationsForm.formState.errors.quiet_hours_start?.message ? (
-                <p className="app-form-footnote" style={{ color: "hsl(var(--destructive))" }}>
+                <p className={`app-form-footnote ${styles.errorText}`}>
                   {notificationsForm.formState.errors.quiet_hours_start.message}
                 </p>
               ) : null}
@@ -278,7 +261,7 @@ export function NotificationsPanel() {
                 {...notificationsForm.register("quiet_hours_end")}
               />
               {notificationsForm.formState.errors.quiet_hours_end?.message ? (
-                <p className="app-form-footnote" style={{ color: "hsl(var(--destructive))" }}>
+                <p className={`app-form-footnote ${styles.errorText}`}>
                   {notificationsForm.formState.errors.quiet_hours_end.message}
                 </p>
               ) : null}
@@ -287,39 +270,37 @@ export function NotificationsPanel() {
         </form>
       </section>
 
-      <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
-        <h3 style={{ margin: 0 }}>
+      <section className={`app-inline-surface ${styles.historySection}`}>
+        <h3 className={shared.flushTitle}>
           {formatUiMessage(locale, "settings.notifications.historyTitle")}
         </h3>
         {notificationsQuery.isLoading ? (
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+          <p className={shared.mutedText}>
             {formatUiMessage(locale, "settings.notifications.loading")}
           </p>
         ) : notifications.length === 0 ? (
-          <div style={{ display: "grid", gap: "0.3rem" }}>
+          <div className={styles.emptyState}>
             <strong>
               {formatUiMessage(locale, "settings.notifications.emptyTitle")}
             </strong>
-            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+            <p className={shared.mutedText}>
               {formatUiMessage(locale, "settings.notifications.emptyBody")}
             </p>
           </div>
         ) : (
-          <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div className={styles.notificationList}>
             {notifications.map((notification) => (
               <article
-                className="app-inline-surface"
+                className={`app-inline-surface ${styles.notificationItem}`}
                 key={notification.id}
                 style={{
-                  display: "grid",
-                  gap: "0.6rem",
-                  borderColor: notification.read_at ? "hsl(var(--border))" : "hsl(var(--primary))",
+                  borderColor: notification.read_at ? "hsl(var(--border))" : "hsl(var(--accent))",
                 }}
               >
-                <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
-                  <div style={{ display: "grid", gap: "0.25rem" }}>
+                <div className={`app-inline-row ${styles.headerRow}`}>
+                  <div className={styles.notificationMeta}>
                     <strong>{notification.title}</strong>
-                    <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                    <span className={styles.mutedSpan}>
                       {notificationTypeLabel(locale, notification.event_type)} ·{" "}
                       {formatDateTime(notification.created_at, locale)}
                     </span>
@@ -341,7 +322,7 @@ export function NotificationsPanel() {
                         : formatUiMessage(locale, "settings.notifications.markRead")}
                   </button>
                 </div>
-                <p style={{ margin: 0 }}>{notification.body}</p>
+                <p className={styles.flushText}>{notification.body}</p>
               </article>
             ))}
           </div>
@@ -350,4 +331,3 @@ export function NotificationsPanel() {
     </section>
   );
 }
-

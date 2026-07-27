@@ -215,11 +215,15 @@ describe("DashboardSurface", () => {
 
     await user.click(screen.getByTestId("dashboard-account-menu-trigger"));
     expect(screen.getByTestId("dashboard-account-menu")).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "个人资料" }).getAttribute("href")).toBe(
-      "/settings?tab=profile",
+    // Profile / billing / appearance open in-page modals (buttons); security/notifications stay links.
+    expect(screen.getByRole("menuitem", { name: "个人资料" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "订阅与用量" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "外观" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "安全" }).getAttribute("href")).toBe(
+      "/settings?tab=security",
     );
-    expect(screen.getByRole("menuitem", { name: "账单" }).getAttribute("href")).toBe(
-      "/settings?tab=billing",
+    expect(screen.getByRole("menuitem", { name: "通知" }).getAttribute("href")).toBe(
+      "/settings?tab=notifications",
     );
 
     await user.click(screen.getByTestId("dashboard-logout"));
@@ -325,8 +329,6 @@ describe("DashboardSurface", () => {
 
   it("creates, searches, renames, and deletes workspaces against the dashboard contract", async () => {
     const user = userEvent.setup();
-    const promptMock = vi.spyOn(window, "prompt").mockReturnValue("Renamed Gamma");
-    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     renderWithQuery(<DashboardSurface />);
 
@@ -352,6 +354,11 @@ describe("DashboardSurface", () => {
     await user.click(screen.getByRole("button", { name: "关闭搜索" }));
     const renameMenu = await openWorkspaceMenu(user, "Gamma");
     await user.click(within(renameMenu).getByRole("menuitem", { name: "重命名" }));
+    const renameDialog = await screen.findByRole("dialog", { name: "重命名工作区" });
+    const renameInput = within(renameDialog).getByLabelText("名称");
+    await user.clear(renameInput);
+    await user.type(renameInput, "Renamed Gamma");
+    await user.click(within(renameDialog).getByRole("button", { name: "保存" }));
     await waitFor(() => {
       expect(mocks.updateWorkspaceMock).toHaveBeenCalledWith("token-123", "ws-3", {
         name: "Renamed Gamma",
@@ -361,13 +368,11 @@ describe("DashboardSurface", () => {
 
     const betaMenu = await openWorkspaceMenu(user, "Beta");
     await user.click(within(betaMenu).getByRole("menuitem", { name: "删除" }));
+    const deleteDialog = await screen.findByRole("dialog", { name: "删除工作区" });
+    await user.click(within(deleteDialog).getByRole("button", { name: "删除" }));
     await waitFor(() => {
-      expect(confirmMock).toHaveBeenCalledWith("删除 Beta?");
       expect(mocks.deleteWorkspaceMock).toHaveBeenCalledWith("token-123", "ws-2");
       expect(mocks.updateFavoriteWorkspaceIdsMock).toHaveBeenCalledWith("token-123", []);
     });
-
-    promptMock.mockRestore();
-    confirmMock.mockRestore();
   });
 });

@@ -1,9 +1,11 @@
 use anyhow::{Context, Result};
-use app_core::AppConfig;
+use app_core::{AppConfig, RetrievalBackend};
 use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, ObjectStoreHeadError, S3ObjectStore};
+use avrag_storage_pgvector::{PgvectorConfig, PgvectorDataPlane};
+use sqlx::PgPool;
 use ingestion::IngestionTask;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -141,21 +143,37 @@ pub(crate) fn url_to_filename(url: &str) -> String {
 
 pub(crate) async fn build_worker_retrieval_data_plane(
     config: &AppConfig,
+    pool: Option<&PgPool>,
 ) -> Result<Option<Arc<dyn RetrievalDataPlane>>> {
     if !config.enable_rag {
         return Ok(None);
     }
-    let milvus_config = StorageMilvusConfig {
-        url: config.milvus.url.clone(),
-        token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),
-        database: Some(config.milvus.database.clone())
-            .filter(|database| !database.trim().is_empty()),
-        collection_prefix: config.milvus.collection_prefix.clone(),
-        text_vector_dim: config.milvus.text_vector_dim,
-        multimodal_vector_dim: config.milvus.multimodal_vector_dim,
-        metric_type: config.milvus.metric_type.clone(),
+    let data_plane: Arc<dyn RetrievalDataPlane> = match config.retrieval_backend {
+        RetrievalBackend::Milvus => {
+            let milvus_config = StorageMilvusConfig {
+                url: config.milvus.url.clone(),
+                token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),
+                database: Some(config.milvus.database.clone())
+                    .filter(|database| !database.trim().is_empty()),
+                collection_prefix: config.milvus.collection_prefix.clone(),
+                text_vector_dim: config.milvus.text_vector_dim,
+                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                metric_type: config.milvus.metric_type.clone(),
+            };
+            Arc::new(MilvusDataPlane::new(milvus_config))
+        }
+        RetrievalBackend::Pgvector => {
+            let pool = pool.ok_or_else(|| {
+                anyhow::anyhow!("RETRIEVAL_BACKEND=pgvector requires DATABASE_URL / PgPool")
+            })?;
+            let pgvector_config = PgvectorConfig {
+                text_vector_dim: config.milvus.text_vector_dim,
+                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                hnsw_ef_search: Some(40),
+            };
+            Arc::new(PgvectorDataPlane::new(pool.clone(), pgvector_config))
+        }
     };
-    let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
     data_plane.ensure_schema().await?;
     Ok(Some(data_plane))
 }

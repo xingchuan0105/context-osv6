@@ -1,0 +1,76 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background) / 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.container {
+  width: 100%;
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.navLink {
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+  font-size: var(--font-size-body);
+  text-decoration: none;
+}
+
+.navLinkActive {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.langGroup {
+  display: inline-flex;
+  gap: 0.35rem;
+  font-size: var(--font-size-control);
+}
+
+.langButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+
+.langButtonActive {
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.navButton {
+  font-size: var(--font-size-body);
+  padding: 0.35rem 0.75rem;
+}
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.shellContent {
+  flex: 1;
+}

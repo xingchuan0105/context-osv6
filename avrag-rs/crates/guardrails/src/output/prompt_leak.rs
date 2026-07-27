@@ -3,17 +3,36 @@
 use contracts::chat::{GuardResult, RiskLevel};
 
 const PROMPT_SOURCES: &[(&str, &str)] = &[
+    // Live main-path system prompts (P2 2026-07-20: monomode *-system retired
+    // to prompts/deprecated/monomode-system/; leak references must track the
+    // prompts actually served to models).
     (
-        "rag-system",
-        include_str!("../../../../prompts/orchestrators/rag-system.md"),
+        "capability-rag",
+        include_str!("../../../../prompts/orchestrators/capability-rag.md"),
     ),
     (
-        "search-system",
-        include_str!("../../../../prompts/orchestrators/search-system.md"),
+        "capability-search",
+        include_str!("../../../../prompts/orchestrators/capability-search.md"),
     ),
     (
-        "chat-system",
-        include_str!("../../../../prompts/orchestrators/chat-system.md"),
+        "chat-base",
+        include_str!("../../../../prompts/orchestrators/chat-base.md"),
+    ),
+    (
+        "orchestrator-base",
+        include_str!("../../../../prompts/orchestrators/orchestrator-base.md"),
+    ),
+    (
+        "answer-from-workspace",
+        include_str!("../../../../prompts/orchestrators/answer-from-workspace.md"),
+    ),
+    (
+        "answer-from-web",
+        include_str!("../../../../prompts/orchestrators/answer-from-web.md"),
+    ),
+    (
+        "answer-dual-source",
+        include_str!("../../../../prompts/orchestrators/answer-dual-source.md"),
     ),
     (
         "codegen",
@@ -216,14 +235,16 @@ mod tests {
         assert!(result.passed);
     }
 
-    /// NOTE: this fixture mirrors the current `prompts/orchestrators/rag-system.md`
-    /// wording (minimal v0). If that prompt is rewritten, update the leaked text
-    /// below to verbatim-copy a current paragraph, otherwise the detector will
-    /// correctly miss it and this test will rot (see git history of this hunk).
+    /// NOTE: this fixture mirrors the current `prompts/orchestrators/capability-rag.md`
+    /// wording (P2: main-path RAG worker prompt). If that prompt is rewritten,
+    /// update the leaked text below to verbatim-copy a current paragraph,
+    /// otherwise the detector will correctly miss it and this test will rot.
+    /// (C7: fenced prompt examples are ignored by the detector; this unfenced
+    /// single-sentence paragraph remains the kept detection path.)
     #[test]
     fn paragraph_leak_is_blocked() {
         let guard = PromptLeakGuard::new();
-        let leaked = "系统提示要求：你是 **RAG agent**：只根据工作区文档（经检索得到的 chunks）回答用户。事实性结论必须有检索证据支撑；证据中没有的内容不要当作文档事实写出。";
+        let leaked = "系统提示要求：你当前 **已启用** 工作区文档检索。文档事实须来自检索 / 代码 observation；未见的内容不要当作文档事实。";
         let result = guard.check(leaked, None);
         assert!(!result.passed);
         assert_eq!(result.guard_type, "output:prompt_leak");

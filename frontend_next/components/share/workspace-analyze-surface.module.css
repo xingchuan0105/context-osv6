@@ -1,0 +1,64 @@
+.sectionCard {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.sectionTitle {
+  margin-bottom: var(--space-2);
+  font-size: 1.3rem;
+}
+
+.pageStack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.headerRow {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.metricGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.metricTitle {
+  margin: 0 0 0.35rem;
+}
+
+.metricValue {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.logList {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.logMeta {
+  margin-top: 0.35rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.flushText {
+  margin: 0;
+}
+
+.mutedText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}

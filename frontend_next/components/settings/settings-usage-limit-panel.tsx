@@ -10,6 +10,8 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import { UsageMeter } from "../billing/UsageMeter";
 import { usageLimitToMeterProps } from "../../lib/billing/usage-limit-adapter";
 import { formatCompactNumber, metricLabel, settingsKeys, bannerStyle } from "./settings-shared";
+import styles from "./settings-usage-limit-panel.module.css";
+import shared from "./settings-ui-shared.module.css";
 
 export function UsageLimitPanel() {
   const { token } = useAuth();
@@ -40,28 +42,28 @@ export function UsageLimitPanel() {
     : "";
 
   return (
-    <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
-      <div style={{ display: "grid", gap: "0.35rem" }}>
-        <h2 style={{ margin: 0 }}>
+    <section className={`app-inline-surface ${shared.section}`}>
+      <div className={shared.headerText}>
+        <h2 className={shared.flushTitle}>
           {formatUiMessage(locale, "settings.usage.sectionTitle")}
         </h2>
-        <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+        <p className={shared.mutedText}>
           {formatUiMessage(locale, "settings.usage.sectionSubtitle")}
         </p>
       </div>
       {usageLimitQuery.isLoading ? (
-        <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+        <p className={shared.mutedText}>
           {formatUiMessage(locale, "settings.usage.loading")}
         </p>
       ) : usageError ? (
         <p className="app-notice-banner">{usageError}</p>
       ) : !usageLimitQuery.data ? (
-        <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+        <p className={shared.mutedText}>
           {formatUiMessage(locale, "settings.usage.empty")}
         </p>
       ) : (
         <>
-          <div className="app-inline-surface" style={{ display: "grid", gap: "0.5rem" }}>
+          <div className={`app-inline-surface ${styles.detailCard}`}>
             <div className="app-inline-row">
               <span>{formatUiMessage(locale, "settings.usage.scopeLabel")}</span>
               <strong>{scopeLabel}</strong>
@@ -82,10 +84,10 @@ export function UsageLimitPanel() {
           </div>
           <UsageMeter {...usageLimitToMeterProps(usageLimitQuery.data, locale)} />
           {breakdown.length > 0 ? (
-            <div className="app-inline-surface" style={{ display: "grid", gap: "0.5rem" }}>
+            <div className={`app-inline-surface ${styles.detailCard}`}>
               <strong>{formatUiMessage(locale, "settings.usage.breakdownTitle")}</strong>
               {breakdown.map(([metric, value]) => (
-                <div className="app-inline-row" key={metric} style={{ marginBottom: 0 }}>
+                <div className={`app-inline-row ${shared.summaryRow}`} key={metric}>
                   <span>{metricLabel(locale, metric)}</span>
                   <strong>{formatCompactNumber(value)}</strong>
                 </div>

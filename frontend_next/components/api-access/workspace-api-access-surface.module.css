@@ -1,0 +1,200 @@
+.container {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 56rem;
+}
+
+.stackLarge {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.header {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.intro {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 42rem;
+}
+
+.overline {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.overlineSmall {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.note {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body-strong);
+  margin: 0;
+}
+
+.muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.mutedText {
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+.mutedTextSpaced {
+  color: hsl(var(--muted-foreground));
+  margin: 0.35rem 0 0;
+}
+
+.card {
+  display: grid;
+  gap: 1rem;
+}
+
+.cardTitle {
+  margin: 0 0 0.5rem;
+  font-size: var(--font-size-title-sm);
+}
+
+.cardTitleCompact {
+  margin: 0 0 0.35rem;
+  font-size: var(--font-size-title-sm);
+}
+
+.form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.checkboxGroup {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.checkboxLabel {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.codeBlock {
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--surface-muted));
+  margin: 0;
+  overflow-x: auto;
+  padding: 1rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.sectionHeader {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.keyItem {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.keyItemBody {
+  min-width: 0;
+}
+
+.keyName {
+  font-weight: 600;
+}
+
+.keyMeta {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body-strong);
+  margin-top: 0.25rem;
+}
+
+.keyMetaSpaced {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body-strong);
+  margin-top: 0.35rem;
+}
+
+.agentCard {
+  background: linear-gradient(180deg, hsl(var(--surface-elevated)) 0%, hsl(var(--surface-muted)) 100%);
+  border: 1px solid hsl(var(--border));
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem;
+}
+
+.agentIntro {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.step {
+  align-items: start;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 2rem minmax(0, 1fr);
+}
+
+.stepBadge {
+  align-items: center;
+  background: hsl(var(--foreground));
+  border-radius: 999px;
+  color: hsl(var(--background));
+  display: grid;
+  font-size: 0.88rem;
+  font-weight: var(--font-weight-bold);
+  height: 2rem;
+  justify-items: center;
+  width: 2rem;
+}
+
+.stepBadgeMuted {
+  align-items: center;
+  background: hsl(var(--surface-muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  color: hsl(var(--foreground));
+  display: grid;
+  font-size: 0.88rem;
+  font-weight: var(--font-weight-bold);
+  height: 2rem;
+  justify-items: center;
+  width: 2rem;
+}
+
+.stepBody {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}

@@ -13,6 +13,7 @@ import {
   type ShareAnalyticsResponse,
   type ShareSettings,
 } from "../../lib/share/client";
+import styles from "./workspace-analyze-surface.module.css";
 
 function AnalyzeSection({
   title,
@@ -24,9 +25,9 @@ function AnalyzeSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
+    <section className={`app-surface-card ${styles.sectionCard}`}>
       <div>
-        <h2 className="app-page-title" style={{ fontSize: "1.3rem", marginBottom: "0.5rem" }}>
+        <h2 className={`app-page-title ${styles.sectionTitle}`}>
           {title}
         </h2>
         <p className="app-page-subtitle">{subtitle}</p>
@@ -96,12 +97,12 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
 
   return (
     <main className="app-page-shell">
-      <div className="app-page-center" style={{ display: "grid", gap: "1rem" }}>
-        <header style={{ display: "grid", gap: "0.75rem" }}>
+      <div className={`app-page-center ${styles.pageStack}`}>
+        <header className={styles.header}>
           <Link className="app-link app-link-muted" href={`/dashboard/${workspaceId}`}>
             返回 Workspace
           </Link>
-          <div style={{ alignItems: "start", display: "flex", gap: "1rem", justifyContent: "space-between" }}>
+          <div className={styles.headerRow}>
             <div>
               <h1 className="app-page-title">Analyze</h1>
               <p className="app-page-subtitle">仅展示当前 Workspace 的分享状态、访问量和最近访问记录。</p>
@@ -116,7 +117,7 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
 
         {loading ? (
           <section className="app-surface-card">
-            <p style={{ margin: 0 }}>正在加载分享分析...</p>
+            <p className={styles.flushText}>正在加载分享分析...</p>
           </section>
         ) : !isShareEnabled(settings) ? (
           <AnalyzeSection
@@ -135,43 +136,31 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
               subtitle="Analyze 页面只保留分享相关分析，不扩展成搜索页或 token 成本页。"
               title="分享状态"
             >
-              <div
-                style={{
-                  display: "grid",
-                  gap: "1rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))",
-                }}
-              >
+              <div className={styles.metricGrid}>
                 <div className="app-inline-surface">
-                  <h3 style={{ margin: "0 0 0.35rem" }}>访问级别</h3>
-                  <p style={{ margin: 0 }}>{settings?.access_level ?? "未设置"}</p>
+                  <h3 className={styles.metricTitle}>访问级别</h3>
+                  <p className={styles.flushText}>{settings?.access_level ?? "未设置"}</p>
                 </div>
                 <div className="app-inline-surface">
-                  <h3 style={{ margin: "0 0 0.35rem" }}>允许下载</h3>
-                  <p style={{ margin: 0 }}>{settings?.allow_download ? "已开启" : "未开启"}</p>
+                  <h3 className={styles.metricTitle}>允许下载</h3>
+                  <p className={styles.flushText}>{settings?.allow_download ? "已开启" : "未开启"}</p>
                 </div>
                 <div className="app-inline-surface">
-                  <h3 style={{ margin: "0 0 0.35rem" }}>过期时间</h3>
-                  <p style={{ margin: 0 }}>{settings?.expires_at ?? "未设置"}</p>
+                  <h3 className={styles.metricTitle}>过期时间</h3>
+                  <p className={styles.flushText}>{settings?.expires_at ?? "未设置"}</p>
                 </div>
               </div>
             </AnalyzeSection>
 
             <AnalyzeSection subtitle="总访问量和独立访客来自 share analytics。 " title="访问指标">
-              <div
-                style={{
-                  display: "grid",
-                  gap: "1rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))",
-                }}
-              >
+              <div className={styles.metricGrid}>
                 <div className="app-inline-surface">
-                  <h3 style={{ margin: "0 0 0.35rem" }}>总访问量</h3>
-                  <p style={{ fontSize: "1.7rem", fontWeight: 700, margin: 0 }}>{analytics?.total_views ?? 0}</p>
+                  <h3 className={styles.metricTitle}>总访问量</h3>
+                  <p className={styles.metricValue}>{analytics?.total_views ?? 0}</p>
                 </div>
                 <div className="app-inline-surface">
-                  <h3 style={{ margin: "0 0 0.35rem" }}>独立访客</h3>
-                  <p style={{ fontSize: "1.7rem", fontWeight: 700, margin: 0 }}>
+                  <h3 className={styles.metricTitle}>独立访客</h3>
+                  <p className={styles.metricValue}>
                     {analytics?.total_unique_visitors ?? 0}
                   </p>
                 </div>
@@ -180,11 +169,11 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
 
             <AnalyzeSection subtitle="展示最近的分享访问动作。 " title="最近访问日志">
               {logs?.logs.length ? (
-                <ul style={{ display: "grid", gap: "0.75rem", listStyle: "none", margin: 0, padding: 0 }}>
+                <ul className={styles.logList}>
                   {logs.logs.slice(0, 10).map((log) => (
                     <li className="app-inline-surface" key={log.id}>
                       <strong>{log.action}</strong>
-                      <div style={{ color: "hsl(var(--muted-foreground))", marginTop: "0.35rem" }}>
+                      <div className={styles.logMeta}>
                         {log.visitor_id} · {log.accessed_at}
                       </div>
                     </li>
@@ -192,7 +181,7 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
                 </ul>
               ) : (
                 <div className="app-inline-surface">
-                  <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>暂时还没有访问日志。</p>
+                  <p className={styles.mutedText}>暂时还没有访问日志。</p>
                 </div>
               )}
             </AnalyzeSection>

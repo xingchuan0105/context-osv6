@@ -65,18 +65,20 @@ type WorkspaceUiStoreOptions = {
 
 export const WORKSPACE_UI_STORAGE_KEY = "context-os.workspace-ui.v1";
 
-const HISTORY_RAIL_MIN_WIDTH = 236;
-const HISTORY_RAIL_MAX_WIDTH = 320;
-const RIGHT_RAIL_MIN_WIDTH = 304;
-const RIGHT_RAIL_MAX_WIDTH = 392;
+export const HISTORY_RAIL_MIN_WIDTH = 236;
+export const HISTORY_RAIL_MAX_WIDTH = 320;
+export const HISTORY_RAIL_DEFAULT_WIDTH = 280;
+export const RIGHT_RAIL_MIN_WIDTH = 280;
+export const RIGHT_RAIL_MAX_WIDTH = 360;
+export const RIGHT_RAIL_DEFAULT_WIDTH = 336;
 const LEGACY_HISTORY_RAIL_DEFAULT_WIDTH = 264;
 const LEGACY_RIGHT_RAIL_DEFAULT_WIDTH = 336;
 
 export const DEFAULT_WORKSPACE_UI_STATE: WorkspaceUiState = {
   historyRailOpen: true,
-  historyRailWidth: HISTORY_RAIL_MAX_WIDTH,
+  historyRailWidth: HISTORY_RAIL_DEFAULT_WIDTH,
   rightRailOpen: true,
-  rightRailWidth: RIGHT_RAIL_MAX_WIDTH,
+  rightRailWidth: RIGHT_RAIL_DEFAULT_WIDTH,
   rightRailSplitRatio: 0.5,
   selectedSourceIds: [],
   focusedSourceId: null,

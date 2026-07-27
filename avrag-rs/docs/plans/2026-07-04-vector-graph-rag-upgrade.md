@@ -1,5 +1,20 @@
 # Vector Graph RAG 升级方案：抽取质量 + 图增强双路检索（2026-07-04）
 
+> **2026-07-23 勘误 / 收窄（图增强触发与证据打分）**  
+> 本文 **§2 图增强双路** 中下列表述 **已废止为现行规范**，以  
+> [`2026-07-23-lexical-graph-augment-scoring-design.md`](./2026-07-23-lexical-graph-augment-scoring-design.md)  
+> 为 **canonical**：
+>
+> | 本文原述 | 现行 |
+> |----------|------|
+> | `dense_search` **与** `lexical_search` 均强制 `graph_augment` | **仅 lexical/BM25 强制带图**；dense **不**自动带图 |
+> | 种子：`embed(subquery)` / 原 query 整句 entity ANN | **本跳 terms** 精确匹配优先；禁止用户原句整句 ANN 作强制默认 |
+> | `GRAPH_AUGMENT_HOPS` 默认 2 | 强制增强固定 **hop=1**；多跳交给 ReAct |
+> | 固定分 0.85 作图证据相关度 / 排序暗示 | **不作相关度**；证据用本跳 terms 的 \(s(c;T)\) + **得分落差截断**（相对 TOP1） |
+>
+> §1 三元组抽取质量、分层 `graph_context`、冗余上限思路仍有效。  
+> 实现现状：`graph_augment` 源码曾落地后已不在树内；恢复时按 canonical 重接。
+
 前置文档：`2026-07-04-graph-channel-analysis.md`（P0/P1 已完成：种子大小写解析、
 json 围栏、语义种子接线；本文承接其 P2 并引入新的检索架构升级）。
 
@@ -144,23 +159,34 @@ RAG_QUALITY_REALISTIC_TRIPLET_ENABLED=1 E2E_MODE=nightly cargo test -p app \
 论文（2507.03608）：Hybrid 双路并行 + 分层拼接在中/难题上事实准确性最优；
 但冗余失控会拖垮上下文相关性（0.04）——**增强必须带上限**。
 
-结论：把图检索从「LLM 显式选择的工具」降级为「dense/lexical 的自动增强通道」，
-路由随机性归零，负反馈反转为正反馈，负对照保护整套退役。
+结论（**历史**）：把图检索从「LLM 显式选择的工具」降级为「dense/lexical 的自动增强通道」。
+
+> **现行（2026-07-23）**：仅 **lexical/BM25 强制 1 跳带图**；dense 不挂钩；证据用  
+> **得分落差** 相对 TOP1 截断。详见  
+> [`2026-07-23-lexical-graph-augment-scoring-design.md`](./2026-07-23-lexical-graph-augment-scoring-design.md)。  
+> 下文 §2.2–2.4 保留为当时实现草图，**不得再当产品真理**。
 
 ### 2.2 数据流
 
 ```
+# === 历史草图（2026-07-04/05）；现行见 lexical-graph-augment-scoring-design ===
 client.dense_search(query=subquery)          # 或 lexical_search
   → RuntimeBridge::call("dense_search")
       ├─ tools::dispatch(dense_retrieval)     ──┐ tokio::join! 并发
       └─ graph_augment(subquery)              ──┘
-           1. embed(subquery)                  # lexical 路径需新 embed；~100ms 被并发掩盖
-           2. entity_dense ANN → 种子实体      # 阈值 + 上限（见 2.4）
-           3. BFS 2 跳（hop_limit=2）
+           1. embed(subquery)                  # 废止：强制增强不再用原 query embed 种子
+           2. entity_dense ANN → 种子实体
+           3. BFS 2 跳（hop_limit=2）          # 废止：强制增强 hop=1
            4. top-N 关系 → scored_relation_chunk（chunk_type=graph_relation）
   → observation:
-     { "chunks": [dense 结果…],               # 向量内容在前（论文拼接顺序）
-       "graph_context": [关系条目…] }         # 图内容在后，独立小节
+     { "chunks": [dense 结果…],
+       "graph_context": [关系条目…] }
+
+# === 现行目标流 ===
+client.lexical_search(terms=T)
+  → join!(lexical_retrieve, graph_augment_from_terms(T, hop=1))
+  → { chunks, graph_context[].evidence_chunks with score_gap_to_top1 }
+# dense_search：无 graph_augment
 ```
 
 ### 2.3 实现位置与改动清单
@@ -185,7 +211,7 @@ native tool-call 路径暂不覆盖（可后续按需扩展）。
 | 种子上限 | top 5 实体 | 控制 BFS 扇出 |
 | 结果上限 | top 5 关系条目 | 关系是单行文本，5 条 ≈ 200 token，上下文膨胀可忽略 |
 | 去重 | 关系的 `supporting_chunk_ids` 与本次 `chunks` 已含的 chunk_id 重叠时不重复给正文 | 避免同一证据双份 |
-| 分层拼接 | `graph_context` 独立键、排在 `chunks` 后 | 论文 III.C；固定分 0.85 不参与 dense 排序，杜绝插位污染 |
+| 分层拼接 | `graph_context` 独立键、排在 `chunks` 后 | 论文 III.C；**保留**。固定 0.85 仅曾作 channel proxy；现行证据分 = 本跳 terms + **得分落差**（见 2026-07-23 canonical） |
 
 ### 2.5 与显式 graph_search 工具的关系
 

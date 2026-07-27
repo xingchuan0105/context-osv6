@@ -1,0 +1,8 @@
+# 通道→机柜索引（历史归档批次-02）
+
+- CH-B1 → RACK-B1 → 站点码 MM-1
+- CH-B2 → RACK-B2 → 站点码 MM-2
+- CH-B3 → RACK-B3 → 站点码 AT-N
+- CH-B4 → RACK-B4 → 站点码 MM-4
+- CH-B5 → RACK-B5 → 站点码 HS-S
+说明：CH-B5 的 HS-S 是演练占用，与任何审批单无绑定。

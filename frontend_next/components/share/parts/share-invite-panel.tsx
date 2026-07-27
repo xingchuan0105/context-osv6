@@ -2,6 +2,7 @@
 
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import { SectionHeader } from "./share-center-ui";
+import styles from "./share-invite-panel.module.css";
 import {
   formatAccessedAt,
   memberDisplayName,
@@ -31,13 +32,8 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
 
   return (
         <section
-          className="app-surface-card"
+          className={`app-surface-card ${styles.panel}`}
           data-testid="share-invite-panel"
-          style={{
-            display: "grid",
-            gap: "0.95rem",
-            padding: "0.95rem 1rem 1rem",
-          }}
         >
           <SectionHeader
             subtitle={formatUiMessage(locale, "shareCenter.inviteSectionSubtitle")}
@@ -45,10 +41,9 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
           />
 
           <div
-            className="app-inline-surface"
-            style={{ display: "grid", gap: "0.75rem", padding: "0.82rem 0.9rem 0.88rem" }}
+            className={`app-inline-surface ${styles.formCard}`}
           >
-            <div style={{ display: "grid", gap: "0.35rem" }}>
+            <div className={styles.fieldStack}>
               <label className="app-form-label" htmlFor="invite-email">
                 {locale === "zh-CN" ? "邀请邮箱" : "Invite email"}
               </label>
@@ -61,7 +56,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                 onChange={(event) => setInviteEmail(event.target.value)}
               />
             </div>
-            <div style={{ display: "grid", gap: "0.35rem" }}>
+            <div className={styles.fieldStack}>
               <label className="app-form-label" htmlFor="invite-role">
                 {locale === "zh-CN" ? "邀请角色" : "Invite role"}
               </label>
@@ -76,10 +71,9 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
               </select>
             </div>
             <button
-              className="app-button-primary"
+              className={`app-button-primary ${styles.submitButton}`}
               data-testid="share-invite-send"
               disabled={inviteMemberMutation.isPending}
-              style={{ justifyContent: "center" }}
               type="button"
               onClick={() => void handleInviteMember()}
             >
@@ -89,44 +83,43 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                   ? "发送邀请"
                   : "Send invite"}
             </button>
-            {inviteError ? <p className="app-notice-banner" style={{ margin: 0 }}>{inviteError}</p> : null}
+            {inviteError ? <p className="app-notice-banner">{inviteError}</p> : null}
           </div>
 
           {membersQuery.isLoading && !membersQuery.data ? (
-            <p style={{ margin: 0 }}>{formatUiMessage(locale, "shareCenter.loading")}</p>
+            <p className={styles.flushText}>{formatUiMessage(locale, "shareCenter.loading")}</p>
           ) : membersQuery.error && !membersQuery.data ? (
-            <p className="app-notice-banner" style={{ margin: 0 }}>
+            <p className="app-notice-banner">
               {membersQuery.error instanceof Error
                 ? membersQuery.error.message
                 : formatUiMessage(locale, "shareCenter.membersLoadError")}
             </p>
           ) : membersQuery.data && membersQuery.data.members.length > 0 ? (
-            <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div className={styles.memberList}>
               {membersQuery.data.members.map((member) => {
                 const displayName = memberDisplayName(member);
                 const confirming = pendingRemoveMemberId === member.member_id;
 
                 return (
                   <article
-                    className="app-inline-surface"
+                    className={`app-inline-surface ${styles.memberCard}`}
                     data-member-id={member.member_id}
                     data-testid="share-invite-member"
                     key={member.member_id}
-                    style={{ display: "grid", gap: "0.65rem", padding: "0.72rem 0.82rem 0.78rem" }}
                   >
-                    <div style={{ display: "grid", gap: "0.2rem" }}>
+                    <div className={styles.memberInfo}>
                       <strong>{displayName}</strong>
-                      <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                      <span className={styles.memberMeta}>
                         {memberRoleLabel(locale, member.role)} · {memberStatusLabel(locale, member.status)}
                       </span>
-                      <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.88rem" }}>
+                      <span className={styles.memberMetaSmall}>
                         {formatUiMessage(locale, "shareCenter.memberInvitedAt", {
                           value: formatAccessedAt(locale, member.invited_at),
                         })}
                       </span>
                     </div>
                     {confirming ? (
-                      <div className="app-button-row" style={{ justifyContent: "flex-start" }}>
+                      <div className={`app-button-row ${styles.confirmRow}`}>
                         <button
                           className="app-button-primary"
                           disabled={removeMemberMutation.isPending}
@@ -146,8 +139,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                       </div>
                     ) : (
                       <button
-                        className="app-button-ghost"
-                        style={{ justifySelf: "start" }}
+                        className={`app-button-ghost ${styles.removeButton}`}
                         type="button"
                         onClick={() => setPendingRemoveMemberId(member.member_id)}
                       >
@@ -159,7 +151,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
               })}
             </div>
           ) : (
-            <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
+            <p className={styles.emptyText}>
               {locale === "zh-CN" ? "暂无成员。" : "No members yet."}
             </p>
           )}

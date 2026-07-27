@@ -1262,9 +1262,18 @@ pub fn resolve_synthesis_answer(
 mod tests {
     use super::*;
 
+    /// Legacy `internal_answer_v1` envelope machinery tests: `modes/rag.yaml` is
+    /// ProseOnly now (PR-A 2026-07-20 — worker final = handoff JSON). Force the
+    /// historical contract so the envelope code paths stay under test.
+    fn legacy_rag_mode() -> ModeConfig {
+        let mut mode = super::super::config::load_mode_config("rag").unwrap();
+        mode.synthesis_output.contract = AnswerContractKind::InternalAnswerV1;
+        mode
+    }
+
     #[test]
     fn parses_valid_rag_json() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"Hi [[cite:a]]","citations":[{"chunk_id":"a"}]}"#;
         let parsed = parse_synthesis_answer(raw, &mode).unwrap();
         match parsed {
@@ -1323,7 +1332,7 @@ mod tests {
 
     #[test]
     fn lifts_rag_prose_with_cite_markers() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
@@ -1350,7 +1359,7 @@ mod tests {
 
     #[test]
     fn extract_partial_fallback_strips_invalid_citations() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
@@ -1438,7 +1447,7 @@ mod tests {
 
     #[test]
     fn resolve_sanitizes_unknown_cites_instead_of_failing() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
@@ -1458,7 +1467,7 @@ mod tests {
 
     #[test]
     fn analytical_weiti_phrase_does_not_abort_partial_salvage() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
@@ -1476,7 +1485,7 @@ mod tests {
 
     #[test]
     fn extract_partial_fallback_returns_insufficient_zh_when_text_empty_after_strip() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
@@ -1499,7 +1508,7 @@ mod tests {
 
     #[test]
     fn extract_partial_fallback_prefers_latest_candidate() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = legacy_rag_mode();
         let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),

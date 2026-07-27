@@ -1,0 +1,121 @@
+.container {
+  display: grid;
+  gap: 1rem;
+}
+
+.metricsGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.filtersGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 14rem);
+}
+
+.listStack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.headRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.titleStack {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.titleRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mutedText {
+  color: hsl(var(--muted-foreground));
+}
+
+.chipsRow {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  font-size: var(--font-size-control);
+}
+
+.chipsRowMuted {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: var(--font-size-control);
+  color: hsl(var(--muted-foreground));
+}
+
+.chipsRowSpaced {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: var(--font-size-control);
+}
+
+.smallMuted {
+  font-size: 0.78rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.actionRow {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.flexInput {
+  flex: 1;
+}
+
+.heading {
+  margin: 0;
+}
+
+/* Change-request status badges (light tinted bg + matching text). Applied on
+   top of .app-inline-surface; module CSS wins over the global class. */
+.statusPending {
+  background: hsl(var(--warning) / 0.12);
+  border-color: hsl(var(--warning) / 0.25);
+  color: hsl(var(--warning));
+}
+
+.statusApproved {
+  background: hsl(var(--info) / 0.12);
+  border-color: hsl(var(--info) / 0.25);
+  color: hsl(var(--info));
+}
+
+.statusExecuted {
+  background: hsl(var(--success) / 0.12);
+  border-color: hsl(var(--success) / 0.25);
+  color: hsl(var(--success));
+}
+
+.statusRejected {
+  background: hsl(var(--destructive) / 0.12);
+  border-color: hsl(var(--destructive) / 0.25);
+  color: hsl(var(--destructive));
+}

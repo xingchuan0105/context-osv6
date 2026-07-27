@@ -44,6 +44,7 @@ pub use metrics_v2::{
     score_query, score_retrieval, score_selection, substring_faithfulness,
 };
 pub use tool_coverage::{
-    ToolCoverageScore, ToolCoverageSummary, extract_tool_trace, tool_present,
-    tool_sequence_matches,
+    ToolCoverageScore, ToolCoverageSummary, extract_tool_trace, graph_augment_hit,
+    graph_explicit_called, is_graph_augment_tool_result, is_graph_explicit_tool_result,
+    tool_present, tool_sequence_matches,
 };

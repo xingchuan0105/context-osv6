@@ -17,7 +17,7 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  transition: transform var(--duration-slow) var(--ease-standard), box-shadow var(--duration-slow) var(--ease-standard);
 }
 
 .card.highlight {
@@ -25,6 +25,11 @@
   box-shadow: var(--shadow-glow);
   transform: scale(1.03);
   z-index: 1;
+}
+
+/* Pro tier distinguishing color (sky blue), small area only — border + badge. */
+.card.pro {
+  border-color: hsl(var(--info) / 0.55);
 }
 
 .card.compact {
@@ -43,6 +48,11 @@
   font-weight: var(--font-weight-semibold);
   padding: 0.25rem 0.75rem;
   border-radius: 999px;
+}
+
+.badge.badgePro {
+  /* Slightly darkened info so white badge text stays >= AA on the small chip. */
+  background: color-mix(in srgb, hsl(var(--info)), black 12%);
 }
 
 .name {
@@ -96,17 +106,17 @@
 }
 
 .primaryButton {
-  background: hsl(var(--cta-background));
-  color: hsl(var(--cta-foreground));
+  background: hsl(var(--accent-cta));
+  color: hsl(var(--primary-foreground));
   border: none;
   border-radius: var(--radius-button);
   padding: 0.625rem 1rem;
   font-size: var(--font-size-control);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background 150ms ease, transform 150ms ease;
+  transition: background var(--duration-base) var(--ease-standard), transform var(--duration-base) var(--ease-standard);
 }
-.primaryButton:hover:not(:disabled) { background: hsl(var(--cta-background-hover)); transform: translateY(-1px); }
+.primaryButton:hover:not(:disabled) { background: hsl(var(--accent-cta-hover)); transform: translateY(-1px); }
 .primaryButton:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .secondaryButton {

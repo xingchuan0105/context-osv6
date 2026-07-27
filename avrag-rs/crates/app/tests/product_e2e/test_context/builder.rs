@@ -297,17 +297,54 @@ impl TestContext {
         let milvus_collection_prefix =
             enable_rag.then(|| milvus_collection_prefix_for_identity(owner_user_id));
 
+        // Local/pgvector retrieval does not need the Docker Milvus stack.
+        // Migration 0060 (`CREATE EXTENSION vector` + rag_* tables) requires pgvector.
+        // Testcontainers `postgres:16-alpine` lacks that extension — prefer host
+        // DATABASE_URL (control plane) whenever it is set, for both pgvector and milvus
+        // real-LLM/channel probes. Ephemeral alpine remains only when no host URL.
+        let retrieval_backend = std::env::var("RETRIEVAL_BACKEND")
+            .unwrap_or_else(|_| "milvus".to_string())
+            .to_ascii_lowercase();
+        let use_pgvector = matches!(
+            retrieval_backend.as_str(),
+            "pgvector" | "postgres" | "pg"
+        );
+        let host_database_url = std::env::var("DATABASE_URL").ok().filter(|u| !u.trim().is_empty());
+
         let (pg_url, shared_pg) = if let Some(infra) = persistent_infra {
             setup::acquire_external_postgres(&infra.postgres_url)
                 .await
                 .expect("acquire external postgres for persistent smoke corpus")
+        } else if use_pgvector {
+            let url = host_database_url.clone().unwrap_or_else(|| {
+                "postgres://avrag:avrag@127.0.0.1:5432/avrag_rs".to_string()
+            });
+            setup::acquire_external_postgres(&url)
+                .await
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "pgvector e2e needs host Postgres with extension vector \
+                         (DATABASE_URL={url}): {e}"
+                    )
+                })
+        } else if let Some(url) = host_database_url {
+            // milvus (and other) paths: host PG has migration 0060; alpine does not.
+            setup::acquire_external_postgres(&url)
+                .await
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "e2e needs host Postgres for migrations incl. vector extension \
+                         (DATABASE_URL={url}): {e}; or unset DATABASE_URL to try alpine \
+                         (will fail if 0060 cannot CREATE EXTENSION vector)"
+                    )
+                })
         } else {
             setup::acquire_shared_postgres()
                 .await
                 .expect("start shared postgres")
         };
 
-        let (milvus_url, shared_milvus) = if enable_rag {
+        let (milvus_url, shared_milvus) = if enable_rag && !use_pgvector {
             let (url, shared) = setup::acquire_shared_milvus()
                 .await
                 .expect("start shared milvus");

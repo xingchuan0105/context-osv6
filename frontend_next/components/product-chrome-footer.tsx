@@ -41,7 +41,7 @@ export function ProductChromeFooter({
         paddingTop: "1rem",
         borderTop: "1px solid hsl(var(--border) / 0.8)",
         color: "hsl(var(--muted-foreground))",
-        fontSize: "0.85rem",
+        fontSize: "var(--font-size-body)",
       }}
     >
       <nav

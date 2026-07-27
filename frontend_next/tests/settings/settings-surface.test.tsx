@@ -284,7 +284,7 @@ describe("SettingsSurface", () => {
   it("renders tab links and loads billing data", async () => {
     renderWithQuery(<SettingsSurface activeTab={"billing" as SettingsTab} />);
 
-    expect(screen.getByRole("link", { name: "Billing" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Subscription & Usage" }).getAttribute("href")).toBe(
       "/settings?tab=billing",
     );
     expect(screen.getByRole("link", { name: "Profile" }).getAttribute("href")).toBe(

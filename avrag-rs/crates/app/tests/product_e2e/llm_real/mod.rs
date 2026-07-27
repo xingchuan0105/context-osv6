@@ -106,6 +106,31 @@ pub fn has_real_search_credentials() -> bool {
     valid_key(std::env::var("SEARCH_API_KEY")) || valid_key(std::env::var("E2E_BRAVE_API_KEY"))
 }
 
+/// Ensure OpenWeather credentials for utility `weather_query` (G-17).
+///
+/// When `OPENWEATHER_API_KEY` is unset/empty, start a process-lifetime mock
+/// OpenWeather server and point `OPENWEATHER_BASE` at it. Real keys (if set in
+/// `.env` or the shell) take precedence and skip the mock.
+pub async fn ensure_weather_defaults() {
+    use std::sync::OnceLock;
+    static MOCK_WEATHER: OnceLock<tokio::sync::oneshot::Sender<()>> = OnceLock::new();
+
+    let has_key = std::env::var("OPENWEATHER_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false);
+    if has_key || MOCK_WEATHER.get().is_some() {
+        return;
+    }
+
+    let (base_url, abort_tx) = super::mock_weather_server::start_mock_weather_server().await;
+    unsafe {
+        std::env::set_var("OPENWEATHER_API_KEY", "e2e-mock-openweather");
+        std::env::set_var("OPENWEATHER_BASE", &base_url);
+    }
+    let _ = MOCK_WEATHER.set(abort_tx);
+    eprintln!("[e2e] OPENWEATHER_API_KEY unset — mock weather at {base_url}");
+}
+
 /// Ensure SEARCH_PROVIDER / SEARCH_BASE_URL defaults when using real Brave.
 pub fn ensure_search_defaults() {
     if !std::env::var("SEARCH_API_KEY")
@@ -940,6 +965,8 @@ pub mod format_real;
 pub mod multi_turn;
 pub mod pdf_corpus;
 pub mod pdf_rag_e2e;
+pub mod multihop_cross_doc_probe;
+pub mod pgvector_channel_probe;
 pub mod rag_quality_prod;
 pub mod rag_real;
 pub mod search_real;

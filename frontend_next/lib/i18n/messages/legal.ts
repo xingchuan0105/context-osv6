@@ -21,8 +21,4 @@ export const legalMessages = {
     zh: "请先阅读并同意最新版用户协议与隐私政策",
     en: "Read and accept the latest Terms of Service and Privacy Policy first",
   },
-  legalPaymentConsentRequired: {
-    zh: "请先阅读并同意用户协议与隐私政策",
-    en: "Read and accept the Terms of Service and Privacy Policy first",
-  },
 } satisfies Record<string, UiMessageDescriptor>;

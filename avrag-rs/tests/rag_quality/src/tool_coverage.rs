@@ -9,12 +9,50 @@ use contracts::{ToolResult, ToolStatus};
 use serde::{Deserialize, Serialize};
 
 /// Ordered tool names from a chat response's `tool_results`.
+///
+/// Lexical force-augment side-cars (`tool=graph_retrieval` +
+/// `degrade_reason=graph_augment`) are labeled **`graph_augment`**, not
+/// `graph_retrieval`, so NC / tool-coverage gates do not treat them as agent
+/// explicit graph calls (canonical 2026-07-23 lexical-graph-augment).
 pub fn extract_tool_trace(tool_results: &[ToolResult]) -> Vec<String> {
     tool_results
         .iter()
         .filter(|r| r.status == ToolStatus::Ok)
-        .map(|r| r.tool.clone())
+        .map(|r| {
+            if is_graph_augment_tool_result(r) {
+                "graph_augment".to_string()
+            } else {
+                r.tool.clone()
+            }
+        })
         .collect()
+}
+
+/// `ToolResult` from forced lexical graph augment (telemetry side-car).
+pub fn is_graph_augment_tool_result(result: &ToolResult) -> bool {
+    result.tool == "graph_retrieval"
+        && result
+            .trace
+            .as_ref()
+            .and_then(|t| t.degrade_reason.as_deref())
+            == Some("graph_augment")
+}
+
+/// Agent-explicit `graph_retrieval` (not force-augment side-car).
+pub fn is_graph_explicit_tool_result(result: &ToolResult) -> bool {
+    result.tool == "graph_retrieval" && !is_graph_augment_tool_result(result)
+}
+
+pub fn graph_augment_hit(tool_results: &[ToolResult]) -> bool {
+    tool_results
+        .iter()
+        .any(|r| r.status == ToolStatus::Ok && is_graph_augment_tool_result(r))
+}
+
+pub fn graph_explicit_called(tool_results: &[ToolResult]) -> bool {
+    tool_results
+        .iter()
+        .any(|r| r.status == ToolStatus::Ok && is_graph_explicit_tool_result(r))
 }
 
 /// Returns `true` when `expected` appears in `actual` in order (not necessarily adjacent).
@@ -283,6 +321,51 @@ mod tests {
         assert_eq!(summary.single_tool_hit, 1);
         assert_eq!(summary.sequence_total, 1);
         assert_eq!(summary.sequence_hit, 1);
+    }
+
+    #[test]
+    fn extract_tool_trace_labels_graph_augment_separately() {
+        use contracts::ToolTrace;
+        let augment = ToolResult {
+            tool: "graph_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({"graph_context": []})),
+            trace: Some(ToolTrace {
+                elapsed_ms: Some(1),
+                raw_hit_count: Some(1),
+                hydrated_hit_count: Some(1),
+                degrade_reason: Some("graph_augment".into()),
+            }),
+        };
+        let explicit = ToolResult {
+            tool: "graph_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!([])),
+            trace: None,
+        };
+        let lexical = ToolResult {
+            tool: "lexical_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!([])),
+            trace: None,
+        };
+        let results = vec![lexical, augment, explicit];
+        let trace = extract_tool_trace(&results);
+        assert_eq!(
+            trace,
+            vec![
+                "lexical_retrieval".to_string(),
+                "graph_augment".to_string(),
+                "graph_retrieval".to_string(),
+            ]
+        );
+        assert!(graph_augment_hit(&results));
+        assert!(graph_explicit_called(&results));
+        assert!(!graph_explicit_called(std::slice::from_ref(&results[1])));
+        assert!(!graph_augment_hit(std::slice::from_ref(&results[2])));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "./UsageForecastCard.module.css";
+import { IconStatusBulb, IconStatusCheck } from "../status-icons";
 import { formatCompactToken, formatLimitToken } from "../../lib/billing/format";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
@@ -26,7 +27,7 @@ export function UsageForecastCard({
   const unlimitedLabel = formatUiMessage(locale, "usageUnlimited");
   return (
     <div className={`${styles.card} ${upgrade_recommended ? styles.warn : ""}`}>
-      <div className={styles.icon}>{upgrade_recommended ? "💡" : "✅"}</div>
+      <div className={styles.icon}>{upgrade_recommended ? <IconStatusBulb /> : <IconStatusCheck />}</div>
       <div className={styles.body}>
         <p className={styles.message}>{suggestion}</p>
         <p className={styles.detail}>

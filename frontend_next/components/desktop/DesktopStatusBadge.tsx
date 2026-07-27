@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import styles from "./desktop.module.css";
+import {
+  IconStatusCheck,
+  IconStatusCircle,
+  IconStatusClock,
+  IconStatusError,
+  IconStatusWarning,
+} from "../status-icons";
 import {
   getLicenseStatus,
   type LicenseStatus,
@@ -11,35 +18,35 @@ import {
 
 const STATUS_CONFIG: Record<
   LicenseStatusKind,
-  { icon: string; className: string; label: (status: LicenseStatus) => string }
+  { icon: ReactNode; className: string; label: (status: LicenseStatus) => string }
 > = {
   active: {
-    icon: "✓",
+    icon: <IconStatusCheck />,
     className: styles.statusActive,
     label: () => "已激活",
   },
   trial: {
-    icon: "⏱",
+    icon: <IconStatusClock />,
     className: styles.statusTrial,
     label: (status) => `试用 ${status.days_remaining ?? 0}d`,
   },
   expired: {
-    icon: "⚠",
+    icon: <IconStatusWarning />,
     className: styles.statusError,
     label: () => "已过期",
   },
   revoked: {
-    icon: "✗",
+    icon: <IconStatusError />,
     className: styles.statusError,
     label: () => "已吊销",
   },
   unactivated: {
-    icon: "○",
+    icon: <IconStatusCircle />,
     className: styles.statusMuted,
     label: () => "未激活",
   },
   offline_grace: {
-    icon: "⚠",
+    icon: <IconStatusWarning />,
     className: styles.statusTrial,
     label: (status) => `离线宽限 ${status.offline_grace_days ?? 0}d`,
   },
@@ -77,7 +84,7 @@ export function DesktopStatusBadge({ onClick }: DesktopStatusBadgeProps) {
       aria-label="授权状态"
       onClick={onClick}
     >
-      <span aria-hidden="true">{config.icon}</span>
+      <span aria-hidden="true" className={config.className}>{config.icon}</span>
       <span className={config.className}>{config.label(status)}</span>
     </button>
   );

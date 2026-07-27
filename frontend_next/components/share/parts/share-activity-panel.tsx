@@ -2,6 +2,7 @@
 
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import { SectionHeader } from "./share-center-ui";
+import styles from "./share-activity-panel.module.css";
 import { formatAccessedAt, parseAccessedAt } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
 
@@ -13,14 +14,14 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
   return (
     <>
       {accessLogsQuery.isLoading && !accessLogsQuery.data ? (
-          <section className="app-surface-card" id="activity" style={{ scrollMarginTop: "6rem" }}>
-            <p style={{ margin: 0 }}>
+          <section className={`app-surface-card ${styles.sectionAnchor}`} id="activity">
+            <p className={styles.flushText}>
               {formatUiMessage(locale, "shareCenter.accessLogsLoading")}
             </p>
           </section>
         ) : accessLogsQuery.error && !accessLogsQuery.data ? (
-          <section className="app-surface-card" id="activity" style={{ scrollMarginTop: "6rem" }}>
-            <p className="app-notice-banner" style={{ margin: 0 }}>
+          <section className={`app-surface-card ${styles.sectionAnchor}`} id="activity">
+            <p className="app-notice-banner">
               {accessLogsQuery.error instanceof Error
                 ? accessLogsQuery.error.message
                 : formatUiMessage(locale, "shareCenter.accessLogsLoadError")}
@@ -28,16 +29,8 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
           </section>
         ) : (
           <section
-            className="app-surface-card"
+            className={`app-surface-card ${styles.activitySection}`}
             id="activity"
-            style={{
-              background:
-                "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.24) 100%)",
-              display: "grid",
-              gap: "0.95rem",
-              padding: "0.95rem 1rem 1rem",
-              scrollMarginTop: "6rem",
-            }}
           >
             <SectionHeader
               subtitle={formatUiMessage(locale, "shareCenter.activitySectionSubtitle")}
@@ -45,7 +38,7 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
             />
 
             {accessLogsQuery.data && accessLogsQuery.data.logs.length > 0 ? (
-              <div style={{ display: "grid", gap: "0.75rem" }}>
+              <div className={styles.logList}>
                 {accessLogsQuery.data.logs
                   .slice()
                   .sort((left, right) => {
@@ -56,24 +49,17 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
                   .slice(0, 10)
                   .map((log) => (
                     <div
-                      className="app-inline-surface"
+                      className={`app-inline-surface ${styles.logItem}`}
                       key={log.id}
-                      style={{
-                        borderLeft: "3px solid hsl(var(--primary) / 0.24)",
-                        display: "grid",
-                        gap: "0.6rem",
-                        gridTemplateColumns: "minmax(0, 1fr)",
-                        padding: "0.72rem 0.82rem 0.78rem",
-                      }}
                     >
-                      <div style={{ display: "grid", gap: "0.2rem" }}>
-                        <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                      <div className={styles.logField}>
+                        <span className={styles.logLabel}>
                           {formatUiMessage(locale, "shareCenter.activityActionLabel")}
                         </span>
                         <strong>{log.action}</strong>
                       </div>
-                      <div style={{ display: "grid", gap: "0.2rem" }}>
-                        <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                      <div className={styles.logField}>
+                        <span className={styles.logLabel}>
                           {formatUiMessage(locale, "shareCenter.activityTimeLabel")}
                         </span>
                         <span>{formatAccessedAt(locale, log.accessed_at)}</span>
@@ -82,9 +68,9 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
                   ))}
               </div>
             ) : (
-              <div className="app-inline-surface" style={{ display: "grid", gap: "0.25rem" }}>
+              <div className={`app-inline-surface ${styles.emptyPanel}`}>
                 <strong>{formatUiMessage(locale, "shareCenter.activityEmptyTitle")}</strong>
-                <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+                <p className={styles.mutedText}>
                   {formatUiMessage(locale, "shareCenter.activityEmptyBody")}
                 </p>
               </div>

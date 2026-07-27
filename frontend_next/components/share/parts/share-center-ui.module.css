@@ -1,0 +1,66 @@
+.sectionHeader {
+  display: grid;
+  gap: 0.35rem;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.sectionTitle {
+  margin-bottom: 0;
+  font-size: 1.2rem;
+}
+
+.sectionSubtitle {
+  max-width: 42rem;
+}
+
+.metricCard {
+  display: grid;
+  gap: 0.55rem;
+  min-height: clamp(5.8rem, 18vw, 7.25rem);
+  padding: clamp(0.9rem, 2.5vw, 1rem) clamp(0.9rem, 2.5vw, 1rem)
+    clamp(0.95rem, 2.5vw, 1.05rem);
+}
+
+.metricTitle {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: hsl(var(--muted-foreground));
+}
+
+.metricValue {
+  margin: 0;
+  font-size: clamp(1.4rem, 4.8vw, 1.85rem);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.statusBadge {
+  padding: 0.28rem 0.62rem;
+  border-radius: var(--radius-badge);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  white-space: nowrap;
+}
+
+.statusBadgeActive {
+  background: hsl(var(--accent) / 0.12);
+  border: 1px solid hsl(var(--accent) / 0.18);
+  color: hsl(var(--accent-text));
+}
+
+.statusBadgeExpired {
+  background: hsl(var(--destructive) / 0.1);
+  border: 1px solid hsl(var(--destructive) / 0.18);
+  color: hsl(var(--destructive));
+}
+
+.statusBadgeIdle {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}

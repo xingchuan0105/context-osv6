@@ -4,6 +4,8 @@
 状态：设计稿
 前置：`2026-07-07-write-refine-agent-loop.md`（WriteRefine ReAct loop）、band 人类标定（`heavytail/src/calibration.rs`）
 
+**相关（外部 Agent / MCP 路径，2026-07-14）：** 人格以 **skill + 说明** 暴露、直写/改写共用 PersonaCard、指纹为 tools — 见 [`2026-07-14-writing-style-mcp-design.md`](./2026-07-14-writing-style-mcp-design.md) 与 [`writing-style-mcp/`](./writing-style-mcp/)。产品内代码 RNG + LLM expand 仍以本文为准。
+
 ## 0. 一句话
 
 把「写文章」重定义为「演员带着角色小传进场演戏」：**小传（PersonaCard）** 是跨全文的常驻人格，**场景卡（SceneCard）** 是每节的规定情境与目标，二者分别注入 system prompt 与 section brief；小传永不直接出现在正文（「放得下」原则），由词汇水库与泄漏检查间接驱动。

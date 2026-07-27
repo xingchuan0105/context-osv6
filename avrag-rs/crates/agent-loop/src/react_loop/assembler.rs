@@ -141,6 +141,10 @@ impl ContextAssembler {
         }
         parts.extend(hint_parts);
 
+        // Synthesis phase tools stay empty by design: utility tools (calculator,
+        // weather_query, user_context) are exposed on the **retrieve** phase via
+        // `ModeConfig.tool_pool` / `tools_for_retrieve`. Option D Answer packs
+        // set that pool; do not re-open retrieval/delegate tools here.
         AssembledContext {
             system_content: parts.join("\n\n"),
             tools: vec![],

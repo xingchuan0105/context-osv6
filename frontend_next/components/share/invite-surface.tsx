@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../lib/auth/context";
 import { acceptInvite, declineInvite } from "../../lib/share/client";
 import { getWorkspace } from "../../lib/workspace/client";
+import styles from "./invite-surface.module.css";
 
 type InviteSurfaceProps = {
   memberId: string;
@@ -115,19 +116,19 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
 
   return (
     <main className="app-auth-shell" data-testid="invite-surface">
-      <section className="app-surface-card" style={{ display: "grid", gap: "1rem", maxWidth: "34rem" }}>
+      <section className={`app-surface-card ${styles.card}`}>
         {loading ? (
-          <p style={{ margin: 0 }}>正在加载邀请...</p>
+          <p className={styles.flushText}>正在加载邀请...</p>
         ) : error ? (
           <>
-            <h1 className="app-page-title" style={{ fontSize: "1.8rem", marginBottom: 0 }}>
+            <h1 className={`app-page-title ${styles.title}`}>
               邀请异常
             </h1>
             <p className="app-notice-banner">{error}</p>
           </>
         ) : decision === "accepted" ? (
           <>
-            <h1 className="app-page-title" style={{ fontSize: "1.8rem", marginBottom: 0 }}>
+            <h1 className={`app-page-title ${styles.title}`}>
               已接受邀请
             </h1>
             <p className="app-page-subtitle">你现在可以访问 {workspaceTitle || "这个 Workspace"}。</p>
@@ -139,7 +140,7 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
           </>
         ) : decision === "declined" ? (
           <>
-            <h1 className="app-page-title" style={{ fontSize: "1.8rem", marginBottom: 0 }}>
+            <h1 className={`app-page-title ${styles.title}`}>
               已拒绝邀请
             </h1>
             <p className="app-page-subtitle">你已拒绝加入 {workspaceTitle || "这个 Workspace"}。</p>
@@ -151,7 +152,7 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
           </>
         ) : (
           <>
-            <h1 className="app-page-title" style={{ fontSize: "1.8rem", marginBottom: 0 }}>
+            <h1 className={`app-page-title ${styles.title}`}>
               Workspace 邀请
             </h1>
             <p className="app-page-subtitle">
@@ -161,8 +162,8 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
             </p>
 
             {!auth.token ? (
-              <div className="app-inline-surface" style={{ display: "grid", gap: "0.75rem" }}>
-                <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+              <div className={`app-inline-surface ${styles.authBox}`}>
+                <p className={styles.mutedText}>
                   需要先登录或注册，才能处理这条邀请。
                 </p>
                 <div className="app-button-row">

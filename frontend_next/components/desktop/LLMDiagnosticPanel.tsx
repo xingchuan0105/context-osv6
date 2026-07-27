@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import styles from "./desktop.module.css";
+import { IconStatusCheck, IconStatusError, IconStatusWarning } from "../status-icons";
 import {
   diagnoseLlm,
   executeRepairAction,
@@ -18,10 +19,10 @@ type LLMDiagnosticPanelProps = {
   onConfigUpdated?: (config: LocalLlmConfig) => void;
 };
 
-function statusIcon(status: DiagnosticStatus): string {
-  if (status === "ok") return "✓";
-  if (status === "warning") return "⚠";
-  return "✗";
+function StatusIcon({ status }: { status: DiagnosticStatus }) {
+  if (status === "ok") return <IconStatusCheck />;
+  if (status === "warning") return <IconStatusWarning />;
+  return <IconStatusError />;
 }
 
 function statusClass(status: DiagnosticStatus): string {
@@ -110,7 +111,7 @@ export function LLMDiagnosticPanel({ config, onConfigUpdated }: LLMDiagnosticPan
           {report.checks.map((check) => (
             <div key={check.name} className={styles.diagnosticCheck}>
               <span className={statusClass(check.status)} aria-hidden="true">
-                {statusIcon(check.status)}
+                <StatusIcon status={check.status} />
               </span>
               <div>
                 <div>

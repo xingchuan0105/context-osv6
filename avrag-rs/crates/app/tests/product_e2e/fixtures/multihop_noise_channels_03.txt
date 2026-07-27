@@ -1,0 +1,8 @@
+# 通道→机柜索引（历史归档批次-03）
+
+- CH-C1 → RACK-C1 → 站点码 PP-1
+- CH-C2 → RACK-C2 → 站点码 PP-2
+- CH-C3 → RACK-C3 → 站点码 PP-3
+- CH-YLINE-02 → RACK-β3 → 站点码 AT-N
+- CH-C5 → RACK-C5 → 站点码 PP-5
+重复：CH-YLINE-02 对应日间对账审批 AP-8802，不是 AP-7741。

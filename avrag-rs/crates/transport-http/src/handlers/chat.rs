@@ -316,7 +316,12 @@ fn chat_failure_event_name(agent_type: &str) -> analytics::ProductEventName {
 
 fn add_sse_headers(response: &mut Response) {
     let headers = response.headers_mut();
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    // no-transform: prevent proxies from re-encoding/buffering the event stream
+    // (gzip-transforming proxies batch small activity frames — 2026-07-23 UX diag).
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache, no-transform"),
+    );
     headers.insert(
         HeaderName::from_static("x-accel-buffering"),
         HeaderValue::from_static("no"),

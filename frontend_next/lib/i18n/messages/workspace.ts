@@ -1,17 +1,9 @@
 import type { UiMessageDescriptor } from "./types";
 
 export const workspaceMessages = {
-  workspaceAnalyze: {
-    zh: "分析",
-    en: "Analyze",
-  },
   workspaceDistribute: {
-    zh: "传播",
-    en: "Distribute",
-  },
-  workspaceAnonymousUser: {
-    zh: "未登录",
-    en: "Not signed in",
+    zh: "分享",
+    en: "Share",
   },
   workspaceApi: {
     zh: "API",
@@ -45,10 +37,6 @@ export const workspaceMessages = {
     zh: "无用",
     en: "Not helpful",
   },
-  workspaceChatClearMode: {
-    zh: "清除对话模式",
-    en: "Clear chat mode",
-  },
   workspaceChatComposerLabel: {
     zh: "工作区对话输入框",
     en: "Workspace chat composer",
@@ -57,13 +45,13 @@ export const workspaceMessages = {
     zh: "输入问题，可开启知识库 / 网络搜索…",
     en: "Ask anything — toggle RAG / Search below…",
   },
-  workspaceCitationsLabel: {
-    zh: "引用",
-    en: "Citations",
+  workspaceChatHeroTitle: {
+    zh: "有什么想问的？",
+    en: "What would you like to ask?",
   },
-  workspaceChatEyebrow: {
-    zh: "工作区对话",
-    en: "Workspace chat",
+  workspaceChatHeroSubtitle: {
+    zh: "直接提问，或开启知识库、网络搜索获取更深入的回答。",
+    en: "Ask directly, or toggle RAG / web search for deeper answers.",
   },
   workspaceChatLoadError: {
     zh: "加载工作区对话记录失败。",
@@ -72,10 +60,6 @@ export const workspaceMessages = {
   workspaceChatModeChat: {
     zh: "聊天",
     en: "Chat",
-  },
-  workspaceChatModeLabel: {
-    zh: "对话模式",
-    en: "Chat mode",
   },
   workspaceChatCapabilityLabel: {
     zh: "能力标签",
@@ -93,45 +77,9 @@ export const workspaceMessages = {
     zh: "网络搜索",
     en: "Search",
   },
-  workspaceChatModeRag: {
-    zh: "知识库检索",
-    en: "RAG",
-  },
-  workspaceChatModeSearch: {
-    zh: "网络搜索",
-    en: "web_search",
-  },
-  workspaceChatModeWrite: {
-    zh: "写作模式",
-    en: "write",
-  },
-  workspaceChatModeWriteUsageHint: {
-    zh: "写作模式可能消耗较多额度",
-    en: "Write mode may use more of your quota",
-  },
-  workspaceChatModeHintChat: {
-    zh: "快速即时对话",
-    en: "Quick conversational answers",
-  },
-  workspaceChatModeHintRag: {
-    zh: "基于工作区资料回答",
-    en: "Answer from workspace sources",
-  },
-  workspaceChatModeHintSearch: {
-    zh: "检索网络后作答",
-    en: "Search the web, then answer",
-  },
-  workspaceChatModeHintWrite: {
-    zh: "长文写作与改写",
-    en: "Long-form drafting and rewrite",
-  },
   workspaceChatRegionLabel: {
     zh: "工作区对话",
     en: "Workspace chat",
-  },
-  workspaceChatSubtitle: {
-    zh: "和当前工作区对话",
-    en: "Chat with the workspace",
   },
   workspaceCreateAction: {
     zh: "创建工作区",
@@ -145,10 +93,6 @@ export const workspaceMessages = {
     zh: "降级原因：{reasons}",
     en: "Degrade reasons: {reasons}",
   },
-  workspaceDescriptionField: {
-    zh: "描述",
-    en: "Description",
-  },
   workspaceGuardIntervened: {
     zh: "Guardrail 已介入当前回答。",
     en: "Guardrails intervened in this answer.",
@@ -156,34 +100,6 @@ export const workspaceMessages = {
   workspaceHistoryLabel: {
     zh: "工作区历史",
     en: "Workspace history",
-  },
-  workspaceQueryLibraryTitle: {
-    zh: "提示词库",
-    en: "Prompt library",
-  },
-  workspaceQueryLibrarySearchPlaceholder: {
-    zh: "搜索提示词…",
-    en: "Search prompts…",
-  },
-  workspaceQueryLibraryEmpty: {
-    zh: "发送过的提问会自动出现在这里",
-    en: "Your sent prompts will appear here",
-  },
-  workspaceQueryLibraryNoMatch: {
-    zh: "没有匹配的提示词",
-    en: "No matching prompts",
-  },
-  workspaceQueryLibraryInsert: {
-    zh: "插入到输入框",
-    en: "Insert into composer",
-  },
-  workspaceQueryLibraryDelete: {
-    zh: "删除",
-    en: "Delete",
-  },
-  workspaceQueryLibraryClear: {
-    zh: "清空",
-    en: "Clear all",
   },
   workspaceHistorySearch: {
     zh: "搜索会话",
@@ -225,14 +141,6 @@ export const workspaceMessages = {
     zh: "部分会话内容加载失败，搜索结果可能不完整。",
     en: "Some session content could not be loaded, so results may be incomplete.",
   },
-  workspaceHistorySubtitle: {
-    zh: "查看会话、筛选结果和线程操作",
-    en: "Sessions, filters, and thread actions",
-  },
-  workspaceHistoryTitle: {
-    zh: "历史",
-    en: "History",
-  },
   workspaceLanguageChinese: {
     zh: "中文",
     en: "Chinese",
@@ -241,33 +149,13 @@ export const workspaceMessages = {
     zh: "English",
     en: "English",
   },
-  workspaceMenuLanguage: {
-    zh: "语言",
-    en: "Language",
-  },
-  workspaceMenuTheme: {
-    zh: "主题",
-    en: "Theme",
-  },
-  workspaceNameField: {
-    zh: "工作区名称",
-    en: "Workspace name",
-  },
   workspaceNewThread: {
     zh: "新建会话",
     en: "New session",
   },
-  workspaceNewWorkspace: {
-    zh: "新建工作区",
-    en: "New workspace",
-  },
-  workspaceNoMessages: {
-    zh: "还没有消息。",
-    en: "No messages yet.",
-  },
-  workspaceEmptyStateBody: {
-    zh: "开始一个新对话，或围绕当前工作区资料提出问题。",
-    en: "Start a new conversation or ask a question about this workspace.",
+  workspaceChatBackToBottom: {
+    zh: "回到底部",
+    en: "Back to bottom",
   },
   workspaceEmptyStateModeHint: {
     zh: "当前：{mode} · 可开启知识库 / 网络搜索",
@@ -277,18 +165,6 @@ export const workspaceMessages = {
     zh: "暂无会话。",
     en: "No sessions yet.",
   },
-  workspacePromptRenameSession: {
-    zh: "重命名会话",
-    en: "Rename session",
-  },
-  workspaceRecentSession: {
-    zh: "最近",
-    en: "Recent",
-  },
-  workspaceRightRailLabel: {
-    zh: "工作区右侧栏",
-    en: "Workspace right rail",
-  },
   workspaceRenameSessionAction: {
     zh: "重命名",
     en: "Rename",
@@ -296,6 +172,30 @@ export const workspaceMessages = {
   workspaceDeleteSessionAction: {
     zh: "删除",
     en: "Delete",
+  },
+  workspaceDeleteSessionDialogTitle: {
+    zh: "删除会话",
+    en: "Delete session",
+  },
+  workspaceDeleteSessionDialogBody: {
+    zh: "确定删除会话「{title}」吗？此操作无法撤销。",
+    en: "Delete \"{title}\"? This cannot be undone.",
+  },
+  workspaceUntitledSession: {
+    zh: "新对话",
+    en: "Untitled",
+  },
+  workspaceChatCodeCopy: {
+    zh: "复制",
+    en: "Copy",
+  },
+  workspaceChatCodeCopied: {
+    zh: "已复制",
+    en: "Copied",
+  },
+  workspaceChatActionCopied: {
+    zh: "已复制",
+    en: "Copied",
   },
   workspacePinSessionAction: {
     zh: "置顶",
@@ -313,61 +213,25 @@ export const workspaceMessages = {
     zh: "退出登录",
     en: "Log out",
   },
-  workspaceOpenAccountMenu: {
-    zh: "打开账号菜单",
-    en: "Open account menu",
-  },
-  workspaceOpenSettingsMenu: {
-    zh: "打开设置菜单",
-    en: "Open settings menu",
-  },
-  workspaceSaveTitle: {
-    zh: "保存标题",
-    en: "Save workspace title",
-  },
-  workspaceSending: {
-    zh: "发送中...",
-    en: "Sending...",
-  },
   workspaceSend: {
     zh: "发送",
     en: "Send",
+  },
+  workspaceChatStop: {
+    zh: "停止",
+    en: "Stop",
+  },
+  workspaceChatComposerResize: {
+    zh: "调整输入框高度",
+    en: "Resize composer",
   },
   workspaceSessionTitleField: {
     zh: "工作区标题",
     en: "Workspace title",
   },
-  workspaceShare: {
-    zh: "分享",
-    en: "Share",
-  },
-  workspaceThemeDark: {
-    zh: "深色",
-    en: "Dark",
-  },
-  workspaceThemeLight: {
-    zh: "浅色",
-    en: "Light",
-  },
-  workspaceThemeSystem: {
-    zh: "跟随系统",
-    en: "System",
-  },
   workspaceThreadTitleField: {
     zh: "会话标题",
     en: "Session title",
-  },
-  workspaceTitleEyebrow: {
-    zh: "工作区",
-    en: "Workspace",
-  },
-  workspaceToggleHistoryRail: {
-    zh: "切换历史栏",
-    en: "Toggle history rail",
-  },
-  workspaceToggleRightRail: {
-    zh: "切换右侧栏",
-    en: "Toggle right rail",
   },
   workspaceTranscriptLabel: {
     zh: "工作区记录",
@@ -381,97 +245,25 @@ export const workspaceMessages = {
     zh: "保存会话",
     en: "Save session",
   },
+  workspaceRenameSessionFailed: {
+    zh: "重命名会话失败，请重试。",
+    en: "Failed to rename the session. Please try again.",
+  },
+  workspaceDeleteSessionFailed: {
+    zh: "删除会话失败，请重试。",
+    en: "Failed to delete the session. Please try again.",
+  },
+  workspaceResizeHistoryRailLabel: {
+    zh: "调整历史栏宽度",
+    en: "Resize history rail",
+  },
+  workspaceResizeRightRailLabel: {
+    zh: "调整右侧栏宽度",
+    en: "Resize right rail",
+  },
   workspaceStreamError: {
     zh: "发送工作区对话失败。",
     en: "Failed to stream workspace chat.",
-  },
-  "workspaceShell.eyebrow": {
-    zh: "工作区",
-    en: "Workspace",
-  },
-  "workspaceShell.titleLabel": {
-    zh: "工作区标题",
-    en: "Workspace title",
-  },
-  "workspaceShell.titlePlaceholder": {
-    zh: "输入工作区标题",
-    en: "Enter a workspace title",
-  },
-  "workspaceShell.descriptionLabel": {
-    zh: "工作区描述",
-    en: "Workspace description",
-  },
-  "workspaceShell.descriptionPlaceholder": {
-    zh: "补充当前工作区的目标或上下文",
-    en: "Add a short goal or context for this workspace",
-  },
-  "workspaceShell.saveAction": {
-    zh: "保存标题",
-    en: "Save title",
-  },
-  "workspaceShell.analyzeAction": {
-    zh: "分析",
-    en: "Analyze",
-  },
-  "workspaceShell.shareAction": {
-    zh: "分享",
-    en: "Share",
-  },
-  "workspaceShell.apiAction": {
-    zh: "API 访问",
-    en: "API access",
-  },
-  "workspaceShell.newThreadAction": {
-    zh: "新建会话",
-    en: "New session",
-  },
-  "workspaceShell.newWorkspaceAction": {
-    zh: "新建工作区",
-    en: "New workspace",
-  },
-  "workspaceShell.createDialogTitle": {
-    zh: "创建工作区",
-    en: "Create workspace",
-  },
-  "workspaceShell.createDialogSubtitle": {
-    zh: "先命名并补充描述，再进入新的工作区。",
-    en: "Name the workspace and add a short description before entering it.",
-  },
-  "workspaceShell.historyRailToggle": {
-    zh: "切换历史栏",
-    en: "Toggle history rail",
-  },
-  "workspaceShell.rightRailToggle": {
-    zh: "切换右侧栏",
-    en: "Toggle right rail",
-  },
-  "workspaceShell.settingsMenuLabel": {
-    zh: "工作区设置菜单",
-    en: "Workspace settings menu",
-  },
-  "workspaceShell.accountMenuLabel": {
-    zh: "账户菜单",
-    en: "Account menu",
-  },
-  "workspaceShell.themeSectionTitle": {
-    zh: "主题",
-    en: "Theme",
-  },
-  "workspaceShell.languageSectionTitle": {
-    zh: "语言",
-    en: "Language",
-  },
-  "workspaceShell.emptyTitle": {
-    zh: "还没有工作区内容",
-    en: "No workspace content yet",
-  },
-  "workspaceShell.emptyBody": {
-    zh: "先创建会话、上传资料，或从右侧栏开始整理上下文。",
-    en: "Start with a thread, upload sources, or organize context from the right rail.",
-  },
-  "workspaceShell.loadError": {
-    zh: "加载工作区失败。",
-    en: "Failed to load the workspace.",
   },
   "workspaceRightRail.label": {
     zh: "工作区右侧栏",
@@ -833,6 +625,10 @@ export const workspaceMessages = {
   "progress.understand": {
     zh: "正在理解问题",
     en: "Understanding your question",
+  },
+  "progress.reason_preview": {
+    zh: "正在思考",
+    en: "Thinking",
   },
   "progress.compose_answer": {
     zh: "正在整理回答",

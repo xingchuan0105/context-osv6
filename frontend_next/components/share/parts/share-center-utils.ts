@@ -204,9 +204,9 @@ export function getLatestAccessLog(logs: AccessLogsResponse | undefined) {
 function shareStatusBadgeStyle(status: ShareStatus | null) {
   if (status === "active") {
     return {
-      background: "hsl(var(--primary) / 0.12)",
-      border: "1px solid hsl(var(--primary) / 0.18)",
-      color: "hsl(var(--primary))",
+      background: "hsl(var(--accent) / 0.12)",
+      border: "1px solid hsl(var(--accent) / 0.18)",
+      color: "hsl(var(--accent-text))",
     };
   }
 

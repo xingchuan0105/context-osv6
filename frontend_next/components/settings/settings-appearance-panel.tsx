@@ -3,28 +3,24 @@
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { panelChoiceStyle } from "./settings-shared";
+import styles from "./settings-appearance-panel.module.css";
+import shared from "./settings-ui-shared.module.css";
 
 export function AppearancePanel() {
   const { locale, setLocale, setTheme, theme } = useUiPreferences();
 
   return (
-    <section style={{ display: "grid", gap: "1rem" }}>
-      <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
-        <div style={{ display: "grid", gap: "0.35rem" }}>
-          <h2 style={{ margin: 0 }}>
+    <section className={shared.section}>
+      <section className={`app-inline-surface ${shared.section}`}>
+        <div className={shared.headerText}>
+          <h2 className={shared.flushTitle}>
             {formatUiMessage(locale, "settings.appearance.sectionTitle")}
           </h2>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+          <p className={shared.mutedText}>
             {formatUiMessage(locale, "settings.appearance.sectionSubtitle")}
           </p>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))",
-          }}
-        >
+        <div className={styles.choiceGrid}>
           {([
             [
               "system",
@@ -49,28 +45,22 @@ export function AppearancePanel() {
               onClick={() => setTheme(value)}
             >
               <strong>{title}</strong>
-              <span style={{ color: "hsl(var(--muted-foreground))" }}>{description}</span>
+              <span className={styles.mutedSpan}>{description}</span>
             </button>
           ))}
         </div>
       </section>
 
-      <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
-        <div style={{ display: "grid", gap: "0.35rem" }}>
-          <h2 style={{ margin: 0 }}>
+      <section className={`app-inline-surface ${shared.section}`}>
+        <div className={shared.headerText}>
+          <h2 className={shared.flushTitle}>
             {formatUiMessage(locale, "settings.appearance.localeLabel")}
           </h2>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatUiMessage(locale, "settings.appearance.sectionSubtitle")}
+          <p className={shared.mutedText}>
+            {formatUiMessage(locale, "settings.appearance.localeSubtitle")}
           </p>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))",
-          }}
-        >
+        <div className={styles.choiceGrid}>
           {([
             [
               "zh-CN",
@@ -90,12 +80,12 @@ export function AppearancePanel() {
               onClick={() => setLocale(value)}
             >
               <strong>{title}</strong>
-              <span style={{ color: "hsl(var(--muted-foreground))" }}>{description}</span>
+              <span className={styles.mutedSpan}>{description}</span>
             </button>
           ))}
         </div>
-        <div className="app-inline-surface" style={{ display: "grid", gap: "0.45rem" }}>
-          <div className="app-inline-row" style={{ marginBottom: 0 }}>
+        <div className={`app-inline-surface ${styles.summaryCard}`}>
+          <div className={`app-inline-row ${shared.summaryRow}`}>
             <span>{formatUiMessage(locale, "settings.appearance.currentTheme")}</span>
             <strong>
               {{
@@ -105,7 +95,7 @@ export function AppearancePanel() {
               }[theme]}
             </strong>
           </div>
-          <div className="app-inline-row" style={{ marginBottom: 0 }}>
+          <div className={`app-inline-row ${shared.summaryRow}`}>
             <span>
               {formatUiMessage(locale, "settings.appearance.currentLanguage")}
             </span>
@@ -120,4 +110,3 @@ export function AppearancePanel() {
     </section>
   );
 }
-

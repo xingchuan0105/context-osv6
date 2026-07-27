@@ -22,17 +22,6 @@ fn agent_request_with_resolved_session(
     agent_request
 }
 
-/// Map resolved capabilities to the ReAct shell kind.
-/// Dual rag+search uses Rag so codegen/retrieval paths stay available; config is hybrid.
-pub(crate) fn agent_kind_for(caps: CapabilitySet) -> crate::agents::AgentKind {
-    match (caps.rag, caps.search) {
-        (false, false) => crate::agents::AgentKind::Chat,
-        (true, false) => crate::agents::AgentKind::Rag,
-        (false, true) => crate::agents::AgentKind::Search,
-        (true, true) => crate::agents::AgentKind::Rag,
-    }
-}
-
 /// Attach assembled mode config + capability metadata for UnifiedAgent / assembler.
 pub(crate) fn inject_assembled_metadata(
     agent_request: &mut AgentRequest,
@@ -96,56 +85,25 @@ pub(crate) async fn dispatch_agent_mode(
         return Ok(execution);
     }
 
-    // O1: orchestrator host (flag) — materialize workers → chat exit (Option B).
-    if crate::orchestrator::orchestrator_v1_enabled() {
-        return run_orchestrator_v1(state, request, session, stream_config, caps).await;
+    // Option D (2026-07-20 产品拍板)：
+    // - 纯聊天（AnswerOnly）：入口直接 Chat，不进编排。
+    // - 勾选 rag 和/或 search：永远走编排（Dispatch → Answer 两阶段）。
+    if caps.is_pure_chat() {
+        let assembled = crate::assemble_mode(caps)?;
+        return run_general_mode(
+            state,
+            request,
+            session,
+            stream_config,
+            crate::agents::AgentKind::Chat,
+            agent_type_label,
+            caps,
+            &assembled,
+        )
+        .await;
     }
 
-    let assembled = crate::assemble_mode(caps)?;
-    let kind = agent_kind_for(caps);
-
-    match kind {
-        crate::agents::AgentKind::Chat => {
-            run_general_mode(
-                state,
-                request,
-                session,
-                stream_config,
-                kind,
-                agent_type_label,
-                caps,
-                &assembled,
-            )
-            .await
-        }
-        crate::agents::AgentKind::Search => {
-            run_search_mode(
-                state,
-                request,
-                session,
-                stream_config,
-                agent_type_label,
-                caps,
-                &assembled,
-            )
-            .await
-        }
-        crate::agents::AgentKind::Rag => {
-            run_rag_mode(
-                state,
-                request,
-                session,
-                stream_config,
-                agent_type_label,
-                caps,
-                &assembled,
-            )
-            .await
-        }
-        crate::agents::AgentKind::Write => Err(AppError::internal(
-            "lane invariant: write must not reach dispatch_agent_mode (use write PipelineLane)",
-        )),
-    }
+    run_orchestrator_v1(state, request, session, stream_config, caps).await
 }
 
 /// @deprecated name — tests may still call this; agent lane only.
@@ -189,7 +147,9 @@ async fn run_orchestrator_turn(
     crate::orchestrator::run_orchestrated_turn(caps, agent_request, executor, sink, docscope).await
 }
 
-/// AGENT_ORCHESTRATOR_V1: materialize channels → workers → chat exit (Option B).
+/// Orchestrated path (Option D, 2026-07-20): materialize channels → workers →
+/// chat exit. The chat exit assembles the Answer pack
+/// (product-answer-base + material blocks) with utility tools.
 async fn run_orchestrator_v1(
     state: &ChatContext,
     request: &ChatRequest,
@@ -229,10 +189,6 @@ async fn run_orchestrator_v1(
     }
     let emit_debug_trace = agent_request.debug;
 
-    let executor = AgentServiceExecutor {
-        agent_service: agent_service.clone(),
-    };
-
     // Source-document identity (file names + genres) for the evidence store —
     // what lets the chat exit judge doc genre instead of guessing from snippets.
     let docscope = if !request.doc_scope.is_empty() {
@@ -261,6 +217,13 @@ async fn run_orchestrator_v1(
         )
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
+
+        // Worker progress fan-out: retrieval facts reach the client stream
+        // during Dispatch (Activity only — worker text stays local).
+        let executor = AgentServiceExecutor::with_progress_sink(
+            agent_service.clone(),
+            agent_loop::events::AgentEventSink::clone_boxed(&sink),
+        );
 
         let turn = run_orchestrator_turn(
             caps,
@@ -299,6 +262,8 @@ async fn run_orchestrator_v1(
     }
 
     let sink = agent_loop::events::CollectingSink::new();
+    // Non-streaming turn: no client stream — workers stay silent (no fan-out).
+    let executor = AgentServiceExecutor::new(agent_service.clone());
     let turn = run_orchestrator_turn(
         caps,
         &agent_request,
@@ -347,6 +312,12 @@ fn orchestrator_debug_map(
         "dispatches".into(),
         serde_json::to_value(&turn.records).unwrap_or(serde_json::json!([])),
     );
+    // Sub-agent white-box: real tool names + reasoning/plan/eval thinking.
+    // Independent of store→dense_retrieval eval bridge on tool_results.
+    m.insert(
+        "workers".into(),
+        serde_json::to_value(&turn.worker_observability).unwrap_or(serde_json::json!([])),
+    );
     m
 }
 
@@ -365,6 +336,15 @@ fn merge_orchestrator_turn_metadata(
             })
         }).collect::<Vec<_>>(),
         "evidence_count": turn.store.entries().len(),
+        // Compact sub-agent tool names for turn metadata (full obs in mode_debug).
+        "worker_tools": turn.worker_observability.iter().map(|w| {
+            serde_json::json!({
+                "channel": w.channel,
+                "tools": w.tools.iter().map(|t| &t.tool).collect::<Vec<_>>(),
+                "has_reasoning": w.reasoning_summary.is_some(),
+                "thinking_steps": w.thinking.len(),
+            })
+        }).collect::<Vec<_>>(),
     });
     match existing {
         Some(mut v) => {
@@ -423,6 +403,14 @@ async fn run_general_mode(
         )
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
+
+        // Turn-start fact for pure chat (2026-07-23): the first LLM call is
+        // silent otherwise — same immediate step as orchestrated turns.
+        agent_loop::progress::emit_work_fact(
+            &sink,
+            agent_loop::progress::WorkFact::understand(&agent_request.query),
+        )
+        .await;
 
         let agent_result = agent_service.run(agent_request, &sink).await?;
         crate::emit_buffered_agent_answer_if_needed(&sink, &agent_result.answer).await;
@@ -493,219 +481,9 @@ async fn run_general_mode(
     Ok(execution)
 }
 
-async fn run_search_mode(
-    state: &ChatContext,
-    request: &ChatRequest,
-    session: &ChatSession,
-    stream_config: Option<&StreamConfig>,
-    agent_type: &'static str,
-    caps: CapabilitySet,
-    assembled: &AssembledMode,
-) -> Result<ChatExecution, AppError> {
-    let Some(agent_service) = state.agent_service() else {
-        return Err(AppError::internal("agent service is not configured"));
-    };
-
-    let mut agent_request = agent_request_with_resolved_session(
-        state
-            .build_agent_request(
-                request,
-                crate::agents::AgentKind::Search,
-                Some(session.id.clone()),
-            )
-            .await,
-        session,
-    );
-    inject_assembled_metadata(&mut agent_request, caps, assembled);
-    if let Some(config) = stream_config {
-        agent_request.stream = true;
-        agent_request.cancellation_token = Some(config.token.clone());
-    }
-    let emit_debug_trace = agent_request.debug;
-
-    if let Some(config) = stream_config {
-        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
-            config.sender.clone(),
-            config.request_id.clone(),
-            session.id.clone(),
-            STREAM_PLACEHOLDER_MESSAGE_ID,
-            agent_type.to_string(),
-        )
-        .without_done_event()
-        .with_debug_trace(emit_debug_trace);
-
-        let agent_result = agent_service.run(agent_request, &sink).await?;
-        crate::emit_buffered_agent_answer_if_needed(&sink, &agent_result.answer).await;
-
-        let search_debug = build_search_debug(state, &agent_result);
-        let mut execution = crate::chat::build_chat_execution_from_result(
-            &agent_result,
-            crate::chat::BuildChatExecutionParams {
-                mode: agent_type,
-                agent_type,
-                session_id: &session.id,
-                input_usage_text: request.query.trim(),
-                // Search 答案合成基于外部网页 snippet，存在 prompt 注入与 PII
-                // 泄露风险，必须经过 prompt_leak + pii_scrubber 双层过滤。
-                apply_output_guard: true,
-                mode_debug: Some(ModeDebug {
-                    rag: None,
-                    search: Some(search_debug),
-                    general: None,
-                }),
-                debug_metadata: None,
-            },
-        );
-        execution.tokens_emitted = true;
-        execution.citations_emitted = sink.has_citations_emitted();
-        execution.assistant_turn_metadata =
-            merge_capabilities_turn_metadata(sink.progress_turn_metadata(), caps);
-        return Ok(execution);
-    }
-
-    let sink = agent_loop::events::CollectingSink::new();
-    let agent_result = agent_service.run(agent_request, &sink).await?;
-
-    let search_debug = build_search_debug(state, &agent_result);
-    let mut execution = crate::chat::build_chat_execution_from_result(
-        &agent_result,
-        crate::chat::BuildChatExecutionParams {
-            mode: agent_type,
-            agent_type,
-            session_id: &session.id,
-            input_usage_text: request.query.trim(),
-            // 同 stream 分支：search 模式输出必经 output guard。
-            apply_output_guard: true,
-            mode_debug: Some(ModeDebug {
-                rag: None,
-                search: Some(search_debug),
-                general: None,
-            }),
-            debug_metadata: None,
-        },
-    );
-    if emit_debug_trace {
-        attach_debug_trace_from_sink(&mut execution, &sink);
-    }
-    execution.assistant_turn_metadata = merge_capabilities_turn_metadata(
-        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
-        caps,
-    );
-    Ok(execution)
-}
-
-fn build_search_debug(
-    _state: &ChatContext,
-    agent_result: &agent_loop::runtime::AgentRunResult,
-) -> BTreeMap<String, serde_json::Value> {
-    let mut search_debug = BTreeMap::new();
-    if let Some(payload) = agent_result.debug_payload.as_ref() {
-        if let Some(query_type) = payload.get("query_type") {
-            search_debug.insert("query_type".to_string(), query_type.clone());
-        }
-        if let Some(sub_queries) = payload.get("sub_queries") {
-            search_debug.insert("sub_queries".to_string(), sub_queries.clone());
-        }
-    }
-    search_debug.insert(
-        "result_count".to_string(),
-        serde_json::json!(agent_result.sources.len()),
-    );
-    search_debug
-}
-
-async fn run_rag_mode(
-    state: &ChatContext,
-    request: &ChatRequest,
-    session: &ChatSession,
-    stream_config: Option<&StreamConfig>,
-    agent_type: &'static str,
-    caps: CapabilitySet,
-    assembled: &AssembledMode,
-) -> Result<ChatExecution, AppError> {
-    let Some(agent_service) = state.agent_service() else {
-        return Err(AppError::internal("agent service is not configured"));
-    };
-
-    let mut agent_request = agent_request_with_resolved_session(
-        state
-            .build_agent_request(
-                request,
-                crate::agents::AgentKind::Rag,
-                Some(session.id.clone()),
-            )
-            .await,
-        session,
-    );
-    inject_assembled_metadata(&mut agent_request, caps, assembled);
-
-    if !request.doc_scope.is_empty()
-        && let Ok(metadata) = state.load_docscope_metadata(&request.doc_scope).await
-    {
-        agent_request.docscope_metadata = Some(metadata);
-    }
-
-    if let Some(config) = stream_config {
-        agent_request.stream = true;
-        agent_request.cancellation_token = Some(config.token.clone());
-        let emit_debug_trace = agent_request.debug;
-        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
-            config.sender.clone(),
-            config.request_id.clone(),
-            session.id.clone(),
-            STREAM_PLACEHOLDER_MESSAGE_ID,
-            agent_type.to_string(),
-        )
-        .without_done_event()
-        .with_debug_trace(emit_debug_trace);
-
-        let agent_result = agent_service.run(agent_request, &sink).await?;
-        crate::emit_buffered_agent_answer_if_needed(&sink, &agent_result.answer).await;
-
-        let mut execution = crate::chat::build_chat_execution_from_result(
-            &agent_result,
-            crate::chat::BuildChatExecutionParams {
-                mode: agent_type,
-                agent_type,
-                session_id: &session.id,
-                input_usage_text: request.query.trim(),
-                apply_output_guard: true,
-                mode_debug: None,
-                debug_metadata: agent_result.debug_payload.clone(),
-            },
-        );
-        execution.tokens_emitted = true;
-        execution.citations_emitted = sink.has_citations_emitted();
-        execution.assistant_turn_metadata =
-            merge_capabilities_turn_metadata(sink.progress_turn_metadata(), caps);
-        return Ok(execution);
-    }
-
-    let sink = agent_loop::events::CollectingSink::new();
-    let agent_result = agent_service.run(agent_request, &sink).await?;
-
-    let mut execution = crate::chat::build_chat_execution_from_result(
-        &agent_result,
-        crate::chat::BuildChatExecutionParams {
-            mode: agent_type,
-            agent_type,
-            session_id: &session.id,
-            input_usage_text: request.query.trim(),
-            apply_output_guard: true,
-            mode_debug: None,
-            debug_metadata: agent_result.debug_payload.clone(),
-        },
-    );
-    execution.assistant_turn_metadata = merge_capabilities_turn_metadata(
-        agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
-        caps,
-    );
-    Ok(execution)
-}
-
 /// Extract `DebugTrace` events from a `CollectingSink` and attach them to
 /// `execution.debug_metadata` as `{"agent_debug_trace": [...]}`.
-/// Used by the non-streaming branches of general and search modes.
+/// Used by the non-streaming branch of pure-chat general mode.
 pub(crate) fn attach_debug_trace_from_sink(
     execution: &mut ChatExecution,
     sink: &agent_loop::events::CollectingSink,

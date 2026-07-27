@@ -1,5 +1,12 @@
 # Graph 检索通道分析与改进路线（2026-07-04）
 
+> **2026-07-23 状态**  
+> 本文为 **实测分析 + 历史路线**（P0/P1 接线、golden、评测口径）。  
+> **图增强触发与证据打分** 的现行规范已迁至  
+> [`2026-07-23-lexical-graph-augment-scoring-design.md`](./2026-07-23-lexical-graph-augment-scoring-design.md)  
+> （**仅 BM25/lexical 强制 1 跳**；**得分落差** 截断；dense 不自动带图）。  
+> 下文 §7 中「dense/lexical 均自动 augment」为 2026-07-05 落地描述，**已废止为现行**。
+
 基于 realistic 7-doc 语料的 graph 通道端到端验证：golden set v2 评测、推理轨迹分析、
 KG 数据审计、跨文档连通性量化。本文档记录已完成的改动、实测数据、已确认的 bug、
 架构结论与分级改进路线。
@@ -248,20 +255,37 @@ EOF
 
 ---
 
-## 7. 图增强通道（graph augment，2026-07-05 落地）
+## 7. 图增强通道（graph augment）
 
-承接 `2026-07-04-vector-graph-rag-upgrade.md` §2：图检索从「LLM 显式 `graph_search`」
-降级为 dense/lexical 的**自动增强通道**，由 `RuntimeBridge::call` 在
-`dense_search` / `lexical_search` 时并发执行 `graph_augment`，结果以独立键
-`graph_context`（`chunk_type=graph_relation`）并入 observation，不混入 `chunks`。
+### 7.0 现行规范（2026-07-23）
 
-- **开关**：`RETRIEVAL_GRAPH_AUGMENT`（默认 off）；冗余控制见
+以 [`2026-07-23-lexical-graph-augment-scoring-design.md`](./2026-07-23-lexical-graph-augment-scoring-design.md)
+为唯一 canonical：
+
+| 项 | 现行 |
+|----|------|
+| 强制挂钩 | **仅** `lexical_search` / BM25 |
+| dense | **不**自动 `graph_augment` |
+| hop | 强制增强 **1**；多跳 = ReAct 多轮 terms |
+| 种子 | 本跳 **terms**，非用户原句整句 embed |
+| 证据截断 | 相对 TOP1 的 **得分落差**（非方差、非固定 0.85） |
+| 输出 | `graph_context` 独立键，**不**混入 dense rerank 池 |
+| 实现 | `graph_augment` 源码当前不在树内；恢复按 canonical |
+
+显式 `graph_search` 仍保留（可 hop>1），与强制增强互补。
+
+### 7.1 历史落地描述（2026-07-05，已废止为产品真理）
+
+承接当时 `2026-07-04-vector-graph-rag-upgrade.md` §2：图检索曾从「LLM 显式
+`graph_search`」做成 dense/**lexical 双挂钩**自动增强，`RuntimeBridge::call` 在
+`dense_search` / `lexical_search` 时并发 `graph_augment`，结果以 `graph_context`
+并入 observation。该 **dense 挂钩 + hop=2 + query-embed 种子** 路径 **已被 §7.0 取代**。
+
+- **开关**（名仍可用）：`RETRIEVAL_GRAPH_AUGMENT`；冗余控制见
   `GRAPH_AUGMENT_MAX_RELATIONS` / `GRAPH_AUGMENT_SEED_LIMIT` / `GRAPH_AUGMENT_HOPS`
-- **显式 `graph_search` 工具保留**（§2.5 分工不变）
-- **评测口径**（`realistic_graph_eval`）：主指标 **`graph_cited`**（关系 chunk 进入最终
-  citations）；`graph_called` 在增强开启时失去区分度。A/B 对比：
-  `RETRIEVAL_GRAPH_AUGMENT=0` vs `=1`（§3.3）；辅助观测 `graph_context_hit`、
-  selection_precision、耗时 — 见 upgrade 文档 §3
+  （**HOPS 强制增强语义改为 1**，见 canonical）
+- **评测口径**：须拆分 **`graph_augment_hit`** vs **`graph_explicit_called`**
+  （full116 已踩坑：augment 侧车误计 graph 调用）；主指标仍可看 `graph_cited`
 
 ---
 

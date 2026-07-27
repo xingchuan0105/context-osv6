@@ -1,0 +1,132 @@
+.container {
+  display: grid;
+  gap: 1rem;
+}
+
+.backRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.backLink {
+  color: hsl(var(--muted-foreground));
+}
+
+.card {
+  display: grid;
+  gap: 1rem;
+}
+
+.accountHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.accountTitle {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.heading {
+  margin: 0;
+}
+
+.muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.mutedText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.smallMuted {
+  font-size: var(--font-size-control);
+  color: hsl(var(--muted-foreground));
+}
+
+.metricsGrid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.metricsGridWide {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.twoColumnGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.inlineRowFlat {
+  margin-bottom: 0;
+}
+
+.rolesGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.memberList {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.memberMeta {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.efficiencyGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.statPanel {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  padding: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableHead {
+  background: hsl(var(--surface-muted));
+}
+
+.tableHeaderCell {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.tableRow {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.tableCell {
+  padding: 1rem;
+}

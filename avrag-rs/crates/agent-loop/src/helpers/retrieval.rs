@@ -2,13 +2,23 @@ use contracts::AnswerContextChunk;
 use contracts::chat::SourceRef;
 use contracts::{ToolResult, ToolStatus};
 
+/// Chunk list from a tool result: raw array **or** `{ "chunks": [...] }` (lexical+graph_context).
+pub(crate) fn tool_result_chunk_items(
+    data: &serde_json::Value,
+) -> Option<&Vec<serde_json::Value>> {
+    if let Some(arr) = data.as_array() {
+        return Some(arr);
+    }
+    data.get("chunks").and_then(|v| v.as_array())
+}
+
 pub fn has_evidence(tool_results: &[ToolResult]) -> bool {
     tool_results.iter().any(|result| {
         result.status == ToolStatus::Ok
             && result
                 .data
                 .as_ref()
-                .and_then(|data| data.as_array())
+                .and_then(tool_result_chunk_items)
                 .is_some_and(|array| !array.is_empty())
     })
 }
@@ -19,7 +29,7 @@ pub fn extract_chunks_with_scores(tool_results: &[ToolResult]) -> Vec<(AnswerCon
         if result.status != ToolStatus::Ok {
             continue;
         }
-        let Some(items) = result.data.as_ref().and_then(|data| data.as_array()) else {
+        let Some(items) = result.data.as_ref().and_then(tool_result_chunk_items) else {
             continue;
         };
         for item in items {
@@ -74,7 +84,7 @@ pub fn build_sources_from_tool_results(tool_results: &[ToolResult]) -> Vec<Sourc
         if result.status != ToolStatus::Ok {
             continue;
         }
-        let Some(items) = result.data.as_ref().and_then(|data| data.as_array()) else {
+        let Some(items) = result.data.as_ref().and_then(tool_result_chunk_items) else {
             continue;
         };
         for item in items {

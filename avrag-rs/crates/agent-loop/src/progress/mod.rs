@@ -142,7 +142,7 @@ impl WorkFact {
         }
     }
 
-    /// Orchestrator dispatched a channel worker (AGENT_ORCHESTRATOR_V1).
+    /// Orchestrator dispatched a channel worker.
     /// `kind` must be `DelegateRag` or `DelegateSearch`; detail carries the brief goal.
     pub fn delegate(kind: ProgressKind, brief_goal: &str) -> Self {
         let g = truncate_chars(brief_goal.trim(), 48);
@@ -225,6 +225,21 @@ impl WorkFact {
         }
     }
 
+    /// Coordinator / agent thinking step (2026-07-23): emitted at each V2
+    /// brain round and anywhere a silent LLM decision would otherwise leave
+    /// the progress line frozen.
+    pub fn thinking(detail: Option<String>) -> Self {
+        Self {
+            phase: ProgressPhase::Reason,
+            kind: ProgressKind::ReasonPreview,
+            title: Self::message_key(ProgressKind::ReasonPreview, ""),
+            detail,
+            hits: None,
+            previews: Vec::new(),
+            status: ProgressStatus::Started,
+        }
+    }
+
     fn into_activity(self) -> AgentEvent {
         let mut counts = BTreeMap::new();
         if let Some(hits) = self.hits.filter(|h| *h > 0) {
@@ -267,7 +282,7 @@ pub fn bridge_method_progress(
         "graph_search" => Some((ProgressKind::RetrieveGraph, "关系检索")),
         "doc_summary" => Some((ProgressKind::RetrieveDoc, "阅读文档摘要")),
         "doc_profile" => Some((ProgressKind::RetrieveDoc, "查看文档结构")),
-        "doc_chunks" => Some((ProgressKind::RetrieveDoc, "通读文档片段")),
+        "doc_scan" | "doc_chunks" => Some((ProgressKind::RetrieveDoc, "代码侧扫读文档")),
         "chunk_fetch" => Some((ProgressKind::RetrieveDoc, "展开原文片段")),
         _ => None,
     }

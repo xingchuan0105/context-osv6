@@ -10,6 +10,7 @@ pub(crate) use super::mock_paddle_server::{
     MOCK_PADDLE_IMAGE_OCR_TEXT, start_mock_paddle_ocr_server,
 };
 pub(crate) use super::mock_search_server::{MockSearchControls, start_mock_search_server};
+pub(crate) use super::mock_weather_server::start_mock_weather_server;
 
 pub(crate) use super::mock_rag_codegen::{
     format_mock_rag_chunk_fetch_codegen, format_mock_rag_codegen_response,

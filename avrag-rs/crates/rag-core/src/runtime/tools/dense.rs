@@ -104,10 +104,11 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         DenseRetrievalModality::Mm | DenseRetrievalModality::Both
     );
 
-    // Dynamic rough-recall sizing: rough = clamp(docscope_chunk_total × 30%, 50, 200);
+    // Dynamic rough-recall sizing: rough = clamp(docscope_chunk_total × 20%, 50, 100);
     // final fed to LLM = clamp(rough × 30%, 10, 30). The LLM-supplied top_k is
     // intentionally overridden so a small top_k (e.g. 10) cannot starve the
-    // reranker of candidates.
+    // reranker of candidates. Rough max is aligned to the rerank provider's
+    // 100-docs/request limit (single rerank call).
     let doc_ids: Vec<uuid::Uuid> = args
         .doc_scope
         .iter()

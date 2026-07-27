@@ -11,12 +11,14 @@ type ContextOsMarkProps = {
 
 /**
  * Canonical Full ContextOsMark (dual-arc + spine + nodes).
- * Plate = currentColor; ink = --cos-mark-ink or background token (theme-safe).
+ * Plate = slate ink (--foreground, theme-adaptive); ink = background (inverse);
+ * one accent node = --accent (brand link to the indigo interactive family).
  * Size only via `size` / CSS class — never hardcode oversized defaults for chrome.
  */
 export function ContextOsMark({ className, style, size = 24, title }: ContextOsMarkProps) {
   const dim = size;
   const ink = "var(--cos-mark-ink, hsl(var(--background)))";
+  const accentNode = "hsl(var(--accent))";
 
   return (
     <svg
@@ -37,7 +39,7 @@ export function ContextOsMark({ className, style, size = 24, title }: ContextOsM
       xmlns="http://www.w3.org/2000/svg"
     >
       {title ? <title>{title}</title> : null}
-      <rect width="76" height="76" rx="18" fill="currentColor" />
+      <rect width="76" height="76" rx="18" fill="hsl(var(--foreground))" />
       <rect
         x="0.75"
         y="0.75"
@@ -77,7 +79,7 @@ export function ContextOsMark({ className, style, size = 24, title }: ContextOsM
       />
       <path
         d="M47 47.1C48.436 47.1 49.6 45.936 49.6 44.5C49.6 43.064 48.436 41.9 47 41.9C45.564 41.9 44.4 43.064 44.4 44.5C44.4 45.936 45.564 47.1 47 47.1Z"
-        fill={ink}
+        fill={accentNode}
       />
       <path
         d="M45 54.3C46.27 54.3 47.3 53.27 47.3 52C47.3 50.73 46.27 49.7 45 49.7C43.73 49.7 42.7 50.73 42.7 52C42.7 53.27 43.73 54.3 45 54.3Z"

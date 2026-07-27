@@ -24,7 +24,8 @@ pub use avrag_retrieval_data_plane::{RetrievalDataPlane, RetrievalReadPort, Weig
 #[derive(Clone)]
 pub struct RagRuntime {
     config: RagConfig,
-    data_plane: Arc<dyn RetrievalReadPort>,
+    /// Crate-visible for tools (graph / graph_augment) without widening product surface.
+    pub(crate) data_plane: Arc<dyn RetrievalReadPort>,
 }
 
 impl RagRuntime {
@@ -82,8 +83,7 @@ impl RagRuntime {
     }
 
     /// List all text (body) chunks for a doc scope with full content, for the
-    /// `doc_chunks` agent tool (codegen sandbox runs arbitrary traversal over
-    /// the full set). See `doc_scan_design.md`.
+    /// Host tool for sandbox `client.doc_scan` (code-side scan/count/filter).
     pub async fn list_text_chunks(
         &self,
         auth: &contracts::auth_runtime::AuthContext,
@@ -102,9 +102,11 @@ const FINAL_SCORE_THRESHOLD: f32 = 0.7;
 // Dynamic rough-recall sizing for agent-driven dense retrieval (dense_search tool).
 // rough = clamp(docscope_chunk_total × ROUGH_RECALL_FRACTION, ROUGH_RECALL_MIN, ROUGH_RECALL_MAX)
 // final = clamp(rough × FINAL_FEED_FRACTION, FINAL_FEED_MIN, FINAL_FEED_MAX)
-const ROUGH_RECALL_FRACTION: f64 = 0.3;
+// ROUGH_RECALL_MAX is aligned to the DashScope qwen3-vl-rerank 100-docs/request
+// limit so the rerank stage stays a single provider call (see llm::reranker).
+const ROUGH_RECALL_FRACTION: f64 = 0.2;
 const ROUGH_RECALL_MIN: usize = 50;
-const ROUGH_RECALL_MAX: usize = 200;
+const ROUGH_RECALL_MAX: usize = 100;
 const FINAL_FEED_FRACTION: f64 = 0.3;
 const FINAL_FEED_MIN: usize = 10;
 const FINAL_FEED_MAX: usize = 30;
@@ -134,23 +136,23 @@ mod dynamic_budget_tests {
     }
 
     #[test]
-    fn rough_recall_scales_at_thirty_percent_in_mid_range() {
-        assert_eq!(dynamic_rough_recall(243), 73);
-        assert_eq!(dynamic_rough_recall(300), 90);
-        assert_eq!(dynamic_rough_recall(666), 200);
+    fn rough_recall_scales_at_twenty_percent_in_mid_range() {
+        assert_eq!(dynamic_rough_recall(243), 50);
+        assert_eq!(dynamic_rough_recall(300), 60);
+        assert_eq!(dynamic_rough_recall(500), 100);
     }
 
     #[test]
     fn rough_recall_caps_at_max() {
-        assert_eq!(dynamic_rough_recall(1000), 200);
-        assert_eq!(dynamic_rough_recall(100_000), 200);
+        assert_eq!(dynamic_rough_recall(1000), 100);
+        assert_eq!(dynamic_rough_recall(100_000), 100);
     }
 
     #[test]
     fn final_feed_scales_at_thirty_percent_of_rough() {
         assert_eq!(dynamic_final_feed(73), 22);
         assert_eq!(dynamic_final_feed(50), 15);
-        assert_eq!(dynamic_final_feed(200), 30);
+        assert_eq!(dynamic_final_feed(100), 30);
     }
 
     #[test]

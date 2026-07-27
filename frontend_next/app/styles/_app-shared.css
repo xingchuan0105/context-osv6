@@ -1,0 +1,502 @@
+/* App shared base (app-*, workspace-*, forms, tabs, animations) — extracted from app/globals.css (mechanical split, rules unchanged).
+ * Merged from globals.css L55-101, L127-134, L142-497 and the
+ * keyframes/animation-utility block (originally L1655-1736, after the
+ * dashboard section). Keyframes are resolved by name, not by source
+ * order, and all keyframe names are unique, so hoisting them here is
+ * cascade-safe. Keep this partial imported BEFORE _dashboard.css:
+ * its combined app-button and dashboard-button :focus-visible/:active rules
+ * must stay ahead of the dashboard rules they precede in the original. */
+
+.app-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.app-surface-card {
+  width: 100%;
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-card);
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+}
+
+.app-auth-card {
+  max-width: 28rem;
+  padding: 1.625rem;
+}
+
+.app-auth-header {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 1.375rem;
+}
+
+/* Auth card only: stacked mark + label */
+.app-auth-brand-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  width: fit-content;
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-auth-brand-link:hover .app-auth-brand-label,
+.app-auth-brand-link:focus-visible .app-auth-brand-label {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* Auth card: large mark (size still passed via ContextOsMark size prop when set) */
+.app-auth-mark {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  color: hsl(var(--foreground));
+}
+
+.app-auth-brand-label {
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: hsl(var(--muted-foreground));
+}
+
+.app-auth-title {
+  margin: 0;
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(1.65rem, 2.6vw, 1.95rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.app-auth-subtitle {
+  margin: 0;
+  max-width: 24rem;
+}
+
+.app-page-shell {
+  width: 100%;
+  min-height: 100vh;
+  padding: 2rem 1rem 4rem;
+}
+
+.app-page-center {
+  margin: 0 auto;
+  max-width: 72rem;
+}
+
+.app-page-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-page-title {
+  margin: 0;
+  font-size: clamp(1.75rem, 2.4vw, 2.35rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.app-page-subtitle {
+  margin: 0;
+  max-width: 48rem;
+  color: hsl(var(--subtle-foreground));
+}
+
+.app-form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-input {
+  width: 100%;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-control);
+  background: hsl(var(--input-background));
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+  padding: 0.9rem 1rem;
+  outline: none;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.app-input::placeholder {
+  color: hsl(var(--subtle-foreground));
+}
+
+.app-input:hover {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-elevated));
+  transform: translateY(-0.5px);
+}
+
+.app-input:focus,
+.app-input:focus-visible {
+  border-color: hsl(var(--focus-ring));
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.app-input:active {
+  transform: translateY(0.5px);
+}
+
+.app-button-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.app-button-primary,
+.app-button-secondary,
+.app-button-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  appearance: none;
+  border-radius: var(--radius-button);
+  padding: 0.8rem 1.15rem;
+  border: 1px solid hsl(var(--border-whisper));
+  cursor: pointer;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-control);
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.app-button-primary:disabled,
+.app-button-secondary:disabled,
+.app-button-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.app-button-primary {
+  border-color: transparent;
+  background: hsl(var(--cta-background));
+  color: hsl(var(--cta-foreground));
+  box-shadow: var(--shadow-sm);
+}
+
+.app-button-primary:hover {
+  background: hsl(var(--cta-background-hover));
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.app-button-secondary {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--border-whisper));
+  color: hsl(var(--secondary-foreground));
+}
+
+.app-button-ghost {
+  background: color-mix(in srgb, hsl(var(--card)) 64%, transparent);
+  border-color: hsl(var(--border-whisper));
+  color: hsl(var(--muted-foreground));
+}
+
+.app-button-secondary:hover,
+.app-button-ghost:hover {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-soft));
+  color: hsl(var(--foreground));
+  transform: translateY(-1px);
+}
+
+.app-button-primary:focus-visible,
+.app-button-secondary:focus-visible,
+.app-button-ghost:focus-visible,
+.app-tab-button:focus-visible,
+.dashboard-tab-button:focus-visible,
+.dashboard-segmented-button:focus-visible,
+.dashboard-sort-button:focus-visible,
+.dashboard-icon-button:focus-visible,
+.dashboard-action-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.app-button-primary:active,
+.app-button-secondary:active,
+.app-button-ghost:active,
+.app-tab-button:active,
+.dashboard-tab-button:active,
+.dashboard-segmented-button:active,
+.dashboard-sort-button:active,
+.dashboard-icon-button:active,
+.dashboard-action-button:active {
+  transform: translateY(1px);
+}
+
+.app-button-primary:active {
+  background: hsl(var(--cta-background-active));
+}
+
+.app-button-accent {
+  background: hsl(var(--accent-cta));
+  color: hsl(var(--primary-foreground));
+}
+
+.app-button-accent:hover {
+  background: hsl(var(--accent-cta-hover));
+}
+
+.app-button-accent:active {
+  background: hsl(var(--accent-cta-hover));
+}
+
+/* Create CTAs: neutral gray fill (aligned with Gemini/Kimi/Grok). Doubled
+   class name so these rules outrank single-class CSS-module button styles
+   regardless of bundle order. */
+.app-button-create.app-button-create {
+  background: hsl(var(--surface-soft));
+  border-color: transparent;
+  color: hsl(var(--foreground));
+}
+
+.app-button-create.app-button-create:hover,
+.app-button-create.app-button-create:active {
+  background: hsl(var(--surface-sunken));
+  border-color: transparent;
+  color: hsl(var(--foreground));
+}
+
+.app-button-create-soft.app-button-create-soft {
+  background: transparent;
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.app-button-create-soft.app-button-create-soft:hover {
+  background: hsl(var(--surface-soft));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.app-inline-surface {
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-card);
+  background: hsl(var(--surface-muted));
+  padding: 1rem 1.1rem;
+}
+
+/* Settings tabs only (scoped via the settings-only tab bar): section cards
+   separate via spacing + tonal fill, not 1px borders. surface-soft reads as a
+   light well on the white card in light theme and lifts above --card in dark
+   (where --card and --surface-muted are identical). */
+.app-surface-card:has(> .app-tab-bar) .app-inline-surface {
+  border-color: transparent;
+  background: hsl(var(--surface-soft));
+}
+
+.app-surface-card:has(> .app-tab-bar) .app-inline-surface .app-inline-surface {
+  background: hsl(var(--surface-muted));
+}
+
+.app-link {
+  color: hsl(var(--accent-text));
+}
+
+.app-link-muted {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.app-button-block {
+  width: 100%;
+  justify-content: center;
+}
+
+.app-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.app-notice-banner {
+  margin: 0;
+  border: 1px solid hsl(var(--destructive-border));
+  border-radius: var(--radius-control);
+  background: hsl(var(--destructive-soft));
+  color: hsl(var(--destructive));
+  padding: 0.9rem 1rem;
+}
+
+.app-form-footnote {
+  margin: 1.25rem 0 0;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.app-tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.app-tab-button {
+  appearance: none;
+  border: 1px solid hsl(var(--border-whisper));
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.app-tab-button:hover {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-soft));
+  color: hsl(var(--foreground));
+}
+
+.app-tab-button-active {
+  background: hsl(var(--surface-soft));
+  color: hsl(var(--foreground));
+  border-color: transparent;
+}
+
+.workspace-shell {
+  min-height: 100vh;
+  background: hsl(var(--workspace-shell));
+}
+
+.workspace-topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid hsl(var(--workspace-border));
+  background: color-mix(in srgb, hsl(var(--workspace-surface)) 86%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 18rem minmax(0, 1fr) 24rem;
+  min-height: calc(100vh - 72px);
+}
+
+.workspace-panel {
+  border-right: 1px solid hsl(var(--workspace-border));
+  background: hsl(var(--workspace-surface));
+}
+
+/* === Animation Keyframes === */
+
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes thinkingPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* === Animation Utility Classes === */
+
+.animate-card-enter {
+  animation: cardEnter var(--duration-slow) ease-out forwards;
+}
+
+.animate-modal-enter {
+  animation: modalEnter var(--duration-slow) ease-out forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft var(--duration-slow) ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-slow) ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-card-enter,
+  .animate-modal-enter,
+  .animate-slide-in-left,
+  .animate-fade-in {
+    animation: none;
+  }
+}
+

@@ -594,8 +594,8 @@ export function WorkspaceNoteEditorTiptap({
       disabled: !toolbarState.canUndo,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M9 8 5 12l4 4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-          <path d="M6 12h6.25c3.73 0 6.75 3.02 6.75 6.75" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+          <path d="M9 8 5 12l4 4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M6 12h6.25c3.73 0 6.75 3.02 6.75 6.75" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
         </svg>
       ),
     },
@@ -606,8 +606,8 @@ export function WorkspaceNoteEditorTiptap({
       disabled: !toolbarState.canRedo,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="m15 8 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-          <path d="M18 12h-6.25C8.02 12 5 15.02 5 18.75" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+          <path d="m15 8 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M18 12h-6.25C8.02 12 5 15.02 5 18.75" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
         </svg>
       ),
     },
@@ -639,9 +639,9 @@ export function WorkspaceNoteEditorTiptap({
       disabled: !toolbarState.link && (!editor || editor.state.selection.empty),
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M10.5 13.5 13.5 10.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-          <path d="M8.25 15.75 6.5 17.5a3 3 0 1 1-4.24-4.24L4 11.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-          <path d="m15.75 8.25 1.75-1.75a3 3 0 1 1 4.24 4.24L20 12.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+          <path d="M10.5 13.5 13.5 10.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M8.25 15.75 6.5 17.5a3 3 0 1 1-4.24-4.24L4 11.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="m15.75 8.25 1.75-1.75a3 3 0 1 1 4.24 4.24L20 12.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
         </svg>
       ),
     },
@@ -652,7 +652,7 @@ export function WorkspaceNoteEditorTiptap({
       active: toolbarState.orderedList,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIconWide} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M10 7h10M10 12h10M10 17h10" strokeLinecap="round" strokeWidth="1.9" />
+          <path d="M10 7h10M10 12h10M10 17h10" strokeLinecap="round" strokeWidth="1.8" />
           <path d="M4.5 6.25h.5v4M4 10.25h2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
           <path d="M4 15.25c.25-.67.78-1 1.6-1 .86 0 1.4.42 1.4 1.12 0 .57-.3.96-1.45 2.08L4 19.25h3" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
         </svg>
@@ -665,7 +665,7 @@ export function WorkspaceNoteEditorTiptap({
       active: toolbarState.unorderedList,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIconWide} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M10 7h10M10 12h10M10 17h10" strokeLinecap="round" strokeWidth="1.9" />
+          <path d="M10 7h10M10 12h10M10 17h10" strokeLinecap="round" strokeWidth="1.8" />
           <circle cx="5" cy="7" r="1.1" fill="currentColor" stroke="none" />
           <circle cx="5" cy="12" r="1.1" fill="currentColor" stroke="none" />
           <circle cx="5" cy="17" r="1.1" fill="currentColor" stroke="none" />
@@ -678,9 +678,9 @@ export function WorkspaceNoteEditorTiptap({
       label: locale === "zh-CN" ? "清除格式" : "Clear formatting",
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M5 5h9l5 5-9 9-5-5 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-          <path d="M14 5 5 14" strokeLinecap="round" strokeWidth="1.9" />
-          <path d="M14.5 18.5h5" strokeLinecap="round" strokeWidth="1.9" />
+          <path d="M5 5h9l5 5-9 9-5-5 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M14 5 5 14" strokeLinecap="round" strokeWidth="1.8" />
+          <path d="M14.5 18.5h5" strokeLinecap="round" strokeWidth="1.8" />
         </svg>
       ),
     },

@@ -47,7 +47,7 @@
 }
 
 .upgradeHint {
-  color: hsl(var(--accent));
+  color: hsl(var(--accent-text));
   font-weight: var(--font-weight-semibold);
 }
 

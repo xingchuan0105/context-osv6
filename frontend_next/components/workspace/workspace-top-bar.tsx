@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { DesktopSettingsDrawer } from "../desktop/DesktopSettingsDrawer";
 import { DesktopStatusBadge } from "../desktop/DesktopStatusBadge";
 import { ContextOsMark } from "../context-os-mark";
-import { useAuth } from "../../lib/auth/context";
+import { AccountMenu } from "../account-menu";
+import { PlanEntry } from "../plan-entry";
+import { WorkspaceApiAccessModal } from "../api-access/workspace-api-access-modal";
+import { WorkspaceShareQuickModal } from "../share/workspace-share-quick-modal";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { isTauri } from "../../lib/runtime/tauri-ipc";
 import { useUiPreferences } from "../../lib/ui-preferences";
@@ -32,58 +34,17 @@ export function WorkspaceTopBar({
   onSaveWorkspaceTitle,
   onCreateWorkspaceSubmit,
 }: WorkspaceTopBarProps) {
-  const auth = useAuth();
-  const router = useRouter();
-  const { locale, setLocale, setTheme, theme } = useUiPreferences();
+  const { locale } = useUiPreferences();
   const [isTitleEditing, setIsTitleEditing] = useState(false);
-  const [gearMenuOpen, setGearMenuOpen] = useState(false);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [desktopDrawerOpen, setDesktopDrawerOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [apiOpen, setApiOpen] = useState(false);
   const desktopRuntime = isTauri();
   const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const gearMenuRef = useRef<HTMLDivElement | null>(null);
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
   const safeWorkspaceTitle = workspaceTitle ?? "";
   const safeWorkspaceDescription = workspaceDescription ?? "";
-  const currentUserLabel = auth.user?.full_name.trim() || auth.user?.email.trim() || formatUiMessage(locale, "workspaceAnonymousUser");
-  const currentUserEmail = auth.user?.email.trim() || formatUiMessage(locale, "workspaceAnonymousUser");
   const newWorkspaceLabel = formatUiMessage(locale, "workspaceCreateDialogLabel");
   const displayTitle = safeWorkspaceTitle;
-
-  useEffect(() => {
-    if (!gearMenuOpen && !avatarMenuOpen) {
-      return;
-    }
-
-    function closeMenus() {
-      setGearMenuOpen(false);
-      setAvatarMenuOpen(false);
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-
-      if (gearMenuRef.current?.contains(target) || avatarMenuRef.current?.contains(target)) {
-        return;
-      }
-
-      closeMenus();
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeMenus();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [avatarMenuOpen, gearMenuOpen]);
 
   useEffect(() => {
     if (!isTitleEditing) {
@@ -93,17 +54,6 @@ export function WorkspaceTopBar({
     titleInputRef.current?.focus();
     titleInputRef.current?.select();
   }, [isTitleEditing]);
-
-  async function handleLogout() {
-    setAvatarMenuOpen(false);
-    await auth.logout();
-    router.replace("/login");
-  }
-
-  function closeAllMenus() {
-    setGearMenuOpen(false);
-    setAvatarMenuOpen(false);
-  }
 
   function saveWorkspaceTitle() {
     setIsTitleEditing(false);
@@ -183,6 +133,7 @@ export function WorkspaceTopBar({
       </div>
 
       <div className={styles.topBarActions}>
+        <PlanEntry locale={locale} size="compact" />
         {desktopRuntime ? (
           <>
             <DesktopStatusBadge onClick={() => setDesktopDrawerOpen(true)} />
@@ -191,7 +142,6 @@ export function WorkspaceTopBar({
               className={styles.topBarActionButton}
               type="button"
               onClick={() => {
-                closeAllMenus();
                 setDesktopDrawerOpen(true);
               }}
             >
@@ -216,19 +166,23 @@ export function WorkspaceTopBar({
         <div className={styles.topBarActionGroup}>
           <button
             aria-label={formatUiMessage(locale, "workspaceCreateAction")}
-            className={styles.topBarPrimaryButton}
+            className={`${styles.topBarPrimaryButton} app-button-create`}
             type="button"
             onClick={() => {
-              closeAllMenus();
               onCreateWorkspaceSubmit();
             }}
           >
             <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.9" />
+              <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
             </svg>
             <span className={styles.topBarActionLabel}>{newWorkspaceLabel}</span>
           </button>
-          <Link className={styles.topBarActionButton} href={`/dashboard/${workspaceId}/share`}>
+          <button
+            className={styles.topBarActionButton}
+            data-testid="workspace-topbar-share"
+            type="button"
+            onClick={() => setShareOpen(true)}
+          >
             <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path d="M8 9.6 10.4 12 8 14.4 5.6 12 8 9.6Z" strokeLinejoin="round" strokeWidth="1.8" />
               <path d="M17 5.3 19.2 7.5 17 9.7 14.8 7.5 17 5.3Z" strokeLinejoin="round" strokeWidth="1.8" />
@@ -237,151 +191,34 @@ export function WorkspaceTopBar({
               <path d="M5.95 8.15 4.25 10.1v3.8l1.7 1.95" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
             </svg>
             <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceDistribute")}</span>
-          </Link>
-          <Link className={styles.topBarActionButton} href={`/dashboard/${workspaceId}/api-access`}>
+          </button>
+          <button
+            className={styles.topBarActionButton}
+            data-testid="workspace-topbar-api"
+            type="button"
+            onClick={() => setApiOpen(true)}
+          >
             <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path d="M8 8.5 4.5 12 8 15.5M16 8.5 19.5 12 16 15.5M13.5 6.5 10.5 17.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
             </svg>
             <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceApi")}</span>
-          </Link>
-        <div className={styles.menuAnchor} ref={gearMenuRef}>
-          <button
-            aria-expanded={gearMenuOpen}
-            aria-haspopup="dialog"
-            aria-label={formatUiMessage(locale, "dashboardAppearanceLink")}
-            className={styles.topBarActionButton}
-            type="button"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              setGearMenuOpen((current) => !current);
-            }}
-          >
-            <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
-              <path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-              <circle cx="12" cy="12" r="4" />
-            </svg>
-            <span>{formatUiMessage(locale, "dashboardAppearanceLink")}</span>
           </button>
-
-          {gearMenuOpen ? (
-            <div className={`${styles.menuPanel} ${styles.menuPanelWide}`}>
-              <section className={styles.menuSection}>
-                <div className={styles.menuSectionTitle}>{formatUiMessage(locale, "workspaceMenuTheme")}</div>
-                <div className={styles.menuChoiceGroup}>
-                  {([
-                    { value: "system" as const, label: formatUiMessage(locale, "workspaceThemeSystem") },
-                    { value: "light" as const, label: formatUiMessage(locale, "workspaceThemeLight") },
-                    { value: "dark" as const, label: formatUiMessage(locale, "workspaceThemeDark") },
-                  ]).map((option) => (
-                    <button
-                      key={option.value}
-                      aria-pressed={theme === option.value}
-                      className={theme === option.value ? styles.menuChoiceActive : styles.menuChoice}
-                      type="button"
-                      onClick={() => {
-                        setTheme(option.value);
-                        setGearMenuOpen(false);
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className={styles.menuSection}>
-                <div className={styles.menuSectionTitle}>{formatUiMessage(locale, "workspaceMenuLanguage")}</div>
-                <div className={styles.menuChoiceGroup}>
-                  {([
-                    { value: "zh-CN" as const, label: formatUiMessage(locale, "workspaceLanguageChinese") },
-                    { value: "en" as const, label: formatUiMessage(locale, "workspaceLanguageEnglish") },
-                  ]).map((option) => (
-                    <button
-                      key={option.value}
-                      aria-pressed={locale === option.value}
-                      className={locale === option.value ? styles.menuChoiceActive : styles.menuChoice}
-                      type="button"
-                      onClick={() => {
-                        setLocale(option.value);
-                        setGearMenuOpen(false);
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </div>
-          ) : null}
         </div>
-
-        <div className={styles.menuAnchor} ref={avatarMenuRef}>
-          <button
-            aria-expanded={avatarMenuOpen}
-            aria-haspopup="dialog"
-            aria-label={formatUiMessage(locale, "workspaceOpenAccountMenu")}
-            className={styles.topBarActionButton}
-            type="button"
-            onClick={() => {
-              setGearMenuOpen(false);
-              setAvatarMenuOpen((current) => !current);
-            }}
-          >
-            <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-              />
-              <path
-                d="M4 20a8 8 0 0 1 16 0"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-              />
-            </svg>
-            <span className={styles.topBarUserLabel}>{formatUiMessage(locale, "dashboardProfileLink")}</span>
-          </button>
-
-          {avatarMenuOpen ? (
-            <div className={styles.menuPanel}>
-              <div className={styles.menuAccountCard}>
-                <div className={styles.menuAccountName}>{currentUserLabel}</div>
-                <div className={styles.menuAccountEmail}>{currentUserEmail}</div>
-              </div>
-              <Link
-                className={styles.menuChoice}
-                href="/settings?tab=profile"
-                onClick={() => {
-                  setAvatarMenuOpen(false);
-                }}
-              >
-                {formatUiMessage(locale, "dashboardProfileLink")}
-              </Link>
-              {!desktopRuntime ? (
-                <Link
-                  className={styles.menuChoice}
-                  href="/desktop"
-                  data-testid="workspace-avatar-desktop"
-                  onClick={() => {
-                    setAvatarMenuOpen(false);
-                  }}
-                >
-                  {formatUiMessage(locale, "productChrome.client")}
-                </Link>
-              ) : null}
-              <button className={styles.menuDangerButton} type="button" onClick={() => void handleLogout()}>
-                {formatUiMessage(locale, "workspaceLogout")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-        </div>
+        <AccountMenu locale={locale} />
       </div>
       {desktopRuntime ? (
         <DesktopSettingsDrawer open={desktopDrawerOpen} onClose={() => setDesktopDrawerOpen(false)} />
       ) : null}
+      <WorkspaceShareQuickModal
+        open={shareOpen}
+        workspaceId={workspaceId}
+        onClose={() => setShareOpen(false)}
+      />
+      <WorkspaceApiAccessModal
+        open={apiOpen}
+        workspaceId={workspaceId}
+        onClose={() => setApiOpen(false)}
+      />
     </header>
   );
 }

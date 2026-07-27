@@ -15,6 +15,19 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 MILVUS_URL="${MILVUS_URL:-http://127.0.0.1:19530}"
 MINIO_API_ADDR="${MINIO_API_ADDR:-127.0.0.1:9000}"
 MINIO_CONSOLE_ADDR="${MINIO_CONSOLE_ADDR:-127.0.0.1:9001}"
+
+# Load backend preference from avrag-rs/.env when present (do not export secrets here).
+RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-milvus}"
+if [[ -f "${AVRAG_DIR}/.env" ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  # shellcheck source=/dev/null
+  source "${AVRAG_DIR}/.env"
+  set +a
+  RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-milvus}"
+fi
+RETRIEVAL_BACKEND="$(echo "${RETRIEVAL_BACKEND}" | tr '[:upper:]' '[:lower:]')"
+
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux is required for this dev stack script." >&2
   exit 1
@@ -41,6 +54,24 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='avrag'" | grep
   sudo -u postgres psql -c "CREATE ROLE avrag LOGIN PASSWORD 'avrag';"
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='avrag_rs'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE avrag_rs OWNER avrag;"
+
+if [[ "${RETRIEVAL_BACKEND}" == "pgvector" || "${RETRIEVAL_BACKEND}" == "postgres" || "${RETRIEVAL_BACKEND}" == "pg" ]]; then
+  echo "Retrieval backend: pgvector (Milvus not required for local RAG)."
+  if ! sudo -u postgres psql -d avrag_rs -tAc "SELECT 1 FROM pg_extension WHERE extname='vector'" | grep -q 1; then
+    echo "Ensuring PostgreSQL pgvector extension..."
+    if ! sudo -u postgres psql -d avrag_rs -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null; then
+      echo "WARN: CREATE EXTENSION vector failed. Install package e.g. postgresql-16-pgvector, then re-run." >&2
+    fi
+  fi
+else
+  echo "Retrieval backend: milvus (start stack separately if needed)."
+  if ! curl -s --connect-timeout 1 "${MILVUS_URL%/}/v2/vectordb/collections/list" -X POST \
+      -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1; then
+    echo "WARN: Milvus not reachable at ${MILVUS_URL}."
+    echo "  Start with: docker compose -f ${AVRAG_DIR}/docker-compose.milvus.yml up -d"
+    echo "  Or switch local RAG: RETRIEVAL_BACKEND=pgvector in ${AVRAG_DIR}/.env"
+  fi
+fi
 
 echo "Starting pdf-visual-renderer (scan/E-class PDF fallback; local dev)..."
 bash "${AVRAG_DIR}/scripts/pdf-renderer-up.sh" || {
@@ -72,7 +103,11 @@ echo "  frontend       http://127.0.0.1:3000"
 echo "  api            http://127.0.0.1:8080"
 echo "  office parser  http://127.0.0.1:9090/v1/healthz"
 echo "  pdf-renderer   http://127.0.0.1:9091/v1/healthz"
-echo "  milvus         ${MILVUS_URL} (start separately)"
+if [[ "${RETRIEVAL_BACKEND}" == "pgvector" || "${RETRIEVAL_BACKEND}" == "postgres" || "${RETRIEVAL_BACKEND}" == "pg" ]]; then
+  echo "  retrieval      pgvector (Postgres; no Milvus)"
+else
+  echo "  milvus         ${MILVUS_URL} (start separately if needed)"
+fi
 echo "  minio          http://127.0.0.1:9001"
 echo "Logs:"
 echo "  worker         ${DEV_LOG_DIR}/worker.log"
