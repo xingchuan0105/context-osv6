@@ -635,7 +635,12 @@ pub async fn run_llm_orchestrated_turn(
                         });
                         worker_observability
                             .push(worker_observability_from_run(*channel, &run));
-                        let handoff = worker_handoff_from_run(&run);
+                        // S5: soft fact verification (default OFF) — after the
+                        // compile, before the note/store finalize.
+                        let mut handoff = worker_handoff_from_run(&run);
+                        if let Some(h) = handoff.as_mut() {
+                            super::fact_verify::verify_handoff_facts(h, &run.tool_results).await;
+                        }
                         let note = ChannelNote::with_handoff(
                             *channel,
                             status,

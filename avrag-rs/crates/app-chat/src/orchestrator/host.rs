@@ -119,6 +119,12 @@ pub(crate) async fn dispatch_channel(
                 worker_tools = ?run.tool_results.iter().map(|t| t.tool.as_str()).collect::<Vec<_>>(),
                 "orchestrator dispatch finished"
             );
+            // S5: soft fact verification (default OFF) — after the compile,
+            // before the note/store finalize; never blocks on failure.
+            let mut handoff = worker_handoff_from_run(&run);
+            if let Some(h) = handoff.as_mut() {
+                super::fact_verify::verify_handoff_facts(h, &run.tool_results).await;
+            }
             ChannelOutcome {
                 record: DispatchRecord {
                     channel,
@@ -131,7 +137,7 @@ pub(crate) async fn dispatch_channel(
                     channel,
                     status,
                     inserted,
-                    worker_handoff_from_run(&run),
+                    handoff,
                     error,
                 ),
                 observability: Some(worker_observability_from_run(channel, &run)),
