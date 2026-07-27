@@ -107,6 +107,43 @@ impl RuntimeBridge {
         intersect_doc_scope(caller, &self.doc_scope)
     }
 
+    /// C10: multi-doc-scope chunk_fetch — probe each scoped doc with its own
+    /// `index_lookup` and return the first non-empty result, or the last probe
+    /// when no scoped doc contains the chunk (honest empty). Mirrors
+    /// `resolve_doc_ids`'s full-scope intent within index_lookup's single-doc
+    /// contract.
+    async fn dispatch_chunk_fetch_full_scope(&self, args: &Value) -> ToolResult {
+        let chunk_id = args
+            .get("chunk_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        let mut last = None;
+        for doc_id in &self.doc_scope {
+            let probe = ToolCall {
+                tool: "index_lookup".to_string(),
+                version: "1.0".to_string(),
+                args: serde_json::to_value(IndexLookupArgs {
+                    doc_id: doc_id.clone(),
+                    chunk_ids: vec![chunk_id.to_string()],
+                })
+                .unwrap_or_default(),
+            };
+            let result = tools::dispatch(&self.runtime, &self.auth, &probe).await;
+            let non_empty = result
+                .data
+                .as_ref()
+                .and_then(|d| d.as_array())
+                .is_some_and(|a| !a.is_empty());
+            if non_empty {
+                return result;
+            }
+            last = Some(result);
+        }
+        // The multi-doc branch guarantees a non-empty scope, so at least one
+        // probe ran.
+        last.expect("multi-doc scope yields at least one probe")
+    }
+
     fn method_to_tool_call(&self, method: &str, args: &Value) -> Result<ToolCall, Value> {
         match method {
             "dense_search" => {
@@ -215,9 +252,10 @@ impl RuntimeBridge {
                         "chunk_fetch requires a non-empty doc_scope",
                     ));
                 }
-                // Limitation: `index_lookup` only takes a single `doc_id`, so for a
-                // multi-doc session scope we resolve to the first doc. The retrieved
-                // chunk is still validated against that doc by the data plane.
+                // Single-doc limitation remains inside method_to_tool_call
+                // (index_lookup takes one doc_id), but multi-doc scopes are
+                // fanned out per scoped doc in `call` (C10) — see
+                // dispatch_chunk_fetch_full_scope below.
                 let doc_id = self.doc_scope.first().cloned().unwrap_or_default();
                 Ok(ToolCall {
                     tool: "index_lookup".to_string(),
@@ -379,7 +417,21 @@ impl HostBridge for RuntimeBridge {
             Err(err) => return err,
         };
 
-        let result = tools::dispatch(&self.runtime, &self.auth, &tool_call).await;
+        // C10: chunk_fetch must resolve across the FULL session doc_scope.
+        // index_lookup is single-doc by contract, so a multi-doc scope fans
+        // out one lookup per scoped doc and takes the first non-empty result
+        // (a chunk belongs to exactly one doc; a wrong-doc lookup returns an
+        // empty array, not an error). Single-doc scope keeps the direct
+        // dispatch below.
+        let result = if method == "chunk_fetch" && self.doc_scope.len() > 1 {
+            self.dispatch_chunk_fetch_full_scope(&args).await
+        } else {
+            // Lexical force-augment runs inside lexical_retrieval (single
+            // place for bridge + native). dense_search never gets
+            // graph_context. Bridge only surfaces + telemetry-splits.
+            tools::dispatch(&self.runtime, &self.auth, &tool_call).await
+        };
+
         self.captured_results
             .lock()
             .unwrap_or_else(|e| e.into_inner())
