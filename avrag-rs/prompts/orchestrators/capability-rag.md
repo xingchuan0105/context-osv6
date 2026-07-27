@@ -47,3 +47,10 @@ applicable_strategies: [rag]
 本轮不跑检索代码；下一轮注入对应簇。
 
 证据够用或 `remaining = 0`：停止检索代码，按 **task brief 的交接契约** 输出内部 handoff JSON（结构与字段以 task brief 为准）。不要写给用户看的最终长文。
+
+### handoff 灰度字段（契约细节以 task brief 为准）
+
+- **`basis`**：每条 key_fact 标 `observed`（证据原文逐字或严格蕴含）或 `inferred`（你的推断——可以带，但必须标注，此时 `evidence` 可为空）。推断不得写成 observed。
+- **`premise_mismatch`**：发现问题的框架/主体归属与证据不符时（如文档用的是另一套框架、该主体实为竞争对手），用此字段上报并写清 `actual_subject`，不要硬凑一个符合错误前提的答案。
+- **查无即成功**：证据确实不覆盖问题时，`coverage=insufficient` + 空 `key_facts` + `gaps` 写明查无内容，就是满分交付——不是失败，不要为凑数编造 facts。
+- **表内精确匹配**：回答"某行某列的值"类问题时，行名/列名/取值必须与证据中的表项精确对应；相邻行、近似行的值不是答案——对不上就进 gaps，不要合并近邻行。

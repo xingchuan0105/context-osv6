@@ -159,3 +159,5 @@ relations = await client.graph_search(query="…", depth=2)
 - **推荐直接裸写 JSON 对象**（不套 markdown 围栏）——最稳。
 - 即使套了 ``` 围栏也能被正确解析（编排器会剥围栏后再校验），但裸写是推荐形式。
 - 字段结构以 task brief 为准，不要凭印象编造。
+- 灰度字段：`basis`（observed / inferred，推断必须标注）与 `premise_mismatch`（前提/归属与证据不符时上报）；语义见 task brief 与 capability 手册，此处不复述。
+- 查无即成功：证据不覆盖时 `coverage=insufficient` + 空 key_facts + gaps 写明查无，即满分交付。
