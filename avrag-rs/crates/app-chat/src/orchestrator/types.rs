@@ -88,15 +88,37 @@ pub struct WorkerHandoff {
     pub coverage: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gaps: Vec<String>,
+    /// C4: true when the worker's final message failed structured-handoff
+    /// validation or content sanitization (unparsable output, fabricated
+    /// `<code_execution_result>` blocks, evidence pointers absent from the
+    /// worker's recorded tool results). Downstream should treat the handoff
+    /// as untrustworthy.
+    #[serde(default)]
+    pub handoff_degraded: bool,
 }
 
 impl WorkerHandoff {
+    /// C4: deterministic fallback when the worker's final message is not a
+    /// parseable handoff at all. The raw text is deliberately NOT carried
+    /// over (q087 raw code block / q039 fabricated execution-result would
+    /// otherwise be rendered into the Answer's channel outcomes).
+    pub fn degraded_unparsable() -> Self {
+        Self {
+            summary: "worker output unparsable as handoff JSON".to_string(),
+            key_facts: Vec::new(),
+            coverage: "insufficient".into(),
+            gaps: Vec::new(),
+            handoff_degraded: true,
+        }
+    }
+
     pub fn freeform_summary(summary: impl Into<String>) -> Self {
         Self {
             summary: summary.into(),
             key_facts: Vec::new(),
             coverage: "partial".into(),
             gaps: Vec::new(),
+            handoff_degraded: false,
         }
     }
 

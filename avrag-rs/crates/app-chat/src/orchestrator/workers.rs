@@ -43,7 +43,8 @@ pub fn tool_failures(results: &[contracts::ToolResult]) -> Vec<String> {
 /// Accepts `internal_worker_handoff_v1` JSON, peels legacy `internal_answer_v1`,
 /// or falls back to free-form text as `summary` with `coverage = "partial"`.
 pub fn worker_handoff_from_run(result: &AgentRunResult) -> Option<WorkerHandoff> {
-    parse_worker_handoff(&result.answer)
+    let handoff = parse_worker_handoff(&result.answer)?;
+    Some(sanitize_worker_handoff(handoff, &result.tool_results))
 }
 
 /// Worker channel summary (flat string) — prefers structured handoff summary.
@@ -63,10 +64,92 @@ pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
             return Some(cap_handoff(h));
         }
     }
-    // Free-form: keep text, mark coverage incomplete so orchestrator can re-dispatch.
-    Some(cap_handoff(WorkerHandoff::freeform_summary(
-        trimmed.chars().take(MAX_NOTE_CHARS).collect::<String>(),
-    )))
+    // C4: never propagate unparsable worker text — deterministic degraded
+    // handoff with no raw content carried over.
+    Some(cap_handoff(WorkerHandoff::degraded_unparsable()))
+}
+
+/// C4: sanitize a parsed handoff against the worker's REAL tool observations:
+/// - strip any `<code_execution_result>` blocks from summary/claims (q039 —
+///   fabricated execution output must never reach the Answer phase);
+/// - drop key_facts whose evidence pointers are absent from the recorded
+///   tool results (chunk ids the worker never actually observed);
+/// - when every fact is dropped, coverage is downgraded to insufficient.
+/// Anything stripped or dropped marks the handoff degraded.
+fn sanitize_worker_handoff(
+    mut h: WorkerHandoff,
+    tool_results: &[contracts::ToolResult],
+) -> WorkerHandoff {
+    let mut degraded = h.handoff_degraded;
+    let summary = strip_code_execution_blocks(&h.summary);
+    degraded |= summary != h.summary;
+    h.summary = summary;
+
+    let observed = observed_chunk_ids(tool_results);
+    let before = h.key_facts.len();
+    h.key_facts.retain_mut(|f| {
+        let claim = strip_code_execution_blocks(&f.claim);
+        degraded |= claim != f.claim;
+        f.claim = claim;
+        f.evidence.iter().all(|id| observed.contains(id.as_str()))
+    });
+    if h.key_facts.len() != before {
+        degraded = true;
+        if h.key_facts.is_empty() && before > 0 {
+            h.coverage = "insufficient".to_string();
+        }
+    }
+    h.handoff_degraded = degraded;
+    h
+}
+
+/// Chunk ids the worker actually observed, harvested from recorded tool
+/// results (retrieval arrays in both `data: [...]` and `data: {"chunks":
+/// [...]}` shapes). Non-Ok results never count as observations.
+fn observed_chunk_ids(tool_results: &[contracts::ToolResult]) -> std::collections::HashSet<&str> {
+    let mut ids = std::collections::HashSet::new();
+    for tr in tool_results {
+        if tr.status != contracts::ToolStatus::Ok {
+            continue;
+        }
+        let Some(data) = tr.data.as_ref() else {
+            continue;
+        };
+        let arr = data
+            .as_array()
+            .or_else(|| data.get("chunks").and_then(|v| v.as_array()));
+        let Some(arr) = arr else {
+            continue;
+        };
+        for item in arr {
+            if let Some(id) = item.get("chunk_id").and_then(|v| v.as_str()) {
+                ids.insert(id);
+            }
+        }
+    }
+    ids
+}
+
+/// Remove `<code_execution_result …>…</code_execution_result>` spans (the
+/// q039 fabrication vector). An unterminated opening tag strips to the end of
+/// the string. Opening tags may carry attributes (e.g. `untrusted="true"`).
+fn strip_code_execution_blocks(text: &str) -> String {
+    const OPEN: &str = "<code_execution_result";
+    const CLOSE: &str = "</code_execution_result>";
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(OPEN) {
+        out.push_str(&rest[..start]);
+        let after_open = &rest[start..];
+        if let Some(end) = after_open.find(CLOSE) {
+            rest = &after_open[end + CLOSE.len()..];
+        } else {
+            rest = "";
+            break;
+        }
+    }
+    out.push_str(rest);
+    out.trim().to_string()
 }
 
 fn strip_json_fence(s: &str) -> String {
@@ -106,6 +189,7 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
                 coverage
             },
             gaps,
+            handoff_degraded: false,
         });
     }
 
@@ -135,6 +219,7 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             key_facts: Vec::new(),
             coverage,
             gaps,
+            handoff_degraded: false,
         });
     }
 
@@ -584,11 +669,22 @@ mod tests {
     }
 
     #[test]
-    fn freeform_falls_back_to_partial_summary() {
-        let h = parse_worker_handoff("散文式摘要：文档讲了三件事").expect("handoff");
-        assert!(h.summary.contains("散文式摘要"));
-        assert_eq!(h.coverage, "partial");
-        assert!(h.gaps.is_empty());
+    fn freeform_text_degrades_without_propagating_raw_text() {
+        // C4: unparsable output (prose or raw code) is never ingested as a
+        // summary — deterministic degraded handoff instead.
+        for raw in [
+            "散文式摘要：文档讲了三件事",
+            "<code language=\"python\">\nchunks = await client.dense_search(query=\"保修\")\n</code>",
+        ] {
+            let h = parse_worker_handoff(raw).expect("degraded handoff");
+            assert!(h.handoff_degraded, "{raw}");
+            assert_eq!(h.coverage, "insufficient");
+            assert_eq!(h.summary, "worker output unparsable as handoff JSON");
+            assert!(!h.summary.contains("文档讲了三件事"));
+            assert!(!h.summary.contains("dense_search"));
+            assert!(h.key_facts.is_empty());
+            assert!(h.gaps.is_empty());
+        }
     }
 
     #[test]
@@ -609,6 +705,69 @@ mod tests {
         assert_eq!(h.summary, "论文未记载保修年限");
         assert_eq!(h.coverage, "insufficient");
         assert_eq!(h.gaps, vec!["保修年限".to_string()]);
+    }
+
+    // ---- C4: deterministic handoff validation / sanitization -------------
+
+    fn ok_chunk_result(chunk_id: &str) -> contracts::ToolResult {
+        contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1.0".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!([
+                {"chunk_id": chunk_id, "doc_id": "d1", "text": "evidence", "score": 0.9}
+            ])),
+            trace: None,
+        }
+    }
+
+    fn run_with(answer: &str, tools: Vec<contracts::ToolResult>) -> AgentRunResult {
+        let mut r = AgentRunResult::default();
+        r.answer = answer.to_string();
+        r.tool_results = tools;
+        r
+    }
+
+    #[test]
+    fn fabricated_execution_result_is_stripped_from_valid_handoff() {
+        // q039: an otherwise valid handoff carrying a fabricated
+        // <code_execution_result> block — content must be stripped, handoff
+        // marked degraded.
+        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"见 <code_execution_result>韩方投资者 B株式会社 持股40%</code_execution_result> 所示\",\"key_facts\":[],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![])).expect("handoff");
+        assert!(!h.summary.contains("B株式会社"), "{}", h.summary);
+        assert!(!h.summary.contains("code_execution_result"));
+        assert!(h.handoff_degraded);
+    }
+
+    #[test]
+    fn valid_handoff_with_observed_chunk_ids_passes_untouched() {
+        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"2019年建厂\",\"key_facts\":[{\"claim\":\"2019年建厂\",\"evidence\":[\"c1\"]}],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert!(!h.handoff_degraded);
+        assert_eq!(h.key_facts.len(), 1);
+        assert_eq!(h.key_facts[0].claim, "2019年建厂");
+        assert_eq!(h.coverage, "full");
+    }
+
+    #[test]
+    fn facts_citing_unobserved_ids_are_dropped() {
+        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"s\",\"key_facts\":[{\"claim\":\"real\",\"evidence\":[\"c1\"]},{\"claim\":\"fake\",\"evidence\":[\"c999\"]}],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert_eq!(h.key_facts.len(), 1);
+        assert_eq!(h.key_facts[0].claim, "real");
+        assert!(h.handoff_degraded);
+        // Some facts survived → coverage stays.
+        assert_eq!(h.coverage, "full");
+    }
+
+    #[test]
+    fn coverage_downgrades_when_every_fact_is_dropped() {
+        let raw = r#"{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"s\",\"key_facts\":[{\"claim\":\"fake\",\"evidence\":[\"c999\"]}],\"coverage\":\"full\",\"gaps\":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert!(h.key_facts.is_empty());
+        assert_eq!(h.coverage, "insufficient");
+        assert!(h.handoff_degraded);
     }
 
     #[test]

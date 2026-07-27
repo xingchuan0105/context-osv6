@@ -309,6 +309,7 @@ mod tests {
                 key_facts: vec![],
                 coverage: coverage.into(),
                 gaps: gaps.iter().map(|s| (*s).to_string()).collect(),
+                handoff_degraded: false,
             }),
             None,
         )
