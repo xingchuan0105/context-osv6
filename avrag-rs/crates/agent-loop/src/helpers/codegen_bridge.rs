@@ -172,11 +172,11 @@ mod tests {
             "dense_retrieval",
             ToolStatus::Ok,
             Some(serde_json::json!([
-                {"chunk_id": "c1", "doc_id": "d1", "content": "hello", "score": 0.9}
+                {"chunk_id": "6c16ac99-e934-4355-be1c-f0956acb51d1", "doc_id": "5a6de5e8-e913-46c9-a109-43eb65ae4e79", "content": "hello", "score": 0.9}
             ])),
         )];
         let stdout = codegen_observation_stdout("", &bridge);
-        assert!(stdout.contains("c1"), "stdout={stdout}");
+        assert!(stdout.contains("6c16ac99-e934-4355-be1c-f0956acb51d1"), "stdout={stdout}");
         assert!(stdout.contains("hello"));
         let observation = format!(
             "<code_execution_result>\n[block 0] stdout: {stdout}\nstderr: \n</code_execution_result>"

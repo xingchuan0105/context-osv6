@@ -103,11 +103,33 @@ pub fn code_execution_has_evidence(message_content: &str) -> bool {
             .split_once("stderr:")
             .map(|(stdout, _)| stdout)
             .unwrap_or(after_stdout);
-        if !stdout_is_placeholder(stdout) {
+        // C8c: non-placeholder stdout alone is NOT evidence — it must carry a
+        // chunk carrier (uuid-shaped chunk/doc id), otherwise fabricated
+        // prose ("no_investor_info_found") would suppress the
+        // DegradedNoEvidence refusal path. Bridge-captured tool results stay
+        // an independent evidence signal via `tool_result_has_chunks`.
+        if !stdout_is_placeholder(stdout) && stdout_has_chunk_carrier(stdout) {
             return true;
         }
     }
     false
+}
+
+/// Marker of a real retrieval hit in sandbox stdout: a canonical uuid-shaped
+/// chunk/doc id (8-4-4-4-12 hex). The retrieval bridge prints one leading id
+/// pair per hit line (`<chunk_id> <doc_id> <text>`), and the empty-stdout
+/// fallback serializes captured chunks as JSON with `"chunk_id"` values — so
+/// real hits always carry the marker while prose answers never do.
+fn stdout_has_chunk_carrier(stdout: &str) -> bool {
+    use std::sync::OnceLock;
+    static UUID_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = UUID_RE.get_or_init(|| {
+        regex::Regex::new(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        )
+        .expect("uuid regex compiles")
+    });
+    re.is_match(stdout)
 }
 
 fn chunk_array_non_empty(data: &serde_json::Value) -> bool {
@@ -251,7 +273,7 @@ mod tests {
     fn detects_code_execution_observation() {
         let mode = rag_mode();
         let messages = vec![ChatMessage::user(
-            "<code_execution_result>\n[block 0] stdout: chunks found\nstderr: \n</code_execution_result>",
+            "<code_execution_result>\n[block 0] stdout: 6c16ac99-e934-4355-be1c-f0956acb51d1 5a6de5e8-e913-46c9-a109-43eb65ae4e79 chunk text\nstderr: \n</code_execution_result>",
         )];
         assert!(has_retrieval_observation(&messages, &[], &mode));
     }
@@ -260,12 +282,34 @@ mod tests {
     fn detects_code_execution_observation_with_untrusted_attribute() {
         // The opening tag may carry attributes (e.g. untrusted="true"). Parsing must still
         // match on the tag prefix, and the closing tag must remain recognized.
-        let content = "<code_execution_result untrusted=\"true\">\n[block 0] stdout: chunks found\nstderr: \n</code_execution_result>";
+        let content = "<code_execution_result untrusted=\"true\">\n[block 0] stdout: 6c16ac99-e934-4355-be1c-f0956acb51d1 5a6de5e8-e913-46c9-a109-43eb65ae4e79 chunk text\nstderr: \n</code_execution_result>";
         assert!(has_code_execution_result_block(content));
         assert!(code_execution_has_evidence(content));
         let mode = rag_mode();
         let messages = vec![ChatMessage::user(content)];
         assert!(has_retrieval_observation(&messages, &[], &mode));
+    }
+
+    #[test]
+    fn prose_stdout_without_chunk_carrier_is_not_evidence() {
+        // C8c: fabricated prose stdout (the "no_investor_info_found" class) has
+        // no uuid chunk carrier → NOT evidence, so the DegradedNoEvidence
+        // refusal path is reachable again.
+        let content = "<code_execution_result>\n[block 0] stdout: no_investor_info_found\nstderr: \n</code_execution_result>";
+        assert!(!code_execution_has_evidence(content));
+        let mode = rag_mode();
+        let messages = vec![ChatMessage::user(content)];
+        assert!(!has_retrieval_observation(&messages, &[], &mode));
+    }
+
+    #[test]
+    fn stdout_with_real_chunk_line_is_evidence() {
+        // C8c: the bridge's real hit line shape `<chunk_id> <doc_id> <text>`.
+        let content = "<code_execution_result>\n[block 0] stdout: === dense_search results ===\n6c16ac99-e934-4355-be1c-f0956acb51d1 5a6de5e8-e913-46c9-a109-43eb65ae4e79 从这个角度讲\nstderr: \n</code_execution_result>";
+        assert!(code_execution_has_evidence(content));
+        // …and the empty-stdout bridge fallback (JSON with chunk_id values).
+        let fallback = "<code_execution_result>\n[block 0] stdout: [{\"chunk_id\":\"6c16ac99-e934-4355-be1c-f0956acb51d1\",\"text\":\"alpha\"}]\nstderr: \n</code_execution_result>";
+        assert!(code_execution_has_evidence(fallback));
     }
 
     #[test]
