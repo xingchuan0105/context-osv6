@@ -56,20 +56,31 @@ pub fn default_brief(channel: Channel, user_query: &str) -> TaskBrief {
 }
 
 /// §7.3 partial notices from the dispatch ledger (Chat synthesize policy input).
+/// R7: THE single partial-notice generator (previously double-fired with
+/// chat_exit's ChannelNote loop, now removed). Empty channels carry the hard
+/// zero-evidence instruction (P3): declare uncovered only — never fill from
+/// worker narrative or common sense.
 pub fn partial_notices_from_records(records: &[DispatchRecord]) -> Vec<String> {
     let mut notices = Vec::new();
     for r in records {
-        match r.status {
-            super::types::PackStatus::Empty => notices.push(format!(
-                "{}: empty (no evidence retrieved; use 未命中 wording, not user-blame)",
-                r.channel.as_str()
-            )),
-            super::types::PackStatus::Error => notices.push(format!(
-                "{}: error ({})",
-                r.channel.as_str(),
+        match (r.channel, r.status) {
+            (Channel::Rag, super::types::PackStatus::Empty) => notices.push(
+                "工作区未检索到任何证据 — 只能声明未覆盖；禁止使用 worker 叙述或常识补写具体事实。"
+                    .to_string(),
+            ),
+            (Channel::Search, super::types::PackStatus::Empty) => notices.push(
+                "网络检索未返回可用结果 — 只能表述为未检索到；禁止补写具体网页事实或网页编号引用。"
+                    .to_string(),
+            ),
+            (Channel::Rag, super::types::PackStatus::Error) => notices.push(format!(
+                "工作区检索失败（{}）；若有网页证据可仅用网页并说明。",
                 r.error.as_deref().unwrap_or("unknown")
             )),
-            super::types::PackStatus::Ok => {}
+            (Channel::Search, super::types::PackStatus::Error) => notices.push(format!(
+                "网络检索失败（{}）；网页侧内容只能表述为未检索到，禁止给出网页编号引用。",
+                r.error.as_deref().unwrap_or("unknown")
+            )),
+            (_, super::types::PackStatus::Ok) => {}
         }
     }
     notices
@@ -146,7 +157,9 @@ mod tests {
         }];
         let n = partial_notices_from_records(&records);
         assert_eq!(n.len(), 1);
-        assert!(n[0].contains("rag"));
+        // P3: the empty-channel notice is the hard zero-evidence instruction.
+        assert!(n[0].contains("未检索到任何证据"), "{:?}", n[0]);
+        assert!(n[0].contains("禁止使用 worker 叙述或常识补写"), "{:?}", n[0]);
     }
 
     #[test]

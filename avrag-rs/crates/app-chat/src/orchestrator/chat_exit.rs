@@ -20,32 +20,8 @@ pub fn synthesize_handoff(
     instruction: Option<String>,
 ) -> ChatHandoff {
     let mut notices = partial_notices_from_records(records);
-    // Human-readable product notices (short)
-    for note in &channel_notes {
-        match note.status {
-            PackStatus::Empty if note.channel == Channel::Rag => {
-                notices.push(
-                    "工作区未命中相关段落（已检索）。请基于可用证据作答；勿将未命中归因为用户未粘贴文档。"
-                        .into(),
-                );
-            }
-            PackStatus::Empty if note.channel == Channel::Search => {
-                notices.push(
-                    "网络检索未返回可用结果。网页侧内容只能表述为未检索到，禁止给出网页编号引用。"
-                        .into(),
-                );
-            }
-            PackStatus::Error if note.channel == Channel::Rag => {
-                notices.push("工作区检索失败；若有网页证据可仅用网页并说明。".into());
-            }
-            PackStatus::Error if note.channel == Channel::Search => {
-                notices.push(
-                    "网络检索失败；网页侧内容只能表述为未检索到，禁止给出网页编号引用。".into(),
-                );
-            }
-            _ => {}
-        }
-    }
+    // R7: notices come from the single ledger generator (invariant.rs). The
+    // per-ChannelNote re-derivation that double-fired is removed.
     // Dedupe while preserving order
     let mut seen = std::collections::HashSet::new();
     notices.retain(|n| seen.insert(n.clone()));
@@ -113,6 +89,11 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
             s.push_str(&format!("- {}: {}\n", note.channel.as_str(), status));
             if let Some(h) = note.handoff.as_ref() {
                 s.push_str(&format!("  coverage: {}\n", h.coverage));
+                if h.handoff_degraded {
+                    // C4/P3: worker output failed handoff validation — the
+                    // Answer must not trust it (treat as uncovered).
+                    s.push_str("  ⚠ worker handoff 未通过校验（输出不可信，按未覆盖处理）\n");
+                }
                 if !h.summary.trim().is_empty() {
                     s.push_str("  summary: ");
                     s.push_str(h.summary.trim());
@@ -368,7 +349,7 @@ mod tests {
         let ctx = render_synthesize_context(&h);
         assert!(ctx.contains("do not cite web evidence"), "web ban: {ctx}");
         assert!(
-            h.partial_notices.iter().any(|n| n.contains("禁止给出网页编号引用")),
+            h.partial_notices.iter().any(|n| n.contains("网页编号引用")),
             "notice: {:?}",
             h.partial_notices
         );
@@ -387,7 +368,7 @@ mod tests {
         );
         let ctx = render_synthesize_context(&h);
         assert!(ctx.contains("do not emit any citation markers"));
-        assert!(h.partial_notices.iter().any(|n| n.contains("未命中")));
+        assert!(h.partial_notices.iter().any(|n| n.contains("未检索到任何证据")));
     }
 
     #[test]
