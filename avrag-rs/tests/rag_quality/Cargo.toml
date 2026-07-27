@@ -13,6 +13,10 @@ path = "src/bin/quality_runner.rs"
 name = "judge_calibration"
 path = "src/bin/judge_calibration.rs"
 
+[[bin]]
+name = "eval_v2_calibration"
+path = "src/bin/eval_v2_calibration.rs"
+
 [dependencies]
 # Core RAG dependencies (for integration testing against real runtime)
 avrag-rag-core = { path = "../../crates/rag-core" }
