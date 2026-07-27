@@ -3,8 +3,10 @@
 //! `SYSTEM_PROMPT` is the strict Chinese RAG evaluator persona plus the fixed
 //! scoring rubric (design §4.2 items 1–5). `build_user_prompt` renders one
 //! query's payload from a `JudgeInput` and states the exact JSON shape the
-//! judge must return. The prompt is versioned via `SCHEMA_VERSION` only —
-//! any wording change must bump it.
+//! judge must return. `SCHEMA_VERSION` versions the **output schema** only —
+//! prompt *wording* changes do NOT bump it; the judge cache keys on a
+//! fingerprint of `SYSTEM_PROMPT` (see `cache.rs`), so wording edits
+//! auto-invalidate cached judgments.
 
 use super::artifact::{ContextSource, JudgeInput};
 
@@ -28,6 +30,9 @@ pub const SYSTEM_PROMPT: &str = "\
 - 只根据给定 context 判定。context_source=cited 表示 context 为答案实际引用的段落；context_source=retrieved_fallback 表示答案未引用任何段落、context 为检索兜底段落（证据链已断，判分需相应从严）。
 - 答案中每个实质性事实 claim 必须被 context 支持；数字、日期、专名从严。
 - 允许同义改写；不允许 context 中不存在的具体数字/实体。把所有无支持的 claim 列入 unsupported_claims。
+- 判 unsupported_claims 的唯一标准是「该事实在 context 中是否有支持」：context 明确支持的事实——无论作为直接答案还是作为背景/相关信息呈现——一律不得列入 unsupported_claims。
+- 对「呈现方式可能误导」（暗示、framing 问题）的关切写进 answer_correctness 或 answer_relevancy 的 rationale，不得折算进 faithfulness 扣分。
+- 正确拒答（实质性声明语料未记载）中带引用的背景事实尤其受本条保护；refuse-then-fabricate（context 没有的具体数字/实体）仍照常判 unsupported。
 
 3. answer_relevancy（答案相关性，0–1 分）
 - 是否在回答所问；文不对题即使「事实正确」也给低分。
@@ -256,5 +261,17 @@ mod tests {
         assert!(SYSTEM_PROMPT.contains("示例 B（声明后编造，错误）"));
         // Correct substantive refusals must not score correctness 0.
         assert!(SYSTEM_PROMPT.contains("正确拒答不存在「答错」"));
+    }
+
+    #[test]
+    fn system_prompt_protects_supported_background_facts_from_unsupported() {
+        // q042 calibration: a fact the context supports must never land in
+        // unsupported_claims just because of how it is framed — framing
+        // concerns go to correctness/relevancy rationales, not faithfulness.
+        assert!(SYSTEM_PROMPT.contains("唯一标准是「该事实在 context 中是否有支持」"));
+        assert!(SYSTEM_PROMPT.contains("作为背景/相关信息呈现"));
+        assert!(SYSTEM_PROMPT.contains("不得折算进 faithfulness 扣分"));
+        assert!(SYSTEM_PROMPT.contains("带引用的背景事实尤其受本条保护"));
+        assert!(SYSTEM_PROMPT.contains("refuse-then-fabricate"));
     }
 }
