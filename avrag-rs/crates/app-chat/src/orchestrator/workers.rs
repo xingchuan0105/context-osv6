@@ -58,7 +58,7 @@ pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
         return None;
     }
     let body = strip_json_fence(trimmed);
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
         if let Some(h) = handoff_from_value(&v) {
             return Some(cap_handoff(h));
         }
@@ -69,20 +69,10 @@ pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
     )))
 }
 
-fn strip_json_fence(s: &str) -> &str {
-    let s = s.trim();
-    if !s.starts_with("```") {
-        return s;
-    }
-    let Some(first_nl) = s.find('\n') else {
-        return s;
-    };
-    let rest = &s[first_nl + 1..];
-    if let Some(end) = rest.rfind("```") {
-        rest[..end].trim()
-    } else {
-        rest.trim()
-    }
+fn strip_json_fence(s: &str) -> String {
+    // C6: delegate to the shared agent-loop stripper (union semantics of the
+    // old local copy and answer_contract::strip_json_fences).
+    agent_loop::r#loop::json_fence::strip_json_fence(s)
 }
 
 fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {

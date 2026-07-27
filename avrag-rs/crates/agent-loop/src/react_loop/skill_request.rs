@@ -2,12 +2,15 @@
 ///
 /// Accepts only `{"skill_request":["cluster_id",...]}` as the full assistant content
 /// (after trim). Embedded-in-prose extraction is intentionally unsupported.
+/// C6: a ```json / ``` fenced payload is unwrapped via the shared stripper
+/// first — a fenced skill request previously fell through unrecognized and
+/// leaked into the final answer.
 pub fn parse_skill_request(content: &str) -> Vec<String> {
-    let trimmed = content.trim();
+    let trimmed = super::json_fence::strip_json_fence(content);
     if trimmed.is_empty() {
         return Vec::new();
     }
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&trimmed) else {
         return Vec::new();
     };
     value
@@ -96,6 +99,23 @@ mod tests {
     fn is_skill_request_message_detects_json_only() {
         assert!(is_skill_request_message(r#"{"skill_request":["memory"]}"#));
         assert!(!is_skill_request_message("plain answer"));
+    }
+
+    #[test]
+    fn fenced_skill_request_is_recognized() {
+        // C6: a ```json-wrapped skill request must parse (previously leaked
+        // into the final answer as unrecognized text).
+        assert_eq!(
+            parse_skill_request("```json\n{\"skill_request\":[\"memory\"]}\n```"),
+            vec!["memory"]
+        );
+        assert_eq!(
+            parse_skill_request("```\n{\"skill_request\":[\"codegen\"]}\n```"),
+            vec!["codegen"]
+        );
+        assert!(is_skill_request_message(
+            "```json\n{\"skill_request\":[\"memory\"]}\n```"
+        ));
     }
 
     #[test]

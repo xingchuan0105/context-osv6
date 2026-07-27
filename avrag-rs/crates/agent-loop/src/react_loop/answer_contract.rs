@@ -102,18 +102,11 @@ Rules:\n\
     }
 }
 
+/// C6: delegate to the shared stripper so every consumer sees the same fence
+/// semantics (json_fence::strip_json_fence). Kept as a wrapper to preserve
+/// this module's long-standing public name.
 pub fn strip_json_fences(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.starts_with("```") {
-        let inner = trimmed
-            .trim_start_matches('`')
-            .trim_start_matches("json")
-            .trim();
-        if let Some(end) = inner.rfind("```") {
-            return inner[..end].trim().to_string();
-        }
-    }
-    trimmed.to_string()
+    super::json_fence::strip_json_fence(raw)
 }
 
 pub fn parse_synthesis_answer(

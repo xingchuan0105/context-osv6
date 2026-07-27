@@ -15,6 +15,7 @@ pub mod hooks;
 pub mod iteration;
 mod iteration_codegen;
 mod iteration_tools;
+pub mod json_fence;
 mod message_format;
 pub mod message_queue;
 pub mod parse;
