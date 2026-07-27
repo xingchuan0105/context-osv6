@@ -1,8 +1,8 @@
-# Orchestrator agent (AGENT_ORCHESTRATOR_V1): allocate only — no channel tools.
-# STATUS: O2 artifact — NOT loaded by the runtime today.
-# The O1 host runs structural first-wave dispatches in code
-# (app-chat/src/orchestrator/host.rs); this YAML is kept for the future
-# LLM multi-hop controller (O2). Do not wire it into loaders yet.
+# Orchestrator agent: allocate only — no channel tools.
+# STATUS: partially loaded — brain.rs reads `budget` and `temperature` from
+# this file (see crates/app-chat/src/orchestrator/brain.rs). The remaining
+# sections (skill_catalog / loop_exit / synthesis_output) are INERT today and
+# kept for the future full controller config.
 mode: orchestrator
 system_prompt_base: prompts/orchestrators/orchestrator-base.md
 tool_pool: []

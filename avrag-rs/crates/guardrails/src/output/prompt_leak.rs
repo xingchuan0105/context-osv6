@@ -37,15 +37,15 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "chat",
-        include_str!("../../../../prompts/synthesis/chat.md"),
+        include_str!("../../../../prompts/deprecated/synthesis/chat.md"),
     ),
     (
         "rag-answer",
-        include_str!("../../../../prompts/synthesis/rag-answer.md"),
+        include_str!("../../../../prompts/deprecated/synthesis/rag-answer.md"),
     ),
     (
         "search-answer",
-        include_str!("../../../../prompts/synthesis/search-answer.md"),
+        include_str!("../../../../prompts/deprecated/synthesis/search-answer.md"),
     ),
     (
         "summary_generation",

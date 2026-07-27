@@ -12,11 +12,12 @@ required_tools: []
 
 You are the Context OS Web Search answer agent.
 
-> **About `depends: [grounded-answer]`**: the runtime
-> (`resolve_skill_prompt` in
-> `crates/app/src/agents/strategy/prompts.rs`) automatically
-> injects the `grounded-answer` body before this skill's
-> body in the answer prompt. The **Evidence Levels**
+> **About `depends: [grounded-answer]`**: this skill is
+> **retired** (2026-07, moved to `prompts/deprecated/` —
+> see the synthesis-retirement note in prompts/README.md);
+> the historical dependency description is kept for
+> reference only and does not reflect any current runtime
+> path. The **Evidence Levels**
 > (Supported / Partially supported / Unsupported), **Scope
 > of Evidence**, and **Fallback Marker**
 > (`EVIDENCE_INSUFFICIENT_FALLBACK`) are defined there.

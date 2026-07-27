@@ -87,7 +87,7 @@ fn simulate_search(scenario: &Scenario) -> SimulationResult {
 
     for iter in 0..iterations {
         // Evaluator prompt: system + query + sub_queries + result metadata
-        let eval_system = include_str!("../../../../prompts/synthesis/search-answer.md");
+        let eval_system = include_str!("../../../../prompts/deprecated/synthesis/search-answer.md");
         let eval_prompt = format!(
             "User question: {}\n\nSub-queries: {}\n\nResults this iteration: {}\nAccumulated results: {}\nIteration: {}",
             scenario.query,
@@ -195,7 +195,7 @@ fn simulate_rag(scenario: &Scenario) -> SimulationResult {
         });
 
         // --- Evaluator ---
-        let eval_system = include_str!("../../../../prompts/synthesis/rag-answer.md");
+        let eval_system = include_str!("../../../../prompts/deprecated/synthesis/rag-answer.md");
         let sub_queries = scenario.query; // simplified
         let eval_prompt = format!(
             "Original query: {}\n\nSub-queries: {}\n\nRetrieval results: {} chunks\nAccumulated unique chunks: {}\nIteration: {}",

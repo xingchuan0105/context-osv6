@@ -85,8 +85,8 @@ fn typical_user_single_session_estimate() {
     // --- Measure actual system-prompt sizes ---
     let chat_system = "You are a direct chat assistant. Answer from the current conversation and general knowledge only. Do not invent document or web citations; if the user asks for document evidence or fresh web facts, explain that they should switch to RAG or WebSearch mode.";
     let rag_plan_sys = include_str!("../../../../prompts/orchestrators/rag-system.md");
-    let rag_eval_sys = include_str!("../../../../prompts/synthesis/rag-answer.md");
-    let search_eval_sys = include_str!("../../../../prompts/synthesis/search-answer.md");
+    let rag_eval_sys = include_str!("../../../../prompts/deprecated/synthesis/rag-answer.md");
+    let search_eval_sys = include_str!("../../../../prompts/deprecated/synthesis/search-answer.md");
 
     let chat_system_tokens = count_tokens(chat_system);
     let rag_plan_sys_tokens = count_tokens(rag_plan_sys);

@@ -40,4 +40,4 @@ applicable_modes: [rag, search, chat]
 - 禁止同时加载多个 format reference
 - 禁止剥离引用标记
 - 禁止编造证据或引用
-- 证据不足 fallback 须保留 `EVIDENCE_INSUFFICIENT_FALLBACK`
+- 证据不足时如实说明缺口；不要输出内部 fallback 标记（运行时会把它们当作 contract 失败处理）

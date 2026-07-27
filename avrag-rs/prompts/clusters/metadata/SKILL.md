@@ -75,7 +75,7 @@ summary = await client.doc_summary(doc_ids=["doc-001"], level="doc")
 summary = await client.doc_summary(doc_ids=["doc-001"], level="section")
 ```
 
-`doc_profile`/`doc_summary` **必须传 doc_ids 非空**——服务端不会自动用 `doc_scope` 注入。详见 codegen skill 的"doc_scope 注入的不对称性"。
+`doc_profile`/`doc_summary` 的 `doc_ids` 可省略——省略时服务端按本轮 `doc_scope` 自动解析（bridge 取 doc_scope 交集，无需手动注入）；只有想**收窄**到特定文档时才显式传 `doc_ids`（UUID 字符串，非文件名）。
 
 ## 4. 加载边界（C4/C5）
 

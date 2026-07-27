@@ -26,7 +26,7 @@ applicable_modes: [rag, search, chat]
 | `storytelling` | 叙事、类比、场景化讲解 |
 | `brainstorming` | 请求模糊、需澄清后再作答 |
 
-未指定风格时：保持清晰中性散文，遵守 orchestrator §5 引用契约。
+未指定风格时：保持清晰中性散文，遵守 query 内「Citation markers」节的引用契约（`[[E:id]]` 标记）。
 
 ## Reference 路由表
 
@@ -42,6 +42,6 @@ applicable_modes: [rag, search, chat]
 ## 禁止
 
 - 禁止同时加载多个 reference（最多 1 个）
-- 禁止剥离 answer agent 提供的引用标记（`[[cite:…]]`、`[[n]]`）
+- 禁止剥离 answer agent 提供的引用标记（`[[E:id]]`）
 - 禁止在无证据时发明引用
-- 证据不足 fallback 时须保留 `EVIDENCE_INSUFFICIENT_FALLBACK` 标记
+- 证据不足时如实说明缺口；不要输出内部 fallback 标记（运行时会把它们当作 contract 失败处理）
