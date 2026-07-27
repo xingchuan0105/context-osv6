@@ -649,6 +649,7 @@ mod tests {
             consecutive_sandbox_errors: 0,
             reasoning_acc: String::new(),
             answer_deltas_streamed: false,
+            compile_continuations: 0,
         }
     }
 

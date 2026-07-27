@@ -76,6 +76,7 @@ fn empty_state() -> IterationState {
         consecutive_sandbox_errors: 0,
         reasoning_acc: String::new(),
         answer_deltas_streamed: false,
+        compile_continuations: 0,
     }
 }
 
@@ -549,4 +550,149 @@ fn iteration_state_defaults_are_empty() {
     let state = empty_state();
     assert_eq!(state.messages.len(), 1);
     assert!(state.disclosed.disclosed_skill_ids.is_empty());
+}
+
+
+// ---------------------------------------------------------------------------
+// S2: worker-handoff output compiler at the direct_content decision point
+// ---------------------------------------------------------------------------
+
+/// Worker loop config: rag mode with the handoff flag set (mirrors app-chat
+/// `apply_worker_handoff_loop_exit`: early stop allowed, skip synthesis).
+fn worker_mode() -> super::super::config::ModeConfig {
+    let mut mode = rag_mode();
+    mode.worker_handoff = true;
+    mode
+}
+
+fn ok_chunk_tool_result(chunk_id: &str) -> contracts::ToolResult {
+    contracts::ToolResult {
+        tool: "dense_retrieval".to_string(),
+        version: "1.0".to_string(),
+        status: contracts::ToolStatus::Ok,
+        data: Some(serde_json::json!([
+            {"chunk_id": chunk_id, "doc_id": "d1", "text": "evidence", "score": 0.9}
+        ])),
+        trace: None,
+    }
+}
+
+async fn apply_content(
+    loop_: &ReActLoop,
+    mode: &super::super::config::ModeConfig,
+    state: &mut IterationState,
+    content: &str,
+) -> super::IterationOutcome {
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response(content);
+    loop_
+        .apply_llm_output(
+            0,
+            mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+        )
+        .await
+        .unwrap()
+}
+
+/// q045 (a): correct conclusion in a self-invented `task_result` wrapper →
+/// E101 compile feedback, loop continues; the re-emitted contract JSON is
+/// then accepted as the final direct answer.
+#[tokio::test]
+async fn worker_handoff_bad_envelope_triggers_feedback_then_accepts() {
+    let loop_ = test_loop();
+    let mode = worker_mode();
+    let mut state = empty_state();
+
+    let bad = r#"{"task_result":{"summary":"文中未写明总部城市","coverage":"insufficient"}}"#;
+    let outcome = apply_content(&loop_, &mode, &mut state, bad).await;
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "compile_feedback"
+    );
+    assert_eq!(state.compile_continuations, 1);
+    let feedback = state.messages.last().unwrap();
+    assert_eq!(feedback.role, "user");
+    assert!(feedback.content.contains("编译失败"), "{feedback:?}");
+    assert!(feedback.content.contains("E101"), "{feedback:?}");
+    assert!(feedback.content.contains("请按契约重新输出"), "{feedback:?}");
+
+    // Next output: the same conclusion in the contract envelope → accepted.
+    let good = r#"{"schema_version":"internal_worker_handoff_v1","summary":"文中未写明总部城市","key_facts":[],"coverage":"insufficient","gaps":["总部城市"]}"#;
+    let outcome = apply_content(&loop_, &mode, &mut state, good).await;
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { content } if content == good
+    ));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+}
+
+/// (b) one-continuation limit: a second invalid output is NOT continued again
+/// (no infinite compile loop) — it falls through as the final direct answer
+/// and the post-loop compile marks it degraded with codes.
+#[tokio::test]
+async fn worker_handoff_compile_feedback_only_once() {
+    let loop_ = test_loop();
+    let mode = worker_mode();
+    let mut state = empty_state();
+
+    let bad = r#"{"task_result":{"summary":"x"}}"#;
+    let first = apply_content(&loop_, &mode, &mut state, bad).await;
+    assert!(matches!(first.control, IterationControl::Continue));
+    assert_eq!(state.compile_continuations, 1);
+
+    let second = apply_content(&loop_, &mode, &mut state, bad).await;
+    assert!(
+        matches!(second.control, IterationControl::DirectAnswer { .. }),
+        "second bad output must not continue again"
+    );
+    assert_eq!(
+        second.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+    assert_eq!(state.compile_continuations, 1, "counter stays at the cap");
+}
+
+/// (e) loop observed chunks but the handoff lists no key_facts → E102
+/// feedback naming the legal pointers.
+#[tokio::test]
+async fn worker_handoff_missing_key_facts_with_tool_results_is_e102() {
+    let loop_ = test_loop();
+    let mode = worker_mode();
+    let mut state = empty_state();
+    state.tool_results.push(ok_chunk_tool_result("c1"));
+
+    let raw = r#"{"handoff":true,"summary":"只找到一条","coverage":"partial","gaps":[]}"#;
+    let outcome = apply_content(&loop_, &mode, &mut state, raw).await;
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "compile_feedback"
+    );
+    let feedback = &state.messages.last().unwrap().content;
+    assert!(feedback.contains("E102"), "{feedback}");
+    assert!(feedback.contains("c1"), "legal pointers listed: {feedback}");
+}
+
+/// Non-worker loops never invoke the compiler (chat prose stays untouched).
+#[tokio::test]
+async fn non_worker_mode_skips_compile() {
+    let loop_ = test_loop();
+    let mode = chat_mode();
+    let mut state = empty_state();
+    let raw = r#"{"task_result":{"summary":"x"}}"#;
+    let outcome = apply_content(&loop_, &mode, &mut state, raw).await;
+    assert!(matches!(outcome.control, IterationControl::DirectAnswer { .. }));
+    assert_eq!(state.compile_continuations, 0);
 }

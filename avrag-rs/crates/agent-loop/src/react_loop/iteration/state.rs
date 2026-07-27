@@ -14,6 +14,15 @@ pub struct IterationState {
     /// True when retrieve already emitted live `MessageDelta`s (stream path).
     /// `finish_direct_answer_run` must not re-emit the whole answer as one token.
     pub answer_deltas_streamed: bool,
+    /// Output-compiler feedback continuations used this run (S2). A worker
+    /// loop (`ModeConfig.worker_handoff`) compiles each candidate final
+    /// output at the `direct_content` decision point; on Error diagnostics the
+    /// output is rejected and the loop continues ONCE with the rendered
+    /// feedback as the next observation (bounded by
+    /// `MAX_COMPILE_CONTINUATIONS` in content_dispatch). When exhausted the
+    /// output is accepted as final and the post-loop compile marks it
+    /// degraded with diagnostic codes attached.
+    pub compile_continuations: u8,
 }
 
 pub enum IterationControl {

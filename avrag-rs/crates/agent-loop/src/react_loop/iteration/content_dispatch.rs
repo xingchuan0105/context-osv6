@@ -73,6 +73,41 @@ impl ReActLoop {
             });
         }
 
+        // S2: worker loops compile the candidate final output at this
+        // decision point (design 2026-07-27 §4.3). Error diagnostics reject
+        // the output: it is NOT final, the rendered feedback becomes the next
+        // observation, and the loop continues — at most once per run. The
+        // compiler stays generic: its input comes only from loop state
+        // (messages/tool_results), no app-chat types leak in.
+        if mode.worker_handoff {
+            let observed = crate::output_compiler::observed_chunk_ids(&state.tool_results);
+            let outcome =
+                crate::output_compiler::compile_handoff(&crate::output_compiler::HandoffCompileInput {
+                    raw: &content,
+                    observed_chunk_ids: Some(&observed),
+                    has_tool_results: !state.tool_results.is_empty(),
+                });
+            if outcome.has_errors() && state.compile_continuations < MAX_COMPILE_CONTINUATIONS {
+                state.compile_continuations += 1;
+                let feedback = outcome.render_feedback();
+                state.messages.push(ChatMessage::user(feedback.clone()));
+                let exit_reason = "compile_feedback".to_string();
+                return Ok(IterationOutcome {
+                    control: IterationControl::Continue,
+                    record: Some(ReActIterationRecord {
+                        iteration,
+                        disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                        action_type: exit_reason.clone(),
+                        observation_preview: truncate_preview(&feedback, 200),
+                        llm_usage: Some(llm_usage),
+                        elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                        exit_reason,
+                    }),
+                    sandbox_break: false,
+                });
+            }
+        }
+
         let exit_reason = "direct_content".to_string();
         Ok(IterationOutcome {
             control: IterationControl::DirectAnswer {
@@ -91,6 +126,13 @@ impl ReActLoop {
         })
     }
 }
+
+/// S2: worker loops get at most ONE compile-feedback continuation per run —
+/// the rejected output consumes one iteration of budget; when that is spent
+/// (or the iteration budget runs out first) the flow falls through to the
+/// existing paths (direct answer / C5 budget-exhausted final turn) and the
+/// post-loop compile attaches diagnostic codes to the degraded handoff.
+pub(super) const MAX_COMPILE_CONTINUATIONS: u8 = 1;
 
 pub(crate) fn iteration_llm_usage(llm_response: &LlmResponse) -> AgentRunUsage {
     AgentRunUsage {

@@ -306,6 +306,7 @@ mod tests {
                 coverage: coverage.into(),
                 gaps: gaps.iter().map(|s| (*s).to_string()).collect(),
                 handoff_degraded: false,
+                compile_diagnostics: vec![],
             }),
             None,
         )

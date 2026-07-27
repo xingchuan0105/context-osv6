@@ -431,11 +431,23 @@ pub fn tool_failures(results: &[contracts::ToolResult]) -> Vec<String> {
 
 /// Parse structured worker handoff from the worker's final message.
 ///
-/// Accepts `internal_worker_handoff_v1` JSON, peels legacy `internal_answer_v1`,
-/// and sanitizes the result against the run's real tool observations (C4).
+/// S2: this is the post-loop compile of the SAME channel the loop uses at the
+/// `direct_content` decision point (agent-loop `output_compiler`) — a cheap
+/// safety net with no continuation. It covers every terminal shape, including
+/// the C5 budget-exhausted final turn's output: compile errors here degrade
+/// the handoff with diagnostic codes attached.
 pub fn worker_handoff_from_run(result: &AgentRunResult) -> Option<WorkerHandoff> {
-    let handoff = parse_worker_handoff(&result.answer)?;
-    Some(sanitize_worker_handoff(handoff, &result.tool_results))
+    if result.answer.trim().is_empty() {
+        return None;
+    }
+    let observed = agent_loop::output_compiler::observed_chunk_ids(&result.tool_results);
+    let outcome =
+        agent_loop::output_compiler::compile_handoff(&agent_loop::output_compiler::HandoffCompileInput {
+            raw: &result.answer,
+            observed_chunk_ids: Some(&observed),
+            has_tool_results: !result.tool_results.is_empty(),
+        });
+    handoff_from_compile(outcome)
 }
 
 /// Worker channel summary (flat string) — prefers structured handoff summary.
@@ -443,116 +455,53 @@ pub fn channel_note_from_run(result: &AgentRunResult) -> Option<String> {
     worker_handoff_from_run(result).map(|h| h.summary)
 }
 
-/// Parse a worker final message into [`WorkerHandoff`].
+/// Parse a worker final message into [`WorkerHandoff`] without run context
+/// (pure parse: pointer truthfulness E103 / loop-observation E102 cannot be
+/// checked and are skipped).
 ///
-/// C4 (deterministic handoff validation): the message MUST parse as
+/// C4/S2 (deterministic handoff validation): the message MUST parse as
 /// structured JSON after the shared fence strip. Anything else — raw code
 /// blocks (q087), prose, fabricated `<code_execution_result>` dumps (q039) —
 /// is NOT ingested as summary text; the worker is marked degraded instead.
 pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
+    if raw.trim().is_empty() {
         return None;
     }
-    let body = strip_json_fence(trimmed);
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
-        if let Some(h) = handoff_from_value(&v) {
-            return Some(cap_handoff(h));
-        }
-    }
-    // C4: never propagate unparsable worker text — deterministic degraded
-    // handoff with no raw content carried over.
-    Some(cap_handoff(WorkerHandoff::degraded_unparsable()))
+    let outcome =
+        agent_loop::output_compiler::compile_handoff(&agent_loop::output_compiler::HandoffCompileInput {
+            raw,
+            observed_chunk_ids: None,
+            has_tool_results: false,
+        });
+    handoff_from_compile(outcome)
 }
 
-/// C4: sanitize a parsed handoff against the worker's REAL tool observations:
-/// - strip any `<code_execution_result>` blocks from summary/claims (q039 —
-///   fabricated execution output must never reach the Answer phase);
-/// - drop key_facts whose evidence pointers are absent from the recorded
-///   tool results (chunk ids the worker never actually observed);
-/// - when every fact is dropped, coverage is downgraded to insufficient.
-/// Anything stripped or dropped marks the handoff degraded.
-fn sanitize_worker_handoff(
-    mut h: WorkerHandoff,
-    tool_results: &[contracts::ToolResult],
-) -> WorkerHandoff {
-    let mut degraded = h.handoff_degraded;
-    let summary = strip_code_execution_blocks(&h.summary);
-    degraded |= summary != h.summary;
-    h.summary = summary;
-
-    let observed = observed_chunk_ids(tool_results);
-    let before = h.key_facts.len();
-    h.key_facts.retain_mut(|f| {
-        let claim = strip_code_execution_blocks(&f.claim);
-        degraded |= claim != f.claim;
-        f.claim = claim;
-        f.evidence.iter().all(|id| observed.contains(id.as_str()))
-    });
-    if h.key_facts.len() != before {
-        degraded = true;
-        if h.key_facts.is_empty() && before > 0 {
-            h.coverage = "insufficient".to_string();
-        }
-    }
-    h.handoff_degraded = degraded;
-    h
+/// Map a compile outcome to a [`WorkerHandoff`]: success keeps the (possibly
+/// E104-stripped / E103-pruned) value; failure yields `degraded_unparsable`.
+/// Either way the diagnostic codes ride along in `compile_diagnostics`.
+/// Degraded = pre-existing flag, any Error diagnostic, or a content
+/// transformation (E103/E104); warnings alone never degrade.
+fn handoff_from_compile(
+    outcome: agent_loop::output_compiler::CompileOutcome<serde_json::Value>,
+) -> Option<WorkerHandoff> {
+    let codes = outcome.diagnostic_codes();
+    let transformed = outcome
+        .diagnostics
+        .iter()
+        .any(|d| d.code == "E103" || d.code == "E104");
+    let mut h = match outcome.value.as_ref().and_then(handoff_from_value) {
+        Some(h) => h,
+        None => WorkerHandoff::degraded_unparsable(),
+    };
+    h.handoff_degraded = h.handoff_degraded || outcome.has_errors() || transformed;
+    h.compile_diagnostics = codes;
+    Some(cap_handoff(h))
 }
 
-/// Chunk ids the worker actually observed, harvested from recorded tool
-/// results (retrieval arrays in both `data: [...]` and `data: {"chunks":
-/// [...]}` shapes). Non-Ok results never count as observations.
-fn observed_chunk_ids(tool_results: &[contracts::ToolResult]) -> std::collections::HashSet<&str> {
-    let mut ids = std::collections::HashSet::new();
-    for tr in tool_results {
-        if tr.status != contracts::ToolStatus::Ok {
-            continue;
-        }
-        let Some(data) = tr.data.as_ref() else {
-            continue;
-        };
-        let arr = data
-            .as_array()
-            .or_else(|| data.get("chunks").and_then(|v| v.as_array()));
-        let Some(arr) = arr else {
-            continue;
-        };
-        for item in arr {
-            if let Some(id) = item.get("chunk_id").and_then(|v| v.as_str()) {
-                ids.insert(id);
-            }
-        }
-    }
-    ids
-}
-
-/// Remove `<code_execution_result …>…</code_execution_result>` spans (the
-/// q039 fabrication vector). An unterminated opening tag strips to the end of
-/// the string. Opening tags may carry attributes (e.g. `untrusted="true"`).
-fn strip_code_execution_blocks(text: &str) -> String {
-    const OPEN: &str = "<code_execution_result";
-    const CLOSE: &str = "</code_execution_result>";
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find(OPEN) {
-        out.push_str(&rest[..start]);
-        let after_open = &rest[start..];
-        if let Some(end) = after_open.find(CLOSE) {
-            rest = &after_open[end + CLOSE.len()..];
-        } else {
-            rest = "";
-            break;
-        }
-    }
-    out.push_str(rest);
-    out.trim().to_string()
-}
-
-fn strip_json_fence(s: &str) -> String {
-    // C6: delegate to the shared agent-loop stripper (union semantics of the
-    // old local copy and answer_contract::strip_json_fences).
-    agent_loop::r#loop::json_fence::strip_json_fence(s)
-}
+// C4/S2 note: the structural validation that used to live here
+// (`sanitize_worker_handoff` — schema check, pointer truthfulness,
+// fabrication stripping) migrated to agent-loop `output_compiler`
+// (E101–E104). What remains below is the thin JSON→WorkerHandoff glue.
 
 fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
     let schema = v
@@ -586,6 +535,7 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             },
             gaps,
             handoff_degraded: false,
+            compile_diagnostics: Vec::new(),
         });
     }
 
@@ -616,6 +566,7 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             coverage,
             gaps,
             handoff_degraded: false,
+            compile_diagnostics: Vec::new(),
         });
     }
 
@@ -1319,6 +1270,84 @@ mod tests {
         assert!(h.key_facts.is_empty());
         assert_eq!(h.coverage, "insufficient");
         assert!(h.handoff_degraded);
+    }
+
+    // ---- S2: compiler migration — degraded handoffs carry diagnostic codes --
+
+    /// (c) The post-loop safety net (same channel the C5 budget-exhausted
+    /// final turn's output flows through): an invalid terminal output degrades
+    /// with compile codes attached, no continuation.
+    #[test]
+    fn degraded_handoff_carries_compile_diagnostics() {
+        let h = worker_handoff_from_run(&run_with("散文式交付，不是 JSON", vec![]))
+            .expect("degraded handoff");
+        assert!(h.handoff_degraded);
+        assert_eq!(h.coverage, "insufficient");
+        assert!(
+            h.compile_diagnostics.contains(&"E101".to_string()),
+            "{:?}",
+            h.compile_diagnostics
+        );
+    }
+
+    #[test]
+    fn unobserved_pointer_degrades_with_e103_code() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"fake","evidence":["c999"]}],"coverage":"full","gaps":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert!(h.handoff_degraded);
+        assert!(
+            h.compile_diagnostics.contains(&"E103".to_string()),
+            "{:?}",
+            h.compile_diagnostics
+        );
+    }
+
+    #[test]
+    fn task_result_wrapper_degrades_with_e101_code() {
+        // q045 shape through the post-loop net (no continuation here).
+        let raw = r#"{"task_result":{"summary":"文中未写明总部城市"}}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert!(h.handoff_degraded);
+        assert_eq!(h.summary, "worker output unparsable as handoff JSON");
+        assert!(
+            h.compile_diagnostics.contains(&"E101".to_string()),
+            "{:?}",
+            h.compile_diagnostics
+        );
+    }
+
+    #[test]
+    fn missing_key_facts_with_tool_results_degrades_with_e102_code() {
+        // q087 shape: summary-only handoff while the loop observed chunks.
+        let raw = r#"{"handoff":true,"summary":"只找到一条","coverage":"partial","gaps":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert!(h.handoff_degraded);
+        assert!(
+            h.compile_diagnostics.contains(&"E102".to_string()),
+            "{:?}",
+            h.compile_diagnostics
+        );
+    }
+
+    #[test]
+    fn fabricated_block_strips_with_e104_code() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"见 <code_execution_result>捏造输出</code_execution_result> 所示","key_facts":[],"coverage":"insufficient","gaps":["x"]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![])).expect("handoff");
+        assert!(h.handoff_degraded, "E104 transformation marks degraded");
+        assert!(!h.summary.contains("捏造输出"), "{}", h.summary);
+        assert!(
+            h.compile_diagnostics.contains(&"E104".to_string()),
+            "{:?}",
+            h.compile_diagnostics
+        );
+    }
+
+    #[test]
+    fn clean_handoff_has_no_compile_diagnostics() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"2019年建厂","key_facts":[{"claim":"2019年建厂","evidence":["c1"]}],"coverage":"full","gaps":[]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        assert!(!h.handoff_degraded);
+        assert!(h.compile_diagnostics.is_empty());
     }
 
     #[test]

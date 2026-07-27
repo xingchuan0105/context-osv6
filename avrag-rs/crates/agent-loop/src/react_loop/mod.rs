@@ -122,6 +122,7 @@ impl ReActLoop {
             consecutive_sandbox_errors: 0,
             reasoning_acc: String::new(),
             answer_deltas_streamed: false,
+            compile_continuations: 0,
         };
         let (iteration, direct_answer, telemetry_records, total_usage) = self
             .run_retrieval_loop(

@@ -95,6 +95,12 @@ pub struct WorkerHandoff {
     /// as untrustworthy.
     #[serde(default)]
     pub handoff_degraded: bool,
+    /// S2: output-compiler diagnostic codes (E101–E104 / W101–W102) produced
+    /// when compiling this handoff — the machine-readable "where it failed"
+    /// carried by degraded handoffs (S4 renders them later). Additive;
+    /// absent on clean compiles.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compile_diagnostics: Vec<String>,
 }
 
 impl WorkerHandoff {
@@ -109,6 +115,7 @@ impl WorkerHandoff {
             coverage: "insufficient".into(),
             gaps: Vec::new(),
             handoff_degraded: true,
+            compile_diagnostics: Vec::new(),
         }
     }
 
@@ -119,6 +126,7 @@ impl WorkerHandoff {
             coverage: "partial".into(),
             gaps: Vec::new(),
             handoff_degraded: false,
+            compile_diagnostics: Vec::new(),
         }
     }
 
