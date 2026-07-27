@@ -10,6 +10,7 @@ mod llm_real_trends;
 mod loader;
 mod models;
 mod rag_diag;
+mod rag_eval_v2;
 mod report;
 mod stability;
 
@@ -326,6 +327,22 @@ fn main() -> anyhow::Result<()> {
             if let Some(out_path) = output {
                 fs::write(&out_path, markdown)?;
                 println!("RAG drift report written to {}", out_path.display());
+            } else {
+                println!("{markdown}");
+            }
+        }
+
+        Commands::RagEvalV2Drift {
+            baseline,
+            current,
+            output,
+        } => {
+            let baseline_summary = rag_eval_v2::load_summary(&baseline)?;
+            let current_summary = rag_eval_v2::load_summary(&current)?;
+            let markdown = rag_eval_v2::render_drift_markdown(&baseline_summary, &current_summary);
+            if let Some(out_path) = output {
+                fs::write(&out_path, markdown)?;
+                println!("RAG eval v2 drift report written to {}", out_path.display());
             } else {
                 println!("{markdown}");
             }

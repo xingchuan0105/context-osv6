@@ -128,6 +128,21 @@ pub enum Commands {
         output: Option<PathBuf>,
     },
 
+    /// Compare two RAG eval v2 summary.json reports (ADR-0012) and report drift.
+    RagEvalV2Drift {
+        /// Baseline summary.json path or rag_eval_v2 run directory.
+        #[arg(long)]
+        baseline: PathBuf,
+
+        /// Current summary.json path or rag_eval_v2 run directory.
+        #[arg(long)]
+        current: PathBuf,
+
+        /// Output path for the Markdown report (default: stdout).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
     /// Set or update a baseline run.
     Baseline {
         /// Path to the run directory to use as baseline.
