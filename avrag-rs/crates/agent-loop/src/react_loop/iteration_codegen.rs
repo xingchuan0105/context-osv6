@@ -31,10 +31,11 @@ impl ReActLoop {
         let interpreter_lock = Arc::clone(&self.code_interpreter);
         let mut combined_result = String::new();
         let mut any_error = false;
+        let mut any_output = false;
         let mut bridge_tool_results = Vec::new();
 
         for (idx, code) in codes.iter().enumerate() {
-            let (block_status, block_text, is_err, block_bridge_results, bridge_calls) = self
+            let (block_status, block_text, is_err, block_bridge_results, bridge_calls, block_had_output) = self
                 .execute_codegen_block(idx, code, request, auth, &interpreter_lock)
                 .await;
             // User-facing progress: one step per bridge client.* call (not codegen itself).
@@ -53,6 +54,7 @@ impl ReActLoop {
                     .await;
                 }
             }
+            any_output = any_output || block_had_output || !bridge_calls.is_empty();
             bridge_tool_results.extend(block_bridge_results);
             combined_result.push_str(&block_text);
             combined_result.push('\n');
@@ -71,7 +73,11 @@ impl ReActLoop {
         }
 
         let elapsed_ms = code_start.elapsed().as_millis() as u64;
-        let observation = format_codegen_observation(&combined_result, any_error);
+        // C3: a round with completely empty stdout AND stderr AND zero bridge
+        // calls gets an explicit note — otherwise the model guesses why the
+        // observation is blank (and typically re-emits the same block).
+        let no_output = !any_output && bridge_tool_results.is_empty();
+        let observation = format_codegen_observation(&combined_result, any_error, no_output);
         self.append_codegen_messages(state, llm_response, &observation);
 
         if any_error {
@@ -215,6 +221,7 @@ impl ReActLoop {
         bool,
         Vec<ToolResult>,
         Vec<avrag_rag_core::runtime::bridge::CapturedBridgeCall>,
+        bool,
     ) {
         let code = code.to_string();
         let interpreter_lock = Arc::clone(interpreter_lock);
@@ -289,7 +296,17 @@ impl ReActLoop {
                     "[block {}] stdout: {}\nstderr: {}",
                     idx, stdout_for_observation, exec.stderr
                 );
-                (status, text, is_err, block_bridge_results, bridge_calls)
+                // C3: whether the block produced ANY visible output (stdout or
+                // stderr) — drives the empty-round feedback note.
+                let had_output = !exec.stdout.trim().is_empty() || !exec.stderr.trim().is_empty();
+                (
+                    status,
+                    text,
+                    is_err,
+                    block_bridge_results,
+                    bridge_calls,
+                    had_output,
+                )
             }
             Err(e) => {
                 let text = format!("[block {}] Execution failed: {e}", idx);
@@ -299,6 +316,7 @@ impl ReActLoop {
                     true,
                     block_bridge_results,
                     bridge_calls,
+                    false,
                 )
             }
         }
@@ -334,19 +352,34 @@ pub(crate) fn format_codegen_result_message(combined_result: &str) -> String {
 }
 
 /// Append sandbox error recovery hints so the next LLM turn can fix bad API calls.
-fn format_codegen_observation(combined_result: &str, had_error: bool) -> String {
-    if !had_error {
-        return combined_result.to_string();
+/// `no_output` (C3): the round produced nothing at all — empty stdout AND
+/// stderr AND zero bridge calls — so the model gets told instead of guessing.
+fn format_codegen_observation(combined_result: &str, had_error: bool, no_output: bool) -> String {
+    let mut out = combined_result.to_string();
+    if no_output {
+        out.push_str(
+            "\n\n[no_output]\n\
+             The block produced no output: stdout and stderr are both empty and no \
+             client.* retrieval calls were made. If this round was meant to retrieve \
+             evidence, check the code path (a block that never calls client.* and \
+             prints nothing returns nothing). Otherwise proceed to your final \
+             answer/handoff now.\n\
+             [/no_output]",
+        );
     }
-    format!(
-        "{combined_result}\n\n\
+    if !had_error {
+        return out;
+    }
+    out.push_str(&format!(
+        "\n\n\
          [sandbox_error]\n\
          Code execution failed. Read stderr in the block above and fix your next code block.\n\
          Allowed client methods ONLY: {CODEGEN_CLIENT_METHODS}.\n\
          NOT available: hybrid_search, dense_retrieval, lexical_retrieval, graph_retrieval, \
          rerank, or any internal host tool name.\n\
          [/sandbox_error]"
-    )
+    ));
+    out
 }
 
 /// Decide whether a sandbox execution should be treated as a failure.
@@ -374,10 +407,26 @@ mod tests {
     #[test]
     fn sandbox_error_observation_includes_sdk_reminder() {
         let raw = "[block 0] stdout: \nstderr: AttributeError: no attribute 'hybrid_search'\n";
-        let obs = format_codegen_observation(raw, true);
+        let obs = format_codegen_observation(raw, true, false);
         assert!(obs.contains("hybrid_search"));
         assert!(obs.contains("dense_search"));
         assert!(obs.contains("[sandbox_error]"));
+    }
+
+    #[test]
+    fn no_output_round_gets_feedback_note() {
+        // C3: empty stdout + empty stderr + zero bridge calls → explicit note.
+        let raw = "[block 0] stdout: \nstderr: \n";
+        let obs = format_codegen_observation(raw, false, true);
+        assert!(obs.contains("[no_output]"));
+        assert!(obs.contains("stdout and stderr are both empty"));
+        assert!(obs.contains("no client.* retrieval calls"));
+        // A round that produced output must NOT get the note.
+        let obs = format_codegen_observation("[block 0] stdout: 42\nstderr: ", false, false);
+        assert!(!obs.contains("[no_output]"));
+        // Note composes with the sandbox-error hint.
+        let obs = format_codegen_observation(raw, true, true);
+        assert!(obs.contains("[no_output]") && obs.contains("[sandbox_error]"));
     }
 
     #[test]
