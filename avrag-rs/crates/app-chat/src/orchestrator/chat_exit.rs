@@ -78,6 +78,33 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         s.push('\n');
     }
 
+    // S4 gray zone: premise-mismatch signals render BEFORE channel outcomes
+    // (prominent) — the Answer must correct the premise first, never answer
+    // under the wrong frame (design §3.2; q114).
+    let mismatches: Vec<(&ChannelNote, &super::types::PremiseMismatch)> = handoff
+        .channel_notes
+        .iter()
+        .filter_map(|n| n.handoff.as_ref()?.premise_mismatch.as_ref().map(|pm| (n, pm)))
+        .collect();
+    if !mismatches.is_empty() {
+        s.push_str("### ⚠ 前提质疑 (premise mismatch — worker 发现题目前提与证据不符)\n");
+        for (note, pm) in &mismatches {
+            s.push_str(&format!(
+                "- [{}] kind: {} — {}\n",
+                note.channel.as_str(),
+                pm.kind,
+                pm.detail
+            ));
+            if let Some(subj) = &pm.actual_subject {
+                s.push_str(&format!("  actual_subject: {subj}\n"));
+            }
+        }
+        s.push_str(
+            "作答前必须先纠正前提（点名真正主体/真正框架），再决定拒答或按纠正后口径作答；\
+             不得为满足问题结构把其他主体的内容归入所问主体。\n\n",
+        );
+    }
+
     // Channel outcomes: structured worker handoff (coverage/gaps visible).
     if !handoff.channel_notes.is_empty() {
         s.push_str("### Channel outcomes\n");
@@ -94,9 +121,18 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
             if let Some(h) = note.handoff.as_ref() {
                 s.push_str(&format!("  coverage: {}\n", h.coverage));
                 if h.handoff_degraded {
-                    // C4/P3: worker output failed handoff validation — the
-                    // Answer must not trust it (treat as uncovered).
-                    s.push_str("  ⚠ worker handoff 未通过校验（输出不可信，按未覆盖处理）\n");
+                    // C4/P3 → S4 wording (supersedes 2026-07-27 P3 文案):
+                    // worker output failed the output compiler — the Answer
+                    // must not trust it (treat as uncovered). Diagnostic
+                    // codes ride along when present.
+                    if h.compile_diagnostics.is_empty() {
+                        s.push_str("  ⚠ worker 输出未通过编译（诊断码见日志），按未覆盖处理\n");
+                    } else {
+                        s.push_str(&format!(
+                            "  ⚠ worker 输出未通过编译（诊断码：{}），按未覆盖处理\n",
+                            h.compile_diagnostics.join(", ")
+                        ));
+                    }
                 }
                 if !h.summary.trim().is_empty() {
                     s.push_str("  summary: ");
@@ -106,15 +142,25 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
                 if !h.key_facts.is_empty() {
                     s.push_str("  key_facts:\n");
                     for fact in &h.key_facts {
+                        // S4: inferred facts stay labeled and never occupy
+                        // fact position (design §3.2).
+                        let claim = if fact.is_inferred() {
+                            format!("（推断）{}", fact.claim)
+                        } else {
+                            fact.claim.clone()
+                        };
                         if fact.evidence.is_empty() {
-                            s.push_str(&format!("  - {}\n", fact.claim));
+                            s.push_str(&format!("  - {claim}\n"));
                         } else {
                             s.push_str(&format!(
                                 "  - {} (evidence: {})\n",
-                                fact.claim,
+                                claim,
                                 fact.evidence.join(", ")
                             ));
                         }
+                    }
+                    if h.key_facts.iter().any(|f| f.is_inferred()) {
+                        s.push_str("  （推断内容不得作为事实引用）\n");
                     }
                 }
                 if !h.gaps.is_empty() {
@@ -444,5 +490,125 @@ mod tests {
         assert!(ctx.contains("覆盖现状与目标两章"), "{ctx}");
         assert!(ctx.contains("未找到投资估算章节"), "{ctx}");
         assert!(ctx.contains("gaps:"), "{ctx}");
+    }
+
+    // ---- S4: gray-zone rendering -------------------------------------------
+
+    fn note_with_full_handoff(handoff: crate::orchestrator::types::WorkerHandoff) -> ChannelNote {
+        ChannelNote::with_handoff(Channel::Rag, PackStatus::Ok, 2, Some(handoff), None)
+    }
+
+    fn handoff_with_facts(facts: Vec<crate::orchestrator::types::WorkerKeyFact>) -> crate::orchestrator::types::WorkerHandoff {
+        crate::orchestrator::types::WorkerHandoff {
+            summary: "s".into(),
+            key_facts: facts,
+            coverage: "partial".into(),
+            gaps: vec![],
+            handoff_degraded: false,
+            compile_diagnostics: vec![],
+            premise_mismatch: None,
+        }
+    }
+
+    #[test]
+    fn inferred_facts_render_labeled_and_not_citable() {
+        use crate::orchestrator::types::WorkerKeyFact;
+        let handoff = handoff_with_facts(vec![
+            WorkerKeyFact {
+                claim: "Y公司营销人员编制为 4 人".into(),
+                evidence: vec!["chunk-a".into()],
+                basis: "observed".into(),
+            },
+            WorkerKeyFact {
+                claim: "访谈覆盖了全部 4 名营销人员".into(),
+                evidence: vec![],
+                basis: "inferred".into(),
+            },
+        ]);
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note_with_full_handoff(handoff)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(ctx.contains("- Y公司营销人员编制为 4 人 (evidence: chunk-a)"), "{ctx}");
+        assert!(ctx.contains("- （推断）访谈覆盖了全部 4 名营销人员"), "{ctx}");
+        assert!(ctx.contains("推断内容不得作为事实引用"), "{ctx}");
+    }
+
+    #[test]
+    fn premise_mismatch_renders_before_channel_outcomes() {
+        use crate::orchestrator::types::PremiseMismatch;
+        let mut handoff = handoff_with_facts(vec![]);
+        handoff.premise_mismatch = Some(PremiseMismatch {
+            kind: "frame".into(),
+            detail: "问题预设的 4P 拆解属于竞争对手南通四方".into(),
+            actual_subject: Some("Y公司策略为 4R 框架".into()),
+        });
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note_with_full_handoff(handoff)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(ctx.contains("⚠ 前提质疑"), "{ctx}");
+        assert!(ctx.contains("kind: frame"), "{ctx}");
+        assert!(ctx.contains("4P 拆解属于竞争对手南通四方"), "{ctx}");
+        assert!(ctx.contains("actual_subject: Y公司策略为 4R 框架"), "{ctx}");
+        assert!(ctx.contains("先纠正前提"), "{ctx}");
+        // Prominent: the block precedes Channel outcomes.
+        let pm_pos = ctx.find("⚠ 前提质疑").unwrap();
+        let outcomes_pos = ctx.find("### Channel outcomes").unwrap();
+        assert!(pm_pos < outcomes_pos, "premise block must precede outcomes: {ctx}");
+    }
+
+    #[test]
+    fn degraded_handoff_renders_compile_wording_with_codes() {
+        let mut handoff = handoff_with_facts(vec![]);
+        handoff.handoff_degraded = true;
+        handoff.compile_diagnostics = vec!["E101".into(), "E103".into()];
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note_with_full_handoff(handoff)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(
+            ctx.contains("⚠ worker 输出未通过编译（诊断码：E101, E103），按未覆盖处理"),
+            "{ctx}"
+        );
+        assert!(!ctx.contains("未通过校验"), "P3 wording superseded: {ctx}");
+    }
+
+    #[test]
+    fn degraded_handoff_without_codes_falls_back_to_log_wording() {
+        let mut handoff = handoff_with_facts(vec![]);
+        handoff.handoff_degraded = true;
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note_with_full_handoff(handoff)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(
+            ctx.contains("⚠ worker 输出未通过编译（诊断码见日志），按未覆盖处理"),
+            "{ctx}"
+        );
     }
 }
