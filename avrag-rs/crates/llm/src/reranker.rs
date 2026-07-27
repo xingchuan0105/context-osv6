@@ -3,6 +3,50 @@ use anyhow::Context;
 use serde::Deserialize;
 use serde_json::json;
 
+/// DashScope qwen3-vl-rerank hard limit: at most 100 text documents per
+/// request (the provider 400s above that — "total documents should not be
+/// larger than 100"). Batching is done client-side here so NO caller can
+/// ever exceed the provider limit, regardless of pool size.
+pub const DASHSCOPE_VL_RERANK_MAX_DOCS: usize = 100;
+
+/// Conservative per-request cap for the SiliconFlow-compatible `/rerank`
+/// endpoint (no documented higher limit; same 100 keeps one merge path).
+const OPENAI_RERANK_MAX_DOCS: usize = 100;
+
+/// Batch boundaries for `total` items split at `batch_size` — e.g. 250 items
+/// at 100 → [(0,100), (100,200), (200,250)].
+fn batch_ranges(total: usize, batch_size: usize) -> Vec<(usize, usize)> {
+    (0..total)
+        .step_by(batch_size)
+        .map(|start| (start, (start + batch_size).min(total)))
+        .collect()
+}
+
+/// Merge per-batch rankings into one global ranking: score descending, ties
+/// broken by original input position (so pre-rerank order survives ties).
+/// `batches` is (input offset, batch-local (index, score) results) per batch;
+/// `top_n` is applied after the merge.
+fn merge_ranked_batches(
+    batches: Vec<(usize, Vec<(usize, f32)>)>,
+    top_n: usize,
+) -> Vec<(usize, f32)> {
+    let mut all: Vec<(usize, f32)> = batches
+        .into_iter()
+        .flat_map(|(offset, results)| {
+            results
+                .into_iter()
+                .map(move |(index, score)| (index + offset, score))
+        })
+        .collect();
+    all.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    all.truncate(top_n);
+    all
+}
+
 pub struct RerankerClient {
     config: ModelProviderConfig,
     client: reqwest::Client,
@@ -58,6 +102,35 @@ impl RerankerClient {
                 .collect());
         }
 
+        // OpenAI-style (/rerank): batch at OPENAI_RERANK_MAX_DOCS so no
+        // caller can exceed the provider's per-request document limit, then
+        // merge the batch rankings by score.
+        let mut batches = Vec::new();
+        for (start, end) in batch_ranges(documents.len(), OPENAI_RERANK_MAX_DOCS) {
+            let results = self.openai_rerank_once(query, &documents[start..end]).await?;
+            batches.push((
+                start,
+                results.into_iter().map(|r| (r.index, r.score)).collect(),
+            ));
+        }
+        let merged = merge_ranked_batches(batches, documents.len());
+        Ok(merged
+            .into_iter()
+            .map(|(index, score)| RerankResult {
+                index,
+                document: documents.get(index).cloned().unwrap_or_default(),
+                score,
+            })
+            .collect())
+    }
+
+    /// One OpenAI-style `/rerank` request for at most
+    /// `OPENAI_RERANK_MAX_DOCS` documents.
+    async fn openai_rerank_once(
+        &self,
+        query: &str,
+        documents: &[String],
+    ) -> anyhow::Result<Vec<RerankResult>> {
         let request_body = json!({
             "model": self.config.model,
             "query": query,
@@ -123,6 +196,36 @@ impl RerankerClient {
             anyhow::bail!("rerank_multimodal_text_query requires a qwen3-vl-rerank config");
         }
 
+        // Batch at the provider's 100-documents-per-request limit and merge
+        // the batch rankings by score (scores are model-scale comparable
+        // across batches). Each batch asks for ALL its documents back so the
+        // global merge sees every candidate before applying top_n.
+        let mut batches = Vec::new();
+        for (start, end) in batch_ranges(documents.len(), DASHSCOPE_VL_RERANK_MAX_DOCS) {
+            let batch = &documents[start..end];
+            let results = self
+                .dashscope_vl_rerank_once(query, batch, batch.len())
+                .await?;
+            batches.push((
+                start,
+                results.into_iter().map(|r| (r.index, r.score)).collect(),
+            ));
+        }
+        let merged = merge_ranked_batches(batches, top_n.min(documents.len()));
+        Ok(merged
+            .into_iter()
+            .map(|(index, score)| MultiModalRerankResult { index, score })
+            .collect())
+    }
+
+    /// One DashScope qwen3-vl-rerank request for at most
+    /// `DASHSCOPE_VL_RERANK_MAX_DOCS` documents.
+    async fn dashscope_vl_rerank_once(
+        &self,
+        query: &str,
+        documents: &[MultiModalRerankDocument],
+        top_n: usize,
+    ) -> anyhow::Result<Vec<MultiModalRerankResult>> {
         let request_body = json!({
             "model": self.config.model,
             "input": {
@@ -205,6 +308,128 @@ pub struct RerankResult {
     pub index: usize,
     pub document: String,
     pub score: f32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batch_ranges_split_250_into_3_batches() {
+        assert_eq!(
+            batch_ranges(250, DASHSCOPE_VL_RERANK_MAX_DOCS),
+            vec![(0, 100), (100, 200), (200, 250)]
+        );
+        // Pools at or under the cap stay a single request (no behavior change).
+        assert_eq!(batch_ranges(100, DASHSCOPE_VL_RERANK_MAX_DOCS), vec![(0, 100)]);
+        assert_eq!(batch_ranges(50, DASHSCOPE_VL_RERANK_MAX_DOCS), vec![(0, 50)]);
+        assert!(batch_ranges(0, DASHSCOPE_VL_RERANK_MAX_DOCS).is_empty());
+    }
+
+    #[test]
+    fn merge_ranked_batches_orders_score_desc_with_input_position_tiebreak() {
+        // Three batches (offsets 0/100/200); scores deliberately scrambled.
+        // The doc at input rank 150 (batch 1, local 50) has the highest score
+        // and must come out first — the case the old single-request code lost
+        // when the provider 400'd an over-100 pool.
+        let batches = vec![
+            (0, vec![(0, 0.5), (1, 0.9), (2, 0.1)]),
+            (100, vec![(0, 0.7), (50, 0.99), (51, 0.7)]),
+            (200, vec![(0, 0.9), (1, 0.3)]),
+        ];
+        let merged = merge_ranked_batches(batches, 6);
+        let indices: Vec<usize> = merged.iter().map(|(i, _)| *i).collect();
+        // 150 first (0.99); then the two 0.9s in input order (1 before 200);
+        // then the two 0.7s in input order (100 before 151); then 0.5.
+        assert_eq!(indices, vec![150, 1, 200, 100, 151, 0]);
+    }
+
+    #[test]
+    fn merge_ranked_batches_applies_top_n_after_merge() {
+        let batches = vec![
+            (0, vec![(0, 0.4), (1, 0.6)]),
+            (100, vec![(0, 0.9), (1, 0.8)]),
+        ];
+        let merged = merge_ranked_batches(batches, 2);
+        assert_eq!(merged, vec![(100, 0.9), (101, 0.8)]);
+    }
+
+    #[test]
+    fn merge_ranked_batches_single_batch_matches_legacy_order() {
+        // One batch (pool ≤ cap): merge must reproduce the plain score-desc
+        // ranking the old single-request path produced.
+        let batches = vec![(0, vec![(2, 0.1), (0, 0.9), (1, 0.5)])];
+        let merged = merge_ranked_batches(batches, 3);
+        assert_eq!(merged, vec![(0, 0.9), (1, 0.5), (2, 0.1)]);
+    }
+
+    /// Live provider proof for the ≤100-doc batching: 150 documents through
+    /// the public `rerank` entry (same code path dense.rs reaches via the
+    /// multimodal stage) must not 400 against the real DashScope endpoint.
+    /// Run: `set -a; source .env; set +a; cargo test -p avrag-llm \
+    ///   live_dashscope_vl_rerank_over_100_docs -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "live DashScope call; needs MM_RERANK_* in env"]
+    async fn live_dashscope_vl_rerank_over_100_docs() {
+        let (Ok(base_url), Ok(api_key), Ok(model)) = (
+            std::env::var("MM_RERANK_BASE_URL"),
+            std::env::var("MM_RERANK_API_KEY"),
+            std::env::var("MM_RERANK_MODEL"),
+        ) else {
+            eprintln!("MM_RERANK_* not set — skipping live rerank test");
+            return;
+        };
+        // Mirror production construction (app-bootstrap make_reranker).
+        let client = RerankerClient::new(ModelProviderConfig {
+            base_url,
+            api_key,
+            model,
+            timeout_ms: 60_000,
+            api_style: Some(crate::ApiStyle::DashScopeVlRerank),
+            dimensions: None,
+            enable_thinking: Some(false),
+            enable_cache: Some(false),
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        // 150 documents: one planted clearly-relevant answer at the END (it
+        // lands in the second batch), the rest plausible-but-generic.
+        let mut documents: Vec<String> = (0..149)
+            .map(|i| {
+                format!(
+                    "速冻机 型号 FZ-{i:03} 采用通用风冷结构，适用于果蔬预冷与常规冷冻工艺，\
+                     产能参数以厂家标定为准，交货周期 30 天。"
+                )
+            })
+            .collect();
+        documents.push(
+            "2T 隧道式速冻机日产能在标准工况下约为 2 吨/日，采用连续网带输送与强制冷风循环，\
+             适用于小规模速冻食品加工。"
+                .to_string(),
+        );
+        assert_eq!(documents.len(), 150);
+
+        let ranked = client
+            .rerank("2T 速冻机日产能", &documents)
+            .await
+            .expect("rerank of 150 docs must not 400 after batching");
+        assert!(!ranked.is_empty(), "empty ranking from live rerank");
+        eprintln!(
+            "live rerank ok: {} docs in → {} ranked out; top index={} score={:.4}",
+            documents.len(),
+            ranked.len(),
+            ranked[0].index,
+            ranked[0].score
+        );
+        // The planted doc (index 149, second batch) surfacing near the top
+        // proves the cross-batch merge works against the real provider.
+        let top10: Vec<usize> = ranked.iter().take(10).map(|r| r.index).collect();
+        assert!(
+            top10.contains(&149),
+            "planted relevant doc 149 missing from top10: {top10:?}"
+        );
+    }
 }
 
 
