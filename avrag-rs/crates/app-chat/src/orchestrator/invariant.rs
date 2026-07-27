@@ -61,27 +61,51 @@ pub fn default_brief(channel: Channel, user_query: &str) -> TaskBrief {
 /// chat_exit's ChannelNote loop, now removed). Empty channels carry the hard
 /// zero-evidence instruction (P3): declare uncovered only — never fill from
 /// worker narrative or common sense.
+///
+/// A1 (2026-07-28): notices aggregate PER CHANNEL, not per dispatch record —
+/// a channel may be dispatched several times (re-dispatch). The zero-evidence
+/// hard instruction fires only when EVERY record for the channel is Empty
+/// (no items at all across all dispatches); any Ok record for the channel
+/// suppresses it entirely (a sibling dispatch DID return evidence — firing
+/// would contradict the Evidence section, q114 autopsy). Error notices get
+/// the same treatment: they fire only when the channel has no Ok record.
 pub fn partial_notices_from_records(records: &[DispatchRecord]) -> Vec<String> {
     let mut notices = Vec::new();
-    for r in records {
-        match (r.channel, r.status) {
-            (Channel::Rag, super::types::PackStatus::Empty) => notices.push(
-                "工作区未检索到任何证据 — 只能声明未覆盖；禁止使用 worker 叙述或常识补写具体事实。"
-                    .to_string(),
-            ),
-            (Channel::Search, super::types::PackStatus::Empty) => notices.push(
-                "网络检索未返回可用结果 — 只能表述为未检索到；禁止补写具体网页事实或网页编号引用。"
-                    .to_string(),
-            ),
-            (Channel::Rag, super::types::PackStatus::Error) => notices.push(format!(
-                "工作区检索失败（{}）；若有网页证据可仅用网页并说明。",
-                r.error.as_deref().unwrap_or("unknown")
-            )),
-            (Channel::Search, super::types::PackStatus::Error) => notices.push(format!(
-                "网络检索失败（{}）；网页侧内容只能表述为未检索到，禁止给出网页编号引用。",
-                r.error.as_deref().unwrap_or("unknown")
-            )),
-            (_, super::types::PackStatus::Ok) => {}
+    for channel in [Channel::Rag, Channel::Search] {
+        let rs: Vec<&DispatchRecord> = records.iter().filter(|r| r.channel == channel).collect();
+        if rs.is_empty() {
+            continue;
+        }
+        // Any successful dispatch for this channel suppresses its notices.
+        if rs.iter().any(|r| r.status == super::types::PackStatus::Ok) {
+            continue;
+        }
+        use super::types::PackStatus;
+        let all_empty = rs.iter().all(|r| r.status == PackStatus::Empty);
+        if all_empty {
+            match channel {
+                Channel::Rag => notices.push(
+                    "工作区未检索到任何证据 — 只能声明未覆盖；禁止使用 worker 叙述或常识补写具体事实。"
+                        .to_string(),
+                ),
+                Channel::Search => notices.push(
+                    "网络检索未返回可用结果 — 只能表述为未检索到；禁止补写具体网页事实或网页编号引用。"
+                        .to_string(),
+                ),
+            }
+            continue;
+        }
+        if let Some(err_rec) = rs.iter().find(|r| r.status == PackStatus::Error) {
+            match channel {
+                Channel::Rag => notices.push(format!(
+                    "工作区检索失败（{}）；若有网页证据可仅用网页并说明。",
+                    err_rec.error.as_deref().unwrap_or("unknown")
+                )),
+                Channel::Search => notices.push(format!(
+                    "网络检索失败（{}）；网页侧内容只能表述为未检索到，禁止给出网页编号引用。",
+                    err_rec.error.as_deref().unwrap_or("unknown")
+                )),
+            }
         }
     }
     notices
@@ -161,6 +185,59 @@ mod tests {
         // P3: the empty-channel notice is the hard zero-evidence instruction.
         assert!(n[0].contains("未检索到任何证据"), "{:?}", n[0]);
         assert!(n[0].contains("禁止使用 worker 叙述或常识补写"), "{:?}", n[0]);
+    }
+
+    // ---- A1: per-channel aggregation (q114 autopsy) -------------------------
+
+    fn rec_with(channel: Channel, status: PackStatus, item_count: usize) -> DispatchRecord {
+        DispatchRecord {
+            channel,
+            dispatch_id: "d".into(),
+            status,
+            item_count,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn ok_sibling_dispatch_suppresses_zero_evidence_notice() {
+        // q114: first dispatch returned 124 items, re-dispatch came back empty
+        // — the zero-evidence hard instruction must NOT fire.
+        let records = vec![
+            rec_with(Channel::Rag, PackStatus::Ok, 124),
+            rec_with(Channel::Rag, PackStatus::Empty, 0),
+        ];
+        let n = partial_notices_from_records(&records);
+        assert!(
+            !n.iter().any(|s| s.contains("未检索到任何证据")),
+            "{n:?}"
+        );
+    }
+
+    #[test]
+    fn all_empty_dispatches_still_fire_notice() {
+        let records = vec![
+            rec_with(Channel::Rag, PackStatus::Empty, 0),
+            rec_with(Channel::Rag, PackStatus::Empty, 0),
+        ];
+        let n = partial_notices_from_records(&records);
+        assert_eq!(n.len(), 1, "one aggregated notice: {n:?}");
+        assert!(n[0].contains("未检索到任何证据"), "{n:?}");
+    }
+
+    #[test]
+    fn single_ok_record_fires_no_notice() {
+        let records = vec![rec_with(Channel::Rag, PackStatus::Ok, 5)];
+        assert!(partial_notices_from_records(&records).is_empty());
+    }
+
+    #[test]
+    fn error_notice_suppressed_by_ok_sibling() {
+        let mut err = rec_with(Channel::Search, PackStatus::Error, 0);
+        err.error = Some("timeout".into());
+        let records = vec![rec_with(Channel::Search, PackStatus::Ok, 3), err];
+        let n = partial_notices_from_records(&records);
+        assert!(!n.iter().any(|s| s.contains("检索失败")), "{n:?}");
     }
 
     #[test]
