@@ -703,11 +703,14 @@ pub fn attach_store_retrieval_tool_results(
 /// (`**[E3]**`, `[**[E3]**]`, bare `[E3]`) instead of protocol `[[E3]]`.
 /// Without this pass, finalize drops them and `expect_citations` fails even
 /// when the model *did* ground on store ids (full_eval Q142, 2026-07-20).
+/// S7: full-width `【E3】` / `【E:3】` / `【E：3】` get the same treatment —
+/// they used to leak raw into the user-facing answer (q087 附, 2026-07-27).
 fn normalize_loose_e_markers(answer: &str) -> String {
     use std::sync::OnceLock;
     use regex::Regex;
 
     struct Patterns {
+        fullwidth: Regex,
         bracket_bold: Regex,
         bold_double: Regex,
         bold_single: Regex,
@@ -717,6 +720,8 @@ fn normalize_loose_e_markers(answer: &str) -> String {
     }
     static PATS: OnceLock<Patterns> = OnceLock::new();
     let p = PATS.get_or_init(|| Patterns {
+        // S7: full-width 【E3】 / 【E:3】 / 【E：3】 (half- or full-width colon)
+        fullwidth: Regex::new(r"【E[:：]?(\d+)】").expect("e-marker re"),
         // [**[E3]**] / [**[E:3]**]
         bracket_bold: Regex::new(r"\[\*\*\[E:?(\d+)\]\*\*\]").expect("e-marker re"),
         // **[[E3]]** / **[[E:3]]**
@@ -731,9 +736,12 @@ fn normalize_loose_e_markers(answer: &str) -> String {
         bare_single: Regex::new(r"\[E:?(\d+)\]").expect("e-marker re"),
     });
 
-    let mut s = p
+    // Full-width first: they contain no ASCII brackets, so converting them up
+    // front lets the canonical passes below treat them uniformly.
+    let mut s = p.fullwidth.replace_all(answer, "[[E$1]]").into_owned();
+    s = p
         .bracket_bold
-        .replace_all(answer, "[[E$1]]")
+        .replace_all(&s, "[[E$1]]")
         .into_owned();
     s = p.bold_double.replace_all(&s, "[[E$1]]").into_owned();
     s = p.bold_single.replace_all(&s, "[[E$1]]").into_owned();
@@ -1056,6 +1064,50 @@ mod tests {
             r.answer
         );
         assert_eq!(r.citations.len(), 1, "dedupe across loose forms");
+    }
+
+    // ---- S7: full-width 【E:n】 markers -------------------------------------
+
+    #[test]
+    fn fullwidth_valid_markers_are_rewritten() {
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer = "文档证据【E1】，网页佐证【E:2】，全角冒号【E：1】。".into();
+        finalize_answer_evidence(&mut r, &store);
+
+        assert!(r.answer.contains("[[cite:chunk-a]]"), "{}", r.answer);
+        assert!(r.answer.contains("[[web:2]]"), "{}", r.answer);
+        assert!(
+            !r.answer.contains('【'),
+            "full-width markers must be gone: {}",
+            r.answer
+        );
+        assert_eq!(r.citations.len(), 2, "dedupe across full-width forms");
+    }
+
+    #[test]
+    fn fullwidth_dangling_markers_are_stripped() {
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer = "编造的【E9】和不存在的【E:42】都剥离。".into();
+        finalize_answer_evidence(&mut r, &store);
+
+        assert!(!r.answer.contains('【'), "{}", r.answer);
+        assert!(!r.answer.contains("[["), "{}", r.answer);
+        assert!(r.citations.is_empty());
+    }
+
+    #[test]
+    fn mixed_half_and_full_width_in_one_answer() {
+        let store = store_with_both();
+        let mut r = AgentRunResult::default();
+        r.answer = "半角 [[E1]] 与全角【E2】并存，悬空【E8】剥离。".into();
+        finalize_answer_evidence(&mut r, &store);
+
+        assert!(r.answer.contains("[[cite:chunk-a]]"), "{}", r.answer);
+        assert!(r.answer.contains("[[web:2]]"), "{}", r.answer);
+        assert!(!r.answer.contains('【'), "{}", r.answer);
+        assert_eq!(r.citations.len(), 2);
     }
 
     #[test]
