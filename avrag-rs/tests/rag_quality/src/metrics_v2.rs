@@ -390,6 +390,11 @@ pub fn contract_compliance(answer: &str, has_evidence: bool, is_refusal: bool) -
 
 /// Answer-correctness gate (ADR 0011 answer-first labeling).
 ///
+/// DEPRECATED for the generation gate (ADR-0012): superseded by eval_v2
+/// judge-first scoring (`eval_v2::label_for`); retained only for the
+/// transition scorecard. Retrieval/selection metrics in this module remain
+/// the ADR-0011 standard.
+///
 /// A query is answer-correct when the user actually received the right answer:
 /// - `expected_should_answer=true`: the answer is NOT a refusal AND contains
 ///   every `must_include` token (substring). When `must_include` is empty, any
@@ -441,6 +446,10 @@ pub struct FaithfulnessReport {
 }
 
 /// Deterministic substring faithfulness (Phase 0.2).
+///
+/// DEPRECATED as the ungrounded/grounded evidence for the generation gate
+/// (ADR-0012): superseded by the eval_v2 judge `faithfulness` block; retained
+/// only for the transition scorecard and as a smoke heuristic.
 ///
 /// Extracts "hard" claim anchors — numbers, dates, and alphanumeric codes —
 /// from the answer and checks each appears as a substring in the **cited**
@@ -550,6 +559,9 @@ fn is_noise_claim(s: &str) -> bool {
 pub enum DiagnosticLabel {
     RetrievalMiss,
     SelectionMiss,
+    /// DEPRECATED for the generation gate (ADR-0012): v2 splits this into
+    /// `UNGROUNDED` vs `INCORRECT` via judge faithfulness/correctness;
+    /// retained only for the transition scorecard.
     GenerationUngrounded,
     SynthesisContract,
     RefusalWrong,

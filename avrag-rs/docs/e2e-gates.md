@@ -226,6 +226,14 @@ Worker ingestion timeout is separate: `E2eBootstrapConfig.worker_timeout_secs` �
 - **Non-streaming citation handling**: `ChatResponse.answer` carries raw `[[cite:CHUNK_ID]]` (UUID); the evaluator rewrites `[[cite:CHUNK_ID]] → [citation:N]` via a `chunk_to_cite` map from `chat.citations`, then `[[N]] → [citation:N]`, before `extract_citation_indices` scores.
 - **Run**: `E2E_MODE=nightly cargo test -p app --test product_e2e rag_quality_prod --features product-e2e -- --ignored --test-threads=1 --nocapture`
 
+### RAG Eval v2 (ADR-0012, judge-first)
+
+Successor to the substring/must_include generation gate — design: [`docs/plans/2026-07-24-rag-eval-judge-v2-design.md`](plans/2026-07-24-rag-eval-judge-v2-design.md), ADR: [`adr/0012-rag-eval-v2-judge-first.md`](adr/0012-rag-eval-v2-judge-first.md). Implementation: `tests/rag_quality/src/eval_v2/` + `realistic_corpus_full_eval` (**v2 is the default**; `RAG_EVAL_V2=0|false` opts out for one transition cycle, `RAG_EVAL_V2_ONLY=1` suppresses the legacy metrics_v2 scorecard print). Retrieval/selection stay on the ADR-0011 deterministic metrics; only the generation layer switched to LLM-as-Judge (DeepSeek V4 Flash, temp 0).
+
+- **Phase 0 (current) — report-only**: no quality gate, labels are diagnostic only. Suite report = mean `answer_correctness` / `faithfulness` / `answer_relevancy` / `recall@15` + label histogram (`summary.json` / `summary.md` / `per_query.tsv` under `crates/app/tests/e2e_output/rag_eval_v2/{run_id}/`; judge cache shared under `rag_eval_v2/cache/`). The only fail-fast allowances are **infra signals**: HTTP 5xx rate and **JUDGE_ERROR rate = 0 expectation** (via `E2E_FAIL_FAST`).
+- **Phase 1 — soft gate, pending 30-question κ calibration**: `τ_c` / `τ_f` **待校准**（初值 0.7 / 0.7，partial 区间 [0.4, 0.7)，目前仅报告）. Tooling: `cargo run -p rag_quality --bin eval_v2_calibration -- export --run-dir <run_dir> --out labels.tsv` → 人工填 `human_label`（0=wrong，1=acceptable）→ `kappa --labeled labels.tsv`（binary 映射：PASS|PARTIAL → 1，另报 correctness≥0.7 对照）. **Target κ ≥ 0.6** before any soft gate is enabled.
+- **Phase 2 — hard-gate candidates** (design §7.2): `Recall@15` (answerable) relative drop ≤ 3% vs baseline（沿用 ADR-0011 精神）; mean `answer_correctness` ≥ 校准后 τ_c; mean `faithfulness` ≥ 校准后 τ_f; `REFUSAL_WRONG` rate = 0（answerable / adversarial 分层）; `JUDGE_ERROR` rate = 0. **Explicitly never gated**: single-question string equality with the reference answer.
+
 ## Playwright
 
 ### Skills (RAG / Search)

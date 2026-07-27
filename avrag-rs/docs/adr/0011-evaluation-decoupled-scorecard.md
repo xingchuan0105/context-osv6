@@ -2,9 +2,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 状态 | **已采纳** |
+| 状态 | **已采纳**（生成层正确性门闩见 **ADR-0012** 取代） |
 | 决策日期 | 2026-06-30 |
-| 关联 | ADR-0008（Answer Contract）、ADR-0009（Codegen Sandbox Retrieval Bridge）、ADR-0010（LLM 负责指代消解） |
+| 关联 | ADR-0008（Answer Contract）、ADR-0009（Codegen Sandbox Retrieval Bridge）、ADR-0010（LLM 负责指代消解）；**ADR-0012**（Judge-first 生成层） |
+| 修订 | 2026-07-24：生成层 `must_include` / substring 作 PASS 主门闩 → 由 [ADR-0012](0012-rag-eval-v2-judge-first.md) 取代；**检索/选择分轨仍有效** |
 
 ---
 
