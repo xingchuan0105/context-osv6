@@ -12,7 +12,9 @@ pub struct GoldenExample {
     /// Natural-language query
     pub query: String,
 
-    /// The expected answer (or key facts that should appear)
+    /// The expected answer (or key facts that should appear). `reference_answer`
+    /// is the v2 name (ADR-0012 §2.6); both spellings deserialize into this field.
+    #[serde(alias = "reference_answer")]
     pub expected_answer: String,
 
     /// Chunks that should be retrieved for this query.
@@ -117,6 +119,12 @@ pub struct GoldenExample {
     /// answers (via `user_context`) become deterministic (e.g. "2026-07-19 15:04").
     #[serde(default)]
     pub client_time: Option<String>,
+
+    /// Optional judge rubric notes (ADR-0012 §2.6): extra grading conventions
+    /// written into the LLM-judge prompt (e.g. "accept 2019 年/2019年"). Not
+    /// used by the deterministic v1 scoring path.
+    #[serde(default)]
+    pub rubric_notes: Option<String>,
 }
 
 /// A scripted prior user→assistant exchange (see `prior_turns`).
@@ -140,6 +148,11 @@ fn default_doc_scope_hint() -> String {
 }
 
 impl GoldenExample {
+    /// The v2 `reference_answer` view of `expected_answer` (ADR-0012 §2.6).
+    pub fn reference_answer(&self) -> &str {
+        &self.expected_answer
+    }
+
     /// Capabilities to send on the wire. Falls back to the legacy `mode`
     /// mapping (`rag`/`search` → single capability, anything else → pure chat)
     /// so pre-v3 golden files behave exactly as before.
@@ -282,6 +295,26 @@ mod tests {
         };
         assert!(sub_match.matches("The transformer architecture revolutionized NLP."));
         assert!(sub_match.matches("The TRANSFORMER architecture is powerful.")); // case-insensitive
+    }
+
+    #[test]
+    fn reference_answer_alias_and_optional_rubric_notes() {
+        // v2 spelling (ADR-0012 §2.6) deserializes into `expected_answer`.
+        let v2 = r#"{
+            "query": "q",
+            "reference_answer": "Y公司2019年在大连建厂。",
+            "source_chunks": [],
+            "rubric_notes": "接受「2019 年」「2019年」"
+        }"#;
+        let ex: GoldenExample = serde_json::from_str(v2).unwrap();
+        assert_eq!(ex.reference_answer(), "Y公司2019年在大连建厂。");
+        assert_eq!(ex.rubric_notes.as_deref(), Some("接受「2019 年」「2019年」"));
+
+        // Legacy spelling still works; rubric_notes stays optional.
+        let legacy = r#"{"query": "q", "expected_answer": "a", "source_chunks": []}"#;
+        let ex: GoldenExample = serde_json::from_str(legacy).unwrap();
+        assert_eq!(ex.reference_answer(), "a");
+        assert_eq!(ex.rubric_notes, None);
     }
 
     #[test]

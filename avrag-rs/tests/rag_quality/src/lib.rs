@@ -18,6 +18,7 @@
 //! report.assert_passing()?; // Gate: Recall@15 regression only; generation gates live in metrics_v2
 //! ```
 
+pub mod eval_v2;
 pub mod golden_set;
 pub mod harness;
 pub mod harness_extract;

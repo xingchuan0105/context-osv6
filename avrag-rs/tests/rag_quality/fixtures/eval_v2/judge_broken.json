@@ -1,0 +1,4 @@
+```json
+{"schema_version": "rag_eval_judge_v2", "refusal": {"is_refusal": false, "correct_for_expectation":
+```
+（输出被 max_tokens 截断；以上是模型原始返回，fence 内的 JSON 不完整，解析必须失败。）

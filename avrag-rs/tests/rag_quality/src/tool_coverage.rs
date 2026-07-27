@@ -202,6 +202,7 @@ mod tests {
             requires_network: false,
             prior_turns: vec![],
             client_time: None,
+            rubric_notes: None,
         }
     }
 

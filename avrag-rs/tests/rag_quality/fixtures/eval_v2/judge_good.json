@@ -1,0 +1,31 @@
+{
+  "schema_version": "rag_eval_judge_v2",
+  "refusal": {
+    "is_refusal": false,
+    "correct_for_expectation": true,
+    "score": 1.0,
+    "rationale": "模型正常作答，符合 expected_should_answer=true 的期望"
+  },
+  "answer_correctness": {
+    "score": 0.95,
+    "verdict": "correct",
+    "rationale": "「2019 年」与参考答案「2019年」语义等价，大连建厂事实一致，仅空格差异不扣分",
+    "key_points_hit": ["2019年建厂", "大连"],
+    "key_points_missed": []
+  },
+  "faithfulness": {
+    "score": 1.0,
+    "verdict": "grounded",
+    "unsupported_claims": [],
+    "rationale": "答案全部事实均被引用段落支持"
+  },
+  "answer_relevancy": {
+    "score": 1.0,
+    "rationale": "直接回答了建厂年份与地点"
+  },
+  "context_sufficiency": {
+    "score": 1.0,
+    "verdict": "sufficient",
+    "rationale": "引用证据充分"
+  }
+}

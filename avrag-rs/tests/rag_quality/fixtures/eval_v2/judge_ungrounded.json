@@ -1,0 +1,31 @@
+{
+  "schema_version": "rag_eval_judge_v2",
+  "refusal": {
+    "is_refusal": false,
+    "correct_for_expectation": true,
+    "score": 1.0,
+    "rationale": "模型正常作答，符合期望"
+  },
+  "answer_correctness": {
+    "score": 0.8,
+    "verdict": "correct",
+    "rationale": "核心事实（2019年大连建厂）与参考答案语义等价",
+    "key_points_hit": ["2019年建厂", "大连"],
+    "key_points_missed": []
+  },
+  "faithfulness": {
+    "score": 0.3,
+    "verdict": "ungrounded",
+    "unsupported_claims": ["员工638人"],
+    "rationale": "context 未记载员工人数，数字系编造"
+  },
+  "answer_relevancy": {
+    "score": 1.0,
+    "rationale": "切题"
+  },
+  "context_sufficiency": {
+    "score": 0.5,
+    "verdict": "partial",
+    "rationale": "context 仅覆盖建厂事实，缺少员工规模信息"
+  }
+}

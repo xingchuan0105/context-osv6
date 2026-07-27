@@ -1,0 +1,346 @@
+//! Deterministic retrieval/selection metrics for eval v2 (Layer A).
+//!
+//! Trimmed copy of `metrics_v2::score_retrieval` / `score_selection`: pure
+//! numbers, no label logic (v2 labels are score-driven and land with
+//! aggregation in a later slice). The graded variants (`relevance_grades`,
+//! ADR-0011) are kept verbatim: `source_chunks` count as grade 3 (critical)
+//! and `relevance_grades` adds partial-credit evidence; with empty grades they
+//! reduce to the binary metrics.
+
+use crate::golden_set::{ChunkMatch, GoldenExample};
+use crate::harness_extract::{CitedChunks, RetrievedChunks};
+use serde::{Deserialize, Serialize};
+
+/// Match each golden `source_chunks[i]` against a list of chunk contents.
+/// Returns the indices of golden chunks that found a match.
+fn matched_golden_indices(contents: &[String], example: &GoldenExample) -> Vec<usize> {
+    example
+        .source_chunks
+        .iter()
+        .enumerate()
+        .filter(|(_, g)| contents.iter().any(|c| g.matches(c)))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Retrieval layer
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetrievalScoreV2 {
+    pub query: String,
+    pub k: usize,
+    pub recall: f64,
+    pub hit: bool,
+    pub mrr: f64,
+    pub ndcg: f64,
+    /// Graded recall: weighted fraction of evidence-grade mass found in top-k
+    /// (`source_chunks` = grade 3, `relevance_grades` = 1..3 partial credit).
+    /// Reduces to binary `recall` when `relevance_grades` is empty.
+    pub graded_recall: f64,
+    /// Graded nDCG@k: linear gain = max matched evidence grade at each rank.
+    /// Reduces to binary `ndcg` when `relevance_grades` is empty.
+    pub graded_ndcg: f64,
+    pub retrieved_count: usize,
+    pub golden_count: usize,
+    pub matched_golden: Vec<usize>,
+    /// Rank (0-indexed, first-seen order) of each matched golden chunk's first
+    /// hit, parallel to `matched_golden`.
+    pub first_hit_ranks: Vec<usize>,
+}
+
+/// Score the retrieval layer. `retrieved` is the deduped first-seen-ordered
+/// chunk list from `extract_retrieved_chunks`.
+pub fn score_retrieval(
+    retrieved: &RetrievedChunks,
+    example: &GoldenExample,
+    k: usize,
+) -> RetrievalScoreV2 {
+    let contents: Vec<String> = retrieved.chunks.iter().map(|c| c.content.clone()).collect();
+    let golden_count = example.source_chunks.len();
+
+    // Match each golden chunk against the top-k retrieved contents.
+    let topk: Vec<String> = contents.into_iter().take(k).collect();
+    let mut matched = Vec::new();
+    let mut first_hit_ranks = Vec::new();
+    for (gi, g) in example.source_chunks.iter().enumerate() {
+        if let Some(rank) = topk.iter().position(|c| g.matches(c)) {
+            matched.push(gi);
+            first_hit_ranks.push(rank);
+        }
+    }
+
+    let recall = if golden_count > 0 {
+        matched.len() as f64 / golden_count as f64
+    } else {
+        1.0
+    };
+    let hit = !matched.is_empty();
+    let mrr = first_hit_ranks
+        .first()
+        .map(|&r| 1.0 / (r as f64 + 1.0))
+        .unwrap_or(0.0);
+
+    // nDCG@k with binary relevance (matched golden = relevant). DCG sums
+    // 1/log2(rank+2) over relevant positions; IDCG is the ideal ordering.
+    let ndcg = if golden_count == 0 || first_hit_ranks.is_empty() {
+        if golden_count == 0 { 1.0 } else { 0.0 }
+    } else {
+        let dcg: f64 = first_hit_ranks
+            .iter()
+            .map(|&r| 1.0 / ((r as f64 + 2.0).log2()))
+            .sum();
+        let ideal_relevant = golden_count.min(k);
+        let idcg: f64 = (0..ideal_relevant)
+            .map(|i| 1.0 / ((i as f64 + 2.0).log2()))
+            .sum();
+        if idcg > 0.0 { dcg / idcg } else { 0.0 }
+    };
+
+    // Graded relevance: source_chunks = grade 3 (critical); relevance_grades
+    // maps a content-signature substring to a finer grade for partial-credit
+    // evidence. A retrieved chunk's grade is the max grade among evidence
+    // units it matches. With empty relevance_grades, graded metrics reduce to
+    // the binary ones.
+    const SOURCE_GRADE: u8 = 3;
+    let graded_evidence: Vec<(ChunkMatch, u8)> = example
+        .relevance_grades
+        .iter()
+        .map(|(sig, g)| (ChunkMatch::Substring { text: sig.clone() }, *g))
+        .collect();
+    let total_grade_mass: u32 = (example.source_chunks.len() as u32 * SOURCE_GRADE as u32)
+        + graded_evidence.iter().map(|(_, g)| *g as u32).sum::<u32>();
+    let mut found_source = vec![false; example.source_chunks.len()];
+    let mut found_graded = vec![false; graded_evidence.len()];
+    let mut rank_grades: Vec<u8> = Vec::with_capacity(topk.len());
+    for c in &topk {
+        let mut g: u8 = 0;
+        for (i, sc) in example.source_chunks.iter().enumerate() {
+            if sc.matches(c) {
+                found_source[i] = true;
+                g = g.max(SOURCE_GRADE);
+            }
+        }
+        for (i, (m, mg)) in graded_evidence.iter().enumerate() {
+            if m.matches(c) {
+                found_graded[i] = true;
+                g = g.max(*mg);
+            }
+        }
+        rank_grades.push(g);
+    }
+    let found_grade_mass: u32 =
+        found_source.iter().filter(|f| **f).count() as u32 * SOURCE_GRADE as u32
+            + graded_evidence
+                .iter()
+                .zip(found_graded.iter())
+                .filter(|(_, f)| **f)
+                .map(|((_, g), _)| *g as u32)
+                .sum::<u32>();
+    let graded_recall = if total_grade_mass > 0 {
+        found_grade_mass as f64 / total_grade_mass as f64
+    } else {
+        1.0
+    };
+    let graded_ndcg = if total_grade_mass == 0 {
+        1.0
+    } else {
+        let gdcg: f64 = rank_grades
+            .iter()
+            .enumerate()
+            .map(|(r, &g)| g as f64 / ((r as f64 + 2.0).log2()))
+            .sum();
+        let mut ideal: Vec<u8> = vec![SOURCE_GRADE; example.source_chunks.len()];
+        ideal.extend(graded_evidence.iter().map(|(_, g)| *g));
+        ideal.sort_by(|a, b| b.cmp(a));
+        let gidcg: f64 = ideal
+            .iter()
+            .take(k)
+            .enumerate()
+            .map(|(i, &g)| g as f64 / ((i as f64 + 2.0).log2()))
+            .sum();
+        if gidcg > 0.0 { gdcg / gidcg } else { 0.0 }
+    };
+
+    RetrievalScoreV2 {
+        query: example.query.clone(),
+        k,
+        recall,
+        hit,
+        mrr,
+        ndcg,
+        graded_recall,
+        graded_ndcg,
+        retrieved_count: retrieved.len().min(k),
+        golden_count,
+        matched_golden: matched,
+        first_hit_ranks,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Selection layer
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectionScoreV2 {
+    pub query: String,
+    /// Fraction of cited chunks that match a golden chunk.
+    pub precision: f64,
+    /// Fraction of golden chunks that appear among the cited chunks.
+    pub recall: f64,
+    pub cited_count: usize,
+    pub golden_count: usize,
+    pub golden_matched_in_cited: usize,
+}
+
+/// Score the selection layer (the synthesizer's citations vs golden).
+pub fn score_selection(cited: &CitedChunks, example: &GoldenExample) -> SelectionScoreV2 {
+    let contents = cited.contents();
+    let golden_count = example.source_chunks.len();
+    let matched = matched_golden_indices(&contents, example);
+    let golden_matched_in_cited = matched.len();
+
+    let precision = if contents.is_empty() {
+        // No citations: vacuously precise if nothing golden was expected either.
+        if golden_count == 0 { 1.0 } else { 0.0 }
+    } else {
+        // A cited chunk is "relevant" if it matches some golden chunk.
+        let relevant_cited = contents
+            .iter()
+            .filter(|c| example.source_chunks.iter().any(|g| g.matches(c)))
+            .count();
+        relevant_cited as f64 / contents.len() as f64
+    };
+    let recall = if golden_count > 0 {
+        golden_matched_in_cited as f64 / golden_count as f64
+    } else {
+        1.0
+    };
+
+    SelectionScoreV2 {
+        query: example.query.clone(),
+        precision,
+        recall,
+        cited_count: contents.len(),
+        golden_count,
+        golden_matched_in_cited,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::harness_extract::{CitedChunk, RetrievedChunk};
+
+    fn ex(query: &str, golden: &[&str]) -> GoldenExample {
+        GoldenExample {
+            query: query.to_string(),
+            expected_answer: String::new(),
+            source_chunks: golden
+                .iter()
+                .map(|t| ChunkMatch::Substring {
+                    text: t.to_string(),
+                })
+                .collect(),
+            expected_citations: vec![],
+            mode: "rag".to_string(),
+            description: String::new(),
+            is_adversarial: false,
+            expected_should_answer: true,
+            refusal_keywords: vec![],
+            must_include: vec![],
+            must_not_include: vec![],
+            retrieval_hints: vec![],
+            difficulty: Default::default(),
+            relevance_grades: Default::default(),
+            expected_tool: None,
+            expected_tool_sequence: None,
+            requires_triplet_reingest: false,
+            capabilities: vec![],
+            doc_scope_hint: "all".to_string(),
+            expect_citations: None,
+            requires_network: false,
+            prior_turns: vec![],
+            client_time: None,
+            rubric_notes: None,
+        }
+    }
+
+    fn ret(contents: &[&str]) -> RetrievedChunks {
+        RetrievedChunks {
+            chunks: contents
+                .iter()
+                .enumerate()
+                .map(|(i, c)| RetrievedChunk {
+                    chunk_id: format!("c{i}"),
+                    content: c.to_string(),
+                    score: Some(1.0 - i as f32 * 0.1),
+                    rank: i,
+                    tool: "dense_retrieval".to_string(),
+                })
+                .collect(),
+        }
+    }
+
+    fn cit(contents: &[(usize, &str)]) -> CitedChunks {
+        CitedChunks {
+            chunks: contents
+                .iter()
+                .map(|(id, c)| CitedChunk {
+                    chunk_id: Some(format!("c{id}")),
+                    citation_id: *id as i64,
+                    content: c.to_string(),
+                    score: 0.9,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn retrieval_recall_hit_mrr_ndcg() {
+        let r = ret(&["noise", "alpha beta", "gamma", "delta"]);
+        let e = ex("q", &["alpha beta", "delta"]);
+        let s = score_retrieval(&r, &e, 15);
+        assert_eq!(s.matched_golden.len(), 2);
+        assert!((s.recall - 1.0).abs() < 1e-9);
+        assert!(s.hit);
+        // first hit at rank 1 → mrr = 1/2
+        assert!((s.mrr - 0.5).abs() < 1e-9);
+        assert!(s.ndcg > 0.0 && s.ndcg <= 1.0);
+    }
+
+    #[test]
+    fn retrieval_miss_when_no_golden_in_topk() {
+        let r = ret(&["noise", "more noise"]);
+        let e = ex("q", &["alpha"]);
+        let s = score_retrieval(&r, &e, 15);
+        assert_eq!(s.matched_golden.len(), 0);
+        assert!((s.recall - 0.0).abs() < 1e-9);
+        assert!(!s.hit);
+        assert!((s.mrr - 0.0).abs() < 1e-9);
+        assert!((s.ndcg - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn graded_metrics_reduce_to_binary_when_relevance_grades_empty() {
+        let r = ret(&["noise", "alpha beta", "gamma"]);
+        let e = ex("q", &["alpha beta", "gamma"]);
+        let s = score_retrieval(&r, &e, 15);
+        assert!((s.graded_recall - s.recall).abs() < 1e-9);
+        assert!((s.graded_ndcg - s.ndcg).abs() < 1e-9);
+    }
+
+    #[test]
+    fn selection_precision_recall() {
+        // cited: [golden-match, golden-match, irrelevant]
+        let c = cit(&[(0, "alpha beta"), (1, "delta"), (2, "irrelevant")]);
+        let e = ex("q", &["alpha beta", "delta"]);
+        let s = score_selection(&c, &e);
+        assert_eq!(s.cited_count, 3);
+        assert_eq!(s.golden_matched_in_cited, 2);
+        assert!((s.precision - 2.0 / 3.0).abs() < 1e-9);
+        assert!((s.recall - 1.0).abs() < 1e-9);
+    }
+}
