@@ -28,6 +28,15 @@ impl GuardPipeline {
         }
     }
 
+    /// C7: pipeline whose prompt-leak guard uses a dynamic fingerprint source
+    /// set (e.g. scanned from the runtime prompt dirs at bootstrap).
+    pub fn with_prompt_sources(sources: Vec<(String, String)>) -> Self {
+        Self {
+            input: input::InputGuardPipeline::new(),
+            output: output::OutputGuardPipeline::with_prompt_sources(sources),
+        }
+    }
+
     /// Run all input guards against a user query.
     ///
     /// Returns the first blocking `GuardResult` if any guard blocks,

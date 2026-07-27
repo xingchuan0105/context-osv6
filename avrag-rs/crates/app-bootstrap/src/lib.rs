@@ -106,6 +106,54 @@ fn build_chat_context(
     )
 }
 
+/// C7: build the GuardPipeline with prompt-leak fingerprints derived
+/// dynamically from the runtime prompt dirs (the same paths
+/// `load_system_prompt` serves) — files added/removed/renamed there follow
+/// automatically. Falls back to the built-in list when the dirs are missing
+/// (e.g. a stripped deployment layout).
+fn guard_pipeline_with_dynamic_leak_sources() -> GuardPipeline {
+    let root = resolve_prompts_root();
+    let dirs: Vec<PathBuf> = ["orchestrators", "synthesis", "clusters", "pipeline"]
+        .iter()
+        .map(|sub| root.join(sub))
+        .filter(|d| d.is_dir())
+        .collect();
+    let refs: Vec<&std::path::Path> = dirs.iter().map(|d| d.as_path()).collect();
+    let sources = avrag_guardrails::output::prompt_leak::load_prompt_sources_from_dirs(&refs);
+    if sources.is_empty() {
+        GuardPipeline::new()
+    } else {
+        GuardPipeline::with_prompt_sources(sources)
+    }
+}
+
+/// Resolve the repo `prompts/` directory the same way `load_system_prompt`
+/// resolves prompt paths: cwd-relative first, then CARGO_MANIFEST_DIR/../..,
+/// then walk up from the current dir.
+fn resolve_prompts_root() -> PathBuf {
+    let rel = PathBuf::from("prompts");
+    if rel.is_dir() {
+        return rel;
+    }
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let candidate = PathBuf::from(manifest_dir).join("../..").join("prompts");
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
+    let mut dir = std::env::current_dir().unwrap_or_default();
+    loop {
+        let candidate = dir.join("prompts");
+        if candidate.is_dir() {
+            return candidate;
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    rel
+}
+
 pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     let auth = auth_context_from_config(&config);
     let llm_ctx = LlmContext::new(
@@ -185,7 +233,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     let orchestrator = OrchestratorContext::new(
         agent_service,
         chatmemory,
-        Arc::new(GuardPipeline::new()),
+        Arc::new(guard_pipeline_with_dynamic_leak_sources()),
         None,
     );
 
@@ -467,7 +515,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let orchestrator = OrchestratorContext::new(
         agent_service,
         chatmemory,
-        Arc::new(GuardPipeline::new()),
+        Arc::new(guard_pipeline_with_dynamic_leak_sources()),
         rag_runtime,
     );
 

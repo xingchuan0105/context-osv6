@@ -19,6 +19,14 @@ impl OutputGuardPipeline {
             pii_scrubber: PiiScrubberGuard::new(),
         }
     }
+
+    /// C7: pipeline with a dynamic prompt-leak fingerprint source set.
+    pub fn with_prompt_sources(sources: Vec<(String, String)>) -> Self {
+        Self {
+            prompt_leak: PromptLeakGuard::with_sources(sources),
+            pii_scrubber: PiiScrubberGuard::new(),
+        }
+    }
 }
 
 impl Default for OutputGuardPipeline {
