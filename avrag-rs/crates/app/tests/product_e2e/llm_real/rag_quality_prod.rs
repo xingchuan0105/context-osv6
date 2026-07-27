@@ -40,6 +40,8 @@ use rag_quality::{
     ToolCoverageSummary, extract_cited_chunks, extract_retrieved_chunks, extract_tool_trace,
     score_query,
 };
+// ADR-0012 eval v2 (judge-first generation metrics). Phase 0: report-only.
+use rag_quality::eval_v2;
 use regex::Regex;
 
 use super::{
@@ -137,6 +139,362 @@ fn print_scorecard_summary(title: &str, summary: &ScorecardSummary) {
         .collect::<Vec<_>>()
         .join(", ");
     eprintln!("  labels: {labels}");
+}
+
+/// Retrieval cutoff used by this runner (recall@15 / score_query k=15).
+const RETRIEVAL_K: usize = 15;
+
+/// True when the env var is set to `1` or `true` (case-insensitive); absent or
+/// any other value means off.
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// True only on an explicit opt-out (`0` or `false`, case-insensitive);
+/// absent or any other value means NOT disabled.
+fn env_flag_disabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
+}
+
+/// ADR-0012 eval-v2 run state: one judge client, one per-run artifact dir
+/// (`tests/e2e_output/rag_eval_v2/{run_id}/`), the judge response cache
+/// (design §4.4, shared across run ids), and the per-question `ScoreV2` sink
+/// aggregated at end of run (design §9 runner integration). Phase 0:
+/// everything here is report-only — no assertion reads these numbers.
+struct V2RunCtx {
+    judge: eval_v2::JudgeClient,
+    run_id: String,
+    run_dir: std::path::PathBuf,
+    cache: eval_v2::JudgeCache,
+    scores: Vec<eval_v2::ScoreV2>,
+}
+
+/// Outcome of the cached judge call path for one question.
+struct JudgeAttempt {
+    status: eval_v2::JudgeStatus,
+    parsed: Option<eval_v2::JudgeOutput>,
+    /// Raw response of the last live attempt (or the cached raw on a hit);
+    /// kept even on parse failure for debugging.
+    raw: Option<String>,
+    note: String,
+    cache_hit: bool,
+}
+
+impl V2RunCtx {
+    /// Record an infrastructure failure (chat transport / HTTP 5xx / error
+    /// envelope / parse error / empty answer): Layer A scores over empty
+    /// chunks, label INFRA_ERROR, judge call skipped — there is no answer to
+    /// judge (design §5 priority 0).
+    fn record_infra(&mut self, qnum: usize, example: &GoldenExample, subset: &str, reason: &str) {
+        let retrieval =
+            eval_v2::score_retrieval(&rag_quality::RetrievedChunks::default(), example, RETRIEVAL_K);
+        let selection =
+            eval_v2::score_selection(&rag_quality::CitedChunks::default(), example);
+        let score = self.finish_score(
+            example,
+            subset,
+            retrieval,
+            selection,
+            eval_v2::JudgeStatus::Error,
+            None,
+            true,
+            None,
+        );
+        self.write_json(
+            &format!("q{qnum:03}.artifact.json"),
+            &serde_json::json!({
+                "question": example.query,
+                "subset": subset,
+                "infra_error": reason,
+                "answer": serde_json::Value::Null,
+                "context_source": serde_json::Value::Null,
+                "score_v2": score,
+            }),
+        );
+        self.scores.push(score);
+    }
+
+    /// Layer A + Layer B for one answered question (design §9): deterministic
+    /// retrieval/selection scores, then one serial Flash judge call. Broken
+    /// JSON gets exactly one retry (design §4.3); transport errors and second
+    /// parse failures map to JUDGE_ERROR and the loop continues.
+    async fn score_question(
+        &mut self,
+        qnum: usize,
+        example: &GoldenExample,
+        subset: &str,
+        retrieved: &rag_quality::RetrievedChunks,
+        cited: &rag_quality::CitedChunks,
+        answer: &str,
+    ) {
+        let retrieval = eval_v2::score_retrieval(retrieved, example, RETRIEVAL_K);
+        let selection = eval_v2::score_selection(cited, example);
+        let judge_input = eval_v2::JudgeInput::new(example, retrieved, cited, answer);
+        let messages = vec![
+            avrag_llm::ChatMessage::system(eval_v2::SYSTEM_PROMPT),
+            avrag_llm::ChatMessage::user(eval_v2::build_user_prompt(&judge_input)),
+        ];
+        let attempt = self.judge_with_retry(&messages, &judge_input).await;
+        let score = self.finish_score(
+            example,
+            subset,
+            retrieval,
+            selection,
+            attempt.status,
+            attempt.parsed,
+            false,
+            Some(answer),
+        );
+        eprintln!(
+            "  v2: label={} judge={:?} cache={} correctness={} faithfulness={}",
+            score.label.as_str(),
+            attempt.status,
+            if attempt.cache_hit { "hit" } else { "miss" },
+            score
+                .judge
+                .as_ref()
+                .map(|j| j.answer_correctness.score.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            score
+                .judge
+                .as_ref()
+                .map(|j| j.faithfulness.score.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+        );
+        // Judge artifact: raw response kept even on parse failure (debugging).
+        self.write_json(
+            &format!("q{qnum:03}.judge.json"),
+            &serde_json::json!({
+                "question": example.query,
+                "subset": subset,
+                "schema_version": eval_v2::SCHEMA_VERSION,
+                "judge_model": self.judge.model(),
+                "judge_status": attempt.status,
+                "cache": if attempt.cache_hit { "hit" } else { "miss" },
+                "note": attempt.note,
+                "raw_response": attempt.raw,
+                "parsed": score.judge,
+            }),
+        );
+        self.write_json(
+            &format!("q{qnum:03}.artifact.json"),
+            &serde_json::json!({
+                "question": example.query,
+                "subset": subset,
+                "answer": answer,
+                "context_source": judge_input.context_source.as_str(),
+                "score_v2": score,
+            }),
+        );
+        self.scores.push(score);
+    }
+
+    /// Assemble a `ScoreV2` from its parts, deriving the label via the
+    /// score-driven priority table (design §5) with the initial thresholds.
+    #[allow(clippy::too_many_arguments)]
+    fn finish_score(
+        &self,
+        example: &GoldenExample,
+        subset: &str,
+        retrieval: eval_v2::RetrievalScoreV2,
+        selection: eval_v2::SelectionScoreV2,
+        judge_status: eval_v2::JudgeStatus,
+        judge: Option<eval_v2::JudgeOutput>,
+        has_infra_error: bool,
+        answer: Option<&str>,
+    ) -> eval_v2::ScoreV2 {
+        let label = eval_v2::label_for(&eval_v2::LabelInput {
+            has_infra_error,
+            judge_status,
+            gold_exists: !example.source_chunks.is_empty(),
+            retrieval_recall: retrieval.recall,
+            cited_gold_hits: selection.golden_matched_in_cited,
+            judge: judge.as_ref(),
+            thresholds: &eval_v2::JudgeThresholds::default(),
+        });
+        eval_v2::ScoreV2 {
+            query: example.query.clone(),
+            subset: subset.to_string(),
+            retrieval,
+            selection,
+            judge,
+            judge_status,
+            label,
+            reference_answer: Some(example.reference_answer().to_string()),
+            model_answer: answer.map(str::to_string),
+        }
+    }
+
+    /// Judge call for one question with the design §4.4 cache in front:
+    /// verified cache hit → parse the cached raw (no retry needed); miss →
+    /// `live_judge_call`. A cached raw that no longer parses (corrupt or
+    /// hand-edited file) falls through to a live call and is overwritten.
+    async fn judge_with_retry(
+        &self,
+        messages: &[avrag_llm::ChatMessage],
+        input: &eval_v2::JudgeInput,
+    ) -> JudgeAttempt {
+        let key = eval_v2::JudgeCache::key(self.judge.model(), input);
+        if let Some(raw) = self.cache.load(&key, self.judge.model(), input) {
+            if let Ok(parsed) = eval_v2::parse_judge_output(&raw) {
+                return JudgeAttempt {
+                    status: eval_v2::JudgeStatus::Ok,
+                    parsed: Some(parsed),
+                    raw: Some(raw),
+                    note: "cache_hit".to_string(),
+                    cache_hit: true,
+                };
+            }
+        }
+        self.live_judge_call(messages, &key, input).await
+    }
+
+    /// Live judge call plus exactly one retry when the first response is not
+    /// parseable JSON (design §4.3). Transport errors never retry. Successful
+    /// raw responses are stored in the cache; errors are never cached.
+    async fn live_judge_call(
+        &self,
+        messages: &[avrag_llm::ChatMessage],
+        cache_key: &str,
+        input: &eval_v2::JudgeInput,
+    ) -> JudgeAttempt {
+        let resp = match self.judge.complete(messages).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                return JudgeAttempt {
+                    status: eval_v2::JudgeStatus::Error,
+                    parsed: None,
+                    raw: None,
+                    note: format!("judge transport error (no retry): {e}"),
+                    cache_hit: false,
+                };
+            }
+        };
+        let raw = resp.content;
+        let first_err = match eval_v2::parse_judge_output(&raw) {
+            Ok(parsed) => {
+                self.cache.store(cache_key, self.judge.model(), input, &raw);
+                return JudgeAttempt {
+                    status: eval_v2::JudgeStatus::Ok,
+                    parsed: Some(parsed),
+                    raw: Some(raw),
+                    note: "ok".to_string(),
+                    cache_hit: false,
+                };
+            }
+            Err(e) => e,
+        };
+        eprintln!("  v2: judge JSON parse failed ({first_err}); retrying once");
+        let resp2 = match self.judge.complete(messages).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                return JudgeAttempt {
+                    status: eval_v2::JudgeStatus::Error,
+                    parsed: None,
+                    raw: Some(raw),
+                    note: format!("judge retry transport error (first parse: {first_err}): {e}"),
+                    cache_hit: false,
+                };
+            }
+        };
+        let raw2 = resp2.content;
+        match eval_v2::parse_judge_output(&raw2) {
+            Ok(parsed) => {
+                self.cache.store(cache_key, self.judge.model(), input, &raw2);
+                JudgeAttempt {
+                    status: eval_v2::JudgeStatus::Ok,
+                    parsed: Some(parsed),
+                    raw: Some(raw2),
+                    note: "ok_after_retry".to_string(),
+                    cache_hit: false,
+                }
+            }
+            Err(e) => JudgeAttempt {
+                status: eval_v2::JudgeStatus::Error,
+                parsed: None,
+                raw: Some(raw2),
+                note: format!("judge JSON invalid after one retry: {e}"),
+                cache_hit: false,
+            },
+        }
+    }
+
+    /// Write summary.json + summary.md + per_query.tsv + judge_prompt_version
+    /// (design §7.1) and print the compact Phase-0 report block (report-only —
+    /// nothing here gates the test; design §7.2 Phase 0).
+    fn print_and_write_summary(&self) {
+        let summary = eval_v2::SuiteSummaryV2::from_scores(&self.scores);
+        self.write_json(
+            "summary.json",
+            &serde_json::json!({
+                "judge_model": self.judge.model(),
+                "schema_version": eval_v2::SCHEMA_VERSION,
+                "thresholds": eval_v2::JudgeThresholds::default(),
+                "summary": summary,
+            }),
+        );
+        self.write_text(
+            "summary.md",
+            &eval_v2::render_summary_md(
+                &self.run_id,
+                self.judge.model(),
+                &eval_v2::JudgeThresholds::default(),
+                &self.scores,
+                &summary,
+            ),
+        );
+        self.write_text("per_query.tsv", &eval_v2::render_per_query_tsv(&self.scores));
+        // Prompt version marker (design §7.1): schema version + git short hash
+        // when the CI env provides one (same option_env convention as the
+        // TestContext artifact ids; "local" otherwise).
+        let short_commit = option_env!("GITHUB_SHA")
+            .map(|s| &s[..s.len().min(8)])
+            .unwrap_or("local");
+        self.write_text(
+            "judge_prompt_version",
+            &format!("{} git={short_commit}\n", eval_v2::SCHEMA_VERSION),
+        );
+        eprintln!();
+        eprintln!("RAG Eval v2 (ADR-0012 judge-first) — REPORT ONLY, no gate");
+        eprintln!("  judge_model: {}", self.judge.model());
+        eprintln!(
+            "  judge calls: ok={} error={} (JUDGE_ERROR must be 0 before any gate)",
+            summary.judge_ok, summary.judge_error
+        );
+        eprintln!(
+            "  mean answer_correctness={:.3} faithfulness={:.3} relevancy={:.3} (judge-ok only)",
+            summary.mean_answer_correctness,
+            summary.mean_faithfulness,
+            summary.mean_answer_relevancy
+        );
+        eprintln!(
+            "  mean retrieval recall@{}={:.2}% (all queries)",
+            RETRIEVAL_K,
+            summary.mean_retrieval_recall_at_k * 100.0
+        );
+        let labels = summary
+            .label_counts
+            .iter()
+            .map(|(label, count)| format!("{}={count}", label.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprintln!("  labels: {labels}");
+        eprintln!("  artifacts: {}", self.run_dir.display());
+    }
+
+    fn write_json(&self, filename: &str, value: &serde_json::Value) {
+        if let Ok(json) = serde_json::to_string_pretty(value) {
+            let _ = std::fs::write(self.run_dir.join(filename), json);
+        }
+    }
+
+    fn write_text(&self, filename: &str, contents: &str) {
+        let _ = std::fs::write(self.run_dir.join(filename), contents);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -498,6 +856,51 @@ fn resolve_doc_scope(hint: &str, scope_keys: &[&str], doc_ids: &[String]) -> Vec
 #[ignore = "requires real LLM + embedding API keys; run with --ignored --test-threads=1"]
 async fn realistic_corpus_full_eval() {
     super::require_nightly_suite();
+    // G-17 weather_query: real OPENWEATHER_API_KEY if present, else process mock.
+    super::ensure_weather_defaults().await;
+
+    // ADR-0012 eval v2 (judge-first generation metrics). Since P5, v2 is the
+    // DEFAULT: it runs unless RAG_EVAL_V2=0|false explicitly opts out (one
+    // transition cycle); RAG_EVAL_V2=1|true remains accepted with the same
+    // meaning. RAG_EVAL_V2_ONLY=1 additionally suppresses the legacy
+    // metrics_v2 scorecard aggregation/printing (design §4.1 transition
+    // switches). Phase 0: v2 quality scores are report-only. The judge client
+    // is built BEFORE corpus ingestion so missing credentials fail early
+    // instead of producing 100+ JUDGE_ERRORs. run_id is a UTC timestamp
+    // (`v2_YYYYMMDD-HHMMSS`) — one runner at a time, same chrono convention as
+    // the TestContext artifact ids.
+    let v2_active = !env_flag_disabled("RAG_EVAL_V2");
+    let v2_only = v2_active && env_flag("RAG_EVAL_V2_ONLY");
+    let mut v2 = if v2_active {
+        super::load_env_from_repo_dotenv();
+        let judge = eval_v2::JudgeClient::from_env().expect(
+            "RAG_EVAL_V2=1 but no judge credentials: set JUDGE_LLM_* (or MEMORY_LLM_*) in avrag-rs/.env",
+        );
+        let run_id = format!("v2_{}", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+        let run_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/e2e_output/rag_eval_v2")
+            .join(&run_id);
+        std::fs::create_dir_all(&run_dir).expect("create rag_eval_v2 run dir");
+        // Judge response cache (design §4.4): shared across run ids so re-runs
+        // of unchanged question/answer/context tuples skip the API call.
+        let cache = eval_v2::JudgeCache::new(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/e2e_output/rag_eval_v2/cache"),
+        );
+        eprintln!(
+            "[realistic_corpus] eval v2 ON (default since P5; RAG_EVAL_V2=0 opts out), artifacts → {}",
+            run_dir.display()
+        );
+        Some(V2RunCtx {
+            judge,
+            run_id,
+            run_dir,
+            cache,
+            scores: Vec::new(),
+        })
+    } else {
+        None
+    };
 
     // Fixed identity → stable Milvus collection prefix + PG owner across runs,
     // which is what makes corpus reuse possible:
@@ -659,8 +1062,15 @@ async fn realistic_corpus_full_eval() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
+    // E2E_END_AT=N: inclusive last question (1-based). With START_AT=END_AT runs one Q.
+    let end_at: Option<usize> = std::env::var("E2E_END_AT")
+        .ok()
+        .and_then(|v| v.parse().ok());
     if start_at > 1 {
         eprintln!("[realistic_corpus] E2E_START_AT={start_at}: skipping first {} questions", start_at - 1);
+    }
+    if let Some(end) = end_at {
+        eprintln!("[realistic_corpus] E2E_END_AT={end}: stop after question {end}");
     }
     let mut per_subset_stats: std::collections::HashMap<String, (usize, usize, f64)> =
         std::collections::HashMap::new();
@@ -668,6 +1078,9 @@ async fn realistic_corpus_full_eval() {
     for (idx, example) in examples.iter().enumerate() {
         if idx + 1 < start_at {
             continue;
+        }
+        if end_at.is_some_and(|end| idx + 1 > end) {
+            break;
         }
         let subset_name = dataset
             .subsets
@@ -716,6 +1129,10 @@ async fn realistic_corpus_full_eval() {
             Err(e) => {
                 failures.push((example.query.clone(), format!("chat: {e}")));
                 eprintln!("  FAIL: chat error: {e}");
+                // ADR-0012: v2 labels this INFRA_ERROR and skips the judge.
+                if let Some(v2) = v2.as_mut() {
+                    v2.record_infra(idx + 1, example, subset_name, "chat_transport");
+                }
                 if fail_fast {
                     break;
                 }
@@ -724,6 +1141,55 @@ async fn realistic_corpus_full_eval() {
         };
         let resp_status = resp.status;
         let resp_body = resp.body_json.clone();
+        // G-11/G-12: infrastructure fail-fast — HTTP 5xx / error envelope before parse.
+        // Quality misses (RETRIEVAL_MISS) still do **not** stop the loop.
+        if resp_status >= 500 {
+            let raw = serde_json::to_string_pretty(&resp_body)
+                .unwrap_or_else(|_| "<serialize failed>".to_string());
+            let msg = format!(
+                "http_error status={} (internal_error envelope; ignore agent_operation_guide if present)",
+                resp_status
+            );
+            failures.push((example.query.clone(), msg.clone()));
+            eprintln!("  FAIL: {msg}");
+            let preview: String = raw.chars().take(4000).collect();
+            eprintln!("  raw response: {preview}");
+            if let Some(v2) = v2.as_mut() {
+                v2.record_infra(idx + 1, example, subset_name, "http_5xx");
+            }
+            if fail_fast {
+                break;
+            }
+            continue;
+        }
+        if resp_body.get("error").is_some()
+            || resp_body
+                .get("error_category")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.contains("internal") || s == "error")
+            || resp_body
+                .pointer("/error/type")
+                .and_then(|v| v.as_str())
+                == Some("internal_error")
+        {
+            let raw = serde_json::to_string_pretty(&resp_body)
+                .unwrap_or_else(|_| "<serialize failed>".to_string());
+            let msg = format!(
+                "error_envelope (status={}); do not treat agent_operation_guide as answer",
+                resp_status
+            );
+            failures.push((example.query.clone(), msg.clone()));
+            eprintln!("  FAIL: {msg}");
+            let preview: String = raw.chars().take(400).collect();
+            eprintln!("  raw: {preview}");
+            if let Some(v2) = v2.as_mut() {
+                v2.record_infra(idx + 1, example, subset_name, "error_envelope");
+            }
+            if fail_fast {
+                break;
+            }
+            continue;
+        }
         let chat: ChatResponse = match resp.into_business() {
             Ok(c) => c,
             Err(e) => {
@@ -742,12 +1208,28 @@ async fn realistic_corpus_full_eval() {
                         raw,
                     );
                 }
+                if let Some(v2) = v2.as_mut() {
+                    v2.record_infra(idx + 1, example, subset_name, "parse_error");
+                }
                 if fail_fast {
                     break;
                 }
                 continue;
             }
         };
+        // Empty product answer is an infrastructure/contract failure (not RETRIEVAL_MISS).
+        if chat.answer.trim().is_empty() {
+            let msg = "empty_answer: chat.answer is empty after successful parse".to_string();
+            failures.push((example.query.clone(), msg.clone()));
+            eprintln!("  FAIL: {msg}");
+            if let Some(v2) = v2.as_mut() {
+                v2.record_infra(idx + 1, example, subset_name, "empty_answer");
+            }
+            if fail_fast {
+                break;
+            }
+            continue;
+        }
         let retrieved = extract_retrieved_chunks(&chat.tool_results);
         let cited = extract_cited_chunks(&chat.citations);
         // Per-question evidence dump (fail-fast iteration loop): full response
@@ -761,6 +1243,12 @@ async fn realistic_corpus_full_eval() {
             "citations": chat.citations.clone(),
             "sources": chat.sources.clone(),
             "tool_results_count": chat.tool_results.len(),
+            "tool_trace": chat.tool_results.iter().map(|r| {
+                serde_json::json!({
+                    "tool": r.tool,
+                    "status": format!("{:?}", r.status),
+                })
+            }).collect::<Vec<_>>(),
             "mode_debug": chat.mode_debug,
         })) {
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -770,12 +1258,41 @@ async fn realistic_corpus_full_eval() {
             }
         }
         let chunks: Vec<String> = retrieved.contents();
+        // G-16: Option D eval bridge — rag questions that expect an answer should
+        // surface store evidence as dense_retrieval tool_results after finalize.
+        // Soft warn (not fail-fast) when golden has source_chunks but bridge empty:
+        // still record as failure so CI can track bridge regressions.
+        if caps.iter().any(|c| c == "rag")
+            && example.expected_should_answer
+            && !example.source_chunks.is_empty()
+            && !chat
+                .tool_results
+                .iter()
+                .any(|tr| tr.tool == "dense_retrieval" || tr.tool == "hybrid_retrieval")
+        {
+            let msg = "eval_bridge_miss: rag expected dense_retrieval/hybrid in tool_results (store→eval bridge)".to_string();
+            eprintln!("  FAIL: {msg}");
+            failures.push((example.query.clone(), msg));
+            if fail_fast {
+                break;
+            }
+        }
         let chunk_to_cite: std::collections::HashMap<String, i64> = chat
             .citations
             .iter()
             .filter_map(|c| c.chunk_id.clone().map(|id| (id, c.citation_id)))
             .collect();
         let answer = rewrite_citations(&chat.answer, &chunk_to_cite);
+
+        // ADR-0012 eval v2 — Layer A deterministic scores + Layer B Flash
+        // judge for this question (serial call, one retry on broken JSON;
+        // judge failure never aborts the loop). The judge sees the RAW
+        // user-visible answer (`chat.answer`); the rewritten `answer` with
+        // `[citation:N]` markers exists only for the legacy regex scorers.
+        if let Some(v2) = v2.as_mut() {
+            v2.score_question(idx + 1, example, subset_name, &retrieved, &cited, &chat.answer)
+                .await;
+        }
 
         // v3: typed citation minimums (doc `[[cite:…]]` / web `[[web:…]]` protocol).
         if let Some(expect) = example.expect_citations {
@@ -801,6 +1318,48 @@ async fn realistic_corpus_full_eval() {
                 failures.push((example.query.clone(), msg));
                 if fail_fast {
                     break;
+                }
+            }
+        }
+
+        // G-17: utility / product tool expectation gate (calculator, weather_query,
+        // user_context, …). RAG codegen channel tools stay soft (worker-internal);
+        // pure-chat utility tools are observable on `tool_results` and hard-gated.
+        if let Some(expected_tool) = example.expected_tool.as_deref() {
+            let is_utility = matches!(
+                expected_tool,
+                "calculator" | "weather_query" | "user_context"
+            );
+            if is_utility {
+                // Ok-only trace (coverage scorer) + full status dump for diagnosis.
+                // Error results still count as "tool was invoked" for G-17 path smoke.
+                let ok_trace = extract_tool_trace(&chat.tool_results);
+                let any_trace: Vec<String> = chat
+                    .tool_results
+                    .iter()
+                    .map(|r| r.tool.clone())
+                    .collect();
+                let status_dump: Vec<String> = chat
+                    .tool_results
+                    .iter()
+                    .map(|r| format!("{}:{:?}", r.tool, r.status))
+                    .collect();
+                let score = ToolCoverageScore::score(example, &any_trace);
+                if !score.covered {
+                    let msg = format!(
+                        "expected_tool={expected_tool} not in tool_results \
+                         any={any_trace:?} ok={ok_trace:?} status={status_dump:?} \
+                         (G-17 utility gate)"
+                    );
+                    eprintln!("  FAIL: {msg}");
+                    failures.push((example.query.clone(), msg));
+                    if fail_fast {
+                        break;
+                    }
+                } else {
+                    eprintln!(
+                        "  tool_hit: {expected_tool} ok (any={any_trace:?} ok={ok_trace:?})"
+                    );
                 }
             }
         }
@@ -845,7 +1404,10 @@ async fn realistic_corpus_full_eval() {
     // --- Aggregate and report ---
     let metrics =
         EvaluationMetrics::aggregate(recall_results, citation_results, hallucination_results);
-    let scorecard_summary = ScorecardSummary::from_scorecards(&scorecards);
+    // ADR-0012: under RAG_EVAL_V2_ONLY=1 the legacy metrics_v2 scorecard
+    // aggregation/printing is skipped (the per-question `score_query` calls in
+    // the loop stay — they feed the per-question log line).
+    let scorecard_summary = (!v2_only).then(|| ScorecardSummary::from_scorecards(&scorecards));
 
     eprintln!();
     eprintln!("=========================================");
@@ -863,10 +1425,16 @@ async fn realistic_corpus_full_eval() {
         "Hallucination Rate:  {:.2}%  (heuristic — noise until NLI; not gated)",
         metrics.hallucination_rate * 100.0
     );
-    print_scorecard_summary(
-        "Decoupled RAG Scorecard (retrieval / selection / generation)",
-        &scorecard_summary,
-    );
+    if let Some(summary) = &scorecard_summary {
+        print_scorecard_summary(
+            "Decoupled RAG Scorecard (retrieval / selection / generation)",
+            summary,
+        );
+    }
+    // ADR-0012 eval v2 suite summary (Phase 0: report-only, never gates).
+    if let Some(v2) = &v2 {
+        v2.print_and_write_summary();
+    }
 
     eprintln!();
     eprintln!("Per-subset breakdown:");
