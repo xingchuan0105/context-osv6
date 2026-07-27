@@ -92,7 +92,13 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     // be mislabeled (the q041/q043 failure mode).
     let correctness_na = judge.answer_correctness.verdict == CorrectnessVerdict::NotApplicable;
     let correctness = judge.answer_correctness.score;
-    if input.retrieval_recall > 0.0
+    // SELECTION_MISS additionally requires gold to exist (q125 class): for
+    // gold-empty questions recall is vacuous 1.0 and cited∩gold is vacuous 0,
+    // so the rule would fire on ANY sub-threshold answer — a metadata/tool
+    // question would be mislabeled as a selection failure. When gold exists,
+    // `gold_exists` is already false only when source_chunks is empty.
+    if input.gold_exists
+        && input.retrieval_recall > 0.0
         && input.cited_gold_hits == 0
         && !correctness_na
         && correctness < t.tau_correctness
@@ -495,6 +501,21 @@ mod tests {
         input.retrieval_recall = 0.5;
         input.cited_gold_hits = 0;
         assert_eq!(label_for(&input), LabelV2::SelectionMiss);
+    }
+
+    #[test]
+    fn selection_miss_requires_gold_to_exist() {
+        // q125/q132 class: gold-empty question — vacuous recall and vacuous
+        // cited∩gold must NOT trigger SELECTION_MISS even when correctness is
+        // below τ_c. With refusal correct and faithfulness grounded, the label
+        // falls through to PARTIAL (correctness 0.5 ∈ [partial_min, τ_c)).
+        let judge = judge_output(0.5, CorrectnessVerdict::Correct, 1.0, &[], true);
+        let mut input = base_input(&judge);
+        input.gold_exists = false;
+        input.retrieval_recall = 1.0; // vacuous for gold-empty
+        input.cited_gold_hits = 0; // vacuous for gold-empty
+        assert_eq!(label_for(&input), LabelV2::Partial);
+        // And the gold-present case still labels SELECTION_MISS (above).
     }
 
     #[test]

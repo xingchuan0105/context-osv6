@@ -23,6 +23,11 @@ pub enum ContextSource {
     /// retrieved, and the golden example declares no evidence. The judge must
     /// not score faithfulness (see `build_user_prompt`).
     NoContext,
+    /// Builtin tool outputs (weather_query / calculator / doc_profile / …) —
+    /// non-RAG question answered by tools, so the tool results ARE the
+    /// authoritative grounding evidence (q125 class). Faithfulness is scorable
+    /// against them (NOT the no-context exemption).
+    ToolOutputs,
 }
 
 impl ContextSource {
@@ -31,6 +36,7 @@ impl ContextSource {
             ContextSource::Cited => "cited",
             ContextSource::RetrievedFallback => "retrieved_fallback",
             ContextSource::NoContext => "no_context",
+            ContextSource::ToolOutputs => "tool_outputs",
         }
     }
 
@@ -75,24 +81,35 @@ pub struct JudgeInput {
 }
 
 impl JudgeInput {
-    /// Build from a golden example, the run's retrieved/cited chunks, and the
-    /// rendered answer. When the synthesizer cited nothing, the retrieved
-    /// chunks (in first-seen rank order) stand in as context and the source is
-    /// marked so the judge can discount accordingly (design §4.2 faithfulness
-    /// rule). When nothing was cited, nothing was retrieved, and the golden
-    /// declares no evidence, the source is `NoContext` and faithfulness must
-    /// not be scored. Truncation for the prompt is P1's concern.
+    /// Build from a golden example, the run's retrieved/cited chunks, the
+    /// rendered answer, and any builtin tool outputs captured this turn.
+    /// When the synthesizer cited nothing, the retrieved chunks (in first-seen
+    /// rank order) stand in as context and the source is marked so the judge
+    /// can discount accordingly (design §4.2 faithfulness rule). When nothing
+    /// was cited, nothing was retrieved, and the golden declares no evidence:
+    /// builtin tool outputs (weather_query / calculator / doc_profile / …)
+    /// become the grounding context with source `ToolOutputs` (q125 class);
+    /// only when those are also absent is the source `NoContext` and
+    /// faithfulness must not be scored. Truncation for the prompt is P1's
+    /// concern.
     pub fn new(
         example: &GoldenExample,
         retrieved: &RetrievedChunks,
         cited: &CitedChunks,
         answer: &str,
+        tool_outputs: &[String],
     ) -> Self {
-        let context_source = ContextSource::determine(example, retrieved, cited);
-        let cited_context = match context_source {
-            ContextSource::Cited => cited.contents(),
-            ContextSource::RetrievedFallback => retrieved.contents(),
-            ContextSource::NoContext => Vec::new(),
+        let (cited_context, context_source) = match ContextSource::determine(example, retrieved, cited)
+        {
+            ContextSource::NoContext if !tool_outputs.is_empty() => {
+                (tool_outputs.to_vec(), ContextSource::ToolOutputs)
+            }
+            ContextSource::Cited => (cited.contents(), ContextSource::Cited),
+            ContextSource::RetrievedFallback => {
+                (retrieved.contents(), ContextSource::RetrievedFallback)
+            }
+            ContextSource::NoContext => (Vec::new(), ContextSource::NoContext),
+            ContextSource::ToolOutputs => unreachable!("determine never yields ToolOutputs"),
         };
         Self {
             question: example.query.clone(),
@@ -167,7 +184,7 @@ mod tests {
                 score: 0.9,
             }],
         };
-        let input = JudgeInput::new(&example(), &retrieved(), &cited, "2019年在大连建厂");
+        let input = JudgeInput::new(&example(), &retrieved(), &cited, "2019年在大连建厂", &[]);
         assert_eq!(input.question, "Y公司哪一年在大连建厂？");
         assert_eq!(input.reference_answer, "Y公司2019年在大连建厂。");
         assert!(input.expected_should_answer);
@@ -180,7 +197,7 @@ mod tests {
 
     #[test]
     fn empty_citations_fall_back_to_retrieved() {
-        let input = JudgeInput::new(&example(), &retrieved(), &CitedChunks::default(), "a");
+        let input = JudgeInput::new(&example(), &retrieved(), &CitedChunks::default(), "a", &[]);
         assert_eq!(input.cited_context, vec!["retrieved text".to_string()]);
         assert_eq!(input.context_source, ContextSource::RetrievedFallback);
         assert_eq!(input.context_source.as_str(), "retrieved_fallback");
@@ -196,6 +213,7 @@ mod tests {
             &RetrievedChunks::default(),
             &CitedChunks::default(),
             "a",
+            &[],
         );
         assert_eq!(input.context_source, ContextSource::NoContext);
         assert_eq!(input.context_source.as_str(), "no_context");
@@ -208,13 +226,32 @@ mod tests {
             &RetrievedChunks::default(),
             &CitedChunks::default(),
             "a",
+            &[],
         );
         assert_eq!(input.context_source, ContextSource::RetrievedFallback);
         assert!(input.cited_context.is_empty());
 
         // Retrieved chunks exist even though gold expects none → fallback.
-        let input = JudgeInput::new(&chat_ex, &retrieved(), &CitedChunks::default(), "a");
+        let input = JudgeInput::new(&chat_ex, &retrieved(), &CitedChunks::default(), "a", &[]);
         assert_eq!(input.context_source, ContextSource::RetrievedFallback);
         assert_eq!(input.cited_context, vec!["retrieved text".to_string()]);
+    }
+
+    #[test]
+    fn tool_outputs_become_context_when_nothing_else_exists() {
+        // q125 class: no cited/retrieved/gold, but a builtin tool produced
+        // output → ToolOutputs (NOT the no-context exemption).
+        let mut chat_ex = example();
+        chat_ex.source_chunks = vec![];
+        let input = JudgeInput::new(
+            &chat_ex,
+            &RetrievedChunks::default(),
+            &CitedChunks::default(),
+            "a",
+            &["weather_query: {\"temp\": 26}".to_string()],
+        );
+        assert_eq!(input.context_source, ContextSource::ToolOutputs);
+        assert_eq!(input.context_source.as_str(), "tool_outputs");
+        assert_eq!(input.cited_context, vec!["weather_query: {\"temp\": 26}".to_string()]);
     }
 }

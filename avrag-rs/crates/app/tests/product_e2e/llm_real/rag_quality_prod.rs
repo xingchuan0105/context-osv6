@@ -144,6 +144,30 @@ fn print_scorecard_summary(title: &str, summary: &ScorecardSummary) {
 /// Retrieval cutoff used by this runner (recall@15 / score_query k=15).
 const RETRIEVAL_K: usize = 15;
 
+/// Max chars of a tool result's JSON payload rendered into one judge-context
+/// block (keeps a runaway payload from dominating the prompt).
+const TOOL_OUTPUT_MAX_CHARS: usize = 2000;
+
+/// Render builtin (non-retrieval) tool outputs as judge-context blocks for
+/// non-RAG turns (q125 class): every Ok tool result whose tool is NOT in the
+/// retrieval set, as `"tool: <json payload (trimmed)>"`. Retrieval chunks
+/// already flow through `retrieved`/`cited`; this is the weather_query /
+/// calculator / doc_profile / user_context evidence that otherwise never
+/// reached the judge.
+fn builtin_tool_outputs(tool_results: &[contracts::ToolResult]) -> Vec<String> {
+    tool_results
+        .iter()
+        .filter(|r| r.status == contracts::ToolStatus::Ok)
+        .filter(|r| !rag_quality::harness_extract::RETRIEVAL_TOOLS.contains(&r.tool.as_str()))
+        .filter_map(|r| {
+            let data = r.data.as_ref()?;
+            let payload = serde_json::to_string(data).ok()?;
+            let payload: String = payload.chars().take(TOOL_OUTPUT_MAX_CHARS).collect();
+            Some(format!("{}: {}", r.tool, payload))
+        })
+        .collect()
+}
+
 /// True when the env var is set to `1` or `true` (case-insensitive); absent or
 /// any other value means off.
 fn env_flag(name: &str) -> bool {
@@ -233,10 +257,11 @@ impl V2RunCtx {
         retrieved: &rag_quality::RetrievedChunks,
         cited: &rag_quality::CitedChunks,
         answer: &str,
+        tool_outputs: &[String],
     ) {
         let retrieval = eval_v2::score_retrieval(retrieved, example, RETRIEVAL_K);
         let selection = eval_v2::score_selection(cited, example);
-        let judge_input = eval_v2::JudgeInput::new(example, retrieved, cited, answer);
+        let judge_input = eval_v2::JudgeInput::new(example, retrieved, cited, answer, tool_outputs);
         let messages = vec![
             avrag_llm::ChatMessage::system(eval_v2::SYSTEM_PROMPT),
             avrag_llm::ChatMessage::user(eval_v2::build_user_prompt(&judge_input)),
@@ -1362,9 +1387,20 @@ async fn realistic_corpus_full_eval() {
         // judge failure never aborts the loop). The judge sees the RAW
         // user-visible answer (`chat.answer`); the rewritten `answer` with
         // `[citation:N]` markers exists only for the legacy regex scorers.
+        // Builtin tool outputs (weather_query / calculator / doc_profile / …)
+        // are extracted as judge context for non-RAG turns (q125 class).
+        let tool_outputs = builtin_tool_outputs(&chat.tool_results);
         if let Some(v2) = v2.as_mut() {
-            v2.score_question(idx + 1, example, subset_name, &retrieved, &cited, &chat.answer)
-                .await;
+            v2.score_question(
+                idx + 1,
+                example,
+                subset_name,
+                &retrieved,
+                &cited,
+                &chat.answer,
+                &tool_outputs,
+            )
+            .await;
         }
 
         // v3: typed citation minimums (doc `[[cite:…]]` / web `[[web:…]]` protocol).

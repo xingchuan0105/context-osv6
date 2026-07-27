@@ -95,6 +95,19 @@ pub fn build_user_prompt(input: &JudgeInput) -> String {
              - context_sufficiency.verdict 必须返回 \"unknown\"；\n\
              - answer_correctness / answer_relevancy / refusal 正常评分。\n",
         );
+    } else if input.context_source == ContextSource::ToolOutputs {
+        // q125 class: the context blocks are builtin TOOL OUTPUTS (authoritative
+        // for this question), not retrieved document chunks.
+        p.push_str("（内建工具输出，见下）\n");
+        for (i, chunk) in input.cited_context.iter().enumerate() {
+            p.push_str(&format!("[{}] {}\n", i + 1, chunk));
+        }
+        p.push_str(
+            "\n【重要】上方 context 是**内建工具的真实输出**（如 weather_query / calculator / doc_profile），是本题答案的权威依据：\n\
+             - faithfulness 按答案是否被这些工具输出支持来评分（不是 not_applicable）；\n\
+             - answer_correctness 可以也应该验证——答案与工具输出一致即高分；\n\
+             - 仅当确实没有任何工具输出时才考虑 not_applicable。\n",
+        );
     } else if input.cited_context.is_empty() {
         p.push_str("（空）\n");
     } else {
@@ -196,6 +209,20 @@ mod tests {
         assert!(p.contains("faithfulness.verdict 必须返回 \"not_applicable\""));
         assert!(p.contains("不得因缺少 context 而编造 unsupported_claims"));
         assert!(p.contains("context_sufficiency.verdict 必须返回 \"unknown\""));
+    }
+
+    #[test]
+    fn builder_tool_outputs_marks_tool_outputs_as_authoritative() {
+        // q125 class: builtin tool outputs are the authoritative grounding,
+        // not not_applicable.
+        let mut i = input(ContextSource::ToolOutputs, None);
+        i.cited_context = vec!["weather_query: {\"temp\": 26}".to_string()];
+        let p = build_user_prompt(&i);
+        assert!(p.contains("context_source=tool_outputs"));
+        assert!(p.contains("内建工具的真实输出"));
+        assert!(p.contains("权威依据"));
+        assert!(p.contains("不是 not_applicable"));
+        assert!(p.contains("答案与工具输出一致即高分"));
     }
 
     #[test]
