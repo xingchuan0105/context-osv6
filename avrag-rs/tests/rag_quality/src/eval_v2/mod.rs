@@ -15,7 +15,7 @@ pub mod judge_prompt;
 pub mod report;
 pub mod retrieval;
 
-pub use aggregate::{LabelInput, SuiteSummaryV2, SubsetSummaryV2, label_for};
+pub use aggregate::{LabelInput, SuiteSummaryV2, SubsetSummaryV2, derived_refusal_correct, label_for};
 pub use artifact::{ContextSource, JudgeInput};
 pub use cache::JudgeCache;
 pub use judge_client::{DEFAULT_JUDGE_MODEL, JUDGE_TEMPERATURE, JudgeClient, JudgeConfig};
@@ -94,6 +94,11 @@ pub struct ScoreV2 {
     /// The model answer that was judged. `None` for infra-failed questions.
     #[serde(default)]
     pub model_answer: Option<String>,
+    /// Where the judge's grounding context came from. `NoContext` marks
+    /// non-RAG questions whose faithfulness must not be scored or averaged.
+    /// Defaults to `Cited` so pre-field artifacts still deserialize.
+    #[serde(default)]
+    pub context_source: ContextSource,
 }
 
 /// Judge label thresholds (design §5 initial values). Report-only until

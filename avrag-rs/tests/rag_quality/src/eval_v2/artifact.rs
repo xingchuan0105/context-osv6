@@ -10,14 +10,19 @@ use crate::harness_extract::{CitedChunks, RetrievedChunks};
 use serde::{Deserialize, Serialize};
 
 /// Where `JudgeInput::cited_context` came from (design §4.2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContextSource {
     /// The synthesizer's cited chunks (preferred evidence).
+    #[default]
     Cited,
     /// Retrieved chunks, used only when nothing was cited; the judge prompt
     /// must flag faithfulness accordingly (`context_source=retrieved_fallback`).
     RetrievedFallback,
+    /// Non-RAG question (pure chat / tool use): nothing cited, nothing
+    /// retrieved, and the golden example declares no evidence. The judge must
+    /// not score faithfulness (see `build_user_prompt`).
+    NoContext,
 }
 
 impl ContextSource {
@@ -25,7 +30,27 @@ impl ContextSource {
         match self {
             ContextSource::Cited => "cited",
             ContextSource::RetrievedFallback => "retrieved_fallback",
+            ContextSource::NoContext => "no_context",
         }
+    }
+
+    /// Determine the context source for a question: cited chunks when present,
+    /// retrieved chunks as the flagged fallback, and `NoContext` only when
+    /// nothing was cited AND nothing was retrieved AND the golden example
+    /// declares no evidence (`source_chunks` empty) — i.e. the question never
+    /// expected retrieval in the first place.
+    pub fn determine(
+        example: &GoldenExample,
+        retrieved: &RetrievedChunks,
+        cited: &CitedChunks,
+    ) -> Self {
+        if !cited.is_empty() {
+            return ContextSource::Cited;
+        }
+        if retrieved.is_empty() && example.source_chunks.is_empty() {
+            return ContextSource::NoContext;
+        }
+        ContextSource::RetrievedFallback
     }
 }
 
@@ -49,17 +74,20 @@ impl JudgeInput {
     /// rendered answer. When the synthesizer cited nothing, the retrieved
     /// chunks (in first-seen rank order) stand in as context and the source is
     /// marked so the judge can discount accordingly (design §4.2 faithfulness
-    /// rule). Truncation for the prompt is P1's concern.
+    /// rule). When nothing was cited, nothing was retrieved, and the golden
+    /// declares no evidence, the source is `NoContext` and faithfulness must
+    /// not be scored. Truncation for the prompt is P1's concern.
     pub fn new(
         example: &GoldenExample,
         retrieved: &RetrievedChunks,
         cited: &CitedChunks,
         answer: &str,
     ) -> Self {
-        let (cited_context, context_source) = if cited.is_empty() {
-            (retrieved.contents(), ContextSource::RetrievedFallback)
-        } else {
-            (cited.contents(), ContextSource::Cited)
+        let context_source = ContextSource::determine(example, retrieved, cited);
+        let cited_context = match context_source {
+            ContextSource::Cited => cited.contents(),
+            ContextSource::RetrievedFallback => retrieved.contents(),
+            ContextSource::NoContext => Vec::new(),
         };
         Self {
             question: example.query.clone(),
@@ -149,5 +177,37 @@ mod tests {
         assert_eq!(input.cited_context, vec!["retrieved text".to_string()]);
         assert_eq!(input.context_source, ContextSource::RetrievedFallback);
         assert_eq!(input.context_source.as_str(), "retrieved_fallback");
+    }
+
+    #[test]
+    fn no_context_only_when_nothing_cited_retrieved_or_expected() {
+        // Pure-chat question: no cited, no retrieved, golden declares no evidence.
+        let mut chat_ex = example();
+        chat_ex.source_chunks = vec![];
+        let input = JudgeInput::new(
+            &chat_ex,
+            &RetrievedChunks::default(),
+            &CitedChunks::default(),
+            "a",
+        );
+        assert_eq!(input.context_source, ContextSource::NoContext);
+        assert_eq!(input.context_source.as_str(), "no_context");
+        assert!(input.cited_context.is_empty());
+
+        // Gold declares evidence but nothing came back → NOT no_context
+        // (retrieval was expected; faithfulness still applies).
+        let input = JudgeInput::new(
+            &example(),
+            &RetrievedChunks::default(),
+            &CitedChunks::default(),
+            "a",
+        );
+        assert_eq!(input.context_source, ContextSource::RetrievedFallback);
+        assert!(input.cited_context.is_empty());
+
+        // Retrieved chunks exist even though gold expects none → fallback.
+        let input = JudgeInput::new(&chat_ex, &retrieved(), &CitedChunks::default(), "a");
+        assert_eq!(input.context_source, ContextSource::RetrievedFallback);
+        assert_eq!(input.cited_context, vec!["retrieved text".to_string()]);
     }
 }

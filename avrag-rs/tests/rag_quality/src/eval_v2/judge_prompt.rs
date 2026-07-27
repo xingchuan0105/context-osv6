@@ -6,7 +6,7 @@
 //! judge must return. The prompt is versioned via `SCHEMA_VERSION` only —
 //! any wording change must bump it.
 
-use super::artifact::JudgeInput;
+use super::artifact::{ContextSource, JudgeInput};
 
 /// Version tag written into every judge request/response (`schema_version`).
 pub const SCHEMA_VERSION: &str = "rag_eval_judge_v2";
@@ -34,7 +34,11 @@ pub const SYSTEM_PROMPT: &str = "\
 
 4. refusal（拒答判定）
 - is_refusal：答案是否为拒答（拒答话术多样化仍算拒答）。
-- correct_for_expectation：拒答行为是否符合 expected_should_answer。
+- correct_for_expectation 比较的是「观察到的行为」与 expected_should_answer，任何情况下都必须有确定值，禁止「无意义就填 false」：
+  · 未拒答（is_refusal=false）且 expected_should_answer=true ⇒ correct_for_expectation 必须为 true（score 1.0）；
+  · 拒答（is_refusal=true）且 expected_should_answer=false ⇒ correct_for_expectation 必须为 true（score 1.0）；
+  · 未拒答但 expected_should_answer=false（该拒未拒）⇒ correct_for_expectation 为 false（score 0.0）；
+  · 拒答但 expected_should_answer=true（不该拒却拒）⇒ correct_for_expectation 为 false（score 0.0）。
 
 5. 禁止
 - 不要因「答案未出现某个精确字符串」扣 correctness。
@@ -75,7 +79,19 @@ pub fn build_user_prompt(input: &JudgeInput) -> String {
     p.push_str("\n\n【评测 context（context_source=");
     p.push_str(input.context_source.as_str());
     p.push_str("）】\n");
-    if input.cited_context.is_empty() {
+    if input.context_source == ContextSource::NoContext {
+        // Non-RAG question: faithfulness must not be scored at all (there is
+        // nothing to ground against), and the absence of context is not an
+        // "unsupported claim".
+        p.push_str("（无 —— 本题不是 RAG 检索题）\n");
+        p.push_str(
+            "\n【重要】本题是纯聊天/工具题，没有也不应有检索 context。因此：\n\
+             - faithfulness.verdict 必须返回 \"not_applicable\"（score 填 1.0 占位，不评分）；\n\
+             - 不得因缺少 context 而编造 unsupported_claims；\n\
+             - context_sufficiency.verdict 必须返回 \"unknown\"；\n\
+             - answer_correctness / answer_relevancy / refusal 正常评分。\n",
+        );
+    } else if input.cited_context.is_empty() {
         p.push_str("（空）\n");
     } else {
         for (i, chunk) in input.cited_context.iter().enumerate() {
@@ -152,5 +168,27 @@ mod tests {
     fn builder_omits_rubric_notes_section_when_none() {
         let p = build_user_prompt(&input(ContextSource::Cited, None));
         assert!(!p.contains("rubric_notes"));
+    }
+
+    #[test]
+    fn builder_no_context_instructs_not_applicable_faithfulness() {
+        let mut i = input(ContextSource::NoContext, None);
+        i.cited_context = vec![];
+        let p = build_user_prompt(&i);
+        assert!(p.contains("context_source=no_context"));
+        assert!(p.contains("不是 RAG 检索题"));
+        assert!(p.contains("faithfulness.verdict 必须返回 \"not_applicable\""));
+        assert!(p.contains("不得因缺少 context 而编造 unsupported_claims"));
+        assert!(p.contains("context_sufficiency.verdict 必须返回 \"unknown\""));
+    }
+
+    #[test]
+    fn system_prompt_has_refusal_disambiguation() {
+        // correct_for_expectation must be derived from observed behavior vs
+        // expectation, never "meaningless → false" (q009/q047/q110 misjudges).
+        assert!(SYSTEM_PROMPT.contains("is_refusal=false）且 expected_should_answer=true ⇒ correct_for_expectation 必须为 true"));
+        assert!(SYSTEM_PROMPT.contains("该拒未拒"));
+        assert!(SYSTEM_PROMPT.contains("不该拒却拒"));
+        assert!(SYSTEM_PROMPT.contains("无意义就填 false"));
     }
 }

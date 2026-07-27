@@ -119,11 +119,17 @@ pub enum JudgeParseError {
 }
 
 /// Extract and validate the judge's JSON output.
+///
+/// Parses via `serde_json::Value` first: duplicate object keys (observed in
+/// real Flash output, e.g. a repeated `rationale`) are last-wins there, while
+/// deserializing straight into `JudgeOutput` hard-fails on them.
 pub fn parse_judge_output(raw: &str) -> Result<JudgeOutput, JudgeParseError> {
     let json =
         crate::judge::extract_first_json_object(raw).ok_or(JudgeParseError::NoJsonObject)?;
-    let output: JudgeOutput =
+    let value: serde_json::Value =
         serde_json::from_str(json).map_err(|e| JudgeParseError::InvalidJson(e.to_string()))?;
+    let output: JudgeOutput =
+        serde_json::from_value(value).map_err(|e| JudgeParseError::InvalidJson(e.to_string()))?;
     if !output.schema_version.is_empty() && output.schema_version != SCHEMA_VERSION {
         return Err(JudgeParseError::VersionMismatch {
             expected: SCHEMA_VERSION,
@@ -245,5 +251,20 @@ mod tests {
         let raw = FULL_SCHEMA_JSON.replace(SCHEMA_VERSION, "rag_eval_judge_v1");
         let err = parse_judge_output(&raw).unwrap_err();
         assert!(matches!(err, JudgeParseError::VersionMismatch { .. }));
+    }
+
+    #[test]
+    fn duplicate_field_is_last_wins_not_an_error() {
+        // Regression for a real Flash output (run v2_20260727-022503 q030):
+        // the model repeated `rationale` inside one block and the strict
+        // struct parse failed with "duplicate field". Value-first parsing is
+        // last-wins tolerant.
+        let raw = FULL_SCHEMA_JSON.replace(
+            r#""rationale": "模型正常作答，符合预期""#,
+            r#""rationale": "第一版理由（应被覆盖）", "rationale": "模型正常作答，符合预期""#,
+        );
+        assert!(raw.matches("\"rationale\"").count() > 5, "test setup must duplicate a key");
+        let out = parse_judge_output(&raw).unwrap();
+        assert_eq!(out.refusal.rationale, "模型正常作答，符合预期");
     }
 }

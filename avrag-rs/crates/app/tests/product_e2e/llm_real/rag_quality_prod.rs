@@ -190,10 +190,12 @@ impl V2RunCtx {
     /// chunks, label INFRA_ERROR, judge call skipped — there is no answer to
     /// judge (design §5 priority 0).
     fn record_infra(&mut self, qnum: usize, example: &GoldenExample, subset: &str, reason: &str) {
-        let retrieval =
-            eval_v2::score_retrieval(&rag_quality::RetrievedChunks::default(), example, RETRIEVAL_K);
-        let selection =
-            eval_v2::score_selection(&rag_quality::CitedChunks::default(), example);
+        let empty_retrieved = rag_quality::RetrievedChunks::default();
+        let empty_cited = rag_quality::CitedChunks::default();
+        let context_source =
+            eval_v2::ContextSource::determine(example, &empty_retrieved, &empty_cited);
+        let retrieval = eval_v2::score_retrieval(&empty_retrieved, example, RETRIEVAL_K);
+        let selection = eval_v2::score_selection(&empty_cited, example);
         let score = self.finish_score(
             example,
             subset,
@@ -203,6 +205,7 @@ impl V2RunCtx {
             None,
             true,
             None,
+            context_source,
         );
         self.write_json(
             &format!("q{qnum:03}.artifact.json"),
@@ -211,7 +214,7 @@ impl V2RunCtx {
                 "subset": subset,
                 "infra_error": reason,
                 "answer": serde_json::Value::Null,
-                "context_source": serde_json::Value::Null,
+                "context_source": context_source.as_str(),
                 "score_v2": score,
             }),
         );
@@ -248,9 +251,16 @@ impl V2RunCtx {
             attempt.parsed,
             false,
             Some(answer),
+            judge_input.context_source,
         );
+        // The judge's raw refusal boolean is advisory; flag when it disagrees
+        // with the derived value (the q009-class judge mislabel).
+        let refusal_raw_mismatch = score.judge.as_ref().is_some_and(|j| {
+            eval_v2::derived_refusal_correct(&j.refusal, example.expected_should_answer)
+                != j.refusal.correct_for_expectation
+        });
         eprintln!(
-            "  v2: label={} judge={:?} cache={} correctness={} faithfulness={}",
+            "  v2: label={} judge={:?} cache={} correctness={} faithfulness={}{}",
             score.label.as_str(),
             attempt.status,
             if attempt.cache_hit { "hit" } else { "miss" },
@@ -264,6 +274,11 @@ impl V2RunCtx {
                 .as_ref()
                 .map(|j| j.faithfulness.score.to_string())
                 .unwrap_or_else(|| "-".to_string()),
+            if refusal_raw_mismatch {
+                " refusal_raw_mismatch"
+            } else {
+                ""
+            },
         );
         // Judge artifact: raw response kept even on parse failure (debugging).
         self.write_json(
@@ -306,11 +321,14 @@ impl V2RunCtx {
         judge: Option<eval_v2::JudgeOutput>,
         has_infra_error: bool,
         answer: Option<&str>,
+        context_source: eval_v2::ContextSource,
     ) -> eval_v2::ScoreV2 {
         let label = eval_v2::label_for(&eval_v2::LabelInput {
             has_infra_error,
             judge_status,
             gold_exists: !example.source_chunks.is_empty(),
+            no_context: context_source == eval_v2::ContextSource::NoContext,
+            expected_should_answer: example.expected_should_answer,
             retrieval_recall: retrieval.recall,
             cited_gold_hits: selection.golden_matched_in_cited,
             judge: judge.as_ref(),
@@ -326,6 +344,7 @@ impl V2RunCtx {
             label,
             reference_answer: Some(example.reference_answer().to_string()),
             model_answer: answer.map(str::to_string),
+            context_source,
         }
     }
 
@@ -466,10 +485,11 @@ impl V2RunCtx {
             summary.judge_ok, summary.judge_error
         );
         eprintln!(
-            "  mean answer_correctness={:.3} faithfulness={:.3} relevancy={:.3} (judge-ok only)",
+            "  mean answer_correctness={:.3} faithfulness={:.3} relevancy={:.3} (judge-ok; faithfulness n={} excl. no-context/NA)",
             summary.mean_answer_correctness,
             summary.mean_faithfulness,
-            summary.mean_answer_relevancy
+            summary.mean_answer_relevancy,
+            summary.faithfulness_applicable
         );
         eprintln!(
             "  mean retrieval recall@{}={:.2}% (all queries)",

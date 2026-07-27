@@ -54,8 +54,8 @@ pub fn render_summary_md(
         summary.judge_ok, summary.mean_answer_correctness
     ));
     md.push_str(&format!(
-        "| faithfulness (judge-ok) | {:.4} |\n",
-        summary.mean_faithfulness
+        "| faithfulness (applicable n={}) | {:.4} |\n",
+        summary.faithfulness_applicable, summary.mean_faithfulness
     ));
     md.push_str(&format!(
         "| answer_relevancy (judge-ok) | {:.4} |\n",
@@ -261,6 +261,7 @@ mod tests {
             label,
             reference_answer: Some("Y公司2019年在大连建厂。".to_string()),
             model_answer: Some("2019 年，Y公司在大连投资建厂。".to_string()),
+            context_source: crate::eval_v2::ContextSource::Cited,
         }
     }
 

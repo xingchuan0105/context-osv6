@@ -8,7 +8,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::judge_parse::{CorrectnessVerdict, JudgeOutput};
+use super::artifact::ContextSource;
+use super::judge_parse::{CorrectnessVerdict, FaithfulnessVerdict, JudgeOutput, RefusalJudgment};
 use super::{JudgeStatus, JudgeThresholds, LabelV2, ScoreV2};
 
 /// Everything `label_for` needs to attribute one query (design §5 conditions).
@@ -22,6 +23,12 @@ pub struct LabelInput<'a> {
     pub judge_status: JudgeStatus,
     /// Whether the golden example declares evidence (`source_chunks` non-empty).
     pub gold_exists: bool,
+    /// Non-RAG question (nothing cited/retrieved/expected — see
+    /// `ContextSource::NoContext`): faithfulness rules do not apply.
+    pub no_context: bool,
+    /// Golden refusal expectation; refusal correctness is derived from this
+    /// and the judge's `is_refusal`, never from the judge's raw boolean.
+    pub expected_should_answer: bool,
     /// Retrieval recall@k from Layer A.
     pub retrieval_recall: f64,
     /// Golden chunks matched among the cited chunks (cited ∩ gold).
@@ -30,6 +37,16 @@ pub struct LabelInput<'a> {
     /// status without output is treated as a judge failure (never silent-pass).
     pub judge: Option<&'a JudgeOutput>,
     pub thresholds: &'a JudgeThresholds,
+}
+
+/// Refusal correctness derived deterministically from observed behavior vs
+/// the golden expectation. The judge's raw `correct_for_expectation` is
+/// advisory only — real outputs set it to `false` even while their own
+/// rationale states the behavior matched the expectation. Correct iff the
+/// observed refusal state differs from `expected_should_answer` (answered
+/// when expected to answer, or refused when expected to refuse).
+pub fn derived_refusal_correct(refusal: &RefusalJudgment, expected_should_answer: bool) -> bool {
+    refusal.is_refusal != expected_should_answer
 }
 
 /// Assign the single root-cause label for a query, in design §5 priority
@@ -56,10 +73,15 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     {
         return LabelV2::SelectionMiss;
     }
-    if !judge.refusal.correct_for_expectation {
+    if !derived_refusal_correct(&judge.refusal, input.expected_should_answer) {
         return LabelV2::RefusalWrong;
     }
-    if judge.faithfulness.score < t.tau_faithfulness
+    // UNGROUNDED never applies when faithfulness is not scorable: non-RAG
+    // questions (no context by design) or a judge not_applicable verdict.
+    let faithfulness_applicable =
+        !input.no_context && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable;
+    if faithfulness_applicable
+        && judge.faithfulness.score < t.tau_faithfulness
         && !judge.faithfulness.unsupported_claims.is_empty()
     {
         return LabelV2::Ungrounded;
@@ -80,6 +102,10 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
 pub struct SubsetSummaryV2 {
     pub total: usize,
     pub judge_ok: usize,
+    /// Entries contributing to `mean_faithfulness`: judge-ok AND faithfulness
+    /// scorable (not `NoContext`, verdict not `not_applicable`).
+    #[serde(default)]
+    pub faithfulness_applicable: usize,
     pub mean_answer_correctness: f64,
     pub mean_faithfulness: f64,
     pub mean_answer_relevancy: f64,
@@ -95,6 +121,9 @@ pub struct SuiteSummaryV2 {
     pub total: usize,
     pub judge_ok: usize,
     pub judge_error: usize,
+    /// Entries contributing to `mean_faithfulness` (see `SubsetSummaryV2`).
+    #[serde(default)]
+    pub faithfulness_applicable: usize,
     pub mean_answer_correctness: f64,
     pub mean_faithfulness: f64,
     pub mean_answer_relevancy: f64,
@@ -108,6 +137,7 @@ pub struct SuiteSummaryV2 {
 struct Accum {
     total: usize,
     judge_ok: usize,
+    faithfulness_applicable: usize,
     correctness_sum: f64,
     faithfulness_sum: f64,
     relevancy_sum: f64,
@@ -124,8 +154,16 @@ impl Accum {
             if let Some(judge) = &score.judge {
                 self.judge_ok += 1;
                 self.correctness_sum += judge.answer_correctness.score;
-                self.faithfulness_sum += judge.faithfulness.score;
                 self.relevancy_sum += judge.answer_relevancy.score;
+                // Faithfulness excludes non-RAG questions (NoContext) and
+                // not_applicable verdicts — their placeholder scores would
+                // poison the mean.
+                if score.context_source != ContextSource::NoContext
+                    && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable
+                {
+                    self.faithfulness_applicable += 1;
+                    self.faithfulness_sum += judge.faithfulness.score;
+                }
             }
         }
     }
@@ -142,8 +180,12 @@ impl Accum {
         SubsetSummaryV2 {
             total: self.total,
             judge_ok: self.judge_ok,
+            faithfulness_applicable: self.faithfulness_applicable,
             mean_answer_correctness: Self::mean_over_judge_ok(self.correctness_sum, self.judge_ok),
-            mean_faithfulness: Self::mean_over_judge_ok(self.faithfulness_sum, self.judge_ok),
+            mean_faithfulness: Self::mean_over_judge_ok(
+                self.faithfulness_sum,
+                self.faithfulness_applicable,
+            ),
             mean_answer_relevancy: Self::mean_over_judge_ok(self.relevancy_sum, self.judge_ok),
             mean_retrieval_recall_at_k: Self::mean_over_total(
                 self.retrieval_recall_sum,
@@ -171,11 +213,15 @@ impl SuiteSummaryV2 {
             total: suite.total,
             judge_ok: suite.judge_ok,
             judge_error,
+            faithfulness_applicable: suite.faithfulness_applicable,
             mean_answer_correctness: Accum::mean_over_judge_ok(
                 suite.correctness_sum,
                 suite.judge_ok,
             ),
-            mean_faithfulness: Accum::mean_over_judge_ok(suite.faithfulness_sum, suite.judge_ok),
+            mean_faithfulness: Accum::mean_over_judge_ok(
+                suite.faithfulness_sum,
+                suite.faithfulness_applicable,
+            ),
             mean_answer_relevancy: Accum::mean_over_judge_ok(suite.relevancy_sum, suite.judge_ok),
             mean_retrieval_recall_at_k: Accum::mean_over_total(
                 suite.retrieval_recall_sum,
@@ -226,12 +272,33 @@ mod tests {
         unsupported_claims: &[&str],
         refusal_correct: bool,
     ) -> JudgeOutput {
+        judge_output_full(
+            correctness,
+            correctness_verdict,
+            faithfulness,
+            FaithfulnessVerdict::Grounded,
+            unsupported_claims,
+            false,
+            refusal_correct,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn judge_output_full(
+        correctness: f64,
+        correctness_verdict: CorrectnessVerdict,
+        faithfulness: f64,
+        faithfulness_verdict: FaithfulnessVerdict,
+        unsupported_claims: &[&str],
+        is_refusal: bool,
+        refusal_correct_raw: bool,
+    ) -> JudgeOutput {
         JudgeOutput {
             schema_version: SCHEMA_VERSION.to_string(),
             refusal: RefusalJudgment {
-                is_refusal: false,
-                correct_for_expectation: refusal_correct,
-                score: if refusal_correct { 1.0 } else { 0.0 },
+                is_refusal,
+                correct_for_expectation: refusal_correct_raw,
+                score: if refusal_correct_raw { 1.0 } else { 0.0 },
                 rationale: String::new(),
             },
             answer_correctness: CorrectnessJudgment {
@@ -243,7 +310,7 @@ mod tests {
             },
             faithfulness: FaithfulnessJudgment {
                 score: faithfulness,
-                verdict: FaithfulnessVerdict::Grounded,
+                verdict: faithfulness_verdict,
                 unsupported_claims: unsupported_claims.iter().map(|s| s.to_string()).collect(),
                 rationale: String::new(),
             },
@@ -265,6 +332,17 @@ mod tests {
         status: JudgeStatus,
         judge: Option<JudgeOutput>,
         recall: f64,
+    ) -> ScoreV2 {
+        score_with_context(subset, label, status, judge, recall, ContextSource::Cited)
+    }
+
+    fn score_with_context(
+        subset: &str,
+        label: LabelV2,
+        status: JudgeStatus,
+        judge: Option<JudgeOutput>,
+        recall: f64,
+        context_source: ContextSource,
     ) -> ScoreV2 {
         ScoreV2 {
             query: format!("{subset}-q"),
@@ -296,6 +374,7 @@ mod tests {
             label,
             reference_answer: Some("ref".to_string()),
             model_answer: Some("ans".to_string()),
+            context_source,
         }
     }
 
@@ -304,6 +383,8 @@ mod tests {
             has_infra_error: false,
             judge_status: JudgeStatus::Ok,
             gold_exists: true,
+            no_context: false,
+            expected_should_answer: true,
             retrieval_recall: 1.0,
             cited_gold_hits: 1,
             judge: Some(judge),
@@ -329,6 +410,8 @@ mod tests {
             has_infra_error: false,
             judge_status: JudgeStatus::Error,
             gold_exists: true,
+            no_context: false,
+            expected_should_answer: true,
             retrieval_recall: 0.0,
             cited_gold_hits: 0,
             judge: None,
@@ -359,9 +442,78 @@ mod tests {
 
     #[test]
     fn refusal_wrong_beats_ungrounded() {
-        let judge = judge_output(0.9, CorrectnessVerdict::Correct, 0.2, &["员工638人"], false);
-        let input = base_input(&judge);
+        // Derived refusal: answered (is_refusal=false) when expected to
+        // refuse → REFUSAL_WRONG even with low faithfulness present.
+        let judge = judge_output_full(
+            0.9,
+            CorrectnessVerdict::Correct,
+            0.2,
+            FaithfulnessVerdict::Ungrounded,
+            &["员工638人"],
+            false,
+            false,
+        );
+        let mut input = base_input(&judge);
+        input.expected_should_answer = false;
         assert_eq!(label_for(&input), LabelV2::RefusalWrong);
+    }
+
+    #[test]
+    fn refusal_correctness_is_derived_not_judge_raw_boolean() {
+        // q009/q047/q110 case: judge answered as expected but set
+        // correct_for_expectation=false anyway → must NOT be REFUSAL_WRONG.
+        let judge = judge_output_full(
+            0.95,
+            CorrectnessVerdict::Correct,
+            1.0,
+            FaithfulnessVerdict::Grounded,
+            &[],
+            false,
+            false, // bogus raw boolean from the judge
+        );
+        assert_eq!(label_for(&base_input(&judge)), LabelV2::Pass);
+
+        // q044 case: answered when expected to refuse → REFUSAL_WRONG.
+        let mut input = base_input(&judge);
+        input.expected_should_answer = false;
+        assert_eq!(label_for(&input), LabelV2::RefusalWrong);
+
+        // Refused when expected to answer → REFUSAL_WRONG.
+        let judge = judge_output_full(
+            0.95,
+            CorrectnessVerdict::Correct,
+            1.0,
+            FaithfulnessVerdict::Grounded,
+            &[],
+            true,
+            false,
+        );
+        assert_eq!(label_for(&base_input(&judge)), LabelV2::RefusalWrong);
+    }
+
+    #[test]
+    fn no_context_skips_ungrounded_and_passes() {
+        // Non-RAG question: judge returned faithfulness=0 with "unsupported"
+        // claims because there was nothing to ground against — must not be
+        // UNGROUNDED, and PASS must not require faithfulness ≥ τ_f.
+        let judge = judge_output(0.95, CorrectnessVerdict::Correct, 0.0, &["x"], true);
+        let mut input = base_input(&judge);
+        input.no_context = true;
+        assert_eq!(label_for(&input), LabelV2::Pass);
+    }
+
+    #[test]
+    fn not_applicable_faithfulness_verdict_skips_ungrounded() {
+        let judge = judge_output_full(
+            0.95,
+            CorrectnessVerdict::Correct,
+            0.0,
+            FaithfulnessVerdict::NotApplicable,
+            &["x"],
+            false,
+            true,
+        );
+        assert_eq!(label_for(&base_input(&judge)), LabelV2::Pass);
     }
 
     #[test]
@@ -408,6 +560,8 @@ mod tests {
             has_infra_error: false,
             judge_status: JudgeStatus::Ok,
             gold_exists: true,
+            no_context: false,
+            expected_should_answer: true,
             retrieval_recall: 1.0,
             cited_gold_hits: 1,
             judge: None,
@@ -523,5 +677,50 @@ mod tests {
         assert_eq!(json["total"], 1);
         assert_eq!(json["label_counts"]["PASS"], 1);
         assert_eq!(json["subsets"]["a"]["total"], 1);
+    }
+
+    #[test]
+    fn suite_faithfulness_mean_excludes_no_context_and_not_applicable() {
+        // One RAG question (faithfulness 0.8) + one non-RAG question scored
+        // faithfulness 0.0 (placeholder): the mean must be 0.8, not 0.4.
+        let scores = vec![
+            score(
+                "rag",
+                LabelV2::Pass,
+                JudgeStatus::Ok,
+                Some(judge_output(0.9, CorrectnessVerdict::Correct, 0.8, &[], true)),
+                1.0,
+            ),
+            score_with_context(
+                "chat",
+                LabelV2::Pass,
+                JudgeStatus::Ok,
+                Some(judge_output(1.0, CorrectnessVerdict::Correct, 0.0, &[], true)),
+                0.0,
+                ContextSource::NoContext,
+            ),
+            // NA verdict (context existed but judge declined) also excluded.
+            score(
+                "rag",
+                LabelV2::Pass,
+                JudgeStatus::Ok,
+                Some(judge_output_full(
+                    0.9,
+                    CorrectnessVerdict::Correct,
+                    0.0,
+                    FaithfulnessVerdict::NotApplicable,
+                    &[],
+                    false,
+                    true,
+                )),
+                1.0,
+            ),
+        ];
+        let summary = SuiteSummaryV2::from_scores(&scores);
+        assert_eq!(summary.judge_ok, 3);
+        assert_eq!(summary.faithfulness_applicable, 1);
+        assert!((summary.mean_faithfulness - 0.8).abs() < 1e-9);
+        // Correctness/relevancy still average over all judge-ok entries.
+        assert!((summary.mean_answer_correctness - (0.9 + 1.0 + 0.9) / 3.0).abs() < 1e-9);
     }
 }
