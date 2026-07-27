@@ -46,6 +46,7 @@ struct KeyMaterial {
     context_source: String,
     cited_context: Vec<String>,
     rubric_notes: Option<String>,
+    expect_no_retrieval: bool,
 }
 
 fn key_material(model: &str, input: &JudgeInput) -> KeyMaterial {
@@ -60,6 +61,7 @@ fn key_material(model: &str, input: &JudgeInput) -> KeyMaterial {
         context_source: input.context_source.as_str().to_string(),
         cited_context: input.cited_context.clone(),
         rubric_notes: input.rubric_notes.clone(),
+        expect_no_retrieval: input.expect_no_retrieval,
     }
 }
 
@@ -115,6 +117,7 @@ impl JudgeCache {
         ];
         parts.extend(m.cited_context.iter().map(String::as_str));
         parts.push(m.rubric_notes.as_deref().unwrap_or(""));
+        parts.push(if m.expect_no_retrieval { "1" } else { "0" });
         format!("{:016x}", fnv1a64(&parts))
     }
 
@@ -161,6 +164,7 @@ mod tests {
             cited_context: vec!["Y冷冻设备公司2019年于大连市投资建厂".to_string()],
             context_source: ContextSource::Cited,
             rubric_notes: None,
+            expect_no_retrieval: false,
         }
     }
 

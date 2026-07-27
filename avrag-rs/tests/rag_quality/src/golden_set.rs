@@ -125,6 +125,13 @@ pub struct GoldenExample {
     /// used by the deterministic v1 scoring path.
     #[serde(default)]
     pub rubric_notes: Option<String>,
+
+    /// Memory / follow-up questions answered from conversation context rather
+    /// than retrieval: the retrieval track is not applicable (skip
+    /// RETRIEVAL_MISS, exclude from retrieval means, judge faithfulness as
+    /// not_applicable). eval_v2 only; the legacy path ignores this field.
+    #[serde(default)]
+    pub expect_no_retrieval: bool,
 }
 
 /// A scripted prior user→assistant exchange (see `prior_turns`).

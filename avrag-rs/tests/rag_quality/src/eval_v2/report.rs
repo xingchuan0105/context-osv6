@@ -63,8 +63,12 @@ pub fn render_summary_md(
     ));
     let k = scores.first().map(|s| s.retrieval.k).unwrap_or(15);
     md.push_str(&format!(
-        "| retrieval recall@{k} (all n={}) | {:.4} |\n",
-        summary.total, summary.mean_retrieval_recall_at_k
+        "| retrieval recall (full stream, n={}) | {:.4} |\n",
+        summary.retrieval_applicable, summary.mean_retrieval_recall
+    ));
+    md.push_str(&format!(
+        "| retrieval recall@{k} (top-k view, n={}) | {:.4} |\n",
+        summary.retrieval_applicable, summary.mean_retrieval_recall_at_k
     ));
     md.push_str(&format!(
         "\njudge calls: ok={} error={} (JUDGE_ERROR must be 0 before any gate)\n\n",
@@ -77,7 +81,7 @@ pub fn render_summary_md(
     }
 
     md.push_str("\n## Per-subset\n\n");
-    md.push_str("| subset | total | judge_ok | correctness | faithfulness | relevancy | recall@k | labels |\n|---|---|---|---|---|---|---|---|\n");
+    md.push_str("| subset | total | judge_ok | correctness | faithfulness | relevancy | recall | recall@k | labels |\n|---|---|---|---|---|---|---|---|---|\n");
     for (name, s) in &summary.subsets {
         let labels = s
             .label_counts
@@ -86,12 +90,13 @@ pub fn render_summary_md(
             .collect::<Vec<_>>()
             .join(", ");
         md.push_str(&format!(
-            "| {name} | {} | {} | {:.4} | {:.4} | {:.4} | {:.4} | {labels} |\n",
+            "| {name} | {} | {} | {:.4} | {:.4} | {:.4} | {:.4} | {:.4} | {labels} |\n",
             s.total,
             s.judge_ok,
             s.mean_answer_correctness,
             s.mean_faithfulness,
             s.mean_answer_relevancy,
+            s.mean_retrieval_recall,
             s.mean_retrieval_recall_at_k,
         ));
     }
@@ -107,8 +112,8 @@ pub fn render_summary_md(
             s.label.as_str()
         ));
         md.push_str(&format!(
-            "- retrieval: recall@{}={:.2} hit={}\n",
-            s.retrieval.k, s.retrieval.recall, s.retrieval.hit
+            "- retrieval: recall={:.2} (@{}={:.2}) hit={}\n",
+            s.retrieval.recall, s.retrieval.k, s.retrieval.recall_at_k, s.retrieval.hit
         ));
         md.push_str(&format!(
             "- selection: prec={:.2} rec={:.2}\n",
@@ -150,10 +155,12 @@ pub fn render_summary_md(
 }
 
 /// Render `per_query.tsv`: one row per question, empty judge columns for
-/// judge-error rows (design §7.1).
+/// judge-error rows (design §7.1). `recall` is the full-stream value (gold in
+/// ANY round); `recall_at_k` is the top-k view.
 pub fn render_per_query_tsv(scores: &[ScoreV2]) -> String {
-    let mut out =
-        String::from("n\tsubset\tlabel\tcorrectness\tfaithfulness\trelevancy\trecall_at_k\tquery\n");
+    let mut out = String::from(
+        "n\tsubset\tlabel\tcorrectness\tfaithfulness\trelevancy\trecall\trecall_at_k\tquery\n",
+    );
     for (i, s) in scores.iter().enumerate() {
         let (correctness, faithfulness, relevancy) = match &s.judge {
             Some(j) => (
@@ -165,7 +172,7 @@ pub fn render_per_query_tsv(scores: &[ScoreV2]) -> String {
         };
         let clean = |v: &str| v.replace(['\t', '\n', '\r'], " ");
         out.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{:.4}\t{}\n",
             i + 1,
             clean(&s.subset),
             s.label.as_str(),
@@ -173,6 +180,7 @@ pub fn render_per_query_tsv(scores: &[ScoreV2]) -> String {
             faithfulness,
             relevancy,
             s.retrieval.recall,
+            s.retrieval.recall_at_k,
             clean(&s.query),
         ));
     }
@@ -239,6 +247,8 @@ mod tests {
                 k: 15,
                 recall,
                 hit: recall > 0.0,
+                recall_at_k: recall,
+                hit_at_k: recall > 0.0,
                 mrr: 1.0,
                 ndcg: 1.0,
                 graded_recall: recall,
@@ -262,6 +272,7 @@ mod tests {
             reference_answer: Some("Y公司2019年在大连建厂。".to_string()),
             model_answer: Some("2019 年，Y公司在大连投资建厂。".to_string()),
             context_source: crate::eval_v2::ContextSource::Cited,
+            expect_no_retrieval: false,
         }
     }
 
@@ -317,14 +328,15 @@ mod tests {
         let mut lines = tsv.lines();
         assert_eq!(
             lines.next().unwrap(),
-            "n\tsubset\tlabel\tcorrectness\tfaithfulness\trelevancy\trecall_at_k\tquery"
+            "n\tsubset\tlabel\tcorrectness\tfaithfulness\trelevancy\trecall\trecall_at_k\tquery"
         );
         let row1: Vec<&str> = lines.next().unwrap().split('\t').collect();
-        assert_eq!(row1.len(), 8);
+        assert_eq!(row1.len(), 9);
         assert_eq!(row1[0], "1");
         assert_eq!(row1[2], "PASS");
         assert_eq!(row1[3], "0.9000");
         assert_eq!(row1[6], "1.0000");
+        assert_eq!(row1[7], "1.0000");
         let row2: Vec<&str> = lines.next().unwrap().split('\t').collect();
         assert_eq!(row2[2], "JUDGE_ERROR");
         assert_eq!(row2[3], "");

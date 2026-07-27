@@ -26,10 +26,15 @@ pub struct LabelInput<'a> {
     /// Non-RAG question (nothing cited/retrieved/expected — see
     /// `ContextSource::NoContext`): faithfulness rules do not apply.
     pub no_context: bool,
+    /// Golden `expect_no_retrieval` (memory/follow-up answered from
+    /// conversation context): RETRIEVAL_MISS and faithfulness rules do not
+    /// apply.
+    pub expect_no_retrieval: bool,
     /// Golden refusal expectation; refusal correctness is derived from this
     /// and the judge's `is_refusal`, never from the judge's raw boolean.
     pub expected_should_answer: bool,
-    /// Retrieval recall@k from Layer A.
+    /// Retrieval recall from Layer A (full merged stream — evidence surfaced
+    /// in ANY ReAct round counts).
     pub retrieval_recall: f64,
     /// Golden chunks matched among the cited chunks (cited ∩ gold).
     pub cited_gold_hits: usize,
@@ -59,7 +64,7 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     if input.judge_status == JudgeStatus::Error {
         return LabelV2::JudgeError;
     }
-    if input.gold_exists && input.retrieval_recall == 0.0 {
+    if input.gold_exists && !input.expect_no_retrieval && input.retrieval_recall == 0.0 {
         return LabelV2::RetrievalMiss;
     }
     let Some(judge) = input.judge else {
@@ -77,9 +82,11 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
         return LabelV2::RefusalWrong;
     }
     // UNGROUNDED never applies when faithfulness is not scorable: non-RAG
-    // questions (no context by design) or a judge not_applicable verdict.
-    let faithfulness_applicable =
-        !input.no_context && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable;
+    // questions (no context by design), memory/follow-up questions grounded
+    // in conversation history, or a judge not_applicable verdict.
+    let faithfulness_applicable = !input.no_context
+        && !input.expect_no_retrieval
+        && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable;
     if faithfulness_applicable
         && judge.faithfulness.score < t.tau_faithfulness
         && !judge.faithfulness.unsupported_claims.is_empty()
@@ -103,19 +110,28 @@ pub struct SubsetSummaryV2 {
     pub total: usize,
     pub judge_ok: usize,
     /// Entries contributing to `mean_faithfulness`: judge-ok AND faithfulness
-    /// scorable (not `NoContext`, verdict not `not_applicable`).
+    /// scorable (not `NoContext`, not `expect_no_retrieval`, verdict not
+    /// `not_applicable`).
     #[serde(default)]
     pub faithfulness_applicable: usize,
+    /// Entries contributing to the retrieval means (excludes
+    /// `expect_no_retrieval` questions).
+    #[serde(default)]
+    pub retrieval_applicable: usize,
     pub mean_answer_correctness: f64,
     pub mean_faithfulness: f64,
     pub mean_answer_relevancy: f64,
+    /// Full-stream retrieval recall mean (evidence surfaced in ANY round).
+    #[serde(default)]
+    pub mean_retrieval_recall: f64,
+    /// Top-k retrieval recall mean (single-shot ranking diagnostic).
     pub mean_retrieval_recall_at_k: f64,
     pub label_counts: BTreeMap<LabelV2, usize>,
 }
 
 /// Suite-level aggregation (design §7.1 summary.json shape). Judge means are
-/// computed over judge-ok queries only; retrieval recall and the label
-/// histogram cover every query.
+/// computed over judge-ok queries only; retrieval means and the label
+/// histogram cover every retrieval-applicable query.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SuiteSummaryV2 {
     pub total: usize,
@@ -124,9 +140,16 @@ pub struct SuiteSummaryV2 {
     /// Entries contributing to `mean_faithfulness` (see `SubsetSummaryV2`).
     #[serde(default)]
     pub faithfulness_applicable: usize,
+    /// Entries contributing to the retrieval means.
+    #[serde(default)]
+    pub retrieval_applicable: usize,
     pub mean_answer_correctness: f64,
     pub mean_faithfulness: f64,
     pub mean_answer_relevancy: f64,
+    /// Full-stream retrieval recall mean (primary; evidence in ANY round).
+    #[serde(default)]
+    pub mean_retrieval_recall: f64,
+    /// Top-k retrieval recall mean (diagnostic).
     pub mean_retrieval_recall_at_k: f64,
     pub label_counts: BTreeMap<LabelV2, usize>,
     pub subsets: BTreeMap<String, SubsetSummaryV2>,
@@ -138,27 +161,34 @@ struct Accum {
     total: usize,
     judge_ok: usize,
     faithfulness_applicable: usize,
+    retrieval_applicable: usize,
     correctness_sum: f64,
     faithfulness_sum: f64,
     relevancy_sum: f64,
     retrieval_recall_sum: f64,
+    retrieval_recall_at_k_sum: f64,
     label_counts: BTreeMap<LabelV2, usize>,
 }
 
 impl Accum {
     fn push(&mut self, score: &ScoreV2) {
         self.total += 1;
-        self.retrieval_recall_sum += score.retrieval.recall;
         *self.label_counts.entry(score.label).or_insert(0) += 1;
+        if !score.expect_no_retrieval {
+            self.retrieval_applicable += 1;
+            self.retrieval_recall_sum += score.retrieval.recall;
+            self.retrieval_recall_at_k_sum += score.retrieval.recall_at_k;
+        }
         if score.judge_status == JudgeStatus::Ok {
             if let Some(judge) = &score.judge {
                 self.judge_ok += 1;
                 self.correctness_sum += judge.answer_correctness.score;
                 self.relevancy_sum += judge.answer_relevancy.score;
-                // Faithfulness excludes non-RAG questions (NoContext) and
-                // not_applicable verdicts — their placeholder scores would
-                // poison the mean.
+                // Faithfulness excludes non-RAG questions (NoContext),
+                // memory/follow-up questions, and not_applicable verdicts —
+                // their placeholder scores would poison the mean.
                 if score.context_source != ContextSource::NoContext
+                    && !score.expect_no_retrieval
                     && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable
                 {
                     self.faithfulness_applicable += 1;
@@ -172,8 +202,8 @@ impl Accum {
         sum / judge_ok.max(1) as f64
     }
 
-    fn mean_over_total(sum: f64, total: usize) -> f64 {
-        sum / total.max(1) as f64
+    fn mean_over_retrieval_applicable(&self, sum: f64) -> f64 {
+        sum / self.retrieval_applicable.max(1) as f64
     }
 
     fn into_subset(self) -> SubsetSummaryV2 {
@@ -181,16 +211,16 @@ impl Accum {
             total: self.total,
             judge_ok: self.judge_ok,
             faithfulness_applicable: self.faithfulness_applicable,
+            retrieval_applicable: self.retrieval_applicable,
             mean_answer_correctness: Self::mean_over_judge_ok(self.correctness_sum, self.judge_ok),
             mean_faithfulness: Self::mean_over_judge_ok(
                 self.faithfulness_sum,
                 self.faithfulness_applicable,
             ),
             mean_answer_relevancy: Self::mean_over_judge_ok(self.relevancy_sum, self.judge_ok),
-            mean_retrieval_recall_at_k: Self::mean_over_total(
-                self.retrieval_recall_sum,
-                self.total,
-            ),
+            mean_retrieval_recall: self.mean_over_retrieval_applicable(self.retrieval_recall_sum),
+            mean_retrieval_recall_at_k: self
+                .mean_over_retrieval_applicable(self.retrieval_recall_at_k_sum),
             label_counts: self.label_counts,
         }
     }
@@ -214,6 +244,7 @@ impl SuiteSummaryV2 {
             judge_ok: suite.judge_ok,
             judge_error,
             faithfulness_applicable: suite.faithfulness_applicable,
+            retrieval_applicable: suite.retrieval_applicable,
             mean_answer_correctness: Accum::mean_over_judge_ok(
                 suite.correctness_sum,
                 suite.judge_ok,
@@ -223,10 +254,9 @@ impl SuiteSummaryV2 {
                 suite.faithfulness_applicable,
             ),
             mean_answer_relevancy: Accum::mean_over_judge_ok(suite.relevancy_sum, suite.judge_ok),
-            mean_retrieval_recall_at_k: Accum::mean_over_total(
-                suite.retrieval_recall_sum,
-                suite.total,
-            ),
+            mean_retrieval_recall: suite.mean_over_retrieval_applicable(suite.retrieval_recall_sum),
+            mean_retrieval_recall_at_k: suite
+                .mean_over_retrieval_applicable(suite.retrieval_recall_at_k_sum),
             label_counts: suite.label_counts,
             subsets: subsets
                 .into_iter()
@@ -352,6 +382,8 @@ mod tests {
                 k: 15,
                 recall,
                 hit: recall > 0.0,
+                recall_at_k: recall,
+                hit_at_k: recall > 0.0,
                 mrr: 0.0,
                 ndcg: 0.0,
                 graded_recall: recall,
@@ -375,6 +407,7 @@ mod tests {
             reference_answer: Some("ref".to_string()),
             model_answer: Some("ans".to_string()),
             context_source,
+            expect_no_retrieval: false,
         }
     }
 
@@ -384,6 +417,7 @@ mod tests {
             judge_status: JudgeStatus::Ok,
             gold_exists: true,
             no_context: false,
+            expect_no_retrieval: false,
             expected_should_answer: true,
             retrieval_recall: 1.0,
             cited_gold_hits: 1,
@@ -411,6 +445,7 @@ mod tests {
             judge_status: JudgeStatus::Error,
             gold_exists: true,
             no_context: false,
+            expect_no_retrieval: false,
             expected_should_answer: true,
             retrieval_recall: 0.0,
             cited_gold_hits: 0,
@@ -561,6 +596,7 @@ mod tests {
             judge_status: JudgeStatus::Ok,
             gold_exists: true,
             no_context: false,
+            expect_no_retrieval: false,
             expected_should_answer: true,
             retrieval_recall: 1.0,
             cited_gold_hits: 1,
@@ -722,5 +758,52 @@ mod tests {
         assert!((summary.mean_faithfulness - 0.8).abs() < 1e-9);
         // Correctness/relevancy still average over all judge-ok entries.
         assert!((summary.mean_answer_correctness - (0.9 + 1.0 + 0.9) / 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn expect_no_retrieval_skips_retrieval_miss_and_ungrounded() {
+        // Memory/follow-up question: gold declares evidence, recall is 0, and
+        // the judge returned faithfulness=0 with claims — but the question is
+        // answered from conversation context, so neither rule fires.
+        let judge = judge_output(0.95, CorrectnessVerdict::Correct, 0.0, &["x"], true);
+        let mut input = base_input(&judge);
+        input.retrieval_recall = 0.0;
+        input.cited_gold_hits = 0;
+        input.expect_no_retrieval = true;
+        assert_eq!(label_for(&input), LabelV2::Pass);
+        // Sanity: without the flag this is RETRIEVAL_MISS.
+        input.expect_no_retrieval = false;
+        assert_eq!(label_for(&input), LabelV2::RetrievalMiss);
+    }
+
+    #[test]
+    fn suite_means_split_full_stream_vs_top_k_and_exclude_no_retrieval() {
+        // One multi-round question (full recall 1.0, top-k 0.0) and one
+        // memory question flagged expect_no_retrieval (excluded from both
+        // retrieval means and the faithfulness mean).
+        let mut multi = score(
+            "rag",
+            LabelV2::Pass,
+            JudgeStatus::Ok,
+            Some(judge_output(0.9, CorrectnessVerdict::Correct, 0.8, &[], true)),
+            1.0,
+        );
+        multi.retrieval.recall_at_k = 0.0;
+        multi.retrieval.hit_at_k = false;
+        let mut memory = score_with_context(
+            "memory",
+            LabelV2::Pass,
+            JudgeStatus::Ok,
+            Some(judge_output(1.0, CorrectnessVerdict::Correct, 0.0, &[], true)),
+            0.0,
+            ContextSource::Cited,
+        );
+        memory.expect_no_retrieval = true;
+        let summary = SuiteSummaryV2::from_scores(&[multi, memory]);
+        assert_eq!(summary.retrieval_applicable, 1);
+        assert!((summary.mean_retrieval_recall - 1.0).abs() < 1e-9);
+        assert!((summary.mean_retrieval_recall_at_k - 0.0).abs() < 1e-9);
+        assert_eq!(summary.faithfulness_applicable, 1);
+        assert!((summary.mean_faithfulness - 0.8).abs() < 1e-9);
     }
 }

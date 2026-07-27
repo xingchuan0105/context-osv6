@@ -259,9 +259,20 @@ impl V2RunCtx {
             eval_v2::derived_refusal_correct(&j.refusal, example.expected_should_answer)
                 != j.refusal.correct_for_expectation
         });
+        // Full-stream recall is primary; show the top-k view only when it
+        // diverges (multi-round surfacing: gold found after rank 15).
+        let recall_str = if (score.retrieval.recall - score.retrieval.recall_at_k).abs() < 1e-9 {
+            format!("{:.2}", score.retrieval.recall)
+        } else {
+            format!(
+                "{:.2} (@{}={:.2})",
+                score.retrieval.recall, score.retrieval.k, score.retrieval.recall_at_k
+            )
+        };
         eprintln!(
-            "  v2: label={} judge={:?} cache={} correctness={} faithfulness={}{}",
+            "  v2: label={} recall={} judge={:?} cache={} correctness={} faithfulness={}{}",
             score.label.as_str(),
+            recall_str,
             attempt.status,
             if attempt.cache_hit { "hit" } else { "miss" },
             score
@@ -328,6 +339,7 @@ impl V2RunCtx {
             judge_status,
             gold_exists: !example.source_chunks.is_empty(),
             no_context: context_source == eval_v2::ContextSource::NoContext,
+            expect_no_retrieval: example.expect_no_retrieval,
             expected_should_answer: example.expected_should_answer,
             retrieval_recall: retrieval.recall,
             cited_gold_hits: selection.golden_matched_in_cited,
@@ -345,6 +357,7 @@ impl V2RunCtx {
             reference_answer: Some(example.reference_answer().to_string()),
             model_answer: answer.map(str::to_string),
             context_source,
+            expect_no_retrieval: example.expect_no_retrieval,
         }
     }
 
@@ -492,9 +505,11 @@ impl V2RunCtx {
             summary.faithfulness_applicable
         );
         eprintln!(
-            "  mean retrieval recall@{}={:.2}% (all queries)",
+            "  mean retrieval recall={:.2}% (@{}={:.2}%, n={} excl. expect_no_retrieval)",
+            summary.mean_retrieval_recall * 100.0,
             RETRIEVAL_K,
-            summary.mean_retrieval_recall_at_k * 100.0
+            summary.mean_retrieval_recall_at_k * 100.0,
+            summary.retrieval_applicable
         );
         let labels = summary
             .label_counts

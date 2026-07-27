@@ -28,6 +28,14 @@ pub struct SuitePart {
     pub mean_faithfulness: f64,
     pub mean_answer_relevancy: f64,
     pub mean_retrieval_recall_at_k: f64,
+    /// Full-stream retrieval recall mean (added 2026-07; absent in older
+    /// summaries → defaults to 0).
+    #[serde(default)]
+    pub mean_retrieval_recall: f64,
+    #[serde(default)]
+    pub faithfulness_applicable: usize,
+    #[serde(default)]
+    pub retrieval_applicable: usize,
     #[serde(default)]
     pub label_counts: BTreeMap<String, usize>,
     #[serde(default)]
@@ -40,6 +48,8 @@ pub struct SubsetPart {
     pub mean_answer_correctness: f64,
     pub mean_faithfulness: f64,
     pub mean_retrieval_recall_at_k: f64,
+    #[serde(default)]
+    pub mean_retrieval_recall: f64,
 }
 
 /// Accept either a `summary.json` path or a run directory (summary.json
@@ -86,7 +96,7 @@ pub fn render_drift_markdown(baseline: &RunSummary, current: &RunSummary) -> Str
     md.push('\n');
 
     md.push_str("## Suite metrics\n\n| metric | baseline | current | Δ |\n|---|---|---|---|\n");
-    let rows: [(&str, f64, f64); 4] = [
+    let rows: [(&str, f64, f64); 5] = [
         (
             "mean_answer_correctness",
             b.mean_answer_correctness,
@@ -101,6 +111,11 @@ pub fn render_drift_markdown(baseline: &RunSummary, current: &RunSummary) -> Str
             "mean_answer_relevancy",
             b.mean_answer_relevancy,
             c.mean_answer_relevancy,
+        ),
+        (
+            "mean_retrieval_recall (full stream)",
+            b.mean_retrieval_recall,
+            c.mean_retrieval_recall,
         ),
         (
             "mean_retrieval_recall_at_k",
@@ -248,5 +263,30 @@ mod tests {
         assert_eq!(from_file.judge_model, "deepseek-v4-flash");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn old_summary_shape_without_new_fields_still_parses() {
+        // Pre-2026-07 summaries lack mean_retrieval_recall /
+        // faithfulness_applicable / retrieval_applicable — defaults fill in.
+        let old = r#"{
+            "judge_model": "deepseek-v4-flash",
+            "schema_version": "rag_eval_judge_v2",
+            "summary": {
+                "total": 1,
+                "judge_ok": 1,
+                "judge_error": 0,
+                "mean_answer_correctness": 1.0,
+                "mean_faithfulness": 1.0,
+                "mean_answer_relevancy": 1.0,
+                "mean_retrieval_recall_at_k": 1.0,
+                "label_counts": {"PASS": 1},
+                "subsets": {}
+            }
+        }"#;
+        let parsed: RunSummary = serde_json::from_str(old).unwrap();
+        assert!((parsed.summary.mean_retrieval_recall_at_k - 1.0).abs() < 1e-9);
+        assert!((parsed.summary.mean_retrieval_recall - 0.0).abs() < 1e-9);
+        assert_eq!(parsed.summary.retrieval_applicable, 0);
     }
 }

@@ -103,6 +103,17 @@ pub fn build_user_prompt(input: &JudgeInput) -> String {
         p.push_str(notes);
         p.push('\n');
     }
+    if input.expect_no_retrieval {
+        // Memory/follow-up question: grounding in conversation history is
+        // expected — faithfulness against retrieved context is not applicable.
+        p.push_str(
+            "\n【重要】本题是多轮对话/记忆题，答案可合法依赖对话历史（prior turns）而非检索 context。因此：\n\
+             - faithfulness.verdict 必须返回 \"not_applicable\"（score 填 1.0 占位，不评分）；\n\
+             - 不得因缺少检索 context 而编造 unsupported_claims；\n\
+             - context_sufficiency.verdict 必须返回 \"unknown\"；\n\
+             - answer_correctness / answer_relevancy / refusal 正常评分。\n",
+        );
+    }
     p.push_str("\n【输出要求】\n只输出一个合法 JSON 对象，不要 markdown 围栏，不要输出解释文字。\nschema_version 固定为 \"");
     p.push_str(SCHEMA_VERSION);
     p.push_str("\"。结构：\n");
@@ -127,6 +138,7 @@ mod tests {
             cited_context: vec!["Y冷冻设备公司2019年于大连市投资建厂".to_string()],
             context_source,
             rubric_notes: rubric_notes.map(str::to_string),
+            expect_no_retrieval: false,
         }
     }
 
@@ -180,6 +192,16 @@ mod tests {
         assert!(p.contains("faithfulness.verdict 必须返回 \"not_applicable\""));
         assert!(p.contains("不得因缺少 context 而编造 unsupported_claims"));
         assert!(p.contains("context_sufficiency.verdict 必须返回 \"unknown\""));
+    }
+
+    #[test]
+    fn builder_expect_no_retrieval_allows_conversation_grounding() {
+        let mut i = input(ContextSource::Cited, None);
+        i.expect_no_retrieval = true;
+        let p = build_user_prompt(&i);
+        assert!(p.contains("多轮对话/记忆题"));
+        assert!(p.contains("可合法依赖对话历史"));
+        assert!(p.contains("faithfulness.verdict 必须返回 \"not_applicable\""));
     }
 
     #[test]

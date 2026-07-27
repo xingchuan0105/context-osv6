@@ -99,6 +99,11 @@ pub struct ScoreV2 {
     /// Defaults to `Cited` so pre-field artifacts still deserialize.
     #[serde(default)]
     pub context_source: ContextSource,
+    /// Golden `expect_no_retrieval`: memory/follow-up questions answered from
+    /// conversation context. Skips RETRIEVAL_MISS and excludes the question
+    /// from retrieval means and the faithfulness mean.
+    #[serde(default)]
+    pub expect_no_retrieval: bool,
 }
 
 /// Judge label thresholds (design §5 initial values). Report-only until

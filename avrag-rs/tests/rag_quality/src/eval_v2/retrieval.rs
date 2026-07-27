@@ -31,27 +31,43 @@ fn matched_golden_indices(contents: &[String], example: &GoldenExample) -> Vec<u
 pub struct RetrievalScoreV2 {
     pub query: String,
     pub k: usize,
+    /// Full-stream recall: fraction of golden evidence found ANYWHERE in the
+    /// merged cross-round deduped stream. The multi-round agent surfaces gold
+    /// in later ReAct rounds that a top-k truncation would hide, so this is
+    /// the primary number — RETRIEVAL_MISS and the suite means use it.
     pub recall: f64,
     pub hit: bool,
+    /// Top-k view of the same stream (single-shot ranking diagnostic; k=15 at
+    /// the runner call site). Additive; pre-field artifacts deserialize with 0.
+    #[serde(default)]
+    pub recall_at_k: f64,
+    #[serde(default)]
+    pub hit_at_k: bool,
+    /// MRR over the merged stream (first-hit rank across all rounds).
     pub mrr: f64,
+    /// nDCG over the merged stream (binary relevance; IDCG spans
+    /// `min(golden_count, stream_len)` ideal positions).
     pub ndcg: f64,
-    /// Graded recall: weighted fraction of evidence-grade mass found in top-k
-    /// (`source_chunks` = grade 3, `relevance_grades` = 1..3 partial credit).
-    /// Reduces to binary `recall` when `relevance_grades` is empty.
+    /// Graded recall: weighted fraction of evidence-grade mass found in the
+    /// merged stream (`source_chunks` = grade 3, `relevance_grades` = 1..3
+    /// partial credit). Reduces to binary `recall` when grades are empty.
     pub graded_recall: f64,
-    /// Graded nDCG@k: linear gain = max matched evidence grade at each rank.
-    /// Reduces to binary `ndcg` when `relevance_grades` is empty.
+    /// Graded nDCG over the merged stream: linear gain = max matched evidence
+    /// grade at each rank. Reduces to binary `ndcg` when grades are empty.
     pub graded_ndcg: f64,
+    /// Total chunks in the merged deduped stream (across all rounds).
     pub retrieved_count: usize,
     pub golden_count: usize,
     pub matched_golden: Vec<usize>,
-    /// Rank (0-indexed, first-seen order) of each matched golden chunk's first
-    /// hit, parallel to `matched_golden`.
+    /// Rank (0-indexed, first-seen order in the merged stream) of each matched
+    /// golden chunk's first hit, parallel to `matched_golden`.
     pub first_hit_ranks: Vec<usize>,
 }
 
 /// Score the retrieval layer. `retrieved` is the deduped first-seen-ordered
-/// chunk list from `extract_retrieved_chunks`.
+/// chunk list from `extract_retrieved_chunks` (merged across all loop rounds).
+/// Primary recall/hit are computed over the FULL stream; the top-k view is
+/// reported separately as `recall_at_k`/`hit_at_k`.
 pub fn score_retrieval(
     retrieved: &RetrievedChunks,
     example: &GoldenExample,
@@ -60,12 +76,12 @@ pub fn score_retrieval(
     let contents: Vec<String> = retrieved.chunks.iter().map(|c| c.content.clone()).collect();
     let golden_count = example.source_chunks.len();
 
-    // Match each golden chunk against the top-k retrieved contents.
-    let topk: Vec<String> = contents.into_iter().take(k).collect();
+    // Match each golden chunk against the FULL merged stream (multi-round
+    // semantics: gold from any ReAct round counts as retrieved).
     let mut matched = Vec::new();
     let mut first_hit_ranks = Vec::new();
     for (gi, g) in example.source_chunks.iter().enumerate() {
-        if let Some(rank) = topk.iter().position(|c| g.matches(c)) {
+        if let Some(rank) = contents.iter().position(|c| g.matches(c)) {
             matched.push(gi);
             first_hit_ranks.push(rank);
         }
@@ -77,13 +93,30 @@ pub fn score_retrieval(
         1.0
     };
     let hit = !matched.is_empty();
+
+    // Top-k view (diagnostic for single-shot ranking quality).
+    let topk: Vec<String> = contents.iter().take(k).cloned().collect();
+    let mut matched_at_k = 0usize;
+    for g in example.source_chunks.iter() {
+        if topk.iter().any(|c| g.matches(c)) {
+            matched_at_k += 1;
+        }
+    }
+    let recall_at_k = if golden_count > 0 {
+        matched_at_k as f64 / golden_count as f64
+    } else {
+        1.0
+    };
+    let hit_at_k = matched_at_k > 0;
+
     let mrr = first_hit_ranks
         .first()
         .map(|&r| 1.0 / (r as f64 + 1.0))
         .unwrap_or(0.0);
 
-    // nDCG@k with binary relevance (matched golden = relevant). DCG sums
-    // 1/log2(rank+2) over relevant positions; IDCG is the ideal ordering.
+    // nDCG over the merged stream with binary relevance (matched golden =
+    // relevant). DCG sums 1/log2(rank+2) over first-hit positions; IDCG is the
+    // ideal ordering over min(golden_count, stream_len) positions.
     let ndcg = if golden_count == 0 || first_hit_ranks.is_empty() {
         if golden_count == 0 { 1.0 } else { 0.0 }
     } else {
@@ -91,7 +124,7 @@ pub fn score_retrieval(
             .iter()
             .map(|&r| 1.0 / ((r as f64 + 2.0).log2()))
             .sum();
-        let ideal_relevant = golden_count.min(k);
+        let ideal_relevant = golden_count.min(contents.len());
         let idcg: f64 = (0..ideal_relevant)
             .map(|i| 1.0 / ((i as f64 + 2.0).log2()))
             .sum();
@@ -113,8 +146,8 @@ pub fn score_retrieval(
         + graded_evidence.iter().map(|(_, g)| *g as u32).sum::<u32>();
     let mut found_source = vec![false; example.source_chunks.len()];
     let mut found_graded = vec![false; graded_evidence.len()];
-    let mut rank_grades: Vec<u8> = Vec::with_capacity(topk.len());
-    for c in &topk {
+    let mut rank_grades: Vec<u8> = Vec::with_capacity(contents.len());
+    for c in &contents {
         let mut g: u8 = 0;
         for (i, sc) in example.source_chunks.iter().enumerate() {
             if sc.matches(c) {
@@ -156,7 +189,7 @@ pub fn score_retrieval(
         ideal.sort_by(|a, b| b.cmp(a));
         let gidcg: f64 = ideal
             .iter()
-            .take(k)
+            .take(contents.len())
             .enumerate()
             .map(|(i, &g)| g as f64 / ((i as f64 + 2.0).log2()))
             .sum();
@@ -168,11 +201,13 @@ pub fn score_retrieval(
         k,
         recall,
         hit,
+        recall_at_k,
+        hit_at_k,
         mrr,
         ndcg,
         graded_recall,
         graded_ndcg,
-        retrieved_count: retrieved.len().min(k),
+        retrieved_count: retrieved.len(),
         golden_count,
         matched_golden: matched,
         first_hit_ranks,
@@ -265,6 +300,7 @@ mod tests {
             prior_turns: vec![],
             client_time: None,
             rubric_notes: None,
+            expect_no_retrieval: false,
         }
     }
 
@@ -309,6 +345,9 @@ mod tests {
         // first hit at rank 1 → mrr = 1/2
         assert!((s.mrr - 0.5).abs() < 1e-9);
         assert!(s.ndcg > 0.0 && s.ndcg <= 1.0);
+        // Everything inside top-k here → both views agree.
+        assert!((s.recall_at_k - 1.0).abs() < 1e-9);
+        assert!(s.hit_at_k);
     }
 
     #[test]
@@ -319,8 +358,30 @@ mod tests {
         assert_eq!(s.matched_golden.len(), 0);
         assert!((s.recall - 0.0).abs() < 1e-9);
         assert!(!s.hit);
+        assert!((s.recall_at_k - 0.0).abs() < 1e-9);
+        assert!(!s.hit_at_k);
         assert!((s.mrr - 0.0).abs() < 1e-9);
         assert!((s.ndcg - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn full_stream_recall_counts_gold_from_later_rounds() {
+        // Multi-round agent scenario: 25 merged chunks, gold first appears at
+        // merged rank 20 (a later ReAct round). Old top-15 truncation scored
+        // recall=0 (bogus RETRIEVAL_MISS); full-stream recall is 1.0 while the
+        // top-k view honestly reports the late rank.
+        let mut chunks: Vec<&str> = (0..24).map(|_| "noise").collect();
+        chunks[20] = "alpha beta";
+        let r = ret(&chunks);
+        let e = ex("q", &["alpha beta"]);
+        let s = score_retrieval(&r, &e, 15);
+        assert!((s.recall - 1.0).abs() < 1e-9);
+        assert!(s.hit);
+        assert!((s.recall_at_k - 0.0).abs() < 1e-9);
+        assert!(!s.hit_at_k);
+        assert_eq!(s.first_hit_ranks, vec![20]);
+        assert!((s.mrr - 1.0 / 21.0).abs() < 1e-9);
+        assert_eq!(s.retrieved_count, 24);
     }
 
     #[test]

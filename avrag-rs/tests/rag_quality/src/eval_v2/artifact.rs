@@ -67,6 +67,11 @@ pub struct JudgeInput {
     /// Optional golden rubric notes passed through to the judge prompt.
     #[serde(default)]
     pub rubric_notes: Option<String>,
+    /// Golden `expect_no_retrieval`: memory/follow-up question answered from
+    /// conversation context — the prompt tells the judge faithfulness is
+    /// not_applicable here.
+    #[serde(default)]
+    pub expect_no_retrieval: bool,
 }
 
 impl JudgeInput {
@@ -97,6 +102,7 @@ impl JudgeInput {
             cited_context,
             context_source,
             rubric_notes: example.rubric_notes.clone(),
+            expect_no_retrieval: example.expect_no_retrieval,
         }
     }
 }
@@ -135,6 +141,7 @@ mod tests {
             prior_turns: vec![],
             client_time: None,
             rubric_notes: Some("接受「2019 年」「2019年」".to_string()),
+            expect_no_retrieval: false,
         }
     }
 

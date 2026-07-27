@@ -203,6 +203,7 @@ mod tests {
             prior_turns: vec![],
             client_time: None,
             rubric_notes: None,
+            expect_no_retrieval: false,
         }
     }
 
