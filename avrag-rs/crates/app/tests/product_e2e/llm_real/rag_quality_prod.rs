@@ -1107,6 +1107,37 @@ async fn realistic_corpus_full_eval() {
     if let Some(end) = end_at {
         eprintln!("[realistic_corpus] E2E_END_AT={end}: stop after question {end}");
     }
+    // E2E_QUESTIONS="5,6,11,12": comma-separated 1-based question numbers —
+    // only those run. When START_AT/END_AT are also set, the range applies as
+    // an outer bound (intersection). Invalid tokens fail fast with the token
+    // named (test harness — a typo must not silently drop coverage).
+    let question_filter: Option<std::collections::HashSet<usize>> =
+        std::env::var("E2E_QUESTIONS").ok().and_then(|v| {
+            let trimmed = v.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            Some(
+                trimmed
+                    .split(',')
+                    .map(|token| {
+                        let token = token.trim();
+                        token.parse::<usize>().unwrap_or_else(|_| {
+                            panic!(
+                                "E2E_QUESTIONS: invalid question number token {token:?} \
+                                 (expected comma-separated 1-based integers)"
+                            )
+                        })
+                    })
+                    .collect(),
+            )
+        });
+    if let Some(filter) = &question_filter {
+        eprintln!(
+            "[realistic_corpus] E2E_QUESTIONS: running {} filtered question(s)",
+            filter.len()
+        );
+    }
     let mut per_subset_stats: std::collections::HashMap<String, (usize, usize, f64)> =
         std::collections::HashMap::new();
 
@@ -1116,6 +1147,13 @@ async fn realistic_corpus_full_eval() {
         }
         if end_at.is_some_and(|end| idx + 1 > end) {
             break;
+        }
+        // E2E_QUESTIONS filter: skip (not stop — later filtered numbers may
+        // still follow) when this question is not in the set.
+        if let Some(filter) = &question_filter {
+            if !filter.contains(&(idx + 1)) {
+                continue;
+            }
         }
         let subset_name = dataset
             .subsets
