@@ -72,6 +72,37 @@ pub struct WorkerKeyFact {
     pub claim: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<String>,
+    /// S3 gray zone: `observed` (verbatim / strictly entailed by evidence) |
+    /// `inferred` (the worker's inference — legal to carry, but must stay
+    /// labeled; rendering never puts it in fact position). Open string:
+    /// unknown values are tolerated and treated as `observed`.
+    #[serde(default = "default_basis")]
+    pub basis: String,
+}
+
+fn default_basis() -> String {
+    "observed".to_string()
+}
+
+impl WorkerKeyFact {
+    pub fn is_inferred(&self) -> bool {
+        self.basis.eq_ignore_ascii_case("inferred")
+    }
+}
+
+/// S3 gray zone: the worker's structured veto — the question's premise
+/// (frame / entity attribution / scope) contradicts the evidence (design
+/// §3.1). q114: the worker saw the doc uses 4R while the question presumes
+/// 4P; before this field the observation could only leak out as prose.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PremiseMismatch {
+    /// `entity` | `frame` | `scope` (open string).
+    pub kind: String,
+    /// What the evidence actually says vs the presumed premise.
+    pub detail: String,
+    /// The real subject / frame the evidence supports, when identifiable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_subject: Option<String>,
 }
 
 /// Structured worker exit contract (V2 design §3.4).
@@ -101,6 +132,11 @@ pub struct WorkerHandoff {
     /// absent on clean compiles.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compile_diagnostics: Vec<String>,
+    /// S3 gray zone: set when the worker found the question's premise
+    /// (frame / entity / scope) contradicts the evidence. Rendered as a
+    /// prominent ⚠ block ahead of channel outcomes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub premise_mismatch: Option<PremiseMismatch>,
 }
 
 impl WorkerHandoff {
@@ -116,6 +152,7 @@ impl WorkerHandoff {
             gaps: Vec::new(),
             handoff_degraded: true,
             compile_diagnostics: Vec::new(),
+            premise_mismatch: None,
         }
     }
 
@@ -127,6 +164,7 @@ impl WorkerHandoff {
             gaps: Vec::new(),
             handoff_degraded: false,
             compile_diagnostics: Vec::new(),
+            premise_mismatch: None,
         }
     }
 

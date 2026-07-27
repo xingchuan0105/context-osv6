@@ -21,7 +21,7 @@ use contracts::chat::{AnswerBlock, Citation, SourceRef};
 use serde::{Deserialize, Serialize};
 
 use super::store::{EvidenceKind, EvidenceStore};
-use super::types::{Channel, WorkerHandoff, WorkerKeyFact};
+use super::types::{Channel, PremiseMismatch, WorkerHandoff, WorkerKeyFact};
 
 const MAX_NOTE_CHARS: usize = 2000;
 const MAX_GAPS: usize = 12;
@@ -525,6 +525,7 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             .to_string();
         let gaps = string_list(v.get("gaps"));
         let key_facts = key_facts_from(v.get("key_facts"));
+        let premise_mismatch = premise_mismatch_from(v.get("premise_mismatch"));
         return Some(WorkerHandoff {
             summary: summary.to_string(),
             key_facts,
@@ -536,6 +537,7 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             gaps,
             handoff_degraded: false,
             compile_diagnostics: Vec::new(),
+            premise_mismatch,
         });
     }
 
@@ -567,10 +569,40 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             gaps,
             handoff_degraded: false,
             compile_diagnostics: Vec::new(),
+            premise_mismatch: None,
         });
     }
 
     None
+}
+
+/// S3: parse the optional `premise_mismatch` block. Tolerant: an incomplete
+/// block (missing kind/detail) is ignored rather than failing the handoff.
+fn premise_mismatch_from(v: Option<&serde_json::Value>) -> Option<PremiseMismatch> {
+    let pm = v?;
+    let kind = pm
+        .get("kind")
+        .and_then(|s| s.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let detail = pm
+        .get("detail")
+        .and_then(|s| s.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let actual_subject = pm
+        .get("actual_subject")
+        .and_then(|s| s.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Some(PremiseMismatch {
+        kind,
+        detail,
+        actual_subject,
+    })
 }
 
 fn string_list(v: Option<&serde_json::Value>) -> Vec<String> {
@@ -598,6 +630,7 @@ fn key_facts_from(v: Option<&serde_json::Value>) -> Vec<WorkerKeyFact> {
                 return Some(WorkerKeyFact {
                     claim: t.to_string(),
                     evidence: Vec::new(),
+                    basis: "observed".to_string(),
                 });
             }
             let claim = item
@@ -616,7 +649,19 @@ fn key_facts_from(v: Option<&serde_json::Value>) -> Vec<WorkerKeyFact> {
                         .collect()
                 })
                 .unwrap_or_default();
-            Some(WorkerKeyFact { claim, evidence })
+            // S3: open string, unknown values tolerated (treated as observed).
+            let basis = item
+                .get("basis")
+                .and_then(|b| b.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("observed")
+                .to_string();
+            Some(WorkerKeyFact {
+                claim,
+                evidence,
+                basis,
+            })
         })
         .collect()
 }
@@ -1158,7 +1203,72 @@ mod tests {
         assert_eq!(h.key_facts[0].evidence, vec!["chunk-a".to_string()]);
         assert_eq!(h.key_facts[1].claim, "预算约 2 亿");
         assert!(!h.is_full_coverage());
+        // S3: absent gray fields default to observed / None.
+        assert!(h.key_facts.iter().all(|f| f.basis == "observed"));
+        assert!(h.premise_mismatch.is_none());
     }
+
+    // ---- S3: gray-zone schema (basis / premise_mismatch) -------------------
+
+    #[test]
+    fn parses_basis_and_premise_mismatch() {
+        let raw = r#"{
+          "schema_version": "internal_worker_handoff_v1",
+          "summary": "文档核心框架是 4R",
+          "key_facts": [
+            {"claim": "Y公司营销人员编制为 4 人", "evidence": ["chunk-a"], "basis": "observed"},
+            {"claim": "访谈可能覆盖了全部 4 名营销人员", "evidence": [], "basis": "inferred"}
+          ],
+          "coverage": "partial",
+          "gaps": [],
+          "premise_mismatch": {
+            "kind": "frame",
+            "detail": "问题预设的 4P 拆解属于竞争对手南通四方",
+            "actual_subject": "Y公司策略为 4R 框架（关联/反应/关系/回报）"
+          }
+        }"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert!(!h.key_facts[0].is_inferred());
+        assert!(h.key_facts[1].is_inferred());
+        assert_eq!(h.key_facts[1].basis, "inferred");
+        let pm = h.premise_mismatch.expect("premise_mismatch");
+        assert_eq!(pm.kind, "frame");
+        assert!(pm.detail.contains("4P"));
+        assert_eq!(
+            pm.actual_subject.as_deref(),
+            Some("Y公司策略为 4R 框架（关联/反应/关系/回报）")
+        );
+    }
+
+    #[test]
+    fn basis_unknown_value_tolerated_as_observed() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"x","basis":"maybe"}],"coverage":"partial","gaps":[]}"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert_eq!(h.key_facts[0].basis, "maybe", "open string preserved");
+        assert!(!h.key_facts[0].is_inferred(), "unknown treated as observed");
+    }
+
+    #[test]
+    fn incomplete_premise_mismatch_is_ignored() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[],"coverage":"insufficient","gaps":["x"],"premise_mismatch":{"kind":"frame"}}"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        assert!(h.premise_mismatch.is_none(), "missing detail → ignored");
+    }
+
+    #[test]
+    fn handoff_serde_roundtrip_keeps_gray_fields() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"c","evidence":[],"basis":"inferred"}],"coverage":"partial","gaps":[],"premise_mismatch":{"kind":"entity","detail":"d"}}"#;
+        let h = parse_worker_handoff(raw).expect("handoff");
+        let json = serde_json::to_string(&h).unwrap();
+        let back: WorkerHandoff = serde_json::from_str(&json).unwrap();
+        assert_eq!(h, back);
+        // Old outputs without the new fields still deserialize (serde additive).
+        let old = r#"{"summary":"s","coverage":"partial"}"#;
+        let legacy: WorkerHandoff = serde_json::from_str(old).unwrap();
+        assert!(legacy.key_facts.is_empty());
+        assert!(legacy.premise_mismatch.is_none());
+    }
+
 
     #[test]
     fn peels_legacy_internal_answer_v1() {

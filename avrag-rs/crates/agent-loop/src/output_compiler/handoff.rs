@@ -376,7 +376,7 @@ fn check_hedge_markers(v: &serde_json::Value, diagnostics: &mut Vec<Diagnostic>)
             fields.join(" / "),
             HEDGE_MARKERS.join("/")
         ),
-        "建议把对应条目标注为推断（basis: inferred，schema 升级后）而非断言；当前仅提示，不影响接收",
+        "建议把对应条目以 \"basis\":\"inferred\" 标注为推断而非断言（推断条目的 evidence 可为空）；当前仅提示，不影响接收",
     ));
 }
 

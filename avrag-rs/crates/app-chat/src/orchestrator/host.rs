@@ -382,12 +382,26 @@ impl OrchestratorExecutor for AgentServiceExecutor {
                  {{\n\
                    \"schema_version\": \"internal_worker_handoff_v1\",\n\
                    \"summary\": \"concise channel understanding (what you found)\",\n\
-                   \"key_facts\": [{{\"claim\": \"…\", \"evidence\": [\"chunk_id or pointer\"]}}],\n\
+                   \"key_facts\": [{{\"claim\": \"…\", \"evidence\": [\"chunk_id or pointer\"], \"basis\": \"observed|inferred\"}}],\n\
                    \"coverage\": \"full|partial|insufficient\",\n\
-                   \"gaps\": [\"what you could not find / sections not covered\"]\n\
+                   \"gaps\": [\"what you could not find / sections not covered\"],\n\
+                   \"premise_mismatch\": {{\"kind\": \"entity|frame|scope\", \"detail\": \"…\", \"actual_subject\": \"…\"}}  // optional\n\
                  }}\n\
-                 Rules: `coverage=full` only when the brief is fully covered; list real gaps; \
-                 {evidence_rule}",
+                 Rules:\n\
+                 - `coverage=full` only when the brief is fully covered; list real gaps; \
+                 {evidence_rule}\n\
+                 - `basis`: \"observed\" = verbatim or strictly entailed by the evidence; \
+                 \"inferred\" = your inference — legal to carry, but it MUST be labeled \
+                 `inferred` and its `evidence` may then be empty. Never assert an inference \
+                 as observed.\n\
+                 - `premise_mismatch`: if the question's frame / entity attribution / scope \
+                 contradicts the evidence (e.g. the doc uses a different framework or the \
+                 attributed subject is wrong), report it via this field — name the real \
+                 subject in `actual_subject` — instead of forcing an answer that fits the \
+                 wrong premise.\n\
+                 - 查无即成功: when the evidence genuinely does not cover the question, \
+                 `coverage=insufficient` + empty `key_facts` + `gaps` explaining what is \
+                 absent IS a complete successful delivery, not a failure.",
                 brief.goal
             ));
             req.metadata.insert(

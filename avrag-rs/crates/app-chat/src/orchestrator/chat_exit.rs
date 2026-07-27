@@ -307,6 +307,7 @@ mod tests {
                 gaps: gaps.iter().map(|s| (*s).to_string()).collect(),
                 handoff_degraded: false,
                 compile_diagnostics: vec![],
+                premise_mismatch: None,
             }),
             None,
         )
