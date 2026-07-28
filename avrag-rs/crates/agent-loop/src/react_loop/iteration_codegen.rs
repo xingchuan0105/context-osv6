@@ -36,7 +36,12 @@ impl ReActLoop {
         // E3: coaching hints for lexical_search 0-hit calls this round.
         let mut zero_hit_hints = String::new();
 
-        for (idx, code) in codes.iter().enumerate() {
+        // E6 (2026-07-28): one code block per round, mechanically enforced —
+        // only the FIRST extracted block executes; extra blocks are skipped
+        // with a warning observation. A 12-block burst (5 errors) used to
+        // trip the consecutive-sandbox-error breaker in a single round.
+        let skipped_blocks = codes.len().saturating_sub(1);
+        for (idx, code) in codes.iter().take(1).enumerate() {
             // User-facing "running" progress before the sandbox executes
             // (2026-07-23: dispatch-phase silence — retrieval now announces
             // start, not just finish). One step per detected client.* call.
@@ -90,6 +95,16 @@ impl ReActLoop {
         }
 
         let elapsed_ms = code_start.elapsed().as_millis() as u64;
+        if skipped_blocks > 0 {
+            combined_result.push_str(&format!(
+                "[blocks_skipped] 本轮检测到 {} 个代码块：只执行了第 1 个，跳过了 {} 个。\
+                 每轮只输出一个 <code> 块（机制强制，多余块不会被执行）——\
+                 多个检索调用请放进同一个块内并行 await，或留到下一轮。\
+                 [/blocks_skipped]\n",
+                codes.len(),
+                skipped_blocks
+            ));
+        }
         // C3: a round with completely empty stdout AND stderr AND zero bridge
         // calls gets an explicit note — otherwise the model guesses why the
         // observation is blank (and typically re-emits the same block).
@@ -113,7 +128,8 @@ impl ReActLoop {
             self.record_codegen_success(state, &combined_result, bridge_tool_results);
         }
 
-        state.total_tool_calls += codes.len() as u32;
+        // E6: count executed blocks only (skipped blocks never ran).
+        state.total_tool_calls += codes.len().min(1) as u32;
         let exit_reason = if any_error {
             "code_gen_error".to_string()
         } else {

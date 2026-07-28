@@ -16,7 +16,7 @@ applicable_modes: [rag]
   不会把「库里全部段落」原样灌进你的聊天窗口。
 - 因此：你需要的是 **够用的证据与可核验的数字**，而不是把大段原文贴进 observation。
 
-每轮输出 **一个** `<code language="python">` 块；每个被提取出的 python 块都会执行（不只第一个）。  
+每轮输出 **一个** `<code language="python">` 块——**机制强制**：一轮里只有第一个被提取的 python 块会执行，多余块被跳过并在 observation 里给出 `[blocks_skipped]` 告警；要并行就在同一块内多条 `await`。  
 围栏规则：只有 `python` / `py` 围栏会被当作代码执行——`json` 等其它围栏**不会**被执行（交接 JSON 直接裸写，别套围栏）。  
 检索与统计都写在代码里：`await client.…(...)`；`print` 只适合放 **结论**（数字、短列表），
 大段 `print` 全文会挤占后续推理空间。

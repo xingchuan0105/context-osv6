@@ -364,6 +364,49 @@ async fn code_block_success_returns_continue() {
     );
 }
 
+/// E6: only the FIRST extracted block executes per round; the rest are
+/// skipped with a warning naming the count (mechanical one-block-per-round).
+#[tokio::test]
+async fn only_first_code_block_executes_with_skip_warning() {
+    let loop_ = test_loop();
+    let mode = rag_mode();
+    let mut state = empty_state();
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response(
+        r#"<code language="python">print("AAA_FIRST")</code>
+<code language="python">print("BBB_SECOND")</code>
+<code language="python">print("CCC_THIRD")</code>"#,
+    );
+
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    let observation = &state.messages.last().unwrap().content;
+    assert!(observation.contains("AAA_FIRST"), "{observation}");
+    assert!(!observation.contains("BBB_SECOND"), "{observation}");
+    assert!(!observation.contains("CCC_THIRD"), "{observation}");
+    assert!(!observation.contains("[block 1]"), "{observation}");
+    assert!(observation.contains("[blocks_skipped]"), "{observation}");
+    assert!(observation.contains("跳过了 2 个"), "{observation}");
+    assert!(observation.contains("每轮只输出一个"), "{observation}");
+    // Only the executed block counts as a tool call.
+    assert_eq!(state.total_tool_calls, 1);
+}
+
 #[tokio::test]
 async fn consecutive_code_errors_break_to_synthesis() {
     let loop_ = test_loop();
