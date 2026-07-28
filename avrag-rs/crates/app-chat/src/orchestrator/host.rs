@@ -395,37 +395,28 @@ impl OrchestratorExecutor for AgentServiceExecutor {
             };
             // Brief + worker-output slim: the worker's final message is an
             // internal hand-off; the chat exit writes the user answer.
+            // K3: the handoff contract is prose + optional SELECTED line —
+            // JSON is still accepted for structured fields, key_facts and
+            // hand-copied evidence pointers are gone (code hydrates them).
             parts.push(format!(
                 "## Task brief (orchestrator)\n{}\n\n\
                  Execute only this brief. Your final message is an **internal hand-off**, \
                  not the user-facing answer — another agent writes the user answer.\n\n\
-                 Output **one JSON object only** (no markdown fence, no prose outside JSON):\n\
-                 {{\n\
-                   \"schema_version\": \"internal_worker_handoff_v1\",\n\
-                   \"summary\": \"concise channel understanding (what you found)\",\n\
-                   \"key_facts\": [{{\"claim\": \"…\", \"evidence\": [\"chunk_id or pointer\"], \"basis\": \"observed|inferred\"}}],\n\
-                   \"coverage\": \"full|partial|insufficient\",\n\
-                   \"gaps\": [\"what you could not find / sections not covered\"],\n\
-                   \"premise_mismatch\": {{\"kind\": \"entity|frame|scope|definition\", \"detail\": \"…\", \"actual_subject\": \"…\"}}  // optional\n\
-                 }}\n\
+                 最终消息 = **分析散文**（写清发现了什么 / 没发现什么、覆盖判断）；\
+                 也可以输出 internal_worker_handoff_v1 JSON（summary / coverage / gaps，\
+                 可选 premise_mismatch）。**不要**代码块或 markdown 围栏包装。\n\
+                 收尾时：凡实际用到的证据，**另起一行**写 `SELECTED: #n, #m`——\
+                 检索结果 dict 自带 `alias` 字段，只列真正用到的编号；没用到就不写这一行。\
+                 **不要抄 chunk UUID，不要用描述代替编号**（指针由系统按编号水合，无需你提供）。\n\
                  Rules:\n\
-                 - `coverage=full` only when the brief is fully covered; list real gaps; \
-                 {evidence_rule}\n\
-                 - `basis`: \"observed\" = verbatim or strictly entailed by the evidence; \
-                 \"inferred\" = your inference — legal to carry, but it MUST be labeled \
-                 `inferred` and its `evidence` may then be empty. Never assert an inference \
-                 as observed.\n\
-                 - `premise_mismatch`: if the question's frame / entity attribution / scope \
-                 contradicts the evidence (e.g. the doc uses a different framework or the \
-                 attributed subject is wrong), report it via this field — name the real \
-                 subject in `actual_subject` — instead of forcing an answer that fits the \
-                 wrong premise. kind 可为 entity|frame|scope|definition（口径分歧）：\
-                 文档中有候选证据但口径存疑时（如「第一阶段…按4A架构详细设计」vs「详细设计阶段」），\
-                 不得替用户裁决——以 premise_mismatch 上报口径分歧并附上候选日期/原文，\
-                 把选择权留给 Answer/用户。\n\
+                 - 覆盖判断要诚实：找到什么写什么，没覆盖的维度明确说未覆盖；{evidence_rule}\n\
+                 - `premise_mismatch`（仅 JSON 形式时）：若问题的框架/主体归属/口径与证据不符，\
+                 在 JSON 里以该字段上报并写明 `actual_subject`（kind 可为 entity|frame|scope|definition——\
+                 文档中有候选证据但口径存疑时，如「第一阶段…按4A架构详细设计」vs「详细设计阶段」，\
+                 不得替用户裁决，附上候选日期/原文）；散文形式时在文中说明即可。\n\
                  - 查无即成功: when the evidence genuinely does not cover the question, \
-                 `coverage=insufficient` + empty `key_facts` + `gaps` explaining what is \
-                 absent IS a complete successful delivery, not a failure.\n\
+                 `coverage=insufficient` + `gaps` explaining what is absent IS a complete \
+                 successful delivery, not a failure.\n\
                  - 查无须凭据: {retrieval_proof_rule}",
                 brief.goal
             ));

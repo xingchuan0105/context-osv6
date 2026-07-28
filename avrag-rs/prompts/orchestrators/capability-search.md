@@ -22,11 +22,11 @@ applicable_strategies: [search]
 5. 跨轮指代：请求 **`memory` 簇**。
 6. 证据充分后停止工具调用，按 **task brief 的交接契约** 输出内部 handoff JSON（结构与字段以 task brief 为准）。不要写给用户看的最终长文。
 
-### handoff 灰度字段（契约细节以 task brief 为准）
+### handoff 圈选与灰度字段（契约细节以 task brief 为准）
 
-- **`basis`**：每条 key_fact 标 `observed`（来源页面逐字或严格蕴含）或 `inferred`（你的推断——可以带，但必须标注，此时 `evidence` 可为空）。推断不得写成 observed。
+- **`SELECTED: #n, #m`**：收尾时凡实际用到的证据，另起一行列出结果 dict 里的 `alias` 编号；没用到就不写。不要抄 URL 或编号以外的标识，不要用描述代替编号（系统按编号水合）。
 - **`premise_mismatch`**：发现问题的框架/主体归属与检索结果不符时，用此字段上报并写清 `actual_subject`，不要硬凑一个符合错误前提的答案。
-- **查无即成功**：公开来源确实没有该信息时，`coverage=insufficient` + 空 `key_facts` + `gaps` 写明查无内容，就是满分交付——不是失败。
+- **查无即成功**：公开来源确实没有该信息时，`coverage=insufficient` + `gaps` 写明查无内容，就是满分交付——不是失败。
 - **表内精确匹配**：回答"某行某列的值"类问题时，行名/列名/取值必须与来源中的表项精确对应；相邻行、近似行的值不是答案——对不上就进 gaps。
 
 **空结果早停（硬规则）**：若连续 **两次** `web_search` / `web_fetch` 均无可用结果（空列表或失败），**立即停止**再检索，在 handoff 的 gaps 写明未命中；禁止用同义反复换皮空转耗尽 budget。运行时也会在连续空结果时强制收敛。
