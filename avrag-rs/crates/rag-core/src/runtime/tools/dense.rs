@@ -123,7 +123,10 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             .unwrap_or(0)
     };
     let rough_budget = dynamic_rough_recall(chunk_total);
-    let final_budget = dynamic_final_feed(rough_budget);
+    // K1: the fixed `dynamic_final_feed` ratio cut is REPLACED by the
+    // score-shape adaptive k below (function retained for reference/other
+    // callers); the rough pool upstream is unchanged.
+    let _legacy_final_budget = dynamic_final_feed(rough_budget);
 
     let text_result = if include_text {
         runtime
@@ -191,8 +194,12 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                     Vec::new()
                 }
             };
+            // K1: adaptive top-k on the reranked (display) scores — the cut
+            // width comes from the score shape, not a fixed ratio.
+            let rerank_scores: Vec<f32> = reranked.iter().map(|c| c.score).collect();
+            let adaptive = super::super::adaptive_k::adaptive_k(&rerank_scores);
             let mut chunks =
-                runtime.cut_final_candidates_stage_with_budget(reranked, final_budget);
+                runtime.cut_final_candidates_stage_with_budget(reranked, adaptive.k);
 
             if chunks.is_empty()
                 && (embedding_failure_in_trace(&degrade_trace) || !degrade_trace.is_empty())
@@ -208,13 +215,19 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 let lexical_args = lexical_args_from_dense(&args);
                 let lexical_result = super::lexical::run(runtime, auth, &lexical_args).await;
                 if lexical_result.status == ToolStatus::Ok {
-                    if let Some(items) = lexical_result
+                    // K1: lexical data is now always the object shape; the
+                    // legacy array shape is still tolerated here.
+                    let lexical_items = lexical_result
                         .data
                         .as_ref()
-                        .and_then(|data| data.as_array())
-                    {
+                        .and_then(|d| {
+                            d.as_array()
+                                .or_else(|| d.get("chunks").and_then(|v| v.as_array()))
+                        })
+                        .cloned();
+                    if let Some(items) = lexical_items {
                         chunks.reserve(items.len());
-                        for item in items {
+                        for item in &items {
                             if let (Some(chunk_id), Some(doc_id), Some(text)) = (
                                 item.get("chunk_id").and_then(|v| v.as_str()),
                                 item.get("doc_id").and_then(|v| v.as_str()),
@@ -250,19 +263,25 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 )
             };
 
+            // K1: data carries the adaptive-k decision + coaching hint in the
+            // object shape (native tool message dumps `data` verbatim to the
+            // model; store/progress/eval extractors tolerate both shapes).
+            let chunk_json: Vec<_> = chunks.iter().map(super::scored_chunk_to_json).collect();
+            let hint = super::super::adaptive_k::hint_text(&adaptive);
+            let mut data = serde_json::json!({
+                "chunks": chunk_json,
+                "adaptive_k": adaptive.k,
+                "score_shape": adaptive.shape.as_str(),
+            });
+            if let Some(hint) = hint {
+                data["retrieval_hint"] = serde_json::json!(hint);
+            }
+
             ToolResult {
                 tool: "dense_retrieval".to_string(),
                 version: "1.0".to_string(),
                 status: ToolStatus::Ok,
-                data: Some(
-                    serde_json::to_value(
-                        chunks
-                            .iter()
-                            .map(super::scored_chunk_to_json)
-                            .collect::<Vec<_>>(),
-                    )
-                    .unwrap_or_default(),
-                ),
+                data: Some(data),
                 trace: Some(ToolTrace {
                     elapsed_ms: Some(started.elapsed().as_millis() as u64),
                     raw_hit_count: Some(chunks.len()),

@@ -376,7 +376,10 @@ impl RuntimeBridge {
 
         match result.tool.as_str() {
             "dense_retrieval" | "index_lookup" | "doc_scan" => {
-                json!({ "chunks": chunks_with_content_field(data) })
+                // K1: native results are now object-shaped ({chunks, hint…})
+                // — the sandbox only ever sees the chunk list.
+                let inner = data.get("chunks").unwrap_or(data);
+                json!({ "chunks": chunks_with_content_field(inner) })
             }
             // lexical may already be `{ chunks, graph_context }` (native path alignment).
             "lexical_retrieval" => {

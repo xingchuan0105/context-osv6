@@ -77,22 +77,30 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         Ok((lists, degrade_trace)) => {
             let chunks: Vec<crate::ScoredChunk> =
                 lists.into_iter().flat_map(|list| list.chunks).collect();
+            // K1: adaptive top-k on the similarity scores (no rerank here —
+            // the retrieval order is the display order).
+            let scores: Vec<f32> = chunks.iter().map(|c| c.score).collect();
+            let adaptive = super::super::adaptive_k::adaptive_k(&scores);
+            let mut chunks = chunks;
+            chunks.truncate(adaptive.k);
             let chunk_json: Vec<_> = chunks
                 .iter()
                 .map(super::scored_chunk_to_json)
                 .collect();
-            // Prefer object shape when graph_context present so native path matches bridge.
-            // Backward-compatible array when empty (legacy extractors / tests).
-            // Object shape when graph_context present so native ToolCatalog path matches bridge.
-            // Array when empty (legacy extractors / tests).
-            let data = if graph_context.is_empty() {
-                serde_json::to_value(chunk_json).unwrap_or_default()
-            } else {
-                json!({
-                    "chunks": chunk_json,
-                    "graph_context": graph_context,
-                })
-            };
+            // K1: always the object shape — carries the adaptive-k decision +
+            // coaching hint; graph_context rides as before. Extractors
+            // (store/progress/eval/observed-ids) tolerate both shapes.
+            let mut data = json!({
+                "chunks": chunk_json,
+                "adaptive_k": adaptive.k,
+                "score_shape": adaptive.shape.as_str(),
+            });
+            if let Some(hint) = super::super::adaptive_k::hint_text(&adaptive) {
+                data["retrieval_hint"] = json!(hint);
+            }
+            if !graph_context.is_empty() {
+                data["graph_context"] = json!(graph_context);
+            }
             ToolResult {
                 tool: "lexical_retrieval".to_string(),
                 version: "1.0".to_string(),

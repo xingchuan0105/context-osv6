@@ -35,6 +35,8 @@ impl ReActLoop {
         let mut bridge_tool_results = Vec::new();
         // E3: coaching hints for lexical_search 0-hit calls this round.
         let mut zero_hit_hints = String::new();
+        // K1: adaptive-k hints + per-round retrieval summary.
+        let mut all_bridge_calls = Vec::new();
 
         // E6 (2026-07-28): one code block per round, mechanically enforced —
         // only the FIRST extracted block executes; extra blocks are skipped
@@ -77,6 +79,7 @@ impl ReActLoop {
             }
             any_output = any_output || block_had_output || !bridge_calls.is_empty();
             zero_hit_hints.push_str(&lexical_zero_hit_hints(&bridge_calls));
+            all_bridge_calls.extend(bridge_calls);
             bridge_tool_results.extend(block_bridge_results);
             combined_result.push_str(&block_text);
             combined_result.push('\n');
@@ -110,8 +113,9 @@ impl ReActLoop {
         // observation is blank (and typically re-emits the same block).
         let no_output = !any_output && bridge_tool_results.is_empty();
         let observation = format!(
-            "{}{zero_hit_hints}",
-            format_codegen_observation(&combined_result, any_error, no_output)
+            "{}{}{zero_hit_hints}",
+            format_codegen_observation(&combined_result, any_error, no_output),
+            retrieval_callouts(&all_bridge_calls),
         );
         self.append_codegen_messages(state, llm_response, &observation);
 
@@ -357,6 +361,52 @@ impl ReActLoop {
             }
         }
     }
+}
+
+/// K1: per-round retrieval summary (「本轮检索 N 次，共返回 M 条」) plus the
+/// adaptive-k coaching hints carried on the captured calls' data
+/// (`retrieval_hint` set by dense/lexical tools). Model-visible suffix of
+/// the codegen observation; empty when no retrieval happened this round.
+fn retrieval_callouts(
+    bridge_calls: &[avrag_rag_core::runtime::bridge::CapturedBridgeCall],
+) -> String {
+    const RETRIEVAL_METHODS: &[&str] = &[
+        "dense_search",
+        "lexical_search",
+        "graph_search",
+        "chunk_fetch",
+        "doc_scan",
+    ];
+    let call_count = bridge_calls
+        .iter()
+        .filter(|c| RETRIEVAL_METHODS.contains(&c.method.as_str()))
+        .count();
+    let mut total_chunks = 0usize;
+    let mut hints = String::new();
+    for call in bridge_calls {
+        if call.result.status != contracts::ToolStatus::Ok {
+            continue;
+        }
+        total_chunks += crate::progress::hits_from_tool_data(call.result.data.as_ref());
+        if let Some(hint) = call
+            .result
+            .data
+            .as_ref()
+            .and_then(|d| d.get("retrieval_hint"))
+            .and_then(|v| v.as_str())
+        {
+            hints.push_str("\n\n[retrieval_hint] ");
+            hints.push_str(hint);
+        }
+    }
+    if call_count == 0 && hints.is_empty() {
+        return String::new();
+    }
+    let mut out = format!(
+        "\n\n[retrieval_summary] 本轮检索 {call_count} 次，共返回 {total_chunks} 条[/retrieval_summary]"
+    );
+    out.push_str(&hints);
+    out
 }
 
 /// E3: collect coaching hints for `lexical_search` calls that returned 0
@@ -800,5 +850,51 @@ mod tests {
             lexical_zero_hit_hints(&errored).is_empty(),
             "a failed call is an error, not a 0-hit"
         );
+    }
+
+    // ---- K1: retrieval summary + adaptive-k hints ---------------------------
+
+    #[test]
+    fn retrieval_callouts_render_summary_and_hints() {
+        let calls = vec![
+            bridge_call(
+                "dense_search",
+                "q1",
+                contracts::ToolStatus::Ok,
+                serde_json::json!({
+                    "chunks": [{"chunk_id": "c1"}, {"chunk_id": "c2"}],
+                    "retrieval_hint": "命中明确（top 分数梯度大）。可进入分析；若需交叉验证可换角度再查一次。",
+                }),
+            ),
+            bridge_call(
+                "lexical_search",
+                "q2",
+                contracts::ToolStatus::Ok,
+                serde_json::json!({
+                    "chunks": [{"chunk_id": "c3"}],
+                    "retrieval_hint": "结果区分度低（分数平均）。建议换更具体的词。",
+                }),
+            ),
+        ];
+        let out = retrieval_callouts(&calls);
+        assert!(
+            out.contains("本轮检索 2 次，共返回 3 条"),
+            "{out}"
+        );
+        assert!(out.contains("命中明确"), "{out}");
+        assert!(out.contains("区分度低"), "{out}");
+    }
+
+    #[test]
+    fn retrieval_callouts_empty_without_retrieval() {
+        assert!(retrieval_callouts(&[]).is_empty());
+        // A non-retrieval method (doc_profile) produces no summary line.
+        let calls = vec![bridge_call(
+            "doc_profile",
+            "",
+            contracts::ToolStatus::Ok,
+            serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
+        )];
+        assert!(retrieval_callouts(&calls).is_empty());
     }
 }

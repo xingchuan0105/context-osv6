@@ -1,3 +1,4 @@
+pub mod adaptive_k;
 pub mod bridge;
 mod config;
 /// Pure channel-budget helpers used by unit tests only (post ExecutePlan removal).
