@@ -38,6 +38,45 @@ fn task_result_wrapper_is_e101() {
     assert!(fb.contains("E101"), "{fb}");
     assert!(fb.contains("internal_worker_handoff_v1"), "{fb}");
     assert!(fb.contains("请按契约重新输出"), "{fb}");
+    // A: dual-path feedback — keep retrieving OR emit the bare handoff JSON.
+    assert!(fb.contains("继续输出 <code language=\"python\"> 块检索材料"), "{fb}");
+    assert!(fb.contains("直接输出无围栏的交接 JSON"), "{fb}");
+    assert!(fb.contains("不要散文"), "{fb}");
+}
+
+// ---- E105 -----------------------------------------------------------------
+
+#[test]
+fn insufficient_with_zero_retrieval_calls_is_e105() {
+    let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"未找到相关信息","key_facts":[],"coverage":"insufficient","gaps":["x"]}"#;
+    let outcome = compile(raw, None, false);
+    assert!(outcome.has_errors());
+    assert!(codes(&outcome).contains(&"E105".to_string()));
+    let fb = outcome.render_feedback();
+    assert!(fb.contains("E105"), "{fb}");
+    assert!(fb.contains("零检索调用"), "{fb}");
+    assert!(fb.contains("先执行至少一次检索"), "{fb}");
+}
+
+#[test]
+fn insufficient_with_retrieval_calls_is_not_e105() {
+    // A zero-chunk Ok result still counts as having retrieved (合法查无).
+    let obs = observed(&[]);
+    let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"文档未记载保修年限","key_facts":[],"coverage":"insufficient","gaps":["保修年限"]}"#;
+    let outcome = compile(raw, Some(&obs), true);
+    assert!(!outcome.has_errors(), "{:?}", outcome.diagnostics);
+}
+
+#[test]
+fn partial_coverage_with_zero_calls_is_not_e105() {
+    // E105 targets only the insufficient （查无） declaration.
+    let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[],"coverage":"partial","gaps":[]}"#;
+    let outcome = compile(raw, None, false);
+    assert!(
+        !codes(&outcome).contains(&"E105".to_string()),
+        "{:?}",
+        outcome.diagnostics
+    );
 }
 
 #[test]
@@ -143,7 +182,9 @@ fn unknown_run_context_skips_e103() {
 fn fabricated_execution_result_is_stripped_with_warning() {
     // q039: fabricated execution output inside an otherwise valid handoff.
     let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"见 <code_execution_result>韩方投资者 B株式会社 持股40%</code_execution_result> 所示","key_facts":[],"coverage":"insufficient","gaps":["x"]}"#;
-    let outcome = compile(raw, None, false);
+    // has_tools=true: a retrieval happened, so the insufficient coverage is a
+    // legal 查无 — this test is about E104 stripping, not E105.
+    let outcome = compile(raw, None, true);
     assert!(!outcome.has_errors(), "E104 is a warning: {:?}", outcome.diagnostics);
     assert!(codes(&outcome).contains(&"E104".to_string()));
     let v = outcome.value.expect("value survives");

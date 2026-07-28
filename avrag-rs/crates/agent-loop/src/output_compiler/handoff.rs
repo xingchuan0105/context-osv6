@@ -110,6 +110,13 @@ pub fn compile_handoff(input: &HandoffCompileInput) -> CompileOutcome<serde_json
     // worker is not declaring a legal "查无" via coverage=insufficient).
     check_facts_present(input.has_tool_results, &value, input.observed_chunk_ids, &mut diagnostics);
 
+    // E105: coverage=insufficient declared with ZERO retrieval calls this
+    // loop — a fabricated "已检索" narrative. `has_tool_results` at the call
+    // site means ANY tool call happened (a zero-chunk Ok result still counts
+    // as having retrieved — that IS a legitimate 查无); only zero CALLS is
+    // the violation.
+    check_insufficient_has_retrieval(input.has_tool_results, &value, &mut diagnostics);
+
     // W101: hedge markers — advisory only, never blocks.
     check_hedge_markers(&value, &mut diagnostics);
 
@@ -176,7 +183,9 @@ fn e101(detail: &str) -> Diagnostic {
         None,
         format!("missing handoff structure: {detail}"),
         format!(
-            "按契约骨架直接输出完整 JSON 对象本身（不要任何外层包装）：\
+            "两种合法选择：① 继续输出 <code language=\"python\"> 块检索材料；\
+             ② 直接输出无围栏的交接 JSON（internal_worker_handoff_v1）。不要散文。\
+             契约骨架：\
              {{\"schema_version\":\"{HANDOFF_SCHEMA}\",\"summary\":\"…\",\
              \"key_facts\":[{{\"claim\":\"…\",\"evidence\":[\"chunk-id\"]}}],\
              \"coverage\":\"full|partial|insufficient\",\"gaps\":[\"…\"]}}"
@@ -340,6 +349,29 @@ fn check_facts_present(
             "把已观察到的证据逐条归纳为 key_facts（claim + evidence 指针）。\
              可用指针：{pointers}。若确实查无，请将 coverage 置为 insufficient 并在 gaps 说明查无内容"
         ),
+    ));
+}
+
+fn check_insufficient_has_retrieval(
+    has_tool_results: bool,
+    v: &serde_json::Value,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if has_tool_results {
+        return;
+    }
+    let coverage = v
+        .get("coverage")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    if !coverage.eq_ignore_ascii_case("insufficient") {
+        return;
+    }
+    diagnostics.push(Diagnostic::error(
+        "E105",
+        Some("coverage".to_string()),
+        "声明 coverage=insufficient（查无），但本轮循环零检索调用",
+        "先执行至少一次检索（dense/lexical/graph/doc_scan），再决定是否查无——零检索调用的查无不接受",
     ));
 }
 
