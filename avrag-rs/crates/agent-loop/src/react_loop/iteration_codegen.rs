@@ -55,7 +55,7 @@ impl ReActLoop {
                 .await;
             }
             let (block_status, block_text, is_err, block_bridge_results, bridge_calls, block_had_output) = self
-                .execute_codegen_block(idx, code, request, auth, &interpreter_lock)
+                .execute_codegen_block(idx, code, request, auth, &interpreter_lock, &state.retrieval_aliases)
                 .await;
             // User-facing progress: one step per bridge client.* call (not codegen itself).
             for call in &bridge_calls {
@@ -255,6 +255,7 @@ impl ReActLoop {
         request: &AgentRequest,
         auth: &contracts::auth_runtime::AuthContext,
         interpreter_lock: &Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
+        retrieval_aliases: &Arc<std::sync::atomic::AtomicU64>,
     ) -> (
         contracts::ToolStatus,
         String,
@@ -274,11 +275,14 @@ impl ReActLoop {
         let mut bridge_calls = Vec::new();
 
         if let Some(runtime) = &self.rag_runtime {
-            let bridge = Arc::new(avrag_rag_core::runtime::bridge::RuntimeBridge::new(
-                Arc::clone(runtime),
-                auth.clone(),
-                request.doc_scope.clone(),
-            ));
+            let bridge = Arc::new(
+                avrag_rag_core::runtime::bridge::RuntimeBridge::new(
+                    Arc::clone(runtime),
+                    auth.clone(),
+                    request.doc_scope.clone(),
+                )
+                .with_alias_counter(Arc::clone(retrieval_aliases)),
+            );
             let interpreter = avrag_code_interpreter::CodeInterpreter::new();
             exec_result = match interpreter
                 .execute_with_bridge(&code, Arc::clone(&bridge))
@@ -745,6 +749,7 @@ mod tests {
             reasoning_acc: String::new(),
             answer_deltas_streamed: false,
             compile_continuations: 0,
+            retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 

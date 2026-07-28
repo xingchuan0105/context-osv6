@@ -200,15 +200,43 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         .iter()
         .filter(|l| l.kind != EvidenceKind::DocProfile)
         .collect();
+    // K2: the worker's SELECTED retrieval log forms a ★ tier ahead of the
+    // background evidence. Empty log → no ★ section, background unchanged,
+    // plus a marker (only when workers actually ran).
+    let selected: Vec<&EvidenceListing> = citable.iter().copied().filter(|l| l.selected).collect();
+    let background: Vec<&EvidenceListing> =
+        citable.iter().copied().filter(|l| !l.selected).collect();
+    if !selected.is_empty() {
+        s.push_str("### ★ 模型圈选证据\n");
+        s.push_str(
+            "（worker 在 SELECTED 日志中圈选的证据——优先据此作答；引用同样使用 `[[E:id]]`。）\n\n",
+        );
+        for l in &selected {
+            let body = if l.full_text.trim().is_empty() {
+                l.preview.trim()
+            } else {
+                l.full_text.trim()
+            };
+            s.push_str(&format!("#### [{}] {}\n{}\n\n", l.eid, l.label, body));
+        }
+    }
     if !citable.is_empty() {
-        s.push_str("### Evidence (complete set — cite by id only)\n");
+        if selected.is_empty() {
+            s.push_str("### Evidence (complete set — cite by id only)\n");
+        } else {
+            s.push_str("### ○ 背景证据（本轮检索捕获，未经模型圈选）\n");
+        }
+        if selected.is_empty() && !handoff.channel_notes.is_empty() {
+            // K2 empty-log semantics: no fallback — background only + marker.
+            s.push_str("（worker 未圈选证据）\n");
+        }
         s.push_str(
             "The following is the **entire** evidence set for this turn (already selected by \
              the retrieval pipeline). Bodies are whole chunks — do not assume truncation. \
              Use only these passages. Do not claim you lack documents when this section is \
              non-empty. Cite with `[[E:id]]` using the id in brackets (e.g. `[[E3]]`).\n\n",
         );
-        for l in citable {
+        for l in background {
             let body = if l.full_text.trim().is_empty() {
                 l.preview.trim()
             } else {
@@ -309,6 +337,7 @@ mod tests {
             doc_id: Some("d1".into()),
             score: Some(0.9),
             url: None,
+            selected: false,
         }
     }
 
@@ -326,6 +355,7 @@ mod tests {
             preview: "genre: report".into(),
             full_text: "genre: report\nsections: 现状诊断 (p3), 基础设施选型 (p12)".into(),
             score: None,
+            selected: false,
         }
     }
 
@@ -610,5 +640,61 @@ mod tests {
             ctx.contains("⚠ worker 输出未通过编译（诊断码见日志），按未覆盖处理"),
             "{ctx}"
         );
+    }
+
+    // ---- K2: layered evidence rendering (★ selected / ○ background) --------
+
+    #[test]
+    fn selected_tier_renders_ahead_of_background() {
+        let mut starred = listing("E2", Channel::Rag);
+        starred.selected = true;
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag), starred],
+            vec![],
+            vec![note(Channel::Rag, PackStatus::Ok, 2)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(ctx.contains("### ★ 模型圈选证据"), "{ctx}");
+        assert!(
+            ctx.contains("### ○ 背景证据（本轮检索捕获，未经模型圈选）"),
+            "{ctx}"
+        );
+        let star_pos = ctx.find("### ★ 模型圈选证据").unwrap();
+        let bg_pos = ctx.find("### ○ 背景证据").unwrap();
+        assert!(star_pos < bg_pos, "selected tier precedes background: {ctx}");
+        // Selected E2 lives under ★; background E1 under ○.
+        let star_section = &ctx[star_pos..bg_pos];
+        assert!(star_section.contains("#### [E2]"), "{star_section}");
+        assert!(!star_section.contains("#### [E1]"), "{star_section}");
+        assert!(!ctx.contains("worker 未圈选证据"), "{ctx}");
+    }
+
+    #[test]
+    fn empty_selection_log_renders_background_with_marker() {
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note(Channel::Rag, PackStatus::Ok, 1)],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(!ctx.contains("### ★ 模型圈选证据"), "{ctx}");
+        assert!(ctx.contains("### Evidence (complete set"), "{ctx}");
+        assert!(ctx.contains("（worker 未圈选证据）"), "{ctx}");
+    }
+
+    #[test]
+    fn no_workers_no_empty_selection_marker() {
+        // Pure chat turn (no channel notes): the empty-log marker is noise.
+        let h = synthesize_handoff("q", vec![], vec![listing("E1", Channel::Rag)], vec![], vec![], &[], None);
+        let ctx = render_synthesize_context(&h);
+        assert!(!ctx.contains("worker 未圈选证据"), "{ctx}");
     }
 }

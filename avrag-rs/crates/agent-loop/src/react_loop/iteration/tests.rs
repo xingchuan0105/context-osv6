@@ -77,6 +77,7 @@ fn empty_state() -> IterationState {
         reasoning_acc: String::new(),
         answer_deltas_streamed: false,
         compile_continuations: 0,
+        retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }
 }
 

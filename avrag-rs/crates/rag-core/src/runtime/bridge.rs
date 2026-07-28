@@ -55,6 +55,10 @@ pub struct RuntimeBridge {
     doc_scope: Vec<String>,
     captured_results: Arc<Mutex<Vec<ToolResult>>>,
     captured_calls: Arc<Mutex<Vec<CapturedBridgeCall>>>,
+    /// K2: retrieval-log alias counter (`#1 #2 …`), shared across all blocks
+    /// of one worker run (per-worker namespace; agent-loop IterationState
+    /// owns the Arc). Tests default to a fresh counter.
+    alias_counter: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl RuntimeBridge {
@@ -65,7 +69,14 @@ impl RuntimeBridge {
             doc_scope,
             captured_results: Arc::new(Mutex::new(Vec::new())),
             captured_calls: Arc::new(Mutex::new(Vec::new())),
+            alias_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// K2: share one alias counter across the worker run's blocks.
+    pub fn with_alias_counter(mut self, counter: Arc<std::sync::atomic::AtomicU64>) -> Self {
+        self.alias_counter = counter;
+        self
     }
 
     /// Drain tool results recorded during sandbox bridge calls (for citation/degrade assembly).
@@ -493,6 +504,31 @@ impl HostBridge for RuntimeBridge {
                 result: result.clone(),
             });
         let mut data = Self::tool_result_to_bridge_data(&result);
+
+        // K2: inject the retrieval-log alias (`#1 #2 …`) into every chunk the
+        // sandbox sees. Per-worker namespace (counter shared across blocks of
+        // the run); replayed positionally by app-chat hydration, so the
+        // captured native results need no alias field themselves.
+        const ALIASED_METHODS: &[&str] = &[
+            "dense_search",
+            "lexical_search",
+            "graph_search",
+            "chunk_fetch",
+            "doc_scan",
+        ];
+        if ALIASED_METHODS.contains(&method)
+            && let Some(items) = data.get_mut("chunks").and_then(|v| v.as_array_mut())
+        {
+            for item in items {
+                if item.get("chunk_id").and_then(|v| v.as_str()).is_some() {
+                    let n = self
+                        .alias_counter
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                        + 1;
+                    item["alias"] = json!(format!("#{n}"));
+                }
+            }
+        }
 
         // Telemetry for eval: non-empty graph_context → side-car with degrade_reason=graph_augment.
         let graph_context_count = if method == "lexical_search" {
@@ -1155,5 +1191,55 @@ print(json.dumps(chunks))
         assert!(hint.contains("doc_scan"), "{hint}");
         assert!(hint.contains("dense_search 复核"), "{hint}");
         assert!(hint.contains("避免对同一措辞连续无效重试"), "{hint}");
+    }
+
+    // ---- K2: retrieval-log alias injection ----------------------------------
+
+    #[tokio::test]
+    async fn aliases_increment_across_methods_within_one_worker() {
+        let runtime = make_runtime();
+        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
+        let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
+
+        let d1 = bridge
+            .call("dense_search", json!({"query": "antifragility", "top_k": 5}))
+            .await;
+        let d2 = bridge
+            .call("dense_search", json!({"query": "again", "top_k": 5}))
+            .await;
+        let scan = bridge.call("doc_scan", json!({})).await;
+
+        let alias_of = |data: &Value| data["chunks"][0]["alias"].as_str().unwrap().to_string();
+        assert_eq!(alias_of(&d1), "#1");
+        assert_eq!(alias_of(&d2), "#2", "cross-round increment, no reset");
+        assert_eq!(alias_of(&scan), "#3", "all methods share the namespace");
+    }
+
+    #[tokio::test]
+    async fn two_workers_have_independent_alias_namespaces() {
+        let runtime = make_runtime();
+        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
+        let counter_a = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let counter_b = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let worker_a = RuntimeBridge::new(Arc::clone(&runtime), make_auth(), doc_scope.clone())
+            .with_alias_counter(Arc::clone(&counter_a));
+        let worker_b = RuntimeBridge::new(runtime, make_auth(), doc_scope)
+            .with_alias_counter(Arc::clone(&counter_b));
+
+        let a1 = worker_a
+            .call("dense_search", json!({"query": "q", "top_k": 5}))
+            .await;
+        let a2 = worker_a
+            .call("dense_search", json!({"query": "q", "top_k": 5}))
+            .await;
+        let b1 = worker_b
+            .call("dense_search", json!({"query": "q", "top_k": 5}))
+            .await;
+
+        assert_eq!(a1["chunks"][0]["alias"], "#1");
+        assert_eq!(a2["chunks"][0]["alias"], "#2");
+        assert_eq!(b1["chunks"][0]["alias"], "#1", "per-worker namespace");
+        assert_eq!(counter_a.load(std::sync::atomic::Ordering::Relaxed), 2);
+        assert_eq!(counter_b.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 }

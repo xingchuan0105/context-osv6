@@ -641,6 +641,11 @@ pub async fn run_llm_orchestrated_turn(
                         if let Some(h) = handoff.as_mut() {
                             super::fact_verify::verify_handoff_facts(h, &run.tool_results).await;
                         }
+                        // K2: hydrate the worker's SELECTED retrieval log into
+                        // the store's ★ selected tier.
+                        let hydrated =
+                            super::selected::hydrate_selected(&run.answer, &run.tool_results);
+                        store.mark_selected(*channel, &hydrated);
                         let note = ChannelNote::with_handoff(
                             *channel,
                             status,

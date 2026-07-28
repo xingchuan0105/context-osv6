@@ -125,6 +125,10 @@ pub(crate) async fn dispatch_channel(
             if let Some(h) = handoff.as_mut() {
                 super::fact_verify::verify_handoff_facts(h, &run.tool_results).await;
             }
+            // K2: hydrate the worker's SELECTED retrieval log into the
+            // store's ★ selected tier (empty log → nothing marked).
+            let hydrated = super::selected::hydrate_selected(&run.answer, &run.tool_results);
+            store.mark_selected(channel, &hydrated);
             ChannelOutcome {
                 record: DispatchRecord {
                     channel,
@@ -898,6 +902,7 @@ mod tests {
             doc_id: None,
             score: None,
             url: None,
+            selected: false,
         }
     }
 

@@ -25,6 +25,11 @@ pub struct IterationState {
     /// allowance is spent the output is accepted as final and the post-loop
     /// compile marks it degraded with diagnostic codes attached.
     pub compile_continuations: u8,
+    /// K2: retrieval-log alias counter (`#1 #2 …`) for this run — one
+    /// namespace per worker loop, incrementing across rounds/blocks. The
+    /// sandbox bridge injects aliases in this order; downstream hydration
+    /// replays the run's tool_results to resolve them.
+    pub retrieval_aliases: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 pub enum IterationControl {

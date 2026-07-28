@@ -55,6 +55,11 @@ pub struct EvidenceEntry {
     pub preview: String,
     pub full_text: String,
     pub score: Option<f64>,
+    /// K2 (2026-07-28): true when the worker flagged this entry in its
+    /// SELECTED retrieval log (code-hydrated, never model-written ids).
+    /// Renders as the ★ selected tier ahead of background evidence.
+    #[serde(default)]
+    pub selected: bool,
 }
 
 /// One evidence unit as shown to the chat exit (and for answer-rule selection).
@@ -82,6 +87,9 @@ pub struct EvidenceListing {
     pub score: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// K2: member of the worker's ★ selected tier (see `EvidenceEntry.selected`).
+    #[serde(default)]
+    pub selected: bool,
 }
 
 /// A source document in scope (identity for genre judgment + chip display).
@@ -236,6 +244,7 @@ impl EvidenceStore {
                 preview: preview_of(&full_text),
                 full_text,
                 score: None,
+                selected: false,
             });
         }
     }
@@ -307,6 +316,7 @@ impl EvidenceStore {
                     preview: preview_of(text),
                     full_text: text.to_string(),
                     score: c.get("score").and_then(|v| v.as_f64()),
+                    selected: false,
                 });
             }
         }
@@ -351,6 +361,7 @@ impl EvidenceStore {
                 preview: preview_of(text),
                 full_text: text.to_string(),
                 score: None,
+                selected: false,
             });
         }
     }
@@ -402,9 +413,56 @@ impl EvidenceStore {
                     doc_id: e.doc_id.clone(),
                     score: e.score,
                     url: e.url.clone(),
+                    selected: e.selected,
                 }
             })
             .collect()
+    }
+
+    /// K2: mark chunks hydrated from a worker's SELECTED log as the ★
+    /// selected tier. Existing entries are flagged in place (E-ids stable);
+    /// chunks the store never saw are appended as new DocChunk entries
+    /// (monotonic ids preserved). Returns the number of selected entries.
+    pub fn mark_selected(
+        &mut self,
+        channel: Channel,
+        hydrated: &[super::selected::HydratedChunk],
+    ) -> usize {
+        let mut marked = 0usize;
+        for chunk in hydrated {
+            if let Some(entry) = self.entries.iter_mut().find(|e| {
+                e.kind == EvidenceKind::DocChunk
+                    && e.chunk_id.as_deref() == Some(chunk.chunk_id.as_str())
+            }) {
+                if !entry.selected {
+                    entry.selected = true;
+                    marked += 1;
+                }
+                continue;
+            }
+            let doc_name = chunk
+                .doc_id
+                .as_ref()
+                .and_then(|id| self.doc_names.get(id))
+                .cloned();
+            self.push_entry(EvidenceEntry {
+                eid: String::new(),
+                channel,
+                kind: EvidenceKind::DocChunk,
+                chunk_id: Some(chunk.chunk_id.clone()),
+                doc_id: chunk.doc_id.clone(),
+                doc_name,
+                page: chunk.page.map(|p| p as usize),
+                url: None,
+                title: None,
+                preview: preview_of(&chunk.text),
+                full_text: chunk.text.clone(),
+                score: None,
+                selected: true,
+            });
+            marked += 1;
+        }
+        marked
     }
 
     /// Citable doc chunks as a single `dense_retrieval` tool result for eval /
@@ -810,5 +868,69 @@ mod tests {
             .find(|t| t.tool == "dense_retrieval")
             .expect("dense_retrieval result");
         assert_eq!(dense.data.as_ref().and_then(|d| d.as_array()).unwrap().len(), 2);
+    }
+
+    /// K2: mark_selected flags existing entries in place (E-ids stable) and
+    /// appends unseen hydrated chunks as new selected DocChunk entries.
+    #[test]
+    fn mark_selected_flags_and_appends_with_stable_eids() {
+        use crate::orchestrator::selected::HydratedChunk;
+        let mut store = EvidenceStore::default();
+        store.insert_from_tool_results(
+            Channel::Rag,
+            &[ToolResult {
+                tool: "dense_retrieval".into(),
+                version: "1.0".into(),
+                status: ToolStatus::Ok,
+                data: Some(serde_json::json!([
+                    {"chunk_id": "c1", "doc_id": "d1", "text": "第一条", "score": 0.9},
+                    {"chunk_id": "c2", "doc_id": "d1", "text": "第二条", "score": 0.8},
+                ])),
+                trace: None,
+            }],
+        );
+        let before: Vec<String> = store.entries().iter().map(|e| e.eid.clone()).collect();
+
+        let marked = store.mark_selected(
+            Channel::Rag,
+            &[
+                HydratedChunk {
+                    chunk_id: "c2".into(),
+                    doc_id: Some("d1".into()),
+                    page: Some(3),
+                    text: "第二条".into(),
+                },
+                HydratedChunk {
+                    chunk_id: "c9".into(),
+                    doc_id: Some("d1".into()),
+                    page: None,
+                    text: "store 未见但被圈选".into(),
+                },
+            ],
+        );
+        assert_eq!(marked, 2);
+        // Existing eids unchanged; c2 flagged in place, c9 appended selected.
+        let after: Vec<String> = store.entries().iter().map(|e| e.eid.clone()).collect();
+        assert_eq!(&after[..before.len()], &before[..], "E-ids stable");
+        let c2 = store.entries().iter().find(|e| e.chunk_id.as_deref() == Some("c2")).unwrap();
+        assert!(c2.selected);
+        let c9 = store.entries().iter().find(|e| e.chunk_id.as_deref() == Some("c9")).unwrap();
+        assert!(c9.selected);
+        assert_eq!(c9.eid, "E3");
+        // Listings propagate the flag.
+        let listings = store.listings();
+        assert!(listings.iter().find(|l| l.eid == "E3").unwrap().selected);
+        assert!(!listings.iter().find(|l| l.eid == "E1").unwrap().selected);
+        // Re-marking the same chunk is idempotent (no double count).
+        let again = store.mark_selected(
+            Channel::Rag,
+            &[HydratedChunk {
+                chunk_id: "c2".into(),
+                doc_id: Some("d1".into()),
+                page: Some(3),
+                text: "第二条".into(),
+            }],
+        );
+        assert_eq!(again, 0);
     }
 }
