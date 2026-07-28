@@ -33,6 +33,8 @@ impl ReActLoop {
         let mut any_error = false;
         let mut any_output = false;
         let mut bridge_tool_results = Vec::new();
+        // E3: coaching hints for lexical_search 0-hit calls this round.
+        let mut zero_hit_hints = String::new();
 
         for (idx, code) in codes.iter().enumerate() {
             // User-facing "running" progress before the sandbox executes
@@ -69,6 +71,7 @@ impl ReActLoop {
                 }
             }
             any_output = any_output || block_had_output || !bridge_calls.is_empty();
+            zero_hit_hints.push_str(&lexical_zero_hit_hints(&bridge_calls));
             bridge_tool_results.extend(block_bridge_results);
             combined_result.push_str(&block_text);
             combined_result.push('\n');
@@ -91,7 +94,10 @@ impl ReActLoop {
         // calls gets an explicit note — otherwise the model guesses why the
         // observation is blank (and typically re-emits the same block).
         let no_output = !any_output && bridge_tool_results.is_empty();
-        let observation = format_codegen_observation(&combined_result, any_error, no_output);
+        let observation = format!(
+            "{}{zero_hit_hints}",
+            format_codegen_observation(&combined_result, any_error, no_output)
+        );
         self.append_codegen_messages(state, llm_response, &observation);
 
         if any_error {
@@ -335,6 +341,29 @@ impl ReActLoop {
             }
         }
     }
+}
+
+/// E3: collect coaching hints for `lexical_search` calls that returned 0
+/// hits this round (model-visible; wording lives in rag-core
+/// `lexical_zero_hit_hint`). Failed (non-Ok) calls are errors, not 0-hits.
+fn lexical_zero_hit_hints(
+    bridge_calls: &[avrag_rag_core::runtime::bridge::CapturedBridgeCall],
+) -> String {
+    let mut out = String::new();
+    for call in bridge_calls {
+        if call.method != "lexical_search" || call.result.status != contracts::ToolStatus::Ok {
+            continue;
+        }
+        let hits = crate::progress::hits_from_tool_data(call.result.data.as_ref());
+        if let Some(hint) = avrag_rag_core::runtime::bridge::lexical_zero_hit_hint(
+            call.query.as_deref().unwrap_or(""),
+            hits,
+        ) {
+            out.push_str("\n\n");
+            out.push_str(&hint);
+        }
+    }
+    out
 }
 
 /// SDK methods that must appear only as `client.<name>(...)` inside a `<code>` block.
@@ -687,5 +716,73 @@ mod tests {
         // parser decides whether this shape yields a result.
         ReActLoop::record_bridge_evidence(&mut state, combined, Vec::new());
         let _ = state.tool_results.len();
+    }
+
+    // ---- E3: lexical 0-hit coaching hints -----------------------------------
+
+    fn bridge_call(
+        method: &str,
+        query: &str,
+        status: contracts::ToolStatus,
+        data: serde_json::Value,
+    ) -> avrag_rag_core::runtime::bridge::CapturedBridgeCall {
+        avrag_rag_core::runtime::bridge::CapturedBridgeCall {
+            method: method.to_string(),
+            query: Some(query.to_string()),
+            result: ToolResult {
+                tool: "lexical_retrieval".to_string(),
+                version: "1.0".to_string(),
+                status,
+                data: Some(data),
+                trace: None,
+            },
+        }
+    }
+
+    #[test]
+    fn lexical_zero_hit_produces_coaching_hint() {
+        let calls = vec![bridge_call(
+            "lexical_search",
+            "速冻机 年产",
+            contracts::ToolStatus::Ok,
+            serde_json::json!({"chunks": []}),
+        )];
+        let hints = lexical_zero_hit_hints(&calls);
+        assert!(hints.contains("0 命中"), "{hints}");
+        assert!(hints.contains("速冻机 年产"), "failing query quoted: {hints}");
+        assert!(hints.contains("拆出核心专名"), "{hints}");
+    }
+
+    #[test]
+    fn no_hint_for_hits_or_other_methods_or_errors() {
+        let with_hits = vec![bridge_call(
+            "lexical_search",
+            "q",
+            contracts::ToolStatus::Ok,
+            serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
+        )];
+        assert!(lexical_zero_hit_hints(&with_hits).is_empty());
+
+        let dense_zero = vec![bridge_call(
+            "dense_search",
+            "q",
+            contracts::ToolStatus::Ok,
+            serde_json::json!({"chunks": []}),
+        )];
+        assert!(
+            lexical_zero_hit_hints(&dense_zero).is_empty(),
+            "hint is lexical-specific (dense has semantic recall)"
+        );
+
+        let errored = vec![bridge_call(
+            "lexical_search",
+            "q",
+            contracts::ToolStatus::Error,
+            serde_json::json!({"error": "boom"}),
+        )];
+        assert!(
+            lexical_zero_hit_hints(&errored).is_empty(),
+            "a failed call is an error, not a 0-hit"
+        );
     }
 }

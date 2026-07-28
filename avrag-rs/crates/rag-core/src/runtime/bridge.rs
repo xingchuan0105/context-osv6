@@ -26,6 +26,28 @@ pub struct CapturedBridgeCall {
     pub result: ToolResult,
 }
 
+/// E3 (2026-07-28): coaching hint when a `lexical_search` returns 0 hits.
+///
+/// Pure function over (query, hit_count) so the wording is unit-testable and
+/// the call site (agent-loop codegen observation) stays a thin collector.
+/// The hint is model-facing: multi-word Chinese queries tend to be tokenized
+/// whole, so the first move is splitting to core terms — NOT early-stopping
+/// (no counts change, hint only).
+pub fn lexical_zero_hit_hint(query: &str, hit_count: usize) -> Option<String> {
+    if hit_count > 0 {
+        return None;
+    }
+    Some(format!(
+        "[retrieval_hint] lexical_search 0 命中（query: \"{query}\"）。\
+         多词中文查询可能被整词切分——依次尝试：\
+         ① 拆出核心专名/单词条单独查（如「速冻机」而非「速冻机 年产」）；\
+         ② 换同义词/近义表述；\
+         ③ doc_scan 扫目录定位章节；\
+         ④ 仍无结果可用 dense_search 复核语义。\
+         避免对同一措辞连续无效重试。[/retrieval_hint]"
+    ))
+}
+
 /// Host-side bridge backed by `RagRuntime` tool dispatch.
 pub struct RuntimeBridge {
     runtime: Arc<RagRuntime>,
@@ -1116,5 +1138,19 @@ print(json.dumps(chunks))
             data.get("graph_context").is_none(),
             "switch off must not attach graph_context: {data}"
         );
+    }
+
+    #[test]
+    fn lexical_zero_hit_hint_fires_only_on_zero() {
+        assert!(lexical_zero_hit_hint("速冻机 年产", 3).is_none());
+        assert!(lexical_zero_hit_hint("速冻机 年产", 1).is_none());
+        let hint = lexical_zero_hit_hint("速冻机 年产", 0).expect("0 hits → hint");
+        assert!(hint.contains("0 命中"), "{hint}");
+        assert!(hint.contains("速冻机 年产"), "query quoted: {hint}");
+        assert!(hint.contains("拆出核心专名"), "{hint}");
+        assert!(hint.contains("换同义词"), "{hint}");
+        assert!(hint.contains("doc_scan"), "{hint}");
+        assert!(hint.contains("dense_search 复核"), "{hint}");
+        assert!(hint.contains("避免对同一措辞连续无效重试"), "{hint}");
     }
 }
