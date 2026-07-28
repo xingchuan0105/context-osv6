@@ -387,8 +387,33 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
     let mut multimodal_chunks: Vec<IrMultimodalChunkItem> = Vec::new();
     let mut cursor = 0usize;
     let mode = split_mode_for_file(filename);
+    // T2: nearest preceding Heading chain — fills section_path for blocks
+    // that don't carry one themselves (previously empty everywhere).
+    let mut heading_chain: Vec<String> = Vec::new();
 
     for block in &doc.blocks {
+        if block.block_type == BlockType::Heading {
+            update_heading_chain(&mut heading_chain, block);
+        }
+        let section_path = if block.section_path.is_empty() {
+            heading_chain.clone()
+        } else {
+            block.section_path.clone()
+        };
+
+        // T2: table arm — atomic chunk when the table fits the token budget,
+        // row-group chunks with a repeated header row when it doesn't. Never
+        // splits mid-row. Falls through to the generic text path when the
+        // block carries no validated TableIr payload.
+        if block.block_type == BlockType::Table
+            && let Some(table) = crate::ir::TableIr::from_block(block)
+        {
+            for item in table_chunk_items(block, &table, &section_path, &mut cursor) {
+                text_chunks.push(item);
+            }
+            continue;
+        }
+
         if block.block_type.supports_text_chunking() {
             let segments = split_text_segments(&block.text, mode, policy);
             for segment in segments {
@@ -409,7 +434,7 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
                     block_type: block.block_type.clone(),
                     parser_backend: block.parser_backend.clone(),
                     source_locator: block.source_locator.clone(),
-                    section_path: block.section_path.clone(),
+                    section_path: section_path.clone(),
                     metadata: block.metadata.clone(),
                 });
                 cursor += 1;
@@ -491,6 +516,110 @@ fn split_text_segments(text: &str, mode: SplitMode, policy: &ChunkPolicy) -> Vec
             .map(ToOwned::to_owned)
             .collect(),
     }
+}
+
+/// T2: nearest-preceding-heading chain maintenance. A Heading block with an
+/// explicit section_path replaces the chain; otherwise its text pushes a new
+/// level (capped at 6 entries).
+fn update_heading_chain(chain: &mut Vec<String>, block: &crate::ir::BlockIr) {
+    if !block.section_path.is_empty() {
+        *chain = block.section_path.clone();
+        return;
+    }
+    let text = block.text.trim();
+    if text.is_empty() {
+        return;
+    }
+    chain.push(text.to_string());
+    if chain.len() > 6 {
+        chain.remove(0);
+    }
+}
+
+/// T2: chunk a structured table block. Atomic when the serialized table fits
+/// the token budget; otherwise row-group chunks — each carries the section
+/// path + caption + the REPEATED header row, splits only at row boundaries,
+/// with no text overlap between groups. Metadata: `table_index`, `row_range`
+/// (1-based data-row indexes, inclusive); block_type stays `Table` so the
+/// downstream `chunk_type` column lands "table" unchanged.
+fn table_chunk_items(
+    block: &crate::ir::BlockIr,
+    table: &crate::ir::TableIr,
+    section_path: &[String],
+    cursor: &mut usize,
+) -> Vec<IrTextChunkItem> {
+    let tokenizer = cl100k_base_singleton();
+    let token_len = |text: &str| tokenizer.encode_ordinary(text).len();
+
+    let section_line = if section_path.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", section_path.join(" / "))
+    };
+    // table.to_markdown() already leads with the caption when present.
+    let full = format!("{section_line}{}", table.to_markdown());
+
+    let table_index = block.source_locator.table_index.unwrap_or(0);
+    let make_item = |text: String, row_range: (u32, u32), cursor: &mut usize| {
+        let mut source_locator = block.source_locator.clone();
+        source_locator.row_range = Some(row_range);
+        let mut metadata = block.metadata.clone();
+        metadata.insert("table_index".to_string(), table_index.to_string());
+        metadata.insert(
+            "row_range".to_string(),
+            format!("{}-{}", row_range.0, row_range.1),
+        );
+        let item = IrTextChunkItem {
+            text,
+            page: block.page.or(block.source_locator.page),
+            cursor: *cursor,
+            block_id: block.block_id.clone(),
+            block_type: block.block_type.clone(),
+            parser_backend: block.parser_backend.clone(),
+            source_locator,
+            section_path: section_path.to_vec(),
+            metadata,
+        };
+        *cursor += 1;
+        item
+    };
+
+    // Atomic: fits the budget → one chunk, never split.
+    if token_len(&full) <= TARGET_CHUNK_TOKENS {
+        let last = table.rows.len().max(1) as u32;
+        return vec![make_item(full, (1, last), cursor)];
+    }
+
+    // Row groups: repeated header, row-boundary splits, no overlap.
+    let caption_line = match &table.caption {
+        Some(caption) => format!("{caption}\n"),
+        None => String::new(),
+    };
+    let group_prefix = format!("{section_line}{caption_line}{}", table.header_markdown());
+    let mut items = Vec::new();
+    let mut group_start = 0usize;
+    let mut group_text = group_prefix.clone();
+    for (row_idx, _row) in table.rows.iter().enumerate() {
+        let row_line = format!("\n{}", table.row_markdown(row_idx));
+        let candidate_len = token_len(&format!("{group_text}{row_line}"));
+        if group_text != group_prefix && candidate_len > TARGET_CHUNK_TOKENS {
+            // Flush the current group (1-based inclusive row range).
+            items.push(make_item(
+                group_text,
+                (group_start as u32 + 1, row_idx as u32),
+                cursor,
+            ));
+            group_text = group_prefix.clone();
+            group_start = row_idx;
+        }
+        group_text.push_str(&row_line);
+    }
+    items.push(make_item(
+        group_text,
+        (group_start as u32 + 1, table.rows.len() as u32),
+        cursor,
+    ));
+    items
 }
 
 fn build_multimodal_summary_text(block: &crate::ir::BlockIr) -> String {
@@ -582,6 +711,203 @@ mod ir_chunk_plan_tests {
         assert_eq!(plan.text_chunks[0].block_type, BlockType::SlideText);
         assert_eq!(plan.multimodal_chunks[0].block_type, BlockType::SlideImage);
         assert_eq!(plan.multimodal_chunks[0].asset_ref, "asset-1");
+    }
+
+    // ---- T2: table arm -------------------------------------------------------
+
+    fn table_block(table: &crate::ir::TableIr, block_id: &str) -> BlockIr {
+        let mut metadata = BTreeMap::new();
+        metadata.insert(
+            crate::ir::TableIr::METADATA_KEY.to_string(),
+            serde_json::to_string(table).unwrap(),
+        );
+        BlockIr {
+            block_id: block_id.to_string(),
+            page: Some(1),
+            block_type: BlockType::Table,
+            modality: BlockModality::TextOnly,
+            text: table.to_markdown(),
+            alt_text: None,
+            asset_refs: Vec::new(),
+            caption: table.caption.clone(),
+            section_path: Vec::new(),
+            source_locator: SourceLocator {
+                page: Some(1),
+                table_index: Some(0),
+                ..SourceLocator::default()
+            },
+            parser_backend: ParseBackend::TextLocal,
+            metadata,
+        }
+    }
+
+    fn doc_with_blocks(blocks: Vec<BlockIr>) -> DocumentIr {
+        DocumentIr {
+            document_id: "doc-t".to_string(),
+            title: "t".to_string(),
+            doc_type: DocumentType::Text,
+            primary_backend: ParseBackend::TextLocal,
+            backend_version: None,
+            language: None,
+            metadata: BTreeMap::new(),
+            pages: Vec::new(),
+            blocks,
+            assets: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    fn make_table(rows: usize, cell_words: usize) -> crate::ir::TableIr {
+        crate::ir::TableIr {
+            caption: Some("表 1 测试表".to_string()),
+            headers: vec!["编号".into(), "名称".into(), "说明".into()],
+            rows: (1..=rows)
+                .map(|i| {
+                    vec![
+                        i.to_string(),
+                        format!("条目{i}"),
+                        (0..cell_words)
+                            .map(|w| format!("描述词{w}"))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ]
+                })
+                .collect(),
+            parse_confidence: crate::ir::TableConfidence::High,
+            notes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn small_table_is_one_atomic_chunk() {
+        let table = make_table(3, 3);
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(vec![table_block(&table, "t-1")]),
+            "t.txt",
+            &ChunkPolicy::default(),
+        );
+        assert_eq!(plan.text_chunks.len(), 1);
+        let chunk = &plan.text_chunks[0];
+        assert_eq!(chunk.block_type, BlockType::Table);
+        assert!(chunk.text.contains("表 1 测试表"), "caption: {}", chunk.text);
+        assert!(chunk.text.contains("|编号|名称|说明|"), "header: {}", chunk.text);
+        assert!(chunk.text.contains("|3|条目3|"), "last row: {}", chunk.text);
+        assert_eq!(
+            chunk.metadata.get("row_range").map(String::as_str),
+            Some("1-3")
+        );
+        assert_eq!(chunk.source_locator.row_range, Some((1, 3)));
+    }
+
+    #[test]
+    fn big_table_splits_into_row_groups_with_repeated_headers() {
+        let tokenizer = cl100k_base_singleton();
+        let table = make_table(200, 10);
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(vec![table_block(&table, "t-1")]),
+            "t.txt",
+            &ChunkPolicy::default(),
+        );
+        assert!(
+            plan.text_chunks.len() > 1,
+            "200 fat rows must exceed one chunk: {}",
+            plan.text_chunks.len()
+        );
+        let header_line = "|编号|名称|说明|";
+        let mut seen_rows: Vec<usize> = Vec::new();
+        for chunk in &plan.text_chunks {
+            // Every group repeats the header row and stays within budget.
+            assert!(chunk.text.contains(header_line), "{}", chunk.text);
+            assert!(chunk.text.contains("表 1 测试表"), "caption: {}", chunk.text);
+            assert!(
+                tokenizer.encode_ordinary(&chunk.text).len() <= TARGET_CHUNK_TOKENS,
+                "chunk over budget"
+            );
+            // Collect data-row numbers present in this group.
+            for line in chunk.text.lines() {
+                if let Some(rest) = line.strip_prefix('|')
+                    && !line.contains("编号")
+                    && !line.contains("---")
+                    && let Some(num_str) = rest.split('|').next()
+                    && let Ok(n) = num_str.parse::<usize>()
+                {
+                    seen_rows.push(n);
+                }
+            }
+        }
+        // No row is split or duplicated across groups; every row appears once.
+        seen_rows.sort_unstable();
+        assert_eq!(seen_rows.len(), 200, "rows lost or duplicated");
+        assert_eq!(seen_rows[0], 1);
+        assert_eq!(seen_rows[199], 200);
+        // Groups are contiguous row ranges (split at row edges only).
+        assert!(seen_rows.windows(2).all(|w| w[1] == w[0] + 1));
+        // row_range metadata matches the group's actual span.
+        let first = &plan.text_chunks[0];
+        let range = first.metadata.get("row_range").unwrap();
+        let (lo, hi) = range.split_once('-').unwrap();
+        assert_eq!(lo, "1");
+        assert!(hi.parse::<usize>().unwrap() < 200, "first group is not the whole table");
+    }
+
+    #[test]
+    fn section_path_flows_from_preceding_heading() {
+        let heading = BlockIr {
+            block_id: "h-1".to_string(),
+            page: Some(1),
+            block_type: BlockType::Heading,
+            modality: BlockModality::TextOnly,
+            text: "第三章 营销策略".to_string(),
+            alt_text: None,
+            asset_refs: Vec::new(),
+            caption: None,
+            section_path: Vec::new(),
+            source_locator: SourceLocator {
+                page: Some(1),
+                ..SourceLocator::default()
+            },
+            parser_backend: ParseBackend::TextLocal,
+            metadata: BTreeMap::new(),
+        };
+        let table = make_table(2, 2);
+        let prose = BlockIr {
+            block_id: "p-1".to_string(),
+            page: Some(1),
+            block_type: BlockType::Paragraph,
+            modality: BlockModality::TextOnly,
+            text: "这是一段足够长的普通段落文字，用来验证标题链会流入普通块的 section_path。".to_string(),
+            alt_text: None,
+            asset_refs: Vec::new(),
+            caption: None,
+            section_path: Vec::new(),
+            source_locator: SourceLocator {
+                page: Some(1),
+                ..SourceLocator::default()
+            },
+            parser_backend: ParseBackend::TextLocal,
+            metadata: BTreeMap::new(),
+        };
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(vec![heading, table_block(&table, "t-1"), prose]),
+            "t.txt",
+            &ChunkPolicy::default(),
+        );
+        let table_chunk = plan
+            .text_chunks
+            .iter()
+            .find(|c| c.block_type == BlockType::Table)
+            .expect("table chunk");
+        assert!(
+            table_chunk.text.contains("第三章 营销策略"),
+            "section path in table chunk: {}",
+            table_chunk.text
+        );
+        let prose_chunk = plan
+            .text_chunks
+            .iter()
+            .find(|c| c.block_type == BlockType::Paragraph)
+            .expect("prose chunk");
+        assert_eq!(prose_chunk.section_path, vec!["第三章 营销策略".to_string()]);
     }
 
     /// S4 P-Scale (L2-patho filter `patho_scale`): LiteParse ~1.5k micro-paragraphs.
