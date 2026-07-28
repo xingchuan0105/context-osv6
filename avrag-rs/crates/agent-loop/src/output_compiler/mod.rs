@@ -17,9 +17,7 @@
 mod handoff;
 mod types;
 
-pub use handoff::{
-    HandoffCompileInput, compile_handoff, observed_chunk_ids, strip_code_execution_blocks,
-};
+pub use handoff::{HandoffCompileInput, compile_handoff, strip_code_execution_blocks};
 pub use types::{CompileOutcome, Diagnostic, Severity};
 
 #[cfg(test)]

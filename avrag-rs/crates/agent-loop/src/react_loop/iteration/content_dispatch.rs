@@ -83,11 +83,9 @@ impl ReActLoop {
         // compiler stays generic: its input comes only from loop state
         // (messages/tool_results), no app-chat types leak in.
         if mode.worker_handoff {
-            let observed = crate::output_compiler::observed_chunk_ids(&state.tool_results);
             let outcome =
                 crate::output_compiler::compile_handoff(&crate::output_compiler::HandoffCompileInput {
                     raw: &content,
-                    observed_chunk_ids: Some(&observed),
                     has_tool_results: !state.tool_results.is_empty(),
                 });
             if outcome.has_errors() && state.compile_continuations < MAX_COMPILE_CONTINUATIONS {

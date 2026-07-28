@@ -110,9 +110,17 @@ pub struct PremiseMismatch {
 /// Replaces free-form digest notes so coverage gaps are visible to the
 /// orchestrator and chat exit. Workers are prompted to emit this JSON;
 /// free-form answers fall back to `summary` + `coverage = "partial"`.
+///
+/// K3 (2026-07-28): the handoff contract is now "分析散文 + 可选 SELECTED
+/// 行" — `key_facts` is DEPRECATED (facts are owned by the retrieval log +
+/// code hydration). The field stays for serde compat with old artifacts
+/// (mode_debug dumps, stored handoffs) but is no longer populated on new
+/// parses; `basis` lives only on these legacy facts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkerHandoff {
     pub summary: String,
+    /// DEPRECATED (K3): always empty on new parses; populated only when
+    /// reading pre-K3 artifacts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub key_facts: Vec<WorkerKeyFact>,
     /// `full` | `partial` | `insufficient` (open string; unknown treated as partial).

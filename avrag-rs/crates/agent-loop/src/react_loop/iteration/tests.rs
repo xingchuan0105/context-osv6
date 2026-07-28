@@ -646,16 +646,16 @@ async fn apply_content(
         .unwrap()
 }
 
-/// q045 (a): correct conclusion in a self-invented `task_result` wrapper →
-/// E101 compile feedback, loop continues; the re-emitted contract JSON is
-/// then accepted as the final direct answer.
+/// K3 (a): zero-retrieval insufficient JSON → E105 compile feedback, loop
+/// continues; a prose final message is then accepted (prose is a legal
+/// handoff now — no JSON envelope needed).
 #[tokio::test]
-async fn worker_handoff_bad_envelope_triggers_feedback_then_accepts() {
+async fn worker_handoff_e105_triggers_feedback_then_prose_accepted() {
     let loop_ = test_loop();
     let mode = worker_mode();
     let mut state = empty_state();
 
-    let bad = r#"{"task_result":{"summary":"文中未写明总部城市","coverage":"insufficient"}}"#;
+    let bad = r#"{"schema_version":"internal_worker_handoff_v1","summary":"未找到","key_facts":[],"coverage":"insufficient","gaps":["x"]}"#;
     let outcome = apply_content(&loop_, &mode, &mut state, bad).await;
     assert!(matches!(outcome.control, IterationControl::Continue));
     assert_eq!(
@@ -666,11 +666,11 @@ async fn worker_handoff_bad_envelope_triggers_feedback_then_accepts() {
     let feedback = state.messages.last().unwrap();
     assert_eq!(feedback.role, "user");
     assert!(feedback.content.contains("编译失败"), "{feedback:?}");
-    assert!(feedback.content.contains("E101"), "{feedback:?}");
+    assert!(feedback.content.contains("E105"), "{feedback:?}");
     assert!(feedback.content.contains("请按契约重新输出"), "{feedback:?}");
 
-    // Next output: the same conclusion in the contract envelope → accepted.
-    let good = r#"{"schema_version":"internal_worker_handoff_v1","summary":"文中未写明总部城市","key_facts":[],"coverage":"insufficient","gaps":["总部城市"]}"#;
+    // Next output: plain prose — legal handoff under K3, accepted directly.
+    let good = "文档确认竞争对手身份，但未记载总部城市信息。";
     let outcome = apply_content(&loop_, &mode, &mut state, good).await;
     assert!(matches!(
         outcome.control,
@@ -682,7 +682,7 @@ async fn worker_handoff_bad_envelope_triggers_feedback_then_accepts() {
     );
 }
 
-/// (b) one-continuation limit: a second invalid output is NOT continued again
+/// (b) one-continuation limit: a second E105 output is NOT continued again
 /// (no infinite compile loop) — it falls through as the final direct answer
 /// and the post-loop compile marks it degraded with codes.
 #[tokio::test]
@@ -691,7 +691,7 @@ async fn worker_handoff_compile_feedback_only_once() {
     let mode = worker_mode();
     let mut state = empty_state();
 
-    let bad = r#"{"task_result":{"summary":"x"}}"#;
+    let bad = r#"{"schema_version":"internal_worker_handoff_v1","summary":"未找到","key_facts":[],"coverage":"insufficient","gaps":[]}"#;
     let first = apply_content(&loop_, &mode, &mut state, bad).await;
     assert!(matches!(first.control, IterationControl::Continue));
     assert_eq!(state.compile_continuations, 1);
@@ -708,25 +708,26 @@ async fn worker_handoff_compile_feedback_only_once() {
     assert_eq!(state.compile_continuations, 1, "counter stays at the cap");
 }
 
-/// (e) loop observed chunks but the handoff lists no key_facts → E102
-/// feedback naming the legal pointers.
+/// K3 (e): a prose final message in a worker loop is a legal handoff — no
+/// compile error, no continuation, straight to DirectAnswer.
 #[tokio::test]
-async fn worker_handoff_missing_key_facts_with_tool_results_is_e102() {
+async fn worker_handoff_prose_accepted_without_continuation() {
     let loop_ = test_loop();
     let mode = worker_mode();
     let mut state = empty_state();
     state.tool_results.push(ok_chunk_tool_result("c1"));
 
-    let raw = r#"{"handoff":true,"summary":"只找到一条","coverage":"partial","gaps":[]}"#;
+    let raw = "找到 2 条相关证据：2019年建厂、大连。SELECTED: #1, #2";
     let outcome = apply_content(&loop_, &mode, &mut state, raw).await;
-    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert!(
+        matches!(outcome.control, IterationControl::DirectAnswer { .. }),
+        "prose handoff must be accepted without continuation"
+    );
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "compile_feedback"
+        "direct_content"
     );
-    let feedback = &state.messages.last().unwrap().content;
-    assert!(feedback.contains("E102"), "{feedback}");
-    assert!(feedback.contains("c1"), "legal pointers listed: {feedback}");
+    assert_eq!(state.compile_continuations, 0);
 }
 
 /// Non-worker loops never invoke the compiler (chat prose stays untouched).

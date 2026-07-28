@@ -21,7 +21,7 @@ use contracts::chat::{AnswerBlock, Citation, SourceRef};
 use serde::{Deserialize, Serialize};
 
 use super::store::{EvidenceKind, EvidenceStore};
-use super::types::{Channel, PremiseMismatch, WorkerHandoff, WorkerKeyFact};
+use super::types::{Channel, PremiseMismatch, WorkerHandoff};
 
 const MAX_NOTE_CHARS: usize = 2000;
 const MAX_GAPS: usize = 12;
@@ -431,23 +431,22 @@ pub fn tool_failures(results: &[contracts::ToolResult]) -> Vec<String> {
 
 /// Parse structured worker handoff from the worker's final message.
 ///
-/// S2: this is the post-loop compile of the SAME channel the loop uses at the
-/// `direct_content` decision point (agent-loop `output_compiler`) — a cheap
-/// safety net with no continuation. It covers every terminal shape, including
-/// the C5 budget-exhausted final turn's output: compile errors here degrade
-/// the handoff with diagnostic codes attached.
+/// K3 (design 2026-07-28 §4.3): the handoff contract is "分析散文 + 可选
+/// SELECTED 行" — prose is a legal delivery. This is the post-loop compile
+/// of the SAME channel the loop uses at the `direct_content` decision point
+/// (agent-loop `output_compiler`): a cheap safety net with no continuation.
+/// Degraded now means ONLY: E104 fabrication stripped, or E105 rejected
+/// (insufficient declared with zero retrieval calls) — never "not JSON".
 pub fn worker_handoff_from_run(result: &AgentRunResult) -> Option<WorkerHandoff> {
     if result.answer.trim().is_empty() {
         return None;
     }
-    let observed = agent_loop::output_compiler::observed_chunk_ids(&result.tool_results);
     let outcome =
         agent_loop::output_compiler::compile_handoff(&agent_loop::output_compiler::HandoffCompileInput {
             raw: &result.answer,
-            observed_chunk_ids: Some(&observed),
             has_tool_results: !result.tool_results.is_empty(),
         });
-    handoff_from_compile(outcome)
+    handoff_from_compile(&result.answer, outcome)
 }
 
 /// Worker channel summary (flat string) — prefers structured handoff summary.
@@ -456,13 +455,9 @@ pub fn channel_note_from_run(result: &AgentRunResult) -> Option<String> {
 }
 
 /// Parse a worker final message into [`WorkerHandoff`] without run context
-/// (pure parse: pointer truthfulness E103 / loop-observation E102 cannot be
-/// checked and are skipped).
-///
-/// C4/S2 (deterministic handoff validation): the message MUST parse as
-/// structured JSON after the shared fence strip. Anything else — raw code
-/// blocks (q087), prose, fabricated `<code_execution_result>` dumps (q039) —
-/// is NOT ingested as summary text; the worker is marked degraded instead.
+/// (pure parse; E105's zero-retrieval gate needs the run's tool trail and is
+/// skipped here). Prose becomes the summary (K3); JSON yields structured
+/// fields when it carries them.
 pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
     if raw.trim().is_empty() {
         return None;
@@ -470,38 +465,61 @@ pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
     let outcome =
         agent_loop::output_compiler::compile_handoff(&agent_loop::output_compiler::HandoffCompileInput {
             raw,
-            observed_chunk_ids: None,
             has_tool_results: false,
         });
-    handoff_from_compile(outcome)
+    handoff_from_compile(raw, outcome)
 }
 
-/// Map a compile outcome to a [`WorkerHandoff`]: success keeps the (possibly
-/// E104-stripped / E103-pruned) value; failure yields `degraded_unparsable`.
-/// Either way the diagnostic codes ride along in `compile_diagnostics`.
-/// Degraded = pre-existing flag, any Error diagnostic, or a content
-/// transformation (E103/E104); warnings alone never degrade.
+/// Map a compile outcome to a [`WorkerHandoff`] (K3):
+/// - JSON value that reads as a handoff → structured fields (summary /
+///   coverage / gaps / premise_mismatch; key_facts is deprecated — facts are
+///   owned by SELECTED + hydration);
+/// - anything else (prose, SELECTED-only, non-envelope JSON) → the raw
+///   message becomes the prose summary, coverage defaults to "partial"
+///   (same default the old `freeform_summary` used — least surprising);
+/// - degraded ONLY when E104 stripped a fabrication or E105 rejected —
+///   codes ride along in `compile_diagnostics`.
 fn handoff_from_compile(
+    raw: &str,
     outcome: agent_loop::output_compiler::CompileOutcome<serde_json::Value>,
 ) -> Option<WorkerHandoff> {
     let codes = outcome.diagnostic_codes();
+    let mut h = match outcome.value.as_ref().and_then(handoff_from_value) {
+        Some(h) => h,
+        None => {
+            // K3: prose path — the message itself is the summary. E104's
+            // fabrication stripping applies to prose too.
+            let summary = agent_loop::output_compiler::strip_code_execution_blocks(raw.trim());
+            let mut h = WorkerHandoff::freeform_summary(summary.clone());
+            if summary != raw.trim() {
+                h.handoff_degraded = true;
+                if !codes.iter().any(|c| c == "E104") {
+                    h.compile_diagnostics.push("E104".to_string());
+                }
+            }
+            h
+        }
+    };
+    // Degraded = any Error diagnostic (E105) or a transformation (E104
+    // strip); warnings alone never degrade; prose handoffs are NOT degraded.
     let transformed = outcome
         .diagnostics
         .iter()
-        .any(|d| d.code == "E103" || d.code == "E104");
-    let mut h = match outcome.value.as_ref().and_then(handoff_from_value) {
-        Some(h) => h,
-        None => WorkerHandoff::degraded_unparsable(),
-    };
+        .any(|d| d.code == "E104");
     h.handoff_degraded = h.handoff_degraded || outcome.has_errors() || transformed;
-    h.compile_diagnostics = codes;
+    for code in codes {
+        if !h.compile_diagnostics.contains(&code) {
+            h.compile_diagnostics.push(code);
+        }
+    }
     Some(cap_handoff(h))
 }
 
-// C4/S2 note: the structural validation that used to live here
-// (`sanitize_worker_handoff` — schema check, pointer truthfulness,
-// fabrication stripping) migrated to agent-loop `output_compiler`
-// (E101–E104). What remains below is the thin JSON→WorkerHandoff glue.
+// K3 note: the envelope/pointer validation that used to live here (E101
+// envelope check, E102 key_facts presence, E103 pointer truthfulness) is
+// retired with the K3 rule-table slimming — prose handoffs are legal and
+// evidence pointers are code-hydrated (K2 `selected.rs`). What remains is
+// the thin JSON→WorkerHandoff glue; E104/E105 still fire.
 
 fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
     let schema = v
@@ -524,11 +542,13 @@ fn handoff_from_value(v: &serde_json::Value) -> Option<WorkerHandoff> {
             .trim()
             .to_string();
         let gaps = string_list(v.get("gaps"));
-        let key_facts = key_facts_from(v.get("key_facts"));
         let premise_mismatch = premise_mismatch_from(v.get("premise_mismatch"));
         return Some(WorkerHandoff {
             summary: summary.to_string(),
-            key_facts,
+            // K3: key_facts parsing is dropped — facts are owned by the
+            // SELECTED log + code hydration. The field stays for serde
+            // compat with old artifacts but is no longer populated here.
+            key_facts: Vec::new(),
             coverage: if coverage.is_empty() {
                 "partial".into()
             } else {
@@ -614,56 +634,6 @@ fn string_list(v: Option<&serde_json::Value>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn key_facts_from(v: Option<&serde_json::Value>) -> Vec<WorkerKeyFact> {
-    let Some(arr) = v.and_then(|x| x.as_array()) else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|item| {
-            if let Some(s) = item.as_str() {
-                let t = s.trim();
-                if t.is_empty() {
-                    return None;
-                }
-                return Some(WorkerKeyFact {
-                    claim: t.to_string(),
-                    evidence: Vec::new(),
-                    basis: "observed".to_string(),
-                });
-            }
-            let claim = item
-                .get("claim")
-                .and_then(|c| c.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())?
-                .to_string();
-            let evidence = item
-                .get("evidence")
-                .and_then(|e| e.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
-                        .filter(|s| !s.is_empty())
-                        .collect()
-                })
-                .unwrap_or_default();
-            // S3: open string, unknown values tolerated (treated as observed).
-            let basis = item
-                .get("basis")
-                .and_then(|b| b.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .unwrap_or("observed")
-                .to_string();
-            Some(WorkerKeyFact {
-                claim,
-                evidence,
-                basis,
-            })
-        })
-        .collect()
 }
 
 fn cap_handoff(mut h: WorkerHandoff) -> WorkerHandoff {
@@ -1250,27 +1220,20 @@ mod tests {
         assert_eq!(h.summary, "立项报告，结构：现状→目标→路径");
         assert_eq!(h.coverage, "partial");
         assert_eq!(h.gaps, vec!["未找到投资估算章节".to_string()]);
-        assert_eq!(h.key_facts.len(), 2);
-        assert_eq!(h.key_facts[0].claim, "采用微服务");
-        assert_eq!(h.key_facts[0].evidence, vec!["chunk-a".to_string()]);
-        assert_eq!(h.key_facts[1].claim, "预算约 2 亿");
+        // K3: key_facts parsing dropped (SELECTED + hydration owns facts);
+        // the field stays serde-compatible but is no longer populated.
+        assert!(h.key_facts.is_empty());
         assert!(!h.is_full_coverage());
-        // S3: absent gray fields default to observed / None.
-        assert!(h.key_facts.iter().all(|f| f.basis == "observed"));
         assert!(h.premise_mismatch.is_none());
     }
 
-    // ---- S3: gray-zone schema (basis / premise_mismatch) -------------------
+    // ---- S3: gray-zone schema (premise_mismatch; key_facts deprecated) ------
 
     #[test]
-    fn parses_basis_and_premise_mismatch() {
+    fn parses_premise_mismatch() {
         let raw = r#"{
           "schema_version": "internal_worker_handoff_v1",
           "summary": "文档核心框架是 4R",
-          "key_facts": [
-            {"claim": "Y公司营销人员编制为 4 人", "evidence": ["chunk-a"], "basis": "observed"},
-            {"claim": "访谈可能覆盖了全部 4 名营销人员", "evidence": [], "basis": "inferred"}
-          ],
           "coverage": "partial",
           "gaps": [],
           "premise_mismatch": {
@@ -1280,9 +1243,7 @@ mod tests {
           }
         }"#;
         let h = parse_worker_handoff(raw).expect("handoff");
-        assert!(!h.key_facts[0].is_inferred());
-        assert!(h.key_facts[1].is_inferred());
-        assert_eq!(h.key_facts[1].basis, "inferred");
+        assert!(h.key_facts.is_empty(), "K3: facts no longer parsed");
         let pm = h.premise_mismatch.expect("premise_mismatch");
         assert_eq!(pm.kind, "frame");
         assert!(pm.detail.contains("4P"));
@@ -1290,14 +1251,6 @@ mod tests {
             pm.actual_subject.as_deref(),
             Some("Y公司策略为 4R 框架（关联/反应/关系/回报）")
         );
-    }
-
-    #[test]
-    fn basis_unknown_value_tolerated_as_observed() {
-        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"x","basis":"maybe"}],"coverage":"partial","gaps":[]}"#;
-        let h = parse_worker_handoff(raw).expect("handoff");
-        assert_eq!(h.key_facts[0].basis, "maybe", "open string preserved");
-        assert!(!h.key_facts[0].is_inferred(), "unknown treated as observed");
     }
 
     #[test]
@@ -1333,21 +1286,18 @@ mod tests {
     }
 
     #[test]
-    fn freeform_text_degrades_without_propagating_raw_text() {
-        // C4: unparsable output (prose or raw code) is never ingested as a
-        // summary — deterministic degraded handoff instead.
+    fn freeform_text_becomes_summary_not_degraded() {
+        // K3: prose (or any non-envelope output) is a legal handoff — the
+        // message becomes the summary with the partial default, NOT degraded.
         for raw in [
             "散文式摘要：文档讲了三件事",
             "<code language=\"python\">\nchunks = await client.dense_search(query=\"保修\")\n</code>",
         ] {
-            let h = parse_worker_handoff(raw).expect("degraded handoff");
-            assert!(h.handoff_degraded, "{raw}");
-            assert_eq!(h.coverage, "insufficient");
-            assert_eq!(h.summary, "worker output unparsable as handoff JSON");
-            assert!(!h.summary.contains("文档讲了三件事"));
-            assert!(!h.summary.contains("dense_search"));
+            let h = parse_worker_handoff(raw).expect("prose handoff");
+            assert!(!h.handoff_degraded, "prose is not degraded: {raw}");
+            assert_eq!(h.coverage, "partial");
+            assert_eq!(h.summary, raw.trim());
             assert!(h.key_facts.is_empty());
-            assert!(h.gaps.is_empty());
         }
     }
 
@@ -1409,86 +1359,36 @@ mod tests {
         let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"2019年建厂","key_facts":[{"claim":"2019年建厂","evidence":["c1"]}],"coverage":"full","gaps":[]}"#;
         let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert!(!h.handoff_degraded);
-        assert_eq!(h.key_facts.len(), 1);
-        assert_eq!(h.key_facts[0].claim, "2019年建厂");
-        assert_eq!(h.coverage, "full");
-    }
-
-    #[test]
-    fn facts_citing_unobserved_ids_are_dropped() {
-        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"real","evidence":["c1"]},{"claim":"fake","evidence":["c999"]}],"coverage":"full","gaps":[]}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
-        assert_eq!(h.key_facts.len(), 1);
-        assert_eq!(h.key_facts[0].claim, "real");
-        assert!(h.handoff_degraded);
-        // Some facts survived → coverage stays.
-        assert_eq!(h.coverage, "full");
-    }
-
-    #[test]
-    fn coverage_downgrades_when_every_fact_is_dropped() {
-        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"fake","evidence":["c999"]}],"coverage":"full","gaps":[]}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        // K3: model-written key_facts are ignored (hydration owns facts).
         assert!(h.key_facts.is_empty());
-        assert_eq!(h.coverage, "insufficient");
-        assert!(h.handoff_degraded);
+        assert_eq!(h.coverage, "full");
     }
 
-    // ---- S2: compiler migration — degraded handoffs carry diagnostic codes --
+    // ---- K3: degraded = E104 stripped or E105 rejected only ------------------
 
-    /// (c) The post-loop safety net (same channel the C5 budget-exhausted
-    /// final turn's output flows through): an invalid terminal output degrades
-    /// with compile codes attached, no continuation.
+    /// The post-loop safety net (same channel the C5 budget-exhausted final
+    /// turn's output flows through): E105 rejection degrades with codes.
     #[test]
-    fn degraded_handoff_carries_compile_diagnostics() {
-        let h = worker_handoff_from_run(&run_with("散文式交付，不是 JSON", vec![]))
-            .expect("degraded handoff");
+    fn e105_rejection_degrades_with_code() {
+        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"未找到","key_facts":[],"coverage":"insufficient","gaps":["x"]}"#;
+        let h = worker_handoff_from_run(&run_with(raw, vec![])).expect("handoff");
         assert!(h.handoff_degraded);
-        assert_eq!(h.coverage, "insufficient");
         assert!(
-            h.compile_diagnostics.contains(&"E101".to_string()),
+            h.compile_diagnostics.contains(&"E105".to_string()),
             "{:?}",
             h.compile_diagnostics
         );
     }
 
     #[test]
-    fn unobserved_pointer_degrades_with_e103_code() {
-        let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"s","key_facts":[{"claim":"fake","evidence":["c999"]}],"coverage":"full","gaps":[]}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
-        assert!(h.handoff_degraded);
-        assert!(
-            h.compile_diagnostics.contains(&"E103".to_string()),
-            "{:?}",
-            h.compile_diagnostics
-        );
-    }
-
-    #[test]
-    fn task_result_wrapper_degrades_with_e101_code() {
-        // q045 shape through the post-loop net (no continuation here).
+    fn task_result_wrapper_is_prose_not_degraded() {
+        // K3: q045's self-invented wrapper is no longer an error — the raw
+        // message becomes the (JSON-text) summary, not degraded.
         let raw = r#"{"task_result":{"summary":"文中未写明总部城市"}}"#;
         let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
-        assert!(h.handoff_degraded);
-        assert_eq!(h.summary, "worker output unparsable as handoff JSON");
-        assert!(
-            h.compile_diagnostics.contains(&"E101".to_string()),
-            "{:?}",
-            h.compile_diagnostics
-        );
-    }
-
-    #[test]
-    fn missing_key_facts_with_tool_results_degrades_with_e102_code() {
-        // q087 shape: summary-only handoff while the loop observed chunks.
-        let raw = r#"{"handoff":true,"summary":"只找到一条","coverage":"partial","gaps":[]}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
-        assert!(h.handoff_degraded);
-        assert!(
-            h.compile_diagnostics.contains(&"E102".to_string()),
-            "{:?}",
-            h.compile_diagnostics
-        );
+        assert!(!h.handoff_degraded);
+        assert!(h.summary.contains("task_result"), "{}", h.summary);
+        assert!(h.compile_diagnostics.is_empty());
     }
 
     #[test]
