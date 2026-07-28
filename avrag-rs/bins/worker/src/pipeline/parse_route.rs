@@ -18,6 +18,15 @@ pub(crate) async fn execute_local_parse(
     document_id: Uuid,
     kind: &LocalParseKind,
 ) -> Result<DocumentIr, IngestionError> {
+    // T3: Excel parses in-process via calamine (grid kept as SheetTable
+    // blocks) — never the office service XML stripper.
+    if matches!(kind, LocalParseKind::Excel) {
+        return ingestion::parser::parse_excel_document_ir(document_id, filename, bytes)
+            .map_err(|error| {
+                IngestionError::parse_local(format!("calamine parse failed for {filename}: {error}"))
+            });
+    }
+
     let (doc_type, backend, parser): (DocumentType, ParseBackend, Box<dyn DocumentParser>) =
         match kind {
             LocalParseKind::Text => (
@@ -35,6 +44,7 @@ pub(crate) async fn execute_local_parse(
                 ParseBackend::CodeLocal,
                 Box::new(CodeParser),
             ),
+            LocalParseKind::Excel => unreachable!("handled above"),
         };
 
     let parsed = parser.parse(bytes, filename).await.map_err(|error| {

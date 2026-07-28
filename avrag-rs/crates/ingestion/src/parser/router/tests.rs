@@ -71,6 +71,35 @@ fn presentation_file_routing_uses_pdf_after_conversion() {
     ));
 }
 
+/// T3: xlsx/xls route to the in-process calamine parser — never the office
+/// service XML stripper.
+#[test]
+fn xlsx_routing_uses_local_calamine_not_office_service() {
+    let decision = ParseRouter::route(
+        b"fake xlsx",
+        "ipd.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    .unwrap();
+    assert_eq!(decision.route, ParseRoute::Local);
+    assert!(matches!(
+        decision.plan,
+        ParsePlan::Local(LocalParsePlan {
+            kind: LocalParseKind::Excel
+        })
+    ));
+
+    let decision =
+        ParseRouter::route(b"fake xls", "legacy.xls", "application/vnd.ms-excel").unwrap();
+    assert_eq!(decision.route, ParseRoute::Local);
+    assert!(matches!(
+        decision.plan,
+        ParsePlan::Local(LocalParsePlan {
+            kind: LocalParseKind::Excel
+        })
+    ));
+}
+
 #[test]
 fn route_rejects_missing_extension() {
     let error = ParseRouter::route(b"hello", "README", "text/plain").expect_err("should fail");

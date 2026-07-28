@@ -137,6 +137,8 @@ pub enum LocalParseKind {
     Text,
     Html,
     Code,
+    /// T3: xls/xlsx via calamine in-process (never the office XML stripper).
+    Excel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,7 +288,7 @@ impl ParseRouter {
             normalize_extension(filename).expect("validated file types must retain an extension");
 
         match extension.as_str() {
-            "txt" | "md" | "rst" | "csv" | "json" | "toml" | "yaml" | "yml" => {
+            "txt" | "md" | "rst" | "csv" | "tsv" | "json" | "toml" | "yaml" | "yml" => {
                 Ok(ParseRouteDecision {
                     route: ParseRoute::Local,
                     reason: RouteReason::TextFile,
@@ -364,15 +366,13 @@ impl ParseRouter {
                 })
             }
             "xls" | "xlsx" => Ok(ParseRouteDecision {
-                route: ParseRoute::OfficeService,
-                reason: RouteReason::OfficeDocument,
+                // T3: Excel goes to calamine in-process — never the office
+                // service's XML tag stripper (grid was discarded there).
+                route: ParseRoute::Local,
+                reason: RouteReason::TextFile,
                 probe_result: None,
-                plan: ParsePlan::Office(OfficeParsePlan {
-                    doc_type: if extension == "xls" {
-                        OfficeDocType::Xls
-                    } else {
-                        OfficeDocType::Xlsx
-                    },
+                plan: ParsePlan::Local(LocalParsePlan {
+                    kind: LocalParseKind::Excel,
                 }),
                 liteparse_snapshot: None,
             }),

@@ -1,4 +1,6 @@
 mod code;
+pub mod csv_table;
+mod excel;
 mod html;
 mod liteparse;
 mod liteparse_config;
@@ -24,6 +26,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 pub use code::CodeParser;
+pub use excel::parse_excel_document_ir;
 pub use html::HtmlParser;
 pub use liteparse::{LiteParseService, ParsedPdfSnapshot};
 pub use liteparse_config::LiteParseConfig;

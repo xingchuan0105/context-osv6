@@ -20,6 +20,7 @@ pub(super) fn is_supported_extension(extension: &str) -> bool {
             | "md"
             | "rst"
             | "csv"
+            | "tsv"
             | "json"
             | "toml"
             | "yaml"
@@ -119,6 +120,7 @@ pub(super) fn mime_matches_extension(extension: &str, mime_type: &str) -> bool {
         "csv" => {
             mime_type == "text/csv" || mime_type == "application/csv" || mime_type == "text/plain"
         }
+        "tsv" => mime_type == "text/tab-separated-values" || mime_type == "text/plain",
         "md" => mime_type == "text/markdown" || mime_type == "text/plain",
         "toml" => mime_type == "application/toml" || mime_type == "text/plain",
         "yaml" | "yml" => matches!(

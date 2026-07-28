@@ -37,7 +37,7 @@ impl DocumentType {
             "html" | "htm" => Self::Html,
             "rs" | "py" | "js" | "ts" | "tsx" | "go" | "java" | "c" | "cpp" | "h" => Self::Code,
             "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" => Self::Image,
-            "txt" | "md" | "rst" | "csv" | "json" | "toml" | "yaml" | "yml" => Self::Text,
+            "txt" | "md" | "rst" | "csv" | "tsv" | "json" | "toml" | "yaml" | "yml" => Self::Text,
             _ => Self::Unknown,
         }
     }
@@ -70,6 +70,9 @@ pub enum ParseBackend {
     HtmlLocal,
     TextLocal,
     CodeLocal,
+    /// T3: calamine in-process xlsx/xls grid parse (replaces the office
+    /// service's XML tag stripper for Excel files).
+    CalamineExcel,
     #[default]
     Unknown,
 }
@@ -104,6 +107,7 @@ impl ParseBackend {
             Self::HtmlLocal => "html_local",
             Self::TextLocal => "text_local",
             Self::CodeLocal => "code_local",
+            Self::CalamineExcel => "calamine_excel",
             Self::Unknown => "unknown",
         }
     }
@@ -169,6 +173,35 @@ impl DocumentIr {
             match unit.kind {
                 ParsedUnitKind::Text => {
                     *page_text_chars.entry(unit.page).or_default() += unit.text.chars().count();
+                    // T3: CSV/TSV pre-parsed by TextParser → ONE Table block.
+                    if primary_backend == ParseBackend::TextLocal
+                        && let Some(json) = normalized.metadata.get("csv_table_ir")
+                        && let Ok(table) = serde_json::from_str::<TableIr>(json)
+                    {
+                        let mut metadata = unit.metadata.clone();
+                        metadata.insert(TableIr::METADATA_KEY.to_string(), json.clone());
+                        metadata.insert("table_parser".to_string(), "csv-v1".to_string());
+                        document.blocks.push(BlockIr {
+                            block_id: unit.unit_id.clone(),
+                            page: Some(unit.page),
+                            block_type: BlockType::Table,
+                            modality: BlockModality::TextOnly,
+                            text: table.to_markdown(),
+                            alt_text: None,
+                            asset_refs: Vec::new(),
+                            caption: table.caption.clone(),
+                            section_path: Vec::new(),
+                            source_locator: SourceLocator {
+                                page: Some(unit.page),
+                                table_index: Some(0),
+                                row_range: Some((1, table.rows.len().max(1) as u32)),
+                                ..SourceLocator::default()
+                            },
+                            parser_backend: primary_backend.clone(),
+                            metadata,
+                        });
+                        continue;
+                    }
                     // T1: the TextLocal path segments the flat text so table
                     // regions become BlockType::Table blocks (structured
                     // TableIr in metadata) while prose stays paragraphs.
