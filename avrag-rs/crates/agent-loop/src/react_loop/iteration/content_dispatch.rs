@@ -6,7 +6,10 @@ use super::super::exit_policy::{has_retrieval_observation, should_block_content_
 use super::super::skill_request::is_skill_request_message;
 use super::super::telemetry::ReActIterationRecord;
 use super::super::{ReActLoop, truncate_preview};
-use super::state::{IterationControl, IterationOutcome, IterationState, disclosed_skill_ids};
+use super::state::{
+    COMPILE_FEEDBACK_EXIT_REASON, IterationControl, IterationOutcome, IterationState,
+    disclosed_skill_ids,
+};
 use crate::events::AgentEventSink;
 use crate::runtime::AgentRunUsage;
 
@@ -91,7 +94,7 @@ impl ReActLoop {
                 state.compile_continuations += 1;
                 let feedback = outcome.render_feedback();
                 state.messages.push(ChatMessage::user(feedback.clone()));
-                let exit_reason = "compile_feedback".to_string();
+                let exit_reason = COMPILE_FEEDBACK_EXIT_REASON.to_string();
                 return Ok(IterationOutcome {
                     control: IterationControl::Continue,
                     record: Some(ReActIterationRecord {
@@ -127,11 +130,13 @@ impl ReActLoop {
     }
 }
 
-/// S2: worker loops get at most ONE compile-feedback continuation per run —
-/// the rejected output consumes one iteration of budget; when that is spent
-/// (or the iteration budget runs out first) the flow falls through to the
-/// existing paths (direct answer / C5 budget-exhausted final turn) and the
-/// post-loop compile attaches diagnostic codes to the degraded handoff.
+/// S2/E4: worker loops get at most ONE compile-feedback continuation per
+/// run. The continuation is a free correction turn — it does NOT consume the
+/// numbered iteration budget (`consumes_iteration_budget`), so a compile
+/// failure at the last numbered iteration still gets its retry; when the
+/// allowance is spent the flow falls through to the existing paths (direct
+/// answer / C5 budget-exhausted final turn) and the post-loop compile
+/// attaches diagnostic codes to the degraded handoff.
 pub(super) const MAX_COMPILE_CONTINUATIONS: u8 = 1;
 
 pub(crate) fn iteration_llm_usage(llm_response: &LlmResponse) -> AgentRunUsage {

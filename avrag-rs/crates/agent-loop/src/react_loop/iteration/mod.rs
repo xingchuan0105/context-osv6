@@ -5,7 +5,7 @@ mod state;
 pub use state::{IterationControl, IterationOutcome, IterationState};
 
 pub(crate) use content_dispatch::iteration_llm_usage;
-pub(crate) use state::disclosed_skill_ids;
+pub(crate) use state::{COMPILE_FEEDBACK_EXIT_REASON, consumes_iteration_budget, disclosed_skill_ids};
 
 use avrag_llm::LlmUsage;
 use common::AppError;

@@ -696,3 +696,49 @@ async fn non_worker_mode_skips_compile() {
     assert!(matches!(outcome.control, IterationControl::DirectAnswer { .. }));
     assert_eq!(state.compile_continuations, 0);
 }
+
+// ---- E4: compile continuations are free of the iteration budget ------------
+
+#[test]
+fn compile_feedback_continue_does_not_consume_iteration_budget() {
+    use super::super::telemetry::ReActIterationRecord;
+
+    let outcome = |exit_reason: &str| super::IterationOutcome {
+        control: IterationControl::Continue,
+        record: Some(ReActIterationRecord {
+            iteration: 0,
+            disclosed_skills: vec![],
+            action_type: exit_reason.to_string(),
+            observation_preview: String::new(),
+            llm_usage: None,
+            elapsed_ms: 0,
+            exit_reason: exit_reason.to_string(),
+        }),
+        sandbox_break: false,
+    };
+
+    assert!(
+        !super::consumes_iteration_budget(&outcome("compile_feedback")),
+        "compile correction turn is free"
+    );
+    for reason in ["direct_content", "content_blocked_no_evidence", "code_gen", "skill_request"] {
+        assert!(
+            super::consumes_iteration_budget(&outcome(reason)),
+            "{reason} consumes one numbered iteration"
+        );
+    }
+    // No record (defensive) consumes budget as before.
+    let bare = super::IterationOutcome {
+        control: IterationControl::Continue,
+        record: None,
+        sandbox_break: false,
+    };
+    assert!(super::consumes_iteration_budget(&bare));
+}
+
+#[test]
+fn hook_emits_the_shared_compile_feedback_exit_reason() {
+    // The free-budget accounting keys on this exact label — pin it so the two
+    // sites cannot drift apart.
+    assert_eq!(super::COMPILE_FEEDBACK_EXIT_REASON, "compile_feedback");
+}

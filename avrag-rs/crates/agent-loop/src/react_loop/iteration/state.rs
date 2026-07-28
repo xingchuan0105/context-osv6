@@ -14,14 +14,16 @@ pub struct IterationState {
     /// True when retrieve already emitted live `MessageDelta`s (stream path).
     /// `finish_direct_answer_run` must not re-emit the whole answer as one token.
     pub answer_deltas_streamed: bool,
-    /// Output-compiler feedback continuations used this run (S2). A worker
+    /// Output-compiler feedback continuations used this run (S2/E4). A worker
     /// loop (`ModeConfig.worker_handoff`) compiles each candidate final
     /// output at the `direct_content` decision point; on Error diagnostics the
     /// output is rejected and the loop continues ONCE with the rendered
     /// feedback as the next observation (bounded by
-    /// `MAX_COMPILE_CONTINUATIONS` in content_dispatch). When exhausted the
-    /// output is accepted as final and the post-loop compile marks it
-    /// degraded with diagnostic codes attached.
+    /// `MAX_COMPILE_CONTINUATIONS` in content_dispatch). The correction turn
+    /// is FREE — it does not consume the numbered iteration budget
+    /// (`consumes_iteration_budget` in run_retrieval). When the continuation
+    /// allowance is spent the output is accepted as final and the post-loop
+    /// compile marks it degraded with diagnostic codes attached.
     pub compile_continuations: u8,
 }
 
@@ -36,6 +38,22 @@ pub struct IterationOutcome {
     pub record: Option<ReActIterationRecord>,
     /// Sandbox break emits telemetry inline and skips TurnEnd/record (legacy behavior).
     pub sandbox_break: bool,
+}
+
+/// Exit reason marking a compile-feedback continuation (S2/E4). Shared by the
+/// emission site (content_dispatch) and the budget accounting (run_retrieval).
+pub(crate) const COMPILE_FEEDBACK_EXIT_REASON: &str = "compile_feedback";
+
+/// E4 (2026-07-28): whether a `Continue` outcome consumes a numbered
+/// iteration. Compile-feedback continuations are FREE — the correction turn
+/// rides on top of the normal budget (up to `MAX_COMPILE_CONTINUATIONS` per
+/// run), because 58% of continuations used to fire in the last budget slot
+/// with no room left to act on the feedback. All other continues consume one.
+pub(crate) fn consumes_iteration_budget(outcome: &IterationOutcome) -> bool {
+    outcome
+        .record
+        .as_ref()
+        .is_none_or(|r| r.exit_reason != COMPILE_FEEDBACK_EXIT_REASON)
 }
 
 pub(crate) fn disclosed_skill_ids(disclosed: &DisclosedState) -> Vec<String> {

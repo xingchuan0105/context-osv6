@@ -72,7 +72,11 @@ impl ReActLoop {
 
             match outcome.control {
                 IterationControl::Continue => {
-                    iteration += 1;
+                    // E4: compile-feedback continuations are free correction
+                    // turns — they do not consume the numbered budget.
+                    if super::iteration::consumes_iteration_budget(&outcome) {
+                        iteration += 1;
+                    }
                 }
                 IterationControl::BreakToSynthesis { .. } => break,
                 IterationControl::DirectAnswer { content } => {
