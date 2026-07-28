@@ -14,6 +14,7 @@ mod pdf_renderer_service;
 mod probe;
 mod router;
 mod text;
+pub mod text_table;
 mod visual_pdf;
 
 use std::collections::BTreeMap;

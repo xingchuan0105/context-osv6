@@ -169,23 +169,72 @@ impl DocumentIr {
             match unit.kind {
                 ParsedUnitKind::Text => {
                     *page_text_chars.entry(unit.page).or_default() += unit.text.chars().count();
-                    document.blocks.push(BlockIr {
-                        block_id: unit.unit_id.clone(),
-                        page: Some(unit.page),
-                        block_type: BlockType::Paragraph,
-                        modality: BlockModality::TextOnly,
-                        text: unit.text.clone(),
-                        alt_text: None,
-                        asset_refs: Vec::new(),
-                        caption: None,
-                        section_path: Vec::new(),
-                        source_locator: SourceLocator {
+                    // T1: the TextLocal path segments the flat text so table
+                    // regions become BlockType::Table blocks (structured
+                    // TableIr in metadata) while prose stays paragraphs.
+                    // Every other backend keeps the one-block-per-unit shape.
+                    if primary_backend == ParseBackend::TextLocal {
+                        let segments =
+                            crate::parser::text_table::segment_text(&unit.text);
+                        for (seg_index, segment) in segments.into_iter().enumerate() {
+                            let is_table = segment.table.is_some();
+                            let mut metadata = unit.metadata.clone();
+                            let mut source_locator = SourceLocator {
+                                page: Some(unit.page),
+                                ..SourceLocator::default()
+                            };
+                            let mut caption = None;
+                            if let Some(table) = &segment.table {
+                                metadata.insert(
+                                    TableIr::METADATA_KEY.to_string(),
+                                    serde_json::to_string(table)
+                                        .unwrap_or_else(|_| "{}".to_string()),
+                                );
+                                metadata.insert(
+                                    "table_parser".to_string(),
+                                    "text-table-v1".to_string(),
+                                );
+                                source_locator.table_index = Some(seg_index);
+                                caption = table.caption.clone();
+                            }
+                            document.blocks.push(BlockIr {
+                                block_id: format!("{}-seg{seg_index}", unit.unit_id),
+                                page: Some(unit.page),
+                                block_type: if is_table {
+                                    BlockType::Table
+                                } else {
+                                    BlockType::Paragraph
+                                },
+                                modality: BlockModality::TextOnly,
+                                text: segment.text,
+                                alt_text: None,
+                                asset_refs: Vec::new(),
+                                caption,
+                                section_path: Vec::new(),
+                                source_locator,
+                                parser_backend: primary_backend.clone(),
+                                metadata,
+                            });
+                        }
+                    } else {
+                        document.blocks.push(BlockIr {
+                            block_id: unit.unit_id.clone(),
                             page: Some(unit.page),
-                            ..SourceLocator::default()
-                        },
-                        parser_backend: primary_backend.clone(),
-                        metadata: unit.metadata.clone(),
-                    });
+                            block_type: BlockType::Paragraph,
+                            modality: BlockModality::TextOnly,
+                            text: unit.text.clone(),
+                            alt_text: None,
+                            asset_refs: Vec::new(),
+                            caption: None,
+                            section_path: Vec::new(),
+                            source_locator: SourceLocator {
+                                page: Some(unit.page),
+                                ..SourceLocator::default()
+                            },
+                            parser_backend: primary_backend.clone(),
+                            metadata: unit.metadata.clone(),
+                        });
+                    }
                 }
                 ParsedUnitKind::ImageWithContext => {
                     *page_text_chars.entry(unit.page).or_default() += unit.text.chars().count();
@@ -251,6 +300,91 @@ pub struct PageIr {
     pub text_char_count: usize,
     pub image_count: usize,
     pub metadata: BTreeMap<String, String>,
+}
+
+/// T1 (2026-07-28, table-aware ingestion §4.1): parse confidence of a
+/// structured table. High = deterministic source (txt/md whitelist, csv,
+/// xlsx grid); Medium = reconstructed (PDF bbox); Low = best-effort.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TableConfidence {
+    #[default]
+    High,
+    Medium,
+    Low,
+}
+
+/// T1: structured table content carried by a `BlockType::Table` block.
+///
+/// The block's flat `text` stays the markdown serialization (embedding /
+/// lexical search surface); this structured form rides in
+/// `block.metadata["table_ir"]` as JSON (document_blocks.metadata_json —
+/// zero schema migration). Never emitted unless the parser's self-validation
+/// passed — degraded parses stay plain text instead.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct TableIr {
+    /// Table title/caption from neighbouring text, when identifiable.
+    pub caption: Option<String>,
+    /// Column headers (positional `col_1..n` when the source has none).
+    pub headers: Vec<String>,
+    /// Grid cells, one Vec per data row.
+    pub rows: Vec<Vec<String>>,
+    pub parse_confidence: TableConfidence,
+    /// Parse diagnostics (source gaps / irregular rows / merged cells).
+    pub notes: Vec<String>,
+}
+
+impl TableIr {
+    /// Metadata key under which the JSON-serialized TableIr rides on a block.
+    pub const METADATA_KEY: &'static str = "table_ir";
+
+    /// Deserialize the structured table from a block's metadata, if present.
+    pub fn from_block(block: &BlockIr) -> Option<Self> {
+        serde_json::from_str(block.metadata.get(Self::METADATA_KEY)?).ok()
+    }
+
+    /// Full markdown serialization (header + separator + all data rows).
+    pub fn to_markdown(&self) -> String {
+        let mut out = String::new();
+        if let Some(caption) = &self.caption {
+            out.push_str(caption);
+            out.push('\n');
+        }
+        out.push_str(&self.header_markdown());
+        for row in &self.rows {
+            out.push('\n');
+            out.push_str(&Self::cells_markdown(row));
+        }
+        out
+    }
+
+    /// Header row + markdown separator line.
+    pub fn header_markdown(&self) -> String {
+        let mut out = Self::cells_markdown(&self.headers);
+        out.push('\n');
+        out.push_str(&Self::cells_markdown(
+            &self
+                .headers
+                .iter()
+                .map(|_| "---".to_string())
+                .collect::<Vec<_>>(),
+        ));
+        out
+    }
+
+    /// One data row as a markdown table line.
+    pub fn row_markdown(&self, row_index: usize) -> String {
+        Self::cells_markdown(&self.rows[row_index])
+    }
+
+    fn cells_markdown(cells: &[String]) -> String {
+        let mut out = String::from("|");
+        for cell in cells {
+            out.push_str(&cell.replace('|', "\\|"));
+            out.push('|');
+        }
+        out
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
