@@ -378,6 +378,17 @@ impl OrchestratorExecutor for AgentServiceExecutor {
                 Channel::Search => "evidence pointers must come from your **native tool results** \
                  (`web_search` / `web_fetch` observations), not from inventing tool calls.",
             };
+            // E2: a "not found / insufficient" verdict must rest on REAL
+            // retrieval calls this run — the tool vocabulary differs by
+            // channel (this brief only ever reaches rag/search workers).
+            let retrieval_proof_rule = match channel {
+                Channel::Rag => "查无 / coverage=insufficient 的结论必须以本轮**真实检索调用记录**为支撑\
+                 （dense/lexical/graph/doc_scan 至少执行过）；零检索调用得出的『未找到』不可接受\
+                 ——先检索，再谈覆盖。",
+                Channel::Search => "查无 / coverage=insufficient 的结论必须以本轮**真实检索调用记录**为支撑\
+                 （web_search/web_fetch 至少执行过）；零检索调用得出的『未找到』不可接受\
+                 ——先检索，再谈覆盖。",
+            };
             // Brief + worker-output slim: the worker's final message is an
             // internal hand-off; the chat exit writes the user answer.
             parts.push(format!(
@@ -391,7 +402,7 @@ impl OrchestratorExecutor for AgentServiceExecutor {
                    \"key_facts\": [{{\"claim\": \"…\", \"evidence\": [\"chunk_id or pointer\"], \"basis\": \"observed|inferred\"}}],\n\
                    \"coverage\": \"full|partial|insufficient\",\n\
                    \"gaps\": [\"what you could not find / sections not covered\"],\n\
-                   \"premise_mismatch\": {{\"kind\": \"entity|frame|scope\", \"detail\": \"…\", \"actual_subject\": \"…\"}}  // optional\n\
+                   \"premise_mismatch\": {{\"kind\": \"entity|frame|scope|definition\", \"detail\": \"…\", \"actual_subject\": \"…\"}}  // optional\n\
                  }}\n\
                  Rules:\n\
                  - `coverage=full` only when the brief is fully covered; list real gaps; \
@@ -404,10 +415,14 @@ impl OrchestratorExecutor for AgentServiceExecutor {
                  contradicts the evidence (e.g. the doc uses a different framework or the \
                  attributed subject is wrong), report it via this field — name the real \
                  subject in `actual_subject` — instead of forcing an answer that fits the \
-                 wrong premise.\n\
+                 wrong premise. kind 可为 entity|frame|scope|definition（口径分歧）：\
+                 文档中有候选证据但口径存疑时（如「第一阶段…按4A架构详细设计」vs「详细设计阶段」），\
+                 不得替用户裁决——以 premise_mismatch 上报口径分歧并附上候选日期/原文，\
+                 把选择权留给 Answer/用户。\n\
                  - 查无即成功: when the evidence genuinely does not cover the question, \
                  `coverage=insufficient` + empty `key_facts` + `gaps` explaining what is \
-                 absent IS a complete successful delivery, not a failure.",
+                 absent IS a complete successful delivery, not a failure.\n\
+                 - 查无须凭据: {retrieval_proof_rule}",
                 brief.goal
             ));
             req.metadata.insert(
