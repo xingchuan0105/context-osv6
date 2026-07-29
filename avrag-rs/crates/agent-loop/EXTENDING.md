@@ -61,13 +61,24 @@ Custom transforms: `ReActLoop::run_with_hooks(..., &my_hooks)`.
 
 **Do not** implement tier/risk allowlists inside hooks (plan D7).
 
-## Runtime deps (Wave B1)
+## Runtime deps (Wave B1 + follow-up)
 
 - Side-effect runtimes live in `LoopRuntimeDeps` (`rag_runtime`, `search_executor`,
   `chat_persistence`, `code_interpreter`), not as loose fields on `ReActLoop`.
 - Builders: `with_rag_runtime` / `with_search_executor` / `with_chat_persistence` /
   `with_runtime_deps`.
-- Codegen still names `avrag_rag_core` bridge types in `iteration_codegen` (follow-up port).
+- **CodegenPort:** `LoopRuntimeDeps::execute_codegen_bridged` owns `RuntimeBridge`;
+  loop files use [`BridgeCallObs`] only. Grep: `avrag_rag_core::` under `react_loop/`
+  should only appear in `deps.rs` (+ optional public builder signatures on `ReActLoop`).
+
+## Product contract (Wave C)
+
+- Facade: `agent_loop::product_contract` (answer + handoff compiler).
+- Stable paths still work: `answer_contract`, `output_compiler`.
+- Worker ↔ loop metadata: `worker_contract::RETRIEVAL_ALIAS_START_METADATA`
+  (app-chat `ALIAS_START_METADATA` aliases the same string).
+- HostTools: `app_chat::orchestrator::HOST_TOOL_NAMES` — never on `ToolCatalog`
+  (**C4a:** do not force brain onto `ReActLoop`; **C4b:** only extract proven shared helpers).
 
 ## Extension recipes
 

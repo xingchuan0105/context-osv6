@@ -47,7 +47,7 @@ use common::AppError;
 use config::ModeConfig;
 use iteration::IterationState;
 
-pub use deps::LoopRuntimeDeps;
+pub use deps::{BridgeCallObs, LoopRuntimeDeps};
 pub use hooks::{BeforeToolCallOutcome, LoopContext, LoopHooks, StandardLoopHooks};
 
 /// ReAct retrieve → gate → synthesis engine.
@@ -134,10 +134,10 @@ impl ReActLoop {
 
         // W1 (2026-07-28, channel-persistent worker): a resumed worker session
         // passes its alias cursor so retrieval-log aliases stay unique across
-        // briefs of the same turn (`retrieval_alias_start`, default 0).
+        // briefs of the same turn (see worker_contract::RETRIEVAL_ALIAS_START_METADATA).
         let alias_start = request
             .metadata
-            .get("retrieval_alias_start")
+            .get(crate::worker_contract::RETRIEVAL_ALIAS_START_METADATA)
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
         let mut state = IterationState {

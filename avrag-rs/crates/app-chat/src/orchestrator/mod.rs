@@ -7,6 +7,7 @@ mod brain;
 mod chat_exit;
 mod fact_verify;
 mod host;
+mod host_tools;
 mod invariant;
 mod materialize;
 mod selected;
@@ -14,6 +15,11 @@ mod store;
 mod types;
 mod worker_session;
 mod workers;
+
+pub use host_tools::{
+    CONVERSATION_HISTORY_LOAD, DELEGATE_RAG, DELEGATE_SEARCH, EVIDENCE_FETCH, FINISH_ANSWER,
+    HOST_ONLY_TOOL_NAMES, HOST_TOOL_NAMES,
+};
 
 pub use brain::{orchestrator_v2_enabled, run_llm_orchestrated_turn};
 pub use chat_exit::{direct_handoff, query_for_agent, render_synthesize_context, synthesize_handoff};

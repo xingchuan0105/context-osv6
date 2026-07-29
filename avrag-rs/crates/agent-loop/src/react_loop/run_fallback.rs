@@ -220,9 +220,9 @@ impl ReActLoop {
         messages: &mut Vec<ChatMessage>,
         collected_tool_results: &mut Vec<ToolResult>,
     ) -> Result<(), AppError> {
-        let Some(runtime) = &self.deps.rag_runtime else {
+        if !self.deps.has_rag_runtime() {
             return Ok(());
-        };
+        }
         let args = match fallback.tool_id.as_str() {
             "dense_retrieval" => serde_json::to_value(contracts::DenseRetrievalArgs {
                 queries: vec![retrieval_query.to_string()],
@@ -251,9 +251,14 @@ impl ReActLoop {
             _ => return Ok(()),
         }
         .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-        let result =
-            fallback::inject_fallback_observation(runtime, auth, args, &fallback.tool_id, messages)
-                .await;
+        let Some(result) = self
+            .deps
+            .dispatch_rag_fallback(auth, &fallback.tool_id, args)
+            .await
+        else {
+            return Ok(());
+        };
+        let result = fallback::append_fallback_observation(&fallback.tool_id, result, messages);
         collected_tool_results.push(result);
         Ok(())
     }
@@ -265,11 +270,15 @@ impl ReActLoop {
         messages: &mut Vec<ChatMessage>,
         collected_tool_results: &mut Vec<ToolResult>,
     ) -> Result<(), AppError> {
-        let Some(executor) = &self.deps.search_executor else {
+        let v = fallback.vertical.as_deref().unwrap_or("web");
+        let Some(result) = self
+            .deps
+            .execute_search_fallback(retrieval_query, Some(v))
+            .await
+        else {
             return Ok(());
         };
-        let v = fallback.vertical.as_deref().unwrap_or("web");
-        match executor.execute_search(retrieval_query, Some(v)).await {
+        match result {
             Ok(response) => {
                 let text = serde_json::to_string_pretty(&response)
                     .unwrap_or_else(|_| "search succeeded".to_string());

@@ -46,8 +46,8 @@ pub const CHANNEL_ITERATION_CAP: u8 = 10;
 
 /// Metadata key carrying the session's alias cursor into the loop run
 /// (agent-loop seeds its counter from it; absent ⇒ 0, byte-identical to
-/// pre-W1 single-brief behavior).
-pub const ALIAS_START_METADATA: &str = "retrieval_alias_start";
+/// pre-W1 single-brief behavior). Canonical def: `agent_loop::worker_contract`.
+pub const ALIAS_START_METADATA: &str = agent_loop::worker_contract::RETRIEVAL_ALIAS_START_METADATA;
 
 /// One delivered brief's retained record (drives resume compaction).
 #[derive(Debug, Clone)]

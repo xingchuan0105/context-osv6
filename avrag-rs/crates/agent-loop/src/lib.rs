@@ -75,11 +75,13 @@ pub mod error_kind;
 pub mod events;
 pub mod helpers;
 pub mod output_compiler;
+pub mod product_contract;
 pub mod progress;
 pub mod react_loop;
 pub mod runtime;
 pub mod sse_sink;
 pub mod untrusted_input;
+pub mod worker_contract;
 
 #[cfg(feature = "eval")]
 pub mod eval;
@@ -92,14 +94,16 @@ pub use react_loop as r#loop;
 pub use events::{AgentEvent, AgentEventSink, AgentUsage, CollectingSink, NoopSink};
 pub use react_loop::config::{ModeConfig, load_mode_config, load_system_prompt};
 pub use react_loop::{
-    BeforeToolCallOutcome, DegradeReason, LoopContext, LoopHooks, LoopPolicy, LoopRuntimeDeps,
-    ReActLoop, StandardLoopHooks, answer_contract, assembler, disclosure_plan, exit_policy,
+    BeforeToolCallOutcome, BridgeCallObs, DegradeReason, LoopContext, LoopHooks, LoopPolicy,
+    LoopRuntimeDeps, ReActLoop, StandardLoopHooks, answer_contract, assembler, disclosure_plan,
+    exit_policy,
 };
 pub use runtime::{
     Agent, AgentRequest, AgentRunResult, AgentRunUsage, AgentUserPreferences, EvaluationSignals,
     FinalDecision, IterationRecord, MAX_PROMPT_HISTORY_TURNS, recent_messages, stub_agent_auth,
 };
 pub use sse_sink::SseSink;
+pub use worker_contract::RETRIEVAL_ALIAS_START_METADATA;
 
 // Re-export rag scope helper for callers that used `loop::force_doc_scope` paths.
 pub use agent_tools::force_doc_scope;

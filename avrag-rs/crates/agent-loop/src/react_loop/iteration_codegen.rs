@@ -268,7 +268,7 @@ impl ReActLoop {
         String,
         bool,
         Vec<ToolResult>,
-        Vec<avrag_rag_core::runtime::bridge::CapturedBridgeCall>,
+        Vec<super::deps::BridgeCallObs>,
         bool,
     ) {
         let code = code.to_string();
@@ -281,23 +281,21 @@ impl ReActLoop {
         let mut block_bridge_results = Vec::new();
         let mut bridge_calls = Vec::new();
 
-        if let Some(runtime) = &self.deps.rag_runtime {
-            let bridge = Arc::new(
-                avrag_rag_core::runtime::bridge::RuntimeBridge::new(
-                    Arc::clone(runtime),
-                    auth.clone(),
-                    request.doc_scope.clone(),
+        if self.deps.has_rag_runtime() {
+            // CodegenPort: all RuntimeBridge / rag-core types stay inside deps.
+            let bridged = self
+                .deps
+                .execute_codegen_bridged(
+                    &code,
+                    auth,
+                    &request.doc_scope,
+                    Arc::clone(retrieval_aliases),
                 )
-                .with_alias_counter(Arc::clone(retrieval_aliases)),
-            );
-            let interpreter = avrag_code_interpreter::CodeInterpreter::new();
-            exec_result = match interpreter
-                .execute_with_bridge(&code, Arc::clone(&bridge))
-                .await
-            {
+                .await;
+            block_bridge_results = bridged.bridge_results;
+            bridge_calls = bridged.bridge_calls;
+            exec_result = match bridged.exec {
                 Ok(exec) => {
-                    block_bridge_results = bridge.take_captured_results();
-                    bridge_calls = bridge.take_captured_calls();
                     block_observation_stdout =
                         Some(crate::helpers::codegen_observation_stdout(
                             &exec.stdout,
@@ -305,14 +303,7 @@ impl ReActLoop {
                         ));
                     Ok(exec)
                 }
-                Err(e) => {
-                    // C2: an interpreter-level failure still leaves any bridge
-                    // calls that succeeded before it behind — capture them so
-                    // their evidence survives the errored block.
-                    block_bridge_results = bridge.take_captured_results();
-                    bridge_calls = bridge.take_captured_calls();
-                    Err(e)
-                }
+                Err(e) => Err(e),
             };
         } else {
             let interpreter_lock = Arc::clone(&interpreter_lock);
@@ -378,9 +369,7 @@ impl ReActLoop {
 /// adaptive-k coaching hints carried on the captured calls' data
 /// (`retrieval_hint` set by dense/lexical tools). Model-visible suffix of
 /// the codegen observation; empty when no retrieval happened this round.
-fn retrieval_callouts(
-    bridge_calls: &[avrag_rag_core::runtime::bridge::CapturedBridgeCall],
-) -> String {
+fn retrieval_callouts(bridge_calls: &[super::deps::BridgeCallObs]) -> String {
     const RETRIEVAL_METHODS: &[&str] = &[
         "dense_search",
         "lexical_search",
@@ -745,8 +734,8 @@ mod tests {
         query: &str,
         status: contracts::ToolStatus,
         data: serde_json::Value,
-    ) -> avrag_rag_core::runtime::bridge::CapturedBridgeCall {
-        avrag_rag_core::runtime::bridge::CapturedBridgeCall {
+    ) -> super::super::deps::BridgeCallObs {
+        super::super::deps::BridgeCallObs {
             method: method.to_string(),
             query: Some(query.to_string()),
             result: ToolResult {
