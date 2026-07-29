@@ -356,6 +356,7 @@ mod tests {
             full_text: "genre: report\nsections: 现状诊断 (p3), 基础设施选型 (p12)".into(),
             score: None,
             selected: false,
+            brief_seq: None,
         }
     }
 

@@ -28,7 +28,7 @@ use super::types::{
 };
 use super::workers::{
     attach_worker_thinking_events, finalize_answer_evidence, tool_failures,
-    worker_observability_from_run, WorkerRunObservability,
+    worker_observability_from_run, WorkerBriefObservability,
 };
 use crate::capabilities::CapabilitySet;
 
@@ -63,7 +63,7 @@ pub struct OrchestratedTurn {
     pub agent_type_label: String,
     /// Per-channel sub-agent white-box (real tools + thinking). Not the store
     /// eval bridge on `answer_result.tool_results`.
-    pub worker_observability: Vec<WorkerRunObservability>,
+    pub worker_observability: Vec<WorkerBriefObservability>,
 }
 
 /// Map a materialized channel to its localized delegate progress fact.
@@ -78,7 +78,7 @@ pub(crate) fn delegate_fact(channel: Channel, brief: &TaskBrief) -> agent_loop::
 pub(crate) struct ChannelOutcome {
     pub record: DispatchRecord,
     pub note: ChannelNote,
-    pub observability: Option<WorkerRunObservability>,
+    pub observability: Option<WorkerBriefObservability>,
 }
 
 /// Run one channel dispatch: session brief → store insert → ledger entry.
@@ -116,7 +116,7 @@ pub(crate) async fn dispatch_channel(
         Ok(Ok(outcome)) => {
             let run = &outcome.run;
             let inserted =
-                store.insert_from_tool_results(channel, &outcome.tool_results_delta);
+                store.insert_from_tool_results_for_brief(channel, &outcome.tool_results_delta, Some(outcome.seq));
             let failures = tool_failures(&outcome.tool_results_delta);
             let (status, error) = if inserted > 0 {
                 if !failures.is_empty() {
@@ -150,7 +150,11 @@ pub(crate) async fn dispatch_channel(
             }
             // K2/W1: hydrate the brief's SELECTED retrieval log (offset
             // applied by the session) into the store's ★ selected tier.
-            store.mark_selected(channel, &outcome.hydrated);
+            store.mark_selected_for_brief(channel, &outcome.hydrated, Some(outcome.seq));
+            let handoff_degraded = handoff
+                .as_ref()
+                .map(|h| h.handoff_degraded)
+                .unwrap_or(false);
             ChannelOutcome {
                 record: DispatchRecord {
                     channel,
@@ -166,7 +170,12 @@ pub(crate) async fn dispatch_channel(
                     handoff,
                     error,
                 ),
-                observability: Some(worker_observability_from_run(channel, run)),
+                observability: Some(WorkerBriefObservability {
+                    channel,
+                    seq: outcome.seq,
+                    handoff_degraded,
+                    run: worker_observability_from_run(channel, run),
+                }),
             }
         }
         Ok(Err(e)) => {
@@ -252,7 +261,7 @@ pub async fn run_orchestrated_turn(
     let mut store = EvidenceStore::from_docscope(docscope);
     let mut records: Vec<DispatchRecord> = Vec::new();
     let mut channel_notes: Vec<ChannelNote> = Vec::new();
-    let mut worker_observability: Vec<WorkerRunObservability> = Vec::new();
+    let mut worker_observability: Vec<WorkerBriefObservability> = Vec::new();
     // W1: per-channel persistent worker sessions (one turn lifetime). V1's
     // single default brief per channel is exactly one brief per session —
     // byte-identical to the pre-W1 path.

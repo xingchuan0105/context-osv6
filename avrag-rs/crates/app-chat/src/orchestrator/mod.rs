@@ -31,6 +31,6 @@ pub use types::*;
 pub use workers::{
     attach_store_retrieval_tool_results, attach_worker_thinking_events, channel_note_from_run,
     finalize_answer_evidence, parse_worker_handoff, tool_failures, worker_handoff_from_run,
-    worker_observability_from_run, WorkerIterationObs, WorkerRunObservability, WorkerThinkingStep,
-    WorkerToolObs,
+    worker_observability_from_run, WorkerBriefObservability, WorkerIterationObs,
+    WorkerRunObservability, WorkerThinkingStep, WorkerToolObs,
 };

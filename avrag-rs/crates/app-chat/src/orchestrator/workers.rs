@@ -106,6 +106,19 @@ pub struct WorkerRunObservability {
     pub handoff_summary: Option<String>,
 }
 
+/// W2 (2026-07-28, channel-persistent worker): one BRIEF's observability —
+/// the channel-persistent session runs several briefs, so mode_debug v2
+/// groups these per channel (`briefs[]`), each stamped with its `seq`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkerBriefObservability {
+    pub channel: Channel,
+    /// 1-based brief sequence within the channel session this turn.
+    pub seq: u32,
+    pub handoff_degraded: bool,
+    #[serde(flatten)]
+    pub run: WorkerRunObservability,
+}
+
 /// Harvest plan/eval/codegen thinking from a worker's local event sink into
 /// `AgentRunResult.debug_payload.worker_thinking` so dispatch can build
 /// [`WorkerRunObservability`] without changing the executor trait.

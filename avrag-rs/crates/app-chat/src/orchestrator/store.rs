@@ -60,6 +60,10 @@ pub struct EvidenceEntry {
     /// Renders as the ★ selected tier ahead of background evidence.
     #[serde(default)]
     pub selected: bool,
+    /// W2: which session brief produced this entry (1-based; None for
+    /// pre-W2 artifacts).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brief_seq: Option<u32>,
 }
 
 /// One evidence unit as shown to the chat exit (and for answer-rule selection).
@@ -159,6 +163,17 @@ impl EvidenceStore {
     /// Only **dedupes** by locator (chunk_id / url). Does **not** re-apply TOPK
     /// or truncate body text — the RAG pipeline already sized the result set.
     pub fn insert_from_tool_results(&mut self, channel: Channel, results: &[ToolResult]) -> usize {
+        self.insert_from_tool_results_for_brief(channel, results, None)
+    }
+
+    /// W2: same as [`Self::insert_from_tool_results`], stamping the entries
+    /// added in this call with the producing session brief's `seq`.
+    pub fn insert_from_tool_results_for_brief(
+        &mut self,
+        channel: Channel,
+        results: &[ToolResult],
+        brief_seq: Option<u32>,
+    ) -> usize {
         let before = self.entries.len();
         for tr in results {
             if tr.status != ToolStatus::Ok {
@@ -175,6 +190,11 @@ impl EvidenceStore {
                     _ => self.insert_rag(data),
                 },
                 Channel::Search => self.insert_search(data),
+            }
+        }
+        if let Some(seq) = brief_seq {
+            for entry in &mut self.entries[before..] {
+                entry.brief_seq = Some(seq);
             }
         }
         self.entries.len() - before
@@ -245,6 +265,7 @@ impl EvidenceStore {
                 full_text,
                 score: None,
                 selected: false,
+                brief_seq: None,
             });
         }
     }
@@ -317,6 +338,7 @@ impl EvidenceStore {
                     full_text: text.to_string(),
                     score: c.get("score").and_then(|v| v.as_f64()),
                     selected: false,
+                brief_seq: None,
                 });
             }
         }
@@ -362,6 +384,7 @@ impl EvidenceStore {
                 full_text: text.to_string(),
                 score: None,
                 selected: false,
+                brief_seq: None,
             });
         }
     }
@@ -428,6 +451,17 @@ impl EvidenceStore {
         channel: Channel,
         hydrated: &[super::selected::HydratedChunk],
     ) -> usize {
+        self.mark_selected_for_brief(channel, hydrated, None)
+    }
+
+    /// W2: [`Self::mark_selected`] with the producing brief's `seq` stamped
+    /// on newly appended entries.
+    pub fn mark_selected_for_brief(
+        &mut self,
+        channel: Channel,
+        hydrated: &[super::selected::HydratedChunk],
+        brief_seq: Option<u32>,
+    ) -> usize {
         let mut marked = 0usize;
         for chunk in hydrated {
             if let Some(entry) = self.entries.iter_mut().find(|e| {
@@ -459,6 +493,7 @@ impl EvidenceStore {
                 full_text: chunk.text.clone(),
                 score: None,
                 selected: true,
+                brief_seq,
             });
             marked += 1;
         }

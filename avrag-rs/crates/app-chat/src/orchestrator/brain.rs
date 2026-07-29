@@ -29,7 +29,7 @@ use super::types::{
 };
 use super::workers::{
     attach_store_retrieval_tool_results, finalize_answer_evidence, tool_failures,
-    worker_observability_from_run, WorkerRunObservability,
+    worker_observability_from_run, WorkerBriefObservability,
 };
 use crate::capabilities::CapabilitySet;
 
@@ -452,7 +452,7 @@ pub async fn run_llm_orchestrated_turn(
     let mut store = EvidenceStore::from_docscope(docscope);
     let mut records: Vec<DispatchRecord> = Vec::new();
     let mut channel_notes = Vec::new();
-    let mut worker_observability: Vec<WorkerRunObservability> = Vec::new();
+    let mut worker_observability: Vec<WorkerBriefObservability> = Vec::new();
     // W1: per-channel persistent worker sessions (one turn lifetime).
     let mut sessions: std::collections::HashMap<Channel, WorkerSession> =
         std::collections::HashMap::new();
@@ -667,8 +667,6 @@ pub async fn run_llm_orchestrated_turn(
                                 item_count: inserted,
                                 error: error.clone(),
                             });
-                            worker_observability
-                                .push(worker_observability_from_run(channel, run));
                             // S5: soft fact verification (default OFF) — after the
                             // compile, before the note/store finalize.
                             let mut handoff = outcome.handoff.clone();
@@ -679,9 +677,18 @@ pub async fn run_llm_orchestrated_turn(
                                 )
                                 .await;
                             }
+                            worker_observability.push(WorkerBriefObservability {
+                                channel,
+                                seq: outcome.seq,
+                                handoff_degraded: handoff
+                                    .as_ref()
+                                    .map(|h| h.handoff_degraded)
+                                    .unwrap_or(false),
+                                run: worker_observability_from_run(channel, run),
+                            });
                             // K2/W1: hydrate the brief's SELECTED log (offset
                             // applied by the session) into the store's ★ tier.
-                            store.mark_selected(channel, &outcome.hydrated);
+                            store.mark_selected_for_brief(channel, &outcome.hydrated, Some(outcome.seq));
                             let note = ChannelNote::with_handoff(
                                 channel,
                                 status,

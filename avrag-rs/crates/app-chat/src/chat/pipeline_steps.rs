@@ -307,6 +307,10 @@ fn orchestrator_debug_map(
     turn: &crate::orchestrator::OrchestratedTurn,
 ) -> BTreeMap<String, serde_json::Value> {
     let mut m = BTreeMap::new();
+    // W2: mode_debug v2 — workers group per channel with `briefs[]` (the
+    // channel-persistent session runs several briefs). v1 dumps had no
+    // version key; consumers default those to the old flat list.
+    m.insert("mode_debug_version".into(), serde_json::json!(2));
     m.insert("orchestrator_v1".into(), serde_json::json!(true));
     m.insert(
         "dispatches".into(),
@@ -314,10 +318,24 @@ fn orchestrator_debug_map(
     );
     // Sub-agent white-box: real tool names + reasoning/plan/eval thinking.
     // Independent of store→dense_retrieval eval bridge on tool_results.
-    m.insert(
-        "workers".into(),
-        serde_json::to_value(&turn.worker_observability).unwrap_or(serde_json::json!([])),
-    );
+    let mut by_channel: BTreeMap<String, Vec<&crate::orchestrator::WorkerBriefObservability>> =
+        BTreeMap::new();
+    for brief in &turn.worker_observability {
+        by_channel
+            .entry(brief.channel.as_str().to_string())
+            .or_default()
+            .push(brief);
+    }
+    let workers: Vec<serde_json::Value> = by_channel
+        .into_iter()
+        .map(|(channel, briefs)| {
+            serde_json::json!({
+                "channel": channel,
+                "briefs": briefs,
+            })
+        })
+        .collect();
+    m.insert("workers".into(), serde_json::Value::Array(workers));
     m
 }
 
@@ -340,9 +358,10 @@ fn merge_orchestrator_turn_metadata(
         "worker_tools": turn.worker_observability.iter().map(|w| {
             serde_json::json!({
                 "channel": w.channel,
-                "tools": w.tools.iter().map(|t| &t.tool).collect::<Vec<_>>(),
-                "has_reasoning": w.reasoning_summary.is_some(),
-                "thinking_steps": w.thinking.len(),
+                "brief_seq": w.seq,
+                "tools": w.run.tools.iter().map(|t| &t.tool).collect::<Vec<_>>(),
+                "has_reasoning": w.run.reasoning_summary.is_some(),
+                "thinking_steps": w.run.thinking.len(),
             })
         }).collect::<Vec<_>>(),
     });
@@ -545,4 +564,63 @@ pub(crate) fn emit_terminal_stream_events(
         message_id: crate::stream_event_message_id(execution.response.message_id),
         payload: crate::chat_done_payload(&execution.response),
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::orchestrator::{Channel, WorkerBriefObservability, WorkerRunObservability};
+
+    fn brief_obs(channel: Channel, seq: u32) -> WorkerBriefObservability {
+        WorkerBriefObservability {
+            channel,
+            seq,
+            handoff_degraded: false,
+            run: WorkerRunObservability {
+                channel,
+                tools: vec![],
+                reasoning_summary: None,
+                thinking: vec![],
+                iterations: vec![],
+                final_decision: Some("direct_answer".into()),
+                total_tool_calls: 1,
+                total_elapsed_ms: None,
+                handoff_summary: Some(format!("摘要{seq}")),
+            },
+        }
+    }
+
+    /// W2: mode_debug v2 — workers group per channel with briefs[] and the
+    /// dump carries mode_debug_version=2.
+    #[test]
+    fn mode_debug_v2_groups_worker_briefs_per_channel() {
+        let turn = crate::orchestrator::OrchestratedTurn {
+            answer_result: agent_loop::runtime::AgentRunResult::default(),
+            store: crate::orchestrator::EvidenceStore::default(),
+            records: vec![],
+            handoff: crate::orchestrator::direct_handoff("q"),
+            agent_type_label: "orchestrated".into(),
+            worker_observability: vec![
+                brief_obs(Channel::Rag, 1),
+                brief_obs(Channel::Rag, 2),
+                brief_obs(Channel::Search, 1),
+            ],
+        };
+        let map = orchestrator_debug_map(&turn);
+        assert_eq!(map["mode_debug_version"], serde_json::json!(2));
+        let workers = map["workers"].as_array().expect("workers array");
+        assert_eq!(workers.len(), 2, "grouped per channel: {workers:?}");
+        let rag = workers
+            .iter()
+            .find(|w| w["channel"] == "rag")
+            .expect("rag entry");
+        let briefs = rag["briefs"].as_array().expect("briefs array");
+        assert_eq!(briefs.len(), 2);
+        assert_eq!(briefs[0]["seq"], serde_json::json!(1));
+        assert_eq!(briefs[1]["seq"], serde_json::json!(2));
+        assert_eq!(
+            briefs[1]["handoff_summary"],
+            serde_json::json!("摘要2")
+        );
+    }
 }
