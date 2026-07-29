@@ -63,7 +63,9 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
         "You are the sole user-facing answer agent. Answer from the evidence below. \
          If the question is ambiguous, state your reading of it in one short sentence first \
          (理解口径). Do not claim the user failed to provide a document when workspace \
-         retrieval ran — say 未命中 instead. Use the same language as the user.\n\n",
+         retrieval ran — say 未命中 instead. Use the same language as the user. \
+         ⚠-marked lines below are internal pipeline status for your reliability judgment \
+         only — never quote or mention them (worker/编译/诊断码/内部检查) in the answer.\n\n",
     );
 
     // Source-document identity: genre judgment must not be guessed from snippets.
@@ -121,18 +123,11 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
             if let Some(h) = note.handoff.as_ref() {
                 s.push_str(&format!("  coverage: {}\n", h.coverage));
                 if h.handoff_degraded {
-                    // C4/P3 → S4 wording (supersedes 2026-07-27 P3 文案):
-                    // worker output failed the output compiler — the Answer
-                    // must not trust it (treat as uncovered). Diagnostic
-                    // codes ride along when present.
-                    if h.compile_diagnostics.is_empty() {
-                        s.push_str("  ⚠ worker 输出未通过编译（诊断码见日志），按未覆盖处理\n");
-                    } else {
-                        s.push_str(&format!(
-                            "  ⚠ worker 输出未通过编译（诊断码：{}），按未覆盖处理\n",
-                            h.compile_diagnostics.join(", ")
-                        ));
-                    }
+                    // 用户安全措辞（2026-07-29）：此行进入 Answer 上下文，
+                    // 措辞必须即使被逐字复述也对用户可读——内部 jargon（编译/
+                    // 诊断码）曾原样泄入用户答案。诊断码留在 trace（compile
+                    // feedback 的 observation_preview），不进 Answer 上下文。
+                    s.push_str("  ⚠ 该通道结果未通过内部一致性检查，按未覆盖处理\n");
                 }
                 if !h.summary.trim().is_empty() {
                     s.push_str("  summary: ");
@@ -602,10 +597,12 @@ mod tests {
     }
 
     #[test]
-    fn degraded_handoff_renders_compile_wording_with_codes() {
+    fn degraded_handoff_renders_user_safe_wording_without_codes() {
+        // 2026-07-29: 诊断码/内部 jargon 不进 Answer 上下文（曾泄入用户答案）；
+        // codes 有无不再影响措辞——它们只留在 trace。
         let mut handoff = handoff_with_facts(vec![]);
         handoff.handoff_degraded = true;
-        handoff.compile_diagnostics = vec!["E101".into(), "E103".into()];
+        handoff.compile_diagnostics = vec!["E104".into(), "E105".into()];
         let h = synthesize_handoff(
             "q",
             vec![],
@@ -617,30 +614,12 @@ mod tests {
         );
         let ctx = render_synthesize_context(&h);
         assert!(
-            ctx.contains("⚠ worker 输出未通过编译（诊断码：E101, E103），按未覆盖处理"),
+            ctx.contains("⚠ 该通道结果未通过内部一致性检查，按未覆盖处理"),
             "{ctx}"
         );
-        assert!(!ctx.contains("未通过校验"), "P3 wording superseded: {ctx}");
-    }
-
-    #[test]
-    fn degraded_handoff_without_codes_falls_back_to_log_wording() {
-        let mut handoff = handoff_with_facts(vec![]);
-        handoff.handoff_degraded = true;
-        let h = synthesize_handoff(
-            "q",
-            vec![],
-            vec![listing("E1", Channel::Rag)],
-            vec![],
-            vec![note_with_full_handoff(handoff)],
-            &[rec(Channel::Rag, PackStatus::Ok)],
-            None,
-        );
-        let ctx = render_synthesize_context(&h);
-        assert!(
-            ctx.contains("⚠ worker 输出未通过编译（诊断码见日志），按未覆盖处理"),
-            "{ctx}"
-        );
+        assert!(!ctx.contains("诊断码："), "{ctx}");
+        assert!(!ctx.contains("E104"), "{ctx}");
+        assert!(!ctx.contains("E105"), "{ctx}");
     }
 
     // ---- K2: layered evidence rendering (★ selected / ○ background) --------
