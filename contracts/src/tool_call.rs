@@ -193,6 +193,36 @@ pub struct DocChunksArgs {
     pub doc_ids: Vec<String>,
 }
 
+/// doc_grep (2026-07-29, grep 化检索替代 doc_scan): coding-agent 语义的行级
+/// 检索——关键词/正则、命中计数、行号、上下文。完备性由 total_hits 承载。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocGrepArgs {
+    pub pattern: String,
+    #[serde(default)]
+    pub doc_ids: Vec<String>,
+    /// true → Rust regex 语法；false → 字面子串。
+    #[serde(default)]
+    pub regex: bool,
+    /// 每个命中行两侧携带的上下文行数（0-3）。
+    #[serde(default)]
+    pub context: u32,
+    /// 返回命中上限（默认 50，硬顶 200）；total_hits 不受其影响。
+    #[serde(default)]
+    pub max_hits: Option<u32>,
+}
+
+/// doc_read_lines: 按行号区间读取文档原文（与 doc_grep 同一虚拟行视图）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocReadLinesArgs {
+    pub doc_id: String,
+    /// 1-based 起始行（含）。
+    pub start: u32,
+    /// 1-based 结束行（含）；区间硬顶 400 行。
+    pub end: u32,
+}
+
 /// Tolerate singular `doc_id` (string or array) as an alias for `doc_ids`.
 /// Models frequently emit the singular form; strict `deny_unknown_fields`
 /// rejection burns a whole retrieval retry (2026-07-18 incident).

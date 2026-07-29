@@ -6,9 +6,8 @@ use async_trait::async_trait;
 use contracts::auth_runtime::AuthContext;
 use avrag_code_interpreter::HostBridge;
 use contracts::{
-    DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs, DocProfileArgs, DocSummaryArgs,
-    DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall,
-    ToolResult, ToolStatus,
+    DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
+    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
 };
 use serde_json::{Value, json};
 use tracing::info;
@@ -24,28 +23,6 @@ pub struct CapturedBridgeCall {
     /// Human query / terms from call args when present.
     pub query: Option<String>,
     pub result: ToolResult,
-}
-
-/// E3 (2026-07-28): coaching hint when a `lexical_search` returns 0 hits.
-///
-/// Pure function over (query, hit_count) so the wording is unit-testable and
-/// the call site (agent-loop codegen observation) stays a thin collector.
-/// The hint is model-facing: multi-word Chinese queries tend to be tokenized
-/// whole, so the first move is splitting to core terms — NOT early-stopping
-/// (no counts change, hint only).
-pub fn lexical_zero_hit_hint(query: &str, hit_count: usize) -> Option<String> {
-    if hit_count > 0 {
-        return None;
-    }
-    Some(format!(
-        "[retrieval_hint] lexical_search 0 命中（query: \"{query}\"）。\
-         多词中文查询可能被整词切分——依次尝试：\
-         ① 拆出核心专名/单词条单独查（如「速冻机」而非「速冻机 年产」）；\
-         ② 换同义词/近义表述；\
-         ③ doc_scan 扫目录定位章节；\
-         ④ 仍无结果可用 dense_search 复核语义。\
-         避免对同一措辞连续无效重试。[/retrieval_hint]"
-    ))
 }
 
 /// Host-side bridge backed by `RagRuntime` tool dispatch.
@@ -120,9 +97,9 @@ impl RuntimeBridge {
             "chunk_fetch",
             "doc_summary",
             "doc_profile",
-            "doc_scan",
-            // legacy alias — prefer doc_scan in prompts/client
-            "doc_chunks",
+            // 2026-07-29: grep/read_lines replace doc_scan (spec §4).
+            "grep",
+            "read_lines",
         ]
     }
 
@@ -339,7 +316,10 @@ impl RuntimeBridge {
             }
             // doc_scan: sandbox-side material for code scan/count/filter (not chat dump).
             // doc_chunks: legacy RPC alias — same host tool.
-            "doc_scan" | "doc_chunks" => {
+            // 2026-07-29: grep 化检索替代 doc_scan（spec §4）——行级命中+
+            // 精确计数+完备性声明；read_lines 提供区间原文。doc_ids 一律与
+            // session scope 求交（resolve_doc_ids）。
+            "grep" => {
                 let caller_doc_ids = args
                     .get("doc_ids")
                     .and_then(|v| v.as_array())
@@ -357,10 +337,51 @@ impl RuntimeBridge {
                         "doc_ids is required when doc_scope is empty",
                     ));
                 }
+                let pattern = args
+                    .get("pattern")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
                 Ok(ToolCall {
-                    tool: "doc_scan".to_string(),
+                    tool: "doc_grep".to_string(),
                     version: "1.0".to_string(),
-                    args: serde_json::to_value(DocChunksArgs { doc_ids }).unwrap_or_default(),
+                    args: serde_json::to_value(contracts::DocGrepArgs {
+                        pattern,
+                        doc_ids,
+                        regex: args.get("regex").and_then(|v| v.as_bool()).unwrap_or(false),
+                        context: args
+                            .get("context")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32,
+                        max_hits: args
+                            .get("max_hits")
+                            .and_then(|v| v.as_u64())
+                            .map(|v| v as u32),
+                    })
+                    .unwrap_or_default(),
+                })
+            }
+            "read_lines" => {
+                let doc_id = args
+                    .get("doc_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                // read_lines 必须读调用者指定的那一篇——scope 回退语义
+                // （resolve_doc_ids 的"交集为空回退全 scope"）在这里是错的。
+                if !self.doc_scope.is_empty() && !self.doc_scope.contains(&doc_id) {
+                    return Err(Self::bridge_error(
+                        "out_of_scope",
+                        "doc_id is outside the session doc_scope",
+                    ));
+                }
+                let start = args.get("start").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+                let end = args.get("end").and_then(|v| v.as_u64()).unwrap_or(start as u64) as u32;
+                Ok(ToolCall {
+                    tool: "doc_read_lines".to_string(),
+                    version: "1.0".to_string(),
+                    args: serde_json::to_value(contracts::DocReadLinesArgs { doc_id, start, end })
+                        .unwrap_or_default(),
                 })
             }
             other => Err(Self::bridge_error(
@@ -386,12 +407,15 @@ impl RuntimeBridge {
         };
 
         match result.tool.as_str() {
-            "dense_retrieval" | "index_lookup" | "doc_scan" => {
+            "dense_retrieval" | "index_lookup" => {
                 // K1: native results are now object-shaped ({chunks, hint…})
                 // — the sandbox only ever sees the chunk list.
                 let inner = data.get("chunks").unwrap_or(data);
                 json!({ "chunks": chunks_with_content_field(inner) })
             }
+            // grep/read_lines: 完整载荷（total_hits/行号/完备性声明）原样给沙箱
+            // ——命中计数就是它的核心语义，不能削成行列表。
+            "doc_grep" | "doc_read_lines" => data.clone(),
             // lexical may already be `{ chunks, graph_context }` (native path alignment).
             "lexical_retrieval" => {
                 if let Some(obj) = data.as_object() {
@@ -514,7 +538,10 @@ impl HostBridge for RuntimeBridge {
             "lexical_search",
             "graph_search",
             "chunk_fetch",
-            "doc_scan",
+            // grep/read_lines 的 chunks 数组（命中行所属 chunk）参与别名空间——
+            // SELECTED 水合经 alias_chunks_in_order 重放（hits 行不别名）。
+            "grep",
+            "read_lines",
         ];
         if ALIASED_METHODS.contains(&method)
             && let Some(items) = data.get_mut("chunks").and_then(|v| v.as_array_mut())
@@ -750,19 +777,18 @@ mod tests {
     fn bridge_host_methods_match_python_shim() {
         let host = RuntimeBridge::supported_method_names();
         let shim = avrag_code_interpreter::bridge_shim_client_method_names();
-        // Every shim-advertised method must be host-supported. The host
-        // additionally keeps legacy RPC aliases (doc_chunks → doc_scan, see
-        // `method_to_tool_call`) that the shim no longer advertises (2026-07-20).
+        // Every shim-advertised method must be host-supported, and the two
+        // lists must match exactly (2026-07-29: grep/read_lines replace
+        // doc_scan + legacy doc_chunks on both sides).
         for m in shim {
             assert!(
                 host.contains(m),
                 "shim method {m} missing from host bridge: {host:?}"
             );
         }
-        assert!(
-            host.contains(&"doc_chunks"),
-            "legacy alias doc_chunks must stay host-side: {host:?}"
-        );
+        assert_eq!(host, shim, "host and shim method lists must match");
+        assert!(!host.contains(&"doc_scan"));
+        assert!(!host.contains(&"doc_chunks"));
     }
 
     #[tokio::test]
@@ -786,21 +812,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_bridge_doc_scan_returns_chunks_with_content() {
-        // doc_scan: sandbox material for code-side count/filter. Agent code uses
-        // `c["content"]`, so the bridge MUST surface body under `content`.
+    async fn runtime_bridge_grep_returns_full_payload() {
+        // grep (doc_scan 继任者): 沙箱拿到完整载荷——total_hits 精确计数、
+        // 行号命中，不削成行列表（计数语义不能被 chunks 化丢失）。
         let runtime = make_runtime();
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge.call("doc_scan", json!({})).await;
-        let chunks = data["chunks"].as_array().expect("chunks array");
-        assert_eq!(chunks.len(), 1);
-        assert_eq!(chunks[0]["content"], "scan hit");
-        assert!(chunks[0].get("text").is_none(), "must be renamed to content");
-        assert_eq!(
-            chunks[0]["chunk_id"],
-            "00000000-0000-0000-0000-000000000001"
-        );
+        let data = bridge.call("grep", json!({"pattern": "scan"})).await;
+        assert_eq!(data["total_hits"], 1, "{data}");
+        assert_eq!(data["returned"], 1, "{data}");
+        assert_eq!(data["truncated"], false, "{data}");
+        let hits = data["hits"].as_array().expect("hits array");
+        assert_eq!(hits[0]["line"], 1);
+        assert_eq!(hits[0]["text"], "scan hit");
     }
 
     #[test]
@@ -1179,20 +1203,6 @@ print(json.dumps(chunks))
         );
     }
 
-    #[test]
-    fn lexical_zero_hit_hint_fires_only_on_zero() {
-        assert!(lexical_zero_hit_hint("速冻机 年产", 3).is_none());
-        assert!(lexical_zero_hit_hint("速冻机 年产", 1).is_none());
-        let hint = lexical_zero_hit_hint("速冻机 年产", 0).expect("0 hits → hint");
-        assert!(hint.contains("0 命中"), "{hint}");
-        assert!(hint.contains("速冻机 年产"), "query quoted: {hint}");
-        assert!(hint.contains("拆出核心专名"), "{hint}");
-        assert!(hint.contains("换同义词"), "{hint}");
-        assert!(hint.contains("doc_scan"), "{hint}");
-        assert!(hint.contains("dense_search 复核"), "{hint}");
-        assert!(hint.contains("避免对同一措辞连续无效重试"), "{hint}");
-    }
-
     // ---- K2: retrieval-log alias injection ----------------------------------
 
     #[tokio::test]
@@ -1207,12 +1217,14 @@ print(json.dumps(chunks))
         let d2 = bridge
             .call("dense_search", json!({"query": "again", "top_k": 5}))
             .await;
-        let scan = bridge.call("doc_scan", json!({})).await;
+        let d3 = bridge
+            .call("lexical_search", json!({"query": "third", "top_k": 5}))
+            .await;
 
         let alias_of = |data: &Value| data["chunks"][0]["alias"].as_str().unwrap().to_string();
         assert_eq!(alias_of(&d1), "#1");
         assert_eq!(alias_of(&d2), "#2", "cross-round increment, no reset");
-        assert_eq!(alias_of(&scan), "#3", "all methods share the namespace");
+        assert_eq!(alias_of(&d3), "#3", "all chunk methods share the namespace");
     }
 
     #[tokio::test]

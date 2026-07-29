@@ -29,7 +29,7 @@ applicable_modes: [rag]
 
 每个 `<code>` 块都在 **全新沙箱进程**里运行：变量、import、上轮定义的函数 **不会** 跨轮保留。
 
-- 每块都要自足：需要的 import 与数据在本块内重新加载（需要材料就再 `doc_scan` 装入）。
+- 每块都要自足：需要的 import 与数据在本块内重新加载（需要材料就再检索/`grep` 获取）。
 - 用 **顶层 await**，不要 `asyncio.run(...)`（沙箱已在事件循环内）。
 
 ### 沙箱边界
@@ -51,7 +51,8 @@ pwd, grp, resource, signal, multiprocessing, threading`。
 | 已有 `chunk_id`，要该段完整正文 | `client.chunk_fetch(chunk_id=…)` |
 | 文档类型、章节结构（sections → chunk_id） | `client.doc_profile(…)` |
 | 整篇压缩摘要 | `client.doc_summary(level="doc", …)` |
-| 在 **代码里** 对数、词、行、表项做扫描/过滤/统计（结果用 print 压成小数） | `client.doc_scan(…)` 得到段落列表后在 Python 里处理 |
+| 行级定位/计数/查无判定（数、词、表项、关键词出现与否） | `client.grep(pattern, …)` 返回精确命中数与行号 |
+| 按行号区间读原文 | `client.read_lines(doc_id, start, end)` |
 
 选择直觉（**非硬门禁**，按问题自行判断）：
 
@@ -71,7 +72,8 @@ pwd, grp, resource, signal, multiprocessing, threading`。
 | 按 id 取段 | `client.chunk_fetch(chunk_id)` | list[dict]（**单个** `chunk_id`，不是列表；自动在**完整 doc_scope** 内解析） |
 | 整篇摘要 | `client.doc_summary(level="doc", doc_ids=None)` | list[dict] |
 | 文档结构 | `client.doc_profile(doc_ids=None, fields=None)` | list[dict]（每项含 `sections` 等） |
-| 装入扫描 | `client.doc_scan(doc_ids=None)` | list[dict] |
+| 行级检索 | `client.grep(pattern, doc_ids=None, regex=False, context=0, max_hits=50)` | **dict**（非 list）：`total_hits` / `returned` / `truncated` / `hits[]` |
+| 区间读原文 | `client.read_lines(doc_id, start, end)` | **dict**：`total_lines` / `lines[]`（每行带行号） |
 
 kwarg 语义：
 
@@ -92,27 +94,52 @@ profiles = await client.doc_profile()
 target = next(p for p in profiles if p.get("name") == "<目标文件名>")
 sections = target.get("sections", [])
 
-# 代码侧扫描：装入沙箱后自己数，只 print 结论
-rows = await client.doc_scan(doc_ids=["…"])  # 省略 doc_ids 时用本轮 doc_scope
-print(f"count={n}")
+# 行级定位/计数：total_hits 是服务端精确数（不是样本数）
+result = await client.grep("| 概念阶段 |", doc_ids=["…"])  # 省略 doc_ids 时用本轮 doc_scope
+print(f"total_hits={result['total_hits']}, truncated={result['truncated']}")
+for h in result["hits"][:5]:
+    print(h["doc_id"], h["line"], h["text"][:80])
+
+# 命中行号 → 读原文区间
+page = await client.read_lines(doc_id="…", start=48, end=60)
 ```
 
-### `doc_scan` 的工作方式（重要）
+### `grep` / `read_lines` 的工作方式（重要）
 
-- 作用：把指定文档（或当前 doc_scope）的段落 **装进沙箱**，供 **Python 代码** 扫描、计数、过滤。
-- 适用直觉：需要 **可复算的数量**、词频、按字段过滤时——在代码里做，而不是靠模型通读估数。
-- observation 侧通常只给 **「已装入 N 段，请在代码里扫」** 类提示，而不是把全文再贴回聊天；
-  所以请在同一轮或后续代码里完成统计，并 **只 print 紧凑结果**。
-- 已知目标 `doc_id` 时传入 `doc_ids=[…]`，避免扫到无关文档。
+- **作用**：在整个 doc_scope（或指定 doc_ids）上逐行检索——coding-agent 的 grep。
+  `total_hits` 是 **Rust 统计的精确命中数**：计数题直接引用它，**不要**自写解析代码再数一遍。
+- **查无即证据**：`total_hits: 0` 是确定性的「scope 内确实没有」——比"我没找到方法"硬得多，
+  可直接支撑 coverage=insufficient 或"证据不支持"类结论。
+- **表格过滤用管道符号**：表行形态为 `| 单元格 | 单元格 |`（**注意空格填充**——xlsx 单空格、
+  PDF 列宽对齐填充）。要「阶段列的值=概念阶段」就查 `"| 概念阶段 |"`，把该列取值与
+  描述列里偶然提及区分开；空格不确定时用 `regex=True` + `r"\|\s*概念阶段\s*\|"`。
+- **截断即完备性**：`truncated: true` 时 `hits` 只是前 max_hits 条样本——但 `total_hits`
+  始终是全部命中数；要看全样本就缩小 doc_ids 或加 context 精查。
+- **命中后必读邻域**：答案常在命中行附近（表格/列表/日期行的空间邻近）。grep 命中后
+  第一步是读邻域（`context=2` 或 `read_lines` 以命中行为中心 ±5）——**命中行前后都要读**，
+  不要只向后取，也不要在远离命中的区域翻找。
+- **日期/时间安排类问题**：直接用日期模式定位——`grep(r"\d+月\d+日", regex=True)`，
+  命中行即日期行，再读其邻域归属（属于哪个阶段/活动）。
+- **圈选路径不变**：grep/read_lines 的 chunks 同样带 `#n` 别名——采用证据时按惯例
+  `SELECTED: #n` 圈选；计数/枚举题圈选**覆盖编号区间**的 chunk（如 #1~#81 各行所在），
+  Answer 才能逐条引用，否则被判无据。
+- **计数语义（q078 第二轮教训）**：`total_hits`（行级命中数）**默认即答案**。仅当问题
+  明确要去重语义时才另算去重数——且必须**两数并陈**（如「81 行 / 46 个去重名」）并做
+  编号连续性互验，不得只报去重数顶替行数。拿不准时以行数为准并如实说明口径。
+- `read_lines(doc_id, start, end)`：与 grep 同一行号视图，按区间读原文（≤400 行）。
+- **计数题范式（q078 教训）**：模式计数后必须**交叉验证**——例如行号/编号列连续性
+  （`#1~#81` 连续 ⇒ 81；命中数 87 但有编号越出范围 ⇒ 有假命中需剔除）。
+  total_hits 与行号范围互验，不一致时在 handoff 里如实说明，不得自行裁决。
+- observation 不贴全文：在代码里 `print` 紧凑结论（数字、短清单），不要把 hits 整页倒出。
 
 ### 长 chunk 阅读（重要）
 
 - 头部命中的 chunk 可能把答案藏在**尾部**（编号列表、表格常在段末）；observation 头部预览不代表全文。
-- 不要凭预览就下「未记载」结论——在沙箱里对**完整 chunk 文本**扫关键词/数字模式（如 `for line in text.splitlines()`、正则找编号/日期）再判有无。
+- 不要凭预览就下「未记载」结论——用 `grep` 在**全文行视图**上扫关键词/数字模式（正则找编号/日期），或用 `read_lines` 读完整区间后再判有无。
 
 ### 常见选择背景
 
-- 用户问「有多少 / 各占多少 / 是否齐全」：往往需要 **可复算** → 先定位文档，再 lexical/dense 取相关段，或 `doc_scan` 后在代码里数；估数容易错。
+- 用户问「有多少 / 各占多少 / 是否齐全」：往往需要 **可复算** → 先定位文档，`grep` 取 `total_hits` 并做编号连续性互验；估数容易错。
 - 用户问「是什么 / 为什么」：dense 或 lexical 取相关段即可。
 - 不熟悉「这篇」文档：可先 `doc_profile` / `doc_summary` 看清结构与主题，再决定查哪里。
 - 同块可同时 dense + lexical，一次 observation 合并。
@@ -150,7 +177,7 @@ relations = await client.graph_search(query="…", depth=2)
 ### doc_scope
 
 会话已限定工作区文档范围。dense / lexical 按 scope 检索；  
-`doc_profile` / `doc_summary` / `doc_scan` 可选用 `doc_ids` 再收窄。  
+`doc_profile` / `doc_summary` / `grep` 可选用 `doc_ids` 再收窄。  
 `chunk_fetch` 按 id 取段时会在 **完整 doc_scope** 内解析——多文档 scope 下也能取到非首个文档的段。
 
 ### 沙箱报错时

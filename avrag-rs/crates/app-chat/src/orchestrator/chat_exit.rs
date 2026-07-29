@@ -289,6 +289,10 @@ fn render_citation_contract(handoff: &ChatHandoff) -> String {
          short store id listed above (copy exactly: `[[E3]]` — never paste chunk UUIDs into \
          the E-marker). One claim may carry several markers: `[[E2]][[E5]]`.\n",
     );
+    s.push_str(
+        "- 清单/枚举/计数类断言（如「共 N 项，行号 #a~#b」）：引用必须覆盖全部条目所在的 \
+         chunk——单条 E-marker 支撑不了整段清单；覆盖不全就按已覆盖范围作答或如实说明缺口。\n",
+    );
     if !has_doc {
         s.push_str("- Workspace retrieval returned nothing usable: say 未命中 for document-side \
                     facts; do not cite document evidence.\n");

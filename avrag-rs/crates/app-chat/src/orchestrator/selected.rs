@@ -69,7 +69,10 @@ pub fn alias_chunks_in_order(tool_results: &[ToolResult]) -> Vec<HydratedChunk> 
         "lexical_retrieval",
         "graph_retrieval",
         "index_lookup",
-        "doc_scan",
+        // 2026-07-29: grep/read_lines 的 chunks 数组（命中行所属 chunk，首见序）
+        // 与桥接别名注入一一对应，水合按同一顺序重放。
+        "doc_grep",
+        "doc_read_lines",
     ];
     let mut out = Vec::new();
     for tr in tool_results {

@@ -329,6 +329,10 @@ pub fn hits_from_tool_data(data: Option<&serde_json::Value>) -> usize {
     if let Some(chunks) = data.get("chunks").and_then(|c| c.as_array()) {
         return chunks.len();
     }
+    // doc_grep payload: exact hit count carries the semantics (2026-07-29).
+    if let Some(n) = data.get("total_hits").and_then(|c| c.as_u64()) {
+        return n as usize;
+    }
     if let Some(results) = data.get("results").and_then(|c| c.as_array()) {
         return results.len();
     }

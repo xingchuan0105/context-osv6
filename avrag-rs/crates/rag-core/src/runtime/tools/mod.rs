@@ -1,4 +1,5 @@
 pub mod dense;
+pub mod doc_grep;
 pub mod doc_metadata;
 pub mod doc_profile;
 pub mod doc_scan;
@@ -25,6 +26,8 @@ pub async fn dispatch(runtime: &RagRuntime, auth: &AuthContext, call: &ToolCall)
         "doc_metadata" => doc_metadata::run(runtime, auth, &call.args).await,
         "doc_profile" => doc_profile::run(runtime, auth, &call.args).await,
         "doc_scan" => doc_scan::run(runtime, auth, &call.args).await,
+        "doc_grep" => doc_grep::run_grep(runtime, auth, &call.args).await,
+        "doc_read_lines" => doc_grep::run_read_lines(runtime, auth, &call.args).await,
         other => ToolResult {
             tool: other.to_string(),
             version: call.version.clone(),

@@ -38,6 +38,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     };
 
     let terms_for_augment = args.terms.clone();
+    let terms_for_hint = args.terms.clone();
     let rag_plan = RagPlan {
         plan_version: "rag-item-v2".to_string(),
         plan_confidence: 1.0,
@@ -95,7 +96,13 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 "adaptive_k": adaptive.k,
                 "score_shape": adaptive.shape.as_str(),
             });
-            if let Some(hint) = super::super::adaptive_k::hint_text(&adaptive) {
+            if chunks.is_empty() {
+                // 2026-07-29: 0 命中数据 hint——AND 语义下哪个词杀死了查询是
+                // 服务端可确定的事实（按词命中数），直接给数据而非建议。
+                let hint =
+                    zero_hit_data_hint(runtime, auth, &terms_for_hint, &args.doc_scope).await;
+                data["retrieval_hint"] = json!(hint);
+            } else if let Some(hint) = super::super::adaptive_k::hint_text(&adaptive) {
                 data["retrieval_hint"] = json!(hint);
             }
             if !graph_context.is_empty() {
@@ -125,5 +132,121 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             }
         }
         Err(e) => super::error_result("lexical_retrieval", e.to_string()),
+    }
+}
+
+/// 0 命中时按词计命中数（复用同一 bm25 通道，仅该路径触发，封顶 8 词）。
+/// 返回 (词, 池内命中数)；池上限 100，达到即"≥100"语义。
+async fn per_term_hit_counts(
+    runtime: &RagRuntime,
+    auth: &AuthContext,
+    terms: &[String],
+    doc_scope: &[String],
+) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    for term in terms.iter().take(8) {
+        let request = ChatRequest {
+            query: term.clone(),
+            workspace_id: None,
+            session_id: None,
+            agent_type: "chat".to_string(),
+            capabilities: None,
+            client_context: None,
+            client_ip: None,
+            source_type: None,
+            source_token: None,
+            doc_scope: doc_scope.to_vec(),
+            messages: Vec::new(),
+            stream: false,
+            debug: false,
+            language: None,
+            format_hint: None,
+        };
+        let plan = RagPlan {
+            plan_version: "rag-item-v2".to_string(),
+            plan_confidence: 1.0,
+            clarify_needed: false,
+            clarify_message: String::new(),
+            items: vec![RagPlanItem {
+                priority: 1.0,
+                query: None,
+                bm25_terms: Some(vec![term.clone()]),
+                summary: None,
+            }],
+        };
+        let n = runtime
+            .retrieve_bm25_stage(&request, auth, &plan)
+            .await
+            .map(|(lists, _)| lists.iter().map(|l| l.chunks.len()).sum())
+            .unwrap_or(0);
+        out.push((term.clone(), n));
+    }
+    out
+}
+
+fn fmt_counts(counts: &[(String, usize)]) -> String {
+    counts
+        .iter()
+        .map(|(t, n)| {
+            if *n >= 100 {
+                format!("「{t}」=≥100 条")
+            } else {
+                format!("「{t}」={n} 条")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("、")
+}
+
+/// 数据形态 0 命中 hint（2026-07-29，替代 E3 散文 hint）：多词 AND 下哪个词
+/// 使整查归零是服务端可确定的事实——给词级命中数，删词动作由模型自读。
+async fn zero_hit_data_hint(
+    runtime: &RagRuntime,
+    auth: &AuthContext,
+    terms: &[String],
+    doc_scope: &[String],
+) -> String {
+    if terms.len() == 1 {
+        return format!(
+            "0 命中：「{}」在 scope 内不存在。换词/换表述，或按查无流程处理。",
+            terms[0]
+        );
+    }
+    let counts = per_term_hit_counts(runtime, auth, terms, doc_scope).await;
+    let detail = fmt_counts(&counts);
+    let zeros: Vec<&str> = counts
+        .iter()
+        .filter(|(_, n)| *n == 0)
+        .map(|(t, _)| t.as_str())
+        .collect();
+    if zeros.len() == counts.len() {
+        format!(
+            "0 命中：{detail}——全部词在 scope 内均不存在，按查无流程处理（不要换措辞重试同类查询）。"
+        )
+    } else if !zeros.is_empty() {
+        format!(
+            "0 命中（多词 AND）：{detail}——「{}」在 scope 内不存在；AND 语义下一词为零整查归零，删去 0 条词重试。",
+            zeros.join("」「")
+        )
+    } else {
+        format!(
+            "0 命中（多词 AND）：{detail}——各词分别存在但不共现于同一段；减词或拆成单词查询。"
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fmt_counts_marks_pool_ceiling() {
+        let counts = vec![
+            ("详细设计".to_string(), 3usize),
+            ("阶段".to_string(), 100usize),
+        ];
+        let s = fmt_counts(&counts);
+        assert!(s.contains("「详细设计」=3 条"), "{s}");
+        assert!(s.contains("「阶段」=≥100 条"), "{s}");
     }
 }

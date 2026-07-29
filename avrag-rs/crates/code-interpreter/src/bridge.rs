@@ -60,13 +60,18 @@ class _Client:
         if fields:
             payload["fields"] = fields
         return _rpc("doc_profile", payload)["chunks"]
-    async def doc_scan(self, doc_ids=None):
-        """Load document material into the sandbox for code-side scan/count/filter.
-        Prefer printing compact numbers or short lists — not full text dumps."""
-        payload = {}
+    async def grep(self, pattern, doc_ids=None, regex=False, context=0, max_hits=50):
+        """Locate lines across docs (coding-agent grep). Returns the FULL payload:
+        {"total_hits": N, "returned": M, "truncated": bool, "hits": [{doc_id, line, text, before, after}]}.
+        total_hits is exact (Rust-counted) — use it for counting instead of parsing yourself."""
+        payload = {"pattern": pattern, "regex": regex, "context": context, "max_hits": max_hits}
         if doc_ids is not None:
             payload["doc_ids"] = doc_ids
-        return _rpc("doc_scan", payload)["chunks"]
+        return _rpc("grep", payload)
+    async def read_lines(self, doc_id, start, end):
+        """Read original lines [start, end] (1-based, inclusive) of one document.
+        Same virtual line view as grep — hit line numbers resolve here."""
+        return _rpc("read_lines", {"doc_id": doc_id, "start": start, "end": end})
 
 client = _Client()
 "#
@@ -81,7 +86,8 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
         "chunk_fetch",
         "doc_summary",
         "doc_profile",
-        "doc_scan",
+        "grep",
+        "read_lines",
     ]
 }
 
@@ -516,10 +522,12 @@ mod bridge_shim_tests {
                 "chunk_fetch",
                 "doc_summary",
                 "doc_profile",
-                "doc_scan",
+                "grep",
+                "read_lines",
             ]
         );
         assert!(!bridge_shim_client_method_names().contains(&"rerank"));
+        assert!(!bridge_shim_client_method_names().contains(&"doc_scan"));
     }
 }
 
