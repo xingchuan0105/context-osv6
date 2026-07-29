@@ -397,7 +397,7 @@ mod tests {
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden_set_realistic.json");
         let dataset = GoldenDataset::load(&path).expect("load realistic v4 golden set");
-        assert_eq!(dataset.len(), 143, "107 legacy + 36 paradigm/group cases");
+        assert_eq!(dataset.len(), 149, "113 legacy + 36 paradigm/group cases");
 
         let expect = [
             ("orchestrator_paradigm", 8),
