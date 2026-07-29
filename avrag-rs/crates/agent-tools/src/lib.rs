@@ -11,6 +11,16 @@
 //! Orchestration (`ReActLoop`, chat pipeline) stays in `app-chat` and depends
 //! on this crate so tool changes need not recompile the full orchestrator matrix
 //! when only skill/meta code changes (workspace incremental compile).
+//!
+//! # Vocabulary (T4 — do not collapse layers)
+//!
+//! | Term | Crate type | Role |
+//! |------|------------|------|
+//! | **Tool** | [`ToolCatalog`] entry | Sole **execute** route (`dispatch_tool`) |
+//! | **SkillComponent** | [`skills::SkillComponent`] | Executable builtin (is a Tool; name is legacy) |
+//! | **SkillMd** | [`progressive::Skill`] | Prompt body only — **no** `execute` |
+//! | **Capability** | [`CapabilityRegistry`] + [`PolicyEnforcer`] | Metadata + **policy truth** (allow/deny/tier) |
+//! | **HostTool** | (app-chat orchestrator) | Intercepted by brain; **never** register here |
 
 /// Guaranteed recent user turns injected unconditionally (memory floor).
 /// Shared with app-chat AgentRequest history assembly.

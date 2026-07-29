@@ -44,8 +44,9 @@ use assembler::DisclosedState;
 use avrag_llm::LlmClient;
 use common::AppError;
 use config::ModeConfig;
-use hooks::StandardLoopHooks;
 use iteration::IterationState;
+
+pub use hooks::{LoopContext, LoopHooks, StandardLoopHooks};
 
 pub struct ReActLoop {
     llm: Arc<LlmClient>,
@@ -97,11 +98,27 @@ impl ReActLoop {
         self
     }
 
+    /// Run with default [`StandardLoopHooks`] (two-tier compact: high=32, low=20).
     pub async fn run(
         &self,
         mode: &ModeConfig,
         request: AgentRequest,
         sink: &dyn AgentEventSink,
+    ) -> Result<AgentRunResult, AppError> {
+        self.run_with_hooks(mode, request, sink, &StandardLoopHooks::default())
+            .await
+    }
+
+    /// Run with an injected [`LoopHooks`] implementation.
+    ///
+    /// Prefer this over forking `run` for context transforms. Hooks are **not**
+    /// the tool-policy truth source — see `EXTENDING.md` / `hooks` module docs.
+    pub async fn run_with_hooks(
+        &self,
+        mode: &ModeConfig,
+        request: AgentRequest,
+        sink: &dyn AgentEventSink,
+        hooks: &dyn LoopHooks,
     ) -> Result<AgentRunResult, AppError> {
         let start_time = std::time::Instant::now();
         let cancel = request.cancellation_token.clone().unwrap_or_default();
@@ -109,7 +126,6 @@ impl ReActLoop {
             return Err(cancellation_error());
         }
         let loop_exit = mode.loop_exit_for_mode();
-        let hooks = StandardLoopHooks::default();
 
         let (request, base_message_count, max_iterations, auth, loop_user_query) =
             self.prepare_run_request(mode, request, sink).await?;
@@ -139,7 +155,7 @@ impl ReActLoop {
                 &request,
                 &auth,
                 &loop_exit,
-                &hooks,
+                hooks,
                 base_message_count,
                 max_iterations,
                 &cancel,

@@ -3,15 +3,58 @@
 Owner crate: `agent-loop` (ReAct + policy). Tools live in `agent-tools`.
 Orchestration (sessions, pipeline, UnifiedAgent shell) stays in `app-chat`.
 
+Architecture plan: `docs/plans/2026-07-29-pi-informed-agent-architecture-optimization.md`.
+
+## Vocabulary (do not merge)
+
+| Term | Meaning | Forbidden |
+|------|---------|-----------|
+| **Tool** | Executable via `ToolCatalog` / `dispatch_tool` | Ad-hoc execute match arms in the loop |
+| **SkillMd** | Prompt-only `SKILL.md` (`progressive::Skill`) | Registering MD as executable |
+| **SkillComponent** | Legacy name for executable builtins (is a **Tool**) | Treating as “prompt skill” |
+| **Capability** | Mode metadata + **`PolicyEnforcer`** (policy truth) | Collapsing into one map with tools |
+| **HostTool** | Orchestrator intercepts (`delegate_*`, `finish_answer`, `evidence_fetch`) | Registering into `ToolCatalog` |
+| **LoopHooks** | Context transforms (`transform_context` / `convert_to_llm`) | **Second policy engine** (allowlists/denies) |
+
 ## Boundaries (do not violate)
 
 | Concern | Where | Forbidden |
 |---------|-------|-----------|
-| Tool **execute** | `agent_tools::ToolCatalog` + `dispatch_tool` only | New match arms in loop / atomic_tools / dual HashMap |
+| Tool **execute** | `agent_tools::ToolCatalog` + `dispatch_tool` only | New match arms in loop / dual HashMap |
+| Tool **policy** (allow/deny/tier) | `PolicyEnforcer` + catalog metadata | Parallel deny rules inside `LoopHooks` |
 | Mode behavior | YAML `ModeConfig` (`tool_pool`, skills, budgets) | Hard-coding mode branches inside iteration |
-| Capability / Skill / Tool names | ADR-0006 §5a product layers | Merging registries into one “everything map” |
+| Capability / Skill / Tool names | ADR-0006 §5a product layers (T4) | Merging registries into one “everything map” |
 | Untrusted tool/obs text | `agent_loop::untrusted_input` | Ad-hoc scrubbers in app-chat |
 | Chat product shell | `app-chat` (pipeline, persistence, SSE glue) | Pulling session/HTTP into agent-loop |
+| Write tools | Write lane / `write_refine` only | ReAct `ToolCatalog` (T2) |
+
+## Dual loops (product shape)
+
+```text
+User turn
+  └─ Orchestrator brain (HostTools: delegate_*/evidence_fetch/finish_answer)
+        │  not in ToolCatalog; not ReActLoop
+        ├─ WorkerSession (channel-persistent)
+        │     └─ ReActLoop::run[_with_hooks]
+        │           ├─ Assembler + SkillMd disclosure
+        │           ├─ codegen (RAG main path) / dispatch_tool
+        │           └─ LoopHooks::transform_context (windowing only)
+        └─ chat_exit / evidence hydrate → user answer
+```
+
+- **Do not** force the brain onto `ReActLoop` (plan C4a).
+- Shared fragments only when proven (budget helpers, message format) — plan C4b.
+
+## Policy vs hooks
+
+| Concern | Truth source | Hooks may |
+|---------|--------------|-----------|
+| Permission / tier / risk | **`PolicyEnforcer`** | Observe; optional later *delegate* — never fork rules |
+| Message window / prefix cache | **`LoopHooks::transform_context`** | Own this |
+| Exit gates (evidence/budget) | `LoopPolicy` / `exit_policy` | Observe only |
+
+Default product path: `ReActLoop::run` → `StandardLoopHooks` (high watermark 32, low 20).
+Custom transforms: `ReActLoop::run_with_hooks(..., &my_hooks)`.
 
 ## Extension recipes
 
@@ -29,13 +72,20 @@ Orchestration (sessions, pipeline, UnifiedAgent shell) stays in `app-chat`.
 
 ### 3. Prompt / context transforms
 
-- Prefer `LoopHooks` (`transform_context` / `convert_to_llm`) over forking `ReActLoop::run`.
-- Iteration budget injection and disclosure assembly already live in assembler / policy.
+- Prefer `LoopHooks` + `run_with_hooks` over forking `ReActLoop::run`.
+- Iteration budget injection and disclosure assembly live in assembler / policy.
+- `StandardLoopHooks`: append-only until `base + compact_high_watermark`, then pair-safe compact to `max_react_messages`.
 
 ### 4. Product orchestration (sessions, write, billing)
 
 - Stay in `app-chat` / domain crates.
 - Write mode is intentionally **not** UnifiedAgent — see `app-chat` writer boundary.
+- HostTools stay host-intercepted in orchestrator.
+
+### 5. Steering / follow-up queues
+
+- `react_loop::message_queue::LoopMessageQueue` is a **deprecated placeholder** (Wave A2).
+- SaaS one-shot turns do not inject mid-loop user messages. Do not wire or delete without product/ADR decision.
 
 ## Verification
 

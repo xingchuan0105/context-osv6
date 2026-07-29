@@ -1,13 +1,23 @@
 # ADR-0005-revised: 基于 v5 的增量扩展 — 阶段级工具动态加载与跨 Mode 历史共享
 
+> **⛔ SUPERSEDED — do not implement from this document**  
+> Proposed incremental keep-Strategy path; **not** the shipping design.  
+> **Current architecture:** single `ReActLoop` (ADR-0006-revised / ADR-0007),  
+> not Strategy state machines. See  
+> [0006-unified-agent-loop-revised.md](0006-unified-agent-loop-revised.md),  
+> [0007-react-phased-context-disclosure.md](0007-react-phased-context-disclosure.md),  
+> plan [2026-07-29-pi-informed-agent-architecture-optimization.md](../plans/2026-07-29-pi-informed-agent-architecture-optimization.md).  
+> Index: [ARCHIVE-superseded-by-adr-0007.md](../agents/ARCHIVE-superseded-by-adr-0007.md)
+
 | 项目 | 内容 |
 |---|---|
-| 状态 | 审议中（替代原 ADR-0005） |
+| 状态 | **已废止 / SUPERSEDED**（原「审议中」未采纳为最终架构） |
 | 决策日期 | 2026-06-06 |
 | 提出者 | AI 助手（与用户共同决策） |
 | 影响范围 | `crates/app/src/agents/unified/mod.rs`、`crates/app/src/agents/strategy/*.rs`、`crates/app/src/agents/strategy/prompts.rs` |
 
 ---
+
 
 ## 1. 背景与动机
 

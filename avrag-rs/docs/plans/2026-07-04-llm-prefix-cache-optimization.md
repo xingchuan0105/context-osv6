@@ -235,8 +235,14 @@ MEMORY_LLM_ENABLE_CACHE=true
 
 ### Phase 3-2 验证数据
 
-- **drain → 两档折叠**：`StandardLoopHooks` 新增 `compact_high_watermark: usize`（默认 32），`max_react_messages` 保持 20（低水位/后缀大小）。行为：消息数 < base+32 时完全 append-only；≥ base+32 时一次性 drain 到 base+20。
-- **测试**：原有 3 个配对安全测试 + 新增 3 个两档行为测试全部通过（`cargo test -p app-chat -- hooks` — 6/6，`cargo test -p app-chat -- loop` — 105/105）。
+> **Rebase note (2026-07-29 Wave A4):** Status below claimed “done” but
+> `compact_high_watermark` was **not** present in `agent-loop` trunk at audit
+> time (only this doc mentioned it). Re-landed under Wave A in
+> `crates/agent-loop/src/react_loop/hooks.rs` + characterization tests.
+> Call site remains `run_retrieval.rs` end-of-turn `hooks.transform_context`.
+
+- **drain → 两档折叠**：`StandardLoopHooks` 新增 `compact_high_watermark: usize`（默认 32），`max_react_messages` 保持 20（低水位/后缀大小）。行为：消息数 ≤ base+32 时完全 append-only；> base+32 时一次性 pair-safe drain 到约 base+20。
+- **测试**：`cargo test -p agent-loop --lib hooks`（characterization + pair-safe + two-tier）。
 
 ---
 

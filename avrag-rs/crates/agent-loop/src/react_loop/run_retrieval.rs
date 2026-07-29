@@ -5,7 +5,7 @@ use super::ReActLoop;
 use super::assembler::LoopPhase;
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::has_retrieval_observation;
-use super::hooks::{LoopContext, LoopHooks, StandardLoopHooks};
+use super::hooks::{LoopContext, LoopHooks};
 use super::iteration::{IterationControl, IterationOutcome, IterationState};
 use super::reasoning_emit;
 use super::telemetry::ReActIterationRecord;
@@ -19,7 +19,7 @@ impl ReActLoop {
         request: &AgentRequest,
         auth: &contracts::auth_runtime::AuthContext,
         loop_exit: &LoopExitConfig,
-        hooks: &StandardLoopHooks,
+        hooks: &dyn LoopHooks,
         base_message_count: usize,
         max_iterations: u8,
         cancel: &tokio_util::sync::CancellationToken,

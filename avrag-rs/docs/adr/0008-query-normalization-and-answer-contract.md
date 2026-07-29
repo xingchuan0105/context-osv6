@@ -7,7 +7,15 @@
 | 关联 | 被 ADR-0010 取代（query normalization 部分）；ADR-0007 v0.6、ADR-0006-revised、ADR-0005-revised |
 | 背景 | ADR-0007 实现后 `llm_real` 仍暴露两类结构性缺陷：(1) 多轮指代未消解导致 turn2 检索/query 与 turn1 脱节；(2) Synthesis 纯文本输出无法可靠校验 cite，出现 `citations[]` 有值但正文无 `[[cite:…]]`。同时 ReAct 允许 **Content 早停** 且 **无 observation 仍进 Synthesis**，与 RAG/Search 产品契约冲突。 |
 
+> **Steering / follow-up queues (2026-07-29):**  
+> `react_loop::message_queue::LoopMessageQueue` remains a **deprecated placeholder**.  
+> There is **no scheduled “ADR-0008 v0.2” product track** for mid-turn inject under  
+> HTTP one-shot SaaS. Do not wire or delete without an explicit decision  
+> (plan Wave A2 / D8: `docs/plans/2026-07-29-pi-informed-agent-architecture-optimization.md`).  
+> `LoopHooks` (context windowing) is the active extension surface for message transforms.
+
 ---
+
 
 ## 1. 问题陈述
 

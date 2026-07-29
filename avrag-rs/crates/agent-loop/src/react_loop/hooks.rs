@@ -13,6 +13,15 @@ pub struct LoopContext<'a> {
     pub base_message_count: usize,
 }
 
+/// Per-turn context transforms for the retrieve loop.
+///
+/// **Policy boundary (Wave A / plan 2026-07-29):** tool allow/deny/tier lives in
+/// `agent_tools::PolicyEnforcer` + `ToolCatalog` metadata — **not** here.
+/// Hooks may observe, record, or (later) *delegate* to the enforcer; they must
+/// not grow a parallel allowlist/denylist.
+///
+/// Prefer implementing this trait and calling [`crate::react_loop::ReActLoop::run_with_hooks`]
+/// over forking `ReActLoop::run`.
 pub trait LoopHooks: Send + Sync {
     fn transform_context(&self, messages: &mut Vec<ChatMessage>, ctx: &LoopContext) {
         let _ = (messages, ctx);
@@ -23,22 +32,35 @@ pub trait LoopHooks: Send + Sync {
     }
 }
 
+/// Default retrieve-loop message windowing.
+///
+/// Two-tier compaction (prefix-cache friendly, plan 2026-07-04 P3-2 / Wave A4):
+/// - While `len <= base + compact_high_watermark`: **append-only** (no drain).
+/// - When `len > base + compact_high_watermark`: one-shot drain of the middle so
+///   the protected suffix is about `max_react_messages` long (pair-safe).
+///
+/// Set `compact_high_watermark == max_react_messages` to recover the pre-A4
+/// “drain whenever over low watermark” cadence (used by characterization tests).
 pub struct StandardLoopHooks {
+    /// Protected suffix size after compaction (low watermark). Default 20.
     pub max_react_messages: usize,
+    /// Append-only ceiling above `base` before compaction fires. Default 32.
+    pub compact_high_watermark: usize,
 }
 
 impl Default for StandardLoopHooks {
     fn default() -> Self {
         Self {
             max_react_messages: 20,
+            compact_high_watermark: 32,
         }
     }
 }
 
 impl LoopHooks for StandardLoopHooks {
-    /// Truncate the conversation to keep it within `max_react_messages` of the
-    /// protected prefix, **without ever splitting an `assistant(tool_calls)` /
-    /// `tool` result pair**.
+    /// Truncate the conversation when over the high watermark, keeping
+    /// `max_react_messages` of the protected suffix **without ever splitting an
+    /// `assistant(tool_calls)` / `tool` result pair**.
     ///
     /// OpenAI-format requires every `assistant` message carrying `tool_calls`
     /// to be *immediately* followed by the matching `tool` messages (keyed by
@@ -50,33 +72,23 @@ impl LoopHooks for StandardLoopHooks {
     /// provider 400.
     ///
     /// To avoid this we never cut *inside* a turn. We compute the drainable
-    /// region `[base_message_count .. suffix_start)` (everything between the
-    /// protected prefix and the protected suffix) and then *realign the drain
+    /// region `[base_message_count .. suffix_start)` and then *realign the drain
     /// end forward* past any leading non-`assistant` messages of the would-be
-    /// protected suffix. If the kept region would otherwise begin on a `tool`
-    /// message (whose `assistant(tool_calls)` parent is being drained), we
-    /// advance the cut so the kept region starts on an `assistant` turn
-    /// boundary — keeping every `tool` result attached to its parent. This
-    /// shrinks the protected suffix by at most one turn, always preferable to
-    /// a provider 400.
+    /// protected suffix.
     fn transform_context(&self, messages: &mut Vec<ChatMessage>, ctx: &LoopContext) {
         let base = ctx.base_message_count;
-        if messages.len() <= base + self.max_react_messages {
+        let high = self.compact_high_watermark.max(self.max_react_messages);
+        // Append-only until the high watermark is exceeded.
+        if messages.len() <= base + high {
             return;
         }
-        // Start of the protected suffix (the most recent max_react_messages).
+        // Target: keep the most recent `max_react_messages` after the prefix.
         let suffix_start = messages.len() - self.max_react_messages;
         if suffix_start <= base {
             return; // protected region already covers everything
         }
         // Realign the drain end FORWARD past any leading non-`assistant`
-        // messages of the would-be protected suffix. A `tool` (or other
-        // non-assistant) message at the head of the kept region would be an
-        // orphan: its `assistant(tool_calls)` parent lives further left and is
-        // about to be drained. Advancing `suffix_start` so the kept region
-        // begins on an `assistant` turn boundary keeps every tool message
-        // attached to its parent. This shrinks the protected suffix slightly
-        // (at most one turn) — always preferable to a provider 400.
+        // messages of the would-be protected suffix.
         let mut drain_end = suffix_start;
         while drain_end < messages.len() && !is_assistant_turn_boundary(&messages[drain_end]) {
             drain_end += 1;
@@ -101,6 +113,14 @@ mod tests {
     use super::*;
     use crate::react_loop::config;
     use crate::runtime::AgentRequest;
+
+    /// Legacy single-tier cadence: high == low (pre-A4 drain threshold).
+    fn legacy_hooks(max_react_messages: usize) -> StandardLoopHooks {
+        StandardLoopHooks {
+            max_react_messages,
+            compact_high_watermark: max_react_messages,
+        }
+    }
 
     /// Build an assistant message carrying OpenAI-format `tool_calls`.
     fn assistant_with_tool_calls(call_id: &str) -> ChatMessage {
@@ -132,12 +152,7 @@ mod tests {
         }
     }
 
-    fn ctx(messages_len: usize, base: usize) -> LoopContext<'static> {
-        // SAFETY of borrow: `transform_context` only reads `base_message_count`,
-        // so the `mode`/`request` references are never dereferenced; we hand
-        // dangling-but-unused references to satisfy the struct shape. To keep
-        // this sound without `unsafe`, we instead build real (cheap) values and
-        // leak them so the `'static` lifetime holds for the test.
+    fn ctx(base: usize) -> LoopContext<'static> {
         static MODE: std::sync::OnceLock<ModeConfig> = std::sync::OnceLock::new();
         static REQUEST: std::sync::OnceLock<AgentRequest> = std::sync::OnceLock::new();
         let mode = MODE.get_or_init(|| config::load_mode_config("rag").unwrap());
@@ -161,7 +176,6 @@ mod tests {
             cancellation_token: None,
             guard_pipeline: None,
         });
-        let _ = messages_len;
         LoopContext {
             mode,
             request,
@@ -170,6 +184,30 @@ mod tests {
             has_retrieval_observation: false,
             base_message_count: base,
         }
+    }
+
+    fn role_sequence(messages: &[ChatMessage]) -> Vec<&str> {
+        messages.iter().map(|m| m.role.as_str()).collect()
+    }
+
+    fn tool_id_sequence(messages: &[ChatMessage]) -> Vec<Option<&str>> {
+        messages
+            .iter()
+            .map(|m| {
+                if m.role == "tool" {
+                    m.tool_call_id.as_deref()
+                } else if m.role == "assistant" {
+                    m.tool_calls
+                        .as_ref()
+                        .and_then(|v| v.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|e| e.get("id"))
+                        .and_then(|i| i.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// Collect the set of `tool_call_id`s declared by assistant `tool_calls`.
@@ -189,40 +227,9 @@ mod tests {
         set
     }
 
-    #[test]
-    fn preserves_tool_call_pairing_under_truncation() {
-        // [base: 2 prefix msgs][4 full turns (assistant+tool)][suffix tail]
-        // max_react_messages is small so the middle turns get drained.
-        let hooks = StandardLoopHooks { max_react_messages: 3 };
-
-        let mut messages: Vec<ChatMessage> = vec![
-            ChatMessage::system("sys"),
-            ChatMessage::user("q"),
-        ];
-        // Four complete turns in the drainable middle.
-        for i in 0..4 {
-            let id = format!("call_{i}");
-            messages.push(assistant_with_tool_calls(&id));
-            messages.push(tool_result(&id, &format!("result-{i}")));
-        }
-        // Protected suffix: a final assistant turn that must survive intact.
-        messages.push(assistant_with_tool_calls("call_keep"));
-        messages.push(tool_result("call_keep", "keep-result"));
-        messages.push(ChatMessage::user("thanks"));
-
-        let before_len = messages.len();
-        let base = 2;
-        hooks.transform_context(&mut messages, &ctx(before_len, base));
-
-        // (a) total length reduced
-        assert!(messages.len() < before_len, "expected truncation");
-        // (b) protected prefix untouched
-        assert_eq!(messages[0].role, "system");
-        assert_eq!(messages[1].content, "q");
-        assert_eq!(messages[..base].len(), base);
-        // (c) no orphan tool message without a preceding matching assistant
-        let declared = declared_tool_call_ids(&messages);
-        for m in &messages {
+    fn assert_no_orphan_tools(messages: &[ChatMessage]) {
+        let declared = declared_tool_call_ids(messages);
+        for m in messages {
             if m.role == "tool" {
                 let id = m.tool_call_id.as_ref().expect("tool msg has tool_call_id");
                 assert!(
@@ -231,15 +238,101 @@ mod tests {
                 );
             }
         }
-        // The protected suffix turn survived intact.
+    }
+
+    // ── A0 characterization: full role / tool-id sequence snapshots ─────────
+
+    #[test]
+    fn characterization_role_sequence_legacy_tier_drain() {
+        // base=2, low=high=3 → drain as soon as len > 5.
+        let hooks = legacy_hooks(3);
+        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        for i in 0..4 {
+            let id = format!("call_{i}");
+            messages.push(assistant_with_tool_calls(&id));
+            messages.push(tool_result(&id, &format!("result-{i}")));
+        }
+        messages.push(assistant_with_tool_calls("call_keep"));
+        messages.push(tool_result("call_keep", "keep-result"));
+        messages.push(ChatMessage::user("thanks"));
+
+        // len = 2 + 8 + 3 = 13; high = 3 → drain middle to keep last 3.
+        assert_eq!(messages.len(), 13);
+        hooks.transform_context(&mut messages, &ctx(2));
+
+        assert_eq!(
+            role_sequence(&messages),
+            vec!["system", "user", "assistant", "tool", "user"]
+        );
+        assert_eq!(
+            tool_id_sequence(&messages),
+            vec![None, None, Some("call_keep"), Some("call_keep"), None]
+        );
+        assert_no_orphan_tools(&messages);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[1].content, "q");
+    }
+
+    #[test]
+    fn characterization_no_drain_under_high_watermark() {
+        // Default production hooks: high=32, low=20. A short trace stays intact.
+        let hooks = StandardLoopHooks::default();
+        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        for i in 0..5 {
+            let id = format!("c{i}");
+            messages.push(assistant_with_tool_calls(&id));
+            messages.push(tool_result(&id, "r"));
+        }
+        let before: Vec<String> = role_sequence(&messages)
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let before_len = messages.len();
+        hooks.transform_context(&mut messages, &ctx(2));
+        assert_eq!(messages.len(), before_len, "append-only under high watermark");
+        assert_eq!(
+            role_sequence(&messages)
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>(),
+            before
+        );
+    }
+
+    // ── Pair-safety (legacy threshold = high == low) ────────────────────────
+
+    #[test]
+    fn preserves_tool_call_pairing_under_truncation() {
+        let hooks = legacy_hooks(3);
+
+        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        for i in 0..4 {
+            let id = format!("call_{i}");
+            messages.push(assistant_with_tool_calls(&id));
+            messages.push(tool_result(&id, &format!("result-{i}")));
+        }
+        messages.push(assistant_with_tool_calls("call_keep"));
+        messages.push(tool_result("call_keep", "keep-result"));
+        messages.push(ChatMessage::user("thanks"));
+
+        let before_len = messages.len();
+        let base = 2;
+        hooks.transform_context(&mut messages, &ctx(base));
+
+        assert!(messages.len() < before_len, "expected truncation");
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[1].content, "q");
+        assert_no_orphan_tools(&messages);
+        let declared = declared_tool_call_ids(&messages);
         assert!(declared.contains("call_keep"));
-        assert!(messages.iter().any(|m| m.role == "tool"
-            && m.tool_call_id.as_deref() == Some("call_keep")));
+        assert!(messages
+            .iter()
+            .any(|m| m.role == "tool" && m.tool_call_id.as_deref() == Some("call_keep")));
     }
 
     #[test]
     fn does_not_truncate_when_under_budget() {
-        let hooks = StandardLoopHooks { max_react_messages: 20 };
+        let hooks = legacy_hooks(20);
         let mut messages = vec![
             ChatMessage::system("sys"),
             ChatMessage::user("q"),
@@ -247,43 +340,101 @@ mod tests {
             tool_result("c1", "r1"),
         ];
         let before_len = messages.len();
-        hooks.transform_context(&mut messages, &ctx(before_len, 2));
-        assert_eq!(messages.len(), before_len, "nothing should be drained under budget");
-        // Prefix untouched.
+        hooks.transform_context(&mut messages, &ctx(2));
+        assert_eq!(
+            messages.len(),
+            before_len,
+            "nothing should be drained under budget"
+        );
         assert_eq!(messages[0].role, "system");
         assert_eq!(messages[2].role, "assistant");
     }
 
     #[test]
     fn truncation_realigns_to_assistant_boundary() {
-        // Force the suffix to begin exactly on a `tool` message, so a naive
-        // drain would orphan it. The pairing-aware logic must pull the drain end
-        // back to include its parent assistant(tool_calls).
-        let hooks = StandardLoopHooks { max_react_messages: 2 };
+        let hooks = legacy_hooks(2);
 
         let mut messages: Vec<ChatMessage> = vec![
             ChatMessage::system("sys"),
             ChatMessage::user("q"),
-            // Turn A (should be dropped entirely, pair stays together).
             assistant_with_tool_calls("a"),
             tool_result("a", "ra"),
-            // Turn B: assistant + tool — these two form the protected suffix,
-            // starting on the `tool` message relative to the naive cut.
             assistant_with_tool_calls("b"),
             tool_result("b", "rb"),
         ];
         let before_len = messages.len();
-        hooks.transform_context(&mut messages, &ctx(before_len, 2));
+        hooks.transform_context(&mut messages, &ctx(2));
 
-        let declared = declared_tool_call_ids(&messages);
-        for m in &messages {
-            if m.role == "tool" {
-                let id = m.tool_call_id.as_ref().unwrap();
-                assert!(declared.contains(id), "orphan tool {id} survived");
-            }
-        }
-        // Prefix preserved.
+        assert!(messages.len() <= before_len);
+        assert_no_orphan_tools(&messages);
         assert_eq!(messages[0].role, "system");
         assert_eq!(messages[1].content, "q");
+    }
+
+    // ── A4 two-tier compaction ──────────────────────────────────────────────
+
+    #[test]
+    fn two_tier_appends_until_high_watermark() {
+        let hooks = StandardLoopHooks {
+            max_react_messages: 4,
+            compact_high_watermark: 8,
+        };
+        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        // 3 full turns = 6 msgs → total 8 = base+6 ≤ base+8 → no drain.
+        for i in 0..3 {
+            let id = format!("t{i}");
+            messages.push(assistant_with_tool_calls(&id));
+            messages.push(tool_result(&id, "r"));
+        }
+        assert_eq!(messages.len(), 8);
+        hooks.transform_context(&mut messages, &ctx(2));
+        assert_eq!(messages.len(), 8, "still under high watermark");
+    }
+
+    #[test]
+    fn two_tier_compacts_once_over_high_watermark() {
+        let hooks = StandardLoopHooks {
+            max_react_messages: 4,
+            compact_high_watermark: 8,
+        };
+        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        // 5 turns = 10 → total 12 > base+8 → compact, keep last 4 (+ pair realign).
+        for i in 0..5 {
+            let id = format!("t{i}");
+            messages.push(assistant_with_tool_calls(&id));
+            messages.push(tool_result(&id, "r"));
+        }
+        assert_eq!(messages.len(), 12);
+        hooks.transform_context(&mut messages, &ctx(2));
+        assert!(messages.len() < 12, "must compact over high watermark");
+        assert!(messages.len() >= 2 + 4 || messages.len() > 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[1].content, "q");
+        assert_no_orphan_tools(&messages);
+        // Latest turns should survive.
+        let declared = declared_tool_call_ids(&messages);
+        assert!(declared.contains("t4"));
+    }
+
+    #[test]
+    fn custom_hook_is_invokable_via_trait_object() {
+        struct CountingHook {
+            hits: std::sync::atomic::AtomicUsize,
+        }
+        impl LoopHooks for CountingHook {
+            fn transform_context(&self, messages: &mut Vec<ChatMessage>, _ctx: &LoopContext) {
+                self.hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                // No mutation — proves injection without changing sequences.
+                let _ = messages;
+            }
+        }
+        let hook = CountingHook {
+            hits: std::sync::atomic::AtomicUsize::new(0),
+        };
+        let hooks: &dyn LoopHooks = &hook;
+        let mut messages = vec![ChatMessage::user("x")];
+        hooks.transform_context(&mut messages, &ctx(0));
+        assert_eq!(hook.hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(messages.len(), 1);
     }
 }

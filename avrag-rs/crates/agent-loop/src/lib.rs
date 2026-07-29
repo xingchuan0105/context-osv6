@@ -10,6 +10,17 @@
 //! UnifiedAgent shell) remains in `app-chat`.
 //!
 //! Extension guide: crate-level `EXTENDING.md` (next to this crate’s `Cargo.toml`).
+//!
+//! # Vocabulary (do not merge layers)
+//!
+//! | Term | Meaning |
+//! |------|---------|
+//! | **Tool** | Executable surface via `agent_tools::ToolCatalog` / `dispatch_tool` |
+//! | **SkillMd** | Prompt-only `SKILL.md` body (`progressive::Skill` / `PromptRegistry`) |
+//! | **SkillComponent** | Legacy name for **executable** builtins in `SkillRegistry` (is a Tool) |
+//! | **Capability** | Mode/tool metadata + `PolicyEnforcer` (strategy truth for allow/deny) |
+//! | **HostTool** | Orchestrator-only intercepts (`delegate_*`, `finish_answer`, …); never in ToolCatalog |
+//! | **LoopHooks** | Context transforms only — **not** a second policy engine |
 
 #![recursion_limit = "256"]
 
@@ -81,7 +92,8 @@ pub use react_loop as r#loop;
 pub use events::{AgentEvent, AgentEventSink, AgentUsage, CollectingSink, NoopSink};
 pub use react_loop::config::{ModeConfig, load_mode_config, load_system_prompt};
 pub use react_loop::{
-    DegradeReason, LoopPolicy, ReActLoop, answer_contract, assembler, disclosure_plan, exit_policy,
+    DegradeReason, LoopContext, LoopHooks, LoopPolicy, ReActLoop, StandardLoopHooks,
+    answer_contract, assembler, disclosure_plan, exit_policy,
 };
 pub use runtime::{
     Agent, AgentRequest, AgentRunResult, AgentRunUsage, AgentUserPreferences, EvaluationSignals,
