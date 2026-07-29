@@ -82,3 +82,17 @@ lines = await client.read_lines(doc_id, start, end)   # 行号区间原文
 - 五题定向：q077/q078/q105/q115/q139（前置已做：Answer 归因军规 + q105 rubric 分档）；
 - 对比上轮：PARTIAL 0.8 / UNGROUNDED 0 / PARTIAL 0.8 / PARTIAL 0.7 / PARTIAL 0.7；
 - grep/校验器本批只出说明不实现（产出物驱动下一轮实现）。
+
+## 8. 实验结果（2026-07-29，换血灌库后五题定向）
+
+**5/5 全 PASS**（labels: PASS=5，mean correctness 0.980 / faithfulness 1.000）：
+
+| 题 | 上轮 | 本轮 | 归因 |
+|---|---|---|---|
+| q077 IPD 阶段枚举 | PARTIAL 0.8 | **PASS 1.0/1.0** | xlsx 管道行可检索，6 阶段齐 |
+| q078 概念阶段计数 | UNGROUNDED 0/0 | **PASS 1.0/1.0** | `\| 概念阶段 \|` 行形态可数，81 正确 |
+| q105 跨文档对比 | PARTIAL 0.8 | **PASS 0.9/1.0** | rubric 分档生效 |
+| q115 白药时间安排 | PARTIAL 0.7 | **PASS 1.0/1.0** | markitdown PDF 空间重建保住日期行邻接（**q115 类不再需要等遗留 2 Docling**） |
+| q139 质疑归因 | PARTIAL 0.7 | **PASS 1.0/1.0** | Answer 归因军规生效 |
+
+灌库方式：`markitdown_reingest`（ignored 测试，只换 `rag_text_chunks` 行；triplet 536 / TOC 325 零变动）。待办：全量 nightly 复跑确认其余 144 题无回归（同 5 文档的其他题面暴露于 chunk 形态变化）。

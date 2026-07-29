@@ -968,6 +968,7 @@ pub mod pdf_rag_e2e;
 pub mod multihop_cross_doc_probe;
 pub mod pgvector_channel_probe;
 pub mod rag_quality_prod;
+pub mod markitdown_reingest;
 pub mod rag_real;
 pub mod search_real;
 
