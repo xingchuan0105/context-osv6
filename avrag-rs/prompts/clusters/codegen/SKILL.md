@@ -104,15 +104,31 @@ for h in result["hits"][:5]:
 page = await client.read_lines(doc_id="…", start=48, end=60)
 ```
 
+### markitdown 输出契约（检索格式唯一标准）
+
+库内文档统一经 markitdown 解析为 markdown-ish 文本。各 converter 的确切方言：
+
+- **xlsx**（pandas→HTML→markdownify）：`## <sheet名>` 分节；**首行被吃掉当列名**
+  （真表头降级为第一数据行）；空列名 `Unnamed: N`；单元格内换行转为字面 `\n`
+  （一行一记录，利好行级检索）；管道为单空格填充 `| 值 |`。
+- **pdf**（pdfplumber 空间重建 + pdfminer 散文兜底）：表格为**列宽对齐**管道
+  `| 值     |`（ljust 填充，单元格后空格数不定）；空单元格 `|     |`；无边框表格
+  也会重建为管道行。
+- **docx**（mammoth→HTML→markdownify）：标题保留为 `#` 层级，表格为 `| 值 |`。
+- **txt**：透传（不新增任何格式）。
+
+**检索规则**：单元格匹配一律 `regex=True` + `\|\s*值\s*\|`（覆盖单空格与列宽填充）；
+xlsx 单元格含字面 `\n`——模式按单行写；xlsx 列名在**第一数据行**（markdown 表头行是
+标题/`Unnamed`）。
+
 ### `grep` / `read_lines` 的工作方式（重要）
 
 - **作用**：在整个 doc_scope（或指定 doc_ids）上逐行检索——coding-agent 的 grep。
   `total_hits` 是 **Rust 统计的精确命中数**：计数题直接引用它，**不要**自写解析代码再数一遍。
 - **查无即证据**：`total_hits: 0` 是确定性的「scope 内确实没有」——比"我没找到方法"硬得多，
   可直接支撑 coverage=insufficient 或"证据不支持"类结论。
-- **表格过滤用管道符号**：表行形态为 `| 单元格 | 单元格 |`（**注意空格填充**——xlsx 单空格、
-  PDF 列宽对齐填充）。要「阶段列的值=概念阶段」就查 `"| 概念阶段 |"`，把该列取值与
-  描述列里偶然提及区分开；空格不确定时用 `regex=True` + `r"\|\s*概念阶段\s*\|"`。
+- **表格过滤用管道符号**（方言见上方 markitdown 输出契约）：要「阶段列的值=概念阶段」就查
+  `\|\s*概念阶段\s*\|`（regex），把该列取值与描述列里偶然提及区分开。
 - **截断即完备性**：`truncated: true` 时 `hits` 只是前 max_hits 条样本——但 `total_hits`
   始终是全部命中数；要看全样本就缩小 doc_ids 或加 context 精查。
 - **命中后必读邻域**：答案常在命中行附近（表格/列表/日期行的空间邻近）。grep 命中后

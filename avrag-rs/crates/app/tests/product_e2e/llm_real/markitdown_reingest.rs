@@ -29,6 +29,7 @@ const MD_DIR: &str = concat!(
 );
 
 /// (语料缓存文件名, markitdown 产出物文件名)——原件解析，非导出 txt。
+/// adr 两篇本就是 markdown（markitdown 对 .md 透传），直取等价。
 const DOCS: &[(&str, &str)] = &[
     (
         "huawei_ipd_370_activities.txt",
@@ -43,6 +44,23 @@ const DOCS: &[(&str, &str)] = &[
     (
         "thesis_y_refrigeration.txt",
         "thesis_y_refrigeration.docx.md",
+    ),
+    (
+        "consulting_compensation_design.txt",
+        "consulting_compensation_design.docx.md",
+    ),
+    (
+        "consulting_craftsman_paradox.txt",
+        "consulting_craftsman_paradox.docx.md",
+    ),
+    (
+        "consulting_prepared_food.txt",
+        "consulting_prepared_food.docx.md",
+    ),
+    ("adr-0004-rag-agent-loop.md", "adr-0004-rag-agent-loop.md.md"),
+    (
+        "adr-0009-codegen-sandbox-bridge.md",
+        "adr-0009-codegen-sandbox-bridge.md.md",
     ),
 ];
 

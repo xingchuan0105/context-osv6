@@ -120,9 +120,10 @@ impl ReActLoop {
         // observation is blank (and typically re-emits the same block).
         let no_output = !any_output && bridge_tool_results.is_empty();
         let observation = format!(
-            "{}{}",
+            "{}{}{}",
             format_codegen_observation(&combined_result, any_error, no_output),
             retrieval_callouts(&all_bridge_calls),
+            markitdown_format_hints(&codes),
         );
         self.append_codegen_messages(state, llm_response, &observation);
 
@@ -407,6 +408,45 @@ fn retrieval_callouts(bridge_calls: &[super::deps::BridgeCallObs]) -> String {
         "\n\n[retrieval_summary] 本轮检索 {call_count} 次，共返回 {total_chunks} 条[/retrieval_summary]"
     );
     out.push_str(&hints);
+    out
+}
+
+/// markitdown 静态格式校验（2026-07-29，spec §5 静态层）：执行前扫代码块中
+/// 的格式符号，与 markitdown 输出契约（SKILL「markitdown 输出契约」节）比对，
+/// 高置信不符才提醒（宁缺勿滥——误报=新一轮误导）。规则 v1：
+///   ① `|值`（管道后紧跟 CJK，无空格）——markitdown 单元格恒为空格填充；
+///   ② key=value 过滤形（`阶段=值`）——markitdown 表格无 key=value 形式。
+/// 每条规则至多报一次；提醒进 observation，不阻断执行。
+fn markitdown_format_hints(codes: &[String]) -> String {
+    use std::sync::OnceLock;
+    fn rules() -> &'static [(&'static str, regex::Regex, &'static str)] {
+        static RULES: OnceLock<[(&'static str, regex::Regex, &'static str); 2]> = OnceLock::new();
+        RULES.get_or_init(|| {
+            [
+                (
+                    "no_space_pipe",
+                    regex::Regex::new(r"\|\p{Han}").expect("valid regex"),
+                    "[format_hint] markitdown 格式提醒：检测到 `|值`（管道后无空格）——\
+                     markitdown 单元格恒为空格填充 `| 值 |`（xlsx 单空格、PDF 列宽对齐），\
+                     `|值` 不会命中；请用 regex `\\|\\s*值\\s*\\|`。[/format_hint]",
+                ),
+                (
+                    "key_value_form",
+                    regex::Regex::new(r"\p{Han}{2,}=\p{Han}").expect("valid regex"),
+                    "[format_hint] markitdown 格式提醒：检测到 key=value 过滤形（如 `阶段=值`）——\
+                     markitdown 表格行是管道文本，无 key=value 形式；\
+                     按 `\\|\\s*值\\s*\\|` 匹配。[/format_hint]",
+                ),
+            ]
+        })
+    }
+    let mut out = String::new();
+    for (_, re, text) in rules() {
+        if codes.iter().any(|code| re.is_match(code)) {
+            out.push_str("\n\n");
+            out.push_str(text);
+        }
+    }
     out
 }
 
@@ -749,6 +789,20 @@ mod tests {
     }
 
     // ---- K1: retrieval summary + adaptive-k hints ---------------------------
+
+    #[test]
+    fn markitdown_hints_fire_on_no_space_pipe_and_kv_form() {
+        let bad_pipe = markitdown_format_hints(&[r#"client.grep("|概念阶段|")"#.to_string()]);
+        assert!(bad_pipe.contains("管道后无空格"), "{bad_pipe}");
+        let good_pipe = markitdown_format_hints(&[r#"client.grep("| 概念阶段 |")"#.to_string()]);
+        assert!(good_pipe.is_empty(), "{good_pipe}");
+        let escaped = markitdown_format_hints(&[r#"client.grep(r"\|\s*概念阶段\s*\|", regex=True)"#.to_string()]);
+        assert!(escaped.is_empty(), "regex escape form must not fire: {escaped}");
+        let kv = markitdown_format_hints(&[r#"client.grep("阶段=概念阶段")"#.to_string()]);
+        assert!(kv.contains("key=value"), "{kv}");
+        let ascii = markitdown_format_hints(&["x = foo|bar".to_string()]);
+        assert!(ascii.is_empty(), "{ascii}");
+    }
 
     #[test]
     fn retrieval_callouts_render_summary_and_hints() {
