@@ -65,7 +65,9 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
          (理解口径). Do not claim the user failed to provide a document when workspace \
          retrieval ran — say 未命中 instead. Use the same language as the user. \
          ⚠-marked lines below are internal pipeline status for your reliability judgment \
-         only — never quote or mention them (worker/编译/诊断码/内部检查) in the answer.\n\n",
+         only — never quote or mention them (worker/编译/诊断码/内部检查) in the answer. \
+         归属纪律：问题问某人的观点/质疑/评价时，仅把证据明确归于该人的内容挂在其名下；\
+         作者延伸分析或他人转述须分立陈述或明确标注归属，不得并入本人清单。\n\n",
     );
 
     // Source-document identity: genre judgment must not be guessed from snippets.
@@ -594,6 +596,23 @@ mod tests {
         let pm_pos = ctx.find("⚠ 前提质疑").unwrap();
         let outcomes_pos = ctx.find("### Channel outcomes").unwrap();
         assert!(pm_pos < outcomes_pos, "premise block must precede outcomes: {ctx}");
+    }
+
+    #[test]
+    fn synthesize_header_carries_attribution_discipline() {
+        // q139 (2026-07-29): 观点归属题——作者延伸分析不得并入本人清单。
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![note_with_full_handoff(handoff_with_facts(vec![]))],
+            &[rec(Channel::Rag, PackStatus::Ok)],
+            None,
+        );
+        let ctx = render_synthesize_context(&h);
+        assert!(ctx.contains("归属纪律"), "{ctx}");
+        assert!(ctx.contains("不得并入本人清单"), "{ctx}");
     }
 
     #[test]

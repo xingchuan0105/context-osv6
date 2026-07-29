@@ -2668,7 +2668,7 @@
           "capabilities": [
             "rag"
           ],
-          "rubric_notes": "字面忠实读法「证据不支持相似性」为可接受答案（Salesforce 文中「细分」仅贬义出现，未论述细分市场选择）；若答相似，须落在生态锁定深耕 CRM + Y 公司专业化市场两点，且不得虚构 Salesforce 的细分市场论述。"
+          "rubric_notes": "分档判分：读法②「证据不支持相似」（Salesforce 文中「细分」仅贬义/警示语境出现，未论述细分市场选择）判 correct。读法①「相似」的满分路径：须同时 (a) 命中两点——Salesforce 生态锁定深耕 CRM（23% 份额）与 Y 公司专业化市场集中资源，(b) 明确限定相似性系间接归纳、且 Salesforce 文中「细分」仅贬义/警示语境出现；满足 (a)+(b) 判 correct，仅满足 (a) 判 partial(≤0.8)，虚构 Salesforce 的细分市场正面论述判 incorrect。"
         },
         {
           "query": "华为IPD流程有多少个活动？云南白药IT规划有多少个业务对象？两者在'体系化'方面有什么共同特点？",
