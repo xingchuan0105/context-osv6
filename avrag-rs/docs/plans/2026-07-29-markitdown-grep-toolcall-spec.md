@@ -96,3 +96,14 @@ lines = await client.read_lines(doc_id, start, end)   # 行号区间原文
 | q139 质疑归因 | PARTIAL 0.7 | **PASS 1.0/1.0** | Answer 归因军规生效 |
 
 灌库方式：`markitdown_reingest`（ignored 测试，只换 `rag_text_chunks` 行；triplet 536 / TOC 325 零变动）。待办：全量 nightly 复跑确认其余 144 题无回归（同 5 文档的其他题面暴露于 chunk 形态变化）。
+
+## 9. 五题推理过程解剖（2026-07-29 第二轮分析）
+
+全部 PASS 后的过程级复盘（mode_debug 逐轮 trace），按严重度排：
+
+1. **lexical 多词 AND 零命中陷阱（3/5 题踩中，最高频浪费）**：CJK 分支对全部查询词做 `LIKE AND` 链（search.rs build_cjk_bm25_query）——一词不在文档即整查归零。实证：q115 brief1 iter3「详细设计阶段 时间」→ 0（白药 39 chunks：`详细设计`×3、`时间`×0）；q105 iter2 四次检索 0 条；q077 iter0 lexical 0。每次烧一整轮，q105/q115 因此触顶 C5。**机制解：0 命中时 observation 附 hint「多词 AND 无命中——减词或换单词查询」（或自动 AND→OR 降级并标注）。**
+2. **grep 空缺的过程代价**：q105 的「查无即证据」（Salesforce 无细分正面论述=读法②成立）、q115 的行定位、q078 的行计数——各烧了 4–8 次检索模拟，grep 一次调用（且 `total_hits:0` 是确定性查无证据）。§4 spec 排产依据。
+3. **triplet chunk 引用 100% 悬空（换血副作用，实证 791/791）**：保留的 rag_kg_entities.supporting_chunk_ids 全部指向旧 chunk_id，index_lookup 全空（q139 iter1 五连 "no data"），worker 靠 doc_scan 兜底。**生产重灌若走同路：三元组须重抽，或换血时保留旧 chunk_id 而非新造 uuid。**
+4. **doc_scan 重复大装载**：q105 同 brief 内 438 段×2 次、q115 39 段×2 次。grep 先行缩范围可解；或同 brief 装载复用。
+5. **正面模式固化**：q078 worker 自然涌现「模式计数 87 → 编号范围 #1-#81 交叉验证 → 81」——计数题正确范式，应写进 codegen SKILL（命中数 vs 行号范围互验）。q115 双 brief 接续（persistent worker resume）与 q077/q105 的 TOC sidecar 答疑，是既有架构按设计工作的证据，不动。
+6. 轻量：doc_profile 同 brief 重复调用（q077×4）——SKILL 注明结果当轮可复用。
