@@ -785,5 +785,5 @@ fn compile_feedback_continue_does_not_consume_iteration_budget() {
 fn hook_emits_the_shared_compile_feedback_exit_reason() {
     // The free-budget accounting keys on this exact label — pin it so the two
     // sites cannot drift apart.
-    assert_eq!(super::COMPILE_FEEDBACK_EXIT_REASON, "compile_feedback");
+    assert_eq!(super::state::COMPILE_FEEDBACK_EXIT_REASON, "compile_feedback");
 }

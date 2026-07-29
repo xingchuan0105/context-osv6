@@ -12,12 +12,14 @@ mod materialize;
 mod selected;
 mod store;
 mod types;
+mod worker_session;
 mod workers;
 
 pub use brain::{orchestrator_v2_enabled, run_llm_orchestrated_turn};
 pub use chat_exit::{direct_handoff, query_for_agent, render_synthesize_context, synthesize_handoff};
 pub use fact_verify::verify_handoff_facts;
 pub use selected::{HydratedChunk, alias_chunks_in_order, hydrate_selected, parse_selected_aliases};
+pub use worker_session::{BriefOutcome, BriefRecord, SessionError, WorkerSession};
 pub use host::{run_orchestrated_turn, AgentServiceExecutor, OrchestratedTurn, OrchestratorExecutor};
 pub use invariant::{
     assert_complete, default_brief, looks_like_user_did_not_provide_doc, missing_dispatches,

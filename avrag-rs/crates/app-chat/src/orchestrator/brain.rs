@@ -23,12 +23,13 @@ use super::host::{dispatch_channel, OrchestratedTurn, OrchestratorExecutor};
 use super::invariant::missing_dispatches;
 use super::materialize::materialize_channels;
 use super::store::{EvidenceKind, EvidenceStore};
+use super::worker_session::{SessionError, WorkerSession};
 use super::types::{
     Channel, ChannelNote, ChatExitMode, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
 };
 use super::workers::{
     attach_store_retrieval_tool_results, finalize_answer_evidence, tool_failures,
-    worker_handoff_from_run, worker_observability_from_run, WorkerRunObservability,
+    worker_observability_from_run, WorkerRunObservability,
 };
 use crate::capabilities::CapabilitySet;
 
@@ -175,12 +176,12 @@ fn orchestrator_tools(channels: &[Channel], has_memory: bool) -> Vec<contracts::
         match ch {
             Channel::Rag => tools.push(tool_spec(
                 "delegate_rag",
-                "派发工作区文档检索 worker。goal 必须自包含（去语境化）：说明文档身份/结构与要抽取的内容。worker 返回状态、新证据编号与摘要。",
+                "向通道 worker 投递任务/追问（同一轮内同通道只有一个 worker，再次投递=带记忆的追问，它会看到此前的检索与交接）。goal 必须自包含（去语境化）：说明文档身份/结构与要抽取的内容。worker 返回状态、新证据编号与摘要。",
                 goal_schema("自包含子任务目标：文档身份 + 要检索/抽取什么"),
             )),
             Channel::Search => tools.push(tool_spec(
                 "delegate_search",
-                "派发网络检索 worker。goal 必须自包含：可独立成立的公网检索主题（不依赖工作区上下文；默认中英双语）。worker 返回状态、新证据编号与摘要。",
+                "向通道 worker 投递任务/追问（同一轮内同通道只有一个 worker，再次投递=带记忆的追问）。goal 必须自包含：可独立成立的公网检索主题（不依赖工作区上下文；默认中英双语）。worker 返回状态、新证据编号与摘要。",
                 goal_schema("自包含公网检索主题（中英双语）"),
             )),
         }
@@ -452,6 +453,9 @@ pub async fn run_llm_orchestrated_turn(
     let mut records: Vec<DispatchRecord> = Vec::new();
     let mut channel_notes = Vec::new();
     let mut worker_observability: Vec<WorkerRunObservability> = Vec::new();
+    // W1: per-channel persistent worker sessions (one turn lifetime).
+    let mut sessions: std::collections::HashMap<Channel, WorkerSession> =
+        std::collections::HashMap::new();
     let mut dispatch_counts: HashMap<Channel, usize> = HashMap::new();
     let mut seen_goals: HashSet<(Channel, String)> = HashSet::new();
 
@@ -593,7 +597,8 @@ pub async fn run_llm_orchestrated_turn(
             wave.push((call_id.clone(), channel, brief));
         }
 
-        // 2) Run the wave concurrently, then merge into store/ledger in order.
+        // 2) Run the wave: per-channel worker sessions (W1) — cross-channel
+        // parallel, same-channel sequential through the SAME session.
         if !wave.is_empty() {
             for (_, channel, brief) in &wave {
                 agent_loop::progress::emit_work_fact(
@@ -602,127 +607,186 @@ pub async fn run_llm_orchestrated_turn(
                 )
                 .await;
             }
-            let results = futures::future::join_all(wave.iter().map(|(_, channel, brief)| {
-                executor.run_channel(*channel, brief, base_request)
-            }))
-            .await;
-            for ((call_id, channel, _brief), result) in wave.iter().zip(results.into_iter()) {
-                match result {
-                    Ok(run) => {
-                        let inserted = store.insert_from_tool_results(*channel, &run.tool_results);
-                        let failures = tool_failures(&run.tool_results);
-                        let (status, error) = if inserted > 0 {
-                            (PackStatus::Ok, None)
-                        } else if !failures.is_empty() {
-                            // Retrieval itself failed — NOT 未命中.
-                            (PackStatus::Error, Some(failures.join("; ")))
-                        } else {
-                            (PackStatus::Empty, None)
-                        };
-                        tracing::info!(
-                            channel = channel.as_str(),
-                            status = ?status,
-                            item_count = inserted,
-                            worker_tools = ?run.tool_results.iter().map(|t| t.tool.as_str()).collect::<Vec<_>>(),
-                            "orchestrator dispatch finished"
-                        );
-                        records.push(DispatchRecord {
-                            channel: *channel,
-                            dispatch_id: uuid::Uuid::new_v4().to_string(),
-                            status,
-                            item_count: inserted,
-                            error: error.clone(),
-                        });
-                        worker_observability
-                            .push(worker_observability_from_run(*channel, &run));
-                        // S5: soft fact verification (default OFF) — after the
-                        // compile, before the note/store finalize.
-                        let mut handoff = worker_handoff_from_run(&run);
-                        if let Some(h) = handoff.as_mut() {
-                            super::fact_verify::verify_handoff_facts(h, &run.tool_results).await;
+            // Group by channel, preserving first-seen channel order and the
+            // brief order within each channel.
+            let mut by_channel: Vec<(Channel, Vec<(String, TaskBrief)>)> = Vec::new();
+            for (call_id, channel, brief) in wave {
+                match by_channel.iter_mut().find(|(c, _)| *c == channel) {
+                    Some((_, briefs)) => briefs.push((call_id, brief)),
+                    None => by_channel.push((channel, vec![(call_id, brief)])),
+                }
+            }
+            let runs = futures::future::join_all(by_channel.into_iter().map(
+                |(channel, briefs)| {
+                    // Failure isolation (W1): a poisoned session is dropped
+                    // and replaced before this wave.
+                    let mut session = sessions
+                        .remove(&channel)
+                        .filter(|s| !s.failed)
+                        .unwrap_or_else(|| WorkerSession::new(channel));
+                    async move {
+                        let mut outs = Vec::new();
+                        for (call_id, brief) in briefs {
+                            let r = session.run_brief(&brief, base_request, executor).await;
+                            outs.push((call_id, r));
                         }
-                        // K2: hydrate the worker's SELECTED retrieval log into
-                        // the store's ★ selected tier.
-                        let hydrated =
-                            super::selected::hydrate_selected(&run.answer, &run.tool_results);
-                        store.mark_selected(*channel, &hydrated);
-                        let note = ChannelNote::with_handoff(
-                            *channel,
-                            status,
-                            inserted,
-                            handoff.clone(),
-                            error.clone(),
-                        );
-                        channel_notes.push(note);
-                        let new_listings: Vec<serde_json::Value> = store
-                            .listings()
-                            .into_iter()
-                            .rev()
-                            .take(inserted)
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                            .rev()
-                            .map(|l| {
-                                serde_json::json!({
-                                    "eid": l.eid, "label": l.label, "preview": l.preview,
-                                })
-                            })
-                            .collect();
-                        let handoff_json = handoff
-                            .as_ref()
-                            .and_then(|h| serde_json::to_value(h).ok())
-                            .unwrap_or(serde_json::Value::Null);
-                        tool_msgs.push((
-                            call_id.clone(),
-                            tool_result_msg(
-                                call_id,
-                                &format!("delegate_{}", channel.as_str()),
-                                status != PackStatus::Error,
-                                serde_json::json!({
-                                    "channel": channel.as_str(),
-                                    "status": format!("{status:?}").to_lowercase(),
-                                    "new_evidence_count": inserted,
-                                    "new_evidence": new_listings,
-                                    "worker_handoff": handoff_json,
-                                    "worker_digest": handoff.as_ref().map(|h| &h.summary),
-                                    "tool_errors": error,
-                                    "total_evidence": {
-                                        "rag": store.count_channel(Channel::Rag),
-                                        "search": store.count_channel(Channel::Search),
-                                    }
-                                }),
-                            ),
-                        ));
+                        (channel, session, outs)
                     }
-                    Err(e) => {
-                        tracing::warn!(channel = channel.as_str(), error = %e, "orchestrator dispatch failed");
-                        records.push(DispatchRecord {
-                            channel: *channel,
-                            dispatch_id: uuid::Uuid::new_v4().to_string(),
-                            status: PackStatus::Error,
-                            item_count: 0,
-                            error: Some(e.to_string()),
-                        });
-                        channel_notes.push(ChannelNote::with_handoff(
-                            *channel,
-                            PackStatus::Error,
-                            0,
-                            None,
-                            Some(e.to_string()),
-                        ));
-                        tool_msgs.push((
-                            call_id.clone(),
-                            tool_result_msg(
-                                call_id,
-                                &format!("delegate_{}", channel.as_str()),
-                                false,
-                                serde_json::json!({
-                                    "channel": channel.as_str(),
-                                    "status": "error",
-                                    "error": e.to_string(),
-                                }),
-                            ),
-                        ));
+                },
+            ))
+            .await;
+            for (channel, session, outs) in runs {
+                sessions.insert(channel, session);
+                for (call_id, result) in outs {
+                    match result {
+                        Ok(Ok(outcome)) => {
+                            let run = &outcome.run;
+                            let inserted = store
+                                .insert_from_tool_results(channel, &outcome.tool_results_delta);
+                            let failures = tool_failures(&outcome.tool_results_delta);
+                            let (status, error) = if inserted > 0 {
+                                (PackStatus::Ok, None)
+                            } else if !failures.is_empty() {
+                                // Retrieval itself failed — NOT 未命中.
+                                (PackStatus::Error, Some(failures.join("; ")))
+                            } else {
+                                (PackStatus::Empty, None)
+                            };
+                            tracing::info!(
+                                channel = channel.as_str(),
+                                status = ?status,
+                                item_count = inserted,
+                                brief_seq = outcome.seq,
+                                worker_tools = ?run.tool_results.iter().map(|t| t.tool.as_str()).collect::<Vec<_>>(),
+                                "orchestrator dispatch finished"
+                            );
+                            records.push(DispatchRecord {
+                                channel,
+                                dispatch_id: uuid::Uuid::new_v4().to_string(),
+                                status,
+                                item_count: inserted,
+                                error: error.clone(),
+                            });
+                            worker_observability
+                                .push(worker_observability_from_run(channel, run));
+                            // S5: soft fact verification (default OFF) — after the
+                            // compile, before the note/store finalize.
+                            let mut handoff = outcome.handoff.clone();
+                            if let Some(h) = handoff.as_mut() {
+                                super::fact_verify::verify_handoff_facts(
+                                    h,
+                                    &outcome.tool_results_delta,
+                                )
+                                .await;
+                            }
+                            // K2/W1: hydrate the brief's SELECTED log (offset
+                            // applied by the session) into the store's ★ tier.
+                            store.mark_selected(channel, &outcome.hydrated);
+                            let note = ChannelNote::with_handoff(
+                                channel,
+                                status,
+                                inserted,
+                                handoff.clone(),
+                                error.clone(),
+                            );
+                            channel_notes.push(note);
+                            let new_listings: Vec<serde_json::Value> = store
+                                .listings()
+                                .into_iter()
+                                .rev()
+                                .take(inserted)
+                                .collect::<Vec<_>>()
+                                .into_iter()
+                                .rev()
+                                .map(|l| {
+                                    serde_json::json!({
+                                        "eid": l.eid, "label": l.label, "preview": l.preview,
+                                    })
+                                })
+                                .collect();
+                            let handoff_json = handoff
+                                .as_ref()
+                                .and_then(|h| serde_json::to_value(h).ok())
+                                .unwrap_or(serde_json::Value::Null);
+                            tool_msgs.push((
+                                call_id.clone(),
+                                tool_result_msg(
+                                    &call_id,
+                                    &format!("delegate_{}", channel.as_str()),
+                                    status != PackStatus::Error,
+                                    serde_json::json!({
+                                        "channel": channel.as_str(),
+                                        "status": format!("{status:?}").to_lowercase(),
+                                        "brief_seq": outcome.seq,
+                                        "new_evidence_count": inserted,
+                                        "new_evidence": new_listings,
+                                        "worker_handoff": handoff_json,
+                                        "worker_digest": handoff.as_ref().map(|h| &h.summary),
+                                        "tool_errors": error,
+                                        "total_evidence": {
+                                            "rag": store.count_channel(Channel::Rag),
+                                            "search": store.count_channel(Channel::Search),
+                                        }
+                                    }),
+                                ),
+                            ));
+                        }
+                        Ok(Err(e)) => {
+                            tracing::warn!(channel = channel.as_str(), error = %e, "orchestrator dispatch failed");
+                            records.push(DispatchRecord {
+                                channel,
+                                dispatch_id: uuid::Uuid::new_v4().to_string(),
+                                status: PackStatus::Error,
+                                item_count: 0,
+                                error: Some(e.to_string()),
+                            });
+                            channel_notes.push(ChannelNote::with_handoff(
+                                channel,
+                                PackStatus::Error,
+                                0,
+                                None,
+                                Some(e.to_string()),
+                            ));
+                            tool_msgs.push((
+                                call_id.clone(),
+                                tool_result_msg(
+                                    &call_id,
+                                    &format!("delegate_{}", channel.as_str()),
+                                    false,
+                                    serde_json::json!({
+                                        "channel": channel.as_str(),
+                                        "status": "error",
+                                        "error": e.to_string(),
+                                    }),
+                                ),
+                            ));
+                        }
+                        Err(SessionError::BudgetExhausted) => {
+                            // W2: channel cap spent — the seal is visible to
+                            // the brain as an error it can react to.
+                            let msg = "channel budget exhausted（通道预算耗尽）：不要再向该通道投递 brief，用已有证据 finish_answer".to_string();
+                            tracing::info!(channel = channel.as_str(), "{msg}");
+                            records.push(DispatchRecord {
+                                channel,
+                                dispatch_id: uuid::Uuid::new_v4().to_string(),
+                                status: PackStatus::Error,
+                                item_count: 0,
+                                error: Some(msg.clone()),
+                            });
+                            tool_msgs.push((
+                                call_id.clone(),
+                                tool_result_msg(
+                                    &call_id,
+                                    &format!("delegate_{}", channel.as_str()),
+                                    false,
+                                    serde_json::json!({
+                                        "channel": channel.as_str(),
+                                        "status": "error",
+                                        "error": msg,
+                                    }),
+                                ),
+                            ));
+                        }
                     }
                 }
             }
@@ -931,7 +995,16 @@ pub async fn run_llm_orchestrated_turn(
     // a forced synthesize chat (§7.2 holds by construction).
     tracing::warn!("orchestrator budget exhausted; forcing deterministic finish");
     for ch in missing_dispatches(&channels, &records) {
-        let outcome = dispatch_channel(ch, &query, base_request, executor, &mut store, sink).await;
+        let outcome = dispatch_channel(
+            ch,
+            &query,
+            base_request,
+            executor,
+            &mut store,
+            sink,
+            &mut sessions,
+        )
+        .await;
         records.push(outcome.record);
         channel_notes.push(outcome.note);
         if let Some(obs) = outcome.observability {

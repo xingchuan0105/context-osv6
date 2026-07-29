@@ -114,6 +114,14 @@ impl ReActLoop {
         let (request, base_message_count, max_iterations, auth, loop_user_query) =
             self.prepare_run_request(mode, request, sink).await?;
 
+        // W1 (2026-07-28, channel-persistent worker): a resumed worker session
+        // passes its alias cursor so retrieval-log aliases stay unique across
+        // briefs of the same turn (`retrieval_alias_start`, default 0).
+        let alias_start = request
+            .metadata
+            .get("retrieval_alias_start")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let mut state = IterationState {
             messages: self.build_initial_messages(mode, &request, &loop_user_query),
             disclosed: DisclosedState::default(),
@@ -123,7 +131,7 @@ impl ReActLoop {
             reasoning_acc: String::new(),
             answer_deltas_streamed: false,
             compile_continuations: 0,
-            retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(alias_start)),
         };
         let (iteration, direct_answer, telemetry_records, total_usage) = self
             .run_retrieval_loop(

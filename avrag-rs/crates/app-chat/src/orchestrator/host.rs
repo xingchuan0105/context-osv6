@@ -22,12 +22,13 @@ use super::chat_exit::{direct_handoff, query_for_agent, synthesize_handoff};
 use super::invariant::{assert_complete, default_brief};
 use super::materialize::materialize_channels;
 use super::store::{EvidenceKind, EvidenceStore};
+use super::worker_session::{SessionError, WorkerSession};
 use super::types::{
     Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
 };
 use super::workers::{
     attach_worker_thinking_events, finalize_answer_evidence, tool_failures,
-    worker_handoff_from_run, worker_observability_from_run, WorkerRunObservability,
+    worker_observability_from_run, WorkerRunObservability,
 };
 use crate::capabilities::CapabilitySet;
 
@@ -80,7 +81,12 @@ pub(crate) struct ChannelOutcome {
     pub observability: Option<WorkerRunObservability>,
 }
 
-/// Run one channel dispatch: worker run → store insert → ledger entry.
+/// Run one channel dispatch: session brief → store insert → ledger entry.
+///
+/// W1: the brief goes to the channel's persistent [`WorkerSession`] (created
+/// on first use; a failed session is dropped and replaced — failure
+/// isolation). A sealed channel (budget exhausted) yields an Error record
+/// carrying the seal signal instead of running.
 pub(crate) async fn dispatch_channel(
     channel: Channel,
     query: &str,
@@ -88,15 +94,30 @@ pub(crate) async fn dispatch_channel(
     executor: &dyn OrchestratorExecutor,
     store: &mut EvidenceStore,
     sink: &dyn AgentEventSink,
+    sessions: &mut std::collections::HashMap<Channel, WorkerSession>,
 ) -> ChannelOutcome {
     let brief = default_brief(channel, query);
     agent_loop::progress::emit_work_fact(sink, delegate_fact(channel, &brief)).await;
 
+    // Failure isolation: poisoned sessions never run again.
+    if sessions.get(&channel).is_some_and(|s| s.failed) {
+        tracing::warn!(
+            channel = channel.as_str(),
+            "worker session failed previously; isolating and creating a fresh session"
+        );
+        sessions.insert(channel, WorkerSession::new(channel));
+    }
+    let session = sessions
+        .entry(channel)
+        .or_insert_with(|| WorkerSession::new(channel));
+
     let dispatch_id = uuid::Uuid::new_v4().to_string();
-    match executor.run_channel(channel, &brief, base_request).await {
-        Ok(run) => {
-            let inserted = store.insert_from_tool_results(channel, &run.tool_results);
-            let failures = tool_failures(&run.tool_results);
+    match session.run_brief(&brief, base_request, executor).await {
+        Ok(Ok(outcome)) => {
+            let run = &outcome.run;
+            let inserted =
+                store.insert_from_tool_results(channel, &outcome.tool_results_delta);
+            let failures = tool_failures(&outcome.tool_results_delta);
             let (status, error) = if inserted > 0 {
                 if !failures.is_empty() {
                     tracing::warn!(
@@ -116,19 +137,20 @@ pub(crate) async fn dispatch_channel(
                 channel = channel.as_str(),
                 status = ?status,
                 item_count = inserted,
+                brief_seq = outcome.seq,
                 worker_tools = ?run.tool_results.iter().map(|t| t.tool.as_str()).collect::<Vec<_>>(),
                 "orchestrator dispatch finished"
             );
             // S5: soft fact verification (default OFF) — after the compile,
             // before the note/store finalize; never blocks on failure.
-            let mut handoff = worker_handoff_from_run(&run);
+            let mut handoff = outcome.handoff.clone();
             if let Some(h) = handoff.as_mut() {
-                super::fact_verify::verify_handoff_facts(h, &run.tool_results).await;
+                super::fact_verify::verify_handoff_facts(h, &outcome.tool_results_delta)
+                    .await;
             }
-            // K2: hydrate the worker's SELECTED retrieval log into the
-            // store's ★ selected tier (empty log → nothing marked).
-            let hydrated = super::selected::hydrate_selected(&run.answer, &run.tool_results);
-            store.mark_selected(channel, &hydrated);
+            // K2/W1: hydrate the brief's SELECTED retrieval log (offset
+            // applied by the session) into the store's ★ selected tier.
+            store.mark_selected(channel, &outcome.hydrated);
             ChannelOutcome {
                 record: DispatchRecord {
                     channel,
@@ -144,10 +166,10 @@ pub(crate) async fn dispatch_channel(
                     handoff,
                     error,
                 ),
-                observability: Some(worker_observability_from_run(channel, &run)),
+                observability: Some(worker_observability_from_run(channel, run)),
             }
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::warn!(
                 channel = channel.as_str(),
                 error = %e,
@@ -167,6 +189,28 @@ pub(crate) async fn dispatch_channel(
                     0,
                     None,
                     Some(e.to_string()),
+                ),
+                observability: None,
+            }
+        }
+        Err(SessionError::BudgetExhausted) => {
+            // W2: channel cap spent — seal signal on the record.
+            let msg = "channel budget exhausted".to_string();
+            tracing::info!(channel = channel.as_str(), "{msg}");
+            ChannelOutcome {
+                record: DispatchRecord {
+                    channel,
+                    dispatch_id,
+                    status: PackStatus::Error,
+                    item_count: 0,
+                    error: Some(msg.clone()),
+                },
+                note: ChannelNote::with_handoff(
+                    channel,
+                    PackStatus::Error,
+                    0,
+                    None,
+                    Some(msg),
                 ),
                 observability: None,
             }
@@ -209,6 +253,11 @@ pub async fn run_orchestrated_turn(
     let mut records: Vec<DispatchRecord> = Vec::new();
     let mut channel_notes: Vec<ChannelNote> = Vec::new();
     let mut worker_observability: Vec<WorkerRunObservability> = Vec::new();
+    // W1: per-channel persistent worker sessions (one turn lifetime). V1's
+    // single default brief per channel is exactly one brief per session —
+    // byte-identical to the pre-W1 path.
+    let mut sessions: std::collections::HashMap<Channel, WorkerSession> =
+        std::collections::HashMap::new();
 
     // Turn-start fact (2026-07-23): the first dispatch decision can take tens
     // of seconds — give the client an immediate progress step, not dead air.
@@ -217,7 +266,16 @@ pub async fn run_orchestrated_turn(
 
     // §7.1 first wave: every materialized channel
     for ch in &channels {
-        let outcome = dispatch_channel(*ch, &query, base_request, executor, &mut store, sink).await;
+        let outcome = dispatch_channel(
+            *ch,
+            &query,
+            base_request,
+            executor,
+            &mut store,
+            sink,
+            &mut sessions,
+        )
+        .await;
         records.push(outcome.record);
         channel_notes.push(outcome.note);
         if let Some(obs) = outcome.observability {
@@ -231,9 +289,16 @@ pub async fn run_orchestrated_turn(
     // orchestrator may skip a channel and the invariant must force a default run.
     if let Err(missing) = assert_complete(&channels, &records) {
         for ch in missing.channels {
-            let outcome =
-                dispatch_channel(ch, &query, base_request, executor, &mut store, sink).await;
-            records.push(outcome.record);
+            let outcome = dispatch_channel(
+                ch,
+                &query,
+                base_request,
+                executor,
+                &mut store,
+                sink,
+                &mut sessions,
+            )
+            .await;
             channel_notes.push(outcome.note);
             if let Some(obs) = outcome.observability {
                 worker_observability.push(obs);
