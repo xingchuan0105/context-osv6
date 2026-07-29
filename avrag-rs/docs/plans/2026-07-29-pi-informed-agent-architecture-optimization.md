@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | **Wave A 落地中**（A0–A6 代码/文档；见 §10 修订记录） |
+| 状态 | **Wave A 已合入 master；Wave B 落地中**（见 §10） |
 | 日期 | 2026-07-29 |
 | 对照源 | [pi 的设计艺术](https://zhanghandong.github.io/pi-book/)（pi-mono v0.82.1 基线） |
 | 代码基线 | `avrag-rs` master 本地 trunk（含 orchestrator V2、证据平面、通道持久 worker） |
@@ -405,3 +405,4 @@ WSL：`jobs=2`，避免并行全量 `cargo test`。
 | 2026-07-29 | 初版：代码审计 + pi 对照 + Wave A–D 建议 |
 | 2026-07-29 | **审核修订**：事实口径（§1.2 行数含/不含测试与子目录）；§0 双轴 ~1.8 万行硬论据；A0 characterization 闸门；A2 去掉删除选项并对齐 ADR-0008 deferred；A4 先 rebase 旧 plan；A6 旧 ADR superseded 标头；B1 类型解耦机检；B2 与 PolicyEnforcer 职责划界 + D7；C4 拆 C4a/C4b；§4.6 策略单真相；Wave D 增 D7/D8 |
 | 2026-07-29 | **Wave A 实现**：A0 role/tool-id 序列 characterization；A1 词汇表（EXTENDING + crate roots）；A2 `LoopMessageQueue` deprecated + ADR-0008 注；A3 `run_with_hooks` + `&dyn LoopHooks`；A4 `compact_high_watermark` 两档折叠（rebase 确认 plan 状态与代码漂移）；A5 双循环图 + 策略边界；A6 ADR-0005/-revised superseded 标头 |
+| 2026-07-29 | **Wave B 实现**：B1 `LoopRuntimeDeps` 袋 + builder（codegen bridge 类型仍在 `iteration_codegen`，完整 port 待 follow-up）；B2 hooks 观测面 `before/after_tool_call`/`on_turn_end`（默认不 block，Policy 真相不变）；B3 codegen bridge 共用 `after_tool_call`；B4 SDK-as-native 拒绝收口到 `dispatch_tool`；B5 `convert_to_llm` 接 retrieve LLM 边界 |

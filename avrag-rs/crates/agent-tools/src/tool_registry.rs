@@ -30,8 +30,59 @@ pub struct ToolDispatchContext<'a> {
     pub client_timezone: Option<&'a str>,
 }
 
+/// Codegen Python SDK method names — never native tool schema ids.
+/// Reject bare tool_calls so the model retries with a `<code language="python">` block.
+pub const CODEGEN_SDK_METHOD_NAMES: &[&str] = &[
+    "dense_search",
+    "lexical_search",
+    "graph_search",
+    "chunk_fetch",
+    "doc_profile",
+    "doc_summary",
+    "doc_chunks",
+    // Legacy SDK names still rejected if the model invents a native call.
+    "doc_scan",
+    // 2026-07-29: grep/read_lines replace doc_scan (spec §4).
+    "grep",
+    "read_lines",
+];
+
+/// True when `tool` is a codegen SDK method name, not a ToolCatalog entry.
+pub fn is_codegen_sdk_method_as_native_tool(tool_name: &str) -> bool {
+    CODEGEN_SDK_METHOD_NAMES.iter().any(|n| *n == tool_name)
+}
+
+/// Synthetic error result when the model invents native tool_calls for SDK methods.
+pub fn reject_codegen_method_as_native_tool(tool_name: &str) -> ToolResult {
+    ToolResult {
+        tool: tool_name.to_string(),
+        version: "1.0".to_string(),
+        status: ToolStatus::Error,
+        data: Some(serde_json::json!({
+            "error": "not_a_native_tool",
+            "tool": tool_name,
+            "hint": format!(
+                "`{tool_name}` is a Python SDK method on `client`, not a native tool. \
+                 Do not emit function/tool calls for it. Output one \
+                 `<code language=\"python\">` block, e.g. \
+                 `chunks = await client.{tool_name}(...)` (adjust args per codegen skill)."
+            ),
+        })),
+        trace: None,
+    }
+}
+
 /// Canonical tool execute entry used by ReActLoop and all call sites.
 pub async fn dispatch_tool(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> ToolResult {
+    // B4: hard gate at the single execute entry (was iteration-local).
+    if is_codegen_sdk_method_as_native_tool(&call.tool) {
+        tracing::warn!(
+            tool = %call.tool,
+            "rejecting codegen SDK method issued as native tool_call"
+        );
+        return reject_codegen_method_as_native_tool(&call.tool);
+    }
+
     let catalog = ToolCatalog::standard_cached();
     let Some(registered) = catalog.get(&call.tool) else {
         return ToolResult {
@@ -273,6 +324,37 @@ mod tests {
         assert!(is_rag_tool("doc_scan"));
         assert!(!is_rag_tool("calculator"));
         assert!(!is_rag_tool("web_search"));
+    }
+
+    #[test]
+    fn codegen_sdk_method_names_rejected_as_native() {
+        assert!(is_codegen_sdk_method_as_native_tool("dense_search"));
+        assert!(is_codegen_sdk_method_as_native_tool("grep"));
+        assert!(is_codegen_sdk_method_as_native_tool("read_lines"));
+        assert!(!is_codegen_sdk_method_as_native_tool("dense_retrieval"));
+        assert!(!is_codegen_sdk_method_as_native_tool("web_search"));
+        let r = reject_codegen_method_as_native_tool("dense_search");
+        assert_eq!(r.status, ToolStatus::Error);
+        let err = r.data.as_ref().and_then(|d| d.get("error")).and_then(|e| e.as_str());
+        assert_eq!(err, Some("not_a_native_tool"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_tool_rejects_codegen_sdk_before_catalog() {
+        let result = dispatch_tool(
+            &call("dense_search", serde_json::json!({})),
+            &ctx_permissive(None),
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(
+            result
+                .data
+                .as_ref()
+                .and_then(|d| d.get("error"))
+                .and_then(|e| e.as_str()),
+            Some("not_a_native_tool")
+        );
     }
 
     #[test]

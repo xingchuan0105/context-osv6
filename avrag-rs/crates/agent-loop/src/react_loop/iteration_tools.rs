@@ -7,8 +7,6 @@ use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, build_assistant_message_with_tool_calls, build_tool_message};
 use crate::events::{AgentEvent, AgentEventSink};
 use crate::runtime::AgentRequest;
-use agent_tools::tool_registry::OwnedToolDeps;
-
 use super::iteration::{
     IterationControl, IterationOutcome, IterationState, disclosed_skill_ids, iteration_llm_usage,
 };
@@ -23,22 +21,10 @@ impl ReActLoop {
         session_id: Option<&str>,
         request: &AgentRequest,
     ) -> ToolResult {
-        let meta_str = |key: &str| {
-            request
-                .metadata
-                .get(key)
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-        };
-        let deps = OwnedToolDeps {
-            search_executor: self.search_executor.clone(),
-            rag_runtime: self.rag_runtime.clone(),
-            chat_persistence: self.effective_chat_persistence(),
-            client_ip: meta_str("client_ip"),
-            client_local_time: meta_str("client_local_time"),
-            client_timezone: meta_str("client_timezone"),
-        };
-        deps.dispatch(call, auth, doc_scope, session_id).await
+        self.deps
+            .owned_tool_deps(request)
+            .dispatch(call, auth, doc_scope, session_id)
+            .await
     }
 
     pub(super) async fn dispatch_native_tool_calls(
@@ -53,6 +39,7 @@ impl ReActLoop {
         llm_response: &LlmResponse,
         iter_start: std::time::Instant,
         calls: Vec<contracts::ToolCall>,
+        hooks: &dyn super::LoopHooks,
     ) -> Result<IterationOutcome, AppError> {
         let llm_usage = iteration_llm_usage(llm_response);
         let call_ids: Vec<String> = (0..calls.len()).map(|i| format!("call_{}", i)).collect();
@@ -71,19 +58,29 @@ impl ReActLoop {
                 )
                 .await;
             }
-            // Hard gate (2026-07-20): codegen SDK method names must not be
-            // dispatched as native tools — return a corrective Error result so
-            // the model retries with `<code language="python">await client.…`.
-            let result = if super::iteration_codegen::is_codegen_sdk_method_as_native_tool(
-                &call.tool,
-            ) {
-                tracing::warn!(
+
+            // Observability only — PolicyEnforcer remains the allow/deny truth
+            // inside dispatch_tool. Hooks must not grow parallel allowlists.
+            let pre = hooks.before_tool_call(&call.tool, &call.args);
+            let result = if pre.block {
+                tracing::info!(
                     tool = %call.tool,
                     iteration,
-                    "rejecting codegen SDK method issued as native tool_call"
+                    reason = ?pre.reason,
+                    "before_tool_call hook blocked tool"
                 );
-                super::iteration_codegen::reject_codegen_method_as_native_tool(&call.tool)
+                contracts::ToolResult {
+                    tool: call.tool.clone(),
+                    version: call.version.clone(),
+                    status: contracts::ToolStatus::Error,
+                    data: Some(serde_json::json!({
+                        "error": pre.reason.unwrap_or_else(|| "blocked_by_hook".into()),
+                        "blocked_by_hook": true,
+                    })),
+                    trace: None,
+                }
             } else {
+                // Codegen SDK-as-native reject is inside dispatch_tool (B4).
                 self.dispatch_tool_call(
                     call,
                     auth,
@@ -93,6 +90,16 @@ impl ReActLoop {
                 )
                 .await
             };
+            hooks.after_tool_call(
+                &call.tool,
+                match result.status {
+                    contracts::ToolStatus::Ok => "ok",
+                    contracts::ToolStatus::Timeout => "timeout",
+                    contracts::ToolStatus::Error => "error",
+                    contracts::ToolStatus::NotFound => "not_found",
+                    contracts::ToolStatus::NotImplemented => "not_implemented",
+                },
+            );
             let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;
 
             if let Some((kind, product)) = crate::progress::native_tool_progress(&call.tool) {

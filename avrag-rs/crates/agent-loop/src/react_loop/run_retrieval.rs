@@ -64,11 +64,19 @@ impl ReActLoop {
                     state,
                     &mut total_usage,
                     sink,
+                    hooks,
                 )
                 .await?;
 
             self.emit_turn_end_telemetry(iteration, &outcome, sink, &mut telemetry_records)
                 .await;
+
+            let control_label = match &outcome.control {
+                IterationControl::Continue => "continue",
+                IterationControl::BreakToSynthesis { .. } => "break",
+                IterationControl::DirectAnswer { .. } => "direct",
+            };
+            hooks.on_turn_end(iteration, control_label);
 
             match outcome.control {
                 IterationControl::Continue => {

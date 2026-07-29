@@ -11,6 +11,7 @@ pub use policy::exit_policy;
 pub mod cancellation;
 pub use cancellation::DegradeReason;
 pub(crate) use cancellation::cancellation_error;
+pub mod deps;
 pub mod hooks;
 pub mod iteration;
 mod iteration_codegen;
@@ -46,15 +47,17 @@ use common::AppError;
 use config::ModeConfig;
 use iteration::IterationState;
 
-pub use hooks::{LoopContext, LoopHooks, StandardLoopHooks};
+pub use deps::LoopRuntimeDeps;
+pub use hooks::{BeforeToolCallOutcome, LoopContext, LoopHooks, StandardLoopHooks};
 
+/// ReAct retrieve → gate → synthesis engine.
+///
+/// Runtime side-effects (rag/search/codegen) live in [`LoopRuntimeDeps`]; prefer
+/// `with_*` builders over reaching into `deps` from product code.
 pub struct ReActLoop {
     llm: Arc<LlmClient>,
     skill_registry: Arc<CapabilityRegistry>,
-    rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
-    search_executor: Option<Arc<dyn avrag_search::SearchProvider>>,
-    chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
-    code_interpreter: Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
+    deps: LoopRuntimeDeps,
 }
 
 impl ReActLoop {
@@ -62,10 +65,7 @@ impl ReActLoop {
         Self {
             llm,
             skill_registry,
-            rag_runtime: None,
-            search_executor: None,
-            chat_persistence: None,
-            code_interpreter: Arc::new(std::sync::Mutex::new(None)),
+            deps: LoopRuntimeDeps::default(),
         }
     }
 
@@ -73,20 +73,12 @@ impl ReActLoop {
         mut self,
         chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
     ) -> Self {
-        self.chat_persistence = chat_persistence;
+        self.deps.chat_persistence = chat_persistence;
         self
     }
 
-    fn effective_chat_persistence(&self) -> Option<Arc<dyn ChatPersistencePort>> {
-        self.chat_persistence.clone().or_else(|| {
-            self.rag_runtime
-                .as_ref()
-                .and_then(|runtime| runtime.chat_persistence())
-        })
-    }
-
     pub fn with_rag_runtime(mut self, runtime: Option<Arc<avrag_rag_core::RagRuntime>>) -> Self {
-        self.rag_runtime = runtime;
+        self.deps.rag_runtime = runtime;
         self
     }
 
@@ -94,8 +86,18 @@ impl ReActLoop {
         mut self,
         executor: Option<Arc<dyn avrag_search::SearchProvider>>,
     ) -> Self {
-        self.search_executor = executor;
+        self.deps.search_executor = executor;
         self
+    }
+
+    /// Replace the whole deps bag (tests / advanced composition).
+    pub fn with_runtime_deps(mut self, deps: LoopRuntimeDeps) -> Self {
+        self.deps = deps;
+        self
+    }
+
+    pub fn runtime_deps(&self) -> &LoopRuntimeDeps {
+        &self.deps
     }
 
     /// Run with default [`StandardLoopHooks`] (two-tier compact: high=32, low=20).

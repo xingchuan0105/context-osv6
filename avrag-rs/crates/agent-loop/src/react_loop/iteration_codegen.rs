@@ -25,16 +25,15 @@ impl ReActLoop {
         llm_response: &LlmResponse,
         _iter_start: std::time::Instant,
         codes: Vec<String>,
+        hooks: &dyn super::LoopHooks,
     ) -> Result<IterationOutcome, AppError> {
         let llm_usage = iteration_llm_usage(llm_response);
         let code_start = std::time::Instant::now();
-        let interpreter_lock = Arc::clone(&self.code_interpreter);
+        let interpreter_lock = Arc::clone(&self.deps.code_interpreter);
         let mut combined_result = String::new();
         let mut any_error = false;
         let mut any_output = false;
         let mut bridge_tool_results = Vec::new();
-        // E3: coaching hints for lexical_search 0-hit calls this round.
-        let mut zero_hit_hints = String::new();
         // K1: adaptive-k hints + per-round retrieval summary.
         let mut all_bridge_calls = Vec::new();
 
@@ -58,7 +57,16 @@ impl ReActLoop {
                 .execute_codegen_block(idx, code, request, auth, &interpreter_lock, &state.retrieval_aliases)
                 .await;
             // User-facing progress: one step per bridge client.* call (not codegen itself).
+            // B3: same after_tool_call observation surface as native tools.
             for call in &bridge_calls {
+                let status = match call.result.status {
+                    contracts::ToolStatus::Ok => "ok",
+                    contracts::ToolStatus::Timeout => "timeout",
+                    contracts::ToolStatus::Error => "error",
+                    contracts::ToolStatus::NotFound => "not_found",
+                    contracts::ToolStatus::NotImplemented => "not_implemented",
+                };
+                hooks.after_tool_call(&call.method, status);
                 if let Some((kind, product)) = crate::progress::bridge_method_progress(&call.method)
                 {
                     // Same guard as native tools: failed calls are not empty results.
@@ -78,7 +86,6 @@ impl ReActLoop {
                 }
             }
             any_output = any_output || block_had_output || !bridge_calls.is_empty();
-            zero_hit_hints.push_str(&lexical_zero_hit_hints(&bridge_calls));
             all_bridge_calls.extend(bridge_calls);
             bridge_tool_results.extend(block_bridge_results);
             combined_result.push_str(&block_text);
@@ -113,7 +120,7 @@ impl ReActLoop {
         // observation is blank (and typically re-emits the same block).
         let no_output = !any_output && bridge_tool_results.is_empty();
         let observation = format!(
-            "{}{}{zero_hit_hints}",
+            "{}{}",
             format_codegen_observation(&combined_result, any_error, no_output),
             retrieval_callouts(&all_bridge_calls),
         );
@@ -274,7 +281,7 @@ impl ReActLoop {
         let mut block_bridge_results = Vec::new();
         let mut bridge_calls = Vec::new();
 
-        if let Some(runtime) = &self.rag_runtime {
+        if let Some(runtime) = &self.deps.rag_runtime {
             let bridge = Arc::new(
                 avrag_rag_core::runtime::bridge::RuntimeBridge::new(
                     Arc::clone(runtime),
@@ -379,7 +386,8 @@ fn retrieval_callouts(
         "lexical_search",
         "graph_search",
         "chunk_fetch",
-        "doc_scan",
+        "grep",
+        "read_lines",
     ];
     let call_count = bridge_calls
         .iter()
@@ -413,75 +421,16 @@ fn retrieval_callouts(
     out
 }
 
-/// E3: collect coaching hints for `lexical_search` calls that returned 0
-/// hits this round (model-visible; wording lives in rag-core
-/// `lexical_zero_hit_hint`). Failed (non-Ok) calls are errors, not 0-hits.
-fn lexical_zero_hit_hints(
-    bridge_calls: &[avrag_rag_core::runtime::bridge::CapturedBridgeCall],
-) -> String {
-    let mut out = String::new();
-    for call in bridge_calls {
-        if call.method != "lexical_search" || call.result.status != contracts::ToolStatus::Ok {
-            continue;
-        }
-        let hits = crate::progress::hits_from_tool_data(call.result.data.as_ref());
-        if let Some(hint) = avrag_rag_core::runtime::bridge::lexical_zero_hit_hint(
-            call.query.as_deref().unwrap_or(""),
-            hits,
-        ) {
-            out.push_str("\n\n");
-            out.push_str(&hint);
-        }
-    }
-    out
-}
-
 /// SDK methods that must appear only as `client.<name>(...)` inside a `<code>` block.
-/// Never registered as native tool schema names — rejecting bare tool_calls for these
-/// prevents "unknown tool: dense_search" pollution (Q55 / 2026-07-20).
-pub(crate) const CODEGEN_SDK_METHOD_NAMES: &[&str] = &[
-    "dense_search",
-    "lexical_search",
-    "graph_search",
-    "chunk_fetch",
-    "doc_profile",
-    "doc_summary",
-    "doc_scan",
-    // legacy client name — still reject if issued as native tool_call
-    "doc_chunks",
-];
+// B4: SDK-as-native reject lives in `agent_tools::tool_registry` (single execute entry).
+pub(crate) use agent_tools::{
+    is_codegen_sdk_method_as_native_tool, reject_codegen_method_as_native_tool,
+};
 
 /// Maximum number of chars (not bytes) of sandbox/tool output re-injected into the LLM
 /// context. Bounds untrusted content (which may include retrieved document text) so a
 /// single malicious or oversized document cannot dominate the prompt.
 const CODEGEN_OBSERVATION_MAX_CHARS: usize = 8000;
-
-/// True when the model used a codegen SDK method name as a native tool_call.
-pub(crate) fn is_codegen_sdk_method_as_native_tool(tool_name: &str) -> bool {
-    CODEGEN_SDK_METHOD_NAMES
-        .iter()
-        .any(|n| *n == tool_name)
-}
-
-/// Tool-result payload when the model invents native tool_calls for SDK methods.
-pub(crate) fn reject_codegen_method_as_native_tool(tool_name: &str) -> contracts::ToolResult {
-    contracts::ToolResult {
-        tool: tool_name.to_string(),
-        version: "1.0".to_string(),
-        status: contracts::ToolStatus::Error,
-        data: Some(serde_json::json!({
-            "error": "not_a_native_tool",
-            "tool": tool_name,
-            "hint": format!(
-                "`{tool_name}` is a Python SDK method on `client`, not a native tool. \
-                 Do not emit function/tool calls for it. Output one \
-                 `<code language=\"python\">` block, e.g. \
-                 `chunks = await client.{tool_name}(...)` (adjust args per codegen skill)."
-            ),
-        })),
-        trace: None,
-    }
-}
 
 /// Wrap a codegen sandbox/tool observation for re-injection into the LLM, applying a
 /// length cap and an explicit untrusted-content marker. This is a defense-in-depth measure
@@ -808,53 +757,6 @@ mod tests {
                 trace: None,
             },
         }
-    }
-
-    #[test]
-    fn lexical_zero_hit_produces_coaching_hint() {
-        let calls = vec![bridge_call(
-            "lexical_search",
-            "速冻机 年产",
-            contracts::ToolStatus::Ok,
-            serde_json::json!({"chunks": []}),
-        )];
-        let hints = lexical_zero_hit_hints(&calls);
-        assert!(hints.contains("0 命中"), "{hints}");
-        assert!(hints.contains("速冻机 年产"), "failing query quoted: {hints}");
-        assert!(hints.contains("拆出核心专名"), "{hints}");
-    }
-
-    #[test]
-    fn no_hint_for_hits_or_other_methods_or_errors() {
-        let with_hits = vec![bridge_call(
-            "lexical_search",
-            "q",
-            contracts::ToolStatus::Ok,
-            serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
-        )];
-        assert!(lexical_zero_hit_hints(&with_hits).is_empty());
-
-        let dense_zero = vec![bridge_call(
-            "dense_search",
-            "q",
-            contracts::ToolStatus::Ok,
-            serde_json::json!({"chunks": []}),
-        )];
-        assert!(
-            lexical_zero_hit_hints(&dense_zero).is_empty(),
-            "hint is lexical-specific (dense has semantic recall)"
-        );
-
-        let errored = vec![bridge_call(
-            "lexical_search",
-            "q",
-            contracts::ToolStatus::Error,
-            serde_json::json!({"error": "boom"}),
-        )];
-        assert!(
-            lexical_zero_hit_hints(&errored).is_empty(),
-            "a failed call is an error, not a 0-hit"
-        );
     }
 
     // ---- K1: retrieval summary + adaptive-k hints ---------------------------

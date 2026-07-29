@@ -51,5 +51,7 @@ pub use progressive::{
 pub use rag_bridge::{dispatch_rag_tool, force_doc_scope, intersect_doc_scope};
 pub use skills::{ExecutionContext, SkillComponent, SkillRegistry, builtin_registry_cached};
 pub use tool_registry::{
-    OwnedToolDeps, ToolDispatchContext, dispatch_tool, execute_with_retry, is_rag_tool, tool_meta,
+    CODEGEN_SDK_METHOD_NAMES, OwnedToolDeps, ToolDispatchContext, dispatch_tool, execute_with_retry,
+    is_codegen_sdk_method_as_native_tool, is_rag_tool, reject_codegen_method_as_native_tool,
+    tool_meta,
 };

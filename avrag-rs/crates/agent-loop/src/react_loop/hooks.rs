@@ -13,12 +13,24 @@ pub struct LoopContext<'a> {
     pub base_message_count: usize,
 }
 
-/// Per-turn context transforms for the retrieve loop.
+/// Result of [`LoopHooks::before_tool_call`].
 ///
-/// **Policy boundary (Wave A / plan 2026-07-29):** tool allow/deny/tier lives in
+/// **Default is never block.** Product allow/deny/tier stays in
+/// `PolicyEnforcer` inside `dispatch_tool`. A hook that sets `block: true`
+/// is for tests / host-level emergency intercepts only — do not recreate
+/// policy tables here (plan Wave B2 / D7).
+#[derive(Debug, Clone, Default)]
+pub struct BeforeToolCallOutcome {
+    pub block: bool,
+    pub reason: Option<String>,
+}
+
+/// Per-turn context transforms and observation points for the retrieve loop.
+///
+/// **Policy boundary (Wave A–B / plan 2026-07-29):** tool allow/deny/tier lives in
 /// `agent_tools::PolicyEnforcer` + `ToolCatalog` metadata — **not** here.
-/// Hooks may observe, record, or (later) *delegate* to the enforcer; they must
-/// not grow a parallel allowlist/denylist.
+/// Hooks may observe, record, or *delegate* to the enforcer; they must not grow
+/// a parallel allowlist/denylist.
 ///
 /// Prefer implementing this trait and calling [`crate::react_loop::ReActLoop::run_with_hooks`]
 /// over forking `ReActLoop::run`.
@@ -27,8 +39,29 @@ pub trait LoopHooks: Send + Sync {
         let _ = (messages, ctx);
     }
 
+    /// Map messages at the LLM API boundary (after system assemble).
     fn convert_to_llm(&self, messages: &[ChatMessage]) -> Vec<ChatMessage> {
         messages.to_vec()
+    }
+
+    /// Observability / rare host intercept. Default: allow (never block).
+    fn before_tool_call(
+        &self,
+        tool: &str,
+        args: &serde_json::Value,
+    ) -> BeforeToolCallOutcome {
+        let _ = (tool, args);
+        BeforeToolCallOutcome::default()
+    }
+
+    /// Observability after a native tool finishes (status is snake-ish debug label).
+    fn after_tool_call(&self, tool: &str, status: &str) {
+        let _ = (tool, status);
+    }
+
+    /// Observability at end of a retrieve iteration (`continue` / `break` / `direct`).
+    fn on_turn_end(&self, iteration: u8, control: &str) {
+        let _ = (iteration, control);
     }
 }
 
@@ -436,5 +469,23 @@ mod tests {
         hooks.transform_context(&mut messages, &ctx(0));
         assert_eq!(hook.hits.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(messages.len(), 1);
+    }
+
+    #[test]
+    fn before_tool_call_default_never_blocks() {
+        let hooks = StandardLoopHooks::default();
+        let outcome = hooks.before_tool_call("web_search", &serde_json::json!({"q": "x"}));
+        assert!(!outcome.block);
+        assert!(outcome.reason.is_none());
+    }
+
+    #[test]
+    fn convert_to_llm_default_is_identity() {
+        let hooks = StandardLoopHooks::default();
+        let msgs = vec![ChatMessage::user("hello"), ChatMessage::assistant("hi")];
+        let out = hooks.convert_to_llm(&msgs);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].content, "hello");
+        assert_eq!(out[1].content, "hi");
     }
 }

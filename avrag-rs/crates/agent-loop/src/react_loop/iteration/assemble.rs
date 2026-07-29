@@ -4,6 +4,7 @@ use common::AppError;
 use super::super::ReActLoop;
 use super::super::assembler::ContextAssembler;
 use super::super::config::ModeConfig;
+use super::super::hooks::LoopHooks;
 use super::super::reasoning_emit::{self, record_reasoning};
 use super::state::IterationState;
 use crate::events::AgentEventSink;
@@ -62,6 +63,7 @@ impl ReActLoop {
         total_usage: &mut LlmUsage,
         assembled: &super::super::assembler::AssembledContext,
         sink: &dyn AgentEventSink,
+        hooks: &dyn LoopHooks,
     ) -> Result<LlmResponse, AppError> {
         let mut round_messages = vec![ChatMessage::system(assembled.system_content.clone())];
         for msg in &state.messages {
@@ -69,6 +71,8 @@ impl ReActLoop {
                 round_messages.push(msg.clone());
             }
         }
+        // B5: LLM boundary transform (default: identity).
+        let round_messages = hooks.convert_to_llm(&round_messages);
 
         let temperature = mode.temperature.unwrap_or(0.7);
 

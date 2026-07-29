@@ -92,8 +92,8 @@ pub use react_loop as r#loop;
 pub use events::{AgentEvent, AgentEventSink, AgentUsage, CollectingSink, NoopSink};
 pub use react_loop::config::{ModeConfig, load_mode_config, load_system_prompt};
 pub use react_loop::{
-    DegradeReason, LoopContext, LoopHooks, LoopPolicy, ReActLoop, StandardLoopHooks,
-    answer_contract, assembler, disclosure_plan, exit_policy,
+    BeforeToolCallOutcome, DegradeReason, LoopContext, LoopHooks, LoopPolicy, LoopRuntimeDeps,
+    ReActLoop, StandardLoopHooks, answer_contract, assembler, disclosure_plan, exit_policy,
 };
 pub use runtime::{
     Agent, AgentRequest, AgentRunResult, AgentRunUsage, AgentUserPreferences, EvaluationSignals,

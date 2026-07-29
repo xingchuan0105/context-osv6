@@ -12,6 +12,7 @@ use common::AppError;
 
 use super::ReActLoop;
 use super::config::{LoopExitConfig, ModeConfig};
+use super::hooks::LoopHooks;
 use super::parse::{LlmOutput, parse_llm_output};
 use super::skill_request::validate_skill_request;
 use crate::events::AgentEventSink;
@@ -29,13 +30,14 @@ impl ReActLoop {
         state: &mut IterationState,
         total_usage: &mut LlmUsage,
         sink: &dyn AgentEventSink,
+        hooks: &dyn LoopHooks,
     ) -> Result<IterationOutcome, AppError> {
         let assembled = self
             .assemble_retrieve_context(iteration, max_iterations, mode, request, state, sink)
             .await;
         let iter_start = std::time::Instant::now();
         let llm_response = self
-            .call_retrieve_llm(mode, request, state, total_usage, &assembled, sink)
+            .call_retrieve_llm(mode, request, state, total_usage, &assembled, sink, hooks)
             .await?;
 
         self.apply_llm_output(
@@ -48,6 +50,7 @@ impl ReActLoop {
             sink,
             &llm_response,
             iter_start,
+            hooks,
         )
         .await
     }
@@ -63,6 +66,7 @@ impl ReActLoop {
         sink: &dyn AgentEventSink,
         llm_response: &avrag_llm::LlmResponse,
         iter_start: std::time::Instant,
+        hooks: &dyn LoopHooks,
     ) -> Result<IterationOutcome, AppError> {
         let validated = validate_skill_request(mode, &llm_response.content);
         if !validated.is_empty() {
@@ -84,6 +88,7 @@ impl ReActLoop {
                     llm_response,
                     iter_start,
                     calls,
+                    hooks,
                 )
                 .await
             }
@@ -97,6 +102,7 @@ impl ReActLoop {
                     llm_response,
                     iter_start,
                     codes,
+                    hooks,
                 )
                 .await
             }

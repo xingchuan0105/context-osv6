@@ -49,12 +49,25 @@ User turn
 
 | Concern | Truth source | Hooks may |
 |---------|--------------|-----------|
-| Permission / tier / risk | **`PolicyEnforcer`** | Observe; optional later *delegate* — never fork rules |
+| Permission / tier / risk | **`PolicyEnforcer`** (inside `dispatch_tool`) | `before_tool_call` default **never blocks**; tests/host only |
 | Message window / prefix cache | **`LoopHooks::transform_context`** | Own this |
+| LLM message shape at API boundary | **`LoopHooks::convert_to_llm`** | Own this (default identity) |
+| Tool / codegen bridge finish | (events + progress) | `after_tool_call` observe |
+| Per-iteration end | `IterationControl` | `on_turn_end` observe |
 | Exit gates (evidence/budget) | `LoopPolicy` / `exit_policy` | Observe only |
 
 Default product path: `ReActLoop::run` → `StandardLoopHooks` (high watermark 32, low 20).
 Custom transforms: `ReActLoop::run_with_hooks(..., &my_hooks)`.
+
+**Do not** implement tier/risk allowlists inside hooks (plan D7).
+
+## Runtime deps (Wave B1)
+
+- Side-effect runtimes live in `LoopRuntimeDeps` (`rag_runtime`, `search_executor`,
+  `chat_persistence`, `code_interpreter`), not as loose fields on `ReActLoop`.
+- Builders: `with_rag_runtime` / `with_search_executor` / `with_chat_persistence` /
+  `with_runtime_deps`.
+- Codegen still names `avrag_rag_core` bridge types in `iteration_codegen` (follow-up port).
 
 ## Extension recipes
 

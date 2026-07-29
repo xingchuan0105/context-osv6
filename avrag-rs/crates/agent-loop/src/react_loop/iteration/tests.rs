@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::super::StandardLoopHooks;
 use super::{IterationControl, IterationState};
 use crate::AgentKind;
 use agent_tools::capability::CapabilityRegistry;
@@ -115,6 +116,7 @@ async fn native_tool_call_returns_continue_with_record() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -162,6 +164,7 @@ async fn rejects_codegen_sdk_method_as_native_tool_call() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -306,6 +309,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -351,6 +355,7 @@ async fn code_block_success_returns_continue() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -391,6 +396,7 @@ async fn only_first_code_block_executes_with_skip_warning() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -430,6 +436,7 @@ async fn consecutive_code_errors_break_to_synthesis() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -462,6 +469,7 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -502,6 +510,7 @@ async fn content_without_evidence_in_rag_is_blocked() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -544,6 +553,7 @@ async fn content_without_evidence_in_rag_early_stops_by_default() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -574,6 +584,7 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap();
@@ -641,6 +652,7 @@ async fn apply_content(
             &sink,
             &response,
             std::time::Instant::now(),
+            &StandardLoopHooks::default(),
         )
         .await
         .unwrap()

@@ -220,7 +220,7 @@ impl ReActLoop {
         messages: &mut Vec<ChatMessage>,
         collected_tool_results: &mut Vec<ToolResult>,
     ) -> Result<(), AppError> {
-        let Some(runtime) = &self.rag_runtime else {
+        let Some(runtime) = &self.deps.rag_runtime else {
             return Ok(());
         };
         let args = match fallback.tool_id.as_str() {
@@ -265,7 +265,7 @@ impl ReActLoop {
         messages: &mut Vec<ChatMessage>,
         collected_tool_results: &mut Vec<ToolResult>,
     ) -> Result<(), AppError> {
-        let Some(executor) = &self.search_executor else {
+        let Some(executor) = &self.deps.search_executor else {
             return Ok(());
         };
         let v = fallback.vertical.as_deref().unwrap_or("web");
