@@ -1,7 +1,7 @@
 # Prompt Cache 优化策略
 
 **日期**：2026-07-30  
-**状态**：调研完成，待执行 P0  
+**状态**：P0/P1/P2a 已实施；P2b 标残留（见 §3a）
 **数据来源**：`avrag_rs_e2e_smoke` 库（`realistic_corpus_full_eval` E2E，13508 条 billable）
 
 ---
@@ -48,6 +48,18 @@
 | **BUG-2** Anthropic 末尾断点 | `llm/protocols/anthropic_messages.rs` | 给滚动后缀（末条消息末 block）加 `cache_control:ephemeral`，让多轮 ReAct 第 2-N 轮命中 prefix cache |
 | **BUG-1** cache_creation 计费 | 同上 | `AnthropicUsage` 解析 `cache_creation_input_tokens`，折入 `prompt_tokens` 计费（此前完全漏掉） |
 | 工具 | `scripts/cache-diagnostics.sql` | 4 个只读查询：cache 命中率 / execute 轮数 / token 占比 / 按租户命中率 |
+
+---
+
+## 3a. 本轮实施（P0/P1/P2a）
+
+| 项 | commit | 内容 |
+|---|---|---|
+| **P0** budget_hint 移出 system | `395808bc` | `assemble_retrieve` 不再把 budget_hint 拼进 system_content；`call_retrieve_llm` 作为末尾 user message 注入 → system+历史前缀跨轮稳定 |
+| **P1** session/request 埋点 | `47f1d1f4` | LlmClient 加 `with_request_context`；unified agent/writer 填入 session_id/request_id（此前硬编码 None） |
+| **P2a** Anthropic cache_read rate | 本提交 | `load_model_rates` fallback 改为 provider 感知：anthropic cache_hit 0.1（此前误用 DeepSeek 0.02，偏低 5×） |
+
+**P2b（cache_creation 1.25× 溢价精确计）标残留**：当前 BUG-1 已按 1.0× 计入（从"完全漏掉"→"按 input 价"），剩余 25% 差异需 LlmUsage 加字段（19 处构造点）+ billing 第四桶 + migration，ROI 不合理，待 Anthropic 有真实用户量级再评估。
 
 ---
 

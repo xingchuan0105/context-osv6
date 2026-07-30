@@ -297,7 +297,13 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
                 row.try_get::<f64, _>("output_unit_rate").unwrap_or(2.0),
             )
         } else {
-            (1.0, 0.02, 2.0)
+            // Provider-aware fallback: Anthropic cache_read is 0.1× input
+            // ($0.30/$3), not 0.02× like DeepSeek. P2 (2026-07-30): corrects
+            // the 5× under-billing for Anthropic models without an explicit
+            // llm_model_weights row. input/output stay at unified token units
+            // (1.0/2.0); per-model real-cost rate needs product pricing decision.
+            let cache_hit = if provider == "anthropic" { 0.1 } else { 0.02 };
+            (1.0, cache_hit, 2.0)
         })
     }
 
