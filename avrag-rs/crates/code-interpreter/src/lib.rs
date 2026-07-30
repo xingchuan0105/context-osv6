@@ -344,7 +344,7 @@ mod tests {
     impl HostBridge for StubBridge {
         async fn call(&self, method: &str, _args: serde_json::Value) -> serde_json::Value {
             match method {
-                "dense_search" => json!({
+                "dense" | "dense_search" => json!({
                     "chunks": [{
                         "chunk_id": "00000000-0000-4000-8000-000000000001",
                         "doc_id": "00000000-0000-4000-8000-000000000010",
@@ -358,10 +358,10 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn bridge_dense_search_returns_chunks_in_stdout() {
+    async fn bridge_dense_returns_chunks_in_stdout() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
         let code = r#"
-chunks = await client.dense_search(query="x", top_k=5)
+chunks = await client.dense(query="x")
 import json
 print(json.dumps(chunks))
 "#;

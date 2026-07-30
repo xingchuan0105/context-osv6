@@ -33,10 +33,9 @@ impl ReActLoop {
 
         let tier = request.metadata.get("user_tier");
         // Tokens = primary cost budget; rounds = safety ceiling.
-        let mut effective_max_iters = max_iterations;
-        let mut effective_max_tokens = mode.budget.resolve_max_tokens(tier);
-        let grace_tokens = mode.budget.resolve_no_chunk_grace_tokens();
-        let mut no_chunk_grace_used = false;
+        let effective_max_iters = max_iterations;
+        let effective_max_tokens = mode.budget.resolve_max_tokens(tier);
+        // require_evidence is skill-owned: no host no-chunk grace / hard continue.
 
         loop {
             if cancel.is_cancelled() {
@@ -49,54 +48,7 @@ impl ReActLoop {
                 effective_max_tokens > 0 && tokens_used >= effective_max_tokens;
 
             if rounds_exhausted || tokens_exhausted {
-                let has_chunks =
-                    has_retrieval_observation(&state.messages, &state.tool_results, mode);
-                if loop_exit.require_evidence && !has_chunks && !no_chunk_grace_used {
-                    no_chunk_grace_used = true;
-                    // Token grace + ensure at least 2 more completes can run.
-                    if grace_tokens > 0 {
-                        effective_max_tokens = if effective_max_tokens == 0 {
-                            grace_tokens
-                        } else {
-                            effective_max_tokens.saturating_add(grace_tokens)
-                        };
-                    }
-                    effective_max_iters = effective_max_iters
-                        .max(iteration.saturating_add(super::exit_policy::NO_CHUNK_BUDGET_GRACE_ROUNDS));
-                    state.messages.push(avrag_llm::ChatMessage::user(
-                        super::exit_policy::NO_CHUNK_BUDGET_GRACE_NUDGE.to_string(),
-                    ));
-                    let detail = format!(
-                        "no answer-grade chunk at budget; +{grace_tokens} tokens, rounds_cap={effective_max_iters}"
-                    );
-                    reasoning_emit::emit_evaluation_telemetry(
-                        sink,
-                        iteration,
-                        "budget_grace_no_chunk",
-                        &detail,
-                        &state
-                            .disclosed
-                            .disclosed_skill_ids
-                            .iter()
-                            .cloned()
-                            .collect::<Vec<_>>(),
-                        "budget_grace_no_chunk",
-                    )
-                    .await;
-                    let _ = sink
-                        .emit(AgentEvent::Activity {
-                            stage: "budget_grace_no_chunk".to_string(),
-                            message: super::exit_policy::NO_CHUNK_BUDGET_GRACE_NUDGE.to_string(),
-                            detail: Some(format!(
-                                "tokens_used={tokens_used} tokens_max={effective_max_tokens} \
-                                 grace_tokens={grace_tokens} max_iterations={effective_max_iters}"
-                            )),
-                            counts: Default::default(),
-                            sources_preview: Vec::new(),
-                        })
-                        .await;
-                    // Continue with raised caps.
-                } else if self
+                if self
                     .check_loop_budget_exhausted(
                         iteration,
                         effective_max_iters,

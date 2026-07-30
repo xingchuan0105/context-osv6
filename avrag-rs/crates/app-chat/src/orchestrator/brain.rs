@@ -5,7 +5,7 @@
 //! (host-intercepted, never registered on the global catalog) and observes each
 //! result before choosing the next action. No rule-based planning or
 //! query-rewriting code — de-referencing and channel-appropriate briefs are the
-//! model's reasoning, guided by `prompts/orchestrators/orchestrator-base.md`
+//! model's reasoning, guided by `prompts/deprecated/orchestrator-multiagent/orchestrator-base.md`
 //! (design §3.2).
 //!
 //! Code owns only: materialization, finish-gates, loop guards, the evidence
@@ -67,7 +67,7 @@ fn orchestrator_loop_config() -> LoopConfig {
         })
         .unwrap_or((DEFAULT_MAX_ROUNDS, 0.4));
     let base_prompt = agent_loop::r#loop::config::load_system_prompt(
-        "prompts/orchestrators/orchestrator-base.md",
+        "prompts/deprecated/orchestrator-multiagent/orchestrator-base.md",
     )
     .unwrap_or_else(|_| "你是 Context OS 的协调者：读懂问题、派活给检索同事、再移交答案撰写。".into());
     LoopConfig {
@@ -95,8 +95,8 @@ fn channel_dispatch_manual(channel: Channel) -> Option<String> {
     let path = match channel {
         // U1: the orchestrator-facing section lives in its own dispatch file —
         // workers receive the capability manual without it.
-        Channel::Rag => "prompts/orchestrators/capability-rag.dispatch.md",
-        Channel::Search => "prompts/orchestrators/capability-search.dispatch.md",
+        Channel::Rag => "prompts/deprecated/orchestrator-multiagent/capability-rag.dispatch.md",
+        Channel::Search => "prompts/deprecated/orchestrator-multiagent/capability-search.dispatch.md",
     };
     let manual = agent_loop::r#loop::config::load_system_prompt(path)
         .map_err(|e| {
@@ -1565,7 +1565,11 @@ mod tests {
             .expect("system message");
         // rag + search 都物化 → 两份「给任务分配者」小节都在编排 system 里。
         assert_eq!(system.content.matches("## 给任务分配者").count(), 2, "{}", system.content);
-        assert!(system.content.contains("公网 web search"), "{}", system.content);
+        assert!(
+            system.content.contains("公网搜索") || system.content.contains("网页检索"),
+            "{}",
+            system.content
+        );
         assert!(system.content.contains("已开启的检索通道"), "{}", system.content);
     }
 

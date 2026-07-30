@@ -236,16 +236,15 @@ mod tests {
             .await
             .unwrap();
 
-        // Product path: rag capability always enters orchestrator (worker + chat exit).
+        // A2: rag capability enters single ReAct agent (not orchestrator).
         assert_eq!(execution.mode, "rag");
         assert_eq!(execution.response.session_id, session.id);
         assert!(execution.apply_output_guard);
         assert_eq!(execution.response.agent_type, "rag");
-        // The mock agent echoes its query; the chat exit's query is the
-        // synthesize context, which always ends with the user-question block.
+        // Mock agent echoes the user query directly (no synthesize handoff pack).
         assert!(
-            execution.response.answer.contains("### User question"),
-            "answer must come from the chat exit synthesize query: {}",
+            execution.response.answer.contains("test"),
+            "single-agent answer must contain user question: {}",
             execution.response.answer
         );
         let caps = execution
@@ -254,13 +253,13 @@ mod tests {
             .and_then(|m| m.get("capabilities"))
             .cloned();
         assert_eq!(caps, Some(serde_json::json!(["rag"])));
-        assert_eq!(
+        assert!(
             execution
                 .assistant_turn_metadata
                 .as_ref()
                 .and_then(|m| m.get("orchestrator"))
-                .and_then(|v| v.as_bool()),
-            Some(true)
+                .is_none(),
+            "orchestrator flag must not be set on single-agent path"
         );
     }
 
@@ -315,12 +314,18 @@ mod tests {
         let cfg: agent_loop::r#loop::config::ModeConfig =
             serde_json::from_value(cfg_val).expect("deserialize ModeConfig");
         assert_eq!(cfg.id, "rag+search");
-        assert!(cfg.tool_pool.iter().any(|t| t == "web_search"));
         assert!(
-            !cfg.tool_pool.iter().any(|t| t == "user_context"),
-            "capability assemble must not seed chat user_context: {:?}",
+            cfg.tool_pool.is_empty(),
+            "single-agent: no native retrieval tool_pool, got {:?}",
             cfg.tool_pool
         );
+        assert!(
+            cfg.sdk_primitives.iter().any(|t| t == "web")
+                && cfg.sdk_primitives.iter().any(|t| t == "dense"),
+            "dual sdk_primitives: {:?}",
+            cfg.sdk_primitives
+        );
+        assert!(!cfg.worker_handoff);
     }
 
     #[tokio::test]
@@ -369,8 +374,7 @@ mod tests {
             .cloned();
         assert_eq!(caps_meta, Some(serde_json::json!(["rag", "search"])));
 
-        // Last agent invocation is the chat exit (Product Agent Answer phase),
-        // not the removed flat assemble path.
+        // Single agent: one Rag run with capability manuals (no Answer-phase pack).
         let captured = capture.lock().unwrap().take().expect("agent ran");
         assert!(
             captured.metadata.contains_key("assembled_mode_config"),
@@ -391,14 +395,18 @@ mod tests {
             })
             .unwrap_or_default();
         assert!(
-            parts.iter().any(|p| p.contains("product-answer-base.md")),
-            "Answer phase product-answer-base expected, got {parts:?}"
+            parts.iter().any(|p| p.contains("capability-rag.md")),
+            "capability-rag expected, got {parts:?}"
         );
         assert!(
-            !parts.iter().any(|p| p.contains("chat-base.md")),
-            "P1-2: full chat-base must not load in Answer pack, got {parts:?}"
+            parts.iter().any(|p| p.contains("capability-search.md")),
+            "capability-search expected, got {parts:?}"
         );
-        assert_eq!(captured.kind, crate::agents::AgentKind::Chat);
+        assert!(
+            !parts.iter().any(|p| p.contains("product-answer-base.md")),
+            "no orchestrator Answer pack on single-agent path: {parts:?}"
+        );
+        assert_eq!(captured.kind, crate::agents::AgentKind::Rag);
         assert_eq!(execution.mode, "rag+search");
     }
 
@@ -415,16 +423,16 @@ mod tests {
 
         assert_eq!(execution.mode, "search");
         assert_eq!(execution.response.agent_type, "search");
-        // Search (orchestrated) applies output guard; no doc-scope clarify required.
+        // Search single-agent applies output guard; no doc-scope clarify required.
         assert!(execution.apply_output_guard);
         assert!(!execution.response.answer.is_empty());
-        assert_eq!(
+        assert!(
             execution
                 .assistant_turn_metadata
                 .as_ref()
                 .and_then(|m| m.get("orchestrator"))
-                .and_then(|v| v.as_bool()),
-            Some(true)
+                .is_none(),
+            "orchestrator flag must not be set on single-agent search"
         );
     }
 
@@ -495,7 +503,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dispatch_phase_loads_orchestrator_and_capability_prompts() {
+    async fn dispatch_phase_loads_capability_manuals_only() {
         let capture = Arc::new(Mutex::new(None));
         let agent = MetadataCaptureAgent {
             last: capture.clone(),
@@ -531,15 +539,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(execution.mode, "rag");
-        assert_eq!(
+        assert!(
             execution
                 .assistant_turn_metadata
                 .as_ref()
                 .and_then(|m| m.get("orchestrator"))
-                .and_then(|v| v.as_bool()),
-            Some(true)
+                .is_none(),
+            "single-agent path has no orchestrator flag"
         );
-        // Workers run; last agent invocation is the chat exit (Answer phase).
+        // Single ReAct agent with capability-rag manual.
         let captured = capture.lock().unwrap().take().expect("agent ran");
         let parts: Vec<String> = captured
             .metadata
@@ -551,19 +559,19 @@ mod tests {
                     .collect()
             })
             .unwrap_or_default();
-        // Answer phase: product-answer-base (P1-2: no full chat-base, no orchestrator-base).
         assert!(
-            parts.iter().any(|p| p.contains("product-answer-base.md")),
-            "product-answer-base must load for Answer phase: {parts:?}"
+            parts.iter().any(|p| p.contains("capability-rag.md")),
+            "capability-rag must load for rag single agent: {parts:?}"
         );
         assert!(
-            !parts.iter().any(|p| p.contains("chat-base.md")),
-            "P1-2: full chat-base must not load in Answer pack: {parts:?}"
+            !parts.iter().any(|p| p.contains("product-answer-base.md")),
+            "no Answer-phase pack on single-agent path: {parts:?}"
         );
         assert!(
             !parts.iter().any(|p| p.contains("orchestrator-base")),
-            "orchestrator-base must NOT load for Answer phase: {parts:?}"
+            "orchestrator-base must not load: {parts:?}"
         );
+        assert_eq!(captured.kind, crate::agents::AgentKind::Rag);
     }
 
     #[tokio::test]

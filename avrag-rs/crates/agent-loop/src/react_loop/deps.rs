@@ -9,15 +9,27 @@
 //! Grep gate (production paths under `react_loop/`, excluding this file and
 //! builder signatures on `ReActLoop` if any): no `avrag_rag_core::` /
 //! `avrag_search::` outside `deps.rs`.
+//!
+//! # SaC composite bridge
+//!
+//! Python shim lists dense/lexical/grep/web/fetch/doc_*/history/user_profile.
+//! `RuntimeBridge` owns retrieval; this module's [`SacHostBridge`] fills
+//! web/memory ports and forwards the rest.
 
+use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
+use agent_tools::skills::builtin::web_fetch::WebFetchSkill;
+use agent_tools::skills::memory_dispatch::{conversation_history_load, user_profile_load};
+use agent_tools::skills::{ExecutionContext, SkillComponent};
 use agent_tools::tool_registry::OwnedToolDeps;
 use app_core::ChatPersistencePort;
-use avrag_code_interpreter::{CodeInterpreter, ExecutionResult, InterpreterError};
-use contracts::ToolResult;
+use async_trait::async_trait;
+use avrag_code_interpreter::{CodeInterpreter, ExecutionResult, HostBridge, InterpreterError};
+use contracts::{ToolResult, ToolStatus};
 use contracts::auth_runtime::AuthContext;
+use serde_json::{Value, json};
 use crate::runtime::AgentRequest;
 
 /// Loop-local view of one sandbox `client.*` call (no rag-core types).
@@ -109,49 +121,64 @@ impl LoopRuntimeDeps {
         self.search_executor.is_some()
     }
 
-    /// CodegenPort: run Python with RagRuntime bridge when configured.
+    /// CodegenPort: run Python with SaC host bridge when configured.
     ///
     /// Returns execution result plus loop-local [`BridgeCallObs`] (rag-core types
-    /// never leave this module).
-    pub async fn execute_codegen_bridged(
+    /// never leave this module). Callers must pass a non-empty `sdk_allowed` for
+    /// capability gating (empty set = allow-all, tests only — see `method_allowed`).
+    pub async fn execute_codegen_bridged_with_session(
         &self,
         code: &str,
         auth: &AuthContext,
         doc_scope: &[String],
         alias_counter: Arc<AtomicU64>,
+        session_id: Option<uuid::Uuid>,
+        session_fs: Arc<super::session_fs::SessionFs>,
+        sdk_allowed: Arc<HashSet<String>>,
     ) -> BridgedCodegenExec {
-        let Some(runtime) = &self.rag_runtime else {
+        if self.rag_runtime.is_none() && self.search_executor.is_none() {
             return BridgedCodegenExec {
                 exec: Err(InterpreterError::Bridge(
-                    "rag runtime not configured for bridged codegen".into(),
+                    "neither rag runtime nor search provider configured for SaC codegen".into(),
                 )),
                 bridge_results: Vec::new(),
                 bridge_calls: Vec::new(),
             };
-        };
+        }
 
-        let bridge = Arc::new(
+        let rag = self.rag_runtime.as_ref().map(|runtime| {
             avrag_rag_core::runtime::bridge::RuntimeBridge::new(
                 Arc::clone(runtime),
                 auth.clone(),
                 doc_scope.to_vec(),
             )
-            .with_alias_counter(alias_counter),
-        );
+            .with_alias_counter(Arc::clone(&alias_counter))
+        });
+
+        let bridge = Arc::new(SacHostBridge {
+            rag,
+            search: self.search_executor.clone(),
+            chat_persistence: self.effective_chat_persistence(),
+            auth: auth.clone(),
+            session_id,
+            session_fs,
+            sdk_allowed,
+            extra_results: Mutex::new(Vec::new()),
+            extra_calls: Mutex::new(Vec::new()),
+        });
         let interpreter = CodeInterpreter::new();
         match interpreter
             .execute_with_bridge(code, Arc::clone(&bridge))
             .await
         {
             Ok(exec) => BridgedCodegenExec {
-                bridge_results: bridge.take_captured_results(),
-                bridge_calls: map_bridge_calls(bridge.take_captured_calls()),
+                bridge_results: bridge.take_all_results(),
+                bridge_calls: bridge.take_all_calls(),
                 exec: Ok(exec),
             },
             Err(e) => BridgedCodegenExec {
-                // Preserve any calls that succeeded before the interpreter failed.
-                bridge_results: bridge.take_captured_results(),
-                bridge_calls: map_bridge_calls(bridge.take_captured_calls()),
+                bridge_results: bridge.take_all_results(),
+                bridge_calls: bridge.take_all_calls(),
                 exec: Err(e),
             },
         }
@@ -195,4 +222,276 @@ fn map_bridge_calls(
             result: c.result,
         })
         .collect()
+}
+
+/// Product SaC host: retrieval via [`RuntimeBridge`] + web/memory ports.
+struct SacHostBridge {
+    rag: Option<avrag_rag_core::runtime::bridge::RuntimeBridge>,
+    search: Option<Arc<dyn avrag_search::SearchProvider>>,
+    chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
+    auth: AuthContext,
+    session_id: Option<uuid::Uuid>,
+    session_fs: Arc<super::session_fs::SessionFs>,
+    /// Empty set = open (tests). Product runs always pass a non-empty allowlist.
+    sdk_allowed: Arc<HashSet<String>>,
+    extra_results: Mutex<Vec<ToolResult>>,
+    extra_calls: Mutex<Vec<BridgeCallObs>>,
+}
+
+impl SacHostBridge {
+    fn take_all_results(&self) -> Vec<ToolResult> {
+        let mut out = self
+            .rag
+            .as_ref()
+            .map(|r| r.take_captured_results())
+            .unwrap_or_default();
+        out.extend(
+            self.extra_results
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .drain(..),
+        );
+        out
+    }
+
+    fn take_all_calls(&self) -> Vec<BridgeCallObs> {
+        let mut out = self
+            .rag
+            .as_ref()
+            .map(|r| map_bridge_calls(r.take_captured_calls()))
+            .unwrap_or_default();
+        out.extend(
+            self.extra_calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .drain(..),
+        );
+        out
+    }
+
+    fn record_extra(&self, method: &str, query: Option<String>, result: ToolResult) -> Value {
+        let data = match result.status {
+            ToolStatus::Ok => result.data.clone().unwrap_or(json!({})),
+            ToolStatus::Error => {
+                let message = result
+                    .data
+                    .as_ref()
+                    .and_then(|d| d.get("error"))
+                    .cloned()
+                    .unwrap_or_else(|| json!("tool execution failed"));
+                json!({ "error": { "code": "tool_error", "message": message } })
+            }
+            _ => result.data.clone().unwrap_or(json!({})),
+        };
+        self.extra_results
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(result.clone());
+        self.extra_calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(BridgeCallObs {
+                method: method.to_string(),
+                query,
+                result,
+            });
+        data
+    }
+
+    async fn call_web(&self, args: &Value) -> Value {
+        let query = args
+            .get("query")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        if query.is_empty() {
+            return self.record_extra(
+                "web",
+                None,
+                ToolResult {
+                    tool: "web_search".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": "missing query" })),
+                    trace: None,
+                },
+            );
+        }
+        let Some(provider) = &self.search else {
+            return self.record_extra(
+                "web",
+                Some(query.to_string()),
+                ToolResult {
+                    tool: "web_search".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": "search provider not available" })),
+                    trace: None,
+                },
+            );
+        };
+        let result = match provider.execute_search(query, None).await {
+            Ok(response) => ToolResult {
+                tool: "web_search".into(),
+                version: "1.0".into(),
+                status: ToolStatus::Ok,
+                data: serde_json::to_value(&response).ok(),
+                trace: None,
+            },
+            Err(e) => ToolResult {
+                tool: "web_search".into(),
+                version: "1.0".into(),
+                status: ToolStatus::Error,
+                data: Some(json!({ "error": e.to_string() })),
+                trace: None,
+            },
+        };
+        self.record_extra("web", Some(query.to_string()), result)
+    }
+
+    async fn call_fetch(&self, args: &Value) -> Value {
+        let url = args
+            .get("url")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let skill = WebFetchSkill;
+        let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _));
+        let result = skill.execute(args, &ctx).await;
+        self.record_extra("fetch", url, result)
+    }
+
+    async fn call_history(&self, args: &Value) -> Value {
+        let Some(session_id) = self.session_id else {
+            return self.record_extra(
+                "history",
+                None,
+                ToolResult {
+                    tool: "conversation_history_load".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": "session_id required for history" })),
+                    trace: None,
+                },
+            );
+        };
+        let Some(persist) = &self.chat_persistence else {
+            return self.record_extra(
+                "history",
+                None,
+                ToolResult {
+                    tool: "conversation_history_load".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": "chat persistence not available" })),
+                    trace: None,
+                },
+            );
+        };
+        let result =
+            conversation_history_load(args, &self.auth, session_id, persist.as_ref()).await;
+        self.record_extra("history", None, result)
+    }
+
+    async fn call_user_profile(&self) -> Value {
+        let Some(persist) = &self.chat_persistence else {
+            return self.record_extra(
+                "user_profile",
+                None,
+                ToolResult {
+                    tool: "user_profile_load".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": "chat persistence not available" })),
+                    trace: None,
+                },
+            );
+        };
+        let result = user_profile_load(&self.auth, persist.as_ref()).await;
+        self.record_extra("user_profile", None, result)
+    }
+
+    fn call_save(&self, args: &Value) -> Value {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let data = args.get("data").cloned().unwrap_or(Value::Null);
+        match self.session_fs.save(path, data) {
+            Ok(()) => self.record_extra(
+                "save",
+                Some(path.to_string()),
+                ToolResult {
+                    tool: "session_fs_save".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Ok,
+                    data: Some(json!({ "ok": true, "path": path })),
+                    trace: None,
+                },
+            ),
+            Err(e) => self.record_extra(
+                "save",
+                Some(path.to_string()),
+                ToolResult {
+                    tool: "session_fs_save".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": e })),
+                    trace: None,
+                },
+            ),
+        }
+    }
+
+    fn call_load(&self, args: &Value) -> Value {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        match self.session_fs.load(path) {
+            Ok(data) => self.record_extra(
+                "load",
+                Some(path.to_string()),
+                ToolResult {
+                    tool: "session_fs_load".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Ok,
+                    data: Some(json!({ "path": path, "data": data })),
+                    trace: None,
+                },
+            ),
+            Err(e) => self.record_extra(
+                "load",
+                Some(path.to_string()),
+                ToolResult {
+                    tool: "session_fs_load".into(),
+                    version: "1.0".into(),
+                    status: ToolStatus::Error,
+                    data: Some(json!({ "error": e })),
+                    trace: None,
+                },
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl HostBridge for SacHostBridge {
+    async fn call(&self, method: &str, args: Value) -> Value {
+        if !super::sdk_gate::method_allowed(&self.sdk_allowed, method) {
+            return super::sdk_gate::capability_denied_error(method);
+        }
+        match method {
+            "web" => self.call_web(&args).await,
+            "fetch" => self.call_fetch(&args).await,
+            "history" => self.call_history(&args).await,
+            "user_profile" => self.call_user_profile().await,
+            "save" => self.call_save(&args),
+            "load" => self.call_load(&args),
+            // Retrieval + legacy aliases — RuntimeBridge when configured.
+            _ => match &self.rag {
+                Some(rag) => rag.call(method, args).await,
+                None => json!({
+                    "error": {
+                        "code": "not_configured",
+                        "message": format!(
+                            "retrieval method `{method}` requires rag runtime (not configured)"
+                        ),
+                    }
+                }),
+            },
+        }
+    }
 }

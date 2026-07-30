@@ -69,14 +69,11 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
 
     if caps.rag {
         let rag = load_mode_config("rag")?;
-        merge_tool_pool(&mut config.tool_pool, &rag.tool_pool);
+        // A1: do not merge native retrieval tool_pool — SaC SDK only.
         merge_skill_catalog(&mut config.skill_catalog, &rag.skill_catalog);
         add_budget(&mut config, &rag);
         config.inject_retrieval_query = true;
-        // Option D worker handoff (PR-A / diagnosis 2026-07-20):
-        // ProseOnly → synthesis_contract_block is empty (no unified JSON / UUID cite).
-        // Early-stop + skip_synthesis → brief's internal_worker_handoff_v1 can be final.
-        apply_worker_handoff_loop_exit(&mut config);
+        apply_single_agent_loop_exit(&mut config);
         config.auto_fallback = rag.auto_fallback.clone();
         if let Some(t) = rag.temperature {
             config.temperature = Some(t);
@@ -86,11 +83,11 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
 
     if caps.search {
         let search = load_mode_config("search")?;
-        merge_tool_pool(&mut config.tool_pool, &search.tool_pool);
+        // A1: native web_search/web_fetch stay off the LLM tool surface.
         merge_skill_catalog(&mut config.skill_catalog, &search.skill_catalog);
         add_budget(&mut config, &search);
         config.inject_retrieval_query = true;
-        apply_worker_handoff_loop_exit(&mut config);
+        apply_single_agent_loop_exit(&mut config);
         if !caps.rag {
             config.auto_fallback = search.auto_fallback.clone();
         }
@@ -102,8 +99,9 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
     }
 
     if caps.rag || caps.search {
-        // No monomode answer skills on capability / worker paths (handoff is final).
+        // Single agent answers in-loop (A2); no monomode answer skill mandatory.
         config.skill_catalog.mandatory.synthesis.clear();
+        config.tool_pool.clear();
     }
 
     if caps.is_pure_chat() {
@@ -128,36 +126,28 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         .cloned()
         .unwrap_or_else(|| CHAT_BASE.to_string());
 
+    // A3: SaC SDK subset for this capability set (sandbox host enforces).
+    config.sdk_primitives = agent_loop::r#loop::sdk_primitives_for_caps(caps.rag, caps.search)
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+
     Ok(AssembledMode {
         config,
         system_prompt_parts,
     })
 }
 
-/// Worker / capability-agent loop exit for Option D handoff finals.
+/// Single-agent loop exit (A2): one ReAct run produces the user-facing answer.
 ///
-/// `require_evidence` + hard gate: no answer-grade chunk → cannot enter answer.
-/// `skip_synthesis_on_direct_answer` still applies **after** chunks exist so a
-/// valid worker handoff can finalize without monomode synthesis.
-fn apply_worker_handoff_loop_exit(config: &mut ModeConfig) {
-    config.loop_exit.require_evidence = true;
-    // 2026-07-29 hard gate: no answer-grade chunk → cannot early-stop into
-    // final handoff / answer (allow_content_early_stop is ignored by the gate
-    // anyway; keep false so config and behavior match).
+/// Grounding is **skill-owned** (`require_evidence` is not a host hard gate).
+/// `worker_handoff` is **false** — no orchestrator brief / handoff JSON.
+fn apply_single_agent_loop_exit(config: &mut ModeConfig) {
+    config.loop_exit.require_evidence = false;
     config.loop_exit.allow_content_early_stop = false;
     config.loop_exit.skip_synthesis_on_direct_answer = true;
     config.synthesis_output.contract = AnswerContractKind::ProseOnly;
-    // U3: mark this as a worker loop (handoff is final) so downstream
-    // disclosure can skip answer-side synthesis scaffolding.
-    config.worker_handoff = true;
-}
-
-fn merge_tool_pool(dst: &mut Vec<String>, src: &[String]) {
-    for id in src {
-        if !dst.iter().any(|x| x == id) {
-            dst.push(id.clone());
-        }
-    }
+    config.worker_handoff = false;
 }
 
 fn merge_skill_catalog(dst: &mut SkillCatalogConfig, src: &SkillCatalogConfig) {
@@ -281,6 +271,15 @@ mod tests {
             "pure chat must not mandatory-inject synthesis skills: {:?}",
             assembled.config.skill_catalog.mandatory.synthesis
         );
+        // A3: pure chat opens memory + fs only.
+        assert!(
+            assembled.config.sdk_primitives.contains(&"history".into())
+                && assembled.config.sdk_primitives.contains(&"save".into())
+                && !assembled.config.sdk_primitives.contains(&"dense".into())
+                && !assembled.config.sdk_primitives.contains(&"web".into()),
+            "pure chat sdk_primitives: {:?}",
+            assembled.config.sdk_primitives
+        );
     }
 
     #[test]
@@ -318,22 +317,30 @@ mod tests {
             "capability workers must not inherit chat user_context: {:?}",
             assembled.config.tool_pool
         );
+        // A1: native web_search not on LLM surface — SaC client.web instead.
         assert!(
-            assembled
-                .config
-                .tool_pool
-                .iter()
-                .any(|t| t == "web_search"),
-            "dual tool_pool must include web_search: {:?}",
+            assembled.config.tool_pool.is_empty(),
+            "single-agent capability modes must not expose native retrieval tools: {:?}",
             assembled.config.tool_pool
         );
-        // PR-A: ProseOnly + early-stop so handoff JSON is final (not unified envelope).
+        assert!(
+            assembled.config.sdk_primitives.contains(&"web".into())
+                && assembled.config.sdk_primitives.contains(&"dense".into())
+                && assembled.config.sdk_primitives.contains(&"grep".into()),
+            "dual sdk_primitives: {:?}",
+            assembled.config.sdk_primitives
+        );
+        // A2 single agent: ProseOnly user answer, not worker handoff.
         assert_eq!(
             assembled.config.synthesis_output.contract,
             AnswerContractKind::ProseOnly
         );
+        assert!(!assembled.config.worker_handoff);
         assert!(assembled.config.inject_retrieval_query);
-        assert!(assembled.config.loop_exit.require_evidence);
+        assert!(
+            !assembled.config.loop_exit.require_evidence,
+            "require_evidence is skill-owned, not host-forced"
+        );
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
         // Budget is sum of rag(12) + search(8) = 20 (not max; chat base not included)
@@ -358,6 +365,9 @@ mod tests {
         assert_eq!(assembled.config.budget.max_iterations, 12);
         assert_eq!(assembled.config.budget.max_tokens, Some(28_000));
         assert_eq!(assembled.config.temperature, Some(0.4));
+        assert!(assembled.config.sdk_primitives.contains(&"dense".into()));
+        assert!(assembled.config.sdk_primitives.contains(&"grep".into()));
+        assert!(!assembled.config.sdk_primitives.contains(&"web".into()));
     }
 
     #[test]
@@ -370,6 +380,10 @@ mod tests {
         assert_eq!(assembled.config.budget.max_iterations, 8);
         assert_eq!(assembled.config.budget.max_tokens, Some(16_000));
         assert_eq!(assembled.config.temperature, Some(0.4));
+        assert!(assembled.config.sdk_primitives.contains(&"web".into()));
+        assert!(assembled.config.sdk_primitives.contains(&"fetch".into()));
+        assert!(assembled.config.sdk_primitives.contains(&"dense".into()));
+        assert!(!assembled.config.sdk_primitives.contains(&"grep".into()));
     }
 
     #[test]
@@ -381,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn rag_only_worker_handoff_contract_and_prompt() {
+    fn rag_only_single_agent_contract_and_prompt() {
         let assembled = assemble_mode(CapabilitySet {
             rag: true,
             search: false,
@@ -396,6 +410,7 @@ mod tests {
             assembled.config.synthesis_output.contract,
             AnswerContractKind::ProseOnly
         );
+        assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
         assert!(assembled.config.skill_catalog.mandatory.synthesis.is_empty());
@@ -412,13 +427,13 @@ mod tests {
         );
         assert!(
             assembled.config.tool_pool.is_empty(),
-            "rag worker tool_pool is mode YAML only (empty): {:?}",
+            "rag single-agent tool_pool empty (SaC only): {:?}",
             assembled.config.tool_pool
         );
     }
 
     #[test]
-    fn search_only_worker_handoff_contract_and_fallback() {
+    fn search_only_single_agent_contract_and_fallback() {
         let assembled = assemble_mode(CapabilitySet {
             rag: false,
             search: true,
@@ -429,24 +444,17 @@ mod tests {
             assembled.config.synthesis_output.contract,
             AnswerContractKind::ProseOnly
         );
+        assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
         assert!(assembled.config.skill_catalog.mandatory.synthesis.is_empty());
         let fb = assembled.config.auto_fallback.expect("search fallback");
         assert_eq!(fb.tool_id, "web_search");
-        assert!(assembled
-            .config
-            .tool_pool
-            .iter()
-            .any(|t| t == "web_search"));
         assert!(
-            !assembled
-                .config
-                .tool_pool
-                .iter()
-                .any(|t| t == "user_context"),
-            "search worker must not inherit chat user_context: {:?}",
+            assembled.config.tool_pool.is_empty(),
+            "search single-agent tool_pool empty (SaC web): {:?}",
             assembled.config.tool_pool
         );
+        assert!(assembled.config.sdk_primitives.contains(&"web".into()));
     }
 }

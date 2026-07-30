@@ -244,6 +244,11 @@ impl Agent for UnifiedAgent {
                     }
                 };
 
+                // SaC search: web via SearchProvider; optional dense via RagRuntime.
+                let rag_for_dense = self.rag_runtime.clone().map(|rag| {
+                    Arc::new((*rag).clone().with_tenant(tenant.clone()))
+                });
+
                 agent_loop::progress::emit_work_fact(
                     sink,
                     agent_loop::progress::WorkFact::understand(&request.query),
@@ -254,7 +259,13 @@ impl Agent for UnifiedAgent {
                     self.search_llm_client
                         .clone()
                         .or_else(|| self.llm_client.clone()),
-                    |lp| lp.with_search_executor(Some(search_executor)),
+                    |lp| {
+                        let mut lp = lp.with_search_executor(Some(search_executor));
+                        if let Some(rag) = rag_for_dense {
+                            lp = lp.with_rag_runtime(Some(rag));
+                        }
+                        lp
+                    },
                     request,
                     sink,
                     &tenant,

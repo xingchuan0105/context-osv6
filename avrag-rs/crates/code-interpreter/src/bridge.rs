@@ -40,19 +40,46 @@ def _rpc(method, args):
     return msg["data"]
 
 class _Client:
-    async def dense_search(self, query, top_k=10, method="auto"):
-        return _rpc("dense_search", {"query": query, "top_k": top_k, "method": method})["chunks"]
-    async def lexical_search(self, query, top_k=10):
-        return _rpc("lexical_search", {"query": query, "top_k": top_k})["chunks"]
-    async def graph_search(self, query, depth=2):
-        return _rpc("graph_search", {"query": query, "depth": depth})["chunks"]
-    async def chunk_fetch(self, chunk_id):
-        return _rpc("chunk_fetch", {"chunk_id": chunk_id})["chunks"]
+    """SaC SDK: query-only dense/lexical; grep for line-level; web/fetch; memory; no graph/topk."""
+
+    async def dense(self, query):
+        """Semantic dense retrieval. topk is fixed by the host — only pass query."""
+        return _rpc("dense", {"query": query})["chunks"]
+
+    async def lexical(self, query):
+        """BM25/keyword retrieval. When graph augment is on, observation may include graph_context."""
+        return _rpc("lexical", {"query": query})["chunks"]
+
+    # Temporary aliases (ignore legacy top_k / method kwargs) — remove after skill cutover.
+    async def dense_search(self, query, top_k=None, method=None):
+        return await self.dense(query)
+
+    async def lexical_search(self, query, top_k=None):
+        return await self.lexical(query)
+
+    async def grep(self, pattern, doc_ids=None, regex=False, context=0, max_hits=50):
+        """Line-level locate (coding-agent grep). Returns full payload:
+        total_hits / returned / truncated / hits[{doc_id, line, text, before, after}].
+        total_hits is exact (host-counted) — use it; do not re-count or dedupe in code."""
+        payload = {"pattern": pattern, "regex": regex, "context": context, "max_hits": max_hits}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
+        return _rpc("grep", payload)
+
+    async def web(self, query):
+        """Web search (SaC). Fan-out multiple queries in one code block when needed."""
+        return _rpc("web", {"query": query})
+
+    async def fetch(self, url):
+        """Fetch one URL and extract readable text."""
+        return _rpc("fetch", {"url": url})
+
     async def doc_summary(self, level="doc", doc_ids=None):
         payload = {"level": level}
         if doc_ids is not None:
             payload["doc_ids"] = doc_ids
         return _rpc("doc_summary", payload)["chunks"]
+
     async def doc_profile(self, doc_ids=None, fields=None):
         payload = {}
         if doc_ids is not None:
@@ -60,34 +87,51 @@ class _Client:
         if fields:
             payload["fields"] = fields
         return _rpc("doc_profile", payload)["chunks"]
-    async def grep(self, pattern, doc_ids=None, regex=False, context=0, max_hits=50):
-        """Locate lines across docs (coding-agent grep). Returns the FULL payload:
-        {"total_hits": N, "returned": M, "truncated": bool, "hits": [{doc_id, line, text, before, after}]}.
-        total_hits is exact (Rust-counted) — use it for counting instead of parsing yourself."""
-        payload = {"pattern": pattern, "regex": regex, "context": context, "max_hits": max_hits}
-        if doc_ids is not None:
-            payload["doc_ids"] = doc_ids
-        return _rpc("grep", payload)
-    async def read_lines(self, doc_id, start, end):
-        """Read original lines [start, end] (1-based, inclusive) of one document.
-        Same virtual line view as grep — hit line numbers resolve here."""
-        return _rpc("read_lines", {"doc_id": doc_id, "start": start, "end": end})
+
+    async def history(self, limit=20, query="", scope="workspace"):
+        """Load prior conversation turns (not full chat dump into tokens)."""
+        return _rpc("history", {"limit": limit, "query": query, "scope": scope})
+
+    async def user_profile(self):
+        """Load structured user profile preferences."""
+        return _rpc("user_profile", {})
+
+    async def save(self, path, data):
+        """Persist JSON-serializable data under a relative path (cross-block / cross-turn)."""
+        return _rpc("save", {"path": path, "data": data})
+
+    async def load(self, path):
+        """Load data previously saved with save(path, data)."""
+        return _rpc("load", {"path": path})["data"]
+
+# Module-level aliases (design §5 examples use bare save/load).
+async def save(path, data):
+    return await client.save(path, data)
+
+async def load(path):
+    return await client.load(path)
 
 client = _Client()
 "#
 }
 
-/// RPC method names exposed on the injected Python `client` (must match host bridge).
+/// Canonical SaC SDK RPC methods (host must implement every name).
+///
+/// Python may also expose temporary aliases (`dense_search` → RPC `dense`) that are
+/// not listed here — only wire names count for host/shim parity.
 pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
     &[
-        "dense_search",
-        "lexical_search",
-        "graph_search",
-        "chunk_fetch",
+        "dense",
+        "lexical",
+        "grep",
+        "web",
+        "fetch",
         "doc_summary",
         "doc_profile",
-        "grep",
-        "read_lines",
+        "history",
+        "user_profile",
+        "save",
+        "load",
     ]
 }
 
@@ -512,22 +556,38 @@ mod bridge_shim_tests {
     use super::bridge_shim_client_method_names;
 
     #[test]
-    fn shim_exposes_only_host_supported_methods() {
+    fn shim_exposes_sac_sdk_methods() {
         assert_eq!(
             bridge_shim_client_method_names(),
             &[
-                "dense_search",
-                "lexical_search",
-                "graph_search",
-                "chunk_fetch",
+                "dense",
+                "lexical",
+                "grep",
+                "web",
+                "fetch",
                 "doc_summary",
                 "doc_profile",
-                "grep",
-                "read_lines",
+                "history",
+                "user_profile",
+                "save",
+                "load",
             ]
         );
-        assert!(!bridge_shim_client_method_names().contains(&"rerank"));
-        assert!(!bridge_shim_client_method_names().contains(&"doc_scan"));
+        // Removed anchors (A4/A5): no graph / chunk_fetch / read_lines / aggregators.
+        for banned in [
+            "graph_search",
+            "chunk_fetch",
+            "read_lines",
+            "doc_scan",
+            "rerank",
+            "count",
+            "dedupe",
+        ] {
+            assert!(
+                !bridge_shim_client_method_names().contains(&banned),
+                "banned method {banned} must not be on SaC SDK surface"
+            );
+        }
     }
 }
 

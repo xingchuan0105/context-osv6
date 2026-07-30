@@ -1,10 +1,10 @@
-# Orchestrator agent: allocate only — no channel tools.
-# STATUS: partially loaded — brain.rs reads `budget` and `temperature` from
-# this file (see crates/app-chat/src/orchestrator/brain.rs). The remaining
-# sections (skill_catalog / loop_exit / synthesis_output) are INERT today and
-# kept for the future full controller config.
+# RETIRED product mode (SaC A2, 2026-07-30).
+# Product entry is single-agent: chat/rag/search via assemble_mode.
+# This file remains only so legacy orchestrator brain/tests can still resolve
+# budget/temperature if AGENT_ORCHESTRATOR_V2 or structural host re-entry is used.
+# Prompt pack lives under prompts/deprecated/orchestrator-multiagent/.
 mode: orchestrator
-system_prompt_base: prompts/orchestrators/orchestrator-base.md
+system_prompt_base: prompts/deprecated/orchestrator-multiagent/orchestrator-base.md
 tool_pool: []
 skill_catalog:
   retrieve: []

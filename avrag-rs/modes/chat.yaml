@@ -20,7 +20,6 @@ budget:
     free: 6000
     pro: 8000
     enterprise: 12000
-  no_chunk_grace_tokens: 4000
 # Unified with rag/search so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:

@@ -908,7 +908,9 @@ fn extract_inline_markers_from(block: &str) -> String {
 
 
 
-const PARTIAL_EVIDENCE_INSUFFICIENT_ZH: &str = "资料不足以完整回答";
+fn partial_evidence_insufficient_zh() -> &'static str {
+    super::prompt_assets::partial_evidence_insufficient()
+}
 
 /// Strong refusal cues only. Avoid mid-sentence phrases like「未提及…」in analytical prose
 /// (that false-positive aborted hybrid salvage and leaked raw synthesis JSON).
@@ -924,15 +926,7 @@ const DRAFT_REFUSAL_CUES: &[&str] = &[
 ];
 
 pub fn contract_violation_fallback(mode_id: &str) -> String {
-    match mode_id {
-        "rag" => "找到了相关资料，但未能生成符合引用格式要求的完整答案，请尝试重新提问。".to_string(),
-        "search" => "找到了搜索结果，但未能生成符合格式要求的完整答案，请尝试重新提问。".to_string(),
-        "rag+search" => {
-            "找到了文档与网络资料，但未能生成符合引用格式要求的完整答案，请尝试重新提问。"
-                .to_string()
-        }
-        _ => "未能生成符合格式要求的完整答案。".to_string(),
-    }
+    super::prompt_assets::contract_violation_fallback(mode_id).to_string()
 }
 
 fn draft_contains_refusal(answer_text: &str) -> bool {
@@ -1192,7 +1186,7 @@ pub fn extract_partial_synthesis_fallback(
             !draft_contains_refusal(answer_text)
         })
     }) {
-        return Some(PARTIAL_EVIDENCE_INSUFFICIENT_ZH.to_string());
+        return Some(partial_evidence_insufficient_zh().to_string());
     }
 
     None
@@ -1496,7 +1490,7 @@ mod tests {
         let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"[[cite:bad]]","citations":[{"chunk_id":"bad"}],"coverage":"full","refusal_reason":null}"#;
         let partial = extract_partial_synthesis_fallback(&[raw], &tool_results, &[], &mode)
             .expect("expected insufficient fallback");
-        assert_eq!(partial, PARTIAL_EVIDENCE_INSUFFICIENT_ZH);
+        assert_eq!(partial, partial_evidence_insufficient_zh());
     }
 
     #[test]

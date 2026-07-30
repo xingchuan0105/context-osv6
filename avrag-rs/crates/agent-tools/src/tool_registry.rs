@@ -10,6 +10,25 @@ use contracts::{ToolCall, ToolResult, ToolStatus};
 use crate::catalog::{ToolCatalog, ToolExecKind};
 use crate::rag_bridge::dispatch_rag_tool;
 
+/// LLM-facing reject hints from `avrag-rs/prompts/loop/*.md` (prompts-in-md).
+macro_rules! loop_prompt {
+    ($file:literal) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../prompts/loop/",
+            $file
+        ))
+    };
+}
+
+fn subst_prompt(template: &str, pairs: &[(&str, &str)]) -> String {
+    let mut out = template.trim().to_string();
+    for (k, v) in pairs {
+        out = out.replace(&format!("{{{k}}}"), v);
+    }
+    out
+}
+
 /// Tool ids handled by the RAG runtime (catalog + legacy helper).
 pub fn is_rag_tool(tool: &str) -> bool {
     ToolCatalog::standard_cached().is_rag(tool)
@@ -33,18 +52,44 @@ pub struct ToolDispatchContext<'a> {
 /// Codegen Python SDK method names — never native tool schema ids.
 /// Reject bare tool_calls so the model retries with a `<code language="python">` block.
 pub const CODEGEN_SDK_METHOD_NAMES: &[&str] = &[
+    // SaC canonical (2026-07-30)
+    "dense",
+    "lexical",
+    "grep",
+    "web",
+    "fetch",
+    "doc_profile",
+    "doc_summary",
+    "history",
+    "user_profile",
+    "save",
+    "load",
+    // Temporary / legacy aliases still rejected if invented as native tools.
     "dense_search",
     "lexical_search",
     "graph_search",
     "chunk_fetch",
-    "doc_profile",
-    "doc_summary",
     "doc_chunks",
-    // Legacy SDK names still rejected if the model invents a native call.
     "doc_scan",
-    // 2026-07-29: grep/read_lines replace doc_scan (spec §4).
-    "grep",
     "read_lines",
+];
+
+/// Former native retrieval tools now SaC-only (A1). Catalog may still hold
+/// them for host-internal fallback via `dispatch_rag_fallback` / SearchProvider,
+/// but **LLM function-calling must not execute them**.
+pub const SAC_SUPERSEDED_NATIVE_TOOLS: &[&str] = &[
+    "dense_retrieval",
+    "lexical_retrieval",
+    "graph_retrieval",
+    "index_lookup",
+    "doc_summary",
+    "doc_metadata",
+    "doc_profile",
+    "doc_scan",
+    "doc_grep",
+    "doc_read_lines",
+    "web_search",
+    "web_fetch",
 ];
 
 /// True when `tool` is a codegen SDK method name, not a ToolCatalog entry.
@@ -52,8 +97,17 @@ pub fn is_codegen_sdk_method_as_native_tool(tool_name: &str) -> bool {
     CODEGEN_SDK_METHOD_NAMES.iter().any(|n| *n == tool_name)
 }
 
+/// True when a catalog tool id is retrieval/web and must only be used via SaC SDK.
+pub fn is_sac_superseded_native_tool(tool_name: &str) -> bool {
+    SAC_SUPERSEDED_NATIVE_TOOLS.iter().any(|n| *n == tool_name)
+}
+
 /// Synthetic error result when the model invents native tool_calls for SDK methods.
 pub fn reject_codegen_method_as_native_tool(tool_name: &str) -> ToolResult {
+    let hint = subst_prompt(
+        loop_prompt!("codegen-method-as-native-rejection.tmpl.md"),
+        &[("tool", tool_name)],
+    );
     ToolResult {
         tool: tool_name.to_string(),
         version: "1.0".to_string(),
@@ -61,12 +115,38 @@ pub fn reject_codegen_method_as_native_tool(tool_name: &str) -> ToolResult {
         data: Some(serde_json::json!({
             "error": "not_a_native_tool",
             "tool": tool_name,
-            "hint": format!(
-                "`{tool_name}` is a Python SDK method on `client`, not a native tool. \
-                 Do not emit function/tool calls for it. Output one \
-                 `<code language=\"python\">` block, e.g. \
-                 `chunks = await client.{tool_name}(...)` (adjust args per codegen skill)."
-            ),
+            "hint": hint,
+        })),
+        trace: None,
+    }
+}
+
+/// Reject LLM native tool_calls for tools that moved into the SaC sandbox SDK (A1).
+pub fn reject_sac_superseded_native_tool(tool_name: &str) -> ToolResult {
+    let sac_hint = match tool_name {
+        "dense_retrieval" => "await client.dense(query)",
+        "lexical_retrieval" => "await client.lexical(query)",
+        "web_search" => "await client.web(query)",
+        "web_fetch" => "await client.fetch(url)",
+        "doc_summary" => "await client.doc_summary(...)",
+        "doc_profile" => "await client.doc_profile(...)",
+        "doc_grep" | "doc_scan" => "await client.grep(pattern, ...)",
+        "doc_read_lines" => "await client.grep(..., context=N)  # read_lines removed",
+        "graph_retrieval" => "await client.lexical(query)  # graph is bound to lexical",
+        _ => "await client.<method>(...)  # see codegen/search skill",
+    };
+    let hint = subst_prompt(
+        loop_prompt!("sac-superseded-rejection.tmpl.md"),
+        &[("tool", tool_name), ("sac_hint", sac_hint)],
+    );
+    ToolResult {
+        tool: tool_name.to_string(),
+        version: "1.0".to_string(),
+        status: ToolStatus::Error,
+        data: Some(serde_json::json!({
+            "error": "sac_sdk_only",
+            "tool": tool_name,
+            "hint": hint,
         })),
         trace: None,
     }
@@ -81,6 +161,14 @@ pub async fn dispatch_tool(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> To
             "rejecting codegen SDK method issued as native tool_call"
         );
         return reject_codegen_method_as_native_tool(&call.tool);
+    }
+    // A1: retrieval/web only via SaC sandbox — not LLM function calling.
+    if is_sac_superseded_native_tool(&call.tool) {
+        tracing::warn!(
+            tool = %call.tool,
+            "rejecting SaC-superseded native tool_call (use sandbox client)"
+        );
+        return reject_sac_superseded_native_tool(&call.tool);
     }
 
     let catalog = ToolCatalog::standard_cached();
@@ -328,15 +416,50 @@ mod tests {
 
     #[test]
     fn codegen_sdk_method_names_rejected_as_native() {
-        assert!(is_codegen_sdk_method_as_native_tool("dense_search"));
+        assert!(is_codegen_sdk_method_as_native_tool("dense"));
+        assert!(is_codegen_sdk_method_as_native_tool("lexical"));
+        assert!(is_codegen_sdk_method_as_native_tool("web"));
+        assert!(is_codegen_sdk_method_as_native_tool("fetch"));
+        assert!(is_codegen_sdk_method_as_native_tool("dense_search")); // legacy alias
         assert!(is_codegen_sdk_method_as_native_tool("grep"));
-        assert!(is_codegen_sdk_method_as_native_tool("read_lines"));
+        assert!(is_codegen_sdk_method_as_native_tool("read_lines")); // still reject if invented
         assert!(!is_codegen_sdk_method_as_native_tool("dense_retrieval"));
-        assert!(!is_codegen_sdk_method_as_native_tool("web_search"));
-        let r = reject_codegen_method_as_native_tool("dense_search");
+        assert!(is_sac_superseded_native_tool("dense_retrieval"));
+        assert!(is_sac_superseded_native_tool("web_search"));
+        let r = reject_codegen_method_as_native_tool("dense");
         assert_eq!(r.status, ToolStatus::Error);
         let err = r.data.as_ref().and_then(|d| d.get("error")).and_then(|e| e.as_str());
         assert_eq!(err, Some("not_a_native_tool"));
+        let r2 = reject_sac_superseded_native_tool("web_search");
+        assert_eq!(r2.status, ToolStatus::Error);
+        assert_eq!(
+            r2.data.as_ref().and_then(|d| d.get("error")).and_then(|e| e.as_str()),
+            Some("sac_sdk_only")
+        );
+        let hint = r2
+            .data
+            .as_ref()
+            .and_then(|d| d.get("hint"))
+            .and_then(|h| h.as_str())
+            .unwrap_or("");
+        assert!(hint.contains("web_search"), "hint: {hint}");
+        assert!(hint.contains("client.web"), "hint: {hint}");
+        // Parameterized: every SaC-superseded name is recognized.
+        for name in SAC_SUPERSEDED_NATIVE_TOOLS {
+            assert!(
+                is_sac_superseded_native_tool(name),
+                "missing SaC supersede for {name}"
+            );
+            let rej = reject_sac_superseded_native_tool(name);
+            assert_eq!(rej.status, ToolStatus::Error);
+            assert_eq!(
+                rej.data
+                    .as_ref()
+                    .and_then(|d| d.get("error"))
+                    .and_then(|e| e.as_str()),
+                Some("sac_sdk_only")
+            );
+        }
     }
 
     #[tokio::test]
@@ -366,10 +489,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rag_without_runtime_is_not_implemented() {
+    async fn rag_native_is_rejected_as_sac_only() {
         let result = dispatch_tool(&call("dense_retrieval", serde_json::json!({})), &ctx_permissive(None))
             .await;
-        assert_eq!(result.status, ToolStatus::NotImplemented);
+        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(
+            result
+                .data
+                .as_ref()
+                .and_then(|d| d.get("error"))
+                .and_then(|e| e.as_str()),
+            Some("sac_sdk_only")
+        );
     }
 
     #[tokio::test]
@@ -391,27 +522,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enforcement_blocks_web_search_without_perm() {
-        let auth = contracts::auth_runtime::AuthContext::new(
-            contracts::auth_runtime::UserId::new(uuid::Uuid::nil()),
-            contracts::auth_runtime::SubjectKind::User,
-        );
-        let result = dispatch_tool(
-            &call("web_search", serde_json::json!({"query": "test"})),
-            &ctx_enforced(Some(&auth), None),
-        )
-        .await;
-        assert_eq!(result.status, ToolStatus::Error);
-        assert!(
-            result.data.unwrap()["error"]
-                .as_str()
-                .unwrap()
-                .contains("external network")
-        );
-    }
-
-    #[tokio::test]
-    async fn enforcement_allows_web_search_with_perm() {
+    async fn web_search_native_is_rejected_as_sac_only() {
+        // A1: web_search is no longer an LLM-facing native tool (use client.web).
         let auth = contracts::auth_runtime::AuthContext::new(
             contracts::auth_runtime::UserId::new(uuid::Uuid::nil()),
             contracts::auth_runtime::SubjectKind::User,
@@ -423,18 +535,34 @@ mod tests {
             &ctx_enforced(Some(&auth), Some(&provider)),
         )
         .await;
-        assert_eq!(result.status, ToolStatus::Ok);
+        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(
+            result
+                .data
+                .as_ref()
+                .and_then(|d| d.get("error"))
+                .and_then(|e| e.as_str()),
+            Some("sac_sdk_only")
+        );
     }
 
     #[tokio::test]
-    async fn permissive_path_allows_web_search_without_auth() {
+    async fn permissive_path_also_rejects_web_search_native() {
         let provider = FakeSearchProvider;
         let result = dispatch_tool(
             &call("web_search", serde_json::json!({"query": "test"})),
             &ctx_permissive(Some(&provider)),
         )
         .await;
-        assert_eq!(result.status, ToolStatus::Ok);
+        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(
+            result
+                .data
+                .as_ref()
+                .and_then(|d| d.get("error"))
+                .and_then(|e| e.as_str()),
+            Some("sac_sdk_only")
+        );
     }
 
     #[tokio::test]

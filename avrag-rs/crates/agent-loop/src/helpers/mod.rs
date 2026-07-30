@@ -1,12 +1,16 @@
 mod citations;
 mod codegen_bridge;
 mod retrieval;
+mod selected;
 mod usage;
 
 pub use citations::{
     build_all_citations_from_tool_results, build_citations_from_tool_results,
     build_search_citations_from_tool_results, degrade_trace_from_tool_results,
     filter_citations_by_answer_references, filter_citations_for_mode,
+};
+pub use selected::{
+    answer_with_selected_cite_markers, parse_selected_aliases, resolve_selected_chunk_ids,
 };
 pub use codegen_bridge::{
     bridge_tool_results_to_observation_stdout, codegen_observation_stdout,

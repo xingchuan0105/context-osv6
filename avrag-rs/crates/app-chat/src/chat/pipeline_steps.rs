@@ -85,25 +85,25 @@ pub(crate) async fn dispatch_agent_mode(
         return Ok(execution);
     }
 
-    // Option D (2026-07-20 产品拍板)：
-    // - 纯聊天（AnswerOnly）：入口直接 Chat，不进编排。
-    // - 勾选 rag 和/或 search：永远走编排（Dispatch → Answer 两阶段）。
-    if caps.is_pure_chat() {
-        let assembled = crate::assemble_mode(caps)?;
-        return run_general_mode(
-            state,
-            request,
-            session,
-            stream_config,
-            crate::agents::AgentKind::Chat,
-            agent_type_label,
-            caps,
-            &assembled,
-        )
-        .await;
-    }
-
-    run_orchestrator_v1(state, request, session, stream_config, caps).await
+    // A2 single agent (2026-07-30 SaC): one ReAct loop for chat / rag / search.
+    // Orchestrator / worker / brief / handoff path is no longer the product entry.
+    let assembled = crate::assemble_mode(caps)?;
+    let kind = match (caps.rag, caps.search) {
+        (true, _) => crate::agents::AgentKind::Rag, // dual also uses Rag + search metadata
+        (false, true) => crate::agents::AgentKind::Search,
+        (false, false) => crate::agents::AgentKind::Chat,
+    };
+    run_general_mode(
+        state,
+        request,
+        session,
+        stream_config,
+        kind,
+        agent_type_label,
+        caps,
+        &assembled,
+    )
+    .await
 }
 
 /// @deprecated name — tests may still call this; agent lane only.
@@ -117,7 +117,9 @@ pub(crate) async fn dispatch_mode(
     dispatch_agent_mode(state, request, session, stream_config).await
 }
 
-/// Pick the V2 LLM brain when enabled + configured, else the structural host.
+/// Legacy orchestrator path (kept for unit tests / optional re-entry).
+/// Product chat entry is single-agent ([`dispatch_agent_mode`]).
+#[allow(dead_code)]
 async fn run_orchestrator_turn(
     caps: CapabilitySet,
     agent_request: &agent_loop::runtime::AgentRequest,
@@ -147,9 +149,8 @@ async fn run_orchestrator_turn(
     crate::orchestrator::run_orchestrated_turn(caps, agent_request, executor, sink, docscope).await
 }
 
-/// Orchestrated path (Option D, 2026-07-20): materialize channels → workers →
-/// chat exit. The chat exit assembles the Answer pack
-/// (product-answer-base + material blocks) with utility tools.
+/// Legacy orchestrated path (Option D). Not used by product entry after SaC A2.
+#[allow(dead_code)]
 async fn run_orchestrator_v1(
     state: &ChatContext,
     request: &ChatRequest,

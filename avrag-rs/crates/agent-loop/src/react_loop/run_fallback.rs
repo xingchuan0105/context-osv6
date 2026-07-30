@@ -1,178 +1,25 @@
-use avrag_llm::{ChatMessage, LlmUsage};
+//! Host auto_fallback helpers (mode YAML `auto_fallback`).
+//!
+//! As of 2026-07-31 (OCR fix plan WP-3 Option R), the synthesis gate no longer
+//! routes through `RunFallbackThenCheck` / `DegradedNoEvidence`. These methods
+//! remain for a future budget-path re-entry; `modes/*.yaml` still deserializes
+//! `auto_fallback` config.
+
+use avrag_llm::ChatMessage;
 use common::AppError;
 use contracts::ToolResult;
 
-use super::assembler::DisclosedState;
-use super::config::{AutoFallbackConfig, LoopExitConfig, ModeConfig};
-use super::exit_policy::{
-    PostLoopAction, degraded_no_evidence_answer, has_retrieval_observation, post_fallback_gate,
-};
-use super::reasoning_emit;
-use super::run_result::{build_run_result, RunContext};
-use super::telemetry::ReActIterationRecord;
-use super::{ReActLoop, fallback, truncate_preview};
+use super::config::{AutoFallbackConfig, ModeConfig};
+use super::{ReActLoop, fallback};
 use crate::events::{AgentEvent, AgentEventSink};
-use crate::runtime::{AgentRequest, AgentRunResult, FinalDecision};
-use super::cancellation::DegradeReason;
+use crate::runtime::AgentRequest;
 
 impl ReActLoop {
-    pub(super) async fn trigger_auto_fallback_and_check_degraded(
-        &self,
-        mode: &ModeConfig,
-        loop_exit: &LoopExitConfig,
-        request: &AgentRequest,
-        auth: &contracts::auth_runtime::AuthContext,
-        retrieval_query: &str,
-        messages: &mut Vec<ChatMessage>,
-        collected_tool_results: &mut Vec<ToolResult>,
-        disclosed_state: &DisclosedState,
-        sink: &dyn AgentEventSink,
-        iteration: u8,
-        max_iterations: u8,
-        total_tool_calls: u32,
-        telemetry_records: &[ReActIterationRecord],
-        total_usage: &LlmUsage,
-        reasoning_summary_acc: &str,
-        start_time: std::time::Instant,
-    ) -> Result<Option<AgentRunResult>, AppError> {
-        self.run_auto_fallback(
-            mode,
-            request,
-            auth,
-            retrieval_query,
-            messages,
-            collected_tool_results,
-            sink,
-        )
-        .await?;
-        let has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
-        if post_fallback_gate(loop_exit, has_evidence) != PostLoopAction::DegradedNoEvidence {
-            return Ok(None);
-        }
-        Ok(Some(
-            self.finish_degraded_no_evidence_run(
-                mode,
-                request,
-                messages,
-                disclosed_state,
-                collected_tool_results,
-                sink,
-                iteration,
-                max_iterations,
-                total_tool_calls,
-                telemetry_records,
-                total_usage,
-                reasoning_summary_acc,
-                start_time,
-            )
-            .await?,
-        ))
-    }
-
-    pub(super) async fn finish_degraded_no_evidence_run(
-        &self,
-        mode: &ModeConfig,
-        request: &AgentRequest,
-        messages: &[ChatMessage],
-        disclosed_state: &DisclosedState,
-        collected_tool_results: &[ToolResult],
-        sink: &dyn AgentEventSink,
-        iteration: u8,
-        max_iterations: u8,
-        total_tool_calls: u32,
-        telemetry_records: &[ReActIterationRecord],
-        total_usage: &LlmUsage,
-        reasoning_summary_acc: &str,
-        start_time: std::time::Instant,
-    ) -> Result<AgentRunResult, AppError> {
-        // Ask the model once to state retrieval failure (no tools). If the call
-        // fails, fall back to a fixed user-facing refusal string.
-        let mut final_messages = messages.to_vec();
-        final_messages.push(ChatMessage::user(
-            super::exit_policy::RETRIEVAL_FAILED_FINAL_TURN.to_string(),
-        ));
-        let answer = match self.llm.complete(&final_messages, None).await {
-            Ok(resp) => {
-                let text = resp.content.trim().to_string();
-                if text.is_empty() {
-                    degraded_no_evidence_answer(&mode.id)
-                } else {
-                    text
-                }
-            }
-            Err(err) => {
-                tracing::warn!(
-                    error = %err,
-                    "retrieval-failed final LLM call failed; using fixed refusal"
-                );
-                degraded_no_evidence_answer(&mode.id)
-            }
-        };
-        let disclosed_skills: Vec<String> = disclosed_state
-            .disclosed_skill_ids
-            .iter()
-            .cloned()
-            .collect();
-        let observation_preview = truncate_preview(&answer, 200);
-        reasoning_emit::emit_evaluation_telemetry(
-            sink,
-            iteration,
-            "degraded_no_evidence",
-            &observation_preview,
-            &disclosed_skills,
-            "degraded_no_evidence",
-        )
-        .await;
-        let _ = sink
-            .emit(AgentEvent::Activity {
-                stage: "degraded_no_evidence".to_string(),
-                message: answer.clone(),
-                detail: None,
-                counts: Default::default(),
-                sources_preview: Vec::new(),
-            })
-            .await;
-        let _ = sink
-            .emit(AgentEvent::MessageDelta {
-                text: answer.clone(),
-            })
-            .await;
-        let _ = sink
-            .emit(AgentEvent::Done {
-                final_message: Some(answer.clone()),
-                usage: None,
-            })
-            .await;
-        let ctx = RunContext {
-            iteration,
-            max_iterations,
-            total_tool_calls,
-            telemetry_records,
-            total_usage,
-            reasoning_summary_acc,
-            start_time,
-        };
-        let mut result = build_run_result(
-            &self.llm,
-            answer,
-            request,
-            collected_tool_results,
-            &ctx,
-            Some(FinalDecision::Degraded {
-                reason: DegradeReason::NoResultsAfterAllFallbacks,
-            }),
-        );
-        result
-            .degrade_trace
-            .push(contracts::chat::DegradeTraceItem {
-                stage: "degraded_no_evidence".to_string(),
-                reason: DegradeReason::NoRetrievalEvidence,
-                impact: "Answer withheld; synthesis skipped".to_string(),
-            });
-        self.emit_run_citations(sink, &result.citations).await;
-        Ok(result)
-    }
-
+    /// Run configured host retrieval/search fallback once (inject observation).
+    ///
+    /// Currently unhooked from the synthesis gate (skill-owned stop). Keep for
+    /// re-entry from budget exhaustion or explicit product policy.
+    #[allow(dead_code)]
     pub(super) async fn run_auto_fallback(
         &self,
         mode: &ModeConfig,
@@ -235,6 +82,7 @@ impl ReActLoop {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(super) async fn run_rag_retrieval_fallback(
         &self,
         request: &AgentRequest,
@@ -287,6 +135,7 @@ impl ReActLoop {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(super) async fn run_web_search_fallback(
         &self,
         retrieval_query: &str,
@@ -322,6 +171,7 @@ impl ReActLoop {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(super) async fn emit_unknown_fallback_skipped(
         &self,
         sink: &dyn AgentEventSink,

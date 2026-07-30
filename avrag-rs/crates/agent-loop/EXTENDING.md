@@ -67,9 +67,10 @@ Custom transforms: `ReActLoop::run_with_hooks(..., &my_hooks)`.
   `chat_persistence`, `code_interpreter`), not as loose fields on `ReActLoop`.
 - Builders: `with_rag_runtime` / `with_search_executor` / `with_chat_persistence` /
   `with_runtime_deps`.
-- **CodegenPort:** `LoopRuntimeDeps::execute_codegen_bridged` owns `RuntimeBridge`;
-  loop files use [`BridgeCallObs`] only. Grep: `avrag_rag_core::` under `react_loop/`
-  should only appear in `deps.rs` (+ optional public builder signatures on `ReActLoop`).
+- **CodegenPort:** `LoopRuntimeDeps::execute_codegen_bridged_with_session` owns
+  `RuntimeBridge`; loop files use [`BridgeCallObs`] only. Grep: `avrag_rag_core::`
+  under `react_loop/` should only appear in `deps.rs` (+ optional public builder
+  signatures on `ReActLoop`).
 
 ## Product contract (Wave C)
 

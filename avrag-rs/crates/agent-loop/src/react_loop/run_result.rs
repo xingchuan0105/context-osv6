@@ -32,9 +32,17 @@ pub fn build_run_result(
     let citations = crate::helpers::build_all_citations_from_tool_results(
         collected_tool_results,
     );
+    // Single-agent path: models circle evidence with `SELECTED: #n` (bridge
+    // aliases). ADR-0008 filter only keeps `[[cite:chunk_id]]` / `[[web:n]]`.
+    // Hydrate SELECTED → synthetic cite markers for filtering only; user-
+    // facing `answer` stays as written.
+    let filter_answer = crate::helpers::answer_with_selected_cite_markers(
+        &final_answer,
+        collected_tool_results,
+    );
     let citations = crate::helpers::filter_citations_for_mode(
         &request.kind.as_canonical_str(),
-        &final_answer,
+        &filter_answer,
         citations,
     );
     let sources =

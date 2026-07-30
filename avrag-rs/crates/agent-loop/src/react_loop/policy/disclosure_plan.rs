@@ -55,6 +55,25 @@ impl DisclosurePlanner {
             push_cluster_body(&mut slices, cluster_id, None, already_disclosed, true);
         }
 
+        // Table structure reference (ontology + few-shot): default-disclose once
+        // with codegen so markitdown pipe tables are in context without skill_request.
+        if first_round
+            && mode
+                .skill_catalog
+                .mandatory
+                .retrieve
+                .iter()
+                .any(|id| id == "codegen")
+        {
+            push_cluster_body(
+                &mut slices,
+                "codegen",
+                Some("how-to-read-tables"),
+                already_disclosed,
+                false,
+            );
+        }
+
         if let Some(requested) = skill_request {
             for token in requested {
                 let tok = crate::react_loop::skill_request::split_skill_request_token(token);

@@ -120,6 +120,7 @@ impl ReActLoop {
                 self.dispatch_content(
                     iteration,
                     mode,
+                    request,
                     loop_exit,
                     state,
                     sink,

@@ -84,15 +84,17 @@ const PRODUCT_MODE_FILES: &[(&str, &str)] = &[
 struct ModeYamlToolPool {
     #[serde(default)]
     tool_pool: Vec<String>,
-    /// RAG (and others) may keep `tool_pool` empty for on-demand skill disclosure
-    /// while still auto-invoking a retrieval tool — include it in product capability list.
+    /// Host-internal post-budget fallback (dense/web). Not disclosed to the LLM;
+    /// deserialized so YAML remains valid, never merged into tool_pool (A1/D6).
     #[serde(default)]
+    #[allow(dead_code)]
     auto_fallback: Option<ModeYamlAutoFallback>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ModeYamlAutoFallback {
     #[serde(default)]
+    #[allow(dead_code)]
     tool_id: Option<String>,
 }
 
@@ -136,18 +138,14 @@ fn load_mode_tool_pool(file_stem: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Product capability disclosure for a mode: `tool_pool` ∪ `auto_fallback.tool_id`.
+/// Product capability disclosure for a mode: **LLM-facing** `tool_pool` only.
+///
+/// A1/D6: `auto_fallback.tool_id` is host-internal (dense/web after budget) and
+/// must **not** appear as a callable tool in the capabilities API.
 fn load_mode_disclosed_tools(file_stem: &str) -> Vec<String> {
-    let Some(m) = parse_mode_yaml(file_stem) else {
-        return vec![];
-    };
-    let mut ids = m.tool_pool;
-    if let Some(fb) = m.auto_fallback.and_then(|a| a.tool_id) {
-        if !fb.is_empty() && !ids.iter().any(|x| x == &fb) {
-            ids.push(fb);
-        }
-    }
-    ids
+    parse_mode_yaml(file_stem)
+        .map(|m| m.tool_pool)
+        .unwrap_or_default()
 }
 
 /// Union of disclosed tool ids across product modes (chat/rag/search).
@@ -297,21 +295,24 @@ mod tests {
                 t.id
             );
         }
-        // search mode pool tools that exist in catalog appear
-        if allowed.contains("web_search") {
-            assert!(resp.tools.iter().any(|t| t.id == "web_search"));
-        }
-        // RAG keeps tool_pool empty for loop semantics; auto_fallback.tool_id is disclosed.
+        // A1: retrieval/web natives not in LLM disclosure (SaC only).
         assert!(
-            allowed.contains("dense_retrieval"),
-            "rag auto_fallback dense_retrieval must appear in disclosure union"
+            !allowed.contains("web_search"),
+            "web_search must not be LLM-disclosed"
         );
-        assert!(resp.tools.iter().any(|t| t.id == "dense_retrieval"));
+        assert!(
+            !allowed.contains("dense_retrieval"),
+            "dense_retrieval auto_fallback is host-internal, not disclosed"
+        );
+        assert!(!resp.tools.iter().any(|t| t.id == "web_search"));
+        assert!(!resp.tools.iter().any(|t| t.id == "dense_retrieval"));
         assert_eq!(
             resp.modes["search"].tool_pool,
             load_mode_tool_pool("search")
         );
-        // mode.tool_pool in response is the YAML tool_pool only (not auto_fallback merge)
-        // — product tools[] is the union; mode field stays faithful to ModeConfig.
+        assert!(
+            load_mode_tool_pool("search").is_empty(),
+            "search mode YAML tool_pool empty after SaC"
+        );
     }
 }

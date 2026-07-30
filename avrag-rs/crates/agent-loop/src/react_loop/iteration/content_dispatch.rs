@@ -2,7 +2,6 @@ use avrag_llm::{ChatMessage, LlmResponse};
 use common::AppError;
 
 use super::super::config::{LoopExitConfig, ModeConfig};
-use super::super::exit_policy::{has_retrieval_observation, should_block_content_early_stop};
 use super::super::skill_request::is_skill_request_message;
 use super::super::telemetry::ReActIterationRecord;
 use super::super::{ReActLoop, truncate_preview};
@@ -18,7 +17,8 @@ impl ReActLoop {
         &self,
         iteration: u8,
         mode: &ModeConfig,
-        loop_exit: &LoopExitConfig,
+        _request: &crate::runtime::AgentRequest,
+        _loop_exit: &LoopExitConfig,
         state: &mut IterationState,
         _sink: &dyn AgentEventSink,
         llm_response: &LlmResponse,
@@ -53,27 +53,9 @@ impl ReActLoop {
             });
         }
 
-        let has_evidence_now =
-            has_retrieval_observation(&state.messages, &state.tool_results, mode);
-        if should_block_content_early_stop(loop_exit, has_evidence_now) {
-            state.messages.push(ChatMessage::user(
-                super::super::exit_policy::NO_CHUNK_CONTINUE_NUDGE.to_string(),
-            ));
-            let exit_reason = "content_blocked_no_evidence".to_string();
-            return Ok(IterationOutcome {
-                control: IterationControl::Continue,
-                record: Some(ReActIterationRecord {
-                    iteration,
-                    disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                    action_type: exit_reason.clone(),
-                    observation_preview: truncate_preview(&content, 200),
-                    llm_usage: Some(llm_usage),
-                    elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                    exit_reason,
-                }),
-                sandbox_break: false,
-            });
-        }
+        // Stop / DirectAnswer is model+skill owned (including whether to answer
+        // without retrieval). Host does not block prose for missing evidence —
+        // `require_evidence` is skill prose only, not a loop hard gate.
 
         // S2: worker loops compile the candidate final output at this
         // decision point (design 2026-07-27 §4.3). Error diagnostics reject
@@ -107,6 +89,9 @@ impl ReActLoop {
                 });
             }
         }
+
+        // Stop decision: model-owned (pi-style). Worker path may still
+        // compile_feedback (structural only). No host require_evidence bar.
 
         let exit_reason = "direct_content".to_string();
         Ok(IterationOutcome {

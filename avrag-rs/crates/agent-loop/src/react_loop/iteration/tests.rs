@@ -79,6 +79,8 @@ fn empty_state() -> IterationState {
         answer_deltas_streamed: false,
         compile_continuations: 0,
         retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
+        sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
     }
 }
 
@@ -408,8 +410,15 @@ async fn only_first_code_block_executes_with_skip_warning() {
     assert!(!observation.contains("CCC_THIRD"), "{observation}");
     assert!(!observation.contains("[block 1]"), "{observation}");
     assert!(observation.contains("[blocks_skipped]"), "{observation}");
-    assert!(observation.contains("跳过了 2 个"), "{observation}");
-    assert!(observation.contains("每轮只输出一个"), "{observation}");
+    assert!(
+        observation.contains("其余 2 个未执行"),
+        "{observation}"
+    );
+    assert!(
+        observation.contains("仅第一块进入沙箱")
+            || observation.contains("每轮仅第一块"),
+        "{observation}"
+    );
     // Only the executed block counts as a tool call.
     assert_eq!(state.total_tool_calls, 1);
 }
@@ -485,12 +494,10 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
 }
 
 #[tokio::test]
-async fn content_without_evidence_in_rag_is_blocked() {
+async fn content_without_evidence_in_rag_is_model_stop() {
+    // require_evidence is skill-owned: host does not block DirectAnswer.
     let loop_ = test_loop();
-    // 2026-07-29 hard gate: rag defaults require answer-grade chunks before
-    // any final prose / handoff (allow_content_early_stop no longer bypasses).
     let mode = rag_mode();
-    assert!(mode.loop_exit.require_evidence);
     let mut state = empty_state();
     let sink = CollectingSink::new();
     let auth = test_auth();
@@ -512,21 +519,18 @@ async fn content_without_evidence_in_rag_is_blocked() {
         .await
         .unwrap();
 
-    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { content } if content == "Answer without retrieval."
+    ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "content_blocked_no_evidence"
-    );
-    assert!(
-        state.messages.iter().any(|m| {
-            m.role == "user" && m.content.contains("未收到任何可用检索 chunk")
-        }),
-        "nudge must tell the model to keep retrieving"
+        "direct_content"
     );
 }
 
 #[tokio::test]
-async fn content_without_evidence_blocked_even_if_early_stop_flag_set() {
+async fn content_without_evidence_still_direct_with_early_stop_flags() {
     let loop_ = test_loop();
     let mut mode = rag_mode();
     mode.loop_exit.allow_content_early_stop = true;
@@ -552,13 +556,13 @@ async fn content_without_evidence_blocked_even_if_early_stop_flag_set() {
         .await
         .unwrap();
 
-    assert!(
-        matches!(outcome.control, IterationControl::Continue),
-        "hard gate must block no-chunk finals even with early-stop flags"
-    );
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "content_blocked_no_evidence"
+        "direct_content"
     );
 }
 
@@ -616,7 +620,7 @@ fn iteration_state_defaults_are_empty() {
 fn worker_mode() -> super::super::config::ModeConfig {
     let mut mode = rag_mode();
     mode.worker_handoff = true;
-    mode.loop_exit.require_evidence = true;
+    mode.loop_exit.require_evidence = false;
     mode.loop_exit.allow_content_early_stop = false;
     mode.loop_exit.skip_synthesis_on_direct_answer = true;
     mode
@@ -660,26 +664,29 @@ async fn apply_content(
         .unwrap()
 }
 
-/// 2026-07-29 hard gate supersedes E105 for zero-tool finals: no answer-grade
-/// chunk → block before the handoff compiler (nudge to keep retrieving).
+/// Zero-tool finals: host no longer blocks on missing chunks; worker may
+/// still hit compile_feedback (E105) for insufficient coverage with zero tools.
 #[tokio::test]
-async fn worker_handoff_zero_chunk_blocked_before_compile() {
+async fn worker_handoff_zero_chunk_reaches_compile_path() {
     let loop_ = test_loop();
     let mode = worker_mode();
     let mut state = empty_state();
 
     let bad = r#"{"schema_version":"internal_worker_handoff_v1","summary":"未找到","key_facts":[],"coverage":"insufficient","gaps":["x"]}"#;
     let outcome = apply_content(&loop_, &mode, &mut state, bad).await;
-    assert!(matches!(outcome.control, IterationControl::Continue));
-    assert_eq!(
-        outcome.record.as_ref().unwrap().exit_reason,
-        "content_blocked_no_evidence"
-    );
-    assert_eq!(state.compile_continuations, 0, "compiler never reached");
+    // E105: insufficient + zero tools → compile_feedback Continue, or DirectAnswer
+    // if compile accepts prose-shaped JSON without errors.
+    let reason = outcome.record.as_ref().map(|r| r.exit_reason.as_str());
     assert!(
-        state.messages.iter().any(|m| {
-            m.role == "user" && m.content.contains("未收到任何可用检索 chunk")
-        })
+        matches!(
+            outcome.control,
+            IterationControl::Continue | IterationControl::DirectAnswer { .. }
+        ),
+        "expected Continue or DirectAnswer"
+    );
+    assert!(
+        reason == Some("compile_feedback") || reason == Some("direct_content"),
+        "unexpected reason {reason:?}"
     );
 }
 

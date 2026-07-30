@@ -24,12 +24,19 @@ RetrieveRound
   │    └─ injects <iteration_budget round="X" max="Y" remaining="Z" /> every round
   ├─ LLM call (retrieve phase)
   ├─ parse output
-  │    ├─ tool calls → dispatch tools → Continue (next iteration)
+  │    ├─ tool calls / codegen → dispatch → Continue (next iteration)
   │    ├─ skill request → validate → Continue
-  │    ├─ direct answer prose → DirectAnswer
-  │    └─ empty / blocked early-stop → BreakToSynthesis
+  │    ├─ candidate final prose (content):
+  │    │    ├─ worker_handoff + compile errors
+  │    │    │     → compile_feedback observation → Continue×1 free  [structural only]
+  │    │    └─ else → DirectAnswer / stop   [model + skill; no require_evidence host bar]
+  │    └─ empty → BreakToSynthesis (legacy path)
   └─ optimizer hints (duplicate chunks) → Continue
 ```
+
+**Stop ownership:** **DirectAnswer is model-owned** (including whether to answer without
+retrieval). `require_evidence` is skill prose only — host does not inject no-chunk continue
+or force degraded. See root `AGENTS.md` § Stop decision.
 
 ### Per-round iteration budget injection
 

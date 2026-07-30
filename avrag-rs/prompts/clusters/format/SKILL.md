@@ -1,43 +1,36 @@
 ---
 name: format
-description: "输出形态：HTML、幻灯片、框架大纲、教学步骤"
+description: "Output shape: HTML, slides, outline, or teaching steps — load at most one format reference"
 disclose_at: synthesis
 atomic: false
 applicable_modes: [rag, search, chat]
+version: "3.0"
 ---
 
-## 何时加载
+## 加载边界
 
-- **仅 Synthesis 阶段**披露；与 `writing` 簇对称
-- Index 列出叶子能力；Agent 自选 **0~1** 个 `reference/<slug>.md`
-- 选择来源：`format_choice` metadata 或 `format_hint`（可 override）
-- 与 mandatory answer skill 并列叠加
+- 出现在 **撰写最终答案** 阶段。
+- 同一答复最多 **1** 个 `reference/<slug>.md`。
+- slug 来自格式提示（如 `format_choice` / `format_hint`）或用户关键词。
 
-## 核心指令
+## 作用范围
 
-本簇决定**答案长成什么形态**（非怎么说）。answer agent 已提供证据与引用；你按所选格式重渲染，保留全部引用标记。
+本说明决定答案 **形态**（不是语气、也不是证据裁决）。材料中的事实与引用标记在重排后仍是同一集合：
 
-| slug | 输出 |
-|------|------|
-| `html-renderer` | 自包含 ` ```html ` 代码块 |
-| `ppt-generation` | 结构化 JSON 幻灯片 |
-| `framework-extraction` | `##`/`###` 层级框架 |
+| slug | 输出形态 |
+|------|----------|
+| `html-renderer` | 自包含 HTML 代码块 |
+| `ppt-generation` | 结构化幻灯片 JSON |
+| `framework-extraction` | 层级大纲（`##` / `###`） |
 | `teaching` | 分步教学对话 |
 
-各格式互斥：一次只选一种。
+引用标记随内容保留；缺口在材料中已是未覆盖的，换格式后仍是未覆盖。
 
-## Reference 路由表
+## 可选参考
 
-| 文件 | 触发关键词 |
-|------|------------|
+| 文件 | 触发词例 |
+|------|----------|
 | `reference/html-renderer.md` | html、图表、dashboard、可视化 |
-| `reference/ppt-generation.md` | slides、PPT、deck、演示 |
-| `reference/framework-extraction.md` | framework、outline、分解、结构化概览 |
-| `reference/teaching.md` | teach、tutorial、step by step、walkthrough |
-
-## 禁止
-
-- 禁止同时加载多个 format reference
-- 禁止剥离引用标记
-- 禁止编造证据或引用
-- 证据不足时如实说明缺口；不要输出内部 fallback 标记（运行时会把它们当作 contract 失败处理）
+| `reference/ppt-generation.md` | slides、PPT、演示 |
+| `reference/framework-extraction.md` | framework、大纲、结构化概览 |
+| `reference/teaching.md` | teach、tutorial、step by step |

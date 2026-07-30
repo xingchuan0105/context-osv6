@@ -277,13 +277,19 @@ pub fn bridge_method_progress(
     method: &str,
 ) -> Option<(ProgressKind, &'static str)> {
     match method {
-        "dense_search" => Some((ProgressKind::RetrieveSemantic, "语义检索")),
-        "lexical_search" => Some((ProgressKind::RetrieveKeyword, "关键词检索")),
-        "graph_search" => Some((ProgressKind::RetrieveGraph, "关系检索")),
+        "dense" | "dense_search" => Some((ProgressKind::RetrieveSemantic, "语义检索")),
+        "lexical" | "lexical_search" => Some((ProgressKind::RetrieveKeyword, "关键词检索")),
+        "grep" => Some((ProgressKind::RetrieveDoc, "行级检索")),
+        "web" => Some((ProgressKind::SearchWeb, "网页搜索")),
+        "fetch" => Some((ProgressKind::FetchUrl, "读取网页")),
         "doc_summary" => Some((ProgressKind::RetrieveDoc, "阅读文档摘要")),
         "doc_profile" => Some((ProgressKind::RetrieveDoc, "查看文档结构")),
-        "doc_scan" | "doc_chunks" => Some((ProgressKind::RetrieveDoc, "代码侧扫读文档")),
-        "chunk_fetch" => Some((ProgressKind::RetrieveDoc, "展开原文片段")),
+        "history" | "user_profile" => Some((ProgressKind::Memory, "回忆相关上下文")),
+        // Removed SaC methods — keep labels only if old telemetry still streams.
+        "graph_search" => Some((ProgressKind::RetrieveGraph, "关系检索")),
+        "doc_scan" | "doc_chunks" | "chunk_fetch" | "read_lines" => {
+            Some((ProgressKind::RetrieveDoc, "文档读取"))
+        }
         _ => None,
     }
 }

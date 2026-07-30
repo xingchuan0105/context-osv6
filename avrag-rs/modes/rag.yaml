@@ -26,7 +26,8 @@ budget:
     free: 16000
     pro: 28000
     enterprise: 40000
-  no_chunk_grace_tokens: 10000
+  # no_chunk continue boost: default +50% of baseline max_tokens (omit absolute override)
+  # no_chunk_grace_tokens: <absolute>  # optional ops override only
 auto_fallback:
   enabled: true
   tool_id: dense_retrieval
@@ -34,9 +35,8 @@ auto_fallback:
 # Unified with chat/search so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:
-  require_evidence: true
-  # 2026-07-29 hard gate: no answer-grade chunk → refuse answer phase (nudged
-  # continue; +2 grace at budget; still empty → retrieval-failed final).
+  # Skill-owned grounding intent only — host does not hard-block DirectAnswer.
+  require_evidence: false
   allow_content_early_stop: false
   skip_synthesis_on_direct_answer: true
 synthesis_output:

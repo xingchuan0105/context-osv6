@@ -3,7 +3,7 @@
 ## Precedence
 
 1. User's explicit request for this turn
-2. This repo's hard rules (Product T1–T8, workspace/org, `.env` reuse, solo trunk, graphify update after structural edits, deploy scripts only, service assumptions)
+2. This repo's hard rules (Product T1–T8, **prompts-in-md**, **third-person observation not orders**, no golden-set leakage, workspace/org, `.env` reuse, solo trunk, graphify update after structural edits, deploy scripts only, service assumptions)
 3. Generic style preferences
 
 ## Behavior (project deltas only)
@@ -11,6 +11,55 @@
 - State assumptions explicitly; **stop and ask** when a request is ambiguous. Push back with a simpler option when warranted.
 - Surgical edits: every changed line traces to the user's request. Match local style. Remove only unused symbols **you** introduced — **do not delete pre-existing dead code unless asked**.
 - Multi-step work: brief plan with verify gates; do not advance past a failing gate.
+
+## Prompts — non-negotiable (`avrag-rs`)
+
+### Location
+
+**Forbid hardcoding LLM-facing prompt prose in Rust (or other product code).** Author and edit it only under `avrag-rs/prompts/**/*.md`; runtime may `include_str!` / load / substitute placeholders and assemble — never invent Chinese/English instruction bodies in source.
+
+| Do | Don't |
+|----|--------|
+| Skills / capability / orchestrator / synthesis copy in `prompts/clusters/`, `prompts/orchestrators/`, … | Multi-line instruction strings inline in `agent-loop` / app crates |
+| Loop **observations** (no-chunk, budget C5, sandbox_error, format_hint, …) in `prompts/loop/*.md` via `react_loop/prompt_assets.rs` | New observation/repair/fallback sentence left inline next to control flow |
+| Placeholders only in code (`{n_blocks}`, `{tool}`, …) | Paste realistic-corpus / golden-set queries, gold answers, entity names, or eval numbers into prompts, loop code, or unit-test fixtures that claim to be product policy |
+| SDK/tool **observation data** (stdout, retrieval JSON) as runtime feedback | Treat tool stdout as a place to author system instructions |
+
+**Exceptions (not “prompt authoring”):** pure control tokens (`exit_reason` ids), regex/match keyword lists used as detectors (not injected as instructions), short UI progress labels, machine-stable error codes. If text is **shown to the model as instruction or user-turn guidance**, it belongs in `prompts/`.
+
+Layout map: `avrag-rs/prompts/README.md`. Loop assets: `avrag-rs/prompts/loop/README.md`.
+
+### Voice: third-person observation, not orders (LLM autonomy)
+
+**All LLM-facing prompts** (capability/skills, answer-phase check/observation, loop nudges, synthesis repair, format hints, …) are written as **third-person narrative of what happened or what is true in the environment** — not as a to-do list for the model.
+
+| Prefer（发生了什么 / 环境是什么） | Avoid（命令 / 禁令 / 步骤） |
+|----|----|
+| 「本轮检索观察中仍未出现 answer-grade 命中。」 | 「禁止终答。请继续用 client 检索。」 |
+| 「草稿里问题侧 A 有 observation 支撑；侧 B 仍未见命中。」 | 「请再写一个 code 块补检 B。」 |
+| 「管道表中一行是一条记录；`total_hits` 是命中行数。」 | 「应/必须/不要/禁止 dedupe。」 |
+| 「沙箱本轮 stdout/stderr 为空，且未发生 client.* 调用。」 | 「请检查代码路径并修复。」 |
+| Few-shot：情境 → observation → 读出的事实 | 「正确做法是：先…再…」 |
+
+**Goal:** maximize model agency. The runtime **reports state** (budget, empty evidence, mechanism facts); the model **decides** the next action. Do not smuggle a second policy layer of “you must / must not” into prose when a hard gate already exists in code.
+
+**Scope:** skill bodies, capability manuals, `prompts/loop/*` observations, any other string assembled into the model context as guidance. **Out of scope for this voice rule:** short end-user product copy that is the final answer shown to a human (degraded empty-result lines), pure machine tags, detector keyword lists.
+
+### Stop decision (who may end the retrieve loop)
+
+Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **whether to stop is model + skill**. Host does **not** run semantic “coverage / completeness” heuristics to refuse `DirectAnswer`.
+
+| Term (prefer) | Meaning | Owner |
+|---------------|---------|--------|
+| **Continue** | Next retrieve turn (codegen/tools/skill_request) | Model chose tools/code, or host structural gate |
+| **DirectAnswer** / **stop** | Final prose; loop ends (no further tool turn) | **Model + skill** (with evidence present) |
+| **observation** | Host-injected user message stating runtime facts (`prompts/loop/*`) | Host reports; model acts |
+| **compile_feedback** | Free correction turn after **structural** handoff compile fail (worker path only) | Host structural only |
+| **require_evidence** | Product/skill **intent** that grounded facts come from observation — **not** a host hard gate | **Skill + model** only |
+| **compile_feedback** | Free structural correction (worker handoff) | Host structural only |
+| **token / round budget** | Primary stop when cost ceiling hit | Host cost policy |
+
+**Do not:** host-side claim checklists, multi-entity scanners, soft-refusal keyword bars, or **no-chunk refuse DirectAnswer** for `require_evidence`. Grounding and multi-claim coverage live in **skill/capability prose** (third-person), not `exit_policy` enforcement.
 
 ## Product hard rules (`avrag-rs`) — non-negotiable (formerly §8)
 
@@ -56,6 +105,7 @@
 ## More (links only)
 
 - `docs/agent/product-apps.md` — full T1–T8 / workspace / org text
+- `avrag-rs/prompts/README.md` · `avrag-rs/prompts/loop/README.md` — prompt CDS + loop nudge load path
 - `docs/agent/graphify.md` — graphify query & update rules
 - `docs/agent/wsl-services.md` — services, ports, VPS
 - `docs/agent/rust-resources.md` — target/cache policy

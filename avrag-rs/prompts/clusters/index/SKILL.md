@@ -23,7 +23,7 @@ atomic: true
 
 - All ingestion tools require `workspace_id` matching the workspace API key scope.
 - Use `workspace.list_sources` to inspect indexed sources before querying.
-- After ingestion completes, use `workspace.rag_query` with `agent_type=rag` (codegen/SDK), not search tools.
+- After ingestion completes, query with workspace RAG (`agent_type=rag`), not pure web-search tools.
 
 ## Forbidden
 

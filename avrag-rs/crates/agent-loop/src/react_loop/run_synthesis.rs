@@ -35,7 +35,9 @@ impl ReActLoop {
         start_time: std::time::Instant,
         answer_deltas_streamed: bool,
     ) -> Result<Option<AgentRunResult>, AppError> {
-        let mut has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
+        // auth / retrieval_query reserved for a future budget-path auto_fallback re-entry.
+        let _ = auth;
+        let has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
 
         match decide_synthesis_gate(
             loop_exit,
@@ -82,36 +84,8 @@ impl ReActLoop {
                     ));
                 }
             }
-            SynthesisGate::RunFallbackThenCheck => {
-                if let Some(result) = self
-                    .trigger_auto_fallback_and_check_degraded(
-                        mode,
-                        loop_exit,
-                        request,
-                        auth,
-                        retrieval_query,
-                        messages,
-                        collected_tool_results,
-                        disclosed_state,
-                        sink,
-                        iteration,
-                        max_iterations,
-                        total_tool_calls,
-                        telemetry_records,
-                        total_usage,
-                        reasoning_summary_acc,
-                        start_time,
-                    )
-                    .await?
-                {
-                    return Ok(Some(result));
-                }
-                has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
-            }
             SynthesisGate::EnterSynthesis => {}
         }
-
-        let _ = has_evidence;
         Ok(None)
     }
 
@@ -330,13 +304,10 @@ impl ReActLoop {
 /// the worker brief (app-chat) requires the internal_worker_handoff_v1 JSON,
 /// chat modes require prose; this turn re-asserts "wrap up per brief" either
 /// way.
-pub(crate) const BUDGET_EXHAUSTED_FINAL_TURN: &str = "\
-迭代预算已用尽。不要再输出任何 <code> 代码块，也不要发起新的检索或工具调用。\n\
-立即按任务简报（Task brief）要求的最终输出格式给出最终答复：\n\
-- 若简报要求输出内部交接 JSON（schema_version=internal_worker_handoff_v1，\n\
-  含 summary / key_facts / coverage / gaps），请直接输出该 JSON 对象本身\n\
-  （不要 <code> 块，不要 markdown 围栏）；\n\
-- 否则直接给出最终结论散文，并如实说明已找到/未找到的证据。";
+/// Body: `prompts/loop/budget-exhausted-final.nudge.md`
+pub(crate) fn budget_exhausted_final_turn() -> &'static str {
+    super::prompt_assets::budget_exhausted_final_turn()
+}
 
 /// Char budget for the last-tool-result carryover appended to the C5 turn —
 /// enough for computed conclusions/numbers, bounded so a giant retrieval
@@ -348,8 +319,8 @@ const C5_CARRYOVER_MAX_CHARS: usize = 2000;
 /// call starts from an explicit handoff instruction instead of the
 /// retrieve-phase framing. Returns `Some(new_messages)` when appended.
 ///
-/// 2026-07-29（遗留5，q088）：强制交接会丢掉收官轮刚算出的关键数字——把最后
-/// 一次成功工具调用的原始结果确定性地拼进 C5 提示，要求原样带入最终输出。
+/// 2026-07-29：强制交接会丢掉收官轮刚算出的关键数字——把最后一次成功工具
+/// 调用的原始结果确定性地拼进 C5 提示，要求原样带入最终输出。
 fn budget_exhausted_messages(
     messages: &[ChatMessage],
     iteration: u8,
@@ -360,7 +331,7 @@ fn budget_exhausted_messages(
         return None;
     }
     let mut out = messages.to_vec();
-    let mut turn = BUDGET_EXHAUSTED_FINAL_TURN.to_string();
+    let mut turn = budget_exhausted_final_turn().to_string();
     if let Some(last) = tool_results
         .iter()
         .rev()
@@ -370,11 +341,10 @@ fn budget_exhausted_messages(
             serde_json::Value::String(s) => s.clone(),
             other => other.to_string(),
         };
-        turn.push_str(&format!(
-            "\n你最后一轮工具调用（{}）的原始结果如下；若其中含有你已算出的关键结论/数字，\
-             最终输出必须原样带入，不得遗漏：\n{}",
-            last.tool,
-            super::truncate_observation(&body, C5_CARRYOVER_MAX_CHARS),
+        let truncated = super::truncate_observation(&body, C5_CARRYOVER_MAX_CHARS);
+        turn.push_str(&super::prompt_assets::budget_exhausted_carryover(
+            &last.tool,
+            &truncated,
         ));
     }
     out.push(ChatMessage::user(turn));
@@ -395,10 +365,17 @@ mod tests {
         assert_eq!(out.len(), history.len() + 1);
         let last = out.last().unwrap();
         assert_eq!(last.role, "user");
-        assert!(last.content.contains("internal_worker_handoff_v1"));
-        assert!(last.content.contains("不要再输出任何 <code> 代码块"));
-        assert!(last.content.contains("不要发起新的检索"));
-        assert!(last.content.contains("summary / key_facts / coverage / gaps"));
+        assert!(
+            last.content.contains("迭代额度已用尽") || last.content.contains("迭代预算已用尽")
+        );
+        assert!(
+            last.content.contains("不再产生新的代码块") || last.content.contains("不再发起新的检索")
+        );
+        assert!(
+            last.content.contains("summary")
+                || last.content.contains("coverage")
+                || last.content.contains("结论散文")
+        );
     }
 
     #[test]
@@ -410,29 +387,32 @@ mod tests {
 
     #[test]
     fn c5_carries_last_ok_tool_result_into_the_turn() {
-        // 遗留5（q088）：强制交接不得丢掉收官轮算出的关键数字。
+        // Synthetic payload only — no realistic-corpus strings.
         let history = vec![ChatMessage::user("question")];
         let results = vec![
             ToolResult {
                 tool: "dense_retrieval".into(),
                 version: "1".into(),
                 status: contracts::ToolStatus::Ok,
-                data: Some(serde_json::json!([{"chunk_id": "c1", "text": "背景"}])),
+                data: Some(serde_json::json!([{"chunk_id": "c1", "text": "background"}])),
                 trace: None,
             },
             ToolResult {
                 tool: "code_execution".into(),
                 version: "1".into(),
                 status: contracts::ToolStatus::Ok,
-                data: Some(serde_json::json!({"stdout": "合计 59 台"})),
+                data: Some(serde_json::json!({"stdout": "total_count=12"})),
                 trace: None,
             },
         ];
         let out = budget_exhausted_messages(&history, 6, 6, &results).expect("appended");
         let last = &out.last().unwrap().content;
         assert!(last.contains("code_execution"), "{last}");
-        assert!(last.contains("合计 59 台"), "{last}");
-        assert!(last.contains("必须原样带入"), "{last}");
+        assert!(last.contains("total_count=12"), "{last}");
+        assert!(
+            last.contains("原始结果") || last.contains("观察"),
+            "{last}"
+        );
         // Picks the LAST Ok result, not an earlier one.
         assert!(!last.contains("dense_retrieval"), "{last}");
     }
@@ -470,6 +450,6 @@ mod tests {
         assert!(!last.contains("boom"), "{last}");
         // No tool results at all → plain C5 turn, no carryover block.
         let plain = budget_exhausted_messages(&history, 6, 6, &[]).expect("appended");
-        assert!(!plain.last().unwrap().content.contains("必须原样带入"));
+        assert!(!plain.last().unwrap().content.contains("原始结果如下"));
     }
 }

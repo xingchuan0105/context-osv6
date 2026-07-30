@@ -95,9 +95,8 @@ impl SynthesisPhase {
             }
 
             // Thin repair: only ask for a parseable envelope; do not nitpick cite hygiene.
-            let repair_user = "Return ONLY the synthesis JSON object from the system contract. \
-No markdown fences. Put all user-visible markdown in answer_text."
-                .to_string();
+            // Body: prompts/loop/synthesis-repair.nudge.md
+            let repair_user = super::prompt_assets::synthesis_repair_nudge();
             let _ = (tool_results, messages);
             let last_candidate = candidates.last().expect("candidates non-empty");
             let mut repair_messages = vec![
@@ -105,7 +104,7 @@ No markdown fences. Put all user-visible markdown in answer_text."
                 ChatMessage::assistant(last_candidate),
             ];
             append_tool_results_observation(&mut repair_messages, tool_results);
-            repair_messages.push(ChatMessage::user(&repair_user));
+            repair_messages.push(ChatMessage::user(repair_user));
             let repaired = llm
                 .complete_json_mode(&repair_messages, Some(temperature))
                 .await
@@ -420,7 +419,8 @@ mod tests {
 
     #[test]
     fn lifts_refusal_sentence_from_reasoning() {
-        let reasoning = "我们进行了几轮检索，没有任何一个chunk提及Y冷冻设备公司速冻机产品的保修期限。\
+        // Synthetic prose only — no realistic-corpus entities.
+        let reasoning = "我们进行了几轮检索，没有任何一个chunk提及目标实体的该项属性。\
                          由于没有找到足够证据，我应该如实说明。";
         let lifted = extract_refusal_sentence(Some(reasoning)).unwrap();
         assert!(lifted.contains("没有找到足够证据") || lifted.contains("提及"));
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn returns_none_when_no_refusal_cue() {
-        let reasoning = "文档指出公司于2019年在大连建厂，营收550万元。这是答案。";
+        let reasoning = "文档指出组件于2020年发布，版本号为3。这是答案。";
         assert!(extract_refusal_sentence(Some(reasoning)).is_none());
     }
 

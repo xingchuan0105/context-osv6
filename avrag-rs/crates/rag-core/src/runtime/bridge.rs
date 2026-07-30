@@ -7,7 +7,7 @@ use contracts::auth_runtime::AuthContext;
 use avrag_code_interpreter::HostBridge;
 use contracts::{
     DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
-    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
+    LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
 };
 use serde_json::{Value, json};
 use tracing::info;
@@ -76,31 +76,39 @@ impl RuntimeBridge {
 
     fn extract_query(method: &str, args: &Value) -> Option<String> {
         match method {
-            "dense_search" | "lexical_search" | "graph_search" => args
+            "dense" | "dense_search" | "lexical" | "lexical_search" | "web" => args
                 .get("query")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned),
-            "chunk_fetch" => args
-                .get("chunk_id")
+            "fetch" => args
+                .get("url")
                 .and_then(|v| v.as_str())
-                .map(|id| format!("片段 {id}")),
+                .map(str::to_owned),
             _ => None,
         }
     }
 
-    /// RPC methods supported by `method_to_tool_call` (must match Python shim `client`).
+    /// Canonical SaC retrieval methods implemented by this host (parity with shim
+    /// minus web/memory ports, which the composite host in agent-loop fills).
+    ///
+    /// Full product surface: `avrag_code_interpreter::bridge_shim_client_method_names`.
     pub fn supported_method_names() -> &'static [&'static str] {
         &[
-            "dense_search",
-            "lexical_search",
-            "graph_search",
-            "chunk_fetch",
+            "dense",
+            "lexical",
+            "grep",
             "doc_summary",
             "doc_profile",
-            // 2026-07-29: grep/read_lines replace doc_scan (spec §4).
-            "grep",
-            "read_lines",
         ]
+    }
+
+    /// Normalize legacy alias method names to the SaC canonical name.
+    fn canonicalize_method(method: &str) -> &str {
+        match method {
+            "dense_search" => "dense",
+            "lexical_search" => "lexical",
+            other => other,
+        }
     }
 
     fn bridge_error(code: &str, message: impl Into<String>) -> Value {
@@ -119,69 +127,33 @@ impl RuntimeBridge {
         intersect_doc_scope(caller, &self.doc_scope)
     }
 
-    /// C10: multi-doc-scope chunk_fetch — probe each scoped doc with its own
-    /// `index_lookup` and return the first non-empty result, or the last probe
-    /// when no scoped doc contains the chunk (honest empty). Mirrors
-    /// `resolve_doc_ids`'s full-scope intent within index_lookup's single-doc
-    /// contract.
-    async fn dispatch_chunk_fetch_full_scope(&self, args: &Value) -> ToolResult {
-        let chunk_id = args
-            .get("chunk_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default();
-        let mut last = None;
-        for doc_id in &self.doc_scope {
-            let probe = ToolCall {
-                tool: "index_lookup".to_string(),
-                version: "1.0".to_string(),
-                args: serde_json::to_value(IndexLookupArgs {
-                    doc_id: doc_id.clone(),
-                    chunk_ids: vec![chunk_id.to_string()],
-                })
-                .unwrap_or_default(),
-            };
-            let result = tools::dispatch(&self.runtime, &self.auth, &probe).await;
-            let non_empty = result
-                .data
-                .as_ref()
-                .and_then(|d| d.as_array())
-                .is_some_and(|a| !a.is_empty());
-            if non_empty {
-                return result;
-            }
-            last = Some(result);
-        }
-        // The multi-doc branch guarantees a non-empty scope, so at least one
-        // probe ran.
-        last.expect("multi-doc scope yields at least one probe")
-    }
-
     fn method_to_tool_call(&self, method: &str, args: &Value) -> Result<ToolCall, Value> {
+        // Host-fixed top_k (A4): SDK never exposes top_k; contracts default is 10.
+        const HOST_TOP_K: usize = 10;
+        let method = Self::canonicalize_method(method);
         match method {
-            "dense_search" => {
+            "dense" => {
                 let query = args
                     .get("query")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| Self::bridge_error("invalid_args", "query is required"))?;
-                let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
                 Ok(ToolCall {
                     tool: "dense_retrieval".to_string(),
                     version: "1.0".to_string(),
                     args: serde_json::to_value(DenseRetrievalArgs {
                         queries: vec![query.to_string()],
                         modality: DenseRetrievalModality::Both,
-                        top_k,
+                        top_k: HOST_TOP_K,
                         doc_scope: self.doc_scope.clone(),
                     })
                     .unwrap_or_default(),
                 })
             }
-            "lexical_search" => {
+            "lexical" => {
                 let query = args
                     .get("query")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| Self::bridge_error("invalid_args", "query is required"))?;
-                let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
                 let terms: Vec<String> = query.split_whitespace().map(ToOwned::to_owned).collect();
                 let terms = if terms.is_empty() {
                     vec![query.to_string()]
@@ -193,29 +165,7 @@ impl RuntimeBridge {
                     version: "1.0".to_string(),
                     args: serde_json::to_value(LexicalRetrievalArgs {
                         terms,
-                        top_k,
-                        doc_scope: self.doc_scope.clone(),
-                    })
-                    .unwrap_or_default(),
-                })
-            }
-            "graph_search" => {
-                let query = args
-                    .get("query")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| Self::bridge_error("invalid_args", "query is required"))?;
-                let depth = args.get("depth").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
-                Ok(ToolCall {
-                    tool: "graph_retrieval".to_string(),
-                    version: "1.0".to_string(),
-                    args: serde_json::to_value(GraphRetrievalArgs {
-                        graph_hints: Vec::new(),
-                        placeholder_triplets: Vec::new(),
-                        relation_limit: 20,
-                        supporting_chunk_limit: 10,
-                        hop_limit: depth,
-                        fan_out_limit: 10,
-                        query: Some(query.to_string()),
+                        top_k: HOST_TOP_K,
                         doc_scope: self.doc_scope.clone(),
                     })
                     .unwrap_or_default(),
@@ -248,35 +198,6 @@ impl RuntimeBridge {
                     version: "1.0".to_string(),
                     args: serde_json::to_value(DocSummaryArgs { doc_ids, level })
                         .unwrap_or_default(),
-                })
-            }
-            "chunk_fetch" => {
-                let chunk_id = args
-                    .get("chunk_id")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| Self::bridge_error("invalid_args", "chunk_id is required"))?;
-                if self.doc_scope.is_empty() {
-                    // Without a session doc_scope we cannot determine which doc the
-                    // chunk belongs to; refusing is safer than silently passing an empty
-                    // doc_id (which `index_lookup` would treat as a wildcard lookup).
-                    return Err(Self::bridge_error(
-                        "invalid_scope",
-                        "chunk_fetch requires a non-empty doc_scope",
-                    ));
-                }
-                // Single-doc limitation remains inside method_to_tool_call
-                // (index_lookup takes one doc_id), but multi-doc scopes are
-                // fanned out per scoped doc in `call` (C10) — see
-                // dispatch_chunk_fetch_full_scope below.
-                let doc_id = self.doc_scope.first().cloned().unwrap_or_default();
-                Ok(ToolCall {
-                    tool: "index_lookup".to_string(),
-                    version: "1.0".to_string(),
-                    args: serde_json::to_value(IndexLookupArgs {
-                        doc_id,
-                        chunk_ids: vec![chunk_id.to_string()],
-                    })
-                    .unwrap_or_default(),
                 })
             }
             "doc_profile" => {
@@ -314,11 +235,8 @@ impl RuntimeBridge {
                         .unwrap_or_default(),
                 })
             }
-            // doc_scan: sandbox-side material for code scan/count/filter (not chat dump).
-            // doc_chunks: legacy RPC alias — same host tool.
-            // 2026-07-29: grep 化检索替代 doc_scan（spec §4）——行级命中+
-            // 精确计数+完备性声明；read_lines 提供区间原文。doc_ids 一律与
-            // session scope 求交（resolve_doc_ids）。
+            // grep: line-level locate + exact total_hits (A4: sole line primitive).
+            // doc_ids intersect session scope (resolve_doc_ids).
             "grep" => {
                 let caller_doc_ids = args
                     .get("doc_ids")
@@ -361,29 +279,14 @@ impl RuntimeBridge {
                     .unwrap_or_default(),
                 })
             }
-            "read_lines" => {
-                let doc_id = args
-                    .get("doc_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                // read_lines 必须读调用者指定的那一篇——scope 回退语义
-                // （resolve_doc_ids 的"交集为空回退全 scope"）在这里是错的。
-                if !self.doc_scope.is_empty() && !self.doc_scope.contains(&doc_id) {
-                    return Err(Self::bridge_error(
-                        "out_of_scope",
-                        "doc_id is outside the session doc_scope",
-                    ));
-                }
-                let start = args.get("start").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
-                let end = args.get("end").and_then(|v| v.as_u64()).unwrap_or(start as u64) as u32;
-                Ok(ToolCall {
-                    tool: "doc_read_lines".to_string(),
-                    version: "1.0".to_string(),
-                    args: serde_json::to_value(contracts::DocReadLinesArgs { doc_id, start, end })
-                        .unwrap_or_default(),
-                })
-            }
+            // Non-retrieval SaC ports are owned by the composite host (agent-loop).
+            "web" | "fetch" | "history" | "user_profile" => Err(Self::bridge_error(
+                "not_configured",
+                format!(
+                    "{method} is a SaC SDK method but this RuntimeBridge has no web/memory port; \
+                     use the product SacHostBridge"
+                ),
+            )),
             other => Err(Self::bridge_error(
                 "unknown_method",
                 format!("unsupported bridge method: {other}"),
@@ -413,10 +316,9 @@ impl RuntimeBridge {
                 let inner = data.get("chunks").unwrap_or(data);
                 json!({ "chunks": chunks_with_content_field(inner) })
             }
-            // grep/read_lines: 完整载荷（total_hits/行号/完备性声明）原样给沙箱
-            // ——命中计数就是它的核心语义，不能削成行列表。
-            "doc_grep" | "doc_read_lines" => data.clone(),
-            // lexical may already be `{ chunks, graph_context }` (native path alignment).
+            // grep: full payload (total_hits / line hits) — do not strip to list.
+            "doc_grep" => data.clone(),
+            // lexical may already be `{ chunks, graph_context }` (A5: graph bound to lexical).
             "lexical_retrieval" => {
                 if let Some(obj) = data.as_object() {
                     if obj.contains_key("chunks") {
@@ -435,8 +337,10 @@ impl RuntimeBridge {
                 }
                 json!({ "chunks": chunks_with_content_field(data) })
             }
-            "graph_retrieval" => json!({ "chunks": data }),
             "doc_summary" | "doc_profile" => json!({ "chunks": data }),
+            "web_search" | "web_fetch" | "conversation_history_load" | "user_profile_load" => {
+                data.clone()
+            }
             _ => json!({ "chunks": data }),
         }
     }
@@ -495,25 +399,15 @@ fn chunks_with_content_field(data: &Value) -> Value {
 impl HostBridge for RuntimeBridge {
     async fn call(&self, method: &str, args: Value) -> Value {
         let started = std::time::Instant::now();
+        let canonical = Self::canonicalize_method(method);
         let tool_call = match self.method_to_tool_call(method, &args) {
             Ok(call) => call,
             Err(err) => return err,
         };
 
-        // C10: chunk_fetch must resolve across the FULL session doc_scope.
-        // index_lookup is single-doc by contract, so a multi-doc scope fans
-        // out one lookup per scoped doc and takes the first non-empty result
-        // (a chunk belongs to exactly one doc; a wrong-doc lookup returns an
-        // empty array, not an error). Single-doc scope keeps the direct
-        // dispatch below.
-        let result = if method == "chunk_fetch" && self.doc_scope.len() > 1 {
-            self.dispatch_chunk_fetch_full_scope(&args).await
-        } else {
-            // Lexical force-augment runs inside lexical_retrieval (single
-            // place for bridge + native). dense_search never gets
-            // graph_context. Bridge only surfaces + telemetry-splits.
-            tools::dispatch(&self.runtime, &self.auth, &tool_call).await
-        };
+        // Lexical force-augment runs inside lexical_retrieval (A5). dense never
+        // gets graph_context. Bridge only surfaces + telemetry-splits.
+        let result = tools::dispatch(&self.runtime, &self.auth, &tool_call).await;
 
         self.captured_results
             .lock()
@@ -523,27 +417,15 @@ impl HostBridge for RuntimeBridge {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(CapturedBridgeCall {
-                method: method.to_string(),
+                method: canonical.to_string(),
                 query: Self::extract_query(method, &args),
                 result: result.clone(),
             });
         let mut data = Self::tool_result_to_bridge_data(&result);
 
-        // K2: inject the retrieval-log alias (`#1 #2 …`) into every chunk the
-        // sandbox sees. Per-worker namespace (counter shared across blocks of
-        // the run); replayed positionally by app-chat hydration, so the
-        // captured native results need no alias field themselves.
-        const ALIASED_METHODS: &[&str] = &[
-            "dense_search",
-            "lexical_search",
-            "graph_search",
-            "chunk_fetch",
-            // grep/read_lines 的 chunks 数组（命中行所属 chunk）参与别名空间——
-            // SELECTED 水合经 alias_chunks_in_order 重放（hits 行不别名）。
-            "grep",
-            "read_lines",
-        ];
-        if ALIASED_METHODS.contains(&method)
+        // K2: inject retrieval-log alias (`#1 #2 …`) into chunk lists the sandbox sees.
+        const ALIASED_METHODS: &[&str] = &["dense", "lexical", "grep"];
+        if ALIASED_METHODS.contains(&canonical)
             && let Some(items) = data.get_mut("chunks").and_then(|v| v.as_array_mut())
         {
             for item in items {
@@ -557,8 +439,8 @@ impl HostBridge for RuntimeBridge {
             }
         }
 
-        // Telemetry for eval: non-empty graph_context → side-car with degrade_reason=graph_augment.
-        let graph_context_count = if method == "lexical_search" {
+        // Telemetry: non-empty graph_context → side-car degrade_reason=graph_augment.
+        let graph_context_count = if canonical == "lexical" {
             let gc = data
                 .get("graph_context")
                 .and_then(|v| v.as_array())
@@ -574,8 +456,7 @@ impl HostBridge for RuntimeBridge {
             }
             gc.len()
         } else {
-            // Ensure dense never leaks a graph_context key.
-            if method == "dense_search" {
+            if canonical == "dense" {
                 if let Some(obj) = data.as_object_mut() {
                     obj.remove("graph_context");
                 }
@@ -589,7 +470,7 @@ impl HostBridge for RuntimeBridge {
             .unwrap_or(0);
 
         info!(
-            bridge_method = method,
+            bridge_method = canonical,
             bridge_tool = %tool_call.tool,
             bridge_elapsed_ms = started.elapsed().as_millis() as u64,
             bridge_chunk_count = chunk_count,
@@ -774,34 +655,36 @@ mod tests {
     }
 
     #[test]
-    fn bridge_host_methods_match_python_shim() {
+    fn bridge_retrieval_methods_are_subset_of_shim() {
         let host = RuntimeBridge::supported_method_names();
         let shim = avrag_code_interpreter::bridge_shim_client_method_names();
-        // Every shim-advertised method must be host-supported, and the two
-        // lists must match exactly (2026-07-29: grep/read_lines replace
-        // doc_scan + legacy doc_chunks on both sides).
-        for m in shim {
+        for m in host {
             assert!(
-                host.contains(m),
-                "shim method {m} missing from host bridge: {host:?}"
+                shim.contains(m),
+                "host retrieval method {m} missing from shim: {shim:?}"
             );
         }
-        assert_eq!(host, shim, "host and shim method lists must match");
-        assert!(!host.contains(&"doc_scan"));
-        assert!(!host.contains(&"doc_chunks"));
+        // A4/A5: removed from SaC surface.
+        for banned in ["graph_search", "chunk_fetch", "read_lines", "doc_scan"] {
+            assert!(!host.contains(&banned));
+            assert!(!shim.contains(&banned));
+        }
+        // Web/memory/fs live on the composite SacHostBridge (agent-loop).
+        for extra in ["web", "fetch", "history", "user_profile", "save", "load"] {
+            assert!(shim.contains(&extra), "shim must list {extra}");
+            assert!(
+                !host.contains(&extra),
+                "RuntimeBridge must not claim {extra} (no web/memory/fs port)"
+            );
+        }
     }
 
     #[tokio::test]
-    async fn runtime_bridge_dense_search_returns_chunks_with_content() {
+    async fn runtime_bridge_dense_returns_chunks_with_content() {
         let runtime = make_runtime();
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge
-            .call(
-                "dense_search",
-                json!({"query": "antifragility", "top_k": 5}),
-            )
-            .await;
+        let data = bridge.call("dense", json!({"query": "antifragility"})).await;
         let chunks = data["chunks"].as_array().expect("chunks array");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0]["content"], "bridge hit");
@@ -809,6 +692,28 @@ mod tests {
             chunks[0]["chunk_id"],
             "00000000-0000-0000-0000-000000000001"
         );
+    }
+
+    #[tokio::test]
+    async fn dense_search_alias_still_works() {
+        let runtime = make_runtime();
+        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
+        let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
+        let data = bridge
+            .call("dense_search", json!({"query": "x", "top_k": 99}))
+            .await;
+        assert_eq!(data["chunks"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dense_ignores_caller_top_k() {
+        let runtime = make_runtime();
+        let bridge = RuntimeBridge::new(runtime, make_auth(), vec![]);
+        let call = bridge
+            .method_to_tool_call("dense", &json!({"query": "x", "top_k": 99}))
+            .expect("tool call");
+        let args: DenseRetrievalArgs = serde_json::from_value(call.args).unwrap();
+        assert_eq!(args.top_k, 10, "host fixes top_k; SDK must not control it");
     }
 
     #[tokio::test]
@@ -828,190 +733,15 @@ mod tests {
     }
 
     #[test]
-    fn chunk_fetch_tool_call_errors_on_empty_doc_scope() {
-        // Previously chunk_fetch silently passed an empty doc_id to index_lookup
-        // (effectively a wildcard). It must now refuse when the session scope is empty.
+    fn removed_methods_are_unknown() {
         let runtime = make_runtime();
         let bridge = RuntimeBridge::new(runtime, make_auth(), vec![]);
-        let result = bridge.method_to_tool_call(
-            "chunk_fetch",
-            &json!({"chunk_id": "00000000-0000-0000-0000-000000000001"}),
-        );
-        let err = result.expect_err("expected scope error");
-        assert_eq!(err["error"]["code"], "invalid_scope");
-    }
-
-    /// Minimal ContentStore stub for chunk_fetch tests: serves exactly one
-    /// chunk (`chunk_id`) living in `doc_id`.
-    struct StubContentStore {
-        chunk_id: uuid::Uuid,
-        doc_id: uuid::Uuid,
-    }
-
-    #[async_trait]
-    impl common::content_store::ContentStore for StubContentStore {
-        async fn get_chunks_by_ids(
-            &self,
-            _auth: &AuthContext,
-            chunk_ids: &[uuid::Uuid],
-        ) -> anyhow::Result<
-            std::collections::HashMap<uuid::Uuid, common::content_store::IndexedChunk>,
-            common::content_store::ContentStoreError,
-        > {
-            let mut map = std::collections::HashMap::new();
-            for id in chunk_ids {
-                if *id == self.chunk_id {
-                    map.insert(
-                        *id,
-                        common::content_store::IndexedChunk {
-                            chunk_id: self.chunk_id.to_string(),
-                            doc_id: self.doc_id.to_string(),
-                            page: Some(1),
-                            content: "second-doc body".to_string(),
-                            score: Some(0.9),
-                            metadata: serde_json::json!({}),
-                        },
-                    );
-                }
-            }
-            Ok(map)
+        for method in ["graph_search", "chunk_fetch", "read_lines"] {
+            let err = bridge
+                .method_to_tool_call(method, &json!({"query": "x", "chunk_id": "c"}))
+                .expect_err("removed method");
+            assert_eq!(err["error"]["code"], "unknown_method", "{method}: {err}");
         }
-
-        async fn get_document_metadata_by_ids(
-            &self,
-            _auth: &AuthContext,
-            _doc_ids: &[uuid::Uuid],
-        ) -> anyhow::Result<Vec<common::DocumentMetadata>, common::content_store::ContentStoreError>
-        {
-            Ok(vec![])
-        }
-
-        async fn get_summary_metadata(
-            &self,
-            _auth: &AuthContext,
-            _doc_ids: &[uuid::Uuid],
-        ) -> anyhow::Result<Vec<common::SummaryMetadata>, common::content_store::ContentStoreError>
-        {
-            Ok(vec![])
-        }
-
-        async fn get_document_toc_entries(
-            &self,
-            _auth: &AuthContext,
-            _doc_ids: &[uuid::Uuid],
-        ) -> anyhow::Result<
-            Vec<(uuid::Uuid, common::TocEntry)>,
-            common::content_store::ContentStoreError,
-        > {
-            Ok(vec![])
-        }
-
-        async fn get_summary_chunks(
-            &self,
-            _auth: &AuthContext,
-            _doc_ids: &[uuid::Uuid],
-        ) -> anyhow::Result<Vec<(uuid::Uuid, String)>, common::content_store::ContentStoreError>
-        {
-            Ok(vec![])
-        }
-
-        async fn list_documents(
-            &self,
-            _auth: &AuthContext,
-            _workspace_id: Option<uuid::Uuid>,
-            _document_id: Option<uuid::Uuid>,
-        ) -> anyhow::Result<Vec<common::Document>, common::content_store::ContentStoreError>
-        {
-            Ok(vec![])
-        }
-
-        async fn get_document_names(
-            &self,
-            _auth: &AuthContext,
-            _doc_ids: &[uuid::Uuid],
-        ) -> anyhow::Result<
-            std::collections::HashMap<uuid::Uuid, String>,
-            common::content_store::ContentStoreError,
-        > {
-            Ok(std::collections::HashMap::new())
-        }
-    }
-
-    fn make_runtime_with_content_store(
-        chunk_id: uuid::Uuid,
-        doc_id: uuid::Uuid,
-    ) -> Arc<RagRuntime> {
-        let mut config = crate::test_doubles::test_rag_config();
-        config.content_store = Some(Arc::new(StubContentStore { chunk_id, doc_id }));
-        let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =
-            Arc::new(StubDataPlane {
-                chunk_id,
-                doc_id,
-                graph_edge: false,
-            });
-        Arc::new(RagRuntime::with_data_plane(config, data_plane))
-    }
-
-    #[tokio::test]
-    async fn chunk_fetch_resolves_chunk_in_second_scoped_doc() {
-        // C10: chunk lives in the SECOND scoped doc — the old first-doc
-        // shortcut silently returned []; the full-scope fan-out must find it.
-        let chunk_id = uuid::Uuid::from_u128(1);
-        let real_doc = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000aa").unwrap();
-        let other_doc = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000bb").unwrap();
-        let runtime = make_runtime_with_content_store(chunk_id, real_doc);
-        let bridge = RuntimeBridge::new(
-            runtime,
-            make_auth(),
-            vec![other_doc.to_string(), real_doc.to_string()],
-        );
-        let data = bridge
-            .call("chunk_fetch", json!({"chunk_id": chunk_id.to_string()}))
-            .await;
-        let chunks = data["chunks"].as_array().expect("chunks array");
-        assert_eq!(chunks.len(), 1, "{data}");
-        assert_eq!(chunks[0]["content"], "second-doc body");
-    }
-
-    #[tokio::test]
-    async fn chunk_fetch_out_of_scope_chunk_still_rejected() {
-        // C10: scope contains two docs, neither owning the chunk → still an
-        // honest empty (no wildcard leak outside the scope).
-        let chunk_id = uuid::Uuid::from_u128(1);
-        let real_doc = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000aa").unwrap();
-        let doc_b = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000bb").unwrap();
-        let doc_c = uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000cc").unwrap();
-        let runtime = make_runtime_with_content_store(chunk_id, real_doc);
-        let bridge = RuntimeBridge::new(
-            runtime,
-            make_auth(),
-            vec![doc_b.to_string(), doc_c.to_string()],
-        );
-        let data = bridge
-            .call("chunk_fetch", json!({"chunk_id": chunk_id.to_string()}))
-            .await;
-        let chunks = data["chunks"].as_array().expect("chunks array");
-        assert!(chunks.is_empty(), "{data}");
-    }
-
-    #[test]
-    fn chunk_fetch_uses_scope_first_doc_when_non_empty() {
-        let runtime = make_runtime();
-        let doc_id = "00000000-0000-0000-0000-000000000010".to_string();
-        let bridge = RuntimeBridge::new(runtime, make_auth(), vec![doc_id.clone()]);
-        let call = bridge
-            .method_to_tool_call(
-                "chunk_fetch",
-                &json!({"chunk_id": "00000000-0000-0000-0000-000000000001"}),
-            )
-            .expect("tool call");
-        assert_eq!(call.tool, "index_lookup");
-        let args: IndexLookupArgs = serde_json::from_value(call.args).unwrap();
-        assert_eq!(args.doc_id, doc_id);
-        assert_eq!(
-            args.chunk_ids,
-            vec!["00000000-0000-0000-0000-000000000001".to_string()]
-        );
     }
 
     #[tokio::test]
@@ -1020,7 +750,7 @@ mod tests {
         let forced_scope = vec!["00000000-0000-0000-0000-000000000099".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), forced_scope.clone());
         let call = bridge
-            .method_to_tool_call("dense_search", &json!({"query": "x"}))
+            .method_to_tool_call("dense", &json!({"query": "x"}))
             .expect("tool call");
         let args: DenseRetrievalArgs = serde_json::from_value(call.args).unwrap();
         assert_eq!(args.doc_scope, forced_scope);
@@ -1081,7 +811,7 @@ mod tests {
         ));
         let interpreter = avrag_code_interpreter::CodeInterpreter::new().with_timeout(10);
         let code = r#"
-chunks = await client.dense_search(query="antifragility", top_k=5)
+chunks = await client.dense(query="antifragility")
 import json
 print(json.dumps(chunks))
 "#;
@@ -1113,9 +843,7 @@ print(json.dumps(chunks))
         let runtime = make_runtime_with_graph(true);
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge
-            .call("lexical_search", json!({"query": "DRC DRO", "top_k": 5}))
-            .await;
+        let data = bridge.call("lexical", json!({"query": "DRC DRO"})).await;
 
         tools::graph_augment::clear_test_config();
 
@@ -1150,9 +878,9 @@ print(json.dumps(chunks))
         );
     }
 
-    /// A2: dense_search never attaches graph_context from augment.
+    /// A5: dense never attaches graph_context from augment.
     #[tokio::test]
-    async fn dense_search_never_gets_graph_augment_sidecar() {
+    async fn dense_never_gets_graph_augment_sidecar() {
         let _serial = tools::graph_augment::TEST_CONFIG_SERIAL
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -1164,9 +892,7 @@ print(json.dumps(chunks))
         let runtime = make_runtime_with_graph(true);
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge
-            .call("dense_search", json!({"query": "DRC DRO", "top_k": 5}))
-            .await;
+        let data = bridge.call("dense", json!({"query": "DRC DRO"})).await;
 
         tools::graph_augment::clear_test_config();
 
@@ -1178,7 +904,7 @@ print(json.dumps(chunks))
     }
 
     #[tokio::test]
-    async fn lexical_search_graph_augment_off_has_no_graph_context_key() {
+    async fn lexical_graph_augment_off_has_no_graph_context_key() {
         let _serial = tools::graph_augment::TEST_CONFIG_SERIAL
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -1190,9 +916,7 @@ print(json.dumps(chunks))
         let runtime = make_runtime_with_graph(true);
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge
-            .call("lexical_search", json!({"query": "DRC DRO", "top_k": 5}))
-            .await;
+        let data = bridge.call("lexical", json!({"query": "DRC DRO"})).await;
 
         tools::graph_augment::clear_test_config();
 
@@ -1211,15 +935,9 @@ print(json.dumps(chunks))
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
 
-        let d1 = bridge
-            .call("dense_search", json!({"query": "antifragility", "top_k": 5}))
-            .await;
-        let d2 = bridge
-            .call("dense_search", json!({"query": "again", "top_k": 5}))
-            .await;
-        let d3 = bridge
-            .call("lexical_search", json!({"query": "third", "top_k": 5}))
-            .await;
+        let d1 = bridge.call("dense", json!({"query": "antifragility"})).await;
+        let d2 = bridge.call("dense", json!({"query": "again"})).await;
+        let d3 = bridge.call("lexical", json!({"query": "third"})).await;
 
         let alias_of = |data: &Value| data["chunks"][0]["alias"].as_str().unwrap().to_string();
         assert_eq!(alias_of(&d1), "#1");
@@ -1238,15 +956,9 @@ print(json.dumps(chunks))
         let worker_b = RuntimeBridge::new(runtime, make_auth(), doc_scope)
             .with_alias_counter(Arc::clone(&counter_b));
 
-        let a1 = worker_a
-            .call("dense_search", json!({"query": "q", "top_k": 5}))
-            .await;
-        let a2 = worker_a
-            .call("dense_search", json!({"query": "q", "top_k": 5}))
-            .await;
-        let b1 = worker_b
-            .call("dense_search", json!({"query": "q", "top_k": 5}))
-            .await;
+        let a1 = worker_a.call("dense", json!({"query": "q"})).await;
+        let a2 = worker_a.call("dense", json!({"query": "q"})).await;
+        let b1 = worker_b.call("dense", json!({"query": "q"})).await;
 
         assert_eq!(a1["chunks"][0]["alias"], "#1");
         assert_eq!(a2["chunks"][0]["alias"], "#2");

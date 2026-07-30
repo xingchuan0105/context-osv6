@@ -1,47 +1,42 @@
 ---
 name: metadata
-description: "Load when the user asks about the workspace's document inventory (which docs exist, who authored them, what genres/domains are present), or when you need doc_ids for doc_profile/doc_summary but don't want to dense_search first to discover them. Skip if a single dense_search is enough to surface the needed doc_ids."
+description: "Load when the user asks which documents exist in the workspace, authors/types overview, or when you need document ids for doc_profile/doc_summary without a prior content search. Skip if one dense search already surfaces the needed docs."
 disclose_at: retrieve
 atomic: false
 applicable_modes: [rag]
 ---
 
-## 1. 何时请求本簇（C1）
+## 何时加载本说明
 
-输出 `{"skill_request": ["metadata"]}` 触发下一轮加载本簇。适用场景：
+在回复中输出**整段** JSON（不要夹其它字）：
 
-- 用户问"工作区里都有哪些文档"/"都有哪些作者"/"文档都是什么类型"
-- 需要全局文档概览（多文档对比、统计）
-- 需要 `doc_ids` 调 `doc_profile`/`doc_summary`，但不想先 `dense_search` 摸索
-- `dense_search` 返回 0 chunk，怀疑是 query 不匹配——可以先看 metadata 了解文档主题再换 query
+```json
+{"skill_request": ["metadata"]}
+```
 
-**不适用**：单文档内的具体内容查询——直接 `dense_search`/`lexical_search` 更高效。
+下一轮会注入工作区文档清单。适用于：
 
-## 2. 加载后你会看到什么（C2/C4）
+- 用户问工作区有哪些文档、作者、类型
+- 需要全局概览（多文档对比、统计）
+- 需要 `doc_id` 再调 `doc_profile` / `doc_summary`，又不想先做内容检索
+- 内容检索回传为空，想先看清单再换查询词
 
-本簇加载时，runtime 会注入 `<docscope_metadata>...</docscope_metadata>` 包裹的 **JSON**，包含**工作区所有文档**的元数据（全量，不能按 doc_id 子集请求）：
+单文档内的具体内容：直接用 `client.dense` / `client.lexical` / `client.grep` 通常更合适。
+
+## 加载后会看到什么
+
+注入一段 `<docscope_metadata>…</docscope_metadata>` 包裹的 JSON，列出**当前工作区全部文档**的元数据（一次给全量，不能只要子集）。形状示例（虚构 id，非真实语料）：
 
 ```json
 {
   "documents": [
     {
-      "doc_id": "doc-001",
-      "filename": "thesis_y_refrigeration.docx",
-      "docname": "Y冷冻设备公司营销策略研究",
+      "doc_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "filename": "example-report.docx",
+      "docname": "示例报告",
       "language": "zh",
       "domain": "business",
-      "genre": "thesis",
-      "era": "contemporary",
-      "author": null,
-      "publication_date": null
-    },
-    {
-      "doc_id": "doc-002",
-      "filename": "huawei_ipd_370_activities.xlsx",
-      "docname": "华为 IPD 流程 370 个活动",
-      "language": "zh",
-      "domain": "engineering",
-      "genre": "manual",
+      "genre": "report",
       "era": "contemporary",
       "author": null,
       "publication_date": null
@@ -49,41 +44,29 @@ applicable_modes: [rag]
   ],
   "profile": {
     "languages": ["zh"],
-    "domains": ["business", "engineering"],
-    "genres": ["thesis", "manual"],
+    "domains": ["business"],
+    "genres": ["report"],
     "eras": ["contemporary"]
   }
 }
 ```
 
-**字段说明**：
-- `documents[]`：每个文档一条，含 `doc_id`/`filename`/`docname`/`language`/`domain`/`genre`/`era`/`author`/`publication_date`（`author`/`publication_date` 可能为 `null`）
-- `profile`：去重聚合的 `languages`/`domains`/`genres`/`eras` 列表，用于快速判断工作区整体特征
+- `documents[]`：每篇一条；`doc_id` 用于后续 `doc_profile` / `doc_summary`。
+- `profile`：语言/领域/体裁等聚合列表，便于看工作区整体特征。
+- `domain` / `genre` / `era` 可能为 `"unknown"`：表示系统未识别，不要当成有效标签。
+- `author` / `publication_date` 为 `null`：只表示未识别，不能当成「文档一定没有作者/日期」。
 
-**注意**：`domain`/`genre`/`era` 是服务端分类枚举，可能为 `"unknown"`——这意味着服务端没能识别该维度，不要把它当有效信息。
-
-## 3. 拿到 doc_ids 后能做什么（C3）
-
-从 `documents[]` 提取目标文档的 `doc_id` 后：
+## 拿到 doc_id 之后
 
 ```python
-# 拿 TOC / sections / metadata
-profile = await client.doc_profile(doc_ids=["doc-001"])
-
-# 拿文档级或章节级摘要
-summary = await client.doc_summary(doc_ids=["doc-001"], level="doc")
-summary = await client.doc_summary(doc_ids=["doc-001"], level="section")
+profile = await client.doc_profile(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"])
+summary = await client.doc_summary(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"], level="doc")
 ```
 
-`doc_profile`/`doc_summary` 的 `doc_ids` 可省略——省略时服务端按本轮 `doc_scope` 自动解析（bridge 取 doc_scope 交集，无需手动注入）；只有想**收窄**到特定文档时才显式传 `doc_ids`（UUID 字符串，非文件名）。
+`doc_ids` 可省略：省略时按当前工作区默认范围解析；只有要**收窄**到某几篇时才显式传入（用 `doc_id` 字符串，不是文件名）。
 
-## 4. 加载边界（C4/C5）
+## 边界
 
-- **全量加载**：本簇一旦请求，注入的是工作区所有文档的元数据，不能按 doc_id 子集请求。若工作区文档很多，JSON 会比较大——但这只是一次性注入，后续轮次不会重复注入（`already_disclosed` 去重）
-- **round 0 不可直接用**：round 0 默认只加载 `codegen` cluster。必须先输出 `{"skill_request": ["metadata"]}`，**本轮不执行检索**，下一轮本簇 body + docscope_metadata 才会注入
-
-## 5. 禁止
-
-- 禁止在未加载本簇的情况下假设 `docscope_metadata` 已注入——它只在 `{"skill_request": ["metadata"]}` 后的下一轮出现
-- 禁止把 `profile` 里的 `"unknown"` 当作有效分类信息
-- 禁止把 `author: null`/`publication_date: null` 当作"文档无作者/无日期"的证据——只代表服务端未识别
+- 本说明在 `skill_request` 的**下一轮**才注入清单；未加载前不要假设清单已在上下文中。
+- 文档很多时 JSON 会较大；同一会话内通常只注入一次。
+- 默认首轮只有检索代码说明；需要清单时再 `skill_request` metadata。

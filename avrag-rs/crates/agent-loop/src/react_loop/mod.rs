@@ -15,11 +15,14 @@ pub mod deps;
 pub mod hooks;
 pub mod iteration;
 mod iteration_codegen;
+pub mod session_fs;
+pub mod sdk_gate;
 mod iteration_tools;
 pub mod json_fence;
 mod message_format;
 pub mod message_queue;
 pub mod parse;
+pub mod prompt_assets;
 // rag_bridge moved to agent-tools (TN Wave 6)
 pub use agent_tools::rag_bridge;
 pub mod reasoning_emit;
@@ -48,6 +51,7 @@ use config::ModeConfig;
 use iteration::IterationState;
 
 pub use deps::{BridgeCallObs, LoopRuntimeDeps};
+pub use sdk_gate::{method_allowed, sdk_primitives_for_caps};
 pub use hooks::{BeforeToolCallOutcome, LoopContext, LoopHooks, StandardLoopHooks};
 
 /// ReAct retrieve → gate → synthesis engine.
@@ -150,6 +154,10 @@ impl ReActLoop {
             answer_deltas_streamed: false,
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(alias_start)),
+            session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
+            sdk_allowed: std::sync::Arc::new(
+                mode.sdk_primitives.iter().cloned().collect(),
+            ),
         };
         let (iteration, direct_answer, telemetry_records, total_usage) = self
             .run_retrieval_loop(

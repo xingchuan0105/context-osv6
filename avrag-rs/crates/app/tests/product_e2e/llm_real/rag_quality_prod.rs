@@ -1356,19 +1356,27 @@ async fn realistic_corpus_full_eval() {
             }
         }
         let chunks: Vec<String> = retrieved.contents();
-        // G-16: Option D eval bridge — rag questions that expect an answer should
-        // surface store evidence as dense_retrieval tool_results after finalize.
-        // Soft warn (not fail-fast) when golden has source_chunks but bridge empty:
-        // still record as failure so CI can track bridge regressions.
+        // G-16: rag questions that expect an answer should leave **some**
+        // retrieval-layer tool_results after finalize. SaC sandbox capture uses
+        // dense/lexical/doc_grep/… (see harness_extract::RETRIEVAL_TOOLS), not
+        // only dense/hybrid — requiring only dense/hybrid false-fails grep-only runs.
         if caps.iter().any(|c| c == "rag")
             && example.expected_should_answer
             && !example.source_chunks.is_empty()
-            && !chat
-                .tool_results
-                .iter()
-                .any(|tr| tr.tool == "dense_retrieval" || tr.tool == "hybrid_retrieval")
+            && !chat.tool_results.iter().any(|tr| {
+                tr.status == contracts::ToolStatus::Ok
+                    && rag_quality::harness_extract::RETRIEVAL_TOOLS.contains(&tr.tool.as_str())
+            })
         {
-            let msg = "eval_bridge_miss: rag expected dense_retrieval/hybrid in tool_results (store→eval bridge)".to_string();
+            let msg = format!(
+                "eval_bridge_miss: rag expected a retrieval-layer tool_result \
+                 (one of {:?}) after finalize; got tools={:?}",
+                rag_quality::harness_extract::RETRIEVAL_TOOLS,
+                chat.tool_results
+                    .iter()
+                    .map(|t| t.tool.as_str())
+                    .collect::<Vec<_>>()
+            );
             eprintln!("  FAIL: {msg}");
             failures.push((example.query.clone(), msg));
             if fail_fast {

@@ -6,6 +6,7 @@ use super::config::{LoopExitConfig, ModeConfig};
 /// Tools whose payloads count as **answer-grade chunks** (unlock final answer).
 /// Catalog-only tools (`doc_profile` / `doc_metadata`) are intentionally excluded:
 /// a workspace listing is not retrieval evidence and must not open the answer gate.
+/// Internal tool ids on bridge-captured `ToolResult`s (not LLM-facing schemas).
 const RAG_ANSWER_CHUNK_TOOLS: &[&str] = &[
     "dense_retrieval",
     "lexical_retrieval",
@@ -16,43 +17,27 @@ const RAG_ANSWER_CHUNK_TOOLS: &[&str] = &[
     "doc_read_lines",
 ];
 
+/// Web evidence from SaC host (still tagged `web_search` / `web_fetch` on capture).
 const SEARCH_EVIDENCE_TOOLS: &[&str] = &["web_search", "web_fetch"];
 
-/// Injected when the model tries to finalize without any answer-grade chunk.
-pub const NO_CHUNK_CONTINUE_NUDGE: &str = "\
-系统未收到任何可用检索 chunk（dense / lexical / graph / grep / read_lines 等正文命中）。\
-禁止进入最终答复阶段。请继续用 <code language=\"python\"> 调用 client 检索；\
-不要编造数字、编号或事实。";
-
-/// After normal budget + 2 grace rounds still have no chunks: force a failure reply.
-pub const RETRIEVAL_FAILED_FINAL_TURN: &str = "\
-检索仍未返回任何可用 chunk。不要再输出 <code> 代码块，不要编造任何文档事实。\n\
-请用与用户相同的语言直接说明：未能从文档中检索到相关证据，请用户重试或调整问题。\n\
-若任务简报要求 internal_worker_handoff_v1 JSON，则输出该 JSON 且 coverage=insufficient，\
-summary 写明检索失败、请用户重试；key_facts 置空数组。";
-
-/// Minimum extra completes when no-chunk grace fires (alongside grace tokens).
-pub const NO_CHUNK_BUDGET_GRACE_ROUNDS: u8 = 2;
-
-/// Injected when granting the no-chunk budget grace (token + round ceiling).
-pub const NO_CHUNK_BUDGET_GRACE_NUDGE: &str = "\
-检索预算已触顶且仍无可用检索 chunk。系统额外追加 token 额度，并至少再允许 2 次检索 complete。\n\
-请继续用 <code language=\"python\"> 调用 client 检索；仍不要编造答案。";
+// LLM-facing observation bodies live in `prompts/loop/*.md` (see `prompt_assets`).
+// Re-export loaders so call sites stay under exit_policy without inlined prose.
+//
+// No-chunk / host-forced **continue budget** is **+50% baseline max_tokens**
+// (see `BudgetConfig::resolve_continue_token_boost`), not “+N free rounds”.
+pub use super::super::prompt_assets::{
+    no_chunk_budget_grace_nudge, no_chunk_continue_nudge, retrieval_failed_final_turn,
+};
 
 // ---------------------------------------------------------------------------
 // Synthesis gate
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PostLoopAction {
-    EnterSynthesis,
-    DegradedNoEvidence,
-}
-
+/// Post-retrieve synthesis routing. Host does **not** force auto_fallback or
+/// DegradedNoEvidence for missing chunks (skill-owned stop; retired 2026-07-31).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SynthesisGate {
     EnterSynthesis,
-    RunFallbackThenCheck,
     SkipSynthesisUseDirect(String),
 }
 
@@ -63,11 +48,10 @@ pub fn decide_synthesis_gate(
     _tool_results: &[ToolResult],
     _query: &str,
 ) -> SynthesisGate {
-    // Hard gate: no answer-grade chunk → never skip into a final answer,
-    // even if the model already wrote prose (or a fabricated handoff).
-    if loop_exit.require_evidence && !has_evidence {
-        return SynthesisGate::RunFallbackThenCheck;
-    }
+    // require_evidence is skill-owned (no host hard gate). Direct answer /
+    // synthesis routing does not refuse stop for missing chunks.
+    let _ = has_evidence;
+    let _ = loop_exit.require_evidence;
 
     if let Some(answer) = direct_answer {
         if loop_exit.skip_synthesis_on_direct_answer {
@@ -75,15 +59,7 @@ pub fn decide_synthesis_gate(
         }
     }
 
-    if has_evidence || !loop_exit.require_evidence {
-        SynthesisGate::EnterSynthesis
-    } else {
-        SynthesisGate::RunFallbackThenCheck
-    }
-}
-
-pub fn post_fallback_gate(loop_exit: &LoopExitConfig, has_evidence: bool) -> PostLoopAction {
-    decide_post_loop(loop_exit, has_evidence)
+    SynthesisGate::EnterSynthesis
 }
 
 pub(crate) fn stdout_is_placeholder(stdout: &str) -> bool {
@@ -290,27 +266,10 @@ pub fn has_retrieval_observation(
     true
 }
 
-/// Hard gate: when evidence is required, refuse to leave retrieve without
-/// answer-grade chunks. `allow_content_early_stop` no longer bypasses this
-/// (2026-07-29 product rule: no chunk → no answer phase).
-pub fn should_block_content_early_stop(loop_exit: &LoopExitConfig, has_evidence: bool) -> bool {
-    loop_exit.require_evidence && !has_evidence
-}
-
-pub fn decide_post_loop(loop_exit: &LoopExitConfig, has_evidence: bool) -> PostLoopAction {
-    if has_evidence || !loop_exit.require_evidence {
-        PostLoopAction::EnterSynthesis
-    } else {
-        PostLoopAction::DegradedNoEvidence
-    }
-}
-
-pub fn degraded_no_evidence_answer(mode_id: &str) -> String {
-    match mode_id {
-        "rag" => "未能从文档中检索到相关证据，请重试或调整问题。".to_string(),
-        "search" => "未能从网页检索到相关证据，请重试或调整问题。".to_string(),
-        _ => "信息不足，暂时无法回答，请重试。".to_string(),
-    }
+/// Formerly host hard gate for require_evidence. Always false: stop/grounding
+/// is model+skill owned (AGENTS.md). Kept for call-site compatibility/tests.
+pub fn should_block_content_early_stop(_loop_exit: &LoopExitConfig, _has_evidence: bool) -> bool {
+    false
 }
 
 #[cfg(test)]
@@ -414,24 +373,21 @@ mod tests {
     }
 
     #[test]
-    fn blocks_content_early_stop_when_no_evidence() {
+    fn host_never_blocks_content_for_require_evidence() {
+        // require_evidence is skill-owned; host hard gate retired.
         let loop_exit = LoopExitConfig {
             require_evidence: true,
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
         };
-        assert!(should_block_content_early_stop(&loop_exit, false));
+        assert!(!should_block_content_early_stop(&loop_exit, false));
         assert!(!should_block_content_early_stop(&loop_exit, true));
-    }
-
-    #[test]
-    fn hard_gate_ignores_allow_content_early_stop() {
-        let loop_exit = LoopExitConfig {
+        let loop_exit2 = LoopExitConfig {
             require_evidence: true,
             allow_content_early_stop: true,
             skip_synthesis_on_direct_answer: true,
         };
-        assert!(should_block_content_early_stop(&loop_exit, false));
+        assert!(!should_block_content_early_stop(&loop_exit2, false));
     }
 
     #[test]
@@ -467,28 +423,16 @@ mod tests {
     }
 
     #[test]
-    fn decide_synthesis_gate_refuses_direct_without_chunks() {
+    fn decide_synthesis_gate_allows_direct_without_chunks() {
+        // Host no longer refuses direct answer for missing evidence.
         let loop_exit = LoopExitConfig {
             require_evidence: true,
             allow_content_early_stop: true,
             skip_synthesis_on_direct_answer: true,
         };
         assert_eq!(
-            decide_synthesis_gate(&loop_exit, false, Some("fabricated answer"), &[], "q"),
-            SynthesisGate::RunFallbackThenCheck
-        );
-    }
-
-    #[test]
-    fn degraded_when_require_evidence_and_none() {
-        let loop_exit = LoopExitConfig::default();
-        assert_eq!(
-            decide_post_loop(&loop_exit, false),
-            PostLoopAction::DegradedNoEvidence
-        );
-        assert_eq!(
-            decide_post_loop(&loop_exit, true),
-            PostLoopAction::EnterSynthesis
+            decide_synthesis_gate(&loop_exit, false, Some("model prose"), &[], "q"),
+            SynthesisGate::SkipSynthesisUseDirect("model prose".to_string())
         );
     }
 

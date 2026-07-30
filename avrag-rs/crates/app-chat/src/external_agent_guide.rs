@@ -1,13 +1,11 @@
 use contracts::chat::AgentOperationGuide;
 
-use agent_tools::capability::CapabilityRegistry;
-use agent_loop::r#loop::config::load_mode_config;
 use agent_tools::progressive::{
     DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry,
 };
 
-const RAG_SUMMARY: &str = "RAG uses Python SDK codegen only. Emit <code language=\"python\"> blocks calling client.dense_search, client.chunk_fetch, etc. Do not call native retrieval tool schemas.";
-const SEARCH_SUMMARY: &str = "Search uses native tool calls (web_search, web_fetch). Do not use codegen/SDK blocks in search mode.";
+const RAG_SUMMARY: &str = "RAG uses SaC Python SDK only. Emit <code language=\"python\"> blocks calling client.dense, client.lexical, client.grep, etc. Do not call native retrieval tool schemas.";
+const SEARCH_SUMMARY: &str = "Search uses SaC Python SDK: client.web(query) and client.fetch(url) inside <code language=\"python\"> blocks. No native web_search/web_fetch function calls.";
 const INDEX_SUMMARY: &str = "Ingestion uses MCP workspace tools plus HTTP PUT for file bytes. Flow: create_upload → PUT upload_url → complete_upload → poll document_status until completed.";
 const WORKSPACE_CREATE_SUMMARY: &str = "Personal product: humans create workspaces in the UI, then share workspace_id plus a workspace API key (index+query). Do not rely on account/org-scoped keys for normal automation.";
 
@@ -45,16 +43,13 @@ fn build_rag_guide() -> AgentOperationGuide {
 }
 
 fn build_search_guide() -> AgentOperationGuide {
+    // A1/A6: no native tool schemas — SaC client.web/fetch only.
     let instructions = render_skill_instructions("search");
-    let tool_schemas = load_mode_config("search")
-        .map(|mode| mode.tools_for_retrieve(CapabilityRegistry::standard_cached()))
-        .unwrap_or_default();
-
     AgentOperationGuide {
         mode: "search".to_string(),
         summary: SEARCH_SUMMARY.to_string(),
         instructions,
-        tool_schemas,
+        tool_schemas: Vec::new(),
     }
 }
 
@@ -92,19 +87,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rag_invoke_guide_uses_codegen_mode() {
+    fn rag_invoke_guide_uses_sac_sdk() {
         let guide = load_invoke_operation_guide("rag").expect("rag guide");
         assert_eq!(guide.mode, "rag");
-        assert!(guide.summary.contains("codegen"));
+        assert!(
+            guide.summary.contains("SaC") || guide.summary.contains("client.dense"),
+            "summary: {}",
+            guide.summary
+        );
         assert!(guide.tool_schemas.is_empty());
     }
 
     #[test]
-    fn search_invoke_guide_exposes_native_tool_schemas() {
+    fn search_invoke_guide_uses_sac_sdk() {
         let guide = load_invoke_operation_guide("search").expect("search guide");
         assert_eq!(guide.mode, "search");
-        assert!(guide.summary.contains("web_search"));
-        assert!(!guide.tool_schemas.is_empty());
+        assert!(
+            guide.summary.contains("client.web") || guide.summary.contains("SaC"),
+            "summary: {}",
+            guide.summary
+        );
+        assert!(
+            guide.tool_schemas.is_empty(),
+            "no native web tool schemas after SaC"
+        );
     }
 
     #[test]

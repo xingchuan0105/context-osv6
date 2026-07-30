@@ -26,7 +26,11 @@ fn rag_mode_config_deserializes_with_tool_pool_and_clusters() {
 #[test]
 fn search_mode_config_has_search_cluster() {
     let config = load_mode_config("search").expect("search mode should load");
-    assert!(config.tool_pool.contains(&"web_search".to_string()));
+    assert!(
+        config.tool_pool.is_empty(),
+        "search uses SaC client.web; native tool_pool empty: {:?}",
+        config.tool_pool
+    );
     assert!(config.skill_catalog.cluster_by_id("search").is_some());
 }
 
@@ -171,14 +175,21 @@ fn budget_config_resolves_token_tier() {
         by_user_tier: None,
         max_tokens: Some(28_000),
         max_tokens_by_user_tier: Some(tiers),
-        no_chunk_grace_tokens: Some(10_000),
+        no_chunk_grace_tokens: None,
     };
     assert_eq!(
         cfg.resolve_max_tokens(Some(&serde_json::json!("free"))),
         16_000
     );
     assert_eq!(cfg.resolve_max_tokens(None), 28_000);
-    assert_eq!(cfg.resolve_no_chunk_grace_tokens(), 10_000);
+    // Continue budget = +50% of baseline (not fixed rounds / absolute default).
+    assert_eq!(cfg.resolve_continue_token_boost(28_000), 14_000);
+    assert_eq!(cfg.resolve_continue_token_boost(16_000), 8_000);
+    let with_override = BudgetConfig {
+        no_chunk_grace_tokens: Some(10_000),
+        ..cfg.clone()
+    };
+    assert_eq!(with_override.resolve_continue_token_boost(28_000), 10_000);
 }
 
 #[test]

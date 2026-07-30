@@ -20,19 +20,19 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "orchestrator-base",
-        include_str!("../../../../prompts/orchestrators/orchestrator-base.md"),
+        include_str!("../../../../prompts/deprecated/orchestrator-multiagent/orchestrator-base.md"),
     ),
     (
         "answer-from-workspace",
-        include_str!("../../../../prompts/orchestrators/answer-from-workspace.md"),
+        include_str!("../../../../prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md"),
     ),
     (
         "answer-from-web",
-        include_str!("../../../../prompts/orchestrators/answer-from-web.md"),
+        include_str!("../../../../prompts/deprecated/orchestrator-multiagent/answer-from-web.md"),
     ),
     (
         "answer-dual-source",
-        include_str!("../../../../prompts/orchestrators/answer-dual-source.md"),
+        include_str!("../../../../prompts/deprecated/orchestrator-multiagent/answer-dual-source.md"),
     ),
     (
         "codegen",

@@ -1,38 +1,45 @@
 ---
 name: memory
-description: "Load when the user refers to earlier conversation beyond the 2 prior user turns runtime already injected, asks about past preferences or prior decisions, or needs continuity that recent turns do not cover. Also load when the current query contains anaphora (pronouns, demonstratives, ellipsis) that reference entities from earlier turns — you are responsible for resolving them, the server no longer does it for you. Skip for self-contained questions answerable from the current turn and default injected history."
+description: "Load when the user refers to earlier conversation beyond the two prior user turns already shown, asks about past preferences or decisions, or uses pronouns/ellipsis that need earlier context. Skip for self-contained questions answerable from the current turn and the default recent history."
 disclose_at: retrieve
 atomic: false
 applicable_modes: [rag, search, chat]
+version: "3.0"
 ---
 
-## 核心指令
+## 默认可见历史
 
-**Runtime 已注入**：当前 query + 最近 **2** 条 prior user 原文（`[prior_user_query]`）。仅此而已——服务端不再做指代消解，也不再生成 `resolved_query`（ADR-0010）。
+上下文里通常已有：
 
-**你的职责**：看到代词、指示词、省略（"它"、"那位作者"、"这本书"、"about it"、"那个概念"）时，**主动调** `conversation_history_load` 拉取更早历史，自己消解指代。
+- 当前用户问题
+- 最近 **2** 条更早的用户发言（常标 prior user）
 
-**按需调取**（本簇）：
-1. 更早或跨 session 历史 → `conversation_history_load`（`query` 用当前原话或提取的关键实体；默认 `scope=workspace`；近序 + 中文分词 FTS 混合检索）
-2. 长期画像/偏好 → `user_profile_load`（跨会话偏好、专业领域、表达风格时）
+系统**不会**自动把「它 / 那位 / 这本书」消解成实体。指代与更早偏好需要额外回传才闭合。
 
-## 指代消解流程（你负责）
+## 取更早记忆的入口
 
-1. 检查当前 query 是否含代词/指示词/省略
-2. 若有，且 2 条 prior 历史不足以消解 → 调 `conversation_history_load`
-3. 用拉到的历史里的**最近一条相关 user turn** 锚定实体
-4. 消解后仍歧义 → 澄清，不臆造实体
-5. 回答面向用户原始措辞，但检索可用消解后的实体词
+**Python 沙箱**可用时：
 
-## Reference 路由表
+```python
+hist = await client.history(limit=20)   # 可带 query；字段以回传为准
+profile = await client.user_profile()
+print(hist)
+print(profile)
+```
 
-| 文件 | 内容 |
-|------|------|
-| `reference/anaphora.md` | 指代消解边界与典型模式 |
+若当前环境是点选式工具而非 `client.*`：更早对话 → `conversation_history_load`；长期画像 → `user_profile_load`。
 
-## 禁止
+| 回传状态 | 含义 |
+|----------|------|
+| 仅有默认 2 条 prior | 更早轮次仍为未知 |
+| `history` 非空 | 可用其中最近相关用户话锚定实体 |
+| `user_profile` 有字段 | 长期偏好可引用；`null`/缺字段 ≠ 用户无偏好，只是未记载 |
+| 多候选实体同等可能 | 实体未闭合；澄清问题比臆造实体更贴合证据边界 |
 
-- 禁止假设服务端已替你消解指代——它没有
-- 禁止在 2 条 prior 历史不足时跳过 `conversation_history_load` 直接臆造实体
-- 禁止在歧义未解时编造指代对象
-- 禁止把「记忆」窄化为仅指代消解——更早历史与长期画像也由本簇工具调取
+## 指代与检索用词
+
+- 用户可见答复可用其原措辞；检索 query 可用消解后的实体词。
+- 话题已切换时，以最近一轮明确实体为准。
+- 「记忆」= 更早对话 + 长期画像，不限于指代消解。
+
+更细的表述模式见 `reference/anaphora.md`（若已加载）。

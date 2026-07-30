@@ -479,9 +479,9 @@ mod tests {
     #[test]
     fn skills_without_frontmatter_fields_use_inference() {
         let registry = CapabilityRegistry::standard();
-        // capability-rag.dispatch has no applicable_strategies in frontmatter —
+        // `index` cluster has no applicable_strategies / applicable_modes —
         // should infer from id (falls through to the all-strategies default).
-        let skill = registry.skill("capability-rag.dispatch").unwrap();
+        let skill = registry.skill("index").unwrap();
         assert_eq!(
             skill.applicable_strategies,
             vec!["chat".to_string(), "rag".to_string(), "search".to_string()]

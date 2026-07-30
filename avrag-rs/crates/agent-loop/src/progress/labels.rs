@@ -3,13 +3,16 @@
 /// Bridge SDK method → product label (Chinese).
 pub fn product_action_for_bridge_method(method: &str) -> Option<&'static str> {
     match method {
-        "dense_search" => Some("语义检索"),
-        "lexical_search" => Some("关键词检索"),
-        "graph_search" => Some("关系检索"),
+        "dense" | "dense_search" => Some("语义检索"),
+        "lexical" | "lexical_search" => Some("关键词检索"),
+        "grep" => Some("行级检索"),
+        "web" => Some("网页搜索"),
+        "fetch" => Some("读取网页"),
         "doc_summary" => Some("阅读文档摘要"),
         "doc_profile" => Some("查看文档结构"),
-        "doc_scan" | "doc_chunks" => Some("代码侧扫读文档"),
-        "chunk_fetch" => Some("展开原文片段"),
+        "history" | "user_profile" => Some("回忆相关上下文"),
+        "graph_search" => Some("关系检索"),
+        "doc_scan" | "doc_chunks" | "chunk_fetch" | "read_lines" => Some("文档读取"),
         _ => None,
     }
 }

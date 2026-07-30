@@ -2,12 +2,14 @@ mode: search
 # P2 (2026-07-20): main-path system source is capability-search (self-contained);
 # monomode search-system retired to prompts/deprecated/monomode-system/.
 system_prompt_base: prompts/orchestrators/capability-search.md
-tool_pool: [web_search, web_fetch]
+# A1/A6: native web_* delisted from LLM surface; SaC uses client.web / client.fetch.
+tool_pool: []
 inject_retrieval_query: true
 skill_catalog:
   retrieve: [search, memory]
   synthesis: [writing, format]
-  # PR-A: no monomode search-answer mandatory (worker handoff is final).
+  mandatory:
+    retrieve: [search]
   mandatory_synthesis: []
 budget:
   max_iterations: 8
@@ -20,12 +22,12 @@ budget:
     free: 12000
     pro: 16000
     enterprise: 24000
-  no_chunk_grace_tokens: 8000
+  # continue boost default +50% baseline max_tokens (omit no_chunk_grace_tokens absolute)
 # Unified with chat/rag so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:
-  require_evidence: true
-  # Align with rag hard gate (no evidence → refuse answer phase).
+  # Skill-owned grounding intent only — host does not hard-block DirectAnswer.
+  require_evidence: false
   allow_content_early_stop: false
   skip_synthesis_on_direct_answer: true
 synthesis_output:

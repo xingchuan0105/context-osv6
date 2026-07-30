@@ -299,9 +299,8 @@ fn typical_user_single_session_estimate() {
     // Sanity assertions
     assert!(chat_total < 2000, "Chat should be under 2k tokens");
     assert!(search_total < 8000, "Search should be under 8k tokens");
-    // P2 prompt slimming (capability manual dedup + dispatch split) lowered the
-    // RAG estimate from >10k to ~9.9k — the cost shape (RAG >> 2x Search) is
-    // what this sanity check guards.
-    assert!(rag_total > 9000, "RAG should be over 9k tokens");
-    assert!(rag_total > search_total * 2, "RAG should be >2x Search");
+    // SaC single-agent + slim capability manuals (2026-07-30) further cut
+    // system prompt mass; cost shape (RAG > Search > Chat) is what we guard.
+    assert!(rag_total > 5000, "RAG should stay multi-k (chunks dominate): {rag_total}");
+    assert!(rag_total > search_total, "RAG should cost more than Search: {rag_total} vs {search_total}");
 }

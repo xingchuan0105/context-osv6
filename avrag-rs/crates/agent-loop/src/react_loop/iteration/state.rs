@@ -30,6 +30,10 @@ pub struct IterationState {
     /// sandbox bridge injects aliases in this order; downstream hydration
     /// replays the run's tool_results to resolve them.
     pub retrieval_aliases: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// A7: cross-block `save`/`load` workspace for this agent run.
+    pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
+    /// A3: allowed SaC methods for this run (empty = open).
+    pub sdk_allowed: std::sync::Arc<std::collections::HashSet<String>>,
 }
 
 pub enum IterationControl {
@@ -47,13 +51,14 @@ pub struct IterationOutcome {
 
 /// Exit reason marking a compile-feedback continuation (S2/E4). Shared by the
 /// emission site (content_dispatch) and the budget accounting (run_retrieval).
+/// Exit reason: host rejected a **structural** candidate final (worker handoff
+/// compile). Free correction turn — does not consume numbered iteration budget.
+/// Semantic stop (whether coverage is enough) is model+skill owned; see
+/// `dispatch_content` DirectAnswer path and AGENTS.md prompt voice rules.
 pub(crate) const COMPILE_FEEDBACK_EXIT_REASON: &str = "compile_feedback";
 
 /// E4 (2026-07-28): whether a `Continue` outcome consumes a numbered
-/// iteration. Compile-feedback continuations are FREE — the correction turn
-/// rides on top of the normal budget (up to `MAX_COMPILE_CONTINUATIONS` per
-/// run), because 58% of continuations used to fire in the last budget slot
-/// with no room left to act on the feedback. All other continues consume one.
+/// iteration. Compile-feedback continuations are FREE correction turns.
 pub(crate) fn consumes_iteration_budget(outcome: &IterationOutcome) -> bool {
     outcome
         .record

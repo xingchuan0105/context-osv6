@@ -27,11 +27,16 @@ use contracts::{ToolResult, ToolStatus};
 use serde::{Deserialize, Serialize};
 
 /// Tools whose `data` carries retrieved chunks (the retrieval layer).
+/// Includes SaC sandbox bridge capture names (`doc_grep`, …) so eval does not
+/// treat pure-codegen retrieve runs as “no retrieval”.
 pub const RETRIEVAL_TOOLS: &[&str] = &[
     "dense_retrieval",
     "lexical_retrieval",
     "graph_retrieval",
     "index_lookup",
+    "doc_grep",
+    "doc_read_lines",
+    "doc_summary",
 ];
 
 /// A single chunk recovered from the retrieval layer, with rank/score for nDCG.
@@ -248,6 +253,23 @@ mod tests {
         ];
         let got = extract_retrieved_chunks(&results);
         assert_eq!(got.chunk_ids(), vec!["c1", "c2"]);
+    }
+
+    #[test]
+    fn extracts_doc_grep_chunks_for_sac_path() {
+        let results = vec![tr(
+            "doc_grep",
+            serde_json::json!({
+                "total_hits": 2,
+                "chunks": [
+                    {"chunk_id": "g1", "text": "row a", "doc_id": "d1"},
+                    {"chunk_id": "g2", "content": "row b", "doc_id": "d1"}
+                ]
+            }),
+        )];
+        let got = extract_retrieved_chunks(&results);
+        assert_eq!(got.chunk_ids(), vec!["g1", "g2"]);
+        assert_eq!(got.chunks[0].tool, "doc_grep");
     }
 
     #[test]

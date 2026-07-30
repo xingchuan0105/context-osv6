@@ -42,6 +42,7 @@ pub fn load_mode_config(mode_id: &str) -> Result<ModeConfig, common::AppError> {
 impl ModeConfig {
     pub fn loop_exit_for_mode(&self) -> LoopExitConfig {
         let mut cfg = self.loop_exit.clone();
+        // require_evidence is skill-owned only — never force host hard gate here.
         if self.id == "chat" {
             if !self.loop_exit.require_evidence
                 && !self.loop_exit.allow_content_early_stop
@@ -51,14 +52,8 @@ impl ModeConfig {
                 cfg.allow_content_early_stop = true;
                 cfg.skip_synthesis_on_direct_answer = true;
             }
-        } else if (self.id == "rag" || self.id == "search")
-            && !self.loop_exit.require_evidence
-            && self.loop_exit.allow_content_early_stop
-        {
-            cfg.require_evidence = true;
-            cfg.allow_content_early_stop = false;
-            cfg.skip_synthesis_on_direct_answer = false;
         }
+        // rag/search: preserve YAML loop_exit as-is (no legacy force require_evidence=true).
         cfg
     }
 

@@ -367,12 +367,12 @@ fn answer_rule_parts(handoff: &ChatHandoff) -> Vec<String> {
     // P3: answer-from-workspace carries the core grounding rules (文档事实只能
     // 来自证据 / 不得用常识补写) that zero-evidence turns need most — inject
     // unconditionally (previously gated on has_doc).
-    parts.push("prompts/orchestrators/answer-from-workspace.md".to_string());
+    parts.push("prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md".to_string());
     if has_web {
-        parts.push("prompts/orchestrators/answer-from-web.md".to_string());
+        parts.push("prompts/deprecated/orchestrator-multiagent/answer-from-web.md".to_string());
     }
     if has_doc && has_web {
-        parts.push("prompts/orchestrators/answer-dual-source.md".to_string());
+        parts.push("prompts/deprecated/orchestrator-multiagent/answer-dual-source.md".to_string());
     }
     parts
 }
@@ -545,7 +545,7 @@ impl OrchestratorExecutor for AgentServiceExecutor {
         // Material answer-* blocks only for synthesize (has citable materials);
         // mode=direct is chat-like (no evidence pack, no workspace/web blocks).
         if let Ok(assembled) = crate::assemble_mode(CapabilitySet::default()) {
-            let mut parts = vec!["prompts/orchestrators/product-answer-base.md".to_string()];
+            let mut parts = vec!["prompts/deprecated/orchestrator-multiagent/product-answer-base.md".to_string()];
             if handoff.mode == super::types::ChatExitMode::Synthesize {
                 parts.extend(answer_rule_parts(handoff));
             }
@@ -978,7 +978,7 @@ mod tests {
         let h = direct_handoff("q");
         assert_eq!(
             answer_rule_parts(&h),
-            vec!["prompts/orchestrators/answer-from-workspace.md".to_string()]
+            vec!["prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md".to_string()]
         );
 
         // DocProfile only = orientation, not material — workspace block stays
@@ -987,7 +987,7 @@ mod tests {
         h.listings = vec![listing("E1", Channel::Rag, EvidenceKind::DocProfile)];
         assert_eq!(
             answer_rule_parts(&h),
-            vec!["prompts/orchestrators/answer-from-workspace.md".to_string()]
+            vec!["prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md".to_string()]
         );
 
         // Workspace only.
@@ -995,7 +995,7 @@ mod tests {
         h.listings = vec![listing("E1", Channel::Rag, EvidenceKind::DocChunk)];
         assert_eq!(
             answer_rule_parts(&h),
-            vec!["prompts/orchestrators/answer-from-workspace.md".to_string()]
+            vec!["prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md".to_string()]
         );
 
         // Web only: workspace (unconditional) + web.
@@ -1004,8 +1004,8 @@ mod tests {
         assert_eq!(
             answer_rule_parts(&h),
             vec![
-                "prompts/orchestrators/answer-from-workspace.md".to_string(),
-                "prompts/orchestrators/answer-from-web.md".to_string()
+                "prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md".to_string(),
+                "prompts/deprecated/orchestrator-multiagent/answer-from-web.md".to_string()
             ]
         );
 
@@ -1285,7 +1285,10 @@ mod tests {
             config.synthesis_output.contract,
             agent_loop::r#loop::config::AnswerContractKind::ProseOnly
         );
-        assert!(config.loop_exit.require_evidence);
+        assert!(
+            !config.loop_exit.require_evidence,
+            "require_evidence is skill-owned, not host-forced"
+        );
         assert!(!config.loop_exit.allow_content_early_stop);
         assert!(config.loop_exit.skip_synthesis_on_direct_answer);
         assert!(config.skill_catalog.mandatory.synthesis.is_empty());
@@ -1498,10 +1501,10 @@ mod tests {
     fn answer_vs_dispatch_phrase_mutex() {
         use agent_loop::r#loop::config::load_system_prompt;
 
-        let answer = load_system_prompt("prompts/orchestrators/product-answer-base.md")
+        let answer = load_system_prompt("prompts/deprecated/orchestrator-multiagent/product-answer-base.md")
             .expect("product-answer-base");
         let chat = load_system_prompt("prompts/orchestrators/chat-base.md").expect("chat-base");
-        let orch = load_system_prompt("prompts/orchestrators/orchestrator-base.md")
+        let orch = load_system_prompt("prompts/deprecated/orchestrator-multiagent/orchestrator-base.md")
             .expect("orchestrator-base");
 
         for forbidden in [

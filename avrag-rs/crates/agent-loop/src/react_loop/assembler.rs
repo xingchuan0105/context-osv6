@@ -277,7 +277,11 @@ mod tests {
             &mut disclosed,
             None,
         );
-        assert!(ctx.system_content.contains("dense_search"));
+        assert!(
+            ctx.system_content.contains("client.dense")
+                || ctx.system_content.contains("dense(query)"),
+            "codegen skill should document dense retrieval"
+        );
         assert!(!ctx.system_content.contains("rag-codegen-guide"));
         assert!(ctx.system_content.contains("Retrieval query: test"));
         assert!(
@@ -330,8 +334,10 @@ mod tests {
             None,
         );
         assert!(
-            ctx.system_content.contains("dense_search"),
-            "iteration 1 must still include codegen SDK signatures"
+            ctx.system_content.contains("client.dense")
+                || ctx.system_content.contains("dense(query)"),
+            "iteration 1 must still include SaC SDK signatures: {}",
+            &ctx.system_content[..ctx.system_content.len().min(400)]
         );
         assert!(
             !ctx.system_content.contains("Retrieval query:"),
@@ -374,8 +380,11 @@ mod tests {
         );
 
         let names: Vec<&str> = ctx.tools.iter().map(|tool| tool.name.as_str()).collect();
-        assert!(names.contains(&"web_search"));
-        assert!(names.contains(&"web_fetch"));
+        // A1: search tool_pool empty — web is SaC only (client.web).
+        assert!(
+            names.is_empty() || !names.iter().any(|n| *n == "web_search" || *n == "web_fetch"),
+            "web_* must not be disclosed to LLM: {names:?}"
+        );
     }
 
     #[test]

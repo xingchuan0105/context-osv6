@@ -32,10 +32,17 @@ pub struct ModeConfig {
     /// Serde-default false so yamls and older configs are unaffected.
     #[serde(default)]
     pub worker_handoff: bool,
+    /// SaC SDK methods the sandbox may call (A3). Empty = no gate (tests/legacy).
+    /// Product `assemble_mode` always fills this from capability flags.
+    #[serde(default)]
+    pub sdk_primitives: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoopExitConfig {
+    /// **Skill-owned only** (no host hard gate). When true in YAML it documents
+    /// product intent for capability/skill prose; the loop does not refuse
+    /// DirectAnswer or force degraded for missing answer-grade chunks.
     #[serde(default)]
     pub require_evidence: bool,
     #[serde(default)]
@@ -47,7 +54,8 @@ pub struct LoopExitConfig {
 impl Default for LoopExitConfig {
     fn default() -> Self {
         Self {
-            require_evidence: true,
+            // Host no longer enforces; default false avoids implying a hard gate.
+            require_evidence: false,
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
         }
@@ -99,10 +107,16 @@ pub struct BudgetConfig {
     pub max_tokens: Option<u32>,
     #[serde(default)]
     pub max_tokens_by_user_tier: Option<HashMap<String, u32>>,
-    /// Extra tokens granted once when budget hits with zero answer-grade chunks.
+    /// Optional absolute override for no-chunk continue token boost.
+    /// When `None` (preferred), boost = **50% of baseline** `max_tokens`
+    /// (product rule: continue budget is not “+N free rounds”).
     #[serde(default)]
     pub no_chunk_grace_tokens: Option<u32>,
 }
+
+/// Continue / no-chunk grace: fraction of **baseline** token budget added once.
+pub const CONTINUE_TOKEN_BUDGET_RATIO_NUM: u32 = 1;
+pub const CONTINUE_TOKEN_BUDGET_RATIO_DEN: u32 = 2; // 50%
 
 impl Default for BudgetConfig {
     fn default() -> Self {
@@ -111,7 +125,8 @@ impl Default for BudgetConfig {
             by_user_tier: None,
             max_tokens: None,
             max_tokens_by_user_tier: None,
-            no_chunk_grace_tokens: Some(10_000),
+            // Prefer ratio-based grace (50% baseline); absolute is ops override only.
+            no_chunk_grace_tokens: None,
         }
     }
 }
@@ -148,8 +163,24 @@ impl BudgetConfig {
         resolved.unwrap_or(0)
     }
 
+    /// Tokens added once when retrieve budget hits with zero answer-grade chunks.
+    /// Default: `⌊baseline_max_tokens × 50%⌋`. Absolute `no_chunk_grace_tokens`
+    /// overrides when set. Baseline `0` (rounds-only) → absolute or `0`.
+    pub fn resolve_continue_token_boost(&self, baseline_max_tokens: u32) -> u32 {
+        if let Some(abs) = self.no_chunk_grace_tokens {
+            return abs;
+        }
+        if baseline_max_tokens == 0 {
+            return 0;
+        }
+        baseline_max_tokens
+            .saturating_mul(CONTINUE_TOKEN_BUDGET_RATIO_NUM)
+            / CONTINUE_TOKEN_BUDGET_RATIO_DEN
+    }
+
+    /// @deprecated name — use [`Self::resolve_continue_token_boost`].
     pub fn resolve_no_chunk_grace_tokens(&self) -> u32 {
-        self.no_chunk_grace_tokens.unwrap_or(10_000)
+        self.resolve_continue_token_boost(self.max_tokens.unwrap_or(0))
     }
 }
 

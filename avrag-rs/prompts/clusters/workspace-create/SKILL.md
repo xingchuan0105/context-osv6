@@ -7,7 +7,7 @@ atomic: true
 
 ## Personal product workflow
 
-Context-OS is a personal product: one user owns their workspaces. Agents should **not** assume an account or account-level API key.
+本产品按个人使用：工作区归用户本人。不要假设存在「账号级」密钥。
 
 ### Get a workspace id
 
