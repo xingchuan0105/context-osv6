@@ -92,6 +92,54 @@ fn partial_coverage_with_zero_calls_is_not_e105() {
     );
 }
 
+// ---- E106 (假 full 机检, handover doc §5.2/§6 P0) -------------------------
+
+#[test]
+fn full_coverage_with_zero_retrieval_calls_is_e106() {
+    let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"全部找到","key_facts":[],"coverage":"full","gaps":[]}"#;
+    let outcome = compile(raw, false);
+    assert!(outcome.has_errors());
+    assert!(codes(&outcome).contains(&"E106".to_string()));
+    let fb = outcome.render_feedback();
+    assert!(fb.contains("E106"), "{fb}");
+    assert!(fb.contains("零检索调用无法支撑 full"), "{fb}");
+}
+
+#[test]
+fn full_coverage_with_retrieval_calls_is_not_e106() {
+    // 有检索的 full 是合法的（模型查到了再声明全覆盖）。
+    let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"全部找到","key_facts":[],"coverage":"full","gaps":[]}"#;
+    let outcome = compile(raw, true);
+    assert!(!codes(&outcome).contains(&"E106".to_string()));
+}
+
+// ---- E107 (未执行代码当交货, handover doc §5.2/§6 P0) ---------------------
+
+#[test]
+fn fenced_code_block_with_zero_calls_is_e107() {
+    let raw = "```python\nresult = compute()\nprint(result)\n```";
+    let outcome = compile(raw, false);
+    assert!(codes(&outcome).contains(&"E107".to_string()));
+    let fb = outcome.render_feedback();
+    assert!(fb.contains("E107"), "{fb}");
+    assert!(fb.contains("未执行代码"), "{fb}");
+}
+
+#[test]
+fn fenced_code_block_with_tool_calls_is_not_e107() {
+    // 执行了代码（有工具结果）的 code block 是合法的 K3 prose handoff。
+    let raw = "```python\nresult = compute()\nprint(result)\n```";
+    let outcome = compile(raw, true);
+    assert!(!codes(&outcome).contains(&"E107".to_string()));
+}
+
+#[test]
+fn prose_with_code_fragment_is_not_e107() {
+    // 散文里含 code 片段不是纯 code block（不以 ``` 开头）→ 不触发 E107。
+    let outcome = compile("分析结果如下：total_hits=59，覆盖完整。", false);
+    assert!(!codes(&outcome).contains(&"E107".to_string()));
+}
+
 #[test]
 fn prose_never_triggers_e105() {
     // E105 reads the declared coverage field; prose has none.
@@ -135,7 +183,9 @@ fn fabricated_block_inside_claim_is_stripped() {
 
 #[test]
 fn fenced_json_is_tolerated_with_w102() {
-    let raw = "```json\n{\"summary\":\"s\",\"coverage\":\"full\",\"gaps\":[],\"key_facts\":[]}\n```";
+    // coverage=partial (not full) to avoid E106 假-full check; this test
+    // focuses on W102 fenced-JSON tolerance, not coverage semantics.
+    let raw = "```json\n{\"summary\":\"s\",\"coverage\":\"partial\",\"gaps\":[],\"key_facts\":[]}\n```";
     let outcome = compile(raw, false);
     assert!(!outcome.has_errors());
     assert!(codes(&outcome).contains(&"W102".to_string()));

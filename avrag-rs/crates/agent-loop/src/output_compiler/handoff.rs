@@ -66,6 +66,16 @@ pub fn compile_handoff(input: &HandoffCompileInput) -> CompileOutcome<serde_json
 
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&body) else {
         // K3: prose / SELECTED-only final message — a legal handoff.
+        // E107: fenced code block as the WHOLE final + zero tool calls =
+        // unexecuted code passed off as delivery (handover doc §5.2/§6 P0).
+        if trimmed.starts_with("```") && !input.has_tool_results {
+            diagnostics.push(Diagnostic::error(
+                "E107",
+                None,
+                "整条 handoff 是代码块且本轮零工具调用（未执行代码当交货）",
+                "先执行代码（产生工具结果），再以分析散文交付；纯未执行代码不接受",
+            ));
+        }
         return CompileOutcome {
             value: None,
             diagnostics,
@@ -79,6 +89,9 @@ pub fn compile_handoff(input: &HandoffCompileInput) -> CompileOutcome<serde_json
     // E105: coverage=insufficient declared with ZERO retrieval calls this
     // loop — a fabricated "已检索" narrative (see input.has_tool_results).
     check_insufficient_has_retrieval(input.has_tool_results, &value, &mut diagnostics);
+    // E106: coverage=full declared with ZERO retrieval calls — fabricated
+    // "全覆盖" with no evidence (handover doc §5.2/§6 P0: 假 full 机检).
+    check_full_without_evidence(input.has_tool_results, &value, &mut diagnostics);
 
     // W101: hedge markers — advisory only, never blocks.
     check_hedge_markers(&value, &mut diagnostics);
@@ -175,6 +188,32 @@ fn check_insufficient_has_retrieval(
         Some("coverage".to_string()),
         "声明 coverage=insufficient（查无），但本轮循环零检索调用",
         "先执行至少一次检索（dense/lexical/graph/doc_scan），再决定是否查无——零检索调用的查无不接受",
+    ));
+}
+
+/// E106: coverage=full declared with ZERO retrieval calls — a fabricated
+/// "全覆盖" with no evidence to back it (handover doc §5.2/§6 P0).
+/// Mirror of E105 (insufficient): both catch "conclusion without retrieval".
+fn check_full_without_evidence(
+    has_tool_results: bool,
+    v: &serde_json::Value,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if has_tool_results {
+        return;
+    }
+    let coverage = v
+        .get("coverage")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    if !coverage.eq_ignore_ascii_case("full") {
+        return;
+    }
+    diagnostics.push(Diagnostic::error(
+        "E106",
+        Some("coverage".to_string()),
+        "声明 coverage=full（全覆盖），但本轮循环零检索调用",
+        "零检索调用无法支撑 full——先执行检索再判定覆盖度，否则降级为 partial/insufficient",
     ));
 }
 
