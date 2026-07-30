@@ -28,7 +28,7 @@ pub fn build_anthropic_messages_body(
     req: &LlmRequest,
 ) -> Result<serde_json::Value, LlmError> {
     let mut system_parts = Vec::new();
-    let mut messages = Vec::new();
+    let mut messages: Vec<serde_json::Value> = Vec::new();
 
     for message in &req.messages {
         if message.role == "system" {
@@ -116,10 +116,23 @@ pub fn build_anthropic_messages_body(
             content_blocks.push(build_text_block("", None));
         }
 
-        messages.push(serde_json::json!({
-            "role": role,
-            "content": content_blocks,
-        }));
+        // Anthropic requires alternating user/assistant turns. Merge adjacent
+        // same-role turns (P0 review fix: budget_hint user may follow a
+        // tool_result user → two consecutive user turns → API 400).
+        if messages.last().and_then(|m| m.get("role").and_then(|r| r.as_str())) == Some(role) {
+            if let Some(arr) = messages
+                .last_mut()
+                .and_then(|m| m.get_mut("content"))
+                .and_then(|c| c.as_array_mut())
+            {
+                arr.extend(content_blocks);
+            }
+        } else {
+            messages.push(serde_json::json!({
+                "role": role,
+                "content": content_blocks,
+            }));
+        }
     }
 
     // Anthropic prompt cache: breakpoint on the rolling suffix (last message's
@@ -221,16 +234,20 @@ struct StreamEvent {
 
 fn usage_from_anthropic(usage: &AnthropicUsage, provider: &str, model: &str) -> LlmUsage {
     // Anthropic's `input_tokens` excludes cache read/write (unlike DeepSeek/OpenAI
-    // where prompt_tokens already includes cached hits). Fold cache_creation into
-    // prompt_tokens so the billing three-bucket math (miss = prompt - cached)
-    // charges it at the input rate instead of dropping it entirely.
-    // Residual: exact 1.25× write premium needs a dedicated cache_write rate
-    // (BUG-1b); this 2-line fold fixes the full-omission leak.
-    let prompt_with_creation = usage.input_tokens + usage.cache_creation_input_tokens;
+    // where prompt_tokens already includes cached hits). To align semantics so
+    // the billing three-bucket math (cached = min(cached, prompt)) does NOT
+    // truncate cache_read, prompt_tokens must include ALL input tokens:
+    // input + cache_read + cache_creation.
+    // Review fix (2026-07-30): previously only added cache_creation, which let
+    // cached.min(prompt) clamp cache_read -> under-billed when read >> input.
+    // Residual: cache_creation charged at 1.0x (not 1.25x); see P2b.
+    let prompt_tokens = usage.input_tokens
+        + usage.cache_read_input_tokens
+        + usage.cache_creation_input_tokens;
     LlmUsage {
-        prompt_tokens: prompt_with_creation,
+        prompt_tokens,
         completion_tokens: usage.output_tokens,
-        total_tokens: prompt_with_creation + usage.output_tokens,
+        total_tokens: prompt_tokens + usage.output_tokens,
         provider: provider.to_string(),
         model: model.to_string(),
         cached_tokens: usage.cache_read_input_tokens,
@@ -589,11 +606,48 @@ mod tests {
         });
         protocol.step(&mut state, &response).unwrap();
         let finalized = protocol.finalize(state).unwrap();
-        // prompt = input(100) + cache_creation(30) = 130; cache_read → cached_tokens.
-        assert_eq!(finalized.usage.prompt_tokens, 130);
+        // prompt = input(100) + cache_read(80) + cache_creation(30) = 210
+        // (aligns with DeepSeek semantics where prompt includes cached tokens,
+        //  so billing's cached.min(prompt) does NOT truncate cache_read)
+        assert_eq!(finalized.usage.prompt_tokens, 210);
         assert_eq!(finalized.usage.cached_tokens, 80);
         assert_eq!(finalized.usage.completion_tokens, 20);
-        assert_eq!(finalized.usage.total_tokens, 150); // 130 + 20
+        assert_eq!(finalized.usage.total_tokens, 230); // 210 + 20
+    }
+
+    #[test]
+    fn anthropic_merges_consecutive_user_turns() {
+        // P0 review fix: budget_hint user after a tool_result user must merge
+        // into one user turn (Anthropic requires alternating user/assistant).
+        let tool_msg = ChatMessage {
+            role: "tool".to_string(),
+            content: "result data".to_string(),
+            multimodal_content: None,
+            name: Some("search".to_string()),
+            tool_call_id: Some("call_1".to_string()),
+            tool_calls: None,
+            reasoning_content: None,
+        };
+        let req = LlmRequest::new(
+            vec![
+                ChatMessage::system("sys"),
+                ChatMessage::user("query"),
+                ChatMessage::assistant("thinking"),
+                tool_msg,
+                ChatMessage::user("<loop_budget round=\"2\" />"),
+            ],
+            test_config(),
+        );
+        let body = build_anthropic_messages_body(&req).unwrap();
+        let msgs = body["messages"].as_array().unwrap();
+        // tool_result (user) + budget_hint (user) merge → roles must alternate.
+        let roles: Vec<&str> = msgs.iter().map(|m| m["role"].as_str().unwrap()).collect();
+        assert_eq!(roles, vec!["user", "assistant", "user"]);
+        // Merged user turn carries both tool_result and text blocks.
+        let merged = &msgs[2];
+        let blocks = merged["content"].as_array().unwrap();
+        assert!(blocks.iter().any(|b| b["type"] == "tool_result"));
+        assert!(blocks.iter().any(|b| b["type"] == "text"));
     }
 
     #[test]
