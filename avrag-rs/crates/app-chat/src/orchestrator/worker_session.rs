@@ -44,6 +44,12 @@ use super::workers;
 /// brief's handoff and the session seals.
 pub const CHANNEL_ITERATION_CAP: u8 = 10;
 
+/// Channel token budget — total tokens one channel may burn per user turn
+/// across all briefs. Token-primary (aligns with BudgetConfig.max_tokens as
+/// the loop's main stop); CHANNEL_ITERATION_CAP stays as a runaway safety
+/// ceiling. Default mirrors rag mode max_tokens; tune per channel if needed.
+pub const CHANNEL_TOKEN_CAP: u64 = 28_000;
+
 /// Metadata key carrying the session's alias cursor into the loop run
 /// (agent-loop seeds its counter from it; absent ⇒ 0, byte-identical to
 /// pre-W1 single-brief behavior). Canonical def: `agent_loop::worker_contract`.
@@ -101,8 +107,10 @@ pub struct WorkerSession {
     briefs: Vec<BriefRecord>,
     /// Retrieval-log alias cursor — aliases stay unique across briefs.
     alias_cursor: Arc<AtomicU64>,
-    /// Cumulative iterations spent this turn (drives the channel cap).
+    /// Cumulative iterations spent this turn (runaway safety ceiling).
     pub iterations_used: u8,
+    /// Cumulative tokens spent this turn (drives the channel seal — token-primary).
+    pub tokens_used: u64,
     sealed: bool,
     pub failed: bool,
 }
@@ -114,6 +122,7 @@ impl WorkerSession {
             briefs: Vec::new(),
             alias_cursor: Arc::new(AtomicU64::new(0)),
             iterations_used: 0,
+            tokens_used: 0,
             sealed: false,
             failed: false,
         }
@@ -142,10 +151,11 @@ impl WorkerSession {
         if self.sealed {
             return Err(SessionError::BudgetExhausted);
         }
-        // W2: channel cap binds BEFORE the brief starts — already spent →
-        // seal and reject (brain sees the budget-exhausted signal).
-        let remaining = CHANNEL_ITERATION_CAP.saturating_sub(self.iterations_used);
-        if remaining == 0 {
+        // Token-primary budget: seal when the channel token pool is spent.
+        // Iterations remain as a runaway safety ceiling (anti-infinite-loop).
+        let token_remaining = CHANNEL_TOKEN_CAP.saturating_sub(self.tokens_used);
+        let iter_remaining = CHANNEL_ITERATION_CAP.saturating_sub(self.iterations_used);
+        if token_remaining == 0 || iter_remaining == 0 {
             self.sealed = true;
             return Err(SessionError::BudgetExhausted);
         }
@@ -156,7 +166,7 @@ impl WorkerSession {
         // cap; when the clamp binds, the loop's C5 budget-exhausted turn
         // forces this brief's handoff and the session seals right after.
         let per_brief = per_brief_budget(self.channel);
-        let effective = per_brief.min(remaining);
+        let effective = per_brief.min(iter_remaining);
         let cap_clamped = effective < per_brief;
         req.max_iterations = Some(effective);
         let alias_before = self.alias_cursor.load(Ordering::Relaxed);
@@ -190,7 +200,9 @@ impl WorkerSession {
         let hydrated =
             hydrate_selected_offset(&run.answer, &run.tool_results, alias_before);
         self.alias_cursor.store(alias_before + aliased, Ordering::Relaxed);
+        let tokens = run.usage.as_ref().map(|u| u.total_tokens).unwrap_or(0);
         self.iterations_used = self.iterations_used.saturating_add(iterations);
+        self.tokens_used = self.tokens_used.saturating_add(tokens);
 
         let summary = handoff
             .as_ref()
@@ -211,8 +223,14 @@ impl WorkerSession {
         };
         self.briefs.push(record);
 
-        let exhausted_after = self.iterations_used >= CHANNEL_ITERATION_CAP;
-        if cap_clamped || exhausted_after {
+        let token_exhausted = self.tokens_used >= CHANNEL_TOKEN_CAP;
+        let iter_exhausted = self.iterations_used >= CHANNEL_ITERATION_CAP;
+        // cap_clamped no longer seals on its own (token-primary design): a
+        // clamped brief just truncates itself; the next brief runs if token
+        // budget remains. Fixes the "half-loaded cannot top-up" symptom
+        // (handover doc §5.1 / P0): CAP 10 vs per_brief 12 used to seal after
+        // the first brief, blocking the second brief's evidence top-up.
+        if token_exhausted || iter_exhausted {
             self.sealed = true;
         }
         Ok(Ok(BriefOutcome {
@@ -497,7 +515,9 @@ mod tests {
         let reqs = exec.requests.lock().unwrap();
         assert!(reqs[0].messages.is_empty());
         assert!(!reqs[0].metadata.contains_key(ALIAS_START_METADATA));
-        assert_eq!(reqs[0].max_iterations, Some(4));
+        // effective = min(per_brief=12, iter_remaining=10) = 10 (clamped by
+        // CHANNEL_ITERATION_CAP safety ceiling; token-primary seal is separate).
+        assert_eq!(reqs[0].max_iterations, Some(10));
         drop(reqs);
 
         exec.push_script(Box::new(chunk_run("c2", "SELECTED: #2 用了第二条")));
