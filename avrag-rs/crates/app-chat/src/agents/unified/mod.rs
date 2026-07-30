@@ -306,7 +306,10 @@ impl UnifiedAgent {
         let llm = match llm_client {
             Some(client) => {
                 // Tag stage with assembled/legacy mode id; attach exit metering.
-                let client = client.with_stage(&stage_id);
+                let client = client.with_stage(&stage_id).with_request_context(
+                    request.session_id.as_deref().and_then(|s| uuid::Uuid::parse_str(s).ok()),
+                    request.auth.request_id().map(|s| s.to_string()),
+                );
                 let client = if let Some(ref observer) = self.usage_observer {
                     client.with_observer(observer.clone(), tenant.clone())
                 } else {

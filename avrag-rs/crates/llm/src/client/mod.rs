@@ -31,6 +31,8 @@ pub struct LlmClient {
     feature: String,
     stage: String,
     observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
+    session_id: Option<uuid::Uuid>,
+    request_id: Option<String>,
 }
 
 impl std::fmt::Debug for LlmClient {
@@ -59,6 +61,8 @@ impl LlmClient {
             feature: "agent_loop".to_string(),
             stage: String::new(),
             observer: None,
+            session_id: None,
+            request_id: None,
         }
     }
 
@@ -69,6 +73,19 @@ impl LlmClient {
 
     pub fn with_stage(mut self, stage: impl std::fmt::Display) -> Self {
         self.stage = stage.to_string();
+        self
+    }
+
+    /// Attach request-level context (session_id / request_id) for usage metering.
+    /// P1 (2026-07-30): flows into llm_usage_events so execute-round and
+    /// cross-session cache analysis is possible (was hardcoded None).
+    pub fn with_request_context(
+        mut self,
+        session_id: Option<uuid::Uuid>,
+        request_id: Option<String>,
+    ) -> Self {
+        self.session_id = session_id;
+        self.request_id = request_id;
         self
     }
 
@@ -180,9 +197,9 @@ impl LlmClient {
                 model: model.to_string(),
                 feature: self.feature.clone(),
                 stage: self.stage.clone(),
-                session_id: None,
+                session_id: self.session_id,
                 document_id: None,
-                request_id: None,
+                request_id: self.request_id.clone(),
                 trace_id: None,
             };
             observer.record_chat(tenant, &record).await;

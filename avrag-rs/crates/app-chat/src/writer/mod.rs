@@ -59,7 +59,8 @@ fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(Uuid::nil),
         };
-        client = client.with_observer(observer.clone(), tenant);
+        client = client.with_observer(observer.clone(), tenant)
+            .with_request_context(None, ctx.auth.request_id().map(|s| s.to_string()));
     }
 
     Ok(WriterLlm::from_client(client))
