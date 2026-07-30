@@ -18,7 +18,7 @@ applicable_strategies: [rag]
 - 你通过 **codegen** 在沙箱里调用 `client`（见 codegen skill），而不是聊天侧的 native tool 表。
 - 检索管道会做 **召回与截断**（rough / rerank / final 等）：进对话的证据是筛选后的集合，不是库的全文倒入。
 - 因此策略上更划算的是：想清楚「要哪类证据 → 用哪种 client 调用 → observation 是否够核验」；
-  需要精确计数/定位/查无判定时，用 `client.grep` 的 `total_hits`（服务端精确数）并做编号连续性互验，不要自写解析统计。
+  需要精确计数/定位/查无判定时，用 `client.grep` 的 `total_hits`（服务端精确数），不要自写解析统计。
 - 合成用户可见长文是后续阶段；本阶段把证据与可核验事实准备好即可。
 
 ### 可见上下文

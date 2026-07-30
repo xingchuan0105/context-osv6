@@ -57,8 +57,7 @@ impl ReActLoop {
             has_retrieval_observation(&state.messages, &state.tool_results, mode);
         if should_block_content_early_stop(loop_exit, has_evidence_now) {
             state.messages.push(ChatMessage::user(
-                "You must retrieve evidence (code execution or tools) before answering. \
-                 Continue with retrieval — do not answer from memory alone.",
+                super::super::exit_policy::NO_CHUNK_CONTINUE_NUDGE.to_string(),
             ));
             let exit_reason = "content_blocked_no_evidence".to_string();
             return Ok(IterationOutcome {

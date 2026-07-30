@@ -121,10 +121,24 @@ page = await client.read_lines(doc_id="…", start=48, end=60)
 xlsx 单元格含字面 `\n`——模式按单行写；xlsx 列名在**第一数据行**（markdown 表头行是
 标题/`Unnamed`）。
 
+### 渐进披露：表格素养（按需）
+
+主技能保持精简。遇到 **管道表 / 行列数据 / 按阶段或类型列过滤计数** 时，再加载 reference：
+
+| 文件 | 触发 |
+|------|------|
+| `reference/how-to-read-tables.md` | 文档呈 markdown 表格、要数「有多少行/项」、阶段列+角色列等多列结构 |
+
+加载方式（本轮只输出 JSON，不执行检索代码）：
+
+```json
+{"skill_request": ["codegen/how-to-read-tables"]}
+```
+
 ### `grep` / `read_lines` 的工作方式（重要）
 
 - **作用**：在整个 doc_scope（或指定 doc_ids）上逐行检索——coding-agent 的 grep。
-  `total_hits` 是 **Rust 统计的精确命中数**：计数题直接引用它，**不要**自写解析代码再数一遍。
+  `total_hits` 是 **Rust 统计的精确命中行数**（不是样本条数）。
 - **查无即证据**：`total_hits: 0` 是确定性的「scope 内确实没有」——比"我没找到方法"硬得多，
   可直接支撑 coverage=insufficient 或"证据不支持"类结论。
 - **表格过滤用管道符号**（方言见上方 markitdown 输出契约）：要「阶段列的值=概念阶段」就查
@@ -137,15 +151,9 @@ xlsx 单元格含字面 `\n`——模式按单行写；xlsx 列名在**第一数
 - **日期/时间安排类问题**：直接用日期模式定位——`grep(r"\d+月\d+日", regex=True)`，
   命中行即日期行，再读其邻域归属（属于哪个阶段/活动）。
 - **圈选路径不变**：grep/read_lines 的 chunks 同样带 `#n` 别名——采用证据时按惯例
-  `SELECTED: #n` 圈选；计数/枚举题圈选**覆盖编号区间**的 chunk（如 #1~#81 各行所在），
+  `SELECTED: #n` 圈选；清单/枚举类作答时圈选实际用到的命中所在 chunk，
   Answer 才能逐条引用，否则被判无据。
-- **计数语义（q078 第二轮教训）**：`total_hits`（行级命中数）**默认即答案**。仅当问题
-  明确要去重语义时才另算去重数——且必须**两数并陈**（如「81 行 / 46 个去重名」）并做
-  编号连续性互验，不得只报去重数顶替行数。拿不准时以行数为准并如实说明口径。
 - `read_lines(doc_id, start, end)`：与 grep 同一行号视图，按区间读原文（≤400 行）。
-- **计数题范式（q078 教训）**：模式计数后必须**交叉验证**——例如行号/编号列连续性
-  （`#1~#81` 连续 ⇒ 81；命中数 87 但有编号越出范围 ⇒ 有假命中需剔除）。
-  total_hits 与行号范围互验，不一致时在 handoff 里如实说明，不得自行裁决。
 - observation 不贴全文：在代码里 `print` 紧凑结论（数字、短清单），不要把 hits 整页倒出。
 
 ### 长 chunk 阅读（重要）
@@ -155,7 +163,8 @@ xlsx 单元格含字面 `\n`——模式按单行写；xlsx 列名在**第一数
 
 ### 常见选择背景
 
-- 用户问「有多少 / 各占多少 / 是否齐全」：往往需要 **可复算** → 先定位文档，`grep` 取 `total_hits` 并做编号连续性互验；估数容易错。
+- 用户问「有多少 / 各占多少 / 是否齐全」：往往需要 **可复算** → 先定位文档，用 `grep` 取行级
+  `total_hits`；若是表格结构，可先 `skill_request` 加载 `codegen/how-to-read-tables`。
 - 用户问「是什么 / 为什么」：dense 或 lexical 取相关段即可。
 - 不熟悉「这篇」文档：可先 `doc_profile` / `doc_summary` 看清结构与主题，再决定查哪里。
 - 同块可同时 dense + lexical，一次 observation 合并。
@@ -200,7 +209,8 @@ relations = await client.graph_search(query="…", depth=2)
 
 读 stderr，下一轮只输出一个修正后的 `<code>` 块；对照签名表换合法 `client.` 方法。
 
-申请其它 skill 时只输出 JSON，例如 `{"skill_request": ["metadata"]}`（本轮不执行检索代码）。
+申请其它 skill 或本簇 reference 时只输出 JSON（本轮不执行检索代码），例如：
+`{"skill_request": ["metadata"]}`、`{"skill_request": ["codegen/how-to-read-tables"]}`。
 
 ### 收尾交接
 

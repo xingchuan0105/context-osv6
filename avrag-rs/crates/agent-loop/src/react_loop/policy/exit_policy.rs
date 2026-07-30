@@ -3,17 +3,41 @@ use contracts::{ToolResult, ToolStatus};
 
 use super::config::{LoopExitConfig, ModeConfig};
 
-const RAG_EVIDENCE_TOOLS: &[&str] = &[
+/// Tools whose payloads count as **answer-grade chunks** (unlock final answer).
+/// Catalog-only tools (`doc_profile` / `doc_metadata`) are intentionally excluded:
+/// a workspace listing is not retrieval evidence and must not open the answer gate.
+const RAG_ANSWER_CHUNK_TOOLS: &[&str] = &[
     "dense_retrieval",
     "lexical_retrieval",
     "graph_retrieval",
     "index_lookup",
     "doc_summary",
-    "doc_metadata",
-    "doc_profile",
+    "doc_grep",
+    "doc_read_lines",
 ];
 
 const SEARCH_EVIDENCE_TOOLS: &[&str] = &["web_search", "web_fetch"];
+
+/// Injected when the model tries to finalize without any answer-grade chunk.
+pub const NO_CHUNK_CONTINUE_NUDGE: &str = "\
+系统未收到任何可用检索 chunk（dense / lexical / graph / grep / read_lines 等正文命中）。\
+禁止进入最终答复阶段。请继续用 <code language=\"python\"> 调用 client 检索；\
+不要编造数字、编号或事实。";
+
+/// After normal budget + 2 grace rounds still have no chunks: force a failure reply.
+pub const RETRIEVAL_FAILED_FINAL_TURN: &str = "\
+检索仍未返回任何可用 chunk。不要再输出 <code> 代码块，不要编造任何文档事实。\n\
+请用与用户相同的语言直接说明：未能从文档中检索到相关证据，请用户重试或调整问题。\n\
+若任务简报要求 internal_worker_handoff_v1 JSON，则输出该 JSON 且 coverage=insufficient，\
+summary 写明检索失败、请用户重试；key_facts 置空数组。";
+
+/// Minimum extra completes when no-chunk grace fires (alongside grace tokens).
+pub const NO_CHUNK_BUDGET_GRACE_ROUNDS: u8 = 2;
+
+/// Injected when granting the no-chunk budget grace (token + round ceiling).
+pub const NO_CHUNK_BUDGET_GRACE_NUDGE: &str = "\
+检索预算已触顶且仍无可用检索 chunk。系统额外追加 token 额度，并至少再允许 2 次检索 complete。\n\
+请继续用 <code language=\"python\"> 调用 client 检索；仍不要编造答案。";
 
 // ---------------------------------------------------------------------------
 // Synthesis gate
@@ -39,6 +63,12 @@ pub fn decide_synthesis_gate(
     _tool_results: &[ToolResult],
     _query: &str,
 ) -> SynthesisGate {
+    // Hard gate: no answer-grade chunk → never skip into a final answer,
+    // even if the model already wrote prose (or a fabricated handoff).
+    if loop_exit.require_evidence && !has_evidence {
+        return SynthesisGate::RunFallbackThenCheck;
+    }
+
     if let Some(answer) = direct_answer {
         if loop_exit.skip_synthesis_on_direct_answer {
             return SynthesisGate::SkipSynthesisUseDirect(answer.to_string());
@@ -142,15 +172,38 @@ fn chunk_array_non_empty(data: &serde_json::Value) -> bool {
     false
 }
 
-/// True when a RAG tool result carries at least one chunk/item.
+/// True when a RAG tool result carries at least one answer-grade chunk/item.
 pub fn tool_result_has_chunks(result: &ToolResult) -> bool {
     if result.status != ToolStatus::Ok {
         return false;
     }
-    if !RAG_EVIDENCE_TOOLS.contains(&result.tool.as_str()) {
+    if !RAG_ANSWER_CHUNK_TOOLS.contains(&result.tool.as_str()) {
         return false;
     }
-    result.data.as_ref().is_some_and(chunk_array_non_empty)
+    let Some(data) = result.data.as_ref() else {
+        return false;
+    };
+    match result.tool.as_str() {
+        "doc_grep" => {
+            // total_hits > 0 is enough even when returned hits are truncated.
+            let hits = data
+                .get("total_hits")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                > 0;
+            hits || chunk_array_non_empty(data)
+                || data
+                    .get("hits")
+                    .and_then(|h| h.as_array())
+                    .is_some_and(|a| !a.is_empty())
+        }
+        "doc_read_lines" => data
+            .get("lines")
+            .and_then(|l| l.as_array())
+            .is_some_and(|a| !a.is_empty())
+            || chunk_array_non_empty(data),
+        _ => chunk_array_non_empty(data),
+    }
 }
 
 /// True when a Search tool result carries usable hits (non-empty results / body).
@@ -237,8 +290,11 @@ pub fn has_retrieval_observation(
     true
 }
 
+/// Hard gate: when evidence is required, refuse to leave retrieve without
+/// answer-grade chunks. `allow_content_early_stop` no longer bypasses this
+/// (2026-07-29 product rule: no chunk → no answer phase).
 pub fn should_block_content_early_stop(loop_exit: &LoopExitConfig, has_evidence: bool) -> bool {
-    loop_exit.require_evidence && !has_evidence && !loop_exit.allow_content_early_stop
+    loop_exit.require_evidence && !has_evidence
 }
 
 pub fn decide_post_loop(loop_exit: &LoopExitConfig, has_evidence: bool) -> PostLoopAction {
@@ -251,13 +307,9 @@ pub fn decide_post_loop(loop_exit: &LoopExitConfig, has_evidence: bool) -> PostL
 
 pub fn degraded_no_evidence_answer(mode_id: &str) -> String {
     match mode_id {
-        "rag" => "I could not find relevant evidence in your documents for this question. \
-                  Please try rephrasing or upload additional material."
-            .to_string(),
-        "search" => "I could not retrieve web evidence to answer this question. \
-                      Please try again with a more specific query."
-            .to_string(),
-        _ => "I do not have enough information to answer this question.".to_string(),
+        "rag" => "未能从文档中检索到相关证据，请重试或调整问题。".to_string(),
+        "search" => "未能从网页检索到相关证据，请重试或调整问题。".to_string(),
+        _ => "信息不足，暂时无法回答，请重试。".to_string(),
     }
 }
 
@@ -370,6 +422,61 @@ mod tests {
         };
         assert!(should_block_content_early_stop(&loop_exit, false));
         assert!(!should_block_content_early_stop(&loop_exit, true));
+    }
+
+    #[test]
+    fn hard_gate_ignores_allow_content_early_stop() {
+        let loop_exit = LoopExitConfig {
+            require_evidence: true,
+            allow_content_early_stop: true,
+            skip_synthesis_on_direct_answer: true,
+        };
+        assert!(should_block_content_early_stop(&loop_exit, false));
+    }
+
+    #[test]
+    fn doc_profile_alone_is_not_answer_evidence() {
+        let mode = rag_mode();
+        let results = vec![ToolResult {
+            tool: "doc_profile".to_string(),
+            version: "1.0".to_string(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!([{"name": "thesis.txt", "doc_id": "x"}])),
+            trace: None,
+        }];
+        assert!(!has_retrieval_observation(&[], &results, &mode));
+    }
+
+    #[test]
+    fn doc_grep_with_hits_counts_as_answer_evidence() {
+        let mode = rag_mode();
+        let results = vec![ToolResult {
+            tool: "doc_grep".to_string(),
+            version: "1.0".to_string(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "total_hits": 3,
+                "returned": 3,
+                "truncated": false,
+                "hits": [{"line": 1, "text": "x"}],
+                "chunks": [{"chunk_id": "6c16ac99-e934-4355-be1c-f0956acb51d1"}]
+            })),
+            trace: None,
+        }];
+        assert!(has_retrieval_observation(&[], &results, &mode));
+    }
+
+    #[test]
+    fn decide_synthesis_gate_refuses_direct_without_chunks() {
+        let loop_exit = LoopExitConfig {
+            require_evidence: true,
+            allow_content_early_stop: true,
+            skip_synthesis_on_direct_answer: true,
+        };
+        assert_eq!(
+            decide_synthesis_gate(&loop_exit, false, Some("fabricated answer"), &[], "q"),
+            SynthesisGate::RunFallbackThenCheck
+        );
     }
 
     #[test]

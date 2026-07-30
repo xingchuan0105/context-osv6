@@ -68,17 +68,22 @@ pub fn derived_refusal_correct(refusal: &RefusalJudgment, expected_should_answer
 }
 
 /// Assign the single root-cause label for a query, in design §5 priority
-/// order: INFRA_ERROR → JUDGE_ERROR → RETRIEVAL_MISS → SELECTION_MISS →
-/// REFUSAL_WRONG → UNGROUNDED → INCORRECT → PARTIAL → PASS.
+/// order: INFRA_ERROR → JUDGE_ERROR → RETRIEVAL_MISS (only when answer not
+/// already good) → SELECTION_MISS → REFUSAL_WRONG → UNGROUNDED → INCORRECT →
+/// PARTIAL → PASS.
+///
+/// RETRIEVAL_MISS used to fire on `recall==0` alone, which mislabeled
+/// markitdown/grep-era answers that were correct and grounded while Layer-A
+/// substring gold no longer matched the dense/lexical stream. Align: zero
+/// recall is a retrieval failure only when the answer is not already at/above
+/// τ_c (and not a correct-refusal NA). Good answers fall through so
+/// faithfulness / PASS can still apply.
 pub fn label_for(input: &LabelInput) -> LabelV2 {
     if input.has_infra_error {
         return LabelV2::InfraError;
     }
     if input.judge_status == JudgeStatus::Error {
         return LabelV2::JudgeError;
-    }
-    if input.gold_exists && !input.expect_no_retrieval && input.retrieval_recall == 0.0 {
-        return LabelV2::RetrievalMiss;
     }
     let Some(judge) = input.judge else {
         // JudgeStatus::Ok without a parsed output is a pipeline bug; surface
@@ -92,6 +97,18 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     // be mislabeled (the q041/q043 failure mode).
     let correctness_na = judge.answer_correctness.verdict == CorrectnessVerdict::NotApplicable;
     let correctness = judge.answer_correctness.score;
+    let answer_quality_ok = correctness_na
+        || (correctness >= t.tau_correctness
+            && judge.answer_correctness.verdict != CorrectnessVerdict::Partial
+            && judge.answer_correctness.verdict != CorrectnessVerdict::Incorrect);
+
+    if input.gold_exists
+        && !input.expect_no_retrieval
+        && input.retrieval_recall == 0.0
+        && !answer_quality_ok
+    {
+        return LabelV2::RetrievalMiss;
+    }
     // SELECTION_MISS additionally requires gold to exist (q125 class): for
     // gold-empty questions recall is vacuous 1.0 and cited∩gold is vacuous 0,
     // so the rule would fire on ANY sub-threshold answer — a metadata/tool
@@ -486,12 +503,38 @@ mod tests {
     #[test]
     fn retrieval_miss_beats_incorrect() {
         // Correctness 0.1 would alone imply INCORRECT, but recall == 0 with
-        // gold wins priority.
+        // gold wins priority when the answer is not already good.
         let judge = judge_output(0.1, CorrectnessVerdict::Incorrect, 1.0, &[], true);
         let mut input = base_input(&judge);
         input.retrieval_recall = 0.0;
         input.cited_gold_hits = 0;
         assert_eq!(label_for(&input), LabelV2::RetrievalMiss);
+    }
+
+    #[test]
+    fn pass_when_answer_correct_despite_recall_zero() {
+        // markitdown / grep path: Layer-A substring gold may miss while judge
+        // correctness+faithfulness already pass — do not mask as RETRIEVAL_MISS.
+        let judge = judge_output(1.0, CorrectnessVerdict::Correct, 1.0, &[], true);
+        let mut input = base_input(&judge);
+        input.retrieval_recall = 0.0;
+        input.cited_gold_hits = 0;
+        assert_eq!(label_for(&input), LabelV2::Pass);
+    }
+
+    #[test]
+    fn ungrounded_still_wins_when_correct_but_unsupported_with_recall_zero() {
+        let judge = judge_output(
+            1.0,
+            CorrectnessVerdict::Correct,
+            0.0,
+            &["fabricated number"],
+            true,
+        );
+        let mut input = base_input(&judge);
+        input.retrieval_recall = 0.0;
+        input.cited_gold_hits = 0;
+        assert_eq!(label_for(&input), LabelV2::Ungrounded);
     }
 
     #[test]
@@ -852,9 +895,10 @@ mod tests {
         input.cited_gold_hits = 0;
         input.expect_no_retrieval = true;
         assert_eq!(label_for(&input), LabelV2::Pass);
-        // Sanity: without the flag this is RETRIEVAL_MISS.
+        // Without the flag: answer score is already ≥τ_c so recall=0 does not
+        // force RETRIEVAL_MISS; low faithfulness + unsupported claims → UNGROUNDED.
         input.expect_no_retrieval = false;
-        assert_eq!(label_for(&input), LabelV2::RetrievalMiss);
+        assert_eq!(label_for(&input), LabelV2::Ungrounded);
     }
 
     #[test]

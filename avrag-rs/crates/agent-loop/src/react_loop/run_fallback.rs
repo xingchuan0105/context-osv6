@@ -53,6 +53,7 @@ impl ReActLoop {
             self.finish_degraded_no_evidence_run(
                 mode,
                 request,
+                messages,
                 disclosed_state,
                 collected_tool_results,
                 sink,
@@ -72,6 +73,7 @@ impl ReActLoop {
         &self,
         mode: &ModeConfig,
         request: &AgentRequest,
+        messages: &[ChatMessage],
         disclosed_state: &DisclosedState,
         collected_tool_results: &[ToolResult],
         sink: &dyn AgentEventSink,
@@ -83,7 +85,29 @@ impl ReActLoop {
         reasoning_summary_acc: &str,
         start_time: std::time::Instant,
     ) -> Result<AgentRunResult, AppError> {
-        let answer = degraded_no_evidence_answer(&mode.id);
+        // Ask the model once to state retrieval failure (no tools). If the call
+        // fails, fall back to a fixed user-facing refusal string.
+        let mut final_messages = messages.to_vec();
+        final_messages.push(ChatMessage::user(
+            super::exit_policy::RETRIEVAL_FAILED_FINAL_TURN.to_string(),
+        ));
+        let answer = match self.llm.complete(&final_messages, None).await {
+            Ok(resp) => {
+                let text = resp.content.trim().to_string();
+                if text.is_empty() {
+                    degraded_no_evidence_answer(&mode.id)
+                } else {
+                    text
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "retrieval-failed final LLM call failed; using fixed refusal"
+                );
+                degraded_no_evidence_answer(&mode.id)
+            }
+        };
         let disclosed_skills: Vec<String> = disclosed_state
             .disclosed_skill_ids
             .iter()

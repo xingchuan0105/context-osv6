@@ -15,11 +15,18 @@ skill_catalog:
     # (assemble_mode forces ProseOnly + early-stop; see diagnosis prompt-stack).
     synthesis: []
 budget:
-  max_iterations: 4
+  # Rounds = safety ceiling (concurrency / runaway). Tokens = primary cost budget.
+  max_iterations: 12
   by_user_tier:
-    free: 2
-    pro: 4
-    enterprise: 4
+    free: 8
+    pro: 12
+    enterprise: 16
+  max_tokens: 28000
+  max_tokens_by_user_tier:
+    free: 16000
+    pro: 28000
+    enterprise: 40000
+  no_chunk_grace_tokens: 10000
 auto_fallback:
   enabled: true
   tool_id: dense_retrieval
@@ -28,8 +35,9 @@ auto_fallback:
 temperature: 0.4
 loop_exit:
   require_evidence: true
-  # Handoff JSON can finish the loop without monomode JSON synthesis.
-  allow_content_early_stop: true
+  # 2026-07-29 hard gate: no answer-grade chunk → refuse answer phase (nudged
+  # continue; +2 grace at budget; still empty → retrieval-failed final).
+  allow_content_early_stop: false
   skip_synthesis_on_direct_answer: true
 synthesis_output:
   # assemble_mode re-asserts ProseOnly for capability paths.

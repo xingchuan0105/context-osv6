@@ -114,6 +114,7 @@ fn budget_config_uses_tier_override_when_present() {
     let cfg = BudgetConfig {
         max_iterations: 4,
         by_user_tier: Some(tiers),
+        ..Default::default()
     };
     assert_eq!(
         cfg.resolve_max_iterations(Some(&serde_json::json!("free"))),
@@ -132,6 +133,7 @@ fn budget_config_falls_back_to_max_iterations_for_unknown_tier() {
     let cfg = BudgetConfig {
         max_iterations: 4,
         by_user_tier: Some(tiers),
+        ..Default::default()
     };
     assert_eq!(
         cfg.resolve_max_iterations(Some(&serde_json::json!("enterprise"))),
@@ -144,6 +146,7 @@ fn budget_config_falls_back_when_no_tier() {
     let cfg = BudgetConfig {
         max_iterations: 4,
         by_user_tier: None,
+        ..Default::default()
     };
     assert_eq!(cfg.resolve_max_iterations(None), 4);
 }
@@ -153,8 +156,29 @@ fn budget_config_clamps_to_at_least_one() {
     let cfg = BudgetConfig {
         max_iterations: 0,
         by_user_tier: None,
+        ..Default::default()
     };
     assert_eq!(cfg.resolve_max_iterations(None), 1);
+}
+
+#[test]
+fn budget_config_resolves_token_tier() {
+    let mut tiers = std::collections::HashMap::new();
+    tiers.insert("free".to_string(), 16_000);
+    tiers.insert("pro".to_string(), 28_000);
+    let cfg = BudgetConfig {
+        max_iterations: 12,
+        by_user_tier: None,
+        max_tokens: Some(28_000),
+        max_tokens_by_user_tier: Some(tiers),
+        no_chunk_grace_tokens: Some(10_000),
+    };
+    assert_eq!(
+        cfg.resolve_max_tokens(Some(&serde_json::json!("free"))),
+        16_000
+    );
+    assert_eq!(cfg.resolve_max_tokens(None), 28_000);
+    assert_eq!(cfg.resolve_no_chunk_grace_tokens(), 10_000);
 }
 
 #[test]

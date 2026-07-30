@@ -88,9 +88,32 @@ impl Default for SynthesisOutputConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BudgetConfig {
+    /// Safety ceiling on retrieve completes (prevents infinite loops when
+    /// usage is missing). Prefer `max_tokens` as the primary cost control.
     pub max_iterations: u8,
     #[serde(default)]
     pub by_user_tier: Option<HashMap<String, u8>>,
+    /// Primary retrieve budget: cumulative LLM `total_tokens` (prompt+completion).
+    /// `None` / omitted → rounds-only (legacy).
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
+    #[serde(default)]
+    pub max_tokens_by_user_tier: Option<HashMap<String, u32>>,
+    /// Extra tokens granted once when budget hits with zero answer-grade chunks.
+    #[serde(default)]
+    pub no_chunk_grace_tokens: Option<u32>,
+}
+
+impl Default for BudgetConfig {
+    fn default() -> Self {
+        Self {
+            max_iterations: 4,
+            by_user_tier: None,
+            max_tokens: None,
+            max_tokens_by_user_tier: None,
+            no_chunk_grace_tokens: Some(10_000),
+        }
+    }
 }
 
 impl BudgetConfig {
@@ -107,6 +130,26 @@ impl BudgetConfig {
             self.max_iterations
         };
         resolved.max(1)
+    }
+
+    /// Resolved token cap. `0` means unlimited (rounds-only).
+    pub fn resolve_max_tokens(&self, request_tier: Option<&serde_json::Value>) -> u32 {
+        let tier_str = request_tier
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_lowercase());
+        let resolved = if let Some(tier) = tier_str {
+            self.max_tokens_by_user_tier
+                .as_ref()
+                .and_then(|m| m.get(&tier).copied())
+                .or(self.max_tokens)
+        } else {
+            self.max_tokens
+        };
+        resolved.unwrap_or(0)
+    }
+
+    pub fn resolve_no_chunk_grace_tokens(&self) -> u32 {
+        self.no_chunk_grace_tokens.unwrap_or(10_000)
     }
 }
 

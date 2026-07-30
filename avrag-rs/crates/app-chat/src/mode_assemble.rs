@@ -58,10 +58,13 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
     config.tool_pool.clear();
     config.system_prompt_base = CHAT_BASE.to_string();
 
-    // Capability path: iterations = sum of selected modes only (exclude chat base).
+    // Capability path: budget = sum of selected modes only (exclude chat base).
     if caps.rag || caps.search {
         config.budget.max_iterations = 0;
         config.budget.by_user_tier = None;
+        config.budget.max_tokens = None;
+        config.budget.max_tokens_by_user_tier = None;
+        config.budget.no_chunk_grace_tokens = None;
     }
 
     if caps.rag {
@@ -133,12 +136,15 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
 
 /// Worker / capability-agent loop exit for Option D handoff finals.
 ///
-/// Must stay in lockstep: ProseOnly alone still runs synthesis with empty
-/// contract text; skip_synthesis alone still requires a "direct answer" from
-/// early-stop. Doing only one half reopens the dual-track (brief vs code contract).
+/// `require_evidence` + hard gate: no answer-grade chunk → cannot enter answer.
+/// `skip_synthesis_on_direct_answer` still applies **after** chunks exist so a
+/// valid worker handoff can finalize without monomode synthesis.
 fn apply_worker_handoff_loop_exit(config: &mut ModeConfig) {
     config.loop_exit.require_evidence = true;
-    config.loop_exit.allow_content_early_stop = true;
+    // 2026-07-29 hard gate: no answer-grade chunk → cannot early-stop into
+    // final handoff / answer (allow_content_early_stop is ignored by the gate
+    // anyway; keep false so config and behavior match).
+    config.loop_exit.allow_content_early_stop = false;
     config.loop_exit.skip_synthesis_on_direct_answer = true;
     config.synthesis_output.contract = AnswerContractKind::ProseOnly;
     // U3: mark this as a worker loop (handoff is final) so downstream
@@ -174,7 +180,7 @@ fn union_strings(dst: &mut Vec<String>, src: &[String]) {
     }
 }
 
-/// Sum iteration budgets from a selected capability mode into `dst`.
+/// Sum iteration **and token** budgets from a selected capability mode into `dst`.
 /// Used for multi-select: dual = rag.budget + search.budget (not max).
 fn add_budget(dst: &mut ModeConfig, src: &ModeConfig) {
     dst.budget.max_iterations = dst
@@ -194,10 +200,43 @@ fn add_budget(dst: &mut ModeConfig, src: &ModeConfig) {
             dst.budget.by_user_tier = Some(src_map.clone());
         }
         (Some(dst_map), None) => {
-            // Cap-level max_iterations already summed; keep existing tier map.
             let _ = dst_map;
         }
         (None, None) => {}
+    }
+    // Token caps: sum Options (None treated as 0 for addend; keep None if both None).
+    match (dst.budget.max_tokens, src.budget.max_tokens) {
+        (None, None) => {}
+        (a, b) => {
+            dst.budget.max_tokens = Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)));
+        }
+    }
+    match (
+        &mut dst.budget.max_tokens_by_user_tier,
+        &src.budget.max_tokens_by_user_tier,
+    ) {
+        (Some(dst_map), Some(src_map)) => {
+            for (k, v) in src_map {
+                dst_map
+                    .entry(k.clone())
+                    .and_modify(|cur| *cur = (*cur).saturating_add(*v))
+                    .or_insert(*v);
+            }
+        }
+        (None, Some(src_map)) => {
+            dst.budget.max_tokens_by_user_tier = Some(src_map.clone());
+        }
+        _ => {}
+    }
+    match (
+        dst.budget.no_chunk_grace_tokens,
+        src.budget.no_chunk_grace_tokens,
+    ) {
+        (None, None) => {}
+        (a, b) => {
+            dst.budget.no_chunk_grace_tokens =
+                Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)));
+        }
     }
 }
 
@@ -295,10 +334,10 @@ mod tests {
         );
         assert!(assembled.config.inject_retrieval_query);
         assert!(assembled.config.loop_exit.require_evidence);
-        assert!(assembled.config.loop_exit.allow_content_early_stop);
+        assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
-        // Budget is sum of rag(4) + search(3) = 7 (not max; chat base not included)
-        assert_eq!(assembled.config.budget.max_iterations, 7);
+        // Budget is sum of rag(12) + search(8) = 20 (not max; chat base not included)
+        assert_eq!(assembled.config.budget.max_iterations, 20);
         // Skill catalog union includes codegen (rag) and search cluster.
         assert!(assembled.config.skill_catalog.cluster_by_id("codegen").is_some());
         assert!(assembled.config.skill_catalog.cluster_by_id("search").is_some());
@@ -316,7 +355,8 @@ mod tests {
             search: false,
         })
         .expect("assemble rag");
-        assert_eq!(assembled.config.budget.max_iterations, 4);
+        assert_eq!(assembled.config.budget.max_iterations, 12);
+        assert_eq!(assembled.config.budget.max_tokens, Some(28_000));
         assert_eq!(assembled.config.temperature, Some(0.4));
     }
 
@@ -327,14 +367,16 @@ mod tests {
             search: true,
         })
         .expect("assemble search");
-        assert_eq!(assembled.config.budget.max_iterations, 3);
+        assert_eq!(assembled.config.budget.max_iterations, 8);
+        assert_eq!(assembled.config.budget.max_tokens, Some(16_000));
         assert_eq!(assembled.config.temperature, Some(0.4));
     }
 
     #[test]
     fn pure_chat_keeps_chat_budget_and_unified_temp() {
         let assembled = assemble_mode(CapabilitySet::default()).expect("pure chat");
-        assert_eq!(assembled.config.budget.max_iterations, 2);
+        assert_eq!(assembled.config.budget.max_iterations, 4);
+        assert_eq!(assembled.config.budget.max_tokens, Some(8_000));
         assert_eq!(assembled.config.temperature, Some(0.4));
     }
 
@@ -354,7 +396,7 @@ mod tests {
             assembled.config.synthesis_output.contract,
             AnswerContractKind::ProseOnly
         );
-        assert!(assembled.config.loop_exit.allow_content_early_stop);
+        assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
         assert!(assembled.config.skill_catalog.mandatory.synthesis.is_empty());
         assert!(
@@ -387,7 +429,7 @@ mod tests {
             assembled.config.synthesis_output.contract,
             AnswerContractKind::ProseOnly
         );
-        assert!(assembled.config.loop_exit.allow_content_early_stop);
+        assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
         assert!(assembled.config.skill_catalog.mandatory.synthesis.is_empty());
         let fb = assembled.config.auto_fallback.expect("search fallback");

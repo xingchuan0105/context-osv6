@@ -19,6 +19,8 @@ impl ReActLoop {
         request: &AgentRequest,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,
+        tokens_used: u32,
+        tokens_max: u32,
     ) -> super::super::assembler::AssembledContext {
         let last_assistant_content = state
             .messages
@@ -26,6 +28,9 @@ impl ReActLoop {
             .rev()
             .find(|m| m.role == "assistant")
             .map(|m| m.content.as_str());
+
+        state.disclosed.tokens_used_hint = Some(tokens_used);
+        state.disclosed.tokens_max_hint = Some(tokens_max);
 
         let assembled = ContextAssembler::assemble_retrieve(
             iteration,

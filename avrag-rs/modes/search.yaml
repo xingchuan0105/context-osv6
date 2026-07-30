@@ -10,16 +10,23 @@ skill_catalog:
   # PR-A: no monomode search-answer mandatory (worker handoff is final).
   mandatory_synthesis: []
 budget:
-  max_iterations: 3
+  max_iterations: 8
   by_user_tier:
-    free: 2
-    pro: 3
-    enterprise: 3
+    free: 6
+    pro: 8
+    enterprise: 12
+  max_tokens: 16000
+  max_tokens_by_user_tier:
+    free: 12000
+    pro: 16000
+    enterprise: 24000
+  no_chunk_grace_tokens: 8000
 # Unified with chat/rag so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:
   require_evidence: true
-  allow_content_early_stop: true
+  # Align with rag hard gate (no evidence → refuse answer phase).
+  allow_content_early_stop: false
   skip_synthesis_on_direct_answer: true
 synthesis_output:
   contract: prose_only

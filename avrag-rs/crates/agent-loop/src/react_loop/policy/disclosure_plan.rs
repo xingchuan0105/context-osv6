@@ -56,8 +56,15 @@ impl DisclosurePlanner {
         }
 
         if let Some(requested) = skill_request {
-            for cluster_id in requested {
-                push_cluster_body(&mut slices, cluster_id, None, already_disclosed, false);
+            for token in requested {
+                let tok = crate::react_loop::skill_request::split_skill_request_token(token);
+                push_cluster_body(
+                    &mut slices,
+                    &tok.cluster_id,
+                    tok.reference.as_deref(),
+                    already_disclosed,
+                    false,
+                );
             }
         }
 
@@ -326,12 +333,12 @@ fn render_cluster_body(
 ) -> Option<String> {
     let prompt_registry = PromptRegistry::standard_cached();
     let skill = prompt_registry.skill(cluster_id)?;
-    let is_atomic = skill.metadata().get("atomic") == Some(&"true".to_string());
-    let ctx = DisclosureContext::with_tier(if is_atomic && reference_slug.is_none() {
-        DisclosureTier::Runtime
-    } else {
-        DisclosureTier::Load
-    });
+    // Progressive refs: always render body at Load tier. Do **not** use Runtime
+    // (which dumps every reference/* spoke). Spokes load only when
+    // `reference_slug` is set (writing/format metadata, or
+    // skill_request `cluster/slug`).
+    let _ = skill.metadata().get("atomic"); // kept for future routing; Load for all
+    let ctx = DisclosureContext::with_tier(DisclosureTier::Load);
     let mut parts = Vec::new();
     for dep in skill.dependencies() {
         if !disclosed.disclosed_skill_ids.contains(dep) {
@@ -340,7 +347,13 @@ fn render_cluster_body(
             }
         }
     }
-    parts.push(skill.render(&ctx));
+    // If only a reference is requested and the cluster body was already
+    // disclosed this run, skip re-printing the full body.
+    let body_key = cluster_id.to_string();
+    let body_already = disclosed.disclosed_skill_ids.contains(&body_key);
+    if !(body_already && reference_slug.is_some()) {
+        parts.push(skill.render(&ctx));
+    }
 
     if let Some(slug) = reference_slug {
         let ref_key = normalize_reference_key(slug);

@@ -10,11 +10,17 @@ skill_catalog:
   # writing/format remain optional clusters via DisclosurePlanner.
   mandatory_synthesis: []
 budget:
-  max_iterations: 2
+  max_iterations: 4
   by_user_tier:
-    free: 2
-    pro: 3
-    enterprise: 3
+    free: 3
+    pro: 4
+    enterprise: 6
+  max_tokens: 8000
+  max_tokens_by_user_tier:
+    free: 6000
+    pro: 8000
+    enterprise: 12000
+  no_chunk_grace_tokens: 4000
 # Unified with rag/search so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:

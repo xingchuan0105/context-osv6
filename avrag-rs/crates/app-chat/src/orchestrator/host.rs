@@ -1286,7 +1286,7 @@ mod tests {
             agent_loop::r#loop::config::AnswerContractKind::ProseOnly
         );
         assert!(config.loop_exit.require_evidence);
-        assert!(config.loop_exit.allow_content_early_stop);
+        assert!(!config.loop_exit.allow_content_early_stop);
         assert!(config.loop_exit.skip_synthesis_on_direct_answer);
         assert!(config.skill_catalog.mandatory.synthesis.is_empty());
         let parts = parts_of(&req);

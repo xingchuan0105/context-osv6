@@ -31,9 +31,19 @@ impl ReActLoop {
         total_usage: &mut LlmUsage,
         sink: &dyn AgentEventSink,
         hooks: &dyn LoopHooks,
+        tokens_max: u32,
     ) -> Result<IterationOutcome, AppError> {
         let assembled = self
-            .assemble_retrieve_context(iteration, max_iterations, mode, request, state, sink)
+            .assemble_retrieve_context(
+                iteration,
+                max_iterations,
+                mode,
+                request,
+                state,
+                sink,
+                total_usage.total_tokens,
+                tokens_max,
+            )
             .await;
         let iter_start = std::time::Instant::now();
         let llm_response = self

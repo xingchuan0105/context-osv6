@@ -487,13 +487,10 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
 #[tokio::test]
 async fn content_without_evidence_in_rag_is_blocked() {
     let loop_ = test_loop();
-    // Policy guard coverage with early-stop disallowed. Note: modes/rag.yaml
-    // itself now ALLOWS no-evidence early stop (PR-A 2026-07-20) so empty-result
-    // workers can still finish their handoff JSON; this test pins the guard
-    // under the strict config (require evidence + no early stop).
-    let mut mode = rag_mode();
-    mode.loop_exit.allow_content_early_stop = false;
-    mode.loop_exit.skip_synthesis_on_direct_answer = false;
+    // 2026-07-29 hard gate: rag defaults require answer-grade chunks before
+    // any final prose / handoff (allow_content_early_stop no longer bypasses).
+    let mode = rag_mode();
+    assert!(mode.loop_exit.require_evidence);
     let mut state = empty_state();
     let sink = CollectingSink::new();
     let auth = test_auth();
@@ -521,22 +518,19 @@ async fn content_without_evidence_in_rag_is_blocked() {
         "content_blocked_no_evidence"
     );
     assert!(
-        state
-            .messages
-            .iter()
-            .any(|m| { m.role == "user" && m.content.contains("retrieve evidence") })
+        state.messages.iter().any(|m| {
+            m.role == "user" && m.content.contains("未收到任何可用检索 chunk")
+        }),
+        "nudge must tell the model to keep retrieving"
     );
 }
 
-/// PR-A (2026-07-20): rag.yaml default allows a no-evidence early stop so a
-/// worker that found nothing can still emit its handoff JSON as the final
-/// message (coverage=gaps), instead of being force-looped.
 #[tokio::test]
-async fn content_without_evidence_in_rag_early_stops_by_default() {
+async fn content_without_evidence_blocked_even_if_early_stop_flag_set() {
     let loop_ = test_loop();
-    let mode = rag_mode();
-    assert!(mode.loop_exit.allow_content_early_stop);
-    assert!(mode.loop_exit.skip_synthesis_on_direct_answer);
+    let mut mode = rag_mode();
+    mode.loop_exit.allow_content_early_stop = true;
+    mode.loop_exit.skip_synthesis_on_direct_answer = true;
     let mut state = empty_state();
     let sink = CollectingSink::new();
     let auth = test_auth();
@@ -559,8 +553,12 @@ async fn content_without_evidence_in_rag_early_stops_by_default() {
         .unwrap();
 
     assert!(
-        !matches!(outcome.control, IterationControl::Continue),
-        "no-evidence content must not be blocked under PR-A defaults"
+        matches!(outcome.control, IterationControl::Continue),
+        "hard gate must block no-chunk finals even with early-stop flags"
+    );
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "content_blocked_no_evidence"
     );
 }
 
@@ -613,10 +611,14 @@ fn iteration_state_defaults_are_empty() {
 // ---------------------------------------------------------------------------
 
 /// Worker loop config: rag mode with the handoff flag set (mirrors app-chat
-/// `apply_worker_handoff_loop_exit`: early stop allowed, skip synthesis).
+/// `apply_worker_handoff_loop_exit`: hard gate on chunks; skip synthesis when
+/// chunks exist).
 fn worker_mode() -> super::super::config::ModeConfig {
     let mut mode = rag_mode();
     mode.worker_handoff = true;
+    mode.loop_exit.require_evidence = true;
+    mode.loop_exit.allow_content_early_stop = false;
+    mode.loop_exit.skip_synthesis_on_direct_answer = true;
     mode
 }
 
@@ -658,11 +660,10 @@ async fn apply_content(
         .unwrap()
 }
 
-/// K3 (a): zero-retrieval insufficient JSON → E105 compile feedback, loop
-/// continues; a prose final message is then accepted (prose is a legal
-/// handoff now — no JSON envelope needed).
+/// 2026-07-29 hard gate supersedes E105 for zero-tool finals: no answer-grade
+/// chunk → block before the handoff compiler (nudge to keep retrieving).
 #[tokio::test]
-async fn worker_handoff_e105_triggers_feedback_then_prose_accepted() {
+async fn worker_handoff_zero_chunk_blocked_before_compile() {
     let loop_ = test_loop();
     let mode = worker_mode();
     let mut state = empty_state();
@@ -672,16 +673,25 @@ async fn worker_handoff_e105_triggers_feedback_then_prose_accepted() {
     assert!(matches!(outcome.control, IterationControl::Continue));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "compile_feedback"
+        "content_blocked_no_evidence"
     );
-    assert_eq!(state.compile_continuations, 1);
-    let feedback = state.messages.last().unwrap();
-    assert_eq!(feedback.role, "user");
-    assert!(feedback.content.contains("编译失败"), "{feedback:?}");
-    assert!(feedback.content.contains("E105"), "{feedback:?}");
-    assert!(feedback.content.contains("请按契约重新输出"), "{feedback:?}");
+    assert_eq!(state.compile_continuations, 0, "compiler never reached");
+    assert!(
+        state.messages.iter().any(|m| {
+            m.role == "user" && m.content.contains("未收到任何可用检索 chunk")
+        })
+    );
+}
 
-    // Next output: plain prose — legal handoff under K3, accepted directly.
+/// With real chunks present, a prose handoff is accepted; a second independent
+/// zero-chunk final is still blocked (gate is per-state, not one-shot).
+#[tokio::test]
+async fn worker_handoff_with_chunks_allows_prose_final() {
+    let loop_ = test_loop();
+    let mode = worker_mode();
+    let mut state = empty_state();
+    state.tool_results.push(ok_chunk_tool_result("c1"));
+
     let good = "文档确认竞争对手身份，但未记载总部城市信息。";
     let outcome = apply_content(&loop_, &mode, &mut state, good).await;
     assert!(matches!(
@@ -692,32 +702,6 @@ async fn worker_handoff_e105_triggers_feedback_then_prose_accepted() {
         outcome.record.as_ref().unwrap().exit_reason,
         "direct_content"
     );
-}
-
-/// (b) one-continuation limit: a second E105 output is NOT continued again
-/// (no infinite compile loop) — it falls through as the final direct answer
-/// and the post-loop compile marks it degraded with codes.
-#[tokio::test]
-async fn worker_handoff_compile_feedback_only_once() {
-    let loop_ = test_loop();
-    let mode = worker_mode();
-    let mut state = empty_state();
-
-    let bad = r#"{"schema_version":"internal_worker_handoff_v1","summary":"未找到","key_facts":[],"coverage":"insufficient","gaps":[]}"#;
-    let first = apply_content(&loop_, &mode, &mut state, bad).await;
-    assert!(matches!(first.control, IterationControl::Continue));
-    assert_eq!(state.compile_continuations, 1);
-
-    let second = apply_content(&loop_, &mode, &mut state, bad).await;
-    assert!(
-        matches!(second.control, IterationControl::DirectAnswer { .. }),
-        "second bad output must not continue again"
-    );
-    assert_eq!(
-        second.record.as_ref().unwrap().exit_reason,
-        "direct_content"
-    );
-    assert_eq!(state.compile_continuations, 1, "counter stays at the cap");
 }
 
 /// K3 (e): a prose final message in a worker loop is a legal handoff — no

@@ -13,6 +13,9 @@ pub enum LoopPhase {
 pub struct DisclosedState {
     pub disclosed_skill_ids: std::collections::HashSet<String>,
     pub last_skill_request: Option<Vec<String>>,
+    /// Snapshot for `<loop_budget … tokens_* />` (set each retrieve assemble).
+    pub tokens_used_hint: Option<u32>,
+    pub tokens_max_hint: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +89,10 @@ impl ContextAssembler {
             mode.tools_for_retrieve(registry)
         };
 
-        let budget_hint = build_iteration_budget_hint(iteration, max_iterations);
+        let tokens_used = disclosed.tokens_used_hint.unwrap_or(0);
+        let tokens_max = disclosed.tokens_max_hint.unwrap_or(0);
+        let budget_hint =
+            build_loop_budget_hint(iteration, max_iterations, tokens_used, tokens_max);
         let system_content = if rendered.text.is_empty() {
             format!("{base}\n\n{budget_hint}")
         } else {
@@ -168,16 +174,36 @@ fn dedupe_tools(tools: Vec<contracts::ToolSpec>) -> Vec<contracts::ToolSpec> {
         .collect()
 }
 
-/// Build the per-round iteration budget hint injected into every retrieve-phase
-/// system prompt. `iteration` is 0-indexed; `round` and `remaining` are derived
-/// for LLM consumption.
+/// Build the per-round loop budget hint injected into every retrieve-phase
+/// system prompt. `iteration` is 0-indexed.
 ///
-/// Format: `<iteration_budget round="1" max="4" remaining="3" />`
+/// Tokens are the primary cost signal; rounds are a safety ceiling.
+///
+/// Format:
+/// `<loop_budget round="1" max_rounds="12" remaining_rounds="11" tokens_used="0" tokens_max="28000" tokens_remaining="28000" />`
 pub fn build_iteration_budget_hint(iteration: u8, max_iterations: u8) -> String {
+    build_loop_budget_hint(iteration, max_iterations, 0, 0)
+}
+
+/// Full budget hint with cumulative LLM token usage.
+///
+/// `tokens_max == 0` means no token cap (rounds-only).
+pub fn build_loop_budget_hint(
+    iteration: u8,
+    max_iterations: u8,
+    tokens_used: u32,
+    tokens_max: u32,
+) -> String {
     let round = iteration + 1;
-    let remaining = max_iterations.saturating_sub(round);
+    let remaining_rounds = max_iterations.saturating_sub(round);
+    let tokens_remaining = if tokens_max == 0 {
+        0
+    } else {
+        tokens_max.saturating_sub(tokens_used)
+    };
     format!(
-        "<iteration_budget round=\"{round}\" max=\"{max_iterations}\" remaining=\"{remaining}\" />"
+        "<loop_budget round=\"{round}\" max_rounds=\"{max_iterations}\" remaining_rounds=\"{remaining_rounds}\" \
+         tokens_used=\"{tokens_used}\" tokens_max=\"{tokens_max}\" tokens_remaining=\"{tokens_remaining}\" />"
     )
 }
 
@@ -245,7 +271,10 @@ mod tests {
         assert!(ctx.system_content.contains("Retrieval query: test"));
         assert!(
             ctx.system_content
-                .contains("<iteration_budget round=\"1\" max=\"4\" remaining=\"3\" />")
+                .contains(
+                    "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
+                     tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />",
+                )
         );
         assert_eq!(
             ctx.tools.len(),
