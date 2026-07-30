@@ -122,6 +122,21 @@ pub fn build_anthropic_messages_body(
         }));
     }
 
+    // Anthropic prompt cache: breakpoint on the rolling suffix (last message's
+    // last content block) so multi-turn ReAct iterations reuse the cached prefix.
+    // System already carries a breakpoint; Anthropic allows up to 4 total.
+    // ponytail: SaaS 多租户下只有单次 execute 内串行多轮能稳定命中——末尾断点
+    // 让第 2..N 轮命中第 1 轮写入的 prefix cache（max_iterations 默认 12，常 ≥3 轮）。
+    if req.config.enable_cache == Some(true) {
+        if let Some(last_msg) = messages.last_mut() {
+            if let Some(blocks) = last_msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+                if let Some(last_block) = blocks.last_mut() {
+                    last_block["cache_control"] = serde_json::json!({ "type": "ephemeral" });
+                }
+            }
+        }
+    }
+
     let max_tokens = req.options.max_tokens.unwrap_or(4096);
     let mut body = serde_json::json!({
         "model": req.config.model,
@@ -178,6 +193,10 @@ struct AnthropicUsage {
     output_tokens: u32,
     #[serde(default)]
     cache_read_input_tokens: u32,
+    /// Cache-write tokens (Anthropic charges these at 1.25× input).
+    /// BUG-1: previously dropped entirely → Anthropic under-billed.
+    #[serde(default)]
+    cache_creation_input_tokens: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -201,10 +220,17 @@ struct StreamEvent {
 }
 
 fn usage_from_anthropic(usage: &AnthropicUsage, provider: &str, model: &str) -> LlmUsage {
+    // Anthropic's `input_tokens` excludes cache read/write (unlike DeepSeek/OpenAI
+    // where prompt_tokens already includes cached hits). Fold cache_creation into
+    // prompt_tokens so the billing three-bucket math (miss = prompt - cached)
+    // charges it at the input rate instead of dropping it entirely.
+    // Residual: exact 1.25× write premium needs a dedicated cache_write rate
+    // (BUG-1b); this 2-line fold fixes the full-omission leak.
+    let prompt_with_creation = usage.input_tokens + usage.cache_creation_input_tokens;
     LlmUsage {
-        prompt_tokens: usage.input_tokens,
+        prompt_tokens: prompt_with_creation,
         completion_tokens: usage.output_tokens,
-        total_tokens: usage.input_tokens + usage.output_tokens,
+        total_tokens: prompt_with_creation + usage.output_tokens,
         provider: provider.to_string(),
         model: model.to_string(),
         cached_tokens: usage.cache_read_input_tokens,
@@ -498,6 +524,35 @@ mod tests {
     }
 
     #[test]
+    fn anthropic_body_sets_cache_breakpoint_on_rolling_suffix() {
+        // enable_cache=true: the LAST message's last content block must carry a
+        // cache_control breakpoint so multi-turn ReAct hits the prefix cache.
+        let req = LlmRequest::new(
+            vec![
+                ChatMessage::system("You are helpful."),
+                ChatMessage::user("round 1"),
+                ChatMessage::assistant("thinking"),
+                ChatMessage::user("round 2"),
+            ],
+            test_config(), // enable_cache = Some(true)
+        );
+        let body = build_anthropic_messages_body(&req).unwrap();
+        let messages = body["messages"].as_array().unwrap();
+        // Last message ("round 2") → its last block must have cache_control.
+        let last_msg = messages.last().expect("at least one message");
+        let blocks = last_msg["content"].as_array().unwrap();
+        let last_block = blocks.last().unwrap();
+        assert_eq!(
+            last_block["cache_control"]["type"],
+            "ephemeral",
+            "rolling-suffix breakpoint missing on last message"
+        );
+        // System still has its own breakpoint.
+        let system = &body["system"];
+        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
     fn anthropic_non_stream_response_is_finalized() {
         let protocol = AnthropicMessagesProtocol;
         let req = LlmRequest::new(vec![ChatMessage::user("hi")], test_config());
@@ -512,6 +567,33 @@ mod tests {
         assert_eq!(finalized.content, "Hello there");
         assert_eq!(finalized.usage.prompt_tokens, 5);
         assert_eq!(finalized.usage.completion_tokens, 3);
+    }
+
+    #[test]
+    fn anthropic_usage_folds_cache_creation_into_prompt_tokens() {
+        // BUG-1: cache_creation_input_tokens was dropped → Anthropic under-billed.
+        // Verifies the fold into prompt_tokens (charged at input rate via the
+        // three-bucket miss = prompt - cached math).
+        let protocol = AnthropicMessagesProtocol;
+        let req = LlmRequest::new(vec![ChatMessage::user("hi")], test_config());
+        let mut state = protocol.initial_state(&req);
+        let response = serde_json::json!({
+            "model": "claude-sonnet-4-20250514",
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 80,
+                "cache_creation_input_tokens": 30
+            }
+        });
+        protocol.step(&mut state, &response).unwrap();
+        let finalized = protocol.finalize(state).unwrap();
+        // prompt = input(100) + cache_creation(30) = 130; cache_read → cached_tokens.
+        assert_eq!(finalized.usage.prompt_tokens, 130);
+        assert_eq!(finalized.usage.cached_tokens, 80);
+        assert_eq!(finalized.usage.completion_tokens, 20);
+        assert_eq!(finalized.usage.total_tokens, 150); // 130 + 20
     }
 
     #[test]
