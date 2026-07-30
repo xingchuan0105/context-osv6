@@ -228,6 +228,7 @@ mod tests {
             system_content: "You are RAG.".to_string(),
             tools: Vec::new(),
             newly_disclosed_skills: vec!["rag-answer".to_string()],
+            budget_hint: String::new(),
         };
         emit_prompt_snapshot(&sink, "retrieve", 0, &assembled, &disclosed).await;
         let ev = events.lock().unwrap().pop().unwrap();
@@ -259,6 +260,7 @@ mod tests {
                 output_schema: serde_json::json!({}),
             }],
             newly_disclosed_skills: vec![],
+            budget_hint: String::new(),
         };
         emit_plan_decision_telemetry(&sink, "retrieve", 1, &assembled, &disclosed).await;
         let ev = events.lock().unwrap().pop().unwrap();

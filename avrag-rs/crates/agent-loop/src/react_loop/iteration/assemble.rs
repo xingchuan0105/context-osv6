@@ -76,6 +76,12 @@ impl ReActLoop {
                 round_messages.push(msg.clone());
             }
         }
+        // P0 (2026-07-30): budget_hint injected as trailing user message (not in
+        // system) so the system + history prefix stays stable across rounds →
+        // DeepSeek/OpenAI prefix cache can hit.
+        if !assembled.budget_hint.is_empty() {
+            round_messages.push(ChatMessage::user(assembled.budget_hint.clone()));
+        }
         // B5: LLM boundary transform (default: identity).
         let round_messages = hooks.convert_to_llm(&round_messages);
 

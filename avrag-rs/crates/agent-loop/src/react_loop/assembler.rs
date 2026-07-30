@@ -23,6 +23,10 @@ pub struct AssembledContext {
     pub system_content: String,
     pub tools: Vec<contracts::ToolSpec>,
     pub newly_disclosed_skills: Vec<String>,
+    /// Per-round budget hint (`<loop_budget .../>`). Injected by the caller as a
+    /// trailing user message, NOT in system_content, to keep the system prefix
+    /// stable for provider prefix caching (P0, 2026-07-30).
+    pub budget_hint: String,
 }
 
 pub struct ContextAssembler;
@@ -93,16 +97,22 @@ impl ContextAssembler {
         let tokens_max = disclosed.tokens_max_hint.unwrap_or(0);
         let budget_hint =
             build_loop_budget_hint(iteration, max_iterations, tokens_used, tokens_max);
+        // P0 (2026-07-30): budget_hint moved OUT of system_content into
+        // AssembledContext.budget_hint; the caller injects it as a trailing
+        // user message so the system + history prefix stays stable across
+        // ReAct rounds → DeepSeek/OpenAI prefix cache can hit (was 0% because
+        // budget_hint's round/tokens_used change every round broke the prefix).
         let system_content = if rendered.text.is_empty() {
-            format!("{base}\n\n{budget_hint}")
+            base
         } else {
-            format!("{base}\n\n{}\n\n{budget_hint}", rendered.text)
+            format!("{base}\n\n{}", rendered.text)
         };
 
         AssembledContext {
             system_content,
             tools,
             newly_disclosed_skills: rendered.newly_disclosed,
+            budget_hint,
         }
     }
 
@@ -155,6 +165,7 @@ impl ContextAssembler {
             system_content: parts.join("\n\n"),
             tools: vec![],
             newly_disclosed_skills: rendered.newly_disclosed,
+            budget_hint: String::new(),
         }
     }
 }
@@ -270,7 +281,7 @@ mod tests {
         assert!(!ctx.system_content.contains("rag-codegen-guide"));
         assert!(ctx.system_content.contains("Retrieval query: test"));
         assert!(
-            ctx.system_content
+            ctx.budget_hint
                 .contains(
                     "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
                      tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />",
