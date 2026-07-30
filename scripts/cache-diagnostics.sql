@@ -81,6 +81,32 @@ ORDER BY executes DESC;
 
 
 -- ════════════════════════════════════════════════════════════════════════
+-- 查询 B2：按 feature 的 token 消耗分布（回答“chunk 是不是大头”）
+-- summary vs triplet 若 prompt_token 接近 → 同一 chunk 被重复发送两次
+-- → 合并调用可省 ~50% per-batch chunk token（见下方查询 B2 跨 feature 对比）
+-- ════════════════════════════════════════════════════════════════════════
+\echo '== B2: token consumption by feature (7d, billable) =='
+
+SELECT
+    feature,
+    provider,
+    model,
+    COUNT(*)                                          AS calls,
+    SUM(prompt_tokens)                                AS prompt_tok,
+    ROUND(AVG(prompt_tokens))                         AS avg_prompt_per_call,
+    ROUND(100.0 * SUM(prompt_tokens)
+          / NULLIF(SUM(SUM(prompt_tokens)) OVER (), 0), 1)
+                                                     AS pct_of_total_prompt,
+    SUM(completion_tokens)                            AS completion_tok,
+    SUM(total_tokens)                                 AS total_tok
+FROM llm_usage_events
+WHERE created_at > NOW() - INTERVAL '7 days'
+  AND billable = true
+GROUP BY feature, provider, model
+ORDER BY prompt_tok DESC;
+
+
+-- ════════════════════════════════════════════════════════════════════════
 -- 查询 C：按租户 cache 命中率（近 7 天，agent_loop 为主）
 -- 命中率方差大 → 跨租户 cache 驱逐严重 → 考虑 key 池 + 租户亲和路由
 -- ════════════════════════════════════════════════════════════════════════
