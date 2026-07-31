@@ -12,13 +12,18 @@
 //! LLM 指令正文。
 
 pub mod checks;
+pub mod config;
 pub mod directives;
 pub mod grid;
+pub mod prompts;
+pub mod runner;
 pub mod session;
 pub mod store;
+pub mod tools;
 
 pub use checks::{Check, TableReport};
 pub use grid::{Grid, Row, header_sig, quote_ident, render_table_md, sanitize_headers};
+pub use runner::{SuperviseConfig, SuperviseReport, SupervisorLlm, supervise};
 pub use session::{FinalState, Session};
 pub use store::EvidenceChunk;
 
