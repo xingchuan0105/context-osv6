@@ -78,6 +78,10 @@ fn open_readonly(path: &Path) -> Result<duckdb::Connection, String> {
         .map_err(|e| format!("config: {e}"))?;
     let con = duckdb::Connection::open_with_flags(path, config)
         .map_err(|e| format!("open {}: {e}", path.display()))?;
+    // fts 扩展（表内值发现）：bundled 内建，LOAD 需扩展目录访问——在加固前加载，
+    // 之后 SET 禁文件访问不影响已加载扩展；LOAD 失败（离线/缺失）时静默降级，
+    // 普通查询不受影响，match_bm25 谓词会报 schema 不存在（模型可见错误）。
+    let _ = con.execute_batch("LOAD fts");
     con.execute_batch("SET enable_external_access=false; SET lock_configuration=true;")
         .map_err(|e| format!("harden: {e}"))?;
     Ok(con)
@@ -148,8 +152,9 @@ fn catalog_for_file(
     con: &duckdb::Connection,
     doc_id: Uuid,
 ) -> Result<Vec<serde_json::Value>, String> {
+    // fts 内部表（dict/docs/fields/stats/terms/stopwords）不是用户表，排除。
     let mut stmt = con
-        .prepare("SELECT table_name FROM information_schema.tables WHERE table_name != '_meta' ORDER BY table_name")
+        .prepare("SELECT table_name FROM information_schema.tables WHERE table_name != '_meta' AND table_name NOT IN ('dict', 'docs', 'fields', 'stats', 'terms', 'stopwords') ORDER BY table_name")
         .map_err(|e| e.to_string())?;
     let tables: Vec<String> = stmt
         .query_map([], |r| r.get(0))
@@ -218,6 +223,15 @@ fn catalog_for_file(
         let sample_rows = query_rows(con, &sample_sql, MAX_SAMPLE_ROWS)
             .map(|(_, rows)| rows)
             .unwrap_or_default();
+        // fts 表内值发现：relation 是否有 FTS 索引（schema fts_main_<table> 存在）
+        let fts_available: bool = con
+            .query_row(
+                "SELECT COUNT(*) FROM duckdb_schemas() WHERE schema_name = ?",
+                duckdb::params![format!("fts_main_{table}")],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
         let m = meta.get(&table).cloned().unwrap_or_else(|| json!({}));
         out.push(json!({
             "name": table,
@@ -227,6 +241,7 @@ fn catalog_for_file(
             "table_kind": m.get("table_kind"),
             "confidence": m.get("confidence"),
             "evidence_chunk_id": m.get("evidence_chunk_id"),
+            "fts": fts_available,
             "headers": headers,
             "n_rows": n_rows,
             "sample_rows": sample_rows,
@@ -413,7 +428,7 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
     for (doc_id, path) in &files {
         let con = open_readonly(path)?;
         let mut stmt = con
-            .prepare("SELECT table_name FROM information_schema.tables WHERE table_name != '_meta'")
+            .prepare("SELECT table_name FROM information_schema.tables WHERE table_name != '_meta' AND table_name NOT IN ('dict', 'docs', 'fields', 'stats', 'terms', 'stopwords')")
             .map_err(|e| e.to_string())?;
         let names: Vec<String> = stmt
             .query_map([], |r| r.get(0))
@@ -696,6 +711,9 @@ mod tests {
                 .is_err()
         );
 
+        // 老 fixture（无 FTS 索引）→ catalog fts=false。
+        assert_eq!(relations[0]["fts"], false);
+
         // 查询路径（直接走内部闭包，与 run_query 同一代码路径的关键段）。
         let (sql, idents) =
             validate_sql("SELECT 阶段, COUNT(*) FROM t0 GROUP BY 阶段 ORDER BY 阶段").unwrap();
@@ -728,6 +746,67 @@ mod tests {
             relations.is_empty(),
             "无表格存储 → relations 空(「无表格」路径)"
         );
+    }
+
+    /// 带 FTS 索引的 fixture（灌入侧 struct-supervision/pipeline.py 产物形状）。
+    fn fixture_file_with_fts(dir: &Path, doc_id: Uuid) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = doc_file(dir, doc_id);
+        let con = duckdb::Connection::open(&path).unwrap();
+        con.execute_batch(
+            "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON, evidence_chunk_id VARCHAR);
+             CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, 阶段 VARCHAR, 角色 VARCHAR);
+             INSERT INTO t0 VALUES (0, 1, 'accept concept', 'LPDT'), (1, 2, 'verify PQA', 'PQA');
+             INSERT INTO _meta VALUES ('t0', '活动表', NULL, 'detail', 'high', 1, 2, 2, 'high_candidate', '[]', '[]', '11111111-2222-3333-4444-555555555555');",
+        )
+        .unwrap();
+        con.execute_batch("PRAGMA create_fts_index('t0', 'row_ord', '阶段', '角色')")
+            .unwrap();
+        drop(con);
+        path
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn fts_predicate_works_on_indexed_store() {
+        let dir = std::env::temp_dir().join(format!("struct_store_test_{}", Uuid::new_v4()));
+        let doc_id = Uuid::new_v4();
+        fixture_file_with_fts(&dir, doc_id);
+
+        let relations = run_blocking({
+            let dir = dir.clone();
+            move || {
+                let con = open_readonly(&doc_file(&dir, doc_id))?;
+                catalog_for_file(&con, doc_id)
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(relations[0]["fts"], true, "FTS 索引存在 → catalog 标注可用");
+
+        // validate_sql：FTS 谓词在 WHERE（FROM 只有用户表），放行且 idents 干净。
+        let (sql, idents) = validate_sql(
+            "SELECT row_ord, 阶段 FROM t0 WHERE fts_main_t0.match_bm25(row_ord, 'concept') IS NOT NULL",
+        )
+        .unwrap();
+        assert_eq!(idents, vec!["t0".to_string()]);
+
+        // 只读加固连接上执行 FTS 谓词（先 LOAD fts 再 SET 加固，open_readonly 已处理）。
+        let con = open_readonly(&doc_file(&dir, doc_id)).unwrap();
+        let (cols, rows) = query_rows(&con, &sql, 10).unwrap();
+        assert_eq!(cols, vec!["row_ord".to_string(), "阶段".to_string()]);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].iter().any(|c| c.contains("concept")));
+
+        // 无匹配关键词 → 空结果（不是错误）。
+        let no_hit = query_rows(
+            &con,
+            "SELECT row_ord FROM t0 WHERE fts_main_t0.match_bm25(row_ord, 'zzz') IS NOT NULL",
+            10,
+        )
+        .unwrap();
+        assert!(no_hit.1.is_empty());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// 第二个 fixture：表名 t1，用于 cross_doc 场景（与 fixture_file 的 t0 不同名）。

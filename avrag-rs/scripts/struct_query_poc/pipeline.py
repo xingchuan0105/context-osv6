@@ -240,6 +240,11 @@ def write_duckdb(grids: list, metas: list, out_path: str):
     if os.path.exists(out_path):
         os.remove(out_path)
     con = duckdb.connect(out_path)
+    try:
+        con.execute("INSTALL fts")
+        con.execute("LOAD fts")
+    except Exception:
+        pass  # 老版本/离线: FTS 索引缺失,查询侧 match_bm25 报 schema 不存在(有容错)
     con.execute("CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, "
                 "confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, "
                 "checks JSON, notes JSON, evidence_chunk_id VARCHAR)")
@@ -265,6 +270,13 @@ def write_duckdb(grids: list, metas: list, out_path: str):
                      g.start_line, len(g.data), len(hdr), m["status"],
                      json.dumps(m["checks"], ensure_ascii=False), json.dumps(g.notes, ensure_ascii=False),
                      chunk_id])
+        # FTS 索引（fts 表内值发现；与 struct-supervision Rust 产物对齐）。
+        # 查询侧: SELECT * FROM {name} WHERE fts_main_{name}.match_bm25(row_ord, 'x') IS NOT NULL
+        try:
+            col_list = ", ".join(f"'{h.replace(chr(39), chr(39)*2)}'" for h in hdr)
+            con.execute(f"PRAGMA create_fts_index('{name}', 'row_ord', {col_list})")
+        except Exception as e:
+            print(f"WARN: create_fts_index({name}) failed: {e}")
     con.close()
     return evidence
 

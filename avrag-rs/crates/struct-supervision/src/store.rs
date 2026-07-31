@@ -131,6 +131,18 @@ pub fn write_duckdb(
             n_rows: g.n_rows(),
             md: render_table_md(&hdr, &rows),
         });
+        // FTS 索引（fts 表内值发现）：bundled duckdb 内建 fts 扩展，PRAGMA 即可。
+        // 查询侧（struct_query 只读连接）用 fts_main_<table>.match_bm25(row_ord, 'x')
+        // 谓词检索；中文整串不分词（与 grep 配合：grep 管子串、fts 管空格分隔 token）。
+        if let Err(e) = con.execute_batch(&format!(
+            "PRAGMA create_fts_index('{name}', 'row_ord', {})",
+            hdr.iter()
+                .map(|h| format!("'{}'", h.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )) {
+            eprintln!("struct-supervision: create_fts_index({name}) failed: {e}");
+        }
         con.execute(
             "INSERT INTO _meta VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             duckdb::params![
@@ -231,7 +243,7 @@ mod tests {
     fn write_duckdb_produces_meta_and_evidence() {
         let dir = std::env::temp_dir();
         let out = dir.join(format!("sup_test_{}.duckdb", uuid::Uuid::new_v4()));
-        let g = grid(&[("1", &["编号", "名称"]), ("2", &["1", "a"])]);
+        let g = grid(&[("1", &["编号", "名称"]), ("2", &["1", "a concept"])]);
         let rep = crate::checks::table_report(0, &g);
         let mut reports = BTreeMap::new();
         reports.insert("t0".to_string(), rep);
@@ -252,6 +264,15 @@ mod tests {
         assert_eq!(n_rows, 1);
         // _meta.evidence_chunk_id 必须与 sidecar evidence 的 chunk_id 一致（证据水合依赖）
         assert_eq!(chunk_id.as_deref(), Some(evidence[0].chunk_id.as_str()));
+        // FTS 索引已建：match_bm25 谓词可检索（fts 表内值发现）
+        let hits: i64 = con
+            .query_row(
+                "SELECT COUNT(*) FROM t0 WHERE fts_main_t0.match_bm25(row_ord, 'concept') IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hits, 1);
         let _ = std::fs::remove_file(&out);
     }
 
