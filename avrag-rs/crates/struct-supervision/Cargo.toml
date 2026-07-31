@@ -1,0 +1,16 @@
+[package]
+name = "avrag-struct-supervision"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "struct-query 表格监督 loop（Rust 版，P2 supervision 工具化）"
+
+[dependencies]
+anyhow.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+# struct_query 同款 bundled DuckDB（WSL2 一次性编译成本已付）
+duckdb = { version = "1", features = ["bundled"] }

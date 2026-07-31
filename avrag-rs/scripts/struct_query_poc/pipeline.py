@@ -287,6 +287,22 @@ def main() -> int:
     md_path = sys.argv[1]
     out = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else "/tmp/struct_poc_doc.duckdb"
     doc_id = sys.argv[sys.argv.index("--doc-id") + 1] if "--doc-id" in sys.argv else None
+    # --emit-grids <path>: 导出与 prepare() 一致的 grids JSON 中间表示
+    # (struct-supervision Rust 侧的输入;schema 见 docs/plans/2026-07-31-struct-query-p2-handoff.md S0)。
+    emit_grids = sys.argv[sys.argv.index("--emit-grids") + 1] if "--emit-grids" in sys.argv else None
+    if emit_grids:
+        grids, text = prepare(md_path)
+        payload = {
+            "doc_id": doc_id,
+            "source_text": text,
+            "grids": [
+                {"start_line": g.start_line, "notes": g.notes,
+                 "rows": [{"line": r["line"], "cells": r["cells"]} for r in g.rows]}
+                for g in grids
+            ],
+        }
+        with open(emit_grids, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=1)
     rep = run_pipeline(md_path, out, doc_id)
     print(json.dumps(rep, ensure_ascii=False, indent=1))
     return 0
