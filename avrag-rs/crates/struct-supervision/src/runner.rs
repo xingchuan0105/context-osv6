@@ -27,6 +27,10 @@ pub struct SuperviseReport {
     pub budget_exhausted: bool,
     pub tables: serde_json::Value,
     pub log: Vec<(String, serde_json::Value, String)>,
+    /// 表级证据 chunk（`write_duckdb` 产出；ingestion 挂接时随报告带出直接入库，
+    /// 不再回读 sidecar）。serde default 仅为兼容既有 JSON 反序列化。
+    #[serde(default)]
+    pub evidence: Vec<crate::store::EvidenceChunk>,
 }
 
 /// LLM 抽象（可注入 mock 测试）。
@@ -217,6 +221,7 @@ fn finish(
         budget_exhausted,
         tables,
         log,
+        evidence,
     };
     if let Some(path) = &cfg.report_path {
         let _ = std::fs::write(path, serde_json::to_string_pretty(&report).unwrap_or_default());
