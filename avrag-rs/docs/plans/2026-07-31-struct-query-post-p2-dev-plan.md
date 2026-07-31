@@ -44,6 +44,7 @@ CARGO_BUILD_JOBS=2 STRUCT_STORE_DIR=$PWD/avrag-rs/storage/struct_store \
 ```
 
 **gate**：≥2 轮切片（LLM 抖动纪律）；每题记录 tool_trace 有无 match_bm25、activity_counts、budget_exhausted 次数；结论写入当日交接。
+**状态**：✅ 已完成（2026-07-31，86/106/113 两轮）——`docs/plans/2026-07-31-struct-query-w1-observation.md`：repair 首触发且有效、match_bm25 零触发（fts 残留 #1 维持）、W5 维持关闭。
 
 ---
 
