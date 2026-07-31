@@ -47,8 +47,9 @@ version: "4.1"
 
 - `dense` / `lexical` / `doc_*` → **list[dict]**（常见字段 `chunk_id`、`content`、`doc_id`、`score`、`alias`）。
 - `grep` → **dict**：`total_hits`（命中行数）、`hits[]`、`truncated`（是否因上限截断）。
-- `struct_catalog` → **dict**：`relations[]`（`name`、`headers`、`n_rows`、`sample_rows`、`caption`、`unit`、`confidence`）。
+- `struct_catalog` → **dict**：`relations[]`（`name`、`headers`、`n_rows`、`sample_rows`、`caption`、`unit`、`confidence`、`fts`）。
 - `struct_query` → **dict**：`ok`、`columns`、`rows`、`row_count`、`truncated`、`evidence`；`ok=false` 时含 `error.code`（`forbidden` / `unknown_relation` / `no_relations` 等）。
+- `fts: true` = 该表建有全文索引，`WHERE fts_main_<表名>.match_bm25(row_ord, '关键词') IS NOT NULL` 是表内值检索谓词（空格分隔 token 有效；整串中文是单 token，子串发现归 grep）。`fts: false` = 无索引，此情形 match_bm25 会报 schema 不存在。
 
 ```python
 chunks = await client.dense("概念定义")
