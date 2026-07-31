@@ -6,8 +6,10 @@
   白药 PDF  → 9 表全 needs_diagnosis;638 banner 被 header_numeric_banner 捕获;
               分隔行残迹已剔除(无全 '-' 行)
   IPD txt   → 0 表(「无表格」路径)
+  万科年报  → t114(双栏混入)触发 dual_column_suspect(detail 含三块面板表头行源行);
+              ipd/白药 dual_column_suspect 零误报
 
-运行: /tmp/struct_poc/bin/python3 check_pipeline.py   (会先重建三份 duckdb)
+运行: /tmp/struct_poc/bin/python3 check_pipeline.py   (会先重建四份 duckdb)
 """
 import json
 import os
@@ -18,11 +20,13 @@ import duckdb
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
-OUT = {"ipd": "/tmp/poc_ipd.duckdb", "baiyao": "/tmp/poc_baiyao.duckdb", "txt": "/tmp/poc_txt.duckdb"}
+OUT = {"ipd": "/tmp/poc_ipd.duckdb", "baiyao": "/tmp/poc_baiyao.duckdb",
+       "txt": "/tmp/poc_txt.duckdb", "vanke": "/tmp/poc_vanke.duckdb"}
 SRC = {
     "ipd": "/tmp/markitdown_out/huawei_ipd_370_activities.xlsx.md",
     "baiyao": "/tmp/markitdown_out/baiyao_it_planning.pdf.md",
     "txt": "/tmp/markitdown_out/huawei_ipd_370_activities.txt.md",
+    "vanke": "/tmp/markitdown_out/万科2024年报.pdf.md",
 }
 
 failures = []
@@ -75,6 +79,30 @@ def main() -> int:
 
     txt = duckdb.connect(OUT["txt"], read_only=True)
     check("txt: 0 tables(无表格路径)", txt.execute("SELECT COUNT(*) FROM _meta").fetchone()[0] == 0)
+
+    # dual_column_suspect 零误报: ipd/白药所有表的 checks_full 中 dual_column_suspect 均 passed
+    def failed_checks(con, tbl):
+        checks = json.loads(con.execute("SELECT checks FROM _meta WHERE table_name=?", [tbl]).fetchone()[0])
+        return {c["name"]: c for c in checks if not c["passed"]}
+
+    check("ipd: dual_column_suspect 零误报", "dual_column_suspect" not in failed_checks(ipd, "t0"))
+    by_fp = [t for (t,) in by.execute("SELECT table_name FROM _meta").fetchall()
+             if "dual_column_suspect" in failed_checks(by, t)]
+    check("baiyao: dual_column_suspect 零误报", by_fp == [], str(by_fp))
+
+    # 万科 t114(资产负债表双栏混入): dual_column_suspect 触发, detail 给出三块面板表头行源行
+    vk = duckdb.connect(OUT["vanke"], read_only=True)
+    meta114 = vk.execute("SELECT n_rows, status, checks FROM _meta WHERE table_name='t114'").fetchone()
+    checks114 = {c["name"]: c for c in json.loads(meta114[2])}
+    dc = checks114.get("dual_column_suspect", {})
+    check("vanke: t114 79 行 needs_diagnosis", meta114[0] == 79 and meta114[1] == "needs_diagnosis",
+          str(meta114[:2]))
+    check("vanke: t114 触发 dual_column_suspect", dc.get("passed") is False, str(dc))
+    check("vanke: t114 detail 行集正确(面板表头行 6084/6135/6160)",
+          all(str(l) in dc.get("detail", "") for l in (6084, 6135, 6160)), dc.get("detail", ""))
+    sh = checks114.get("section_header_rows", {})
+    check("vanke: t114 section_header_rows 提示信号(passed=True 有 detail)",
+          sh.get("passed") is True and bool(sh.get("detail")), str(sh))
 
     print("\n== %s ==" % ("ALL PASS" if not failures else f"{len(failures)} FAILURES: {failures}"))
     return 0 if not failures else 1

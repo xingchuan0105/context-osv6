@@ -1,4 +1,4 @@
-//! 校验套件（对齐 `pipeline.checks_for` / `pipeline.table_report`；6+1 项确定性校验）。
+//! 校验套件（对齐 `pipeline.checks_for` / `pipeline.table_report`；8+1 项确定性校验）。
 
 use serde::{Deserialize, Serialize};
 
@@ -56,8 +56,8 @@ fn cell(g: &Grid, i: usize, k: usize) -> &str {
         .unwrap_or("")
 }
 
-/// 校验套件（6+1 项）：header_suspicious / header_numeric_banner / column_count /
-/// empty_rows / empty_columns / sequence / total_reconcile。
+/// 校验套件（8+1 项）：header_suspicious / header_numeric_banner / column_count /
+/// empty_rows / empty_columns / dual_column_suspect / section_header_rows / sequence / total_reconcile。
 pub fn checks_for(g: &Grid) -> Vec<Check> {
     let mut checks = Vec::new();
     let hdr = g.header();
@@ -142,6 +142,162 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
             String::new()
         } else {
             format!("全空列: {empty_cols:?}")
+        },
+    });
+
+    // dual_column_suspect：疑似双栏/兄弟面板行混入（已知提取限制；只探测上报
+    // needs_diagnosis，不自动拆表）。数据行 <6 或列数 <2 不适用（不触发）。
+    // 信号1 列组分离：排除全空列（empty_columns 口径）后，数据行非空列集合的列共现图
+    //   恰为两个连通分量、各 ≥3 行且各 ≥2 列（≥2 列排除布局碎表「标签列 vs 其余」假分离）。
+    // 信号2 面板表头行混入：数据行与表头在 ≥2 个表头非空格上同值（整行重复表头已被
+    //   merge_continuations 剔除；此处捕获兄弟面板的近重复表头，如万科 t114 的
+    //   「负债及股东权益/资产」行）≥2 行。
+    let mut parts: Vec<String> = Vec::new();
+    if data.len() >= 6 && n_cols >= 2 {
+        // 排除全空列（empty_columns 口径）
+        let keep: Vec<usize> = (0..n_cols)
+            .filter(|&i| (0..data.len()).any(|j| !cell(g, j, i).is_empty()))
+            .collect();
+        // 每行非空列集合
+        let sets: Vec<Vec<usize>> = (0..data.len())
+            .map(|j| {
+                keep.iter()
+                    .copied()
+                    .filter(|&i| !cell(g, j, i).is_empty())
+                    .collect()
+            })
+            .collect();
+        // 列共现连通分量（union-find，行内各列并到首列的根）
+        let mut parent: Vec<usize> = (0..n_cols).collect();
+        fn find(parent: &mut Vec<usize>, mut x: usize) -> usize {
+            while parent[x] != x {
+                x = parent[x];
+            }
+            x
+        }
+        for s in &sets {
+            if s.len() > 1 {
+                let r0 = find(&mut parent, s[0]);
+                for &c in &s[1..] {
+                    let rc = find(&mut parent, c);
+                    if rc != r0 {
+                        parent[rc] = r0;
+                    }
+                }
+            }
+        }
+        let mut comp_cols: std::collections::HashMap<usize, Vec<usize>> = Default::default();
+        let mut comp_lines: std::collections::HashMap<usize, Vec<usize>> = Default::default();
+        for (j, s) in sets.iter().enumerate() {
+            if s.is_empty() {
+                continue; // 全空行归 empty_rows，不参与列组聚类
+            }
+            let root = find(&mut parent, s[0]);
+            let cols = comp_cols.entry(root).or_default();
+            for &c in s {
+                if !cols.contains(&c) {
+                    cols.push(c);
+                }
+            }
+            comp_lines.entry(root).or_default().push(data[j].line);
+        }
+        if comp_cols.len() == 2 {
+            let mut groups: Vec<(Vec<usize>, Vec<usize>)> = comp_cols
+                .iter()
+                .map(|(root, cols)| {
+                    let mut cols = cols.clone();
+                    cols.sort_unstable();
+                    (cols, comp_lines[root].clone())
+                })
+                .collect();
+            groups.sort_by_key(|(cols, _)| cols[0]);
+            if groups
+                .iter()
+                .all(|(cols, lines)| lines.len() >= 3 && cols.len() >= 2)
+            {
+                for (tag, (cols, lines)) in ['A', 'B'].iter().zip(groups.iter()) {
+                    let names: Vec<String> = cols
+                        .iter()
+                        .map(|&i| {
+                            if hdr[i].is_empty() {
+                                format!("col_{i}")
+                            } else {
+                                hdr[i].clone()
+                            }
+                        })
+                        .collect();
+                    parts.push(format!(
+                        "列组{tag}{names:?} {}行, 代表源行 {:?}",
+                        lines.len(),
+                        &lines[..lines.len().min(5)]
+                    ));
+                }
+            }
+        }
+        let panel: Vec<&crate::grid::Row> = data
+            .iter()
+            .filter(|r| {
+                (0..n_cols)
+                    .filter(|&i| {
+                        !hdr[i].is_empty()
+                            && r.cells.get(i).map(String::as_str).unwrap_or("") == hdr[i]
+                    })
+                    .count()
+                    >= 2
+            })
+            .collect();
+        if panel.len() >= 2 {
+            let lines: Vec<usize> = panel.iter().map(|r| r.line).take(5).collect();
+            let firsts: Vec<&str> = panel
+                .iter()
+                .take(5)
+                .map(|r| r.cells.first().map(String::as_str).unwrap_or(""))
+                .collect();
+            parts.push(format!(
+                "面板表头行 {} 行混入(疑似双栏另一面板), 源行 {:?}, 首格 {:?}",
+                panel.len(),
+                lines,
+                firsts
+            ));
+        }
+    }
+    checks.push(Check {
+        name: "dual_column_suspect".into(),
+        passed: parts.is_empty(),
+        detail: parts.join("; "),
+    });
+
+    // section_header_rows：孤立段标题行计数（提示信号，passed 恒 true 仅作 detail 记录，
+    // 裁决交 supervision）。口径：非首数据行、首格非空、其余列全空、首格不含 合计/总计/小计。
+    let sec_hits: Vec<&crate::grid::Row> = data
+        .iter()
+        .enumerate()
+        .filter(|(idx, r)| {
+            *idx > 0
+                && !r.cells.first().map(String::as_str).unwrap_or("").is_empty()
+                && !re(TOTAL_LABEL_RE).is_match(&r.cells[0])
+                && r.cells[1..].iter().all(|c| c.is_empty())
+        })
+        .map(|(_, r)| r)
+        .collect();
+    checks.push(Check {
+        name: "section_header_rows".into(),
+        passed: true,
+        detail: if sec_hits.is_empty() {
+            String::new()
+        } else {
+            let lines: Vec<usize> = sec_hits.iter().map(|r| r.line).take(5).collect();
+            let firsts: Vec<&str> = sec_hits
+                .iter()
+                .take(5)
+                .map(|r| r.cells[0].as_str())
+                .collect();
+            format!(
+                "{} 孤立段标题行(首格非空余全空), 源行 {:?}, 首格 {:?}",
+                sec_hits.len(),
+                lines,
+                firsts
+            )
         },
     });
 
@@ -334,5 +490,125 @@ mod tests {
         let ec = rep.checks_full.iter().find(|c| c.name == "empty_columns").unwrap();
         assert!(!ec.passed, "{:?}", ec.detail);
         assert!(ec.detail.contains("b"), "{:?}", ec.detail);
+    }
+
+    #[test]
+    fn dual_column_suspect_fires_on_disjoint_column_groups() {
+        // 真·左右双栏：左栏行只用 {0,1,2}，右栏行只用 {3,4,5}，各 ≥3 行
+        let grid = g(&[
+            ("1", &["资产", "附注", "期末", "负债", "附注", "期末"]),
+            ("2", &["货币资金", "1", "88", "", "", ""]),
+            ("3", &["应收票据", "2", "17", "", "", ""]),
+            ("4", &["存货", "3", "51", "", "", ""]),
+            ("5", &["", "", "", "短期借款", "4", "15"]),
+            ("6", &["", "", "", "应付账款", "5", "16"]),
+            ("7", &["", "", "", "合同负债", "6", "19"]),
+        ]);
+        let rep = table_report(0, &grid);
+        let dc = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "dual_column_suspect")
+            .unwrap();
+        assert!(!dc.passed, "{:?}", dc.detail);
+        assert!(dc.detail.contains("列组A"), "{:?}", dc.detail);
+        assert!(dc.detail.contains("列组B"), "{:?}", dc.detail);
+        assert!(dc.detail.contains("资产"), "{:?}", dc.detail);
+        assert!(dc.detail.contains("负债"), "{:?}", dc.detail);
+        assert_eq!(rep.status, "needs_diagnosis");
+    }
+
+    #[test]
+    fn dual_column_suspect_fires_on_panel_header_rows() {
+        // 万科 t114 形态：两面板共用列布局竖向拼接，表体混入兄弟面板表头行
+        // （与表头在日期列等非空格上同值，但非整行重复——整行重复已被 merge 剔除）
+        let grid = g(&[
+            ("6039", &["资产", "附注五", "2024年12月31日", "", "2023年12月31日", ""]),
+            ("6042", &["流动资产：", "", "", "", "", ""]),
+            ("6084", &["负债及股东权益", "附注五", "2024年12月31日", "", "2023年12月31日", ""]),
+            ("6085", &["流动负债：", "", "", "", "", ""]),
+            ("6086", &["短期借款", "23", "15,973,061,991.55", "", "1,063,561,883.10", ""]),
+            ("6089", &["应付账款", "25", "160,033,042,049.19", "", "221,688,101,235.72", ""]),
+            ("6135", &["资产", "附注十五", "2024年12月31日", "", "2023年12月31日", ""]),
+            ("6137", &["货币资金", "1", "911,239,043.23", "", "18,397,363,742.88", ""]),
+        ]);
+        let rep = table_report(0, &grid);
+        let dc = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "dual_column_suspect")
+            .unwrap();
+        assert!(!dc.passed, "{:?}", dc.detail);
+        assert!(dc.detail.contains("面板表头行 2 行"), "{:?}", dc.detail);
+        assert!(dc.detail.contains("6084"), "{:?}", dc.detail);
+        assert!(dc.detail.contains("6135"), "{:?}", dc.detail);
+        assert_eq!(rep.status, "needs_diagnosis");
+    }
+
+    #[test]
+    fn dual_column_suspect_clean_on_normal_table() {
+        // ipd 风格正常表：全部行使用同一组列，无面板表头行 → 不触发
+        let grid = g(&[
+            ("1", &["编号", "阶段", "活动"]),
+            ("2", &["1", "概念", "x"]),
+            ("3", &["2", "概念", "y"]),
+            ("4", &["3", "计划", "z"]),
+            ("5", &["4", "开发", "u"]),
+            ("6", &["5", "验证", "v"]),
+            ("7", &["6", "发布", "w"]),
+        ]);
+        let rep = table_report(0, &grid);
+        let dc = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "dual_column_suspect")
+            .unwrap();
+        assert!(dc.passed, "{:?}", dc.detail);
+        assert!(dc.detail.is_empty(), "{:?}", dc.detail);
+        assert!(rep.all_passed(), "{:?}", rep.failed_checks);
+        assert_eq!(rep.status, "high_candidate");
+    }
+
+    #[test]
+    fn dual_column_suspect_skips_small_tables() {
+        // <6 数据行的小表不触发（即使含面板表头行形态）
+        let grid = g(&[
+            ("1", &["资产", "附注", "期末"]),
+            ("2", &["负债", "附注", "期末"]),
+            ("3", &["货币资金", "1", "88"]),
+            ("4", &["负债", "附注", "期末"]),
+            ("5", &["存货", "2", "51"]),
+        ]);
+        let rep = table_report(0, &grid);
+        let dc = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "dual_column_suspect")
+            .unwrap();
+        assert!(dc.passed, "{:?}", dc.detail);
+    }
+
+    #[test]
+    fn section_header_rows_is_hint_only() {
+        // 孤立段标题行：passed 恒 true（提示信号），detail 记录行号；首数据行与合计行不计
+        let grid = g(&[
+            ("1", &["项目", "金额"]),
+            ("2", &["流动资产：", ""]),
+            ("3", &["货币资金", "88"]),
+            ("4", &["非流动资产：", ""]),
+            ("5", &["存货", "51"]),
+            ("6", &["合计", "139"]),
+        ]);
+        let rep = table_report(0, &grid);
+        let sh = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "section_header_rows")
+            .unwrap();
+        assert!(sh.passed, "{:?}", sh.detail);
+        assert!(sh.detail.contains("1 孤立段标题行"), "{:?}", sh.detail);
+        assert!(sh.detail.contains('4'), "{:?}", sh.detail);
+        assert!(!sh.detail.contains('2'), "首数据行不计: {:?}", sh.detail);
+        assert!(rep.all_passed(), "提示信号不影响 status: {:?}", rep.failed_checks);
     }
 }

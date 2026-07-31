@@ -410,6 +410,56 @@ mod tests {
     }
 
     #[test]
+    fn merge_continuation_multi_page_preserves_order_and_lines() {
+        // 跨 3 页同表头签名续表：数据行按源序拼接、源行号保留、页重复表头剔除
+        let md = "| h1 | h2 |\n| --- | --- |\n| 1 | a |\n\n| h1 | h2 |\n| --- | --- |\n| 2 | b |\n\n| h1 | h2 |\n| --- | --- |\n| h1 | h2 |\n| 3 | c |\n";
+        let g = merge_continuations(extract_grids(md));
+        assert_eq!(g.len(), 1);
+        assert_eq!(
+            cells(&g[0]),
+            vec![
+                &["h1", "h2"][..],
+                &["1", "a"][..],
+                &["2", "b"][..],
+                &["3", "c"][..]
+            ]
+        );
+        let lines: Vec<usize> = g[0].rows.iter().map(|r| r.line).collect();
+        assert_eq!(lines, vec![0, 2, 6, 11]);
+        assert_eq!(
+            g[0]
+                .notes
+                .iter()
+                .filter(|n| n.starts_with("merged_continuation@"))
+                .count(),
+            2
+        );
+        assert!(g[0]
+            .notes
+            .iter()
+            .any(|n| n.starts_with("dropped_repeated_header")));
+    }
+
+    #[test]
+    fn merge_continuation_no_false_merge_and_keeps_near_header_rows() {
+        // 表头签名不同 → 不合并（防错并）；数据行仅一格与表头不同 → 保留
+        // （仅剔除与表头完全同签名的行）
+        let md = "| h1 | h2 |\n| --- | --- |\n| h1 | h2x |\n\n| h1 | h3 |\n| --- | --- |\n| 9 | z |\n";
+        let g = merge_continuations(extract_grids(md));
+        assert_eq!(g.len(), 2, "签名不同不得合并");
+        assert_eq!(
+            cells(&g[0]),
+            vec![&["h1", "h2"][..], &["h1", "h2x"][..]],
+            "近重复表头行(一格不同)应保留"
+        );
+        assert!(g[0]
+            .notes
+            .iter()
+            .all(|n| !n.starts_with("merged_continuation")));
+        assert_eq!(cells(&g[1]), vec![&["h1", "h3"][..], &["9", "z"][..]]);
+    }
+
+    #[test]
     fn auto_rotate_fake_header_with_guard() {
         // IPD 方言：sheet 标题行成假表头（Unnamed 列），真表头降为数据第 1 行
         let mut g = Grid {

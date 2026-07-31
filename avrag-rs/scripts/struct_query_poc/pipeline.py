@@ -154,6 +154,63 @@ def checks_for(g: Grid) -> list:
     checks.append({"name": "empty_columns", "passed": not empty_cols,
                    "detail": f"全空列: {empty_cols}" if empty_cols else ""})
 
+    # dual_column_suspect：疑似双栏/兄弟面板行混入(已知提取限制; 只探测上报 needs_diagnosis,
+    # 不自动拆表)。数据行 <6 或列数 <2 不适用(不触发)。
+    # 信号1 列组分离: 排除全空列(empty_columns 口径)后, 数据行非空列集合的列共现图恰为
+    #   两个连通分量、各 >=3 行且各 >=2 列(>=2 列排除布局碎表「标签列 vs 其余」的假分离)。
+    # 信号2 面板表头行混入: 数据行与表头在 >=2 个表头非空格上同值(整行重复表头已被
+    #   merge_continuations 剔除; 此处捕获兄弟面板的近重复表头, 如万科 t114 的
+    #   「负债及股东权益/资产」行) >=2 行。
+    parts = []
+    if len(data) >= 6 and n_cols >= 2:
+        def _ne(r, i):
+            return i < len(r["cells"]) and r["cells"][i] != ""
+        keep = [i for i in range(n_cols) if any(_ne(r, i) for r in data)]  # 排除全空列
+        sets = [tuple(i for i in keep if _ne(r, i)) for r in data]
+        parent = {i: i for i in keep}
+
+        def _find(x):
+            while parent[x] != x:
+                x = parent[x]
+            return x
+        for s in sets:
+            for j in range(1, len(s)):
+                ra, rb = _find(s[0]), _find(s[j])
+                if ra != rb:
+                    parent[rb] = ra
+        comp_cols, comp_lines = {}, {}
+        for r, s in zip(data, sets):
+            if not s:
+                continue  # 全空行归 empty_rows, 不参与列组聚类
+            root = _find(s[0])
+            comp_cols.setdefault(root, set()).update(s)
+            comp_lines.setdefault(root, []).append(r["line"])
+        if len(comp_cols) == 2:
+            groups = sorted(comp_cols.items(), key=lambda kv: min(kv[1]))
+            if all(len(comp_lines[root]) >= 3 and len(cols) >= 2 for root, cols in groups):
+                for tag, (root, cols) in zip("AB", groups):
+                    names = [hdr[i] or f"col_{i}" for i in sorted(cols)]
+                    lines = comp_lines[root]
+                    parts.append(f"列组{tag}{names} {len(lines)}行, 代表源行 {lines[:5]}")
+        panel = [r for r in data
+                 if sum(1 for i in range(n_cols) if hdr[i] and _ne(r, i) and r["cells"][i] == hdr[i]) >= 2]
+        if len(panel) >= 2:
+            parts.append(f"面板表头行 {len(panel)} 行混入(疑似双栏另一面板), "
+                         f"源行 {[r['line'] for r in panel[:5]]}, 首格 {[r['cells'][0] for r in panel[:5]]}")
+    checks.append({"name": "dual_column_suspect", "passed": not parts,
+                   "detail": "; ".join(parts)})
+
+    # section_header_rows：孤立段标题行计数(提示信号, passed 恒 true 仅作 detail 记录,
+    # 裁决交 supervision)。口径: 非首数据行、首格非空、其余列全空、首格不含 合计/总计/小计。
+    sec_hits = [r for idx, r in enumerate(data)
+                if idx > 0 and r["cells"] and r["cells"][0] != ""
+                and not TOTAL_LABEL_RE.search(r["cells"][0])
+                and all(c == "" for c in r["cells"][1:])]
+    checks.append({"name": "section_header_rows", "passed": True,
+                   "detail": f"{len(sec_hits)} 孤立段标题行(首格非空余全空), "
+                             f"源行 {[r['line'] for r in sec_hits[:5]]}, "
+                             f"首格 {[r['cells'][0] for r in sec_hits[:5]]}" if sec_hits else ""})
+
     if data:
         col0 = [r["cells"][0] for r in data if r["cells"]]
         ints = [int(c) for c in col0 if c.isdigit()]
