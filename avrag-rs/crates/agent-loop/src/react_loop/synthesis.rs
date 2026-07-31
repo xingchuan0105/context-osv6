@@ -14,7 +14,7 @@ use super::assembler::AssembledContext;
 use super::config::{AnswerContractKind, ModeConfig};
 use super::reasoning_emit;
 use crate::events::{AgentEvent, AgentEventSink};
-use avrag_llm::{ChatMessage, LlmClient};
+use avrag_llm::{ChatMessage, LlmClient, LlmResponse};
 use common::AppError;
 use contracts::ToolResult;
 use tokio_util::sync::CancellationToken;
@@ -279,62 +279,57 @@ impl SynthesisPhase {
                 synthesis_messages.push(msg.clone());
             }
         }
-
-        let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let temperature = mode.temperature.unwrap_or(0.7);
-        let stream = llm.complete_stream(
-            &synthesis_messages,
-            Some(temperature),
-            cancel.clone(),
-            move |delta| {
-                if !delta.is_empty() {
-                    let _ = delta_tx.send(delta.to_string());
-                }
-            },
-            move |delta| {
-                if !delta.is_empty() {
-                    let _ = reasoning_tx.send(delta.to_string());
-                }
-            },
-        );
-        tokio::pin!(stream);
 
-        let mut full_answer = String::new();
+        let (mut full_answer, response) =
+            stream_prose_to_sink(llm, &synthesis_messages, temperature, sink, cancel).await?;
 
-        let response = loop {
-            tokio::select! {
-                biased;
-                _ = cancel.cancelled() => {
-                    return Err(super::cancellation::cancellation_error());
-                }
-                delta = delta_rx.recv() => {
-                    if let Some(delta) = delta {
-                        full_answer.push_str(&delta);
-                        let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
-                    }
-                }
-                reasoning = reasoning_rx.recv() => {
-                    if let Some(reasoning) = reasoning {
-                        let _ = sink
-                            .emit(AgentEvent::ReasoningSummaryDelta { text: reasoning })
-                            .await;
-                    }
-                }
-                result = &mut stream => {
-                    break result.map_err(|e| AppError::internal(format!("synthesis stream failed: {e}")))?;
-                }
-            }
-        };
-
-        while let Ok(delta) = delta_rx.try_recv() {
-            full_answer.push_str(&delta);
-            let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
-        }
-        while let Ok(reasoning) = reasoning_rx.try_recv() {
+        // prose_only contract check (host structural): a code-only answer
+        // means the retrieve-phase "output one <code> block" framing leaked
+        // into the closing turn (observed on budget-exhausted tails). One
+        // repair round; if the repair still comes back code-only, use the
+        // degraded fallback copy — never surface a raw code block as the
+        // final prose answer.
+        if super::answer_contract::is_code_only_answer(&full_answer) {
             let _ = sink
-                .emit(AgentEvent::ReasoningSummaryDelta { text: reasoning })
+                .emit(AgentEvent::Activity {
+                    stage: "synthesis_code_answer_repair".to_string(),
+                    message:
+                        "prose_only synthesis returned a code-only answer; one repair round follows"
+                            .to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
+                })
                 .await;
+            let mut repair_messages = synthesis_messages.clone();
+            repair_messages.push(ChatMessage::assistant(full_answer.as_str()));
+            repair_messages.push(ChatMessage::user(
+                super::prompt_assets::synthesis_prose_repair_nudge(),
+            ));
+            let (repaired, _) =
+                stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
+            if super::answer_contract::is_code_only_answer(&repaired) {
+                let _ = sink
+                    .emit(AgentEvent::Activity {
+                        stage: "synthesis_code_answer_violation".to_string(),
+                        message:
+                            "prose_only repair still returned a code-only answer; contract fallback used"
+                                .to_string(),
+                        detail: None,
+                        counts: Default::default(),
+                        sources_preview: Vec::new(),
+                    })
+                    .await;
+                full_answer = contract_violation_fallback(&mode.id);
+                let _ = sink
+                    .emit(AgentEvent::MessageDelta {
+                        text: full_answer.clone(),
+                    })
+                    .await;
+            } else {
+                full_answer = repaired;
+            }
         }
 
         let usage = crate::events::AgentUsage {
@@ -355,6 +350,76 @@ impl SynthesisPhase {
 
         Ok(full_answer)
     }
+}
+
+/// Stream one prose completion, forwarding content deltas and reasoning
+/// summaries to the sink as they arrive; returns the accumulated prose and
+/// the final response (usage/model). Shared by the first prose pass and the
+/// code-only repair round.
+async fn stream_prose_to_sink(
+    llm: &LlmClient,
+    messages: &[ChatMessage],
+    temperature: f32,
+    sink: &dyn AgentEventSink,
+    cancel: &CancellationToken,
+) -> Result<(String, LlmResponse), AppError> {
+    let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let stream = llm.complete_stream(
+        messages,
+        Some(temperature),
+        cancel.clone(),
+        move |delta| {
+            if !delta.is_empty() {
+                let _ = delta_tx.send(delta.to_string());
+            }
+        },
+        move |delta| {
+            if !delta.is_empty() {
+                let _ = reasoning_tx.send(delta.to_string());
+            }
+        },
+    );
+    tokio::pin!(stream);
+
+    let mut full_answer = String::new();
+
+    let response = loop {
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                return Err(super::cancellation::cancellation_error());
+            }
+            delta = delta_rx.recv() => {
+                if let Some(delta) = delta {
+                    full_answer.push_str(&delta);
+                    let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                }
+            }
+            reasoning = reasoning_rx.recv() => {
+                if let Some(reasoning) = reasoning {
+                    let _ = sink
+                        .emit(AgentEvent::ReasoningSummaryDelta { text: reasoning })
+                        .await;
+                }
+            }
+            result = &mut stream => {
+                break result.map_err(|e| AppError::internal(format!("synthesis stream failed: {e}")))?;
+            }
+        }
+    };
+
+    while let Ok(delta) = delta_rx.try_recv() {
+        full_answer.push_str(&delta);
+        let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+    }
+    while let Ok(reasoning) = reasoning_rx.try_recv() {
+        let _ = sink
+            .emit(AgentEvent::ReasoningSummaryDelta { text: reasoning })
+            .await;
+    }
+
+    Ok((full_answer, response))
 }
 
 fn append_tool_results_observation(out: &mut Vec<ChatMessage>, tool_results: &[ToolResult]) {

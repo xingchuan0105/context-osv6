@@ -124,6 +124,12 @@ pub fn synthesis_repair_nudge() -> &'static str {
     trim_body(loop_prompt!("synthesis-repair.nudge.md"))
 }
 
+/// prose_only synthesis returned a code-only answer (retrieve framing leaked
+/// into the final turn): observation that precedes the one repair round.
+pub fn synthesis_prose_repair_nudge() -> &'static str {
+    trim_body(loop_prompt!("synthesis-prose-repair.nudge.md"))
+}
+
 pub fn partial_evidence_insufficient() -> &'static str {
     trim_body(loop_prompt!("partial-evidence-insufficient.md"))
 }
@@ -157,6 +163,7 @@ mod tests {
         assert!(!budget_exhausted_final_turn().is_empty());
         assert!(!budget_exhausted_final_turn_tokens().is_empty());
         assert!(!synthesis_repair_nudge().is_empty());
+        assert!(!synthesis_prose_repair_nudge().is_empty());
         assert!(!partial_evidence_insufficient().is_empty());
         assert!(!codegen_no_output_nudge().is_empty());
         assert!(!codegen_sandbox_error_nudge().is_empty());

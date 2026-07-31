@@ -21,6 +21,7 @@ Third-person **what happened / what is true**. No “please / you must”. Hard 
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + alias/truncation detail (`{call_count}`, `{total_chunks}`, `{detail}`) |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON candidate (non–prose_only paths) |
+| `synthesis-prose-repair.nudge.md` | prose_only code-only answer repair (one round) |
 | `contract-violation-*.md` | User-facing format failure fallbacks |
 | `degraded-no-evidence-*.md` | User-facing empty-evidence fallbacks |
 | `partial-evidence-insufficient.md` | Short partial-evidence line |

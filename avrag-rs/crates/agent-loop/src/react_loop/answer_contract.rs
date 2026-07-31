@@ -929,6 +929,51 @@ pub fn contract_violation_fallback(mode_id: &str) -> String {
     super::prompt_assets::contract_violation_fallback(mode_id).to_string()
 }
 
+/// prose_only-contract detector: true when `text` carries code spans
+/// (`<code>…</code>` or markdown fences) but no prose outside them — the
+/// retrieve-phase "output one code block" framing leaked into the final
+/// answer. Detector only (host structural check); the repair observation
+/// lives in `prompts/loop/synthesis-prose-repair.nudge.md`.
+///
+/// Stricter than `parse::parse_llm_output`'s CodeBlocks classification on
+/// purpose: a prose answer that *quotes* one fenced query is a valid answer
+/// and must not trigger a repair round.
+pub(crate) fn is_code_only_answer(text: &str) -> bool {
+    let mut saw_code = false;
+    let mut outside = String::new();
+    let mut rest = text;
+    // `<code …>…</code>` spans (inline or block) — same tag shape parse.rs
+    // treats as executable.
+    while let Some(start) = rest.find("<code") {
+        let Some(tag_end) = rest[start..].find('>').map(|o| start + o) else {
+            break;
+        };
+        let Some(close) = rest[tag_end..].find("</code>").map(|o| tag_end + o) else {
+            break;
+        };
+        outside.push_str(&rest[..start]);
+        saw_code = true;
+        rest = &rest[close + "</code>".len()..];
+    }
+    outside.push_str(rest);
+    // Markdown fences of ANY language: a fence-only answer is not prose no
+    // matter the tag (unlike parse.rs, which only executes python fences).
+    let mut prose = String::new();
+    let mut in_fence = false;
+    for line in outside.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            saw_code = true;
+            continue;
+        }
+        if !in_fence {
+            prose.push_str(line);
+            prose.push('\n');
+        }
+    }
+    saw_code && prose.trim().is_empty()
+}
+
 fn draft_contains_refusal(answer_text: &str) -> bool {
     DRAFT_REFUSAL_CUES
         .iter()
@@ -1255,6 +1300,30 @@ pub fn resolve_synthesis_answer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_only_detector_flags_block_answers() {
+        // The observed terminal-answer failure shapes.
+        assert!(is_code_only_answer("<code language=\"python\">print(1)</code>"));
+        assert!(is_code_only_answer("```python\nprint(1)\n```"));
+        assert!(is_code_only_answer("```sql\nSELECT 1\n```"));
+        // Truncated stream: unclosed fence is still a code-only answer.
+        assert!(is_code_only_answer("```python\nprint(1)"));
+    }
+
+    #[test]
+    fn code_only_detector_accepts_prose() {
+        assert!(!is_code_only_answer("答案是 LPDT-03。"));
+        // Prose quoting a fenced query is a valid answer, not a violation.
+        assert!(!is_code_only_answer(
+            "查询结果如下：\n```sql\nSELECT 1\n```\n如上所示共 3 行。"
+        ));
+        // Inline `<code>` inside prose leaves prose behind.
+        assert!(!is_code_only_answer("使用 <code>foo()</code> 即可。"));
+        // Empty / whitespace answers are a different classification.
+        assert!(!is_code_only_answer(""));
+        assert!(!is_code_only_answer("  \n  "));
+    }
 
     /// Legacy `internal_answer_v1` envelope machinery tests: `modes/rag.yaml` is
     /// ProseOnly now (PR-A 2026-07-20 — worker final = handoff JSON). Force the
