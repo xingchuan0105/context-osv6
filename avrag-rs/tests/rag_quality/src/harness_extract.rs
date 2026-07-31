@@ -37,6 +37,8 @@ pub const RETRIEVAL_TOOLS: &[&str] = &[
     "doc_grep",
     "doc_read_lines",
     "doc_summary",
+    // 2b 起：data.chunks 为表级证据 chunk（结果集 md，chunk_id ∈ PG chunks table_evidence）。
+    "struct_query",
 ];
 
 /// A single chunk recovered from the retrieval layer, with rank/score for nDCG.
@@ -270,6 +272,24 @@ mod tests {
         let got = extract_retrieved_chunks(&results);
         assert_eq!(got.chunk_ids(), vec!["g1", "g2"]);
         assert_eq!(got.chunks[0].tool, "doc_grep");
+    }
+
+    #[test]
+    fn extracts_struct_query_evidence_chunk() {
+        // struct_query：data.chunks = 表级证据 chunk（结果集 md），2b 起计入召回层。
+        let results = vec![tr(
+            "struct_query",
+            serde_json::json!({
+                "ok": true,
+                "row_count": 1,
+                "scanned_chunks": ["ev-chunk-1"],
+                "chunks": [{"chunk_id": "ev-chunk-1", "doc_id": "d1", "text": "| 阶段 |\n| --- |\n| 验证阶段 |"}]
+            }),
+        )];
+        let got = extract_retrieved_chunks(&results);
+        assert_eq!(got.chunk_ids(), vec!["ev-chunk-1"]);
+        assert!(got.chunks[0].content.contains("验证阶段"));
+        assert_eq!(got.chunks[0].tool, "struct_query");
     }
 
     #[test]

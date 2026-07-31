@@ -128,11 +128,13 @@ impl AssetRepository {
             return Ok(HashMap::new());
         }
         let mut tx = self.pool.begin(context).await?;
+        // table_evidence：struct_query 表级证据 chunk（整表 md）——仅 id 水合可见，
+        // 不进任何检索/计数路径（那些路径按 chunk_type='body'/'summary' 过滤）。
         let rows = sqlx::query(
             r#"
             select id, document_id, page, content, metadata
             from chunks
-            where id = any($1) and chunk_type = 'body'
+            where id = any($1) and chunk_type in ('body', 'table_evidence')
             "#,
         )
         .bind(chunk_ids)

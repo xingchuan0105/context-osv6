@@ -2,14 +2,15 @@
 //!
 //! per-doc DuckDB 表格存储的只读查询面：
 //! - `struct_catalog`：列出 doc_scope 内各 doc 表格存储中的 relation（表名/表头/行数/
-//!   样例行/caption/unit/confidence）。**无存储或无表 → relations 为空，ok**（「无表格」）。
+//!   样例行/caption/unit/confidence/证据 chunk）。**无存储或无表 → relations 为空，ok**（「无表格」）。
 //! - `struct_query`：受限 SQL（单条 SELECT、禁文件/DDL/DML 函数、标识符 ∈ catalog）在
 //!   加固只读连接上执行（READ_ONLY + enable_external_access=false + lock_configuration=true，
 //!   配方：Simon Willison duckdb-security；详见计划 §6.2）。
 //!
 //! 存储约定：`<STRUCT_STORE_DIR 或 storage/struct_store>/<doc_id>.duckdb`，
-//! 由灌入 pipeline（scripts/struct_query_poc）产出；证据列 `row_ord` / `__src_line`
-//! （chunk_id 映射待 2b，当前回传 src_line）。
+//! 由灌入 pipeline（scripts/struct_query_poc）产出；证据列 `row_ord` / `__src_line`，
+//! 表级证据 chunk：`_meta.evidence_chunk_id`（整表 md 存 PG chunks，table_evidence，
+//! 仅 citation 水合、不进检索面）；行级 chunk 映射留待切块行号元数据（另案）。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -24,6 +25,8 @@ use crate::RagRuntime;
 const MAX_SAMPLE_ROWS: usize = 3;
 const MAX_RESULT_ROWS: usize = 200;
 const MAX_CELL_CHARS: usize = 300;
+/// 证据 chunk text（结果集 md）的行数硬顶（完整行集仍在 `rows` 字段内）。
+const MAX_EVIDENCE_MD_ROWS: usize = 50;
 
 /// SQL 禁词（词边界，大小写不敏感）：文件读写/外部访问/DDL/DML/配置。
 const FORBIDDEN_SQL: &[&str] = &[
@@ -108,6 +111,38 @@ fn cell_to_string(v: duckdb::types::ValueRef) -> String {
     }
 }
 
+/// 结果集 → pipe md（证据 chunk 的 text；行数另封顶，单元格 `|` 转义、换行压平）。
+fn render_rows_md(columns: &[String], rows: &[Vec<String>]) -> String {
+    fn esc(s: &str) -> String {
+        s.replace('|', "\\|").replace('\n', " ").trim().to_string()
+    }
+    let mut lines = vec![
+        format!(
+            "| {} |",
+            columns
+                .iter()
+                .map(|c| esc(c))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ),
+        format!(
+            "| {} |",
+            columns
+                .iter()
+                .map(|_| "---")
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ),
+    ];
+    for r in rows.iter().take(MAX_EVIDENCE_MD_ROWS) {
+        lines.push(format!(
+            "| {} |",
+            r.iter().map(|c| esc(c)).collect::<Vec<_>>().join(" | ")
+        ));
+    }
+    lines.join("\n")
+}
+
 /// 单文件的 catalog：information_schema 列表 + DESCRIBE + 样例行 + _meta。
 fn catalog_for_file(
     con: &duckdb::Connection,
@@ -122,25 +157,39 @@ fn catalog_for_file(
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
 
-    // _meta 可选：缺省时 caption/confidence 等为空。
-    let meta: HashMap<String, serde_json::Value> = con
-        .prepare("SELECT table_name, caption, unit, table_kind, confidence, notes FROM _meta")
-        .and_then(|mut s| {
-            s.query_map([], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    json!({
+    // _meta 可选：缺省时 caption/confidence 等为空。evidence_chunk_id 为 2b 后加列，
+    // 老库无此列 → 回退旧列形状（relation 的 evidence_chunk_id 为 null）。
+    let read_meta =
+        |sql: &str, with_evidence: bool| -> Option<HashMap<String, serde_json::Value>> {
+            con.prepare(sql).ok().and_then(|mut s| {
+                s.query_map([], |r| {
+                    let mut v = json!({
                         "caption": r.get::<_, Option<String>>(1)?,
                         "unit": r.get::<_, Option<String>>(2)?,
                         "table_kind": r.get::<_, Option<String>>(3)?,
                         "confidence": r.get::<_, Option<String>>(4)?,
                         "notes": r.get::<_, Option<String>>(5)?,
-                    }),
-                ))
+                    });
+                    if with_evidence {
+                        v["evidence_chunk_id"] = json!(r.get::<_, Option<String>>(6)?);
+                    }
+                    Ok((r.get::<_, String>(0)?, v))
+                })
+                .ok()
+                .map(|rows| rows.filter_map(|x| x.ok()).collect())
             })
-            .map(|rows| rows.filter_map(|x| x.ok()).collect())
-        })
-        .unwrap_or_default();
+        };
+    let meta: HashMap<String, serde_json::Value> = read_meta(
+        "SELECT table_name, caption, unit, table_kind, confidence, notes, evidence_chunk_id FROM _meta",
+        true,
+    )
+    .or_else(|| {
+        read_meta(
+            "SELECT table_name, caption, unit, table_kind, confidence, notes FROM _meta",
+            false,
+        )
+    })
+    .unwrap_or_default();
 
     let mut out = Vec::new();
     for table in tables {
@@ -177,6 +226,7 @@ fn catalog_for_file(
             "unit": m.get("unit"),
             "table_kind": m.get("table_kind"),
             "confidence": m.get("confidence"),
+            "evidence_chunk_id": m.get("evidence_chunk_id"),
             "headers": headers,
             "n_rows": n_rows,
             "sample_rows": sample_rows,
@@ -408,6 +458,22 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
         .map(|(_, p)| p.clone())
         .ok_or_else(|| "target doc file missing".to_string())?;
     let con = open_readonly(&path)?;
+    // 表级证据 chunk（2b：整表 md 合成 chunk，PG chunks 表 table_evidence，仅水合用）。
+    // 老库 _meta 无此列 → 空映射，不影响查询。
+    let chunk_of: HashMap<String, String> = con
+        .prepare("SELECT table_name, evidence_chunk_id FROM _meta")
+        .ok()
+        .and_then(|mut s| {
+            s.query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            })
+            .ok()
+            .map(|rows| rows.filter_map(|x| x.ok()).collect::<Vec<_>>())
+        })
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(t, c)| c.map(|c| (t.to_lowercase(), c)))
+        .collect();
     let (columns, rows) = match query_rows(&con, &sql, MAX_RESULT_ROWS + 1) {
         Ok(v) => v,
         Err(e) => {
@@ -420,6 +486,18 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
     let truncated = rows.len() > MAX_RESULT_ROWS;
     let rows: Vec<_> = rows.into_iter().take(MAX_RESULT_ROWS).collect();
     let row_count = rows.len();
+    // scanned_chunks：本查询扫到的表的证据 chunk（按 idents 序去重）。
+    let scanned_chunks: Vec<String> = {
+        let mut seen = HashSet::new();
+        idents
+            .iter()
+            .filter_map(|i| chunk_of.get(&i.to_lowercase()))
+            .filter(|c| seen.insert(c.to_string()))
+            .cloned()
+            .collect()
+    };
+    // v1 简化：明细行证据归属首个 FROM relation 的表（chunk 粒度为整表）。
+    let primary_chunk = scanned_chunks.first().cloned();
     let col_idx: HashMap<&str, usize> = columns
         .iter()
         .enumerate()
@@ -430,6 +508,7 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
             .map(|r| {
                 json!({
                     "doc_id": target_doc.to_string(),
+                    "chunk_id": primary_chunk.as_deref(),
                     "row_ord": col_idx.get("row_ord").and_then(|i| r.get(*i)),
                     "__src_line": col_idx.get("__src_line").and_then(|i| r.get(*i)),
                 })
@@ -437,6 +516,15 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
             .collect()
     } else {
         Vec::new()
+    };
+    // harness 召回抽取（chunks 形状）：结果集 md（行数另封顶）。
+    let chunks: Vec<serde_json::Value> = match &primary_chunk {
+        Some(cid) => vec![json!({
+            "chunk_id": cid,
+            "doc_id": target_doc.to_string(),
+            "text": render_rows_md(&columns, &rows),
+        })],
+        None => Vec::new(),
     };
     Ok(json!({
         "ok": true,
@@ -447,7 +535,9 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
         "engine": "duckdb",
         "doc_id": target_doc.to_string(),
         "evidence": evidence,
-        "evidence_note": "__src_line 为源 markdown 行号;chunk_id 映射待灌入切块联动(2b)",
+        "scanned_chunks": scanned_chunks,
+        "chunks": chunks,
+        "evidence_note": "chunk_id/scanned_chunks 为表级证据 chunk(整表 md,PG chunks 表 table_evidence,仅水合);__src_line 为源 markdown 行号",
     }))
 }
 
@@ -506,15 +596,18 @@ pub async fn run_query(
 mod tests {
     use super::*;
 
+    /// fixture _meta 的证据 chunk id（2b：per-table md 合成 chunk）。
+    const FIXTURE_CHUNK_ID: &str = "11111111-2222-3333-4444-555555555555";
+
     fn fixture_file(dir: &Path, doc_id: Uuid) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
         let path = doc_file(dir, doc_id);
         let con = duckdb::Connection::open(&path).unwrap();
         con.execute_batch(
-            "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON);
+            "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON, evidence_chunk_id VARCHAR);
              CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, 阶段 VARCHAR, 角色 VARCHAR);
              INSERT INTO t0 VALUES (0, 1, '概念阶段', 'LPDT'), (1, 2, '验证阶段', 'PQA'), (2, 3, '验证阶段', 'SE');
-             INSERT INTO _meta VALUES ('t0', '活动表', NULL, 'detail', 'high', 1, 3, 2, 'high_candidate', '[]', '[]');",
+             INSERT INTO _meta VALUES ('t0', '活动表', NULL, 'detail', 'high', 1, 3, 2, 'high_candidate', '[]', '[]', '11111111-2222-3333-4444-555555555555');",
         )
         .unwrap();
         drop(con);
@@ -593,6 +686,7 @@ mod tests {
         assert_eq!(relations[0]["n_rows"], 3);
         assert_eq!(relations[0]["headers"], json!(["阶段", "角色"]));
         assert_eq!(relations[0]["confidence"], "high");
+        assert_eq!(relations[0]["evidence_chunk_id"], FIXTURE_CHUNK_ID);
 
         // 只读加固：写与外部访问被拒。
         let con = open_readonly(&doc_file(&dir, doc_id)).unwrap();
@@ -723,6 +817,43 @@ mod tests {
         assert_eq!(v["evidence"][0]["row_ord"], json!("1"));
         assert_eq!(v["evidence"][0]["__src_line"], json!("2"));
         assert_eq!(v["evidence"][1]["row_ord"], json!("2"));
+        // 表级证据 chunk：明细行归属 + scanned_chunks + harness 抽取用 chunks。
+        assert_eq!(v["evidence"][0]["chunk_id"], FIXTURE_CHUNK_ID);
+        assert_eq!(v["scanned_chunks"], json!([FIXTURE_CHUNK_ID]));
+        assert_eq!(v["chunks"][0]["chunk_id"], FIXTURE_CHUNK_ID);
+        let md = v["chunks"][0]["text"].as_str().unwrap();
+        assert!(md.contains("验证阶段"));
+        assert!(md.contains("row_ord"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn query_store_legacy_meta_without_evidence_column_degrades() {
+        // 老库 _meta 无 evidence_chunk_id 列：查询/catalog 正常，chunk 相关字段为空。
+        let dir = std::env::temp_dir().join(format!("struct_store_test_{}", Uuid::new_v4()));
+        let doc_id = Uuid::new_v4();
+        std::fs::create_dir_all(&dir).unwrap();
+        let con = duckdb::Connection::open(doc_file(&dir, doc_id)).unwrap();
+        con.execute_batch(
+            "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON);
+             CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, x VARCHAR);
+             INSERT INTO t0 VALUES (0, 1, 'a');
+             INSERT INTO _meta VALUES ('t0', '旧表', NULL, 'detail', 'high', 1, 1, 1, 'high_candidate', '[]', '[]');",
+        )
+        .unwrap();
+        drop(con);
+
+        let v = query_store(&dir, &[doc_id], "SELECT row_ord, x FROM t0").unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["scanned_chunks"], json!([]));
+        assert_eq!(v["chunks"], json!([]));
+        assert!(v["evidence"][0]["chunk_id"].is_null());
+
+        let relations = catalog_store(&dir, &[doc_id]).unwrap();
+        assert_eq!(relations.len(), 1);
+        assert_eq!(relations[0]["caption"], "旧表");
+        assert!(relations[0]["evidence_chunk_id"].is_null());
 
         std::fs::remove_dir_all(&dir).ok();
     }

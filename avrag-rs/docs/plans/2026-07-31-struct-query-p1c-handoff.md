@@ -106,5 +106,5 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
 
 1. ~~落 R1–R4~~（已完成 2026-07-31：R1 抽纯函数 + 5 测试、R2/R3 随重构消除、R4 语气改写；验证序列全绿）。
 2. ~~P1d~~（已完成 2026-07-31：重灌 ipd/白药 struct store → `avrag-rs/storage/struct_store/<doc_id>.duckdb`；切片 86/88 答对、106 sticky 未解（末轮停在 code 块未出 synthesis，非 struct 缺陷）；证据见计划文档 §11 B3/B4 与附录 B）。
-3. 2b：`__src_line → __chunk_id` 证据映射（需与 chunker 联动）；真实会计报表样本验合计对账（q106 类问题）。
+3. ~~2b~~（已完成 2026-07-31：证据映射按用户拍板改**表级证据 chunk** 方案（整表 md 存 PG `chunks[table_evidence]`，绕开 chunker 行号依赖）；万科 2024 年报合计对账核验通过；Q86 recall 0→100%。详见计划文档附录 C）。
 4. P2：supervision loop 工具化 / fts 字段发现 / 数值规整 / telemetry。

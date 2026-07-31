@@ -365,9 +365,9 @@ r = await client.struct_query(sql)
 | B0 | bridge catalog/query 可调 | P1 | ✅（P1d E2E tool_trace：struct_catalog×4 / struct_query×11 全 Ok；P1c shim parity 测试） |
 | B1 | 安全锁：`read_csv`/ATTACH/多语句/`;` 拼接被拒 | P1 | ✅（struct_query 测试 10/10：forbidden 矩阵含 DELETE/SET/ATTACH/read_csv/子查询；P1c 探针：READ_ONLY 拒写、外部访问拒、lock_configuration 防撤销） |
 | B2 | skill 无 golden 实体名；观察语气 | P1 | ✅（SKILL.md 增补无 golden 实体名；低自由度行已由祈使式改观察式） |
-| B3 | 86/88/106 切片（含表格存储语料） | P1 | ◐ 86/88 ✅（correctness=1；88 全绿 PASS）；106 ❌ sticky 未解：末轮停在 codegen 块未出 synthesis（疑轮次/预算耗尽），struct/grep 调用全 Ok、取证方向正确（370 口径 + 638 grep）→ 归 P2 预算/telemetry 观察 |
+| B3 | 86/88/106 切片（含表格存储语料） | P1 | ◐ 88 连续两轮全绿 PASS；86 答案能力已证（首轮 LPDT-03 正确 + 复跑 recall=100%），但三轮中两轮末轮停在 code 块/空答案；106 同模式 sticky。确诊：loop token 预算（28K/12 轮）在合成轮前耗尽、「末轮 code 块当答案」——与 struct 无关（调用全 Ok，证据 chunk 增量百字节级），归 P2 预算/telemetry + loop 终答契约 |
 | B4 | 无表 doc：catalog 空、ok、不 panic | P1 | ✅（P1d E2E 全 10 doc scope 运行无 panic、exit=0；单测 no_relations / 缺文件跳过） |
-| C0 | 明细证据 `__chunk_id` 水合；聚合附 scanned_chunks | P1 | ⬜ |
+| C0 | 明细证据 `__chunk_id` 水合；聚合附 scanned_chunks | P1 | ✅（表级粒度方案：per-table md 合成 chunk 存 PG `chunks[chunk_type=table_evidence]`，仅 `get_chunks_by_ids` 水合可见，检索/计数路径零污染；明细 evidence 带 chunk_id、聚合附 scanned_chunks、`chunks` 数组供召回抽取——Q86 复跑 recall 0→100%；行级映射留待切块行号元数据另案） |
 
 ---
 
@@ -391,7 +391,7 @@ r = await client.struct_query(sql)
 [x] 0. 拍板:v3 架构(统一 markitdown + 灌入 pipeline + DuckDB 核心 + supervision loop)
 [x] 1. P0:提取实证(4/4 PASS)+ duckdb_markdown 否决 + 方言记录
 [x] 2. P1a:pipeline 全链(提取/合并/校验/健康报告/_meta/重建语义)+ PDF 样本实测(11/11 PASS)
-[ ] 2b.P1a 收尾:__src_line → __chunk_id 证据映射(待切块联动);真实会计报表样本验合计对账
+[x] 2b.P1a 收尾:证据映射按用户拍板改**表级证据 chunk** 方案(绕开切块行号依赖;Q86 recall 0→100%);万科2024年报合计对账核验通过(五条勾稽恒等式+叶子级抽查对平到分;朴素 total_reconcile 在多级小计/双栏版式触发 needs_diagnosis 属设计行为)。详见附录 C
 [x] 3. P1b:supervision loop v1(6 工具薄 loop + prompts 落盘 + 守卫/终态回归,12/12 确定性 + live 不变量 PASS)
 [x] 4. P1c:host struct_catalog/struct_query(duckdb-rs 加固只读)+ bridge + skill 增补
 [x] 5. P1d:重灌语料(ipd t0 370 行 high_candidate / 白药 9 网格 needs_diagnosis → storage/struct_store/<doc_id>.duckdb),QUESTIONS=86,88,106 切片:86/88 答对、106 sticky 依旧(详见 §11 B3 与附录 B)
@@ -470,3 +470,23 @@ STRUCT_STORE_DIR=$PWD/avrag-rs/storage/struct_store QUESTIONS=86,88,106 \
 | 106 双数跨 doc | catalog×2 + query×3 + grep×4 | correctness=0：最终「答案」是 code 块（loop 末轮为 codegen，未出 synthesis） | judge：三个关键点全 miss；取证方向本身正确（370 口径 SQL + 638 grep） |
 
 结论：struct_catalog/struct_query 在真实 agent loop 全链路可用（SDK shim → bridge → host 加固只读），86/88 由 struct 取证答对；106 为既有 sticky 题，失败模式从 half-coverage 变为「code 块当答案」，与 struct 无关，归 P2（预算/telemetry）与 2b（证据映射后登记 RETRIEVAL_TOOLS，recall 机制性 0 随之消除）。
+
+## C. 2b 表级证据 chunk + 合计对账（2026-07-31 续）
+
+方案（用户拍板，替代行级 `__src_line → chunk_id` 映射；chunk 侧无行号元数据、chunk_id 随机 UUID，行级映射依赖切块行号埋点另案）：
+- `pipeline.py`：每表把**入库后内容**渲染为 pipe md + 生成 `evidence_chunk_id` 入 `_meta`，sidecar `<duckdb>.evidence.json`；修复无数据行 grid 的 `executemany` 崩溃（万科年报首次暴露的 latent bug）
+- `load_evidence_chunks.py`（新）：sidecar → PG `chunks`（`chunk_type='table_evidence'`，幂等先删后插；RLS forced，需事务内 `set_config('app.current_user', …)`）
+- `storage-pg` `get_chunks_by_ids`：`chunk_type in ('body','table_evidence')`——仅此 id 水合路径可见；全部检索/计数 SQL 按 `'body'/'summary'` 过滤，证据 chunk 对 grep/BM25 计数**零污染**（已逐条核 `repository_retrieval.rs` 的 chunks 查询）
+- host `struct_query`：明细 evidence 行带 `chunk_id`、聚合附 `scanned_chunks`、`data.chunks`（结果集 md，≤50 行）供召回抽取；老库 `_meta` 无 `evidence_chunk_id` 列自动降级为 null（有单测）
+- `harness_extract` `RETRIEVAL_TOOLS += struct_query` → 召回层计入证据 chunk（Q86 复跑 recall 0→100%）
+- 测试：struct_query 11/11、check_pipeline 11/11、rag_quality 111/111、storage-pg check 通过
+
+万科 2024 年报合计对账（9.9MB PDF → markitdown 1.06MB md → 306 表，4 high_candidate / 302 needs_diagnosis）：
+- t114（资产负债表，79 行）五条勾稽恒等式全对平到分：流动 424,099,742,991.10 + 非流动 71,648,400,757.29 = 资产总计 495,748,143,748.39；流动负债 719,061,817,650.72 + 非流动负债 228,343,379,631.36 = 负债合计 947,405,197,282.08；负债 + 股东权益 338,854,662,483.74 = 1,286,259,859,765.82；资产总计 = 负债及股东权益总计（会计恒等式成立）；非流动资产叶子级逐行求和 == 合计（diff=0.00）
+- 朴素 `total_reconcile`（首个合计行 vs 全叶子行）在多级小计/双栏版式下结构性触发 needs_diagnosis → 交监督裁决，即设计行为；流动资产区被双栏另一面板行混入是已知提取限制（P2 跨页/分栏）
+
+切片复跑（证据 chunk 生效后；v2 artifacts `v2_20260731-064146` / `v2_20260731-064556`）：
+- 88：连续两轮全绿 PASS（struct_query×3 主取证，59/30 正确）
+- 86：答案能力已证（首轮 LPDT-03 正确；单跑复验 recall=100%），但三轮中两轮末轮停在 code 块/空答案
+- 106：sticky 依旧（末轮 code 块未执行：6 次调用后预算耗尽）
+- 确诊：react loop 预算 28K token / 12 轮（`assembler.rs` loop_budget）在合成轮前耗尽 → 「末轮 code 块当答案」；与证据 chunk 负载无关（本轮 struct 结果单行/小样例，增量百字节级；主因是检索负载与模型路径选择波动）。P2 候选：预算/telemetry + 「code 块不应作为终答」的 loop/harness 契约
