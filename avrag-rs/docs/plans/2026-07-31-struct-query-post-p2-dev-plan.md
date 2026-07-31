@@ -68,6 +68,8 @@ CARGO_BUILD_JOBS=2 STRUCT_STORE_DIR=$PWD/avrag-rs/storage/struct_store \
 - `crates/storage-pg/src/lib_impl/`（table_evidence 插入；`get_chunks_by_ids` 已支持，2b）
 - 配置：struct_store 目录随部署（现为 `STRUCT_STORE_DIR` env，默认 `storage/struct_store`）
 
+**状态**：◐ 进行中（2026-07-31 首窗口）——②证据入库 Rust 化 ✅（storage-pg `replace_table_evidence_chunks`，真 PG 幂等/水合/跳过三断言）、③提取器 Rust 化 ✅（struct-supervision `extract.rs`，markdown-it 语义对齐探针实证；ipd/白药/万科 三语料 `prepare()` vs `pipeline.py --emit-grids` **行级+notes 全对**）、`SuperviseInput::from_markdown` 库化入口 ✅。剩余：①表格阶段入 `document_pipeline`（**仍等 markitdown 前置**）+ worker 内 supervision loop 调用。详见 `docs/plans/2026-07-31-struct-query-w2-s4-progress.md`。
+
 **gate**：
 ```bash
 CARGO_BUILD_JOBS=2 cargo test -p ingestion -p avrag-struct-supervision -p storage-pg

@@ -14,6 +14,7 @@
 pub mod checks;
 pub mod config;
 pub mod directives;
+pub mod extract;
 pub mod grid;
 pub mod prompts;
 pub mod runner;
@@ -39,5 +40,16 @@ pub struct SuperviseInput {
 impl SuperviseInput {
     pub fn from_json_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
         Ok(serde_json::from_slice(bytes)?)
+    }
+
+    /// markdown 全文 → 提取/合并/auto_rotate → 监督输入（S4：ingestion 直接库调用，
+    /// 与 `pipeline.prepare` + `--emit-grids` 产物同形状）。
+    pub fn from_markdown(doc_id: Option<String>, source_text: String) -> Self {
+        let grids = extract::prepare(&source_text);
+        Self {
+            doc_id,
+            source_text,
+            grids,
+        }
     }
 }

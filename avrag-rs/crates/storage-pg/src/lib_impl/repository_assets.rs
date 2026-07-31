@@ -1,4 +1,16 @@
 use super::*;
+
+/// table_evidence 证据 chunk 入参（struct_query 表级证据；
+/// 与 struct-supervision `EvidenceChunk` 同语义，跨 crate 解耦）。
+#[derive(Debug, Clone)]
+pub struct TableEvidenceChunkRow {
+    pub chunk_id: Uuid,
+    pub table: String,
+    pub start_line: i64,
+    pub n_rows: i64,
+    pub md: String,
+}
+
 impl AssetRepository {
     pub async fn store_document_asset(
         &self,
@@ -151,12 +163,54 @@ impl AssetRepository {
         Ok(map)
     }
 
+    /// table_evidence 证据 chunk 装载（struct_query 表级证据；
+    /// `load_evidence_chunks.py` 的 Rust 化——S4 ingestion 挂接）。
+    /// 幂等：先按 (document_id, 'table_evidence') 删除再插入；owner_user_id 取自
+    /// documents 行（与 Python `INSERT ... SELECT ... FROM documents` 同语义，
+    /// document 不存在则该行跳过）。返回插入行数。
+    pub async fn replace_table_evidence_chunks(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+        chunks: &[TableEvidenceChunkRow],
+    ) -> Result<usize, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        sqlx::query("DELETE FROM chunks WHERE document_id = $1 AND chunk_type = 'table_evidence'")
+            .bind(document_id)
+            .execute(tx.inner())
+            .await?;
+        let mut inserted = 0usize;
+        for c in chunks {
+            let meta = serde_json::json!({
+                "source": "struct_query_pipeline",
+                "table": c.table,
+                "start_line": c.start_line,
+                "n_rows": c.n_rows,
+            });
+            let res = sqlx::query(
+                r#"
+                INSERT INTO chunks (id, owner_user_id, document_id, chunk_type, content, metadata)
+                SELECT $1, d.owner_user_id, d.id, 'table_evidence', $2, $3
+                FROM documents d WHERE d.id = $4
+                "#,
+            )
+            .bind(c.chunk_id)
+            .bind(&c.md)
+            .bind(meta)
+            .bind(document_id)
+            .execute(tx.inner())
+            .await?;
+            inserted += res.rows_affected() as usize;
+        }
+        tx.commit().await?;
+        Ok(inserted)
+    }
+
     pub async fn get_multimodal_chunks_by_ids(
         &self,
         context: &AuthContext,
         chunk_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, MultimodalChunkRow>, PgStorageError> {
-        if chunk_ids.is_empty() {
+    ) -> Result<HashMap<Uuid, MultimodalChunkRow>, PgStorageError> {        if chunk_ids.is_empty() {
             return Ok(HashMap::new());
         }
         let mut tx = self.pool.begin(context).await?;
