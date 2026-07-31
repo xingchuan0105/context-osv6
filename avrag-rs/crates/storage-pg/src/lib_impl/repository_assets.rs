@@ -11,6 +11,15 @@ pub struct TableEvidenceChunkRow {
     pub md: String,
 }
 
+/// body chunk 的 md 源行区间（W6 行级证据；0-based 闭区间，
+/// ingestion 侧键见 ingestion::ir `MD_LINE_START_KEY`/`MD_LINE_END_KEY`）。
+#[derive(Debug, Clone)]
+pub struct BodyChunkMdLineRow {
+    pub chunk_id: Uuid,
+    pub md_line_start: i64,
+    pub md_line_end: i64,
+}
+
 impl AssetRepository {
     pub async fn store_document_asset(
         &self,
@@ -204,6 +213,45 @@ impl AssetRepository {
         }
         tx.commit().await?;
         Ok(inserted)
+    }
+
+    /// W6 行级证据：按 document_id 列 body chunks 的
+    /// (chunk_id, md_line_start, md_line_end)——worker `_line_map` 写入的数据源。
+    /// 仅取 chunk_type='body' 且 block_metadata 下 md 行区间两键均非 NULL 的行
+    /// （无键的老数据/非 markitdown 路径自然排除）；按 md_line_start 排序，
+    /// 同 start 按 id 稳定序。
+    pub async fn list_body_chunk_md_line_ranges(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<Vec<BodyChunkMdLineRow>, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let rows = sqlx::query(
+            r#"
+            SELECT id,
+                   (metadata->'block_metadata'->>'md_line_start')::bigint AS md_line_start,
+                   (metadata->'block_metadata'->>'md_line_end')::bigint   AS md_line_end
+            FROM chunks
+            WHERE document_id = $1
+              AND chunk_type = 'body'
+              AND metadata->'block_metadata'->>'md_line_start' IS NOT NULL
+              AND metadata->'block_metadata'->>'md_line_end' IS NOT NULL
+            ORDER BY md_line_start, id
+            "#,
+        )
+        .bind(document_id)
+        .fetch_all(tx.inner())
+        .await?;
+        tx.commit().await?;
+        rows.iter()
+            .map(|row| {
+                Ok(BodyChunkMdLineRow {
+                    chunk_id: row.try_get("id")?,
+                    md_line_start: row.try_get("md_line_start")?,
+                    md_line_end: row.try_get("md_line_end")?,
+                })
+            })
+            .collect()
     }
 
     pub async fn get_multimodal_chunks_by_ids(

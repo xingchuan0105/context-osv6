@@ -166,3 +166,73 @@ pub(crate) async fn stage_struct_tables(
         }
     }
 }
+
+/// 行级证据映射阶段（W6）：materialize 之后把 body chunk 的 md 行号区间
+/// 写进 struct_store duckdb 内建表 `_line_map(md_line_start INTEGER,
+/// md_line_end INTEGER, chunk_id VARCHAR)`——幂等重建（DROP + CREATE + 逐
+/// chunk 一行；区间重叠/同 start 保留全部，查询侧按「区间包含」取候选集合；
+/// 空 ranges 同样重建为空表，清掉旧版本映射）。
+/// best-effort：任何失败只 warn。duckdb 单写者——struct stage 已结束，不冲突。
+pub(crate) async fn stage_struct_line_map(
+    processor: &PgTaskProcessor,
+    context: &AuthContext,
+    document_id: Uuid,
+) {
+    let out_path = struct_store_dir().join(format!("{document_id}.duckdb"));
+    if !out_path.exists() {
+        return; // 无表格存储：无映射可写（非错误）
+    }
+    let ranges = match processor
+        .storage
+        .repo
+        .assets()
+        .list_body_chunk_md_line_ranges(context, document_id)
+        .await
+    {
+        Ok(ranges) => ranges,
+        Err(error) => {
+            warn!(stage = "struct_line_map", document_id = %document_id, error = %error, "body chunk md line ranges read failed");
+            return;
+        }
+    };
+    let mapped_rows = ranges.len();
+    let duckdb_path = out_path.display().to_string();
+    let write = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let con = duckdb::Connection::open(&out_path).map_err(|e| format!("open: {e}"))?;
+        con.execute_batch(
+            "DROP TABLE IF EXISTS _line_map; \
+             CREATE TABLE _line_map (md_line_start INTEGER, md_line_end INTEGER, chunk_id VARCHAR);",
+        )
+        .map_err(|e| format!("rebuild: {e}"))?;
+        let mut stmt = con
+            .prepare("INSERT INTO _line_map (md_line_start, md_line_end, chunk_id) VALUES (?, ?, ?)")
+            .map_err(|e| format!("prepare: {e}"))?;
+        for r in &ranges {
+            stmt.execute(duckdb::params![
+                r.md_line_start,
+                r.md_line_end,
+                r.chunk_id.to_string()
+            ])
+            .map_err(|e| format!("insert: {e}"))?;
+        }
+        Ok(())
+    })
+    .await;
+    match write {
+        Ok(Ok(())) => {
+            info!(
+                stage = "struct_line_map",
+                document_id = %document_id,
+                mapped_rows,
+                duckdb = %duckdb_path,
+                "struct line map stage done"
+            );
+        }
+        Ok(Err(error)) => {
+            warn!(stage = "struct_line_map", document_id = %document_id, error = %error, "_line_map write failed");
+        }
+        Err(error) => {
+            warn!(stage = "struct_line_map", document_id = %document_id, error = %error, "_line_map write task join failed");
+        }
+    }
+}

@@ -18,7 +18,8 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::ir::{
-    BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, ParseBackend, SourceLocator,
+    BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, MD_LINE_END_KEY,
+    MD_LINE_START_KEY, ParseBackend, SourceLocator,
 };
 
 /// 子进程调用配置。
@@ -120,14 +121,30 @@ async fn run_markitdown_on_path(
 /// markitdown markdown → Heading/Paragraph blocks（不触发管道表重检测：
 /// block_type 只给 Heading/Paragraph；与 `markitdown_reingest.rs` 对齐，
 /// parser_backend 一律 [`ParseBackend::Markitdown`]）。
+///
+/// 每个 block 的 `metadata` 写入 [`MD_LINE_START_KEY`] / [`MD_LINE_END_KEY`]
+/// （0-based、闭区间，见 ir.rs 常量注释）：Heading 为所在单行；Paragraph 为其
+/// 缓冲行覆盖的区间（含内部空行）。
 pub fn blocks_from_markdown(md: &str) -> Vec<BlockIr> {
     let mut blocks: Vec<BlockIr> = Vec::new();
     let mut buf: Vec<&str> = Vec::new();
+    // buf 当前覆盖的 0-based md 行区间（闭区间）；buf 为空时取值无意义
+    // （空 buf 产出的 block 文本为空，会被 push 的 trim 检查跳过）。
+    let mut buf_start = 0usize;
+    let mut buf_end = 0usize;
     let mut idx = 0usize;
-    let push = |blocks: &mut Vec<BlockIr>, idx: &mut usize, block_type: BlockType, text: String| {
+    let push = |blocks: &mut Vec<BlockIr>,
+                idx: &mut usize,
+                block_type: BlockType,
+                text: String,
+                line_range: (usize, usize)| {
         if text.trim().is_empty() {
             return;
         }
+        let metadata = BTreeMap::from([
+            (MD_LINE_START_KEY.to_string(), line_range.0.to_string()),
+            (MD_LINE_END_KEY.to_string(), line_range.1.to_string()),
+        ]);
         blocks.push(BlockIr {
             block_id: format!("b{idx}"),
             page: None,
@@ -140,24 +157,46 @@ pub fn blocks_from_markdown(md: &str) -> Vec<BlockIr> {
             section_path: Vec::new(),
             source_locator: SourceLocator::default(),
             parser_backend: ParseBackend::Markitdown,
-            metadata: BTreeMap::new(),
+            metadata,
         });
         *idx += 1;
     };
-    for line in md.lines() {
+    for (line_no, line) in md.lines().enumerate() {
         let trimmed = line.trim_start();
         if trimmed.starts_with('#') {
             let pending = buf.join("\n");
-            push(&mut blocks, &mut idx, BlockType::Paragraph, pending);
+            push(
+                &mut blocks,
+                &mut idx,
+                BlockType::Paragraph,
+                pending,
+                (buf_start, buf_end),
+            );
             buf.clear();
             let heading = trimmed.trim_start_matches('#').trim().to_string();
-            push(&mut blocks, &mut idx, BlockType::Heading, heading);
+            push(
+                &mut blocks,
+                &mut idx,
+                BlockType::Heading,
+                heading,
+                (line_no, line_no),
+            );
         } else {
+            if buf.is_empty() {
+                buf_start = line_no;
+            }
+            buf_end = line_no;
             buf.push(line);
         }
     }
     let pending = buf.join("\n");
-    push(&mut blocks, &mut idx, BlockType::Paragraph, pending);
+    push(
+        &mut blocks,
+        &mut idx,
+        BlockType::Paragraph,
+        pending,
+        (buf_start, buf_end),
+    );
     blocks
 }
 
@@ -212,6 +251,31 @@ mod tests {
         let blocks = blocks_from_markdown(md);
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].block_type, BlockType::Heading);
+    }
+
+    #[test]
+    fn blocks_carry_md_line_ranges() {
+        // 行号（0-based）：0 标题 / 1 空 / 2-3 第一段 / 4 空 / 5 标题 / 6 空 / 7-9 表
+        let md = "# 标题一\n\n第一段。\n继续第一段。\n\n## 标题二\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+        let blocks = blocks_from_markdown(md);
+        let range = |b: &BlockIr| {
+            (
+                b.metadata
+                    .get(MD_LINE_START_KEY)
+                    .and_then(|v| v.parse::<usize>().ok()),
+                b.metadata
+                    .get(MD_LINE_END_KEY)
+                    .and_then(|v| v.parse::<usize>().ok()),
+            )
+        };
+        assert_eq!(range(&blocks[0]), (Some(0), Some(0)), "heading 单行");
+        assert_eq!(
+            range(&blocks[1]),
+            (Some(1), Some(4)),
+            "段落含内部与结尾空行"
+        );
+        assert_eq!(range(&blocks[2]), (Some(5), Some(5)), "heading 单行");
+        assert_eq!(range(&blocks[3]), (Some(6), Some(9)), "管道表段落");
     }
 
     #[tokio::test]

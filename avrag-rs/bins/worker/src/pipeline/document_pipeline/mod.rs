@@ -32,7 +32,7 @@ use parse::{stage_parse_and_validate_ir, stage_project_document_ir};
 use materialize::stage_materialize_chunks_assets_profile;
 use index::stage_build_and_replace_retrieval_index;
 use profile::generate_document_summary;
-use struct_stage::stage_struct_tables;
+use struct_stage::{stage_struct_line_map, stage_struct_tables};
 pub(crate) use struct_stage::remove_struct_store_files;
 
 pub(crate) struct RunDocumentPipelineParams<'a> {
@@ -162,6 +162,18 @@ pub(crate) async fn run_document_pipeline(
         filename = %filename,
         document_id = %document_id,
         processed_chunk_count = materialize.processed_chunk_count,
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        "ingestion stage done"
+    );
+
+    // Stage 3.5 — struct line map（best-effort，不阻断主链）。body chunks 此刻在
+    // PG chunks 表、尚未被 index 阶段迁走；须紧随 materialize 成功之后。
+    let stage_started = std::time::Instant::now();
+    stage_struct_line_map(processor, context, document_id).await;
+    info!(
+        stage = "struct_line_map",
+        filename = %filename,
+        document_id = %document_id,
         elapsed_ms = stage_started.elapsed().as_millis(),
         "ingestion stage done"
     );

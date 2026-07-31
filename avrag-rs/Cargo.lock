@@ -1025,6 +1025,7 @@ dependencies = [
  "common",
  "contracts",
  "dotenvy",
+ "duckdb",
  "hex",
  "ingestion",
  "reqwest 0.12.28",

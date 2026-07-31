@@ -10,4 +10,5 @@ mod document_status;
 mod chat_messages;
 mod conversation_search;
 mod table_evidence;
+mod body_chunk_md_lines;
 mod workspaces;

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 
-use crate::ir::{AssetKind, BlockModality, BlockType, DocumentIr, DocumentType};
+use crate::ir::{AssetKind, BlockModality, BlockType, DocumentIr, DocumentType, ParseBackend};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentIrValidationIssue {
@@ -197,6 +197,9 @@ pub fn validate_document_ir(document: &DocumentIr) -> Result<(), DocumentIrValid
         if document.doc_type == DocumentType::Pdf
             && block.page.is_none()
             && block.source_locator.page.is_none()
+            // markitdown 把整篇 PDF 转成无页概念的 markdown——页元数据在该后端
+            // 不存在（2026-07-31 实测：不豁免则 PDF 摄入校验全灭、任务无限重试）。
+            && block.parser_backend != ParseBackend::Markitdown
         {
             issues.push(issue(
                 "pdf_block_missing_page",
@@ -467,6 +470,32 @@ mod tests {
             assets: Vec::new(),
             warnings: Vec::new(),
         }
+    }
+
+    #[test]
+    fn pdf_markitdown_blocks_without_page_pass_validation() {
+        // markitdown 把整篇 PDF 转成无页概念 markdown，块无页元数据属正常（2026-07-31
+        // 白药 PDF 实测：不豁免则校验失败 → 任务无限重试直至死信）。
+        let mut document = base_document();
+        document.primary_backend = ParseBackend::Markitdown;
+        document.blocks[0].page = None;
+        document.blocks[0].source_locator.page = None;
+        document.blocks[0].parser_backend = ParseBackend::Markitdown;
+        validate_document_ir(&document).expect("markitdown 后端块无需页元数据");
+    }
+
+    #[test]
+    fn pdf_non_markitdown_blocks_still_require_page() {
+        let mut document = base_document();
+        document.blocks[0].page = None;
+        document.blocks[0].source_locator.page = None;
+        let error = validate_document_ir(&document).expect_err("非 markitdown 后端仍要求页元数据");
+        assert!(
+            error
+                .issues
+                .iter()
+                .any(|issue| issue.code == "pdf_block_missing_page")
+        );
     }
 
     #[test]

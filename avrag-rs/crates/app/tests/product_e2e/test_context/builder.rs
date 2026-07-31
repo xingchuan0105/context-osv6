@@ -817,7 +817,6 @@ impl TestContext {
             mock_search_abort: None,
             mock_paddle_abort: None,
             mock_paddle_jobs_submitted: None,
-            mock_office_abort: None,
             search_controls: fixture.search_controls.clone(),
             embedding_should_503: fixture.embedding_should_503.clone(),
             embedding_call_count: fixture.embedding_call_count.clone(),

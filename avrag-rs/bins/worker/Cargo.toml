@@ -18,6 +18,8 @@ avrag-storage-milvus = { path = "../../crates/storage-milvus" }
 avrag-storage-pgvector = { path = "../../crates/storage-pgvector" }
 avrag-storage-pg = { path = "../../crates/storage-pg" }
 avrag-struct-supervision = { path = "../../crates/struct-supervision" }
+# struct_line_map 阶段写 struct_store duckdb（struct-supervision/rag-core 同款 bundled）
+duckdb = { version = "1", features = ["bundled"] }
 chrono.workspace = true
 common = { path = "../../crates/common" }
 contracts = { path = "../../../contracts" }

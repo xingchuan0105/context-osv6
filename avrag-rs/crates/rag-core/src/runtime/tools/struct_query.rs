@@ -10,7 +10,10 @@
 //! 存储约定：`<STRUCT_STORE_DIR 或 storage/struct_store>/<doc_id>.duckdb`，
 //! 由灌入 pipeline（scripts/struct_query_poc）产出；证据列 `row_ord` / `__src_line`，
 //! 表级证据 chunk：`_meta.evidence_chunk_id`（整表 md 存 PG chunks，table_evidence，
-//! 仅 citation 水合、不进检索面）；行级 chunk 映射留待切块行号元数据（另案）。
+//! 仅 citation 水合、不进检索面）；行级证据（W6）：worker 灌入后写内建表
+//! `_line_map(md_line, chunk_id)`（body chunk md 行区间下端点 → chunk_id），
+//! 查询侧按 `__src_line` 最近命中把明细 evidence 升级为行级 chunk_id；
+//! 老库无此表 → 表级行为不变。`_line_map` 非用户 relation（catalog/可见性均排除）。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -152,9 +155,10 @@ fn catalog_for_file(
     con: &duckdb::Connection,
     doc_id: Uuid,
 ) -> Result<Vec<serde_json::Value>, String> {
-    // fts 内部表（dict/docs/fields/stats/terms/stopwords）不是用户表，排除。
+    // fts 内部表（dict/docs/fields/stats/terms/stopwords）与 W6 内建映射表
+    // _line_map 不是用户表，排除。
     let mut stmt = con
-        .prepare("SELECT table_name FROM information_schema.tables WHERE table_name != '_meta' AND table_name NOT IN ('dict', 'docs', 'fields', 'stats', 'terms', 'stopwords') ORDER BY table_name")
+        .prepare("SELECT table_name FROM information_schema.tables WHERE table_name NOT IN ('_meta', '_line_map', 'dict', 'docs', 'fields', 'stats', 'terms', 'stopwords') ORDER BY table_name")
         .map_err(|e| e.to_string())?;
     let tables: Vec<String> = stmt
         .query_map([], |r| r.get(0))
@@ -293,6 +297,56 @@ fn query_rows(
     Ok((columns, rows))
 }
 
+/// `_line_map`（W6 worker 写入：md 行区间 → body chunk_id）读取，
+/// 按 md_line_start 排序（同 start 按 chunk_id 稳定序）。老库无此表 → None；
+/// 表存在但为空同样视为 None（调用侧降级表级证据）。
+fn read_line_map(con: &duckdb::Connection) -> Option<Vec<(i64, i64, String)>> {
+    let has: i64 = con
+        .query_row(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '_line_map'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()?;
+    if has == 0 {
+        return None;
+    }
+    let mut stmt = con
+        .prepare("SELECT md_line_start, md_line_end, chunk_id FROM _line_map ORDER BY md_line_start, chunk_id")
+        .ok()?;
+    let rows: Vec<(i64, i64, String)> = stmt
+        .query_map([], |r| {
+            Ok((
+                i64::from(r.get::<_, i32>(0)?),
+                i64::from(r.get::<_, i32>(1)?),
+                r.get::<_, String>(2)?,
+            ))
+        })
+        .ok()?
+        .filter_map(|x| x.ok())
+        .collect();
+    if rows.is_empty() { None } else { Some(rows) }
+}
+
+/// 区间包含 __src_line 的全部 chunk（map 已按 start 排序）。一个 block 拆多
+/// chunk 时这些 chunk 共享同一区间（如 [1,373]×5），全部如实列出——行级证据
+/// 的诚实粒度是「候选集合」，不假装单行定位。
+fn containing_line_chunks<'a>(map: &'a [(i64, i64, String)], src_line: i64) -> Vec<&'a str> {
+    map.iter()
+        .filter(|(s, e, _)| *s <= src_line && src_line <= *e)
+        .map(|(_, _, c)| c.as_str())
+        .collect()
+}
+
+/// 无包含时的就近兜底：`md_line_start <= __src_line` 的最大 start（floor）；
+/// floor 不存在时取 __src_line 之后最近者（ceil）。
+fn nearest_line_chunk<'a>(map: &'a [(i64, i64, String)], src_line: i64) -> Option<&'a str> {
+    if let Some((_, _, c)) = map.iter().filter(|(s, _, _)| *s <= src_line).last() {
+        return Some(c);
+    }
+    map.iter().find(|(s, _, _)| *s > src_line).map(|(_, _, c)| c.as_str())
+}
+
 /// SQL 白名单校验 + FROM/JOIN 标识符收集（词边界正则，非完整 parser；
 /// 加固由连接层 READ_ONLY + enable_external_access=false 兜底）。
 fn validate_sql(sql: &str) -> Result<(String, Vec<String>), (String, String)> {
@@ -428,7 +482,7 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
     for (doc_id, path) in &files {
         let con = open_readonly(path)?;
         let mut stmt = con
-            .prepare("SELECT table_name FROM information_schema.tables WHERE table_name != '_meta' AND table_name NOT IN ('dict', 'docs', 'fields', 'stats', 'terms', 'stopwords')")
+            .prepare("SELECT table_name FROM information_schema.tables WHERE table_name NOT IN ('_meta', '_line_map', 'dict', 'docs', 'fields', 'stats', 'terms', 'stopwords')")
             .map_err(|e| e.to_string())?;
         let names: Vec<String> = stmt
             .query_map([], |r| r.get(0))
@@ -489,6 +543,8 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
         .into_iter()
         .filter_map(|(t, c)| c.map(|c| (t.to_lowercase(), c)))
         .collect();
+    // 行级证据映射（W6 worker 写入）：老库无 _line_map → None，明细行维持表级。
+    let line_map = read_line_map(&con);
     let (columns, rows) = match query_rows(&con, &sql, MAX_RESULT_ROWS + 1) {
         Ok(v) => v,
         Err(e) => {
@@ -511,7 +567,10 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
             .cloned()
             .collect()
     };
-    // v1 简化：明细行证据归属首个 FROM relation 的表（chunk 粒度为整表）。
+    // v1 简化：明细行证据归属首个 FROM relation 的表。行级升级（W6）：
+    // 行带 __src_line 且 _line_map 区间包含该行的 → chunk_ids 列全部候选
+    // （chunk_granularity="row"）；无包含但有就近（floor/ceil）→ "row_nearest"
+    // （该 chunk 不含此行，如实区分）；否则表级证据 chunk（"table"，含老库无映射）。
     let primary_chunk = scanned_chunks.first().cloned();
     let col_idx: HashMap<&str, usize> = columns
         .iter()
@@ -521,9 +580,39 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
     let evidence: Vec<serde_json::Value> = if col_idx.contains_key("row_ord") {
         rows.iter()
             .map(|r| {
+                let src_line = col_idx
+                    .get("__src_line")
+                    .and_then(|i| r.get(*i))
+                    .and_then(|s| s.parse::<i64>().ok());
+                let containing: Vec<&str> = src_line
+                    .map(|l| {
+                        line_map
+                            .as_deref()
+                            .map(|m| containing_line_chunks(m, l))
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default();
+                let nearest = if containing.is_empty() {
+                    src_line.and_then(|l| line_map.as_deref().and_then(|m| nearest_line_chunk(m, l)))
+                } else {
+                    None
+                };
+                let granularity = if !containing.is_empty() {
+                    "row"
+                } else if nearest.is_some() {
+                    "row_nearest"
+                } else {
+                    "table"
+                };
                 json!({
                     "doc_id": target_doc.to_string(),
-                    "chunk_id": primary_chunk.as_deref(),
+                    "chunk_id": containing
+                        .first()
+                        .map(|s| s.to_string())
+                        .or_else(|| nearest.map(str::to_string))
+                        .or_else(|| primary_chunk.clone()),
+                    "chunk_ids": containing,
+                    "chunk_granularity": granularity,
                     "row_ord": col_idx.get("row_ord").and_then(|i| r.get(*i)),
                     "__src_line": col_idx.get("__src_line").and_then(|i| r.get(*i)),
                 })
@@ -552,7 +641,7 @@ fn query_store(dir: &Path, doc_uuids: &[Uuid], sql_arg: &str) -> Result<serde_js
         "evidence": evidence,
         "scanned_chunks": scanned_chunks,
         "chunks": chunks,
-        "evidence_note": "chunk_id/scanned_chunks 为表级证据 chunk(整表 md,PG chunks 表 table_evidence,仅水合);__src_line 为源 markdown 行号",
+        "evidence_note": "evidence.chunk_id: chunk_granularity=row 为 _line_map 行级命中的 body chunk,=table 为表级证据 chunk(整表 md,PG chunks 表 table_evidence,仅水合);scanned_chunks/chunks 维持表级;__src_line 为源 markdown 行号",
     }))
 }
 
@@ -613,6 +702,9 @@ mod tests {
 
     /// fixture _meta 的证据 chunk id（2b：per-table md 合成 chunk）。
     const FIXTURE_CHUNK_ID: &str = "11111111-2222-3333-4444-555555555555";
+    /// 行级 fixture 的 _line_map chunk id（body chunk）。
+    const LINE_CHUNK_A: &str = "aaaaaaaa-1111-2222-3333-444444444444";
+    const LINE_CHUNK_B: &str = "bbbbbbbb-1111-2222-3333-444444444444";
 
     fn fixture_file(dir: &Path, doc_id: Uuid) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
@@ -627,6 +719,77 @@ mod tests {
         .unwrap();
         drop(con);
         path
+    }
+
+    #[test]
+    fn line_map_containing_and_nearest() {
+        // 区间包含：拆分 block 的共享区间全部列出（候选集合，不假装单行定位）
+        let map = vec![
+            (1, 373, "c1".to_string()),
+            (1, 373, "c2".to_string()),
+            (400, 410, "c3".to_string()),
+        ];
+        assert_eq!(containing_line_chunks(&map, 100), vec!["c1", "c2"]);
+        assert_eq!(containing_line_chunks(&map, 1), vec!["c1", "c2"]);
+        assert_eq!(containing_line_chunks(&map, 405), vec!["c3"]);
+        assert!(containing_line_chunks(&map, 380).is_empty());
+        // 就近兜底：floor → ceil
+        assert_eq!(nearest_line_chunk(&map, 380), Some("c2"));
+        assert_eq!(nearest_line_chunk(&map, 500), Some("c3"));
+        assert_eq!(nearest_line_chunk(&map, 0), Some("c1"));
+        assert_eq!(nearest_line_chunk(&[], 3), None);
+    }
+
+    /// 带 _line_map 的 fixture（W6 行级证据）：t0 三行 __src_line=1/2/3；
+    /// _line_map: [0,1]→A, [2,3]→B —— 命中规则见行级测试断言。
+    fn fixture_file_with_line_map(dir: &Path, doc_id: Uuid) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = doc_file(dir, doc_id);
+        let con = duckdb::Connection::open(&path).unwrap();
+        con.execute_batch(
+            "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, confidence VARCHAR, start_line INTEGER, n_rows INTEGER, n_cols INTEGER, status VARCHAR, checks JSON, notes JSON, evidence_chunk_id VARCHAR);
+             CREATE TABLE t0 (row_ord INTEGER, __src_line INTEGER, 阶段 VARCHAR, 角色 VARCHAR);
+             INSERT INTO t0 VALUES (0, 1, '概念阶段', 'LPDT'), (1, 2, '验证阶段', 'PQA'), (2, 3, '验证阶段', 'SE');
+             INSERT INTO _meta VALUES ('t0', '活动表', NULL, 'detail', 'high', 1, 3, 2, 'high_candidate', '[]', '[]', '11111111-2222-3333-4444-555555555555');
+             CREATE TABLE _line_map (md_line_start INTEGER, md_line_end INTEGER, chunk_id VARCHAR);
+             INSERT INTO _line_map VALUES (0, 1, 'aaaaaaaa-1111-2222-3333-444444444444'), (2, 3, 'bbbbbbbb-1111-2222-3333-444444444444');",
+        )
+        .unwrap();
+        drop(con);
+        path
+    }
+
+    #[test]
+    fn query_store_line_map_upgrades_row_level_chunk_id() {
+        let dir = std::env::temp_dir().join(format!("struct_store_test_{}", Uuid::new_v4()));
+        let doc_id = Uuid::new_v4();
+        fixture_file_with_line_map(&dir, doc_id);
+
+        let v = query_store(
+            &dir,
+            &[doc_id],
+            "SELECT row_ord, __src_line, 阶段, 角色 FROM t0 ORDER BY row_ord",
+        )
+        .unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["row_count"], 3);
+        // __src_line=1 ∈ [0,1] → A；=2 ∈ [2,3] → B；=3 ∈ [2,3] → B。
+        assert_eq!(v["evidence"][0]["chunk_id"], LINE_CHUNK_A);
+        assert_eq!(v["evidence"][0]["chunk_ids"], json!([LINE_CHUNK_A]));
+        assert_eq!(v["evidence"][0]["chunk_granularity"], json!("row"));
+        assert_eq!(v["evidence"][1]["chunk_id"], LINE_CHUNK_B);
+        assert_eq!(v["evidence"][1]["chunk_ids"], json!([LINE_CHUNK_B]));
+        assert_eq!(v["evidence"][2]["chunk_id"], LINE_CHUNK_B);
+        assert_eq!(v["evidence"][2]["chunk_granularity"], json!("row"));
+        // scanned_chunks / chunks（召回抽取）维持表级不动。
+        assert_eq!(v["scanned_chunks"], json!([FIXTURE_CHUNK_ID]));
+        assert_eq!(v["chunks"][0]["chunk_id"], FIXTURE_CHUNK_ID);
+        // _line_map 不作为用户 relation 出现在 catalog。
+        let relations = catalog_store(&dir, &[doc_id]).unwrap();
+        assert_eq!(relations.len(), 1);
+        assert_eq!(relations[0]["name"], "t0");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -897,7 +1060,10 @@ mod tests {
         assert_eq!(v["evidence"][0]["__src_line"], json!("2"));
         assert_eq!(v["evidence"][1]["row_ord"], json!("2"));
         // 表级证据 chunk：明细行归属 + scanned_chunks + harness 抽取用 chunks。
+        // 老库（无 _line_map）→ 表级降级不变。
         assert_eq!(v["evidence"][0]["chunk_id"], FIXTURE_CHUNK_ID);
+        assert_eq!(v["evidence"][0]["chunk_granularity"], json!("table"));
+        assert_eq!(v["evidence"][1]["chunk_granularity"], json!("table"));
         assert_eq!(v["scanned_chunks"], json!([FIXTURE_CHUNK_ID]));
         assert_eq!(v["chunks"][0]["chunk_id"], FIXTURE_CHUNK_ID);
         let md = v["chunks"][0]["text"].as_str().unwrap();

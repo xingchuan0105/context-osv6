@@ -5,7 +5,9 @@ use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
 use tiktoken_rs::{CoreBPE, cl100k_base_singleton};
 use uuid::Uuid;
 
-use crate::ir::{BlockType, DocumentIr, ParseBackend, SourceLocator};
+use crate::ir::{
+    BlockType, DocumentIr, MD_LINE_END_KEY, MD_LINE_START_KEY, ParseBackend, SourceLocator,
+};
 use crate::parser::{NormalizedDocument, Page, ParsedDocument, ParsedUnitKind};
 
 const TARGET_CHUNK_TOKENS: usize = 512;
@@ -422,6 +424,9 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
                     if let Some(last) = text_chunks.last_mut() {
                         last.text.push_str("\n\n");
                         last.text.push_str(&segment);
+                        // W6: 并入的 segment 来自别的 block —— 行区间随之聚合
+                        // （min start / max end；该 block 缺行号则降级删键）。
+                        widen_chunk_md_line_range(&mut last.metadata, &block.metadata);
                     }
                     continue;
                 }
@@ -533,6 +538,40 @@ fn update_heading_chain(chain: &mut Vec<String>, block: &crate::ir::BlockIr) {
     chain.push(text.to_string());
     if chain.len() > 6 {
         chain.remove(0);
+    }
+}
+
+/// W6 行级证据：从 block/chunk metadata 读出 0-based md 行闭区间
+/// （`md_line_start` / `md_line_end`，见 ir.rs 常量注释）；任一端缺失或不可
+/// 解析 → None。
+fn md_line_range(metadata: &BTreeMap<String, String>) -> Option<(usize, usize)> {
+    let start = metadata.get(MD_LINE_START_KEY)?.parse::<usize>().ok()?;
+    let end = metadata.get(MD_LINE_END_KEY)?.parse::<usize>().ok()?;
+    Some((start, end))
+}
+
+/// W6：小 segment 并入上一 chunk 时，把该 block 的行区间聚合进 chunk
+/// （min start / max end）。并入的 block 缺行号信息 → 该 chunk 移除这两个键
+/// （降级，不报错）——成员行号不全的 chunk 不给部分区间。
+fn widen_chunk_md_line_range(
+    chunk_metadata: &mut BTreeMap<String, String>,
+    block_metadata: &BTreeMap<String, String>,
+) {
+    match (md_line_range(chunk_metadata), md_line_range(block_metadata)) {
+        (Some((chunk_start, chunk_end)), Some((block_start, block_end))) => {
+            chunk_metadata.insert(
+                MD_LINE_START_KEY.to_string(),
+                chunk_start.min(block_start).to_string(),
+            );
+            chunk_metadata.insert(
+                MD_LINE_END_KEY.to_string(),
+                chunk_end.max(block_end).to_string(),
+            );
+        }
+        _ => {
+            chunk_metadata.remove(MD_LINE_START_KEY);
+            chunk_metadata.remove(MD_LINE_END_KEY);
+        }
     }
 }
 
@@ -863,6 +902,120 @@ mod ir_chunk_plan_tests {
             hi.parse::<usize>().unwrap() < 200,
             "first group is not the whole table"
         );
+    }
+
+    // ---- W6: md 源行区间（md_line_start / md_line_end，0-based 闭区间）---------
+
+    /// 验收 gate：含管道表 + 标题的 markitdown md → chunk metadata 的行区间
+    /// 覆盖表区且顺序单调。管道表在 markitdown 路径是 Paragraph block（走普通
+    /// 文本路径）；段落文本远低于 token 容量时是单一 segment，整段一个 chunk。
+    #[test]
+    fn md_line_ranges_cover_table_region_and_stay_monotonic() {
+        // 行号（0-based）：0 标题 / 1 空 / 2 说明。 / 3 空 / 4-7 管道表
+        let md = "# IPD 阶段活动\n\n说明。\n\n| 阶段 | 活动 |\n| --- | --- |\n| 概念 | 明确机会 |\n| 计划 | 制定计划 |\n";
+        let blocks = crate::parser::markitdown::blocks_from_markdown(md);
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(blocks),
+            "t.md",
+            &ChunkPolicy::default(),
+        );
+        assert!(!plan.text_chunks.is_empty());
+        let ranges: Vec<(usize, usize)> = plan
+            .text_chunks
+            .iter()
+            .map(|chunk| {
+                let start = chunk
+                    .metadata
+                    .get(MD_LINE_START_KEY)
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .expect("chunk missing md_line_start");
+                let end = chunk
+                    .metadata
+                    .get(MD_LINE_END_KEY)
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .expect("chunk missing md_line_end");
+                (start, end)
+            })
+            .collect();
+        // 标题 chunk [0,0]；说明+管道表同属一个段落 block [1,7]，单 segment 一个
+        // chunk 继承整段区间（故表区 4..=7 被完整覆盖）。
+        assert_eq!(ranges, vec![(0, 0), (1, 7)]);
+        // 表区（行 4..=7，含表头）被某个 chunk 完整覆盖。
+        assert!(
+            ranges.iter().any(|&(start, end)| start <= 4 && end >= 7),
+            "table region 4..=7 not covered: {ranges:?}"
+        );
+        // 顺序单调：start / end 均非递减。
+        assert!(
+            ranges.windows(2).all(|w| w[0].0 <= w[1].0 && w[0].1 <= w[1].1),
+            "ranges not monotonic: {ranges:?}"
+        );
+    }
+
+    /// 小 segment 并入上一 chunk 时，行区间按 min start / max end 聚合。
+    #[test]
+    fn small_segment_merge_widens_md_line_range() {
+        // 段落仅 10 字符 < min_chars(32) → 并入标题 chunk。
+        let md = "# 标题\n\n正文一。\n正文二。\n";
+        let blocks = crate::parser::markitdown::blocks_from_markdown(md);
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(blocks),
+            "t.md",
+            &ChunkPolicy::default(),
+        );
+        assert_eq!(plan.text_chunks.len(), 1, "short paragraph must merge");
+        let chunk = &plan.text_chunks[0];
+        assert_eq!(
+            chunk.metadata.get(MD_LINE_START_KEY).map(String::as_str),
+            Some("0")
+        );
+        assert_eq!(
+            chunk.metadata.get(MD_LINE_END_KEY).map(String::as_str),
+            Some("3"),
+            "merged chunk must widen to the paragraph block's end line"
+        );
+    }
+
+    /// TableIr 组块路径：block 带行号时原子 chunk 继承同一区间。
+    #[test]
+    fn table_chunk_inherits_block_md_line_range() {
+        let table = make_table(3, 3);
+        let mut block = table_block(&table, "t-1");
+        block
+            .metadata
+            .insert(MD_LINE_START_KEY.to_string(), "10".to_string());
+        block
+            .metadata
+            .insert(MD_LINE_END_KEY.to_string(), "14".to_string());
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(vec![block]),
+            "t.txt",
+            &ChunkPolicy::default(),
+        );
+        assert_eq!(plan.text_chunks.len(), 1);
+        let chunk = &plan.text_chunks[0];
+        assert_eq!(
+            chunk.metadata.get(MD_LINE_START_KEY).map(String::as_str),
+            Some("10")
+        );
+        assert_eq!(
+            chunk.metadata.get(MD_LINE_END_KEY).map(String::as_str),
+            Some("14")
+        );
+    }
+
+    /// 降级：成员 block 缺行号信息时 chunk 不写这两个键（不报错）。
+    #[test]
+    fn chunk_without_block_md_line_range_omits_keys() {
+        let table = make_table(3, 3);
+        let plan = build_ir_chunk_plan(
+            &doc_with_blocks(vec![table_block(&table, "t-1")]),
+            "t.txt",
+            &ChunkPolicy::default(),
+        );
+        let chunk = &plan.text_chunks[0];
+        assert!(!chunk.metadata.contains_key(MD_LINE_START_KEY));
+        assert!(!chunk.metadata.contains_key(MD_LINE_END_KEY));
     }
 
     #[test]

@@ -370,6 +370,15 @@ pub struct TableIr {
     pub notes: Vec<String>,
 }
 
+/// W6 行级证据：block/chunk `metadata` 的 md 源行区间键。
+///
+/// 值为 0-based 行号，**闭区间** `[md_line_start, md_line_end]`，坐标系是与
+/// struct-supervision 表格行 `__src_line` 相同的**同一份 markitdown markdown
+/// 文本**（仅 markitdown 解析路径写入；其它 backend 的 block 无此键，chunk
+/// 聚合时缺键即降级不写）。语义与同文件 `row_range` 的 inclusive 约定一致。
+pub const MD_LINE_START_KEY: &str = "md_line_start";
+pub const MD_LINE_END_KEY: &str = "md_line_end";
+
 impl TableIr {
     /// Metadata key under which the JSON-serialized TableIr rides on a block.
     pub const METADATA_KEY: &'static str = "table_ir";
