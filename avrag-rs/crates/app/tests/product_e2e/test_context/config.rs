@@ -25,7 +25,6 @@ pub(crate) struct E2eBootstrapConfig {
     pub mock_embedding_base_url: Option<String>,
     pub mock_search_base_url: Option<String>,
     pub mock_paddle_ocr_base_url: Option<String>,
-    pub mock_office_parser_base_url: Option<String>,
     pub use_real_llm: bool,
     pub has_real_search: bool,
     pub worker_timeout_secs: u64,
@@ -369,30 +368,21 @@ impl E2eBootstrapConfig {
             );
         }
 
-        if let Some(ref url) = self.mock_office_parser_base_url {
-            cmd.env("OFFICE_PARSER_BASE_URL", url)
-                .env("OFFICE_PARSER_TIMEOUT_MS", "30000");
-        } else {
-            Self::forward_optional_env(
-                cmd,
-                &["OFFICE_PARSER_BASE_URL", "OFFICE_PARSER_TIMEOUT_MS"],
-            );
-        }
+        // markitdown 唯一解析器（2026-07-31）：worker 直接子进程调 markitdown；
+        // OFFICE_PARSER_*/LITEPARSE_*/PDF_RENDERER_* 已退役，不再转发。
+        Self::forward_optional_env(
+            cmd,
+            &[
+                "MARKITDOWN_BIN",
+                "MARKITDOWN_TIMEOUT_MS",
+                "STRUCT_STORE_DIR",
+                "STRUCT_SUPERVISE_MAX_TURNS",
+            ],
+        );
 
         Self::forward_optional_env(
             cmd,
             &[
-                "LITEPARSE_OCR_ENABLED",
-                "LITEPARSE_OCR_SERVER_URL",
-                "LITEPARSE_OCR_LANGUAGE",
-                "LITEPARSE_SCANNED_PAGE_THRESHOLD",
-                "LITEPARSE_TABLE_GARBLE_THRESHOLD",
-                "LITEPARSE_TABLE_HEAVY_THRESHOLD",
-                "LITEPARSE_FIG_RATIO_THRESHOLD",
-                "LITEPARSE_FIG_COUNT_THRESHOLD",
-                "LITEPARSE_TEXT_QUAL_THRESHOLD",
-                "LITEPARSE_DECORATIVE_MAX_AREA",
-                "PDF_RENDERER_BASE_URL",
                 "INGESTION_PDF_MAX_PAGES",
                 "INGESTION_TRIPLET_ENABLED",
                 "INGESTION_TRIPLET_TOKEN_BUDGET",

@@ -21,11 +21,7 @@ fn document_with_unique_words(word_count: usize) -> NormalizedDocument {
         .join(" ");
     NormalizedDocument {
         title: "overlap-test".to_string(),
-        units: vec![ParsedUnit::new_text(
-            1,
-            text,
-            "test-backend".to_string(),
-        )],
+        units: vec![ParsedUnit::new_text(1, text, "test-backend".to_string())],
         metadata: BTreeMap::new(),
     }
 }
@@ -82,12 +78,18 @@ fn adjacent_chunks_share_overlapping_text_when_overlap_set() {
              of a chunk did not appear in the head of the next one.\n\
              --- prev tail ---\n{}\n--- next head ---\n{}",
             prev_tokens[tail..].join(" "),
-            next.split_whitespace().take(40).collect::<Vec<_>>().join(" "),
+            next.split_whitespace()
+                .take(40)
+                .collect::<Vec<_>>()
+                .join(" "),
         );
         any_overlap = true;
     }
 
-    assert!(any_overlap, "no adjacent chunk pairs were checked for overlap");
+    assert!(
+        any_overlap,
+        "no adjacent chunk pairs were checked for overlap"
+    );
 }
 
 #[test]
@@ -116,10 +118,12 @@ fn no_overlap_when_overlap_chars_is_zero() {
             let start = tokens.len().saturating_sub(40);
             tokens[start..].iter().copied().collect()
         };
-        let next_head: Vec<&str> =
-            window[1].text.split_whitespace().take(40).collect();
+        let next_head: Vec<&str> = window[1].text.split_whitespace().take(40).collect();
 
-        let shared: Vec<&&str> = next_head.iter().filter(|t| prev_tail.contains(**t)).collect();
+        let shared: Vec<&&str> = next_head
+            .iter()
+            .filter(|t| prev_tail.contains(**t))
+            .collect();
         assert!(
             shared.is_empty(),
             "overlap was disabled but adjacent chunks still share tokens: {:?}",

@@ -13,6 +13,8 @@ pub(crate) struct ParseRunState {
     pub(crate) document_ir: Option<DocumentIr>,
     pub(crate) validation_warnings: Vec<ingestion::DocumentIrValidationIssue>,
     pub(crate) outputs: ParseRunOutputs,
+    /// markitdown 产出的 markdown 原文（表格阶段消费；图片等非 markitdown 路径为 None）。
+    pub(crate) markdown: Option<String>,
 }
 
 pub(crate) struct IngestionPipelineMetrics {
@@ -24,11 +26,14 @@ mod parse;
 mod materialize;
 mod index;
 mod profile;
+mod struct_stage;
 
 use parse::{stage_parse_and_validate_ir, stage_project_document_ir};
 use materialize::stage_materialize_chunks_assets_profile;
 use index::stage_build_and_replace_retrieval_index;
 use profile::generate_document_summary;
+use struct_stage::stage_struct_tables;
+pub(crate) use struct_stage::remove_struct_store_files;
 
 pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) task: &'a IngestionTask,
@@ -38,7 +43,6 @@ pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) parse_run_id: Uuid,
     pub(crate) bytes: &'a [u8],
     pub(crate) filename: &'a str,
-    pub(crate) object_path: &'a str,
     pub(crate) route_decision: &'a ingestion::parser::ParseRouteDecision,
 }
 
@@ -55,7 +59,6 @@ pub(crate) async fn run_document_pipeline(
         parse_run_id,
         bytes,
         filename,
-        object_path,
         route_decision,
     } = params;
 
@@ -70,12 +73,9 @@ pub(crate) async fn run_document_pipeline(
         "ingestion stage begin"
     );
     let document_ir = stage_parse_and_validate_ir(
-        processor,
         bytes,
         filename,
-        object_path,
         document_id,
-        parse_run_id,
         route_decision,
         parse_run_state,
     )
@@ -113,6 +113,26 @@ pub(crate) async fn run_document_pipeline(
         filename = %filename,
         document_id = %document_id,
         blocks = document_ir.blocks.len(),
+        elapsed_ms = stage_started.elapsed().as_millis(),
+        "ingestion stage done"
+    );
+
+    // Stage 2.5 — struct tables（best-effort，不阻断主链）
+    let stage_started = std::time::Instant::now();
+    stage_struct_tables(
+        processor,
+        task,
+        context,
+        document_id,
+        filename,
+        parse_run_state.markdown.as_deref(),
+    )
+    .await;
+    info!(
+        stage = "struct_tables",
+        filename = %filename,
+        document_id = %document_id,
+        has_markdown = parse_run_state.markdown.is_some(),
         elapsed_ms = stage_started.elapsed().as_millis(),
         "ingestion stage done"
     );

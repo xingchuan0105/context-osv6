@@ -378,6 +378,8 @@ pub(crate) async fn process_document_cleanup_task(
             task.document_id
         ));
     }
+    // struct_store 产物（per-doc duckdb + evidence sidecar）随 doc 生命周期删除；best-effort。
+    crate::pipeline::remove_struct_store_files(task.document_id);
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "mark document deleted")
         .await?;
     if !repo

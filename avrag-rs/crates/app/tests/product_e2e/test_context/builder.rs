@@ -14,7 +14,7 @@ use super::super::{
     },
     mock_servers::{
         reset_mock_rag_state, start_mock_embedding_server, start_mock_llm_server,
-        start_mock_office_parser_server, start_mock_paddle_ocr_server, start_mock_search_server,
+        start_mock_paddle_ocr_server, start_mock_search_server,
     },
     persistent_runtime::{bind_persistent_listener, spawn_persistent},
     setup,
@@ -384,13 +384,6 @@ impl TestContext {
             (url, Some(abort), Some(jobs))
         };
 
-        let (mock_office_url, mock_office_abort) = if use_real_llm {
-            (String::new(), None)
-        } else {
-            let (url, abort) = start_mock_office_parser_server().await;
-            (url, Some(abort))
-        };
-
         let has_real_search = Self::resolve_use_real_search(use_real_llm).await;
 
         let (mock_embedding_url, mock_embedding_abort, embedding_should_503, embedding_call_count) =
@@ -448,11 +441,6 @@ impl TestContext {
                 None
             } else {
                 Some(mock_paddle_url.clone())
-            },
-            mock_office_parser_base_url: if use_real_llm {
-                None
-            } else {
-                Some(mock_office_url.clone())
             },
             use_real_llm,
             has_real_search,
@@ -587,7 +575,6 @@ impl TestContext {
             mock_search_abort: Some(mock_search_abort),
             mock_paddle_abort,
             mock_paddle_jobs_submitted,
-            mock_office_abort,
             search_controls: Some(search_controls),
             embedding_should_503,
             embedding_call_count,
@@ -708,7 +695,6 @@ impl TestContext {
             mock_search_abort: None,
             mock_paddle_abort: None,
             mock_paddle_jobs_submitted: None,
-            mock_office_abort: None,
             search_controls: None,
             embedding_should_503: None,
             embedding_call_count: None,

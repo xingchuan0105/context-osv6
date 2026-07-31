@@ -2,10 +2,7 @@ use anyhow::Result;
 use avrag_cache_redis::DocumentLock;
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
-use ingestion::parser::{
-    OfficeParserServiceClient, ParsePlan, ParseRouteDecision, ParseRouter, PdfPageBackend,
-    PdfRendererServiceClient,
-};
+use ingestion::parser::{ParseRouteDecision, ParseRouter};
 use ingestion::{IngestionError, IngestionTask, TaskProcessor};
 use std::path::Path;
 use std::sync::Arc;
@@ -24,7 +21,6 @@ use crate::ingestion_guard::{
     spawn_ingestion_task_lock_heartbeat, stop_ingestion_task_lock_heartbeat,
     verify_uploaded_object_bytes, worker_task_kind,
 };
-use crate::pdf;
 use crate::runtime_support::{fetch_url_content, task_context, url_to_filename};
 
 /// Derive a stable, document-scoped i64 advisory-lock key from a document id.
@@ -127,12 +123,6 @@ pub(crate) struct LlmDeps {
     pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
 }
 
-/// External parse services (office / PDF renderer).
-pub(crate) struct ParseServiceDeps {
-    pub(crate) office_parser_client: Option<OfficeParserServiceClient>,
-    pub(crate) pdf_renderer_client: Option<PdfRendererServiceClient>,
-}
-
 /// Usage metering + product analytics for ingestion tasks.
 pub(crate) struct MeteringDeps {
     pub(crate) analytics: Option<analytics::AnalyticsService>,
@@ -154,7 +144,6 @@ pub(crate) struct PgTaskProcessor {
     pub(crate) storage: StorageDeps,
     pub(crate) embedding: EmbeddingDeps,
     pub(crate) llm: LlmDeps,
-    pub(crate) parse: ParseServiceDeps,
     pub(crate) metering: MeteringDeps,
     pub(crate) task_timeout_secs: u64,
 }
@@ -433,11 +422,8 @@ impl TaskProcessor for PgTaskProcessor {
                 }
             }
 
-            let mut route_decision = ParseRouter::route(&bytes, &filename, &claimed_mime_type)
+            let route_decision = ParseRouter::route(&bytes, &filename, &claimed_mime_type)
                 .map_err(|error| IngestionError::storage(error))?;
-            if let ParsePlan::Pdf(ref mut pdf_plan) = route_decision.plan {
-                pdf::maybe_truncate_pdf_plan(pdf_plan);
-            }
 
             info!(
                 stage = "route",
@@ -447,25 +433,6 @@ impl TaskProcessor for PgTaskProcessor {
                 reason = %route_decision.reason,
                 "Document routing decision"
             );
-            if let ParsePlan::Pdf(pdf_plan) = &route_decision.plan {
-                let liteparse_text_pages = pdf_plan
-                    .pages
-                    .iter()
-                    .filter(|page| page.backend == PdfPageBackend::LITEPARSE_TEXT)
-                    .count();
-                let visual_raster_pages = pdf_plan
-                    .pages
-                    .iter()
-                    .filter(|page| page.backend == PdfPageBackend::VisualRaster)
-                    .count();
-                info!(
-                    filename = %filename,
-                    total_pages = pdf_plan.pages.len(),
-                    liteparse_text_pages,
-                    visual_raster_pages,
-                    "PDF page routing plan prepared"
-                );
-            }
 
             ensure_ingestion_side_effects_allowed(
                 &self.storage.repo,
@@ -506,14 +473,11 @@ impl TaskProcessor for PgTaskProcessor {
                 "document parse run created"
             );
             {
-                let mut track_route = route_decision.clone();
-                // Drop heavy LiteParse snapshot from the timeout tracker.
-                track_route.liteparse_snapshot = None;
                 *timeout_parse_run_for_task.lock().await = Some(TimeoutTrackedParseRun {
                     parse_run_id,
                     parse_run_started_at,
                     object_path: object_path.clone(),
-                    route_decision: track_route,
+                    route_decision: route_decision.clone(),
                 });
             }
 
@@ -527,7 +491,6 @@ impl TaskProcessor for PgTaskProcessor {
                     parse_run_id,
                     bytes: &bytes,
                     filename: &filename,
-                    object_path: &object_path,
                     route_decision: &route_decision,
                 },
                 &mut parse_run_state,

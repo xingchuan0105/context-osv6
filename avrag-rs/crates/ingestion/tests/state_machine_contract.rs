@@ -35,6 +35,6 @@ fn parse_router_routes_plain_text_to_local_fast_path() {
     assert_eq!(decision.reason, RouteReason::TextFile);
     assert!(matches!(
         decision.plan,
-        ParsePlan::Local(plan) if plan.kind == LocalParseKind::Text
+        ParsePlan::Local(plan) if plan.kind == LocalParseKind::Markitdown
     ));
 }

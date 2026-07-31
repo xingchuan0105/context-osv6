@@ -71,7 +71,10 @@ mod tests {
     #[tokio::test]
     async fn csv_file_produces_single_table_block() {
         let parsed = TextParser
-            .parse("编号,名称,数量\n1,速冻机,10\n2,冷却塔,3\n".as_bytes(), "库存.csv")
+            .parse(
+                "编号,名称,数量\n1,速冻机,10\n2,冷却塔,3\n".as_bytes(),
+                "库存.csv",
+            )
             .await
             .unwrap();
         assert!(parsed.metadata.contains_key("csv_table_ir"));
@@ -118,7 +121,11 @@ mod tests {
                 .iter()
                 .all(|b| b.block_type == crate::ir::BlockType::Paragraph),
             "degraded CSV stays prose: {:?}",
-            document.blocks.iter().map(|b| &b.block_type).collect::<Vec<_>>()
+            document
+                .blocks
+                .iter()
+                .map(|b| &b.block_type)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -132,4 +139,3 @@ mod tests {
         assert!(parsed.metadata.contains_key("csv_table_ir"));
     }
 }
-

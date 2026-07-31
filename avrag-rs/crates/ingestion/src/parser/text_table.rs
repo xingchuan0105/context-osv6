@@ -72,9 +72,11 @@ pub fn segment_text(text: &str) -> Vec<TextSegment> {
 pub fn try_parse_block(text: &str) -> Option<TableIr> {
     let segments = segment_text(text);
     match segments.as_slice() {
-        [TextSegment {
-            table: Some(table), ..
-        }] => Some(table.clone()),
+        [
+            TextSegment {
+                table: Some(table), ..
+            },
+        ] => Some(table.clone()),
         _ => None,
     }
 }
@@ -178,8 +180,11 @@ fn parse_numbered_region(
     // Header / caption furniture above the first anchor.
     let (headers, caption, header_width_hint) = header_furniture(lines, first_anchor_line);
 
-    let col_count = header_width_hint
-        .unwrap_or_else(|| split_cells(lines[first_anchor_line]).len().max(MIN_ROW_CELLS));
+    let col_count = header_width_hint.unwrap_or_else(|| {
+        split_cells(lines[first_anchor_line])
+            .len()
+            .max(MIN_ROW_CELLS)
+    });
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut row_numbers: Vec<u64> = Vec::new();
     let mut end = first_anchor_line;
@@ -328,9 +333,18 @@ fn cleanup_cell(cell: &mut String) {
         if !prefix.is_empty()
             && prefix.chars().all(|c| c.is_ascii_uppercase())
             && !digits.is_empty()
-            && digits.chars().all(|c| c.is_ascii_digit() || c.is_whitespace())
+            && digits
+                .chars()
+                .all(|c| c.is_ascii_digit() || c.is_whitespace())
         {
-            *cell = format!("{}-{}", prefix, digits.chars().filter(|c| c.is_ascii_digit()).collect::<String>());
+            *cell = format!(
+                "{}-{}",
+                prefix,
+                digits
+                    .chars()
+                    .filter(|c| c.is_ascii_digit())
+                    .collect::<String>()
+            );
         }
     }
 }
@@ -348,8 +362,7 @@ fn detect_pipe_tables(lines: &[&str]) -> Vec<(usize, usize, TableIr)> {
             let headers = pipe_cells(lines[idx]);
             let mut rows: Vec<Vec<String>> = Vec::new();
             idx += 2;
-            while idx < lines.len() && is_pipe_line(lines[idx]) && !is_pipe_separator(lines[idx])
-            {
+            while idx < lines.len() && is_pipe_line(lines[idx]) && !is_pipe_separator(lines[idx]) {
                 let mut cells = pipe_cells(lines[idx]);
                 cells.resize(headers.len(), String::new());
                 cells.truncate(headers.len());
@@ -422,18 +435,9 @@ mod tests {
             table.headers,
             vec!["编号", "阶段", "活动", "活动号", "活动描述", "角色"]
         );
-        assert_eq!(
-            table.caption.as_deref(),
-            Some("华为IPD流程各阶段活动详解")
-        );
+        assert_eq!(table.caption.as_deref(), Some("华为IPD流程各阶段活动详解"));
 
-        let phase_count = |phase: &str| {
-            table
-                .rows
-                .iter()
-                .filter(|r| r[1] == phase)
-                .count()
-        };
+        let phase_count = |phase: &str| table.rows.iter().filter(|r| r[1] == phase).count();
         assert_eq!(phase_count("概念阶段"), 81);
         assert_eq!(phase_count("计划阶段"), 86);
         assert_eq!(phase_count("开发阶段"), 92);
@@ -490,7 +494,10 @@ mod tests {
         let table = try_parse_block(text).expect("parses with gap note");
         assert_eq!(table.rows.len(), 3);
         assert!(
-            table.notes.iter().any(|n| n.contains("源文档行号缺口") && n.contains('2')),
+            table
+                .notes
+                .iter()
+                .any(|n| n.contains("源文档行号缺口") && n.contains('2')),
             "{:?}",
             table.notes
         );

@@ -1,5 +1,6 @@
 # struct-query W2（S4 ingestion 挂接）首窗口交接（2026-07-31）
 
+> **后续**：第二窗口已完成 markitdown 换血 + S4 挂接，见 `2026-07-31-struct-query-w2-s4-window2-handoff.md`。
 > 上游：`docs/plans/2026-07-31-struct-query-post-p2-dev-plan.md` W2。
 > 硬前置核对结论：**生产 parser 未走 markitdown**（worker `bins/worker/src/pipeline/document_pipeline/` 走自有 parse 阶段；markitdown 仅在 E2E 换血 harness `markitdown_reingest.rs`）→ 按计划条款做不依赖前置的 ②③ + 提取器 Rust 化。
 

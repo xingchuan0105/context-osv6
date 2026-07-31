@@ -1,23 +1,12 @@
 mod code;
 pub mod csv_table;
-mod excel;
 mod html;
-mod liteparse;
-mod liteparse_config;
-mod liteparse_ir;
-mod liteparse_probe_bridge;
-mod office_service;
-mod paddle_cache;
+pub mod markitdown;
 pub mod paddle_ocr;
 mod page_status;
-mod pdf;
-mod pdf_image;
-mod pdf_renderer_service;
-mod probe;
 mod router;
 mod text;
 pub mod text_table;
-mod visual_pdf;
 
 use std::collections::BTreeMap;
 
@@ -26,47 +15,20 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 pub use code::CodeParser;
-pub use excel::parse_excel_document_ir;
 pub use html::HtmlParser;
-pub use liteparse::{LiteParseService, ParsedPdfSnapshot};
-pub use liteparse_config::LiteParseConfig;
-pub use liteparse_ir::{
-    LiteParsePageProbe, LiteParseTextBlock, append_liteparse_blocks_to_ir, blocks_to_document_ir,
-    coalesce_liteparse_text_blocks,
-    page_has_searchable_text,
+pub use markitdown::{
+    MarkitdownConfig, blocks_from_markdown, parse_markitdown_document_ir, run_markitdown,
 };
-pub use liteparse_probe_bridge::{
-    HybridPdfProbeOutcome, overlay_liteparse_signals, probe_pdf_hybrid,
-};
-pub use office_service::{
-    OfficeParserCapabilities, OfficeParserErrorBody, OfficeParserFormat, OfficeParserHealthz,
-    OfficeParserParseResponse, OfficeParserParseStats, OfficeParserServiceClient,
-    OfficeParserServiceConfig,
-};
-pub use paddle_cache::{PaddleResultCache, PaddleResultCacheConfig};
 pub use paddle_ocr::{
     PaddleJobsOcrService, PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult,
     optional_payload_hash, optional_payload_json,
 };
 pub use page_status::{PageParseStatus, PageStatusEntry, parse_page_status_from_ir};
-pub use pdf::PdfParser;
-pub use pdf_image::{
-    ExtractedPdfImage, FigurePlacement, PdfImageFormat, compute_figure_area_ratio,
-    extract_page_images, image_mime_type, image_to_base64,
-};
-pub use pdf_renderer_service::{
-    PdfRendererServiceClient, PdfRendererServiceConfig, RenderPagesResponse, RenderedPdfPage,
-    chunk_page_ranges, page_range_metadata, pages_per_visual_chunk, visual_render_strategy,
-};
-pub use probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 pub use router::{
-    ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,
-    OfficeParsePlan, PageRouteKind, ParsePlan, ParseRoute, ParseRouteDecision, ParseRouteError,
-    ParseRouter, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteDecision, RouteReason,
-    page_route_label, pdf_page_route_labels, pdf_parse_plan_for_probe,
+    ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, ParsePlan, ParseRoute,
+    ParseRouteDecision, ParseRouteError, ParseRouter, RouteReason,
 };
 pub use text::TextParser;
-pub use visual_pdf::VisualPdfParser;
 
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
@@ -162,7 +124,6 @@ impl ParserFactory {
     pub fn create_parser(filename: &str) -> Option<Box<dyn DocumentParser>> {
         let extension = filename.rsplit('.').next()?.to_lowercase();
         match extension.as_str() {
-            "pdf" => Some(Box::new(PdfParser)),
             "html" | "htm" => Some(Box::new(HtmlParser)),
             "txt" | "md" | "rst" => Some(Box::new(TextParser)),
             _ if Self::is_code_file(&extension) => Some(Box::new(CodeParser)),

@@ -73,6 +73,9 @@ pub enum ParseBackend {
     /// T3: calamine in-process xlsx/xls grid parse (replaces the office
     /// service's XML tag stripper for Excel files).
     CalamineExcel,
+    /// markitdown subprocess parse → markdown (sole document parse path;
+    /// xls/xlsx/doc/docx/ppt/pptx/pdf/txt/md/html/csv/code all route here).
+    Markitdown,
     #[default]
     Unknown,
 }
@@ -108,6 +111,7 @@ impl ParseBackend {
             Self::TextLocal => "text_local",
             Self::CodeLocal => "code_local",
             Self::CalamineExcel => "calamine_excel",
+            Self::Markitdown => "markitdown",
             Self::Unknown => "unknown",
         }
     }
@@ -207,8 +211,7 @@ impl DocumentIr {
                     // TableIr in metadata) while prose stays paragraphs.
                     // Every other backend keeps the one-block-per-unit shape.
                     if primary_backend == ParseBackend::TextLocal {
-                        let segments =
-                            crate::parser::text_table::segment_text(&unit.text);
+                        let segments = crate::parser::text_table::segment_text(&unit.text);
                         for (seg_index, segment) in segments.into_iter().enumerate() {
                             let is_table = segment.table.is_some();
                             let mut metadata = unit.metadata.clone();

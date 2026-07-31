@@ -1,8 +1,7 @@
-//! Office DOCX ingest via mock Office Parser → worker → indexed chunks.
+//! Office DOCX ingest via markitdown（唯一解析器）→ worker → indexed chunks.
 
 use std::time::Duration;
 
-use crate::product_e2e::mock_servers::MOCK_OFFICE_DOCX_TEXT;
 use crate::product_e2e::setup;
 use crate::product_e2e::{DocumentStatus, TestContext};
 
@@ -35,8 +34,8 @@ async fn office_docx_ingest_e2e() {
         .expect("backend_summary");
     let summary_text = summary.to_string();
     assert!(
-        summary_text.contains("office") || summary_text.contains("docx"),
-        "expected office/docx routing in backend_summary: {summary_text}"
+        summary_text.contains("markitdown"),
+        "expected markitdown routing in backend_summary: {summary_text}"
     );
 
     let chunk_count = ctx
@@ -55,7 +54,8 @@ async fn office_docx_ingest_e2e() {
     .await
     .expect("first chunk content");
     assert!(
-        row.0.contains(MOCK_OFFICE_DOCX_TEXT),
-        "chunk should contain mock office parser docx text"
+        row.0.contains("Context-OS phase0 mini docx fixture"),
+        "chunk should contain markitdown-parsed docx text, got: {}",
+        row.0
     );
 }

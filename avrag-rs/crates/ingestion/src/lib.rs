@@ -9,9 +9,7 @@ pub mod parser;
 pub mod security_scanner;
 pub mod semantic;
 
-pub use error::{
-    IngestionError, IndexKind, ParseKind, SecurityKind, StorageKind,
-};
+pub use error::{IndexKind, IngestionError, ParseKind, SecurityKind, StorageKind};
 pub use ingestion_types::{
     AuditAction, AuditRecord, DEFAULT_MAX_ATTEMPTS, IngestDocumentPayload, IngestUrlPayload,
     IngestionTask, IngestionTaskKind, IngestionTaskPayload, ReindexDocumentPayload, ReindexReason,
@@ -30,10 +28,7 @@ pub use model::{
     DocumentStateMachine, Transition, build_ingest_task, build_ingest_url_task, build_reindex_task,
     task_audit,
 };
-pub use parser::{
-    LiteParseConfig, LiteParseService, PageParseStatus, PageStatusEntry, ParsedPdfSnapshot,
-    blocks_to_document_ir, parse_page_status_from_ir,
-};
+pub use parser::{PageParseStatus, PageStatusEntry, parse_page_status_from_ir};
 pub use runtime::{
     AuditSink, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, StateSink,
     TaskProcessor, TaskSource, WorkerRuntime, WorkerTick,

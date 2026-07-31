@@ -50,17 +50,11 @@ pub enum IngestionError {
     #[error("audit sink error: {0}")]
     AuditSink(String),
     #[error("storage error ({kind:?}): {message}")]
-    Storage {
-        kind: StorageKind,
-        message: String,
-    },
+    Storage { kind: StorageKind, message: String },
     #[error("parse error ({kind:?}): {message}")]
     Parse { kind: ParseKind, message: String },
     #[error("security ({kind:?}): {message}")]
-    Security {
-        kind: SecurityKind,
-        message: String,
-    },
+    Security { kind: SecurityKind, message: String },
     #[error("indexing error ({kind:?}): {message}")]
     Index { kind: IndexKind, message: String },
     #[error("embedding error ({kind:?}): {message}")]

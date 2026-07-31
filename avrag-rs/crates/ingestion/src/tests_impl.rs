@@ -157,7 +157,10 @@ impl TaskSource for OrderingTaskSource {
         _task: &IngestionTask,
         _error: &str,
     ) -> Result<TaskFailureOutcome, IngestionError> {
-        self.events.lock().unwrap().push("task_source.fail_terminal");
+        self.events
+            .lock()
+            .unwrap()
+            .push("task_source.fail_terminal");
         Ok(TaskFailureOutcome::DeadLettered)
     }
 }

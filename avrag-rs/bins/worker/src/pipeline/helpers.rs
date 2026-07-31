@@ -1,13 +1,10 @@
-use ingestion::parser::{ParsePlan, PdfPageBackend};
-use ingestion::{DocumentIr, ParseBackend, SourceLocator};
+use ingestion::{DocumentIr, SourceLocator};
 
 pub(crate) use super::graph_index::{
     GraphIndexRecords, build_document_index_batch, build_graph_index_records,
 };
 pub(crate) use super::index_dispatch::build_text_index_records;
-pub(crate) use super::parse_route::{
-    execute_external_parse, execute_local_parse, execute_office_parse,
-};
+pub(crate) use super::parse_route::{execute_external_parse, execute_local_parse};
 pub(crate) use super::pg_side_effects::{
     build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
     collect_document_text, generate_document_profile_with_llm,
@@ -164,24 +161,7 @@ pub(crate) fn build_parse_backend_summary(
                 })
                 .collect::<Vec<_>>()
         })
-        .unwrap_or_else(|| match &route_decision.plan {
-            ParsePlan::Pdf(plan) => plan
-                .pages
-                .iter()
-                .map(|page| {
-                    serde_json::json!({
-                        "page": page.page_number,
-                        "backend": match page.backend {
-                            // Wire plan: `edge_parse` (= LiteParse text); metadata uses canonical backend.
-                            PdfPageBackend::EdgeParse => ParseBackend::LiteParsePdf.as_str(),
-                            PdfPageBackend::PaddleOcr => ParseBackend::PaddleOcrPdf.as_str(),
-                            PdfPageBackend::VisualRaster => ParseBackend::VisualRasterPdf.as_str(),
-                        },
-                    })
-                })
-                .collect::<Vec<_>>(),
-            _ => Vec::new(),
-        });
+        .unwrap_or_default();
 
     let page_status: Option<serde_json::Value> = document_ir
         .and_then(|document| document.metadata.get("page_status"))
@@ -227,7 +207,6 @@ pub(crate) fn build_parse_backend_summary(
         "route": &route_decision.route,
         "reason": &route_decision.reason,
         "plan": &route_decision.plan,
-        "probe_result": &route_decision.probe_result,
         "page_backends": page_backends,
         "page_status": page_status,
         "ingest_routing": ingest_routing,

@@ -789,8 +789,16 @@ mod ir_chunk_plan_tests {
         assert_eq!(plan.text_chunks.len(), 1);
         let chunk = &plan.text_chunks[0];
         assert_eq!(chunk.block_type, BlockType::Table);
-        assert!(chunk.text.contains("表 1 测试表"), "caption: {}", chunk.text);
-        assert!(chunk.text.contains("|编号|名称|说明|"), "header: {}", chunk.text);
+        assert!(
+            chunk.text.contains("表 1 测试表"),
+            "caption: {}",
+            chunk.text
+        );
+        assert!(
+            chunk.text.contains("|编号|名称|说明|"),
+            "header: {}",
+            chunk.text
+        );
         assert!(chunk.text.contains("|3|条目3|"), "last row: {}", chunk.text);
         assert_eq!(
             chunk.metadata.get("row_range").map(String::as_str),
@@ -818,7 +826,11 @@ mod ir_chunk_plan_tests {
         for chunk in &plan.text_chunks {
             // Every group repeats the header row and stays within budget.
             assert!(chunk.text.contains(header_line), "{}", chunk.text);
-            assert!(chunk.text.contains("表 1 测试表"), "caption: {}", chunk.text);
+            assert!(
+                chunk.text.contains("表 1 测试表"),
+                "caption: {}",
+                chunk.text
+            );
             assert!(
                 tokenizer.encode_ordinary(&chunk.text).len() <= TARGET_CHUNK_TOKENS,
                 "chunk over budget"
@@ -847,7 +859,10 @@ mod ir_chunk_plan_tests {
         let range = first.metadata.get("row_range").unwrap();
         let (lo, hi) = range.split_once('-').unwrap();
         assert_eq!(lo, "1");
-        assert!(hi.parse::<usize>().unwrap() < 200, "first group is not the whole table");
+        assert!(
+            hi.parse::<usize>().unwrap() < 200,
+            "first group is not the whole table"
+        );
     }
 
     #[test]
@@ -875,7 +890,8 @@ mod ir_chunk_plan_tests {
             page: Some(1),
             block_type: BlockType::Paragraph,
             modality: BlockModality::TextOnly,
-            text: "这是一段足够长的普通段落文字，用来验证标题链会流入普通块的 section_path。".to_string(),
+            text: "这是一段足够长的普通段落文字，用来验证标题链会流入普通块的 section_path。"
+                .to_string(),
             alt_text: None,
             asset_refs: Vec::new(),
             caption: None,
@@ -907,7 +923,10 @@ mod ir_chunk_plan_tests {
             .iter()
             .find(|c| c.block_type == BlockType::Paragraph)
             .expect("prose chunk");
-        assert_eq!(prose_chunk.section_path, vec!["第三章 营销策略".to_string()]);
+        assert_eq!(
+            prose_chunk.section_path,
+            vec!["第三章 营销策略".to_string()]
+        );
     }
 
     /// S4 P-Scale (L2-patho filter `patho_scale`): LiteParse ~1.5k micro-paragraphs.

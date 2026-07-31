@@ -17,12 +17,12 @@ avrag-retrieval-data-plane = { path = "../../crates/retrieval-data-plane" }
 avrag-storage-milvus = { path = "../../crates/storage-milvus" }
 avrag-storage-pgvector = { path = "../../crates/storage-pgvector" }
 avrag-storage-pg = { path = "../../crates/storage-pg" }
+avrag-struct-supervision = { path = "../../crates/struct-supervision" }
 chrono.workspace = true
 common = { path = "../../crates/common" }
 contracts = { path = "../../../contracts" }
 dotenvy = "0.15"
 ingestion = { path = "../../crates/ingestion" }
-lopdf = "0.35"
 reqwest.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

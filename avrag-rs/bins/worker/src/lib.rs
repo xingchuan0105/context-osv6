@@ -14,10 +14,6 @@ use app_core::{AppConfig, load_prompt_template};
 use avrag_cache_redis::DocumentLock;
 use avrag_llm::SummaryGenerator;
 use avrag_storage_pg::{BootstrapRepository, PgAppRepository, TenantPgPool};
-use ingestion::parser::{
-    OfficeParserServiceClient, OfficeParserServiceConfig, PdfRendererServiceClient,
-    PdfRendererServiceConfig,
-};
 use ingestion::{
     NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, WorkerRuntime, WorkerTick,
 };
@@ -26,9 +22,7 @@ use tokio::time::{Duration, interval};
 use tracing::{error, info, warn};
 
 use ingestion_guard::run_document_cleanup_once;
-use pipeline::{
-    EmbeddingDeps, LlmDeps, MeteringDeps, ParseServiceDeps, PgTaskProcessor, StorageDeps,
-};
+use pipeline::{EmbeddingDeps, LlmDeps, MeteringDeps, PgTaskProcessor, StorageDeps};
 use runtime_support::{
     apply_e2e_object_store_overrides, build_worker_embedding_client, build_worker_object_store,
     build_worker_retrieval_data_plane, build_worker_ingestion_llm, build_worker_triplet_llm,
@@ -254,12 +248,6 @@ pub async fn run() -> Result<()> {
                     },
                     triplet_llm: build_worker_triplet_llm(&config, &usage_observer),
                     ingestion_llm: build_worker_ingestion_llm(&config, &usage_observer),
-                },
-                parse: ParseServiceDeps {
-                    office_parser_client: OfficeParserServiceConfig::from_env()
-                        .map(OfficeParserServiceClient::new),
-                    pdf_renderer_client: PdfRendererServiceConfig::from_env()
-                        .map(PdfRendererServiceClient::new),
                 },
                 metering: MeteringDeps {
                     analytics: Some(analytics::AnalyticsService::new(analytics_pool)),

@@ -4,10 +4,7 @@ use avrag_retrieval_data_plane::{
     EntityIndexRecord, GraphPassageIndexRecord, RelationIndexRecord, TextChunkIndexRecord,
 };
 use ingestion::SourceLocator;
-use ingestion::parser::{
-    ParsePlan, ParseRoute, ParseRouteDecision, PdfPageBackend, PdfPagePlan, PdfParsePlan,
-    RouteReason,
-};
+use ingestion::parser::{ParsePlan, ParseRoute, ParseRouteDecision, RouteReason};
 use std::{env, fs};
 use uuid::Uuid;
 
@@ -86,18 +83,11 @@ fn enrich_multimodal_source_locator_includes_page_range_metadata() {
 #[test]
 fn build_parse_backend_summary_uses_fixed_contract_fields() {
     let route_decision = ParseRouteDecision {
-        route: ParseRoute::Pdf,
-        reason: RouteReason::ComplexPdf,
-        probe_result: None,
-        plan: ParsePlan::Pdf(PdfParsePlan {
-            pages: vec![PdfPagePlan {
-                page_number: 2,
-                backend: PdfPageBackend::VisualRaster,
-                reason: RouteReason::ComplexPdf,
-                route_kinds: vec![],
-            }],
+        route: ParseRoute::Local,
+        reason: RouteReason::OfficeDocument,
+        plan: ParsePlan::Local(ingestion::parser::LocalParsePlan {
+            kind: ingestion::parser::LocalParseKind::Markitdown,
         }),
-        liteparse_snapshot: None,
     };
 
     let summary = build_parse_backend_summary(
@@ -125,8 +115,7 @@ fn build_parse_backend_summary_uses_fixed_contract_fields() {
     assert!(summary.get("route").is_some());
     assert!(summary.get("reason").is_some());
     assert!(summary.get("plan").is_some());
-    assert!(summary.get("probe_result").is_some());
-    assert_eq!(summary["page_backends"][0]["page"], 2);
+    assert!(summary.get("page_backends").is_some());
     assert_eq!(summary["outputs"]["text_vector_count"], 2);
     assert_eq!(summary["outputs"]["entity_count"], 1);
     assert_eq!(summary["outputs"]["graph_degrade_count"], 1);

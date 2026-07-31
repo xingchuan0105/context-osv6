@@ -24,7 +24,10 @@ pub fn try_parse_csv(text: &str, delimiter: u8) -> Option<TableIr> {
         let record = record.ok()?;
         grid.push(record.iter().map(|c| c.trim().to_string()).collect());
     }
-    while grid.last().is_some_and(|row| row.iter().all(|c| c.is_empty())) {
+    while grid
+        .last()
+        .is_some_and(|row| row.iter().all(|c| c.is_empty()))
+    {
         grid.pop();
     }
     if grid.len() < 2 {
@@ -39,8 +42,8 @@ pub fn try_parse_csv(text: &str, delimiter: u8) -> Option<TableIr> {
     }
 
     let first = &grid[0];
-    let looks_like_headers = first.iter().all(|c| !c.is_empty())
-        && first.iter().any(|c| !is_numeric(c));
+    let looks_like_headers =
+        first.iter().all(|c| !c.is_empty()) && first.iter().any(|c| !is_numeric(c));
     let mut notes = Vec::new();
     let (headers, rows) = if looks_like_headers {
         let headers = grid.remove(0);
@@ -75,8 +78,8 @@ mod tests {
 
     #[test]
     fn csv_with_headers_parses() {
-        let table = try_parse_csv("编号,名称,数量\n1,速冻机,10\n2,冷却塔,3\n", b',')
-            .expect("csv parses");
+        let table =
+            try_parse_csv("编号,名称,数量\n1,速冻机,10\n2,冷却塔,3\n", b',').expect("csv parses");
         assert_eq!(table.headers, vec!["编号", "名称", "数量"]);
         assert_eq!(table.rows.len(), 2);
         assert_eq!(table.rows[0], vec!["1", "速冻机", "10"]);
