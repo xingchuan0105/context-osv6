@@ -61,6 +61,12 @@ pub fn budget_exhausted_final_turn() -> &'static str {
     trim_body(loop_prompt!("budget-exhausted-final.nudge.md"))
 }
 
+/// Token-budget variant of the C5 closing observation: same wrap-up body,
+/// but the stated fact is the token ceiling, not the rounds ceiling.
+pub fn budget_exhausted_final_turn_tokens() -> &'static str {
+    trim_body(loop_prompt!("budget-exhausted-final-tokens.nudge.md"))
+}
+
 pub fn budget_exhausted_carryover(tool: &str, body: &str) -> String {
     subst(
         trim_body(loop_prompt!("budget-exhausted-carryover.tmpl.md")),
@@ -149,6 +155,7 @@ mod tests {
         assert!(!no_chunk_budget_grace_nudge().is_empty());
         assert!(!retrieval_failed_final_turn().is_empty());
         assert!(!budget_exhausted_final_turn().is_empty());
+        assert!(!budget_exhausted_final_turn_tokens().is_empty());
         assert!(!synthesis_repair_nudge().is_empty());
         assert!(!partial_evidence_insufficient().is_empty());
         assert!(!codegen_no_output_nudge().is_empty());

@@ -159,7 +159,7 @@ impl ReActLoop {
                 mode.sdk_primitives.iter().cloned().collect(),
             ),
         };
-        let (iteration, direct_answer, telemetry_records, total_usage) = self
+        let (iteration, direct_answer, telemetry_records, total_usage, budget_exhaustion) = self
             .run_retrieval_loop(
                 mode,
                 &request,
@@ -222,6 +222,7 @@ impl ReActLoop {
             &cancel,
             iteration,
             max_iterations,
+            budget_exhaustion,
             total_tool_calls,
             &telemetry_records,
             &total_usage,

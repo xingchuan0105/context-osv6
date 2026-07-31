@@ -165,6 +165,7 @@ impl ReActLoop {
         cancel: &tokio_util::sync::CancellationToken,
         iteration: u8,
         max_iterations: u8,
+        budget_exhaustion: super::run_retrieval::BudgetExhaustion,
         total_tool_calls: u32,
         telemetry_records: &[ReActIterationRecord],
         total_usage: &LlmUsage,
@@ -195,13 +196,13 @@ impl ReActLoop {
         .await;
 
         let synthesis = SynthesisPhase;
-        // C5: a loop that exhausted its iteration budget gets ONE explicit
-        // final turn before synthesis: stop emitting code/retrieval and
-        // produce the final output the task brief requires (the worker's
+        // C5: a loop that exhausted its budget (rounds OR tokens) gets ONE
+        // explicit final turn before synthesis: stop emitting code/retrieval
+        // and produce the final output the task brief requires (the worker's
         // internal handoff JSON). Without it, exhausted workers reach the
         // prose-only stream with the retrieve-phase "output one <code> block"
         // framing still dominant and emit raw code or fabrications.
-        let exhausted = budget_exhausted_messages(messages, iteration, max_iterations, collected_tool_results);
+        let exhausted = budget_exhausted_messages(messages, budget_exhaustion, collected_tool_results);
         let messages = exhausted.as_deref().unwrap_or(messages);
         let final_answer = synthesis
             .run(
@@ -299,14 +300,21 @@ impl ReActLoop {
 }
 
 /// Final-turn instruction appended when the retrieval loop exhausts its
-/// iteration budget (C5): stop emitting code blocks / new retrieval and
-/// produce the final output the task brief requires. Generic on purpose —
+/// budget (C5): stop emitting code blocks / new retrieval and produce the
+/// final output the task brief requires. Generic on purpose —
 /// the worker brief (app-chat) requires the internal_worker_handoff_v1 JSON,
 /// chat modes require prose; this turn re-asserts "wrap up per brief" either
 /// way.
-/// Body: `prompts/loop/budget-exhausted-final.nudge.md`
-pub(crate) fn budget_exhausted_final_turn() -> &'static str {
-    super::prompt_assets::budget_exhausted_final_turn()
+/// Body: `prompts/loop/budget-exhausted-final.nudge.md` (rounds exhausted) or
+/// `prompts/loop/budget-exhausted-final-tokens.nudge.md` (token-only).
+pub(crate) fn budget_exhausted_final_turn(
+    exhaustion: super::run_retrieval::BudgetExhaustion,
+) -> &'static str {
+    if exhaustion.tokens && !exhaustion.rounds {
+        super::prompt_assets::budget_exhausted_final_turn_tokens()
+    } else {
+        super::prompt_assets::budget_exhausted_final_turn()
+    }
 }
 
 /// Char budget for the last-tool-result carryover appended to the C5 turn —
@@ -314,24 +322,23 @@ pub(crate) fn budget_exhausted_final_turn() -> &'static str {
 /// payload can't swamp the final turn.
 const C5_CARRYOVER_MAX_CHARS: usize = 2000;
 
-/// C5: when the retrieval loop exhausted its iteration budget, append ONE
-/// final user turn carrying `BUDGET_EXHAUSTED_FINAL_TURN` so the synthesis
-/// call starts from an explicit handoff instruction instead of the
-/// retrieve-phase framing. Returns `Some(new_messages)` when appended.
+/// C5: when the retrieval loop exhausted its budget (rounds or tokens),
+/// append ONE final user turn carrying the budget-exhausted final nudge so
+/// the synthesis call starts from an explicit handoff instruction instead of
+/// the retrieve-phase framing. Returns `Some(new_messages)` when appended.
 ///
 /// 2026-07-29：强制交接会丢掉收官轮刚算出的关键数字——把最后一次成功工具
 /// 调用的原始结果确定性地拼进 C5 提示，要求原样带入最终输出。
 fn budget_exhausted_messages(
     messages: &[ChatMessage],
-    iteration: u8,
-    max_iterations: u8,
+    exhaustion: super::run_retrieval::BudgetExhaustion,
     tool_results: &[ToolResult],
 ) -> Option<Vec<ChatMessage>> {
-    if iteration < max_iterations {
+    if !exhaustion.any() {
         return None;
     }
     let mut out = messages.to_vec();
-    let mut turn = budget_exhausted_final_turn().to_string();
+    let mut turn = budget_exhausted_final_turn(exhaustion).to_string();
     if let Some(last) = tool_results
         .iter()
         .rev()
@@ -354,6 +361,15 @@ fn budget_exhausted_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::run_retrieval::BudgetExhaustion;
+
+    fn rounds_exhausted() -> BudgetExhaustion {
+        BudgetExhaustion { rounds: true, tokens: false }
+    }
+
+    fn tokens_exhausted() -> BudgetExhaustion {
+        BudgetExhaustion { rounds: false, tokens: true }
+    }
 
     #[test]
     fn budget_exhaustion_appends_handoff_turn() {
@@ -361,7 +377,8 @@ mod tests {
             ChatMessage::system("retrieve with <code> blocks"),
             ChatMessage::user("question"),
         ];
-        let out = budget_exhausted_messages(&history, 6, 6, &[]).expect("exhausted → appended");
+        let out = budget_exhausted_messages(&history, rounds_exhausted(), &[])
+            .expect("exhausted  appended");
         assert_eq!(out.len(), history.len() + 1);
         let last = out.last().unwrap();
         assert_eq!(last.role, "user");
@@ -379,10 +396,34 @@ mod tests {
     }
 
     #[test]
+    fn token_exhaustion_alone_appends_handoff_turn() {
+        // F2: the C5 gate previously only watched the rounds ceiling; a loop
+        // that burned its token budget first reached synthesis with no
+        // closing observation at all.
+        let history = vec![ChatMessage::user("question")];
+        let out = budget_exhausted_messages(&history, tokens_exhausted(), &[])
+            .expect("token-exhausted  appended");
+        let last = &out.last().unwrap().content;
+        assert!(last.contains("token"), "{last}");
+        assert!(last.contains("不再产生新的代码块"), "{last}");
+        // Token-only exhaustion states the token fact, not the rounds fact.
+        assert!(!last.contains("迭代额度已用尽"), "{last}");
+    }
+
+    #[test]
+    fn rounds_and_tokens_exhaustion_uses_rounds_turn() {
+        let history = vec![ChatMessage::user("question")];
+        let both = BudgetExhaustion { rounds: true, tokens: true };
+        let out = budget_exhausted_messages(&history, both, &[]).expect("appended");
+        let last = &out.last().unwrap().content;
+        assert!(last.contains("迭代额度已用尽"), "{last}");
+    }
+
+    #[test]
     fn no_final_turn_before_budget_exhaustion() {
         let history = vec![ChatMessage::user("question")];
-        assert!(budget_exhausted_messages(&history, 5, 6, &[]).is_none());
-        assert!(budget_exhausted_messages(&history, 0, 6, &[]).is_none());
+        assert!(budget_exhausted_messages(&history, BudgetExhaustion::default(), &[]).is_none());
+        assert!(budget_exhausted_messages(&history, rounds_exhausted(), &[]).is_some());
     }
 
     #[test]
@@ -405,7 +446,7 @@ mod tests {
                 trace: None,
             },
         ];
-        let out = budget_exhausted_messages(&history, 6, 6, &results).expect("appended");
+        let out = budget_exhausted_messages(&history, rounds_exhausted(), &results).expect("appended");
         let last = &out.last().unwrap().content;
         assert!(last.contains("code_execution"), "{last}");
         assert!(last.contains("total_count=12"), "{last}");
@@ -443,13 +484,13 @@ mod tests {
                 trace: None,
             },
         ];
-        let out = budget_exhausted_messages(&history, 6, 6, &results).expect("appended");
+        let out = budget_exhausted_messages(&history, rounds_exhausted(), &results).expect("appended");
         let last = &out.last().unwrap().content;
         // Walks back to the most recent Ok-with-data result.
         assert!(last.contains("答案 42"), "{last}");
         assert!(!last.contains("boom"), "{last}");
         // No tool results at all → plain C5 turn, no carryover block.
-        let plain = budget_exhausted_messages(&history, 6, 6, &[]).expect("appended");
+        let plain = budget_exhausted_messages(&history, rounds_exhausted(), &[]).expect("appended");
         assert!(!plain.last().unwrap().content.contains("原始结果如下"));
     }
 }

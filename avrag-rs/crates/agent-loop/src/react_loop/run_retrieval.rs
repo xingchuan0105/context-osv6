@@ -12,6 +12,21 @@ use super::telemetry::ReActIterationRecord;
 use crate::events::{AgentEvent, AgentEventSink};
 use crate::runtime::AgentRequest;
 
+/// Which budget ceiling ended the retrieval loop. Tokens = primary cost
+/// budget; rounds = safety ceiling. Both false → the loop ended on a model
+/// decision (DirectAnswer / BreakToSynthesis), not on budget.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct BudgetExhaustion {
+    pub rounds: bool,
+    pub tokens: bool,
+}
+
+impl BudgetExhaustion {
+    pub(super) fn any(self) -> bool {
+        self.rounds || self.tokens
+    }
+}
+
 impl ReActLoop {
     pub(super) async fn run_retrieval_loop(
         &self,
@@ -25,11 +40,12 @@ impl ReActLoop {
         cancel: &tokio_util::sync::CancellationToken,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,
-    ) -> Result<(u8, Option<String>, Vec<ReActIterationRecord>, LlmUsage), AppError> {
+    ) -> Result<(u8, Option<String>, Vec<ReActIterationRecord>, LlmUsage, BudgetExhaustion), AppError> {
         let mut iteration: u8 = 0;
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
         let mut total_usage = LlmUsage::zeroed();
         let mut direct_answer: Option<String> = None;
+        let mut budget_exhaustion = BudgetExhaustion::default();
 
         let tier = request.metadata.get("user_tier");
         // Tokens = primary cost budget; rounds = safety ceiling.
@@ -61,6 +77,10 @@ impl ReActLoop {
                     )
                     .await
                 {
+                    budget_exhaustion = BudgetExhaustion {
+                        rounds: rounds_exhausted,
+                        tokens: tokens_exhausted,
+                    };
                     break;
                 }
             }
@@ -136,7 +156,7 @@ impl ReActLoop {
                 .await;
         }
 
-        Ok((iteration, direct_answer, telemetry_records, total_usage))
+        Ok((iteration, direct_answer, telemetry_records, total_usage, budget_exhaustion))
     }
 
     pub(super) async fn check_loop_budget_exhausted(

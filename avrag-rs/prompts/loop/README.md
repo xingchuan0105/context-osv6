@@ -13,6 +13,7 @@ Third-person **what happened / what is true**. No “please / you must”. Hard 
 |------|-----------|
 | `blocks-skipped.nudge.md` | Extra code blocks in one turn (`{n_blocks}`, `{n_skipped}`) |
 | `budget-exhausted-final.nudge.md` | Budget exhausted final turn (SaC prose + SELECTED / `[[web:n]]`) |
+| `budget-exhausted-final-tokens.nudge.md` | Same closing turn, token-ceiling variant (states token fact) |
 | `budget-exhausted-carryover.tmpl.md` | Last successful tool payload (`{tool}`, `{body}`) |
 | `codegen-no-output.nudge.md` | Empty sandbox round |
 | `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts |
