@@ -66,6 +66,22 @@ class _Client:
             payload["doc_ids"] = doc_ids
         return _rpc("grep", payload)
 
+    async def struct_catalog(self, doc_ids=None):
+        """List table relations in per-doc DuckDB struct stores (name/headers/n_rows/
+        sample_rows/caption/unit/confidence). Empty relations = no struct store (「无表格」)."""
+        payload = {}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
+        return _rpc("struct_catalog", payload)
+
+    async def struct_query(self, sql, doc_ids=None):
+        """Run one restricted SELECT against the struct store. COUNT/filter/order are
+        engine-exact. Returns {ok, columns, rows, row_count, evidence} or {ok:false, error}."""
+        payload = {"sql": sql}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
+        return _rpc("struct_query", payload)
+
     async def web(self, query):
         """Web search (SaC). Fan-out multiple queries in one code block when needed."""
         return _rpc("web", {"query": query})
@@ -124,6 +140,8 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
         "dense",
         "lexical",
         "grep",
+        "struct_catalog",
+        "struct_query",
         "web",
         "fetch",
         "doc_summary",
@@ -135,7 +153,11 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
     ]
 }
 
-pub(crate) fn build_bridge_sandbox_wrapper(user_code: &str, memory_mb: u64, cpu_secs: u64) -> String {
+pub(crate) fn build_bridge_sandbox_wrapper(
+    user_code: &str,
+    memory_mb: u64,
+    cpu_secs: u64,
+) -> String {
     let blocked_modules = [
         "os",
         "subprocess",
@@ -563,6 +585,8 @@ mod bridge_shim_tests {
                 "dense",
                 "lexical",
                 "grep",
+                "struct_catalog",
+                "struct_query",
                 "web",
                 "fetch",
                 "doc_summary",

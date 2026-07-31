@@ -3,8 +3,8 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use avrag_code_interpreter::HostBridge;
+use contracts::auth_runtime::AuthContext;
 use contracts::{
     DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
     LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
@@ -99,6 +99,8 @@ impl RuntimeBridge {
             "grep",
             "doc_summary",
             "doc_profile",
+            "struct_catalog",
+            "struct_query",
         ]
     }
 
@@ -279,6 +281,63 @@ impl RuntimeBridge {
                     .unwrap_or_default(),
                 })
             }
+            // struct_catalog / struct_query: per-doc DuckDB 表格存储(2026-07-31 计划)。
+            // doc_ids 与 grep 同款 scope 交叉。
+            "struct_catalog" => {
+                let caller_doc_ids = args
+                    .get("doc_ids")
+                    .and_then(|v| v.as_array())
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_owned))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let doc_ids = self.resolve_doc_ids(&caller_doc_ids);
+                if doc_ids.is_empty() {
+                    return Err(Self::bridge_error(
+                        "invalid_args",
+                        "doc_ids is required when doc_scope is empty",
+                    ));
+                }
+                Ok(ToolCall {
+                    tool: "struct_catalog".to_string(),
+                    version: "1.0".to_string(),
+                    args: serde_json::to_value(contracts::StructCatalogArgs { doc_ids })
+                        .unwrap_or_default(),
+                })
+            }
+            "struct_query" => {
+                let caller_doc_ids = args
+                    .get("doc_ids")
+                    .and_then(|v| v.as_array())
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_owned))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let doc_ids = self.resolve_doc_ids(&caller_doc_ids);
+                if doc_ids.is_empty() {
+                    return Err(Self::bridge_error(
+                        "invalid_args",
+                        "doc_ids is required when doc_scope is empty",
+                    ));
+                }
+                let sql = args
+                    .get("sql")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                Ok(ToolCall {
+                    tool: "struct_query".to_string(),
+                    version: "1.0".to_string(),
+                    args: serde_json::to_value(contracts::StructQueryArgs { sql, doc_ids })
+                        .unwrap_or_default(),
+                })
+            }
             // Non-retrieval SaC ports are owned by the composite host (agent-loop).
             "web" | "fetch" | "history" | "user_profile" => Err(Self::bridge_error(
                 "not_configured",
@@ -318,6 +377,8 @@ impl RuntimeBridge {
             }
             // grep: full payload (total_hits / line hits) — do not strip to list.
             "doc_grep" => data.clone(),
+            // struct_*: full payload (relations / rows+evidence) — 同 grep 不削形。
+            "struct_catalog" | "struct_query" => data.clone(),
             // lexical may already be `{ chunks, graph_context }` (A5: graph bound to lexical).
             "lexical_retrieval" => {
                 if let Some(obj) = data.as_object() {
@@ -486,12 +547,12 @@ impl HostBridge for RuntimeBridge {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use contracts::auth_runtime::{UserId, SubjectKind};
     use avrag_retrieval_data_plane::{
         Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput,
         GraphSearchRequest, MultimodalSearchRequest, RelationPathCandidate, ScoredChunk,
         TextDenseSearchRequest,
     };
+    use contracts::auth_runtime::{SubjectKind, UserId};
     use uuid::Uuid;
 
     struct StubDataPlane {
@@ -684,7 +745,9 @@ mod tests {
         let runtime = make_runtime();
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge.call("dense", json!({"query": "antifragility"})).await;
+        let data = bridge
+            .call("dense", json!({"query": "antifragility"}))
+            .await;
         let chunks = data["chunks"].as_array().expect("chunks array");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0]["content"], "bridge hit");
@@ -935,7 +998,9 @@ print(json.dumps(chunks))
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
 
-        let d1 = bridge.call("dense", json!({"query": "antifragility"})).await;
+        let d1 = bridge
+            .call("dense", json!({"query": "antifragility"}))
+            .await;
         let d2 = bridge.call("dense", json!({"query": "again"})).await;
         let d3 = bridge.call("lexical", json!({"query": "third"})).await;
 

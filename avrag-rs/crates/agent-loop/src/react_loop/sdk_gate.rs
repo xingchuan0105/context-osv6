@@ -15,6 +15,8 @@ const RAG_PRIMITIVES: &[&str] = &[
     "grep",
     "doc_profile",
     "doc_summary",
+    "struct_catalog",
+    "struct_query",
 ];
 
 /// Web surface (search). Design also allows `dense` for hybrid search mode.

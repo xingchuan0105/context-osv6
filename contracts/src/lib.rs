@@ -76,8 +76,8 @@ pub use tool_call::{
     normalize_doc_id_alias, DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs,
     DocGrepArgs, DocMetadataArgs, DocProfileArgs, DocReadLinesArgs, DocSummaryArgs,
     DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, MergeConfig,
-    NextStep, RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse, ToolCall,
-    ToolSpec,
+    NextStep, RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse,
+    StructCatalogArgs, StructQueryArgs, ToolCall, ToolSpec,
 };
 pub use usage_limit::{
     UsageLimitPolicy, UsageLimitResponse, UsageScope, UsageWindow, UsageWindows,

@@ -223,6 +223,24 @@ pub struct DocReadLinesArgs {
     pub end: u32,
 }
 
+/// struct_catalog (2026-07-31, docs/plans/2026-07-31-struct-query-virtual-tables.md):
+/// 列出 doc scope 内 per-doc DuckDB 表格存储中的 relation。无存储/无表 → relations 为空（ok）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StructCatalogArgs {
+    #[serde(default)]
+    pub doc_ids: Vec<String>,
+}
+
+/// struct_query: 在表格存储上执行受限 SQL（单条 SELECT、标识符 ∈ catalog、只读加固）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StructQueryArgs {
+    pub sql: String,
+    #[serde(default)]
+    pub doc_ids: Vec<String>,
+}
+
 /// Tolerate singular `doc_id` (string or array) as an alias for `doc_ids`.
 /// Models frequently emit the singular form; strict `deny_unknown_fields`
 /// rejection burns a whole retrieval retry (2026-07-18 incident).
@@ -293,7 +311,6 @@ fn default_relation_limit() -> usize {
 fn default_supporting_chunk_limit() -> usize {
     10
 }
-
 
 #[cfg(test)]
 mod tests {

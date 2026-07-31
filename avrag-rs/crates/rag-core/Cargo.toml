@@ -21,6 +21,8 @@ futures-util = "0.3"
 sha2.workspace = true
 hex.workspace = true
 regex.workspace = true
+# struct_query: per-doc DuckDB 表格存储只读查询(docs/plans/2026-07-31-struct-query-virtual-tables.md)
+duckdb = { version = "1", features = ["bundled"] }
 # Internal — no avrag-llm / avrag-cache-redis (Wave 5 ports)
 avrag-rag-core-ports = { path = "../rag-core-ports" }
 common = { path = "../common" }

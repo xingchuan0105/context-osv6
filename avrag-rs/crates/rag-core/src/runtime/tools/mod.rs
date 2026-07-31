@@ -8,6 +8,7 @@ pub mod graph;
 pub mod graph_augment;
 pub mod index_lookup;
 pub mod lexical;
+pub mod struct_query;
 
 use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::ScoredChunk;
@@ -28,6 +29,8 @@ pub async fn dispatch(runtime: &RagRuntime, auth: &AuthContext, call: &ToolCall)
         "doc_scan" => doc_scan::run(runtime, auth, &call.args).await,
         "doc_grep" => doc_grep::run_grep(runtime, auth, &call.args).await,
         "doc_read_lines" => doc_grep::run_read_lines(runtime, auth, &call.args).await,
+        "struct_catalog" => struct_query::run_catalog(runtime, auth, &call.args).await,
+        "struct_query" => struct_query::run_query(runtime, auth, &call.args).await,
         other => ToolResult {
             tool: other.to_string(),
             version: call.version.clone(),
