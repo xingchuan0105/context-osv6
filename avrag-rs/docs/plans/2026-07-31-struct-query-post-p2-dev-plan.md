@@ -93,6 +93,8 @@ E2E：经生产 ingestion 灌一篇含表 doc（ipd xlsx）→ `struct_catalog` 
 
 ## W4 提取鲁棒性：双栏/跨页（独立）
 
+**状态**：✅ 已完成（2026-07-31）——`dual_column_suspect`（列组分离 + 面板表头行混入两信号）+ `section_header_rows`（提示级）双侧入库；t114 命中（6084/6135/6160）、ipd/白药零误报、check_pipeline 17 断言全过。详见 `docs/plans/2026-07-31-struct-query-w4-w6-handoff.md`。
+
 **目标**：附录 C 已知限制——万科年报「流动资产区被双栏另一面板行混入」与 PDF 跨页/分栏提取质量。
 
 **范围**：
@@ -119,6 +121,8 @@ E2E：经生产 ingestion 灌一篇含表 doc（ipd xlsx）→ `struct_catalog` 
 ---
 
 ## W6 行级证据映射（最后，依赖最重）
+
+**状态**：✅ 已完成（2026-07-31）——chunk md 行号埋点（`md_line_start/end` 闭区间）→ `_line_map` 区间映射（post-materialize worker 阶段）→ 明细 evidence 候选集合 `chunk_ids` + `chunk_granularity`（row/row_nearest/table，老库自动降级）。详见 `docs/plans/2026-07-31-struct-query-w4-w6-handoff.md`。
 
 **目标**：附录 C 另案——行级 `__src_line → chunk_id`（现表级证据已使 Q86 recall 0→100%，本项是精度增强非功能补缺）。
 
