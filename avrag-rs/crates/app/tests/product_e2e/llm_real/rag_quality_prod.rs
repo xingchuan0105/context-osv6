@@ -184,6 +184,43 @@ fn env_flag_disabled(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// True when the answer carries code spans (`<code>…</code>` or markdown
+/// fences) but no prose outside them — the retrieve-phase "output one code
+/// block" framing leaked into the final answer. Infrastructure/contract
+/// failure, not a retrieval miss. Mirror of the agent-loop prose_only
+/// detector; duplicated here to keep the harness dependency-free.
+fn is_code_only_answer(answer: &str) -> bool {
+    let mut saw_code = false;
+    let mut outside = String::new();
+    let mut rest = answer;
+    while let Some(start) = rest.find("<code") {
+        let Some(tag_end) = rest[start..].find('>').map(|o| start + o) else {
+            break;
+        };
+        let Some(close) = rest[tag_end..].find("</code>").map(|o| tag_end + o) else {
+            break;
+        };
+        outside.push_str(&rest[..start]);
+        saw_code = true;
+        rest = &rest[close + "</code>".len()..];
+    }
+    outside.push_str(rest);
+    let mut prose = String::new();
+    let mut in_fence = false;
+    for line in outside.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            saw_code = true;
+            continue;
+        }
+        if !in_fence {
+            prose.push_str(line);
+            prose.push('\n');
+        }
+    }
+    saw_code && prose.trim().is_empty()
+}
+
 /// ADR-0012 eval-v2 run state: one judge client, one per-run artifact dir
 /// (`tests/e2e_output/rag_eval_v2/{run_id}/`), the judge response cache
 /// (design §4.4, shared across run ids), and the per-question `ScoreV2` sink
@@ -1322,6 +1359,20 @@ async fn realistic_corpus_full_eval() {
             eprintln!("  FAIL: {msg}");
             if let Some(v2) = v2.as_mut() {
                 v2.record_infra(idx + 1, example, subset_name, "empty_answer");
+            }
+            if fail_fast {
+                break;
+            }
+            continue;
+        }
+        // A code-block-only answer (retrieve framing leaked through synthesis)
+        // is likewise an infrastructure/contract failure, not a wrong answer.
+        if is_code_only_answer(&chat.answer) {
+            let msg = "code_block_answer: chat.answer is code-only, no prose".to_string();
+            failures.push((example.query.clone(), msg.clone()));
+            eprintln!("  FAIL: {msg}");
+            if let Some(v2) = v2.as_mut() {
+                v2.record_infra(idx + 1, example, subset_name, "code_block_answer");
             }
             if fail_fast {
                 break;
