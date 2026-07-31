@@ -68,7 +68,7 @@ CARGO_BUILD_JOBS=2 STRUCT_STORE_DIR=$PWD/avrag-rs/storage/struct_store \
 - `crates/storage-pg/src/lib_impl/`（table_evidence 插入；`get_chunks_by_ids` 已支持，2b）
 - 配置：struct_store 目录随部署（现为 `STRUCT_STORE_DIR` env，默认 `storage/struct_store`）
 
-**状态**：◐ 进行中（2026-07-31 首窗口）——②证据入库 Rust 化 ✅（storage-pg `replace_table_evidence_chunks`，真 PG 幂等/水合/跳过三断言）、③提取器 Rust 化 ✅（struct-supervision `extract.rs`，markdown-it 语义对齐探针实证；ipd/白药/万科 三语料 `prepare()` vs `pipeline.py --emit-grids` **行级+notes 全对**）、`SuperviseInput::from_markdown` 库化入口 ✅。剩余：①表格阶段入 `document_pipeline`（**仍等 markitdown 前置**）+ worker 内 supervision loop 调用。详见 `docs/plans/2026-07-31-struct-query-w2-s4-progress.md`。
+**状态**：✅ 已完成（2026-07-31 三窗口）——首窗口 ②③ + 提取器 Rust 化；第二窗口 markitdown 唯一解析器 + 表格阶段挂接（commit b0dc1722）；收尾窗口 deploy 依赖/jvm 删除/A5/**本地验收门四环全过**（含真 bug 修复：`store_document_body_chunks` 不再擦除 table_evidence）。详见 `docs/plans/2026-07-31-struct-query-w2-s4-final-handoff.md`。
 
 **gate**：
 ```bash
@@ -87,6 +87,7 @@ E2E：经生产 ingestion 灌一篇含表 doc（ipd xlsx）→ `struct_catalog` 
 **落点**：`crates/struct-supervision/src/`（directives/store 测试）或 `scripts/struct_query_poc/check_supervise.py` 增一例。
 
 **gate**：`cargo test -p avrag-struct-supervision` 全绿含新例；断言 rotate 后表头正确 + 行数净化 + 复验全过。
+**状态**：✅ 已完成（2026-07-31 随 W2 收尾窗口并入）——`store::tests::a5_eaten_header_rotate_header_sql_recheck`：IPD 方言假表头（sheet 标题 + Unnamed:N）→ `rotate_header(header_row=1, drop_columns_matching=^Unnamed)`（守卫两侧同验：全空 Unnamed 列丢、非空保留）→ checks 全过 high_candidate + SQL 复验（COUNT + 序号自校验）。
 
 ---
 

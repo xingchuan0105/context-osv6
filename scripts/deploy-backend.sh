@@ -139,6 +139,40 @@ rsync -a --delete \
 install -m 755 "\$STAGE/docker/run-avrag-containers.sh" "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
 install -m 644 "\$STAGE/DEPLOY_META.backend.json" "\$REMOTE_ROOT/DEPLOY_META.backend.json"
 
+# markitdown CLI: production document parsing runs in the worker by invoking
+# the `markitdown` binary on PATH (env MARKITDOWN_BIN, MARKITDOWN_TIMEOUT_MS).
+# Provision it here, idempotently: skip when already installed.
+# NOTE: the old office parser service (:9090) and PDF renderer (:9091) are
+# retired — they are no longer called and this script does not deploy them.
+if command -v markitdown >/dev/null 2>&1; then
+  echo "deploy-backend: markitdown present (\$(command -v markitdown)); install skipped"
+else
+  echo "deploy-backend: installing markitdown CLI"
+  if command -v uv >/dev/null 2>&1; then
+    uv tool install markitdown
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -m pip install --user 'markitdown[all]'
+    # pip --user lands in ~/.local/bin, which non-login shells may not have on
+    # PATH; expose it via /usr/local/bin when writable.
+    if ! command -v markitdown >/dev/null 2>&1 && [[ -x "\$HOME/.local/bin/markitdown" ]]; then
+      if [[ -w /usr/local/bin ]]; then
+        ln -sf "\$HOME/.local/bin/markitdown" /usr/local/bin/markitdown
+      else
+        export PATH="\$HOME/.local/bin:\$PATH"
+      fi
+    fi
+  else
+    echo "deploy-backend: ERROR neither uv nor python3 available to install markitdown" >&2
+    exit 1
+  fi
+fi
+if ! command -v markitdown >/dev/null 2>&1; then
+  echo "deploy-backend: ERROR markitdown CLI not on PATH after install" >&2
+  exit 1
+fi
+markitdown --help >/dev/null 2>&1 || { echo "deploy-backend: ERROR 'markitdown --help' failed" >&2; exit 1; }
+echo "deploy-backend: markitdown OK (\$(command -v markitdown))"
+
 if [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" != "1" ]]; then
   bash "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
 elif [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" == "1" ]]; then

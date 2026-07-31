@@ -276,6 +276,77 @@ mod tests {
         let _ = std::fs::remove_file(&out);
     }
 
+    /// A5 回归（监督干预成功案例）：xlsx 经 markitdown 后 sheet 标题行被吃成假表头
+    /// （`华为IPD流程各阶段活动` + `Unnamed: 1..5`），真表头降为数据第 1 行。
+    /// rotate_header(header_row=1, drop_columns_matching="^Unnamed") 修复后复验全过。
+    #[test]
+    fn a5_eaten_header_rotate_header_sql_recheck() {
+        // rows[0] 假表头（sheet 标题 + Unnamed）；rows[1] 真表头；rows[2..] 数据行。
+        // 末列数据区全空 → 守卫允许丢；其余 Unnamed 列数据区非空 → 守卫保留。
+        let g = grid(&[
+            ("3", &["华为IPD流程各阶段活动", "Unnamed: 1", "Unnamed: 2", "Unnamed: 3", "Unnamed: 4", "Unnamed: 5"]),
+            ("4", &["编号", "阶段", "活动", "参与角色", "输出物", ""]),
+            ("5", &["1", "概念", "市场调研与需求分析", "市场部", "市场调研报告", ""]),
+            ("6", &["2", "计划", "产品开发计划制定", "PDT", "产品开发计划", ""]),
+            ("7", &["3", "开发", "详细设计与实现", "研发部", "产品包", ""]),
+        ]);
+
+        // 干预前：header_suspicious 不过，status=needs_diagnosis。
+        let before = crate::checks::table_report(0, &g);
+        assert!(!before
+            .checks_full
+            .iter()
+            .find(|c| c.name == "header_suspicious")
+            .unwrap()
+            .passed);
+        assert_eq!(before.status, "needs_diagnosis");
+
+        // 监督干预：apply_directive（内部 directives::apply + 确定性重跑 + rebuild_db）。
+        let input = crate::SuperviseInput {
+            doc_id: Some("a5".into()),
+            source_text: String::new(),
+            grids: vec![g],
+        };
+        let mut s = crate::session::Session::new(&input).unwrap();
+        let r = s.t_apply_directive(&serde_json::json!({
+            "table_id": "t0",
+            "directive": {
+                "action": "rotate_header",
+                "header_row": 1,
+                "drop_columns_matching": "^Unnamed",
+            },
+        }));
+        assert!(r.contains("已通过"), "{r}");
+
+        // 修复后：假表头行消失、真表头提升；全空 Unnamed 列被丢，非空列被守卫保留（6→5 列）。
+        assert_eq!(
+            s.grids[0].header(),
+            &["编号".to_string(), "阶段".to_string(), "活动".to_string(), "参与角色".to_string(), "输出物".to_string()]
+        );
+        assert_eq!(s.grids[0].n_rows(), 3);
+
+        // 复验：全部 checks 通过、status=high_candidate。
+        let after = &s.reports["t0"];
+        assert!(after.all_passed(), "{:?}", after.failed_checks);
+        assert_eq!(after.status, "high_candidate");
+
+        // 内存库复验：COUNT(*) 与序号自校验（row_ord 0 起 ↔ 编号 1..=3）。
+        let con = duckdb::Connection::open_in_memory().unwrap();
+        rebuild_db(&con, &s.grids).unwrap();
+        let n: i64 = con
+            .query_row("SELECT COUNT(*) FROM t0", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 3);
+        let seq_ok: i64 = con
+            .query_row(
+                "SELECT COUNT(*) FROM t0 WHERE \"编号\" = CAST(row_ord + 1 AS VARCHAR)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(seq_ok, 3);
+    }
+
     #[test]
     fn write_duckdb_skips_quarantine() {
         let dir = std::env::temp_dir();

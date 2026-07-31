@@ -73,16 +73,11 @@ else
   fi
 fi
 
-echo "Starting pdf-visual-renderer (scan/E-class PDF fallback; local dev)..."
-bash "${AVRAG_DIR}/scripts/pdf-renderer-up.sh" || {
-  echo "WARN: pdf-visual-renderer failed to start; text PDFs still work, scans/visual fallback will fail." >&2
-}
+# pdf-visual-renderer / office-parser 已退役（markitdown 唯一生产解析器，2026-07-31 W2）：
+# worker 只依赖 PATH 上的 markitdown CLI，不再起本地解析服务。
 
 tmux new-session -d -s "${SESSION}" -n minio \
   "MINIO_ROOT_USER='${MINIO_ROOT_USER:-minioadmin}' MINIO_ROOT_PASSWORD='${MINIO_ROOT_PASSWORD:-minioadmin}' exec minio server '${MINIO_DATA_DIR}' --address '${MINIO_API_ADDR}' --console-address '${MINIO_CONSOLE_ADDR}'"
-
-tmux new-window -t "${SESSION}" -n office \
-  "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && OFFICE_PARSER_BIND=127.0.0.1:9090 exec cargo run -p avrag-office-parser-jvm --bin office-parser-jvm"
 
 tmux new-window -t "${SESSION}" -n api \
   "cd '${AVRAG_DIR}' && set -a && source .env && set +a && export CARGO_TARGET_DIR='${CARGO_TARGET_DIR}' && exec cargo run -p avrag-api 2>&1 | tee -a '${DEV_LOG_DIR}/api.log'"

@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
   "bins/api",
-  "bins/office-parser-jvm",
   "bins/worker",
   "crates/analytics",
   "crates/app",

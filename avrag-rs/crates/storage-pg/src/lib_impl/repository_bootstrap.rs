@@ -240,7 +240,10 @@ impl BootstrapRepository {
             return Err(PgStorageError::NotFound("document not found".to_string()));
         }
 
-        sqlx::query("delete from chunks where document_id = $1")
+        // 全量重建检索族 chunk（body/summary/profile 等）；**保留 table_evidence**
+        // （struct_query 表级证据由表格阶段独立维护——检索重建若把它一并清掉，
+        // 表格阶段先跑时证据会被本方法随后擦掉，2026-07-31 本地验收实测）。
+        sqlx::query("delete from chunks where document_id = $1 and chunk_type <> 'table_evidence'")
             .bind(document_id)
             .execute(tx.inner())
             .await?;

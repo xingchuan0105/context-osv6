@@ -78,4 +78,29 @@ async fn replace_table_evidence_chunks_idempotent_and_hydratable_when_database_a
         .await
         .unwrap();
     assert_eq!(n, 0);
+
+    // 回归（2026-07-31 本地验收实测 bug）：检索重建 store_document_body_chunks
+    // 不得擦掉 table_evidence——证据由表格阶段独立维护（阶段序：struct 先于 materialize）。
+    let n = repo
+        .assets()
+        .replace_table_evidence_chunks(&ctx, document_id, &[c1.clone()])
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    let body = StoreDocumentChunkParams {
+        parse_run_id: None,
+        page: Some(1),
+        content: "body text".into(),
+        metadata: serde_json::json!({}),
+    };
+    __bootstrap
+        .store_document_body_chunks(&ctx, document_id, None, "body text", &[body])
+        .await
+        .unwrap();
+    let got = repo
+        .assets()
+        .get_chunks_by_ids(&ctx, &[c1.chunk_id])
+        .await
+        .unwrap();
+    assert_eq!(got.len(), 1, "table_evidence 须在检索重建后存活");
 }
