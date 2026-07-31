@@ -28,5 +28,8 @@ pub(crate) use pipeline::{
     ChatExecution, ChatPreflight, PipelineLane, StreamConfig, execute_pipeline,
     execute_pipeline_stream,
 };
-pub(crate) use pipeline_steps::attach_debug_trace_from_sink;
+pub(crate) use pipeline_steps::{
+    activity_counts_from_events, attach_activity_counts_from_sink, attach_debug_trace_from_sink,
+    merge_activity_counts_into_mode_debug,
+};
 pub(crate) use service::{BuildChatExecutionParams, build_chat_execution_from_result};

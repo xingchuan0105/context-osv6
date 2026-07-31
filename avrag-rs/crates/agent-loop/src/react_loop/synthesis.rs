@@ -291,6 +291,8 @@ impl SynthesisPhase {
         // degraded fallback copy — never surface a raw code block as the
         // final prose answer.
         if super::answer_contract::is_code_only_answer(&full_answer) {
+            let mut repair_counts = std::collections::BTreeMap::new();
+            repair_counts.insert("synthesis_code_answer_repair".to_string(), 1usize);
             let _ = sink
                 .emit(AgentEvent::Activity {
                     stage: "synthesis_code_answer_repair".to_string(),
@@ -298,7 +300,7 @@ impl SynthesisPhase {
                         "prose_only synthesis returned a code-only answer; one repair round follows"
                             .to_string(),
                     detail: None,
-                    counts: Default::default(),
+                    counts: repair_counts,
                     sources_preview: Vec::new(),
                 })
                 .await;
@@ -310,6 +312,8 @@ impl SynthesisPhase {
             let (repaired, _) =
                 stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
             if super::answer_contract::is_code_only_answer(&repaired) {
+                let mut violation_counts = std::collections::BTreeMap::new();
+                violation_counts.insert("synthesis_code_answer_violation".to_string(), 1usize);
                 let _ = sink
                     .emit(AgentEvent::Activity {
                         stage: "synthesis_code_answer_violation".to_string(),
@@ -317,7 +321,7 @@ impl SynthesisPhase {
                             "prose_only repair still returned a code-only answer; contract fallback used"
                                 .to_string(),
                         detail: None,
-                        counts: Default::default(),
+                        counts: violation_counts,
                         sources_preview: Vec::new(),
                     })
                     .await;

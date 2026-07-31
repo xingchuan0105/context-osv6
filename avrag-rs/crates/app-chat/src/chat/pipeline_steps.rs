@@ -117,7 +117,7 @@ pub(crate) async fn dispatch_mode(
     dispatch_agent_mode(state, request, session, stream_config).await
 }
 
-/// Legacy orchestrator path (kept for unit tests / optional re-entry).
+/// Legacy orchestrator path (kept for unit tests / optional re-entry). See docs/engineering/2026-07-31-sac-orchestrator-isolation.md.
 /// Product chat entry is single-agent ([`dispatch_agent_mode`]).
 #[allow(dead_code)]
 async fn run_orchestrator_turn(
@@ -295,6 +295,8 @@ async fn run_orchestrator_v1(
     if emit_debug_trace {
         attach_debug_trace_from_sink(&mut execution, &sink);
     }
+    attach_activity_counts_from_sink(&mut execution, &sink);
+    merge_activity_counts_into_mode_debug(&mut execution);
     let mut meta = merge_capabilities_turn_metadata(
         agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
         caps,
@@ -494,6 +496,8 @@ async fn run_general_mode(
     if emit_debug_trace {
         attach_debug_trace_from_sink(&mut execution, &sink);
     }
+    attach_activity_counts_from_sink(&mut execution, &sink);
+    merge_activity_counts_into_mode_debug(&mut execution);
     execution.assistant_turn_metadata = merge_capabilities_turn_metadata(
         agent_loop::progress::assistant_progress_turn_metadata(agent_type, &sink.events()),
         caps,
@@ -523,6 +527,70 @@ pub(crate) fn attach_debug_trace_from_sink(
             "agent_debug_trace": debug_events,
         }));
     }
+}
+
+/// Sum `Activity` event counts across the collected non-streaming events.
+/// Stage keys are stable machine identifiers emitted by agent-loop (e.g.
+/// `synthesis_code_answer_repair`); consumers fold them into
+/// `debug_metadata` / analytics without parsing prose.
+pub(crate) fn activity_counts_from_events(
+    events: &[agent_loop::events::AgentEvent],
+) -> BTreeMap<String, usize> {
+    let mut out: BTreeMap<String, usize> = BTreeMap::new();
+    for event in events {
+        if let agent_loop::events::AgentEvent::Activity { stage, counts, .. } = event {
+            let entry = out.entry(stage.clone()).or_insert(0);
+            *entry += counts.values().sum::<usize>().max(1);
+        }
+    }
+    out
+}
+
+/// Attach the folded `activity_counts` to `execution.debug_metadata`
+/// (merged into any existing debug object). Non-streaming path only —
+/// streaming consumers read Activity events from SSE directly.
+pub(crate) fn attach_activity_counts_from_sink(
+    execution: &mut ChatExecution,
+    sink: &agent_loop::events::CollectingSink,
+) {
+    let counts = activity_counts_from_events(&sink.events());
+    if counts.is_empty() {
+        return;
+    }
+    let mut meta = execution
+        .debug_metadata
+        .take()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    meta.insert(
+        "activity_counts".to_string(),
+        serde_json::to_value(counts).unwrap_or_default(),
+    );
+    execution.debug_metadata = Some(serde_json::Value::Object(meta));
+}
+
+/// Mirror the folded `activity_counts` from `debug_metadata` into the
+/// user-visible `ChatResponse.mode_debug.general` map so non-streaming
+/// harnesses can read per-stage counters from the HTTP response.
+pub(crate) fn merge_activity_counts_into_mode_debug(execution: &mut ChatExecution) {
+    let Some(counts) = execution
+        .debug_metadata
+        .as_ref()
+        .and_then(|v| v.get("activity_counts").cloned())
+    else {
+        return;
+    };
+    let mode_debug = execution.response.mode_debug.get_or_insert_with(|| {
+        contracts::chat::ModeDebug {
+            rag: None,
+            search: None,
+            general: None,
+        }
+    });
+    let general = mode_debug
+        .general
+        .get_or_insert_with(BTreeMap::new);
+    general.insert("activity_counts".to_string(), counts);
 }
 
 pub(crate) fn emit_terminal_stream_events(
@@ -571,6 +639,44 @@ pub(crate) fn emit_terminal_stream_events(
 mod tests {
     use super::*;
     use crate::orchestrator::{Channel, WorkerBriefObservability, WorkerRunObservability};
+
+    fn activity(stage: &str, counts: &[(&str, usize)]) -> agent_loop::events::AgentEvent {
+        agent_loop::events::AgentEvent::Activity {
+            stage: stage.to_string(),
+            message: "m".to_string(),
+            detail: None,
+            counts: counts
+                .iter()
+                .map(|(k, v)| (k.to_string(), *v))
+                .collect(),
+            sources_preview: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn activity_counts_folds_stage_counters() {
+        let events = vec![
+            activity("synthesis_code_answer_repair", &[("synthesis_code_answer_repair", 1)]),
+            activity("budget_exhausted", &[]),
+            activity(
+                "synthesis_code_answer_violation",
+                &[("synthesis_code_answer_violation", 1)],
+            ),
+        ];
+        let counts = activity_counts_from_events(&events);
+        assert_eq!(counts["synthesis_code_answer_repair"], 1);
+        assert_eq!(counts["synthesis_code_answer_violation"], 1);
+        assert_eq!(counts["budget_exhausted"], 1);
+    }
+
+    #[test]
+    fn activity_counts_empty_for_non_activity_events() {
+        let events = vec![agent_loop::events::AgentEvent::Done {
+            final_message: Some("ok".into()),
+            usage: None,
+        }];
+        assert!(activity_counts_from_events(&events).is_empty());
+    }
 
     fn brief_obs(channel: Channel, seq: u32) -> WorkerBriefObservability {
         WorkerBriefObservability {

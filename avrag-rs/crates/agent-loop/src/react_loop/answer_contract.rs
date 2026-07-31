@@ -938,7 +938,7 @@ pub fn contract_violation_fallback(mode_id: &str) -> String {
 /// Stricter than `parse::parse_llm_output`'s CodeBlocks classification on
 /// purpose: a prose answer that *quotes* one fenced query is a valid answer
 /// and must not trigger a repair round.
-pub(crate) fn is_code_only_answer(text: &str) -> bool {
+pub fn is_code_only_answer(text: &str) -> bool {
     let mut saw_code = false;
     let mut outside = String::new();
     let mut rest = text;
