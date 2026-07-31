@@ -47,17 +47,17 @@ let counts = chat.mode_debug
 
 ## 3. telemetry 剩余（下一窗口）
 
-- **pipeline 侧指标**：supervise.py 健康报告聚合（提取成功率 / 指令分布 / low/quarantine 率），接成可查面。
-- **真实触发率观测**：跑 `QUESTIONS=86,88,106` 切片，从 `mode_debug.general["activity_counts"]` 读 repair/violation 真实触发率，决定是否需要 C5 carryover 增强 / 预算调优（§3.1 决策依据）。
-- **预算调优**：28K token / 12 轮是否适配 struct 深调查，等触发率数据，别凭切片单轮感觉调。
+- **真实触发率已有第一轮数据**：三题 0 触发 repair/violation（`fail6_20260731-171901.log`），repair 回路尚未被真实行使过——继续积累切片数据，触发率 >0 时决定是否需要 C5 carryover 增强。
+- **预算调优**：86/106 各 1 次 `budget_exhausted`（token 耗尽），但终答均正常（C5 闸门生效）；28K/12 轮是否需调，等更多轮次数据，别凭单轮感觉调。
+- **Q88 SELECTION_MISS**：非终答问题（recall=1.0 但 selection=0），与 struct 取证无关，属既有抖动（同题两轮全 PASS 历史）。
 
 ## 4. 验收口径（延伸 §11 矩阵）
 
 | ID | 检查 | Phase | 状态 |
 |----|------|-------|------|
-| T1 | `synthesis_code_answer_repair`/`violation` Activity 计数可从非流式 HTTP 响应读出 | P2 | ✅（commit 96d2265d；单测 2 例 + agent-loop 272 全绿） |
-| T2 | pipeline 提取成功率 / 指令分布 / low/quarantine 率可查 | P2 | ⬜ |
-| T3 | 切片 86/88/106 的 repair/violation 真实触发率有数据 | P2 | ⬜ |
+| T1 | `synthesis_code_answer_repair`/`violation` Activity 计数可从非流式 HTTP 响应读出 | P2 | ✅（commit 96d2265d；单测 2 例 + agent-loop 272 全绿；切片 artifact `q0NN.json` 的 `mode_debug.general["activity_counts"]` 实证透出） |
+| T2 | pipeline 提取成功率 / 指令分布 / low/quarantine 率可查 | P2 | ✅（commit c35a7fc0 `check_telemetry.py`：ipd rate=1.0 / 白药 rate=0.0 全 needs_diagnosis，check 分布 header_suspicious×9 / header_numeric_banner×1 / empty_columns×3） |
+| T3 | 切片 86/88/106 的 repair/violation 真实触发率有数据 | P2 | ✅（log `fail6_20260731-171901.log`：三题均 0 触发；Q86 PASS / Q106 PASS / Q88 SELECTION_MISS 非终答问题；budget_exhausted 86/106 各 1 次） |
 
 ## 5. 开工顺序与依赖
 
