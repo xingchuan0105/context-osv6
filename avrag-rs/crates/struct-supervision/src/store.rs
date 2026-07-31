@@ -145,7 +145,7 @@ pub fn write_duckdb(
                 m.status.clone(),
                 serde_json::to_string(&m.checks).unwrap_or_else(|_| "[]".into()),
                 serde_json::to_string(&m.notes).unwrap_or_else(|_| "[]".into()),
-                chunk_id,
+                chunk_id.clone(),
             ],
         )?;
     }
@@ -243,13 +243,15 @@ mod tests {
         assert!(evidence[0].md.contains("| 编号 | 名称 |"));
 
         let con = duckdb::Connection::open(&out).unwrap();
-        let (status, n_rows): (String, i64) = con
-            .query_row("SELECT status, n_rows FROM _meta", [], |r| {
-                Ok((r.get(0)?, r.get(1)?))
+        let (status, n_rows, chunk_id): (String, i64, Option<String>) = con
+            .query_row("SELECT status, n_rows, evidence_chunk_id FROM _meta", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })
             .unwrap();
         assert_eq!(status, "high_candidate");
         assert_eq!(n_rows, 1);
+        // _meta.evidence_chunk_id 必须与 sidecar evidence 的 chunk_id 一致（证据水合依赖）
+        assert_eq!(chunk_id.as_deref(), Some(evidence[0].chunk_id.as_str()));
         let _ = std::fs::remove_file(&out);
     }
 
