@@ -35,3 +35,5 @@
 | cache-compression | **通过** | 0 | 文档措辞 1 |
 
 ProviderPool 必修项待用户拍板后修复（修复方向明确：回调置位交付标志 + 流式边界测试）。
+
+**✅ 必修已修复（2026-08-01）**：`complete_stream_pool` 交付标志改为 `Arc<AtomicBool>`、在内容/推理回调真正触发时置位（首事件只看 delta 的旧逻辑废除）；中间踩两坑——`Cell<bool>` 使 future 非 Send（调用方 spawn 需要，换 AtomicBool）、`move` 闭包吞掉 `&mut` 回调（去 move 改借用）。新增 2 个边界测试（本地 axum SSE server）：`pool_stream_failure_after_delivered_delta_does_not_failover`（TextStart 首事件 + 交付后流内错 → 不切换/不退款/内容不重复/下一 pick 落 member 1）、`pool_stream_failure_before_first_event_fails_over`（交付前 500 → 正常切换成功）。`cargo test -p avrag-llm --lib` **109/109**（107+2）、`cargo check -p avrag-worker` 与 `--workspace` 均 0 error。ProviderPool 验收升级为**通过**。

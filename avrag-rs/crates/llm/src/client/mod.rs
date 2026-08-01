@@ -586,8 +586,9 @@ impl LlmClient {
     }
 
     /// Streaming completion through the provider pool. Failover happens only
-    /// before the first event is delivered; once delivery has started the
-    /// stream runs to completion (or fails) on the picked key.
+    /// before any content/reasoning delta is delivered (callback-fired); once
+    /// delivery has started the stream runs to completion (or fails) on the
+    /// picked key.
     async fn complete_stream_pool(
         &self,
         pool: &std::sync::Arc<ProviderPool>,
@@ -629,20 +630,29 @@ impl LlmClient {
             };
             match first {
                 Some(Ok(event)) => {
-                    // Only once content actually starts flowing do we commit to
-                    // this pick; a bare Finish/ProviderError first event (no
-                    // delta delivered) still fails over to the next member.
-                    let delivery_started = matches!(
-                        event,
-                        LlmEvent::TextDelta { .. } | LlmEvent::ReasoningDelta { .. }
-                    );
+                    // 交付标志以「内容/推理回调真正被触发」为准：OpenAI 系协议
+                    // 正常流式响应先发 TextStart/ReasoningStart 标记再发 delta，
+                    // 仅看首事件会把交付后断流误判为未交付 → 错误退款 + failover
+                    // 重放导致调用方收到重复前缀（2026-08-01 验收实测）。
+                    // AtomicBool：Cell 会让整个 future 非 Send（调用方 spawn 需要）。
+                    let delivered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                    let delivered_c = delivered.clone();
+                    let mut content_cb = |text: &str| {
+                        delivered_c.store(true, std::sync::atomic::Ordering::Relaxed);
+                        on_content_delta(text);
+                    };
+                    let delivered_r = delivered.clone();
+                    let mut reasoning_cb = |text: &str| {
+                        delivered_r.store(true, std::sync::atomic::Ordering::Relaxed);
+                        on_reasoning_delta(text);
+                    };
                     match self
                         .consume_stream_events(
                             &mut stream,
                             Some(event),
                             &call,
-                            on_content_delta,
-                            on_reasoning_delta,
+                            &mut content_cb,
+                            &mut reasoning_cb,
                             token.clone(),
                         )
                         .await
@@ -665,7 +675,7 @@ impl LlmClient {
                             .await;
                             return Ok(response);
                         }
-                        Err(err) if delivery_started => {
+                        Err(err) if delivered.load(std::sync::atomic::Ordering::Relaxed) => {
                             // Delivery was already in progress: finish with an
                             // error and cool down the key (no refund — tokens
                             // may have been consumed).
@@ -818,5 +828,158 @@ impl LlmClient {
             _ => {}
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::routing::{LlmPoolConfig, PoolMemberConfig};
+    use crate::{ApiStyle, ChatMessage};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn provider_config(base_url: &str) -> ModelProviderConfig {
+        ModelProviderConfig {
+            base_url: base_url.to_string(),
+            api_key: "test-key".to_string(),
+            model: "test-model".to_string(),
+            timeout_ms: 5000,
+            api_style: Some(ApiStyle::OpenAi),
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        }
+    }
+
+    fn member(base_url: &str) -> PoolMemberConfig {
+        PoolMemberConfig {
+            config: provider_config(base_url),
+            api_keys: vec!["test-key".to_string()],
+        }
+    }
+
+    async fn serve(router: axum::Router) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    fn sse(body: &'static str) -> impl axum::response::IntoResponse {
+        ([(axum::http::header::CONTENT_TYPE, "text/event-stream")], body)
+    }
+
+    const ROLE_FRAME: &str =
+        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n";
+    const SUCCESS_BODY: &str = "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"B-WORLD\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\ndata: [DONE]\n\n";
+
+    /// 交付边界（2026-08-01 验收必修）：首事件是 TextStart 标记（role chunk），
+    /// 内容 delta 已交付后流内出错——不得 failover、不得退款、不得重复输出。
+    #[tokio::test]
+    async fn pool_stream_failure_after_delivered_delta_does_not_failover() {
+        let calls_a = Arc::new(AtomicUsize::new(0));
+        let calls_b = Arc::new(AtomicUsize::new(0));
+        let ca = calls_a.clone();
+        let url_a = serve(axum::Router::new().route(
+            "/chat/completions",
+            axum::routing::post(move || {
+                let c = ca.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    sse(concat!(
+                        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n",
+                        "data: {\"choices\":[{\"delta\":{\"content\":\"A-HELLO\"}}]}\n\n",
+                        "data: {not-valid-json\n\n"
+                    ))
+                }
+            }),
+        ))
+        .await;
+        let cb = calls_b.clone();
+        let url_b = serve(axum::Router::new().route(
+            "/chat/completions",
+            axum::routing::post(move || {
+                let c = cb.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    sse(SUCCESS_BODY)
+                }
+            }),
+        ))
+        .await;
+
+        let client = LlmClient::new_with_pool(
+            provider_config(&url_a),
+            LlmPoolConfig::new(vec![member(&url_a), member(&url_b)]),
+        );
+        let mut received = String::new();
+        let result = client
+            .complete_stream(
+                &[ChatMessage::user("hi")],
+                None,
+                CancellationToken::new(),
+                |t| received.push_str(t),
+                |_| {},
+            )
+            .await;
+
+        assert!(result.is_err(), "流内错误应报错返回");
+        assert_eq!(received, "A-HELLO", "内容只交付一次，不得被 failover 重放");
+        assert_eq!(calls_a.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            calls_b.load(Ordering::SeqCst),
+            0,
+            "交付后失败不得切到下一 member"
+        );
+        // KeyOnly 冷却（不退款）：下一 pick 落到 member 1。
+        let pick = client.pool.as_ref().unwrap().pick(1).unwrap();
+        assert_eq!(pick.member_idx, 1);
+    }
+
+    /// 交付前失败（首事件即 HTTP 错误）→ 正常 failover 到下一 member。
+    #[tokio::test]
+    async fn pool_stream_failure_before_first_event_fails_over() {
+        let calls_a = Arc::new(AtomicUsize::new(0));
+        let ca = calls_a.clone();
+        let url_a = serve(axum::Router::new().route(
+            "/chat/completions",
+            axum::routing::post(move || {
+                let c = ca.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR
+                }
+            }),
+        ))
+        .await;
+        let url_b = serve(axum::Router::new().route(
+            "/chat/completions",
+            axum::routing::post(|| async { sse(SUCCESS_BODY) }),
+        ))
+        .await;
+
+        let client = LlmClient::new_with_pool(
+            provider_config(&url_a),
+            LlmPoolConfig::new(vec![member(&url_a), member(&url_b)]),
+        );
+        let mut received = String::new();
+        let result = client
+            .complete_stream(
+                &[ChatMessage::user("hi")],
+                None,
+                CancellationToken::new(),
+                |t| received.push_str(t),
+                |_| {},
+            )
+            .await;
+
+        assert!(result.is_ok(), "交付前失败应 failover 成功: {result:?}");
+        assert_eq!(received, "B-WORLD");
+        assert_eq!(calls_a.load(Ordering::SeqCst), 1);
     }
 }
