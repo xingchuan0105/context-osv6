@@ -1,5 +1,10 @@
 # struct-query 线代码审查报告：BUG / DRIFT / GAP + 退役残留 + 另案诊断（2026-07-31）
 
+> **修复回执（2026-08-01）**：六轨修复已完成并全部通过 gate（分轨 commit 见本报告后续 git 历史）。
+> 摘要：H1/H2/M1/M2/M3 全修；validate_sql 族模式+逗号多关系拒、catalog sample/headers 对齐、ambiguous_relations 透出；
+> 退役残留 B1/B2/B5 + config/ir.rs/env.example/notices 全清（含 AGPL PyMuPDF 服务删除）；storage-pg D3 五项测试缺陷修复，两轮全绿零残留。
+> 未做（用户既定边界）：VPS 停服、delegate_contract.rs、双栏修复策略、106 专项、segment 精确行级、`INGESTION_PDF_MAX_PAGES` 产品决策。
+
 > 审查方式：主线 + 3 个 review subagent（R1 代码逐行审 / R2 退役残留全量定位 / R3 另案诊断）。只读，未改代码。
 > 范围：struct-query 功能线全部新代码（extract/checks/store/runner/directives/struct_query/struct_stage/markitdown/chunker 行区间/storage-pg 证据面）+ 退役面 + 另案三项。
 
