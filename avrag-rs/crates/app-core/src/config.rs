@@ -2,7 +2,8 @@ use common::{default_owner_user_id, default_user_id};
 
 use crate::config_helpers::{
     build_redis_url, default_object_root, env_bool, env_csv, env_i64, env_optional_string,
-    env_string, env_u64, env_usize, env_usize_optional, model_config_from_env,
+    env_string, env_u64, env_usize, env_usize_optional, llm_pool_config_from_env,
+    model_config_from_env,
 };
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,9 @@ pub struct AppConfig {
     pub mm_rerank: ModelProviderConfig,
     pub rerank: ModelProviderConfig,
     pub agent_llm: ModelProviderConfig,
+    /// Multi-provider pool for the agent LLM (extra keys + fallbacks); `None`
+    /// keeps the single-route behavior.
+    pub agent_llm_pool: Option<avrag_llm::LlmPoolConfig>,
     pub memory_llm: ModelProviderConfig,
     pub ingestion_llm: ModelProviderConfig,
     /// LLM for KG triplet extraction during document ingest (defaults to DeepSeek).
@@ -244,6 +248,7 @@ impl Default for AppConfig {
                 rpm_limit: None,
                 tpm_limit: None,
             },
+            agent_llm_pool: None,
             memory_llm: ModelProviderConfig {
                 base_url: "https://api.deepseek.com".to_string(),
                 api_key: String::new(),
@@ -389,6 +394,7 @@ impl AppConfig {
                 .unwrap_or(config.milvus.multimodal_vector_dim),
         );
         config.agent_llm = model_config_from_env("AGENT_LLM", &config.agent_llm, None);
+        config.agent_llm_pool = llm_pool_config_from_env("AGENT_LLM", &config.agent_llm);
         config.memory_llm = model_config_from_env("MEMORY_LLM", &config.memory_llm, None);
         config.ingestion_llm = model_config_from_env("INGESTION_LLM", &config.ingestion_llm, None);
         config.triplet_llm = model_config_from_env("TRIPLET_LLM", &config.triplet_llm, None);

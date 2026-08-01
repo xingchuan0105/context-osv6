@@ -1,4 +1,5 @@
 pub mod client;
+pub mod completion_cache;
 pub mod embedding;
 pub mod planner;
 pub mod protocols;
@@ -7,6 +8,7 @@ pub mod providers;
 pub mod rate_limiter;
 pub mod reranker;
 pub mod route;
+pub mod routing;
 pub mod schema;
 pub mod section_index;
 pub mod summary;
@@ -15,6 +17,7 @@ pub mod token_counter;
 pub mod usage_observer;
 
 pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
+pub use completion_cache::{CachedCompletion, CompletionCache};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
 pub use protocols::{
@@ -37,6 +40,10 @@ pub use route::{
     AnyRoute, Auth, DetectedProtocol, Endpoint, Framing, Route, RoutePatch,
     build_openai_chat_route, build_openai_responses_route, build_route_from_config,
     detect_protocol,
+};
+pub use routing::{
+    DEFAULT_COOLDOWN_SECS, FailureKind, LlmPoolConfig, Pick, PickError, PoolAttemptError,
+    PoolMemberConfig, ProviderPool, failure_kind,
 };
 pub use schema::{
     FinishReason, GenerationOptions, LlmError, LlmEvent, LlmRequest, MessageRole, ModelLimits,

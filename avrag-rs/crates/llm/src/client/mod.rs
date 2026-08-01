@@ -1,14 +1,15 @@
-mod rate_limit;
+pub(crate) mod rate_limit;
 mod stream_parser;
 mod types;
 
 use crate::protocols::Protocol;
 use crate::route::build_route_from_config;
-use crate::schema::{GenerationOptions, LlmEvent, LlmRequest, ToolDefinition};
+use crate::routing::{FailureKind, LlmPoolConfig, PickError, ProviderPool};
+use crate::schema::{GenerationOptions, LlmError, LlmEvent, LlmRequest, ToolDefinition};
 use crate::usage_observer::{ChatUsageRecord, TenantContext, UsageObserver};
 use crate::{AnyRoute, ModelProviderConfig};
 use anyhow::Context;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use rate_limit::ClientRateLimit;
 use std::sync::Arc;
 use stream_parser::ApiUsageRaw;
@@ -27,6 +28,10 @@ struct CompletionCall {
 pub struct LlmClient {
     pub config: ModelProviderConfig,
     route: AnyRoute,
+    /// Optional multi-provider routing layer; when present, completions and
+    /// streams go through the pool (multi-key rotation + failover) instead of
+    /// the single `route`.
+    pool: Option<std::sync::Arc<ProviderPool>>,
     rate_limit: ClientRateLimit,
     feature: String,
     stage: String,
@@ -48,15 +53,28 @@ impl std::fmt::Debug for LlmClient {
 
 impl LlmClient {
     pub fn new(config: ModelProviderConfig) -> Self {
+        Self::new_with_pool(config, LlmPoolConfig::new(Vec::new()))
+    }
+
+    /// Build a client with an optional multi-provider pool. When `pool_config`
+    /// has members, all completions/streams route through the pool; otherwise
+    /// behavior is identical to [`Self::new`].
+    pub fn new_with_pool(config: ModelProviderConfig, pool_config: LlmPoolConfig) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(config.timeout_ms))
             .build()
             .expect("reqwest client should build");
         let rate_limit = ClientRateLimit::from_config(&config);
         let route = build_route_from_config(&config, client);
+        let pool = if pool_config.is_empty() {
+            None
+        } else {
+            Some(std::sync::Arc::new(ProviderPool::new(pool_config)))
+        };
         Self {
             config,
             route,
+            pool,
             rate_limit,
             feature: "agent_loop".to_string(),
             stage: String::new(),
@@ -127,11 +145,32 @@ impl LlmClient {
         json_mode: bool,
         max_tokens: Option<u32>,
     ) -> LlmRequest {
+        self.build_llm_request_with(
+            &self.config,
+            messages,
+            temperature,
+            stream,
+            tools,
+            json_mode,
+            max_tokens,
+        )
+    }
+
+    fn build_llm_request_with(
+        &self,
+        config: &ModelProviderConfig,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        stream: bool,
+        tools: Option<&[contracts::ToolSpec]>,
+        json_mode: bool,
+        max_tokens: Option<u32>,
+    ) -> LlmRequest {
         let tool_defs = tools
             .map(|tools| tools.iter().map(ToolDefinition::from).collect())
             .unwrap_or_default();
 
-        LlmRequest::new(messages.to_vec(), self.config.clone()).with_options(GenerationOptions {
+        LlmRequest::new(messages.to_vec(), config.clone()).with_options(GenerationOptions {
             temperature,
             max_tokens,
             stream,
@@ -168,6 +207,7 @@ impl LlmClient {
         model: &str,
         usage: &ApiUsageRaw,
         cached_tokens_for_metrics: u64,
+        track_local_limits: bool,
     ) {
         telemetry::prometheus::observe_llm_call(
             "generic",
@@ -184,8 +224,12 @@ impl LlmClient {
             usage.completion_tokens() as u64,
             cached_tokens_for_metrics,
         );
-        self.rate_limit
-            .record_usage(call.pre_deducted, usage.total_tokens() as usize);
+        // Pool-backed calls settle limits inside the picked key's limiter;
+        // only the single-route path tracks the client-level limiter here.
+        if track_local_limits {
+            self.rate_limit
+                .record_usage(call.pre_deducted, usage.total_tokens() as usize);
+        }
 
         if let Some((observer, tenant)) = &self.observer {
             let record = ChatUsageRecord {
@@ -218,6 +262,11 @@ impl LlmClient {
         json_mode: bool,
         max_tokens: Option<u32>,
     ) -> anyhow::Result<LlmResponse> {
+        if let Some(pool) = &self.pool {
+            return self
+                .complete_non_stream_pool(pool, messages, temperature, tools, json_mode, max_tokens)
+                .await;
+        }
         let call = self.prepare_completion(messages)?;
         let request = self.build_llm_request(
             messages,
@@ -245,6 +294,66 @@ impl LlmClient {
                 response.usage.cached_tokens,
             ),
             response.usage.cached_tokens as u64,
+            true,
+        ).await;
+
+        Ok(response)
+    }
+
+    /// Non-streaming completion through the provider pool: rotates keys and
+    /// fails over across members until one attempt succeeds.
+    async fn complete_non_stream_pool(
+        &self,
+        pool: &std::sync::Arc<ProviderPool>,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        tools: Option<&[contracts::ToolSpec]>,
+        json_mode: bool,
+        max_tokens: Option<u32>,
+    ) -> anyhow::Result<LlmResponse> {
+        let estimated = self.rate_limit.estimate_input_tokens(messages);
+        let started_at = std::time::Instant::now();
+        let owned_messages = messages.to_vec();
+        let owned_tools = tools.map(|tools| tools.to_vec());
+
+        let response = pool
+            .try_each(estimated, |pick| {
+                let messages = owned_messages.clone();
+                let tools = owned_tools.clone();
+                let client = self.clone();
+                async move {
+                    let request = client.build_llm_request_with(
+                        &pick.config,
+                        &messages,
+                        temperature,
+                        false,
+                        tools.as_deref(),
+                        json_mode,
+                        max_tokens,
+                    );
+                    pick.route.generate(request).await
+                }
+            })
+            .await
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+
+        let call = CompletionCall {
+            started_at,
+            provider: response.usage.provider.clone(),
+            configured_model: response.model.clone(),
+            pre_deducted: 0,
+        };
+        self.record_completion_success(
+            &call,
+            &response.model,
+            &ApiUsageRaw::from_token_counts(
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.total_tokens,
+                response.usage.cached_tokens,
+            ),
+            response.usage.cached_tokens as u64,
+            false,
         ).await;
 
         Ok(response)
@@ -296,6 +405,19 @@ impl LlmClient {
         mut on_content_delta: impl FnMut(&str),
         mut on_reasoning_delta: impl FnMut(&str),
     ) -> anyhow::Result<LlmResponse> {
+        if let Some(pool) = &self.pool {
+            return self
+                .complete_stream_pool(
+                    pool,
+                    messages,
+                    temperature,
+                    token,
+                    &mut on_content_delta,
+                    &mut on_reasoning_delta,
+                )
+                .await;
+        }
+
         let call = self.prepare_completion(messages)?;
 
         if self.route.is_openai_chat() {
@@ -415,6 +537,7 @@ impl LlmClient {
                 parsed.usage.cached_tokens,
             ),
             parsed.usage.cached_tokens as u64,
+            true,
         ).await;
 
         Ok(parsed)
@@ -431,10 +554,176 @@ impl LlmClient {
     ) -> anyhow::Result<LlmResponse> {
         let request = self.build_llm_request(messages, temperature, true, None, false, None);
         let mut stream = self.route.stream(request);
+        let response = self
+            .consume_stream_events(
+                &mut stream,
+                None,
+                call,
+                on_content_delta,
+                on_reasoning_delta,
+                token,
+            )
+            .await?;
+        self.record_completion_success(
+            call,
+            &response.model,
+            &ApiUsageRaw::from_token_counts(
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.total_tokens,
+                response.usage.cached_tokens,
+            ),
+            response.usage.cached_tokens as u64,
+            true,
+        )
+        .await;
+        Ok(response)
+    }
+
+    /// Streaming completion through the provider pool. Failover happens only
+    /// before the first event is delivered; once delivery has started the
+    /// stream runs to completion (or fails) on the picked key.
+    async fn complete_stream_pool(
+        &self,
+        pool: &std::sync::Arc<ProviderPool>,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        token: CancellationToken,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<LlmResponse> {
+        let estimated = self.rate_limit.estimate_input_tokens(messages);
+        let mut last_error: Option<anyhow::Error> = None;
+        loop {
+            let pick = match pool.pick(estimated) {
+                Ok(pick) => pick,
+                Err(PickError::NoCapacity) => break,
+            };
+            let call = CompletionCall {
+                started_at: std::time::Instant::now(),
+                provider: pick.provider.clone(),
+                configured_model: pick.model.clone(),
+                pre_deducted: pick.pre_deducted,
+            };
+            let request = self.build_llm_request_with(
+                &pick.config,
+                messages,
+                temperature,
+                true,
+                None,
+                false,
+                None,
+            );
+            let mut stream = pick.route.stream(request);
+            let first = tokio::select! {
+                event = stream.next() => event,
+                _ = token.cancelled() => {
+                    pool.report_failure(&pick, FailureKind::NotRetryable, true);
+                    anyhow::bail!("LLM request cancelled");
+                }
+            };
+            match first {
+                Some(Ok(event)) => {
+                    // Only once content actually starts flowing do we commit to
+                    // this pick; a bare Finish/ProviderError first event (no
+                    // delta delivered) still fails over to the next member.
+                    let delivery_started =
+                        matches!(event, LlmEvent::TextDelta { .. } | LlmEvent::ReasoningDelta { .. });
+                    match self
+                        .consume_stream_events(
+                            &mut stream,
+                            Some(event),
+                            &call,
+                            on_content_delta,
+                            on_reasoning_delta,
+                            token.clone(),
+                        )
+                        .await
+                    {
+                        Ok(response) => {
+                            pool.report_success(&pick, response.usage.total_tokens as usize);
+                            self.record_completion_success(
+                                &call,
+                                &response.model,
+                                &ApiUsageRaw::from_token_counts(
+                                    response.usage.prompt_tokens,
+                                    response.usage.completion_tokens,
+                                    response.usage.total_tokens,
+                                    response.usage.cached_tokens,
+                                ),
+                                response.usage.cached_tokens as u64,
+                                false,
+                            )
+                            .await;
+                            return Ok(response);
+                        }
+                        Err(err) if delivery_started => {
+                            // Delivery was already in progress: finish with an
+                            // error and cool down the key (no refund — tokens
+                            // may have been consumed).
+                            pool.report_failure(&pick, FailureKind::KeyOnly, false);
+                            return Err(err);
+                        }
+                        Err(err) => {
+                            // Failed before any content was delivered:
+                            // treat as a provider-level failure and fail over.
+                            pool.report_failure(&pick, FailureKind::Provider, true);
+                            last_error = Some(err);
+                        }
+                    }
+                }
+                Some(Err(err)) => {
+                    let kind = crate::routing::failure_kind(&err);
+                    pool.report_failure(&pick, kind, true);
+                    last_error = Some(Self::map_route_error(err));
+                    if kind == FailureKind::NotRetryable {
+                        break;
+                    }
+                }
+                None => {
+                    pool.report_failure(&pick, FailureKind::Provider, true);
+                    last_error = Some(anyhow::anyhow!("LLM stream ended before any event"));
+                }
+            }
+        }
+        match last_error {
+            Some(err) => Err(err),
+            None => Err(anyhow::anyhow!(
+                "no LLM pool candidate available (rate-limited or in cooldown)"
+            )),
+        }
+    }
+
+    /// Consume a routed stream from `first_event` (or from the stream head)
+    /// until completion, folding deltas into the response.
+    async fn consume_stream_events<S>(
+        &self,
+        stream: &mut S,
+        first_event: Option<LlmEvent>,
+        call: &CompletionCall,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+        token: CancellationToken,
+    ) -> anyhow::Result<LlmResponse>
+    where
+        S: Stream<Item = Result<LlmEvent, LlmError>> + Unpin,
+    {
         let mut content = String::new();
         let mut reasoning = String::new();
         let model = call.configured_model.clone();
         let mut usage = ApiUsageRaw::from_token_counts(0, 0, 0, 0);
+
+        if let Some(event) = first_event {
+            Self::apply_stream_event(
+                event,
+                &mut content,
+                &mut reasoning,
+                &mut usage,
+                on_content_delta,
+                on_reasoning_delta,
+                call,
+            )?;
+        }
 
         loop {
             let next = tokio::select! {
@@ -444,32 +733,16 @@ impl LlmClient {
             let Some(event) = next else {
                 break;
             };
-            match event.map_err(Self::map_route_error)? {
-                LlmEvent::TextDelta { text, .. } => {
-                    content.push_str(&text);
-                    on_content_delta(&text);
-                }
-                LlmEvent::ReasoningDelta { text, .. } => {
-                    reasoning.push_str(&text);
-                    on_reasoning_delta(&text);
-                }
-                LlmEvent::Finish {
-                    usage: Some(event_usage),
-                    ..
-                } => {
-                    usage = ApiUsageRaw::from_token_counts(
-                        event_usage.prompt_tokens,
-                        event_usage.completion_tokens,
-                        event_usage.total_tokens,
-                        event_usage.cached_tokens,
-                    );
-                }
-                LlmEvent::ProviderError { message, .. } => {
-                    Self::record_call_failure(call);
-                    anyhow::bail!(message);
-                }
-                _ => {}
-            }
+            let event = event.map_err(Self::map_route_error)?;
+            Self::apply_stream_event(
+                event,
+                &mut content,
+                &mut reasoning,
+                &mut usage,
+                on_content_delta,
+                on_reasoning_delta,
+                call,
+            )?;
         }
 
         if content.is_empty() {
@@ -480,7 +753,7 @@ impl LlmClient {
             content = reasoning.clone();
         }
 
-        let response = LlmResponse {
+        Ok(LlmResponse {
             content,
             reasoning_content: if reasoning.is_empty() {
                 None
@@ -497,10 +770,44 @@ impl LlmClient {
             },
             model: model.clone(),
             tool_calls: None,
-        };
+        })
+    }
 
-        self.record_completion_success(call, &model, &usage, usage.cached_token_count() as u64).await;
-
-        Ok(response)
+    fn apply_stream_event(
+        event: LlmEvent,
+        content: &mut String,
+        reasoning: &mut String,
+        usage: &mut ApiUsageRaw,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+        call: &CompletionCall,
+    ) -> anyhow::Result<()> {
+        match event {
+            LlmEvent::TextDelta { text, .. } => {
+                content.push_str(&text);
+                on_content_delta(&text);
+            }
+            LlmEvent::ReasoningDelta { text, .. } => {
+                reasoning.push_str(&text);
+                on_reasoning_delta(&text);
+            }
+            LlmEvent::Finish {
+                usage: Some(event_usage),
+                ..
+            } => {
+                *usage = ApiUsageRaw::from_token_counts(
+                    event_usage.prompt_tokens,
+                    event_usage.completion_tokens,
+                    event_usage.total_tokens,
+                    event_usage.cached_tokens,
+                );
+            }
+            LlmEvent::ProviderError { message, .. } => {
+                Self::record_call_failure(call);
+                anyhow::bail!(message);
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }

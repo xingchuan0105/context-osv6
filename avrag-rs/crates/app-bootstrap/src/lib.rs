@@ -159,8 +159,8 @@ fn resolve_prompts_root() -> PathBuf {
 pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     let auth = auth_context_from_config(&config);
     let llm_ctx = LlmContext::new(
-        make_llm_client(&config.agent_llm),
-        make_llm_client(&config.memory_llm),
+        make_llm_client(&config.agent_llm, config.agent_llm_pool.clone()),
+        make_llm_client(&config.memory_llm, None),
     );
     let chatmemory = None;
     let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
@@ -287,8 +287,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     };
 
     let llm_ctx = LlmContext::new(
-        make_llm_client(&config.agent_llm),
-        make_llm_client(&config.memory_llm),
+        make_llm_client(&config.agent_llm, config.agent_llm_pool.clone()),
+        make_llm_client(&config.memory_llm, None),
     );
     let chat_persistence_adapter = pg
         .as_ref()

@@ -19,8 +19,14 @@ pub fn auth_context_from_config(config: &AppConfig) -> AuthContext {
         .with_request_id("config-bootstrap")
 }
 
-pub fn make_llm_client(config: &ModelProviderConfig) -> Option<LlmClient> {
-    config.to_llm_config().map(LlmClient::new)
+pub fn make_llm_client(
+    config: &ModelProviderConfig,
+    pool: Option<avrag_llm::LlmPoolConfig>,
+) -> Option<LlmClient> {
+    config.to_llm_config().map(|llm_config| {
+        let pool = pool.unwrap_or_else(|| avrag_llm::LlmPoolConfig::new(Vec::new()));
+        LlmClient::new_with_pool(llm_config, pool)
+    })
 }
 
 pub fn build_unified_agent_service(
