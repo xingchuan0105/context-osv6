@@ -57,19 +57,16 @@ version: "4.1"
 ```python
 import asyncio
 
-async def main():
-    chunks, hits, g = await asyncio.gather(
-        client.dense("概念定义"),
-        client.lexical("保修年限"),
-        client.grep(r"\|\s*概念阶段\s*\|", regex=True, context=2),
-    )
-    print("dense n=", len(chunks), "| lexical n=", len(hits),
-          "| grep total_hits=", g["total_hits"], "| truncated=", g.get("truncated"))
-    for h in g["hits"][:5]:
-        print(h["line"], h["text"][:100], h.get("before"), h.get("after"))
-    await client.save("cands.json", chunks)
-
-asyncio.run(main())
+chunks, hits, g = await asyncio.gather(
+    client.dense("概念定义"),
+    client.lexical("保修年限"),
+    client.grep(r"\|\s*概念阶段\s*\|", regex=True, context=2),
+)
+print("dense n=", len(chunks), "| lexical n=", len(hits),
+      "| grep total_hits=", g["total_hits"], "| truncated=", g.get("truncated"))
+for h in g["hits"][:5]:
+    print(h["line"], h["text"][:100], h.get("before"), h.get("after"))
+await client.save("cands.json", chunks)
 ```
 
 ## 空结果、截断与失败
