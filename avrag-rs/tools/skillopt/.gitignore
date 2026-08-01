@@ -1,0 +1,6 @@
+# 虚拟环境与运行产物（落地期不提交）
+.venv/
+__pycache__/
+*.pyc
+outputs/
+_generated_splits/
