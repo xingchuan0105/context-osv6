@@ -22,6 +22,7 @@ const ALIASED_TOOLS: &[&str] = &[
     "index_lookup",
     "doc_grep",
     "doc_read_lines",
+    "struct_query",
 ];
 
 /// Parse `SELECTED:` / `SELECTED：` / `选择:` / `选择：` lines into alias
@@ -77,6 +78,8 @@ pub fn alias_chunk_ids_in_order(tool_results: &[ToolResult]) -> Vec<String> {
         let Some(data) = tr.data.as_ref() else {
             continue;
         };
+        // struct_query carries `chunks` (table-level evidence md) like other
+        // aliased tools; dense/lexical/grep carry a chunk list too.
         let list = data
             .as_array()
             .or_else(|| data.get("chunks").and_then(|v| v.as_array()));
@@ -187,6 +190,36 @@ mod tests {
             resolve_selected_chunk_ids("SELECTED: #3, #1", &results),
             vec!["c3".to_string(), "c1".to_string()]
         );
+    }
+
+    #[test]
+    fn struct_query_chunks_join_alias_namespace() {
+        // struct_query returns `chunks` (table-level evidence md) like dense/grep;
+        // bridge aliases it (ALIASED_METHODS), host replays in tool-result order.
+        let results = vec![
+            tr(
+                "dense_retrieval",
+                serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
+            ),
+            tr(
+                "struct_query",
+                serde_json::json!({
+                    "columns": ["阶段", "cnt"],
+                    "rows": [["验证", "59"], ["发布", "30"]],
+                    "chunks": [{"chunk_id": "c4", "text": "| 阶段 | cnt |\n| 验证 | 59 |"}],
+                }),
+            ),
+        ];
+        assert_eq!(
+            resolve_selected_chunk_ids("SELECTED: #2", &results),
+            vec!["c4".to_string()]
+        );
+        // Non-aliased struct_catalog must not enter the namespace.
+        let with_catalog = vec![tr(
+            "struct_catalog",
+            serde_json::json!({"relations": [{"table_name": "t0"}]}),
+        )];
+        assert!(alias_chunk_ids_in_order(&with_catalog).is_empty());
     }
 
     #[test]

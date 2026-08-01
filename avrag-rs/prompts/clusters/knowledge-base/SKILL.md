@@ -123,6 +123,7 @@ Claim checklist (copy and tick against returns):
 
 - **行计数** → `grep` + 采用 `total_hits`（不要肉眼数 hits、不要按列去重）。
 - **表内计数 / 过滤 / 表序 first** → `struct_catalog` 给出可见表名与列名；`struct_query` 执行单条 SELECT；「第一个」= `row_ord` 升序第一行（表出现序），非编号字典序；catalog 为空 = 该 doc 无表格存储，此情形 grep 仍可用。
+- **表内总数（如某类对象的总数）** → `struct_query` 聚合（COUNT/SUM/GROUP BY）是确定路径；看到部分分域计数而未见总数时，总数仍处于未覆盖状态，聚合查询可闭合它（表按行存储，`rows` 单元格给出聚合值，不是结果集行数）。
 - **表内「第一个 / 先后」** → 按 **回传中该过滤条件下的出现顺序**（或显式序号列）；编码字符串不做排序键。
 - **金额 / 活动号 / 表内字面** → 优先 `lexical` 或 `grep`；`dense` 仅作定位线索。
 
@@ -133,3 +134,5 @@ Claim checklist (copy and tick against returns):
 `SELECTED: #1, #3`
 
 编号来自回传中的 alias。历史轮次回传里已出现的 alias 仍有效。
+
+终答采用的**每个主张**都应能指向回传中的 alias：只圈部分命中时，未圈的主张在证据面仍处于无引用状态（judge 按引用圈定的命中核对支撑）。

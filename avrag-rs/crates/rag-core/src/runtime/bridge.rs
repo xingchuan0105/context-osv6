@@ -80,10 +80,7 @@ impl RuntimeBridge {
                 .get("query")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned),
-            "fetch" => args
-                .get("url")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned),
+            "fetch" => args.get("url").and_then(|v| v.as_str()).map(str::to_owned),
             _ => None,
         }
     }
@@ -269,10 +266,7 @@ impl RuntimeBridge {
                         pattern,
                         doc_ids,
                         regex: args.get("regex").and_then(|v| v.as_bool()).unwrap_or(false),
-                        context: args
-                            .get("context")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as u32,
+                        context: args.get("context").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                         max_hits: args
                             .get("max_hits")
                             .and_then(|v| v.as_u64())
@@ -485,7 +479,9 @@ impl HostBridge for RuntimeBridge {
         let mut data = Self::tool_result_to_bridge_data(&result);
 
         // K2: inject retrieval-log alias (`#1 #2 …`) into chunk lists the sandbox sees.
-        const ALIASED_METHODS: &[&str] = &["dense", "lexical", "grep"];
+        // struct_query's `chunks` carrier is the table-level evidence md (query
+        // result set rendered), so it joins the same alias namespace.
+        const ALIASED_METHODS: &[&str] = &["dense", "lexical", "grep", "struct_query"];
         if ALIASED_METHODS.contains(&canonical)
             && let Some(items) = data.get_mut("chunks").and_then(|v| v.as_array_mut())
         {

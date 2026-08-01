@@ -15,6 +15,7 @@ const RAG_ANSWER_CHUNK_TOOLS: &[&str] = &[
     "doc_summary",
     "doc_grep",
     "doc_read_lines",
+    "struct_query",
 ];
 
 /// Web evidence from SaC host (still tagged `web_search` / `web_fetch` on capture).
@@ -174,6 +175,15 @@ pub fn tool_result_has_chunks(result: &ToolResult) -> bool {
                 .and_then(|l| l.as_array())
                 .is_some_and(|a| !a.is_empty())
                 || chunk_array_non_empty(data)
+        }
+        "struct_query" => {
+            // Table-query evidence: non-empty `chunks` (table-level md) or `rows`
+            // (result set) counts as answer-grade material even before citation.
+            chunk_array_non_empty(data)
+                || data
+                    .get("rows")
+                    .and_then(|r| r.as_array())
+                    .is_some_and(|a| !a.is_empty())
         }
         _ => chunk_array_non_empty(data),
     }
