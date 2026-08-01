@@ -343,7 +343,8 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
         if let Some(&ti) = total_rows.first() {
             let tr = &data[ti];
             // 叶子行：所有首格不命中 TOTAL_LABEL_RE 的数据行
-            let detail_idxs: std::collections::HashSet<usize> = (0..data.len())
+            // BTreeSet：f64 求和顺序确定性（HashSet 迭代序跨进程随机 → detail 末位抖动）
+            let detail_idxs: std::collections::BTreeSet<usize> = (0..data.len())
                 .filter(|j| {
                     !data[*j]
                         .cells

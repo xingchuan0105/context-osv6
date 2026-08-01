@@ -52,27 +52,30 @@ impl DocumentType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ParseBackend {
-    /// Historical wire name (`edge_parse_pdf`). Post-P4 digital text uses [`Self::LiteParsePdf`].
+    /// Historical IR only (`edge_parse_pdf`). Do not emit on new ingest.
     EdgeParsePdf,
+    /// Historical IR only (raster-render PDF pages). Do not emit on new ingest.
     VisualRasterPdf,
+    /// Standalone image files via PaddleOCR（现役，图片路径）。
     PaddleOcrPdf,
-    /// LiteParse digital text extraction (canonical post-P4 PDF text backend).
+    /// Historical IR only (LiteParse digital text). Do not emit on new ingest.
     LiteParsePdf,
-    /// LiteParse B-route figure enrichment (VLM caption / asset metadata).
+    /// Historical IR only (LiteParse figure enrichment). Do not emit on new ingest.
     LiteParseFigure,
     /// Historical IR only (pre-P4 MinerU OCR PDF). Do not emit on new ingest.
     MineruPdfOcr,
     /// Historical IR only (pre-P4 MinerU image OCR). Do not emit on new ingest.
     MineruImage,
+    /// Historical IR only (office service 时代 docx 后端)。Do not emit on new ingest.
     Docx4jDocx,
+    /// Historical IR only (office service 时代 xlsx/pptx/ppt 后端)。Do not emit on new ingest.
     PoiXlsx,
     PoiPptx,
     PoiPpt,
     HtmlLocal,
     TextLocal,
     CodeLocal,
-    /// T3: calamine in-process xlsx/xls grid parse (replaces the office
-    /// service's XML tag stripper for Excel files).
+    /// Historical IR only (calamine 进程内 Excel 解析)。Do not emit on new ingest.
     CalamineExcel,
     /// markitdown subprocess parse → markdown (sole document parse path;
     /// xls/xlsx/doc/docx/ppt/pptx/pdf/txt/md/html/csv/code all route here).
@@ -87,9 +90,14 @@ impl ParseBackend {
         matches!(
             self,
             Self::EdgeParsePdf
+                | Self::VisualRasterPdf
                 | Self::LiteParsePdf
                 | Self::LiteParseFigure
                 | Self::CalamineExcel
+                | Self::Docx4jDocx
+                | Self::PoiXlsx
+                | Self::PoiPptx
+                | Self::PoiPpt
                 | Self::MineruPdfOcr
                 | Self::MineruImage
         )

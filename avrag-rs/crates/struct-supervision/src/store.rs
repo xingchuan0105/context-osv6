@@ -70,14 +70,40 @@ pub fn rebuild_db(con: &duckdb::Connection, grids: &[Grid]) -> duckdb::Result<()
 
 /// 落库（与 `pipeline.write_duckdb` 对齐）：grids + metas → `<out_path>.duckdb`；
 /// 返回 evidence chunk 列表（调用方写 sidecar）。
+/// 原子写（审核建议 J1）：先写同目录临时文件再 rename——写半路失败旧库原样保留
+/// （旧实现先 remove_file 再写，半路失败时旧库已失、新库残缺且 _line_map 不重建）。
 pub fn write_duckdb(
     grids: &[Grid],
     metas: &[TableMeta],
     out_path: &Path,
 ) -> anyhow::Result<Vec<EvidenceChunk>> {
-    if out_path.exists() {
-        std::fs::remove_file(out_path)?;
+    let tmp_path = out_path.with_extension(format!("duckdb.tmp-{}", std::process::id()));
+    let _ = std::fs::remove_file(&tmp_path);
+    // inner 返回即连接闭合（checkpoint），随后原子改名。
+    match write_duckdb_inner(grids, metas, &tmp_path) {
+        Ok(evidence) => {
+            let rename_result = std::fs::rename(&tmp_path, out_path);
+            let _ = std::fs::remove_file(tmp_path.with_extension("wal"));
+            match rename_result {
+                Ok(()) => Ok(evidence),
+                Err(e) => {
+                    let _ = std::fs::remove_file(&tmp_path);
+                    Err(e.into())
+                }
+            }
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp_path);
+            Err(e)
+        }
     }
+}
+
+fn write_duckdb_inner(
+    grids: &[Grid],
+    metas: &[TableMeta],
+    out_path: &Path,
+) -> anyhow::Result<Vec<EvidenceChunk>> {
     let con = duckdb::Connection::open(out_path)?;
     con.execute_batch(
         "CREATE TABLE _meta (table_name VARCHAR, caption VARCHAR, unit VARCHAR, table_kind VARCHAR, \
