@@ -127,45 +127,53 @@ impl Session {
 
     /// 简报（对齐 `supervise.Session.briefing`；LLM 的首条 user 消息）。
     pub fn briefing(&self, doc_name: &str) -> String {
-        let mut parts = vec![format!(
-            "文档「{doc_name}」的表格提取与校验已完成。共 {} 张表。校验由 SQL 确定性执行,其数值即事实。\n",
-            self.grids.len()
-        )];
+        let mut per_table = Vec::new();
         for (tid, r) in &self.reports {
             let idx: usize = tid[1..].parse().unwrap_or(0);
             let g = &self.grids[idx];
-            parts.push(format!(
-                "---\n表 {tid} | {} 列 × {} 行 | 状态:{}",
-                r.headers.len(),
-                r.n_rows,
-                r.status
-            ));
-            parts.push(format!("表头:{:?}", r.headers));
             let mut samples: Vec<&crate::grid::Row> = g.data().iter().take(2).collect();
             if r.n_rows > 2 {
                 samples.push(g.data().last().unwrap());
             }
-            for s in samples {
-                let row: Vec<String> = s.cells.iter().map(|c| clip(c, CELL_BR)).collect();
-                parts.push(format!("  采样: {}", row.join(" | ")));
-            }
-            if r.all_passed() {
-                parts.push("校验:全部通过".to_string());
+            let sample_rows: Vec<String> = samples
+                .iter()
+                .map(|s| {
+                    let row: Vec<String> = s.cells.iter().map(|c| clip(c, CELL_BR)).collect();
+                    format!("  采样: {}", row.join(" | "))
+                })
+                .collect();
+            let check_lines = if r.all_passed() {
+                "校验:全部通过".to_string()
             } else {
-                for c in &r.failed_checks {
-                    parts.push(format!("校验失败:{} — {}", c.name, c.detail));
-                }
-            }
-            if !g.notes.is_empty() {
-                parts.push(format!("管线备注:{:?}", g.notes));
-            }
+                r.failed_checks
+                    .iter()
+                    .map(|c| format!("校验失败:{} — {}", c.name, c.detail))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            let notes_line = if g.notes.is_empty() {
+                String::new()
+            } else {
+                format!("管线备注:{:?}", g.notes)
+            };
+            let mut row = BTreeMap::new();
+            row.insert("table_id".to_string(), tid.clone());
+            row.insert("n_cols".to_string(), r.headers.len().to_string());
+            row.insert("n_rows".to_string(), r.n_rows.to_string());
+            row.insert("status".to_string(), r.status.to_string());
+            row.insert("headers".to_string(), format!("{:?}", r.headers));
+            row.insert("sample_rows".to_string(), sample_rows.join("\n"));
+            row.insert("check_lines".to_string(), check_lines);
+            row.insert("notes_line".to_string(), notes_line);
+            per_table.push(row);
         }
-        parts.push(
-            "---\n状态为「待诊断」的表存在至少一项失败校验。全部表给出终态(high/low/quarantine)\
-             并完成语义标注后调用 done。"
-                .to_string(),
-        );
-        parts.join("\n")
+        crate::prompts::obs(
+            "health-report",
+            crate::prompts::ObsCtx::new()
+                .key("doc_name", doc_name)
+                .key("n_tables", self.grids.len().to_string())
+                .block("per_table", per_table),
+        )
     }
 
     /// annotate：批量语义标注并给出终态置信度（守卫：隔离终态不被覆盖；
@@ -175,19 +183,24 @@ impl Session {
         for t in tables {
             let tid = t.get("table_id").and_then(|v| v.as_str()).unwrap_or("");
             if !self.reports.contains_key(tid) {
-                out.push(format!("{tid}: 不存在,标注未记录"));
+                out.push(crate::prompts::obs(
+                    "annotate",
+                    crate::prompts::ObsCtx::new().pick("case", 0).key("table_id", tid),
+                ));
                 continue;
             }
             if self.finals.get(tid).map(|f| f.excluded).unwrap_or(false) {
-                out.push(format!(
-                    "{tid}: 已处于隔离/排除终态,标注未生效(终态不被后续标注覆盖)"
+                out.push(crate::prompts::obs(
+                    "annotate",
+                    crate::prompts::ObsCtx::new().pick("case", 1).key("table_id", tid),
                 ));
                 continue;
             }
             let failing = !self.reports[tid].all_passed();
             if t.get("confidence").and_then(|v| v.as_str()) == Some("high") && failing {
-                out.push(format!(
-                    "{tid}: 校验未全部通过,confidence=high 未生效(守卫);请以 low 终态或先修复"
+                out.push(crate::prompts::obs(
+                    "annotate",
+                    crate::prompts::ObsCtx::new().pick("case", 2).key("table_id", tid),
                 ));
                 continue;
             }
@@ -214,14 +227,23 @@ impl Session {
                     notes_add: None,
                 },
             );
-            out.push(format!(
-                "{tid}: 已标注 table_kind={}, confidence={}",
-                t.get("table_kind").and_then(|v| v.as_str()).unwrap_or(""),
-                t.get("confidence").and_then(|v| v.as_str()).unwrap_or("")
+            out.push(crate::prompts::obs(
+                "annotate",
+                crate::prompts::ObsCtx::new()
+                    .pick("case", 3)
+                    .key("table_id", tid)
+                    .key(
+                        "table_kind",
+                        t.get("table_kind").and_then(|v| v.as_str()).unwrap_or(""),
+                    )
+                    .key(
+                        "confidence",
+                        t.get("confidence").and_then(|v| v.as_str()).unwrap_or(""),
+                    ),
             ));
         }
         if out.is_empty() {
-            "未提供 tables".to_string()
+            crate::prompts::obs("annotate", crate::prompts::ObsCtx::new().pick("case", 4))
         } else {
             out.join("\n")
         }
@@ -231,7 +253,10 @@ impl Session {
     pub fn t_fetch_slice(&self, args: &serde_json::Value) -> String {
         let tid = args.get("table_id").and_then(|v| v.as_str()).unwrap_or("");
         if !self.reports.contains_key(tid) {
-            return format!("{tid}: 不存在");
+            return crate::prompts::obs(
+                "table-missing",
+                crate::prompts::ObsCtx::new().key("table_id", tid),
+            );
         }
         let idx: usize = tid[1..].parse().unwrap_or(0);
         let g = &self.grids[idx];
@@ -246,10 +271,15 @@ impl Session {
             let rows: Vec<String> = (a..=end)
                 .map(|i| format!("L{i}: {}", clip(&self.lines[i - 1], CELL_SLICE)))
                 .collect();
-            return format!(
-                "源行 {a}–{end}(共 {} 行)原文切片;未覆盖部分仍处于未观察状态:\n{}",
-                self.lines.len(),
-                rows.join("\n")
+            return crate::prompts::obs(
+                "slice",
+                crate::prompts::ObsCtx::new()
+                    .key("table_id", tid)
+                    .key("from", a.to_string())
+                    .key("to", end.to_string())
+                    .key("total", self.lines.len().to_string())
+                    .key("slice", rows.join("\n"))
+                    .pick("slice_kind", 0),
             );
         }
         let a = args
@@ -268,10 +298,15 @@ impl Session {
                 format!("row {}: {}", a + j, cells.join(" | "))
             })
             .collect();
-        format!(
-            "表 {tid} 第 {a}–{end} 行(共 {} 行)切片;未覆盖行仍处于未观察状态:\n{}",
-            data.len(),
-            rows.join("\n")
+        crate::prompts::obs(
+            "slice",
+            crate::prompts::ObsCtx::new()
+                .key("table_id", tid)
+                .key("from", a.to_string())
+                .key("to", end.to_string())
+                .key("total", data.len().to_string())
+                .key("slice", rows.join("\n"))
+                .pick("slice_kind", 1),
         )
     }
 
@@ -283,8 +318,14 @@ impl Session {
             .unwrap_or("")
             .trim()
             .trim_end_matches(';');
+        let guard = || {
+            crate::prompts::obs(
+                "check-guard",
+                crate::prompts::ObsCtx::new().key("sql", clip(sql, 120)),
+            )
+        };
         if !sql.to_lowercase().starts_with("select") {
-            return format!("校验 SQL 未通过只读守卫,未执行:{}", clip(sql, 120));
+            return guard();
         }
         // 精确禁词（词边界，大小写不敏感）
         for kw in FORBIDDEN_SQL {
@@ -295,7 +336,7 @@ impl Session {
                 .expect("forbidden regex")
                 .is_match(sql)
             {
-                return format!("校验 SQL 未通过只读守卫,未执行:{}", clip(sql, 120));
+                return guard();
             }
         }
         // 族模式禁词（如 read_csv_auto 等变体逃逸词边界）
@@ -306,12 +347,17 @@ impl Session {
                 .expect("forbidden family regex")
                 .is_match(sql)
             {
-                return format!("校验 SQL 未通过只读守卫,未执行:{}", clip(sql, 120));
+                return guard();
             }
         }
         let mut stmt = match self.con.prepare(sql) {
             Ok(stmt) => stmt,
-            Err(e) => return format!("SQL 执行失败:{e}"),
+            Err(e) => {
+                return crate::prompts::obs(
+                    "check-error",
+                    crate::prompts::ObsCtx::new().key("error", e.to_string()),
+                )
+            }
         };
         let rows = match stmt.query_map([], |row| {
             let mut cells = Vec::new();
@@ -321,7 +367,12 @@ impl Session {
             Ok(cells)
         }) {
             Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<Vec<String>>>(),
-            Err(e) => return format!("SQL 执行失败:{e}"),
+            Err(e) => {
+                return crate::prompts::obs(
+                    "check-error",
+                    crate::prompts::ObsCtx::new().key("error", e.to_string()),
+                )
+            }
         };
         let trunc = rows.len() > MAX_CHECK_ROWS;
         let body: Vec<String> = rows
@@ -329,15 +380,20 @@ impl Session {
             .take(MAX_CHECK_ROWS)
             .map(|r| clip(&format!("{r:?}"), 300))
             .collect();
-        format!(
-            "run_check 完成,返回 {}{}:\n{}",
-            rows.len().min(MAX_CHECK_ROWS),
-            if trunc { "(已截断)" } else { "" },
-            if body.is_empty() {
-                "(空结果)".to_string()
-            } else {
-                body.join("\n")
-            }
+        crate::prompts::obs(
+            "check-result",
+            crate::prompts::ObsCtx::new()
+                .key("sql", sql)
+                .key("returned", rows.len().min(MAX_CHECK_ROWS).to_string())
+                .key("truncated_note", if trunc { "(已截断)" } else { "" })
+                .key(
+                    "rows",
+                    if body.is_empty() {
+                        "(空结果)".to_string()
+                    } else {
+                        body.join("\n")
+                    },
+                ),
         )
     }
 
@@ -349,8 +405,12 @@ impl Session {
             .cloned()
             .unwrap_or(serde_json::json!({}));
         if !self.reports.contains_key(tid) {
-            return format!("指令未通过校验,未被应用。表 {tid} 不存在。");
+            return crate::prompts::obs(
+                "directive-missing",
+                crate::prompts::ObsCtx::new().key("table_id", tid),
+            );
         }
+        let action = d.get("action").and_then(|v| v.as_str()).unwrap_or("");
         match crate::directives::apply(self, tid, &d) {
             Ok(()) => {
                 let idx: usize = tid[1..].parse().unwrap_or(0);
@@ -358,7 +418,13 @@ impl Session {
                 self.reports
                     .insert(tid.to_string(), crate::checks::table_report(idx, g));
                 if let Err(e) = rebuild_db(&self.con, &self.grids) {
-                    return format!("指令已应用,但内存库重建失败:{e}");
+                    return crate::prompts::obs(
+                        "directive-applied",
+                        crate::prompts::ObsCtx::new()
+                            .pick("rebuild_ok", 1)
+                            .key("table_id", tid)
+                            .key("rebuild_error", e.to_string()),
+                    );
                 }
                 let r = &self.reports[tid];
                 let checks = if r.all_passed() {
@@ -370,19 +436,25 @@ impl Session {
                         .collect::<Vec<_>>()
                         .join("; ")
                 };
-                format!(
-                    "指令 {} 已通过 schema 校验与确定性守卫,应用于表 {tid};确定性重跑已完成。\n\
-                     新健康报告:{} 列 × {} 行 | 状态:{}\n表头:{:?}\n校验:{checks}",
-                    d.get("action").and_then(|v| v.as_str()).unwrap_or(""),
-                    r.headers.len(),
-                    r.n_rows,
-                    r.status,
-                    r.headers
+                crate::prompts::obs(
+                    "directive-applied",
+                    crate::prompts::ObsCtx::new()
+                        .pick("rebuild_ok", 0)
+                        .key("action", action)
+                        .key("table_id", tid)
+                        .key("n_cols", r.headers.len().to_string())
+                        .key("n_rows", r.n_rows.to_string())
+                        .key("status", r.status.to_string())
+                        .key("headers", format!("{:?}", r.headers))
+                        .key("checks", checks),
                 )
             }
-            Err(reason) => format!(
-                "指令 {} 未通过校验,未被应用。表 {tid} 状态未变。\n拒绝原因:{reason}",
-                d.get("action").and_then(|v| v.as_str()).unwrap_or("")
+            Err(reason) => crate::prompts::obs(
+                "directive-rejected",
+                crate::prompts::ObsCtx::new()
+                    .key("action", action)
+                    .key("table_id", tid)
+                    .key("reason", reason.to_string()),
             ),
         }
     }
@@ -391,7 +463,10 @@ impl Session {
     pub fn t_quarantine(&mut self, args: &serde_json::Value) -> String {
         let tid = args.get("table_id").and_then(|v| v.as_str()).unwrap_or("");
         if !self.reports.contains_key(tid) {
-            return format!("{tid}: 不存在");
+            return crate::prompts::obs(
+                "table-missing",
+                crate::prompts::ObsCtx::new().key("table_id", tid),
+            );
         }
         self.finals.insert(
             tid.to_string(),
@@ -405,9 +480,14 @@ impl Session {
                 ..Default::default()
             },
         );
-        format!(
-            "{tid}: 已隔离,原因:{}. 该表不出现在查询侧 catalog。",
-            args.get("reason").and_then(|v| v.as_str()).unwrap_or("")
+        crate::prompts::obs(
+            "quarantine",
+            crate::prompts::ObsCtx::new()
+                .key("table_id", tid)
+                .key(
+                    "reason",
+                    args.get("reason").and_then(|v| v.as_str()).unwrap_or(""),
+                ),
         )
     }
 }

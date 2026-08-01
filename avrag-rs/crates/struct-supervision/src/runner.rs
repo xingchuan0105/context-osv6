@@ -121,9 +121,11 @@ pub async fn supervise(
             // 模型未调工具：以观察提示当前未完成表数（第三人称）
             let un = session.unfinished();
             if !un.is_empty() {
-                messages.push(ChatMessage::user(format!(
-                    "本轮未发生工具调用。仍处于未终态的表:{un:?}(共 {} 张)。",
-                    un.len()
+                messages.push(ChatMessage::user(crate::prompts::obs(
+                    "no-tool",
+                    crate::prompts::ObsCtx::new()
+                        .key("unfinished", format!("{un:?}"))
+                        .key("n", un.len().to_string()),
                 )));
             }
             continue;
@@ -132,7 +134,10 @@ pub async fn supervise(
             match crate::tools::dispatch(&mut session, call, &mut log) {
                 Ok(Some(summary)) => {
                     done_summary = Some(summary);
-                    messages.push(build_tool_message(&call_ids[idx], "监督结束。"));
+                    messages.push(build_tool_message(
+                        &call_ids[idx],
+                        &crate::prompts::obs("done", crate::prompts::ObsCtx::new()),
+                    ));
                 }
                 Ok(None) => {
                     let out = log.last().map(|(_, _, o)| o.clone()).unwrap_or_default();
@@ -151,8 +156,11 @@ pub async fn supervise(
             && turns % 8 == 0
         {
             let un = session.unfinished();
-            messages.push(ChatMessage::user(format!(
-                "进度观察:已进行 {turns} 轮;仍未终态的表:{un:?}。"
+            messages.push(ChatMessage::user(crate::prompts::obs(
+                "progress",
+                crate::prompts::ObsCtx::new()
+                    .key("turns", turns.to_string())
+                    .key("unfinished", format!("{un:?}")),
             )));
         }
     }

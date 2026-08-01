@@ -10,6 +10,10 @@ use heavytail::StyleParams;
 
 use crate::refine_types::{RefineContext, RefineLoopBudget};
 
+/// 轮次计数模板（LLM 可见文案，见 `prompts/system/hints/round-counter.md`）。
+const ROUND_COUNTER_TEMPLATE: &str =
+    include_str!("../../../prompts/system/hints/round-counter.md");
+
 /// Chinese round-counter block + machine-readable budget tag for the LLM.
 pub fn build_write_refine_round_counter_zh(
     react_iteration: u8,
@@ -22,42 +26,109 @@ pub fn build_write_refine_round_counter_zh(
 ) -> String {
     let round = react_iteration.saturating_add(1);
     let react_remaining = max_react.saturating_sub(round);
-    let mut lines = vec![format!(
-        "- ReAct 轮次：第 {round} / {max_react} 轮（剩余 {react_remaining} 轮，硬上限 {max_react}）"
-    )];
-    if budget.revise_rounds_capped() {
-        let rev_rem = max_revise.saturating_sub(revise_used);
-        lines.push(format!(
-            "- 有效 revise：已用 {revise_used} / {max_revise}（剩余 {rev_rem}）"
-        ));
-    } else {
-        lines.push(format!("- 有效 revise：已用 {revise_used}（本轮无 revise 上限）"));
-    }
-    if budget.research_capped() {
-        let res_rem = max_research.saturating_sub(research_used);
-        lines.push(format!(
-            "- research 调用：已用 {research_used} / {max_research}（剩余 {res_rem}）"
-        ));
-    } else {
-        lines.push(format!(
-            "- research 调用：已用 {research_used}（本轮无 research 上限）"
-        ));
-    }
-    if round >= max_react {
-        lines.push(
-            "- **最后一轮**：本轮结束后将强制收工；若 band 已过关请立即 `write_refine_finish`。"
-                .to_string(),
-        );
+    let rev_rem = max_revise.saturating_sub(revise_used);
+    let res_rem = max_research.saturating_sub(research_used);
+    let revise_pick = if budget.revise_rounds_capped() { 0 } else { 1 };
+    let research_pick = if budget.research_capped() { 0 } else { 1 };
+    let final_pick = if round >= max_react {
+        0
     } else if react_remaining <= 1 {
-        lines.push(
-            "- **临近轮次上限**：请优先处理 hapax/zipf 与优先清单，避免空转。"
-                .to_string(),
-        );
+        1
+    } else {
+        2
+    };
+    let keys = [
+        ("round", round.to_string()),
+        ("max_react", max_react.to_string()),
+        ("react_remaining", react_remaining.to_string()),
+        ("revise_used", revise_used.to_string()),
+        ("max_revise", max_revise.to_string()),
+        ("rev_rem", rev_rem.to_string()),
+        ("research_used", research_used.to_string()),
+        ("max_research", max_research.to_string()),
+        ("res_rem", res_rem.to_string()),
+    ];
+    let picks = [
+        ("revise_pick", revise_pick),
+        ("research_pick", research_pick),
+        ("final_pick", final_pick),
+    ];
+    render_round_counter(ROUND_COUNTER_TEMPLATE, &keys, &picks)
+}
+
+/// 极简模板渲染：`{key}` 字面替换 + `{name|备选0|备选1}` 按索引选择
+/// （备选内只允许 `{key}`，不含 `|`）。
+fn render_round_counter(template: &str, keys: &[(&str, String)], picks: &[(&str, usize)]) -> String {
+    fn key_of<'a>(keys: &'a [(&str, String)], k: &str) -> Option<&'a str> {
+        keys.iter().find(|(n, _)| *n == k).map(|(_, v)| v.as_str())
     }
-    format!(
-        "## 轮次计数\n\n{body}\n\n<write_refine_round round=\"{round}\" max=\"{max_react}\" remaining=\"{react_remaining}\" revise_used=\"{revise_used}\" research_used=\"{research_used}\" />",
-        body = lines.join("\n"),
-    )
+    fn pick_of(picks: &[(&str, usize)], p: &str) -> Option<usize> {
+        picks.iter().find(|(n, _)| *n == p).map(|(_, v)| *v)
+    }
+    fn scan_close(s: &str) -> Option<usize> {
+        let mut depth = 0usize;
+        for (i, c) in s.char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                    depth -= 1;
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+    fn render_keys_only(s: &str, keys: &[(&str, String)]) -> String {
+        let mut out = String::new();
+        let mut rest = s;
+        while let Some(start) = rest.find('{') {
+            out.push_str(&rest[..start]);
+            let tail = &rest[start + 1..];
+            match scan_close(tail) {
+                Some(close) => {
+                    if let Some(v) = key_of(keys, &tail[..close]) {
+                        out.push_str(v);
+                    }
+                    rest = &tail[close + 1..];
+                }
+                None => {
+                    out.push('{');
+                    rest = tail;
+                }
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+    let mut out = String::new();
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start + 1..];
+        let Some(close) = scan_close(tail) else {
+            out.push('{');
+            rest = tail;
+            continue;
+        };
+        let seg = &tail[..close];
+        if let Some(pipe) = seg.find('|') {
+            let name = &seg[..pipe];
+            let content = &tail[pipe + 1..close];
+            let alts = content.split('|').collect::<Vec<_>>();
+            let idx = pick_of(picks, name).unwrap_or(0);
+            if let Some(alt) = alts.get(idx.min(alts.len().saturating_sub(1))) {
+                out.push_str(&render_keys_only(alt, keys));
+            }
+        } else if let Some(v) = key_of(keys, seg) {
+            out.push_str(v);
+        }
+        rest = &tail[close + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 pub fn strip_task_section(brief: &str) -> String {

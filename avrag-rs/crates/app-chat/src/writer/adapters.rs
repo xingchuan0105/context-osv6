@@ -168,7 +168,10 @@ impl WriteRefineModeHost for AppWriteRefineMode {
         if let Some(p) = persona {
             out.push_str("\n\n");
             out.push_str(&heavytail::persona::render_persona_system_zh(p));
-            out.push_str("\n\n**内化人格：影响措辞与取舍，禁止在正文自我介绍或引用小传事实**");
+            out.push_str("\n\n");
+            out.push_str(include_str!(
+                "../../../../prompts/system/hints/persona-internalize.md"
+            ));
         }
         out.push_str("\n\n");
         out.push_str(&budget_hint);

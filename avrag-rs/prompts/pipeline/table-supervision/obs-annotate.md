@@ -1,0 +1,1 @@
+{case|{table_id}: 不存在,标注未记录|{table_id}: 已处于隔离/排除终态,标注未生效(终态不被后续标注覆盖)|{table_id}: 校验未全部通过,confidence=high 未生效(守卫);low 终态或修复后重试是可行路径|{table_id}: 已标注 table_kind={table_kind}, confidence={confidence}|未提供 tables}

@@ -134,9 +134,16 @@ pub fn dispatch(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            log.push(("done".into(), args, "监督结束。".into()));
+            log.push((
+                "done".into(),
+                args,
+                crate::prompts::obs("done", crate::prompts::ObsCtx::new()),
+            ));
             Ok(Some(summary))
         }
-        other => Err(format!("未知工具:{other}")),
+        other => Err(crate::prompts::obs(
+            "unknown-tool",
+            crate::prompts::ObsCtx::new().key("tool", other),
+        )),
     }
 }

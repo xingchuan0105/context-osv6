@@ -3,6 +3,14 @@ use super::disclosure_plan::{DisclosurePlanner, DisclosureRenderer, parse_synthe
 use crate::runtime::AgentRequest;
 use agent_tools::capability::CapabilityRegistry;
 
+/// 用户偏好提示模板（prompts/system/hints/，第三人称观察式，{hint} 运行时替换）。
+const FORMAT_HINT_TMPL: &str = include_str!("../../../../prompts/system/hints/format-hint.md");
+const WRITING_HINT_TMPL: &str = include_str!("../../../../prompts/system/hints/writing-hint.md");
+
+fn subst_hint(template: &str, hint: &str) -> String {
+    template.replace("{hint}", hint)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoopPhase {
     Retrieve,
@@ -127,9 +135,7 @@ impl ContextAssembler {
         let mut hint_parts = Vec::new();
 
         if let Some(hint) = request.format_hint.as_deref() {
-            hint_parts.push(format!(
-                "\n<format_hint>\nUser prefers format skill: {hint}. You may still choose a different format if inappropriate.\n</format_hint>"
-            ));
+            hint_parts.push(subst_hint(FORMAT_HINT_TMPL, hint));
         }
 
         if let Some(hint) = request
@@ -137,9 +143,7 @@ impl ContextAssembler {
             .get("writing_hint")
             .and_then(|v| v.as_str())
         {
-            hint_parts.push(format!(
-                "\n<writing_hint>\nUser prefers writing style: {hint}. You may override if inappropriate.\n</writing_hint>"
-            ));
+            hint_parts.push(subst_hint(WRITING_HINT_TMPL, hint));
         }
 
         let choices = parse_synthesis_choices(request);

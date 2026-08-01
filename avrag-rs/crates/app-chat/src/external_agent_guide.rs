@@ -2,10 +2,14 @@ use contracts::chat::AgentOperationGuide;
 
 use agent_tools::progressive::{DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry};
 
-const RAG_SUMMARY: &str = "RAG uses SaC Python SDK only. Emit <code language=\"python\"> blocks calling client.dense, client.lexical, client.grep, etc. Do not call native retrieval tool schemas.";
-const SEARCH_SUMMARY: &str = "Search uses SaC Python SDK: client.web(query) and client.fetch(url) inside <code language=\"python\"> blocks. No native web_search/web_fetch function calls.";
-const INDEX_SUMMARY: &str = "Ingestion uses MCP workspace tools plus HTTP PUT for file bytes. Flow: create_upload → PUT upload_url → complete_upload → poll document_status until completed.";
-const WORKSPACE_CREATE_SUMMARY: &str = "Personal product: humans create workspaces in the UI, then share workspace_id plus a workspace API key (index+query). Do not rely on account/org-scoped keys for normal automation.";
+const RAG_SUMMARY: &str =
+    include_str!("../../../prompts/agent-guide/rag-summary.md");
+const SEARCH_SUMMARY: &str =
+    include_str!("../../../prompts/agent-guide/search-summary.md");
+const INDEX_SUMMARY: &str =
+    include_str!("../../../prompts/agent-guide/index-summary.md");
+const WORKSPACE_CREATE_SUMMARY: &str =
+    include_str!("../../../prompts/agent-guide/workspace-create-summary.md");
 
 /// Prefetch / MCP operation guides for external agents.
 ///
