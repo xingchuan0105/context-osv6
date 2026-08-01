@@ -75,8 +75,8 @@ def run_batch(
 
     for n in ids:
         row = rows.get(n, {})
-        hard, soft = score_row(row)
         item = item_by_id.get(str(n), {})
+        hard, soft, skipped = score_row(row, no_context=bool(item.get("no_context")))
         answer = load_artifact_answer(v2_dir, n)
 
         # 落轨迹（SkillOpt reflect 依赖）
@@ -90,6 +90,12 @@ def run_batch(
         (task_dir / "conversation.json").write_text(
             json.dumps(conversation, ensure_ascii=False, indent=2), encoding="utf-8",
         )
+
+        if skipped:
+            # JUDGE_ERROR（judge API 故障）不是 skill 质量问题:轨迹留档,
+            # 但不进聚合/训练,避免把好 skill 按 0 分惩罚(2026-08-01 评分点修正)。
+            print(f"  [rollout] {n} JUDGE_ERROR → skip (轨迹已留档)")
+            continue
 
         results.append({
             "id": str(n),

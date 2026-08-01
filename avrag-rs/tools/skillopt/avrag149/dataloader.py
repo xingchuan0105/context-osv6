@@ -43,6 +43,9 @@ class Avrag149DataLoader(SplitDataLoader):
                     "mode": ex.get("mode", ""),
                     "capabilities": ex.get("capabilities", []),
                     "expected_should_answer": ex.get("expected_should_answer", True),
+                    # non-RAG 题（无 source_chunks）：faithfulness not_applicable，
+                    # soft 分只用 correctness（2026-08-01 评分点修正）
+                    "no_context": not bool(ex.get("source_chunks")),
                 })
 
         if not items:

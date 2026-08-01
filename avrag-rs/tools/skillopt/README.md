@@ -25,6 +25,10 @@ train_avrag149.py
 - **优化单元**：`prompts/system/agent-base.md`（config `env.prompt_target` 可切换任意 prompts 文件）。
 - **评分口径**：`hard = 1 iff label == "PASS"`（与 nightly PASS 计数一致）；
   `soft = mean(correctness, faithfulness)`。
+  - **JUDGE_ERROR 题跳过**（judge API 故障非 skill 质量问题，不进聚合/训练，
+    轨迹留档供 rejudge 补判）——2026-08-01 评分点修正。
+  - **non-RAG 题（无 source_chunks）`soft` 只用 correctness**——faithfulness
+    not_applicable 占位 1.0 无区分度——2026-08-01 评分点修正。
 - **数据集**：`avrag-rs/tests/rag_quality/golden_set_realistic.json`（149 题），
   按 subsets 展平顺序编号 1..149（与 `E2E_QUESTIONS` 索引一致），
   `split_ratio 7:2:1` 确定性划分 train/val/test。

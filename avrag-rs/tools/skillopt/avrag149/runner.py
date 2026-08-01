@@ -206,16 +206,24 @@ def parse_report(v2_dir: str | os.PathLike) -> tuple[dict[int, dict], dict]:
     return rows, meta
 
 
-def score_row(row: dict) -> tuple[int, float]:
-    """评分规则（与 nightly 判定口径对齐）：
+def score_row(row: dict, no_context: bool = False) -> tuple[int, float, bool]:
+    """评分规则（与 nightly 判定口径对齐）。
 
     hard = 1 iff label == "PASS"；soft = mean(correctness, faithfulness) ∈ [0,1]。
+    - ``no_context``（non-RAG 题，golden 无 source_chunks）：faithfulness 为
+      not_applicable 占位 1.0、无区分度，soft 只用 correctness（2026-08-01 评分点修正）。
+    - 返回 ``(hard, soft, skip)``：``skip=True`` 表示评测故障（JUDGE_ERROR，
+      judge API 失败）——不是 skill 质量问题，调用方应从聚合/训练中排除，
+      不得按 0 分惩罚（2026-08-01 评分点修正）。
     """
-    hard = 1 if row.get("label") == "PASS" else 0
+    label = row.get("label", "")
+    if label == "JUDGE_ERROR":
+        return 0, 0.0, True
+    hard = 1 if label == "PASS" else 0
     c = row.get("correctness", 0.0)
     f = row.get("faithfulness", 0.0)
-    soft = (c + f) / 2.0
-    return hard, soft
+    soft = c if no_context else (c + f) / 2.0
+    return hard, soft, False
 
 
 def load_artifact_answer(v2_dir: str | os.PathLike, n: int) -> str:
