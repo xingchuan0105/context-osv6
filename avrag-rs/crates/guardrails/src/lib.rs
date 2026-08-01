@@ -207,7 +207,7 @@ mod tests {
         assert!(!report.blocked);
     }
 
-    /// NOTE: leaked text mirrors current `prompts/capabilities/knowledge-base.md`
+    /// NOTE: leaked text mirrors current `prompts/capabilities/knowledge-base/contract.md`
     /// (SaC: main-path KB capability prompt). If that prompt is rewritten, update
     /// this verbatim. (C7: fenced prompt examples are ignored by the detector;
     /// this unfenced paragraph remains blocked.)

@@ -374,8 +374,11 @@ mod tests {
     fn can_lookup_skills() {
         let registry = CapabilityRegistry::standard();
         assert!(registry.skill("knowledge-base").is_some());
-        assert!(registry.skill("metadata").is_some());
-        assert!(registry.skill("capability-knowledge-base").is_some());
+        assert!(registry.skill("docscope").is_some());
+        assert!(!registry.skill("metadata").is_some());
+        // Capability contracts register under their frontmatter name
+        // (capability-* ids come from the legacy flat capabilities/*.md scan).
+        assert!(registry.skill("capability-knowledge-base").is_none());
         // U9 (2026-07): synthesis answer skills retired to prompts/deprecated/.
         assert!(registry.skill("rag-answer").is_none());
         assert!(registry.skill("chat").is_none());
@@ -464,10 +467,13 @@ mod tests {
     #[test]
     fn capability_knowledge_base_reads_frontmatter() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.skill("capability-knowledge-base").is_some());
-        assert!(registry.skill("capability-web").is_some());
+        // Capability skills register under their SKILL.md frontmatter `name`
+        // (capability-* ids were the legacy flat capabilities/*.md scan, gone).
+        assert!(registry.skill("capability-knowledge-base").is_none());
+        assert!(registry.skill("capability-web").is_none());
         assert!(registry.skill("agent-base").is_some());
         assert!(registry.skill("knowledge-base").is_some());
+        assert!(registry.skill("search").is_some());
     }
 
     #[test]

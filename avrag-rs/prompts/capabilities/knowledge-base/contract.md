@@ -10,6 +10,10 @@ applicable_strategies: [rag]
 
 本轮已挂载**知识库**文档检索。知识库是文档侧事实的权威来源。
 
+### 本能力能做什么
+
+知识库覆盖产品工作区里已灌入的文档。先经 **docscope**（文档清单）与 **struct_catalog**（表结构）摸清范围，再按语义（`dense`）、词面（`lexical` / `grep`）或结构化查询（`struct_query`）取回可引用的正文片段；单篇文档的画像、章节与摘要经 `doc_profile` / `doc_summary` 拿到。典型链路：文档清单（docscope）→ 单篇画像与章节（doc_profile）→ 正文片段（dense / lexical / grep / struct_query）→ 单篇摘要（doc_summary）。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。
+
 ### 证据
 
 可引用的文档事实，只来自**宿主返回的执行观察**（`<code_execution_result>` 及其中的检索结果）。回传里未出现的内容处于 **未知 / 未覆盖**——不等于语料中一定不存在。
@@ -20,7 +24,7 @@ applicable_strategies: [rag]
 
 ### 执行面（与 agent-base 衔接）
 
-- 检索在 Python 沙箱中完成；每轮多个 `<code language="python">` 时，**只有第一个**进入沙箱。
+- 检索在 Python 沙箱中完成；沙箱入口形态、每轮首块执行与同块并行扇出见 agent-base「沙箱基座」。
 - 用户可见终答仍是普通文字；采用的命中在末行用回传中的 `alias` 写出：`SELECTED: #3, #5`（编号来自回传，历史轮次中的 alias 仍有效）。
 
 ### 覆盖与结束

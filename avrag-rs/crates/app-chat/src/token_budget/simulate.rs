@@ -157,7 +157,7 @@ fn simulate_rag(scenario: &Scenario) -> SimulationResult {
         // --- Planner ---
         // Live equivalent of the RAG retrieve-phase system prompt (P2: monomode
         // rag-system retired; capability-rag is the main-path worker prompt).
-        let plan_system = include_str!("../../../../prompts/capabilities/knowledge-base.md");
+        let plan_system = include_str!("../../../../prompts/capabilities/knowledge-base/contract.md");
         let mut plan_user = format!("Query: {}\n", scenario.query);
         if !scenario.history.is_empty() {
             plan_user.push_str("Conversation history:\n");

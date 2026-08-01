@@ -2,7 +2,7 @@ mode: search
 # SaC: assemble_mode always loads system/agent-base, then
 # capabilities/web when 联网 is mounted.
 # Internal mode id `search`. Model-facing: 联网 / web. Skill id for thick world model: `search`.
-system_prompt_base: prompts/capabilities/web.md
+system_prompt_base: prompts/capabilities/web/contract.md
 # Empty tool_pool: LLM uses client.web / client.fetch in sandbox. auto_fallback is host-side only.
 tool_pool: []
 inject_retrieval_query: true

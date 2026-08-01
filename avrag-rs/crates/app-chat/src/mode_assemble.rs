@@ -12,9 +12,9 @@ use common::AppError;
 /// Always-on single-agent main system voice.
 const AGENT_BASE: &str = "prompts/system/agent-base.md";
 /// Mounted when product knowledge-base retrieval is enabled (internal mode id may still be `rag`).
-const CAPABILITY_KNOWLEDGE_BASE: &str = "prompts/capabilities/knowledge-base.md";
+const CAPABILITY_KNOWLEDGE_BASE: &str = "prompts/capabilities/knowledge-base/contract.md";
 /// Mounted when product web retrieval is enabled.
-const CAPABILITY_WEB: &str = "prompts/capabilities/web.md";
+const CAPABILITY_WEB: &str = "prompts/capabilities/web/contract.md";
 
 #[derive(Debug, Clone)]
 pub struct AssembledMode {
@@ -278,8 +278,8 @@ mod tests {
             assembled.system_prompt_parts,
             vec![
                 "prompts/system/agent-base.md".to_string(),
-                "prompts/capabilities/knowledge-base.md".to_string(),
-                "prompts/capabilities/web.md".to_string(),
+                "prompts/capabilities/knowledge-base/contract.md".to_string(),
+                "prompts/capabilities/web/contract.md".to_string(),
             ]
         );
         assert!(
@@ -402,7 +402,7 @@ mod tests {
             assembled.system_prompt_parts,
             vec![
                 "prompts/system/agent-base.md".to_string(),
-                "prompts/capabilities/knowledge-base.md".to_string(),
+                "prompts/capabilities/knowledge-base/contract.md".to_string(),
             ]
         );
         assert_eq!(

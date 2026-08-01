@@ -414,7 +414,7 @@ fn inject_cluster_runtime_context(
     request: &AgentRequest,
 ) -> String {
     // WP3 renames the cluster to `docscope`; accept both until the switch is done.
-    if cluster_id == "metadata" || cluster_id == "docscope" {
+    if cluster_id == "docscope" {
         if let Some(meta) = &request.docscope_metadata {
             let json = serde_json::to_string_pretty(meta).unwrap_or_default();
             return format!("{body}\n\n<docscope_metadata>\n{json}\n</docscope_metadata>");

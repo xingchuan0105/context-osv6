@@ -139,8 +139,11 @@ mod tests {
         assert!(registry.skill("format").is_some());
         assert!(registry.skill("memory").is_some());
         assert!(registry.skill("search").is_some());
-        assert!(registry.skill("capability-knowledge-base").is_some());
-        assert!(registry.skill("capability-web").is_some());
+        assert!(registry.skill("docscope").is_some());
+        // Capability skills register under SKILL.md frontmatter `name`
+        // (capability-* ids were the legacy flat capabilities/*.md scan, gone).
+        assert!(registry.skill("capability-knowledge-base").is_none());
+        assert!(registry.skill("capability-web").is_none());
         assert!(registry.skill("agent-base").is_some());
         // P2 (2026-07-20): monomode *-system prompts retired to prompts/deprecated/.
         assert!(registry.skill("rag-system").is_none());

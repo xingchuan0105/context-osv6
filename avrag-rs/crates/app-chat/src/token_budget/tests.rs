@@ -83,7 +83,7 @@ fn typical_user_single_session_estimate() {
     // --- Measure actual system-prompt sizes ---
     let chat_system = "You are a direct chat assistant. Answer from the current conversation and general knowledge only. Do not invent document or web citations; if the user asks for document evidence or fresh web facts, explain that they should switch to RAG or WebSearch mode.";
     // P2: main-path RAG worker prompt is capability-rag (monomode retired).
-    let rag_plan_sys = include_str!("../../../../prompts/capabilities/knowledge-base.md");
+    let rag_plan_sys = include_str!("../../../../prompts/capabilities/knowledge-base/contract.md");
     let rag_eval_sys = include_str!("../../../../prompts/deprecated/synthesis/rag-answer.md");
     let search_eval_sys = include_str!("../../../../prompts/deprecated/synthesis/search-answer.md");
 

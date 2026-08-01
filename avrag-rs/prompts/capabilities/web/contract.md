@@ -10,6 +10,10 @@ applicable_strategies: [search]
 
 本轮已挂载**联网**检索。网页侧可引用事实只来自**宿主返回的执行观察**中的搜索或打开页面结果。
 
+### 本能力能做什么
+
+联网检索覆盖互联网上的公开信息：`client.web(query)` 并行扇出多语种 query 取回搜索摘要，摘要不足以支撑主张时 `client.fetch(url)` 拉取页面全文；若同时挂载知识库，`client.dense` 等检索方法可用以对照本地文档。网页事实与知识库事实分源引用（`[[web:n]]` 与 `SELECTED: #n`）。方法签名与返回字段以已加载的 search skill 为准，本段不重复签名。
+
 ### 证据
 
 方法与返回语义见已加载的 **search** skill。未进入沙箱的代码、仿造的执行结果、非约定 tool/XML 外壳，都不是网页证据。
@@ -18,7 +22,7 @@ applicable_strategies: [search]
 
 ### 执行面（与 agent-base 衔接）
 
-- 在 Python 沙箱中调用检索；每轮多个 `<code language="python">` 时，**只有第一个**进入沙箱。
+- 在 Python 沙箱中调用检索；沙箱入口形态、每轮首块执行与同块并行扇出见 agent-base「沙箱基座」。
 - 用户可见终答是普通文字；以回传与 `[[web:n]]` 支撑网页事实。
 
 ### 空结果与冲突（摘要）

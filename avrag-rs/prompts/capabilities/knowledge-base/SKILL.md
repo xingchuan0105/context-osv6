@@ -22,11 +22,14 @@ version: "4.1"
 
 ## 沙箱
 
-检索在 **Python 沙箱**完成。每轮回复若有多个 `<code language="python">` 块，**只执行第一个**；同一块内可多条 `await` 并行。
+检索在 **Python 沙箱**完成；沙箱基座（唯一执行入口 `<code language="python">`、每轮仅首块执行、每块新进程、`save` / `load` 跨块）见 agent-base「沙箱基座」。结果以 `<code_execution_result>` 回传。
 
-- 结果以 `<code_execution_result>` 回传。每个代码块是**新进程**：变量不跨块；跨块用 `save` / `load`（相对路径）。
-- 不允许 `import os, subprocess, socket, sys, ctypes, shutil` 等。
 - 本 skill 下的检索入口是 **`client.方法名(...)`**。同名点选式原生工具不在此沙箱契约内。
+- 不允许 `import os, subprocess, socket, sys, ctypes, shutil` 等。
+
+### 并行扇出
+
+相互独立的检索调用在**同一个块**内并行发出是默认工作方式：一轮一块把多次独立调用一次回传，比一轮一个调用节省整轮 LLM 往返。同块内各方法的空/非空彼此独立；存在依赖的调用（后一调用的参数来自前一调用的返回值，如 doc_profile 的 doc_id 来自 docscope 清单）按顺序 await。
 
 ## 可用方法
 
@@ -35,9 +38,9 @@ version: "4.1"
 | 语义相近 | `await client.dense(query)` | 概念、定义、换说法 | 易偏主题叙述；金额/编号/表内字面可能漏 |
 | 关键词 | `await client.lexical(query)` | 编号、日期、金额、表内字面；结果可能附带关系上下文 | 同义改写、简称可能 0 命中 |
 | 按行查找 | `await client.grep(pattern, doc_ids=None, regex=False, context=0, max_hits=50)` | 行计数、表记录、精确字面、顺序邻域 | pattern 与库内空白/管道格式不对齐时假 0；`total_hits` 是**命中行数** |
-| 表结构目录 | `await client.struct_catalog(doc_ids=None)` | 查看表格存储里的表：表名、列名、行数、样例行、置信度 | `relations` 为空 = 当前 scope 无表格存储，不是检索失败 |
-| 表格查询 | `await client.struct_query(sql, doc_ids=None)` | 表内 COUNT / 过滤 / 排序 / 分组（单条 SELECT） | 仅单条 SELECT；禁 DDL/DML/文件函数；表名与列名以 catalog 为准 |
-| 文档结构 | `await client.doc_profile(doc_ids=None)` | 章节地图 | 不是证据正文 |
+| 表结构目录 | `await client.struct_catalog(doc_ids=None)` | 查看表格存储里的表：表名、列名、行数、样例行、置信度 | `relations` 为空 = 当前 scope 无表格存储，不是检索失败；多 doc 同名表时响应含 `ambiguous_relations` 表名列表，同名表查询静默归属首个出现的 doc |
+| 表格查询 | `await client.struct_query(sql, doc_ids=None)` | 表内 COUNT / 过滤 / 排序 / 分组（单条 SELECT） | 仅单条 SELECT；禁 DDL/DML/文件函数；表名与列名以 catalog 为准；多 doc 同名表查询静默归属首个 doc——用 `doc_ids` 收窄范围后再查 |
+| 文档画像与章节 | `await client.doc_profile(doc_ids=None)` | 单篇画像（标题/作者/文体/年代/语言）+ 章节结构；fields 为空时全量返回 | 画像与章节不是证据正文 |
 | 摘要 | `await client.doc_summary(level="doc", doc_ids=None)` | 整篇/章节概览 | 摘要不是逐字证据 |
 | 跨块存储 | `await client.save(path, data)` / `await client.load(path)` | 中间结果 | 仅相对路径 |
 
@@ -52,13 +55,21 @@ version: "4.1"
 - `fts: true` = 该表建有全文索引，`WHERE fts_main_<表名>.match_bm25(row_ord, '关键词') IS NOT NULL` 是表内值检索谓词（空格分隔 token 有效；整串中文是单 token，子串发现归 grep）。`fts: false` = 无索引，此情形 match_bm25 会报 schema 不存在。
 
 ```python
-chunks = await client.dense("概念定义")
-hits = await client.lexical("保修年限")
-g = await client.grep(r"\|\s*概念阶段\s*\|", regex=True, context=2)
-print("total_hits=", g["total_hits"], "truncated=", g.get("truncated"))
-for h in g["hits"][:5]:
-    print(h["line"], h["text"][:100], h.get("before"), h.get("after"))
-await client.save("cands.json", chunks)
+import asyncio
+
+async def main():
+    chunks, hits, g = await asyncio.gather(
+        client.dense("概念定义"),
+        client.lexical("保修年限"),
+        client.grep(r"\|\s*概念阶段\s*\|", regex=True, context=2),
+    )
+    print("dense n=", len(chunks), "| lexical n=", len(hits),
+          "| grep total_hits=", g["total_hits"], "| truncated=", g.get("truncated"))
+    for h in g["hits"][:5]:
+        print(h["line"], h["text"][:100], h.get("before"), h.get("after"))
+    await client.save("cands.json", chunks)
+
+asyncio.run(main())
 ```
 
 ## 空结果、截断与失败
@@ -82,7 +93,7 @@ await client.save("cands.json", chunks)
 
 - **一行 = 一条记录**；表头给列命名；完整事实是「表头/邻列含义 + 该格」。
 - **`total_hits` = 命中行数**；某一列值重复不改变行数含义。
-- 表内「第一个」常指 **表中出现顺序** 或显式序号列，不是编码标签的字典序。
+- 表内「第一个」= **`row_ord`（表出现序）升序第一行**，或显式序号列，不是编码标签的字典序。
 - 单元格两侧常有 `|`；`grep(..., regex=True, context=…)` 的 before/after 提供邻行邻列。
 
 完整 ontology、**误读对照**与虚构示例见 **how-to-read-tables**（默认随本说明披露）。

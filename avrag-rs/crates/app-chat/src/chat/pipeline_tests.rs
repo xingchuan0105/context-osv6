@@ -397,11 +397,11 @@ mod tests {
         assert!(
             parts
                 .iter()
-                .any(|p| p.contains("capabilities/knowledge-base.md")),
+                .any(|p| p.contains("capabilities/knowledge-base/contract.md")),
             "workspace capability expected, got {parts:?}"
         );
         assert!(
-            parts.iter().any(|p| p.contains("capabilities/web.md")),
+            parts.iter().any(|p| p.contains("capabilities/web/contract.md")),
             "web capability expected, got {parts:?}"
         );
         assert!(
@@ -564,7 +564,7 @@ mod tests {
         assert!(
             parts
                 .iter()
-                .any(|p| p.contains("capabilities/knowledge-base.md")),
+                .any(|p| p.contains("capabilities/knowledge-base/contract.md")),
             "workspace capability must load for rag single agent: {parts:?}"
         );
         assert!(

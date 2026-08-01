@@ -1,5 +1,5 @@
 ---
-name: metadata
+name: docscope
 description: "Load when the user asks which documents exist in the workspace, authors/types overview, or when you need document ids for doc_profile/doc_summary without a prior content search. Skip if one dense search already surfaces the needed docs."
 disclose_at: retrieve
 atomic: false
@@ -11,10 +11,10 @@ applicable_modes: [rag]
 在回复中输出**整段** JSON（不要夹其它字）：
 
 ```json
-{"skill_request": ["metadata"]}
+{"skill_request": ["docscope"]}
 ```
 
-下一轮会注入知识库文档清单。适用于：
+下一轮会注入文档清单（scope 级聚合，由灌入时的 profile 阶段产出）。适用于：
 
 - 用户问知识库有哪些文档、作者、类型
 - 需要全局概览（多文档对比、统计）
@@ -56,6 +56,16 @@ applicable_modes: [rag]
 - `domain` / `genre` / `era` 可能为 `"unknown"`：表示系统未识别，不要当成有效标签。
 - `author` / `publication_date` 为 `null`：只表示未识别，不能当成「文档一定没有作者/日期」。
 
+## 教学链路
+
+文档侧的信息按粒度分三层，按需取用：
+
+1. **docscope**（本文）：整个工作区有哪些文档 + 每篇的画像概览（拿 `doc_id`）。
+2. **doc_profile**：单篇画像（标题/作者/文体/年代/语言）+ 章节结构——回答「某文档讲了什么结构、作者是谁」。
+3. **doc_summary**：单篇摘要（`level="doc"` 整篇，或章节级）——回答「某文档内容概览」。
+
+三层互为入口：问题落在哪层，就从哪层开始；粗粒度信息不足时向细粒度下钻。
+
 ## 拿到 doc_id 之后
 
 ```python
@@ -69,4 +79,4 @@ summary = await client.doc_summary(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee
 
 - 本说明在 `skill_request` 的**下一轮**才注入清单；未加载前不要假设清单已在上下文中。
 - 文档很多时 JSON 会较大；同一会话内通常只注入一次。
-- 默认首轮只有检索代码说明；需要清单时再 `skill_request` metadata。
+- 默认首轮只有检索代码说明；需要清单时再 `skill_request` docscope。

@@ -18,7 +18,7 @@ version: "3.0"
 
 ## 取更早记忆的入口
 
-**Python 沙箱**可用时：
+`client.history` / `client.user_profile` 是每轮可用的基础原语（见 agent-base「沙箱基座」），在 **Python 沙箱**中随时可调：
 
 ```python
 hist = await client.history(limit=20)   # 可带 query；字段以回传为准
@@ -26,8 +26,6 @@ profile = await client.user_profile()
 print(hist)
 print(profile)
 ```
-
-若当前环境是点选式工具而非 `client.*`：更早对话 → `conversation_history_load`；长期画像 → `user_profile_load`。
 
 | 回传状态 | 含义 |
 |----------|------|

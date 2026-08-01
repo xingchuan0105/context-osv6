@@ -99,3 +99,23 @@
 误读：看到 12 更靠前 → 答 12
 正确：L2 行 +「配置项」邻域 → 42
 ```
+
+## SQL 结果集（struct_query）读法
+
+`struct_query` 把表按 SQL 查询投影成结果集：
+
+- **`row_count` = 结果集行数**，不是被查表的总行数：`SELECT COUNT(*) FROM t` 的结果集只有 1 行，`row_count=1`，**COUNT 的数值在 `rows` 单元格里**。
+- `columns` 给结果集列名；`rows` 是行数组，单元格按 `columns` 顺序对齐。行内 `row_ord`（表出现序）保留时，它标出该行在原表中的位置，不是排序依据。
+- `truncated=true` 表示 rows 是样本，不是该结果集全量；计数类答案以聚合查询的单元格值为准。
+- `ok=false` 时响应含 `error.code`：
+  - `unknown_relation` / `no_relations` → 表名不在当前可见范围；先 `struct_catalog`（含 `doc_ids` 收窄）取可见表名与列名，再以 catalog 名重查。
+  - `forbidden` → 该查询形态不可用（DDL/DML/文件函数等）；改成单条只读 SELECT。
+- 多 doc 同名表时，`struct_catalog` 响应含 `ambiguous_relations`，同名表的查询静默归属首个出现的 doc；需要特定文档的行时，用 `doc_ids=[...]` 收窄范围后再查。
+
+### 示例（虚构）
+
+```text
+问：各阶段合计多少条？
+回传：ok=true, columns=["阶段","cnt"], rows=[["概念",3],["施工",5]], row_count=2, truncated=false
+读出：总记录 8 条来自聚合值 3+5；row_count=2 是结果集行数，不是计数答案。
+```

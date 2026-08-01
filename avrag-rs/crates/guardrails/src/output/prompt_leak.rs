@@ -10,11 +10,11 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "capability-knowledge-base",
-        include_str!("../../../../prompts/capabilities/knowledge-base.md"),
+        include_str!("../../../../prompts/capabilities/knowledge-base/contract.md"),
     ),
     (
         "capability-web",
-        include_str!("../../../../prompts/capabilities/web.md"),
+        include_str!("../../../../prompts/capabilities/web/contract.md"),
     ),
     (
         "orchestrator-base",
@@ -38,7 +38,7 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "knowledge-base",
-        include_str!("../../../../prompts/clusters/knowledge-base/SKILL.md"),
+        include_str!("../../../../prompts/capabilities/knowledge-base/SKILL.md"),
     ),
     (
         "writing",
@@ -242,7 +242,7 @@ mod tests {
     }
 
     /// NOTE: fixture must mirror a live prompt paragraph (currently
-    /// `prompts/capabilities/knowledge-base.md`). Rewrite this string if that
+    /// `prompts/capabilities/knowledge-base/contract.md`). Rewrite this string if that
     /// body changes, or the detector will miss it and the test will rot.
     /// (C7: fenced prompt examples are ignored; unfenced prose is the path.)
     #[test]
