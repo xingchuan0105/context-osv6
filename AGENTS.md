@@ -20,7 +20,7 @@
 
 | Do | Don't |
 |----|--------|
-| Skills / capability / orchestrator / synthesis copy in `prompts/clusters/`, `prompts/orchestrators/`, … | Multi-line instruction strings inline in `agent-loop` / app crates |
+| Capability copy in `prompts/capabilities/<id>/{contract.md,SKILL.md,reference/}`（knowledge-base / web）；skill / orchestrator / synthesis copy in `prompts/clusters/`（docscope / memory / writing / format / heavytail-* / index / workspace-create）、`prompts/agent-guide/`、`prompts/system/hints/`、`prompts/templates/` | Multi-line instruction strings inline in `agent-loop` / app crates |
 | Loop **observations** (no-chunk, budget C5, sandbox_error, format_hint, …) in `prompts/loop/*.md` via `react_loop/prompt_assets.rs` | New observation/repair/fallback sentence left inline next to control flow |
 | Placeholders only in code (`{n_blocks}`, `{tool}`, …) | Paste realistic-corpus / golden-set queries, gold answers, entity names, or eval numbers into prompts, loop code, or unit-test fixtures that claim to be product policy |
 | SDK/tool **observation data** (stdout, retrieval JSON) as runtime feedback | Treat tool stdout as a place to author system instructions |

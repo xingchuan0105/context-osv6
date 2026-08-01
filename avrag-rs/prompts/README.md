@@ -16,8 +16,9 @@ Product and code use different short names for the **same** concepts. This is in
 
 | 模型中文 | 模型/文件英文 | 能力文件 / skill id | 内部 mode / caps | 实现层代号（非模型文案） |
 |----------|---------------|---------------------|------------------|--------------------------|
-| 知识库 | knowledge base | `capabilities/knowledge-base.md` · skill `knowledge-base` | `mode: rag` · `caps.rag` | sandbox / bridge；loop 文件名可含 `codegen-*` |
-| 联网 | web / internet | `capabilities/web.md` · skill `search` | `mode: search` · `caps.search` | `client.web` / `web_search` fallback tool id |
+| 知识库 | knowledge base | `capabilities/knowledge-base/contract.md` · skill `knowledge-base` | `mode: rag` · `caps.rag` | sandbox / bridge；loop 文件名可含 `codegen-*` |
+| 联网 | web / internet | `capabilities/web/contract.md` · skill `search` | `mode: search` · `caps.search` | `client.web` / `web_search` fallback tool id |
+| 文档清单 | docscope | `clusters/docscope/SKILL.md` · skill `docscope` | pipeline 注入 `<docscope_metadata>` | profile 阶段 scope 级聚合 |
 | （无） | agent base | `system/agent-base.md` | pure chat + all SaC turns | always first system part |
 | 写精修 | write refine | `deprecated/.../write-refine-system.md` | `mode: write_refine` | separate product; not SaC chat tree |
 
@@ -28,26 +29,33 @@ Product and code use different short names for the **same** concepts. This is in
 | Family | Path | How loaded | Role |
 |--------|------|------------|------|
 | **System** | `system/` | Mode assemble (always first: `agent-base`) | Single-agent main voice |
-| **Capabilities** | `capabilities/` | Assemble **only when** product mounts that capability | Short task contracts (知识库 / 联网) |
+| **Hints** | `system/hints/` | `include_str!` from assembler / write-core | Small per-round context blocks (`format-hint` / `writing-hint` / `persona-internalize` / `round-counter`) |
+| **Capabilities** | `capabilities/<id>/` | Assemble **only when** product mounts that capability | Directory per capability: `contract.md` (short evidence / coverage / cite contract) + `SKILL.md` (method semantics) + `reference/` |
+| **Agent guide** | `agent-guide/` | `include_str!` from `app-chat::external_agent_guide` | Standalone API summaries (RAG / search / index / workspace-create) |
 | **Clusters** | `clusters/<id>/` | `PromptRegistry` + progressive disclose | Thick world models |
 | **Loop** | `loop/` | `agent-loop` `prompt_assets` | Runtime observations |
 | **Pipeline** | `pipeline/` | Workers / postprocess | Ingestion helpers |
+| **Templates** | `templates/` | Pipeline llm calls (`summary-*` / `section-index-*`) | User-turn templates for worker prompts |
 | **Deprecated** | `deprecated/**` | Not product SaC entry | Retired monomode, multi-agent, old voices |
 
 ## Assembly (SaC)
 
 ```text
 parts = [ system/agent-base.md ]
-if caps.rag (知识库 mounted):   parts += capabilities/knowledge-base.md
-if caps.search (联网 mounted):  parts += capabilities/web.md
+if caps.rag (知识库 mounted):   parts += capabilities/knowledge-base/contract.md
+if caps.search (联网 mounted):  parts += capabilities/web/contract.md
 ```
+
+Capability `SKILL.md` files (method semantics) and `reference/` are **not** in `system_prompt_parts`; they are disclosed progressively by `DisclosurePlanner` (mandatory retrieve skills each round + skill_request on demand).
 
 | Product state | System parts |
 |---------------|--------------|
 | Pure chat | `agent-base` only |
-| Knowledge base only | `agent-base` + `capabilities/knowledge-base` |
-| Web only | `agent-base` + `capabilities/web` |
+| Knowledge base only | `agent-base` + `capabilities/knowledge-base/contract.md` |
+| Web only | `agent-base` + `capabilities/web/contract.md` |
 | Dual | `agent-base` + both capability contracts |
+
+Every round also carries the **mandatory memory disclosure** (`clusters/memory/SKILL.md`, derived by `derive_mandatory_retrieve` from CapabilitySet — never listed in mode YAML).
 
 Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_parts` → agent-loop assembler.
 
@@ -57,18 +65,18 @@ Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_par
 
 | Layer | Content |
 |-------|---------|
-| `agent-base` | Identity, language, final-answer shape, unmounted boundary, memory protocol, pointer to injected modules |
-| `capabilities/*` | Short evidence / coverage / cite contracts when mounted |
-| `clusters/knowledge-base`, `search`, … | Sandbox APIs, truncation, tables, method risk |
+| `agent-base` | Identity, language, final-answer shape, unconditional sandbox base (first-block rule, parallel fan-out, base primitives `history`/`user_profile`/`save`/`load`), memory protocol, pointer to injected modules |
+| `capabilities/<id>/contract.md` | Short evidence / coverage / cite contracts when mounted |
+| `capabilities/<id>/SKILL.md` | Sandbox method semantics, truncation, tables, method risk |
+| `clusters/{docscope, memory, writing, format, index, workspace-create, heavytail-*}` | Thick world models (history / document inventory, answer style, write-refine metrics, MCP helpers) |
 | `loop/*` | What happened this round (budget, sandbox, retrieval_summary) |
 
 ## Clusters
 
 | Id | Role |
 |----|------|
-| `knowledge-base` | Knowledge-base retrieve via Python sandbox (v4.1+: gotchas, multi-claim checklist, table contrast examples). Skill-reg subset: `scripts/sac-skill-fail6-reg.sh` + `docs/engineering/2026-07-31-sac-skill-fail6-reg.md` |
-| `search` | Web (联网) retrieve via Python sandbox |
-| `memory` / `metadata` | History / document inventory |
+| `docscope` | Document inventory (scope-level aggregate from the profile stage) + teaching chain `docscope` → `doc_profile` → `doc_summary`. Injected via `<docscope_metadata>` when requested with `skill_request ["docscope"]` |
+| `memory` | History / user profile; **mandatory base disclosure every round** (`derive_mandatory_retrieve`) |
 | `writing` / `format` | Answer style / shape (also on retrieve when request has writing/format hints — SaC ProseOnly path) |
 | `heavytail-*` | Write-refine metrics |
 | `index` / `workspace-create` | MCP / automation helpers |

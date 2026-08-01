@@ -199,9 +199,23 @@ WP1 → WP2 → WP3 → WP4 → WP5 → WP6，每 WP 一个本地 commit（solo 
 5. **memory 基础披露带来行为变化**：round 0 即披露 memory cluster 并暴露 conversation_history_load/user_profile_load 两个 native 工具（原测试断言 round0 tools=0 已按 D8 更新为期望这两个工具）。
 6. **disclosure_plan `metadata` 特判先行兼容 `docscope`**（`cluster_id == "metadata" || cluster_id == "docscope"`），WP3 完成改名后再收敛为单值。
 
+### WP3（2026-08-02 提交 97e7d88b）
+
+7. **`modes/*.yaml` 的 `system_prompt_base` 指向 `prompts/capabilities/{knowledge-base,web}/contract.md`**（D1 布局）；`metadata`→`docscope` 改名同步了 `disclosure_plan.rs` 特判收敛为单值 `"docscope"`、`modes/rag.yaml` retrieve 列表、registry 测试断言（`skill("metadata").is_none()`、`skill("docscope").is_some()`、flat capability id `capability-knowledge-base` 随 flat 扫描删除而消失）。
+8. **build.rs 扫描根**：`scan_roots = [clusters, capabilities]`（capabilities/*/SKILL.md 同款目录扫描，frontmatter `name` 稳定 registry id）+ flat 只留 `system`；删除了 `synthesis`（空目录）与 `capabilities` 平铺两项。
+
+### WP4（2026-08-02 提交 a63e1f79）
+
+9. **`external_agent_guide.rs` 用 `include_str!` 而非计划原文的"运行时加载"**：编译期内嵌满足 prompts-in-md（文案住 md、代码只加载），实现层面差异，行为不变。
+10. **write-refine 轮次计数用本地极简 render 引擎**：`prompts/system/hints/round-counter.md` 模板 + `write-core/src/refine_helpers.rs` 内 ~60 行 keys/picks 渲染（与 struct-supervision 的 ObsCtx 同构，未引入共享 crate）。
+11. **table-supervision 接线用了自研迷你模板引擎**（`avrag-struct-supervision/src/prompts.rs`：keys/blocks/picks 三语法），5 个孤儿模板按 session.rs 语义改写 + 新增 10 个 obs-*.md；briefing/annotate 等文案与原 format! 输出在少量标点/空行上有差异（无测试断言原格式）。
+12. **G5 验证方式**：以 grep 复查六处无内联 LLM 文案 + 各 crate 单测全绿为准（§3.5 表六行全部处置）。
+
 ### worker_handoff / compile_feedback 死路径评估（非目标，仅记录）
 
-（待 WP6 前补：本会话尚未深入评估，结论留到后续 WP。）
+- **`compile_feedback`**：orchestrator 删除（commit 7f2d182d）后，结构性编译失败的自由纠正轮次只存在于 worker 手递路径；产品单 agent 路径（SaC）无 worker handoff，该字段/分支已不可达。代码中仍有解析与类型定义（wire 兼容），**本轮不删**。
+- **`worker_handoff`**：同为 orchestrator 时代的会话交接消息类型；单 agent 路径不产生也不消费。若未来从 wire 契约移除需评估序列化兼容（当前保留零成本）。
+- 结论：两者均为纯残留定义，无运行时副作用；删除属独立重构项（需动 app-chat/agent-loop 类型 + 测试），按计划留作非目标，仅此记录。
 
 ## 9. 环境纪律（摘自 AGENTS.md，全文有效）
 

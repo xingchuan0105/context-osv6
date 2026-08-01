@@ -27,7 +27,7 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `codegen-no-output.nudge.md` | Empty sandbox round |
 | `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts |
 | `codegen-untrusted-prefix.nudge.md` | Untrusted tool-output prefix |
-| `codegen-method-as-native-rejection.tmpl.md` | SDK method issued as native tool name |
+| `native-tools-closed.tmpl.md` | Single fixed rejection for the closed native model surface (SDK method or superseded native tool name issued as a native tool call; error code `native_tools_closed`) |
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + alias/truncation detail |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON (non–prose_only paths) |
@@ -36,10 +36,11 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `degraded-no-evidence-*.md` | User-facing empty-evidence fallbacks |
 | `partial-evidence-insufficient.md` | Short partial-evidence line |
 | `retrieval-failed-final.nudge.md` | Degraded final turn when host uses empty-evidence path |
-| `sac-superseded-rejection.tmpl.md` | Superseded tool/call observation |
 
 ## Retired (not product-injected)
 
 `../deprecated/loop-legacy/no-chunk-*.md` — host no-chunk continue/grace. Kept for unit tests via `prompt_assets` only.
 
-Placeholders: `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`.
+Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`.
+
+`pipeline/table-supervision/obs-*.md` observations (`{sql}`, `{rows}`, `{table_id}`, …) are **not** loaded here: they are rendered by the `avrag-struct-supervision` `prompts.rs` mini engine (`include_str!` + key/block/pick substitution).
