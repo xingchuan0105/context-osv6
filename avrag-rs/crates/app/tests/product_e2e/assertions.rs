@@ -294,30 +294,41 @@ pub fn assert_citations_use_document_chunks(resp: &ChatResponse, document_chunk_
 // Ingestion routing (P4 LiteParse + Paddle; no MinerU)
 // ---------------------------------------------------------------------------
 
-/// Assert backend summary reflects P4 LiteParse hybrid PDF routing.
-pub fn assert_liteparse_hybrid_backend_summary(summary: &serde_json::Value) {
+/// Assert backend summary reflects markitdown (sole production parser post-2026-07-31).
+pub fn assert_markitdown_backend_summary(summary: &serde_json::Value) {
     let summary_text = summary.to_string();
     assert!(
-        summary_text.contains("liteparse")
-            || summary_text.contains("LiteParse")
-            || summary_text.contains("liteparse-v1"),
-        "expected LiteParse routing in backend_summary: {summary_text}"
+        summary_text.contains("markitdown"),
+        "expected markitdown in backend_summary: {summary_text}"
     );
     assert!(
         summary.get("page_status").is_some(),
         "page_status should be present in backend_summary"
     );
+    let outputs = summary
+        .get("outputs")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        outputs
+            .get("primary_backend")
+            .and_then(|v| v.as_str()),
+        Some("markitdown"),
+        "expected primary_backend=markitdown in outputs: {summary_text}"
+    );
+    // 确认不残留 liteparse 路由标记
     let ingest_routing = summary
         .get("ingest_routing")
         .and_then(|v| v.as_object())
         .cloned()
         .unwrap_or_default();
-    assert_eq!(
+    assert!(
         ingest_routing
             .get("pdf_route_mode")
-            .and_then(|v| v.as_str()),
-        Some("liteparse_hybrid"),
-        "expected liteparse_hybrid route mode in ingest_routing: {summary_text}"
+            .and_then(|v| v.as_str())
+            != Some("liteparse_hybrid"),
+        "ingest_routing must not use liteparse_hybrid route: {summary_text}"
     );
 }
 

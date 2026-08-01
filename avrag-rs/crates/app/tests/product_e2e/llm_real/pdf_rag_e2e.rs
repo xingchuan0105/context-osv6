@@ -1,4 +1,4 @@
-//! Real-LLM RAG after LiteParse PDF ingest (ingest + retrieval + synthesis).
+//! Real-LLM RAG after markitdown PDF ingest (ingest + retrieval + synthesis).
 
 use std::time::Duration;
 
@@ -7,7 +7,7 @@ use crate::product_e2e::{
     assertions::{
         assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
         assert_citation_referenced_in_answer, assert_has_citations,
-        assert_liteparse_hybrid_backend_summary, assert_no_mineru_in_backend_summary,
+        assert_markitdown_backend_summary, assert_no_mineru_in_backend_summary,
     },
     llm_real::{
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry_attempts, merge_llm_real_extra,
@@ -19,7 +19,7 @@ fn phase0_mini_fixture_path() -> std::path::PathBuf {
     setup::fixture_path("phase0-mini.pdf").expect("phase0-mini.pdf fixture")
 }
 
-fn apply_liteparse_profile() {
+fn apply_markitdown_profile() {
     unsafe {
         std::env::set_var("INGESTION_PDF_MAX_PAGES", "8");
         std::env::set_var("INGESTION_TRIPLET_ENABLED", "0");
@@ -31,9 +31,9 @@ fn apply_liteparse_profile() {
 
 #[tokio::test]
 #[ignore = "requires real LLM + embedding; run with --ignored --test-threads=1"]
-async fn real_llm_rag_after_liteparse_pdf_ingest_returns_citation() {
+async fn real_llm_rag_after_markitdown_pdf_ingest_returns_citation() {
     super::require_nightly_suite();
-    apply_liteparse_profile();
+    apply_markitdown_profile();
     assert!(
         phase0_mini_fixture_path().is_file(),
         "missing bundled fixture phase0-mini.pdf"
@@ -58,7 +58,7 @@ async fn real_llm_rag_after_liteparse_pdf_ingest_returns_citation() {
         .query_latest_backend_summary(&upload.document_id)
         .await
         .expect("backend_summary");
-    assert_liteparse_hybrid_backend_summary(&summary);
+    assert_markitdown_backend_summary(&summary);
     assert_no_mineru_in_backend_summary(&summary);
 
     let chunk_count = ctx
@@ -67,12 +67,12 @@ async fn real_llm_rag_after_liteparse_pdf_ingest_returns_citation() {
         .expect("chunk count");
     assert!(
         chunk_count > 0,
-        "expected chunks after LiteParse PDF ingest"
+        "expected chunks after markitdown PDF ingest"
     );
 
     let result = chat_with_citations_retry_attempts(
         &ctx,
-        "According to the uploaded PDF, what is LiteParse and how is it used? Cite the document.",
+        "According to the uploaded PDF, summarize its content and key findings. Cite the document.",
         &notebook.id,
         &[upload.document_id.clone()],
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS + 2,
@@ -87,7 +87,7 @@ async fn real_llm_rag_after_liteparse_pdf_ingest_returns_citation() {
     assert_answer_substantive(resp, 30);
 
     ctx.save_llm_artifact(
-        "real_llm_rag_after_liteparse_pdf_ingest_returns_citation",
+        "real_llm_rag_after_markitdown_pdf_ingest_returns_citation",
         resp,
         merge_llm_real_extra(
             &result,

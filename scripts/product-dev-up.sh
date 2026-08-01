@@ -96,8 +96,6 @@ echo
 echo "URLs:"
 echo "  frontend       http://127.0.0.1:3000"
 echo "  api            http://127.0.0.1:8080"
-echo "  office parser  http://127.0.0.1:9090/v1/healthz"
-echo "  pdf-renderer   http://127.0.0.1:9091/v1/healthz"
 if [[ "${RETRIEVAL_BACKEND}" == "pgvector" || "${RETRIEVAL_BACKEND}" == "postgres" || "${RETRIEVAL_BACKEND}" == "pg" ]]; then
   echo "  retrieval      pgvector (Postgres; no Milvus)"
 else
@@ -107,4 +105,3 @@ echo "  minio          http://127.0.0.1:9001"
 echo "Logs:"
 echo "  worker         ${DEV_LOG_DIR}/worker.log"
 echo "  api            ${DEV_LOG_DIR}/api.log"
-echo "  pdf-renderer   ${DEV_LOG_DIR}/pdf-visual-renderer.log"

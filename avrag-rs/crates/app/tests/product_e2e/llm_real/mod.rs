@@ -10,7 +10,7 @@
 //! Run serially with:
 //!   E2E_MODE=nightly cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1 --nocapture
 //!
-//! PDF ingest RAG (`pdf_corpus`, `pdf_rag_e2e`) uses P4 LiteParse hybrid routing on bundled
+//! PDF ingest RAG (`pdf_corpus`, `pdf_rag_e2e`) uses markitdown routing on bundled
 //! `phase0-mini.pdf` by default; txt RAG (`rag_real`, etc.) uses `antifragile.txt` local parse.
 //!
 //! Artifacts: `crates/app/tests/e2e_output/llm_real/{run_id}/{test_name}/`

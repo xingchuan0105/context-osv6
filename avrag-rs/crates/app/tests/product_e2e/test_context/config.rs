@@ -265,12 +265,9 @@ impl E2eBootstrapConfig {
                 "EMBEDDING_MODEL",
                 "EMBEDDING_DIMENSIONS",
                 "AVRAG_EMBEDDING_DIM",
-                "OFFICE_PARSER_BASE_URL",
                 "PADDLE_OCR_BASE_URL",
                 "PADDLE_OCR_API_TOKEN",
                 "PADDLE_OCR_MODEL",
-                "PDF_RENDERER_BASE_URL",
-                "PDF_VISUAL_PAGES_PER_CHUNK",
                 "INGESTION_PDF_MAX_PAGES",
                 "INGESTION_TRIPLET_ENABLED",
                 "INGESTION_TRIPLET_TOKEN_BUDGET",
@@ -363,7 +360,6 @@ impl E2eBootstrapConfig {
                     "PADDLE_OCR_API_TOKEN",
                     "PADDLE_OCR_MODEL",
                     "PADDLE_OCR_MAX_JOBS_PER_DOCUMENT",
-                    "PADDLE_OCR_RESULT_CACHE_ENABLED",
                 ],
             );
         }

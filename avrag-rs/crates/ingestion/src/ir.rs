@@ -45,8 +45,9 @@ impl DocumentType {
 
 /// Parser backend recorded on document IR blocks and pages.
 ///
-/// Post-P4 PDF text ingest uses [`Self::LiteParsePdf`] / [`Self::LiteParseFigure`].
-/// Variants prefixed with historical wire names (`edge_parse_*`, `mineru_*`) remain
+/// Post-2026-07-31 markitdown is the sole production document parser.
+/// Variants prefixed with historical wire names (including `LiteParsePdf`,
+/// `LiteParseFigure`, `CalamineExcel`, `EdgeParsePdf`, `Mineru*`) remain
 /// for deserializing stored IR only — do not select them in new ingest paths.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -81,16 +82,16 @@ pub enum ParseBackend {
 }
 
 impl ParseBackend {
-    /// Canonical PDF text backend for new ingest (post-P4 LiteParse main chain).
-    pub const fn canonical_pdf_text() -> Self {
-        Self::LiteParsePdf
-    }
-
     /// Whether this variant is retained only for historical stored IR / metadata.
     pub const fn is_historical_ir_only(self) -> bool {
         matches!(
             self,
-            Self::EdgeParsePdf | Self::MineruPdfOcr | Self::MineruImage
+            Self::EdgeParsePdf
+                | Self::LiteParsePdf
+                | Self::LiteParseFigure
+                | Self::CalamineExcel
+                | Self::MineruPdfOcr
+                | Self::MineruImage
         )
     }
 

@@ -1,4 +1,4 @@
-//! Nightly PDF corpus — P4 LiteParse hybrid ingest + real-LLM RAG.
+//! Nightly PDF corpus — markitdown ingest + real-LLM RAG.
 //!
 //! Default: bundled `phase0-mini.pdf` (CI/staging portable).
 //! Optional staging stress: set `E2E_LLM_REAL_STAGING_PDF` to a local book path.
@@ -14,7 +14,7 @@ use crate::product_e2e::{
     DocumentStatus, TestContext,
     assertions::{
         assert_answer_substantive, assert_citation_doc_id, assert_has_citations,
-        assert_liteparse_hybrid_backend_summary, assert_no_mineru_in_backend_summary,
+        assert_markitdown_backend_summary, assert_no_mineru_in_backend_summary,
     },
     llm_real::{
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry,
@@ -94,7 +94,7 @@ async fn ingest_pdf_with_routing_asserts(
         .query_latest_backend_summary(&upload.document_id)
         .await
         .expect("backend_summary");
-    assert_liteparse_hybrid_backend_summary(&summary);
+    assert_markitdown_backend_summary(&summary);
     assert_no_mineru_in_backend_summary(&summary);
 
     let chunk_count = ctx
@@ -114,7 +114,7 @@ async fn ingest_pdf_with_routing_asserts(
     upload
 }
 
-/// Bundled PDF → LiteParse hybrid ingest → real-LLM RAG with citations.
+/// Bundled PDF → markitdown ingest → real-LLM RAG with citations.
 #[tokio::test]
 #[ignore = "requires real LLM + embedding; run with --ignored --test-threads=1"]
 async fn real_llm_rag_bundled_pdf_corpus_query() {
@@ -131,7 +131,7 @@ async fn real_llm_rag_bundled_pdf_corpus_query() {
 
     let result = chat_with_citations_retry_attempts(
         &ctx,
-        "According to the uploaded PDF, what is LiteParse and how is it used? Cite the document.",
+        "According to the uploaded PDF, summarize its content and key findings. Cite the document.",
         &upload.workspace_id,
         &[upload.document_id.clone()],
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS,
@@ -208,7 +208,7 @@ async fn real_llm_rag_multidoc_pdf_and_txt() {
         .query_latest_backend_summary(&pdf_upload.document_id)
         .await
         .expect("pdf summary");
-    assert_liteparse_hybrid_backend_summary(&pdf_summary);
+    assert_markitdown_backend_summary(&pdf_summary);
     assert_no_mineru_in_backend_summary(&pdf_summary);
 
     let doc_scope = vec![
