@@ -88,19 +88,16 @@ impl ContextAssembler {
         let renderer = DisclosureRenderer::new(registry);
         let rendered = renderer.render(&plan, mode, request, disclosed);
 
-        let tools = if memory_cluster_disclosed(disclosed) {
-            let mut merged = mode.tools_for_retrieve(registry);
-            merged.extend(mode.resolve_tool_specs(
-                registry,
-                &[
-                    "conversation_history_load".to_string(),
-                    "user_profile_load".to_string(),
-                ],
-            ));
-            dedupe_tools(merged)
-        } else {
-            mode.tools_for_retrieve(registry)
-        };
+        // D8 (2026-08-02): memory is disclosed every round as prose, and the
+        // memory SKILL teaches `client.history` / `client.user_profile` (base
+        // SDK primitives, always open in the sandbox). The native memory tools
+        // (`conversation_history_load` / `user_profile_load`) are the legacy
+        // point-and-click surface; exposing them at round 0 pushed the
+        // function-calling model onto the native tool path and away from
+        // `<code language="python">` codegen — retrieval never fired. SaC
+        // retrieve phases carry only the configured `tool_pool` (empty for
+        // rag/search); the model reaches memory + retrieval via the sandbox.
+        let tools = mode.tools_for_retrieve(registry);
 
         let tokens_used = disclosed.tokens_used_hint.unwrap_or(0);
         let tokens_max = disclosed.tokens_max_hint.unwrap_or(0);
@@ -175,21 +172,6 @@ impl ContextAssembler {
     }
 }
 
-fn memory_cluster_disclosed(disclosed: &DisclosedState) -> bool {
-    disclosed
-        .disclosed_skill_ids
-        .iter()
-        .any(|key| key == "memory" || key.starts_with("memory:"))
-}
-
-fn dedupe_tools(tools: Vec<contracts::ToolSpec>) -> Vec<contracts::ToolSpec> {
-    let mut seen = std::collections::BTreeSet::new();
-    tools
-        .into_iter()
-        .filter(|tool| seen.insert(tool.name.clone()))
-        .collect()
-}
-
 /// Build the per-round loop budget hint injected into every retrieve-phase
 /// system prompt. `iteration` is 0-indexed.
 ///
@@ -242,25 +224,17 @@ mod tests {
     }
 
     #[test]
-    fn rag_retrieve_tools_empty_until_memory_cluster_disclosed() {
+    fn rag_retrieve_tools_always_from_tool_pool_only() {
         let mode = rag_mode();
         let registry = CapabilityRegistry::standard_cached();
         assert!(mode.tools_for_retrieve(registry).is_empty());
 
         let mut disclosed = DisclosedState::default();
         disclosed.disclosed_skill_ids.insert("memory".to_string());
-        let tools = mode.resolve_tool_specs(
-            registry,
-            &[
-                "conversation_history_load".to_string(),
-                "user_profile_load".to_string(),
-            ],
-        );
-        let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(
-            names,
-            vec!["conversation_history_load", "user_profile_load"]
-        );
+        // D8 (2026-08-02): memory is prose-only disclosure; its access is via
+        // client.history / client.user_profile in the sandbox, never native tools.
+        let tools = mode.resolve_tool_specs(registry, &[]);
+        assert!(tools.is_empty());
     }
 
     #[test]
@@ -307,13 +281,12 @@ mod tests {
             "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
                      tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />",
         ));
-        // D8: memory is a mandatory base disclosure — its tools are present at
-        // round 0; retrieval itself stays SDK-only (no native retrieval tools).
-        let names: Vec<&str> = ctx.tools.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(
-            names,
-            vec!["conversation_history_load", "user_profile_load"],
-            "memory base disclosure exposes its two tools, nothing else"
+        // D8: memory is prose-only disclosure (client.history / client.user_profile
+        // in the sandbox); no native tools are exposed — retrieval stays SDK-only.
+        assert!(
+            ctx.tools.is_empty(),
+            "rag retrieve exposes no native tools: {:?}",
+            ctx.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>()
         );
     }
 
@@ -412,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn rag_retrieve_attaches_memory_tools_after_skill_request_disclosure() {
+    fn rag_retrieve_stays_tool_free_after_memory_skill_request() {
         let mode = rag_mode();
         let registry = CapabilityRegistry::standard_cached();
         let mut disclosed = DisclosedState::default();
@@ -446,9 +419,10 @@ mod tests {
             None,
         );
         assert!(ctx.system_content.contains("memory"));
-        assert_eq!(ctx.tools.len(), 2);
-        assert_eq!(ctx.tools[0].name, "conversation_history_load");
-        assert_eq!(ctx.tools[1].name, "user_profile_load");
+        assert!(
+            ctx.tools.is_empty(),
+            "memory access is via client.history/user_profile in the sandbox, not native tools"
+        );
     }
 
     #[test]

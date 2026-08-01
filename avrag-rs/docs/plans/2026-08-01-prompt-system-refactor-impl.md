@@ -221,6 +221,12 @@ WP1 → WP2 → WP3 → WP4 → WP5 → WP6，每 WP 一个本地 commit（solo 
 
 13. **`bash scripts/test-l1.sh` 的 L1 file-size 闸为**实施前既有失败（commit 447e6fa7 引入该闸，早于本计划 commit db9b80cc；`answer_contract.rs` 1588 行 > 1000 行硬上限，自 a1c7be35 后未被本计划任何 commit 触碰）。本计划无分解该文件的 WP 项，超出范围不改动；L1 其余部分（cargo test agent-tools/agent-loop/app-chat + frontend tsc）单独执行全绿。G10 以此口径验收：crate 单测全绿 + L1 cargo 层通过 + graphify 已更新。
 
+### WP7（2026-08-02 黄金集回归修复）
+
+14. **全量黄金集（realistic_corpus_full_eval，149 题，deepseek-v4-flash）暴露重构回归**：重构前 v2 基线（08-01）多子集 recall=1.0/correctness=1.0；重构后前 18 题全挂（eval_bridge_miss / RETRIEVAL_MISS）。根因：WP2 D8 使 memory cluster **每轮 mandatory 披露** → round 0 即暴露 `conversation_history_load`/`user_profile_load` 两个原生工具（此前仅 skill_request 披露 memory 时出现）→ 函数调用模型看到 tools 数组即走原生工具路径（含幻觉工具名 invoke_skill/code/`__knowledge_base__search` 等），全部 dispatch 未命中返回 NotImplemented，烧光预算，从不写 `<code language="python">` 块 → 检索从未发生。
+15. **修复（assembler.rs）**：`assemble_retrieve` 的 tools 恒定取自 `mode.tools_for_retrieve(registry)`（rag/search tool_pool 空 → `tools=[]`），不再在 memory 披露时附加两个原生记忆工具；删除 `memory_cluster_disclosed`/`dedupe_tools` 私有函数；更新 3 个相关单测。D8 自洽：memory 每轮散文披露、教学 `client.history`/`client.user_profile` 基础原语，原生工具是 legacy 点选式残留。`cargo test -p agent-loop --lib` = 279 全绿。
+16. **验证（4 题探针 thesis_factual Q1-Q4）**：2/4 PASS（recall=1.0），2 题 eval_bridge_miss 但已能写出 code 块（q002 为 `asyncio.run()` 与沙箱运行中事件循环冲突、q003 为 sandbox_error + synthesis 修复）——非系统性回归，属模型行为波动（与重构前基线中零星 miss 同量级）。
+
 ## 9. 环境纪律（摘自 AGENTS.md，全文有效）
 
 - prompts-in-md：LLM 可见文案只住 `avrag-rs/prompts/**/*.md`；代码里只做加载与占位符替换。
