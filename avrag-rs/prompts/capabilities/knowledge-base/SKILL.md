@@ -126,6 +126,7 @@ Claim checklist (copy and tick against returns):
 | `truncated=true` 或 hits 长度 < total_hits | hits 是样本；计数以 `total_hits` 为准 | 用 `len(hits)` 当全库计数 |
 | 问题字面与某段很像 | 相似 ≠ 主张已覆盖 | 跳过 lexical/grep 精确核对 |
 | 多数字题只见一个数 | 其余主张仍未知 | 只答一半即结束 |
+| 知识库与联网同时挂载，问题含「文章称/文中提到/报告称」 | 该前提通常指向**文档库**，可用 `dense`/`grep` 直接核实原文 | 当成外部事实只走 `client.web`，文档侧前提未覆盖 |
 
 **默认低自由度路径（易碎结论）：**
 
