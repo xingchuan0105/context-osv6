@@ -20,7 +20,10 @@ fn codes(outcome: &super::CompileOutcome<serde_json::Value>) -> Vec<String> {
 fn prose_handoff_compiles_clean() {
     // K3: the handoff contract is prose + optional SELECTED line — no JSON
     // required, no error, no continuation.
-    let outcome = compile("文档确认烟台冰轮是主要竞争对手，但未记载其总部城市。", false);
+    let outcome = compile(
+        "文档确认烟台冰轮是主要竞争对手，但未记载其总部城市。",
+        false,
+    );
     assert!(outcome.value.is_none());
     assert!(!outcome.has_errors());
     assert!(outcome.diagnostics.is_empty(), "{:?}", outcome.diagnostics);
@@ -156,14 +159,23 @@ fn fabricated_execution_result_is_stripped_with_warning() {
     // has_tools=true: a retrieval happened, so the insufficient coverage is a
     // legal 查无 — this test is about E104 stripping, not E105.
     let outcome = compile(raw, true);
-    assert!(!outcome.has_errors(), "E104 is a warning: {:?}", outcome.diagnostics);
+    assert!(
+        !outcome.has_errors(),
+        "E104 is a warning: {:?}",
+        outcome.diagnostics
+    );
     assert!(codes(&outcome).contains(&"E104".to_string()));
     let v = outcome.value.expect("value survives");
     let summary = v["summary"].as_str().unwrap();
     assert!(!summary.contains("B株式会社"), "{summary}");
     assert!(!summary.contains("code_execution_result"), "{summary}");
     assert_eq!(
-        outcome.diagnostics.iter().find(|d| d.code == "E104").unwrap().severity,
+        outcome
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "E104")
+            .unwrap()
+            .severity,
         Severity::Warning
     );
 }
@@ -185,7 +197,8 @@ fn fabricated_block_inside_claim_is_stripped() {
 fn fenced_json_is_tolerated_with_w102() {
     // coverage=partial (not full) to avoid E106 假-full check; this test
     // focuses on W102 fenced-JSON tolerance, not coverage semantics.
-    let raw = "```json\n{\"summary\":\"s\",\"coverage\":\"partial\",\"gaps\":[],\"key_facts\":[]}\n```";
+    let raw =
+        "```json\n{\"summary\":\"s\",\"coverage\":\"partial\",\"gaps\":[],\"key_facts\":[]}\n```";
     let outcome = compile(raw, false);
     assert!(!outcome.has_errors());
     assert!(codes(&outcome).contains(&"W102".to_string()));

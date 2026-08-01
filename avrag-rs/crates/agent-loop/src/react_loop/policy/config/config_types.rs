@@ -173,8 +173,7 @@ impl BudgetConfig {
         if baseline_max_tokens == 0 {
             return 0;
         }
-        baseline_max_tokens
-            .saturating_mul(CONTINUE_TOKEN_BUDGET_RATIO_NUM)
+        baseline_max_tokens.saturating_mul(CONTINUE_TOKEN_BUDGET_RATIO_NUM)
             / CONTINUE_TOKEN_BUDGET_RATIO_DEN
     }
 

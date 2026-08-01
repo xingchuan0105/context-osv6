@@ -171,10 +171,8 @@ impl WorkerSession {
         req.max_iterations = Some(effective);
         let alias_before = self.alias_cursor.load(Ordering::Relaxed);
         if alias_before > 0 {
-            req.metadata.insert(
-                ALIAS_START_METADATA.into(),
-                serde_json::json!(alias_before),
-            );
+            req.metadata
+                .insert(ALIAS_START_METADATA.into(), serde_json::json!(alias_before));
         }
 
         let run = match executor.run_channel(self.channel, brief, &req).await {
@@ -187,19 +185,15 @@ impl WorkerSession {
             }
         };
 
-        let iterations = run
-            .budget_used
-            .as_ref()
-            .map(|b| b.current)
-            .unwrap_or(0);
+        let iterations = run.budget_used.as_ref().map(|b| b.current).unwrap_or(0);
         let delta = run.tool_results.clone();
         let handoff = workers::worker_handoff_from_run(&run);
         // Alias cursor advances by the chunks this brief emitted; hydration
         // of this brief's SELECTED log resolves against the pre-run offset.
         let aliased = selected::alias_chunks_in_order(&run.tool_results).len() as u64;
-        let hydrated =
-            hydrate_selected_offset(&run.answer, &run.tool_results, alias_before);
-        self.alias_cursor.store(alias_before + aliased, Ordering::Relaxed);
+        let hydrated = hydrate_selected_offset(&run.answer, &run.tool_results, alias_before);
+        self.alias_cursor
+            .store(alias_before + aliased, Ordering::Relaxed);
         let tokens = run.usage.as_ref().map(|u| u.total_tokens).unwrap_or(0);
         self.iterations_used = self.iterations_used.saturating_add(iterations);
         self.tokens_used = self.tokens_used.saturating_add(tokens);
@@ -279,7 +273,10 @@ pub fn hydrate_selected_offset(
             tracing::warn!(alias, alias_offset, "SELECTED alias below session offset");
             continue;
         };
-        let Some(chunk) = (local as usize).checked_sub(1).and_then(|idx| stream.get(idx)) else {
+        let Some(chunk) = (local as usize)
+            .checked_sub(1)
+            .and_then(|idx| stream.get(idx))
+        else {
             tracing::warn!(alias, "SELECTED alias did not resolve to a retrieved chunk");
             continue;
         };
@@ -364,7 +361,11 @@ mod tests {
 
     #[test]
     fn older_briefs_compact_latest_keeps_full_text() {
-        let briefs = vec![record(1, "任务一"), record(2, "任务二"), record(3, "任务三")];
+        let briefs = vec![
+            record(1, "任务一"),
+            record(2, "任务二"),
+            record(3, "任务三"),
+        ];
         let msgs = resume_context_messages(&briefs);
         assert_eq!(msgs.len(), 3);
         assert!(msgs[0].content.contains("[前序任务 1 压缩]"));
@@ -530,11 +531,18 @@ mod tests {
         let reqs = exec.requests.lock().unwrap();
         // Resume context: brief#1 rides as the FULL-text entry.
         assert_eq!(reqs[1].messages.len(), 1);
-        assert!(reqs[1].messages[0].content.contains("[前序任务 1 完整交接]"));
+        assert!(
+            reqs[1].messages[0]
+                .content
+                .contains("[前序任务 1 完整交接]")
+        );
         assert!(reqs[1].messages[0].content.contains("任务一"));
         // Alias cursor carried over (brief#1 emitted 1 chunk → start at 1).
         assert_eq!(
-            reqs[1].metadata.get(ALIAS_START_METADATA).and_then(|v| v.as_u64()),
+            reqs[1]
+                .metadata
+                .get(ALIAS_START_METADATA)
+                .and_then(|v| v.as_u64()),
             Some(1)
         );
         drop(reqs);
@@ -563,10 +571,7 @@ mod tests {
         let mut session = WorkerSession::new(Channel::Rag);
         for _ in 0..2 {
             exec.push_script(Box::new(|r: &mut AgentRunResult| {
-                r.budget_used = Some(agent_loop::runtime::BudgetUsage {
-                    current: 4,
-                    max: 4,
-                });
+                r.budget_used = Some(agent_loop::runtime::BudgetUsage { current: 4, max: 4 });
             }));
             session
                 .run_brief(&TaskBrief::new("b"), &base_req(), &exec)
@@ -579,10 +584,7 @@ mod tests {
 
         // Third brief: remaining cap = 2 < per-brief 4 → clamped, then sealed.
         exec.push_script(Box::new(|r: &mut AgentRunResult| {
-            r.budget_used = Some(agent_loop::runtime::BudgetUsage {
-                current: 2,
-                max: 2,
-            });
+            r.budget_used = Some(agent_loop::runtime::BudgetUsage { current: 2, max: 2 });
         }));
         let o3 = session
             .run_brief(&TaskBrief::new("b3"), &base_req(), &exec)
@@ -626,7 +628,10 @@ mod tests {
             .unwrap()
             .unwrap();
         let h = o2.handoff.expect("handoff");
-        assert!(h.handoff_degraded, "E105 must fire on the brief's own zero-call delta");
+        assert!(
+            h.handoff_degraded,
+            "E105 must fire on the brief's own zero-call delta"
+        );
         assert!(
             h.compile_diagnostics.contains(&"E105".to_string()),
             "{:?}",

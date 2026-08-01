@@ -33,13 +33,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-use agent_loop::events::{AgentEventSink, CollectingSink};
-use agent_loop::runtime::{stub_agent_auth, Agent, AgentRequest, AgentRunResult};
-use app_chat::agents::service::UnifiedAgentService;
 use agent_loop::AgentKind;
+use agent_loop::events::{AgentEventSink, CollectingSink};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult, stub_agent_auth};
+use app_chat::agents::service::UnifiedAgentService;
 use app_chat::writer::SubagentInvoker;
 use app_chat::writer::{
     FinishReason, MaterialPack, RefineContext, RefineLoopBudget, WriteRefineLoopRunner,
@@ -47,21 +47,21 @@ use app_chat::writer::{
 
 use common::AppError;
 
+use heavytail::StyleParams;
 use heavytail::diagnosis::diagnose_pre_refine;
+use heavytail::experiment::build_refine_reservoir;
 use heavytail::experiment::{
-    compliance_rate_from_rounds, evaluate_m4_exit, render_m4_markdown, M4TopicResult,
+    M4TopicResult, compliance_rate_from_rounds, evaluate_m4_exit, render_m4_markdown,
 };
 use heavytail::feedforward::fingerprint_workspace;
 use heavytail::llm::WriterLlm;
-use heavytail::experiment::build_refine_reservoir;
 use heavytail::persona::{
-    generate_persona, load_persona, persona_seed_default, save_persona, PersonaCard,
+    PersonaCard, generate_persona, load_persona, persona_seed_default, save_persona,
 };
 use heavytail::score::composite;
 use heavytail::state::WriterState;
 use heavytail::validator::validate;
 use heavytail::workspace::DraftWorkspace;
-use heavytail::StyleParams;
 
 /// Stub agent that rejects every run — on-demand research is disabled in this
 /// comparison harness. `handle_research` maps the error into a tool error and
@@ -280,20 +280,19 @@ async fn run_refine(opts: &ExperimentOptions) -> Result<()> {
         let pre_fp = fingerprint_workspace(&DraftWorkspace::from_plain(&draft));
         let pre_score = composite(&pre_fp, &style).s;
 
-        let persona = resolve_experiment_persona(
-            &llm,
-            &topic_title,
-            topic_num,
-            opts,
-            &out_dir,
-        )
-        .await?;
+        let persona =
+            resolve_experiment_persona(&llm, &topic_title, topic_num, opts, &out_dir).await?;
 
         let reservoir = build_refine_reservoir(&topic_title, &pre_fp, persona.as_ref());
         eprintln!(
             "  reservoir ({} terms): {}",
             reservoir.len(),
-            reservoir.iter().take(8).cloned().collect::<Vec<_>>().join("、")
+            reservoir
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("、")
         );
 
         let mut ws = DraftWorkspace::from_plain(&draft);
@@ -303,8 +302,13 @@ async fn run_refine(opts: &ExperimentOptions) -> Result<()> {
 
         let parent_request = experiment_request(&topic_title);
 
-        let runner =
-            WriteRefineLoopRunner::new(&llm, &invoker, &parent_request, style.clone(), budget.clone());
+        let runner = WriteRefineLoopRunner::new(
+            &llm,
+            &invoker,
+            &parent_request,
+            style.clone(),
+            budget.clone(),
+        );
         let mut state = WriterState::default();
         let sink = CollectingSink::new();
         runner

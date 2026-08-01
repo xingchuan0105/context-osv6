@@ -40,7 +40,16 @@ impl ReActLoop {
         cancel: &tokio_util::sync::CancellationToken,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,
-    ) -> Result<(u8, Option<String>, Vec<ReActIterationRecord>, LlmUsage, BudgetExhaustion), AppError> {
+    ) -> Result<
+        (
+            u8,
+            Option<String>,
+            Vec<ReActIterationRecord>,
+            LlmUsage,
+            BudgetExhaustion,
+        ),
+        AppError,
+    > {
         let mut iteration: u8 = 0;
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
         let mut total_usage = LlmUsage::zeroed();
@@ -60,8 +69,7 @@ impl ReActLoop {
 
             let tokens_used = total_usage.total_tokens;
             let rounds_exhausted = iteration >= effective_max_iters;
-            let tokens_exhausted =
-                effective_max_tokens > 0 && tokens_used >= effective_max_tokens;
+            let tokens_exhausted = effective_max_tokens > 0 && tokens_used >= effective_max_tokens;
 
             if rounds_exhausted || tokens_exhausted {
                 if self
@@ -156,7 +164,13 @@ impl ReActLoop {
                 .await;
         }
 
-        Ok((iteration, direct_answer, telemetry_records, total_usage, budget_exhaustion))
+        Ok((
+            iteration,
+            direct_answer,
+            telemetry_records,
+            total_usage,
+            budget_exhaustion,
+        ))
     }
 
     pub(super) async fn check_loop_budget_exhausted(

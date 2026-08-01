@@ -45,11 +45,7 @@ pub trait LoopHooks: Send + Sync {
     }
 
     /// Observability / rare host intercept. Default: allow (never block).
-    fn before_tool_call(
-        &self,
-        tool: &str,
-        args: &serde_json::Value,
-    ) -> BeforeToolCallOutcome {
+    fn before_tool_call(&self, tool: &str, args: &serde_json::Value) -> BeforeToolCallOutcome {
         let _ = (tool, args);
         BeforeToolCallOutcome::default()
     }
@@ -279,7 +275,8 @@ mod tests {
     fn characterization_role_sequence_legacy_tier_drain() {
         // base=2, low=high=3 → drain as soon as len > 5.
         let hooks = legacy_hooks(3);
-        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        let mut messages: Vec<ChatMessage> =
+            vec![ChatMessage::system("sys"), ChatMessage::user("q")];
         for i in 0..4 {
             let id = format!("call_{i}");
             messages.push(assistant_with_tool_calls(&id));
@@ -310,7 +307,8 @@ mod tests {
     fn characterization_no_drain_under_high_watermark() {
         // Default production hooks: high=32, low=20. A short trace stays intact.
         let hooks = StandardLoopHooks::default();
-        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        let mut messages: Vec<ChatMessage> =
+            vec![ChatMessage::system("sys"), ChatMessage::user("q")];
         for i in 0..5 {
             let id = format!("c{i}");
             messages.push(assistant_with_tool_calls(&id));
@@ -322,7 +320,11 @@ mod tests {
             .collect();
         let before_len = messages.len();
         hooks.transform_context(&mut messages, &ctx(2));
-        assert_eq!(messages.len(), before_len, "append-only under high watermark");
+        assert_eq!(
+            messages.len(),
+            before_len,
+            "append-only under high watermark"
+        );
         assert_eq!(
             role_sequence(&messages)
                 .into_iter()
@@ -338,7 +340,8 @@ mod tests {
     fn preserves_tool_call_pairing_under_truncation() {
         let hooks = legacy_hooks(3);
 
-        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        let mut messages: Vec<ChatMessage> =
+            vec![ChatMessage::system("sys"), ChatMessage::user("q")];
         for i in 0..4 {
             let id = format!("call_{i}");
             messages.push(assistant_with_tool_calls(&id));
@@ -358,9 +361,11 @@ mod tests {
         assert_no_orphan_tools(&messages);
         let declared = declared_tool_call_ids(&messages);
         assert!(declared.contains("call_keep"));
-        assert!(messages
-            .iter()
-            .any(|m| m.role == "tool" && m.tool_call_id.as_deref() == Some("call_keep")));
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.role == "tool" && m.tool_call_id.as_deref() == Some("call_keep"))
+        );
     }
 
     #[test]
@@ -412,7 +417,8 @@ mod tests {
             max_react_messages: 4,
             compact_high_watermark: 8,
         };
-        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        let mut messages: Vec<ChatMessage> =
+            vec![ChatMessage::system("sys"), ChatMessage::user("q")];
         // 3 full turns = 6 msgs → total 8 = base+6 ≤ base+8 → no drain.
         for i in 0..3 {
             let id = format!("t{i}");
@@ -430,7 +436,8 @@ mod tests {
             max_react_messages: 4,
             compact_high_watermark: 8,
         };
-        let mut messages: Vec<ChatMessage> = vec![ChatMessage::system("sys"), ChatMessage::user("q")];
+        let mut messages: Vec<ChatMessage> =
+            vec![ChatMessage::system("sys"), ChatMessage::user("q")];
         // 5 turns = 10 → total 12 > base+8 → compact, keep last 4 (+ pair realign).
         for i in 0..5 {
             let id = format!("t{i}");

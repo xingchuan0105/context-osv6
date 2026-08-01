@@ -43,7 +43,14 @@ impl LoopPolicy {
         first_round: bool,
         skill_request: Option<&[String]>,
         already_disclosed: &std::collections::HashSet<String>,
+        request: Option<&crate::runtime::AgentRequest>,
     ) -> DisclosurePlan {
-        DisclosurePlanner::plan_retrieve(mode, first_round, skill_request, already_disclosed)
+        DisclosurePlanner::plan_retrieve(
+            mode,
+            first_round,
+            skill_request,
+            already_disclosed,
+            request,
+        )
     }
 }

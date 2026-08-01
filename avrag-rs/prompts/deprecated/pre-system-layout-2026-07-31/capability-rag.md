@@ -16,7 +16,7 @@ applicable_strategies: [rag]
 ### 环境
 
 - 检索在 **Python 沙箱**完成。每轮若有多个 `<code language="python">` 块，**只执行第一个**；同块内可多条 `await` 并行。
-- 方法与返回语义见已加载的 **codegen**：`dense` / `lexical` / `grep` / `doc_profile` / `doc_summary` / `save` / `load`（无 top_k；无 graph_search、read_lines）。
+- 方法与返回语义见已加载的 **knowledge-base**：`dense` / `lexical` / `grep` / `doc_profile` / `doc_summary` / `save` / `load`（无 top_k；无 graph_search、read_lines）。
 - `grep` 的 `total_hits` = 命中行数；`truncated` 表示 hits 被上限截断。表格记录模型见 **how-to-read-tables**。
 - 每个代码块新进程；跨块用 `save` / `load`。
 - 采用的命中：结果里的 `alias`（如 `#3`）；最终答复**末行** `SELECTED: #3, #5`。历史回传中的 alias 仍有效。

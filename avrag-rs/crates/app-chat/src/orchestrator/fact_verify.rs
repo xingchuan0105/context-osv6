@@ -231,7 +231,10 @@ fn build_verify_messages(claims: &[VerifyClaim]) -> Vec<avrag_llm::ChatMessage> 
             text = text.chars().take(MAX_CHUNK_CHARS).collect();
             text.push('…');
         }
-        user.push_str(&format!("[{i}] claim: {}\nevidence:\n{}\n\n", c.claim, text));
+        user.push_str(&format!(
+            "[{i}] claim: {}\nevidence:\n{}\n\n",
+            c.claim, text
+        ));
     }
     user.push_str(
         "只输出一个 JSON 数组，长度与 claim 数量一致，每个元素为 \
@@ -352,7 +355,11 @@ mod tests {
     fn verdicts_confirm_and_relabel() {
         let mut h = handoff(vec![fact("a", &["c1"]), fact("b", &["c1"])]);
         let claims = collect_verify_claims(&h, &[chunk_result("c1", "t")]);
-        apply_fact_verdicts(&mut h, &claims, &[FactVerdict::Observed, FactVerdict::Inferred]);
+        apply_fact_verdicts(
+            &mut h,
+            &claims,
+            &[FactVerdict::Observed, FactVerdict::Inferred],
+        );
         assert_eq!(h.key_facts[0].basis, "observed");
         assert_eq!(h.key_facts[1].basis, "inferred");
         assert!(h.gaps.is_empty());
@@ -363,7 +370,11 @@ mod tests {
     fn unsupported_moves_to_gaps_with_warning_prefix() {
         let mut h = handoff(vec![fact("真", &["c1"]), fact("假", &["c1"])]);
         let claims = collect_verify_claims(&h, &[chunk_result("c1", "t")]);
-        apply_fact_verdicts(&mut h, &claims, &[FactVerdict::Observed, FactVerdict::Unsupported]);
+        apply_fact_verdicts(
+            &mut h,
+            &claims,
+            &[FactVerdict::Observed, FactVerdict::Unsupported],
+        );
         assert_eq!(h.key_facts.len(), 1);
         assert_eq!(h.key_facts[0].claim, "真");
         assert_eq!(h.gaps, vec!["⚠ 未获证据支持：假".to_string()]);

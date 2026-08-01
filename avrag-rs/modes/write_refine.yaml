@@ -1,5 +1,6 @@
 mode: write_refine
-system_prompt_base: prompts/orchestrators/write-refine-system.md
+# Write-refine is a separate product mode (not SaC chat system tree).
+system_prompt_base: prompts/deprecated/pre-system-layout-2026-07-31/write-refine-system.md
 tool_pool:
   - write_refine_revise
   - write_refine_lexical

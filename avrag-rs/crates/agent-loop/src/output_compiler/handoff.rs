@@ -176,10 +176,7 @@ fn check_insufficient_has_retrieval(
     if has_tool_results {
         return;
     }
-    let coverage = v
-        .get("coverage")
-        .and_then(|c| c.as_str())
-        .unwrap_or("");
+    let coverage = v.get("coverage").and_then(|c| c.as_str()).unwrap_or("");
     if !coverage.eq_ignore_ascii_case("insufficient") {
         return;
     }
@@ -202,10 +199,7 @@ fn check_full_without_evidence(
     if has_tool_results {
         return;
     }
-    let coverage = v
-        .get("coverage")
-        .and_then(|c| c.as_str())
-        .unwrap_or("");
+    let coverage = v.get("coverage").and_then(|c| c.as_str()).unwrap_or("");
     if !coverage.eq_ignore_ascii_case("full") {
         return;
     }

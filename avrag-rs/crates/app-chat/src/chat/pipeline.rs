@@ -155,7 +155,8 @@ async fn run_pipeline(
             .await?
         }
         PipelineLane::Write => {
-            crate::writer::run_write_mode(&state, &request, &session, stream_config.as_ref()).await?
+            crate::writer::run_write_mode(&state, &request, &session, stream_config.as_ref())
+                .await?
         }
     };
 

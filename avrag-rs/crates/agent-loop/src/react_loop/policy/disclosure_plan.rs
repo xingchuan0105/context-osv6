@@ -2,11 +2,9 @@ use std::collections::HashSet;
 
 use super::super::assembler::DisclosedState;
 use super::config::{DiscloseAt, ModeConfig, SkillCluster};
-use agent_tools::capability::CapabilityRegistry;
-use agent_tools::progressive::{
-    DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry,
-};
 use crate::runtime::AgentRequest;
+use agent_tools::capability::CapabilityRegistry;
+use agent_tools::progressive::{DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisclosureSlice {
@@ -36,11 +34,16 @@ pub struct DisclosurePlanner;
 
 impl DisclosurePlanner {
     /// `first_round` is assembler internal state (`iteration == 0`), not a config key.
+    ///
+    /// When `request` is provided and the mode is not a worker handoff, optional
+    /// writing/format refs from the request are disclosed on retrieve as well
+    /// (SaC ProseOnly often skips a separate synthesis assembly).
     pub fn plan_retrieve(
         mode: &ModeConfig,
         first_round: bool,
         skill_request: Option<&[String]>,
         already_disclosed: &HashSet<String>,
+        request: Option<&AgentRequest>,
     ) -> DisclosurePlan {
         let mut slices = Vec::new();
 
@@ -48,7 +51,7 @@ impl DisclosurePlanner {
             slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve));
         }
 
-        // Mandatory retrieve clusters (e.g. codegen SDK) must stay in the system
+        // Mandatory retrieve clusters (e.g. knowledge-base skill) must stay in the system
         // prompt every round — not only iteration 0 — so the model can recover
         // from sandbox errors with method signatures in context.
         for cluster_id in &mode.skill_catalog.mandatory.retrieve {
@@ -56,18 +59,18 @@ impl DisclosurePlanner {
         }
 
         // Table structure reference (ontology + few-shot): default-disclose once
-        // with codegen so markitdown pipe tables are in context without skill_request.
+        // with knowledge-base so markitdown pipe tables are in context without skill_request.
         if first_round
             && mode
                 .skill_catalog
                 .mandatory
                 .retrieve
                 .iter()
-                .any(|id| id == "codegen")
+                .any(|id| id == "knowledge-base")
         {
             push_cluster_body(
                 &mut slices,
-                "codegen",
+                "knowledge-base",
                 Some("how-to-read-tables"),
                 already_disclosed,
                 false,
@@ -84,6 +87,14 @@ impl DisclosurePlanner {
                     already_disclosed,
                     false,
                 );
+            }
+        }
+
+        // SaC: writing/format on retrieve when the request carries style/shape hints
+        // (in-loop DirectAnswer skips assemble_synthesis).
+        if first_round && !mode.worker_handoff {
+            if let Some(req) = request {
+                push_writing_format_slices(&mut slices, req, already_disclosed);
             }
         }
 
@@ -110,55 +121,31 @@ impl DisclosurePlanner {
             }
         }
 
-        // U3: the synthesis cluster index (writing/format catalog) is
-        // answer-side scaffolding — noise for channel workers whose final
-        // message is the handoff JSON (C5 gives them an explicit handoff
-        // turn). Answer/AnswerOnly loops still get it.
+        // Synthesis cluster index — noise for worker handoff; SaC answer loops keep it.
         if !mode.worker_handoff {
             slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Synthesis));
-        }
-
-        if let Some(writing_ref) = choices.writing_ref.as_deref() {
-            push_cluster_body(
-                &mut slices,
-                "writing",
-                Some(writing_ref),
-                already_disclosed,
-                false,
-            );
-        } else if let Some(hint) = request
-            .metadata
-            .get("writing_hint")
-            .and_then(|v| v.as_str())
-        {
-            if let Some(ref_slug) = map_writing_hint(hint) {
-                push_cluster_body(
-                    &mut slices,
-                    "writing",
-                    Some(&ref_slug),
-                    already_disclosed,
-                    false,
-                );
-            }
-        }
-
-        if let Some(format_ref) = choices.format_ref.as_deref() {
-            push_cluster_body(
-                &mut slices,
-                "format",
-                Some(format_ref),
-                already_disclosed,
-                false,
-            );
-        } else if let Some(hint) = request.format_hint.as_deref() {
-            if let Some(ref_slug) = map_format_hint(hint) {
-                push_cluster_body(
-                    &mut slices,
-                    "format",
-                    Some(&ref_slug),
-                    already_disclosed,
-                    false,
-                );
+            // Prefer explicit synthesis choices, else same hint mapping as retrieve.
+            if choices.writing_ref.is_some() || choices.format_ref.is_some() {
+                if let Some(writing_ref) = choices.writing_ref.as_deref() {
+                    push_cluster_body(
+                        &mut slices,
+                        "writing",
+                        Some(writing_ref),
+                        already_disclosed,
+                        false,
+                    );
+                }
+                if let Some(format_ref) = choices.format_ref.as_deref() {
+                    push_cluster_body(
+                        &mut slices,
+                        "format",
+                        Some(format_ref),
+                        already_disclosed,
+                        false,
+                    );
+                }
+            } else {
+                push_writing_format_slices(&mut slices, request, already_disclosed);
             }
         }
 
@@ -167,6 +154,40 @@ impl DisclosurePlanner {
         }
 
         DisclosurePlan { slices }
+    }
+}
+
+/// Disclose at most one writing + one format reference from request hints.
+fn push_writing_format_slices(
+    slices: &mut Vec<DisclosureSlice>,
+    request: &AgentRequest,
+    already_disclosed: &HashSet<String>,
+) {
+    let choices = parse_synthesis_choices(request);
+    if let Some(writing_ref) = choices.writing_ref.as_deref() {
+        push_cluster_body(
+            slices,
+            "writing",
+            Some(writing_ref),
+            already_disclosed,
+            false,
+        );
+    } else if let Some(hint) = request
+        .metadata
+        .get("writing_hint")
+        .and_then(|v| v.as_str())
+    {
+        if let Some(ref_slug) = map_writing_hint(hint) {
+            push_cluster_body(slices, "writing", Some(&ref_slug), already_disclosed, false);
+        }
+    }
+
+    if let Some(format_ref) = choices.format_ref.as_deref() {
+        push_cluster_body(slices, "format", Some(format_ref), already_disclosed, false);
+    } else if let Some(hint) = request.format_hint.as_deref() {
+        if let Some(ref_slug) = map_format_hint(hint) {
+            push_cluster_body(slices, "format", Some(&ref_slug), already_disclosed, false);
+        }
     }
 }
 
@@ -467,7 +488,7 @@ mod tests {
     #[test]
     fn retrieve_first_round_includes_index_mandatory_and_query() {
         let mode = rag_mode();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new());
+        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
         assert!(
             plan.slices
                 .contains(&DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve))
@@ -475,14 +496,14 @@ mod tests {
         assert!(plan
             .slices
             .iter()
-            .any(|s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "codegen")));
+            .any(|s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "knowledge-base")));
         assert!(plan.slices.contains(&DisclosureSlice::RetrievalQuery));
     }
 
     #[test]
     fn retrieve_later_round_includes_mandatory_codegen() {
         let mode = rag_mode();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, false, None, &HashSet::new());
+        let plan = DisclosurePlanner::plan_retrieve(&mode, false, None, &HashSet::new(), None);
         assert!(
             !plan
                 .slices
@@ -490,7 +511,7 @@ mod tests {
                 .any(|s| matches!(s, DisclosureSlice::ClusterIndex(_)))
         );
         assert!(plan.slices.iter().any(
-            |s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "codegen")
+            |s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "knowledge-base")
         ));
         assert!(!plan.slices.contains(&DisclosureSlice::RetrievalQuery));
     }
@@ -499,25 +520,26 @@ mod tests {
     fn skill_request_adds_undisclosed_cluster_body() {
         let mode = rag_mode();
         let mut disclosed = HashSet::new();
-        disclosed.insert("codegen".to_string());
+        disclosed.insert("knowledge-base".to_string());
         let plan = DisclosurePlanner::plan_retrieve(
             &mode,
             false,
             Some(&["memory".to_string()]),
             &disclosed,
+            None,
         );
         assert!(plan.slices.iter().any(|s| {
             matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "memory")
         }));
         assert!(plan.slices.iter().any(|s| {
-            matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "codegen")
+            matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "knowledge-base")
         }));
     }
 
     #[test]
     fn chat_mode_no_retrieval_query_by_default() {
         let mode = super::super::config::load_mode_config("chat").unwrap();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new());
+        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
         assert!(!plan.slices.contains(&DisclosureSlice::RetrievalQuery));
     }
 }

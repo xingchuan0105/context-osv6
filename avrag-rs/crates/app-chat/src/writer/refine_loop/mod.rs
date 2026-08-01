@@ -14,16 +14,16 @@ pub use types::{
 pub use write_core::WriteRefineLoopRunner;
 
 use common::AppError;
+use heavytail::StyleParams;
 use heavytail::llm::WriterLlm;
 use heavytail::state::WriterState;
-use heavytail::StyleParams;
 
-use agent_loop::events::AgentEventSink;
-use agent_loop::runtime::AgentRequest;
 use crate::writer::adapters::{
-    parent_meta_from_request, AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort,
+    AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort, parent_meta_from_request,
 };
 use crate::writer::invoker::SubagentInvoker;
+use agent_loop::events::AgentEventSink;
+use agent_loop::runtime::AgentRequest;
 
 /// Build and run WriteRefine with app-chat adapters (orchestrator entry).
 pub async fn run_write_refine(
@@ -47,9 +47,7 @@ pub async fn run_write_refine(
     let parent = parent_meta_from_request(parent_request);
     let runner = WriteRefineLoopRunner::new(llm, &research, &mode, parent, style, budget);
     let activity = AgentWriteActivitySink { inner: sink };
-    runner
-        .run(ctx, reservoir, state, &activity, job_dir)
-        .await
+    runner.run(ctx, reservoir, state, &activity, job_dir).await
 }
 
 #[cfg(test)]

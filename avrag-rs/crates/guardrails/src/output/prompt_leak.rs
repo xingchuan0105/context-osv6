@@ -3,20 +3,18 @@
 use contracts::chat::{GuardResult, RiskLevel};
 
 const PROMPT_SOURCES: &[(&str, &str)] = &[
-    // Live main-path system prompts (P2 2026-07-20: monomode *-system retired
-    // to prompts/deprecated/monomode-system/; leak references must track the
-    // prompts actually served to models).
+    // Live main-path system prompts (SaC: agent-base + mounted capabilities).
     (
-        "capability-rag",
-        include_str!("../../../../prompts/orchestrators/capability-rag.md"),
+        "agent-base",
+        include_str!("../../../../prompts/system/agent-base.md"),
     ),
     (
-        "capability-search",
-        include_str!("../../../../prompts/orchestrators/capability-search.md"),
+        "capability-knowledge-base",
+        include_str!("../../../../prompts/capabilities/knowledge-base.md"),
     ),
     (
-        "chat-base",
-        include_str!("../../../../prompts/orchestrators/chat-base.md"),
+        "capability-web",
+        include_str!("../../../../prompts/capabilities/web.md"),
     ),
     (
         "orchestrator-base",
@@ -24,7 +22,9 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "answer-from-workspace",
-        include_str!("../../../../prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md"),
+        include_str!(
+            "../../../../prompts/deprecated/orchestrator-multiagent/answer-from-workspace.md"
+        ),
     ),
     (
         "answer-from-web",
@@ -32,11 +32,13 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     ),
     (
         "answer-dual-source",
-        include_str!("../../../../prompts/deprecated/orchestrator-multiagent/answer-dual-source.md"),
+        include_str!(
+            "../../../../prompts/deprecated/orchestrator-multiagent/answer-dual-source.md"
+        ),
     ),
     (
-        "codegen",
-        include_str!("../../../../prompts/clusters/codegen/SKILL.md"),
+        "knowledge-base",
+        include_str!("../../../../prompts/clusters/knowledge-base/SKILL.md"),
     ),
     (
         "writing",
@@ -197,7 +199,11 @@ pub fn load_prompt_sources_from_dirs(dirs: &[&std::path::Path]) -> Vec<(String, 
     out
 }
 
-fn collect_markdown(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+fn collect_markdown(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    out: &mut Vec<(String, String)>,
+) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -235,16 +241,14 @@ mod tests {
         assert!(result.passed);
     }
 
-    /// NOTE: this fixture mirrors the current `prompts/orchestrators/capability-rag.md`
-    /// wording (P2: main-path RAG worker prompt). If that prompt is rewritten,
-    /// update the leaked text below to verbatim-copy a current paragraph,
-    /// otherwise the detector will correctly miss it and this test will rot.
-    /// (C7: fenced prompt examples are ignored by the detector; this unfenced
-    /// single-sentence paragraph remains the kept detection path.)
+    /// NOTE: fixture must mirror a live prompt paragraph (currently
+    /// `prompts/capabilities/knowledge-base.md`). Rewrite this string if that
+    /// body changes, or the detector will miss it and the test will rot.
+    /// (C7: fenced prompt examples are ignored; unfenced prose is the path.)
     #[test]
     fn paragraph_leak_is_blocked() {
         let guard = PromptLeakGuard::new();
-        let leaked = "系统提示要求：你当前 **已启用** 工作区文档检索。文档事实须来自检索 / 代码 observation；未见的内容不要当作文档事实。";
+        let leaked = "本轮已挂载**知识库**文档检索。知识库是文档侧事实的权威来源。";
         let result = guard.check(leaked, None);
         assert!(!result.passed);
         assert_eq!(result.guard_type, "output:prompt_leak");
@@ -272,9 +276,9 @@ mod tests {
         // is excluded.
         let guard = PromptLeakGuard::with_sources(vec![(
             "toy-prompt".to_string(),
-            "系统提示要求：你当前 **已启用** 工作区文档检索功能".to_string(),
+            "系统提示要求：你当前 **已启用** 知识库文档检索功能".to_string(),
         )]);
-        let result = guard.check("系统提示要求：你当前 **已启用** 工作区文档检索功能", None);
+        let result = guard.check("系统提示要求：你当前 **已启用** 知识库文档检索功能", None);
         assert!(!result.passed);
     }
 

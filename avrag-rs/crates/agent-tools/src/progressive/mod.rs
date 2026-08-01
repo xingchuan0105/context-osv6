@@ -1,3 +1,4 @@
+mod disclosure_catalog;
 /// Progressive disclosure assets (TN Wave 1 residual).
 ///
 /// `PromptRegistry` is a **skill MD loader / disclosure catalog** only.
@@ -8,16 +9,15 @@ mod prompt_registry;
 mod skill;
 mod skill_frontmatter;
 mod tool;
-mod disclosure_catalog;
 
-pub use disclosure_unit::{DisclosureContext, DisclosureTier, DisclosureUnit};
-pub use prompt_registry::PromptRegistry;
-pub use skill::Skill;
-pub use tool::Tool;
 pub use disclosure_catalog::{
     atomic_tool_catalog, atomic_tool_catalog_cached, evaluate_calculator_expression,
     search_specific_tools, search_specific_tools_cached,
 };
+pub use disclosure_unit::{DisclosureContext, DisclosureTier, DisclosureUnit};
+pub use prompt_registry::PromptRegistry;
+pub use skill::Skill;
+pub use tool::Tool;
 
 #[cfg(test)]
 mod tests {
@@ -73,14 +73,14 @@ mod tests {
     #[test]
     fn prompt_registry_standard_cached_loads_cds_assets() {
         let registry = PromptRegistry::standard_cached();
-        assert!(registry.skill("codegen").is_some());
+        assert!(registry.skill("knowledge-base").is_some());
         assert!(registry.skill("writing").is_some());
         assert!(registry.skill("format").is_some());
         assert!(registry.skill("memory").is_some());
         assert!(registry.skill("search").is_some());
-        assert!(registry.skill("capability-rag").is_some());
-        assert!(registry.skill("capability-search").is_some());
-        assert!(registry.skill("chat-base").is_some());
+        assert!(registry.skill("capability-knowledge-base").is_some());
+        assert!(registry.skill("capability-web").is_some());
+        assert!(registry.skill("agent-base").is_some());
         // P2 (2026-07-20): monomode *-system prompts retired to prompts/deprecated/.
         assert!(registry.skill("rag-system").is_none());
         assert!(registry.skill("search-system").is_none());

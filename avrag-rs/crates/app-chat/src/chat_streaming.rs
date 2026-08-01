@@ -2,8 +2,8 @@ use common::AppError;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
-use agent_loop::events::{AgentEvent, AgentEventSink};
 use crate::context::ChatContext;
+use agent_loop::events::{AgentEvent, AgentEventSink};
 use contracts::chat::ChatEvent;
 pub const STREAM_PLACEHOLDER_MESSAGE_ID: i64 = 0;
 const STREAM_TOKEN_CHUNK_CHARS: usize = 24;

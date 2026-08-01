@@ -4,11 +4,11 @@ use common::AppError;
 use contracts::chat::{ChatRequest, ModeDebug};
 use contracts::workspaces::ChatSession;
 
-use agent_loop::runtime::AgentRequest;
 use crate::capabilities::CapabilitySet;
 use crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID;
 use crate::context::ChatContext;
 use crate::mode_assemble::AssembledMode;
+use agent_loop::runtime::AgentRequest;
 
 use super::pipeline::{ChatExecution, StreamConfig};
 
@@ -180,10 +180,9 @@ async fn run_orchestrator_v1(
         "capabilities".to_string(),
         serde_json::to_value(caps.as_string_list()).unwrap_or_else(|_| serde_json::json!([])),
     );
-    agent_request.metadata.insert(
-        "orchestrator_v1".to_string(),
-        serde_json::json!(true),
-    );
+    agent_request
+        .metadata
+        .insert("orchestrator_v1".to_string(), serde_json::json!(true));
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -193,10 +192,7 @@ async fn run_orchestrator_v1(
     // Source-document identity (file names + genres) for the evidence store —
     // what lets the chat exit judge doc genre instead of guessing from snippets.
     let docscope = if !request.doc_scope.is_empty() {
-        state
-            .load_docscope_metadata(&request.doc_scope)
-            .await
-            .ok()
+        state.load_docscope_metadata(&request.doc_scope).await.ok()
     } else {
         None
     };
@@ -516,9 +512,7 @@ pub(crate) fn attach_debug_trace_from_sink(
         .events()
         .into_iter()
         .filter_map(|e| match e {
-            agent_loop::events::AgentEvent::DebugTrace { kind, payload } => {
-                Some((kind, payload))
-            }
+            agent_loop::events::AgentEvent::DebugTrace { kind, payload } => Some((kind, payload)),
             _ => None,
         })
         .collect();
@@ -580,16 +574,16 @@ pub(crate) fn merge_activity_counts_into_mode_debug(execution: &mut ChatExecutio
     else {
         return;
     };
-    let mode_debug = execution.response.mode_debug.get_or_insert_with(|| {
-        contracts::chat::ModeDebug {
-            rag: None,
-            search: None,
-            general: None,
-        }
-    });
-    let general = mode_debug
-        .general
-        .get_or_insert_with(BTreeMap::new);
+    let mode_debug =
+        execution
+            .response
+            .mode_debug
+            .get_or_insert_with(|| contracts::chat::ModeDebug {
+                rag: None,
+                search: None,
+                general: None,
+            });
+    let general = mode_debug.general.get_or_insert_with(BTreeMap::new);
     general.insert("activity_counts".to_string(), counts);
 }
 
@@ -645,10 +639,7 @@ mod tests {
             stage: stage.to_string(),
             message: "m".to_string(),
             detail: None,
-            counts: counts
-                .iter()
-                .map(|(k, v)| (k.to_string(), *v))
-                .collect(),
+            counts: counts.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
             sources_preview: Vec::new(),
         }
     }
@@ -656,7 +647,10 @@ mod tests {
     #[test]
     fn activity_counts_folds_stage_counters() {
         let events = vec![
-            activity("synthesis_code_answer_repair", &[("synthesis_code_answer_repair", 1)]),
+            activity(
+                "synthesis_code_answer_repair",
+                &[("synthesis_code_answer_repair", 1)],
+            ),
             activity("budget_exhausted", &[]),
             activity(
                 "synthesis_code_answer_violation",
@@ -725,9 +719,6 @@ mod tests {
         assert_eq!(briefs.len(), 2);
         assert_eq!(briefs[0]["seq"], serde_json::json!(1));
         assert_eq!(briefs[1]["seq"], serde_json::json!(2));
-        assert_eq!(
-            briefs[1]["handoff_summary"],
-            serde_json::json!("摘要2")
-        );
+        assert_eq!(briefs[1]["handoff_summary"], serde_json::json!("摘要2"));
     }
 }

@@ -12,7 +12,16 @@ impl ReActLoop {
         mode: &ModeConfig,
         request: AgentRequest,
         _sink: &dyn AgentEventSink,
-    ) -> Result<(AgentRequest, usize, u8, contracts::auth_runtime::AuthContext, String), AppError> {
+    ) -> Result<
+        (
+            AgentRequest,
+            usize,
+            u8,
+            contracts::auth_runtime::AuthContext,
+            String,
+        ),
+        AppError,
+    > {
         let loop_user_query = request.query.clone();
         let base_message_count = request
             .messages

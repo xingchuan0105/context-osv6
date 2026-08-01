@@ -3,10 +3,10 @@ use std::sync::Arc;
 use super::super::StandardLoopHooks;
 use super::{IterationControl, IterationState};
 use crate::AgentKind;
-use agent_tools::capability::CapabilityRegistry;
 use crate::events::CollectingSink;
 use crate::react_loop::ReActLoop;
 use crate::react_loop::assembler::DisclosedState;
+use agent_tools::capability::CapabilityRegistry;
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage, ModelProviderConfig};
 
 fn rag_mode() -> super::super::config::ModeConfig {
@@ -195,11 +195,18 @@ async fn rejects_codegen_sdk_method_as_native_tool_call() {
     }
     // Tool messages pushed so the next LLM turn sees the correction.
     assert!(
-        state.messages.iter().any(|m| m.content.contains("not_a_native_tool")
-            || m.content.contains("client.dense_search")
-            || m.content.contains("await client.")),
+        state
+            .messages
+            .iter()
+            .any(|m| m.content.contains("not_a_native_tool")
+                || m.content.contains("client.dense_search")
+                || m.content.contains("await client.")),
         "state messages should carry rejection: {:?}",
-        state.messages.iter().map(|m| &m.content).collect::<Vec<_>>()
+        state
+            .messages
+            .iter()
+            .map(|m| &m.content)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -410,13 +417,9 @@ async fn only_first_code_block_executes_with_skip_warning() {
     assert!(!observation.contains("CCC_THIRD"), "{observation}");
     assert!(!observation.contains("[block 1]"), "{observation}");
     assert!(observation.contains("[blocks_skipped]"), "{observation}");
+    assert!(observation.contains("其余 2 个未执行"), "{observation}");
     assert!(
-        observation.contains("其余 2 个未执行"),
-        "{observation}"
-    );
-    assert!(
-        observation.contains("仅第一块进入沙箱")
-            || observation.contains("每轮仅第一块"),
+        observation.contains("仅第一块进入沙箱") || observation.contains("每轮仅第一块"),
         "{observation}"
     );
     // Only the executed block counts as a tool call.
@@ -609,7 +612,6 @@ fn iteration_state_defaults_are_empty() {
     assert!(state.disclosed.disclosed_skill_ids.is_empty());
 }
 
-
 // ---------------------------------------------------------------------------
 // S2: worker-handoff output compiler at the direct_content decision point
 // ---------------------------------------------------------------------------
@@ -741,7 +743,10 @@ async fn non_worker_mode_skips_compile() {
     let mut state = empty_state();
     let raw = r#"{"task_result":{"summary":"x"}}"#;
     let outcome = apply_content(&loop_, &mode, &mut state, raw).await;
-    assert!(matches!(outcome.control, IterationControl::DirectAnswer { .. }));
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
     assert_eq!(state.compile_continuations, 0);
 }
 
@@ -769,7 +774,12 @@ fn compile_feedback_continue_does_not_consume_iteration_budget() {
         !super::consumes_iteration_budget(&outcome("compile_feedback")),
         "compile correction turn is free"
     );
-    for reason in ["direct_content", "content_blocked_no_evidence", "code_gen", "skill_request"] {
+    for reason in [
+        "direct_content",
+        "content_blocked_no_evidence",
+        "code_gen",
+        "skill_request",
+    ] {
         assert!(
             super::consumes_iteration_budget(&outcome(reason)),
             "{reason} consumes one numbered iteration"
@@ -788,5 +798,8 @@ fn compile_feedback_continue_does_not_consume_iteration_budget() {
 fn hook_emits_the_shared_compile_feedback_exit_reason() {
     // The free-budget accounting keys on this exact label — pin it so the two
     // sites cannot drift apart.
-    assert_eq!(super::state::COMPILE_FEEDBACK_EXIT_REASON, "compile_feedback");
+    assert_eq!(
+        super::state::COMPILE_FEEDBACK_EXIT_REASON,
+        "compile_feedback"
+    );
 }

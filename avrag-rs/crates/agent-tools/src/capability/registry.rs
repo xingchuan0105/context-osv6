@@ -133,7 +133,6 @@ impl CapabilityRegistry {
         skills.sort_by_key(|s| &s.id);
         skills
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +275,7 @@ fn parse_risk_level(s: &str) -> Option<super::RiskLevel> {
 fn infer_skill_strategies(id: &str) -> Vec<String> {
     let all = || vec!["chat".to_string(), "rag".to_string(), "search".to_string()];
     match id {
-        "codegen" => vec!["rag".to_string()],
+        "knowledge-base" => vec!["rag".to_string()],
         "search" => vec!["search".to_string()],
         id if id.starts_with("rag-") => vec!["rag".to_string()],
         id if id.starts_with("search-") => vec!["search".to_string()],
@@ -374,9 +373,9 @@ mod tests {
     #[test]
     fn can_lookup_skills() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.skill("codegen").is_some());
+        assert!(registry.skill("knowledge-base").is_some());
         assert!(registry.skill("metadata").is_some());
-        assert!(registry.skill("capability-rag").is_some());
+        assert!(registry.skill("capability-knowledge-base").is_some());
         // U9 (2026-07): synthesis answer skills retired to prompts/deprecated/.
         assert!(registry.skill("rag-answer").is_none());
         assert!(registry.skill("chat").is_none());
@@ -463,16 +462,18 @@ mod tests {
     }
 
     #[test]
-    fn capability_rag_reads_frontmatter_strategies() {
+    fn capability_knowledge_base_reads_frontmatter() {
         let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("capability-rag").unwrap();
-        assert_eq!(skill.applicable_strategies, vec!["rag"]);
+        assert!(registry.skill("capability-knowledge-base").is_some());
+        assert!(registry.skill("capability-web").is_some());
+        assert!(registry.skill("agent-base").is_some());
+        assert!(registry.skill("knowledge-base").is_some());
     }
 
     #[test]
-    fn codegen_cluster_is_registered() {
+    fn knowledge_base_cluster_is_registered() {
         let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("codegen").unwrap();
+        let skill = registry.skill("knowledge-base").unwrap();
         assert_eq!(skill.applicable_strategies, vec!["rag"]);
     }
 
@@ -538,7 +539,10 @@ mod tests {
         assert!(ids.contains(&"conversation_history_load"));
         assert!(ids.contains(&"user_profile_load"));
         assert!(ids.contains(&"dense_retrieval"));
-        assert!(!ids.contains(&"web_search"), "search-only tools excluded from rag plan");
+        assert!(
+            !ids.contains(&"web_search"),
+            "search-only tools excluded from rag plan"
+        );
     }
 
     #[test]

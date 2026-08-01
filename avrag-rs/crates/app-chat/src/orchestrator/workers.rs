@@ -54,7 +54,7 @@ pub struct WorkerToolObs {
 /// One plan / eval / terminal thinking step from the worker event sink.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkerThinkingStep {
-    /// `plan` | `eval` | `terminal` | `tool_call` | `codegen`
+    /// `plan` | `eval` | `terminal` | `tool_call` | `knowledge-base`
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision: Option<String>,
@@ -186,11 +186,7 @@ pub fn worker_observability_from_run(
     }
     WorkerRunObservability {
         channel,
-        tools: run
-            .tool_results
-            .iter()
-            .map(tool_obs_from_result)
-            .collect(),
+        tools: run.tool_results.iter().map(tool_obs_from_result).collect(),
         reasoning_summary: run
             .reasoning_summary
             .as_ref()
@@ -377,7 +373,7 @@ fn thinking_steps_from_events(events: &[AgentEvent]) -> Vec<WorkerThinkingStep> 
                 let is_codegen = tool == "code_gen" || tool == "code_execution";
                 steps.push(WorkerThinkingStep {
                     kind: if is_codegen {
-                        "codegen".into()
+                        "knowledge-base".into()
                     } else {
                         "tool_call".into()
                     },
@@ -395,7 +391,7 @@ fn thinking_steps_from_events(events: &[AgentEvent]) -> Vec<WorkerThinkingStep> 
                 elapsed_ms,
             } if tool == "code_gen" || tool == "code_execution" => {
                 steps.push(WorkerThinkingStep {
-                    kind: "codegen".into(),
+                    kind: "knowledge-base".into(),
                     decision: Some(format!("{status:?}").to_lowercase()),
                     reasoning: data
                         .as_ref()
@@ -454,11 +450,12 @@ pub fn worker_handoff_from_run(result: &AgentRunResult) -> Option<WorkerHandoff>
     if result.answer.trim().is_empty() {
         return None;
     }
-    let outcome =
-        agent_loop::output_compiler::compile_handoff(&agent_loop::output_compiler::HandoffCompileInput {
+    let outcome = agent_loop::output_compiler::compile_handoff(
+        &agent_loop::output_compiler::HandoffCompileInput {
             raw: &result.answer,
             has_tool_results: !result.tool_results.is_empty(),
-        });
+        },
+    );
     handoff_from_compile(&result.answer, outcome)
 }
 
@@ -475,11 +472,12 @@ pub fn parse_worker_handoff(raw: &str) -> Option<WorkerHandoff> {
     if raw.trim().is_empty() {
         return None;
     }
-    let outcome =
-        agent_loop::output_compiler::compile_handoff(&agent_loop::output_compiler::HandoffCompileInput {
+    let outcome = agent_loop::output_compiler::compile_handoff(
+        &agent_loop::output_compiler::HandoffCompileInput {
             raw,
             has_tool_results: false,
-        });
+        },
+    );
     handoff_from_compile(raw, outcome)
 }
 
@@ -515,10 +513,7 @@ fn handoff_from_compile(
     };
     // Degraded = any Error diagnostic (E105) or a transformation (E104
     // strip); warnings alone never degrade; prose handoffs are NOT degraded.
-    let transformed = outcome
-        .diagnostics
-        .iter()
-        .any(|d| d.code == "E104");
+    let transformed = outcome.diagnostics.iter().any(|d| d.code == "E104");
     h.handoff_degraded = h.handoff_degraded || outcome.has_errors() || transformed;
     for code in codes {
         if !h.compile_diagnostics.contains(&code) {
@@ -689,8 +684,8 @@ pub fn attach_store_retrieval_tool_results(
 /// S7: full-width `【E3】` / `【E:3】` / `【E：3】` get the same treatment —
 /// they used to leak raw into the user-facing answer (q087 附, 2026-07-27).
 fn normalize_loose_e_markers(answer: &str) -> String {
-    use std::sync::OnceLock;
     use regex::Regex;
+    use std::sync::OnceLock;
 
     struct Patterns {
         fullwidth: Regex,
@@ -722,10 +717,7 @@ fn normalize_loose_e_markers(answer: &str) -> String {
     // Full-width first: they contain no ASCII brackets, so converting them up
     // front lets the canonical passes below treat them uniformly.
     let mut s = p.fullwidth.replace_all(answer, "[[E$1]]").into_owned();
-    s = p
-        .bracket_bold
-        .replace_all(&s, "[[E$1]]")
-        .into_owned();
+    s = p.bracket_bold.replace_all(&s, "[[E$1]]").into_owned();
     s = p.bold_double.replace_all(&s, "[[E$1]]").into_owned();
     s = p.bold_single.replace_all(&s, "[[E$1]]").into_owned();
     s = p.double_bold_inner.replace_all(&s, "[[E$1]]").into_owned();
@@ -792,10 +784,7 @@ pub fn finalize_answer_evidence(answer_result: &mut AgentRunResult, store: &Evid
 }
 
 /// Scan `[[...]]` tokens; returns (rewritten text, citations, stripped count).
-fn rewrite_markers(
-    answer: &str,
-    store: &EvidenceStore,
-) -> (String, Vec<Citation>, usize) {
+fn rewrite_markers(answer: &str, store: &EvidenceStore) -> (String, Vec<Citation>, usize) {
     let mut out = String::with_capacity(answer.len());
     let mut citations: Vec<Citation> = Vec::new();
     let mut seen_eids = std::collections::HashSet::new();
@@ -931,7 +920,9 @@ fn rewrite_markers(
 
 /// `E7` / `E:7` → "E7" (store id form).
 fn parse_e_marker(token: &str) -> Option<String> {
-    let t = token.strip_prefix('E').or_else(|| token.strip_prefix('e'))?;
+    let t = token
+        .strip_prefix('E')
+        .or_else(|| token.strip_prefix('e'))?;
     let t = t.strip_prefix(':').unwrap_or(t);
     if !t.is_empty() && t.chars().all(|c| c.is_ascii_digit()) {
         Some(format!("E{t}"))
@@ -951,11 +942,7 @@ fn is_raw_citation_marker(token: &str) -> bool {
 }
 
 /// Whether an existing citation came from this store entry (for repeat refs).
-fn marker_source_matches(
-    citation: &Citation,
-    eid: &str,
-    store: &EvidenceStore,
-) -> bool {
+fn marker_source_matches(citation: &Citation, eid: &str, store: &EvidenceStore) -> bool {
     let Some(entry) = store.get(eid) else {
         return false;
     };
@@ -1018,7 +1005,11 @@ mod tests {
         assert!(r.answer.contains("[[cite:chunk-a]]"), "{}", r.answer);
         // Single global counter: doc first (1), web second (2).
         assert!(r.answer.contains("[[web:2]]"), "{}", r.answer);
-        assert!(!r.answer.contains("[[E"), "E-ids must be gone: {}", r.answer);
+        assert!(
+            !r.answer.contains("[[E"),
+            "E-ids must be gone: {}",
+            r.answer
+        );
         assert_eq!(r.citations.len(), 2, "repeat ref dedupes");
         assert_eq!(r.citations[0].chunk_id.as_deref(), Some("chunk-a"));
         assert_eq!(r.citations[0].page, Some(3));
@@ -1032,8 +1023,7 @@ mod tests {
         // full_eval Q142 style: model wraps E-ids in markdown bold / single brackets.
         let store = store_with_both();
         let mut r = AgentRunResult::default();
-        r.answer =
-            "直接根源[**[E1]**]。模式层**[E1]**。底层[E1]。规范 [[E1]] 不双写。".into();
+        r.answer = "直接根源[**[E1]**]。模式层**[E1]**。底层[E1]。规范 [[E1]] 不双写。".into();
         finalize_answer_evidence(&mut r, &store);
 
         assert!(
@@ -1106,7 +1096,11 @@ mod tests {
         let mut unique = ids.clone();
         unique.sort_unstable();
         unique.dedup();
-        assert_eq!(ids.len(), unique.len(), "citation ids must be unique: {ids:?}");
+        assert_eq!(
+            ids.len(),
+            unique.len(),
+            "citation ids must be unique: {ids:?}"
+        );
         // `[[web:n]]` n == citation_id == array position (frontend resolves by index).
         assert_eq!(r.citations[0].citation_id, 1);
         assert_eq!(r.citations[0].layer.as_deref(), Some("search"));
@@ -1140,9 +1134,7 @@ mod tests {
         }];
         finalize_answer_evidence(&mut r, &store);
         assert!(
-            r.tool_results
-                .iter()
-                .any(|t| t.tool == "dense_retrieval"),
+            r.tool_results.iter().any(|t| t.tool == "dense_retrieval"),
             "store doc chunks must surface as dense_retrieval: {:?}",
             r.tool_results.iter().map(|t| &t.tool).collect::<Vec<_>>()
         );
@@ -1287,7 +1279,6 @@ mod tests {
         assert!(legacy.premise_mismatch.is_none());
     }
 
-
     #[test]
     fn peels_legacy_internal_answer_v1() {
         let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"结论正文","citations":[],"coverage":"full","refusal_reason":null}"#;
@@ -1316,7 +1307,8 @@ mod tests {
 
     #[test]
     fn fenced_json_handoff_is_accepted() {
-        let raw = "```json\n{\"summary\":\"s\",\"coverage\":\"full\",\"gaps\":[],\"key_facts\":[]}\n```";
+        let raw =
+            "```json\n{\"summary\":\"s\",\"coverage\":\"full\",\"gaps\":[],\"key_facts\":[]}\n```";
         let h = parse_worker_handoff(raw).expect("handoff");
         assert_eq!(h.summary, "s");
         assert_eq!(h.coverage, "full");
@@ -1370,7 +1362,8 @@ mod tests {
     #[test]
     fn valid_handoff_with_observed_chunk_ids_passes_untouched() {
         let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"2019年建厂","key_facts":[{"claim":"2019年建厂","evidence":["c1"]}],"coverage":"full","gaps":[]}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        let h =
+            worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert!(!h.handoff_degraded);
         // K3: model-written key_facts are ignored (hydration owns facts).
         assert!(h.key_facts.is_empty());
@@ -1398,7 +1391,8 @@ mod tests {
         // K3: q045's self-invented wrapper is no longer an error — the raw
         // message becomes the (JSON-text) summary, not degraded.
         let raw = r#"{"task_result":{"summary":"文中未写明总部城市"}}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        let h =
+            worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert!(!h.handoff_degraded);
         assert!(h.summary.contains("task_result"), "{}", h.summary);
         assert!(h.compile_diagnostics.is_empty());
@@ -1420,7 +1414,8 @@ mod tests {
     #[test]
     fn clean_handoff_has_no_compile_diagnostics() {
         let raw = r#"{"schema_version":"internal_worker_handoff_v1","summary":"2019年建厂","key_facts":[{"claim":"2019年建厂","evidence":["c1"]}],"coverage":"full","gaps":[]}"#;
-        let h = worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
+        let h =
+            worker_handoff_from_run(&run_with(raw, vec![ok_chunk_result("c1")])).expect("handoff");
         assert!(!h.handoff_degraded);
         assert!(h.compile_diagnostics.is_empty());
     }
@@ -1445,7 +1440,12 @@ mod tests {
             "web marker must survive: {}",
             r.answer
         );
-        assert_eq!(r.citations.len(), 2, "both valid eids cited: {:?}", r.citations);
+        assert_eq!(
+            r.citations.len(),
+            2,
+            "both valid eids cited: {:?}",
+            r.citations
+        );
         // Broken opener remains as plain text (leading `[[` rescanned); no product markers invented.
         assert!(
             r.answer.contains("[[") || r.answer.contains("E15"),
@@ -1497,9 +1497,9 @@ mod tests {
         run.iterations = vec![IterationRecord {
             iteration: 0,
             plan: serde_json::json!({
-                "action_type": "codegen",
+                "action_type": "knowledge-base",
                 "observation_preview": "lexical hits",
-                "disclosed_skills": ["codegen"],
+                "disclosed_skills": ["knowledge-base"],
                 "exit_reason": "native_tool_call",
             }),
             signals: Default::default(),
@@ -1513,15 +1513,15 @@ mod tests {
         let events = vec![
             AgentEvent::PlanDecision {
                 selected_tools: vec![],
-                selected_skills: vec!["codegen".into()],
+                selected_skills: vec!["knowledge-base".into()],
                 selected_writing_styles: vec![],
                 behavior_mode: None,
                 reasoning: "retrieve iteration 0, skills: [codegen]".into(),
             },
             AgentEvent::Evaluation {
                 signals: Some(serde_json::json!({
-                    "action_type": "codegen",
-                    "disclosed_skills": ["codegen"],
+                    "action_type": "knowledge-base",
+                    "disclosed_skills": ["knowledge-base"],
                 })),
                 decision: "continue".into(),
                 reasoning: "need more evidence".into(),
@@ -1563,7 +1563,7 @@ mod tests {
             obs.thinking
         );
         assert!(
-            obs.thinking.iter().any(|s| s.kind == "codegen"),
+            obs.thinking.iter().any(|s| s.kind == "knowledge-base"),
             "codegen thinking: {:?}",
             obs.thinking
         );
@@ -1596,9 +1596,9 @@ mod tests {
         run.iterations = vec![IterationRecord {
             iteration: 0,
             plan: serde_json::json!({
-                "action_type": "codegen",
+                "action_type": "knowledge-base",
                 "observation_preview": "empty",
-                "disclosed_skills": ["codegen"],
+                "disclosed_skills": ["knowledge-base"],
             }),
             signals: Default::default(),
             decision: "synthesize".into(),

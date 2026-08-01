@@ -1,8 +1,9 @@
 mode: search
-# P2 (2026-07-20): main-path system source is capability-search (self-contained);
-# monomode search-system retired to prompts/deprecated/monomode-system/.
-system_prompt_base: prompts/orchestrators/capability-search.md
-# A1/A6: native web_* delisted from LLM surface; SaC uses client.web / client.fetch.
+# SaC: assemble_mode always loads system/agent-base, then
+# capabilities/web when 联网 is mounted.
+# Internal mode id `search`. Model-facing: 联网 / web. Skill id for thick world model: `search`.
+system_prompt_base: prompts/capabilities/web.md
+# Empty tool_pool: LLM uses client.web / client.fetch in sandbox. auto_fallback is host-side only.
 tool_pool: []
 inject_retrieval_query: true
 skill_catalog:

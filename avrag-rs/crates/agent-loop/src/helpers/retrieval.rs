@@ -3,9 +3,7 @@ use contracts::chat::SourceRef;
 use contracts::{ToolResult, ToolStatus};
 
 /// Chunk list from a tool result: raw array **or** `{ "chunks": [...] }` (lexical+graph_context).
-pub(crate) fn tool_result_chunk_items(
-    data: &serde_json::Value,
-) -> Option<&Vec<serde_json::Value>> {
+pub(crate) fn tool_result_chunk_items(data: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
     if let Some(arr) = data.as_array() {
         return Some(arr);
     }

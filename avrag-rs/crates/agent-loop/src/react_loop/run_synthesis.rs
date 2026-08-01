@@ -6,7 +6,7 @@ use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::{SynthesisGate, decide_synthesis_gate, has_retrieval_observation};
 use super::reasoning_emit;
-use super::run_result::{build_run_result, RunContext};
+use super::run_result::{RunContext, build_run_result};
 use super::synthesis::SynthesisPhase;
 use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, truncate_preview};
@@ -202,7 +202,8 @@ impl ReActLoop {
         // internal handoff JSON). Without it, exhausted workers reach the
         // prose-only stream with the retrieve-phase "output one <code> block"
         // framing still dominant and emit raw code or fabrications.
-        let exhausted = budget_exhausted_messages(messages, budget_exhaustion, collected_tool_results);
+        let exhausted =
+            budget_exhausted_messages(messages, budget_exhaustion, collected_tool_results);
         let messages = exhausted.as_deref().unwrap_or(messages);
         let final_answer = synthesis
             .run(
@@ -350,8 +351,7 @@ fn budget_exhausted_messages(
         };
         let truncated = super::truncate_observation(&body, C5_CARRYOVER_MAX_CHARS);
         turn.push_str(&super::prompt_assets::budget_exhausted_carryover(
-            &last.tool,
-            &truncated,
+            &last.tool, &truncated,
         ));
     }
     out.push(ChatMessage::user(turn));
@@ -360,15 +360,21 @@ fn budget_exhausted_messages(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::run_retrieval::BudgetExhaustion;
+    use super::*;
 
     fn rounds_exhausted() -> BudgetExhaustion {
-        BudgetExhaustion { rounds: true, tokens: false }
+        BudgetExhaustion {
+            rounds: true,
+            tokens: false,
+        }
     }
 
     fn tokens_exhausted() -> BudgetExhaustion {
-        BudgetExhaustion { rounds: false, tokens: true }
+        BudgetExhaustion {
+            rounds: false,
+            tokens: true,
+        }
     }
 
     #[test]
@@ -382,11 +388,10 @@ mod tests {
         assert_eq!(out.len(), history.len() + 1);
         let last = out.last().unwrap();
         assert_eq!(last.role, "user");
+        assert!(last.content.contains("迭代额度已用尽") || last.content.contains("迭代预算已用尽"));
         assert!(
-            last.content.contains("迭代额度已用尽") || last.content.contains("迭代预算已用尽")
-        );
-        assert!(
-            last.content.contains("不再产生新的代码块") || last.content.contains("不再发起新的检索")
+            last.content.contains("不再产生新的代码块")
+                || last.content.contains("不再发起新的检索")
         );
         assert!(
             last.content.contains("summary")
@@ -413,7 +418,10 @@ mod tests {
     #[test]
     fn rounds_and_tokens_exhaustion_uses_rounds_turn() {
         let history = vec![ChatMessage::user("question")];
-        let both = BudgetExhaustion { rounds: true, tokens: true };
+        let both = BudgetExhaustion {
+            rounds: true,
+            tokens: true,
+        };
         let out = budget_exhausted_messages(&history, both, &[]).expect("appended");
         let last = &out.last().unwrap().content;
         assert!(last.contains("迭代额度已用尽"), "{last}");
@@ -446,14 +454,12 @@ mod tests {
                 trace: None,
             },
         ];
-        let out = budget_exhausted_messages(&history, rounds_exhausted(), &results).expect("appended");
+        let out =
+            budget_exhausted_messages(&history, rounds_exhausted(), &results).expect("appended");
         let last = &out.last().unwrap().content;
         assert!(last.contains("code_execution"), "{last}");
         assert!(last.contains("total_count=12"), "{last}");
-        assert!(
-            last.contains("原始结果") || last.contains("观察"),
-            "{last}"
-        );
+        assert!(last.contains("原始结果") || last.contains("观察"), "{last}");
         // Picks the LAST Ok result, not an earlier one.
         assert!(!last.contains("dense_retrieval"), "{last}");
     }
@@ -484,7 +490,8 @@ mod tests {
                 trace: None,
             },
         ];
-        let out = budget_exhausted_messages(&history, rounds_exhausted(), &results).expect("appended");
+        let out =
+            budget_exhausted_messages(&history, rounds_exhausted(), &results).expect("appended");
         let last = &out.last().unwrap().content;
         // Walks back to the most recent Ok-with-data result.
         assert!(last.contains("答案 42"), "{last}");

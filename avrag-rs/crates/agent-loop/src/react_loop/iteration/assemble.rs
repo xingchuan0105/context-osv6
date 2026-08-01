@@ -99,14 +99,8 @@ impl ReActLoop {
                 || mode.synthesis_output.contract
                     == super::super::config::AnswerContractKind::ProseOnly);
         let llm_response = if prefer_prose_stream {
-            self.call_retrieve_llm_stream(
-                &round_messages,
-                temperature,
-                request,
-                state,
-                sink,
-            )
-            .await?
+            self.call_retrieve_llm_stream(&round_messages, temperature, request, state, sink)
+                .await?
         } else {
             self.llm
                 .complete_with_tools(&round_messages, &assembled.tools, Some(temperature))
@@ -134,10 +128,7 @@ impl ReActLoop {
     ) -> Result<LlmResponse, AppError> {
         use crate::events::AgentEvent;
 
-        let cancel = request
-            .cancellation_token
-            .clone()
-            .unwrap_or_default();
+        let cancel = request.cancellation_token.clone().unwrap_or_default();
         let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let stream = self.llm.complete_stream(

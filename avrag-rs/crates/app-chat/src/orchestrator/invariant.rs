@@ -10,19 +10,12 @@ pub struct MissingChannels {
 impl std::fmt::Display for MissingChannels {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let names: Vec<&str> = self.channels.iter().map(|c| c.as_str()).collect();
-        write!(
-            f,
-            "missing dispatch for channel(s): {}",
-            names.join(", ")
-        )
+        write!(f, "missing dispatch for channel(s): {}", names.join(", "))
     }
 }
 
 /// Return channels in `materialized` that have no finished dispatch record.
-pub fn missing_dispatches(
-    materialized: &[Channel],
-    records: &[DispatchRecord],
-) -> Vec<Channel> {
+pub fn missing_dispatches(materialized: &[Channel], records: &[DispatchRecord]) -> Vec<Channel> {
     materialized
         .iter()
         .copied()
@@ -116,7 +109,8 @@ pub fn looks_like_user_did_not_provide_doc(answer: &str) -> bool {
     let a = answer.to_lowercase();
     // Incident class: blame user for missing pasted report body.
     // Do not flag meta instructions that merely mention 未提供 as a forbidden phrase.
-    if answer.contains("勿将") || answer.contains("禁止说") || answer.contains("not user-blame") {
+    if answer.contains("勿将") || answer.contains("禁止说") || answer.contains("not user-blame")
+    {
         return false;
     }
     (answer.contains("未提供")
@@ -127,8 +121,8 @@ pub fn looks_like_user_did_not_provide_doc(answer: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::PackStatus;
+    use super::*;
 
     fn rec(ch: Channel) -> DispatchRecord {
         DispatchRecord {
@@ -184,7 +178,11 @@ mod tests {
         assert_eq!(n.len(), 1);
         // P3: the empty-channel notice is the hard zero-evidence instruction.
         assert!(n[0].contains("未检索到任何证据"), "{:?}", n[0]);
-        assert!(n[0].contains("禁止使用 worker 叙述或常识补写"), "{:?}", n[0]);
+        assert!(
+            n[0].contains("禁止使用 worker 叙述或常识补写"),
+            "{:?}",
+            n[0]
+        );
     }
 
     // ---- A1: per-channel aggregation (q114 autopsy) -------------------------
@@ -208,10 +206,7 @@ mod tests {
             rec_with(Channel::Rag, PackStatus::Empty, 0),
         ];
         let n = partial_notices_from_records(&records);
-        assert!(
-            !n.iter().any(|s| s.contains("未检索到任何证据")),
-            "{n:?}"
-        );
+        assert!(!n.iter().any(|s| s.contains("未检索到任何证据")), "{n:?}");
     }
 
     #[test]

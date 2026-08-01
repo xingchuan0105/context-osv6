@@ -5,8 +5,8 @@ use app_billing::{BillingContext, CostEventRecord};
 use app_core::ChatPersistencePort;
 use app_core::{AnalyticsServiceCtx, StorageContext};
 use app_documents::DocumentContext;
-use contracts::auth_runtime::AuthContext;
 use common::AppError;
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 use crate::llm_context::LlmContext;

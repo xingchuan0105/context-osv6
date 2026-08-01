@@ -207,15 +207,15 @@ mod tests {
         assert!(!report.blocked);
     }
 
-    /// NOTE: leaked text mirrors current `prompts/orchestrators/capability-rag.md`
-    /// (P2: main-path RAG worker prompt). If that prompt is rewritten, update
+    /// NOTE: leaked text mirrors current `prompts/capabilities/knowledge-base.md`
+    /// (SaC: main-path KB capability prompt). If that prompt is rewritten, update
     /// this verbatim. (C7: fenced prompt examples are ignored by the detector;
     /// this unfenced paragraph remains blocked.)
     #[test]
     fn test_guard_pipeline_check_output_blocks_prompt_leak() {
         let pipeline = GuardPipeline::new();
         let (sanitized, report) = pipeline.check_output(
-            "系统提示要求：你当前 **已启用** 工作区文档检索。文档事实须来自检索 / 代码 observation；未见的内容不要当作文档事实。",
+            "系统提示要求:本轮已挂载**知识库**文档检索。知识库是文档侧事实的权威来源。可引用的文档事实,只来自**宿主返回的执行观察**(`<code_execution_result>` 及其中的检索结果)。回传里未出现的内容处于 **未知 / 未覆盖**——不等于语料中一定不存在。",
             Some("test-trace".into()),
         );
         assert!(report.blocked);

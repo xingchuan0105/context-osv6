@@ -20,6 +20,7 @@ use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
+use crate::runtime::AgentRequest;
 use agent_tools::skills::builtin::web_fetch::WebFetchSkill;
 use agent_tools::skills::memory_dispatch::{conversation_history_load, user_profile_load};
 use agent_tools::skills::{ExecutionContext, SkillComponent};
@@ -27,10 +28,9 @@ use agent_tools::tool_registry::OwnedToolDeps;
 use app_core::ChatPersistencePort;
 use async_trait::async_trait;
 use avrag_code_interpreter::{CodeInterpreter, ExecutionResult, HostBridge, InterpreterError};
-use contracts::{ToolResult, ToolStatus};
 use contracts::auth_runtime::AuthContext;
+use contracts::{ToolResult, ToolStatus};
 use serde_json::{Value, json};
-use crate::runtime::AgentRequest;
 
 /// Loop-local view of one sandbox `client.*` call (no rag-core types).
 #[derive(Debug, Clone)]
@@ -61,10 +61,7 @@ impl LoopRuntimeDeps {
         Self::default()
     }
 
-    pub fn with_rag_runtime(
-        mut self,
-        runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
-    ) -> Self {
+    pub fn with_rag_runtime(mut self, runtime: Option<Arc<avrag_rag_core::RagRuntime>>) -> Self {
         self.rag_runtime = runtime;
         self
     }
@@ -349,10 +346,7 @@ impl SacHostBridge {
     }
 
     async fn call_fetch(&self, args: &Value) -> Value {
-        let url = args
-            .get("url")
-            .and_then(|v| v.as_str())
-            .map(str::to_owned);
+        let url = args.get("url").and_then(|v| v.as_str()).map(str::to_owned);
         let skill = WebFetchSkill;
         let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _));
         let result = skill.execute(args, &ctx).await;

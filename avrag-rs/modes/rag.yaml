@@ -1,21 +1,21 @@
 mode: rag
-# P2 (2026-07-20): main-path system source is capability-rag (self-contained);
-# monomode rag-system retired to prompts/deprecated/monomode-system/.
-system_prompt_base: prompts/orchestrators/capability-rag.md
-# Intentionally empty: retrieve tools are disclosed on-demand via skill clusters
-# (codegen/memory). Product capabilities still list auto_fallback.tool_id.
+# SaC: assemble_mode always loads system/agent-base, then
+# capabilities/knowledge-base when 知识库 (KB) is mounted.
+# Internal mode id remains `rag` (config compatibility). Model-facing name: 知识库 / knowledge base.
+# system_prompt_base below is a fallback if parts metadata is missing; live path uses multi-part assemble.
+system_prompt_base: prompts/capabilities/knowledge-base.md
+# Empty tool_pool: LLM uses Python sandbox (client.*). auto_fallback is host-side only.
 tool_pool: []
 inject_retrieval_query: true
 skill_catalog:
-  retrieve: [codegen, memory, metadata]
+  retrieve: [knowledge-base, memory, metadata]
   synthesis: [writing, format]
   mandatory:
-    retrieve: [codegen]
-    # PR-A (2026-07-20): no monomode rag-answer — worker final is handoff JSON
-    # (assemble_mode forces ProseOnly + early-stop; see diagnosis prompt-stack).
+    retrieve: [knowledge-base]
+    # SaC answers in-loop (ProseOnly); no monomode synthesis skill.
     synthesis: []
 budget:
-  # Rounds = safety ceiling (concurrency / runaway). Tokens = primary cost budget.
+  # Rounds = safety ceiling. Tokens = primary cost budget.
   max_iterations: 12
   by_user_tier:
     free: 8
@@ -26,19 +26,16 @@ budget:
     free: 16000
     pro: 28000
     enterprise: 40000
-  # no_chunk continue boost: default +50% of baseline max_tokens (omit absolute override)
-  # no_chunk_grace_tokens: <absolute>  # optional ops override only
 auto_fallback:
+  # Host recovery only — not exposed as an LLM tool schema under SaC.
   enabled: true
   tool_id: dense_retrieval
   top_k: 10
-# Unified with chat/search so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:
-  # Skill-owned grounding intent only — host does not hard-block DirectAnswer.
+  # Skill-owned grounding; host does not hard-block DirectAnswer.
   require_evidence: false
   allow_content_early_stop: false
   skip_synthesis_on_direct_answer: true
 synthesis_output:
-  # assemble_mode re-asserts ProseOnly for capability paths.
   contract: prose_only

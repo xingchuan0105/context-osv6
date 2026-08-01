@@ -1,1 +1,1 @@
-`{tool}` is a Python SDK method on `client`, not a native tool schema. Observation: the call was issued as a function/tool name; the runtime expects a `<code language="python">` block, e.g. `chunks = await client.{tool}(...)` (args per codegen skill).
+`{tool}` is a Python SDK method on `client`, not a native tool schema. Observation: the call was issued as a function/tool name; the runtime expects a `<code language="python">` block, e.g. `chunks = await client.{tool}(...)` (args per knowledge-base skill).

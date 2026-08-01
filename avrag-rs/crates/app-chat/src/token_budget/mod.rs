@@ -1,14 +1,14 @@
 //! TokenBudgetSimulator — offline token-consumption analysis for development.
 
-mod types;
+mod report;
 mod scenarios;
 mod simulate;
-mod report;
+mod types;
 
 #[cfg(test)]
 mod tests;
 
-pub use types::{Scenario, SimulationResult, StageEstimate};
+pub use report::print_report;
 pub use scenarios::default_scenarios;
 pub use simulate::{simulate_all, simulate_scenario};
-pub use report::print_report;
+pub use types::{Scenario, SimulationResult, StageEstimate};

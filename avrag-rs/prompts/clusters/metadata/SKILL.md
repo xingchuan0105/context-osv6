@@ -14,9 +14,9 @@ applicable_modes: [rag]
 {"skill_request": ["metadata"]}
 ```
 
-下一轮会注入工作区文档清单。适用于：
+下一轮会注入知识库文档清单。适用于：
 
-- 用户问工作区有哪些文档、作者、类型
+- 用户问知识库有哪些文档、作者、类型
 - 需要全局概览（多文档对比、统计）
 - 需要 `doc_id` 再调 `doc_profile` / `doc_summary`，又不想先做内容检索
 - 内容检索回传为空，想先看清单再换查询词
@@ -25,7 +25,7 @@ applicable_modes: [rag]
 
 ## 加载后会看到什么
 
-注入一段 `<docscope_metadata>…</docscope_metadata>` 包裹的 JSON，列出**当前工作区全部文档**的元数据（一次给全量，不能只要子集）。形状示例（虚构 id，非真实语料）：
+注入一段 `<docscope_metadata>…</docscope_metadata>` 包裹的 JSON，列出**当前知识库全部文档**的元数据（一次给全量，不能只要子集）。形状示例（虚构 id，非真实语料）：
 
 ```json
 {
@@ -52,7 +52,7 @@ applicable_modes: [rag]
 ```
 
 - `documents[]`：每篇一条；`doc_id` 用于后续 `doc_profile` / `doc_summary`。
-- `profile`：语言/领域/体裁等聚合列表，便于看工作区整体特征。
+- `profile`：语言/领域/体裁等聚合列表，便于看知识库整体特征。
 - `domain` / `genre` / `era` 可能为 `"unknown"`：表示系统未识别，不要当成有效标签。
 - `author` / `publication_date` 为 `null`：只表示未识别，不能当成「文档一定没有作者/日期」。
 
@@ -63,7 +63,7 @@ profile = await client.doc_profile(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee
 summary = await client.doc_summary(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"], level="doc")
 ```
 
-`doc_ids` 可省略：省略时按当前工作区默认范围解析；只有要**收窄**到某几篇时才显式传入（用 `doc_id` 字符串，不是文件名）。
+`doc_ids` 可省略：省略时按当前知识库默认范围解析；只有要**收窄**到某几篇时才显式传入（用 `doc_id` 字符串，不是文件名）。
 
 ## 边界
 

@@ -1,8 +1,6 @@
 use contracts::chat::AgentOperationGuide;
 
-use agent_tools::progressive::{
-    DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry,
-};
+use agent_tools::progressive::{DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry};
 
 const RAG_SUMMARY: &str = "RAG uses SaC Python SDK only. Emit <code language=\"python\"> blocks calling client.dense, client.lexical, client.grep, etc. Do not call native retrieval tool schemas.";
 const SEARCH_SUMMARY: &str = "Search uses SaC Python SDK: client.web(query) and client.fetch(url) inside <code language=\"python\"> blocks. No native web_search/web_fetch function calls.";
@@ -33,7 +31,7 @@ pub fn attach_operation_guide(
 }
 
 fn build_rag_guide() -> AgentOperationGuide {
-    let instructions = render_skill_instructions("codegen");
+    let instructions = render_skill_instructions("knowledge-base");
     AgentOperationGuide {
         mode: "rag".to_string(),
         summary: RAG_SUMMARY.to_string(),

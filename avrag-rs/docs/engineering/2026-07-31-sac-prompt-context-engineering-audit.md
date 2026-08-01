@@ -247,3 +247,14 @@ Product entry was already SaC-only; this makes **prompt ownership** match that f
 | golden-14 E2E | **Not run in this wave** (explicit stop) |
 
 **Estimated pack CE after P2:** ~8.0–8.5/10.
+
+## 11. P0–P3 drift fix (2026-07-31 later)
+
+| Priority | Delivered |
+|----------|-----------|
+| P0 | `prompts/README` three-layer synonym map; rag/search yaml comments fixed; assemble comment; auto_fallback documented as host-only |
+| P1 | agent-base + knowledge-base + web execution-surface env (fake tool / fake result not evidence); dual few-shot in capabilities |
+| P2 | `loop/README` documents `codegen-*` as sandbox implementation codename |
+| P3 | writing/format disclosed on retrieve when request has hints (SaC ProseOnly); orchestrator isolation doc + pipeline_steps pointer |
+
+Isolation doc: `docs/engineering/2026-07-31-sac-orchestrator-isolation.md`.

@@ -8,29 +8,30 @@ mod refine_loop;
 
 pub use material_pack::MaterialPack;
 pub use refine_loop::{
-    run_write_refine, RefineContext, RefineLoopBudget, WriteRefineLoopRunner, WRITE_REFINE_HARD_REACT_CAP,
+    RefineContext, RefineLoopBudget, WRITE_REFINE_HARD_REACT_CAP, WriteRefineLoopRunner,
+    run_write_refine,
 };
 pub use write_core::{WRITE_AGENT_TYPE, WRITE_MODE};
 
-pub use invoker::{research, ResearchOutcome, SubagentInvoker};
+pub use invoker::{ResearchOutcome, SubagentInvoker, research};
 
 use std::path::PathBuf;
 
 use common::AppError;
+use heavytail::StyleParams;
 use heavytail::draft::{self, PRIMING};
 use heavytail::llm::WriterLlm;
 use heavytail::metrics::analyze_sentences;
 use heavytail::skeleton;
 use heavytail::state::{WriterBudget, WriterPhase, WriterState};
 use heavytail::validator;
-use heavytail::StyleParams;
 use tracing::warn;
 
-use agent_tools::capability::CapabilityRegistry;
-use agent_loop::events::{AgentEvent, AgentEventSink};
-use agent_tools::progressive::PromptRegistry;
-use agent_loop::runtime::{AgentRequest, AgentRunResult};
 use crate::context::ChatContext;
+use agent_loop::events::{AgentEvent, AgentEventSink};
+use agent_loop::runtime::{AgentRequest, AgentRunResult};
+use agent_tools::capability::CapabilityRegistry;
+use agent_tools::progressive::PromptRegistry;
 
 const DEFAULT_TARGET_CHARS: usize = 2_000;
 const HEAVYTAIL_PRIMING_SKILL_ID: &str = "heavytail-priming";
@@ -44,9 +45,8 @@ fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
     let mut client = match ctx.llm_ctx.agent_client().cloned() {
         Some(client) => client,
         None => {
-            return WriterLlm::from_env().map_err(|e| {
-                AppError::internal(format!("writer LLM configuration error: {e}"))
-            });
+            return WriterLlm::from_env()
+                .map_err(|e| AppError::internal(format!("writer LLM configuration error: {e}")));
         }
     };
 
@@ -59,7 +59,8 @@ fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(Uuid::nil),
         };
-        client = client.with_observer(observer.clone(), tenant)
+        client = client
+            .with_observer(observer.clone(), tenant)
             .with_request_context(None, ctx.auth.request_id().map(|s| s.to_string()));
     }
 
@@ -152,13 +153,11 @@ impl<'a> WriterOrchestrator<'a> {
         let refine_llm = llm.with_phase("refine");
         let reservoir = research_outcome.reservoir.clone();
         let mut workspace = std::mem::take(&mut state.workspace);
-        let material_pack =
-            material_pack::MaterialPack::from_research(
-                &research_outcome.materials(),
-                &workspace.render_plain(),
-            );
-        let diagnosis =
-            heavytail::diagnosis::diagnose_pre_refine(&workspace, &style, &reservoir);
+        let material_pack = material_pack::MaterialPack::from_research(
+            &research_outcome.materials(),
+            &workspace.render_plain(),
+        );
+        let diagnosis = heavytail::diagnosis::diagnose_pre_refine(&workspace, &style, &reservoir);
         let mut refine_ctx = RefineContext::new(
             std::mem::take(&mut workspace),
             diagnosis,
@@ -179,8 +178,8 @@ impl<'a> WriterOrchestrator<'a> {
             sink,
             &checkpoint_dir,
         )
-            .await
-            .map_err(|e| AppError::internal(format!("write refine loop failed: {e}")))?;
+        .await
+        .map_err(|e| AppError::internal(format!("write refine loop failed: {e}")))?;
         state.workspace = refine_ctx.workspace;
         checkpoint_state(&state, &checkpoint_dir)?;
 
@@ -198,11 +197,8 @@ impl<'a> WriterOrchestrator<'a> {
         checkpoint_state(&state, &checkpoint_dir)?;
 
         let answer = state.workspace.render_plain();
-        let citations = cards::filter_citations_for_cards(
-            &research_outcome.citations,
-            &state.cards,
-            &skeleton,
-        );
+        let citations =
+            cards::filter_citations_for_cards(&research_outcome.citations, &state.cards, &skeleton);
 
         let mut degrade_trace = research_outcome.degrade_trace;
         if research_outcome.research_degraded {

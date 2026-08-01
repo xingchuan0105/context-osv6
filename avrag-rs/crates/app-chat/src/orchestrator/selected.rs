@@ -174,7 +174,10 @@ mod tests {
 
     #[test]
     fn parse_variants_fullwidth_spaces_and_prose() {
-        assert_eq!(parse_selected_aliases("SELECTED: #2, #5, #9"), vec![2, 5, 9]);
+        assert_eq!(
+            parse_selected_aliases("SELECTED: #2, #5, #9"),
+            vec![2, 5, 9]
+        );
         assert_eq!(parse_selected_aliases("SELECTED：#3"), vec![3]);
         assert_eq!(parse_selected_aliases("选择: #1"), vec![1]);
         assert_eq!(parse_selected_aliases("选择： #4、#6"), vec![4, 6]);

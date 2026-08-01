@@ -108,7 +108,9 @@ mod tests {
     #[test]
     fn write_rejected() {
         let err = resolve_capabilities(None, "write").unwrap_err();
-        assert!(err.to_string().contains("write") || format!("{err:?}").contains("write_mode_disabled"));
+        assert!(
+            err.to_string().contains("write") || format!("{err:?}").contains("write_mode_disabled")
+        );
     }
 
     #[test]

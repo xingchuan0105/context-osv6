@@ -11,9 +11,9 @@ mod tests {
         StorageContext, StorageContextParts, StorageInfra, StorageStores,
     };
     use app_documents::DocumentContext;
-    use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
     use avrag_guardrails::GuardPipeline;
     use common::{AppError, new_id, now_rfc3339};
+    use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
     use contracts::chat::ChatRequest;
     use contracts::workspaces::{ChatSession, Workspace};
     use tokio::sync::RwLock;
@@ -21,12 +21,12 @@ mod tests {
 
     use crate::chat::pipeline_steps::{dispatch_mode, inject_assembled_metadata};
     use crate::{
-        assemble_mode, resolve_capabilities, CapabilitySet, ChatContext, LlmContext,
-        OrchestratorContext,
+        CapabilitySet, ChatContext, LlmContext, OrchestratorContext, assemble_mode,
+        resolve_capabilities,
     };
 
-    use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
     use crate::agents::service::UnifiedAgentService;
+    use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
     use async_trait::async_trait;
     use std::sync::Mutex;
 
@@ -169,7 +169,7 @@ mod tests {
             agent_type: agent_type.to_string(),
             capabilities: None,
             client_context: None,
-        client_ip: None,
+            client_ip: None,
             source_type: None,
             source_token: None,
             doc_scope,
@@ -304,7 +304,7 @@ mod tests {
             .get("system_prompt_parts")
             .and_then(|v| v.as_array())
             .expect("system_prompt_parts");
-        assert_eq!(parts.len(), 2);
+        assert_eq!(parts.len(), 3); // agent-base + knowledge-base + web
 
         let cfg_val = req
             .metadata
@@ -395,12 +395,14 @@ mod tests {
             })
             .unwrap_or_default();
         assert!(
-            parts.iter().any(|p| p.contains("capability-rag.md")),
-            "capability-rag expected, got {parts:?}"
+            parts
+                .iter()
+                .any(|p| p.contains("capabilities/knowledge-base.md")),
+            "workspace capability expected, got {parts:?}"
         );
         assert!(
-            parts.iter().any(|p| p.contains("capability-search.md")),
-            "capability-search expected, got {parts:?}"
+            parts.iter().any(|p| p.contains("capabilities/web.md")),
+            "web capability expected, got {parts:?}"
         );
         assert!(
             !parts.iter().any(|p| p.contains("product-answer-base.md")),
@@ -487,16 +489,16 @@ mod tests {
             "orchestrator-base must not load for pure chat: {parts:?}"
         );
         assert!(
-            !parts.iter().any(|p| p.contains("capability-")),
-            "capability-* must not load for pure chat: {parts:?}"
+            !parts.iter().any(|p| p.contains("capabilities/")),
+            "capabilities/* must not load for pure chat: {parts:?}"
         );
         assert!(
             !parts.iter().any(|p| p.contains("answer-")),
             "answer-* blocks must not load for pure chat: {parts:?}"
         );
         assert!(
-            parts.iter().any(|p| p.contains("chat-base.md")),
-            "chat-base must load for pure chat: {parts:?}"
+            parts.iter().any(|p| p.contains("system/agent-base.md")),
+            "agent-base must load for pure chat: {parts:?}"
         );
         // No evidence finalize for pure chat.
         assert!(execution.response.citations.is_empty());
@@ -547,7 +549,7 @@ mod tests {
                 .is_none(),
             "single-agent path has no orchestrator flag"
         );
-        // Single ReAct agent with capability-rag manual.
+        // Single ReAct agent with agent-base + workspace capability.
         let captured = capture.lock().unwrap().take().expect("agent ran");
         let parts: Vec<String> = captured
             .metadata
@@ -560,8 +562,10 @@ mod tests {
             })
             .unwrap_or_default();
         assert!(
-            parts.iter().any(|p| p.contains("capability-rag.md")),
-            "capability-rag must load for rag single agent: {parts:?}"
+            parts
+                .iter()
+                .any(|p| p.contains("capabilities/knowledge-base.md")),
+            "workspace capability must load for rag single agent: {parts:?}"
         );
         assert!(
             !parts.iter().any(|p| p.contains("product-answer-base.md")),
@@ -645,10 +649,7 @@ mod tests {
 
         // No markers to rewrite, but the store bridges when finalize runs.
         assert!(
-            result
-                .tool_results
-                .iter()
-                .any(|tr| tr.tool == "web_search"),
+            result.tool_results.iter().any(|tr| tr.tool == "web_search"),
             "finalize must bridge web store to tool_results"
         );
         assert!(result.citations.is_empty());

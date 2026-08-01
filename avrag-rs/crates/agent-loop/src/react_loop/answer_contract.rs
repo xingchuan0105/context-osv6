@@ -224,9 +224,7 @@ fn normalize_schema_version_value(s: &str) -> String {
         .collect::<String>()
         .to_ascii_lowercase();
     match compact.as_str() {
-        "internalanswerunifiedv1" | "internalhybridanswerv1" => {
-            "internal_answer_unified_v1".into()
-        }
+        "internalanswerunifiedv1" | "internalhybridanswerv1" => "internal_answer_unified_v1".into(),
         "internalanswerv1" => "internal_answer_v1".into(),
         "internalsearchanswerv1" => "internal_search_answer_v1".into(),
         _ => s.to_string(),
@@ -246,7 +244,11 @@ fn parse_unified_or_legacy(body: &str) -> Result<ParsedSynthesisAnswer, String> 
                 if p.schema_version != "internal_answer_unified_v1" {
                     // Convert legacy rag-shaped unified parse (citations may be empty/doc).
                     if p.citations.is_empty() {
-                        p = upgrade_rag_json_to_unified_from_text(&p.answer_text, p.coverage, p.refusal_reason);
+                        p = upgrade_rag_json_to_unified_from_text(
+                            &p.answer_text,
+                            p.coverage,
+                            p.refusal_reason,
+                        );
                     } else {
                         p.schema_version = "internal_answer_unified_v1".into();
                     }
@@ -430,10 +432,7 @@ fn rewrite_legacy_web_markers(text: &str) -> String {
             break;
         };
         let inner = after[..end].trim();
-        if inner.starts_with("cite:")
-            || inner.starts_with("image:")
-            || inner.starts_with("web:")
-        {
+        if inner.starts_with("cite:") || inner.starts_with("image:") || inner.starts_with("web:") {
             out.push_str(&format!("[[{inner}]]"));
         } else if let Ok(n) = inner.parse::<u32>() {
             out.push_str(&format!("[[web:{n}]]"));
@@ -842,10 +841,7 @@ pub fn strip_model_source_wrappers(text: &str) -> String {
     let mut rest = text;
     while let Some(found) = rest.find("[来源") {
         let mut start = found;
-        if start >= 2
-            && rest.as_bytes()[start - 2] == b'*'
-            && rest.as_bytes()[start - 1] == b'*'
-        {
+        if start >= 2 && rest.as_bytes()[start - 2] == b'*' && rest.as_bytes()[start - 1] == b'*' {
             start -= 2;
         }
         out.push_str(&rest[..start]);
@@ -905,8 +901,6 @@ fn extract_inline_markers_from(block: &str) -> String {
     }
     parts.join(" ")
 }
-
-
 
 fn partial_evidence_insufficient_zh() -> &'static str {
     super::prompt_assets::partial_evidence_insufficient()
@@ -1075,10 +1069,8 @@ pub fn sanitize_parsed_answer(
     match answer {
         ParsedSynthesisAnswer::Rag(ans) => {
             let known = known_chunk_ids_with_messages(tool_results, messages);
-            let cleaned = scrub_internal_answer_tokens(&strip_unknown_cite_markers(
-                &ans.answer_text,
-                &known,
-            ));
+            let cleaned =
+                scrub_internal_answer_tokens(&strip_unknown_cite_markers(&ans.answer_text, &known));
             if cleaned.chars().count() < 4 {
                 return None;
             }
@@ -1304,7 +1296,9 @@ mod tests {
     #[test]
     fn code_only_detector_flags_block_answers() {
         // The observed terminal-answer failure shapes.
-        assert!(is_code_only_answer("<code language=\"python\">print(1)</code>"));
+        assert!(is_code_only_answer(
+            "<code language=\"python\">print(1)</code>"
+        ));
         assert!(is_code_only_answer("```python\nprint(1)\n```"));
         assert!(is_code_only_answer("```sql\nSELECT 1\n```"));
         // Truncated stream: unclosed fence is still a code-only answer.
@@ -1417,7 +1411,11 @@ mod tests {
     fn contract_violation_fallback_rag_is_chinese() {
         let fallback = contract_violation_fallback("rag");
         assert!(!fallback.contains("I found"));
-        assert!(fallback.contains('，') || fallback.contains('。') || fallback.chars().any(|c| c > '\u{4e00}'));
+        assert!(
+            fallback.contains('，')
+                || fallback.contains('。')
+                || fallback.chars().any(|c| c > '\u{4e00}')
+        );
     }
 
     #[test]
@@ -1519,8 +1517,8 @@ mod tests {
             trace: None,
         }];
         let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"正文[[cite:good]]与未知[[cite:bad]]","citations":[{"chunk_id":"good"},{"chunk_id":"bad"}],"coverage":"full","refusal_reason":null}"#;
-        let resolved = resolve_synthesis_answer(&[raw], &tool_results, &[], &mode)
-            .expect("should sanitize");
+        let resolved =
+            resolve_synthesis_answer(&[raw], &tool_results, &[], &mode).expect("should sanitize");
         let prose = render_synthesis_prose(&resolved);
         assert!(prose.contains("正文"));
         assert!(prose.contains("[[cite:good]]"));

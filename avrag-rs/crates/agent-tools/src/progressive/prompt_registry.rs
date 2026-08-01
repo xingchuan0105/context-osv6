@@ -134,14 +134,14 @@ mod tests {
     #[test]
     fn prompt_registry_standard_cached_loads_cds_assets() {
         let registry = PromptRegistry::standard_cached();
-        assert!(registry.skill("codegen").is_some());
+        assert!(registry.skill("knowledge-base").is_some());
         assert!(registry.skill("writing").is_some());
         assert!(registry.skill("format").is_some());
         assert!(registry.skill("memory").is_some());
         assert!(registry.skill("search").is_some());
-        assert!(registry.skill("capability-rag").is_some());
-        assert!(registry.skill("capability-search").is_some());
-        assert!(registry.skill("chat-base").is_some());
+        assert!(registry.skill("capability-knowledge-base").is_some());
+        assert!(registry.skill("capability-web").is_some());
+        assert!(registry.skill("agent-base").is_some());
         // P2 (2026-07-20): monomode *-system prompts retired to prompts/deprecated/.
         assert!(registry.skill("rag-system").is_none());
         assert!(registry.skill("search-system").is_none());
@@ -190,8 +190,8 @@ mod tests {
 
     #[test]
     fn atomic_tools_directory_skills_are_not_in_prompt_registry() {
-        // build.rs scans clusters/ + synthesis/ + orchestrators/ only (ADR-0007).
-        // prompts/deprecated/atomic-tools/* are legacy reference docs; runtime tools live in
+        // build.rs scans clusters/ + system/ + capabilities/ + synthesis/ (ADR-0007).
+        // prompts/deprecated/* are legacy reference docs; runtime tools live in
         // SkillComponent registry + mode tool_pool → CapabilityRegistry.
         let registry = PromptRegistry::standard_cached();
         for name in &[

@@ -225,10 +225,7 @@ impl EvidenceStore {
             return;
         };
         for item in list {
-            let doc_id = item
-                .get("doc_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let doc_id = item.get("doc_id").and_then(|v| v.as_str()).unwrap_or("");
             if doc_id.is_empty() {
                 continue;
             }
@@ -242,15 +239,11 @@ impl EvidenceStore {
             {
                 continue;
             }
-            let doc_name = self
-                .doc_names
-                .get(doc_id)
-                .cloned()
-                .or_else(|| {
-                    item.get("name")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                });
+            let doc_name = self.doc_names.get(doc_id).cloned().or_else(|| {
+                item.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            });
             self.push_entry(EvidenceEntry {
                 eid: String::new(),
                 channel: Channel::Rag,
@@ -316,10 +309,7 @@ impl EvidenceStore {
                     .as_ref()
                     .and_then(|id| self.doc_names.get(id))
                     .cloned();
-                let page = c
-                    .get("page")
-                    .and_then(|v| v.as_u64())
-                    .map(|p| p as usize);
+                let page = c.get("page").and_then(|v| v.as_u64()).map(|p| p as usize);
                 self.push_entry(EvidenceEntry {
                     eid: String::new(),
                     channel: Channel::Rag,
@@ -338,7 +328,7 @@ impl EvidenceStore {
                     full_text: text.to_string(),
                     score: c.get("score").and_then(|v| v.as_f64()),
                     selected: false,
-                brief_seq: None,
+                    brief_seq: None,
                 });
             }
         }
@@ -741,8 +731,18 @@ mod tests {
         let mut store = EvidenceStore::default();
         store.insert_from_tool_results(Channel::Rag, &rag_results(30, |i| i as f64));
         assert_eq!(store.count_channel(Channel::Rag), 30);
-        assert!(store.entries().iter().any(|e| e.chunk_id.as_deref() == Some("c0")));
-        assert!(store.entries().iter().any(|e| e.chunk_id.as_deref() == Some("c29")));
+        assert!(
+            store
+                .entries()
+                .iter()
+                .any(|e| e.chunk_id.as_deref() == Some("c0"))
+        );
+        assert!(
+            store
+                .entries()
+                .iter()
+                .any(|e| e.chunk_id.as_deref() == Some("c29"))
+        );
     }
 
     #[test]
@@ -759,7 +759,11 @@ mod tests {
             trace: None,
         };
         store.insert_from_tool_results(Channel::Rag, &[tr]);
-        let e = store.entries().iter().find(|e| e.chunk_id.as_deref() == Some("c-long")).unwrap();
+        let e = store
+            .entries()
+            .iter()
+            .find(|e| e.chunk_id.as_deref() == Some("c-long"))
+            .unwrap();
         assert_eq!(e.full_text.chars().count(), 5000);
         assert_eq!(e.preview.chars().count(), MAX_PREVIEW_CHARS + 1); // + ellipsis
     }
@@ -767,9 +771,15 @@ mod tests {
     #[test]
     fn duplicate_locators_not_reinserted() {
         let mut store = EvidenceStore::default();
-        assert_eq!(store.insert_from_tool_results(Channel::Rag, &rag_results(3, |_| 0.5)), 3);
+        assert_eq!(
+            store.insert_from_tool_results(Channel::Rag, &rag_results(3, |_| 0.5)),
+            3
+        );
         // Same chunks again (e.g. re-dispatch): nothing new added.
-        assert_eq!(store.insert_from_tool_results(Channel::Rag, &rag_results(3, |_| 0.5)), 0);
+        assert_eq!(
+            store.insert_from_tool_results(Channel::Rag, &rag_results(3, |_| 0.5)),
+            0
+        );
         assert_eq!(store.count_channel(Channel::Rag), 3);
     }
 
@@ -834,9 +844,20 @@ mod tests {
         let targeted = store.targeted_entries();
         assert_eq!(targeted.len(), 2);
         assert_eq!(targeted[0].kind, EvidenceKind::DocProfile);
-        assert_eq!(targeted[0].doc_name.as_deref(), Some("数字化转型IT立项报告.docx"));
-        assert!(targeted[0].full_text.contains("genre: report"), "{}", targeted[0].full_text);
-        assert!(targeted[0].full_text.contains("基础设施选型 (p12)"), "{}", targeted[0].full_text);
+        assert_eq!(
+            targeted[0].doc_name.as_deref(),
+            Some("数字化转型IT立项报告.docx")
+        );
+        assert!(
+            targeted[0].full_text.contains("genre: report"),
+            "{}",
+            targeted[0].full_text
+        );
+        assert!(
+            targeted[0].full_text.contains("基础设施选型 (p12)"),
+            "{}",
+            targeted[0].full_text
+        );
         assert_eq!(targeted[1].full_text, "本报告论证数字化转型立项必要性。");
         // Targeted entries appear in listings (orchestrator visibility) with kind.
         let listings = store.listings();
@@ -852,13 +873,23 @@ mod tests {
                 serde_json::json!([{ "doc_id": "d1", "genre": "report", "sections": [{"title": "t", "page": 1}] }]),
             )
         };
-        assert_eq!(store.insert_from_tool_results(Channel::Rag, &[profile()]), 1);
+        assert_eq!(
+            store.insert_from_tool_results(Channel::Rag, &[profile()]),
+            1
+        );
         // Identical repeat call dedupes.
-        assert_eq!(store.insert_from_tool_results(Channel::Rag, &[profile()]), 0);
+        assert_eq!(
+            store.insert_from_tool_results(Channel::Rag, &[profile()]),
+            0
+        );
         store.insert_from_tool_results(Channel::Rag, &rag_results(40, |_| 0.0));
         assert_eq!(store.targeted_entries().len(), 1);
         assert_eq!(
-            store.entries().iter().filter(|e| e.kind == EvidenceKind::DocChunk).count(),
+            store
+                .entries()
+                .iter()
+                .filter(|e| e.kind == EvidenceKind::DocChunk)
+                .count(),
             40
         );
     }
@@ -895,14 +926,27 @@ mod tests {
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["doc_id"], "d1");
         assert_eq!(arr[0]["name"], "数字化转型IT立项报告.docx");
-        assert!(arr[0]["summary"].as_str().unwrap().contains("genre: report"));
+        assert!(
+            arr[0]["summary"]
+                .as_str()
+                .unwrap()
+                .contains("genre: report")
+        );
 
         // DocChunk bridging unchanged: dense_retrieval still carries chunks.
         let dense = bridged
             .iter()
             .find(|t| t.tool == "dense_retrieval")
             .expect("dense_retrieval result");
-        assert_eq!(dense.data.as_ref().and_then(|d| d.as_array()).unwrap().len(), 2);
+        assert_eq!(
+            dense
+                .data
+                .as_ref()
+                .and_then(|d| d.as_array())
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     /// K2: mark_selected flags existing entries in place (E-ids stable) and
@@ -947,9 +991,17 @@ mod tests {
         // Existing eids unchanged; c2 flagged in place, c9 appended selected.
         let after: Vec<String> = store.entries().iter().map(|e| e.eid.clone()).collect();
         assert_eq!(&after[..before.len()], &before[..], "E-ids stable");
-        let c2 = store.entries().iter().find(|e| e.chunk_id.as_deref() == Some("c2")).unwrap();
+        let c2 = store
+            .entries()
+            .iter()
+            .find(|e| e.chunk_id.as_deref() == Some("c2"))
+            .unwrap();
         assert!(c2.selected);
-        let c9 = store.entries().iter().find(|e| e.chunk_id.as_deref() == Some("c9")).unwrap();
+        let c9 = store
+            .entries()
+            .iter()
+            .find(|e| e.chunk_id.as_deref() == Some("c9"))
+            .unwrap();
         assert!(c9.selected);
         assert_eq!(c9.eid, "E3");
         // Listings propagate the flag.

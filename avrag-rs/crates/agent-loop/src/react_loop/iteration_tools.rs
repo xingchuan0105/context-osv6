@@ -3,13 +3,13 @@ use common::AppError;
 use contracts::ToolResult;
 
 use super::config::ModeConfig;
+use super::iteration::{
+    IterationControl, IterationOutcome, IterationState, disclosed_skill_ids, iteration_llm_usage,
+};
 use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, build_assistant_message_with_tool_calls, build_tool_message};
 use crate::events::{AgentEvent, AgentEventSink};
 use crate::runtime::AgentRequest;
-use super::iteration::{
-    IterationControl, IterationOutcome, IterationState, disclosed_skill_ids, iteration_llm_usage,
-};
 
 impl ReActLoop {
     /// Single dispatch entry: every tool goes through [`agent_tools::tool_registry`].
@@ -118,7 +118,9 @@ impl ReActLoop {
                         let docs: Vec<String> = Vec::new();
                         crate::progress::emit_work_fact(
                             sink,
-                            crate::progress::WorkFact::retrieval_finished(kind, product, &q, hits, &docs),
+                            crate::progress::WorkFact::retrieval_finished(
+                                kind, product, &q, hits, &docs,
+                            ),
                         )
                         .await;
                     }
@@ -138,13 +140,7 @@ impl ReActLoop {
             state.tool_results.push(result);
         }
 
-        self.update_state_after_tool_calls(
-            state,
-            &calls,
-            &call_ids,
-            llm_response,
-            tool_messages,
-        );
+        self.update_state_after_tool_calls(state, &calls, &call_ids, llm_response, tool_messages);
 
         // Search 空转早收敛: ≥2 consecutive empty web_search/web_fetch with no
         // hits in the turn → leave retrieve early (handoff / synthesis) instead
@@ -211,4 +207,3 @@ impl ReActLoop {
         state.consecutive_sandbox_errors = 0;
     }
 }
-

@@ -10,10 +10,10 @@ fn rag_mode_config_deserializes_with_tool_pool_and_clusters() {
     );
     let codegen = config
         .skill_catalog
-        .cluster_by_id("codegen")
+        .cluster_by_id("knowledge-base")
         .expect("codegen cluster");
     assert!(codegen.atomic);
-    assert_eq!(codegen.skills, vec!["codegen".to_string()]);
+    assert_eq!(codegen.skills, vec!["knowledge-base".to_string()]);
     // P0-1 (2026-07-20): worker synthesis skills unhooked — the final message is
     // the brief's internal_worker_handoff_v1 JSON, not a monomode answer envelope.
     assert!(config.skill_catalog.mandatory.synthesis.is_empty());
@@ -73,7 +73,7 @@ fn skill_catalog_yaml_ids_exist_in_registry() {
 fn legacy_flat_skill_catalog_deserializes() {
     let yaml = r#"
 mode: test
-system_prompt_base: prompts/orchestrators/chat-base.md
+system_prompt_base: prompts/system/agent-base.md
 skill_catalog:
   - foo
   - bar
@@ -94,7 +94,7 @@ fn rag_mode_has_mandatory_retrieve_codegen() {
             .skill_catalog
             .mandatory
             .retrieve
-            .contains(&"codegen".to_string())
+            .contains(&"knowledge-base".to_string())
     );
 }
 

@@ -22,13 +22,11 @@ use super::chat_exit::{direct_handoff, query_for_agent, synthesize_handoff};
 use super::invariant::{assert_complete, default_brief};
 use super::materialize::materialize_channels;
 use super::store::{EvidenceKind, EvidenceStore};
+use super::types::{Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief};
 use super::worker_session::{SessionError, WorkerSession};
-use super::types::{
-    Channel, ChannelNote, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
-};
 use super::workers::{
-    attach_worker_thinking_events, finalize_answer_evidence, tool_failures,
-    worker_observability_from_run, WorkerBriefObservability,
+    WorkerBriefObservability, attach_worker_thinking_events, finalize_answer_evidence,
+    tool_failures, worker_observability_from_run,
 };
 use crate::capabilities::CapabilitySet;
 
@@ -115,8 +113,11 @@ pub(crate) async fn dispatch_channel(
     match session.run_brief(&brief, base_request, executor).await {
         Ok(Ok(outcome)) => {
             let run = &outcome.run;
-            let inserted =
-                store.insert_from_tool_results_for_brief(channel, &outcome.tool_results_delta, Some(outcome.seq));
+            let inserted = store.insert_from_tool_results_for_brief(
+                channel,
+                &outcome.tool_results_delta,
+                Some(outcome.seq),
+            );
             let failures = tool_failures(&outcome.tool_results_delta);
             let (status, error) = if inserted > 0 {
                 if !failures.is_empty() {
@@ -145,8 +146,7 @@ pub(crate) async fn dispatch_channel(
             // before the note/store finalize; never blocks on failure.
             let mut handoff = outcome.handoff.clone();
             if let Some(h) = handoff.as_mut() {
-                super::fact_verify::verify_handoff_facts(h, &outcome.tool_results_delta)
-                    .await;
+                super::fact_verify::verify_handoff_facts(h, &outcome.tool_results_delta).await;
             }
             // K2/W1: hydrate the brief's SELECTED retrieval log (offset
             // applied by the session) into the store's ★ selected tier.
@@ -163,13 +163,7 @@ pub(crate) async fn dispatch_channel(
                     item_count: inserted,
                     error: error.clone(),
                 },
-                note: ChannelNote::with_handoff(
-                    channel,
-                    status,
-                    inserted,
-                    handoff,
-                    error,
-                ),
+                note: ChannelNote::with_handoff(channel, status, inserted, handoff, error),
                 observability: Some(WorkerBriefObservability {
                     channel,
                     seq: outcome.seq,
@@ -214,13 +208,7 @@ pub(crate) async fn dispatch_channel(
                     item_count: 0,
                     error: Some(msg.clone()),
                 },
-                note: ChannelNote::with_handoff(
-                    channel,
-                    PackStatus::Error,
-                    0,
-                    None,
-                    Some(msg),
-                ),
+                note: ChannelNote::with_handoff(channel, PackStatus::Error, 0, None, Some(msg)),
                 observability: None,
             }
         }
@@ -327,11 +315,8 @@ pub async fn run_orchestrated_turn(
         &records,
         None,
     );
-    agent_loop::progress::emit_work_fact(
-        sink,
-        agent_loop::progress::WorkFact::compose_answer(),
-    )
-    .await;
+    agent_loop::progress::emit_work_fact(sink, agent_loop::progress::WorkFact::compose_answer())
+        .await;
 
     let mut answer_result = executor.run_chat(&handoff, base_request, sink).await?;
     // Single point where E-markers become product markers + citations; dangling
@@ -449,23 +434,31 @@ impl OrchestratorExecutor for AgentServiceExecutor {
             // ground on code-execution observations; search workers have no
             // codegen and ground on native tool results.
             let evidence_rule = match channel {
-                Channel::Rag => "evidence pointers must come from your **code-execution observations** \
+                Channel::Rag => {
+                    "evidence pointers must come from your **code-execution observations** \
                  (`<code_execution_result>` / retrieval chunks), not from inventing native \
                  tool calls. Workspace retrieval is `<code language=\"python\">` + \
-                 `await client.…` only.",
-                Channel::Search => "evidence pointers must come from your **native tool results** \
-                 (`web_search` / `web_fetch` observations), not from inventing tool calls.",
+                 `await client.…` only."
+                }
+                Channel::Search => {
+                    "evidence pointers must come from your **native tool results** \
+                 (`web_search` / `web_fetch` observations), not from inventing tool calls."
+                }
             };
             // E2: a "not found / insufficient" verdict must rest on REAL
             // retrieval calls this run — the tool vocabulary differs by
             // channel (this brief only ever reaches rag/search workers).
             let retrieval_proof_rule = match channel {
-                Channel::Rag => "查无 / coverage=insufficient 的结论必须以本轮**真实检索调用记录**为支撑\
+                Channel::Rag => {
+                    "查无 / coverage=insufficient 的结论必须以本轮**真实检索调用记录**为支撑\
                  （dense/lexical/graph/doc_scan 至少执行过）；零检索调用得出的『未找到』不可接受\
-                 ——先检索，再谈覆盖。",
-                Channel::Search => "查无 / coverage=insufficient 的结论必须以本轮**真实检索调用记录**为支撑\
+                 ——先检索，再谈覆盖。"
+                }
+                Channel::Search => {
+                    "查无 / coverage=insufficient 的结论必须以本轮**真实检索调用记录**为支撑\
                  （web_search/web_fetch 至少执行过）；零检索调用得出的『未找到』不可接受\
-                 ——先检索，再谈覆盖。",
+                 ——先检索，再谈覆盖。"
+                }
             };
             // Brief + worker-output slim: the worker's final message is an
             // internal hand-off; the chat exit writes the user answer.
@@ -531,10 +524,8 @@ impl OrchestratorExecutor for AgentServiceExecutor {
         let mut req = base.clone();
         req.query = query_for_agent(handoff);
         req.kind = crate::agents::AgentKind::Chat;
-        req.metadata.insert(
-            "capabilities".into(),
-            serde_json::json!([]),
-        );
+        req.metadata
+            .insert("capabilities".into(), serde_json::json!([]));
         req.metadata.remove("assembled_mode_config");
 
         // Option D Answer pack (P1-2): product-answer-base + material blocks.
@@ -545,7 +536,9 @@ impl OrchestratorExecutor for AgentServiceExecutor {
         // Material answer-* blocks only for synthesize (has citable materials);
         // mode=direct is chat-like (no evidence pack, no workspace/web blocks).
         if let Ok(assembled) = crate::assemble_mode(CapabilitySet::default()) {
-            let mut parts = vec!["prompts/deprecated/orchestrator-multiagent/product-answer-base.md".to_string()];
+            let mut parts = vec![
+                "prompts/deprecated/orchestrator-multiagent/product-answer-base.md".to_string(),
+            ];
             if handoff.mode == super::types::ChatExitMode::Synthesize {
                 parts.extend(answer_rule_parts(handoff));
             }
@@ -561,7 +554,8 @@ impl OrchestratorExecutor for AgentServiceExecutor {
             answer_config.inject_retrieval_query = false;
             answer_config.auto_fallback = None;
             // Keep prose_only contract (no JSON envelope for user-facing answer).
-            answer_config.synthesis_output.contract = agent_loop::r#loop::config::AnswerContractKind::ProseOnly;
+            answer_config.synthesis_output.contract =
+                agent_loop::r#loop::config::AnswerContractKind::ProseOnly;
             // P0-2 / PR-A: do not inherit chat.yaml (or future) mandatory synthesis
             // — product-answer-base is the Answer voice; stacking synthesis/chat.md
             // after utility tools reopened dual persona.
@@ -573,8 +567,7 @@ impl OrchestratorExecutor for AgentServiceExecutor {
             );
             req.metadata.insert(
                 "system_prompt_parts".into(),
-                serde_json::to_value(&parts)
-                    .unwrap_or(serde_json::json!([])),
+                serde_json::to_value(&parts).unwrap_or(serde_json::json!([])),
             );
         }
         // Env-gated debug dump of the outgoing Answer-phase request (query +
@@ -688,9 +681,10 @@ mod tests {
             channels_run: Mutex::new(vec![]),
         };
         let sink = CollectingSink::new();
-        let turn = run_orchestrated_turn(CapabilitySet::default(), &base_req("hi"), &ex, &sink, None)
-            .await
-            .unwrap();
+        let turn =
+            run_orchestrated_turn(CapabilitySet::default(), &base_req("hi"), &ex, &sink, None)
+                .await
+                .unwrap();
         assert!(ex.channels_run.lock().unwrap().is_empty());
         assert!(turn.records.is_empty());
         assert_eq!(turn.agent_type_label, "chat");
@@ -715,16 +709,26 @@ mod tests {
         assert_eq!(turn.records.len(), 2);
         // rag empty → hard zero-evidence notice (P3 wording)
         assert!(
-            turn.handoff.partial_notices.iter().any(|n| n.contains("未检索到任何证据")),
+            turn.handoff
+                .partial_notices
+                .iter()
+                .any(|n| n.contains("未检索到任何证据")),
             "notices={:?}",
             turn.handoff.partial_notices
         );
         // search returned one web entry → it is in the store + handoff listings
         assert_eq!(turn.store.count_channel(Channel::Search), 1);
-        assert!(turn.handoff.listings.iter().any(|l| l.channel == Channel::Search));
-        assert!(!crate::orchestrator::invariant::looks_like_user_did_not_provide_doc(
-            &turn.answer_result.answer
-        ));
+        assert!(
+            turn.handoff
+                .listings
+                .iter()
+                .any(|l| l.channel == Channel::Search)
+        );
+        assert!(
+            !crate::orchestrator::invariant::looks_like_user_did_not_provide_doc(
+                &turn.answer_result.answer
+            )
+        );
     }
 
     #[tokio::test]
@@ -882,8 +886,7 @@ mod tests {
         );
         // Notice must say 检索失败, not 未命中.
         assert!(
-            turn
-                .handoff
+            turn.handoff
                 .partial_notices
                 .iter()
                 .any(|n| n.contains("检索失败")),
@@ -919,9 +922,9 @@ mod tests {
         }
 
         let captured = std::sync::Arc::new(Mutex::new(None));
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(CaptureAgent(captured.clone())),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            CaptureAgent(captured.clone()),
+        )));
         let exec = AgentServiceExecutor::new(svc);
         exec.run_channel(
             Channel::Rag,
@@ -941,21 +944,22 @@ mod tests {
             .cloned()
             .unwrap_or_default();
         assert!(
-            parts
-                .iter()
-                .filter_map(|p| p.as_str())
-                .any(|s| {
-                    s.contains("brief goal text")
-                        && s.contains("internal hand-off")
-                        && s.contains("internal_worker_handoff_v1")
-                        && s.contains("code-execution observations")
-                        && s.contains("await client.")
-                }),
+            parts.iter().filter_map(|p| p.as_str()).any(|s| {
+                s.contains("brief goal text")
+                    && s.contains("internal hand-off")
+                    && s.contains("internal_worker_handoff_v1")
+                    && s.contains("code-execution observations")
+                    && s.contains("await client.")
+            }),
             "brief part missing or still says tool-results-only: {parts:?}"
         );
     }
 
-    fn listing(eid: &str, channel: Channel, kind: EvidenceKind) -> super::super::store::EvidenceListing {
+    fn listing(
+        eid: &str,
+        channel: Channel,
+        kind: EvidenceKind,
+    ) -> super::super::store::EvidenceListing {
         super::super::store::EvidenceListing {
             eid: eid.into(),
             channel,
@@ -1038,9 +1042,9 @@ mod tests {
         }
 
         let captured = std::sync::Arc::new(Mutex::new(None));
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(CaptureAgent(captured.clone())),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            CaptureAgent(captured.clone()),
+        )));
         let exec = AgentServiceExecutor::new(svc);
 
         // Material blocks only apply on synthesize (not mode=direct).
@@ -1104,9 +1108,9 @@ mod tests {
         }
 
         let captured = std::sync::Arc::new(Mutex::new(None));
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(CaptureAgent(captured.clone())),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            CaptureAgent(captured.clone()),
+        )));
         let exec = AgentServiceExecutor::new(svc);
 
         let handoff = direct_handoff("q");
@@ -1158,9 +1162,9 @@ mod tests {
         }
 
         let captured = std::sync::Arc::new(Mutex::new(None));
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(CaptureAgent(captured.clone())),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            CaptureAgent(captured.clone()),
+        )));
         let exec = AgentServiceExecutor::new(svc);
 
         let handoff = direct_handoff("q");
@@ -1177,7 +1181,10 @@ mod tests {
         )
         .expect("mode config deserialized");
 
-        assert_eq!(config.synthesis_output.contract, agent_loop::r#loop::config::AnswerContractKind::ProseOnly);
+        assert_eq!(
+            config.synthesis_output.contract,
+            agent_loop::r#loop::config::AnswerContractKind::ProseOnly
+        );
         assert!(!config.loop_exit.require_evidence);
         assert!(config.loop_exit.allow_content_early_stop);
         assert!(config.loop_exit.skip_synthesis_on_direct_answer);
@@ -1198,8 +1205,8 @@ mod tests {
     /// Activity (progress) — worker prose stays out of the client stream.
     #[tokio::test]
     async fn run_channel_fans_out_only_activity_to_progress_sink() {
-        use agent_loop::runtime::Agent;
         use crate::orchestrator::types::TaskBrief;
+        use agent_loop::runtime::Agent;
 
         struct NoisyAgent;
         #[async_trait]
@@ -1227,9 +1234,9 @@ mod tests {
             }
         }
 
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(NoisyAgent),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            NoisyAgent,
+        )));
         let progress = CollectingSink::new();
         let exec = AgentServiceExecutor::with_progress_sink(svc, progress.clone_boxed());
         let brief = TaskBrief::new("q");
@@ -1238,7 +1245,11 @@ mod tests {
             .unwrap();
 
         let events = progress.events();
-        assert_eq!(events.len(), 1, "only Activity may reach the client: {events:?}");
+        assert_eq!(
+            events.len(),
+            1,
+            "only Activity may reach the client: {events:?}"
+        );
         assert!(matches!(
             &events[0],
             agent_loop::events::AgentEvent::Activity { .. }
@@ -1248,8 +1259,8 @@ mod tests {
     /// PR-A: worker ModeConfig is ProseOnly + early-stop (handoff final), not unified JSON.
     #[tokio::test]
     async fn worker_channel_uses_handoff_prose_only_contract() {
-        use agent_loop::runtime::Agent;
         use crate::orchestrator::types::TaskBrief;
+        use agent_loop::runtime::Agent;
 
         struct CaptureAgent(std::sync::Arc<Mutex<Option<AgentRequest>>>);
         #[async_trait]
@@ -1265,9 +1276,9 @@ mod tests {
         }
 
         let captured = std::sync::Arc::new(Mutex::new(None));
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(CaptureAgent(captured.clone())),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            CaptureAgent(captured.clone()),
+        )));
         let exec = AgentServiceExecutor::new(svc);
         let brief = TaskBrief::new("extract IPO price");
         exec.run_channel(Channel::Rag, &brief, &base_req("q"))
@@ -1294,7 +1305,9 @@ mod tests {
         assert!(config.skill_catalog.mandatory.synthesis.is_empty());
         let parts = parts_of(&req);
         assert!(
-            parts.iter().any(|p| p.contains("internal_worker_handoff_v1")),
+            parts
+                .iter()
+                .any(|p| p.contains("internal_worker_handoff_v1")),
             "worker brief must still inject handoff schema: {parts:?}"
         );
     }
@@ -1335,9 +1348,9 @@ mod tests {
         }
 
         let captured = std::sync::Arc::new(Mutex::new(None));
-        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(
-            Box::new(CaptureAgent(captured.clone())),
-        ));
+        let svc = std::sync::Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+            CaptureAgent(captured.clone()),
+        )));
         (captured, AgentServiceExecutor::new(svc))
     }
 
@@ -1429,9 +1442,13 @@ mod tests {
             &[],
             None,
         );
-        exec.run_chat(&handoff, &base_req("对比文档与网页"), &CollectingSink::new())
-            .await
-            .unwrap();
+        exec.run_chat(
+            &handoff,
+            &base_req("对比文档与网页"),
+            &CollectingSink::new(),
+        )
+        .await
+        .unwrap();
         let req = captured.lock().unwrap().clone().expect("captured");
         let parts = parts_of(&req);
         assert!(
@@ -1446,7 +1463,10 @@ mod tests {
             parts.iter().any(|p| p.contains("answer-dual-source.md")),
             "{parts:?}"
         );
-        assert!(req.query.contains("### Evidence"), "dual synthesize has Evidence");
+        assert!(
+            req.query.contains("### Evidence"),
+            "dual synthesize has Evidence"
+        );
     }
 
     /// G-08 / KD-17: empty evidence → no answer-* blocks; query carries no-marker contract.
@@ -1468,7 +1488,8 @@ mod tests {
             handoff: None,
             error: None,
         };
-        let handoff = synthesize_handoff("库里有吗", vec![], vec![], vec![], vec![note], &[rec], None);
+        let handoff =
+            synthesize_handoff("库里有吗", vec![], vec![], vec![], vec![note], &[rec], None);
         exec.run_chat(&handoff, &base_req("库里有吗"), &CollectingSink::new())
             .await
             .unwrap();
@@ -1482,7 +1503,9 @@ mod tests {
             "workspace grounding block must be unconditional: {parts:?}"
         );
         assert!(
-            !parts.iter().any(|p| p.contains("answer-from-web") || p.contains("answer-dual-source")),
+            !parts
+                .iter()
+                .any(|p| p.contains("answer-from-web") || p.contains("answer-dual-source")),
             "empty materials → no web/dual blocks: {parts:?}"
         );
         assert!(
@@ -1501,11 +1524,13 @@ mod tests {
     fn answer_vs_dispatch_phrase_mutex() {
         use agent_loop::r#loop::config::load_system_prompt;
 
-        let answer = load_system_prompt("prompts/deprecated/orchestrator-multiagent/product-answer-base.md")
-            .expect("product-answer-base");
-        let chat = load_system_prompt("prompts/orchestrators/chat-base.md").expect("chat-base");
-        let orch = load_system_prompt("prompts/deprecated/orchestrator-multiagent/orchestrator-base.md")
-            .expect("orchestrator-base");
+        let answer =
+            load_system_prompt("prompts/deprecated/orchestrator-multiagent/product-answer-base.md")
+                .expect("product-answer-base");
+        let chat = load_system_prompt("prompts/system/agent-base.md").expect("chat-base");
+        let orch =
+            load_system_prompt("prompts/deprecated/orchestrator-multiagent/orchestrator-base.md")
+                .expect("orchestrator-base");
 
         for forbidden in [
             "不写给用户看的最终长文",

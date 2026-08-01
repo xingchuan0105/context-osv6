@@ -33,9 +33,7 @@ pub fn parse_selected_aliases(text: &str) -> Vec<u64> {
         // Allow blockquote / list / markdown fence ticks before SELECTED
         // (models often write `SELECTED: #1, #2`).
         let line = trimmed
-            .trim_start_matches(|c: char| {
-                c == '>' || c == '-' || c == '*' || c == '`' || c == '|'
-            })
+            .trim_start_matches(|c: char| c == '>' || c == '-' || c == '*' || c == '`' || c == '|')
             .trim_start();
         let line = line.trim_end_matches('`').trim_end();
         let Some(rest) = selected_line_body(line) else {
@@ -164,19 +162,10 @@ mod tests {
 
     #[test]
     fn parse_selected_and_blockquote() {
-        assert_eq!(
-            parse_selected_aliases("SELECTED: #2, #5\nbody"),
-            vec![2, 5]
-        );
-        assert_eq!(
-            parse_selected_aliases("> SELECTED: #1（示例）"),
-            vec![1]
-        );
+        assert_eq!(parse_selected_aliases("SELECTED: #2, #5\nbody"), vec![2, 5]);
+        assert_eq!(parse_selected_aliases("> SELECTED: #1（示例）"), vec![1]);
         assert_eq!(parse_selected_aliases("选择： #4、#6"), vec![4, 6]);
-        assert_eq!(
-            parse_selected_aliases("`SELECTED: #1, #2`"),
-            vec![1, 2]
-        );
+        assert_eq!(parse_selected_aliases("`SELECTED: #1, #2`"), vec![1, 2]);
     }
 
     #[test]

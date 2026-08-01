@@ -88,7 +88,13 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
     let mismatches: Vec<(&ChannelNote, &super::types::PremiseMismatch)> = handoff
         .channel_notes
         .iter()
-        .filter_map(|n| n.handoff.as_ref()?.premise_mismatch.as_ref().map(|pm| (n, pm)))
+        .filter_map(|n| {
+            n.handoff
+                .as_ref()?
+                .premise_mismatch
+                .as_ref()
+                .map(|pm| (n, pm))
+        })
         .collect();
     if !mismatches.is_empty() {
         s.push_str("### ⚠ 前提质疑 (premise mismatch — worker 发现题目前提与证据不符)\n");
@@ -116,10 +122,9 @@ pub fn render_synthesize_context(handoff: &ChatHandoff) -> String {
             let status = match note.status {
                 PackStatus::Ok => format!("ok, {} evidence items", note.item_count),
                 PackStatus::Empty => "empty (ran, nothing usable)".to_string(),
-                PackStatus::Error => format!(
-                    "error ({})",
-                    note.error.as_deref().unwrap_or("unknown")
-                ),
+                PackStatus::Error => {
+                    format!("error ({})", note.error.as_deref().unwrap_or("unknown"))
+                }
             };
             s.push_str(&format!("- {}: {}\n", note.channel.as_str(), status));
             if let Some(h) = note.handoff.as_ref() {
@@ -294,8 +299,10 @@ fn render_citation_contract(handoff: &ChatHandoff) -> String {
          chunk——单条 E-marker 支撑不了整段清单；覆盖不全就按已覆盖范围作答或如实说明缺口。\n",
     );
     if !has_doc {
-        s.push_str("- Workspace retrieval returned nothing usable: say 未命中 for document-side \
-                    facts; do not cite document evidence.\n");
+        s.push_str(
+            "- Workspace retrieval returned nothing usable: say 未命中 for document-side \
+                    facts; do not cite document evidence.\n",
+        );
     }
     if !has_web {
         s.push_str(
@@ -417,7 +424,10 @@ mod tests {
             None,
         );
         let ctx = render_synthesize_context(&h);
-        assert!(ctx.contains("数字化转型IT立项报告.docx"), "doc identity: {ctx}");
+        assert!(
+            ctx.contains("数字化转型IT立项报告.docx"),
+            "doc identity: {ctx}"
+        );
         assert!(ctx.contains("genre: report"), "genre: {ctx}");
         assert!(ctx.contains("[E1]"), "listing: {ctx}");
         assert!(
@@ -425,7 +435,10 @@ mod tests {
             "full evidence body must be injected: {ctx}"
         );
         assert!(ctx.contains("complete set"), "complete-set rule: {ctx}");
-        assert!(ctx.contains("[[E:id]]") || ctx.contains("[[E3]]"), "E-marker rule: {ctx}");
+        assert!(
+            ctx.contains("[[E:id]]") || ctx.contains("[[E3]]"),
+            "E-marker rule: {ctx}"
+        );
         assert!(ctx.contains("理解口径"), "interpretation rule: {ctx}");
     }
 
@@ -468,7 +481,11 @@ mod tests {
         );
         let ctx = render_synthesize_context(&h);
         assert!(ctx.contains("do not emit any citation markers"));
-        assert!(h.partial_notices.iter().any(|n| n.contains("未检索到任何证据")));
+        assert!(
+            h.partial_notices
+                .iter()
+                .any(|n| n.contains("未检索到任何证据"))
+        );
     }
 
     #[test]
@@ -530,7 +547,9 @@ mod tests {
         ChannelNote::with_handoff(Channel::Rag, PackStatus::Ok, 2, Some(handoff), None)
     }
 
-    fn handoff_with_facts(facts: Vec<crate::orchestrator::types::WorkerKeyFact>) -> crate::orchestrator::types::WorkerHandoff {
+    fn handoff_with_facts(
+        facts: Vec<crate::orchestrator::types::WorkerKeyFact>,
+    ) -> crate::orchestrator::types::WorkerHandoff {
         crate::orchestrator::types::WorkerHandoff {
             summary: "s".into(),
             key_facts: facts,
@@ -567,8 +586,14 @@ mod tests {
             None,
         );
         let ctx = render_synthesize_context(&h);
-        assert!(ctx.contains("- Y公司营销人员编制为 4 人 (evidence: chunk-a)"), "{ctx}");
-        assert!(ctx.contains("- （推断）访谈覆盖了全部 4 名营销人员"), "{ctx}");
+        assert!(
+            ctx.contains("- Y公司营销人员编制为 4 人 (evidence: chunk-a)"),
+            "{ctx}"
+        );
+        assert!(
+            ctx.contains("- （推断）访谈覆盖了全部 4 名营销人员"),
+            "{ctx}"
+        );
         assert!(ctx.contains("推断内容不得作为事实引用"), "{ctx}");
     }
 
@@ -599,7 +624,10 @@ mod tests {
         // Prominent: the block precedes Channel outcomes.
         let pm_pos = ctx.find("⚠ 前提质疑").unwrap();
         let outcomes_pos = ctx.find("### Channel outcomes").unwrap();
-        assert!(pm_pos < outcomes_pos, "premise block must precede outcomes: {ctx}");
+        assert!(
+            pm_pos < outcomes_pos,
+            "premise block must precede outcomes: {ctx}"
+        );
     }
 
     #[test]
@@ -668,7 +696,10 @@ mod tests {
         );
         let star_pos = ctx.find("### ★ 模型圈选证据").unwrap();
         let bg_pos = ctx.find("### ○ 背景证据").unwrap();
-        assert!(star_pos < bg_pos, "selected tier precedes background: {ctx}");
+        assert!(
+            star_pos < bg_pos,
+            "selected tier precedes background: {ctx}"
+        );
         // Selected E2 lives under ★; background E1 under ○.
         let star_section = &ctx[star_pos..bg_pos];
         assert!(star_section.contains("#### [E2]"), "{star_section}");
@@ -696,7 +727,15 @@ mod tests {
     #[test]
     fn no_workers_no_empty_selection_marker() {
         // Pure chat turn (no channel notes): the empty-log marker is noise.
-        let h = synthesize_handoff("q", vec![], vec![listing("E1", Channel::Rag)], vec![], vec![], &[], None);
+        let h = synthesize_handoff(
+            "q",
+            vec![],
+            vec![listing("E1", Channel::Rag)],
+            vec![],
+            vec![],
+            &[],
+            None,
+        );
         let ctx = render_synthesize_context(&h);
         assert!(!ctx.contains("worker 未圈选证据"), "{ctx}");
     }

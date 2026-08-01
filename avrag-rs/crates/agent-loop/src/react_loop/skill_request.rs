@@ -1,8 +1,8 @@
 /// Single authoritative protocol for LLM skill-body requests (ADR-0007 / A2).
 ///
 /// Accepts only `{"skill_request":["token",...]}` as the full assistant content
-/// (after trim). Tokens are either a cluster id (`codegen`, `memory`) or a
-/// progressive reference under a cluster (`codegen/how-to-read-tables`).
+/// (after trim). Tokens are either a cluster id (`knowledge-base`, `memory`) or a
+/// progressive reference under a cluster (`knowledge-base/how-to-read-tables`).
 /// Embedded-in-prose extraction is intentionally unsupported.
 /// C6: a ```json / ``` fenced payload is unwrapped via the shared stripper
 /// first — a fenced skill request previously fell through unrecognized and
@@ -31,14 +31,22 @@ impl SkillRequestToken {
     }
 }
 
-/// Split `codegen/how-to-read-tables` or `codegen:how-to-read-tables` or bare id.
+/// Legacy cluster id from pre-rename skill packs (still accepted in skill_request).
+fn alias_cluster_id(cluster: &str) -> &str {
+    match cluster {
+        "codegen" => "knowledge-base",
+        other => other,
+    }
+}
+
+/// Split `knowledge-base/how-to-read-tables` or `codegen:how-to-read-tables` or bare id.
 pub fn split_skill_request_token(raw: &str) -> SkillRequestToken {
     let raw = raw.trim();
     if let Some((cluster, rest)) = raw.split_once('/') {
         let slug = rest.trim().trim_end_matches(".md");
         if !cluster.is_empty() && !slug.is_empty() {
             return SkillRequestToken {
-                cluster_id: cluster.to_string(),
+                cluster_id: alias_cluster_id(cluster).to_string(),
                 reference: Some(slug.to_string()),
             };
         }
@@ -47,13 +55,13 @@ pub fn split_skill_request_token(raw: &str) -> SkillRequestToken {
         let slug = rest.trim().trim_end_matches(".md");
         if !cluster.is_empty() && !slug.is_empty() {
             return SkillRequestToken {
-                cluster_id: cluster.to_string(),
+                cluster_id: alias_cluster_id(cluster).to_string(),
                 reference: Some(slug.to_string()),
             };
         }
     }
     SkillRequestToken {
-        cluster_id: raw.to_string(),
+        cluster_id: alias_cluster_id(raw).to_string(),
         reference: None,
     }
 }
@@ -71,7 +79,7 @@ pub fn parse_skill_request(content: &str) -> Vec<String> {
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
+                .filter_map(|v| v.as_str().map(|s| split_skill_request_token(s).as_token()))
                 .collect()
         })
         .unwrap_or_default()
@@ -119,8 +127,8 @@ mod tests {
     #[test]
     fn pure_json_single_id() {
         assert_eq!(
-            parse_skill_request(r#"{"skill_request": ["codegen"]}"#),
-            vec!["codegen"]
+            parse_skill_request(r#"{"skill_request": ["knowledge-base"]}"#),
+            vec!["knowledge-base"]
         );
     }
 
@@ -128,9 +136,9 @@ mod tests {
     fn json_with_extra_fields() {
         assert_eq!(
             parse_skill_request(
-                r#"{"thought":"need memory","skill_request":["memory","codegen"]}"#
+                r#"{"thought":"need memory","skill_request":["memory","knowledge-base"]}"#
             ),
-            vec!["memory", "codegen"]
+            vec!["memory", "knowledge-base"]
         );
     }
 
@@ -158,7 +166,7 @@ mod tests {
 
     #[test]
     fn malformed_returns_empty() {
-        assert!(parse_skill_request(r#"{"skill_request": "codegen"}"#).is_empty());
+        assert!(parse_skill_request(r#"{"skill_request": "knowledge-base"}"#).is_empty());
         assert!(parse_skill_request(r#"{"skill_request": [1, 2]}"#).is_empty());
         assert!(parse_skill_request(r#"not json at all"#).is_empty());
     }
@@ -185,7 +193,7 @@ mod tests {
         );
         assert_eq!(
             parse_skill_request("```\n{\"skill_request\":[\"codegen\"]}\n```"),
-            vec!["codegen"]
+            vec!["knowledge-base"]
         );
         assert!(is_skill_request_message(
             "```json\n{\"skill_request\":[\"memory\"]}\n```"
@@ -195,19 +203,19 @@ mod tests {
     #[test]
     fn validate_filters_unknown_clusters() {
         let mode = super::super::config::load_mode_config("rag").unwrap();
-        let ids = validate_skill_request(&mode, r#"{"skill_request":["codegen","bogus"]}"#);
-        assert_eq!(ids, vec!["codegen"]);
+        let ids = validate_skill_request(&mode, r#"{"skill_request":["knowledge-base","bogus"]}"#);
+        assert_eq!(ids, vec!["knowledge-base"]);
     }
 
     #[test]
     fn split_cluster_ref_slash_and_colon() {
-        let a = split_skill_request_token("codegen/how-to-read-tables");
-        assert_eq!(a.cluster_id, "codegen");
+        let a = split_skill_request_token("knowledge-base/how-to-read-tables");
+        assert_eq!(a.cluster_id, "knowledge-base");
         assert_eq!(a.reference.as_deref(), Some("how-to-read-tables"));
-        assert_eq!(a.as_token(), "codegen/how-to-read-tables");
+        assert_eq!(a.as_token(), "knowledge-base/how-to-read-tables");
 
         let b = split_skill_request_token("codegen:how-to-read-tables.md");
-        assert_eq!(b.cluster_id, "codegen");
+        assert_eq!(b.cluster_id, "knowledge-base");
         assert_eq!(b.reference.as_deref(), Some("how-to-read-tables"));
     }
 
@@ -216,8 +224,8 @@ mod tests {
         let mode = super::super::config::load_mode_config("rag").unwrap();
         let ids = validate_skill_request(
             &mode,
-            r#"{"skill_request":["codegen/how-to-read-tables","codegen/nope"]}"#,
+            r#"{"skill_request":["knowledge-base/how-to-read-tables","codegen/nope"]}"#,
         );
-        assert_eq!(ids, vec!["codegen/how-to-read-tables"]);
+        assert_eq!(ids, vec!["knowledge-base/how-to-read-tables"]);
     }
 }

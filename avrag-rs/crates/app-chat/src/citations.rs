@@ -15,9 +15,10 @@ impl ChatContext {
         message_id: i64,
         citation_id: i64,
     ) -> Result<CitationLookupResponse, AppError> {
-        let pg = self.storage.chat_persistence().ok_or_else(|| {
-            AppError::internal("chat persistence is not configured")
-        })?;
+        let pg = self
+            .storage
+            .chat_persistence()
+            .ok_or_else(|| AppError::internal("chat persistence is not configured"))?;
         let session_uuid =
             parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
         let message = pg
@@ -131,9 +132,10 @@ impl ChatContext {
     }
 
     pub async fn get_citation_asset(&self, asset_id: &str) -> Result<(Vec<u8>, String), AppError> {
-        let pg = self.storage.chat_persistence().ok_or_else(|| {
-            AppError::internal("chat persistence is not configured")
-        })?;
+        let pg = self
+            .storage
+            .chat_persistence()
+            .ok_or_else(|| AppError::internal("chat persistence is not configured"))?;
         let asset_uuid = parse_uuid_or_app_error(asset_id, "asset_not_found", "asset not found")?;
         let asset = pg
             .get_document_asset_by_id(&self.auth, asset_uuid)

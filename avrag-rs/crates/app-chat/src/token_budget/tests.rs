@@ -1,8 +1,6 @@
-use super::*;
 use super::simulate::estimate_completion_for_query;
+use super::*;
 use avrag_llm::count_tokens;
-
-
 
 #[test]
 fn simulate_chat_simple() {
@@ -85,7 +83,7 @@ fn typical_user_single_session_estimate() {
     // --- Measure actual system-prompt sizes ---
     let chat_system = "You are a direct chat assistant. Answer from the current conversation and general knowledge only. Do not invent document or web citations; if the user asks for document evidence or fresh web facts, explain that they should switch to RAG or WebSearch mode.";
     // P2: main-path RAG worker prompt is capability-rag (monomode retired).
-    let rag_plan_sys = include_str!("../../../../prompts/orchestrators/capability-rag.md");
+    let rag_plan_sys = include_str!("../../../../prompts/capabilities/knowledge-base.md");
     let rag_eval_sys = include_str!("../../../../prompts/deprecated/synthesis/rag-answer.md");
     let search_eval_sys = include_str!("../../../../prompts/deprecated/synthesis/search-answer.md");
 
@@ -106,8 +104,7 @@ fn typical_user_single_session_estimate() {
     // Memory
     let typical_summary = "User is reviewing legal contracts. Prefers concise answers.";
     let typical_prefs = serde_json::json!({"style": "concise", "language": "zh"});
-    let memory_tokens =
-        count_tokens(typical_summary) + count_tokens(&typical_prefs.to_string());
+    let memory_tokens = count_tokens(typical_summary) + count_tokens(&typical_prefs.to_string());
 
     // RAG chunks: 8 chunks, ~300 tokens each
     let chunks_count = 8;
@@ -163,9 +160,8 @@ fn typical_user_single_session_estimate() {
     let rag_synth_completion = 800;
 
     let rag_iterations = 3;
-    let rag_total_prompt = rag_iterations
-        * (rag_plan_prompt_per_iter + rag_eval_prompt_per_iter)
-        + rag_synth_prompt;
+    let rag_total_prompt =
+        rag_iterations * (rag_plan_prompt_per_iter + rag_eval_prompt_per_iter) + rag_synth_prompt;
     let rag_total_completion = rag_iterations
         * (rag_plan_completion_per_iter + rag_eval_completion_per_iter)
         + rag_synth_completion;
@@ -301,6 +297,12 @@ fn typical_user_single_session_estimate() {
     assert!(search_total < 8000, "Search should be under 8k tokens");
     // SaC single-agent + slim capability manuals (2026-07-30) further cut
     // system prompt mass; cost shape (RAG > Search > Chat) is what we guard.
-    assert!(rag_total > 5000, "RAG should stay multi-k (chunks dominate): {rag_total}");
-    assert!(rag_total > search_total, "RAG should cost more than Search: {rag_total} vs {search_total}");
+    assert!(
+        rag_total > 5000,
+        "RAG should stay multi-k (chunks dominate): {rag_total}"
+    );
+    assert!(
+        rag_total > search_total,
+        "RAG should cost more than Search: {rag_total} vs {search_total}"
+    );
 }

@@ -9,19 +9,20 @@ use agent_loop::r#loop::config::{
 };
 use common::AppError;
 
-const CHAT_BASE: &str = "prompts/orchestrators/chat-base.md";
-const CAPABILITY_RAG: &str = "prompts/orchestrators/capability-rag.md";
-const CAPABILITY_SEARCH: &str = "prompts/orchestrators/capability-search.md";
+/// Always-on single-agent main system voice.
+const AGENT_BASE: &str = "prompts/system/agent-base.md";
+/// Mounted when product knowledge-base retrieval is enabled (internal mode id may still be `rag`).
+const CAPABILITY_KNOWLEDGE_BASE: &str = "prompts/capabilities/knowledge-base.md";
+/// Mounted when product web retrieval is enabled.
+const CAPABILITY_WEB: &str = "prompts/capabilities/web.md";
 const USER_CONTEXT_TOOL: &str = "user_context";
 
 /// Utility tool whitelist (OQ-Tools, 2026-07-20): light side-effect helpers
-/// exposed to the **AnswerOnly** (pure chat) and **Answer** (orchestrated
-/// Answer phase) phases. Retrieval / delegate tools are never part of it.
-/// Workers keep their own capability tool surface — this pool is not for them.
+/// exposed on pure-chat (no retrieval capabilities). Retrieval skills use the
+/// knowledge-base / search Python sandbox (`client.*`), not this pool.
 ///
-/// - `user_context`: local clock + IP city geo（产品「定位」走此工具，非独立 geo tool）
-/// - `calculator` / `weather_query`: 轻副作用效用工具
-/// Effective pool overrides `modes/chat.yaml` base (`user_context` only).
+/// - `user_context`: local clock + IP city geo
+/// - `calculator` / `weather_query`: light side-effect helpers
 pub(crate) fn utility_tool_pool() -> Vec<String> {
     vec![
         USER_CONTEXT_TOOL.to_string(),
@@ -33,30 +34,26 @@ pub(crate) fn utility_tool_pool() -> Vec<String> {
 #[derive(Debug, Clone)]
 pub struct AssembledMode {
     pub config: ModeConfig,
-    /// Prompt file paths to load and join (self-contained chat base, or
-    /// capability manuals only — no shared agent-base splice).
+    /// Prompt paths joined for system: always `agent-base`, then optional
+    /// `capabilities/knowledge-base` and/or `capabilities/web` when mounted.
     pub system_prompt_parts: Vec<String>,
 }
 
 /// Build a `ModeConfig` by unioning capability mode YAML on top of chat defaults.
 ///
+/// **System prompts:** `agent-base` is always first. Knowledge-base / web
+/// capability contracts are appended only when the corresponding product capability is on.
+///
 /// Budget: pure chat keeps `chat` YAML; with capabilities, **sum** selected
 /// capability modes' `max_iterations` / tier maps (not max, not +chat base).
 /// Temperature: chat/rag/search YAML are unified; last applied value is fine.
 pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
-    // Base: pure-chat loop_exit / skill catalog / budget defaults.
     let mut config = load_mode_config("chat")?;
-    // P1 (2026-07-20 prompt optimization §4-A): no shared agent-base splice —
-    // pure chat gets the self-contained chat base; capability manuals stand alone.
-    let mut system_prompt_parts = Vec::new();
-    if caps.is_pure_chat() {
-        system_prompt_parts.push(CHAT_BASE.to_string());
-    }
+    // SaC: main voice always present; capability modules only when mounted.
+    let mut system_prompt_parts = vec![AGENT_BASE.to_string()];
 
-    // Tool pool is mode-owned: do not seed chat tools into capability workers.
-    // Pure chat sets utility_tool_pool() below; rag/search only merge their YAML pools.
     config.tool_pool.clear();
-    config.system_prompt_base = CHAT_BASE.to_string();
+    config.system_prompt_base = AGENT_BASE.to_string();
 
     // Capability path: budget = sum of selected modes only (exclude chat base).
     if caps.rag || caps.search {
@@ -78,7 +75,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         if let Some(t) = rag.temperature {
             config.temperature = Some(t);
         }
-        system_prompt_parts.push(CAPABILITY_RAG.to_string());
+        system_prompt_parts.push(CAPABILITY_KNOWLEDGE_BASE.to_string());
     }
 
     if caps.search {
@@ -91,11 +88,11 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         if !caps.rag {
             config.auto_fallback = search.auto_fallback.clone();
         }
-        // Dual keeps rag auto_fallback (set above when rag was applied).
+        // Dual keeps knowledge-base auto_fallback (set above when rag was applied).
         if let Some(t) = search.temperature {
             config.temperature = Some(t);
         }
-        system_prompt_parts.push(CAPABILITY_SEARCH.to_string());
+        system_prompt_parts.push(CAPABILITY_WEB.to_string());
     }
 
     if caps.rag || caps.search {
@@ -105,18 +102,13 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
     }
 
     if caps.is_pure_chat() {
-        // Chat YAML already has these; re-assert for clarity.
         config.loop_exit.require_evidence = false;
         config.loop_exit.allow_content_early_stop = true;
         config.loop_exit.skip_synthesis_on_direct_answer = true;
         config.synthesis_output.contract = AnswerContractKind::ProseOnly;
         config.inject_retrieval_query = false;
         config.auto_fallback = None;
-        // AnswerOnly exposes the utility whitelist, same as the orchestrated
-        // Answer phase (orchestrator::host answer pack); workers do not.
         config.tool_pool = utility_tool_pool();
-        // P0-2: chat-base is the sole pure-chat system voice; do not mandatory-inject
-        // synthesis/chat.md (English long role) on top. writing/format stay optional clusters.
         config.skill_catalog.mandatory.synthesis.clear();
     }
 
@@ -124,7 +116,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
     config.system_prompt_base = system_prompt_parts
         .first()
         .cloned()
-        .unwrap_or_else(|| CHAT_BASE.to_string());
+        .unwrap_or_else(|| AGENT_BASE.to_string());
 
     // A3: SaC SDK subset for this capability set (sandbox host enforces).
     config.sdk_primitives = agent_loop::r#loop::sdk_primitives_for_caps(caps.rag, caps.search)
@@ -224,8 +216,7 @@ fn add_budget(dst: &mut ModeConfig, src: &ModeConfig) {
     ) {
         (None, None) => {}
         (a, b) => {
-            dst.budget.no_chunk_grace_tokens =
-                Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)));
+            dst.budget.no_chunk_grace_tokens = Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)));
         }
     }
 }
@@ -242,15 +233,17 @@ mod tests {
         // AnswerOnly utility whitelist (OQ-Tools): user_context + light helpers;
         // never retrieval / delegate tools.
         assert_eq!(assembled.config.tool_pool, utility_tool_pool());
-        assert!(!assembled
-            .config
-            .tool_pool
-            .iter()
-            .any(|t| t == "web_search" || t == "dense_retrieval" || t.starts_with("delegate_")));
+        assert!(
+            !assembled
+                .config
+                .tool_pool
+                .iter()
+                .any(|t| t == "web_search" || t == "dense_retrieval" || t.starts_with("delegate_"))
+        );
         assert_eq!(assembled.system_prompt_parts.len(), 1);
         assert_eq!(
             assembled.system_prompt_parts[0],
-            "prompts/orchestrators/chat-base.md"
+            "prompts/system/agent-base.md"
         );
         assert_eq!(
             assembled.config.synthesis_output.contract,
@@ -290,12 +283,13 @@ mod tests {
         };
         let assembled = assemble_mode(caps).expect("assemble dual");
         assert_eq!(assembled.config.id, "rag+search");
-        // P1: capability manuals only, no agent-base head.
+        // agent-base always, then mounted capability contracts.
         assert_eq!(
             assembled.system_prompt_parts,
             vec![
-                "prompts/orchestrators/capability-rag.md".to_string(),
-                "prompts/orchestrators/capability-search.md".to_string(),
+                "prompts/system/agent-base.md".to_string(),
+                "prompts/capabilities/knowledge-base.md".to_string(),
+                "prompts/capabilities/web.md".to_string(),
             ]
         );
         assert!(
@@ -345,9 +339,21 @@ mod tests {
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
         // Budget is sum of rag(12) + search(8) = 20 (not max; chat base not included)
         assert_eq!(assembled.config.budget.max_iterations, 20);
-        // Skill catalog union includes codegen (rag) and search cluster.
-        assert!(assembled.config.skill_catalog.cluster_by_id("codegen").is_some());
-        assert!(assembled.config.skill_catalog.cluster_by_id("search").is_some());
+        // Skill catalog union includes knowledge-base (rag) and search cluster.
+        assert!(
+            assembled
+                .config
+                .skill_catalog
+                .cluster_by_id("knowledge-base")
+                .is_some()
+        );
+        assert!(
+            assembled
+                .config
+                .skill_catalog
+                .cluster_by_id("search")
+                .is_some()
+        );
         // auto_fallback from rag when dual
         let fb = assembled.config.auto_fallback.expect("rag fallback");
         assert_eq!(fb.tool_id, "dense_retrieval");
@@ -404,7 +410,10 @@ mod tests {
         assert_eq!(assembled.config.id, "rag");
         assert_eq!(
             assembled.system_prompt_parts,
-            vec!["prompts/orchestrators/capability-rag.md".to_string()]
+            vec![
+                "prompts/system/agent-base.md".to_string(),
+                "prompts/capabilities/knowledge-base.md".to_string(),
+            ]
         );
         assert_eq!(
             assembled.config.synthesis_output.contract,
@@ -413,7 +422,14 @@ mod tests {
         assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
-        assert!(assembled.config.skill_catalog.mandatory.synthesis.is_empty());
+        assert!(
+            assembled
+                .config
+                .skill_catalog
+                .mandatory
+                .synthesis
+                .is_empty()
+        );
         assert!(
             assembled
                 .config
@@ -421,8 +437,8 @@ mod tests {
                 .mandatory
                 .retrieve
                 .iter()
-                .any(|s| s == "codegen"),
-            "codegen retrieve mandatory retained: {:?}",
+                .any(|s| s == "knowledge-base"),
+            "knowledge-base retrieve mandatory retained: {:?}",
             assembled.config.skill_catalog.mandatory.retrieve
         );
         assert!(
@@ -447,7 +463,14 @@ mod tests {
         assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
-        assert!(assembled.config.skill_catalog.mandatory.synthesis.is_empty());
+        assert!(
+            assembled
+                .config
+                .skill_catalog
+                .mandatory
+                .synthesis
+                .is_empty()
+        );
         let fb = assembled.config.auto_fallback.expect("search fallback");
         assert_eq!(fb.tool_id, "web_search");
         assert!(

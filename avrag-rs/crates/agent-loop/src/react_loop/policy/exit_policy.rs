@@ -162,22 +162,19 @@ pub fn tool_result_has_chunks(result: &ToolResult) -> bool {
     match result.tool.as_str() {
         "doc_grep" => {
             // total_hits > 0 is enough even when returned hits are truncated.
-            let hits = data
-                .get("total_hits")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-                > 0;
+            let hits = data.get("total_hits").and_then(|v| v.as_u64()).unwrap_or(0) > 0;
             hits || chunk_array_non_empty(data)
                 || data
                     .get("hits")
                     .and_then(|h| h.as_array())
                     .is_some_and(|a| !a.is_empty())
         }
-        "doc_read_lines" => data
-            .get("lines")
-            .and_then(|l| l.as_array())
-            .is_some_and(|a| !a.is_empty())
-            || chunk_array_non_empty(data),
+        "doc_read_lines" => {
+            data.get("lines")
+                .and_then(|l| l.as_array())
+                .is_some_and(|a| !a.is_empty())
+                || chunk_array_non_empty(data)
+        }
         _ => chunk_array_non_empty(data),
     }
 }
@@ -465,7 +462,11 @@ mod tests {
     #[test]
     fn empty_web_search_ok_is_not_evidence() {
         let mode = search_mode();
-        assert!(!has_retrieval_observation(&[], &[empty_web_search()], &mode));
+        assert!(!has_retrieval_observation(
+            &[],
+            &[empty_web_search()],
+            &mode
+        ));
         assert!(!tool_result_has_web_hits(&empty_web_search()));
     }
 

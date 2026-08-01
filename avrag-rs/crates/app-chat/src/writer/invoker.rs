@@ -3,14 +3,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use avrag_guardrails::GuardPipeline;
 use tokio::time::timeout;
 
-use agent_loop::runtime::{AgentRequest, AgentRunResult};
-use crate::agents::service::UnifiedAgentService;
 use crate::agents::AgentKind;
+use crate::agents::service::UnifiedAgentService;
 use agent_loop::events::CollectingSink;
+use agent_loop::runtime::{AgentRequest, AgentRunResult};
 
 const DEFAULT_WORKER_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -146,7 +146,10 @@ pub async fn research(
         let mut merged = AgentRunResult::default();
         for query in search_research_queries(&topic) {
             let request = SubagentInvoker::worker_request(&parent, kind, &query);
-            match invoker.run_worker(request, per_worker_budget, timeout).await {
+            match invoker
+                .run_worker(request, per_worker_budget, timeout)
+                .await
+            {
                 Ok(result) => merge_worker_result(&mut merged, result),
                 Err(err) => {
                     tracing::warn!(worker = "search", error = %err, "research worker query failed");
@@ -225,9 +228,7 @@ fn merge_worker_result(into: &mut AgentRunResult, mut from: AgentRunResult) {
         into.usage = from.usage.take();
     } else if let (Some(acc), Some(add)) = (&mut into.usage, from.usage) {
         acc.prompt_tokens = acc.prompt_tokens.saturating_add(add.prompt_tokens);
-        acc.completion_tokens = acc
-            .completion_tokens
-            .saturating_add(add.completion_tokens);
+        acc.completion_tokens = acc.completion_tokens.saturating_add(add.completion_tokens);
         acc.total_tokens = acc.total_tokens.saturating_add(add.total_tokens);
         acc.request_count = acc.request_count.saturating_add(add.request_count);
     }

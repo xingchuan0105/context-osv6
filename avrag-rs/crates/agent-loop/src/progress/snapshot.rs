@@ -21,7 +21,7 @@
 //! ```
 
 use crate::events::AgentEvent;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Max reasoning chars stored in the snapshot (matches stream summary cap).
 const REASONING_SUMMARY_MAX_CHARS: usize = 160;
@@ -145,12 +145,14 @@ mod tests {
     #[test]
     fn empty_events_yield_none() {
         assert!(assistant_progress_turn_metadata("chat", &[]).is_none());
-        assert!(assistant_progress_turn_metadata(
-            "chat",
-            &[AgentEvent::MessageDelta {
-                text: "hi".to_string()
-            }]
-        )
-        .is_none());
+        assert!(
+            assistant_progress_turn_metadata(
+                "chat",
+                &[AgentEvent::MessageDelta {
+                    text: "hi".to_string()
+                }]
+            )
+            .is_none()
+        );
     }
 }

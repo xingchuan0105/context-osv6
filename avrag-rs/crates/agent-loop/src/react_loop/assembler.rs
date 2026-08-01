@@ -1,7 +1,7 @@
 use super::config::ModeConfig;
 use super::disclosure_plan::{DisclosurePlanner, DisclosureRenderer, parse_synthesis_choices};
-use agent_tools::capability::CapabilityRegistry;
 use crate::runtime::AgentRequest;
+use agent_tools::capability::CapabilityRegistry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoopPhase {
@@ -75,6 +75,7 @@ impl ContextAssembler {
             first_round,
             skill_request,
             &disclosed.disclosed_skill_ids,
+            Some(request),
         );
         let renderer = DisclosureRenderer::new(registry);
         let rendered = renderer.render(&plan, mode, request, disclosed);
@@ -280,17 +281,14 @@ mod tests {
         assert!(
             ctx.system_content.contains("client.dense")
                 || ctx.system_content.contains("dense(query)"),
-            "codegen skill should document dense retrieval"
+            "knowledge-base skill should document dense retrieval"
         );
         assert!(!ctx.system_content.contains("rag-codegen-guide"));
         assert!(ctx.system_content.contains("Retrieval query: test"));
-        assert!(
-            ctx.budget_hint
-                .contains(
-                    "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
+        assert!(ctx.budget_hint.contains(
+            "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
                      tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />",
-                )
-        );
+        ));
         assert_eq!(
             ctx.tools.len(),
             0,
@@ -303,7 +301,9 @@ mod tests {
         let mode = super::super::config::load_mode_config("rag").unwrap();
         let registry = CapabilityRegistry::standard_cached();
         let mut disclosed = DisclosedState::default();
-        disclosed.disclosed_skill_ids.insert("codegen".to_string());
+        disclosed
+            .disclosed_skill_ids
+            .insert("knowledge-base".to_string());
         let request = crate::runtime::AgentRequest {
             kind: crate::AgentKind::Rag,
             query: "test".to_string(),
@@ -382,7 +382,10 @@ mod tests {
         let names: Vec<&str> = ctx.tools.iter().map(|tool| tool.name.as_str()).collect();
         // A1: search tool_pool empty — web is SaC only (client.web).
         assert!(
-            names.is_empty() || !names.iter().any(|n| *n == "web_search" || *n == "web_fetch"),
+            names.is_empty()
+                || !names
+                    .iter()
+                    .any(|n| *n == "web_search" || *n == "web_fetch"),
             "web_* must not be disclosed to LLM: {names:?}"
         );
     }
@@ -430,7 +433,7 @@ mod tests {
     #[test]
     fn parse_skill_request_rejects_heuristic_phrases() {
         use crate::react_loop::skill_request::parse_skill_request;
-        assert!(parse_skill_request("请求 **codegen**").is_empty());
-        assert!(parse_skill_request("request cluster `codegen`").is_empty());
+        assert!(parse_skill_request("请求 **knowledge-base**").is_empty());
+        assert!(parse_skill_request("request cluster `knowledge-base`").is_empty());
     }
 }

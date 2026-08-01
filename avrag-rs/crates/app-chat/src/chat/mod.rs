@@ -23,11 +23,11 @@ mod service;
 #[cfg(test)]
 mod pipeline_tests;
 
-pub use pipeline::{is_reserved_internal_agent_type, is_write_agent_type};
 pub(crate) use pipeline::{
     ChatExecution, ChatPreflight, PipelineLane, StreamConfig, execute_pipeline,
     execute_pipeline_stream,
 };
+pub use pipeline::{is_reserved_internal_agent_type, is_write_agent_type};
 pub(crate) use pipeline_steps::{
     activity_counts_from_events, attach_activity_counts_from_sink, attach_debug_trace_from_sink,
     merge_activity_counts_into_mode_debug,

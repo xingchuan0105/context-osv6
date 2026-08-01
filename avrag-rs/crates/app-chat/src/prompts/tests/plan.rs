@@ -1,7 +1,7 @@
 use super::super::internal::build_rag_envelope;
 use super::super::*;
-use contracts::chat::ChatRequest;
 use contracts::RetrievalBundle;
+use contracts::chat::ChatRequest;
 
 fn request(agent_type: &str, query: &str, doc_scope: &[&str]) -> ChatRequest {
     ChatRequest {

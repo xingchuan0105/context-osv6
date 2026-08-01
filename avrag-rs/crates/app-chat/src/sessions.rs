@@ -2,23 +2,26 @@ use app_core::parse_uuid_or_app_error;
 use common::{AppError, SourceRow, StatusOnlyResponse};
 use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
 use contracts::workspaces::{
-    ChatSession, CreateChatSessionRequest, Workspace, UpdateChatSessionRequest,
+    ChatSession, CreateChatSessionRequest, UpdateChatSessionRequest, Workspace,
 };
 use uuid::Uuid;
 
-use crate::context::ChatContext;
 use crate::ChatService;
+use crate::context::ChatContext;
 
 impl ChatContext {
     fn require_chat_persistence(
         &self,
     ) -> Result<std::sync::Arc<dyn app_core::ChatPersistencePort>, AppError> {
-        self.storage.chat_persistence().ok_or_else(|| {
-            AppError::internal("chat persistence is not configured")
-        })
+        self.storage
+            .chat_persistence()
+            .ok_or_else(|| AppError::internal("chat persistence is not configured"))
     }
 
-    pub async fn search(&self, pattern: &str) -> (Vec<Workspace>, Vec<ChatSession>, Vec<SourceRow>) {
+    pub async fn search(
+        &self,
+        pattern: &str,
+    ) -> (Vec<Workspace>, Vec<ChatSession>, Vec<SourceRow>) {
         let Ok(pg) = self.require_chat_persistence() else {
             return (Vec::new(), Vec::new(), Vec::new());
         };

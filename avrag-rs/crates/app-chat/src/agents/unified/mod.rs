@@ -109,10 +109,7 @@ impl Agent for UnifiedAgent {
 
         // Emit audit record for routing decision.
         let owner_user_id = request.auth.user_id().to_string();
-        let actor_id_owned = request
-            .auth
-            .actor_id()
-            .map(|id| id.into_uuid().to_string());
+        let actor_id_owned = request.auth.actor_id().map(|id| id.into_uuid().to_string());
         let audit_record = audit::routing_decision_record(
             &owner_user_id,
             actor_id_owned.as_deref(),
@@ -146,7 +143,9 @@ impl Agent for UnifiedAgent {
                 .await;
                 self.run_react_mode(
                     "chat",
-                    self.chat_llm_client.clone().or_else(|| self.llm_client.clone()),
+                    self.chat_llm_client
+                        .clone()
+                        .or_else(|| self.llm_client.clone()),
                     |lp| lp,
                     request,
                     sink,
@@ -245,9 +244,10 @@ impl Agent for UnifiedAgent {
                 };
 
                 // SaC search: web via SearchProvider; optional dense via RagRuntime.
-                let rag_for_dense = self.rag_runtime.clone().map(|rag| {
-                    Arc::new((*rag).clone().with_tenant(tenant.clone()))
-                });
+                let rag_for_dense = self
+                    .rag_runtime
+                    .clone()
+                    .map(|rag| Arc::new((*rag).clone().with_tenant(tenant.clone())));
 
                 agent_loop::progress::emit_work_fact(
                     sink,
@@ -318,7 +318,10 @@ impl UnifiedAgent {
             Some(client) => {
                 // Tag stage with assembled/legacy mode id; attach exit metering.
                 let client = client.with_stage(&stage_id).with_request_context(
-                    request.session_id.as_deref().and_then(|s| uuid::Uuid::parse_str(s).ok()),
+                    request
+                        .session_id
+                        .as_deref()
+                        .and_then(|s| uuid::Uuid::parse_str(s).ok()),
                     request.auth.request_id().map(|s| s.to_string()),
                 );
                 let client = if let Some(ref observer) = self.usage_observer {
@@ -428,7 +431,7 @@ mod tests {
                 .mandatory
                 .retrieve
                 .iter()
-                .any(|s| s == "codegen"),
+                .any(|s| s == "knowledge-base"),
             "assemble_mode lost mandatory codegen: {:?}",
             assembled.config.skill_catalog.mandatory.retrieve
         );
@@ -442,7 +445,7 @@ mod tests {
                 .mandatory
                 .retrieve
                 .iter()
-                .any(|s| s == "codegen"),
+                .any(|s| s == "knowledge-base"),
             "metadata round-trip lost mandatory codegen"
         );
     }

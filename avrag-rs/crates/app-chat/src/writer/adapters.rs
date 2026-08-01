@@ -11,14 +11,14 @@ use write_core::{
     WriteResearchKind, WriteResearchPort,
 };
 
-use agent_loop::events::{AgentEvent, AgentEventSink};
-use agent_loop::r#loop::assembler::build_iteration_budget_hint;
-use agent_loop::r#loop::config::{load_mode_config, load_system_prompt, ModeConfig};
-use agent_tools::progressive::PromptRegistry;
-use agent_loop::runtime::AgentRequest;
 use crate::agents::AgentKind;
 use crate::writer::cards;
 use crate::writer::invoker::SubagentInvoker;
+use agent_loop::events::{AgentEvent, AgentEventSink};
+use agent_loop::r#loop::assembler::build_iteration_budget_hint;
+use agent_loop::r#loop::config::{ModeConfig, load_mode_config, load_system_prompt};
+use agent_loop::runtime::AgentRequest;
+use agent_tools::progressive::PromptRegistry;
 
 /// Map parent AgentRequest → write-core meta.
 pub fn parent_meta_from_request(parent: &AgentRequest) -> WriteParentMeta {
@@ -92,8 +92,7 @@ impl WriteResearchPort for SubagentResearchPort<'_> {
             WriteResearchKind::Rag => AgentKind::Rag,
             WriteResearchKind::Web => AgentKind::Search,
         };
-        let mut worker_req =
-            SubagentInvoker::worker_request(self.parent, agent_kind, query);
+        let mut worker_req = SubagentInvoker::worker_request(self.parent, agent_kind, query);
         worker_req.max_iterations = Some(2);
         worker_req.query = query.to_string();
 
@@ -136,10 +135,7 @@ impl WriteRefineModeHost for AppWriteRefineMode {
 
     fn max_react_iterations(&self, user_tier: Option<&str>, hard_cap: u8) -> u8 {
         let tier_val = user_tier.map(|s| serde_json::Value::String(s.to_string()));
-        let tier_iter = self
-            .mode
-            .budget
-            .resolve_max_iterations(tier_val.as_ref());
+        let tier_iter = self.mode.budget.resolve_max_iterations(tier_val.as_ref());
         tier_iter.min(hard_cap)
     }
 
@@ -172,9 +168,7 @@ impl WriteRefineModeHost for AppWriteRefineMode {
         if let Some(p) = persona {
             out.push_str("\n\n");
             out.push_str(&heavytail::persona::render_persona_system_zh(p));
-            out.push_str(
-                "\n\n**内化人格：影响措辞与取舍，禁止在正文自我介绍或引用小传事实**",
-            );
+            out.push_str("\n\n**内化人格：影响措辞与取舍，禁止在正文自我介绍或引用小传事实**");
         }
         out.push_str("\n\n");
         out.push_str(&budget_hint);

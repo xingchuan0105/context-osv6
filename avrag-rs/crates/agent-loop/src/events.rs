@@ -277,7 +277,10 @@ impl AgentEventSink for ProgressTeeSink {
     }
 
     fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
-        Box::new(Self::new(self.local.clone_boxed(), self.progress.clone_boxed()))
+        Box::new(Self::new(
+            self.local.clone_boxed(),
+            self.progress.clone_boxed(),
+        ))
     }
 }
 
@@ -302,9 +305,11 @@ mod tests {
         let tee = ProgressTeeSink::new(local.clone_boxed(), progress.clone_boxed());
 
         tee.emit(activity("act:retrieve_semantic")).await.unwrap();
-        tee.emit(AgentEvent::MessageDelta { text: "worker prose".into() })
-            .await
-            .unwrap();
+        tee.emit(AgentEvent::MessageDelta {
+            text: "worker prose".into(),
+        })
+        .await
+        .unwrap();
         tee.emit(AgentEvent::Done {
             final_message: Some("handoff".into()),
             usage: None,

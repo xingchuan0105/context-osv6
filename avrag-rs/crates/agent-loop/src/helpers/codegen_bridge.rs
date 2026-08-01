@@ -217,12 +217,17 @@ mod tests {
             ])),
         )];
         let stdout = codegen_observation_stdout("", &bridge);
-        assert!(stdout.contains("6c16ac99-e934-4355-be1c-f0956acb51d1"), "stdout={stdout}");
+        assert!(
+            stdout.contains("6c16ac99-e934-4355-be1c-f0956acb51d1"),
+            "stdout={stdout}"
+        );
         assert!(stdout.contains("hello"));
         let observation = format!(
             "<code_execution_result>\n[block 0] stdout: {stdout}\nstderr: \n</code_execution_result>"
         );
-        assert!(crate::react_loop::exit_policy::code_execution_has_evidence(&observation));
+        assert!(crate::react_loop::exit_policy::code_execution_has_evidence(
+            &observation
+        ));
     }
 
     #[test]

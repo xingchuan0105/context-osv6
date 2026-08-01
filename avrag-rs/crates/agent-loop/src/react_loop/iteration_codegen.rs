@@ -53,7 +53,14 @@ impl ReActLoop {
                 )
                 .await;
             }
-            let (block_status, block_text, is_err, block_bridge_results, bridge_calls, block_had_output) = self
+            let (
+                block_status,
+                block_text,
+                is_err,
+                block_bridge_results,
+                bridge_calls,
+                block_had_output,
+            ) = self
                 .execute_codegen_block(
                     idx,
                     code,
@@ -84,7 +91,8 @@ impl ReActLoop {
                     }
                     let query = call.query.as_deref().unwrap_or("");
                     let hits = crate::progress::hits_from_tool_data(call.result.data.as_ref());
-                    let docs = crate::progress::doc_labels_from_tool_data(call.result.data.as_ref());
+                    let docs =
+                        crate::progress::doc_labels_from_tool_data(call.result.data.as_ref());
                     crate::progress::emit_work_fact(
                         sink,
                         crate::progress::WorkFact::retrieval_finished(
@@ -254,9 +262,7 @@ impl ReActLoop {
         if !bridge_tool_results.is_empty() {
             state.tool_results.extend(bridge_tool_results);
         } else if let Some(result) =
-            crate::helpers::tool_result_from_code_execution_observation(
-                combined_result,
-            )
+            crate::helpers::tool_result_from_code_execution_observation(combined_result)
         {
             state.tool_results.push(result);
         }
@@ -312,11 +318,10 @@ impl ReActLoop {
             bridge_calls = bridged.bridge_calls;
             exec_result = match bridged.exec {
                 Ok(exec) => {
-                    block_observation_stdout =
-                        Some(crate::helpers::codegen_observation_stdout(
-                            &exec.stdout,
-                            &block_bridge_results,
-                        ));
+                    block_observation_stdout = Some(crate::helpers::codegen_observation_stdout(
+                        &exec.stdout,
+                        &block_bridge_results,
+                    ));
                     Ok(exec)
                 }
                 Err(e) => Err(e),
@@ -641,18 +646,14 @@ fn extract_query_arg(s: &str) -> String {
 /// safety net), we look for a `"Traceback"` marker, which appears for raised exceptions but
 /// never for benign warnings.
 fn code_exec_is_error(exec: &avrag_code_interpreter::ExecutionResult) -> bool {
-    !exec.success
-        || exec.exit_code.unwrap_or(0) != 0
-        || exec.stderr.contains("Traceback")
+    !exec.success || exec.exit_code.unwrap_or(0) != 0 || exec.stderr.contains("Traceback")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     // B4: SDK-as-native reject lives in agent_tools (single execute entry).
-    use agent_tools::{
-        is_codegen_sdk_method_as_native_tool, reject_codegen_method_as_native_tool,
-    };
+    use agent_tools::{is_codegen_sdk_method_as_native_tool, reject_codegen_method_as_native_tool};
 
     #[test]
     fn sandbox_error_observation_includes_sdk_reminder() {
@@ -878,8 +879,13 @@ mod tests {
         assert!(bad_pipe.contains("管道后无空格"), "{bad_pipe}");
         let good_pipe = markitdown_format_hints(&[r#"client.grep("| 概念阶段 |")"#.to_string()]);
         assert!(good_pipe.is_empty(), "{good_pipe}");
-        let escaped = markitdown_format_hints(&[r#"client.grep(r"\|\s*概念阶段\s*\|", regex=True)"#.to_string()]);
-        assert!(escaped.is_empty(), "regex escape form must not fire: {escaped}");
+        let escaped = markitdown_format_hints(&[
+            r#"client.grep(r"\|\s*概念阶段\s*\|", regex=True)"#.to_string(),
+        ]);
+        assert!(
+            escaped.is_empty(),
+            "regex escape form must not fire: {escaped}"
+        );
         let kv = markitdown_format_hints(&[r#"client.grep("阶段=概念阶段")"#.to_string()]);
         assert!(kv.contains("key=value"), "{kv}");
         let ascii = markitdown_format_hints(&["x = foo|bar".to_string()]);
@@ -922,10 +928,7 @@ mod tests {
             ),
         ];
         let out = retrieval_callouts(&calls);
-        assert!(
-            out.contains("本轮检索 3 次，共返回 3 条"),
-            "{out}"
-        );
+        assert!(out.contains("本轮检索 3 次，共返回 3 条"), "{out}");
         assert!(out.contains("可见 alias: #1, #2, #3"), "{out}");
         assert!(out.contains("grep total_hits=0"), "{out}");
         assert!(out.contains("SELECTED 仅能引用已出现的 alias"), "{out}");

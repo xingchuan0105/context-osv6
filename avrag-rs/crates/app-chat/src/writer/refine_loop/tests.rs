@@ -1,8 +1,8 @@
 //! Handler-level WriteRefine tests via write-core runner + app-chat ports.
 
 use super::{
-    BestSnapshot, FinishReason, RefineContext, RefineLoopBudget, WriteRefineLoopRunner,
-    WRITE_REFINE_HARD_REACT_CAP, WRITE_REFINE_GATE_MAX_REVISE,
+    BestSnapshot, FinishReason, RefineContext, RefineLoopBudget, WRITE_REFINE_GATE_MAX_REVISE,
+    WRITE_REFINE_HARD_REACT_CAP, WriteRefineLoopRunner,
 };
 
 use std::collections::BTreeMap;
@@ -13,26 +13,26 @@ use avrag_llm::LlmClient;
 use avrag_llm::ModelProviderConfig;
 use contracts::ToolCall;
 use contracts::chat::ToolStatus;
+use heavytail::StyleParams;
 use heavytail::diagnosis::diagnose_pre_refine;
 use heavytail::feedforward::fingerprint_workspace;
 use heavytail::score::composite;
 use heavytail::state::WriterState;
-use heavytail::StyleParams;
-use heavytail::workspace::{DraftWorkspace, ParagraphRecord, RhythmMode, SentenceRecord};
 use heavytail::workspace::SentenceId;
+use heavytail::workspace::{DraftWorkspace, ParagraphRecord, RhythmMode, SentenceRecord};
 use write_core::{
     WriteActivitySink, WriteParentMeta, WriteRefineModeHost, WriteResearchHit, WriteResearchKind,
     WriteResearchPort,
 };
 
-use agent_loop::events::{AgentEventSink, NoopSink};
-use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 use crate::agents::AgentKind;
 use crate::writer::adapters::{
-    parent_meta_from_request, AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort,
+    AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort, parent_meta_from_request,
 };
 use crate::writer::invoker::SubagentInvoker;
 use crate::writer::material_pack::MaterialPack;
+use agent_loop::events::{AgentEventSink, NoopSink};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 
 fn make_workspace() -> DraftWorkspace {
     let mut ws = DraftWorkspace::default();
@@ -219,14 +219,15 @@ async fn handle_revise_counts_effective_round_and_tracks_best_snapshot() {
             "patches": [{ "id": "s01", "text": "这是一句被彻底改写过的全新句子。" }]
         }),
     };
-    let result = runner
-        .handle_revise(&call, &mut ctx, &[], &mut state)
-        .await;
+    let result = runner.handle_revise(&call, &mut ctx, &[], &mut state).await;
 
     assert_eq!(result.status, ToolStatus::Ok);
     assert_eq!(ctx.revise_rounds_used, 1);
     assert_eq!(state.rounds.len(), 1);
-    assert_eq!(state.workspace.sentences[0].text, "这是一句被彻底改写过的全新句子。");
+    assert_eq!(
+        state.workspace.sentences[0].text,
+        "这是一句被彻底改写过的全新句子。"
+    );
     let new_score = ctx.diagnosis.score_s;
     assert_eq!(
         ctx.best_snapshot.as_ref().unwrap().score,
@@ -241,9 +242,7 @@ async fn handle_research_6th_call_returns_budget_exhausted_without_invoking_work
     ctx.research_calls_used = 5;
 
     let call = research_call("web", "test query for 6th call");
-    let sink = AgentWriteActivitySink {
-        inner: &NoopSink,
-    };
+    let sink = AgentWriteActivitySink { inner: &NoopSink };
     let result = runner.handle_research(&call, &mut ctx, &sink).await;
 
     assert_eq!(result.status, ToolStatus::Ok);
@@ -292,9 +291,7 @@ async fn dispatch_tool_call_unknown_tool_returns_error() {
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
     let mut state = WriterState::default();
-    let sink = AgentWriteActivitySink {
-        inner: &NoopSink,
-    };
+    let sink = AgentWriteActivitySink { inner: &NoopSink };
     let call = ToolCall {
         tool: "not_a_real_tool".into(),
         version: "1".into(),
@@ -312,9 +309,7 @@ async fn dispatch_tool_call_routes_finish_correctly() {
     let mut ctx = make_ctx();
     ctx.bands_satisfied = true;
     let mut state = WriterState::default();
-    let sink = AgentWriteActivitySink {
-        inner: &NoopSink,
-    };
+    let sink = AgentWriteActivitySink { inner: &NoopSink };
     let call = finish_call("done", true);
     let result = runner
         .dispatch_tool_call(&call, &mut ctx, &[], &sink, &mut state)
@@ -332,9 +327,9 @@ fn finish_reason_variants_are_distinct() {
 fn _adapter_types_compile() {
     let _ = WRITE_REFINE_HARD_REACT_CAP;
     let _ = WRITE_REFINE_GATE_MAX_REVISE;
-    let service = Arc::new(crate::agents::service::UnifiedAgentService::new(
-        Box::new(NeverCalledAgent),
-    ));
+    let service = Arc::new(crate::agents::service::UnifiedAgentService::new(Box::new(
+        NeverCalledAgent,
+    )));
     let invoker = SubagentInvoker::new(service, None);
     let req = test_parent_request();
     let _ = parent_meta_from_request(&req);

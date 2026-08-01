@@ -10,13 +10,13 @@
 pub mod agent_runtime;
 pub mod agents;
 pub mod capabilities;
-pub mod mode_assemble;
-pub mod orchestrator;
 pub mod chat;
 pub mod chat_private;
 pub mod chat_streaming;
 pub mod citations;
 pub mod context;
+pub mod mode_assemble;
+pub mod orchestrator;
 /// Eval harness lives in `agent_loop`; re-export only when the `eval` feature is on.
 #[cfg(feature = "eval")]
 pub use agent_loop::eval;
@@ -36,14 +36,13 @@ mod chat_service;
 mod external_agent_guide;
 
 pub use agents::AgentKind;
-pub use capabilities::{resolve_capabilities, CapabilitySet, write_disabled_error};
-pub use mode_assemble::{assemble_mode, AssembledMode};
+pub use capabilities::{CapabilitySet, resolve_capabilities, write_disabled_error};
+pub use chat::{is_reserved_internal_agent_type, is_write_agent_type};
 pub use chat_service::ChatService;
 pub use chat_streaming::{
     STREAM_PLACEHOLDER_MESSAGE_ID, chat_done_payload, chunk_text_for_stream,
     emit_buffered_agent_answer_if_needed, stream_event_message_id,
 };
-pub use chat::{is_reserved_internal_agent_type, is_write_agent_type};
 pub use context::ChatContext;
 pub use external_agent_guide::{attach_operation_guide, load_invoke_operation_guide};
 pub use llm_context::LlmContext;
@@ -53,4 +52,5 @@ pub use memory_helpers::{
     detect_preferred_style, estimate_token_count, merge_general_profile_custom_preferences,
     next_message_id, status_label,
 };
+pub use mode_assemble::{AssembledMode, assemble_mode};
 pub use orchestrator_context::OrchestratorContext;

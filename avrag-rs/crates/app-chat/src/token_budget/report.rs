@@ -45,4 +45,3 @@ pub fn print_report(results: &[SimulationResult]) {
     }
     println!("\n");
 }
-

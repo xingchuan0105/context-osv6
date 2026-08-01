@@ -411,7 +411,11 @@ mod tests {
             citations,
         );
         assert_eq!(filtered.len(), 2);
-        assert!(filtered.iter().all(|c| c.layer.as_deref() == Some("search")));
+        assert!(
+            filtered
+                .iter()
+                .all(|c| c.layer.as_deref() == Some("search"))
+        );
         assert_eq!(filtered[0].citation_id, 4);
         assert_eq!(filtered[1].citation_id, 2);
         assert_eq!(filtered[0].doc_id, "https://g.example");

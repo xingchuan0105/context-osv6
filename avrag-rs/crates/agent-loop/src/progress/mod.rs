@@ -201,7 +201,11 @@ impl WorkFact {
         }
     }
 
-    pub fn write_stage(kind: ProgressKind, _title: impl Into<String>, detail: Option<String>) -> Self {
+    pub fn write_stage(
+        kind: ProgressKind,
+        _title: impl Into<String>,
+        detail: Option<String>,
+    ) -> Self {
         Self {
             phase: ProgressPhase::Act,
             kind,
@@ -273,9 +277,7 @@ pub fn truncate_chars(s: &str, max: usize) -> String {
 }
 
 /// Map bridge SDK method → kind + product label.
-pub fn bridge_method_progress(
-    method: &str,
-) -> Option<(ProgressKind, &'static str)> {
+pub fn bridge_method_progress(method: &str) -> Option<(ProgressKind, &'static str)> {
     match method {
         "dense" | "dense_search" => Some((ProgressKind::RetrieveSemantic, "语义检索")),
         "lexical" | "lexical_search" => Some((ProgressKind::RetrieveKeyword, "关键词检索")),

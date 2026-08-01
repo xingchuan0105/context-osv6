@@ -63,10 +63,7 @@ impl SessionFs {
 
     #[cfg(test)]
     pub fn len(&self) -> usize {
-        self.files
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .len()
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 

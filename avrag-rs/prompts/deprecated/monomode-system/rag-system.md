@@ -14,10 +14,10 @@ applicable_strategies: [rag]
 
 - 用户原话 query（服务端不做指代消解）
 - `<iteration_budget round="..." max="4" remaining="..." />`
-- 注入的 `client` 对象（检索 SDK，方法签名见 **codegen** skill）
+- 注入的 `client` 对象（检索 SDK，方法签名见 **knowledge-base** skill）
 - 当前轮及历史的 retrieval chunks（含 `chunk_id`、正文等）
 - 默认注入最近 2 条 prior user 原文（memory）；更早历史需申请 **memory** cluster
-- 已加载的 skill（默认含 **codegen**）
+- 已加载的 skill（默认含 **knowledge-base**）
 
 你看不到：互联网、本地文件系统、工作区文档列表（除非加载 **metadata** cluster 或从检索结果的 `doc_id` 得知）。
 

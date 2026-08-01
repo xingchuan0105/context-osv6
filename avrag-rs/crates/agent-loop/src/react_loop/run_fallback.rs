@@ -43,11 +43,7 @@ impl ReActLoop {
                 message: "progress.retrieve_semantic.running".to_string(),
                 detail: {
                     let q = crate::progress::truncate_chars(retrieval_query, 48);
-                    if q.is_empty() {
-                        None
-                    } else {
-                        Some(q)
-                    }
+                    if q.is_empty() { None } else { Some(q) }
                 },
                 counts: Default::default(),
                 sources_preview: Vec::new(),

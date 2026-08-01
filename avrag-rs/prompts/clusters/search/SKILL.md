@@ -9,7 +9,7 @@ version: "3.0"
 
 ## 环境
 
-在 **Python 沙箱**调网页检索（与工作区检索同一套多轮：写代码 → 看回传 → 再写）。每轮只执行**第一个** `<code language="python">` 块；块内可并行多条 `await`。
+在 **Python 沙箱**调网页检索（与知识库检索同一套多轮：写代码 → 看回传 → 再写）。每轮只执行**第一个** `<code language="python">` 块；块内可并行多条 `await`。
 
 可引用网页事实 = 回传中实际出现的搜索摘要或 `fetch` 正文。URL 与序号以回传为准。
 
@@ -19,7 +19,7 @@ version: "3.0"
 |------|------|------|------|
 | 网页搜索 | `await client.web(query)` | 事实/新闻；可并行多条 query | 单语 query 易漏另一语种索引；摘要可能过短 |
 | 打开页面 | `await client.fetch(url)` | 摘要不够时拉全文 | 未 fetch 的页面全文未知；print 宜截取要点 |
-| 工作区（若开通） | `await client.dense(query)` 等 | 对照本地文档；完整方法见 **codegen** | 与网页证据分源引用 |
+| 知识库（若开通） | `await client.dense(query)` 等 | 对照本地文档；完整方法见 **knowledge-base** | 与网页证据分源引用 |
 | 跨块存储 | `await client.save` / `load` | 相对路径 | 新进程不保留变量 |
 
 未列入上表的方法（如 `grep`）在本能力单独开通时不可用。
@@ -48,4 +48,4 @@ page = await client.fetch(zh["results"][0]["url"])  # 字段以回传为准
 
 ## 引用
 
-最终答复中网页序号写作 `[[web:n]]`，与回传结果序号一致。若同时有工作区命中，文档侧用末行 `SELECTED: #n`，与 `[[web:n]]` 分源，不混挂。
+最终答复中网页序号写作 `[[web:n]]`，与回传结果序号一致。若同时有知识库命中，文档侧用末行 `SELECTED: #n`，与 `[[web:n]]` 分源，不混挂。

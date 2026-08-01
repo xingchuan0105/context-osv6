@@ -46,9 +46,11 @@ mod tests {
     #[test]
     fn dual_memory_tool_may_exist_on_catalog() {
         // conversation_history_load is valid on workers via SkillRegistry.
-        assert!(ToolCatalog::standard_cached()
-            .get(CONVERSATION_HISTORY_LOAD)
-            .is_some());
+        assert!(
+            ToolCatalog::standard_cached()
+                .get(CONVERSATION_HISTORY_LOAD)
+                .is_some()
+        );
     }
 
     #[test]

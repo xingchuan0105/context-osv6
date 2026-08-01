@@ -8,8 +8,8 @@ use heavytail::segment::char_len;
 use heavytail::skeleton::{MaterialCard, MaterialKind};
 use heavytail::tokenize::{is_content_word, tokens};
 
-use agent_loop::untrusted_input::{SanitizedContent, UntrustedInputProcessor};
 use crate::agents::AgentKind;
+use agent_loop::untrusted_input::{SanitizedContent, UntrustedInputProcessor};
 
 const MAX_CARD_CONTENT_CHARS: usize = 80;
 const INJECTION_THRESHOLD: f64 = 0.8;

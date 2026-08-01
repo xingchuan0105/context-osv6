@@ -118,7 +118,8 @@ mod tests {
     fn json_fence_is_not_executed() {
         // C3: a fenced JSON handoff must NOT be treated as a code block —
         // it falls through to Content so the handoff parser can read it.
-        let text = "```json\n{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"s\"}\n```";
+        let text =
+            "```json\n{\"schema_version\":\"internal_worker_handoff_v1\",\"summary\":\"s\"}\n```";
         match parse_llm_output(&response(text)) {
             LlmOutput::Content(c) => assert!(c.contains("internal_worker_handoff_v1")),
             other => panic!("expected Content, got {:?}", other),

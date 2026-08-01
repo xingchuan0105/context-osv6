@@ -89,7 +89,11 @@ pub fn apply_profile_delta(existing: UserProfile, delta: ProfileDelta) -> UserPr
             .unwrap_or(true)
     });
 
-    apply_hints(&mut profile.session_continuity_hints, &delta.session_continuity_hints, &today);
+    apply_hints(
+        &mut profile.session_continuity_hints,
+        &delta.session_continuity_hints,
+        &today,
+    );
     apply_conflicts(&mut profile.observed_conflicts, &delta.observed_conflicts);
 
     if let Some(summary) = delta.global_summary.as_deref().filter(|s| !s.is_empty()) {
@@ -286,7 +290,10 @@ fn apply_hints(slots: &mut Vec<StoredSessionHint>, hints: &[SessionHint], today:
     for hint in hints {
         if let Some(priority) = hint.priority.as_deref() {
             if !VALID_HINT_PRIORITIES.contains(&priority) {
-                tracing::warn!(priority, "ignoring invalid session_continuity_hints priority");
+                tracing::warn!(
+                    priority,
+                    "ignoring invalid session_continuity_hints priority"
+                );
                 continue;
             }
         }
@@ -329,9 +336,9 @@ fn apply_conflicts(existing: &mut Vec<StoredConflict>, new: &[ObservedConflict])
                 e
             },
         };
-        let is_dup = existing.iter().any(|e| {
-            e.field == c.field && e.old_view == c.old_view && e.new_view == c.new_view
-        });
+        let is_dup = existing
+            .iter()
+            .any(|e| e.field == c.field && e.old_view == c.old_view && e.new_view == c.new_view);
         if !is_dup {
             existing.push(c);
         }
@@ -378,12 +385,24 @@ pub(crate) fn apply_slot_updates(
     let mut p = user_profile_from_value(profile);
     let validate_tools = key == "tool_preferences";
     match key {
-        "expertise_domains" => apply_slots(&mut p.expertise_domains, &typed, max_slots, today, false),
-        "tool_preferences" => {
-            apply_slots(&mut p.tool_preferences, &typed, max_slots, today, validate_tools)
+        "expertise_domains" => {
+            apply_slots(&mut p.expertise_domains, &typed, max_slots, today, false)
         }
+        "tool_preferences" => apply_slots(
+            &mut p.tool_preferences,
+            &typed,
+            max_slots,
+            today,
+            validate_tools,
+        ),
         "important_constraints" => {
-            apply_slots(&mut p.important_constraints, &typed, max_slots, today, false);
+            apply_slots(
+                &mut p.important_constraints,
+                &typed,
+                max_slots,
+                today,
+                false,
+            );
             p.important_constraints.retain(|s| {
                 s.expires_at
                     .as_deref()
@@ -407,7 +426,9 @@ pub(crate) fn apply_singleton_update(
         update.and_then(|v| serde_json::from_value(v.clone()).ok());
     let mut p = user_profile_from_value(profile);
     match key {
-        "preferred_answer_style" => apply_singleton(&mut p.preferred_answer_style, typed.as_ref(), today),
+        "preferred_answer_style" => {
+            apply_singleton(&mut p.preferred_answer_style, typed.as_ref(), today)
+        }
         "preferred_language" => apply_singleton(&mut p.preferred_language, typed.as_ref(), today),
         _ => {}
     }

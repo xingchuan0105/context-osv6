@@ -32,7 +32,7 @@ pub enum DiscloseAt {
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct MandatorySkills {
-    /// Clusters forced on the first retrieve round (e.g. RAG `codegen`).
+    /// Clusters forced on the first retrieve round (e.g. RAG `knowledge-base`).
     #[serde(default)]
     pub retrieve: Vec<String>,
     #[serde(default, alias = "mandatory_synthesis")]

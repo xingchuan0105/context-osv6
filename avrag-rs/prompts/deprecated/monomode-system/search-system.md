@@ -20,7 +20,7 @@ applicable_strategies: [search]
 4. 跨轮指代时请求 **`memory` 簇**。
 5. 证据充分后进入合成；合成阶段 `tools=[]`，按 mandatory answer 与自选 writing/format 生成最终回答。
 
-**禁止**：输出 `<code>` 代码块或 SDK 调用；本 mode 无 `codegen` 路径。
+**禁止**：输出 `<code>` 代码块或 SDK 调用；本 mode 无 `knowledge-base` 路径。
 
 ## 3. 定位
 
