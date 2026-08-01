@@ -232,7 +232,9 @@ def score_row(row: dict, no_context: bool = False) -> tuple[int, float, bool]:
       不得按 0 分惩罚（2026-08-01 评分点修正）。
     """
     label = row.get("label", "")
-    if label == "JUDGE_ERROR":
+    if label in ("JUDGE_ERROR", "INFRA_ERROR"):
+        # 评测故障(judge API 失败 / 答案未生成)不是 skill 质量问题:调用方应
+        # 从聚合/训练中排除,不得按 0 分惩罚(2026-08-01 评分点修正)。
         return 0, 0.0, True
     hard = 1 if label == "PASS" else 0
     c = row.get("correctness", 0.0)
