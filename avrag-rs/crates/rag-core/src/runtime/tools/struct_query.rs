@@ -7,6 +7,17 @@
 //!   加固只读连接上执行（READ_ONLY + enable_external_access=false + lock_configuration=true，
 //!   配方：Simon Willison duckdb-security；详见计划 §6.2）。
 //!
+//! ## 三层兜底安全模型
+//!
+//! 1. **SQL 校验层**（`validate_sql`）：禁词（含族模式 `read_[a-z0-9_]+`）、禁子查询/派生表、
+//!    禁逗号连接多关系（`FROM a, b`）、禁多语句/非 SELECT、FROM/JOIN 标识符收集。
+//!    校验层承诺「标识符 ∈ catalog」，但即便校验层被绕过（如新增 DuckDB 函数族），后续两层
+//!    仍可兜底。
+//! 2. **连接加固层**（`open_readonly`）：`READ_ONLY` + `enable_external_access=false` +
+//!    `lock_configuration=true`，物理阻止文件读写与配置变更（即使 SQL 校验层漏过）。
+//! 3. **per-doc 隔离层**（`query_store`）：可见性按 doc 文件粒度收集、所有标识符必须落在
+//!    同一 doc 内（`cross_doc` 拒绝），每个 doc 的 DuckDB 文件独立不可跨文件访问。
+//!
 //! 存储约定：`<STRUCT_STORE_DIR 或 storage/struct_store>/<doc_id>.duckdb`，
 //! 由灌入 pipeline（scripts/struct_query_poc）产出；证据列 `row_ord` / `__src_line`，
 //! 表级证据 chunk：`_meta.evidence_chunk_id`（整表 md 存 PG chunks，table_evidence，
@@ -32,6 +43,7 @@ const MAX_CELL_CHARS: usize = 300;
 const MAX_EVIDENCE_MD_ROWS: usize = 50;
 
 /// SQL 禁词（词边界，大小写不敏感）：文件读写/外部访问/DDL/DML/配置。
+/// `read_*` 表函数族由下方的 FORBIDDEN_FAMILY_PATTERNS 覆盖，此处不重复列出。
 const FORBIDDEN_SQL: &[&str] = &[
     "attach",
     "detach",
@@ -51,17 +63,20 @@ const FORBIDDEN_SQL: &[&str] = &[
     "prepare",
     "execute",
     "macro",
-    "read_csv",
-    "read_json",
-    "read_parquet",
-    "read_text",
-    "read_blob",
     "glob",
     "sqlite_scan",
     "postgres_scan",
     "mysql_scan",
     "parquet_scan",
     "csv_auto",
+];
+
+/// SQL 族模式禁词（额外正则，大小写不敏感）：覆盖 read_* 表函数族
+/// （read_csv / read_csv_auto / read_parquet / read_json / read_text /
+/// read_blob / read_ndjson / read_npy 等），弥补词边界禁词表无法覆盖
+/// `read_csv_auto` 等后续字符仍为词字符的变体。
+const FORBIDDEN_FAMILY_PATTERNS: &[&str] = &[
+    r"\bread_[a-z0-9_]+\b",
 ];
 
 fn struct_store_dir() -> PathBuf {
@@ -220,10 +235,23 @@ fn catalog_for_file(
                 |r| r.get(0),
             )
             .unwrap_or(0);
-        let sample_sql = format!(
-            "SELECT * FROM {} LIMIT {MAX_SAMPLE_ROWS}",
-            quote_ident(&table)
-        );
+        let sample_sql = if headers.is_empty() {
+            format!(
+                "SELECT * FROM {} LIMIT {MAX_SAMPLE_ROWS}",
+                quote_ident(&table)
+            )
+        } else {
+            let cols = headers
+                .iter()
+                .map(|h| quote_ident(h))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "SELECT {} FROM {} LIMIT {MAX_SAMPLE_ROWS}",
+                cols,
+                quote_ident(&table)
+            )
+        };
         let sample_rows = query_rows(con, &sample_sql, MAX_SAMPLE_ROWS)
             .map(|(_, rows)| rows)
             .unwrap_or_default();
@@ -372,6 +400,7 @@ fn validate_sql(sql: &str) -> Result<(String, Vec<String>), (String, String)> {
     if !(lower.starts_with("select") || lower.starts_with("with")) {
         return Err(("forbidden".into(), "only single SELECT allowed".into()));
     }
+    // 精确禁词（词边界）
     for kw in FORBIDDEN_SQL {
         let pat = format!(r"\b{}\b", regex::escape(kw));
         if regex::RegexBuilder::new(&pat)
@@ -385,6 +414,33 @@ fn validate_sql(sql: &str) -> Result<(String, Vec<String>), (String, String)> {
                 format!("keyword/function not allowed: {kw}"),
             ));
         }
+    }
+    // 族模式禁词（如 read_csv_auto 等变体逃逸词边界）
+    for pat in FORBIDDEN_FAMILY_PATTERNS {
+        if regex::RegexBuilder::new(pat)
+            .case_insensitive(true)
+            .build()
+            .expect("forbidden family regex")
+            .is_match(&trimmed)
+        {
+            return Err((
+                "forbidden".into(),
+                format!("family pattern not allowed: {pat}"),
+            ));
+        }
+    }
+    // v1 单表语义：逗号连接多关系（FROM a, b）保守拒绝。
+    // 从 FROM 关键字到下一 SQL 子句边界（WHERE / GROUP / ORDER / LIMIT /
+    // HAVING / UNION / 结尾）之间检测括号外的逗号后跟标识符。
+    let comma_join_re = regex::Regex::new(
+        r#"(?i)\bfrom\s+["\w]+(?:\s+(?:as\s+)?\w+)?\s*,\s*["\w]+"#,
+    )
+    .expect("comma join regex");
+    if comma_join_re.is_match(&trimmed) {
+        return Err((
+            "forbidden".into(),
+            "comma-join multi-relation in FROM not allowed in v1".into(),
+        ));
     }
     let from_re =
         regex::Regex::new(r#"(?i)\b(?:from|join)\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))"#)
@@ -443,17 +499,41 @@ where
 
 /// run_catalog 的存储层主体（纯函数，便于单测）：逐 doc 收集 relations，
 /// 无存储文件的 doc 跳过（非错误）。
-fn catalog_store(dir: &Path, doc_uuids: &[Uuid]) -> Result<Vec<serde_json::Value>, String> {
+/// 返回值：(relations, ambiguous_relations) — ambiguous_relations 为多 doc
+/// 含同名表（不区分大小写）时的表名列表，按首个出现的 doc 静默归属（不改行为，
+/// 仅如实透出）。
+fn catalog_store(
+    dir: &Path,
+    doc_uuids: &[Uuid],
+) -> Result<(Vec<serde_json::Value>, Vec<String>), String> {
     let mut relations = Vec::new();
+    // 记录每个表名（小写）首次出现的 doc_id，用于检测跨 doc 同名。
+    let mut table_doc: HashMap<String, (Uuid, String)> = HashMap::new(); // lower → (doc_id, original_name)
+    let mut ambiguous: HashSet<String> = HashSet::new();
     for doc_id in doc_uuids {
         let path = doc_file(dir, *doc_id);
         if !path.exists() {
-            continue; // 无表格存储：该 doc 对 catalog 无贡献（非错误）
+            continue;
         }
         let con = open_readonly(&path)?;
-        relations.extend(catalog_for_file(&con, *doc_id)?);
+        let file_relations = catalog_for_file(&con, *doc_id)?;
+        for rel in &file_relations {
+            let name = rel["name"].as_str().unwrap_or("").to_string();
+            let lower = name.to_lowercase();
+            if let Some((prev_doc, _)) = table_doc.get(&lower) {
+                if *prev_doc != *doc_id {
+                    ambiguous.insert(name);
+                }
+            } else {
+                table_doc.insert(lower, (*doc_id, name));
+            }
+        }
+        relations.extend(file_relations);
     }
-    Ok(relations)
+    // 按字典序排序输出
+    let mut ambiguous_sorted: Vec<String> = ambiguous.into_iter().collect();
+    ambiguous_sorted.sort();
+    Ok((relations, ambiguous_sorted))
 }
 
 /// run_query 的存储层主体（纯函数，便于单测）：可见性收集 → 标识符校验 →
@@ -663,7 +743,15 @@ pub async fn run_catalog(
     };
     let dir = struct_store_dir();
     match run_blocking(move || catalog_store(&dir, &doc_uuids)).await {
-        Ok(relations) => ok_result("struct_catalog", json!({ "relations": relations }), started),
+        Ok((relations, ambiguous)) => {
+            let mut data = json!({ "relations": relations });
+            if !ambiguous.is_empty() {
+                data["ambiguous_relations"] = json!(ambiguous);
+                data["ambiguous_relations_note"] =
+                    json!("多 doc 含同名表时查询按首个出现的 doc 静默归属（不改行为，仅如实透出）");
+            }
+            ok_result("struct_catalog", data, started)
+        }
         Err(e) => super::error_result("struct_catalog", e),
     }
 }
@@ -785,7 +873,7 @@ mod tests {
         assert_eq!(v["scanned_chunks"], json!([FIXTURE_CHUNK_ID]));
         assert_eq!(v["chunks"][0]["chunk_id"], FIXTURE_CHUNK_ID);
         // _line_map 不作为用户 relation 出现在 catalog。
-        let relations = catalog_store(&dir, &[doc_id]).unwrap();
+        let (relations, _ambiguous) = catalog_store(&dir, &[doc_id]).unwrap();
         assert_eq!(relations.len(), 1);
         assert_eq!(relations[0]["name"], "t0");
 
@@ -834,6 +922,55 @@ mod tests {
         );
         // 词边界：列名含 create_time / update_at 不误伤。
         assert!(validate_sql("SELECT create_time FROM t0").is_ok());
+    }
+
+    #[test]
+    fn validate_sql_rejects_read_csv_auto_family() {
+        // read_csv_auto 是词边界禁词表无法覆盖的变体，族模式应捕获。
+        assert_eq!(
+            validate_sql("SELECT * FROM read_csv_auto('/tmp/x.csv')")
+                .unwrap_err()
+                .0,
+            "forbidden"
+        );
+        assert_eq!(
+            validate_sql("SELECT * FROM read_ndjson('/tmp/x.json')")
+                .unwrap_err()
+                .0,
+            "forbidden"
+        );
+        // read_parquet 同样被族模式覆盖。
+        assert_eq!(
+            validate_sql("SELECT * FROM read_parquet('/tmp/x.parquet')")
+                .unwrap_err()
+                .0,
+            "forbidden"
+        );
+    }
+
+    #[test]
+    fn validate_sql_rejects_comma_join_multi_relation() {
+        // 逗号连接多关系在 v1 单表语义下保守拒绝。
+        assert_eq!(
+            validate_sql("SELECT * FROM t0, t1").unwrap_err().0,
+            "forbidden"
+        );
+        assert_eq!(
+            validate_sql("SELECT * FROM t0, t1 WHERE t0.x = t1.x")
+                .unwrap_err()
+                .0,
+            "forbidden"
+        );
+        assert_eq!(
+            validate_sql("SELECT * FROM t0 AS a, t1 AS b")
+                .unwrap_err()
+                .0,
+            "forbidden"
+        );
+        // JOIN 正常（非逗号连接）不应被误伤。
+        assert!(validate_sql("SELECT * FROM t0 JOIN t1 ON t0.x = t1.x").is_ok());
+        // 单表 FROM 正常。
+        assert!(validate_sql("SELECT * FROM t0 WHERE x > 1").is_ok());
     }
 
     #[test]
@@ -1095,7 +1232,7 @@ mod tests {
         assert_eq!(v["chunks"], json!([]));
         assert!(v["evidence"][0]["chunk_id"].is_null());
 
-        let relations = catalog_store(&dir, &[doc_id]).unwrap();
+        let (relations, _ambiguous) = catalog_store(&dir, &[doc_id]).unwrap();
         assert_eq!(relations.len(), 1);
         assert_eq!(relations[0]["caption"], "旧表");
         assert!(relations[0]["evidence_chunk_id"].is_null());
@@ -1110,10 +1247,59 @@ mod tests {
         fixture_file(&dir, doc_id);
         let missing = Uuid::new_v4();
 
-        let relations = catalog_store(&dir, &[missing, doc_id]).unwrap();
+        let (relations, _ambiguous) = catalog_store(&dir, &[missing, doc_id]).unwrap();
         assert_eq!(relations.len(), 1);
         assert_eq!(relations[0]["doc_id"], doc_id.to_string());
         assert_eq!(relations[0]["name"], "t0");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn catalog_sample_aligns_with_headers() {
+        // sample_rows 列数应与 headers 一致（不应包含 row_ord/__src_line 系统列）。
+        let dir = std::env::temp_dir().join(format!("struct_store_test_{}", Uuid::new_v4()));
+        let doc_id = Uuid::new_v4();
+        fixture_file(&dir, doc_id);
+
+        let (relations, _ambiguous) = catalog_store(&dir, &[doc_id]).unwrap();
+        assert_eq!(relations.len(), 1);
+        let headers = relations[0]["headers"].as_array().unwrap();
+        let sample_rows = relations[0]["sample_rows"].as_array().unwrap();
+        // headers 和 sample_rows 均不包含 row_ord/__src_line。
+        assert!(!headers.iter().any(|v| v.as_str() == Some("row_ord")));
+        assert!(!headers.iter().any(|v| v.as_str() == Some("__src_line")));
+        // sample 每行的列数 == headers 列数。
+        for row in sample_rows {
+            assert_eq!(
+                row.as_array().unwrap().len(),
+                headers.len(),
+                "sample row column count must match headers"
+            );
+        }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn catalog_ambiguous_relations_on_same_name_across_docs() {
+        // 两个 doc 各有同名表 t0 → catalog 应标注 ambiguous_relations。
+        let dir = std::env::temp_dir().join(format!("struct_store_test_{}", Uuid::new_v4()));
+        let doc_a = Uuid::new_v4();
+        let doc_b = Uuid::new_v4();
+        fixture_file(&dir, doc_a);
+        fixture_file(&dir, doc_b); // 两个 doc 都有 t0
+
+        let (relations, ambiguous) = catalog_store(&dir, &[doc_a, doc_b]).unwrap();
+        assert_eq!(relations.len(), 2);
+        assert!(
+            ambiguous.contains(&"t0".to_string()),
+            "多 doc 含同名 t0 → ambiguous_relations 应包含 t0"
+        );
+
+        // 如果只有单一 doc，不应有 ambiguous。
+        let (_, no_ambiguous) = catalog_store(&dir, &[doc_a]).unwrap();
+        assert!(no_ambiguous.is_empty());
 
         std::fs::remove_dir_all(&dir).ok();
     }
