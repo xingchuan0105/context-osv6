@@ -55,6 +55,14 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
             claimed = Some(task);
             break;
         }
+        // Stale leftover from an earlier failed run — complete it so it can't
+        // re-contaminate the queue after lease expiry.
+        if let Some(lt) = task.lock_token {
+            let _ = repo
+                .ingestion_queue()
+                .complete_document_cleanup_task(task.task_id, lt)
+                .await;
+        }
     }
     let claimed = claimed.expect("cleanup task for our document should be claimed");
     assert_eq!(claimed.owner_user_id, owner_user_id.into_uuid());
@@ -137,6 +145,13 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
         if task.task_id == claimed.task_id {
             claimed_again = Some(task);
             break;
+        }
+        // Stale leftover — complete it so it can't re-contaminate the queue.
+        if let Some(lt) = task.lock_token {
+            let _ = repo
+                .ingestion_queue()
+                .complete_document_cleanup_task(task.task_id, lt)
+                .await;
         }
     }
     let claimed = claimed_again.expect("cleanup task should be claimed again");

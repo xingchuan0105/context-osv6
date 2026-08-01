@@ -12,7 +12,6 @@ async fn document_ir_projection_deletes_are_tenant_scoped_when_database_availabl
 
     let owner_user_id = UserId::from(Uuid::new_v4());
     let owner_org_uuid = owner_user_id.into_uuid();
-    let other_org_uuid = Uuid::new_v4();
     let user_id = Uuid::new_v4();
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
@@ -26,7 +25,20 @@ async fn document_ir_projection_deletes_are_tenant_scoped_when_database_availabl
         .await
         .unwrap();
     let document_id = Uuid::parse_str(&document.id).unwrap();
-    let other_workspace_id = Uuid::new_v4();
+
+    // Register the other org via bootstrap so the FK on document_blocks (owner_user_id → users.id)
+    // is satisfied.
+    let other_org_uuid = Uuid::new_v4();
+    let other_ctx = AuthContext::new(
+        UserId::from(other_org_uuid),
+        contracts::auth_runtime::SubjectKind::User,
+    );
+    let other_notebook = repo
+        .bootstrap()
+        .create_workspace(&other_ctx, "ir other tenant notebook", "ir other tenant")
+        .await
+        .unwrap();
+    let other_workspace_id = Uuid::parse_str(&other_notebook.id).unwrap();
 
     insert_test_document_block(
         &repo,

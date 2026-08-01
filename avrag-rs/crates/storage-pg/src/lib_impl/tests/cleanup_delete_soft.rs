@@ -62,11 +62,21 @@ async fn delete_document_soft_deletes_and_enqueues_cleanup_once_when_database_av
             .unwrap(),
         1
     );
-    let task_row = sqlx::query("select status from ingestion_tasks where task_id = $1")
-        .bind(Uuid::parse_str(&task.task_id).unwrap())
-        .fetch_one(repo.raw())
-        .await
-        .unwrap();
+    let task_row = {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        let row = sqlx::query("select status from ingestion_tasks where task_id = $1")
+            .bind(Uuid::parse_str(&task.task_id).unwrap())
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        row
+    };
     assert_eq!(
         task_row.try_get::<String, _>("status").unwrap(),
         "dead_letter"

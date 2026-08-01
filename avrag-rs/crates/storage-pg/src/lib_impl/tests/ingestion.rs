@@ -73,11 +73,28 @@ async fn claim_next_ingestion_task_sees_cross_owner_queue_under_forced_rls() {
 
     let queue_group = std::env::var("AVRAG_INGESTION_QUEUE_GROUP")
         .unwrap_or_else(|_| "default".to_string());
-    let claimed = repo
-        .ingestion_queue()
-        .claim_next_ingestion_task("claim-rls-test-worker", &queue_group)
-        .await
-        .unwrap();
+    // claim 隔离：共享库并发测试可能 claim 到其他测试的任务；bounded 循环
+    // 「claim → 非己则 complete → 再 claim」直到拿到自己的任务。
+    let mut claimed = None;
+    for _ in 0..10 {
+        let next = repo
+            .ingestion_queue()
+            .claim_next_ingestion_task("claim-rls-test-worker", &queue_group)
+            .await
+            .unwrap();
+        let Some(next) = next else { break };
+        if next.task_id == task.task_id {
+            claimed = Some(next);
+            break;
+        }
+        // 非己任务：complete（释放锁并移出队列），避免阻塞后续 claim。
+        if let Some(lock) = next.lock_token.as_deref() {
+            let _ = repo
+                .ingestion_queue()
+                .complete_ingestion_task(&next.task_id, Some(lock))
+                .await;
+        }
+    }
     let claimed = claimed.expect("claim_next must elevate and see cross-owner queued task");
     assert_eq!(claimed.task_id, task.task_id);
     assert_eq!(claimed.document_id, document.id);
@@ -141,23 +158,32 @@ async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_a
     assert!(repo.ingestion_queue().enqueue_ingestion_task(&task).await.unwrap());
     let task_id = Uuid::parse_str(&task.task_id).unwrap();
     let lock_token = Uuid::new_v4();
-    sqlx::query(
-        r#"
-        update ingestion_tasks
-        set status = 'processing',
-            locked_at = now() - interval '5 minutes',
-            locked_by = 'lease-renewal-test-worker',
-            lock_token = $2,
-            attempt_count = attempt_count + 1,
-            updated_at = now()
-        where task_id = $1
-        "#,
-    )
-    .bind(task_id)
-    .bind(lock_token)
-    .execute(repo.raw())
-    .await
-    .unwrap();
+    {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"
+            update ingestion_tasks
+            set status = 'processing',
+                locked_at = now() - interval '5 minutes',
+                locked_by = 'lease-renewal-test-worker',
+                lock_token = $2,
+                attempt_count = attempt_count + 1,
+                updated_at = now()
+            where task_id = $1
+            "#,
+        )
+        .bind(task_id)
+        .bind(lock_token)
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
 
     let lock_token = lock_token.to_string();
     assert!(
@@ -225,19 +251,28 @@ async fn ingestion_side_effect_guard_requires_current_lease_and_non_deleting_doc
     assert!(repo.ingestion_queue().enqueue_ingestion_task(&task).await.unwrap());
     let task_id = Uuid::parse_str(&task.task_id).unwrap();
     let lock_token = Uuid::new_v4();
-    sqlx::query(
-        r#"
-        update ingestion_tasks
-        set status = 'processing', locked_at = now(), locked_by = 'guard-test',
-            lock_token = $2, attempt_count = attempt_count + 1, updated_at = now()
-        where task_id = $1
-        "#,
-    )
-    .bind(task_id)
-    .bind(lock_token)
-    .execute(repo.raw())
-    .await
-    .unwrap();
+    {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"
+            update ingestion_tasks
+            set status = 'processing', locked_at = now(), locked_by = 'guard-test',
+                lock_token = $2, attempt_count = attempt_count + 1, updated_at = now()
+            where task_id = $1
+            "#,
+        )
+        .bind(task_id)
+        .bind(lock_token)
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
 
     let lock_token_string = lock_token.to_string();
     assert!(
