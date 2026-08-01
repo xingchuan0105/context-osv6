@@ -165,6 +165,19 @@ mod tests {
     }
 
     #[test]
+    fn tokens_are_normalized_trim_and_alias() {
+        // 输出为规范化后的 token:trim、去 .md、codegen→knowledge-base。
+        assert_eq!(
+            parse_skill_request(r#"{"skill_request": [" codegen "]}"#),
+            vec!["knowledge-base"]
+        );
+        assert_eq!(
+            parse_skill_request(r#"{"skill_request": ["codegen:how-to-read-tables.md"]}"#),
+            vec!["knowledge-base/how-to-read-tables"]
+        );
+    }
+
+    #[test]
     fn malformed_returns_empty() {
         assert!(parse_skill_request(r#"{"skill_request": "knowledge-base"}"#).is_empty());
         assert!(parse_skill_request(r#"{"skill_request": [1, 2]}"#).is_empty());

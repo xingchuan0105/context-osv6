@@ -843,8 +843,10 @@ async fn mock_llm_handler(
         && (system_prompt.contains("检索 → 评估 → 合成")
             || system_prompt.contains("RAG agent")
             || system_prompt.contains("**检索轮**")
-            || (system_prompt.contains("检索轮") && system_prompt.contains("knowledge-base")
-                || system_prompt.contains("codegen")));
+            // 防漏保底:知识库检索轮需同时含「检索轮」+ 能力段名。codegen 为
+            // pre-rename 兼容旧 skill 名;当前无 live prompt 命中此分支。
+            || (system_prompt.contains("检索轮")
+                && (system_prompt.contains("knowledge-base") || system_prompt.contains("codegen"))));
 
     // ReAct loop: after tool results, emit a final answer (not empty content).
     // Empty content without tool_calls is EmptyStream in openai_chat finalize and

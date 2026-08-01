@@ -73,6 +73,9 @@ pub fn alias_chunks_in_order(tool_results: &[ToolResult]) -> Vec<HydratedChunk> 
         // 与桥接别名注入一一对应，水合按同一顺序重放。
         "doc_grep",
         "doc_read_lines",
+        // 2026-08-01: struct_query 与 bridge ALIASED_METHODS 对齐（bridge.rs K2 注入）
+        // ——chunks 为表级证据 md;struct_catalog 不参与 alias 命名空间。
+        "struct_query",
     ];
     let mut out = Vec::new();
     for tr in tool_results {
@@ -224,5 +227,32 @@ mod tests {
         // Only 3 aliased chunks exist; alias #4 must NOT resolve to web data.
         let h = hydrate_selected("SELECTED: #4", &results);
         assert!(h.is_empty());
+    }
+
+    #[test]
+    fn struct_query_chunks_join_alias_namespace() {
+        // struct_query 返回 chunks(表级证据 md),与 bridge ALIASED_METHODS 对齐后
+        // 参与同一 alias 顺序;struct_catalog 的 relations 不进门。
+        let results = vec![
+            chunk_result(
+                "dense_retrieval",
+                serde_json::json!({"chunks": [{"chunk_id": "c1", "text": "t"}]}),
+            ),
+            chunk_result(
+                "struct_query",
+                serde_json::json!({
+                    "columns": ["阶段", "cnt"],
+                    "rows": [["验证", "59"]],
+                    "chunks": [{"chunk_id": "c4", "text": "| 阶段 | cnt |\n| 验证 | 59 |"}],
+                }),
+            ),
+            chunk_result(
+                "struct_catalog",
+                serde_json::json!({"relations": [{"table_name": "t0", "evidence_chunk_id": "c9"}]}),
+            ),
+        ];
+        let h = hydrate_selected("SELECTED: #2", &results);
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].chunk_id, "c4");
     }
 }
