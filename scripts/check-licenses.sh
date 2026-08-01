@@ -87,11 +87,4 @@ if blocked:
 print(f"OK: {len(data)} frontend production packages scanned")
 PY
 
-echo "==> Optional sidecar reminder"
-if grep -q 'PyMuPDF' "${ROOT}/avrag-rs/services/pdf-visual-renderer/requirements.txt" 2>/dev/null; then
-  echo "NOTE: pdf-visual-renderer uses PyMuPDF (AGPL-3.0 or commercial)."
-  echo "      Do not deploy in commercial SaaS unless licensed or replaced."
-  echo "      Production: leave PDF_RENDERER_BASE_URL unset to skip E-class fallback."
-fi
-
 echo "License gate passed."

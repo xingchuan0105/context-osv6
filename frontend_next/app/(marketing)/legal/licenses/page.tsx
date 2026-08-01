@@ -13,7 +13,7 @@ export default function LicensesSummary() {
     { category: 'Web框架', components: 'Next.js, React', license: 'MIT' },
     { category: '后端运行时', components: 'Tokio, Axum', license: 'MIT' },
     { category: '向量数据库', components: 'Milvus', license: 'Apache-2.0' },
-    { category: 'PDF解析', components: 'LiteParse / PDFium', license: 'Apache-2.0' },
+    { category: 'PDF解析', components: 'markitdown', license: 'MIT' },
     { category: 'AI推理', components: 'DeepSeek, DashScope', license: '商业API' },
   ];
 

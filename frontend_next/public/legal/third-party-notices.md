@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-_Generated: 2026-06-13 via `scripts/generate-third-party-notices.sh`_
+_Generated: 2026-08-01 via `scripts/generate-third-party-notices.sh` (manual edit; generator unavailable due to read-only FS)_
 
 This project (Context-OS / AVRag) is licensed under the [MIT License](LICENSE).
 Third-party components listed below are subject to their own licenses.
@@ -9,7 +9,6 @@ Third-party components listed below are subject to their own licenses.
 
 | Priority | Component | License | Action |
 |----------|-----------|---------|--------|
-| P0 | PyMuPDF (`pdf-visual-renderer`) | AGPL-3.0 or Artifex commercial | Do not deploy in SaaS unless licensed; leave `PDF_RENDERER_BASE_URL` unset |
 | P1 | MinIO (upload / Milvus compose) | AGPL-3.0 | Prefer cloud S3/OSS via `S3_*` env vars |
 | P1 | Redis server 7.4+ | RSALv2 / SSPL | Internal cache only; pin ≤7.2 or use Valkey |
 | P2 | `@img/sharp-libvips-linux-x64` (Next.js web) | LGPL-3.0 | NOTICE only; desktop build uses `images.unoptimized` |
@@ -28,7 +27,7 @@ Third-party components listed below are subject to their own licenses.
 
 ## Rust dependencies (avrag-rs)
 
-Total crates: **634**
+Total crates: **630**
 
 ### Apache-2.0 OR MIT (320 crates)
 
@@ -353,7 +352,7 @@ Total crates: **634**
 - zstd-safe
 - zstd-sys
 
-### MIT (152 crates)
+### MIT (151 crates)
 
 - analytics
 - any_spawner
@@ -375,7 +374,6 @@ Total crates: **634**
 - avrag-code-interpreter
 - avrag-guardrails
 - avrag-llm
-- avrag-office-parser-jvm
 - avrag-rag-core
 - avrag-rag-core-ports
 - avrag-retrieval-data-plane
@@ -508,7 +506,7 @@ Total crates: **634**
 - zmij
 - zstd
 
-### Apache-2.0 (29 crates)
+### Apache-2.0 (26 crates)
 
 - aws-config
 - aws-credential-types
@@ -532,9 +530,6 @@ Total crates: **634**
 - aws-smithy-xml
 - aws-types
 - insta
-- liteparse
-- liteparse-pdfium
-- liteparse-pdfium-sys
 - openssl
 - similar
 - sync_wrapper
@@ -936,13 +931,6 @@ Total packages: **197**
 ### LGPL-3.0-or-later (1 packages)
 
 - @img/sharp-libvips-linux-x64@1.2.4
-
-## Python sidecar (optional)
-
-`avrag-rs/services/pdf-visual-renderer/requirements.txt`:
-
-- **PyMuPDF** — Dual Licensed: GNU Affero GPL 3.0 or Artifex Commercial License
-- fastapi, uvicorn, pydantic, httpx, python-multipart — MIT / BSD / Apache-2.0
 
 ## Regeneration
 
