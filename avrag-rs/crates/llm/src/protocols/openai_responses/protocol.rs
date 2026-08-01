@@ -48,7 +48,9 @@ impl Protocol for OpenAiResponsesProtocol {
             return Ok(serde_json::Value::Null);
         }
         serde_json::from_str(frame).map_err(|error| {
-            LlmError::parse(format!("Failed to parse responses stream payload: {frame}: {error}"))
+            LlmError::parse(format!(
+                "Failed to parse responses stream payload: {frame}: {error}"
+            ))
         })
     }
 
@@ -266,6 +268,7 @@ impl Protocol for OpenAiResponsesProtocol {
                 provider: state.provider,
                 model: state.model.clone(),
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             model: state.model,
             tool_calls: state.tool_calls,
@@ -280,7 +283,9 @@ fn apply_responses_object(
     value: &serde_json::Value,
 ) -> Result<Vec<LlmEvent>, LlmError> {
     let obj: ResponsesObject = serde_json::from_value(value.clone()).map_err(|error| {
-        LlmError::parse(format!("Failed to parse responses object: {value}: {error}"))
+        LlmError::parse(format!(
+            "Failed to parse responses object: {value}: {error}"
+        ))
     })?;
 
     let mut events = Vec::new();
@@ -385,7 +390,9 @@ fn absorb_output_items(
                 //    arrived (call_id/name still empty) — backfill identity
                 //    instead of pushing a duplicate tool call.
                 if let Some(existing) = state.tool_accumulators.iter_mut().find(|acc| {
-                    acc.call_id.is_empty() && !acc.arguments.is_empty() && acc.arguments == arguments
+                    acc.call_id.is_empty()
+                        && !acc.arguments.is_empty()
+                        && acc.arguments == arguments
                 }) {
                     existing.call_id = call_id;
                     existing.name = name;

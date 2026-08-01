@@ -170,12 +170,14 @@ impl LlmClient {
             .map(|tools| tools.iter().map(ToolDefinition::from).collect())
             .unwrap_or_default();
 
-        LlmRequest::new(messages.to_vec(), config.clone()).with_options(GenerationOptions {
-            temperature,
-            max_tokens,
-            stream,
-            json_mode,
-        }).with_tools(tool_defs)
+        LlmRequest::new(messages.to_vec(), config.clone())
+            .with_options(GenerationOptions {
+                temperature,
+                max_tokens,
+                stream,
+                json_mode,
+            })
+            .with_tools(tool_defs)
     }
 
     fn record_call_failure(call: &CompletionCall) {
@@ -207,6 +209,7 @@ impl LlmClient {
         model: &str,
         usage: &ApiUsageRaw,
         cached_tokens_for_metrics: u64,
+        reasoning_tokens: u32,
         track_local_limits: bool,
     ) {
         telemetry::prometheus::observe_llm_call(
@@ -237,6 +240,7 @@ impl LlmClient {
                 completion_tokens: usage.completion_tokens(),
                 total_tokens: usage.total_tokens(),
                 cached_tokens: usage.cached_token_count(),
+                reasoning_tokens,
                 provider: call.provider.clone(),
                 model: model.to_string(),
                 feature: self.feature.clone(),
@@ -268,14 +272,8 @@ impl LlmClient {
                 .await;
         }
         let call = self.prepare_completion(messages)?;
-        let request = self.build_llm_request(
-            messages,
-            temperature,
-            false,
-            tools,
-            json_mode,
-            max_tokens,
-        );
+        let request =
+            self.build_llm_request(messages, temperature, false, tools, json_mode, max_tokens);
 
         let response = self
             .route
@@ -294,8 +292,10 @@ impl LlmClient {
                 response.usage.cached_tokens,
             ),
             response.usage.cached_tokens as u64,
+            response.usage.reasoning_tokens,
             true,
-        ).await;
+        )
+        .await;
 
         Ok(response)
     }
@@ -353,8 +353,10 @@ impl LlmClient {
                 response.usage.cached_tokens,
             ),
             response.usage.cached_tokens as u64,
+            response.usage.reasoning_tokens,
             false,
-        ).await;
+        )
+        .await;
 
         Ok(response)
     }
@@ -537,8 +539,10 @@ impl LlmClient {
                 parsed.usage.cached_tokens,
             ),
             parsed.usage.cached_tokens as u64,
+            parsed.usage.reasoning_tokens,
             true,
-        ).await;
+        )
+        .await;
 
         Ok(parsed)
     }
@@ -574,6 +578,7 @@ impl LlmClient {
                 response.usage.cached_tokens,
             ),
             response.usage.cached_tokens as u64,
+            response.usage.reasoning_tokens,
             true,
         )
         .await;
@@ -627,8 +632,10 @@ impl LlmClient {
                     // Only once content actually starts flowing do we commit to
                     // this pick; a bare Finish/ProviderError first event (no
                     // delta delivered) still fails over to the next member.
-                    let delivery_started =
-                        matches!(event, LlmEvent::TextDelta { .. } | LlmEvent::ReasoningDelta { .. });
+                    let delivery_started = matches!(
+                        event,
+                        LlmEvent::TextDelta { .. } | LlmEvent::ReasoningDelta { .. }
+                    );
                     match self
                         .consume_stream_events(
                             &mut stream,
@@ -652,6 +659,7 @@ impl LlmClient {
                                     response.usage.cached_tokens,
                                 ),
                                 response.usage.cached_tokens as u64,
+                                response.usage.reasoning_tokens,
                                 false,
                             )
                             .await;
@@ -767,6 +775,7 @@ impl LlmClient {
                 provider: call.provider.clone(),
                 model: model.clone(),
                 cached_tokens: usage.cached_token_count(),
+                reasoning_tokens: 0,
             },
             model: model.clone(),
             tool_calls: None,

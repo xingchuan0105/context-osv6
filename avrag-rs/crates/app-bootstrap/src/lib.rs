@@ -4,7 +4,7 @@ mod product_apps;
 
 pub use product_apps::{
     AdminApp, AdminOpsApp, AgentApp, BillingApp, ConversationApp, PrefsApp, ShareApp,
-    WorkspaceApp, WorkspaceApiKeyAuth,
+    WorkspaceApiKeyAuth, WorkspaceApp,
 };
 mod config_helpers;
 mod domain_row_convert;
@@ -33,6 +33,7 @@ use adapters::{
 use app_admin::AdminContext;
 use app_billing::BillingContext;
 use app_chat::{ChatContext, LlmContext, OrchestratorContext};
+use app_core::RetrievalBackend;
 use app_core::{
     AdminStorePort, AnalyticsServiceCtx, AppConfig, AuthStorePort, BillingQuotaPort,
     BillingStorePort, ChatPersistencePort, DocumentStorePort, MemoryStateHandles,
@@ -40,15 +41,14 @@ use app_core::{
     StorageStores,
 };
 use app_documents::DocumentContext;
-use contracts::auth_runtime::AuthContext;
 use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
 use avrag_rag_core::{RagConfig, RagRuntime, RetrievalDataPlane};
 use avrag_search::SearchExecutor;
-use app_core::RetrievalBackend;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
-use avrag_storage_pgvector::{PgvectorConfig, PgvectorDataPlane};
 use avrag_storage_pg::{BootstrapRepository, ObjectStoreHandle, PgAppRepository, TenantPgPool};
+use avrag_storage_pgvector::{PgvectorConfig, PgvectorDataPlane};
+use contracts::auth_runtime::AuthContext;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -186,13 +186,12 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = Some(Arc::new(
         app_core::MemoryChatPersistence::new(memory_state.clone()),
     ));
-    let admin_store: Option<Arc<dyn app_core::AdminStorePort>> = Some(Arc::new(
-        app_core::MemoryAdminStore::new(
+    let admin_store: Option<Arc<dyn app_core::AdminStorePort>> =
+        Some(Arc::new(app_core::MemoryAdminStore::new(
             memory_state.clone(),
             api_keys.clone(),
             api_key_hashes.clone(),
-        ),
-    ));
+        )));
     let billing_quota: Option<Arc<dyn app_core::BillingQuotaPort>> =
         Some(Arc::new(app_core::MemoryBillingQuotaPort));
     let agent_service = Some(build_unified_agent_service(
@@ -302,17 +301,6 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         let profile: Arc<dyn app_core::ProfilePort> = adapter.clone();
         Arc::new(ChatMemory::new(messages, profile))
     });
-    let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
-        provider: config.search.provider.clone(),
-        base_url: config.search.base_url.clone(),
-        api_key: config.search.api_key.clone(),
-        max_results: config.search.max_results,
-        timeout_ms: config.search.timeout_ms,
-        search_lang: config.search.search_lang.clone(),
-        country: config.search.country.clone(),
-        freshness: config.search.freshness.clone(),
-    })));
-
     let cache_store: Option<Arc<dyn avrag_rag_core_ports::CachePort>> =
         if config.redis.url.trim().is_empty() {
             None
@@ -321,6 +309,22 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 .ok()
                 .map(|store| Arc::new(store) as Arc<dyn avrag_rag_core_ports::CachePort>)
         };
+    let search_executor = Some(Arc::new({
+        let mut executor = SearchExecutor::new(avrag_search::SearchConfig {
+            provider: config.search.provider.clone(),
+            base_url: config.search.base_url.clone(),
+            api_key: config.search.api_key.clone(),
+            max_results: config.search.max_results,
+            timeout_ms: config.search.timeout_ms,
+            search_lang: config.search.search_lang.clone(),
+            country: config.search.country.clone(),
+            freshness: config.search.freshness.clone(),
+        });
+        if let Some(cache) = cache_store.clone() {
+            executor = executor.with_cache(cache);
+        }
+        executor
+    }));
 
     let billing_store: Option<Arc<dyn BillingStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgBillingStoreAdapter::new(repository.clone())) as Arc<dyn BillingStorePort>
@@ -371,7 +375,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             cache_store.clone(),
             embedding_observer.clone(),
         )
-            .ok_or_else(|| anyhow::anyhow!("embedding client is required when enable_rag=true"))?;
+        .ok_or_else(|| anyhow::anyhow!("embedding client is required when enable_rag=true"))?;
         let mm_embedding = make_embedding_client(
             &config.mm_embedding,
             cache_store.clone(),
@@ -383,8 +387,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
 
         let attach_rag_components = |mut rag_config: RagConfig| {
             if let Some(p) = planner.clone() {
-                rag_config = rag_config
-                    .with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
+                rag_config =
+                    rag_config.with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
             }
             if let Some(mm) = mm_embedding.clone() {
                 rag_config = rag_config
@@ -406,8 +410,10 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
 
         let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
             embedding as Arc<dyn avrag_rag_core_ports::EmbeddingPort>,
-            Some(Arc::new(avrag_storage_pg::PgContentStore::new(pg_repo.clone()))
-                as Arc<dyn common::ContentStore>),
+            Some(
+                Arc::new(avrag_storage_pg::PgContentStore::new(pg_repo.clone()))
+                    as Arc<dyn common::ContentStore>,
+            ),
         ));
         let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
             match config.retrieval_backend {
@@ -439,14 +445,14 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             };
         data_plane.ensure_schema().await?;
         Some(Arc::new(RagRuntime::with_data_plane(
-            rag_config,
-            data_plane,
+            rag_config, data_plane,
         )))
     } else {
         None
     };
 
-    let mut billing = BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
+    let mut billing =
+        BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
     if let Some(obs) = usage_observer.clone() {
         billing = billing.with_usage_observer(obs);
     }
@@ -486,14 +492,17 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let auth_store: Option<Arc<dyn AuthStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgAuthStoreAdapter::new(repository.clone())) as Arc<dyn AuthStorePort>
     });
-    let billing_quota: Option<Arc<dyn BillingQuotaPort>> = match (pg.as_ref(), document_store.as_ref()) {
-        (Some(_), Some(store)) => Some(Arc::new(PgBillingQuotaAdapter::new(
-            billing.clone(),
-            store.clone(),
-        )) as Arc<dyn BillingQuotaPort>),
-        (None, _) => Some(Arc::new(app_core::MemoryBillingQuotaPort) as Arc<dyn BillingQuotaPort>),
-        _ => None,
-    };
+    let billing_quota: Option<Arc<dyn BillingQuotaPort>> =
+        match (pg.as_ref(), document_store.as_ref()) {
+            (Some(_), Some(store)) => Some(Arc::new(PgBillingQuotaAdapter::new(
+                billing.clone(),
+                store.clone(),
+            )) as Arc<dyn BillingQuotaPort>),
+            (None, _) => {
+                Some(Arc::new(app_core::MemoryBillingQuotaPort) as Arc<dyn BillingQuotaPort>)
+            }
+            _ => None,
+        };
     let agent_service = Some(build_unified_agent_service(
         llm_ctx.agent_client().cloned(),
         search_executor.clone(),

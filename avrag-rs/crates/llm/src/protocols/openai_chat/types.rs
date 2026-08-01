@@ -137,6 +137,7 @@ impl ApiUsageRaw {
             provider,
             model,
             cached_tokens: self.cached_token_count(),
+            reasoning_tokens: 0,
         }
     }
 }
@@ -221,4 +222,3 @@ pub(crate) fn usage_to_event_usage(usage: &LlmUsage) -> Usage {
         cached_tokens: usage.cached_tokens,
     }
 }
-

@@ -19,17 +19,17 @@ use avrag_llm::{ChatMessage, LlmProvider};
 use common::AppError;
 
 use super::chat_exit::{direct_handoff, synthesize_handoff};
-use super::host::{dispatch_channel, OrchestratedTurn, OrchestratorExecutor};
+use super::host::{OrchestratedTurn, OrchestratorExecutor, dispatch_channel};
 use super::invariant::missing_dispatches;
 use super::materialize::materialize_channels;
 use super::store::{EvidenceKind, EvidenceStore};
-use super::worker_session::{SessionError, WorkerSession};
 use super::types::{
     Channel, ChannelNote, ChatExitMode, ChatHandoff, DispatchRecord, PackStatus, TaskBrief,
 };
+use super::worker_session::{SessionError, WorkerSession};
 use super::workers::{
-    attach_store_retrieval_tool_results, finalize_answer_evidence, tool_failures,
-    worker_observability_from_run, WorkerBriefObservability,
+    WorkerBriefObservability, attach_store_retrieval_tool_results, finalize_answer_evidence,
+    tool_failures, worker_observability_from_run,
 };
 use crate::capabilities::CapabilitySet;
 
@@ -69,7 +69,9 @@ fn orchestrator_loop_config() -> LoopConfig {
     let base_prompt = agent_loop::r#loop::config::load_system_prompt(
         "prompts/deprecated/orchestrator-multiagent/orchestrator-base.md",
     )
-    .unwrap_or_else(|_| "你是 Context OS 的协调者：读懂问题、派活给检索同事、再移交答案撰写。".into());
+    .unwrap_or_else(|_| {
+        "你是 Context OS 的协调者：读懂问题、派活给检索同事、再移交答案撰写。".into()
+    });
     LoopConfig {
         max_rounds,
         temperature,
@@ -77,7 +79,11 @@ fn orchestrator_loop_config() -> LoopConfig {
     }
 }
 
-fn tool_spec(name: &str, description: &str, input_schema: serde_json::Value) -> contracts::ToolSpec {
+fn tool_spec(
+    name: &str,
+    description: &str,
+    input_schema: serde_json::Value,
+) -> contracts::ToolSpec {
     contracts::ToolSpec {
         name: name.to_string(),
         version: "1".to_string(),
@@ -96,7 +102,9 @@ fn channel_dispatch_manual(channel: Channel) -> Option<String> {
         // U1: the orchestrator-facing section lives in its own dispatch file —
         // workers receive the capability manual without it.
         Channel::Rag => "prompts/deprecated/orchestrator-multiagent/capability-rag.dispatch.md",
-        Channel::Search => "prompts/deprecated/orchestrator-multiagent/capability-search.dispatch.md",
+        Channel::Search => {
+            "prompts/deprecated/orchestrator-multiagent/capability-search.dispatch.md"
+        }
     };
     let manual = agent_loop::r#loop::config::load_system_prompt(path)
         .map_err(|e| {
@@ -298,14 +306,7 @@ fn render_system_message(
         s.push_str(
             &records
                 .iter()
-                .map(|r| {
-                    format!(
-                        "{}({:?}, {}条)",
-                        r.channel.as_str(),
-                        r.status,
-                        r.item_count
-                    )
-                })
+                .map(|r| format!("{}({:?}, {}条)", r.channel.as_str(), r.status, r.item_count))
                 .collect::<Vec<_>>()
                 .join(", "),
         );
@@ -336,7 +337,10 @@ fn render_user_profile(prefs: &agent_loop::runtime::AgentUserPreferences) -> Opt
         parts.push(format!("偏好风格: {style}"));
     }
     if !prefs.frequently_asked_topics.is_empty() {
-        parts.push(format!("近期关注: {}", prefs.frequently_asked_topics.join("、")));
+        parts.push(format!(
+            "近期关注: {}",
+            prefs.frequently_asked_topics.join("、")
+        ));
     }
     if parts.is_empty() {
         None
@@ -382,7 +386,12 @@ fn tool_result_msg(call_id: &str, name: &str, ok: bool, data: serde_json::Value)
 }
 
 fn guard_error(call_id: &str, name: &str, msg: impl Into<String>) -> ChatMessage {
-    tool_result_msg(call_id, name, false, serde_json::json!({"error": msg.into()}))
+    tool_result_msg(
+        call_id,
+        name,
+        false,
+        serde_json::json!({"error": msg.into()}),
+    )
 }
 
 /// True when search has already run ≥2 times without usable evidence.
@@ -393,7 +402,10 @@ fn search_channel_exhausted(records: &[DispatchRecord]) -> bool {
         .iter()
         .filter(|r| r.channel == Channel::Search)
         .collect();
-    if search.iter().any(|r| r.status == PackStatus::Ok && r.item_count > 0) {
+    if search
+        .iter()
+        .any(|r| r.status == PackStatus::Ok && r.item_count > 0)
+    {
         return false;
     }
     search
@@ -472,11 +484,8 @@ pub async fn run_llm_orchestrated_turn(
     for round in 0..config.max_rounds {
         // Per-round thinking fact (2026-07-23): the brain's LLM call below is
         // the last silent stretch between retrieval facts and the answer.
-        agent_loop::progress::emit_work_fact(
-            sink,
-            agent_loop::progress::WorkFact::thinking(None),
-        )
-        .await;
+        agent_loop::progress::emit_work_fact(sink, agent_loop::progress::WorkFact::thinking(None))
+            .await;
         messages[0] = render_system_message(
             &config.base_prompt,
             &dispatch_manuals,
@@ -542,7 +551,11 @@ pub async fn run_llm_orchestrated_turn(
             if !channels.contains(&channel) {
                 tool_msgs.push((
                     call_id.clone(),
-                    guard_error(call_id, &call.tool, "该通道未被产品 capabilities 选择，不能派发"),
+                    guard_error(
+                        call_id,
+                        &call.tool,
+                        "该通道未被产品 capabilities 选择，不能派发",
+                    ),
                 ));
                 continue;
             }
@@ -616,8 +629,8 @@ pub async fn run_llm_orchestrated_turn(
                     None => by_channel.push((channel, vec![(call_id, brief)])),
                 }
             }
-            let runs = futures::future::join_all(by_channel.into_iter().map(
-                |(channel, briefs)| {
+            let runs =
+                futures::future::join_all(by_channel.into_iter().map(|(channel, briefs)| {
                     // Failure isolation (W1): a poisoned session is dropped
                     // and replaced before this wave.
                     let mut session = sessions
@@ -632,9 +645,8 @@ pub async fn run_llm_orchestrated_turn(
                         }
                         (channel, session, outs)
                     }
-                },
-            ))
-            .await;
+                }))
+                .await;
             for (channel, session, outs) in runs {
                 sessions.insert(channel, session);
                 for (call_id, result) in outs {
@@ -688,7 +700,11 @@ pub async fn run_llm_orchestrated_turn(
                             });
                             // K2/W1: hydrate the brief's SELECTED log (offset
                             // applied by the session) into the store's ★ tier.
-                            store.mark_selected_for_brief(channel, &outcome.hydrated, Some(outcome.seq));
+                            store.mark_selected_for_brief(
+                                channel,
+                                &outcome.hydrated,
+                                Some(outcome.seq),
+                            );
                             let note = ChannelNote::with_handoff(
                                 channel,
                                 status,
@@ -862,7 +878,11 @@ pub async fn run_llm_orchestrated_turn(
                     };
                     tool_msgs.push((
                         call_id.clone(),
-                        write_core::build_tool_message(call_id, "conversation_history_load", &result),
+                        write_core::build_tool_message(
+                            call_id,
+                            "conversation_history_load",
+                            &result,
+                        ),
                     ));
                 }
                 "user_profile_load" => {
@@ -1027,11 +1047,8 @@ pub async fn run_llm_orchestrated_turn(
         &records,
         Some("编排预算已用完：请基于已获证据直接合成；缺口如实说明。".into()),
     );
-    agent_loop::progress::emit_work_fact(
-        sink,
-        agent_loop::progress::WorkFact::compose_answer(),
-    )
-    .await;
+    agent_loop::progress::emit_work_fact(sink, agent_loop::progress::WorkFact::compose_answer())
+        .await;
     let mut answer_result = executor.run_chat(&handoff, base_request, sink).await?;
     finalize_answer_evidence(&mut answer_result, &store);
     Ok(OrchestratedTurn {
@@ -1134,12 +1151,12 @@ mod tests {
         // was silently dumped into the coordinator prompt).
         let no_heading = "# capability-rag\n\n只做检索的工作说明，没有派活小节。";
         assert!(
-            dispatch_note_from_manual("prompts/orchestrators/capability-rag.md", no_heading)
+            dispatch_note_from_manual("prompts/capabilities/knowledge-base.md", no_heading)
                 .is_none()
         );
         let empty_heading = "## 给任务分配者\n\n## 其他\n\n正文";
         assert!(
-            dispatch_note_from_manual("prompts/orchestrators/capability-rag.md", empty_heading)
+            dispatch_note_from_manual("prompts/capabilities/knowledge-base.md", empty_heading)
                 .is_none()
         );
         // Sanity: a proper manual still yields its section.
@@ -1218,6 +1235,7 @@ mod tests {
             provider: String::new(),
             model: String::new(),
             cached_tokens: 0,
+            reasoning_tokens: 0,
         }
     }
 
@@ -1273,17 +1291,11 @@ mod tests {
     }
 
     fn finish_answer_direct_call() -> (&'static str, serde_json::Value) {
-        (
-            "finish_answer",
-            serde_json::json!({"mode": "direct"}),
-        )
+        ("finish_answer", serde_json::json!({"mode": "direct"}))
     }
 
     fn finish_answer_invalid_mode_call() -> (&'static str, serde_json::Value) {
-        (
-            "finish_answer",
-            serde_json::json!({"mode": "unknown_mode"}),
-        )
+        ("finish_answer", serde_json::json!({"mode": "unknown_mode"}))
     }
 
     struct BrainMockExec;
@@ -1371,7 +1383,10 @@ mod tests {
     async fn sequential_dispatch_then_chat() {
         let llm = ScriptedLlm::new(vec![
             tool_call_response(vec![delegate("rag", "定向文档并抽取结构")]),
-            tool_call_response(vec![delegate("search", "数字化转型 立项报告 最佳实践 digital transformation best practices")]),
+            tool_call_response(vec![delegate(
+                "search",
+                "数字化转型 立项报告 最佳实践 digital transformation best practices",
+            )]),
             tool_call_response(vec![chat_call()]),
         ]);
         let sink = CollectingSink::new();
@@ -1564,13 +1579,22 @@ mod tests {
             .find(|m| m.role == "system")
             .expect("system message");
         // rag + search 都物化 → 两份「给任务分配者」小节都在编排 system 里。
-        assert_eq!(system.content.matches("## 给任务分配者").count(), 2, "{}", system.content);
+        assert_eq!(
+            system.content.matches("## 给任务分配者").count(),
+            2,
+            "{}",
+            system.content
+        );
         assert!(
             system.content.contains("公网搜索") || system.content.contains("网页检索"),
             "{}",
             system.content
         );
-        assert!(system.content.contains("已开启的检索通道"), "{}", system.content);
+        assert!(
+            system.content.contains("已开启的检索通道"),
+            "{}",
+            system.content
+        );
     }
 
     /// P3 probe: worker answers with a structured partial-coverage handoff.
@@ -1724,7 +1748,11 @@ mod tests {
             .iter()
             .filter(|r| r.channel == Channel::Rag)
             .collect();
-        assert_eq!(rag.len(), 2, "empty first result must not block re-dispatch");
+        assert_eq!(
+            rag.len(),
+            2,
+            "empty first result must not block re-dispatch"
+        );
         assert!(rag.iter().all(|r| r.status == PackStatus::Empty));
     }
 
@@ -1862,7 +1890,10 @@ mod tests {
         let llm = ScriptedLlm::new(vec![
             tool_call_response(vec![
                 ("user_profile_load", serde_json::json!({})),
-                ("conversation_history_load", serde_json::json!({"query": "转型"})),
+                (
+                    "conversation_history_load",
+                    serde_json::json!({"query": "转型"}),
+                ),
             ]),
             tool_call_response(vec![delegate("rag", "取证"), delegate("search", "web")]),
             tool_call_response(vec![chat_call()]),
@@ -2039,9 +2070,9 @@ mod tests {
     /// G-02: V2 path through real [`AgentServiceExecutor`] must assemble Option D Answer pack.
     #[tokio::test]
     async fn v2_answer_phase_uses_product_answer_pack_via_real_executor() {
+        use crate::agents::AgentKind;
         use crate::orchestrator::AgentServiceExecutor;
         use agent_loop::runtime::Agent;
-        use crate::agents::AgentKind;
 
         /// Captures the last Chat-kind request (Answer phase); workers are Rag/Search.
         struct CaptureChatAgent {

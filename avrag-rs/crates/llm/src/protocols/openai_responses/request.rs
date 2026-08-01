@@ -1,7 +1,7 @@
 //! Request body construction for the OpenAI Responses protocol.
+use crate::ModelProviderConfig;
 use crate::schema::ChatMessage;
 use crate::schema::ToolDefinition;
-use crate::ModelProviderConfig;
 
 pub fn build_responses_request_body(
     config: &ModelProviderConfig,
@@ -160,8 +160,8 @@ fn message_text(message: &ChatMessage) -> String {
 #[cfg(test)]
 mod tests {
     use super::{build_input_items, build_responses_request_body};
-    use crate::schema::{ChatMessage, ToolDefinition};
     use crate::ModelProviderConfig;
+    use crate::schema::{ChatMessage, ToolDefinition};
 
     fn test_config() -> ModelProviderConfig {
         ModelProviderConfig {
@@ -284,7 +284,15 @@ mod tests {
     fn disabled_thinking_maps_to_low_effort() {
         let mut config = test_config();
         config.enable_thinking = Some(false);
-        let body = build_responses_request_body(&config, &[ChatMessage::user("hi")], None, false, false, None, &[]);
+        let body = build_responses_request_body(
+            &config,
+            &[ChatMessage::user("hi")],
+            None,
+            false,
+            false,
+            None,
+            &[],
+        );
         assert_eq!(body["reasoning"]["effort"], "low");
     }
 }

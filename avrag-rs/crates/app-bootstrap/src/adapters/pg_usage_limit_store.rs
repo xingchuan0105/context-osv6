@@ -54,7 +54,10 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         // Billable rows use the user's plan margin M; internal rows still unitize with M=1.0
         // so analytics stay comparable without inflating non-quota ledgers.
         let margin_multiplier = if record.billable {
-            let plan_id = self.get_user_plan(ctx.user_id).await.unwrap_or_else(|_| "free".into());
+            let plan_id = self
+                .get_user_plan(ctx.user_id)
+                .await
+                .unwrap_or_else(|_| "free".into());
             self.load_plan_policy(&plan_id)
                 .await
                 .ok()
@@ -80,9 +83,9 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             INSERT INTO llm_usage_events (
                 owner_user_id, user_id, feature, stage, provider, model,
                 prompt_tokens, completion_tokens, total_tokens, cached_tokens,
-                usage_units, usage_source, usage_kind, billable,
+                reasoning_tokens, usage_units, usage_source, usage_kind, billable,
                 session_id, document_id, request_id, trace_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             "#,
         )
         .bind(ctx.owner_user_id)
@@ -95,6 +98,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .bind(record.completion_tokens as i64)
         .bind(record.total_tokens as i64)
         .bind(record.cached_tokens as i64)
+        .bind(record.reasoning_tokens as i64)
         .bind(usage_units)
         .bind(record.usage_source.as_str())
         .bind(record.usage_kind)
@@ -551,9 +555,7 @@ impl PgUsageLimitStoreAdapter {
                     .ok()
                     .map(|u| u.to_string())
                     .unwrap_or_default();
-                let request_id = row
-                    .try_get::<String, _>("request_id")
-                    .unwrap_or_default();
+                let request_id = row.try_get::<String, _>("request_id").unwrap_or_default();
                 out.push_str(&format!(
                     "{},{},{},{},{},{},{},{},{},{},{},{}\n",
                     row.get::<DateTime<Utc>, _>("created_at").to_rfc3339(),

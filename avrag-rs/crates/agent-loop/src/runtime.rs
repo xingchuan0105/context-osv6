@@ -1,7 +1,7 @@
 use crate::AgentKind;
 use crate::events::AgentEventSink;
 use crate::react_loop::DegradeReason;
-use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, SubjectKind, UserId};
 use contracts::chat::{ChatTurnInput, Citation, DegradeTraceItem};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -283,6 +283,8 @@ pub struct AgentRunUsage {
     pub request_count: u64,
     #[serde(default)]
     pub cached_tokens: u64,
+    #[serde(default)]
+    pub reasoning_tokens: u64,
 }
 
 /// Trait for concrete agent implementations.

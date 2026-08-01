@@ -29,26 +29,20 @@ pub fn build_run_result(
     final_decision: Option<FinalDecision>,
 ) -> AgentRunResult {
     let total_elapsed_ms = ctx.start_time.elapsed().as_millis() as u64;
-    let citations = crate::helpers::build_all_citations_from_tool_results(
-        collected_tool_results,
-    );
+    let citations = crate::helpers::build_all_citations_from_tool_results(collected_tool_results);
     // Single-agent path: models circle evidence with `SELECTED: #n` (bridge
     // aliases). ADR-0008 filter only keeps `[[cite:chunk_id]]` / `[[web:n]]`.
     // Hydrate SELECTED → synthetic cite markers for filtering only; user-
     // facing `answer` stays as written.
-    let filter_answer = crate::helpers::answer_with_selected_cite_markers(
-        &final_answer,
-        collected_tool_results,
-    );
+    let filter_answer =
+        crate::helpers::answer_with_selected_cite_markers(&final_answer, collected_tool_results);
     let citations = crate::helpers::filter_citations_for_mode(
         &request.kind.as_canonical_str(),
         &filter_answer,
         citations,
     );
-    let sources =
-        crate::helpers::build_sources_from_tool_results(collected_tool_results);
-    let degrade_trace =
-        crate::helpers::degrade_trace_from_tool_results(collected_tool_results);
+    let sources = crate::helpers::build_sources_from_tool_results(collected_tool_results);
+    let degrade_trace = crate::helpers::degrade_trace_from_tool_results(collected_tool_results);
 
     AgentRunResult {
         answer: final_answer,
@@ -77,10 +71,12 @@ pub fn build_run_result(
             total_tokens: ctx.total_usage.total_tokens as u64,
             request_count: ctx.telemetry_records.len() as u64,
             cached_tokens: ctx.total_usage.cached_tokens as u64,
+            reasoning_tokens: ctx.total_usage.reasoning_tokens as u64,
         }),
         debug_payload: None,
         message_id: None,
-        iterations: ctx.telemetry_records
+        iterations: ctx
+            .telemetry_records
             .iter()
             .map(|r| IterationRecord {
                 iteration: r.iteration,

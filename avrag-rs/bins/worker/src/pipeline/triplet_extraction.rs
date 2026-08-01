@@ -1,7 +1,7 @@
+use crate::indexing::triplet_batch_token_budget;
 use crate::indexing::{
     MediaResolveContext, StoredMultimodalChunk, env_flag_enabled, resolve_visual_chunk_image_refs,
 };
-use crate::indexing::triplet_batch_token_budget;
 use anyhow::Result;
 use avrag_llm::ChatMessage;
 use avrag_retrieval_data_plane::TextChunkIndexRecord;
@@ -128,7 +128,7 @@ pub(crate) async fn extract_visual_triplets_for_index(
             ),
             ChatMessage::user(prompt),
         ];
-        match complete_triplet_extraction(&llm, &messages).await {
+        match complete_triplet_extraction(&llm, None, &messages).await {
             Ok(response) => {
                 output.total_tokens = output
                     .total_tokens
@@ -168,6 +168,7 @@ pub(crate) async fn extract_triplets_for_index(
     let Some(llm) = processor.llm.triplet_llm.clone() else {
         return TripletExtractionOutput::default();
     };
+    let completion_cache = processor.llm.completion_cache.clone();
 
     let batches = build_triplet_extraction_batches(text_chunks);
     if batches.is_empty() {
@@ -178,6 +179,7 @@ pub(crate) async fn extract_triplets_for_index(
     let mut handles = Vec::with_capacity(batches.len());
     for batch in batches {
         let llm = llm.clone();
+        let cache = completion_cache.clone();
         let sem = semaphore.clone();
         handles.push(tokio::spawn(async move {
             let _permit = sem
@@ -185,7 +187,7 @@ pub(crate) async fn extract_triplets_for_index(
                 .await
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
             let messages = build_triplet_extraction_messages(&batch);
-            let response = complete_triplet_extraction(&llm, &messages).await?;
+            let response = complete_triplet_extraction(&llm, cache.as_ref(), &messages).await?;
             let raw_triplets = parse_triplet_response(&response.content, &batch.chunk_ids)?;
             Ok::<_, anyhow::Error>((raw_triplets, response.usage.total_tokens))
         }));
@@ -290,10 +292,42 @@ fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<Chat
 /// (adds latency and can exceed ingest timeouts on large documents).
 async fn complete_triplet_extraction(
     llm: &avrag_llm::LlmClient,
+    cache: Option<&avrag_llm::CompletionCache>,
     messages: &[ChatMessage],
 ) -> Result<avrag_llm::LlmResponse> {
+    let model = llm.config.model.clone();
+    if let Some(cache) = cache {
+        if let Some(hit) = cache
+            .get(&model, TRIPLET_EXTRACTION_SYSTEM_PROMPT, messages)
+            .await
+        {
+            return Ok(avrag_llm::LlmResponse {
+                content: hit.content,
+                reasoning_content: hit.reasoning_content,
+                usage: avrag_llm::LlmUsage::zeroed(),
+                model,
+                tool_calls: None,
+            });
+        }
+    }
     // Large batches can emit long JSON arrays; cap high enough to avoid truncation.
-    llm.complete_with_max_tokens(messages, Some(0.1), 8_192).await
+    let response = llm
+        .complete_with_max_tokens(messages, Some(0.1), 8_192)
+        .await?;
+    if let Some(cache) = cache {
+        cache
+            .store(
+                &model,
+                TRIPLET_EXTRACTION_SYSTEM_PROMPT,
+                messages,
+                &avrag_llm::CachedCompletion {
+                    content: response.content.clone(),
+                    reasoning_content: response.reasoning_content.clone(),
+                },
+            )
+            .await;
+    }
+    Ok(response)
 }
 
 fn normalize_triplet_json_payload(content: &str) -> String {

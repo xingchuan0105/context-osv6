@@ -14,6 +14,10 @@ pub struct LlmUsage {
     pub model: String,
     #[serde(default)]
     pub cached_tokens: u32,
+    /// Reasoning/thinking tokens split out of `completion_tokens` (0 when the
+    /// provider does not report the split).
+    #[serde(default)]
+    pub reasoning_tokens: u32,
 }
 
 impl LlmUsage {
@@ -25,6 +29,7 @@ impl LlmUsage {
             provider: String::new(),
             model: String::new(),
             cached_tokens: 0,
+            reasoning_tokens: 0,
         }
     }
 
@@ -33,6 +38,7 @@ impl LlmUsage {
         self.completion_tokens += other.completion_tokens;
         self.total_tokens += other.total_tokens;
         self.cached_tokens += other.cached_tokens;
+        self.reasoning_tokens += other.reasoning_tokens;
         if self.provider.is_empty() && !other.provider.is_empty() {
             self.provider = other.provider.clone();
         }

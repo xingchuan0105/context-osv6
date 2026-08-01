@@ -17,9 +17,8 @@ use super::helpers::{
 };
 use crate::indexing::env_flag_enabled;
 use crate::ingestion_guard::{
-    ensure_ingestion_side_effects_allowed, from_storage_error,
-    spawn_ingestion_task_lock_heartbeat, stop_ingestion_task_lock_heartbeat,
-    verify_uploaded_object_bytes, worker_task_kind,
+    ensure_ingestion_side_effects_allowed, from_storage_error, spawn_ingestion_task_lock_heartbeat,
+    stop_ingestion_task_lock_heartbeat, verify_uploaded_object_bytes, worker_task_kind,
 };
 use crate::runtime_support::{fetch_url_content, task_context, url_to_filename};
 
@@ -121,6 +120,9 @@ pub(crate) struct LlmDeps {
     pub(crate) section_index_generator: Option<avrag_llm::SectionIndexGenerator>,
     pub(crate) triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
+    /// Result-level completion cache shared by deterministic ingestion calls
+    /// (summary / section index / triplets). `None` when Redis is unavailable.
+    pub(crate) completion_cache: Option<avrag_llm::CompletionCache>,
 }
 
 /// Usage metering + product analytics for ingestion tasks.
@@ -169,14 +171,14 @@ impl PgTaskProcessor {
                 is_url_task: false,
             }),
             ingestion::IngestionTaskPayload::ReindexDocument(_) => {
-                let seed = self.storage.repo
+                let seed = self
+                    .storage
+                    .repo
                     .bootstrap()
                     .get_document_task_seed(context, document_id)
                     .await
                     .map_err(from_storage_error)?
-                    .ok_or_else(|| {
-                        IngestionError::SeedNotFound
-                    })?;
+                    .ok_or_else(|| IngestionError::SeedNotFound)?;
                 Ok(PayloadSource {
                     object_path: seed.object_path,
                     claimed_mime_type: seed.mime_type,
@@ -216,7 +218,8 @@ impl PgTaskProcessor {
             &parse_run_state.validation_warnings,
             &parse_run_state.outputs,
         );
-        self.storage.repo
+        self.storage
+            .repo
             .documents()
             .finish_document_parse_run(
                 context,

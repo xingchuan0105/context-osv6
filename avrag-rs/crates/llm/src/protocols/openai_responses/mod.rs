@@ -11,9 +11,9 @@ pub use types::{OpenAiResponsesProtocol, OpenAiResponsesState};
 #[cfg(test)]
 mod tests {
     use super::types::OpenAiResponsesProtocol;
+    use crate::ModelProviderConfig;
     use crate::protocols::Protocol;
     use crate::schema::{FinishReason, LlmEvent, LlmRequest};
-    use crate::ModelProviderConfig;
     use serde_json::json;
 
     fn test_config() -> ModelProviderConfig {
@@ -83,13 +83,20 @@ mod tests {
         assert_eq!(text_deltas(&events), vec!["Found results".to_string()]);
 
         let halt = protocol.on_halt(&state);
-        assert!(halt.iter().any(|e| matches!(e, LlmEvent::Finish { reason: FinishReason::ToolCalls, .. })));
+        assert!(halt.iter().any(|e| matches!(
+            e,
+            LlmEvent::Finish {
+                reason: FinishReason::ToolCalls,
+                ..
+            }
+        )));
 
         let response = protocol.finalize(state).unwrap();
         assert_eq!(response.content, "Found results");
         assert_eq!(response.usage.prompt_tokens, 42);
         assert_eq!(response.usage.completion_tokens, 17);
         assert_eq!(response.usage.cached_tokens, 30);
+        assert_eq!(response.usage.reasoning_tokens, 5);
         let calls = response.tool_calls.unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].tool, "web_search");
@@ -102,7 +109,10 @@ mod tests {
         let mut state = protocol.initial_state(&request());
 
         let mut events = protocol
-            .step(&mut state, &json!({"type": "response.created", "response": {"id": "r1"}}))
+            .step(
+                &mut state,
+                &json!({"type": "response.created", "response": {"id": "r1"}}),
+            )
             .unwrap();
         events.extend(
             protocol
@@ -114,7 +124,10 @@ mod tests {
                 .step(&mut state, &json!({"type": "response.output_text.delta", "delta": "lo", "output_index": 0}))
                 .unwrap(),
         );
-        assert_eq!(text_deltas(&events), vec!["Hel".to_string(), "lo".to_string()]);
+        assert_eq!(
+            text_deltas(&events),
+            vec!["Hel".to_string(), "lo".to_string()]
+        );
 
         events.extend(
             protocol
@@ -209,9 +222,11 @@ mod tests {
                 .unwrap(),
         );
 
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, LlmEvent::ReasoningStart { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, LlmEvent::ReasoningStart { .. }))
+        );
         assert_eq!(state.accumulated_reasoning, "think");
         assert_eq!(state.tool_accumulators[1].call_id, "call_9");
         assert_eq!(state.tool_accumulators[1].name, "web_search");
@@ -238,9 +253,13 @@ mod tests {
         );
 
         let halt = protocol.on_halt(&state);
-        assert!(halt
-            .iter()
-            .any(|e| matches!(e, LlmEvent::Finish { reason: FinishReason::ToolCalls, .. })));
+        assert!(halt.iter().any(|e| matches!(
+            e,
+            LlmEvent::Finish {
+                reason: FinishReason::ToolCalls,
+                ..
+            }
+        )));
 
         let response = protocol.finalize(state).unwrap();
         // No output text arrived; reasoning text becomes the content
@@ -275,7 +294,9 @@ mod tests {
             .unwrap();
 
         let halt = protocol.on_halt(&state);
-        assert!(halt.iter().any(|e| matches!(e, LlmEvent::ProviderError { message, .. } if message == "rate limited")));
+        assert!(halt.iter().any(
+            |e| matches!(e, LlmEvent::ProviderError { message, .. } if message == "rate limited")
+        ));
         assert!(protocol.finalize(state).is_err());
     }
 
@@ -297,9 +318,13 @@ mod tests {
             .unwrap();
 
         let halt = protocol.on_halt(&state);
-        assert!(halt
-            .iter()
-            .any(|e| matches!(e, LlmEvent::Finish { reason: FinishReason::Length, .. })));
+        assert!(halt.iter().any(|e| matches!(
+            e,
+            LlmEvent::Finish {
+                reason: FinishReason::Length,
+                ..
+            }
+        )));
     }
 
     #[test]
@@ -313,9 +338,10 @@ mod tests {
             )
             .unwrap();
         let halt = protocol.on_halt(&state);
-        assert!(halt
-            .iter()
-            .any(|e| matches!(e, LlmEvent::ProviderError { .. })));
+        assert!(
+            halt.iter()
+                .any(|e| matches!(e, LlmEvent::ProviderError { .. }))
+        );
     }
 
     #[test]
@@ -345,9 +371,9 @@ mod tests {
         });
 
         let events = protocol.step(&mut state, &body).unwrap();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, LlmEvent::ReasoningDelta { text, .. } if text == "Let me think.")));
+        assert!(events.iter().any(
+            |e| matches!(e, LlmEvent::ReasoningDelta { text, .. } if text == "Let me think.")
+        ));
 
         let response = protocol.finalize(state).unwrap();
         assert_eq!(response.content, "Answer.");
@@ -383,9 +409,13 @@ mod tests {
             .unwrap();
 
         let halt = protocol.on_halt(&state);
-        assert!(halt
-            .iter()
-            .any(|e| matches!(e, LlmEvent::Finish { reason: FinishReason::ToolCalls, .. })));
+        assert!(halt.iter().any(|e| matches!(
+            e,
+            LlmEvent::Finish {
+                reason: FinishReason::ToolCalls,
+                ..
+            }
+        )));
 
         let response = protocol.finalize(state).unwrap();
         let calls = response.tool_calls.expect("expected exactly one tool call");
@@ -408,7 +438,9 @@ mod tests {
         let protocol = OpenAiResponsesProtocol;
         assert!(protocol.decode_frame("not json").is_err());
         assert!(protocol.decode_frame("[DONE]").is_ok());
-        let value = protocol.decode_frame(r#"{"type":"response.created","response":{"id":"r"}}"#).unwrap();
+        let value = protocol
+            .decode_frame(r#"{"type":"response.created","response":{"id":"r"}}"#)
+            .unwrap();
         assert_eq!(value["type"], "response.created");
     }
 }

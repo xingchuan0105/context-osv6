@@ -118,6 +118,7 @@ impl PgUsageObserver {
             completion_tokens: record.completion_tokens,
             total_tokens: record.total_tokens,
             cached_tokens: record.cached_tokens,
+            reasoning_tokens: record.reasoning_tokens,
             usage_source: UsageSource::Actual,
             usage_kind: "chat",
             billable: self.billable,
@@ -147,9 +148,7 @@ impl PgUsageObserver {
         } else {
             UsageSource::Estimated
         };
-        let total_tokens = record
-            .actual_tokens
-            .unwrap_or(record.estimated_tokens);
+        let total_tokens = record.actual_tokens.unwrap_or(record.estimated_tokens);
         let ctx = MeteringContext {
             user_id: tenant.user_id,
             owner_user_id: tenant.owner_user_id,
@@ -167,6 +166,7 @@ impl PgUsageObserver {
             completion_tokens: 0,
             total_tokens,
             cached_tokens: 0,
+            reasoning_tokens: 0,
             usage_source,
             usage_kind,
             billable: self.billable,

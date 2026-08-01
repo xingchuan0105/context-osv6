@@ -1,7 +1,5 @@
 use super::Protocol;
-use crate::schema::{
-    FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage, Usage,
-};
+use crate::schema::{FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage, Usage};
 use serde::Deserialize;
 
 const TEXT_BLOCK_ID: &str = "text-0";
@@ -77,7 +75,10 @@ pub fn build_gemini_body(req: &LlmRequest) -> Result<serde_json::Value, LlmError
         generation_config.insert("maxOutputTokens".into(), serde_json::json!(max_tokens));
     }
     if req.options.json_mode {
-        generation_config.insert("responseMimeType".into(), serde_json::json!("application/json"));
+        generation_config.insert(
+            "responseMimeType".into(),
+            serde_json::json!("application/json"),
+        );
     }
 
     let mut body = serde_json::json!({ "contents": contents });
@@ -115,6 +116,7 @@ fn usage_from_gemini(usage: &GeminiUsageMetadata, provider: &str, model: &str) -
         provider: provider.to_string(),
         model: model.to_string(),
         cached_tokens: 0,
+        reasoning_tokens: 0,
     }
 }
 
@@ -190,7 +192,9 @@ impl Protocol for GeminiProtocol {
             return Ok(serde_json::Value::Null);
         }
         serde_json::from_str(frame).map_err(|error| {
-            LlmError::parse(format!("Failed to parse Gemini stream payload: {frame}: {error}"))
+            LlmError::parse(format!(
+                "Failed to parse Gemini stream payload: {frame}: {error}"
+            ))
         })
     }
 
@@ -210,11 +214,7 @@ impl Protocol for GeminiProtocol {
         if let Some(usage) = event.get("usageMetadata") {
             let usage: GeminiUsageMetadata = serde_json::from_value(usage.clone())
                 .map_err(|e| LlmError::parse(format!("invalid Gemini usage: {e}")))?;
-            state.usage = Some(usage_from_gemini(
-                &usage,
-                &state.provider,
-                &state.model,
-            ));
+            state.usage = Some(usage_from_gemini(&usage, &state.provider, &state.model));
         }
 
         let text = extract_text_from_response(event);
@@ -278,6 +278,7 @@ impl Protocol for GeminiProtocol {
                 provider: state.provider,
                 model: state.model.clone(),
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             model: state.model,
             tool_calls: None,
@@ -287,10 +288,10 @@ impl Protocol for GeminiProtocol {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_gemini_body, GeminiProtocol};
-    use crate::schema::{ChatMessage, GenerationOptions, LlmRequest};
+    use super::{GeminiProtocol, build_gemini_body};
     use crate::ModelProviderConfig;
     use crate::protocols::Protocol;
+    use crate::schema::{ChatMessage, GenerationOptions, LlmRequest};
 
     fn test_config() -> ModelProviderConfig {
         ModelProviderConfig {
@@ -326,11 +327,12 @@ mod tests {
     #[test]
     fn gemini_endpoint_path_includes_model_and_stream_action() {
         let protocol = GeminiProtocol;
-        let req = LlmRequest::new(vec![ChatMessage::user("hi")], test_config())
-            .with_options(GenerationOptions {
+        let req = LlmRequest::new(vec![ChatMessage::user("hi")], test_config()).with_options(
+            GenerationOptions {
                 stream: true,
                 ..Default::default()
-            });
+            },
+        );
         assert_eq!(
             protocol.endpoint_path(&req).unwrap(),
             "/models/gemini-2.0-flash:streamGenerateContent"

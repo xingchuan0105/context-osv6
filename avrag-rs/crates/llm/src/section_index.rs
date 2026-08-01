@@ -47,6 +47,7 @@ pub struct SectionIndexGenerator {
     llm: LlmClient,
     system_prompt: String,
     user_template: String,
+    completion_cache: Option<crate::CompletionCache>,
 }
 
 impl SectionIndexGenerator {
@@ -55,6 +56,7 @@ impl SectionIndexGenerator {
             llm: LlmClient::new(config).with_feature("section_index"),
             system_prompt: DEFAULT_SECTION_INDEX_SYSTEM.to_string(),
             user_template: DEFAULT_SECTION_INDEX_USER.to_string(),
+            completion_cache: None,
         }
     }
 
@@ -64,6 +66,7 @@ impl SectionIndexGenerator {
             llm: llm.with_feature("section_index"),
             system_prompt: DEFAULT_SECTION_INDEX_SYSTEM.to_string(),
             user_template: DEFAULT_SECTION_INDEX_USER.to_string(),
+            completion_cache: None,
         }
     }
 
@@ -73,6 +76,12 @@ impl SectionIndexGenerator {
         tenant: crate::TenantContext,
     ) -> Self {
         self.llm = self.llm.with_observer(observer, tenant);
+        self
+    }
+
+    /// Attach the result-level completion cache (deterministic ingestion calls).
+    pub fn with_completion_cache(mut self, cache: crate::CompletionCache) -> Self {
+        self.completion_cache = Some(cache);
         self
     }
 
@@ -127,8 +136,46 @@ impl SectionIndexGenerator {
             ChatMessage::system(&self.system_prompt),
             ChatMessage::user(user),
         ];
-        let response = self.llm.complete(&messages, Some(0.1)).await?;
+        let response = self
+            .complete_cached(&self.system_prompt, &messages, Some(0.1))
+            .await?;
         parse_section_index_response(&response.content, &chunk_ids)
+    }
+
+    /// Deterministic call: hit the result cache first, store on miss.
+    async fn complete_cached(
+        &self,
+        prompt_version: &str,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<crate::LlmResponse> {
+        let model = self.llm.config.model.clone();
+        if let Some(cache) = &self.completion_cache {
+            if let Some(hit) = cache.get(&model, prompt_version, messages).await {
+                return Ok(crate::LlmResponse {
+                    content: hit.content,
+                    reasoning_content: hit.reasoning_content,
+                    usage: crate::LlmUsage::zeroed(),
+                    model,
+                    tool_calls: None,
+                });
+            }
+        }
+        let response = self.llm.complete(messages, temperature).await?;
+        if let Some(cache) = &self.completion_cache {
+            cache
+                .store(
+                    &model,
+                    prompt_version,
+                    messages,
+                    &crate::CachedCompletion {
+                        content: response.content.clone(),
+                        reasoning_content: response.reasoning_content.clone(),
+                    },
+                )
+                .await;
+        }
+        Ok(response)
     }
 }
 

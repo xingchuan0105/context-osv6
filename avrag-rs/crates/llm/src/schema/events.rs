@@ -46,16 +46,42 @@ impl LlmResponse {
 
 #[derive(Debug, Clone)]
 pub enum LlmEvent {
-    StepStart { index: usize },
-    TextStart { id: String },
-    TextDelta { id: String, text: String },
-    TextEnd { id: String },
-    ReasoningStart { id: String },
-    ReasoningDelta { id: String, text: String },
-    ReasoningEnd { id: String },
-    ToolInputStart { id: String, name: String },
-    ToolInputDelta { id: String, name: String, text: String },
-    ToolInputEnd { id: String, name: String },
+    StepStart {
+        index: usize,
+    },
+    TextStart {
+        id: String,
+    },
+    TextDelta {
+        id: String,
+        text: String,
+    },
+    TextEnd {
+        id: String,
+    },
+    ReasoningStart {
+        id: String,
+    },
+    ReasoningDelta {
+        id: String,
+        text: String,
+    },
+    ReasoningEnd {
+        id: String,
+    },
+    ToolInputStart {
+        id: String,
+        name: String,
+    },
+    ToolInputDelta {
+        id: String,
+        name: String,
+        text: String,
+    },
+    ToolInputEnd {
+        id: String,
+        name: String,
+    },
     ToolCall {
         id: String,
         name: String,
@@ -100,10 +126,12 @@ mod tests {
             provider: "dmxapi".to_string(),
             model: "gemini-test".to_string(),
             cached_tokens: 5,
+            reasoning_tokens: 7,
         });
 
         assert_eq!(total.total_tokens, 30);
         assert_eq!(total.provider, "dmxapi");
         assert_eq!(total.model, "gemini-test");
+        assert_eq!(total.reasoning_tokens, 7);
     }
 }

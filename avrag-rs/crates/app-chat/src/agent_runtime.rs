@@ -20,9 +20,10 @@ impl ChatContext {
         &self,
         doc_scope: &[String],
     ) -> Result<common::DocScopeMetadata, AppError> {
-        let pg = self.storage.chat_persistence().ok_or_else(|| {
-            AppError::internal("chat persistence is not configured")
-        })?;
+        let pg = self
+            .storage
+            .chat_persistence()
+            .ok_or_else(|| AppError::internal("chat persistence is not configured"))?;
 
         let doc_uuids: Vec<Uuid> = doc_scope
             .iter()
@@ -42,9 +43,10 @@ impl ChatContext {
             AppError::validation("invalid_session_id", "invalid session UUID format")
         })?;
 
-        let pg = self.storage.chat_persistence().ok_or_else(|| {
-            AppError::internal("chat persistence is not configured")
-        })?;
+        let pg = self
+            .storage
+            .chat_persistence()
+            .ok_or_else(|| AppError::internal("chat persistence is not configured"))?;
 
         let messages = pg
             .list_messages(&self.auth, session_uuid)
@@ -57,7 +59,10 @@ impl ChatContext {
         Ok(Self::build_rag_session_context(messages))
     }
 
-    pub async fn get_workspace(&self, workspace_id: &str) -> Option<contracts::workspaces::Workspace> {
+    pub async fn get_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Option<contracts::workspaces::Workspace> {
         let pg = self.storage.chat_persistence()?;
         let workspace_id = Uuid::parse_str(workspace_id).ok()?;
         let notebook = pg
@@ -118,8 +123,25 @@ impl ChatContext {
             })
             .collect();
 
-        agent_loop::runtime::recent_messages(&history, agent_loop::runtime::MAX_PROMPT_HISTORY_TURNS)
-            .to_vec()
+        let recent_count = agent_loop::runtime::MAX_PROMPT_HISTORY_TURNS;
+        let mut resolved = Vec::with_capacity(recent_count + 1);
+        // Beyond the recent window, earlier turns are compressed into a
+        // session summary (MEMORY_LLM) instead of being dropped entirely —
+        // later turns keep referencing early facts, decisions and goals.
+        if history.len() > recent_count {
+            let older = &history[..history.len() - recent_count];
+            if let Some(memory) = self.llm_ctx.memory_client() {
+                if let Some(summary) = summarize_older_turns(memory, older).await {
+                    resolved.push(ChatTurnInput {
+                        role: "user".to_string(),
+                        content: format!("[早前对话摘要]\n{summary}"),
+                        resolved_query: None,
+                    });
+                }
+            }
+        }
+        resolved.extend(agent_loop::runtime::recent_messages(&history, recent_count).to_vec());
+        resolved
     }
 
     pub async fn build_agent_request(
@@ -206,4 +228,32 @@ impl ChatContext {
         );
         general_debug
     }
+}
+
+/// Session-summary system prompt (LLM-facing prose lives in prompts/, not code).
+const SESSION_SUMMARY_SYSTEM_PROMPT: &str =
+    include_str!("../../../prompts/pipeline/session-summary.system.md");
+
+/// Compress turns beyond the recent window into a summary via MEMORY_LLM.
+/// Returns `None` when the call fails — callers fall back to the
+/// recent-turns-only behavior (drop the older turns).
+async fn summarize_older_turns(
+    memory: &avrag_llm::LlmClient,
+    older: &[ChatTurnInput],
+) -> Option<String> {
+    let transcript = older
+        .iter()
+        .map(|turn| format!("{}: {}", turn.role, turn.content))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if transcript.trim().is_empty() {
+        return None;
+    }
+    let messages = vec![
+        avrag_llm::ChatMessage::system(SESSION_SUMMARY_SYSTEM_PROMPT),
+        avrag_llm::ChatMessage::user(transcript),
+    ];
+    let response = memory.complete(&messages, Some(0.2)).await.ok()?;
+    let summary = response.content.trim().to_string();
+    (!summary.is_empty()).then_some(summary)
 }

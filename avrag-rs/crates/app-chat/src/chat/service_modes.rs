@@ -76,6 +76,7 @@ pub(crate) fn build_chat_execution_from_result(
         provider: usage.provider.clone(),
         model: usage.model.clone(),
         cached_tokens: usage.cached_tokens.min(u32::MAX as u64) as u32,
+        reasoning_tokens: usage.reasoning_tokens.min(u32::MAX as u64) as u32,
     });
 
     let response_usage = agent_result.usage.as_ref().map(|u| contracts::chat::ChatTokenUsage {

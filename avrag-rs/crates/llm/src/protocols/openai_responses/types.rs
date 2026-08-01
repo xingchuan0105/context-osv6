@@ -79,6 +79,11 @@ impl ResponsesUsageRaw {
             provider,
             model,
             cached_tokens: self.cached_token_count(),
+            reasoning_tokens: self
+                .output_tokens_details
+                .as_ref()
+                .map(|d| d.reasoning_tokens)
+                .unwrap_or(0),
         }
     }
 }

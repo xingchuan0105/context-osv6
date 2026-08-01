@@ -1,7 +1,5 @@
 use super::Protocol;
-use crate::schema::{
-    FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage, Usage,
-};
+use crate::schema::{FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage, Usage};
 use serde::Deserialize;
 
 const TEXT_BLOCK_ID: &str = "text-0";
@@ -24,9 +22,7 @@ pub struct AnthropicMessagesState {
     reasoning_started: bool,
 }
 
-pub fn build_anthropic_messages_body(
-    req: &LlmRequest,
-) -> Result<serde_json::Value, LlmError> {
+pub fn build_anthropic_messages_body(req: &LlmRequest) -> Result<serde_json::Value, LlmError> {
     let mut system_parts = Vec::new();
     let mut messages: Vec<serde_json::Value> = Vec::new();
 
@@ -93,7 +89,9 @@ pub fn build_anthropic_messages_body(
                                 .get("function")
                                 .and_then(|f| f.get("arguments"))
                                 .cloned()
-                                .unwrap_or_else(|| call.get("input").cloned().unwrap_or(serde_json::json!({})));
+                                .unwrap_or_else(|| {
+                                    call.get("input").cloned().unwrap_or(serde_json::json!({}))
+                                });
                             let parsed_input = if input.is_string() {
                                 serde_json::from_str(input.as_str().unwrap_or("{}"))
                                     .unwrap_or(serde_json::json!({}))
@@ -119,7 +117,11 @@ pub fn build_anthropic_messages_body(
         // Anthropic requires alternating user/assistant turns. Merge adjacent
         // same-role turns (P0 review fix: budget_hint user may follow a
         // tool_result user → two consecutive user turns → API 400).
-        if messages.last().and_then(|m| m.get("role").and_then(|r| r.as_str())) == Some(role) {
+        if messages
+            .last()
+            .and_then(|m| m.get("role").and_then(|r| r.as_str()))
+            == Some(role)
+        {
             if let Some(arr) = messages
                 .last_mut()
                 .and_then(|m| m.get_mut("content"))
@@ -241,9 +243,8 @@ fn usage_from_anthropic(usage: &AnthropicUsage, provider: &str, model: &str) -> 
     // Review fix (2026-07-30): previously only added cache_creation, which let
     // cached.min(prompt) clamp cache_read -> under-billed when read >> input.
     // Residual: cache_creation charged at 1.0x (not 1.25x); see P2b.
-    let prompt_tokens = usage.input_tokens
-        + usage.cache_read_input_tokens
-        + usage.cache_creation_input_tokens;
+    let prompt_tokens =
+        usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
     LlmUsage {
         prompt_tokens,
         completion_tokens: usage.output_tokens,
@@ -251,6 +252,7 @@ fn usage_from_anthropic(usage: &AnthropicUsage, provider: &str, model: &str) -> 
         provider: provider.to_string(),
         model: model.to_string(),
         cached_tokens: usage.cache_read_input_tokens,
+        reasoning_tokens: 0,
     }
 }
 
@@ -263,7 +265,9 @@ fn usage_to_event_usage(usage: &LlmUsage) -> Usage {
     }
 }
 
-fn extract_non_stream_content(value: &serde_json::Value) -> (String, Option<String>, Option<Vec<contracts::ToolCall>>) {
+fn extract_non_stream_content(
+    value: &serde_json::Value,
+) -> (String, Option<String>, Option<Vec<contracts::ToolCall>>) {
     let mut content = String::new();
     let mut reasoning = String::new();
     let mut tool_calls = Vec::new();
@@ -361,17 +365,14 @@ impl Protocol for AnthropicMessagesProtocol {
             if let Some(usage) = event.get("usage") {
                 let usage: AnthropicUsage = serde_json::from_value(usage.clone())
                     .map_err(|e| LlmError::parse(format!("invalid Anthropic usage: {e}")))?;
-                state.usage = Some(usage_from_anthropic(
-                    &usage,
-                    &state.provider,
-                    &state.model,
-                ));
+                state.usage = Some(usage_from_anthropic(&usage, &state.provider, &state.model));
             }
             return Ok(Vec::new());
         }
 
-        let stream_event: StreamEvent = serde_json::from_value(event.clone())
-            .map_err(|error| LlmError::parse(format!("Failed to parse Anthropic event: {error}")))?;
+        let stream_event: StreamEvent = serde_json::from_value(event.clone()).map_err(|error| {
+            LlmError::parse(format!("Failed to parse Anthropic event: {error}"))
+        })?;
         let mut events = Vec::new();
 
         if let Some(message) = stream_event.message {
@@ -381,20 +382,12 @@ impl Protocol for AnthropicMessagesProtocol {
             if let Some(usage) = message.get("usage") {
                 let usage: AnthropicUsage = serde_json::from_value(usage.clone())
                     .map_err(|e| LlmError::parse(format!("invalid Anthropic usage: {e}")))?;
-                state.usage = Some(usage_from_anthropic(
-                    &usage,
-                    &state.provider,
-                    &state.model,
-                ));
+                state.usage = Some(usage_from_anthropic(&usage, &state.provider, &state.model));
             }
         }
 
         if let Some(usage) = stream_event.usage {
-            state.usage = Some(usage_from_anthropic(
-                &usage,
-                &state.provider,
-                &state.model,
-            ));
+            state.usage = Some(usage_from_anthropic(&usage, &state.provider, &state.model));
         }
 
         match stream_event.r#type.as_deref() {
@@ -495,6 +488,7 @@ impl Protocol for AnthropicMessagesProtocol {
                 provider: state.provider,
                 model: state.model.clone(),
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             model: state.model,
             tool_calls: state.tool_calls,
@@ -504,10 +498,10 @@ impl Protocol for AnthropicMessagesProtocol {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_anthropic_messages_body, AnthropicMessagesProtocol};
-    use crate::schema::{ChatMessage, GenerationOptions, LlmRequest};
+    use super::{AnthropicMessagesProtocol, build_anthropic_messages_body};
     use crate::ModelProviderConfig;
     use crate::protocols::Protocol;
+    use crate::schema::{ChatMessage, GenerationOptions, LlmRequest};
 
     fn test_config() -> ModelProviderConfig {
         ModelProviderConfig {
@@ -560,8 +554,7 @@ mod tests {
         let blocks = last_msg["content"].as_array().unwrap();
         let last_block = blocks.last().unwrap();
         assert_eq!(
-            last_block["cache_control"]["type"],
-            "ephemeral",
+            last_block["cache_control"]["type"], "ephemeral",
             "rolling-suffix breakpoint missing on last message"
         );
         // System still has its own breakpoint.
@@ -653,11 +646,12 @@ mod tests {
     #[test]
     fn anthropic_stream_delta_emits_text_events() {
         let protocol = AnthropicMessagesProtocol;
-        let req = LlmRequest::new(vec![ChatMessage::user("hi")], test_config())
-            .with_options(GenerationOptions {
+        let req = LlmRequest::new(vec![ChatMessage::user("hi")], test_config()).with_options(
+            GenerationOptions {
                 stream: true,
                 ..Default::default()
-            });
+            },
+        );
         let mut state = protocol.initial_state(&req);
         let event = serde_json::json!({
             "type": "content_block_delta",
@@ -665,7 +659,11 @@ mod tests {
             "delta": {"type": "text_delta", "text": "Hi"}
         });
         let events = protocol.step(&mut state, &event).unwrap();
-        assert!(events.iter().any(|e| matches!(e, crate::schema::LlmEvent::TextDelta { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, crate::schema::LlmEvent::TextDelta { .. }))
+        );
         assert_eq!(state.accumulated_content, "Hi");
     }
 }

@@ -21,6 +21,8 @@ pub struct ChatUsageRecord {
     pub total_tokens: u32,
     /// Provider prompt-cache hit tokens (0 when unknown).
     pub cached_tokens: u32,
+    /// Reasoning/thinking tokens split out of completion (0 when unknown).
+    pub reasoning_tokens: u32,
     pub provider: String,
     pub model: String,
     /// Product feature label (e.g. `agent_loop`, `write:refine`, `summary`).
@@ -88,6 +90,7 @@ mod tests {
             completion_tokens: 5,
             total_tokens: 15,
             cached_tokens: 3,
+            reasoning_tokens: 2,
             provider: "openai".into(),
             model: "gpt-test".into(),
             feature: "agent_loop".into(),

@@ -65,6 +65,7 @@ pub struct SummaryGenerator {
     llm: LlmClient,
     prompt_template: Option<String>,
     finalize_prompt_template: Option<String>,
+    completion_cache: Option<crate::CompletionCache>,
 }
 
 impl SummaryGenerator {
@@ -73,6 +74,7 @@ impl SummaryGenerator {
             llm: LlmClient::new(config).with_feature("summary"),
             prompt_template: None,
             finalize_prompt_template: None,
+            completion_cache: None,
         }
     }
 
@@ -82,6 +84,7 @@ impl SummaryGenerator {
             llm: llm.with_feature("summary"),
             prompt_template: None,
             finalize_prompt_template: None,
+            completion_cache: None,
         }
     }
 
@@ -91,6 +94,12 @@ impl SummaryGenerator {
         tenant: crate::TenantContext,
     ) -> Self {
         self.llm = self.llm.with_observer(observer, tenant);
+        self
+    }
+
+    /// Attach the result-level completion cache (deterministic ingestion calls).
+    pub fn with_completion_cache(mut self, cache: crate::CompletionCache) -> Self {
+        self.completion_cache = Some(cache);
         self
     }
 
@@ -140,8 +149,7 @@ impl SummaryGenerator {
                 ChatMessage::user(user_prompt),
             ];
             let response = self
-                .llm
-                .complete(&messages, Some(0.3))
+                .complete_cached(&system_prompt, &messages, Some(0.3))
                 .await
                 .context("Failed to get summary response")?;
             total_usage.accumulate(&response.usage);
@@ -151,10 +159,10 @@ impl SummaryGenerator {
         let final_text = if partial_summaries.len() == 1 {
             partial_summaries.remove(0)
         } else {
+            let finalize_system =
+                build_finalize_system_prompt(self.finalize_prompt_template.as_deref());
             let finalize_messages = vec![
-                ChatMessage::system(build_finalize_system_prompt(
-                    self.finalize_prompt_template.as_deref(),
-                )),
+                ChatMessage::system(finalize_system.clone()),
                 ChatMessage::user(build_finalize_user_prompt(
                     title,
                     filename,
@@ -162,8 +170,7 @@ impl SummaryGenerator {
                 )),
             ];
             let response = self
-                .llm
-                .complete(&finalize_messages, Some(0.2))
+                .complete_cached(&finalize_system, &finalize_messages, Some(0.2))
                 .await
                 .context("Failed to get final summary response")?;
             total_usage.accumulate(&response.usage);
@@ -180,6 +187,42 @@ impl SummaryGenerator {
             },
             total_usage,
         ))
+    }
+
+    /// Deterministic call: hit the result cache first, store on miss.
+    async fn complete_cached(
+        &self,
+        prompt_version: &str,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<crate::LlmResponse> {
+        let model = self.llm.config.model.clone();
+        if let Some(cache) = &self.completion_cache {
+            if let Some(hit) = cache.get(&model, prompt_version, messages).await {
+                return Ok(crate::LlmResponse {
+                    content: hit.content,
+                    reasoning_content: hit.reasoning_content,
+                    usage: crate::LlmUsage::zeroed(),
+                    model,
+                    tool_calls: None,
+                });
+            }
+        }
+        let response = self.llm.complete(messages, temperature).await?;
+        if let Some(cache) = &self.completion_cache {
+            cache
+                .store(
+                    &model,
+                    prompt_version,
+                    messages,
+                    &crate::CachedCompletion {
+                        content: response.content.clone(),
+                        reasoning_content: response.reasoning_content.clone(),
+                    },
+                )
+                .await;
+        }
+        Ok(response)
     }
 }
 

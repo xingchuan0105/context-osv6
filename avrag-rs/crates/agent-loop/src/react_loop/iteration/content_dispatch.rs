@@ -64,11 +64,12 @@ impl ReActLoop {
         // compiler stays generic: its input comes only from loop state
         // (messages/tool_results), no app-chat types leak in.
         if mode.worker_handoff {
-            let outcome =
-                crate::output_compiler::compile_handoff(&crate::output_compiler::HandoffCompileInput {
+            let outcome = crate::output_compiler::compile_handoff(
+                &crate::output_compiler::HandoffCompileInput {
                     raw: &content,
                     has_tool_results: !state.tool_results.is_empty(),
-                });
+                },
+            );
             if outcome.has_errors() && state.compile_continuations < MAX_COMPILE_CONTINUATIONS {
                 state.compile_continuations += 1;
                 let feedback = outcome.render_feedback();
@@ -130,5 +131,6 @@ pub(crate) fn iteration_llm_usage(llm_response: &LlmResponse) -> AgentRunUsage {
         total_tokens: llm_response.usage.total_tokens as u64,
         request_count: 1,
         cached_tokens: llm_response.usage.cached_tokens as u64,
+        reasoning_tokens: llm_response.usage.reasoning_tokens as u64,
     }
 }

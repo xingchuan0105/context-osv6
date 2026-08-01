@@ -53,8 +53,9 @@ impl Protocol for OpenAiChatProtocol {
             return Ok(Vec::new());
         }
 
-        let chunk: StreamChunk = serde_json::from_value(event.clone())
-            .map_err(|error| LlmError::parse(format!("Failed to parse chat completion event: {error}")))?;
+        let chunk: StreamChunk = serde_json::from_value(event.clone()).map_err(|error| {
+            LlmError::parse(format!("Failed to parse chat completion event: {error}"))
+        })?;
 
         let mut events = Vec::new();
 
@@ -220,10 +221,10 @@ impl Protocol for OpenAiChatProtocol {
                 provider: state.provider,
                 model: state.model.clone(),
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             model: state.model,
             tool_calls: state.tool_calls,
         })
     }
 }
-

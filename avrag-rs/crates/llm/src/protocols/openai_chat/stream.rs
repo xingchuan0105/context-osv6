@@ -78,6 +78,7 @@ impl ChatCompletionStreamParser {
                 provider: self.provider,
                 model: self.model.clone(),
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             model: self.model,
             tool_calls: None,
@@ -133,4 +134,3 @@ impl ChatCompletionStreamParser {
         Ok(())
     }
 }
-

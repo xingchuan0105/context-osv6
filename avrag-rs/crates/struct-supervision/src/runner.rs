@@ -145,7 +145,11 @@ pub async fn supervise(
             }
         }
         // 进度观察：至少一次工具调用后每 8 轮提示（对齐 supervise.py:333）
-        if done_summary.is_none() && !session.unfinished().is_empty() && !log.is_empty() && turns % 8 == 0 {
+        if done_summary.is_none()
+            && !session.unfinished().is_empty()
+            && !log.is_empty()
+            && turns % 8 == 0
+        {
             let un = session.unfinished();
             messages.push(ChatMessage::user(format!(
                 "进度观察:已进行 {turns} 轮;仍未终态的表:{un:?}。"
@@ -225,7 +229,10 @@ fn finish(
         evidence,
     };
     if let Some(path) = &cfg.report_path {
-        let _ = std::fs::write(path, serde_json::to_string_pretty(&report).unwrap_or_default());
+        let _ = std::fs::write(
+            path,
+            serde_json::to_string_pretty(&report).unwrap_or_default(),
+        );
     }
     Ok(report)
 }
@@ -236,7 +243,10 @@ mod tests {
     use crate::{Grid, Row, SuperviseInput};
 
     fn row(line: usize, cells: &[&str]) -> Row {
-        Row { line, cells: cells.iter().map(|c| c.to_string()).collect() }
+        Row {
+            line,
+            cells: cells.iter().map(|c| c.to_string()).collect(),
+        }
     }
 
     fn fixture() -> SuperviseInput {
@@ -246,7 +256,11 @@ mod tests {
             rows: vec![row(1, &["h"]), row(3, &["a"])],
             notes: vec![],
         }];
-        SuperviseInput { doc_id: Some("mock".into()), source_text: text, grids }
+        SuperviseInput {
+            doc_id: Some("mock".into()),
+            source_text: text,
+            grids,
+        }
     }
 
     /// 脚本化假 LLM：按轮返回预设响应。
@@ -266,6 +280,7 @@ mod tests {
                     provider: "mock".into(),
                     model: "mock".into(),
                     cached_tokens: 0,
+                    reasoning_tokens: 0,
                 },
                 model: "mock".into(),
                 tool_calls: Some(vec![contracts::ToolCall {
@@ -287,6 +302,7 @@ mod tests {
                     provider: "mock".into(),
                     model: "mock".into(),
                     cached_tokens: 0,
+                    reasoning_tokens: 0,
                 },
                 model: "mock".into(),
                 tool_calls: None,
@@ -333,7 +349,10 @@ mod tests {
         assert_eq!(rep.turns, 2);
         assert_eq!(rep.done_summary.as_deref(), Some("完成"));
         assert!(!rep.budget_exhausted);
-        assert_eq!(rep.tables["t0"]["final"]["excluded"], serde_json::json!(true));
+        assert_eq!(
+            rep.tables["t0"]["final"]["excluded"],
+            serde_json::json!(true)
+        );
     }
 
     #[tokio::test]
@@ -365,6 +384,10 @@ mod tests {
         };
         let rep = supervise(&fixture(), &llm, &cfg()).await.unwrap();
         assert_eq!(rep.turns, 2);
-        assert!(rep.log.iter().any(|(t, _, o)| t == "nope" || o.contains("未知工具")));
+        assert!(
+            rep.log
+                .iter()
+                .any(|(t, _, o)| t == "nope" || o.contains("未知工具"))
+        );
     }
 }

@@ -33,6 +33,8 @@ pub struct UsageLimitUsageRecord<'a> {
     pub total_tokens: u32,
     /// Provider prompt-cache hit tokens (clamped to prompt at unitization).
     pub cached_tokens: u32,
+    /// Reasoning/thinking tokens split out of completion (0 when unknown).
+    pub reasoning_tokens: u32,
     pub usage_source: UsageSource,
     /// Exit-metering kind: `chat`, `embedding_text`, `embedding_multimodal`, …
     pub usage_kind: &'a str,

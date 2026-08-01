@@ -11,6 +11,7 @@ pub fn merge_usage(existing: Option<&LlmUsage>, new: &LlmUsage) -> LlmUsage {
             completion_tokens: prev.completion_tokens.saturating_add(new.completion_tokens),
             total_tokens: prev.total_tokens.saturating_add(new.total_tokens),
             cached_tokens: prev.cached_tokens.saturating_add(new.cached_tokens),
+            reasoning_tokens: prev.reasoning_tokens.saturating_add(new.reasoning_tokens),
         },
         None => new.clone(),
     }
@@ -25,6 +26,7 @@ pub fn build_run_usage(usage: Option<&LlmUsage>, request_count: u64) -> Option<A
         total_tokens: u.total_tokens as u64,
         request_count,
         cached_tokens: u.cached_tokens as u64,
+        reasoning_tokens: u.reasoning_tokens as u64,
     })
 }
 
@@ -67,6 +69,7 @@ mod tests {
             completion_tokens: completion,
             total_tokens: prompt + completion,
             cached_tokens: 0,
+            reasoning_tokens: 0,
         }
     }
 

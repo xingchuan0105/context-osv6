@@ -11,10 +11,10 @@
 //!   empty streams) cool down the whole member, which makes the next pick
 //!   fall through to the backup member.
 
-use crate::client::rate_limit::ClientRateLimit;
-use crate::route::{build_route_from_config, AnyRoute};
-use crate::schema::{LlmError, LlmResponse};
 use crate::ModelProviderConfig;
+use crate::client::rate_limit::ClientRateLimit;
+use crate::route::{AnyRoute, build_route_from_config};
+use crate::schema::{LlmError, LlmResponse};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -113,7 +113,10 @@ impl std::fmt::Display for PoolAttemptError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Exhausted(err) => write!(f, "all LLM pool candidates failed: {err}"),
-            Self::NoCapacity => write!(f, "no LLM pool candidate available (rate-limited or in cooldown)"),
+            Self::NoCapacity => write!(
+                f,
+                "no LLM pool candidate available (rate-limited or in cooldown)"
+            ),
         }
     }
 }
@@ -128,10 +131,9 @@ pub fn failure_kind(err: &LlmError) -> FailureKind {
             500..=599 => FailureKind::Provider,
             _ => FailureKind::NotRetryable,
         },
-        LlmError::Http(_)
-        | LlmError::Parse(_)
-        | LlmError::Protocol(_)
-        | LlmError::EmptyStream => FailureKind::Provider,
+        LlmError::Http(_) | LlmError::Parse(_) | LlmError::Protocol(_) | LlmError::EmptyStream => {
+            FailureKind::Provider
+        }
         LlmError::Cancelled | LlmError::Config(_) | LlmError::Other(_) => FailureKind::NotRetryable,
     }
 }
@@ -395,7 +397,11 @@ mod tests {
 
     #[test]
     fn pick_round_robins_across_keys() {
-        let p = pool(vec![member("https://api.deepseek.com", &["k1", "k2"], Some(10))]);
+        let p = pool(vec![member(
+            "https://api.deepseek.com",
+            &["k1", "k2"],
+            Some(10),
+        )]);
         let a = p.pick(1).unwrap();
         let b = p.pick(1).unwrap();
         assert_ne!(a.key_idx, b.key_idx);
@@ -409,7 +415,11 @@ mod tests {
     fn pick_skips_ratelimited_key_and_moves_to_second() {
         // rpm=1: first request consumes the only RPM slot of key k1,
         // so the next pick must land on k2.
-        let p = pool(vec![member("https://api.deepseek.com", &["k1", "k2"], Some(1))]);
+        let p = pool(vec![member(
+            "https://api.deepseek.com",
+            &["k1", "k2"],
+            Some(1),
+        )]);
         let a = p.pick(1).unwrap();
         assert_eq!(a.key_idx, 0);
         let b = p.pick(1).unwrap();
@@ -436,7 +446,11 @@ mod tests {
 
     #[test]
     fn key_only_failure_keeps_member_alive() {
-        let p = pool(vec![member("https://api.deepseek.com", &["k1", "k2"], Some(10))]);
+        let p = pool(vec![member(
+            "https://api.deepseek.com",
+            &["k1", "k2"],
+            Some(10),
+        )]);
         let a = p.pick(1).unwrap();
         assert_eq!(a.key_idx, 0);
         // 429 on k1 -> only k1 cools down; k2 of the same member still usable.
@@ -519,6 +533,7 @@ mod tests {
                 provider: "zhipu".to_string(),
                 model: "test-model".to_string(),
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             },
             model: "test-model".to_string(),
             tool_calls: None,
@@ -527,11 +542,38 @@ mod tests {
 
     #[test]
     fn failure_kind_classifies_http_codes() {
-        assert_eq!(failure_kind(&LlmError::Api { status: 429, body: "".into() }), FailureKind::KeyOnly);
-        assert_eq!(failure_kind(&LlmError::Api { status: 401, body: "".into() }), FailureKind::KeyOnly);
-        assert_eq!(failure_kind(&LlmError::Api { status: 503, body: "".into() }), FailureKind::Provider);
-        assert_eq!(failure_kind(&LlmError::Api { status: 400, body: "".into() }), FailureKind::NotRetryable);
+        assert_eq!(
+            failure_kind(&LlmError::Api {
+                status: 429,
+                body: "".into()
+            }),
+            FailureKind::KeyOnly
+        );
+        assert_eq!(
+            failure_kind(&LlmError::Api {
+                status: 401,
+                body: "".into()
+            }),
+            FailureKind::KeyOnly
+        );
+        assert_eq!(
+            failure_kind(&LlmError::Api {
+                status: 503,
+                body: "".into()
+            }),
+            FailureKind::Provider
+        );
+        assert_eq!(
+            failure_kind(&LlmError::Api {
+                status: 400,
+                body: "".into()
+            }),
+            FailureKind::NotRetryable
+        );
         assert_eq!(failure_kind(&LlmError::EmptyStream), FailureKind::Provider);
-        assert_eq!(failure_kind(&LlmError::Cancelled), FailureKind::NotRetryable);
+        assert_eq!(
+            failure_kind(&LlmError::Cancelled),
+            FailureKind::NotRetryable
+        );
     }
 }

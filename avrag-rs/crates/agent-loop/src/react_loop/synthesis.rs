@@ -116,9 +116,12 @@ impl SynthesisPhase {
         }
 
         let candidate_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
-        if let Some(answer) = resolve_synthesis_answer(&candidate_refs, tool_results, messages, mode) {
+        if let Some(answer) =
+            resolve_synthesis_answer(&candidate_refs, tool_results, messages, mode)
+        {
             let prose = ensure_user_facing_prose(render_synthesis_prose(&answer));
-            crate::progress::emit_work_fact(sink, crate::progress::WorkFact::compose_answer()).await;
+            crate::progress::emit_work_fact(sink, crate::progress::WorkFact::compose_answer())
+                .await;
             // P0 "true stream" for JSON synthesis: chunk prose into MessageDelta
             // (generation was complete_json; streaming the validated answer still
             // gives progressive UI without breaking the answer contract).
@@ -430,10 +433,60 @@ fn append_tool_results_observation(out: &mut Vec<ChatMessage>, tool_results: &[T
     if tool_results.is_empty() {
         return;
     }
-    let text = serde_json::to_string_pretty(tool_results).unwrap_or_else(|_| "[]".to_string());
+    let text = serde_json::to_string_pretty(&trim_tool_results_for_synthesis(tool_results))
+        .unwrap_or_else(|_| "[]".to_string());
     out.push(ChatMessage::user(format!(
         "<tool_results>\n{text}\n</tool_results>"
     )));
+}
+
+/// Total char budget for the synthesis-time `<tool_results>` re-play.
+/// Larger than the per-message budget so the final evidence set still fits,
+/// while remaining far below the mode token budget (pro ~28k tokens).
+const SYNTHESIS_TOOL_RESULTS_MAX_CHARS: usize = 48_000;
+
+/// Deduplicate identical `(tool, data)` results and keep the most recent
+/// entries within a total char budget. Mirrors the Reasonix `snip` tier:
+/// stale/duplicate tool results are dropped before the final synthesis so the
+/// model sees a bounded evidence set instead of the full accumulated history
+/// (which can reach ~1.5MB in long RAG sessions).
+fn trim_tool_results_for_synthesis(tool_results: &[ToolResult]) -> Vec<serde_json::Value> {
+    let mut seen = std::collections::HashSet::new();
+    let mut kept = Vec::new();
+    let mut used = 0usize;
+    for result in tool_results.iter().rev() {
+        let data_json = serde_json::to_string(&result.data).unwrap_or_default();
+        let key = format!("{}:{data_json}", result.tool);
+        if !seen.insert(key) {
+            continue;
+        }
+        let data = result.data.as_ref().map(|d| {
+            super::message_format::trim_json_for_context(
+                d,
+                SYNTHESIS_TOOL_RESULTS_MAX_CHARS
+                    .saturating_sub(used)
+                    .max(512),
+            )
+        });
+        let entry = serde_json::json!({
+            "tool": result.tool,
+            "status": result.status,
+            "data": data,
+        });
+        let len = serde_json::to_string(&entry).map(|s| s.len()).unwrap_or(0);
+        if used + len > SYNTHESIS_TOOL_RESULTS_MAX_CHARS {
+            if kept.is_empty() {
+                // Never return an empty evidence set: the newest result (already
+                // budget-trimmed) is better than dropping everything.
+                kept.push(entry);
+            }
+            break;
+        }
+        used += len;
+        kept.push(entry);
+    }
+    kept.reverse();
+    kept
 }
 
 /// Refusal cue words for the synthesis safety-net. Mirrors the evaluator's
@@ -484,7 +537,18 @@ fn extract_refusal_sentence(reasoning: Option<&str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_refusal_sentence;
+    use super::{extract_refusal_sentence, trim_tool_results_for_synthesis};
+    use contracts::ToolResult;
+
+    fn tool_result(tool: &str, data: serde_json::Value) -> ToolResult {
+        ToolResult {
+            tool: tool.to_string(),
+            version: "1.0".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(data),
+            trace: None,
+        }
+    }
 
     #[test]
     fn lifts_refusal_sentence_from_reasoning() {
@@ -506,5 +570,48 @@ mod tests {
     fn returns_none_for_empty_reasoning() {
         assert!(extract_refusal_sentence(None).is_none());
         assert!(extract_refusal_sentence(Some("")).is_none());
+    }
+
+    #[test]
+    fn synthesis_replay_deduplicates_identical_tool_results() {
+        let results = vec![
+            tool_result(
+                "dense_retrieval",
+                serde_json::json!({"query": "q", "chunks": [1, 2]}),
+            ),
+            tool_result(
+                "dense_retrieval",
+                serde_json::json!({"query": "q", "chunks": [1, 2]}),
+            ),
+            tool_result("web_search", serde_json::json!({"query": "w"})),
+        ];
+        let trimmed = trim_tool_results_for_synthesis(&results);
+        assert_eq!(trimmed.len(), 2, "duplicate should be dropped: {trimmed:?}");
+    }
+
+    #[test]
+    fn synthesis_replay_keeps_most_recent_within_budget() {
+        let big_payload = serde_json::json!({"text": "x".repeat(40_000)});
+        let results = vec![
+            tool_result(
+                "dense_retrieval",
+                serde_json::json!({"query": "old", "data": "y".repeat(40_000)}),
+            ),
+            tool_result("dense_retrieval", big_payload.clone()),
+        ];
+        let trimmed = trim_tool_results_for_synthesis(&results);
+        // Newest result is kept (reversed order); total stays under budget.
+        assert_eq!(
+            trimmed.len(),
+            1,
+            "expected one result within budget: {trimmed:?}"
+        );
+        assert_eq!(trimmed[0]["data"]["text"], "x".repeat(40_000));
+        let text = serde_json::to_string(&trimmed).unwrap();
+        assert!(
+            text.len() <= 48_000 + 128,
+            "replay exceeds budget: {}",
+            text.len()
+        );
     }
 }
