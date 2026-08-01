@@ -404,16 +404,7 @@ impl ReActLoop {
 /// Also surfaces **environment facts**: visible `alias` values and grep
 /// `truncated` / zero-hit signals so the model need not re-scan raw JSON alone.
 fn retrieval_callouts(bridge_calls: &[super::deps::BridgeCallObs]) -> String {
-    const RETRIEVAL_METHODS: &[&str] = &[
-        "dense",
-        "lexical",
-        "grep",
-        "web",
-        "fetch",
-        // legacy aliases during skill cutover
-        "dense_search",
-        "lexical_search",
-    ];
+    const RETRIEVAL_METHODS: &[&str] = &["dense", "lexical", "grep", "web", "fetch"];
     let call_count = bridge_calls
         .iter()
         .filter(|c| RETRIEVAL_METHODS.contains(&c.method.as_str()))
