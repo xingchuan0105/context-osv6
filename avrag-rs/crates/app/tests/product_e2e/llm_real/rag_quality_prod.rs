@@ -375,6 +375,9 @@ impl V2RunCtx {
                 "subset": subset,
                 "answer": answer,
                 "context_source": judge_input.context_source.as_str(),
+                // M1(2026-08-01):judge 输入快照持久化——JUDGE_ERROR 题可离线
+                // 重判(rejudge 入口读此重建 JudgeInput),无需重生成答案。
+                "judge_input": judge_input,
                 "score_v2": score,
             }),
         );
@@ -447,33 +450,55 @@ impl V2RunCtx {
         self.live_judge_call(messages, &key, input).await
     }
 
-    /// Live judge call plus exactly one retry when the first response is not
-    /// parseable JSON (design §4.3). Transport errors never retry. Successful
-    /// raw responses are stored in the cache; errors are never cached.
+    /// Live judge call with backoff retry: transport errors retry up to 3
+    /// times with 1s/3s backoff; JSON parse failures get one retry (design
+    /// §4.3). Successful raw responses are stored in the cache; errors are
+    /// never cached.
     async fn live_judge_call(
         &self,
         messages: &[avrag_llm::ChatMessage],
         cache_key: &str,
         input: &eval_v2::JudgeInput,
     ) -> JudgeAttempt {
-        let resp = match self.judge.complete(messages).await {
-            Ok(resp) => resp,
-            Err(e) => {
-                // Transport errors retry once (2026-08-01 dual-run regression:
-                // judge API transient failures ~7% per run; parse-failures below
-                // already get one retry, transport previously got none).
-                eprintln!("  v2: judge transport error ({e}); retrying once");
+        // Transport errors: exponential backoff (1s/3s), up to 3 attempts
+        // (2026-08-01: judge API transient failures ~7% per run).
+        let resp = {
+            let mut last_err = None;
+            let mut resp = None;
+            for attempt in 0..3 {
                 match self.judge.complete(messages).await {
-                    Ok(resp) => resp,
-                    Err(e2) => {
-                        return JudgeAttempt {
-                            status: eval_v2::JudgeStatus::Error,
-                            parsed: None,
-                            raw: None,
-                            note: format!("judge transport error after retry: {e2}"),
-                            cache_hit: false,
-                        };
+                    Ok(r) => {
+                        resp = Some(r);
+                        break;
                     }
+                    Err(e) if attempt < 2 => {
+                        let wait = 1u64 << attempt; // 1s, 2s
+                        eprintln!(
+                            "  v2: judge transport error ({e}); retry {}/3 after {wait}s",
+                            attempt + 1
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                        last_err = Some(e);
+                    }
+                    Err(e) => {
+                        last_err = Some(e);
+                        break;
+                    }
+                }
+            }
+            match resp {
+                Some(r) => r,
+                None => {
+                    return JudgeAttempt {
+                        status: eval_v2::JudgeStatus::Error,
+                        parsed: None,
+                        raw: None,
+                        note: format!(
+                            "judge transport error after 3 attempts: {:?}",
+                            last_err.as_ref().map(|e| e.to_string())
+                        ),
+                        cache_hit: false,
+                    };
                 }
             }
         };
