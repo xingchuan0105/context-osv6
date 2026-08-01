@@ -51,6 +51,8 @@ env:
   data_path: ""                 # 留空 → <avrag_rs_root>/tests/rag_quality/golden_set_realistic.json
   avrag_rs_root: ""             # 留空 → 自动推断为仓库 avrag-rs 根
   prompt_target: system/agent-base.md   # 被优化/替换的 prompts 内文件（相对 prompts/）
+  # 精简集(2026-08-01):题号白名单(错题 ∪ 各题型代表题,65 题);空 → 全量 149
+  include_ids_file: avrag149/question_ids_include.json
   workers: 4
   max_completion_tokens: 4096
   eval_timeout_secs: 3600

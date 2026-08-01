@@ -148,8 +148,15 @@ def run_check(flat: dict) -> None:
     adapter.setup(flat)
     dl = adapter.get_dataloader()
     print(f"      train={len(dl.train_items)} val={len(dl.val_items)} test={len(dl.test_items)}")
-    if len(dl.train_items) + len(dl.val_items) + len(dl.test_items) != 149:
-        print(f"      [FAIL] 题数合计 ≠ 149，检查 golden 集与 split_ratio")
+    # 题数校验:split 合计应等于当前加载题数(全量 149 或 include_ids 精简集)
+    loaded_total = len(
+        dl.load_raw_items(str(Path(flat.get("data_path") or (Path(flat.get("avrag_rs_root") or _DEFAULT_AVRAG_RS_ROOT) / "tests/rag_quality/golden_set_realistic.json"))))
+    )
+    if len(dl.train_items) + len(dl.val_items) + len(dl.test_items) != loaded_total:
+        print(
+            f"      [FAIL] split 题数合计 {len(dl.train_items) + len(dl.val_items) + len(dl.test_items)} "
+            f"≠ 加载题数 {loaded_total}，检查 golden 集 / include_ids / split_ratio"
+        )
         sys.exit(1)
     if not dl.train_items:
         print("      [FAIL] train 为空")

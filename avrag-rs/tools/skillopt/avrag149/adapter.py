@@ -5,6 +5,7 @@ rollout 即「skill 文档注入产品 prompts → 跑真实 nightly 评测 → 
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from skillopt.datasets.base import BatchSpec
@@ -39,6 +40,9 @@ class Avrag149Adapter(EnvAdapter):
         avrag_rs_root: str = "",
         prompt_target: str = "system/agent-base.md",
         eval_timeout_secs: int = 3600,
+        # 精简集(2026-08-01):题号白名单文件(错题 ∪ 各题型代表题);
+        # 空/缺省 → 全量 149。
+        include_ids_file: str = "",
         **kwargs,
     ) -> None:
         self.workers = int(workers)
@@ -54,6 +58,14 @@ class Avrag149Adapter(EnvAdapter):
         if not data_path:
             data_path = str(Path(self.avrag_rs_root) / "tests/rag_quality/golden_set_realistic.json")
 
+        # 精简集:include_ids_file 相对 tools/skillopt 根解析
+        include_ids: list[int] | None = None
+        if include_ids_file:
+            p = Path(include_ids_file)
+            if not p.is_absolute():
+                p = Path(__file__).resolve().parent.parent / p
+            include_ids = [int(x) for x in json.loads(p.read_text(encoding="utf-8"))]
+
         self.dataloader = Avrag149DataLoader(
             split_dir=split_dir,
             data_path=data_path,
@@ -63,6 +75,7 @@ class Avrag149Adapter(EnvAdapter):
             split_output_dir=split_output_dir,
             seed=seed,
             limit=limit,
+            include_ids=include_ids,
         )
 
     # ── Lifecycle ────────────────────────────────────────────────────────

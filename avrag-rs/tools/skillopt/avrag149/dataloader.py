@@ -16,7 +16,13 @@ class Avrag149DataLoader(SplitDataLoader):
 
     split_mode="ratio" 时由基类 shuffle 划分（split_seed 固定保证可复现），
     item 的 ``id`` 始终保留原始 1-based 题号，供 rollout 映射回 ``E2E_QUESTIONS``。
+    ``include_ids`` 非空时只保留这些题号（精简集:错题 + 各题型代表题，
+    2026-08-01）——id 仍是原展平题号,与 E2E_QUESTIONS 一致。
     """
+
+    def __init__(self, include_ids: list[int] | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.include_ids = set(include_ids) if include_ids else None
 
     def load_raw_items(self, data_path: str) -> list[dict]:
         with open(data_path, encoding="utf-8") as f:
@@ -27,13 +33,16 @@ class Avrag149DataLoader(SplitDataLoader):
             raise ValueError(f"{data_path} 缺少 subsets 数组")
 
         items: list[dict] = []
+        seq = 0  # 完整 golden 的展平序号 = E2E_QUESTIONS 原题号(与 items 长度无关)
         for subset in subsets:
             subset_name = str(subset.get("name") or "unknown")
             for ex in subset.get("examples", []):
-                n = len(items) + 1  # 1-based，与 E2E_QUESTIONS 索引一致
+                seq += 1
+                if self.include_ids is not None and seq not in self.include_ids:
+                    continue
                 items.append({
-                    "id": str(n),
-                    "n": n,
+                    "id": str(seq),
+                    "n": seq,
                     "subset": subset_name,
                     # task_type 供 SkillOpt 按任务类型分组反射；取 subset 名最稳
                     "task_type": subset_name,
