@@ -7,7 +7,6 @@ use contracts::auth_runtime::AuthContext;
 use std::sync::Arc;
 use uuid::Uuid;
 
-
 pub struct BillingApp<'a> {
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
@@ -197,12 +196,8 @@ impl<'a> BillingApp<'a> {
         let Some(actor_id) = self.auth.actor_id() else {
             return Self::auth_required();
         };
-        avrag_billing::handle_get_order_status(
-            store,
-            UserId::from(actor_id.into_uuid()),
-            order_id,
-        )
-        .await
+        avrag_billing::handle_get_order_status(store, UserId::from(actor_id.into_uuid()), order_id)
+            .await
     }
 
     pub async fn handle_webhook(
@@ -217,4 +212,3 @@ impl<'a> BillingApp<'a> {
         avrag_billing::handle_webhook(store, provider, signature, body).await
     }
 }
-

@@ -1,21 +1,16 @@
 use contracts::auth_runtime::AuthContext;
 use ingestion::chunker::ChunkPolicy;
-use ingestion::{
-    DocumentIr, IngestionError, IngestionTask,
-};
+use ingestion::{DocumentIr, IngestionError, IngestionTask};
 use tracing::info;
 use uuid::Uuid;
 
 use super::super::helpers::{
-    build_asset_object_key,
-    build_document_chunk_rows, collect_document_text,
-    enrich_multimodal_source_locator,
-    generate_document_profile_with_llm, mirror_document_asset,
+    build_asset_object_key, build_document_chunk_rows, collect_document_text,
+    enrich_multimodal_source_locator, generate_document_profile_with_llm, mirror_document_asset,
 };
 use super::super::processor::PgTaskProcessor;
 use crate::indexing::{
-    StoredMultimodalChunk,
-    maybe_enrich_visual_multimodal_summaries, record_multimodal_degrade,
+    StoredMultimodalChunk, maybe_enrich_visual_multimodal_summaries, record_multimodal_degrade,
 };
 use crate::ingestion_guard::{ensure_ingestion_side_effects_allowed, from_storage_error};
 
@@ -156,7 +151,9 @@ async fn persist_body_chunks(
         "body chunk writes",
     )
     .await?;
-    processor.storage.repo
+    processor
+        .storage
+        .repo
         .bootstrap()
         .store_document_body_chunks(
             context,
@@ -191,9 +188,16 @@ async fn persist_profile_and_toc(
             "toc writes",
         )
         .await?;
-        if let Err(error) = processor.storage.repo
+        if let Err(error) = processor
+            .storage
+            .repo
             .bootstrap()
-            .replace_document_toc(context, workspace_id, document_id, &profile_result.toc_entries)
+            .replace_document_toc(
+                context,
+                workspace_id,
+                document_id,
+                &profile_result.toc_entries,
+            )
             .await
         {
             info!(document_id = %document_id, error = %error, "failed to write document toc");
@@ -214,7 +218,9 @@ async fn persist_profile_and_toc(
             "profile metadata write",
         )
         .await?;
-        if let Err(error) = processor.storage.repo
+        if let Err(error) = processor
+            .storage
+            .repo
             .documents()
             .update_document_profile(
                 context,
@@ -301,13 +307,17 @@ async fn persist_document_assets(
         )
         .await
         {
-            let _ = processor.storage.object_store
+            let _ = processor
+                .storage
+                .object_store
                 .delete(&stored_asset_object_key)
                 .await;
             return Err(error);
         }
 
-        let store_result = processor.storage.repo
+        let store_result = processor
+            .storage
+            .repo
             .assets()
             .store_document_asset(
                 context,
@@ -328,7 +338,9 @@ async fn persist_document_assets(
             )
             .await;
         if let Err(error) = store_result {
-            let _ = processor.storage.object_store
+            let _ = processor
+                .storage
+                .object_store
                 .delete(&stored_asset_object_key)
                 .await;
             return Err(IngestionError::storage_database(error));
@@ -385,7 +397,9 @@ async fn persist_multimodal_chunks(
             .flatten()
             .unwrap_or_else(|| multimodal_chunk.image_path.clone());
 
-        processor.storage.repo
+        processor
+            .storage
+            .repo
             .assets()
             .store_multimodal_chunk(
                 context,

@@ -1,11 +1,10 @@
 //! Product App — Prefs (ADR-0007).
 
 use app_core::StorageContext;
+use contracts::UserPreferences;
 use contracts::auth_runtime::AuthContext;
 use contracts::preferences::AgentPreferenceMemory;
-use contracts::UserPreferences;
 use uuid::Uuid;
-
 
 pub struct PrefsApp<'a> {
     pub(crate) admin: &'a app_admin::AdminContext,

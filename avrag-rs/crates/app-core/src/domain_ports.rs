@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use common::AppError;
+use contracts::auth_runtime::AuthContext;
 
 use crate::StorageContext;
 

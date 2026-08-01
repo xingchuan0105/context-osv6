@@ -8,5 +8,5 @@ mod processor;
 mod triplet_extraction;
 pub(crate) mod triplet_semantic_lint;
 
-pub(crate) use processor::{EmbeddingDeps, LlmDeps, MeteringDeps, PgTaskProcessor, StorageDeps};
 pub(crate) use document_pipeline::remove_struct_store_files;
+pub(crate) use processor::{EmbeddingDeps, LlmDeps, MeteringDeps, PgTaskProcessor, StorageDeps};

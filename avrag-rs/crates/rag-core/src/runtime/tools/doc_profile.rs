@@ -1,5 +1,5 @@
-use contracts::auth_runtime::AuthContext;
 use common::TocEntry;
+use contracts::auth_runtime::AuthContext;
 use contracts::{DocProfileArgs, ToolResult, ToolStatus, ToolTrace};
 use uuid::Uuid;
 

@@ -204,16 +204,14 @@ impl AuthStorePort for PgAuthStoreAdapter {
         tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(row.map(
-            |(user_id, email, full_name, password_hash, auth_version, role)| {
-                AuthUserCredentials {
-                    user_id,
-                    owner_user_id: user_id,
-                    email,
-                    full_name,
-                    password_hash,
-                    auth_version,
-                    role,
-                }
+            |(user_id, email, full_name, password_hash, auth_version, role)| AuthUserCredentials {
+                user_id,
+                owner_user_id: user_id,
+                email,
+                full_name,
+                password_hash,
+                auth_version,
+                role,
             },
         ))
     }

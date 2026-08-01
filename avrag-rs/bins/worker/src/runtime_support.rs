@@ -1,12 +1,14 @@
 use anyhow::{Context, Result};
 use app_core::{AppConfig, RetrievalBackend};
-use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
-use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, ObjectStoreHeadError, S3ObjectStore};
+use avrag_storage_pg::{
+    DocumentCleanupTask, ObjectStoreHandle, ObjectStoreHeadError, S3ObjectStore,
+};
 use avrag_storage_pgvector::{PgvectorConfig, PgvectorDataPlane};
-use sqlx::PgPool;
+use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 use ingestion::IngestionTask;
+use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -179,13 +181,18 @@ pub(crate) async fn build_worker_retrieval_data_plane(
 }
 
 /// Optional exit-metering pair: observer + system-ish tenant (worker bootstrap identity).
-pub(crate) type WorkerUsageObserver =
-    Option<(std::sync::Arc<dyn avrag_llm::UsageObserver>, avrag_llm::TenantContext)>;
+pub(crate) type WorkerUsageObserver = Option<(
+    std::sync::Arc<dyn avrag_llm::UsageObserver>,
+    avrag_llm::TenantContext,
+)>;
 
 pub(crate) fn worker_system_tenant(config: &AppConfig) -> avrag_llm::TenantContext {
     let owner_user_id = Uuid::parse_str(&config.owner_user_id).unwrap_or_else(|_| Uuid::nil());
     let user_id = Uuid::parse_str(&config.user_id).unwrap_or_else(|_| Uuid::nil());
-    avrag_llm::TenantContext { owner_user_id, user_id }
+    avrag_llm::TenantContext {
+        owner_user_id,
+        user_id,
+    }
 }
 
 fn apply_worker_observer(

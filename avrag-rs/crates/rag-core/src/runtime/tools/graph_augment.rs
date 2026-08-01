@@ -6,8 +6,8 @@
 //! - Evidence: score vs terms + TOP1 score-gap cut (得分落差).
 //! - Does **not** register as a ToolCatalog tool; does **not** fake graph_retrieval calls.
 
-use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::GraphSearchRequest;
+use contracts::auth_runtime::AuthContext;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -343,12 +343,11 @@ pub async fn graph_augment_from_terms(
     ranked.sort_by(|a, b| {
         let ha = relation_term_hits(&a.subject, &a.object, &seeds);
         let hb = relation_term_hits(&b.subject, &b.object, &seeds);
-        hb.cmp(&ha)
-            .then_with(|| {
-                b.score
-                    .partial_cmp(&a.score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        hb.cmp(&ha).then_with(|| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
     ranked.truncate(config.max_relations);
 
@@ -391,7 +390,11 @@ pub async fn graph_augment_from_terms(
             }
             if !found {
                 let s = evidence_score_term_coverage(&relation_text, terms);
-                candidates.push((format!("relation:{}", relation_text), relation_text.clone(), s));
+                candidates.push((
+                    format!("relation:{}", relation_text),
+                    relation_text.clone(),
+                    s,
+                ));
             }
         } else {
             for id in &path.supporting_chunk_ids {
@@ -402,14 +405,22 @@ pub async fn graph_augment_from_terms(
             }
             if candidates.is_empty() {
                 let s = evidence_score_term_coverage(&relation_text, terms);
-                candidates.push((format!("relation:{}", relation_text), relation_text.clone(), s));
+                candidates.push((
+                    format!("relation:{}", relation_text),
+                    relation_text.clone(),
+                    s,
+                ));
             }
         }
 
         candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
         let scores: Vec<f32> = candidates.iter().map(|c| c.2).collect();
-        let kept_idx =
-            keep_evidence_by_gap(&scores, config.margin_abs, config.margin_rel, config.evidence_max_k);
+        let kept_idx = keep_evidence_by_gap(
+            &scores,
+            config.margin_abs,
+            config.margin_rel,
+            config.evidence_max_k,
+        );
 
         let s1 = scores.first().copied().unwrap_or(0.0);
         let evidence_chunks: Vec<Value> = kept_idx
@@ -418,11 +429,7 @@ pub async fn graph_augment_from_terms(
             .map(|(rank, i)| {
                 let (cid, text, s) = &candidates[i];
                 let gap = s1 - *s;
-                let reason = if rank == 0 {
-                    "top1"
-                } else {
-                    "within_margin"
-                };
+                let reason = if rank == 0 { "top1" } else { "within_margin" };
                 json!({
                     "chunk_id": cid,
                     "text": text,
@@ -516,7 +523,10 @@ mod tests {
 
     #[test]
     fn term_coverage_scores_fraction() {
-        let s = evidence_score_term_coverage("DRC maps to DRO in table", &["DRC".into(), "DRO".into(), "XYZ".into()]);
+        let s = evidence_score_term_coverage(
+            "DRC maps to DRO in table",
+            &["DRC".into(), "DRO".into(), "XYZ".into()],
+        );
         assert!((s - 2.0 / 3.0).abs() < 1e-5);
     }
 

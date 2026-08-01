@@ -1,5 +1,5 @@
-use crate::usage_observer::{EmbeddingUsageRecord, TenantContext, UsageObserver};
 use crate::ModelProviderConfig;
+use crate::usage_observer::{EmbeddingUsageRecord, TenantContext, UsageObserver};
 use anyhow::Context;
 use serde::Deserialize;
 use serde_json::json;
@@ -214,11 +214,7 @@ impl EmbeddingClient {
         self
     }
 
-    async fn record_embedding_usage(
-        &self,
-        estimated_tokens: u32,
-        actual_tokens: Option<u32>,
-    ) {
+    async fn record_embedding_usage(&self, estimated_tokens: u32, actual_tokens: Option<u32>) {
         let Some((observer, tenant)) = &self.observer else {
             return;
         };
@@ -278,7 +274,11 @@ impl EmbeddingClient {
                     self.config.dimensions,
                     &sha256_hex(text),
                 );
-                match cache.get(&key).await.and_then(|raw| serde_json::from_str(&raw).ok()) {
+                match cache
+                    .get(&key)
+                    .await
+                    .and_then(|raw| serde_json::from_str(&raw).ok())
+                {
                     Some(cached) => slots[index] = Some(cached),
                     None => {
                         missing_indices.push(index);
@@ -552,8 +552,6 @@ impl EmbeddingClient {
     }
 }
 
-
-
 #[async_trait::async_trait]
 impl avrag_rag_core_ports::EmbeddingPort for EmbeddingClient {
     async fn embed(&self, texts: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {
@@ -807,7 +805,8 @@ mod tests {
         );
         let message = result.unwrap_err().to_string();
         assert!(
-            message.contains("vectors") && (message.contains("texts") || message.contains("inputs")),
+            message.contains("vectors")
+                && (message.contains("texts") || message.contains("inputs")),
             "error should explain the count mismatch, got: {message}"
         );
     }
@@ -878,7 +877,8 @@ mod tests {
         );
         for (i, vector) in vectors.iter().enumerate() {
             assert_eq!(
-                vector[0], owned[i].len() as f32,
+                vector[0],
+                owned[i].len() as f32,
                 "vector order mismatch at index {i}"
             );
         }

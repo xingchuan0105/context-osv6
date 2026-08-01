@@ -3,9 +3,9 @@
 //! Product handlers should use `state.admin_ops() product App`, not `state.admin_store()`.
 
 use app_core::{
-    AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo, AdminRagHealthStatus,
-    AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
+    AdminAccountInfo, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
+    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry,
+    AdminRagHealthStatus, AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use common::AppError;
 use contracts::auth_runtime::{AuthContext, UserId};
@@ -74,10 +74,16 @@ impl<'a> AdminOpsApp<'a> {
         store.get_usage(self.auth, owner_user_id, period).await
     }
 
-    pub async fn set_account_blocked(&self, owner_user_id: UserId, blocked: bool) -> Result<(), AppError> {
+    pub async fn set_account_blocked(
+        &self,
+        owner_user_id: UserId,
+        blocked: bool,
+    ) -> Result<(), AppError> {
         self.require_actor()?;
         let store = self.require_store()?;
-        store.set_account_blocked(self.auth, owner_user_id, blocked).await
+        store
+            .set_account_blocked(self.auth, owner_user_id, blocked)
+            .await
     }
 
     pub async fn billing_overview(&self) -> Result<AdminBillingOverview, AppError> {

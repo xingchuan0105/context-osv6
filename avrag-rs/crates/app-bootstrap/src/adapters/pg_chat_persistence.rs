@@ -16,9 +16,9 @@ use app_core::{
     },
 };
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::{ChatTurn, PgAppRepository};
 use common::{AppError, SourceRow};
+use contracts::auth_runtime::AuthContext;
 use contracts::chat::ChatMessage;
 use contracts::workspaces::{ChatSession, Workspace};
 use ingestion_types::AuditRecord;
@@ -107,7 +107,6 @@ impl SessionPort for PgChatPersistenceAdapter {
             .await
             .map_err(map_pg_error)
     }
-
 }
 
 #[async_trait]
@@ -194,7 +193,6 @@ impl MessagePort for PgChatPersistenceAdapter {
             .map_err(map_pg_error)
             .map(|rows| rows.into_iter().map(conversation_history_hit).collect())
     }
-
 }
 
 #[async_trait]
@@ -234,7 +232,6 @@ impl ChatCatalogPort for PgChatPersistenceAdapter {
             .await
             .map_err(map_pg_error)
     }
-
 }
 
 #[async_trait]
@@ -263,7 +260,6 @@ impl ProfilePort for PgChatPersistenceAdapter {
             .await
             .map_err(map_pg_error)
     }
-
 }
 
 #[async_trait]
@@ -318,7 +314,6 @@ impl ChatContentPort for PgChatPersistenceAdapter {
             .await
             .map_err(map_pg_error)
     }
-
 }
 
 #[async_trait]
@@ -357,6 +352,4 @@ impl ChatSideEffectPort for PgChatPersistenceAdapter {
             .await
             .map_err(map_pg_error)
     }
-
 }
-

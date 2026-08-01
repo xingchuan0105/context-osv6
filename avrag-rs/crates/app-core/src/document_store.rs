@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
+use contracts::auth_runtime::AuthContext;
 use contracts::documents::DocumentStatus;
 use contracts::workspaces::Workspace;
 use ingestion_types::{AuditRecord, IngestionTask};

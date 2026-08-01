@@ -3,22 +3,22 @@ use std::sync::Arc;
 use crate::domain_row_convert::{user_profile_row, user_profile_row_to_pg};
 use crate::pg_error::map_pg_error;
 use app_core::{
-    AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
-    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo,
-    AdminRagHealthStatus, AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
-    admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
-    admin_clamp_account_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
-    domain_rows::UserProfileRow,
+    AdminAccountInfo, AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
+    AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
+    AdminFeatureFlagEntry, AdminRagHealthStatus, AdminStorePort, AdminUsageStats, AdminUserInfo,
+    AdminWorkerStatus, admin_audit_logs_to_csv, admin_audit_window_start,
+    admin_clamp_account_list_per_page, admin_clamp_audit_per_page, admin_escape_ilike_pattern,
+    admin_usage_period_start, domain_rows::UserProfileRow,
 };
 use async_trait::async_trait;
-use contracts::auth_runtime::{AuthContext, UserId};
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
+use contracts::auth_runtime::{AuthContext, UserId};
 use sqlx::{Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 
-use crate::adapters::pg_session::{begin_tx, db_err, set_rls_owner, set_current_role};
+use crate::adapters::pg_session::{begin_tx, db_err, set_current_role, set_rls_owner};
 
 pub struct PgAdminStoreAdapter {
     repo: Arc<PgAppRepository>,
@@ -39,12 +39,11 @@ impl PgAdminStoreAdapter {
         let mut tx = begin_tx(self.repo.raw()).await?;
         set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         // Personal B2C: role lives on the user row (account == user).
-        let role =
-            sqlx::query_scalar::<_, String>("select role from users where id = $1")
-                .bind(actor_id.into_uuid())
-                .fetch_optional(tx.as_mut())
-                .await
-                .map_err(db_err)?;
+        let role = sqlx::query_scalar::<_, String>("select role from users where id = $1")
+            .bind(actor_id.into_uuid())
+            .fetch_optional(tx.as_mut())
+            .await
+            .map_err(db_err)?;
         if matches!(
             role.as_deref(),
             Some("super_admin" | "ops_admin" | "finance_admin")

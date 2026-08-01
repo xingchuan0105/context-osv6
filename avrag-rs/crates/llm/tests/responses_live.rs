@@ -36,8 +36,7 @@ fn env_config() -> Option<ModelProviderConfig> {
         base_url: std::env::var("AGENT_LLM_BASE_URL")
             .unwrap_or_else(|_| "https://api.deepseek.com".to_string()),
         api_key,
-        model: std::env::var("AGENT_LLM_MODEL")
-            .unwrap_or_else(|_| "deepseek-v4-flash".to_string()),
+        model: std::env::var("AGENT_LLM_MODEL").unwrap_or_else(|_| "deepseek-v4-flash".to_string()),
         timeout_ms: 60_000,
         api_style: Some(ApiStyle::OpenAiResponses),
         dimensions: None,
@@ -59,18 +58,21 @@ async fn responses_live_non_streaming() {
     let route = build_route_from_config(&config, http);
     assert_eq!(route.protocol_id(), "openai_responses");
 
-    let request = LlmRequest::new(
-        vec![ChatMessage::user("Reply with exactly: OK")],
-        config,
-    )
-    .with_options(GenerationOptions {
-        temperature: Some(0.0),
-        max_tokens: None,
-        stream: false,
-        json_mode: false,
-    });
-    let response = route.generate(request).await.expect("live responses request should succeed");
-    println!("non-streaming model={} content={:?} usage={}", response.model, response.content, response.usage.total_tokens);
+    let request = LlmRequest::new(vec![ChatMessage::user("Reply with exactly: OK")], config)
+        .with_options(GenerationOptions {
+            temperature: Some(0.0),
+            max_tokens: None,
+            stream: false,
+            json_mode: false,
+        });
+    let response = route
+        .generate(request)
+        .await
+        .expect("live responses request should succeed");
+    println!(
+        "non-streaming model={} content={:?} usage={}",
+        response.model, response.content, response.usage.total_tokens
+    );
     assert!(!response.content.is_empty());
 }
 
@@ -85,16 +87,13 @@ async fn responses_live_streaming() {
     let route = build_route_from_config(&config, http);
     assert_eq!(route.protocol_id(), "openai_responses");
 
-    let request = LlmRequest::new(
-        vec![ChatMessage::user("Count from 1 to 3.")],
-        config,
-    )
-    .with_options(GenerationOptions {
-        temperature: Some(0.0),
-        max_tokens: None,
-        stream: true,
-        json_mode: false,
-    });
+    let request = LlmRequest::new(vec![ChatMessage::user("Count from 1 to 3.")], config)
+        .with_options(GenerationOptions {
+            temperature: Some(0.0),
+            max_tokens: None,
+            stream: true,
+            json_mode: false,
+        });
     let mut stream = route.stream(request);
     let mut content = String::new();
     while let Some(event) = stream.next().await {
@@ -125,7 +124,9 @@ async fn responses_live_tool_call() {
     let route = build_route_from_config(&config, http);
 
     let request = LlmRequest::new(
-        vec![ChatMessage::user("What is the weather in Beijing? Use get_weather.")],
+        vec![ChatMessage::user(
+            "What is the weather in Beijing? Use get_weather.",
+        )],
         config,
     )
     .with_options(GenerationOptions {

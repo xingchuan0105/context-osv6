@@ -11,9 +11,9 @@
 //! successful body/SSE shapes and `api_key_security_contract.rs` for the
 //! 401/403 boundaries.
 
-use app_bootstrap::AppState;
 use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage};
+use app_bootstrap::AppState;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::AppConfig;
 use axum::{
@@ -70,6 +70,7 @@ impl Agent for ScriptedAgent {
                 total_tokens: 3,
                 request_count: 1,
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             ..Default::default()
         })
@@ -90,14 +91,16 @@ fn test_app_state() -> AppState {
 /// `(app, workspace_id, bearer)`.
 async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, String, String) {
     let state = test_app_state();
-    let notebook = state.workspace()
+    let notebook = state
+        .workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "openai-contract".to_string(),
             description: String::new(),
         })
         .await
         .expect("notebook should create");
-    let key = state.admin_api()
+    let key = state
+        .admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {

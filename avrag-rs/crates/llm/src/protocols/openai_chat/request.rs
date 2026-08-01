@@ -1,6 +1,6 @@
 //! Request body construction for OpenAI chat completions.
-use crate::schema::{ChatMessage, ToolDefinition};
 use crate::ModelProviderConfig;
+use crate::schema::{ChatMessage, ToolDefinition};
 
 pub fn build_chat_completion_request_body(
     config: &ModelProviderConfig,
@@ -97,4 +97,3 @@ pub fn build_chat_completion_request_body(
 
     request_body
 }
-

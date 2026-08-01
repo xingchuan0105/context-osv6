@@ -15,7 +15,9 @@ fn main() {
             println!("RUST bundled: create_fts_index failed without LOAD: {e}");
             let r2 = con.execute_batch("LOAD fts");
             println!("LOAD fts: {r2:?}");
-            if let Err(e) = con.execute_batch("PRAGMA create_fts_index('t0', 'row_ord', '活动', '角色')") {
+            if let Err(e) =
+                con.execute_batch("PRAGMA create_fts_index('t0', 'row_ord', '活动', '角色')")
+            {
                 println!("after LOAD still failed: {e}");
                 return;
             }
@@ -41,7 +43,9 @@ fn main() {
     ro.execute_batch("SET enable_external_access=false; SET lock_configuration=true;")
         .unwrap();
     let rows2: Vec<(i64, String)> = ro
-        .prepare("SELECT row_ord, 活动 FROM t0 WHERE fts_main_t0.match_bm25(row_ord, 'PQA') IS NOT NULL")
+        .prepare(
+            "SELECT row_ord, 活动 FROM t0 WHERE fts_main_t0.match_bm25(row_ord, 'PQA') IS NOT NULL",
+        )
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap()

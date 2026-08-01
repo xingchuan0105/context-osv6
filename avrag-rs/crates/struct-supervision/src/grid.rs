@@ -76,8 +76,22 @@ pub fn render_table_md(headers: &[String], rows: &[Vec<String>]) -> String {
         c.replace('|', "\\|").replace('\n', " ").trim().to_string()
     }
     let mut lines = vec![
-        format!("| {} |", headers.iter().map(|h| esc(h)).collect::<Vec<_>>().join(" | ")),
-        format!("| {} |", headers.iter().map(|_| "---").collect::<Vec<_>>().join(" | ")),
+        format!(
+            "| {} |",
+            headers
+                .iter()
+                .map(|h| esc(h))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ),
+        format!(
+            "| {} |",
+            headers
+                .iter()
+                .map(|_| "---")
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ),
     ];
     for r in rows {
         lines.push(format!(
@@ -119,7 +133,12 @@ mod tests {
 
     #[test]
     fn sanitize_headers_dedups_and_fills() {
-        let hdr = vec!["a".to_string(), "a".to_string(), "".to_string(), "a".to_string()];
+        let hdr = vec![
+            "a".to_string(),
+            "a".to_string(),
+            "".to_string(),
+            "a".to_string(),
+        ];
         assert_eq!(sanitize_headers(&hdr), vec!["a", "a_2", "col_2", "a_3"]);
     }
 

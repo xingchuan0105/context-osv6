@@ -1,8 +1,8 @@
 use app_core::{AppConfig, load_prompt_template};
-use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::{
     EntityIndexRecord, GraphPassageIndexRecord, RelationIndexRecord, TextChunkIndexRecord,
 };
+use contracts::auth_runtime::{AuthContext, SubjectKind, UserId};
 use ingestion::SourceLocator;
 use ingestion::parser::{ParsePlan, ParseRoute, ParseRouteDecision, RouteReason};
 use std::{env, fs};

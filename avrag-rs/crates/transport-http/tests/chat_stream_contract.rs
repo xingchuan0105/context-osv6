@@ -1,14 +1,14 @@
-use app_bootstrap::AppState;
 use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage};
+use app_bootstrap::AppState;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::AppConfig;
-use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
 use common::{CreateDocumentRequest, CreateWorkspaceRequest};
+use contracts::auth_runtime::{AuthContext, SubjectKind, UserId};
 use contracts::chat::ChatEvent;
 use contracts::chat::ChatResponse;
 use contracts::documents::DocumentStatus;
@@ -110,6 +110,7 @@ impl Agent for ScriptedAgent {
                 total_tokens: 3,
                 request_count: 1,
                 cached_tokens: 0,
+                reasoning_tokens: 0,
             }),
             ..Default::default()
         })
@@ -440,7 +441,10 @@ async fn test_app() -> (axum::Router, String, Uuid) {
     let mut state = AppState::new(AppConfig::default());
     state.set_agent_service(test_agent_service());
     let owner_user_id = Uuid::new_v4();
-    let state = state.with_auth(AuthContext::new(UserId::from(owner_user_id), SubjectKind::User));
+    let state = state.with_auth(AuthContext::new(
+        UserId::from(owner_user_id),
+        SubjectKind::User,
+    ));
     // Product App surface (T1): workspace ops live on WorkspaceApp, not AppState.
     let notebook = state
         .workspace()
@@ -459,7 +463,10 @@ async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) 
     state.set_uses_memory_adapters(false);
     state.set_agent_service(test_agent_service());
     let owner_user_id = Uuid::new_v4();
-    let state = state.with_auth(AuthContext::new(UserId::from(owner_user_id), SubjectKind::User));
+    let state = state.with_auth(AuthContext::new(
+        UserId::from(owner_user_id),
+        SubjectKind::User,
+    ));
     let ws = state.workspace();
     let notebook = ws
         .create_workspace(CreateWorkspaceRequest {
@@ -486,7 +493,12 @@ async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) 
         .await
         .unwrap();
 
-    (build_router(state), notebook.id, upload.document_id, owner_user_id)
+    (
+        build_router(state),
+        notebook.id,
+        upload.document_id,
+        owner_user_id,
+    )
 }
 
 fn chat_post_request(

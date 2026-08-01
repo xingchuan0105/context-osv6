@@ -25,7 +25,7 @@ pub use protocols::{
     Protocol,
 };
 pub use provider_profiles::{
-    AuthStyle, ProtocolKind, ProviderProfile, PROVIDER_PROFILES, api_key_url_for_provider,
+    AuthStyle, PROVIDER_PROFILES, ProtocolKind, ProviderProfile, api_key_url_for_provider,
     find_provider_profile,
 };
 pub use providers::Provider;
@@ -56,9 +56,7 @@ pub use section_index::{
 pub use summary::SummaryGenerator;
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
-pub use usage_observer::{
-    ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver,
-};
+pub use usage_observer::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
 
 #[async_trait::async_trait]
 pub trait LlmProvider: Send + Sync {

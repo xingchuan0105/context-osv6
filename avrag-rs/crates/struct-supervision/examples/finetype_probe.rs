@@ -42,9 +42,15 @@ fn main() {
             "SELECT ft_infer('2024-01-15')",
             "SELECT ft_cast('01/15/2024')",
         ] {
-            match con.prepare(sql).and_then(|mut s| s.query_row([], |r| r.get::<_, String>(0))) {
+            match con
+                .prepare(sql)
+                .and_then(|mut s| s.query_row([], |r| r.get::<_, String>(0)))
+            {
                 Ok(v) => println!("R2 {sql} => {v}"),
-                Err(e) => println!("R2 {sql} => FAIL: {}", e.to_string().lines().next().unwrap_or("")),
+                Err(e) => println!(
+                    "R2 {sql} => FAIL: {}",
+                    e.to_string().lines().next().unwrap_or("")
+                ),
             }
         }
     }
@@ -60,12 +66,27 @@ fn main() {
 
     // ── 路线3：无扩展纯 SQL 规整（加固只读连接内）──
     let probe_sqls = [
-        ("num comma", "SELECT TRY_CAST(replace('1,234,567.89', ',', '') AS DOUBLE)"),
-        ("num currency", "SELECT TRY_CAST(regexp_replace('¥9,876.21', '[^0-9.\\-]', '', 'g') AS DOUBLE)"),
-        ("pct", "SELECT TRY_CAST(replace('12%', '%', '') AS DOUBLE) / 100"),
+        (
+            "num comma",
+            "SELECT TRY_CAST(replace('1,234,567.89', ',', '') AS DOUBLE)",
+        ),
+        (
+            "num currency",
+            "SELECT TRY_CAST(regexp_replace('¥9,876.21', '[^0-9.\\-]', '', 'g') AS DOUBLE)",
+        ),
+        (
+            "pct",
+            "SELECT TRY_CAST(replace('12%', '%', '') AS DOUBLE) / 100",
+        ),
         ("date iso", "SELECT TRY_CAST('2024-01-15' AS DATE)"),
-        ("date slash", "SELECT TRY_CAST(strptime('2024/1/5', '%Y/%-m/%-d') AS DATE)"),
-        ("date cjk", "SELECT TRY_CAST(strptime('2024年3月8日', '%Y年%m月%d日') AS DATE)"),
+        (
+            "date slash",
+            "SELECT TRY_CAST(strptime('2024/1/5', '%Y/%-m/%-d') AS DATE)",
+        ),
+        (
+            "date cjk",
+            "SELECT TRY_CAST(strptime('2024年3月8日', '%Y年%m月%d日') AS DATE)",
+        ),
         ("garbage", "SELECT TRY_CAST('不适用' AS DOUBLE)"),
     ];
     for (name, sql) in probe_sqls {
@@ -76,7 +97,10 @@ fn main() {
             })
         }) {
             Ok(v) => println!("R3 {name}: {sql} => {v}"),
-            Err(e) => println!("R3 {name}: FAIL: {}", e.to_string().lines().next().unwrap_or("")),
+            Err(e) => println!(
+                "R3 {name}: FAIL: {}",
+                e.to_string().lines().next().unwrap_or("")
+            ),
         }
     }
     // 列级判定：一列非空值 ≥90% 可转数值（影子列判定逻辑的 SQL 形态验证）

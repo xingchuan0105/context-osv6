@@ -121,7 +121,11 @@ impl RetrievalPlanner {
         let model = &self.llm.config.model;
         let cache_key = planner_cache_key(model, query, docscope, session_context);
         if let Some(cache) = &self.cache {
-            match cache.get(&cache_key).await.and_then(|raw| serde_json::from_str::<RagPlan>(&raw).ok()) {
+            match cache
+                .get(&cache_key)
+                .await
+                .and_then(|raw| serde_json::from_str::<RagPlan>(&raw).ok())
+            {
                 Some(plan) => return Ok((plan, LlmUsage::zeroed())),
                 _ => {}
             }
@@ -149,7 +153,11 @@ impl RetrievalPlanner {
 
         if let Some(cache) = &self.cache {
             let _ = cache
-                .set(&cache_key, &serde_json::to_string(&plan).unwrap_or_default(), PLANNER_CACHE_TTL_SECS)
+                .set(
+                    &cache_key,
+                    &serde_json::to_string(&plan).unwrap_or_default(),
+                    PLANNER_CACHE_TTL_SECS,
+                )
                 .await;
         }
 

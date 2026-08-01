@@ -359,8 +359,7 @@ impl MessagePort for MemoryChatPersistence {
                 .map(|s| s.id.clone())
                 .collect(),
         };
-        let exclude: std::collections::HashSet<i64> =
-            exclude_message_ids.iter().copied().collect();
+        let exclude: std::collections::HashSet<i64> = exclude_message_ids.iter().copied().collect();
         let mut hits = Vec::new();
         for sk in session_keys {
             let Some(messages) = state.messages.get(&sk) else {
@@ -565,8 +564,8 @@ impl ChatSideEffectPort for MemoryChatPersistence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
     use crate::chat_persistence::{MessagePort, SessionPort};
+    use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 
     fn auth(org: Uuid, user: Uuid) -> AuthContext {
         AuthContext::new(UserId::from(org), SubjectKind::User).with_actor_id(ActorId::new(user))
@@ -668,6 +667,12 @@ mod tests {
         let sid = Uuid::parse_str(&session.id).unwrap();
         let other_auth = auth(other, user);
         assert!(store.get_session(&other_auth, sid).await.unwrap().is_none());
-        assert!(store.list_sessions(&other_auth, None).await.unwrap().is_empty());
+        assert!(
+            store
+                .list_sessions(&other_auth, None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 }

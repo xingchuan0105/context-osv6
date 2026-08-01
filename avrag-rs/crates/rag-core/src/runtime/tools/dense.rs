@@ -117,10 +117,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     let chunk_total = if doc_ids.is_empty() {
         0
     } else {
-        runtime
-            .count_text_chunks(auth, &doc_ids)
-            .await
-            .unwrap_or(0)
+        runtime.count_text_chunks(auth, &doc_ids).await.unwrap_or(0)
     };
     let rough_budget = dynamic_rough_recall(chunk_total);
     // K1: the fixed `dynamic_final_feed` ratio cut is REPLACED by the
@@ -169,8 +166,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
 
             // Merge dense lists (no bm25 here) into a text pool, rerank the
             // combined text + multimodal pool, then cut to the dynamic final budget.
-            let text_pool =
-                runtime.merge_text_stage_with_budget(lists, Vec::new(), rough_budget);
+            let text_pool = runtime.merge_text_stage_with_budget(lists, Vec::new(), rough_budget);
             let reranked = match runtime
                 .multimodal_rerank_stage_with_budget(
                     &query,
@@ -198,8 +194,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             // width comes from the score shape, not a fixed ratio.
             let rerank_scores: Vec<f32> = reranked.iter().map(|c| c.score).collect();
             let adaptive = super::super::adaptive_k::adaptive_k(&rerank_scores);
-            let mut chunks =
-                runtime.cut_final_candidates_stage_with_budget(reranked, adaptive.k);
+            let mut chunks = runtime.cut_final_candidates_stage_with_budget(reranked, adaptive.k);
 
             if chunks.is_empty()
                 && (embedding_failure_in_trace(&degrade_trace) || !degrade_trace.is_empty())

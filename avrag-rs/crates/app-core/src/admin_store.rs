@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use chrono::{DateTime, Utc};
 use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 use contracts::auth_runtime::UserId;
 
 use crate::admin_domain::{
-    AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo, AdminRagHealthStatus,
-    AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
+    AdminAccountInfo, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
+    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry,
+    AdminRagHealthStatus, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use crate::domain_rows::UserProfileRow;
 
@@ -112,7 +112,11 @@ pub trait AdminStorePort: Send + Sync {
         per_page: usize,
     ) -> Result<Vec<AdminAccountInfo>, AppError>;
 
-    async fn get_account(&self, auth: &AuthContext, owner_user_id: UserId) -> Result<AdminAccountInfo, AppError>;
+    async fn get_account(
+        &self,
+        auth: &AuthContext,
+        owner_user_id: UserId,
+    ) -> Result<AdminAccountInfo, AppError>;
 
     async fn list_users(
         &self,

@@ -4,7 +4,6 @@ use app_core::{AnalyticsServiceCtx, StorageContext};
 use contracts::auth_runtime::AuthContext;
 use futures::Stream;
 
-
 pub struct WorkspaceApp<'a> {
     pub(crate) docs: &'a app_documents::DocumentContext,
     pub(crate) auth: &'a AuthContext,
@@ -15,9 +14,7 @@ pub struct WorkspaceApp<'a> {
 
 impl<'a> WorkspaceApp<'a> {
     pub async fn list_workspaces(&self) -> Vec<contracts::workspaces::Workspace> {
-        self.docs
-            .list_workspaces(self.auth, self.storage)
-            .await
+        self.docs.list_workspaces(self.auth, self.storage).await
     }
 
     pub async fn get_workspace(
@@ -100,11 +97,7 @@ impl<'a> WorkspaceApp<'a> {
         stream: S,
     ) -> Result<common::StatusOnlyResponse, common::AppError>
     where
-        S: Stream<Item = std::result::Result<bytes::Bytes, E>>
-            + Send
-            + Sync
-            + Unpin
-            + 'static,
+        S: Stream<Item = std::result::Result<bytes::Bytes, E>> + Send + Sync + Unpin + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         self.docs
@@ -208,4 +201,3 @@ impl<'a> WorkspaceApp<'a> {
             .await
     }
 }
-

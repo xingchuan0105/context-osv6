@@ -1,5 +1,5 @@
 use crate::schema::LlmError;
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::Serialize;
 
 pub async fn post_json(

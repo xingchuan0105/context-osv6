@@ -892,6 +892,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "avrag-llm",
+ "avrag-rag-core-ports",
  "common",
  "contracts",
  "rayon",

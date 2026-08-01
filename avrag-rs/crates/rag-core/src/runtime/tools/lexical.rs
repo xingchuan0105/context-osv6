@@ -84,10 +84,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             let adaptive = super::super::adaptive_k::adaptive_k(&scores);
             let mut chunks = chunks;
             chunks.truncate(adaptive.k);
-            let chunk_json: Vec<_> = chunks
-                .iter()
-                .map(super::scored_chunk_to_json)
-                .collect();
+            let chunk_json: Vec<_> = chunks.iter().map(super::scored_chunk_to_json).collect();
             // K1: always the object shape — carries the adaptive-k decision +
             // coaching hint; graph_context rides as before. Extractors
             // (store/progress/eval/observed-ids) tolerate both shapes.
@@ -229,9 +226,7 @@ async fn zero_hit_data_hint(
             zeros.join("」「")
         )
     } else {
-        format!(
-            "0 命中（多词 AND）：{detail}——各词分别存在但不共现于同一段；减词或拆成单词查询。"
-        )
+        format!("0 命中（多词 AND）：{detail}——各词分别存在但不共现于同一段；减词或拆成单词查询。")
     }
 }
 

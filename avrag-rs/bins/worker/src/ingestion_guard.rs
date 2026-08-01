@@ -1,10 +1,10 @@
 use anyhow::Result;
-use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{
     DocumentCleanupTask, DocumentCleanupTaskCompletionOutcome, DocumentCleanupTaskFailureOutcome,
     ObjectStoreHandle, PgAppRepository, PgStorageError,
 };
+use contracts::auth_runtime::AuthContext;
 use ingestion::{IngestionError, IngestionTask};
 use sha2::{Digest, Sha256};
 use std::sync::{
@@ -106,7 +106,11 @@ pub(crate) fn spawn_ingestion_task_lock_heartbeat(
 
         loop {
             heartbeat.tick().await;
-            match repo.ingestion_queue().renew_ingestion_task_lock(&task_id, &lock_token).await {
+            match repo
+                .ingestion_queue()
+                .renew_ingestion_task_lock(&task_id, &lock_token)
+                .await
+            {
                 Ok(true) => {}
                 Ok(false) => warn!(
                     task_id = %task_id,

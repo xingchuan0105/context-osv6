@@ -39,7 +39,10 @@ pub fn apply(s: &mut Session, tid: &str, d: &serde_json::Value) -> Result<(), St
 fn rotate_header(s: &mut Session, idx: usize, d: &serde_json::Value) -> Result<(), String> {
     let hr = d.get("header_row").and_then(|v| v.as_i64()).unwrap_or(1);
     if hr < 1 || hr as usize > s.grids[idx].n_rows() {
-        return Err(format!("header_row={hr} 超出数据行范围(1..{})", s.grids[idx].n_rows()));
+        return Err(format!(
+            "header_row={hr} 超出数据行范围(1..{})",
+            s.grids[idx].n_rows()
+        ));
     }
     let pat = d.get("drop_columns_matching").and_then(|v| v.as_str());
     let g = &mut s.grids[idx];
@@ -70,18 +73,17 @@ fn rotate_header(s: &mut Session, idx: usize, d: &serde_json::Value) -> Result<(
             .collect(),
     };
     g.rows = vec![new_header];
-    g.rows.extend(
-        body.iter()
-            .skip(hr_usize + 1)
-            .map(|r| Row {
-                line: r.line,
-                cells: keep
-                    .iter()
-                    .map(|&k| r.cells.get(k).cloned().unwrap_or_default())
-                    .collect(),
-            }),
-    );
-    g.notes.push(format!("directive:rotate_header(header_row={hr})"));
+    g.rows.extend(body.iter().skip(hr_usize + 1).map(|r| {
+        Row {
+            line: r.line,
+            cells: keep
+                .iter()
+                .map(|&k| r.cells.get(k).cloned().unwrap_or_default())
+                .collect(),
+        }
+    }));
+    g.notes
+        .push(format!("directive:rotate_header(header_row={hr})"));
     Ok(())
 }
 
@@ -90,7 +92,11 @@ fn set_header(s: &mut Session, idx: usize, d: &serde_json::Value) -> Result<(), 
     let headers: Vec<String> = d
         .get("headers")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let ev = d
         .get("evidence_source_line")
@@ -109,21 +115,34 @@ fn set_header(s: &mut Session, idx: usize, d: &serde_json::Value) -> Result<(), 
     } else {
         String::new()
     };
-    let missing: Vec<&String> = headers.iter().filter(|h| !line.contains(h.as_str())).collect();
+    let missing: Vec<&String> = headers
+        .iter()
+        .filter(|h| !line.contains(h.as_str()))
+        .collect();
     if !missing.is_empty() {
         return Err(format!("守卫:{missing:?} 未出现在证据行 L{ev}"));
     }
     g.rows[0].cells = headers;
-    g.notes.push(format!("directive:set_header(evidence=L{ev})"));
+    g.notes
+        .push(format!("directive:set_header(evidence=L{ev})"));
     Ok(())
 }
 
 /// merge_tables：同表头签名表合并（守卫：签名必须一致；tid 必须在首位且不重复——禁自并）。
-fn merge_tables(s: &mut Session, tid: &str, idx: usize, d: &serde_json::Value) -> Result<(), String> {
+fn merge_tables(
+    s: &mut Session,
+    tid: &str,
+    idx: usize,
+    d: &serde_json::Value,
+) -> Result<(), String> {
     let mut ids: Vec<String> = d
         .get("table_ids")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     // 从 ids 中移除 tid（如有），再插入首位；若 ids 中本已包含 tid 则拒绝（禁自并）。
     let had_tid = ids.iter().any(|i| i == tid);

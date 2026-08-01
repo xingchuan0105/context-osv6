@@ -1,3 +1,1 @@
-pub use crate::schema::{
-    ChatMessage, ContentPart, ImageUrlDetail, LlmResponse, LlmUsage,
-};
+pub use crate::schema::{ChatMessage, ContentPart, ImageUrlDetail, LlmResponse, LlmUsage};

@@ -1,5 +1,6 @@
 use crate::protocols::{
-    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, OpenAiResponsesProtocol, Protocol,
+    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, OpenAiResponsesProtocol,
+    Protocol,
 };
 use crate::route::{auth::Auth, endpoint::Endpoint, framing::SseFramer, transport};
 use crate::schema::{LlmError, LlmEvent, LlmRequest, LlmResponse};
@@ -322,7 +323,7 @@ pub fn build_openai_responses_route(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_route_from_config, detect_protocol, AnyRoute, DetectedProtocol};
+    use super::{AnyRoute, DetectedProtocol, build_route_from_config, detect_protocol};
 
     #[test]
     fn detect_protocol_routes_anthropic_and_gemini() {

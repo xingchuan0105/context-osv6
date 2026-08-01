@@ -68,11 +68,11 @@ impl AgentPreferenceConsolidationJobRunner {
             where owner_user_id is not null
             "#,
         )
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .filter_map(|row| row.try_get::<Uuid, _>("id").ok())
-            .collect::<Vec<_>>();
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .filter_map(|row| row.try_get::<Uuid, _>("id").ok())
+        .collect::<Vec<_>>();
 
         let mut updated_profiles = 0usize;
         for owner_user_id in owner_ids {

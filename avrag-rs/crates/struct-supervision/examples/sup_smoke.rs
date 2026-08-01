@@ -11,5 +11,8 @@ fn main() {
     println!("SMOKE OK: ipd 370 rows; run_check guard works");
     let brief = s.briefing("huawei_ipd_370_activities.xlsx.md");
     assert!(brief.contains("共 1 张表"));
-    println!("briefing head: {}", &brief.chars().take(120).collect::<String>());
+    println!(
+        "briefing head: {}",
+        &brief.chars().take(120).collect::<String>()
+    );
 }

@@ -5,10 +5,19 @@ use std::path::PathBuf;
 
 use avrag_struct_supervision::{SuperviseConfig, SuperviseInput, runner::supervise};
 
-fn parse_args() -> anyhow::Result<(PathBuf, PathBuf, Option<PathBuf>, usize, bool, Option<String>)> {
+fn parse_args() -> anyhow::Result<(
+    PathBuf,
+    PathBuf,
+    Option<PathBuf>,
+    usize,
+    bool,
+    Option<String>,
+)> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        anyhow::bail!("usage: struct-supervise <input.grids.json> --out <doc>.duckdb [--report sup.json] [--max-turns 40] [--dry-run]");
+        anyhow::bail!(
+            "usage: struct-supervise <input.grids.json> --out <doc>.duckdb [--report sup.json] [--max-turns 40] [--dry-run]"
+        );
     }
     let input = PathBuf::from(&args[0]);
     let mut out: Option<PathBuf> = None;
@@ -42,7 +51,14 @@ fn parse_args() -> anyhow::Result<(PathBuf, PathBuf, Option<PathBuf>, usize, boo
             other => anyhow::bail!("未知参数:{other}"),
         }
     }
-    Ok((input, out.unwrap_or_else(|| PathBuf::from("/tmp/sup_doc.duckdb")), report, max_turns, dry_run, doc_id))
+    Ok((
+        input,
+        out.unwrap_or_else(|| PathBuf::from("/tmp/sup_doc.duckdb")),
+        report,
+        max_turns,
+        dry_run,
+        doc_id,
+    ))
 }
 
 #[tokio::main]

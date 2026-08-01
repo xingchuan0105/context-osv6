@@ -25,7 +25,10 @@ pub(crate) async fn generate_document_summary(
     let mut skip_llm_summary = false;
 
     if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
-        match svc.check_quota(context.user_id().into_uuid(), user_id).await {
+        match svc
+            .check_quota(context.user_id().into_uuid(), user_id)
+            .await
+        {
             Ok(quota) => {
                 if quota.blocked_5h || quota.blocked_7d {
                     info!(document_id = %document_id, user_id = %user_id, "skipping LLM summary — quota exhausted");
@@ -62,7 +65,9 @@ pub(crate) async fn generate_document_summary(
     .await
     .is_ok()
     {
-        if let Err(error) = processor.storage.repo
+        if let Err(error) = processor
+            .storage
+            .repo
             .documents()
             .update_document_summary(
                 context,

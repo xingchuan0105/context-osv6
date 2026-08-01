@@ -5,7 +5,6 @@ use contracts::auth_runtime::AuthContext;
 use std::sync::Arc;
 use uuid::Uuid;
 
-
 pub struct ShareApp<'a> {
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
@@ -231,4 +230,3 @@ impl<'a> ShareApp<'a> {
         Uuid::parse_str(&workspace_id).ok()
     }
 }
-

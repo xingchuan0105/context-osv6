@@ -4,9 +4,9 @@ use crate::adapters::RedisRateLimitBackend;
 use anyhow::Result as AnyResult;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::{AdminStorePort, AppConfig, BillingStorePort, ShareStorePort};
-use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use common::AppError;
+use contracts::auth_runtime::AuthContext;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -310,11 +310,8 @@ impl AppState {
         expires: u64,
         signature: &str,
     ) -> Result<(), AppError> {
-        self.storage.objects().verify_upload_signature(
-            document_id,
-            object_path,
-            expires,
-            signature,
-        )
+        self.storage
+            .objects()
+            .verify_upload_signature(document_id, object_path, expires, signature)
     }
 }

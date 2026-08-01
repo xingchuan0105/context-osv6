@@ -14,7 +14,8 @@ async fn memory_state() -> AppState {
 }
 
 async fn create_workspace(state: &AppState) -> contracts::workspaces::Workspace {
-    state.workspace()
+    state
+        .workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "delegate-contract".into(),
             description: String::new(),
@@ -70,7 +71,11 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
 async fn citation_asset_missing_returns_not_found_in_memory_mode() {
     let state = memory_state().await;
 
-    let err = state.agent().get_citation_asset("asset-1").await.unwrap_err();
+    let err = state
+        .agent()
+        .get_citation_asset("asset-1")
+        .await
+        .unwrap_err();
 
     assert_eq!(err.code(), "asset_not_found");
     assert_eq!(err.http_status(), 404);
@@ -90,12 +95,16 @@ async fn list_sessions_empty_for_new_workspace() {
 async fn execute_chat_empty_query_returns_validation_error() {
     let state = memory_state().await;
 
-    let err = state.agent()
-        .execute_chat(contracts::chat::ChatRequest {
+    let err = state
+        .conversation()
+        .execute(contracts::chat::ChatRequest {
             query: "   ".to_string(),
             workspace_id: None,
             session_id: None,
             agent_type: "chat".to_string(),
+            capabilities: None,
+            client_context: None,
+            client_ip: None,
             source_type: None,
             source_token: None,
             doc_scope: Vec::new(),
@@ -119,12 +128,15 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
     let notebook = create_workspace(&state).await;
 
     let err = state
-        .agent()
-        .execute_chat(contracts::chat::ChatRequest {
+        .conversation()
+        .execute(contracts::chat::ChatRequest {
             query: "hello from delegate contract".to_string(),
             workspace_id: Some(notebook.id.clone()),
             session_id: None,
             agent_type: "chat".to_string(),
+            capabilities: None,
+            client_context: None,
+            client_ip: None,
             source_type: None,
             source_token: None,
             doc_scope: Vec::new(),
@@ -164,7 +176,11 @@ async fn admin_create_share_token_succeeds_for_existing_notebook() {
     let state = memory_state().await;
     let notebook = create_workspace(&state).await;
 
-    let response = state.share().create_share_token(&notebook.id).await.unwrap();
+    let response = state
+        .share()
+        .create_share_token(&notebook.id)
+        .await
+        .unwrap();
 
     assert!(
         response.share_token.starts_with("share_"),
@@ -193,10 +209,13 @@ async fn admin_create_share_token_missing_notebook_returns_not_found() {
 
 #[tokio::test]
 async fn admin_ops_without_actor_is_unauthorized() {
-    use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
+    use contracts::auth_runtime::{AuthContext, SubjectKind, UserId};
     let state = memory_state().await;
     // Memory bootstrap attaches a default actor; strip it for this contract.
-    let state = state.with_auth(AuthContext::new(UserId::from(uuid::Uuid::nil()), SubjectKind::User));
+    let state = state.with_auth(AuthContext::new(
+        UserId::from(uuid::Uuid::nil()),
+        SubjectKind::User,
+    ));
     let err = state.admin_ops().list_feature_flags().await.unwrap_err();
     assert_eq!(err.http_status(), 401);
     assert_eq!(err.code(), "unauthorized");

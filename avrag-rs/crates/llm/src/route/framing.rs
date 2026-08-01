@@ -45,8 +45,9 @@ impl SseFramer {
         let mut frames = Vec::new();
 
         if !self.buffer.is_empty() {
-            let line = String::from_utf8(std::mem::take(&mut self.buffer))
-                .map_err(|e| LlmError::parse(format!("invalid UTF-8 in SSE trailing buffer: {e}")))?;
+            let line = String::from_utf8(std::mem::take(&mut self.buffer)).map_err(|e| {
+                LlmError::parse(format!("invalid UTF-8 in SSE trailing buffer: {e}"))
+            })?;
             let normalized = line.trim_end_matches('\r');
             if let Some(value) = normalized.strip_prefix("data:") {
                 self.data_lines.push(value.trim_start().to_string());

@@ -5,22 +5,18 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use common::{
-    ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, new_id, now_rfc3339,
-};
+use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, new_id, now_rfc3339};
 use contracts::auth_runtime::{AuthContext, UserId};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::admin_domain::{
-    AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminAccountInfo, AdminRagHealthStatus,
-    AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
+    AdminAccountInfo, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
+    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry,
+    AdminRagHealthStatus, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use crate::admin_store::AdminStorePort;
-use crate::api_key::{
-    MemoryApiKeyRecord, deactivate_memory_api_key, register_memory_api_key,
-};
+use crate::api_key::{MemoryApiKeyRecord, deactivate_memory_api_key, register_memory_api_key};
 use crate::domain_rows::UserProfileRow;
 use crate::state_types::MemoryState;
 
@@ -169,8 +165,8 @@ impl AdminStorePort for MemoryAdminStore {
         _auth: &AuthContext,
         profile: &UserProfileRow,
     ) -> Result<(), AppError> {
-        let preferences = serde_json::from_value(profile.custom_preferences.clone())
-            .unwrap_or_default();
+        let preferences =
+            serde_json::from_value(profile.custom_preferences.clone()).unwrap_or_default();
         let mut state = self.state.write().await;
         state
             .user_preferences
@@ -203,9 +199,7 @@ impl AdminStorePort for MemoryAdminStore {
         let row = ApiKeyRow {
             id: new_id(),
             owner_user_id: owner_user_id.clone(),
-            workspace_id: workspace_id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
+            workspace_id: workspace_id.map(|id| id.to_string()).unwrap_or_default(),
             key_prefix: plaintext_key.chars().take(12).collect(),
             name: name.to_string(),
             permissions: permissions.to_vec(),
@@ -322,7 +316,11 @@ impl AdminStorePort for MemoryAdminStore {
         Ok(Vec::new())
     }
 
-    async fn get_account(&self, _auth: &AuthContext, _org_id: UserId) -> Result<AdminAccountInfo, AppError> {
+    async fn get_account(
+        &self,
+        _auth: &AuthContext,
+        _org_id: UserId,
+    ) -> Result<AdminAccountInfo, AppError> {
         Err(AppError::not_found(
             "org_not_found",
             "Organization not found",

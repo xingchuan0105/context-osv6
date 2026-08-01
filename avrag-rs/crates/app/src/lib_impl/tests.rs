@@ -215,14 +215,16 @@ mod tests {
     #[tokio::test]
     async fn memory_delete_document_soft_deletes_and_hides_document() {
         let state = AppState::new(AppConfig::default());
-        let notebook = state.workspace()
+        let notebook = state
+            .workspace()
             .create_workspace(CreateWorkspaceRequest {
                 name: "soft delete".to_string(),
                 description: String::new(),
             })
             .await
             .unwrap();
-        let upload = state.workspace()
+        let upload = state
+            .workspace()
             .create_document_upload(
                 &notebook.id,
                 CreateDocumentRequest {
@@ -233,22 +235,29 @@ mod tests {
             )
             .await
             .unwrap();
-        state.workspace()
+        state
+            .workspace()
             .put_uploaded_document(&upload.document_id, b"hello world".to_vec())
             .await
             .unwrap();
 
-        let response = state.workspace().delete_document(&upload.document_id).await.unwrap();
+        let response = state
+            .workspace()
+            .delete_document(&upload.document_id)
+            .await
+            .unwrap();
 
         assert_eq!(response.status, "deleting");
         assert!(
-            state.workspace()
+            state
+                .workspace()
                 .list_documents(Some(&notebook.id), Some(&upload.document_id))
                 .await
                 .is_empty()
         );
         assert_eq!(
-            state.workspace()
+            state
+                .workspace()
                 .get_document_content(&upload.document_id)
                 .await
                 .unwrap_err()
@@ -260,14 +269,16 @@ mod tests {
     #[tokio::test]
     async fn memory_update_document_rejects_deletion_workflow_statuses() {
         let state = AppState::new(AppConfig::default());
-        let notebook = state.workspace()
+        let notebook = state
+            .workspace()
             .create_workspace(CreateWorkspaceRequest {
                 name: "status guard".to_string(),
                 description: String::new(),
             })
             .await
             .unwrap();
-        let upload = state.workspace()
+        let upload = state
+            .workspace()
             .create_document_upload(
                 &notebook.id,
                 CreateDocumentRequest {
@@ -279,7 +290,8 @@ mod tests {
             .await
             .unwrap();
 
-        let error = state.workspace()
+        let error = state
+            .workspace()
             .update_document(
                 &upload.document_id,
                 UpdateDocumentRequest {
@@ -293,7 +305,8 @@ mod tests {
 
         assert_eq!(error.code(), "unsupported_document_status_update");
         assert_eq!(
-            state.workspace()
+            state
+                .workspace()
                 .transition_document_status(&upload.document_id, DocumentStatus::Deleted)
                 .await
                 .unwrap_err()
@@ -301,7 +314,8 @@ mod tests {
             "unsupported_document_status_transition"
         );
         assert_eq!(
-            state.workspace()
+            state
+                .workspace()
                 .list_documents(Some(&notebook.id), Some(&upload.document_id))
                 .await
                 .len(),
@@ -379,6 +393,7 @@ mod tests {
                     total_tokens: 3,
                     request_count: 1,
                     cached_tokens: 0,
+                    reasoning_tokens: 0,
                 }),
                 ..Default::default()
             })
@@ -419,7 +434,8 @@ mod tests {
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
             ScriptedAgent,
         )));
-        let notebook = state.workspace()
+        let notebook = state
+            .workspace()
             .create_workspace(CreateWorkspaceRequest {
                 name: "chat".to_string(),
                 description: String::new(),
@@ -428,13 +444,17 @@ mod tests {
             .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        state.conversation()
+        state
+            .conversation()
             .execute_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
                     workspace_id: Some(notebook.id),
                     session_id: None,
                     agent_type: "chat".to_string(),
+                    capabilities: None,
+                    client_context: None,
+                    client_ip: None,
                     source_type: None,
                     source_token: None,
                     doc_scope: Vec::new(),
@@ -488,7 +508,8 @@ mod tests {
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
             BufferedOnlyAgent,
         )));
-        let notebook = state.workspace()
+        let notebook = state
+            .workspace()
             .create_workspace(CreateWorkspaceRequest {
                 name: "chat".to_string(),
                 description: String::new(),
@@ -497,13 +518,17 @@ mod tests {
             .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        state.conversation()
+        state
+            .conversation()
             .execute_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
                     workspace_id: Some(notebook.id),
                     session_id: None,
                     agent_type: "chat".to_string(),
+                    capabilities: None,
+                    client_context: None,
+                    client_ip: None,
                     source_type: None,
                     source_token: None,
                     doc_scope: Vec::new(),
@@ -550,7 +575,8 @@ mod tests {
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
             BufferedOnlyAgent,
         )));
-        let notebook = state.workspace()
+        let notebook = state
+            .workspace()
             .create_workspace(CreateWorkspaceRequest {
                 name: "search".to_string(),
                 description: String::new(),
@@ -559,13 +585,17 @@ mod tests {
             .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        state.conversation()
+        state
+            .conversation()
             .execute_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
                     workspace_id: Some(notebook.id),
                     session_id: None,
                     agent_type: "search".to_string(),
+                    capabilities: None,
+                    client_context: None,
+                    client_ip: None,
                     source_type: None,
                     source_token: None,
                     doc_scope: Vec::new(),
@@ -612,7 +642,11 @@ mod tests {
             "avrag-app-upload-validation-test-{}",
             Uuid::new_v4()
         ));
-        let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
+        let repo = {
+            let __b = BootstrapRepository::connect(&database_url).await.unwrap();
+            __b.migrate().await.unwrap();
+            PgAppRepository::from_pool(__b.raw().clone())
+        };
 
         let mut config = AppConfig::default();
         config.owner_user_id = Uuid::new_v4().to_string();
@@ -651,9 +685,8 @@ mod tests {
                 infra: crate::storage_context::StorageInfra {
                     postgres_health,
                     postgres_configured: true,
-                    uses_memory_adapters: crate::storage_context::StorageInfra::memory_adapters_flag(
-                        false,
-                    ),
+                    uses_memory_adapters:
+                        crate::storage_context::StorageInfra::memory_adapters_flag(false),
                     max_upload_file_size_bytes: max_upload,
                 },
                 stores: crate::storage_context::StorageStores {
@@ -687,14 +720,16 @@ mod tests {
         filename: &str,
         file_size: u64,
     ) -> (Workspace, CreateDocumentUploadResponse) {
-        let notebook = state.workspace()
+        let notebook = state
+            .workspace()
             .create_workspace(CreateWorkspaceRequest {
                 name: format!("upload validation {filename}"),
                 description: String::new(),
             })
             .await
             .unwrap();
-        let upload = state.workspace()
+        let upload = state
+            .workspace()
             .create_document_upload(
                 &notebook.id,
                 CreateDocumentRequest {
@@ -713,7 +748,8 @@ mod tests {
         workspace_id: &str,
         document_id: &str,
     ) -> DocumentStatus {
-        state.workspace()
+        state
+            .workspace()
             .list_documents(Some(workspace_id), Some(document_id))
             .await
             .into_iter()
@@ -728,7 +764,8 @@ mod tests {
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .ingestion_queue().count_ingestion_tasks_for_document(state.auth(), document_uuid)
+            .ingestion_queue()
+            .count_ingestion_tasks_for_document(state.auth(), document_uuid)
             .await
             .unwrap()
     }
@@ -740,7 +777,8 @@ mod tests {
         };
         let (notebook, upload) = create_upload(&state, "missing-object.txt", 11).await;
 
-        let error = state.workspace()
+        let error = state
+            .workspace()
             .complete_document_upload(&upload.document_id)
             .await
             .unwrap_err();
@@ -761,12 +799,14 @@ mod tests {
         };
         let body = b"hello world".to_vec();
         let (notebook, upload) = create_upload(&state, "size-mismatch.txt", 12).await;
-        state.workspace()
+        state
+            .workspace()
             .put_uploaded_document(&upload.document_id, body)
             .await
             .unwrap();
 
-        let error = state.workspace()
+        let error = state
+            .workspace()
             .complete_document_upload(&upload.document_id)
             .await
             .unwrap_err();
@@ -787,12 +827,14 @@ mod tests {
         };
         let body = b"hello world".to_vec();
         let (notebook, upload) = create_upload(&state, "valid-upload.txt", body.len() as u64).await;
-        state.workspace()
+        state
+            .workspace()
             .put_uploaded_document(&upload.document_id, body)
             .await
             .unwrap();
 
-        let response = state.workspace()
+        let response = state
+            .workspace()
             .complete_document_upload(&upload.document_id)
             .await
             .unwrap();
@@ -808,7 +850,8 @@ mod tests {
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .documents().get_document_upload_validation(
+            .documents()
+            .get_document_upload_validation(
                 state.auth(),
                 Uuid::parse_str(&upload.document_id).unwrap(),
             )

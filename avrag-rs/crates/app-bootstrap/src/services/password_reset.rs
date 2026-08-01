@@ -40,10 +40,7 @@ impl PasswordResetConfig {
             smtp_from: env_first(&["MAIL_FROM", "SMTP_FROM"], ""),
             smtp_from_name: non_empty(env_first(&["SMTP_FROM_NAME"], "")),
             smtp_tls: parse_bool(&env_first(&["SMTP_TLS"], "true"), true),
-            reset_code_secret: env_first(
-                &["RESET_CODE_SECRET"],
-                "context-osv6-local-reset-secret",
-            ),
+            reset_code_secret: env_first(&["RESET_CODE_SECRET"], "context-osv6-local-reset-secret"),
         }
     }
 
@@ -56,7 +53,11 @@ impl PasswordResetConfig {
 
 fn env_first(keys: &[&str], default: &str) -> String {
     keys.iter()
-        .find_map(|key| std::env::var(key).ok().filter(|value| !value.trim().is_empty()))
+        .find_map(|key| {
+            std::env::var(key)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
         .unwrap_or_else(|| default.to_string())
 }
 
@@ -212,12 +213,11 @@ impl PasswordResetService {
         let resolved_email = user_row.email;
         let code = generate_reset_code();
         let reset_ticket = generate_reset_ticket();
-        let code_hash = self.hash_reset_value(
-            PASSWORD_RESET_PURPOSE,
-            &format!("{resolved_email}:{code}"),
-        );
+        let code_hash =
+            self.hash_reset_value(PASSWORD_RESET_PURPOSE, &format!("{resolved_email}:{code}"));
         let ticket_hash = self.hash_reset_value(PASSWORD_RESET_PURPOSE, &reset_ticket);
-        let code_expires_at = chrono::Utc::now() + chrono::Duration::minutes(RESET_CODE_TTL_MINUTES);
+        let code_expires_at =
+            chrono::Utc::now() + chrono::Duration::minutes(RESET_CODE_TTL_MINUTES);
         let ticket_expires_at =
             chrono::Utc::now() + chrono::Duration::minutes(RESET_TICKET_TTL_MINUTES);
 
@@ -309,9 +309,7 @@ impl PasswordResetService {
             .await
         {
             Ok(user_id) => Ok(user_id),
-            Err(error) if error.http_status() == 400 => {
-                Err(PasswordResetError::InvalidResetTicket)
-            }
+            Err(error) if error.http_status() == 400 => Err(PasswordResetError::InvalidResetTicket),
             Err(error) => {
                 warn!(error = %error, "failed to reset password");
                 Err(PasswordResetError::PasswordResetFailed)

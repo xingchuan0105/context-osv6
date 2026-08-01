@@ -26,7 +26,10 @@ pub(crate) async fn begin_super_admin_tx_sqlx<'a>(
     Ok(tx)
 }
 
-pub(crate) async fn set_rls_owner(conn: &mut PgConnection, owner_user_id: &str) -> Result<(), AppError> {
+pub(crate) async fn set_rls_owner(
+    conn: &mut PgConnection,
+    owner_user_id: &str,
+) -> Result<(), AppError> {
     set_config(conn, "app.current_user", owner_user_id)
         .await
         .map_err(db_err)

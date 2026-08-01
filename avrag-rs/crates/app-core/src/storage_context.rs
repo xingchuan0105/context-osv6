@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use common::{ApiKeyRow, AppError};
 use tokio::sync::RwLock;

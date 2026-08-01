@@ -1,5 +1,5 @@
-use contracts::auth_runtime::UserId;
 use chrono::{DateTime, Utc};
+use contracts::auth_runtime::UserId;
 use serde::Serialize;
 
 /// Admin view of an account (replaces former organization row).

@@ -10,8 +10,8 @@ pub(crate) use super::pg_side_effects::{
     collect_document_text, generate_document_profile_with_llm,
 };
 use anyhow::{Result, anyhow};
-use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::ObjectStoreHandle;
+use contracts::auth_runtime::AuthContext;
 use std::path::{Component, Path};
 use uuid::Uuid;
 
@@ -270,25 +270,24 @@ pub(crate) fn build_parse_warning_payload(
     // dedicated warning whenever any multimodal chunk failed; the ratio is
     // included so consumers can gauge severity. The doc is still Completed
     // (correct degrade behavior) — this only adds visibility.
-    let multimodal_failures = if outputs.multimodal_chunk_count > 0
-        && !outputs.failed_mm_chunks.is_empty()
-    {
-        let failed = outputs.failed_mm_chunks.len();
-        let total = outputs.multimodal_chunk_count;
-        let ratio = (failed as f64) / (total as f64);
-        let severity = if ratio > 0.5 { "high" } else { "low" };
-        serde_json::json!({
-            "code": "multimodal_partial_failure",
-            "failed_chunk_count": failed,
-            "total_chunk_count": total,
-            "failure_ratio": (ratio * 100.0).round() as u64,
-            "severity": severity,
-            "failed_chunk_ids": outputs.failed_mm_chunks,
-            "reasons": outputs.multimodal_degrade_reasons,
-        })
-    } else {
-        serde_json::Value::Null
-    };
+    let multimodal_failures =
+        if outputs.multimodal_chunk_count > 0 && !outputs.failed_mm_chunks.is_empty() {
+            let failed = outputs.failed_mm_chunks.len();
+            let total = outputs.multimodal_chunk_count;
+            let ratio = (failed as f64) / (total as f64);
+            let severity = if ratio > 0.5 { "high" } else { "low" };
+            serde_json::json!({
+                "code": "multimodal_partial_failure",
+                "failed_chunk_count": failed,
+                "total_chunk_count": total,
+                "failure_ratio": (ratio * 100.0).round() as u64,
+                "severity": severity,
+                "failed_chunk_ids": outputs.failed_mm_chunks,
+                "reasons": outputs.multimodal_degrade_reasons,
+            })
+        } else {
+            serde_json::Value::Null
+        };
 
     serde_json::json!({
         "parse_warnings": parse_warnings,

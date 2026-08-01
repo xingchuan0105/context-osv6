@@ -22,7 +22,9 @@ pub(crate) fn triplet_semantic_violation(
     let object = object.trim();
 
     if predicate.chars().count() > MAX_ZH_PREDICATE_CHARS
-        && predicate.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+        && predicate
+            .chars()
+            .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
     {
         return Some(TripletSemanticViolation::PredicateTooLong);
     }

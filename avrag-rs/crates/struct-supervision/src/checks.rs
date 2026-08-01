@@ -81,7 +81,11 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
     });
 
     // header_numeric_banner：表头含纯数字列名（白药 638 案例）
-    let num_hdrs: Vec<String> = hdr.iter().filter(|h| re(PURE_NUM_RE).is_match(h)).cloned().collect();
+    let num_hdrs: Vec<String> = hdr
+        .iter()
+        .filter(|h| re(PURE_NUM_RE).is_match(h))
+        .cloned()
+        .collect();
     checks.push(Check {
         name: "header_numeric_banner".into(),
         passed: num_hdrs.is_empty(),
@@ -104,7 +108,11 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
         detail: if ragged.is_empty() {
             String::new()
         } else {
-            format!("{} 行列数不符, 源行 {:?}", ragged.len(), &ragged[..ragged.len().min(5)])
+            format!(
+                "{} 行列数不符, 源行 {:?}",
+                ragged.len(),
+                &ragged[..ragged.len().min(5)]
+            )
         },
     });
 
@@ -120,7 +128,11 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
         detail: if empty_rows.is_empty() {
             String::new()
         } else {
-            format!("{} 全空行, 源行 {:?}", empty_rows.len(), &empty_rows[..empty_rows.len().min(5)])
+            format!(
+                "{} 全空行, 源行 {:?}",
+                empty_rows.len(),
+                &empty_rows[..empty_rows.len().min(5)]
+            )
         },
     });
 
@@ -305,7 +317,10 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
     // 对齐 pipeline.py:214-221：Python str.isdigit() 仅接受 ASCII 数字 0-9，
     // 拒绝负号与 Unicode 数字；i128 + checked_sub 防极端值 debug panic。
     if !data.is_empty() {
-        let col0: Vec<&str> = data.iter().filter_map(|r| r.cells.first().map(String::as_str)).collect();
+        let col0: Vec<&str> = data
+            .iter()
+            .filter_map(|r| r.cells.first().map(String::as_str))
+            .collect();
         let ints: Vec<i128> = col0
             .iter()
             .filter(|c| c.bytes().all(|b| b.is_ascii_digit()) && !c.is_empty())
@@ -320,7 +335,8 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
             checks.push(Check {
                 name: "sequence".into(),
                 passed: ok,
-                detail: format!("序号 {lo}..{hi}, count={}", ints.len()) + if ok { "" } else { " 断号/重复" },
+                detail: format!("序号 {lo}..{hi}, count={}", ints.len())
+                    + if ok { "" } else { " 断号/重复" },
             });
         }
     }
@@ -397,7 +413,11 @@ pub fn table_report(idx: usize, g: &Grid) -> TableReport {
         start_line: g.start_line,
         headers: sanitize_headers(g.header()),
         n_rows: g.n_rows(),
-        status: if all { "high_candidate".into() } else { "needs_diagnosis".into() },
+        status: if all {
+            "high_candidate".into()
+        } else {
+            "needs_diagnosis".into()
+        },
         failed_checks: checks.iter().filter(|c| !c.passed).cloned().collect(),
         checks_full: checks,
     }
@@ -450,7 +470,11 @@ mod tests {
             ("3", &["3", "b"]), // 缺 2 → 断号
         ]);
         let rep = table_report(0, &grid);
-        let seq = rep.checks_full.iter().find(|c| c.name == "sequence").unwrap();
+        let seq = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "sequence")
+            .unwrap();
         assert!(!seq.passed, "{:?}", seq.detail);
         assert_eq!(rep.status, "needs_diagnosis");
     }
@@ -464,7 +488,11 @@ mod tests {
             ("4", &["合计", "301"]), // 应为 300
         ]);
         let rep = table_report(0, &grid);
-        let tr = rep.checks_full.iter().find(|c| c.name == "total_reconcile").unwrap();
+        let tr = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "total_reconcile")
+            .unwrap();
         assert!(!tr.passed, "{:?}", tr.detail);
         assert!(tr.detail.contains("sum=300"));
     }
@@ -478,7 +506,11 @@ mod tests {
             ("4", &["合计", "300"]),
         ]);
         let rep = table_report(0, &grid);
-        let tr = rep.checks_full.iter().find(|c| c.name == "total_reconcile").unwrap();
+        let tr = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "total_reconcile")
+            .unwrap();
         assert!(tr.passed, "{:?}", tr.detail);
     }
 
@@ -489,18 +521,20 @@ mod tests {
             ("2", &["1", "x", "a"]),
         ]);
         let rep = table_report(0, &grid);
-        assert!(!rep
-            .checks_full
-            .iter()
-            .find(|c| c.name == "header_suspicious")
-            .unwrap()
-            .passed);
-        assert!(!rep
-            .checks_full
-            .iter()
-            .find(|c| c.name == "header_numeric_banner")
-            .unwrap()
-            .passed);
+        assert!(
+            !rep.checks_full
+                .iter()
+                .find(|c| c.name == "header_suspicious")
+                .unwrap()
+                .passed
+        );
+        assert!(
+            !rep.checks_full
+                .iter()
+                .find(|c| c.name == "header_numeric_banner")
+                .unwrap()
+                .passed
+        );
     }
 
     #[test]
@@ -511,7 +545,11 @@ mod tests {
             ("3", &["2", "", "y"]),
         ]);
         let rep = table_report(0, &grid);
-        let ec = rep.checks_full.iter().find(|c| c.name == "empty_columns").unwrap();
+        let ec = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "empty_columns")
+            .unwrap();
         assert!(!ec.passed, "{:?}", ec.detail);
         assert!(ec.detail.contains("b"), "{:?}", ec.detail);
     }
@@ -547,14 +585,67 @@ mod tests {
         // 万科 t114 形态：两面板共用列布局竖向拼接，表体混入兄弟面板表头行
         // （与表头在日期列等非空格上同值，但非整行重复——整行重复已被 merge 剔除）
         let grid = g(&[
-            ("6039", &["资产", "附注五", "2024年12月31日", "", "2023年12月31日", ""]),
+            (
+                "6039",
+                &["资产", "附注五", "2024年12月31日", "", "2023年12月31日", ""],
+            ),
             ("6042", &["流动资产：", "", "", "", "", ""]),
-            ("6084", &["负债及股东权益", "附注五", "2024年12月31日", "", "2023年12月31日", ""]),
+            (
+                "6084",
+                &[
+                    "负债及股东权益",
+                    "附注五",
+                    "2024年12月31日",
+                    "",
+                    "2023年12月31日",
+                    "",
+                ],
+            ),
             ("6085", &["流动负债：", "", "", "", "", ""]),
-            ("6086", &["短期借款", "23", "15,973,061,991.55", "", "1,063,561,883.10", ""]),
-            ("6089", &["应付账款", "25", "160,033,042,049.19", "", "221,688,101,235.72", ""]),
-            ("6135", &["资产", "附注十五", "2024年12月31日", "", "2023年12月31日", ""]),
-            ("6137", &["货币资金", "1", "911,239,043.23", "", "18,397,363,742.88", ""]),
+            (
+                "6086",
+                &[
+                    "短期借款",
+                    "23",
+                    "15,973,061,991.55",
+                    "",
+                    "1,063,561,883.10",
+                    "",
+                ],
+            ),
+            (
+                "6089",
+                &[
+                    "应付账款",
+                    "25",
+                    "160,033,042,049.19",
+                    "",
+                    "221,688,101,235.72",
+                    "",
+                ],
+            ),
+            (
+                "6135",
+                &[
+                    "资产",
+                    "附注十五",
+                    "2024年12月31日",
+                    "",
+                    "2023年12月31日",
+                    "",
+                ],
+            ),
+            (
+                "6137",
+                &[
+                    "货币资金",
+                    "1",
+                    "911,239,043.23",
+                    "",
+                    "18,397,363,742.88",
+                    "",
+                ],
+            ),
         ]);
         let rep = table_report(0, &grid);
         let dc = rep
@@ -633,7 +724,11 @@ mod tests {
         assert!(sh.detail.contains("1 孤立段标题行"), "{:?}", sh.detail);
         assert!(sh.detail.contains('4'), "{:?}", sh.detail);
         assert!(!sh.detail.contains('2'), "首数据行不计: {:?}", sh.detail);
-        assert!(rep.all_passed(), "提示信号不影响 status: {:?}", rep.failed_checks);
+        assert!(
+            rep.all_passed(),
+            "提示信号不影响 status: {:?}",
+            rep.failed_checks
+        );
     }
 
     #[test]
@@ -643,10 +738,10 @@ mod tests {
         // 新口径排除所有首格命中 TOTAL_LABEL_RE 的行，仅叶子行参与求和。
         let grid = g(&[
             ("1", &["项目", "金额"]),
-            ("2", &["总计", "350"]),   // 第一个合计行 = 对账目标
+            ("2", &["总计", "350"]), // 第一个合计行 = 对账目标
             ("3", &["东部", "100"]),
             ("4", &["西部", "200"]),
-            ("5", &["小计", "50"]),    // 小计 — 应排除（命中 TOTAL_LABEL_RE）
+            ("5", &["小计", "50"]), // 小计 — 应排除（命中 TOTAL_LABEL_RE）
             ("6", &["西部-a", "120"]),
             ("7", &["西部-b", "80"]),
         ]);

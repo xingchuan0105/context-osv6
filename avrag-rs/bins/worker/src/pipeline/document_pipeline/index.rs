@@ -1,13 +1,11 @@
 use contracts::auth_runtime::AuthContext;
-use ingestion::{
-    DocumentIr, IngestionError, IngestionTask,
-};
+use ingestion::{DocumentIr, IngestionError, IngestionTask};
 use uuid::Uuid;
 
 use super::super::helpers::{
     GraphIndexRecords, build_document_index_batch, build_graph_index_records,
-    build_text_index_records, extract_triplets_for_index, extract_visual_triplets_for_index, merge_extracted_triplets,
-    triplet_extraction_enabled, visual_triplet_extraction_enabled,
+    build_text_index_records, extract_triplets_for_index, extract_visual_triplets_for_index,
+    merge_extracted_triplets, triplet_extraction_enabled, visual_triplet_extraction_enabled,
 };
 use super::super::processor::PgTaskProcessor;
 use crate::indexing::build_multimodal_index_records;
@@ -69,7 +67,8 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
         parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
     }
 
-    let graph_records = if processor.storage.retrieval_data_plane.is_some() && triplet_extraction_enabled()
+    let graph_records = if processor.storage.retrieval_data_plane.is_some()
+        && triplet_extraction_enabled()
     {
         let mut extraction = extract_triplets_for_index(
             processor,
@@ -90,7 +89,9 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
             extraction.triplets = merge_extracted_triplets(extraction.triplets, visual.triplets);
         }
         if extraction.total_tokens > 0 {
-            let _ = processor.storage.repo
+            let _ = processor
+                .storage
+                .repo
                 .sessions()
                 .record_usage_event(
                     context,

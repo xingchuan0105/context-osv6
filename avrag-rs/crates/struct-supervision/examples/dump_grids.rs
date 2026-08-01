@@ -17,6 +17,9 @@ fn main() -> anyhow::Result<()> {
             })
         })
         .collect();
-    println!("{}", serde_json::to_string(&serde_json::json!({"grids": grids}))?);
+    println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({"grids": grids}))?
+    );
     Ok(())
 }

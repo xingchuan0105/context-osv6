@@ -71,10 +71,7 @@ impl<'a> AgentApp<'a> {
             .await
     }
 
-    pub async fn get_citation_asset(
-        &self,
-        asset_id: &str,
-    ) -> Result<(Vec<u8>, String), AppError> {
+    pub async fn get_citation_asset(&self, asset_id: &str) -> Result<(Vec<u8>, String), AppError> {
         self.chat.get_citation_asset(asset_id).await
     }
 

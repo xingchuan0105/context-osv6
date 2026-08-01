@@ -48,11 +48,7 @@ fn build_doc_line_views(
             cs.sort_by(|a, b| a.page.cmp(&b.page).then(a.chunk_id.cmp(&b.chunk_id)));
             let lines = cs
                 .iter()
-                .flat_map(|c| {
-                    c.content
-                        .lines()
-                        .map(move |l| (c.chunk_id, l.to_owned()))
-                })
+                .flat_map(|c| c.content.lines().map(move |l| (c.chunk_id, l.to_owned())))
                 .collect::<Vec<_>>();
             let chunks = cs
                 .iter()
@@ -100,7 +96,11 @@ fn clip(text: &str) -> String {
     }
 }
 
-fn context_window(lines: &[(Uuid, String)], idx: usize, context: u32) -> (Vec<String>, Vec<String>) {
+fn context_window(
+    lines: &[(Uuid, String)],
+    idx: usize,
+    context: u32,
+) -> (Vec<String>, Vec<String>) {
     let lo = idx.saturating_sub(context as usize);
     let hi = (idx + context as usize + 1).min(lines.len());
     let before = lines[lo..idx].iter().map(|(_, l)| clip(l)).collect();
@@ -124,14 +124,20 @@ impl Matcher {
 
 fn resolve_doc_uuids(raw: &[String], tool: &str) -> Result<Vec<Uuid>, ToolResult> {
     if raw.is_empty() {
-        return Err(super::error_result(tool, "doc_ids must not be empty".to_string()));
+        return Err(super::error_result(
+            tool,
+            "doc_ids must not be empty".to_string(),
+        ));
     }
     let uuids: Vec<Uuid> = raw
         .iter()
         .filter_map(|id| Uuid::parse_str(id).ok())
         .collect();
     if uuids.is_empty() {
-        return Err(super::error_result(tool, "no valid doc_ids provided".to_string()));
+        return Err(super::error_result(
+            tool,
+            "no valid doc_ids provided".to_string(),
+        ));
     }
     Ok(uuids)
 }
@@ -160,7 +166,11 @@ async fn load_line_views(
     }
 }
 
-pub async fn run_grep(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
+pub async fn run_grep(
+    runtime: &RagRuntime,
+    auth: &AuthContext,
+    args: &serde_json::Value,
+) -> ToolResult {
     let mut normalized = args.clone();
     contracts::normalize_doc_id_alias(&mut normalized);
     let args: DocGrepArgs = match serde_json::from_value(normalized) {
@@ -185,7 +195,10 @@ pub async fn run_grep(runtime: &RagRuntime, auth: &AuthContext, args: &serde_jso
         Err(r) => return r,
     };
     let context = args.context.min(MAX_CONTEXT);
-    let max_hits = args.max_hits.unwrap_or(DEFAULT_MAX_HITS).clamp(1, MAX_HITS_CAP) as usize;
+    let max_hits = args
+        .max_hits
+        .unwrap_or(DEFAULT_MAX_HITS)
+        .clamp(1, MAX_HITS_CAP) as usize;
 
     let started = std::time::Instant::now();
     let views = match load_line_views(runtime, auth, &doc_uuids, "doc_grep").await {
@@ -268,7 +281,10 @@ pub async fn run_read_lines(
         Ok(v) => v,
         Err(r) => return r,
     };
-    let empty = DocLines { lines: Vec::new(), chunks: Vec::new() };
+    let empty = DocLines {
+        lines: Vec::new(),
+        chunks: Vec::new(),
+    };
     let view = views.get(&doc_uuid).unwrap_or(&empty);
     let total_lines = view.lines.len();
     let from = (args.start as usize).saturating_sub(1).min(total_lines);
@@ -309,7 +325,12 @@ pub async fn run_read_lines(
 mod tests {
     use super::*;
 
-    fn chunk(doc: &str, id: u128, page: i64, text: &str) -> avrag_retrieval_data_plane::ScoredChunk {
+    fn chunk(
+        doc: &str,
+        id: u128,
+        page: i64,
+        text: &str,
+    ) -> avrag_retrieval_data_plane::ScoredChunk {
         avrag_retrieval_data_plane::ScoredChunk {
             chunk_id: Uuid::from_u128(id),
             doc_id: Uuid::parse_str(doc).unwrap(),
@@ -374,11 +395,7 @@ mod tests {
             chunk(DOC, 1, 1, "hit one\nplain"),
             chunk(DOC, 2, 1, "hit two\nhit three"),
         ]);
-        let ids = [
-            Uuid::from_u128(2),
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-        ];
+        let ids = [Uuid::from_u128(2), Uuid::from_u128(1), Uuid::from_u128(2)];
         let chunks = chunks_json_for_hits(&ids, &views);
         assert_eq!(chunks.len(), 2, "dedup by chunk_id");
         assert_eq!(chunks[0]["chunk_id"], Uuid::from_u128(2).to_string());

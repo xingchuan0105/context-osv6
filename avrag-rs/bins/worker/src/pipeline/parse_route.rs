@@ -15,15 +15,14 @@ pub(crate) async fn execute_local_parse(
 ) -> Result<(DocumentIr, Option<String>), IngestionError> {
     match kind {
         LocalParseKind::Markitdown => {
-            let (ir, markdown) = ingestion::parser::parse_markitdown_document_ir(
-                document_id,
-                filename,
-                bytes,
-            )
-            .await
-            .map_err(|error| {
-                IngestionError::parse(format!("markitdown parse failed for {filename}: {error}"))
-            })?;
+            let (ir, markdown) =
+                ingestion::parser::parse_markitdown_document_ir(document_id, filename, bytes)
+                    .await
+                    .map_err(|error| {
+                        IngestionError::parse(format!(
+                            "markitdown parse failed for {filename}: {error}"
+                        ))
+                    })?;
             Ok((ir, Some(markdown)))
         }
     }

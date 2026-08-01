@@ -1,13 +1,13 @@
 use anyhow::Result as AnyResult;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::{AppConfig, ChatPersistencePort, ModelProviderConfig};
-use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
 use avrag_llm::{
     EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner, TenantContext, UsageObserver,
 };
 use avrag_rag_core::RagRuntime;
 use avrag_search::SearchExecutor;
 use avrag_storage_pg::{ObjectStoreHandle, S3ObjectStore};
+use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 use std::{path::PathBuf, sync::Arc};
 use uuid::Uuid;
 
@@ -48,9 +48,7 @@ pub fn build_unified_agent_service(
         agent = agent.with_usage_observer(observer);
     }
 
-    Arc::new(
-        UnifiedAgentService::new(Box::new(agent)).with_orchestrator_llm(llm_client),
-    )
+    Arc::new(UnifiedAgentService::new(Box::new(agent)).with_orchestrator_llm(llm_client))
 }
 
 pub fn make_embedding_client(

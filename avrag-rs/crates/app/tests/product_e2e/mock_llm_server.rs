@@ -109,7 +109,8 @@ impl MockLlmRoute {
         if system_prompt.contains("general chat assistant for Context OS") {
             Self::ChatAnswer
         // HeavyTail write pipeline fingerprints.
-        } else if system_prompt.contains("大纲编辑") || system_prompt.contains("只返回 JSON") {
+        } else if system_prompt.contains("大纲编辑") || system_prompt.contains("只返回 JSON")
+        {
             Self::WriteSkeletonJson
         } else if system_prompt.contains("中文长文写作助手") {
             Self::WriteDraftProse
@@ -227,7 +228,9 @@ fn extract_calculator_expression(user_prompt: &str) -> Option<String> {
         .collect();
     let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join("");
     if cleaned.chars().any(|c| c.is_ascii_digit())
-        && cleaned.chars().any(|c| matches!(c, '+' | '-' | '*' | '/' | '%' | '^' | '('))
+        && cleaned
+            .chars()
+            .any(|c| matches!(c, '+' | '-' | '*' | '/' | '%' | '^' | '('))
     {
         Some(cleaned)
     } else if cleaned.chars().all(|c| c.is_ascii_digit() || c == '.') && !cleaned.is_empty() {
@@ -247,7 +250,9 @@ fn looks_like_weather_query(user_prompt: &str) -> bool {
 }
 
 fn extract_weather_location(user_prompt: &str) -> String {
-    for city in ["北京", "上海", "深圳", "广州", "Tokyo", "Beijing", "Shanghai"] {
+    for city in [
+        "北京", "上海", "深圳", "广州", "Tokyo", "Beijing", "Shanghai",
+    ] {
         if user_prompt.contains(city) {
             return city.to_string();
         }
@@ -261,7 +266,10 @@ fn mock_calculator_followup(messages: &[serde_json::Value]) -> Option<String> {
         if message.get("role").and_then(|r| r.as_str()) != Some("tool") {
             continue;
         }
-        let content = message.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        let content = message
+            .get("content")
+            .and_then(|c| c.as_str())
+            .unwrap_or("");
         // Tool content may be JSON string or nested JSON.
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
             if let Some(result) = v
@@ -304,7 +312,10 @@ fn mock_weather_followup(messages: &[serde_json::Value]) -> Option<String> {
         if message.get("role").and_then(|r| r.as_str()) != Some("tool") {
             continue;
         }
-        let content = message.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        let content = message
+            .get("content")
+            .and_then(|c| c.as_str())
+            .unwrap_or("");
         if content.contains("temperature")
             || content.contains("天气")
             || content.contains("description")
@@ -361,8 +372,7 @@ fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<ser
             }));
         }
     }
-    if tool_names.iter().any(|name| name == "weather_query") && looks_like_weather_query(&query)
-    {
+    if tool_names.iter().any(|name| name == "weather_query") && looks_like_weather_query(&query) {
         let location = extract_weather_location(&query);
         return Some(json!({
             "id": "call_weather_0",
@@ -627,9 +637,7 @@ fn mock_synthesis_json_rag(transcript: &str, system_prompt: &str) -> String {
         // (F2): panic → broken connection → HTTP 500 llm completion failed.
         if let Some(id) = extract_retrieval_chunk_id(transcript)
             .or_else(|| read_mock_rag_state(|state| state.codegen_chunk_id.clone()))
-            .or_else(|| {
-                read_mock_rag_state(|state| state.codegen_chunk_ids.first().cloned())
-            })
+            .or_else(|| read_mock_rag_state(|state| state.codegen_chunk_ids.first().cloned()))
         {
             vec![id]
         } else {
@@ -835,7 +843,8 @@ async fn mock_llm_handler(
         && (system_prompt.contains("检索 → 评估 → 合成")
             || system_prompt.contains("RAG agent")
             || system_prompt.contains("**检索轮**")
-            || (system_prompt.contains("检索轮") && system_prompt.contains("codegen")));
+            || (system_prompt.contains("检索轮") && system_prompt.contains("knowledge-base")
+                || system_prompt.contains("codegen")));
 
     // ReAct loop: after tool results, emit a final answer (not empty content).
     // Empty content without tool_calls is EmptyStream in openai_chat finalize and
@@ -882,7 +891,9 @@ async fn mock_llm_handler(
             mock_option_d_answer_prose(user_prompt)
         } else if is_worker_handoff {
             let channel = if system_prompt.contains("capability-search")
-                || tool_names.iter().any(|n| n == "web_search" || n == "web_fetch")
+                || tool_names
+                    .iter()
+                    .any(|n| n == "web_search" || n == "web_fetch")
             {
                 "search"
             } else {
@@ -892,7 +903,9 @@ async fn mock_llm_handler(
         } else if is_synthesis_contract
             || system_prompt.contains("internal_search_answer_v1")
             || system_prompt.contains("Context OS Web Search answer agent")
-            || tool_names.iter().any(|n| n == "web_search" || n == "web_fetch")
+            || tool_names
+                .iter()
+                .any(|n| n == "web_search" || n == "web_fetch")
         {
             if system_prompt.contains("internal_search_answer_v1") {
                 mock_synthesis_json_search()

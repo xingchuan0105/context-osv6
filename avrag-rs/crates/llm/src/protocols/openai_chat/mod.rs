@@ -17,9 +17,9 @@ mod tests {
     use super::request::build_chat_completion_request_body;
     use super::stream::ChatCompletionStreamParser;
     use super::types::{ApiUsageRaw, OpenAiChatProtocol, OpenAiChatState};
+    use crate::ModelProviderConfig;
     use crate::protocols::Protocol;
     use crate::schema::{ChatMessage, FinishReason, LlmError, LlmEvent};
-    use crate::ModelProviderConfig;
 
     fn test_config(base_url: &str, enable_thinking: Option<bool>) -> ModelProviderConfig {
         ModelProviderConfig {
@@ -469,7 +469,10 @@ data: [DONE]
             "tool_calls must be preserved"
         );
         assert_eq!(
-            resp.tool_calls.as_ref().and_then(|c| c.first()).map(|t| t.tool.as_str()),
+            resp.tool_calls
+                .as_ref()
+                .and_then(|c| c.first())
+                .map(|t| t.tool.as_str()),
             Some("write_refine_finish")
         );
     }
@@ -514,13 +517,13 @@ data: [DONE]
         let protocol = OpenAiChatProtocol;
         let events = protocol.on_halt(&OpenAiChatState::default());
         assert!(
-            events.iter().any(|e| matches!(e, LlmEvent::ProviderError { .. })),
+            events
+                .iter()
+                .any(|e| matches!(e, LlmEvent::ProviderError { .. })),
             "expected ProviderError for empty stream, got {events:?}"
         );
         assert!(
-            !events
-                .iter()
-                .any(|e| matches!(e, LlmEvent::Finish { .. })),
+            !events.iter().any(|e| matches!(e, LlmEvent::Finish { .. })),
             "must not Finish after empty-stream error: {events:?}"
         );
     }

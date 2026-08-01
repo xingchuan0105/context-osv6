@@ -7,11 +7,11 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use common::{
     AppError, CreateWorkspaceRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
     SourceRow, default_owner_user_id, default_user_id, new_id, now_rfc3339,
 };
+use contracts::auth_runtime::AuthContext;
 use contracts::documents::DocumentStatus;
 use contracts::workspaces::Workspace;
 use ingestion_types::{AuditRecord, IngestionTask};
@@ -365,7 +365,9 @@ impl DocumentStorePort for MemoryDocumentStore {
         stored.document.status = DocumentStatus::Queued;
         stored.document.file_size = size_bytes;
         stored.document.updated_at = now_rfc3339();
-        Ok(DocumentUploadQueueOutcome::Queued { task_inserted: false })
+        Ok(DocumentUploadQueueOutcome::Queued {
+            task_inserted: false,
+        })
     }
 
     async fn update_document(
@@ -417,13 +419,15 @@ impl DocumentStorePort for MemoryDocumentStore {
             DocumentStatus::Deleting => {
                 return Ok(DocumentDeletionOutcome::AlreadyDeleting {
                     task_inserted: false,
-                })
+                });
             }
             _ => {}
         }
         stored.document.status = DocumentStatus::Deleting;
         stored.document.updated_at = now_rfc3339();
-        Ok(DocumentDeletionOutcome::Queued { task_inserted: false })
+        Ok(DocumentDeletionOutcome::Queued {
+            task_inserted: false,
+        })
     }
 
     async fn get_document_content(

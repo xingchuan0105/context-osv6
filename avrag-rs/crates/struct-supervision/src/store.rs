@@ -217,7 +217,8 @@ pub fn build_metas(
             status: if f.map(|f| f.excluded).unwrap_or(false) {
                 "quarantine".into()
             } else {
-                r.map(|r| r.status.clone()).unwrap_or_else(|| "quarantine".into())
+                r.map(|r| r.status.clone())
+                    .unwrap_or_else(|| "quarantine".into())
             },
             checks: r.map(|r| r.checks_full.clone()).unwrap_or_default(),
             notes,
@@ -282,9 +283,11 @@ mod tests {
 
         let con = duckdb::Connection::open(&out).unwrap();
         let (status, n_rows, chunk_id): (String, i64, Option<String>) = con
-            .query_row("SELECT status, n_rows, evidence_chunk_id FROM _meta", [], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })
+            .query_row(
+                "SELECT status, n_rows, evidence_chunk_id FROM _meta",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
             .unwrap();
         assert_eq!(status, "high_candidate");
         assert_eq!(n_rows, 1);
@@ -310,21 +313,49 @@ mod tests {
         // rows[0] 假表头（sheet 标题 + Unnamed）；rows[1] 真表头；rows[2..] 数据行。
         // 末列数据区全空 → 守卫允许丢；其余 Unnamed 列数据区非空 → 守卫保留。
         let g = grid(&[
-            ("3", &["华为IPD流程各阶段活动", "Unnamed: 1", "Unnamed: 2", "Unnamed: 3", "Unnamed: 4", "Unnamed: 5"]),
+            (
+                "3",
+                &[
+                    "华为IPD流程各阶段活动",
+                    "Unnamed: 1",
+                    "Unnamed: 2",
+                    "Unnamed: 3",
+                    "Unnamed: 4",
+                    "Unnamed: 5",
+                ],
+            ),
             ("4", &["编号", "阶段", "活动", "参与角色", "输出物", ""]),
-            ("5", &["1", "概念", "市场调研与需求分析", "市场部", "市场调研报告", ""]),
-            ("6", &["2", "计划", "产品开发计划制定", "PDT", "产品开发计划", ""]),
-            ("7", &["3", "开发", "详细设计与实现", "研发部", "产品包", ""]),
+            (
+                "5",
+                &[
+                    "1",
+                    "概念",
+                    "市场调研与需求分析",
+                    "市场部",
+                    "市场调研报告",
+                    "",
+                ],
+            ),
+            (
+                "6",
+                &["2", "计划", "产品开发计划制定", "PDT", "产品开发计划", ""],
+            ),
+            (
+                "7",
+                &["3", "开发", "详细设计与实现", "研发部", "产品包", ""],
+            ),
         ]);
 
         // 干预前：header_suspicious 不过，status=needs_diagnosis。
         let before = crate::checks::table_report(0, &g);
-        assert!(!before
-            .checks_full
-            .iter()
-            .find(|c| c.name == "header_suspicious")
-            .unwrap()
-            .passed);
+        assert!(
+            !before
+                .checks_full
+                .iter()
+                .find(|c| c.name == "header_suspicious")
+                .unwrap()
+                .passed
+        );
         assert_eq!(before.status, "needs_diagnosis");
 
         // 监督干预：apply_directive（内部 directives::apply + 确定性重跑 + rebuild_db）。
@@ -347,7 +378,13 @@ mod tests {
         // 修复后：假表头行消失、真表头提升；全空 Unnamed 列被丢，非空列被守卫保留（6→5 列）。
         assert_eq!(
             s.grids[0].header(),
-            &["编号".to_string(), "阶段".to_string(), "活动".to_string(), "参与角色".to_string(), "输出物".to_string()]
+            &[
+                "编号".to_string(),
+                "阶段".to_string(),
+                "活动".to_string(),
+                "参与角色".to_string(),
+                "输出物".to_string()
+            ]
         );
         assert_eq!(s.grids[0].n_rows(), 3);
 

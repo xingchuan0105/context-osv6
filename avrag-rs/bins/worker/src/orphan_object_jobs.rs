@@ -128,8 +128,8 @@ fn env_bool(key: &str, default: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
     use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
+    use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
     use uuid::Uuid;
 
     // Regression: `documents` has forced RLS keyed on `app.current_user`. The scan runs on
@@ -140,24 +140,32 @@ mod tests {
         let Some(database_url) = std::env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
+        let repo = {
+            let __b = BootstrapRepository::connect(&database_url).await.unwrap();
+            __b.migrate().await.unwrap();
+            PgAppRepository::from_pool(__b.raw().clone())
+        };
 
         let owner_user_id = UserId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(owner_user_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
+        let ctx =
+            AuthContext::new(owner_user_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .bootstrap().create_workspace(&ctx, "orphan-scan-test", "orphan scan test")
+            .bootstrap()
+            .create_workspace(&ctx, "orphan-scan-test", "orphan scan test")
             .await
             .unwrap();
         let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .bootstrap().create_document(&ctx, workspace_id, "in-flight.txt", 7, "text/plain")
+            .bootstrap()
+            .create_document(&ctx, workspace_id, "in-flight.txt", 7, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
         let seed = repo
-            .bootstrap().get_document_task_seed(&ctx, document_id)
+            .bootstrap()
+            .get_document_task_seed(&ctx, document_id)
             .await
             .unwrap()
             .expect("document seed");
@@ -174,10 +182,7 @@ mod tests {
             workspace_id,
             Uuid::new_v4()
         );
-        store
-            .put(&orphan_path, b"orphan-bytes")
-            .await
-            .unwrap();
+        store.put(&orphan_path, b"orphan-bytes").await.unwrap();
 
         let mut runner = OrphanObjectJobRunner {
             pool: repo.raw().clone(),

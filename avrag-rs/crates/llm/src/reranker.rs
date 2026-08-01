@@ -107,7 +107,9 @@ impl RerankerClient {
         // merge the batch rankings by score.
         let mut batches = Vec::new();
         for (start, end) in batch_ranges(documents.len(), OPENAI_RERANK_MAX_DOCS) {
-            let results = self.openai_rerank_once(query, &documents[start..end]).await?;
+            let results = self
+                .openai_rerank_once(query, &documents[start..end])
+                .await?;
             batches.push((
                 start,
                 results.into_iter().map(|r| (r.index, r.score)).collect(),
@@ -321,8 +323,14 @@ mod tests {
             vec![(0, 100), (100, 200), (200, 250)]
         );
         // Pools at or under the cap stay a single request (no behavior change).
-        assert_eq!(batch_ranges(100, DASHSCOPE_VL_RERANK_MAX_DOCS), vec![(0, 100)]);
-        assert_eq!(batch_ranges(50, DASHSCOPE_VL_RERANK_MAX_DOCS), vec![(0, 50)]);
+        assert_eq!(
+            batch_ranges(100, DASHSCOPE_VL_RERANK_MAX_DOCS),
+            vec![(0, 100)]
+        );
+        assert_eq!(
+            batch_ranges(50, DASHSCOPE_VL_RERANK_MAX_DOCS),
+            vec![(0, 50)]
+        );
         assert!(batch_ranges(0, DASHSCOPE_VL_RERANK_MAX_DOCS).is_empty());
     }
 
@@ -431,7 +439,6 @@ mod tests {
         );
     }
 }
-
 
 #[async_trait::async_trait]
 impl avrag_rag_core_ports::RerankPort for RerankerClient {

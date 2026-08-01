@@ -1,7 +1,5 @@
 use contracts::auth_runtime::AuthContext;
-use ingestion::{
-    DocumentIr, IngestionError, IngestionTask,
-};
+use ingestion::{DocumentIr, IngestionError, IngestionTask};
 use tracing::info;
 use uuid::Uuid;
 
@@ -22,19 +20,19 @@ pub(crate) struct IngestionPipelineMetrics {
     pub(crate) processed_chunk_count: usize,
 }
 
-mod parse;
-mod materialize;
 mod index;
+mod materialize;
+mod parse;
 mod profile;
 mod struct_stage;
 
-use parse::{stage_parse_and_validate_ir, stage_project_document_ir};
-use materialize::stage_materialize_chunks_assets_profile;
 use index::stage_build_and_replace_retrieval_index;
+use materialize::stage_materialize_chunks_assets_profile;
+use parse::{stage_parse_and_validate_ir, stage_project_document_ir};
 use profile::generate_document_summary;
-use struct_stage::{stage_struct_line_map, stage_struct_tables};
-pub(crate) use struct_stage::remove_struct_store_files;
 pub(crate) use struct_stage::StructTablesOutcome;
+pub(crate) use struct_stage::remove_struct_store_files;
+use struct_stage::{stage_struct_line_map, stage_struct_tables};
 
 pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) task: &'a IngestionTask,

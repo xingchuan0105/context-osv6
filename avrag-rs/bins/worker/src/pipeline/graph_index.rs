@@ -1,8 +1,8 @@
-use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::{
     DocumentIndexBatch, EntityIndexRecord, GraphPassageIndexRecord, MultimodalChunkIndexRecord,
     RelationIndexRecord, TextChunkIndexRecord,
 };
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;

@@ -1,7 +1,7 @@
 use anyhow::Result;
-use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::{ObjectStoreHandle, TocEntry};
 use common::SummaryMetadata;
+use contracts::auth_runtime::AuthContext;
 use ingestion::DocumentIr;
 use std::path::Path;
 use tracing::{info, warn};

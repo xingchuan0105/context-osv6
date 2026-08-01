@@ -3,8 +3,8 @@ use std::sync::Arc;
 use app_billing::BillingContext;
 use app_core::{BillingQuotaPort, DocumentStorePort};
 use async_trait::async_trait;
-use contracts::auth_runtime::AuthContext;
 use common::AppError;
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 pub struct PgBillingQuotaAdapter {

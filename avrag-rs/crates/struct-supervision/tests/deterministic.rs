@@ -1,10 +1,7 @@
 //! S1 确定性工具语义测试（移植 `check_supervise.py` Part 1 的 12 项用例；
 //! 手写迷你 grids，不依赖 /tmp 真实语料）。
 
-use avrag_struct_supervision::{
-    Grid, Row, SuperviseInput,
-    session::Session,
-};
+use avrag_struct_supervision::{Grid, Row, SuperviseInput, session::Session};
 
 fn row(line: usize, cells: &[&str]) -> Row {
     Row {
@@ -39,11 +36,29 @@ fn fixture() -> SuperviseInput {
         "| 3 | 发布 | 丙 | 300 | 元 | 无 | | 13 | 14 | 15 | 16 |",
     ]
     .join("\n");
-    let hdr11 = ["Unnamed: 0", "Unnamed: 1", "名称", "金额", "单位", "备注", "空列", "a8", "a9", "a10", "a11"];
-    let d1 = ["序号", "阶段", "品名", "总价", "元", "无", "空列", "1", "2", "3", "4"];
+    let hdr11 = [
+        "Unnamed: 0",
+        "Unnamed: 1",
+        "名称",
+        "金额",
+        "单位",
+        "备注",
+        "空列",
+        "a8",
+        "a9",
+        "a10",
+        "a11",
+    ];
+    let d1 = [
+        "序号", "阶段", "品名", "总价", "元", "无", "空列", "1", "2", "3", "4",
+    ];
     let d2 = ["1", "概念", "甲", "100", "元", "无", "", "5", "6", "7", "8"];
-    let d3 = ["2", "验证", "乙", "200", "元", "无", "", "9", "10", "11", "12"];
-    let d4 = ["3", "发布", "丙", "300", "元", "无", "", "13", "14", "15", "16"];
+    let d3 = [
+        "2", "验证", "乙", "200", "元", "无", "", "9", "10", "11", "12",
+    ];
+    let d4 = [
+        "3", "发布", "丙", "300", "元", "无", "", "13", "14", "15", "16",
+    ];
     let grids = vec![
         Grid {
             start_line: 1,
@@ -148,10 +163,12 @@ fn rotate_header_applies_and_passes_recheck() {
     assert!(r.contains("已通过"), "{r}");
     // rotate 后表头来自原第 1 数据行；header_suspicious（Unnamed）检查应通过
     assert_eq!(s.grids[1].header()[0], "序号");
-    assert!(!s.reports["t1"]
-        .checks_full
-        .iter()
-        .any(|c| c.name == "header_suspicious" && !c.passed));
+    assert!(
+        !s.reports["t1"]
+            .checks_full
+            .iter()
+            .any(|c| c.name == "header_suspicious" && !c.passed)
+    );
     // 复验：数据行数为 2（原 3 行数据 - 1 行提升为表头）
     assert_eq!(s.grids[1].n_rows(), 2);
 }
@@ -170,8 +187,16 @@ fn drop_columns_matching_guard_keeps_nonempty() {
         },
     }));
     assert!(r.contains("已通过"), "{r}");
-    assert!(s.grids[1].header().iter().any(|h| h == "空列"), "{:?}", s.grids[1].header());
-    assert!(s.grids[1].header().iter().any(|h| h == "品名"), "{:?}", s.grids[1].header());
+    assert!(
+        s.grids[1].header().iter().any(|h| h == "空列"),
+        "{:?}",
+        s.grids[1].header()
+    );
+    assert!(
+        s.grids[1].header().iter().any(|h| h == "品名"),
+        "{:?}",
+        s.grids[1].header()
+    );
 
     // t2 第 7 列数据区全空 → 可丢。
     let mut s2 = Session::new(&fixture()).unwrap();
@@ -184,7 +209,11 @@ fn drop_columns_matching_guard_keeps_nonempty() {
         },
     }));
     assert!(r2.contains("已通过"), "{r2}");
-    assert!(!s2.grids[2].header().iter().any(|h| h == "空列"), "{:?}", s2.grids[2].header());
+    assert!(
+        !s2.grids[2].header().iter().any(|h| h == "空列"),
+        "{:?}",
+        s2.grids[2].header()
+    );
 }
 
 #[test]

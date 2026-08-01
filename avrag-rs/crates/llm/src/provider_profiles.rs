@@ -235,7 +235,7 @@ pub fn api_key_url_for_provider(id: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_provider_profile, PROVIDER_PROFILES};
+    use super::{PROVIDER_PROFILES, find_provider_profile};
 
     #[test]
     fn provider_profiles_include_all_frontend_preset_ids() {

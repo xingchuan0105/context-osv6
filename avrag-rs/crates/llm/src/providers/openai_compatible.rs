@@ -76,11 +76,7 @@ pub fn find_profile(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|profile| profile.id == id)
 }
 
-pub fn configure(
-    profile: &Profile,
-    api_key: String,
-    base_url: Option<String>,
-) -> Provider {
+pub fn configure(profile: &Profile, api_key: String, base_url: Option<String>) -> Provider {
     let base = base_url
         .filter(|url| !url.is_empty())
         .unwrap_or_else(|| profile.base_url.to_string());
@@ -120,7 +116,7 @@ fn default_http_client() -> reqwest::Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_profile, PROFILES};
+    use super::{PROFILES, find_profile};
 
     #[test]
     fn profiles_match_frontend_preset_ids() {

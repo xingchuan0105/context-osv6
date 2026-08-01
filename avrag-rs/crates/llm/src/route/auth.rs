@@ -39,10 +39,9 @@ impl Auth {
 }
 
 fn insert_header(headers: &mut HeaderMap, name: &str, value: &str) {
-    if let (Ok(header_name), Ok(header_value)) = (
-        HeaderName::from_str(name),
-        HeaderValue::from_str(value),
-    ) {
+    if let (Ok(header_name), Ok(header_value)) =
+        (HeaderName::from_str(name), HeaderValue::from_str(value))
+    {
         headers.insert(header_name, header_value);
     }
 }

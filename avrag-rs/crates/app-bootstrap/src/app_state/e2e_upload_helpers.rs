@@ -49,16 +49,15 @@ impl AppState {
                 tracing::warn!(error = %error, "E2E grant: failed to set super_admin role");
                 "admin role grant failed".to_string()
             })?;
-        let user_id: Option<Uuid> = sqlx::query_scalar(
-            "select id from users where email = $1 limit 1",
-        )
-        .bind(email)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|error| {
-            tracing::warn!(error = %error, "E2E grant: database error during user lookup");
-            "admin role grant failed".to_string()
-        })?;
+        let user_id: Option<Uuid> =
+            sqlx::query_scalar("select id from users where email = $1 limit 1")
+                .bind(email)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "E2E grant: database error during user lookup");
+                    "admin role grant failed".to_string()
+                })?;
         let user_id = user_id.ok_or_else(|| "user not found".to_string())?;
         sqlx::query(
             r#"
@@ -111,16 +110,15 @@ impl AppState {
                 "member provisioning failed".to_string()
             })?;
         // Ensure owner exists (personal account). Member is a separate personal user.
-        let owner_exists: bool = sqlx::query_scalar(
-            "select exists(select 1 from users where email = $1)",
-        )
-        .bind(owner_email)
-        .fetch_one(&mut *lookup_tx)
-        .await
-        .map_err(|error| {
-            tracing::warn!(error = %error, "E2E collaborator: owner lookup failed");
-            "owner lookup failed".to_string()
-        })?;
+        let owner_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from users where email = $1)")
+                .bind(owner_email)
+                .fetch_one(&mut *lookup_tx)
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "E2E collaborator: owner lookup failed");
+                    "owner lookup failed".to_string()
+                })?;
         if !owner_exists {
             let _ = lookup_tx.rollback().await;
             return Err("owner not found".to_string());
@@ -234,14 +232,13 @@ impl AppState {
             .execute(&mut *tx)
             .await;
         let _ = org_uuid; // legacy JWT claim; personal account uses user id only
-        let auth_version = sqlx::query_scalar::<_, i32>(
-            "select auth_version from users where id = $1",
-        )
-        .bind(user_uuid)
-        .fetch_optional(&mut *tx)
-        .await
-        .ok()
-        .flatten();
+        let auth_version =
+            sqlx::query_scalar::<_, i32>("select auth_version from users where id = $1")
+                .bind(user_uuid)
+                .fetch_optional(&mut *tx)
+                .await
+                .ok()
+                .flatten();
         let _ = tx.commit().await;
         auth_version == Some(token_auth_version)
     }
@@ -315,7 +312,10 @@ impl AppState {
         let object_path = row
             .try_get::<String, _>("object_path")
             .map_err(|error| common::AppError::internal(error.to_string()))?;
-        let mut auth = contracts::auth_runtime::AuthContext::new(owner_user_id.into(), contracts::auth_runtime::SubjectKind::System);
+        let mut auth = contracts::auth_runtime::AuthContext::new(
+            owner_user_id.into(),
+            contracts::auth_runtime::SubjectKind::System,
+        );
         if let Some(actor) = self.auth().actor_id() {
             auth = auth.with_actor_id(actor);
         }

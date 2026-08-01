@@ -6,7 +6,9 @@ use ingestion::{
 };
 use uuid::Uuid;
 
-use super::super::helpers::{build_document_block_rows, execute_external_parse, execute_local_parse};
+use super::super::helpers::{
+    build_document_block_rows, execute_external_parse, execute_local_parse,
+};
 use super::super::processor::PgTaskProcessor;
 use crate::ingestion_guard::{ensure_ingestion_side_effects_allowed, from_storage_error};
 
@@ -37,11 +39,9 @@ pub(crate) async fn stage_parse_and_validate_ir(
     parse_run_state: &mut ParseRunState,
 ) -> Result<DocumentIr, IngestionError> {
     let (ir, markdown) = execute_parse_plan(bytes, filename, document_id, route_decision).await?;
-    let validation_report = sanitize_and_validate_document_ir(
-        ir,
-        &DocumentIrValidationOptions::default(),
-    )
-    .map_err(|error| IngestionError::storage(error))?;
+    let validation_report =
+        sanitize_and_validate_document_ir(ir, &DocumentIrValidationOptions::default())
+            .map_err(|error| IngestionError::storage(error))?;
 
     let document_ir = validation_report.document;
     parse_run_state.validation_warnings = validation_report.warnings;
@@ -70,12 +70,16 @@ pub(crate) async fn stage_project_document_ir(
         "IR projection writes",
     )
     .await?;
-    processor.storage.repo
+    processor
+        .storage
+        .repo
         .documents()
         .clear_document_ir_projection(context, document_id)
         .await
         .map_err(from_storage_error)?;
-    processor.storage.repo
+    processor
+        .storage
+        .repo
         .documents()
         .replace_document_blocks(
             context,

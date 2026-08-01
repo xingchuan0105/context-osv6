@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use analytics::AnalyticsService;
 use app_core::util::non_empty_or_unknown;
-use contracts::auth_runtime::AuthContext;
 use avrag_llm::LlmUsage;
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 pub struct CostEventRecord<'a> {

@@ -90,8 +90,7 @@ impl StateSink for PgStateSink {
     ) -> Result<(), IngestionError> {
         ingestion::DocumentStateMachine::validate(&transition)?;
         let context = task_context(task);
-        let document_id = Uuid::parse_str(&task.document_id)
-            .map_err(IngestionError::from)?;
+        let document_id = Uuid::parse_str(&task.document_id).map_err(IngestionError::from)?;
 
         if matches!(
             transition.to,

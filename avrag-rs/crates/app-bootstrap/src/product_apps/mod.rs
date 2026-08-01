@@ -9,23 +9,23 @@
 //! Product accessors: `conversation()`, `workspace()`, `share()`, `billing_api()`,
 //! `prefs()`, `admin_api()`, `admin_ops()`, `agent()`.
 
-mod share;
-mod workspace;
-mod billing;
-mod prefs;
 mod admin;
 mod admin_ops;
 mod agent;
+mod billing;
 mod conversation;
+mod prefs;
+mod share;
+mod workspace;
 
-pub use share::ShareApp;
-pub use workspace::WorkspaceApp;
-pub use billing::BillingApp;
-pub use prefs::PrefsApp;
 pub use admin::AdminApp;
 pub use admin_ops::AdminOpsApp;
 pub use agent::AgentApp;
+pub use billing::BillingApp;
 pub use conversation::ConversationApp;
+pub use prefs::PrefsApp;
+pub use share::ShareApp;
+pub use workspace::WorkspaceApp;
 
 use contracts::auth_runtime::UserId;
 use uuid::Uuid;
@@ -124,7 +124,7 @@ mod tests {
             agent_type: agent_type.to_string(),
             capabilities: None,
             client_context: None,
-        client_ip: None,
+            client_ip: None,
             source_type: None,
             source_token: None,
             doc_scope: vec![],

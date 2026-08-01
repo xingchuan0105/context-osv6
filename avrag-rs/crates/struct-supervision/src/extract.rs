@@ -203,7 +203,9 @@ pub fn extract_grids(md_text: &str) -> Vec<Grid> {
 
 fn is_junk_cell(c: &str) -> bool {
     // JUNK_CELL_RE = ^[-:\s]+$
-    !c.is_empty() && c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
+    !c.is_empty()
+        && c.chars()
+            .all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
 }
 
 /// 同表头签名的后续 grid 并入首见 grid（跨页续表）；数据行与表头相同者剔除
@@ -221,7 +223,9 @@ pub fn merge_continuations(grids: Vec<Grid>) -> Vec<Grid> {
             let extra: Vec<Row> = g.rows.drain(1..).collect();
             let start = g.start_line;
             merged[tgt].rows.extend(extra);
-            merged[tgt].notes.push(format!("merged_continuation@{start}"));
+            merged[tgt]
+                .notes
+                .push(format!("merged_continuation@{start}"));
         } else {
             by_sig.insert(sig, merged.len());
             merged.push(g);
@@ -235,8 +239,10 @@ pub fn merge_continuations(grids: Vec<Grid>) -> Vec<Grid> {
         g.rows
             .retain(|r| r.line == first_line || crate::grid::header_sig(&r.cells) != hdr_sig);
         if g.rows.len() != before {
-            g.notes
-                .push(format!("dropped_repeated_header_x{}", before - g.rows.len()));
+            g.notes.push(format!(
+                "dropped_repeated_header_x{}",
+                before - g.rows.len()
+            ));
         }
         let before = g.rows.len();
         g.rows.retain(|r| {
@@ -247,8 +253,10 @@ pub fn merge_continuations(grids: Vec<Grid>) -> Vec<Grid> {
                     .all(|c| is_junk_cell(if c.is_empty() { "-" } else { c }))
         });
         if g.rows.len() != before {
-            g.notes
-                .push(format!("dropped_delimiter_artifact_x{}", before - g.rows.len()));
+            g.notes.push(format!(
+                "dropped_delimiter_artifact_x{}",
+                before - g.rows.len()
+            ));
         }
     }
     merged
@@ -258,11 +266,7 @@ pub fn merge_continuations(grids: Vec<Grid>) -> Vec<Grid> {
 /// 仅当数据第 1 行非空单元格过半才提升；Unnamed 列仅当数据区全空才丢。
 pub fn auto_rotate(g: &mut Grid) {
     let hdr: Vec<String> = g.header().to_vec();
-    if hdr.is_empty()
-        || !hdr
-            .iter()
-            .any(|h| h.starts_with("Unnamed") || h.is_empty())
-    {
+    if hdr.is_empty() || !hdr.iter().any(|h| h.starts_with("Unnamed") || h.is_empty()) {
         return;
     }
     if g.data().is_empty() {
@@ -357,14 +361,20 @@ mod tests {
         let g = extract_grids(md);
         assert_eq!(g.len(), 1);
         assert_eq!(g[0].rows.len(), 4);
-        assert_eq!(&g[0].rows[2].cells, &["some text no pipe".to_string(), String::new()]);
+        assert_eq!(
+            &g[0].rows[2].cells,
+            &["some text no pipe".to_string(), String::new()]
+        );
     }
 
     #[test]
     fn escaped_pipe_and_markers_preserved() {
         let md = "| a | b |\n| --- | --- |\n| x \\| y | **bold** |\n";
         let g = extract_grids(md);
-        assert_eq!(&g[0].rows[1].cells, &["x | y".to_string(), "**bold**".to_string()]);
+        assert_eq!(
+            &g[0].rows[1].cells,
+            &["x | y".to_string(), "**bold**".to_string()]
+        );
     }
 
     #[test]
@@ -413,8 +423,16 @@ mod tests {
             cells(&g[0]),
             vec![&["h1", "h2"][..], &["1", "2"][..], &["3", "4"][..]]
         );
-        assert!(g[0].notes.iter().any(|n| n.starts_with("merged_continuation@")));
-        assert!(g[0].notes.iter().any(|n| n.starts_with("dropped_repeated_header")));
+        assert!(
+            g[0].notes
+                .iter()
+                .any(|n| n.starts_with("merged_continuation@"))
+        );
+        assert!(
+            g[0].notes
+                .iter()
+                .any(|n| n.starts_with("dropped_repeated_header"))
+        );
     }
 
     #[test]
@@ -435,24 +453,25 @@ mod tests {
         let lines: Vec<usize> = g[0].rows.iter().map(|r| r.line).collect();
         assert_eq!(lines, vec![0, 2, 6, 11]);
         assert_eq!(
-            g[0]
-                .notes
+            g[0].notes
                 .iter()
                 .filter(|n| n.starts_with("merged_continuation@"))
                 .count(),
             2
         );
-        assert!(g[0]
-            .notes
-            .iter()
-            .any(|n| n.starts_with("dropped_repeated_header")));
+        assert!(
+            g[0].notes
+                .iter()
+                .any(|n| n.starts_with("dropped_repeated_header"))
+        );
     }
 
     #[test]
     fn merge_continuation_no_false_merge_and_keeps_near_header_rows() {
         // 表头签名不同 → 不合并（防错并）；数据行仅一格与表头不同 → 保留
         // （仅剔除与表头完全同签名的行）
-        let md = "| h1 | h2 |\n| --- | --- |\n| h1 | h2x |\n\n| h1 | h3 |\n| --- | --- |\n| 9 | z |\n";
+        let md =
+            "| h1 | h2 |\n| --- | --- |\n| h1 | h2x |\n\n| h1 | h3 |\n| --- | --- |\n| 9 | z |\n";
         let g = merge_continuations(extract_grids(md));
         assert_eq!(g.len(), 2, "签名不同不得合并");
         assert_eq!(
@@ -460,10 +479,11 @@ mod tests {
             vec![&["h1", "h2"][..], &["h1", "h2x"][..]],
             "近重复表头行(一格不同)应保留"
         );
-        assert!(g[0]
-            .notes
-            .iter()
-            .all(|n| !n.starts_with("merged_continuation")));
+        assert!(
+            g[0].notes
+                .iter()
+                .all(|n| !n.starts_with("merged_continuation"))
+        );
         assert_eq!(cells(&g[1]), vec![&["h1", "h3"][..], &["9", "z"][..]]);
     }
 
@@ -473,9 +493,22 @@ mod tests {
         let mut g = Grid {
             start_line: 0,
             rows: vec![
-                Row { line: 0, cells: vec!["华为IPD流程各阶段活动".into(), "Unnamed: 1".into(), "Unnamed: 2".into()] },
-                Row { line: 1, cells: vec!["编号".into(), "阶段".into(), "活动".into()] },
-                Row { line: 2, cells: vec!["1".into(), "概念".into(), "x".into()] },
+                Row {
+                    line: 0,
+                    cells: vec![
+                        "华为IPD流程各阶段活动".into(),
+                        "Unnamed: 1".into(),
+                        "Unnamed: 2".into(),
+                    ],
+                },
+                Row {
+                    line: 1,
+                    cells: vec!["编号".into(), "阶段".into(), "活动".into()],
+                },
+                Row {
+                    line: 2,
+                    cells: vec!["1".into(), "概念".into(), "x".into()],
+                },
             ],
             notes: vec![],
         };
@@ -488,9 +521,18 @@ mod tests {
         let mut g2 = Grid {
             start_line: 0,
             rows: vec![
-                Row { line: 0, cells: vec!["Unnamed: 0".into(), "Unnamed: 1".into()] },
-                Row { line: 1, cells: vec!["".into(), "".into()] },
-                Row { line: 2, cells: vec!["1".into(), "2".into()] },
+                Row {
+                    line: 0,
+                    cells: vec!["Unnamed: 0".into(), "Unnamed: 1".into()],
+                },
+                Row {
+                    line: 1,
+                    cells: vec!["".into(), "".into()],
+                },
+                Row {
+                    line: 2,
+                    cells: vec!["1".into(), "2".into()],
+                },
             ],
             notes: vec![],
         };
@@ -505,11 +547,27 @@ mod tests {
         let mut g = Grid {
             start_line: 0,
             rows: vec![
-                Row { line: 0, cells: vec!["sheet title".into(), "Unnamed: 1".into(), "Unnamed: 2".into()] },
+                Row {
+                    line: 0,
+                    cells: vec![
+                        "sheet title".into(),
+                        "Unnamed: 1".into(),
+                        "Unnamed: 2".into(),
+                    ],
+                },
                 // 数据第 1 行 = 真表头，"Unnamed: 1" 在数据区全空，"Unnamed: 2" 非全空
-                Row { line: 1, cells: vec!["编号".into(), "".into(), "金额".into()] },
-                Row { line: 2, cells: vec!["1".into(), "".into(), "100".into()] },
-                Row { line: 3, cells: vec!["2".into(), "".into(), "200".into()] },
+                Row {
+                    line: 1,
+                    cells: vec!["编号".into(), "".into(), "金额".into()],
+                },
+                Row {
+                    line: 2,
+                    cells: vec!["1".into(), "".into(), "100".into()],
+                },
+                Row {
+                    line: 3,
+                    cells: vec!["2".into(), "".into(), "200".into()],
+                },
             ],
             notes: vec![],
         };
@@ -520,7 +578,11 @@ mod tests {
         // 每行都应是 2 列
         for r in &g.rows {
             assert_eq!(r.cells.len(), 2, "行 L{} 列数应为 2: {:?}", r.line, r.cells);
-            assert!(!r.cells.iter().any(|c| c == "Unnamed"), "不应残留 Unnamed: {:?}", r.cells);
+            assert!(
+                !r.cells.iter().any(|c| c == "Unnamed"),
+                "不应残留 Unnamed: {:?}",
+                r.cells
+            );
         }
     }
 
@@ -530,9 +592,18 @@ mod tests {
         let mut g = Grid {
             start_line: 0,
             rows: vec![
-                Row { line: 0, cells: vec!["Unnamed: 0".into(), "Unnamed: 1".into()] },
-                Row { line: 1, cells: vec!["a".into(), "b".into()] },
-                Row { line: 2, cells: vec!["1".into(), "2".into()] },
+                Row {
+                    line: 0,
+                    cells: vec!["Unnamed: 0".into(), "Unnamed: 1".into()],
+                },
+                Row {
+                    line: 1,
+                    cells: vec!["a".into(), "b".into()],
+                },
+                Row {
+                    line: 2,
+                    cells: vec!["1".into(), "2".into()],
+                },
             ],
             notes: vec![],
         };

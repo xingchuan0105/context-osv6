@@ -15,9 +15,7 @@
 use avrag_llm::{ChatMessage, LlmClient};
 
 // The actual triplet extraction system prompt (same as production).
-const TRIPLET_SYSTEM: &str = include_str!(
-    "../../../prompts/pipeline/triplet-extraction.system.md"
-);
+const TRIPLET_SYSTEM: &str = include_str!("../../../prompts/pipeline/triplet-extraction.system.md");
 
 /// Build user messages exactly as `build_triplet_extraction_messages` does.
 fn build_user_payload(chunks_json: &str) -> String {
@@ -96,7 +94,10 @@ async fn triplet_cache_hit_rate() {
             ChatMessage::user(build_user_payload(payload)),
         ];
 
-        let response = match client.complete_with_max_tokens(&messages, Some(0.1), 8_192).await {
+        let response = match client
+            .complete_with_max_tokens(&messages, Some(0.1), 8_192)
+            .await
+        {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("  batch {} FAILED: {e}", i + 1);
@@ -146,15 +147,9 @@ async fn triplet_cache_hit_rate() {
         cold.cached_tokens
     );
 
-    let warm_hit_rates: Vec<f64> = results[1..]
-        .iter()
-        .map(|r| r.hit_rate_pct)
-        .collect();
+    let warm_hit_rates: Vec<f64> = results[1..].iter().map(|r| r.hit_rate_pct).collect();
 
-    let min_warm = warm_hit_rates
-        .iter()
-        .cloned()
-        .fold(f64::MAX, f64::min);
+    let min_warm = warm_hit_rates.iter().cloned().fold(f64::MAX, f64::min);
 
     println!("  ✅ cold batch: cached_tokens=0 (expected)");
     println!("  ✅ warm batches hit rates: {:?}", warm_hit_rates);
@@ -223,9 +218,18 @@ async fn triplet_cache_hit_rate_realistic_payload() {
     let chunk_text_c = chunk_text_a.replace("华为IPD", "阿里中台战略");
 
     let payloads = vec![
-        format!(r#"{{"chunks":[{{"chunk_id":"111-222-333","text":"{}"}}]}}"#, chunk_text_a),
-        format!(r#"{{"chunks":[{{"chunk_id":"111-222-333","text":"{}"}}]}}"#, chunk_text_b),
-        format!(r#"{{"chunks":[{{"chunk_id":"111-222-333","text":"{}"}}]}}"#, chunk_text_c),
+        format!(
+            r#"{{"chunks":[{{"chunk_id":"111-222-333","text":"{}"}}]}}"#,
+            chunk_text_a
+        ),
+        format!(
+            r#"{{"chunks":[{{"chunk_id":"111-222-333","text":"{}"}}]}}"#,
+            chunk_text_b
+        ),
+        format!(
+            r#"{{"chunks":[{{"chunk_id":"111-222-333","text":"{}"}}]}}"#,
+            chunk_text_c
+        ),
     ];
 
     eprintln!("Triplet Cache Hit-Rate — Realistic Payload (~3000 tok/batch)");
@@ -242,7 +246,10 @@ async fn triplet_cache_hit_rate_realistic_payload() {
             ChatMessage::user(build_user_payload(payload)),
         ];
 
-        let response = match client.complete_with_max_tokens(&messages, Some(0.1), 8_192).await {
+        let response = match client
+            .complete_with_max_tokens(&messages, Some(0.1), 8_192)
+            .await
+        {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("  batch {} FAILED: {e}", i + 1);
@@ -292,15 +299,27 @@ async fn triplet_cache_hit_rate_realistic_payload() {
     );
 
     // Realistic hit rate: system / (system + ~3000 user) ≈ 20%.
-    let avg_warm_hit = cached_tokens.iter().zip(prompt_tokens.iter())
+    let avg_warm_hit = cached_tokens
+        .iter()
+        .zip(prompt_tokens.iter())
         .map(|(&c, &p)| c as f64 / p as f64 * 100.0)
-        .sum::<f64>() / cached_tokens.len() as f64;
+        .sum::<f64>()
+        / cached_tokens.len() as f64;
 
-    println!("  ✅ all batches: cached≈{min_cached} tokens ({:.1}% hit)", avg_warm_hit);
+    println!(
+        "  ✅ all batches: cached≈{min_cached} tokens ({:.1}% hit)",
+        avg_warm_hit
+    );
     println!();
     println!("  → Realistic production scenario:");
-    println!("    batch={} tokens, cached={}, user≈{} miss",
-        prompt_tokens[0], min_cached,
-        prompt_tokens[0].saturating_sub(min_cached));
-    println!("    net savings: {:.0}% of input tokens per batch", avg_warm_hit);
+    println!(
+        "    batch={} tokens, cached={}, user≈{} miss",
+        prompt_tokens[0],
+        min_cached,
+        prompt_tokens[0].saturating_sub(min_cached)
+    );
+    println!(
+        "    net savings: {:.0}% of input tokens per batch",
+        avg_warm_hit
+    );
 }
