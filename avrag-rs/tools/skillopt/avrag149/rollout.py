@@ -60,7 +60,7 @@ def run_batch(
             verbose=verbose,
         )
 
-    rows, meta = parse_report(v2_dir)
+    rows, meta = parse_report(v2_dir, ids=ids)
     if verbose and meta:
         counts = meta.get("label_counts") or {}
         print(

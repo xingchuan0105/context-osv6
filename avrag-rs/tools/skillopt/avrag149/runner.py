@@ -161,11 +161,20 @@ def run_eval(
     return newest
 
 
-def parse_report(v2_dir: str | os.PathLike) -> tuple[dict[int, dict], dict]:
+def parse_report(
+    v2_dir: str | os.PathLike,
+    ids: list[int] | None = None,
+) -> tuple[dict[int, dict], dict]:
     """解析 v2 产物目录，返回 (每题评分行, 汇总元信息)。
 
     per_query.tsv 列：n, subset, label, correctness, faithfulness, relevancy, recall, recall_at_k, query
     label 取值：PASS / PARTIAL / RETRIEVAL_MISS / UNGROUNDED / REFUSAL_WRONG（可能含 JUDGE_ERROR）。
+
+    ``ids``：本次评测的 E2E 题号列表（与 ``run_eval(questions=...)`` 一致）。
+    tsv 的 ``n`` 列是评测内枚举序号（``report.rs`` 用 ``i+1``）——全量时恰好等于
+    题号，**子集时是 1..len(ids) 连续序号而非原题号**（2026-08-01 修：子集评测
+    baseline 错位，30 题被误映射成连续号，PASS 29/30 显示为 7/30）。
+    传入 ``ids`` 时按行序映射回原题号（tsv 行序 == sorted(ids) 序）。
     """
     vdir = Path(v2_dir)
     tsv = vdir / "per_query.tsv"
@@ -175,11 +184,17 @@ def parse_report(v2_dir: str | os.PathLike) -> tuple[dict[int, dict], dict]:
     rows: dict[int, dict] = {}
     with tsv.open(encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
-        for r in reader:
-            try:
-                n = int(r["n"])
-            except (KeyError, ValueError):
-                continue
+        for i, r in enumerate(reader):
+            if ids is None:
+                try:
+                    n = int(r["n"])
+                except (KeyError, ValueError):
+                    continue
+            else:
+                # 子集评测:tsv 行 i 对应 sorted(ids)[i]
+                if i >= len(ids):
+                    continue
+                n = ids[i]
             rows[n] = {
                 "subset": r.get("subset", ""),
                 "label": r.get("label", ""),
