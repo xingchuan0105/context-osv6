@@ -217,6 +217,10 @@ WP1 → WP2 → WP3 → WP4 → WP5 → WP6，每 WP 一个本地 commit（solo 
 - **`worker_handoff`**：同为 orchestrator 时代的会话交接消息类型；单 agent 路径不产生也不消费。若未来从 wire 契约移除需评估序列化兼容（当前保留零成本）。
 - 结论：两者均为纯残留定义，无运行时副作用；删除属独立重构项（需动 app-chat/agent-loop 类型 + 测试），按计划留作非目标，仅此记录。
 
+### WP6（2026-08-02 收尾验证）
+
+13. **`bash scripts/test-l1.sh` 的 L1 file-size 闸为**实施前既有失败（commit 447e6fa7 引入该闸，早于本计划 commit db9b80cc；`answer_contract.rs` 1588 行 > 1000 行硬上限，自 a1c7be35 后未被本计划任何 commit 触碰）。本计划无分解该文件的 WP 项，超出范围不改动；L1 其余部分（cargo test agent-tools/agent-loop/app-chat + frontend tsc）单独执行全绿。G10 以此口径验收：crate 单测全绿 + L1 cargo 层通过 + graphify 已更新。
+
 ## 9. 环境纪律（摘自 AGENTS.md，全文有效）
 
 - prompts-in-md：LLM 可见文案只住 `avrag-rs/prompts/**/*.md`；代码里只做加载与占位符替换。
