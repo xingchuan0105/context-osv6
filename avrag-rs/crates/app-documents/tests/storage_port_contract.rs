@@ -57,7 +57,7 @@ fn document_modules_do_not_call_storage_pg_escape_hatch() {
         include_str!("../src/document_context.rs"),
         include_str!("../src/url_imports.rs"),
         include_str!("../src/ingest.rs"),
-        include_str!("../src/notebooks.rs"),
+        include_str!("../src/workspaces.rs"),
     ];
     for source in sources {
         assert!(
@@ -356,8 +356,8 @@ async fn document_store_port_is_used_when_wired() {
     let auth = test_auth();
 
     let workspaces = ctx.list_workspaces(&auth, &storage).await;
-    assert_eq!(notebooks.len(), 1);
-    assert_eq!(notebooks[0].name, "Port Workspace");
+    assert_eq!(workspaces.len(), 1);
+    assert_eq!(workspaces[0].name, "Port Workspace");
     assert_eq!(
         calls.load(std::sync::atomic::Ordering::SeqCst),
         1,

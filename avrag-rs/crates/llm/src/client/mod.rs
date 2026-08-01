@@ -679,18 +679,27 @@ impl LlmClient {
                             // Delivery was already in progress: finish with an
                             // error and cool down the key (no refund — tokens
                             // may have been consumed).
+                            Self::record_call_failure(&call);
                             pool.report_failure(&pick, FailureKind::KeyOnly, false);
                             return Err(err);
                         }
                         Err(err) => {
-                            // Failed before any content was delivered:
-                            // treat as a provider-level failure and fail over.
-                            pool.report_failure(&pick, FailureKind::Provider, true);
+                            // Failed before any content was delivered. Classify
+                            // (429/401/403 → key-only cooldown, not provider) so a
+                            // sibling key on the same member is still tried; the
+                            // raw LlmError survives inside the anyhow error.
+                            Self::record_call_failure(&call);
+                            let kind = err
+                                .downcast_ref::<crate::schema::LlmError>()
+                                .map(crate::routing::failure_kind)
+                                .unwrap_or(FailureKind::Provider);
+                            pool.report_failure(&pick, kind, true);
                             last_error = Some(err);
                         }
                     }
                 }
                 Some(Err(err)) => {
+                    Self::record_call_failure(&call);
                     let kind = crate::routing::failure_kind(&err);
                     pool.report_failure(&pick, kind, true);
                     last_error = Some(Self::map_route_error(err));
@@ -699,6 +708,7 @@ impl LlmClient {
                     }
                 }
                 None => {
+                    Self::record_call_failure(&call);
                     pool.report_failure(&pick, FailureKind::Provider, true);
                     last_error = Some(anyhow::anyhow!("LLM stream ended before any event"));
                 }
@@ -871,11 +881,13 @@ mod tests {
     }
 
     fn sse(body: &'static str) -> impl axum::response::IntoResponse {
-        ([(axum::http::header::CONTENT_TYPE, "text/event-stream")], body)
+        (
+            [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+            body,
+        )
     }
 
-    const ROLE_FRAME: &str =
-        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n";
+    const ROLE_FRAME: &str = "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n";
     const SUCCESS_BODY: &str = "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"B-WORLD\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\ndata: [DONE]\n\n";
 
     /// 交付边界（2026-08-01 验收必修）：首事件是 TextStart 标记（role chunk），
@@ -981,5 +993,57 @@ mod tests {
         assert!(result.is_ok(), "交付前失败应 failover 成功: {result:?}");
         assert_eq!(received, "B-WORLD");
         assert_eq!(calls_a.load(Ordering::SeqCst), 1);
+    }
+
+    /// 429 未交付 → KeyOnly 冷却(只冷却该 key),同 member 的 sibling key 仍被尝试;
+    /// 若误判 Provider 会冷却整个 member 导致 NoCapacity(验收建议①)。
+    #[tokio::test]
+    async fn pool_stream_429_cools_key_only_sibling_key_still_tried() {
+        let url = serve(axum::Router::new().route(
+            "/chat/completions",
+            axum::routing::post(|req: axum::http::Request<axum::body::Body>| async move {
+                let bearer = req
+                    .headers()
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+                if bearer == "Bearer key-429" {
+                    axum::response::IntoResponse::into_response(
+                        axum::http::StatusCode::TOO_MANY_REQUESTS,
+                    )
+                } else {
+                    axum::response::IntoResponse::into_response(sse(SUCCESS_BODY))
+                }
+            }),
+        ))
+        .await;
+
+        let client = LlmClient::new_with_pool(
+            provider_config(&url),
+            LlmPoolConfig::new(vec![PoolMemberConfig::with_keys(
+                provider_config(&url),
+                vec!["key-429".to_string(), "key-ok".to_string()],
+            )]),
+        );
+        let mut received = String::new();
+        let result = client
+            .complete_stream(
+                &[ChatMessage::user("hi")],
+                None,
+                CancellationToken::new(),
+                |t| received.push_str(t),
+                |_| {},
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "429 应只冷却 key 并切 sibling key 成功: {result:?}"
+        );
+        assert_eq!(received, "B-WORLD");
+        // 冷却落在 key 级:member 未冷却,下一次 pick 仍选同一 member 的 key-ok。
+        let pick = client.pool.as_ref().unwrap().pick(1).unwrap();
+        assert_eq!(pick.member_idx, 0);
     }
 }
