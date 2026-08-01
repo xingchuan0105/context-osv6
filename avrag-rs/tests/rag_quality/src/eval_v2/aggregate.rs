@@ -131,6 +131,8 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     let faithfulness_applicable = !input.no_context
         && !input.expect_no_retrieval
         && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable;
+    // UNGROUNDED:faithfulness 不达标且有具名 unsupported claim(编造/无据)。
+    // 一票否决保留——「核心答对+附加编造」仍按编造从严处理(q041 系教训)。
     if faithfulness_applicable
         && judge.faithfulness.score < t.tau_faithfulness
         && !judge.faithfulness.unsupported_claims.is_empty()
@@ -315,8 +317,8 @@ impl SuiteSummaryV2 {
 mod tests {
     use super::*;
     use crate::eval_v2::judge_parse::{
-        CorrectnessJudgment, FaithfulnessJudgment, FaithfulnessVerdict, RelevancyJudgment,
-        RefusalJudgment, SufficiencyJudgment, SufficiencyVerdict,
+        CorrectnessJudgment, FaithfulnessJudgment, FaithfulnessVerdict, RefusalJudgment,
+        RelevancyJudgment, SufficiencyJudgment, SufficiencyVerdict,
     };
     use crate::eval_v2::retrieval::{RetrievalScoreV2, SelectionScoreV2};
     use crate::eval_v2::{SCHEMA_VERSION, parse_judge_output};
@@ -329,8 +331,10 @@ mod tests {
         partial_min: 0.4,
     };
 
-    const JUDGE_GOOD_JSON: &str =
-        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/eval_v2/judge_good.json"));
+    const JUDGE_GOOD_JSON: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/fixtures/eval_v2/judge_good.json"
+    ));
     const JUDGE_UNGROUNDED_JSON: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/fixtures/eval_v2/judge_ungrounded.json"
@@ -785,14 +789,26 @@ mod tests {
                 "a",
                 LabelV2::Pass,
                 JudgeStatus::Ok,
-                Some(judge_output(0.9, CorrectnessVerdict::Correct, 0.8, &[], true)),
+                Some(judge_output(
+                    0.9,
+                    CorrectnessVerdict::Correct,
+                    0.8,
+                    &[],
+                    true,
+                )),
                 1.0,
             ),
             score(
                 "a",
                 LabelV2::Partial,
                 JudgeStatus::Ok,
-                Some(judge_output(0.5, CorrectnessVerdict::Partial, 0.6, &[], true)),
+                Some(judge_output(
+                    0.5,
+                    CorrectnessVerdict::Partial,
+                    0.6,
+                    &[],
+                    true,
+                )),
                 0.5,
             ),
             score("b", LabelV2::JudgeError, JudgeStatus::Error, None, 0.0),
@@ -830,7 +846,13 @@ mod tests {
             "a",
             LabelV2::Pass,
             JudgeStatus::Ok,
-            Some(judge_output(1.0, CorrectnessVerdict::Correct, 1.0, &[], true)),
+            Some(judge_output(
+                1.0,
+                CorrectnessVerdict::Correct,
+                1.0,
+                &[],
+                true,
+            )),
             1.0,
         )]);
         let json = serde_json::to_value(&summary).unwrap();
@@ -848,14 +870,26 @@ mod tests {
                 "rag",
                 LabelV2::Pass,
                 JudgeStatus::Ok,
-                Some(judge_output(0.9, CorrectnessVerdict::Correct, 0.8, &[], true)),
+                Some(judge_output(
+                    0.9,
+                    CorrectnessVerdict::Correct,
+                    0.8,
+                    &[],
+                    true,
+                )),
                 1.0,
             ),
             score_with_context(
                 "chat",
                 LabelV2::Pass,
                 JudgeStatus::Ok,
-                Some(judge_output(1.0, CorrectnessVerdict::Correct, 0.0, &[], true)),
+                Some(judge_output(
+                    1.0,
+                    CorrectnessVerdict::Correct,
+                    0.0,
+                    &[],
+                    true,
+                )),
                 0.0,
                 ContextSource::NoContext,
             ),
@@ -910,7 +944,13 @@ mod tests {
             "rag",
             LabelV2::Pass,
             JudgeStatus::Ok,
-            Some(judge_output(0.9, CorrectnessVerdict::Correct, 0.8, &[], true)),
+            Some(judge_output(
+                0.9,
+                CorrectnessVerdict::Correct,
+                0.8,
+                &[],
+                true,
+            )),
             1.0,
         );
         multi.retrieval.recall_at_k = 0.0;
@@ -919,7 +959,13 @@ mod tests {
             "memory",
             LabelV2::Pass,
             JudgeStatus::Ok,
-            Some(judge_output(1.0, CorrectnessVerdict::Correct, 0.0, &[], true)),
+            Some(judge_output(
+                1.0,
+                CorrectnessVerdict::Correct,
+                0.0,
+                &[],
+                true,
+            )),
             0.0,
             ContextSource::Cited,
         );

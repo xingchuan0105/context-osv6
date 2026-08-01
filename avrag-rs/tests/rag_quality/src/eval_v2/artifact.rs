@@ -99,18 +99,33 @@ impl JudgeInput {
         answer: &str,
         tool_outputs: &[String],
     ) -> Self {
-        let (cited_context, context_source) = match ContextSource::determine(example, retrieved, cited)
-        {
-            ContextSource::NoContext if !tool_outputs.is_empty() => {
-                (tool_outputs.to_vec(), ContextSource::ToolOutputs)
-            }
-            ContextSource::Cited => (cited.contents(), ContextSource::Cited),
-            ContextSource::RetrievedFallback => {
-                (retrieved.contents(), ContextSource::RetrievedFallback)
-            }
-            ContextSource::NoContext => (Vec::new(), ContextSource::NoContext),
-            ContextSource::ToolOutputs => unreachable!("determine never yields ToolOutputs"),
-        };
+        let (cited_context, context_source) =
+            match ContextSource::determine(example, retrieved, cited) {
+                ContextSource::NoContext if !tool_outputs.is_empty() => {
+                    (tool_outputs.to_vec(), ContextSource::ToolOutputs)
+                }
+                ContextSource::Cited => {
+                    // R2(2026-08-01):faithfulness 证据范围 = 引用 + 检索回传可见。
+                    // 模型 claim 常来自多轮检索综合,SELECTED 只圈末轮部分;
+                    // 仅按引用核对会把「检索可见但未圈」误判为无据(q086/q050 根因)。
+                    // cited 优先、检索补足未引用 chunk;cite 质量仍由 selection 指标
+                    // (cited_gold_hits)独立衡量,不因 context 放宽而消失。
+                    let cited_ids: std::collections::HashSet<String> =
+                        cited.chunk_ids().into_iter().collect();
+                    let mut ctx = cited.contents();
+                    for chunk in &retrieved.chunks {
+                        if !cited_ids.contains(chunk.chunk_id.as_str()) {
+                            ctx.push(chunk.content.clone());
+                        }
+                    }
+                    (ctx, ContextSource::Cited)
+                }
+                ContextSource::RetrievedFallback => {
+                    (retrieved.contents(), ContextSource::RetrievedFallback)
+                }
+                ContextSource::NoContext => (Vec::new(), ContextSource::NoContext),
+                ContextSource::ToolOutputs => unreachable!("determine never yields ToolOutputs"),
+            };
         Self {
             question: example.query.clone(),
             reference_answer: example.reference_answer().to_string(),
@@ -192,7 +207,39 @@ mod tests {
         assert_eq!(input.cited_context, vec!["cited text".to_string()]);
         assert_eq!(input.context_source, ContextSource::Cited);
         assert_eq!(input.context_source.as_str(), "cited");
-        assert_eq!(input.rubric_notes.as_deref(), Some("接受「2019 年」「2019年」"));
+        assert_eq!(
+            input.rubric_notes.as_deref(),
+            Some("接受「2019 年」「2019年」")
+        );
+    }
+
+    /// R2(2026-08-01):cited 路径的 faithfulness 证据 = 引用 + 检索回传可见
+    /// (未被引用的检索 chunk 补足),「圈选不全」不再直接判无据。
+    #[test]
+    fn cited_context_includes_retrieved_supplement() {
+        let cited = CitedChunks {
+            chunks: vec![CitedChunk {
+                chunk_id: Some("c0".to_string()),
+                citation_id: 1,
+                content: "cited text".to_string(),
+                score: 0.9,
+            }],
+        };
+        let mut retrieved = retrieved();
+        retrieved.chunks.push(RetrievedChunk {
+            chunk_id: "c1".to_string(),
+            content: "retrieved extra".to_string(),
+            score: Some(0.7),
+            rank: 1,
+            tool: "lexical_retrieval".to_string(),
+        });
+        let input = JudgeInput::new(&example(), &retrieved, &cited, "2019年在大连建厂", &[]);
+        assert_eq!(input.context_source, ContextSource::Cited);
+        // cited 优先 + 未被引用的检索 chunk 补足;已引用的 c0 不重复。
+        assert_eq!(
+            input.cited_context,
+            vec!["cited text".to_string(), "retrieved extra".to_string()]
+        );
     }
 
     #[test]
@@ -252,6 +299,9 @@ mod tests {
         );
         assert_eq!(input.context_source, ContextSource::ToolOutputs);
         assert_eq!(input.context_source.as_str(), "tool_outputs");
-        assert_eq!(input.cited_context, vec!["weather_query: {\"temp\": 26}".to_string()]);
+        assert_eq!(
+            input.cited_context,
+            vec!["weather_query: {\"temp\": 26}".to_string()]
+        );
     }
 }

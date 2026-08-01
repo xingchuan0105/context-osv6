@@ -157,12 +157,25 @@ pub fn extract_retrieved_chunks(tool_results: &[ToolResult]) -> RetrievedChunks 
             }
             // Real retrieval tools use `text`; codegen-bridge fallback normalizes
             // `content` -> `text`, but tolerate either for robustness.
-            let content = chunk
+            let mut content = chunk
                 .get("text")
                 .and_then(|v| v.as_str())
                 .or_else(|| chunk.get("content").and_then(|v| v.as_str()))
                 .unwrap_or("")
                 .to_string();
+            // doc_grep: `total_hits` 是运行时统计(命中行数),不在 chunk 原文里。
+            // retrieved_fallback 路径的 judge context 用这里的内容——附加统计
+            // 使计数类 claim 在未 SELECTED 时也可被核对(2026-08-01 q078 根因)。
+            if result.tool == "doc_grep"
+                && let Some(total_hits) = data.get("total_hits").and_then(|v| v.as_u64())
+            {
+                let truncated = data
+                    .get("truncated")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                content =
+                    format!("[grep total_hits={total_hits}, truncated={truncated}]\n{content}");
+            }
             let score = chunk
                 .get("score")
                 .and_then(|v| v.as_f64())
