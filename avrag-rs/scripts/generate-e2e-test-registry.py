@@ -22,12 +22,10 @@ IGNORED_SUFFIXES = {
     "real_llm_rag_bundled_pdf_corpus_query",
     "real_llm_rag_multidoc_pdf_and_txt",
     "real_llm_rag_staging_local_book_pdf",
-    "real_llm_rag_after_liteparse_pdf_ingest_returns_citation",
+    "real_llm_rag_after_markitdown_pdf_ingest_returns_citation",
     "real_llm_rag_complex_query_uses_multiple_tools",
     "real_llm_rag_document_qa_returns_citation",
     "real_llm_search_open_query_returns_web_citation",
-    "office_xlsx_staging_ingest_e2e",
-    "minimal_docx_liteparse_pdf_ingest_e2e",
     "cost_report_from_artifacts",
 }
 
@@ -139,12 +137,6 @@ MODULE_META: dict[tuple[str, str], dict] = {
         "deps": ["M", "I"],
         "evidence": ["E-P", "E-Prod", "E-Obs"],
     },
-    ("integration", "liteparse_pdf_e2e"): {
-        "capabilities": ["CAP-INGEST"],
-        "parallel_group": "G-serial-integration",
-        "deps": ["M", "I", "P"],
-        "evidence": ["E-P", "E-Prod"],
-    },
     ("integration", "paddle_image_e2e"): {
         "capabilities": ["CAP-INGEST"],
         "parallel_group": "G-serial-integration",
@@ -157,21 +149,7 @@ MODULE_META: dict[tuple[str, str], dict] = {
         "parallel_group": "G-serial-integration",
         "deps": ["M", "I", "P"],
         "evidence": ["E-P", "E-Prod"],
-        "note": "mock office-parser; real JVM in office_xlsx_staging_e2e",
-    },
-    ("integration", "office_doc_liteparse_e2e"): {
-        "capabilities": ["CAP-INGEST"],
-        "parallel_group": "G-serial-integration",
-        "deps": ["I"],
-        "evidence": ["E-P", "E-Prod"],
-        "note": "docx→pdf LiteParse; #[ignore] requires libreoffice",
-    },
-    ("integration", "office_xlsx_staging_e2e"): {
-        "capabilities": ["CAP-INGEST"],
-        "parallel_group": "G-serial-integration",
-        "deps": ["I", "P"],
-        "evidence": ["E-P", "E-Prod"],
-        "note": "real office-parser-jvm; #[ignore] staging only",
+        "note": "real markitdown CLI (retired office-parser mock removed 2026-07-31)",
     },
     ("integration", "document_lifecycle"): {
         "capabilities": ["CAP-INGEST"],
@@ -510,7 +488,7 @@ playwright_specs:
     capabilities: [CAP-RAG, CAP-INGEST]
     evidence: [E-P, E-Prod, E-Q]
     citation_gate: hard
-    note: bundled phase0-mini.pdf LiteParse path
+    note: bundled phase0-mini.pdf markitdown path (fixture text contains the word LiteParse; assertions rely on it)
   - path: frontend_next/e2e/specs/journey/workspace-crud.spec.ts
     layer: L5
     capabilities: [CAP-CHAT]

@@ -45,11 +45,10 @@
 ## 运行
 
 ```bash
-# 推荐：product-dev-up 会拉起 pdf-renderer，worker 日志 tee 到 .dev-logs/worker.log
+# 推荐：product-dev-up 拉起 minio/api/worker/next，worker 日志 tee 到 .dev-logs/worker.log
 bash scripts/product-dev-up.sh   # 仓库根
 
-# 或单独：
-bash avrag-rs/scripts/pdf-renderer-up.sh   # 扫描 PDF / visual 回退需要 :9091
+# 或单独（worker 依赖 PATH 上的 markitdown CLI——唯一生产解析器，xlsx/pdf/docx 等全类）：
 cd avrag-rs
 mkdir -p .dev-logs
 RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-logs/worker.log
@@ -57,8 +56,9 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 
 | 依赖 | 说明 |
 |------|------|
-| `PDF_RENDERER_BASE_URL`（默认 `http://127.0.0.1:9091`） | **dev 应常开** `scripts/pdf-renderer-up.sh`；纯 text PDF 可不依赖 |
+| `markitdown` CLI（`MARKITDOWN_BIN`/`MARKITDOWN_TIMEOUT_MS`） | 唯一生产文档解析器；缺失时摄入以「markitdown 子进程启动失败」显式报错 |
 | `.dev-logs/worker.log` | `product-dev-up` 默认 tee；避免只挂 pts 丢日志 |
+| ~~`PDF_RENDERER_BASE_URL`~~ | 已退役（2026-07-31 markitdown 切换），office parser(:9090)/PDF renderer(:9091) 不再被调用 |
 
 启动时建议先确认：
 
@@ -68,8 +68,8 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 2. **健康探针**
    - `AVRAG_WORKER_HEALTH_PORT=0` 时会自动选端口并写入 `AVRAG_WORKER_HEALTH_PORT_FILE`。
    - 本地可直接 `curl http://127.0.0.1:<port>/health` 验证存活。
-3. **pdf-visual-renderer**
-   - `curl -fsS http://127.0.0.1:9091/v1/healthz`
+3. **markitdown CLI**
+   - `command -v markitdown && markitdown --version`（worker PATH 必须可见）。
 
 ## 任务契约
 
@@ -166,28 +166,25 @@ cargo check -p avrag-worker
 
 ## 服务器部署提醒
 
-### PDF 入库（LiteParse + Paddle Jobs，P4 后默认）
+### PDF 入库（markitdown 单一路径，2026-07-31 起）
 
-PDF 与 Office→PDF 文档走 **LiteParse 主链**：hybrid 探针（`probe_pdf_hybrid`）→ `router/page_routes` 页内分拣 → Worker `execute_pdf_parse`。
+PDF 与 Office 类文档走 **markitdown 单一路径**（2026-07-31 起唯一生产解析器）：worker 子进程 `markitdown` 把 xls/xlsx/doc/docx/ppt/pptx/pdf/txt/md/html/csv/代码文件统一转为 markdown，再进 IR/切块/索引；表格类文档另经 struct-query 表格阶段（per-doc duckdb + 证据 chunk）。原 LiteParse 主链（hybrid 探针/页路由/VisualRaster 兜底）已退役删除。
 
-| 页型 | 处理方式 |
+| 文档形态 | 处理方式 |
 |------|----------|
-| A/B（有字） | LiteParse 抽字；B 类附加 Figure → MM |
-| C/D（表/扫描） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`） |
-| E（兜底） | `pdf-renderer` sidecar 整页 VisualRaster |
+| 文档类（含 PDF/xlsx/docx 等） | markitdown 子进程 → markdown → IR |
+| 扫描件 PDF | markitdown 提不出文本 → 空 IR → 按既有零块校验拒收 |
+| 独立图片（png/jpg/webp） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`，现役唯一图片路径） |
 
-1. **Paddle Jobs（C/D 类 PDF 页 + 独立图片）**
+1. **Paddle Jobs（仅独立图片）**
    - `PADDLE_OCR_BASE_URL` — 默认 `https://paddleocr.aistudio-app.com/api/v2/ocr`
    - `PADDLE_OCR_API_TOKEN` — AI Studio Token（**禁止入库/日志**）
    - `PADDLE_OCR_MODEL` — 如 `PaddleOCR-VL-1.6`
-2. **E 类 VisualRaster sidecar**（仅 OCR 失败 / Job 预算耗尽时）
-   - `PDF_RENDERER_BASE_URL=http://127.0.0.1:9091`
-   - **端口冲突**：Milvus standalone 默认也占 `9091`（metrics）。`docker-compose.milvus.yml` 已把 Milvus 宿主机映射改为 `19091:9091`，gRPC 仍用 `19530`。若 9091 被占，`pdf-renderer-up.sh` 会提示并退出。
-   - 启动：`./scripts/pdf-renderer-up.sh` / 停止：`./scripts/pdf-renderer-down.sh`
-3. 可选调参：`PDF_VISUAL_PAGES_PER_CHUNK=4`、`PDF_RENDERER_TIMEOUT_MS=60000`、`MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896`
+2. **E 类 VisualRaster sidecar** —— 已退役（2026-07-31 markitdown 切换）：`PDF_RENDERER_BASE_URL`、`PDF_VISUAL_PAGES_PER_CHUNK`、`PDF_RENDERER_TIMEOUT_MS` 均不再生效；`pdf-renderer-up.sh/down.sh` 已删除；扫描件 PDF 经 markitdown 提不出文本时按零块校验拒收。
+3. 可选调参：`MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896`
 4. VLM 页摘要（INGESTION_LLM）与可选 triplet（`INGESTION_VLM_TRIPLET_ENABLED=1`）依赖 `INGESTION_LLM_*` 配置。
 
-> **已删除：** MinerU PDF OCR、`LITEPARSE_ENABLED` / shadow / 灰度开关。历史见 `docs/archive/p4-mineru-shadow-migration-historical.md`。架构详情见 `docs/liteparse-paddle-ingestion-architecture-2026-06-13.md`。
+> **已删除：** MinerU PDF OCR、`LITEPARSE_ENABLED` / shadow / 灰度开关。历史见 `docs/archive/p4-mineru-shadow-migration-historical.md`。liteparse/office parser 退役见 `docs/plans/2026-07-31-struct-query-w2-s4-window2-handoff.md`。
 
 ### 独立图片 Paddle OCR（`ParseRoute::PaddleOcrImage`）
 
@@ -199,7 +196,6 @@ PDF 与 Office→PDF 文档走 **LiteParse 主链**：hybrid 探针（`probe_pdf
 
 产出：`DocumentType::Image`，`pdf_route_mode=paddle_image`，文本块 + Figure 块（含 MM 索引）。
 
-### Office 解析（仅 Excel）
+### Office 解析
 
-- `OFFICE_PARSER_BASE_URL=http://127.0.0.1:9090`
-- `./scripts/office-parser-up.sh` / `./scripts/office-parser-down.sh`
+已统一退役（2026-07-31）：docx/xlsx/pptx/pdf 等一切文档类由 worker 子进程 `markitdown` 解析（`OFFICE_PARSER_BASE_URL` 不再生效，`office-parser-up.sh/down.sh` 已删除）。
