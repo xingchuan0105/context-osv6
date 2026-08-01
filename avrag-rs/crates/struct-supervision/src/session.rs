@@ -15,9 +15,43 @@ pub const CELL_SLICE: usize = 200;
 pub const MAX_SLICE_ROWS: usize = 40;
 pub const MAX_CHECK_ROWS: usize = 50;
 
-/// SQL 只读守卫（与 `supervise.FORBIDDEN_SQL` 一致）。
-const FORBIDDEN_SQL: &str =
-    r"\b(attach|copy|read_csv|read_json|insert|update|delete|create|drop|alter|pragma|set|install|load)\b";
+/// SQL 禁词（词边界，大小写不敏感）：文件读写/外部访问/DDL/DML/配置。
+/// `read_*` 表函数族由下方的 FORBIDDEN_FAMILY_PATTERNS 覆盖，此处不重复列出。
+/// 对齐 `struct_query.rs` 禁词全集。
+const FORBIDDEN_SQL: &[&str] = &[
+    "attach",
+    "detach",
+    "copy",
+    "install",
+    "load",
+    "pragma",
+    "set",
+    "create",
+    "insert",
+    "update",
+    "delete",
+    "drop",
+    "alter",
+    "export",
+    "import",
+    "prepare",
+    "execute",
+    "macro",
+    "glob",
+    "sqlite_scan",
+    "postgres_scan",
+    "mysql_scan",
+    "parquet_scan",
+    "csv_auto",
+];
+
+/// SQL 族模式禁词（额外正则，大小写不敏感）：覆盖 read_* 表函数族
+/// （read_csv / read_csv_auto / read_parquet / read_json / read_text /
+/// read_blob / read_ndjson / read_npy 等），弥补词边界禁词表无法覆盖
+/// `read_csv_auto` 等后续字符仍为词字符的变体。
+const FORBIDDEN_FAMILY_PATTERNS: &[&str] = &[
+    r"\bread_[a-z0-9_]+\b",
+];
 
 /// DuckDB 单元格 → String（与 `struct_query.rs::cell_to_string` 同款）。
 fn cell_to_string(v: duckdb::types::ValueRef) -> String {
@@ -240,9 +274,37 @@ impl Session {
             .unwrap_or("")
             .trim()
             .trim_end_matches(';');
-        let re = regex::Regex::new(FORBIDDEN_SQL).unwrap();
-        if !sql.to_lowercase().starts_with("select") || re.is_match(sql) {
+        if !sql.to_lowercase().starts_with("select") {
             return format!("校验 SQL 未通过只读守卫,未执行:{}", clip(sql, 120));
+        }
+        // 精确禁词（词边界，大小写不敏感）
+        for kw in FORBIDDEN_SQL {
+            let pat = format!(r"\b{}\b", regex::escape(kw));
+            if regex::RegexBuilder::new(&pat)
+                .case_insensitive(true)
+                .build()
+                .expect("forbidden regex")
+                .is_match(sql)
+            {
+                return format!(
+                    "校验 SQL 未通过只读守卫,未执行:{}",
+                    clip(sql, 120)
+                );
+            }
+        }
+        // 族模式禁词（如 read_csv_auto 等变体逃逸词边界）
+        for pat in FORBIDDEN_FAMILY_PATTERNS {
+            if regex::RegexBuilder::new(pat)
+                .case_insensitive(true)
+                .build()
+                .expect("forbidden family regex")
+                .is_match(sql)
+            {
+                return format!(
+                    "校验 SQL 未通过只读守卫,未执行:{}",
+                    clip(sql, 120)
+                );
+            }
         }
         let mut stmt = match self.con.prepare(sql) {
             Ok(stmt) => stmt,
@@ -334,5 +396,104 @@ impl Session {
             "{tid}: 已隔离,原因:{}. 该表不出现在查询侧 catalog。",
             args.get("reason").and_then(|v| v.as_str()).unwrap_or("")
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Grid, Row, SuperviseInput};
+
+    fn fixture_session() -> Session {
+        let text = ["| h |", "| --- |", "| a |"].join("\n");
+        let grids = vec![Grid {
+            start_line: 1,
+            rows: vec![
+                Row { line: 1, cells: vec!["h".into()] },
+                Row { line: 3, cells: vec!["a".into()] },
+            ],
+            notes: vec![],
+        }];
+        let input = SuperviseInput {
+            doc_id: Some("test".into()),
+            source_text: text,
+            grids,
+        };
+        Session::new(&input).expect("fixture session")
+    }
+
+    #[test]
+    fn run_check_rejects_non_select() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "DROP TABLE t0"}));
+        assert!(r.contains("未通过只读守卫"), "non-SELECT should be rejected: {r}");
+    }
+
+    #[test]
+    fn run_check_rejects_forbidden_keyword() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM t0; ATTACH 'evil.db'"}));
+        assert!(r.contains("未通过只读守卫"), "ATTACH should be rejected: {r}");
+    }
+
+    #[test]
+    fn run_check_rejects_read_csv_lowercase() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM read_csv('/etc/passwd')"}));
+        assert!(r.contains("未通过只读守卫"), "read_csv should be rejected: {r}");
+    }
+
+    #[test]
+    fn run_check_rejects_read_csv_mixed_case_bypass() {
+        // H2 回归：大小写绕过 `Read_Csv('/etc/passwd')` 必须被拦截。
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM Read_Csv('/etc/passwd')"}));
+        assert!(
+            r.contains("未通过只读守卫"),
+            "Read_Csv (mixed case) must be rejected by case-insensitive guard: {r}"
+        );
+    }
+
+    #[test]
+    fn run_check_rejects_read_parquet_mixed_case() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM Read_ParquET('/tmp/x.parquet')"}));
+        assert!(r.contains("未通过只读守卫"), "Read_ParquET should be rejected by family pattern: {r}");
+    }
+
+    #[test]
+    fn run_check_rejects_read_text() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM read_text('/etc/hosts')"}));
+        assert!(r.contains("未通过只读守卫"), "read_text should be rejected by family pattern: {r}");
+    }
+
+    #[test]
+    fn run_check_rejects_export() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM t0; EXPORT DATABASE '/tmp'"}));
+        assert!(r.contains("未通过只读守卫"), "EXPORT should be rejected: {r}");
+    }
+
+    #[test]
+    fn run_check_rejects_glob_function() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM glob('*.duckdb')"}));
+        assert!(r.contains("未通过只读守卫"), "glob() should be rejected: {r}");
+    }
+
+    #[test]
+    fn run_check_allows_safe_select() {
+        let s = fixture_session();
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT COUNT(*) FROM t0"}));
+        assert!(!r.contains("未通过只读守卫"), "safe SELECT should pass: {r}");
+    }
+
+    #[test]
+    fn run_check_allows_select_with_fts() {
+        let s = fixture_session();
+        // fts_main_t0 不是禁词；match_bm25 谓词应被放行
+        let r = s.t_run_check(&serde_json::json!({"sql": "SELECT * FROM t0 WHERE fts_main_t0.match_bm25(row_ord, 'x') IS NOT NULL"}));
+        assert!(!r.contains("未通过只读守卫"), "FTS predicate should pass: {r}");
     }
 }

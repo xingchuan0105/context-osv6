@@ -34,6 +34,7 @@ use index::stage_build_and_replace_retrieval_index;
 use profile::generate_document_summary;
 use struct_stage::{stage_struct_line_map, stage_struct_tables};
 pub(crate) use struct_stage::remove_struct_store_files;
+pub(crate) use struct_stage::StructTablesOutcome;
 
 pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) task: &'a IngestionTask,
@@ -70,6 +71,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "parse_validate",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         "ingestion stage begin"
     );
     let document_ir = stage_parse_and_validate_ir(
@@ -84,6 +86,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "parse_validate",
         filename = %filename,
         document_id = %document_id,
+        attempt_count = task.attempt_count,
         blocks = document_ir.blocks.len(),
         assets = document_ir.assets.len(),
         elapsed_ms = stage_started.elapsed().as_millis(),
@@ -96,6 +99,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "ir_project",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         "ingestion stage begin"
     );
     stage_project_document_ir(
@@ -112,6 +116,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "ir_project",
         filename = %filename,
         document_id = %document_id,
+        attempt_count = task.attempt_count,
         blocks = document_ir.blocks.len(),
         elapsed_ms = stage_started.elapsed().as_millis(),
         "ingestion stage done"
@@ -119,7 +124,7 @@ pub(crate) async fn run_document_pipeline(
 
     // Stage 2.5 — struct tables（best-effort，不阻断主链）
     let stage_started = std::time::Instant::now();
-    stage_struct_tables(
+    let struct_outcome = stage_struct_tables(
         processor,
         task,
         context,
@@ -132,7 +137,9 @@ pub(crate) async fn run_document_pipeline(
         stage = "struct_tables",
         filename = %filename,
         document_id = %document_id,
+        attempt_count = task.attempt_count,
         has_markdown = parse_run_state.markdown.is_some(),
+        outcome = ?struct_outcome,
         elapsed_ms = stage_started.elapsed().as_millis(),
         "ingestion stage done"
     );
@@ -143,6 +150,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "materialize",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         "ingestion stage begin"
     );
     let materialize = stage_materialize_chunks_assets_profile(
@@ -161,6 +169,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "materialize",
         filename = %filename,
         document_id = %document_id,
+        attempt_count = task.attempt_count,
         processed_chunk_count = materialize.processed_chunk_count,
         elapsed_ms = stage_started.elapsed().as_millis(),
         "ingestion stage done"
@@ -168,15 +177,20 @@ pub(crate) async fn run_document_pipeline(
 
     // Stage 3.5 — struct line map（best-effort，不阻断主链）。body chunks 此刻在
     // PG chunks 表、尚未被 index 阶段迁走；须紧随 materialize 成功之后。
-    let stage_started = std::time::Instant::now();
-    stage_struct_line_map(processor, context, document_id).await;
-    info!(
-        stage = "struct_line_map",
-        filename = %filename,
-        document_id = %document_id,
-        elapsed_ms = stage_started.elapsed().as_millis(),
-        "ingestion stage done"
-    );
+    // H1 gating：仅当 struct_tables 本轮成功重建 duckdb 时才写 _line_map；
+    // 旧库保留时跳过，防止新版 body chunk 行区间映射到旧库行号（静默错配）。
+    if struct_outcome == StructTablesOutcome::Rebuilt {
+        let stage_started = std::time::Instant::now();
+        stage_struct_line_map(processor, context, document_id).await;
+        info!(
+            stage = "struct_line_map",
+            filename = %filename,
+            document_id = %document_id,
+            attempt_count = task.attempt_count,
+            elapsed_ms = stage_started.elapsed().as_millis(),
+            "ingestion stage done"
+        );
+    }
 
     // Stage 4 — summary (best-effort, non-fatal)
     let stage_started = std::time::Instant::now();
@@ -184,6 +198,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "summary",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         "ingestion stage begin"
     );
     generate_document_summary(
@@ -200,6 +215,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "summary",
         filename = %filename,
         document_id = %document_id,
+        attempt_count = task.attempt_count,
         elapsed_ms = stage_started.elapsed().as_millis(),
         "ingestion stage done"
     );
@@ -210,6 +226,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "index",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         "ingestion stage begin"
     );
     stage_build_and_replace_retrieval_index(
@@ -228,6 +245,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "index",
         filename = %filename,
         document_id = %document_id,
+        attempt_count = task.attempt_count,
         elapsed_ms = stage_started.elapsed().as_millis(),
         total_elapsed_ms = pipeline_started.elapsed().as_millis(),
         "ingestion stage done"
@@ -239,6 +257,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "terminal",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         body_chunks,
         multimodal_chunks,
         processed_chunk_count = materialize.processed_chunk_count,
@@ -283,6 +302,7 @@ pub(crate) async fn run_document_pipeline(
         stage = "terminal",
         document_id = %document_id,
         filename = %filename,
+        attempt_count = task.attempt_count,
         body_chunks,
         multimodal_chunks,
         pg_body_chunks = pg_body,

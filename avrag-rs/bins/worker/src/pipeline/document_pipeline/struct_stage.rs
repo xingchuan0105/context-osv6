@@ -17,6 +17,21 @@ use uuid::Uuid;
 use super::super::processor::PgTaskProcessor;
 use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
 
+/// `stage_struct_tables` 产出状态——用于 gating `stage_struct_line_map`：
+/// supervise 失败保留旧库时，不得用新版 body chunk 重建旧库的 `_line_map`
+/// （旧行号映射新文本的静默错配，H1）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StructTablesOutcome {
+    /// supervision 成功，duckdb 已重建（PG 证据可能悬空，但库与 body 一致）
+    Rebuilt,
+    /// supervision 失败 / write_duckdb IO 错，旧库保留
+    OldKept,
+    /// 无 grids，旧库/证据已清理
+    NoGrids,
+    /// LLM 缺失 / markdown=None / dir 创建失败，未动库
+    Skipped,
+}
+
 /// 与查询侧（rag-core `struct_query.rs`）同一目录约定。
 fn struct_store_dir() -> PathBuf {
     std::env::var("STRUCT_STORE_DIR")
@@ -51,6 +66,7 @@ pub(crate) fn remove_struct_store_files(document_id: Uuid) {
 }
 
 /// 表格阶段主入口。`markdown` 为 None 时（非 markitdown 路径，如图片）直接跳过。
+/// 返回 `StructTablesOutcome` 供调用方决定是否执行 `stage_struct_line_map`。
 pub(crate) async fn stage_struct_tables(
     processor: &PgTaskProcessor,
     task: &ingestion::IngestionTask,
@@ -58,9 +74,9 @@ pub(crate) async fn stage_struct_tables(
     document_id: Uuid,
     filename: &str,
     markdown: Option<&str>,
-) {
+) -> StructTablesOutcome {
     let Some(markdown) = markdown else {
-        return;
+        return StructTablesOutcome::Skipped;
     };
     let input = avrag_struct_supervision::SuperviseInput::from_markdown(
         Some(document_id.to_string()),
@@ -78,17 +94,17 @@ pub(crate) async fn stage_struct_tables(
         {
             warn!(stage = "struct_tables", document_id = %document_id, error = %error, "table evidence cleanup on empty grids failed");
         }
-        return;
+        return StructTablesOutcome::NoGrids;
     }
 
     let Some(llm) = processor.llm.ingestion_llm.clone() else {
         warn!(stage = "struct_tables", document_id = %document_id, filename = %filename,
             "ingestion_llm 未配置；表格阶段跳过（grids 非空）");
-        return;
+        return StructTablesOutcome::Skipped;
     };
     if let Err(error) = std::fs::create_dir_all(struct_store_dir()) {
         warn!(stage = "struct_tables", document_id = %document_id, error = %error, "struct store dir create failed; table stage skipped");
-        return;
+        return StructTablesOutcome::Skipped;
     }
 
     let out_path = struct_store_dir().join(format!("{document_id}.duckdb"));
@@ -102,10 +118,11 @@ pub(crate) async fn stage_struct_tables(
     let report = match avrag_struct_supervision::supervise(&input, llm.as_ref(), &cfg).await {
         Ok(report) => report,
         Err(error) => {
-            // 失败时保留既有 duckdb/证据（同版本重灌：内容仍有效；新版本：旧产物互相一致）。
+            // 失败时保留既有 duckdb/证据（同版本重灌：内容仍有效；新版本文档与旧库
+            // 互相一致——行号可能错位，但表级证据保真；_line_map 由调用方据此 gating 跳过）。
             warn!(stage = "struct_tables", document_id = %document_id, filename = %filename, error = %error,
                 "supervision loop failed; table stage degraded, previous struct store kept");
-            return;
+            return StructTablesOutcome::OldKept;
         }
     };
 
@@ -138,8 +155,10 @@ pub(crate) async fn stage_struct_tables(
     )
     .await
     {
-        warn!(stage = "struct_tables", document_id = %document_id, error = %error, "table evidence write aborted by ingestion guard");
-        return;
+        // 证据悬空：duckdb 已重建但 PG 证据未入 → 表级水合失效到下次灌入。
+        warn!(stage = "struct_tables", document_id = %document_id, error = %error,
+            "table evidence write aborted by ingestion guard; duckdb rebuilt but evidence DANGLING — table-level hydration lost until next ingestion");
+        return StructTablesOutcome::Rebuilt;
     }
     match processor
         .storage
@@ -162,9 +181,12 @@ pub(crate) async fn stage_struct_tables(
             );
         }
         Err(error) => {
-            warn!(stage = "struct_tables", document_id = %document_id, error = %error, "table evidence insert failed");
+            // 证据悬空：duckdb 已重建但 PG 证据未入 → 表级水合失效到下次灌入。
+            warn!(stage = "struct_tables", document_id = %document_id, error = %error,
+                "table evidence insert failed; duckdb rebuilt but evidence DANGLING — table-level hydration lost until next ingestion");
         }
     }
+    StructTablesOutcome::Rebuilt
 }
 
 /// 行级证据映射阶段（W6）：materialize 之后把 body chunk 的 md 行号区间
@@ -173,6 +195,22 @@ pub(crate) async fn stage_struct_tables(
 /// chunk 一行；区间重叠/同 start 保留全部，查询侧按「区间包含」取候选集合；
 /// 空 ranges 同样重建为空表，清掉旧版本映射）。
 /// best-effort：任何失败只 warn。duckdb 单写者——struct stage 已结束，不冲突。
+///
+/// ## H1 论证：仅当 `outcome == Rebuilt` 时调用
+///
+/// `stage_struct_line_map` 用当前 materialize 产出的 body chunk md 行区间
+/// 重建 duckdb 内建表 `_line_map`。若 supervision 失败、旧库保留而 call 侧
+/// 仍调用本函数，则新版 body chunk 的行区间会被写入旧版 grids 的 duckdb，
+/// 导致行级 citation（`__src_line` → chunk_id）静默指向错误文本区间。
+///
+/// 解决方案由调用方（`mod.rs`）根据 `StructTablesOutcome` 分流：
+/// - `Rebuilt`：新库 + 新 body，_line_map 一致 → 调用本函数。
+/// - `OldKept` / `Skipped`：旧库 + 新 body 或库未动 → 跳过本函数，
+///   保留旧 _line_map（或空 _line_map，查询侧降级表级证据）。
+/// - `NoGrids`：库已清理，本函数自身的 `!out_path.exists()` 守卫生效。
+///
+/// 同版本重灌一次成功时本函数是必要的：旧 chunk_id 已随 materialize
+/// 被 PG 新 chunk 替代，_line_map 必须重建才能指向新 chunk_id。
 pub(crate) async fn stage_struct_line_map(
     processor: &PgTaskProcessor,
     context: &AuthContext,

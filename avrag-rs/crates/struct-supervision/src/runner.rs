@@ -144,14 +144,15 @@ pub async fn supervise(
                 }
             }
         }
-        if done_summary.is_none() && !session.unfinished().is_empty() && turns % 8 == 0 {
+        // 进度观察：至少一次工具调用后每 8 轮提示（对齐 supervise.py:333）
+        if done_summary.is_none() && !session.unfinished().is_empty() && !log.is_empty() && turns % 8 == 0 {
             let un = session.unfinished();
             messages.push(ChatMessage::user(format!(
                 "进度观察:已进行 {turns} 轮;仍未终态的表:{un:?}。"
             )));
         }
     }
-    Ok(finish(input, session, cfg, turns, done_summary, log))
+    finish(input, session, cfg, turns, done_summary, log)
 }
 
 /// loop 结束后的收尾：兜底终态 + 落库 + sidecar + 报告（与 `supervise.supervise` 尾部对齐）。
@@ -162,7 +163,7 @@ fn finish(
     turns: usize,
     done_summary: Option<String>,
     log: Vec<(String, serde_json::Value, String)>,
-) -> SuperviseReport {
+) -> anyhow::Result<SuperviseReport> {
     // 兜底终态：未处理表保持确定性初态并附说明（pipeline 不被 LLM 卡死）
     for tid in session.unfinished() {
         session.finals.insert(
@@ -180,7 +181,7 @@ fn finish(
     }
 
     let metas = build_metas(&session.grids, &session.reports, &session.finals);
-    let evidence = write_duckdb(&session.grids, &metas, &cfg.out_path).expect("write_duckdb failed");
+    let evidence = write_duckdb(&session.grids, &metas, &cfg.out_path)?;
     let sidecar = cfg.out_path.with_extension("duckdb.evidence.json");
     let _ = std::fs::write(
         &sidecar,
@@ -226,7 +227,7 @@ fn finish(
     if let Some(path) = &cfg.report_path {
         let _ = std::fs::write(path, serde_json::to_string_pretty(&report).unwrap_or_default());
     }
-    report
+    Ok(report)
 }
 
 #[cfg(test)]
