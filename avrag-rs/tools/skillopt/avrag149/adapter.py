@@ -102,6 +102,20 @@ class Avrag149Adapter(EnvAdapter):
 
     # reflect() 继承默认实现（读 out_dir/predictions/<id>/conversation.json）
 
+    # ── Prompts（2026-08-01）────────────────────────────────────────────
+    # skillopt 0.2.0（PyPI）打包缺陷:skillopt/prompts/ 目录为空,load_prompt
+    # 运行时 FileNotFoundError(首次真实训练暴露:reflect 需要 analyst_error)。
+    # 从 GitHub main 拉取全部 prompts 到项目内 avrag149/prompts/ 托管,
+    # override 加载路径——不修改 site-packages,版本可控。
+
+    _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+
+    def _load_env_prompt(self, name: str) -> str | None:
+        path = self._PROMPTS_DIR / f"{name}.md"
+        if not path.is_file():
+            return None
+        return path.read_text(encoding="utf-8")
+
     def get_task_types(self) -> list[str]:
         seen: list[str] = []
         for item in (
