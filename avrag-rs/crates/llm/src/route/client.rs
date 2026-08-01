@@ -1,5 +1,5 @@
 use crate::protocols::{
-    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, Protocol,
+    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, OpenAiResponsesProtocol, Protocol,
 };
 use crate::route::{auth::Auth, endpoint::Endpoint, framing::SseFramer, transport};
 use crate::schema::{LlmError, LlmEvent, LlmRequest, LlmResponse};
@@ -22,6 +22,7 @@ pub struct Route<P: Protocol> {
 #[derive(Debug, Clone)]
 pub enum AnyRoute {
     OpenAi(Route<OpenAiChatProtocol>),
+    OpenAiResponses(Route<OpenAiResponsesProtocol>),
     Anthropic(Route<AnthropicMessagesProtocol>),
     Gemini(Route<GeminiProtocol>),
 }
@@ -30,6 +31,7 @@ impl AnyRoute {
     pub fn protocol_id(&self) -> &'static str {
         match self {
             Self::OpenAi(route) => route.protocol.protocol_id(),
+            Self::OpenAiResponses(route) => route.protocol.protocol_id(),
             Self::Anthropic(route) => route.protocol.protocol_id(),
             Self::Gemini(route) => route.protocol.protocol_id(),
         }
@@ -38,6 +40,7 @@ impl AnyRoute {
     pub fn provider(&self) -> &str {
         match self {
             Self::OpenAi(route) => &route.provider,
+            Self::OpenAiResponses(route) => &route.provider,
             Self::Anthropic(route) => &route.provider,
             Self::Gemini(route) => &route.provider,
         }
@@ -46,6 +49,7 @@ impl AnyRoute {
     pub async fn generate(&self, request: LlmRequest) -> Result<LlmResponse, LlmError> {
         match self {
             Self::OpenAi(route) => route.generate(request).await,
+            Self::OpenAiResponses(route) => route.generate(request).await,
             Self::Anthropic(route) => route.generate(request).await,
             Self::Gemini(route) => route.generate(request).await,
         }
@@ -57,6 +61,7 @@ impl AnyRoute {
     ) -> Pin<Box<dyn Stream<Item = Result<LlmEvent, LlmError>> + Send + 'a>> {
         match self {
             Self::OpenAi(route) => route.stream(request),
+            Self::OpenAiResponses(route) => route.stream(request),
             Self::Anthropic(route) => route.stream(request),
             Self::Gemini(route) => route.stream(request),
         }
@@ -80,6 +85,12 @@ impl From<Route<OpenAiChatProtocol>> for AnyRoute {
     }
 }
 
+impl From<Route<OpenAiResponsesProtocol>> for AnyRoute {
+    fn from(route: Route<OpenAiResponsesProtocol>) -> Self {
+        Self::OpenAiResponses(route)
+    }
+}
+
 impl From<Route<AnthropicMessagesProtocol>> for AnyRoute {
     fn from(route: Route<AnthropicMessagesProtocol>) -> Self {
         Self::Anthropic(route)
@@ -95,6 +106,7 @@ impl From<Route<GeminiProtocol>> for AnyRoute {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectedProtocol {
     OpenAiChat,
+    OpenAiResponses,
     AnthropicMessages,
     Gemini,
 }
@@ -114,6 +126,13 @@ pub fn build_route_from_config(
     config: &crate::ModelProviderConfig,
     http_client: reqwest::Client,
 ) -> AnyRoute {
+    // Explicit `api_style=responses` opts a provider into the Responses
+    // protocol even though its base_url is shared with chat completions
+    // (e.g. `https://api.deepseek.com` serves both).
+    if config.api_style == Some(crate::ApiStyle::OpenAiResponses) {
+        return AnyRoute::OpenAiResponses(build_openai_responses_route(config, http_client));
+    }
+
     let provider = config.provider_name();
     match detect_protocol(&config.base_url) {
         DetectedProtocol::AnthropicMessages => AnyRoute::Anthropic(Route {
@@ -134,7 +153,9 @@ pub fn build_route_from_config(
             framing: super::framing::Framing::Sse,
             http_client,
         }),
-        DetectedProtocol::OpenAiChat => AnyRoute::OpenAi(build_openai_chat_route(config, http_client)),
+        DetectedProtocol::OpenAiChat | DetectedProtocol::OpenAiResponses => {
+            AnyRoute::OpenAi(build_openai_chat_route(config, http_client))
+        }
     }
 }
 
@@ -273,9 +294,35 @@ pub fn build_openai_chat_route(
     }
 }
 
+pub fn build_openai_responses_route(
+    config: &crate::ModelProviderConfig,
+    http_client: reqwest::Client,
+) -> Route<OpenAiResponsesProtocol> {
+    let auth = if config.api_key.is_empty()
+        && config.base_url.to_ascii_lowercase().contains("localhost")
+    {
+        Auth::None
+    } else if config.api_key.is_empty() {
+        Auth::None
+    } else {
+        Auth::Bearer(config.api_key.clone())
+    };
+    Route {
+        id: config.provider_name(),
+        provider: config.provider_name(),
+        protocol: OpenAiResponsesProtocol,
+        // OpenAI SDK appends `/v1/responses` for base URLs without a version
+        // segment (e.g. `https://api.deepseek.com`); keep the same semantics.
+        endpoint: Endpoint::new(config.base_url.clone(), "/v1/responses"),
+        auth,
+        framing: super::framing::Framing::Sse,
+        http_client,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{build_route_from_config, detect_protocol, DetectedProtocol};
+    use super::{build_route_from_config, detect_protocol, AnyRoute, DetectedProtocol};
 
     #[test]
     fn detect_protocol_routes_anthropic_and_gemini() {
@@ -295,6 +342,50 @@ mod tests {
             detect_protocol("https://api.deepseek.com"),
             DetectedProtocol::OpenAiChat
         );
+    }
+
+    #[test]
+    fn api_style_responses_selects_responses_protocol() {
+        let client = reqwest::Client::new();
+        let responses = build_route_from_config(
+            &crate::ModelProviderConfig {
+                base_url: "https://api.deepseek.com".into(),
+                api_key: "k".into(),
+                model: "deepseek-v4-flash".into(),
+                timeout_ms: 1000,
+                api_style: Some(crate::ApiStyle::OpenAiResponses),
+                dimensions: None,
+                enable_thinking: Some(true),
+                enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
+            client.clone(),
+        );
+        assert_eq!(responses.protocol_id(), "openai_responses");
+        let endpoint = match &responses {
+            AnyRoute::OpenAiResponses(route) => route.endpoint.render().unwrap(),
+            _ => panic!("expected responses route"),
+        };
+        assert_eq!(endpoint, "https://api.deepseek.com/v1/responses");
+
+        // Explicit `openai` style still selects chat completions.
+        let chat = build_route_from_config(
+            &crate::ModelProviderConfig {
+                base_url: "https://api.deepseek.com".into(),
+                api_key: "k".into(),
+                model: "deepseek-v4-flash".into(),
+                timeout_ms: 1000,
+                api_style: Some(crate::ApiStyle::OpenAi),
+                dimensions: None,
+                enable_thinking: Some(true),
+                enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
+            client,
+        );
+        assert_eq!(chat.protocol_id(), "openai_chat");
     }
 
     #[test]

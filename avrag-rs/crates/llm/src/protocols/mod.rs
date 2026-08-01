@@ -4,10 +4,12 @@ use serde::Serialize;
 pub mod anthropic_messages;
 pub mod gemini;
 pub mod openai_chat;
+pub mod openai_responses;
 
 pub use anthropic_messages::AnthropicMessagesProtocol;
 pub use gemini::GeminiProtocol;
 pub use openai_chat::OpenAiChatProtocol;
+pub use openai_responses::OpenAiResponsesProtocol;
 
 pub trait Protocol: Clone + Send + Sync + 'static {
     type Body: Serialize + Send + Sync;

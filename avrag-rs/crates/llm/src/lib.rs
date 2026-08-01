@@ -18,7 +18,8 @@ pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
 pub use protocols::{
-    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, Protocol,
+    AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, OpenAiResponsesProtocol,
+    Protocol,
 };
 pub use provider_profiles::{
     AuthStyle, ProtocolKind, ProviderProfile, PROVIDER_PROFILES, api_key_url_for_provider,
@@ -34,7 +35,8 @@ pub use reranker::{
 };
 pub use route::{
     AnyRoute, Auth, DetectedProtocol, Endpoint, Framing, Route, RoutePatch,
-    build_openai_chat_route, build_route_from_config, detect_protocol,
+    build_openai_chat_route, build_openai_responses_route, build_route_from_config,
+    detect_protocol,
 };
 pub use schema::{
     FinishReason, GenerationOptions, LlmError, LlmEvent, LlmRequest, MessageRole, ModelLimits,
@@ -96,6 +98,7 @@ impl LlmProvider for LlmClient {
 #[serde(rename_all = "snake_case")]
 pub enum ApiStyle {
     OpenAi,
+    OpenAiResponses,
     DashScopeMultimodalEmbedding,
     DashScopeVlRerank,
     Auto,
@@ -105,6 +108,7 @@ impl ApiStyle {
     pub fn from_config_str(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "openai" => Some(Self::OpenAi),
+            "responses" | "openai_responses" => Some(Self::OpenAiResponses),
             "dashscope_multimodal_embedding" => Some(Self::DashScopeMultimodalEmbedding),
             "dashscope_vl_rerank" => Some(Self::DashScopeVlRerank),
             "auto" => Some(Self::Auto),
@@ -117,6 +121,7 @@ impl std::fmt::Display for ApiStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             Self::OpenAi => "openai",
+            Self::OpenAiResponses => "responses",
             Self::DashScopeMultimodalEmbedding => "dashscope_multimodal_embedding",
             Self::DashScopeVlRerank => "dashscope_vl_rerank",
             Self::Auto => "auto",
