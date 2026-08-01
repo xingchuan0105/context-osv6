@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-_Generated: 2026-08-01 via `scripts/generate-third-party-notices.sh` (manual edit; generator unavailable due to read-only FS)_
+_Generated: 2026-08-01 via `scripts/generate-third-party-notices.sh`_
 
 This project (Context-OS / AVRag) is licensed under the [MIT License](LICENSE).
 Third-party components listed below are subject to their own licenses.
@@ -27,9 +27,9 @@ Third-party components listed below are subject to their own licenses.
 
 ## Rust dependencies (avrag-rs)
 
-Total crates: **630**
+Total crates: **677**
 
-### Apache-2.0 OR MIT (320 crates)
+### Apache-2.0 OR MIT (338 crates)
 
 - aes
 - ahash
@@ -42,6 +42,7 @@ Total crates: **630**
 - anstyle-wincon
 - anyhow
 - arbitrary
+- arc-swap
 - as-any
 - async-trait
 - atomic-waker
@@ -54,17 +55,16 @@ Total crates: **630**
 - bit-vec
 - bitflags
 - block-buffer
-- block-padding
 - blowfish
 - bstr
 - bumpalo
-- bytecount
 - bytes-utils
 - bzip2
 - bzip2-sys
-- cbc
+- cast
 - cc
 - cfg-if
+- chacha20
 - chrono
 - cipher
 - clap
@@ -72,9 +72,12 @@ Total crates: **630**
 - clap_derive
 - clap_lex
 - cmake
+- cmov
 - colorchoice
 - concurrent-queue
 - const-oid
+- const-random
+- const-random-macro
 - core-foundation
 - core-foundation-sys
 - cpufeatures
@@ -88,6 +91,8 @@ Total crates: **630**
 - crossbeam-utils
 - crypto-bigint
 - crypto-common
+- ctutils
+- dary_heap
 - der
 - deranged
 - derive_arbitrary
@@ -106,8 +111,9 @@ Total crates: **630**
 - etcetera
 - event-listener
 - eventsource-stream
+- fallible-iterator
+- fallible-streaming-iterator
 - fastrand
-- fdeflate
 - ff
 - filetime
 - find-msvc-tools
@@ -134,6 +140,7 @@ Total crates: **630**
 - getrandom
 - glob
 - group
+- half
 - hashbrown
 - hashlink
 - heck
@@ -145,19 +152,18 @@ Total crates: **630**
 - http
 - httparse
 - httpdate
+- hybrid-array
 - hyper-tls
 - iana-time-zone
 - iana-time-zone-haiku
-- id-arena
 - ident_case
 - idna
 - idna_adapter
-- image
 - indexmap
 - inherent
 - inout
 - ipnet
-- iri-string
+- ipnetwork
 - is_terminal_polyfill
 - itertools
 - itoa
@@ -168,7 +174,12 @@ Total crates: **630**
 - jobserver
 - js-sys
 - lazy_static
-- leb128fmt
+- lexical-core
+- lexical-parse-float
+- lexical-parse-integer
+- lexical-util
+- lexical-write-float
+- lexical-write-integer
 - libc
 - lock_api
 - log
@@ -180,8 +191,10 @@ Total crates: **630**
 - mime
 - minimal-lexical
 - native-tls
+- no_std_io2
 - num-bigint
 - num-bigint-dig
+- num-complex
 - num-conv
 - num-integer
 - num-iter
@@ -197,6 +210,7 @@ Total crates: **630**
 - pbkdf2
 - pem-rfc7468
 - percent-encoding
+- pgvector
 - pin-project
 - pin-project-internal
 - pin-project-lite
@@ -205,10 +219,11 @@ Total crates: **630**
 - pkcs8
 - pkg-config
 - plain
-- png
 - powerfmt
 - ppv-lite86
-- prettyplease
+- primeorder
+- proc-macro-error-attr2
+- proc-macro-error2
 - proc-macro2
 - prometheus-client
 - prometheus-client-derive-encode
@@ -221,8 +236,8 @@ Total crates: **630**
 - rand
 - rand_chacha
 - rand_core
+- rand_pcg
 - rand_xorshift
-- rangemap
 - rayon
 - rayon-core
 - ref-cast
@@ -233,6 +248,7 @@ Total crates: **630**
 - regex-syntax
 - reqwest
 - rfc6979
+- rle-decode-fast
 - rsa
 - rustc-hash
 - rustc_version
@@ -302,8 +318,8 @@ Total crates: **630**
 - unicode-bidi
 - unicode-normalization
 - unicode-properties
+- unicode-segmentation
 - unicode-width
-- unicode-xid
 - ureq
 - ureq-proto
 - url
@@ -326,7 +342,9 @@ Total crates: **630**
 - wasm-streams
 - web-sys
 - web-time
-- weezl
+- winapi
+- winapi-i686-pc-windows-gnu
+- winapi-x86_64-pc-windows-gnu
 - windows-core
 - windows-implement
 - windows-interface
@@ -352,8 +370,10 @@ Total crates: **630**
 - zstd-safe
 - zstd-sys
 
-### MIT (151 crates)
+### MIT (162 crates)
 
+- agent-loop
+- agent-tools
 - analytics
 - any_spawner
 - app
@@ -367,12 +387,12 @@ Total crates: **630**
 - async-stream-impl
 - atoi
 - avrag-api
-- avrag-auth
 - avrag-billing
 - avrag-cache-redis
 - avrag-chatmemory
 - avrag-code-interpreter
 - avrag-guardrails
+- avrag-licensing
 - avrag-llm
 - avrag-rag-core
 - avrag-rag-core-ports
@@ -381,7 +401,8 @@ Total crates: **630**
 - avrag-share
 - avrag-storage-milvus
 - avrag-storage-pg
-- avrag-test-kit
+- avrag-storage-pgvector
+- avrag-struct-supervision
 - avrag-worker
 - axum
 - axum-core
@@ -390,13 +411,16 @@ Total crates: **630**
 - base64-simd
 - bcrypt
 - bytes
-- cfb
 - cfg_aliases
 - combine
+- comfy-table
 - common
 - console
 - contracts
 - core_maths
+- crossterm
+- crossterm_winapi
+- crunchy
 - darling
 - darling_core
 - darling_macro
@@ -404,6 +428,7 @@ Total crates: **630**
 - deflate64
 - derive_more
 - dotenvy
+- duckdb
 - e2e-analyzer
 - email_address
 - evalexpr
@@ -413,19 +438,23 @@ Total crates: **630**
 - h2
 - headers
 - headers-core
+- heavytail
 - http-body
 - http-body-util
 - hyper
 - hyper-util
-- infer
 - ingestion
 - ingestion-types
+- jieba-macros
+- jieba-rs
 - jsonwebtoken
 - lettre
+- libduckdb-sys
+- libflate
+- libflate_lz77
 - libm
 - libredox
 - libsqlite3-sys
-- lopdf
 - lru
 - lzma-rs
 - matchers
@@ -435,7 +464,6 @@ Total crates: **630**
 - nanoid
 - new_debug_unreachable
 - nom
-- nom_locate
 - nu-ansi-term
 - openssl-sys
 - ordered-float
@@ -502,12 +530,23 @@ Total crates: **630**
 - valuable
 - vsimd
 - want
+- write-core
 - zip
 - zmij
 - zstd
 
-### Apache-2.0 (26 crates)
+### Apache-2.0 (41 crates)
 
+- arrow
+- arrow-arith
+- arrow-buffer
+- arrow-cast
+- arrow-data
+- arrow-ord
+- arrow-row
+- arrow-schema
+- arrow-select
+- arrow-string
 - aws-config
 - aws-credential-types
 - aws-runtime
@@ -526,9 +565,14 @@ Total crates: **630**
 - aws-smithy-query
 - aws-smithy-runtime
 - aws-smithy-runtime-api
+- aws-smithy-runtime-api-macros
+- aws-smithy-schema
 - aws-smithy-types
 - aws-smithy-xml
 - aws-types
+- include-flate
+- include-flate-codegen
+- include-flate-compress
 - insta
 - openssl
 - similar
@@ -560,38 +604,30 @@ Total crates: **630**
 - zerovec
 - zerovec-derive
 
-### Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT (14 crates)
-
-- linux-raw-sys
-- rustix
-- wasi
-- wasip2
-- wasip3
-- wasm-encoder
-- wasm-metadata
-- wasmparser
-- wit-bindgen
-- wit-bindgen-core
-- wit-bindgen-rust
-- wit-bindgen-rust-macro
-- wit-component
-- wit-parser
-
-### MIT OR Unlicense (8 crates)
+### MIT OR Unlicense (9 crates)
 
 - aho-corasick
 - byteorder
-- byteorder-lite
+- csv
+- csv-core
 - memchr
 - same-file
 - termcolor
 - walkdir
 - winapi-util
 
+### Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT (5 crates)
+
+- linux-raw-sys
+- rustix
+- wasi
+- wasip2
+- wit-bindgen
+
 ### ISC (6 crates)
 
 - ego-tree
-- libloading
+- maxminddb
 - rustls-webpki
 - scraper
 - simple_asn1
@@ -604,9 +640,8 @@ Total crates: **630**
 - rustls-native-certs
 - sct
 
-### Apache-2.0 OR MIT OR Zlib (5 crates)
+### Apache-2.0 OR MIT OR Zlib (4 crates)
 
-- bytemuck
 - lru-slab
 - miniz_oxide
 - tinyvec
@@ -618,6 +653,12 @@ Total crates: **630**
 - cssparser-macros
 - dtoa-short
 - selectors
+
+### Zlib (3 crates)
+
+- adler32
+- foldhash
+- zlib-rs
 
 ### BSD-3-Clause (3 crates)
 
@@ -635,11 +676,6 @@ Total crates: **630**
 - zerocopy
 - zerocopy-derive
 
-### Apache-2.0 OR BSD-3-Clause (2 crates)
-
-- moxcms
-- pxfm
-
 ### Apache-2.0 OR BSL-1.0 OR MIT (2 crates)
 
 - wasite
@@ -653,11 +689,6 @@ Total crates: **630**
 ### Apache-2.0 OR LGPL-2.1-or-later OR MIT (1 crates)
 
 - r-efi
-
-### Zlib (2 crates)
-
-- foldhash
-- zlib-rs
 
 ### (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) AND (Apache-2.0 OR ISC) AND Apache-2.0 AND BSD-3-Clause AND ISC AND MIT (1 crates)
 
@@ -687,19 +718,31 @@ Total crates: **630**
 
 - ring
 
+### Apache-2.0 AND MIT (1 crates)
+
+- arrow-array
+
 ### Apache-2.0 OR BSL-1.0 (1 crates)
 
 - ryu
+
+### BSD-2-Clause (1 crates)
+
+- cedarwood
 
 ### BSD-3-Clause AND MIT (1 crates)
 
 - matchit
 
+### CC0-1.0 (1 crates)
+
+- tiny-keccak
+
 ## Frontend dependencies (frontend_next, transitive)
 
-Total packages: **197**
+Total packages: **312**
 
-### MIT (167 packages)
+### MIT (271 packages)
 
 - @adobe/css-tools@4.5.0
 - @asamuzakjp/css-color@4.1.2
@@ -722,8 +765,8 @@ Total packages: **197**
 - @formatjs/intl-localematcher@0.8.3
 - @img/colour@1.1.0
 - @jridgewell/sourcemap-codec@1.5.5
-- @next/env@16.2.4
-- @next/swc-linux-x64-gnu@16.2.4
+- @next/env@16.2.10
+- @next/swc-linux-x64-gnu@16.2.10
 - @parcel/watcher-linux-x64-glibc@2.5.6
 - @parcel/watcher@2.5.6
 - @rollup/rollup-linux-x64-gnu@4.60.1
@@ -755,9 +798,14 @@ Total packages: **197**
 - @tiptap/extension-underline@3.22.4
 - @types/aria-query@5.0.4
 - @types/chai@5.2.3
+- @types/debug@4.1.13
 - @types/deep-eql@4.0.2
 - @types/estree@1.0.8
+- @types/hast@3.0.4
+- @types/mdast@4.0.4
+- @types/ms@2.1.0
 - @types/trusted-types@2.0.7
+- @types/unist@3.0.3
 - @types/use-sync-external-store@0.0.6
 - @vitest/expect@3.2.4
 - @vitest/mocker@3.2.4
@@ -769,56 +817,135 @@ Total packages: **197**
 - agent-base@7.1.4
 - ansi-regex@5.0.1
 - ansi-styles@5.2.0
+- argparse@1.0.10
 - assertion-error@2.0.1
+- bail@2.0.2
 - bidi-js@1.0.3
 - cac@6.7.14
+- camelcase@5.3.1
+- ccount@2.0.1
 - chai@5.3.3
+- character-entities-html4@2.1.0
+- character-entities-legacy@3.0.0
+- character-entities@2.0.2
 - check-error@2.1.3
 - client-only@0.0.1
+- color-convert@2.0.1
+- color-name@1.1.4
+- comma-separated-tokens@2.0.3
 - css-tree@3.2.1
 - css.escape@1.5.1
 - cssstyle@5.3.7
 - csstype@3.2.3
 - data-urls@6.0.1
 - debug@4.4.3
+- decamelize@1.2.0
 - decimal.js@10.6.0
+- decode-named-character-reference@1.3.0
 - deep-eql@5.0.2
 - dequal@2.0.3
+- devlop@1.1.0
+- dijkstrajs@1.0.3
 - dom-accessibility-api@0.5.16
+- emoji-regex@8.0.0
 - es-module-lexer@1.7.0
 - esbuild@0.27.7
+- escape-string-regexp@5.0.0
 - estree-walker@3.0.3
+- extend-shallow@2.0.1
+- extend@3.0.2
 - fast-equals@5.4.0
 - fdir@6.5.0
+- find-up@4.1.0
+- hast-util-heading-rank@3.0.0
+- hast-util-is-element@3.0.0
+- hast-util-to-html@9.0.5
+- hast-util-to-string@3.0.1
+- hast-util-whitespace@3.0.0
 - html-encoding-sniffer@4.0.0
+- html-void-elements@3.0.0
 - http-proxy-agent@7.0.2
 - https-proxy-agent@7.0.6
 - iconv-lite@0.6.3
 - icu-minify@4.9.1
 - indent-string@4.0.0
+- is-extendable@0.1.1
 - is-extglob@2.1.1
+- is-fullwidth-code-point@3.0.0
 - is-glob@4.0.3
+- is-plain-obj@4.1.0
 - is-potential-custom-element-name@1.0.1
 - js-tokens@4.0.0
+- js-yaml@3.14.2
+- kind-of@6.0.3
 - linkifyjs@4.3.2
+- locate-path@5.0.0
+- longest-streak@3.1.0
 - loupe@3.2.1
 - lz-string@1.5.0
 - magic-string@0.30.21
+- markdown-table@3.0.4
 - marked@17.0.6
+- mdast-util-find-and-replace@3.0.2
+- mdast-util-from-markdown@2.0.3
+- mdast-util-gfm-autolink-literal@2.0.1
+- mdast-util-gfm-footnote@2.1.0
+- mdast-util-gfm-strikethrough@2.0.0
+- mdast-util-gfm-table@2.0.0
+- mdast-util-gfm-task-list-item@2.0.0
+- mdast-util-gfm@3.1.0
+- mdast-util-phrasing@4.1.0
+- mdast-util-to-hast@13.2.1
+- mdast-util-to-markdown@2.1.2
+- mdast-util-to-string@4.0.0
+- micromark-core-commonmark@2.0.3
+- micromark-extension-gfm-autolink-literal@2.1.0
+- micromark-extension-gfm-footnote@2.1.0
+- micromark-extension-gfm-strikethrough@2.1.0
+- micromark-extension-gfm-table@2.1.1
+- micromark-extension-gfm-tagfilter@2.0.0
+- micromark-extension-gfm-task-list-item@2.1.0
+- micromark-extension-gfm@3.0.0
+- micromark-factory-destination@2.0.1
+- micromark-factory-label@2.0.1
+- micromark-factory-space@2.0.1
+- micromark-factory-title@2.0.1
+- micromark-factory-whitespace@2.0.1
+- micromark-util-character@2.1.1
+- micromark-util-chunked@2.0.1
+- micromark-util-classify-character@2.0.1
+- micromark-util-combine-extensions@2.0.1
+- micromark-util-decode-numeric-character-reference@2.0.2
+- micromark-util-decode-string@2.0.1
+- micromark-util-encode@2.0.1
+- micromark-util-html-tag-name@2.0.1
+- micromark-util-normalize-identifier@2.0.1
+- micromark-util-resolve-all@2.0.1
+- micromark-util-sanitize-uri@2.0.1
+- micromark-util-subtokenize@2.1.0
+- micromark-util-symbol@2.0.1
+- micromark-util-types@2.0.2
+- micromark@4.0.2
 - min-indent@1.0.1
 - ms@2.1.3
-- nanoid@3.3.11
+- nanoid@3.3.15
 - negotiator@1.0.0
 - next-intl-swc-plugin-extractor@4.9.1
 - node-addon-api@7.1.1
 - orderedmap@2.1.1
+- p-limit@2.3.0
+- p-locate@4.1.0
+- p-try@2.2.0
 - parse5@7.3.0
+- path-exists@4.0.0
 - pathe@2.0.3
 - pathval@2.0.1
 - picomatch@4.0.4
+- pngjs@5.0.0
 - po-parser@2.1.1
 - postcss@8.4.31
 - pretty-format@27.5.1
+- property-information@7.2.0
 - prosemirror-changeset@2.4.1
 - prosemirror-commands@1.7.1
 - prosemirror-dropcursor@1.8.2
@@ -834,14 +961,22 @@ Total packages: **197**
 - punycode@2.3.1
 - react-is@17.0.2
 - redent@3.0.0
+- remark-stringify@11.0.0
+- require-directory@2.1.1
 - require-from-string@2.0.2
 - rollup@4.60.1
 - rope-sequence@1.3.4
 - rrweb-cssom@0.8.0
 - safer-buffer@2.1.2
 - scheduler@0.27.0
+- section-matter@1.0.0
+- space-separated-tokens@2.0.2
 - stackback@0.0.2
 - std-env@3.10.0
+- string-width@4.2.3
+- stringify-entities@4.0.4
+- strip-ansi@6.0.1
+- strip-bom-string@1.0.0
 - strip-indent@3.0.0
 - strip-literal@3.1.0
 - styled-jsx@5.1.6
@@ -855,9 +990,18 @@ Total packages: **197**
 - tldts-core@7.0.28
 - tldts@7.0.28
 - tr46@6.0.0
+- trim-lines@3.0.1
+- trough@2.2.0
 - undici-types@7.13.0
+- unist-util-is@6.0.1
+- unist-util-position@5.0.0
+- unist-util-stringify-position@4.0.0
+- unist-util-visit-parents@6.0.2
+- unist-util-visit@5.1.0
 - use-intl@4.9.1
 - use-sync-external-store@1.6.0
+- vfile-message@4.0.3
+- vfile@6.0.3
 - vite-node@3.2.4
 - vite@7.3.2
 - w3c-keyname@2.2.8
@@ -866,8 +1010,11 @@ Total packages: **197**
 - whatwg-mimetype@4.0.0
 - whatwg-url@15.1.0
 - why-is-node-running@2.3.0
+- wrap-ansi@6.2.0
 - ws@8.20.0
 - xmlchars@2.2.0
+- yargs@15.4.1
+- zwitch@2.0.4
 
 ### Apache-2.0 (13 packages)
 
@@ -877,7 +1024,7 @@ Total packages: **197**
 - @swc/helpers@0.5.15
 - @swc/types@0.1.26
 - aria-query@5.3.0
-- baseline-browser-mapping@2.10.19
+- baseline-browser-mapping@2.10.42
 - detect-libc@2.1.2
 - expect-type@1.3.0
 - playwright-core@1.53.0
@@ -885,22 +1032,33 @@ Total packages: **197**
 - sharp@0.34.5
 - xml-name-validator@5.0.0
 
-### ISC (4 packages)
+### ISC (13 packages)
 
+- @ungap/structured-clone@1.3.1
+- cliui@6.0.0
+- get-caller-file@2.0.5
+- github-slugger@2.0.0
 - picocolors@1.1.1
+- require-main-filename@2.0.0
 - saxes@6.0.0
-- semver@7.7.4
+- semver@7.8.5
+- set-blocking@2.0.0
 - siginfo@2.0.0
+- which-module@2.0.1
+- y18n@4.0.3
+- yargs-parser@18.1.3
 
-### BSD-3-Clause (3 packages)
+### BSD-3-Clause (4 packages)
 
 - intl-messageformat@11.2.1
 - source-map-js@1.2.1
+- sprintf-js@1.0.3
 - tough-cookie@6.0.1
 
-### BSD-2-Clause (2 packages)
+### BSD-2-Clause (3 packages)
 
 - entities@6.0.1
+- esprima@4.0.1
 - webidl-conversions@8.0.1
 
 ### MIT-0 (2 packages)
@@ -922,7 +1080,7 @@ Total packages: **197**
 
 ### CC-BY-4.0 (1 packages)
 
-- caniuse-lite@1.0.30001788
+- caniuse-lite@1.0.30001803
 
 ### CC0-1.0 (1 packages)
 
