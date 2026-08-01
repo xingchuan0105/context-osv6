@@ -10,10 +10,9 @@ inject_retrieval_query: true
 skill_catalog:
   retrieve: [knowledge-base, memory, metadata]
   synthesis: [writing, format]
-  mandatory:
-    retrieve: [knowledge-base]
-    # SaC answers in-loop (ProseOnly); no monomode synthesis skill.
-    synthesis: []
+  # D9: no `mandatory` here — assemble_mode derives it from the capability
+  # set (memory base + knowledge-base when the capability is mounted).
+  # Optional cluster list above stays as-is (progressive disclosure catalog).
 budget:
   # Rounds = safety ceiling. Tokens = primary cost budget.
   max_iterations: 12

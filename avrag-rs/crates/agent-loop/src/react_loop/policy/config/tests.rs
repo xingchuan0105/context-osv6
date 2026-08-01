@@ -38,10 +38,10 @@ fn search_mode_config_has_search_cluster() {
 fn chat_mode_config_has_only_user_context_tool() {
     let config = load_mode_config("chat").expect("chat mode should load");
     // YAML baseline only: `modes/chat.yaml` lists `user_context`.
-    // Effective AnswerOnly / Answer pool is finalized in app-chat
-    // `mode_assemble::utility_tool_pool()` (user_context + calculator +
-    // weather_query). Do not treat this YAML assert as the product whitelist.
-    // IP geo / "定位" for pure chat is via `user_context`, not a separate tool.
+    // D11: the effective pool is cleared in app-chat mode_assemble — the
+    // pure-chat trio (user_context + calculator + weather_query) is served via
+    // sandbox client.* SDK primitives, never as native tools.
+    // IP geo / "定位" for pure chat is via `client.user_context`, not a native tool.
     assert_eq!(config.tool_pool, vec!["user_context".to_string()]);
     // P0-2 (2026-07-20): no mandatory synthesis/chat.md — chat-base is the sole
     // pure-chat voice; writing/format stay optional clusters.
@@ -89,13 +89,30 @@ budget:
 fn rag_mode_has_mandatory_retrieve_codegen() {
     let config = load_mode_config("rag").expect("rag mode should load");
     assert!(config.inject_retrieval_query);
+    // D9: YAML no longer carries `skill_catalog.mandatory` for SaC modes;
+    // assemble_mode derives it from the capability set. YAML-level list is empty.
     assert!(
-        config
-            .skill_catalog
-            .mandatory
-            .retrieve
-            .contains(&"knowledge-base".to_string())
+        config.skill_catalog.mandatory.retrieve.is_empty(),
+        "rag.yaml must not carry a mandatory retrieve list (D9): {:?}",
+        config.skill_catalog.mandatory.retrieve
     );
+    assert_eq!(
+        super::super::derive_mandatory_retrieve(true, false),
+        vec!["memory".to_string(), "knowledge-base".to_string()]
+    );
+    assert_eq!(
+        super::super::derive_mandatory_retrieve(false, true),
+        vec!["memory".to_string(), "search".to_string()]
+    );
+    assert_eq!(
+        super::super::derive_mandatory_retrieve(true, true),
+        vec![
+            "memory".to_string(),
+            "knowledge-base".to_string(),
+            "search".to_string()
+        ]
+    );
+    assert_eq!(super::super::derive_mandatory_retrieve(false, false), vec!["memory".to_string()]);
 }
 
 #[test]

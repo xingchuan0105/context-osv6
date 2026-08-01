@@ -1,14 +1,14 @@
 mode: chat
 system_prompt_base: prompts/system/agent-base.md
-# Base surface: local clock + IP city geo. Pure-chat effective pool is finalized
-# in mode_assemble (utility whitelist: user_context + calculator + weather_query).
+# D11: native tool surface closed — pure-chat trio (user_context/calculator/
+# weather_query) is served via sandbox client.* SDK primitives; tool_pool is
+# cleared in mode_assemble (no utility whitelist).
 tool_pool: [user_context]
 skill_catalog:
   retrieve: [memory]
   synthesis: [writing, format]
   # agent-base is the pure-chat voice; no mandatory synthesis.
   # writing/format remain optional clusters via DisclosurePlanner.
-  mandatory_synthesis: []
 budget:
   max_iterations: 4
   by_user_tier:

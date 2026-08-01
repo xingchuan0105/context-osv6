@@ -54,3 +54,19 @@ impl LoopPolicy {
         )
     }
 }
+
+/// D9: derive the mandatory retrieve skill list straight from capability flags.
+///
+/// The mode YAML `skill_catalog.mandatory` indirect layer is gone; `memory`
+/// is the always-on base disclosure in every mode (D8), `knowledge-base` and
+/// `search` are mandatory only when the matching capability is mounted.
+pub fn derive_mandatory_retrieve(rag: bool, search: bool) -> Vec<String> {
+    let mut ids = vec!["memory".to_string()];
+    if rag {
+        ids.push("knowledge-base".to_string());
+    }
+    if search {
+        ids.push("search".to_string());
+    }
+    ids
+}

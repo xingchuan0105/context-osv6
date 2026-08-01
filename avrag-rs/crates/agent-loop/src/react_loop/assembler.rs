@@ -223,9 +223,23 @@ pub fn build_loop_budget_hint(
 mod tests {
     use super::*;
 
+    // D9: mandatory retrieve is derived at assembly time (memory base +
+    // capability skill); YAML no longer carries it.
+    fn rag_mode() -> super::super::config::ModeConfig {
+        let mut mode = super::super::config::load_mode_config("rag").unwrap();
+        mode.skill_catalog.mandatory.retrieve = super::super::derive_mandatory_retrieve(true, false);
+        mode
+    }
+
+    fn search_mode() -> super::super::config::ModeConfig {
+        let mut mode = super::super::config::load_mode_config("search").unwrap();
+        mode.skill_catalog.mandatory.retrieve = super::super::derive_mandatory_retrieve(false, true);
+        mode
+    }
+
     #[test]
     fn rag_retrieve_tools_empty_until_memory_cluster_disclosed() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = rag_mode();
         let registry = CapabilityRegistry::standard_cached();
         assert!(mode.tools_for_retrieve(registry).is_empty());
 
@@ -247,7 +261,7 @@ mod tests {
 
     #[test]
     fn rag_round_zero_discloses_codegen_bundle() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = rag_mode();
         let registry = CapabilityRegistry::standard_cached();
         let mut disclosed = DisclosedState::default();
         let ctx = ContextAssembler::assemble_retrieve(
@@ -289,16 +303,19 @@ mod tests {
             "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
                      tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />",
         ));
+        // D8: memory is a mandatory base disclosure — its tools are present at
+        // round 0; retrieval itself stays SDK-only (no native retrieval tools).
+        let names: Vec<&str> = ctx.tools.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(
-            ctx.tools.len(),
-            0,
-            "round0 must not expose memory tools until memory cluster is disclosed"
+            names,
+            vec!["conversation_history_load", "user_profile_load"],
+            "memory base disclosure exposes its two tools, nothing else"
         );
     }
 
     #[test]
     fn rag_round_one_re_injects_codegen_skill() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = rag_mode();
         let registry = CapabilityRegistry::standard_cached();
         let mut disclosed = DisclosedState::default();
         disclosed
@@ -347,7 +364,7 @@ mod tests {
 
     #[test]
     fn search_round_zero_exposes_configured_tool_pool() {
-        let mode = super::super::config::load_mode_config("search").unwrap();
+        let mode = search_mode();
         let registry = CapabilityRegistry::standard_cached();
         let mut disclosed = DisclosedState::default();
         let ctx = ContextAssembler::assemble_retrieve(
@@ -392,7 +409,7 @@ mod tests {
 
     #[test]
     fn rag_retrieve_attaches_memory_tools_after_skill_request_disclosure() {
-        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let mode = rag_mode();
         let registry = CapabilityRegistry::standard_cached();
         let mut disclosed = DisclosedState::default();
         disclosed.last_skill_request = Some(vec!["memory".to_string()]);

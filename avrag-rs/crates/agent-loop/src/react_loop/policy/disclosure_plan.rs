@@ -413,7 +413,8 @@ fn inject_cluster_runtime_context(
     body: String,
     request: &AgentRequest,
 ) -> String {
-    if cluster_id == "metadata" {
+    // WP3 renames the cluster to `docscope`; accept both until the switch is done.
+    if cluster_id == "metadata" || cluster_id == "docscope" {
         if let Some(meta) = &request.docscope_metadata {
             let json = serde_json::to_string_pretty(meta).unwrap_or_default();
             return format!("{body}\n\n<docscope_metadata>\n{json}\n</docscope_metadata>");
@@ -482,7 +483,11 @@ mod tests {
     use super::*;
 
     fn rag_mode() -> ModeConfig {
-        super::super::config::load_mode_config("rag").unwrap()
+        let mut mode = super::super::config::load_mode_config("rag").unwrap();
+        // D9: mandatory retrieve is derived at assembly time (memory base +
+        // capability skill); YAML no longer carries it.
+        mode.skill_catalog.mandatory.retrieve = super::super::derive_mandatory_retrieve(true, false);
+        mode
     }
 
     #[test]

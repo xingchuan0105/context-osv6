@@ -9,12 +9,18 @@ use crate::react_loop::assembler::DisclosedState;
 use agent_tools::capability::CapabilityRegistry;
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage, ModelProviderConfig};
 
+// D9: mandatory retrieve is derived at assembly time (memory base +
+// capability skill); YAML no longer carries it.
 fn rag_mode() -> super::super::config::ModeConfig {
-    super::super::config::load_mode_config("rag").unwrap()
+    let mut mode = super::super::config::load_mode_config("rag").unwrap();
+    mode.skill_catalog.mandatory.retrieve = super::super::derive_mandatory_retrieve(true, false);
+    mode
 }
 
 fn chat_mode() -> super::super::config::ModeConfig {
-    super::super::config::load_mode_config("chat").unwrap()
+    let mut mode = super::super::config::load_mode_config("chat").unwrap();
+    mode.skill_catalog.mandatory.retrieve = super::super::derive_mandatory_retrieve(false, false);
+    mode
 }
 
 fn base_request(kind: AgentKind) -> crate::runtime::AgentRequest {
@@ -97,6 +103,8 @@ fn test_auth() -> contracts::auth_runtime::AuthContext {
 async fn native_tool_call_returns_continue_with_record() {
     let loop_ = test_loop();
     let mode = super::super::config::load_mode_config("search").unwrap();
+    // search YAML carries no mandatory list (D9); this test only exercises the
+    // native web_search rejection path, so raw config is fine.
     let mut state = empty_state();
     let sink = CollectingSink::new();
     let auth = test_auth();

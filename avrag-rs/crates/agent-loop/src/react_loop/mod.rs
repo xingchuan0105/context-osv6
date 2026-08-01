@@ -52,6 +52,7 @@ pub(crate) use message_format::{
 
 pub use deps::{BridgeCallObs, LoopRuntimeDeps};
 pub use hooks::{BeforeToolCallOutcome, LoopContext, LoopHooks, StandardLoopHooks};
+pub use policy::derive_mandatory_retrieve;
 pub use sdk_gate::{method_allowed, sdk_primitives_for_caps};
 
 /// ReAct retrieve → gate → synthesis engine.

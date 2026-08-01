@@ -187,7 +187,21 @@ WP1 → WP2 → WP3 → WP4 → WP5 → WP6，每 WP 一个本地 commit（solo 
 
 ## 8. 实施偏差记录
 
-（实施中任何与本文档的偏差、以及 worker_handoff/compile_feedback 死路径评估结论，追加在此节。）
+### WP1（2026-08-02 提交 707004a7）
+
+1. **三件套 host handler 落在 `agent-loop` 的 `SacHostBridge`，而非 rag-core `RuntimeBridge`**（D10 原设想：注册表可达的共享 crate 承接 handler）。理由：纯 chat 无 rag runtime，`RuntimeBridge` 永远服务不到三件套；Base 原语宿主本就在 `SacHostBridge`；`agent-tools` 的实现（CalculatorSkill/UserContextSkill/WeatherQuerySkill）对 agent-loop 直接可达，无需依赖反转或下沉 evalexpr/maxminddb/reqwest。rag-core 侧三件套与 save/load/history/user_profile 一并维持 `not_configured`。
+2. **三件套经 `client.*` 的可调性验证以单测为准**：D11 要求"纯 chat tool_pool 清空 + 单测验证经 client.* 可调"；本轮以 `agent-loop` 全量单测 + `app-chat` mode_assemble 测试覆盖（无真实 LLM 冒烟，属计划非目标）。
+
+### WP2（2026-08-02 提交（本次））
+
+3. **YAML `mandatory` 删除从"四份"改为"三份"**（G6）：`write_refine.yaml` 的 `mandatory.retrieve: [heavytail-metrics]` **保留**——`write_refine` 是独立产品模式（T2 非目标），`app-chat/src/writer/adapters.rs` `render_mandatory_skills()` 依赖它披露 heavytail-metrics（write-core 控制环）。`SkillCatalogConfig.mandatory` 字段保留（write_refine 使用；SaC 三模式经 `derive_mandatory_retrieve` 派生）。
+4. **`derive_mandatory_retrieve(rag, search)` 放 `agent-loop/react_loop/policy/mod.rs`**（D9 原文只说 assemble_mode 直推；实现为 agent-loop 提供公共派生函数，app-chat 的 assemble_mode 调用它，避免双处推导漂移）。纯 chat 也含 `memory` 基础位（D8 全模式）。
+5. **memory 基础披露带来行为变化**：round 0 即披露 memory cluster 并暴露 conversation_history_load/user_profile_load 两个 native 工具（原测试断言 round0 tools=0 已按 D8 更新为期望这两个工具）。
+6. **disclosure_plan `metadata` 特判先行兼容 `docscope`**（`cluster_id == "metadata" || cluster_id == "docscope"`），WP3 完成改名后再收敛为单值。
+
+### worker_handoff / compile_feedback 死路径评估（非目标，仅记录）
+
+（待 WP6 前补：本会话尚未深入评估，结论留到后续 WP。）
 
 ## 9. 环境纪律（摘自 AGENTS.md，全文有效）
 

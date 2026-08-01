@@ -9,9 +9,8 @@ inject_retrieval_query: true
 skill_catalog:
   retrieve: [search, memory]
   synthesis: [writing, format]
-  mandatory:
-    retrieve: [search]
-  mandatory_synthesis: []
+  # D9: no `mandatory` here — assemble_mode derives it from the capability
+  # set (memory base + search when the capability is mounted).
 budget:
   max_iterations: 8
   by_user_tier:

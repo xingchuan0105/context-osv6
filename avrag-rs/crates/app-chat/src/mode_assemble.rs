@@ -106,6 +106,12 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         .cloned()
         .unwrap_or_else(|| AGENT_BASE.to_string());
 
+    // D9: mandatory retrieve skills derived straight from the capability set
+    // (memory base + capability skills); the YAML `skill_catalog.mandatory`
+    // indirect layer is retired for SaC modes.
+    config.skill_catalog.mandatory.retrieve =
+        agent_loop::r#loop::derive_mandatory_retrieve(caps.rag, caps.search);
+
     // A3: SaC SDK subset for this capability set (sandbox host enforces).
     config.sdk_primitives = agent_loop::r#loop::sdk_primitives_for_caps(caps.rag, caps.search)
         .into_iter()
