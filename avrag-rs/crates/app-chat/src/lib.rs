@@ -16,7 +16,6 @@ pub mod chat_streaming;
 pub mod citations;
 pub mod context;
 pub mod mode_assemble;
-pub mod orchestrator;
 /// Eval harness lives in `agent_loop`; re-export only when the `eval` feature is on.
 #[cfg(feature = "eval")]
 pub use agent_loop::eval;

@@ -3,7 +3,6 @@
 
 mod citations;
 mod internal;
-mod plan;
 mod search_eval;
 mod strategy_eval;
 mod types;
@@ -11,9 +10,6 @@ mod types;
 pub use citations::{answer_context, extract_referenced_chunk_ids};
 pub use types::*;
 
-pub(crate) use plan::{
-    build_rag_plan_user_prompt, parse_rag_plan_decision, plan_strategy_to_tool_calls,
-};
 pub(crate) use search_eval::{
     build_search_strategy_evaluation_prompt, parse_search_strategy_evaluation,
 };

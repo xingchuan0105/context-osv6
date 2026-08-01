@@ -28,8 +28,5 @@ pub(crate) use pipeline::{
     execute_pipeline_stream,
 };
 pub use pipeline::{is_reserved_internal_agent_type, is_write_agent_type};
-pub(crate) use pipeline_steps::{
-    activity_counts_from_events, attach_activity_counts_from_sink, attach_debug_trace_from_sink,
-    merge_activity_counts_into_mode_debug,
-};
+pub(crate) use pipeline_steps::attach_debug_trace_from_sink;
 pub(crate) use service::{BuildChatExecutionParams, build_chat_execution_from_result};

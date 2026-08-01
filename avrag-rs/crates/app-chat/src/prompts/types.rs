@@ -130,44 +130,6 @@ pub(crate) struct SubQueryItem {
     pub tool_index: usize,
 }
 
-/// Plan strategy emitted by the PLAN phase LLM (P4 format).
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PlanStrategy {
-    pub strategy: Vec<PlanStrategyItem>,
-    #[serde(default = "default_next_step_str")]
-    pub next_step: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PlanStrategyItem {
-    pub tool: String,
-    #[serde(flatten)]
-    pub params: serde_json::Value,
-}
-
-fn default_next_step_str() -> String {
-    "answer".to_string()
-}
-
-#[derive(Debug, Clone)]
-pub enum RagPlanDecision {
-    ToolCalls(Vec<ToolCall>),
-    Strategy(PlanStrategy),
-    Clarify(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct RagPlanResult {
-    pub decision: RagPlanDecision,
-    pub llm_usage: Option<LlmUsage>,
-}
-
-#[derive(Debug, Clone)]
-pub struct RagAnswerResult {
-    pub answer_text: String,
-    pub llm_usage: Option<LlmUsage>,
-}
-
 #[derive(Debug, Clone)]
 pub struct RagBehaviorSkill {
     pub name: String,
