@@ -459,13 +459,22 @@ impl V2RunCtx {
         let resp = match self.judge.complete(messages).await {
             Ok(resp) => resp,
             Err(e) => {
-                return JudgeAttempt {
-                    status: eval_v2::JudgeStatus::Error,
-                    parsed: None,
-                    raw: None,
-                    note: format!("judge transport error (no retry): {e}"),
-                    cache_hit: false,
-                };
+                // Transport errors retry once (2026-08-01 dual-run regression:
+                // judge API transient failures ~7% per run; parse-failures below
+                // already get one retry, transport previously got none).
+                eprintln!("  v2: judge transport error ({e}); retrying once");
+                match self.judge.complete(messages).await {
+                    Ok(resp) => resp,
+                    Err(e2) => {
+                        return JudgeAttempt {
+                            status: eval_v2::JudgeStatus::Error,
+                            parsed: None,
+                            raw: None,
+                            note: format!("judge transport error after retry: {e2}"),
+                            cache_hit: false,
+                        };
+                    }
+                }
             }
         };
         let raw = resp.content;
@@ -498,7 +507,8 @@ impl V2RunCtx {
         let raw2 = resp2.content;
         match eval_v2::parse_judge_output(&raw2) {
             Ok(parsed) => {
-                self.cache.store(cache_key, self.judge.model(), input, &raw2);
+                self.cache
+                    .store(cache_key, self.judge.model(), input, &raw2);
                 JudgeAttempt {
                     status: eval_v2::JudgeStatus::Ok,
                     parsed: Some(parsed),
@@ -541,7 +551,10 @@ impl V2RunCtx {
                 &summary,
             ),
         );
-        self.write_text("per_query.tsv", &eval_v2::render_per_query_tsv(&self.scores));
+        self.write_text(
+            "per_query.tsv",
+            &eval_v2::render_per_query_tsv(&self.scores),
+        );
         // Prompt version marker (design §7.1): schema version + git short hash
         // when the CI env provides one (same option_env convention as the
         // TestContext artifact ids; "local" otherwise).
@@ -1042,9 +1055,9 @@ async fn realistic_corpus_full_eval() {
         ("huawei_ipd_370_activities.txt", 300),      // 54K chars, table as TSV
         ("baiyao_it_planning.txt", 300),             // 20K chars, PDF->TXT
         // v4 增量语料（智遥咨询 3 篇，OneDrive 原件已入库 fixtures）
-        ("consulting_rbf_drc.txt", 120),             // 4K chars, 滴灌通&RBF
-        ("consulting_prepared_food.txt", 120),       // 4.3K chars, 预制菜
-        ("consulting_craftsman_paradox.txt", 120),   // 1.4K chars, 手艺人模式
+        ("consulting_rbf_drc.txt", 120),       // 4K chars, 滴灌通&RBF
+        ("consulting_prepared_food.txt", 120), // 4.3K chars, 预制菜
+        ("consulting_craftsman_paradox.txt", 120), // 1.4K chars, 手艺人模式
     ];
     // v3 scope keys — parallel to `corpus_files` order (doc_scope_hint → ids).
     let scope_keys = [
@@ -1164,7 +1177,10 @@ async fn realistic_corpus_full_eval() {
         .ok()
         .and_then(|v| v.parse().ok());
     if start_at > 1 {
-        eprintln!("[realistic_corpus] E2E_START_AT={start_at}: skipping first {} questions", start_at - 1);
+        eprintln!(
+            "[realistic_corpus] E2E_START_AT={start_at}: skipping first {} questions",
+            start_at - 1
+        );
     }
     if let Some(end) = end_at {
         eprintln!("[realistic_corpus] E2E_END_AT={end}: stop after question {end}");
@@ -1302,10 +1318,7 @@ async fn realistic_corpus_full_eval() {
                 .get("error_category")
                 .and_then(|v| v.as_str())
                 .is_some_and(|s| s.contains("internal") || s == "error")
-            || resp_body
-                .pointer("/error/type")
-                .and_then(|v| v.as_str())
-                == Some("internal_error")
+            || resp_body.pointer("/error/type").and_then(|v| v.as_str()) == Some("internal_error")
         {
             let raw = serde_json::to_string_pretty(&resp_body)
                 .unwrap_or_else(|_| "<serialize failed>".to_string());
@@ -1338,10 +1351,7 @@ async fn realistic_corpus_full_eval() {
                 let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                     .join("tests/e2e_output/realistic_corpus_full_eval");
                 if std::fs::create_dir_all(&dir).is_ok() {
-                    let _ = std::fs::write(
-                        dir.join(format!("q{:03}.raw.json", idx + 1)),
-                        raw,
-                    );
+                    let _ = std::fs::write(dir.join(format!("q{:03}.raw.json", idx + 1)), raw);
                 }
                 if let Some(v2) = v2.as_mut() {
                     v2.record_infra(idx + 1, example, subset_name, "parse_error");
@@ -1502,11 +1512,8 @@ async fn realistic_corpus_full_eval() {
                 // Ok-only trace (coverage scorer) + full status dump for diagnosis.
                 // Error results still count as "tool was invoked" for G-17 path smoke.
                 let ok_trace = extract_tool_trace(&chat.tool_results);
-                let any_trace: Vec<String> = chat
-                    .tool_results
-                    .iter()
-                    .map(|r| r.tool.clone())
-                    .collect();
+                let any_trace: Vec<String> =
+                    chat.tool_results.iter().map(|r| r.tool.clone()).collect();
                 let status_dump: Vec<String> = chat
                     .tool_results
                     .iter()
@@ -1525,9 +1532,7 @@ async fn realistic_corpus_full_eval() {
                         break;
                     }
                 } else {
-                    eprintln!(
-                        "  tool_hit: {expected_tool} ok (any={any_trace:?} ok={ok_trace:?})"
-                    );
+                    eprintln!("  tool_hit: {expected_tool} ok (any={any_trace:?} ok={ok_trace:?})");
                 }
             }
         }
@@ -1774,28 +1779,29 @@ async fn rag_system_prompt_smoke_v5() {
             example.query.chars().take(70).collect::<String>()
         );
 
-        let probe =
-            match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope).await {
-                Ok(p) => p,
-                Err(failure) => {
-                    let liveness = probe_api_liveness(&ctx).await;
-                    eprintln!(
-                        "  FAIL: chat {} ({}): {}",
-                        failure.error_category, failure.failing_stage, failure.error_chain
-                    );
-                    ctx.save_smoke_v5_probe_failure(
-                        &artifact_key,
-                        &failure,
-                        &liveness,
-                        Some(&serde_json::json!({ "query": example.query })),
-                    );
-                    failures.push((
-                        example.query.clone(),
-                        format!("chat {}: {}", failure.error_category, failure.error_chain),
-                    ));
-                    continue;
-                }
-            };
+        let probe = match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope)
+            .await
+        {
+            Ok(p) => p,
+            Err(failure) => {
+                let liveness = probe_api_liveness(&ctx).await;
+                eprintln!(
+                    "  FAIL: chat {} ({}): {}",
+                    failure.error_category, failure.failing_stage, failure.error_chain
+                );
+                ctx.save_smoke_v5_probe_failure(
+                    &artifact_key,
+                    &failure,
+                    &liveness,
+                    Some(&serde_json::json!({ "query": example.query })),
+                );
+                failures.push((
+                    example.query.clone(),
+                    format!("chat {}: {}", failure.error_category, failure.error_chain),
+                ));
+                continue;
+            }
+        };
         let chat = probe.resp;
         let tools = summarize_tool_activity(&probe.sse_events, &chat);
         let turn_count = count_sse_trace_stage(&probe.sse_events, "turn_start");
@@ -2080,28 +2086,29 @@ async fn rag_tools_golden_set() {
             );
         }
 
-        let probe =
-            match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope).await {
-                Ok(p) => p,
-                Err(failure) => {
-                    let liveness = probe_api_liveness(&ctx).await;
-                    eprintln!(
-                        "  FAIL: chat {} ({}): {}",
-                        failure.error_category, failure.failing_stage, failure.error_chain
-                    );
-                    ctx.save_smoke_v5_probe_failure(
-                        &subset_name,
-                        &failure,
-                        &liveness,
-                        Some(&serde_json::json!({ "query": example.query })),
-                    );
-                    failures.push((
-                        example.query.clone(),
-                        format!("chat {}: {}", failure.error_category, failure.error_chain),
-                    ));
-                    continue;
-                }
-            };
+        let probe = match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope)
+            .await
+        {
+            Ok(p) => p,
+            Err(failure) => {
+                let liveness = probe_api_liveness(&ctx).await;
+                eprintln!(
+                    "  FAIL: chat {} ({}): {}",
+                    failure.error_category, failure.failing_stage, failure.error_chain
+                );
+                ctx.save_smoke_v5_probe_failure(
+                    &subset_name,
+                    &failure,
+                    &liveness,
+                    Some(&serde_json::json!({ "query": example.query })),
+                );
+                failures.push((
+                    example.query.clone(),
+                    format!("chat {}: {}", failure.error_category, failure.error_chain),
+                ));
+                continue;
+            }
+        };
         let chat = probe.resp;
         let sse_tools = summarize_tool_activity(&probe.sse_events, &chat);
         let trace_tools = extract_tool_trace(&chat.tool_results);
@@ -2333,13 +2340,10 @@ async fn reindex_three_cached_docs_with_triplet() {
 
     let cache_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/e2e_output/realistic_corpus_cache.json");
-    let cache: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(&cache_path).expect("read corpus cache"),
-    )
-    .expect("parse corpus cache");
-    let docs = cache["docs"]
-        .as_object()
-        .expect("cache.docs object");
+    let cache: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&cache_path).expect("read corpus cache"))
+            .expect("parse corpus cache");
+    let docs = cache["docs"].as_object().expect("cache.docs object");
     // Remaining after thesis completed; override via TRIPLET_REINDEX_DOCS.
     let need: Vec<String> = std::env::var("TRIPLET_REINDEX_DOCS")
         .ok()
@@ -2429,9 +2433,7 @@ async fn reindex_three_cached_docs_with_triplet() {
                 );
             }
             Err(e) => {
-                eprintln!(
-                    "[triplet-reindex] {name} completed (backend_summary unavailable: {e})"
-                );
+                eprintln!("[triplet-reindex] {name} completed (backend_summary unavailable: {e})");
             }
         }
     }

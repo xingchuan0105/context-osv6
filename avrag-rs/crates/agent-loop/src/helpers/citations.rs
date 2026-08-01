@@ -42,7 +42,19 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
                 .and_then(|v| v.as_str())
                 .map(str::to_owned)
                 .unwrap_or_default();
-            let text = chunk_text_field(item).unwrap_or_default();
+            let mut text = chunk_text_field(item).unwrap_or_default();
+            // doc_grep: `total_hits` 是运行时统计(命中行数),不在 chunk 原文里;
+            // 附加到 content 前缀使 judge 可核对计数类 claim(2026-08-01 q079 回归)。
+            if result.tool == "doc_grep"
+                && let Some(data) = result.data.as_ref()
+                && let Some(total_hits) = data.get("total_hits").and_then(|v| v.as_u64())
+            {
+                let truncated = data
+                    .get("truncated")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                text = format!("[grep total_hits={total_hits}, truncated={truncated}]\n{text}");
+            }
             let page = item
                 .get("page")
                 .and_then(|v| v.as_i64())
@@ -272,6 +284,37 @@ mod tests {
         let citations = build_citations_from_tool_results(&results);
         assert_eq!(citations.len(), 1);
         assert_eq!(citations[0].citation_id, 1);
+    }
+
+    #[test]
+    fn doc_grep_citations_carry_total_hits_prefix() {
+        // total_hits 是运行时统计,不在 chunk 原文——附加到 content 前缀,
+        // judge 才能核对计数类 claim(q079 回归)。
+        let results = vec![tr(
+            "doc_grep",
+            ToolStatus::Ok,
+            Some(serde_json::json!({
+                "total_hits": 81,
+                "truncated": false,
+                "hits": [{"chunk_id": "c1", "text": "概念阶段行"}],
+                "chunks": [{"chunk_id": "c1", "doc_id": "d1", "text": "活动清单..."}],
+            })),
+        )];
+        let citations = build_citations_from_tool_results(&results);
+        assert_eq!(citations.len(), 1);
+        let content = citations[0].content.as_deref().unwrap();
+        assert!(
+            content.starts_with("[grep total_hits=81, truncated=false]"),
+            "content: {content}"
+        );
+        // 非 grep 工具不受影响
+        let dense = vec![tr(
+            "dense_retrieval",
+            ToolStatus::Ok,
+            Some(serde_json::json!([{"chunk_id": "c2", "text": "x"}])),
+        )];
+        let c2 = build_citations_from_tool_results(&dense);
+        assert_eq!(c2[0].content.as_deref(), Some("x"));
     }
 
     fn sample_citation(id: i64, chunk_id: &str) -> Citation {

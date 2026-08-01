@@ -42,6 +42,9 @@
 ## 5. 建议(按优先级)
 
 1. **judge transport 错误重试**(harness):`judge_with_retry` 对 transport 错误加 1 次重试(或对 JUDGE_ERROR 题支持离线重判),消除 ~7% 的噪声——**单点最高收益**。
+   - ✅ 已修复(2026-08-01):`live_judge_call` transport 错误重试一次,与 parse 失败同等待遇。
 2. **total_hits 载体**:`build_citations_from_tool_results` 对 `doc_grep` 把 `total_hits`/`truncated` 合成进 citation content(或命中行 text 前缀),让 judge 能核对统计值——q079 类表格计数题稳定化。
+   - ✅ 已修复(2026-08-01):doc_grep 的 citation content 前缀附加 `[grep total_hits=N, truncated=bool]`(agent-loop/helpers/citations.rs + 单测)。
 3. **q086 表序强化**(SKILL):how-to-read-tables 的「第一个=出现顺序」再加一个 LPDT 场景 few-shot;同时强化「所有采用的主张都写 SELECTED」(q086 二轮 cited=0)。
+   - ⏳ 未做(用户未选择)。
 4. 可选:重跑 judge 补判 JUDGE_ERROR 题后,真实 PASS 率预计 ≈133/149(89.3%),与基线基本持平。
