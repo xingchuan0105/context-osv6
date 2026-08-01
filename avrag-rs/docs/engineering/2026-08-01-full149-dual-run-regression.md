@@ -39,6 +39,19 @@
 - **P0 修复确认有效**:q088、q121 从基线 UNGROUNDED 稳定到 PASS。
 - 与基线 90.6% 的差距 ≈ JUDGE_ERROR(~7%,环境)+ 结构性 2 题(q079 total_hits 载体、q086 表序)+ 采样。
 
+## 5.1 修复后错题重跑验证(2026-08-01,45 题 = 两轮非 PASS 并集 + q088/q121 对照)
+
+run `v2_20260801-112850`:**PASS 36/45(80%)**,judge calls ok=44 error=1。
+
+| 修复 | 效果 |
+|------|------|
+| judge transport 重试 | JUDGE_ERROR **10/轮 → 1/45**(唯一残留 q133 重试后仍失败,judge 持续故障) |
+| total_hits 载体 | **q079 从稳定 UNGROUNDED → PASS**(corr=1/faith=1);q053/q057 同步翻盘 |
+
+剩余非 PASS 9:UNGROUNDED 3(q050/q078/q086,均 corr=1 但圈选不足 cited≤1)、SELECTION_MISS 2(q046/q061,cited=0 未写 SELECTED)、PARTIAL 3(q059/q103/q105,rubric 细节)、JUDGE_ERROR 1(q133)。
+q086 内容改善(corr 0→1,仍因 cited=1 判 faith=0)——建议 3(SKILL 表序+SELECTED 强化)未做,是剩余 UNGROUNDED 的主因。
+对照 q088/q121 保持 PASS,无回归。
+
 ## 5. 建议(按优先级)
 
 1. **judge transport 错误重试**(harness):`judge_with_retry` 对 transport 错误加 1 次重试(或对 JUDGE_ERROR 题支持离线重判),消除 ~7% 的噪声——**单点最高收益**。
