@@ -296,12 +296,19 @@ impl ReActLoop {
         let mut block_bridge_results = Vec::new();
         let mut bridge_calls = Vec::new();
 
-        if self.deps.has_rag_runtime() || self.deps.has_search_executor() {
-            // CodegenPort: SaC host (retrieval + web/memory + fs) stays inside deps.
+        if self.deps.sdk_can_bridge(sdk_allowed) {
+            // CodegenPort: SaC host (retrieval + base/web/memory + fs) stays inside deps.
             let session_id = request
                 .session_id
                 .as_deref()
                 .and_then(|s| uuid::Uuid::parse_str(s).ok());
+            let meta_str = |key: &str| {
+                request
+                    .metadata
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            };
             let bridged = self
                 .deps
                 .execute_codegen_bridged_with_session(
@@ -311,6 +318,9 @@ impl ReActLoop {
                     Arc::clone(retrieval_aliases),
                     session_id,
                     Arc::clone(session_fs),
+                    meta_str("client_ip"),
+                    meta_str("client_local_time"),
+                    meta_str("client_timezone"),
                     Arc::clone(sdk_allowed),
                 )
                 .await;
@@ -653,7 +663,7 @@ fn code_exec_is_error(exec: &avrag_code_interpreter::ExecutionResult) -> bool {
 mod tests {
     use super::*;
     // B4: SDK-as-native reject lives in agent_tools (single execute entry).
-    use agent_tools::{is_codegen_sdk_method_as_native_tool, reject_codegen_method_as_native_tool};
+    use agent_tools::{is_codegen_sdk_method_as_native_tool, reject_native_tool_surface};
 
     #[test]
     fn sandbox_error_observation_includes_sdk_reminder() {
@@ -692,13 +702,12 @@ mod tests {
     #[test]
     fn codegen_sdk_method_names_are_detected_as_fake_native_tools() {
         assert!(is_codegen_sdk_method_as_native_tool("dense"));
-        assert!(is_codegen_sdk_method_as_native_tool("dense_search")); // legacy
         assert!(is_codegen_sdk_method_as_native_tool("web"));
         assert!(is_codegen_sdk_method_as_native_tool("doc_scan"));
         assert!(is_codegen_sdk_method_as_native_tool("doc_chunks"));
         assert!(!is_codegen_sdk_method_as_native_tool("dense_retrieval"));
         assert!(!is_codegen_sdk_method_as_native_tool("web_search"));
-        let r = reject_codegen_method_as_native_tool("dense");
+        let r = reject_native_tool_surface("dense");
         assert_eq!(r.status, contracts::ToolStatus::Error);
         let hint = r.data.as_ref().unwrap()["hint"].as_str().unwrap();
         assert!(hint.contains("client.dense") || hint.contains("await client.dense"));

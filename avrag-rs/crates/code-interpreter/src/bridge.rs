@@ -23,7 +23,39 @@ struct BridgeRequest {
 }
 
 fn bridge_shim_source() -> &'static str {
-    r#"
+    static SHIM: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+    SHIM.get_or_init(|| Box::leak(build_shim_source().into_boxed_str()))
+}
+
+/// 从 `contracts::sdk_primitives` 注册表 codegen Python shim(D10):
+/// 每个原语一行 `async def`,docstring 与 payload 形状全部派生自注册表。
+fn build_shim_source() -> String {
+    use contracts::sdk_primitives::SDK_PRIMITIVES;
+
+    let mut methods = String::new();
+    for p in SDK_PRIMITIVES {
+        let docstring = p.docstring.replace('\\', "\\\\").replace('"', "\\\"");
+        let return_path = if p.py_return.is_empty() {
+            String::new()
+        } else {
+            p.py_return.to_string()
+        };
+        methods.push_str(&format!(
+            r#"
+    async def {id}({py_sig}):
+        """"{docstring}"""
+        return _rpc("{id}", {py_payload}){return_path}
+"#,
+            id = p.id,
+            py_sig = p.py_sig,
+            docstring = docstring,
+            py_payload = p.py_payload,
+            return_path = return_path,
+        ));
+    }
+
+    format!(
+        r#"
 import json as _json
 _req = open(3, "w", buffering=1)
 _resp = open(4, "r", buffering=1)
@@ -32,94 +64,16 @@ _id = 0
 def _rpc(method, args):
     global _id
     _id += 1
-    _req.write(_json.dumps({"id": _id, "method": method, "args": args}) + "\n")
+    _req.write(_json.dumps({{"id": _id, "method": method, "args": args}}) + "\n")
     _req.flush()
     msg = _json.loads(_resp.readline())
     if not msg.get("ok"):
-        raise RuntimeError(msg.get("error", {}).get("message", "bridge error"))
+        raise RuntimeError(msg.get("error", {{}}).get("message", "bridge error"))
     return msg["data"]
 
 class _Client:
     """SaC SDK: query-only dense/lexical; grep for line-level; web/fetch; memory; no graph/topk."""
-
-    async def dense(self, query):
-        """Semantic dense retrieval. topk is fixed by the host — only pass query."""
-        return _rpc("dense", {"query": query})["chunks"]
-
-    async def lexical(self, query):
-        """BM25/keyword retrieval. When graph augment is on, observation may include graph_context."""
-        return _rpc("lexical", {"query": query})["chunks"]
-
-    # Temporary aliases (ignore legacy top_k / method kwargs) — remove after skill cutover.
-    async def dense_search(self, query, top_k=None, method=None):
-        return await self.dense(query)
-
-    async def lexical_search(self, query, top_k=None):
-        return await self.lexical(query)
-
-    async def grep(self, pattern, doc_ids=None, regex=False, context=0, max_hits=50):
-        """Line-level locate (coding-agent grep). Returns full payload:
-        total_hits / returned / truncated / hits[{doc_id, line, text, before, after}].
-        total_hits is exact (host-counted) — use it; do not re-count or dedupe in code."""
-        payload = {"pattern": pattern, "regex": regex, "context": context, "max_hits": max_hits}
-        if doc_ids is not None:
-            payload["doc_ids"] = doc_ids
-        return _rpc("grep", payload)
-
-    async def struct_catalog(self, doc_ids=None):
-        """List table relations in per-doc DuckDB struct stores (name/headers/n_rows/
-        sample_rows/caption/unit/confidence). Empty relations = no struct store (「无表格」)."""
-        payload = {}
-        if doc_ids is not None:
-            payload["doc_ids"] = doc_ids
-        return _rpc("struct_catalog", payload)
-
-    async def struct_query(self, sql, doc_ids=None):
-        """Run one restricted SELECT against the struct store. COUNT/filter/order are
-        engine-exact. Returns {ok, columns, rows, row_count, evidence} or {ok:false, error}."""
-        payload = {"sql": sql}
-        if doc_ids is not None:
-            payload["doc_ids"] = doc_ids
-        return _rpc("struct_query", payload)
-
-    async def web(self, query):
-        """Web search (SaC). Fan-out multiple queries in one code block when needed."""
-        return _rpc("web", {"query": query})
-
-    async def fetch(self, url):
-        """Fetch one URL and extract readable text."""
-        return _rpc("fetch", {"url": url})
-
-    async def doc_summary(self, level="doc", doc_ids=None):
-        payload = {"level": level}
-        if doc_ids is not None:
-            payload["doc_ids"] = doc_ids
-        return _rpc("doc_summary", payload)["chunks"]
-
-    async def doc_profile(self, doc_ids=None, fields=None):
-        payload = {}
-        if doc_ids is not None:
-            payload["doc_ids"] = doc_ids
-        if fields:
-            payload["fields"] = fields
-        return _rpc("doc_profile", payload)["chunks"]
-
-    async def history(self, limit=20, query="", scope="workspace"):
-        """Load prior conversation turns (not full chat dump into tokens)."""
-        return _rpc("history", {"limit": limit, "query": query, "scope": scope})
-
-    async def user_profile(self):
-        """Load structured user profile preferences."""
-        return _rpc("user_profile", {})
-
-    async def save(self, path, data):
-        """Persist JSON-serializable data under a relative path (cross-block / cross-turn)."""
-        return _rpc("save", {"path": path, "data": data})
-
-    async def load(self, path):
-        """Load data previously saved with save(path, data)."""
-        return _rpc("load", {"path": path})["data"]
-
+{methods}
 # Module-level aliases (design §5 examples use bare save/load).
 async def save(path, data):
     return await client.save(path, data)
@@ -129,28 +83,17 @@ async def load(path):
 
 client = _Client()
 "#
+    )
 }
 
-/// Canonical SaC SDK RPC methods (host must implement every name).
-///
-/// Python may also expose temporary aliases (`dense_search` → RPC `dense`) that are
-/// not listed here — only wire names count for host/shim parity.
+/// 规范 SaC SDK 原语名(host 必须实现每个名字;由注册表派生)。
 pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
-    &[
-        "dense",
-        "lexical",
-        "grep",
-        "struct_catalog",
-        "struct_query",
-        "web",
-        "fetch",
-        "doc_summary",
-        "doc_profile",
-        "history",
-        "user_profile",
-        "save",
-        "load",
-    ]
+    use contracts::sdk_primitives::{SdkCapability, ids_for};
+    static NAMES: std::sync::OnceLock<&'static [&'static str]> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        let ids = ids_for(SdkCapability::BASE | SdkCapability::RAG | SdkCapability::SEARCH);
+        Box::leak(ids.into_boxed_slice())
+    })
 }
 
 pub(crate) fn build_bridge_sandbox_wrapper(
@@ -582,19 +525,22 @@ mod bridge_shim_tests {
         assert_eq!(
             bridge_shim_client_method_names(),
             &[
+                "save",
+                "load",
+                "history",
+                "user_profile",
+                "user_context",
+                "calculator",
+                "weather_query",
                 "dense",
                 "lexical",
                 "grep",
+                "doc_profile",
+                "doc_summary",
                 "struct_catalog",
                 "struct_query",
                 "web",
                 "fetch",
-                "doc_summary",
-                "doc_profile",
-                "history",
-                "user_profile",
-                "save",
-                "load",
             ]
         );
         // Removed anchors (A4/A5): no graph / chunk_fetch / read_lines / aggregators.
@@ -606,6 +552,8 @@ mod bridge_shim_tests {
             "rerank",
             "count",
             "dedupe",
+            "dense_search",
+            "lexical_search",
         ] {
             assert!(
                 !bridge_shim_client_method_names().contains(&banned),

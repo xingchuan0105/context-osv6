@@ -21,6 +21,9 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use crate::runtime::AgentRequest;
+use agent_tools::skills::builtin::calculator::CalculatorSkill;
+use agent_tools::skills::builtin::user_context::UserContextSkill;
+use agent_tools::skills::builtin::weather_query::WeatherQuerySkill;
 use agent_tools::skills::builtin::web_fetch::WebFetchSkill;
 use agent_tools::skills::memory_dispatch::{conversation_history_load, user_profile_load};
 use agent_tools::skills::{ExecutionContext, SkillComponent};
@@ -29,6 +32,7 @@ use app_core::ChatPersistencePort;
 use async_trait::async_trait;
 use avrag_code_interpreter::{CodeInterpreter, ExecutionResult, HostBridge, InterpreterError};
 use contracts::auth_runtime::AuthContext;
+use contracts::sdk_primitives::{SdkCapability, ids_for};
 use contracts::{ToolResult, ToolStatus};
 use serde_json::{Value, json};
 
@@ -118,6 +122,19 @@ impl LoopRuntimeDeps {
         self.search_executor.is_some()
     }
 
+    /// 沙箱是否需要 bridged 执行:有检索面,或本轮开放任意 base 原语
+    /// (纯 chat 的 save/load/history/user_profile/user_context/calculator/weather_query
+    /// 也经 host bridge;空 allowlist = 全开,测试专用)。
+    pub fn sdk_can_bridge(&self, sdk_allowed: &HashSet<String>) -> bool {
+        if self.rag_runtime.is_some() || self.search_executor.is_some() {
+            return true;
+        }
+        sdk_allowed.is_empty()
+            || ids_for(SdkCapability::BASE)
+                .iter()
+                .any(|id| sdk_allowed.contains(*id))
+    }
+
     /// CodegenPort: run Python with SaC host bridge when configured.
     ///
     /// Returns execution result plus loop-local [`BridgeCallObs`] (rag-core types
@@ -131,12 +148,17 @@ impl LoopRuntimeDeps {
         alias_counter: Arc<AtomicU64>,
         session_id: Option<uuid::Uuid>,
         session_fs: Arc<super::session_fs::SessionFs>,
+        client_ip: Option<String>,
+        client_local_time: Option<String>,
+        client_timezone: Option<String>,
         sdk_allowed: Arc<HashSet<String>>,
     ) -> BridgedCodegenExec {
-        if self.rag_runtime.is_none() && self.search_executor.is_none() {
+        // 纯 chat(base 原语开放)或带检索(search/rag)都走 bridged 路径;
+        // 仅当 base 原语一个都不开放且无检索时,沙箱无任何可用 client.*,拒绝执行。
+        if !self.sdk_can_bridge(&sdk_allowed) {
             return BridgedCodegenExec {
                 exec: Err(InterpreterError::Bridge(
-                    "neither rag runtime nor search provider configured for SaC codegen".into(),
+                    "no retrieval runtime and no base SDK primitives open for SaC codegen".into(),
                 )),
                 bridge_results: Vec::new(),
                 bridge_calls: Vec::new(),
@@ -159,6 +181,9 @@ impl LoopRuntimeDeps {
             auth: auth.clone(),
             session_id,
             session_fs,
+            client_ip,
+            client_local_time,
+            client_timezone,
             sdk_allowed,
             extra_results: Mutex::new(Vec::new()),
             extra_calls: Mutex::new(Vec::new()),
@@ -221,7 +246,7 @@ fn map_bridge_calls(
         .collect()
 }
 
-/// Product SaC host: retrieval via [`RuntimeBridge`] + web/memory ports.
+/// Product SaC host: retrieval via [`RuntimeBridge`] + base/web/memory ports.
 struct SacHostBridge {
     rag: Option<avrag_rag_core::runtime::bridge::RuntimeBridge>,
     search: Option<Arc<dyn avrag_search::SearchProvider>>,
@@ -229,6 +254,9 @@ struct SacHostBridge {
     auth: AuthContext,
     session_id: Option<uuid::Uuid>,
     session_fs: Arc<super::session_fs::SessionFs>,
+    client_ip: Option<String>,
+    client_local_time: Option<String>,
+    client_timezone: Option<String>,
     /// Empty set = open (tests). Product runs always pass a non-empty allowlist.
     sdk_allowed: Arc<HashSet<String>>,
     extra_results: Mutex<Vec<ToolResult>>,
@@ -403,6 +431,44 @@ impl SacHostBridge {
         self.record_extra("user_profile", None, result)
     }
 
+    async fn call_user_context(&self) -> Value {
+        let skill = UserContextSkill;
+        let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _)).with_client_context(
+            self.client_ip.clone(),
+            self.client_local_time.clone(),
+            self.client_timezone.clone(),
+        );
+        let result = skill.execute(&json!({}), &ctx).await;
+        self.record_extra("user_context", None, result)
+    }
+
+    async fn call_calculator(&self, args: &Value) -> Value {
+        let skill = CalculatorSkill;
+        let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _));
+        let result = skill.execute(args, &ctx).await;
+        self.record_extra("calculator", None, result)
+    }
+
+    async fn call_weather_query(&self, args: &Value) -> Value {
+        // SDK 面签名是 city/lat/lon;host 技能面用 location("city" 或 "lat,lon")。
+        let coord = |key: &str| {
+            args.get(key)
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .or_else(|| args.get(key).and_then(|v| v.as_f64()).map(|f| f.to_string()))
+        };
+        let location = match args.get("city").and_then(|v| v.as_str()) {
+            Some(city) if !city.is_empty() => city.to_string(),
+            _ => match (coord("lat"), coord("lon")) {
+                (Some(lat), Some(lon)) => format!("{lat},{lon}"),
+                _ => String::new(),
+            },
+        };
+        let skill = WeatherQuerySkill;
+        let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _));
+        let result = skill.execute(&json!({ "location": location }), &ctx).await;
+        self.record_extra("weather_query", None, result)
+    }
+
     fn call_save(&self, args: &Value) -> Value {
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let data = args.get("data").cloned().unwrap_or(Value::Null);
@@ -472,9 +538,12 @@ impl HostBridge for SacHostBridge {
             "fetch" => self.call_fetch(&args).await,
             "history" => self.call_history(&args).await,
             "user_profile" => self.call_user_profile().await,
+            "user_context" => self.call_user_context().await,
+            "calculator" => self.call_calculator(&args).await,
+            "weather_query" => self.call_weather_query(&args).await,
             "save" => self.call_save(&args),
             "load" => self.call_load(&args),
-            // Retrieval + legacy aliases — RuntimeBridge when configured.
+            // Retrieval — RuntimeBridge when configured.
             _ => match &self.rag {
                 Some(rag) => rag.call(method, args).await,
                 None => json!({

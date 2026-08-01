@@ -2,39 +2,25 @@
 //!
 //! Product modes open a **subset** of sandbox primitives. Host denies RPC
 //! methods outside the subset with `capability_denied`.
+//! 原语清单单一事实源在 `contracts::sdk_primitives` 注册表(D10)。
 
 use std::collections::HashSet;
 
-/// Always available when the SaC bridge is active (cross-turn + light memory).
-const BASE_PRIMITIVES: &[&str] = &["save", "load", "history", "user_profile"];
-
-/// Workspace retrieval (rag).
-const RAG_PRIMITIVES: &[&str] = &[
-    "dense",
-    "lexical",
-    "grep",
-    "doc_profile",
-    "doc_summary",
-    "struct_catalog",
-    "struct_query",
-];
-
-/// Web surface (search). Design also allows `dense` for hybrid search mode.
-const SEARCH_PRIMITIVES: &[&str] = &["web", "fetch", "dense"];
-
 /// Resolve SaC primitive ids from product capability flags.
+/// 从 `contracts::sdk_primitives` 注册表派生(D10)——不再维护三组硬编码常量。
 pub fn sdk_primitives_for_caps(rag: bool, search: bool) -> Vec<&'static str> {
-    let mut out: Vec<&'static str> = BASE_PRIMITIVES.to_vec();
+    use contracts::sdk_primitives::{SdkCapability, ids_for};
+    let mut out = ids_for(SdkCapability::BASE);
     if rag {
-        for p in RAG_PRIMITIVES {
-            if !out.contains(p) {
+        for p in ids_for(SdkCapability::RAG) {
+            if !out.contains(&p) {
                 out.push(p);
             }
         }
     }
     if search {
-        for p in SEARCH_PRIMITIVES {
-            if !out.contains(p) {
+        for p in ids_for(SdkCapability::SEARCH) {
+            if !out.contains(&p) {
                 out.push(p);
             }
         }
@@ -42,32 +28,22 @@ pub fn sdk_primitives_for_caps(rag: bool, search: bool) -> Vec<&'static str> {
     out
 }
 
-/// Canonicalize legacy alias names before allow-check.
-pub fn canonicalize_sdk_method(method: &str) -> &str {
-    match method {
-        "dense_search" => "dense",
-        "lexical_search" => "lexical",
-        other => other,
-    }
-}
-
 /// `allowed` empty ⇒ no gate (tests / legacy). Non-empty ⇒ only listed methods.
+/// legacy 别名(dense_search/lexical_search)已在注册表/shime 层退役(D10)。
 pub fn method_allowed(allowed: &HashSet<String>, method: &str) -> bool {
     if allowed.is_empty() {
         return true;
     }
-    let canon = canonicalize_sdk_method(method);
-    allowed.contains(canon)
+    allowed.contains(method)
 }
 
 /// Error payload for denied RPC (Python shim raises RuntimeError with message).
 pub fn capability_denied_error(method: &str) -> serde_json::Value {
-    let canon = canonicalize_sdk_method(method);
     serde_json::json!({
         "error": {
             "code": "capability_denied",
             "message": format!(
-                "SDK method `{canon}` is not enabled for this capability mode"
+                "SDK method `{method}` is not enabled for this capability mode"
             ),
         }
     })
@@ -122,9 +98,11 @@ mod tests {
     }
 
     #[test]
-    fn legacy_alias_maps_to_dense() {
+    fn legacy_alias_no_longer_allowed() {
+        // D10:legacy 别名(dense_search/lexical_search)已退役,只认注册表 id。
         let set: HashSet<String> = ["dense".into()].into_iter().collect();
-        assert!(method_allowed(&set, "dense_search"));
+        assert!(!method_allowed(&set, "dense_search"));
         assert!(!method_allowed(&set, "lexical_search"));
+        assert!(method_allowed(&set, "dense"));
     }
 }

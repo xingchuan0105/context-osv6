@@ -9,6 +9,7 @@ pub mod errors;
 pub mod workspaces;
 pub mod preferences;
 pub mod rag_execute;
+pub mod sdk_primitives;
 pub mod share;
 pub mod tool_call;
 pub mod usage_limit;

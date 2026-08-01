@@ -15,21 +15,6 @@ const AGENT_BASE: &str = "prompts/system/agent-base.md";
 const CAPABILITY_KNOWLEDGE_BASE: &str = "prompts/capabilities/knowledge-base.md";
 /// Mounted when product web retrieval is enabled.
 const CAPABILITY_WEB: &str = "prompts/capabilities/web.md";
-const USER_CONTEXT_TOOL: &str = "user_context";
-
-/// Utility tool whitelist (OQ-Tools, 2026-07-20): light side-effect helpers
-/// exposed on pure-chat (no retrieval capabilities). Retrieval skills use the
-/// knowledge-base / search Python sandbox (`client.*`), not this pool.
-///
-/// - `user_context`: local clock + IP city geo
-/// - `calculator` / `weather_query`: light side-effect helpers
-pub(crate) fn utility_tool_pool() -> Vec<String> {
-    vec![
-        USER_CONTEXT_TOOL.to_string(),
-        "calculator".to_string(),
-        "weather_query".to_string(),
-    ]
-}
 
 #[derive(Debug, Clone)]
 pub struct AssembledMode {
@@ -108,7 +93,10 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         config.synthesis_output.contract = AnswerContractKind::ProseOnly;
         config.inject_retrieval_query = false;
         config.auto_fallback = None;
-        config.tool_pool = utility_tool_pool();
+        // D11: native tool surface closed — the pure-chat trio
+        // (user_context/calculator/weather_query) is served via sandbox
+        // `client.*` SDK primitives (base capability), never as native tools.
+        config.tool_pool.clear();
         config.skill_catalog.mandatory.synthesis.clear();
     }
 
@@ -227,19 +215,12 @@ mod tests {
     use agent_loop::r#loop::config::AnswerContractKind;
 
     #[test]
-    fn pure_chat_has_utility_tools_and_one_prompt_part() {
+    fn pure_chat_has_empty_tool_pool_and_one_prompt_part() {
         let assembled = assemble_mode(CapabilitySet::default()).expect("assemble pure chat");
         assert_eq!(assembled.config.id, "chat");
-        // AnswerOnly utility whitelist (OQ-Tools): user_context + light helpers;
-        // never retrieval / delegate tools.
-        assert_eq!(assembled.config.tool_pool, utility_tool_pool());
-        assert!(
-            !assembled
-                .config
-                .tool_pool
-                .iter()
-                .any(|t| t == "web_search" || t == "dense_retrieval" || t.starts_with("delegate_"))
-        );
+        // D11: native tool surface closed — pure-chat trio served via sandbox
+        // client.* SDK primitives; never retrieval / delegate tools.
+        assert!(assembled.config.tool_pool.is_empty(), "tool_pool: {:?}", assembled.config.tool_pool);
         assert_eq!(assembled.system_prompt_parts.len(), 1);
         assert_eq!(
             assembled.system_prompt_parts[0],
@@ -264,10 +245,13 @@ mod tests {
             "pure chat must not mandatory-inject synthesis skills: {:?}",
             assembled.config.skill_catalog.mandatory.synthesis
         );
-        // A3: pure chat opens memory + fs only.
+        // A3: pure chat opens memory + fs + trio (SDK) only.
         assert!(
             assembled.config.sdk_primitives.contains(&"history".into())
                 && assembled.config.sdk_primitives.contains(&"save".into())
+                && assembled.config.sdk_primitives.contains(&"user_context".into())
+                && assembled.config.sdk_primitives.contains(&"calculator".into())
+                && assembled.config.sdk_primitives.contains(&"weather_query".into())
                 && !assembled.config.sdk_primitives.contains(&"dense".into())
                 && !assembled.config.sdk_primitives.contains(&"web".into()),
             "pure chat sdk_primitives: {:?}",

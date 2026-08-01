@@ -132,7 +132,7 @@ async fn native_tool_call_returns_continue_with_record() {
     assert_eq!(state.total_tool_calls, 1);
 }
 
-/// Q55 pollution: model emits dense_search as native tool — hard-reject with
+/// Q55 pollution: model emits SDK method as native tool — hard-reject with
 /// corrective observation (do not fall through to unknown tool NotImplemented).
 #[tokio::test]
 async fn rejects_codegen_sdk_method_as_native_tool_call() {
@@ -144,7 +144,7 @@ async fn rejects_codegen_sdk_method_as_native_tool_call() {
     let mut response = fake_llm_response("");
     response.tool_calls = Some(vec![
         contracts::ToolCall {
-            tool: "dense_search".to_string(),
+            tool: "dense".to_string(),
             version: "1".to_string(),
             args: serde_json::json!({"query": "doc_scope"}),
         },
@@ -181,7 +181,7 @@ async fn rejects_codegen_sdk_method_as_native_tool_call() {
             .and_then(|d| d.get("error"))
             .and_then(|e| e.as_str())
             .unwrap_or("");
-        assert_eq!(err, "not_a_native_tool", "{r:?}");
+        assert_eq!(err, "native_tools_closed", "{r:?}");
         let hint = r
             .data
             .as_ref()
@@ -198,8 +198,8 @@ async fn rejects_codegen_sdk_method_as_native_tool_call() {
         state
             .messages
             .iter()
-            .any(|m| m.content.contains("not_a_native_tool")
-                || m.content.contains("client.dense_search")
+            .any(|m| m.content.contains("native_tools_closed")
+                || m.content.contains("client.dense")
                 || m.content.contains("await client.")),
         "state messages should carry rejection: {:?}",
         state
@@ -304,7 +304,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     request.doc_scope = vec![doc_id.to_string()];
 
     let response = fake_llm_response(
-        r#"<code language="python">chunks = await client.dense_search(query="antifragility", top_k=10)</code>"#,
+        r#"<code language="python">chunks = await client.dense(query="antifragility")</code>"#,
     );
 
     let _outcome = loop_

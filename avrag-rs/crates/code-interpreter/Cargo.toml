@@ -8,6 +8,7 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+contracts = { path = "../../../contracts" }
 libc = "0.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

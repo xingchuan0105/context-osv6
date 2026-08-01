@@ -344,7 +344,7 @@ mod tests {
     impl HostBridge for StubBridge {
         async fn call(&self, method: &str, _args: serde_json::Value) -> serde_json::Value {
             match method {
-                "dense" | "dense_search" => json!({
+                "dense" => json!({
                     "chunks": [{
                         "chunk_id": "00000000-0000-4000-8000-000000000001",
                         "doc_id": "00000000-0000-4000-8000-000000000010",

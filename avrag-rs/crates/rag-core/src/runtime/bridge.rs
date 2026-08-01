@@ -18,7 +18,7 @@ use crate::RagRuntime;
 /// One sandbox `client.*` call with product-progress metadata (not for UI raw tool dump).
 #[derive(Debug, Clone)]
 pub struct CapturedBridgeCall {
-    /// SDK method name: dense_search / lexical_search / …
+    /// SDK method name (registry canonical id, e.g. `dense`).
     pub method: String,
     /// Human query / terms from call args when present.
     pub query: Option<String>,
@@ -76,7 +76,7 @@ impl RuntimeBridge {
 
     fn extract_query(method: &str, args: &Value) -> Option<String> {
         match method {
-            "dense" | "dense_search" | "lexical" | "lexical_search" | "web" => args
+            "dense" | "lexical" | "web" => args
                 .get("query")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned),
@@ -85,29 +85,18 @@ impl RuntimeBridge {
         }
     }
 
-    /// Canonical SaC retrieval methods implemented by this host (parity with shim
-    /// minus web/memory ports, which the composite host in agent-loop fills).
+    /// SaC retrieval methods implemented by this host (parity with shim minus
+    /// base/web ports, which the composite host in agent-loop fills).
     ///
-    /// Full product surface: `avrag_code_interpreter::bridge_shim_client_method_names`.
+    /// Derived from the `contracts::sdk_primitives` registry RAG face (D10);
+    /// full product surface: `avrag_code_interpreter::bridge_shim_client_method_names`.
     pub fn supported_method_names() -> &'static [&'static str] {
-        &[
-            "dense",
-            "lexical",
-            "grep",
-            "doc_summary",
-            "doc_profile",
-            "struct_catalog",
-            "struct_query",
-        ]
-    }
-
-    /// Normalize legacy alias method names to the SaC canonical name.
-    fn canonicalize_method(method: &str) -> &str {
-        match method {
-            "dense_search" => "dense",
-            "lexical_search" => "lexical",
-            other => other,
-        }
+        use contracts::sdk_primitives::{SdkCapability, ids_for};
+        static NAMES: std::sync::OnceLock<&'static [&'static str]> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            let ids = ids_for(SdkCapability::RAG);
+            Box::leak(ids.into_boxed_slice())
+        })
     }
 
     fn bridge_error(code: &str, message: impl Into<String>) -> Value {
@@ -129,7 +118,6 @@ impl RuntimeBridge {
     fn method_to_tool_call(&self, method: &str, args: &Value) -> Result<ToolCall, Value> {
         // Host-fixed top_k (A4): SDK never exposes top_k; contracts default is 10.
         const HOST_TOP_K: usize = 10;
-        let method = Self::canonicalize_method(method);
         match method {
             "dense" => {
                 let query = args
@@ -333,10 +321,11 @@ impl RuntimeBridge {
                 })
             }
             // Non-retrieval SaC ports are owned by the composite host (agent-loop).
-            "web" | "fetch" | "history" | "user_profile" => Err(Self::bridge_error(
+            "web" | "fetch" | "history" | "user_profile" | "save" | "load"
+            | "user_context" | "calculator" | "weather_query" => Err(Self::bridge_error(
                 "not_configured",
                 format!(
-                    "{method} is a SaC SDK method but this RuntimeBridge has no web/memory port; \
+                    "{method} is a SaC SDK method but this RuntimeBridge has no web/memory/fs/tool port; \
                      use the product SacHostBridge"
                 ),
             )),
@@ -454,7 +443,7 @@ fn chunks_with_content_field(data: &Value) -> Value {
 impl HostBridge for RuntimeBridge {
     async fn call(&self, method: &str, args: Value) -> Value {
         let started = std::time::Instant::now();
-        let canonical = Self::canonicalize_method(method);
+        let canonical = method;
         let tool_call = match self.method_to_tool_call(method, &args) {
             Ok(call) => call,
             Err(err) => return err,
@@ -751,17 +740,6 @@ mod tests {
             chunks[0]["chunk_id"],
             "00000000-0000-0000-0000-000000000001"
         );
-    }
-
-    #[tokio::test]
-    async fn dense_search_alias_still_works() {
-        let runtime = make_runtime();
-        let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
-        let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
-        let data = bridge
-            .call("dense_search", json!({"query": "x", "top_k": 99}))
-            .await;
-        assert_eq!(data["chunks"].as_array().unwrap().len(), 1);
     }
 
     #[test]

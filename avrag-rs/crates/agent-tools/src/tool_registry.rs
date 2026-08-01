@@ -50,29 +50,26 @@ pub struct ToolDispatchContext<'a> {
 }
 
 /// Codegen Python SDK method names — never native tool schema ids.
-/// Reject bare tool_calls so the model retries with a `<code language="python">` block.
-pub const CODEGEN_SDK_METHOD_NAMES: &[&str] = &[
-    // SaC canonical (2026-07-30)
-    "dense",
-    "lexical",
-    "grep",
-    "web",
-    "fetch",
-    "doc_profile",
-    "doc_summary",
-    "history",
-    "user_profile",
-    "save",
-    "load",
-    // Temporary / legacy aliases still rejected if invented as native tools.
-    "dense_search",
-    "lexical_search",
-    "graph_search",
-    "chunk_fetch",
-    "doc_chunks",
-    "doc_scan",
-    "read_lines",
-];
+/// Derived from the single source of truth `contracts::sdk_primitives`
+/// (all 17 registry ids) plus a small defunct list of pre-registry names
+/// still rejected if invented as native tools.
+pub static CODEGEN_SDK_METHOD_NAMES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        let mut names = contracts::sdk_primitives::ids_for(
+            contracts::sdk_primitives::SdkCapability::BASE
+                | contracts::sdk_primitives::SdkCapability::RAG
+                | contracts::sdk_primitives::SdkCapability::SEARCH,
+        );
+        names.extend_from_slice(&[
+            // Defunct pre-registry method names / rejected leftovers.
+            "graph_search",
+            "chunk_fetch",
+            "doc_chunks",
+            "doc_scan",
+            "read_lines",
+        ]);
+        names
+    });
 
 /// Former native retrieval tools now SaC-only (A1). Catalog may still hold
 /// them for host-internal fallback via `dispatch_rag_fallback` / SearchProvider,
@@ -102,10 +99,11 @@ pub fn is_sac_superseded_native_tool(tool_name: &str) -> bool {
     SAC_SUPERSEDED_NATIVE_TOOLS.iter().any(|n| *n == tool_name)
 }
 
-/// Synthetic error result when the model invents native tool_calls for SDK methods.
-pub fn reject_codegen_method_as_native_tool(tool_name: &str) -> ToolResult {
+/// Synthetic error result when the model invents native tool_calls for the
+/// sandbox SDK surface (codegen methods) or SaC-superseded retrieval/web tools.
+pub fn reject_native_tool_surface(tool_name: &str) -> ToolResult {
     let hint = subst_prompt(
-        loop_prompt!("codegen-method-as-native-rejection.tmpl.md"),
+        loop_prompt!("native-tools-closed.tmpl.md"),
         &[("tool", tool_name)],
     );
     ToolResult {
@@ -113,38 +111,7 @@ pub fn reject_codegen_method_as_native_tool(tool_name: &str) -> ToolResult {
         version: "1.0".to_string(),
         status: ToolStatus::Error,
         data: Some(serde_json::json!({
-            "error": "not_a_native_tool",
-            "tool": tool_name,
-            "hint": hint,
-        })),
-        trace: None,
-    }
-}
-
-/// Reject LLM native tool_calls for tools that moved into the SaC sandbox SDK (A1).
-pub fn reject_sac_superseded_native_tool(tool_name: &str) -> ToolResult {
-    let sac_hint = match tool_name {
-        "dense_retrieval" => "await client.dense(query)",
-        "lexical_retrieval" => "await client.lexical(query)",
-        "web_search" => "await client.web(query)",
-        "web_fetch" => "await client.fetch(url)",
-        "doc_summary" => "await client.doc_summary(...)",
-        "doc_profile" => "await client.doc_profile(...)",
-        "doc_grep" | "doc_scan" => "await client.grep(pattern, ...)",
-        "doc_read_lines" => "await client.grep(..., context=N)  # read_lines removed",
-        "graph_retrieval" => "await client.lexical(query)  # graph is bound to lexical",
-        _ => "await client.<method>(...)  # see codegen/search skill",
-    };
-    let hint = subst_prompt(
-        loop_prompt!("sac-superseded-rejection.tmpl.md"),
-        &[("tool", tool_name), ("sac_hint", sac_hint)],
-    );
-    ToolResult {
-        tool: tool_name.to_string(),
-        version: "1.0".to_string(),
-        status: ToolStatus::Error,
-        data: Some(serde_json::json!({
-            "error": "sac_sdk_only",
+            "error": "native_tools_closed",
             "tool": tool_name,
             "hint": hint,
         })),
@@ -154,21 +121,17 @@ pub fn reject_sac_superseded_native_tool(tool_name: &str) -> ToolResult {
 
 /// Canonical tool execute entry used by ReActLoop and all call sites.
 pub async fn dispatch_tool(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> ToolResult {
-    // B4: hard gate at the single execute entry (was iteration-local).
-    if is_codegen_sdk_method_as_native_tool(&call.tool) {
+    // Native model surface closed: codegen SDK methods (registry ids + defunct)
+    // and SaC-superseded retrieval/web tools are rejected at the single entry —
+    // the model must use the sandbox `client.*` SDK instead.
+    if is_codegen_sdk_method_as_native_tool(&call.tool)
+        || is_sac_superseded_native_tool(&call.tool)
+    {
         tracing::warn!(
             tool = %call.tool,
-            "rejecting codegen SDK method issued as native tool_call"
+            "rejecting native tool_call for the closed model surface (use sandbox client.*)"
         );
-        return reject_codegen_method_as_native_tool(&call.tool);
-    }
-    // A1: retrieval/web only via SaC sandbox — not LLM function calling.
-    if is_sac_superseded_native_tool(&call.tool) {
-        tracing::warn!(
-            tool = %call.tool,
-            "rejecting SaC-superseded native tool_call (use sandbox client)"
-        );
-        return reject_sac_superseded_native_tool(&call.tool);
+        return reject_native_tool_surface(&call.tool);
     }
 
     let catalog = ToolCatalog::standard_cached();
@@ -420,21 +383,21 @@ mod tests {
         assert!(is_codegen_sdk_method_as_native_tool("lexical"));
         assert!(is_codegen_sdk_method_as_native_tool("web"));
         assert!(is_codegen_sdk_method_as_native_tool("fetch"));
-        assert!(is_codegen_sdk_method_as_native_tool("dense_search")); // legacy alias
         assert!(is_codegen_sdk_method_as_native_tool("grep"));
         assert!(is_codegen_sdk_method_as_native_tool("read_lines")); // still reject if invented
         assert!(!is_codegen_sdk_method_as_native_tool("dense_retrieval"));
+        assert!(!is_codegen_sdk_method_as_native_tool("dense_search")); // legacy alias gone
         assert!(is_sac_superseded_native_tool("dense_retrieval"));
         assert!(is_sac_superseded_native_tool("web_search"));
-        let r = reject_codegen_method_as_native_tool("dense");
+        let r = reject_native_tool_surface("dense");
         assert_eq!(r.status, ToolStatus::Error);
         let err = r.data.as_ref().and_then(|d| d.get("error")).and_then(|e| e.as_str());
-        assert_eq!(err, Some("not_a_native_tool"));
-        let r2 = reject_sac_superseded_native_tool("web_search");
+        assert_eq!(err, Some("native_tools_closed"));
+        let r2 = reject_native_tool_surface("web_search");
         assert_eq!(r2.status, ToolStatus::Error);
         assert_eq!(
             r2.data.as_ref().and_then(|d| d.get("error")).and_then(|e| e.as_str()),
-            Some("sac_sdk_only")
+            Some("native_tools_closed")
         );
         let hint = r2
             .data
@@ -443,21 +406,21 @@ mod tests {
             .and_then(|h| h.as_str())
             .unwrap_or("");
         assert!(hint.contains("web_search"), "hint: {hint}");
-        assert!(hint.contains("client.web"), "hint: {hint}");
-        // Parameterized: every SaC-superseded name is recognized.
+        assert!(hint.contains("client."), "hint: {hint}");
+        // Parameterized: every SaC-superseded name is recognized and rejected.
         for name in SAC_SUPERSEDED_NATIVE_TOOLS {
             assert!(
                 is_sac_superseded_native_tool(name),
                 "missing SaC supersede for {name}"
             );
-            let rej = reject_sac_superseded_native_tool(name);
+            let rej = reject_native_tool_surface(name);
             assert_eq!(rej.status, ToolStatus::Error);
             assert_eq!(
                 rej.data
                     .as_ref()
                     .and_then(|d| d.get("error"))
                     .and_then(|e| e.as_str()),
-                Some("sac_sdk_only")
+                Some("native_tools_closed")
             );
         }
     }
@@ -465,7 +428,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_tool_rejects_codegen_sdk_before_catalog() {
         let result = dispatch_tool(
-            &call("dense_search", serde_json::json!({})),
+            &call("dense", serde_json::json!({})),
             &ctx_permissive(None),
         )
         .await;
@@ -476,7 +439,7 @@ mod tests {
                 .as_ref()
                 .and_then(|d| d.get("error"))
                 .and_then(|e| e.as_str()),
-            Some("not_a_native_tool")
+            Some("native_tools_closed")
         );
     }
 
@@ -499,7 +462,7 @@ mod tests {
                 .as_ref()
                 .and_then(|d| d.get("error"))
                 .and_then(|e| e.as_str()),
-            Some("sac_sdk_only")
+            Some("native_tools_closed")
         );
     }
 
@@ -511,14 +474,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn calculator_via_dispatch_tool() {
+    async fn calculator_native_is_rejected_as_closed_surface() {
+        // D11: pure-chat trio (user_context/calculator/weather_query) moved into
+        // the sandbox SDK — the native model-facing surface is closed.
         let result = dispatch_tool(
             &call("calculator", serde_json::json!({"expression": "1 + 2 * 3"})),
             &ctx_permissive(None),
         )
         .await;
-        assert_eq!(result.status, ToolStatus::Ok);
-        assert_eq!(result.data.unwrap()["result"].as_f64().unwrap(), 7.0);
+        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(
+            result
+                .data
+                .as_ref()
+                .and_then(|d| d.get("error"))
+                .and_then(|e| e.as_str()),
+            Some("native_tools_closed")
+        );
+    }
+
+    #[tokio::test]
+    async fn trio_native_calls_are_rejected() {
+        for tool in ["user_context", "calculator", "weather_query"] {
+            let result =
+                dispatch_tool(&call(tool, serde_json::json!({})), &ctx_permissive(None)).await;
+            assert_eq!(result.status, ToolStatus::Error, "{tool}");
+            assert_eq!(
+                result
+                    .data
+                    .as_ref()
+                    .and_then(|d| d.get("error"))
+                    .and_then(|e| e.as_str()),
+                Some("native_tools_closed"),
+                "{tool}"
+            );
+        }
     }
 
     #[tokio::test]
@@ -542,7 +532,7 @@ mod tests {
                 .as_ref()
                 .and_then(|d| d.get("error"))
                 .and_then(|e| e.as_str()),
-            Some("sac_sdk_only")
+            Some("native_tools_closed")
         );
     }
 
@@ -561,7 +551,7 @@ mod tests {
                 .as_ref()
                 .and_then(|d| d.get("error"))
                 .and_then(|e| e.as_str()),
-            Some("sac_sdk_only")
+            Some("native_tools_closed")
         );
     }
 

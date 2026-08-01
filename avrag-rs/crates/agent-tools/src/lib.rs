@@ -53,6 +53,5 @@ pub use skills::{ExecutionContext, SkillComponent, SkillRegistry, builtin_regist
 pub use tool_registry::{
     CODEGEN_SDK_METHOD_NAMES, OwnedToolDeps, SAC_SUPERSEDED_NATIVE_TOOLS, ToolDispatchContext,
     dispatch_tool, execute_with_retry, is_codegen_sdk_method_as_native_tool, is_rag_tool,
-    is_sac_superseded_native_tool, reject_codegen_method_as_native_tool,
-    reject_sac_superseded_native_tool, tool_meta,
+    is_sac_superseded_native_tool, reject_native_tool_surface, tool_meta,
 };
