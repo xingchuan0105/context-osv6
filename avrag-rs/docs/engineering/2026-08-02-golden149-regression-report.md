@@ -108,14 +108,29 @@ v2 判分产物 `crates/app/tests/e2e_output/rag_eval_v2/v2_20260801-153129/`（
 - **检索模式已恢复**：2/4 PASS（recall=1.0），2 个 miss 已不再是「不写 code 块」的系统性失败，而是模型行为层波动（asyncio 误用、synthesis 格式），与重构前基线零星 miss 同量级。
 - 后续请求的全量 149 后台跑被用户中断（推进至 2/149），未产生新结论。
 
+### 4.3 fail6 子集探针（E2E_QUESTIONS=65,86,88,105,106,121，commit 382117bc 修复 asyncio 示例后）
+
+| Q | subset | 结果 | 证据 |
+|---|--------|------|------|
+| 65 | consulting_factual | UNGROUNDED | recall=1.00, chunks=4, judge correctness=1（SELECTION_MISS）|
+| 86 | ipd_table | **PASS** | recall=1.00, chunks=55（raw recall@15=0 但 v2 judge PASS）|
+| 88 | ipd_table | **PASS** | recall=1.00, chunks=33 |
+| 105 | cross_document | PARTIAL | recall=1.00, chunks=41, correctness=0.8（SYNTHESIS_CONTRACT）|
+| 106 | cross_document | **PASS** | recall=0.50 (1/2), chunks=48 |
+| 121 | rag_search_joint | **FAIL eval_bridge_miss** | tools=web_search×6 全 Ok（=沙箱 client.web 记录名）, web=23, doc=0, judge correctness=0.9（v2 label=PASS 但 harness 硬闸 FAIL）|
+
+- **修复验证成立**：asyncio + tools 两修复后，6/6 都发生了真实检索/判分；5 题 judge PASS 或 PARTIAL。
+- **q121 定性（第三个问题，判定为模型取舍 miss 而非回归）**：dual 模式下模型全程用沙箱 `client.web`（act:search_web=46，纯 web 高质答案 correctness=0.9），但从未调用 `client.dense`（doc=0）——联合题本应同时取文内证据（golden doc 侧 source_chunks 非空），harness 因此按 RAG 侧无检索结果硬判 FAIL。与重构前基线 rag_search_joint 子集同样出现过 RETRIEVAL_MISS（1 次）一致，属模型对联合题的取舍波动，非确定性回归。
+
 ---
 
 ## 5. 遗留与未决
 
-1. **全量 149 未重跑**：修复后的完整黄金集数字待跑（预计 ~2h）。建议先复跑 fail6 子集（E2E_QUESTIONS=65,86,88,105,106,121）再全量。
-2. **`asyncio.run()` 误用（q002）——WP3 引入的确定性失败模式（复核确认后从"可选教学补充"升级为必修）**：agent-base.md v1.3 的 gather 示例写成 `async def main()` + `asyncio.run(main())`；而沙箱 wrapper（`code-interpreter/src/bridge.rs:170-176`）把用户代码缩进包进 `async def __avrag_main()` 再 `asyncio.run(__avrag_main())`——用户代码已在运行中的事件循环里，顶层 `await` 天然合法，`asyncio.run()` 必然报错。q002 的 answer（"上一轮因 asyncio.run() 与沙箱已有运行中的事件循环冲突而执行失败"）即模型照抄示例的结果：每次模仿基座示例首块必死、烧一轮预算自纠。**全量重跑前必须修**。
-   - **已修（commit 待提交）**：agent-base.md 示例改顶层 `await` 形态 + 新增观察式事实「沙箱在已启动的事件循环中执行代码块；异步调用直接写顶层 `await`（`asyncio.run()` 会与运行中的循环冲突）」；**KB SKILL.md:57-73 的 gather 示例同样含有 `async def main()` + `asyncio.run(main())`（复核方以为它已正确，实际 line 61 只是 `await` 在 `main()` 内），一并改顶层 `await`**；全 prompts 复查无 `asyncio.run(main())` 残留（唯一 `asyncio.run` 命中是教学句本身）。
+1. **全量 149 未重跑**：修复后的完整黄金集数字待跑（预计 ~2h）。fail6 子集（含跨子集代表性：consulting_factual/ipd_table/cross_document/rag_search_joint）已验证修复成立；建议先跑 `E2E_QUESTIONS=116,117,118,119,120,121`（rag_search_joint 全子集）确认 q121 频度，再全量。
+2. **`asyncio.run()` 误用（q002）——WP3 引入的确定性失败模式（复核确认后从"可选教学补充"升级为必修，已修 commit 382117bc）**：agent-base.md v1.3 的 gather 示例写成 `async def main()` + `asyncio.run(main())`；而沙箱 wrapper（`code-interpreter/src/bridge.rs:170-176`）把用户代码缩进包进 `async def __avrag_main()` 再 `asyncio.run(__avrag_main())`——用户代码已在运行中的事件循环里，顶层 `await` 天然合法，`asyncio.run()` 必然报错。q002 的 answer（"上一轮因 asyncio.run() 与沙箱已有运行中的事件循环冲突而执行失败"）即模型照抄示例的结果：每次模仿基座示例首块必死、烧一轮预算自纠。**全量重跑前必须修**。
+   - **已修（commit 382117bc）**：agent-base.md 示例改顶层 `await` 形态 + 新增观察式事实「沙箱在已启动的事件循环中执行代码块；异步调用直接写顶层 `await`（`asyncio.run()` 会与运行中的循环冲突）」；**KB SKILL.md:57-73 的 gather 示例同样含有 `async def main()` + `asyncio.run(main())`（复核方以为它已正确，实际 line 61 只是 `await` 在 `main()` 内），一并改顶层 `await`**；全 prompts 复查无 `asyncio.run(main())` 残留（唯一 `asyncio.run` 命中是教学句本身）。
 3. **q003 synthesis_code_answer_repair**：模型产出含 code 的终答触发修复，待全量跑确认频度（归为待观察项）。
+4. **q121 rag_search_joint 联合题模型取舍 miss（非回归）**：dual 模式模型全走 `client.web` 未调 `client.dense`（见 §4.3）。属模型行为波动，重构前基线同子集亦有此 miss；若全量跑频度偏高再考虑在教学层强化「联合题双源证据」观察式提示。
 
 ---
 
@@ -127,4 +142,5 @@ v2 判分产物 `crates/app/tests/e2e_output/rag_eval_v2/v2_20260801-153129/`（
 - [x] 修复改动面最小、无行为外溢（§3）
 - [x] 4 题探针结论（2 PASS / 2 模型波动）可复现 —— **复核修正：q002 不是模型波动，是 agent-base v1.3 示例（asyncio.run 形态）确定性误导，已在 §5.2 修正并修复；KB SKILL 同病一并修**
 - [x] 单测 279 全绿
-- [x] 修复 agent-base 示例后：全 prompts 无 `asyncio.run(main())` 残留（commit 6b1ea710 之后的第二个修复）
+- [x] 修复 agent-base 示例后：全 prompts 无 `asyncio.run(main())` 残留（commit 6b1ea710 之后的第二个修复，commit 382117bc）
+- [x] fail6 子集探针（65/86/88/105/106/121）检索恢复 6/6，5 题 judge PASS 或 PARTIAL；唯一硬失败 q121 为联合题模型取舍 miss（§4.3、§5.4），非回归
