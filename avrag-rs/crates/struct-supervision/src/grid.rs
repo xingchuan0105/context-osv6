@@ -88,12 +88,14 @@ pub fn render_table_md(headers: &[String], rows: &[Vec<String>]) -> String {
     lines.join("\n")
 }
 
-/// 文本截断（与 `supervise.clip` 一致；按 char 截断避免切坏 CJK）。
+/// 文本截断（与 `supervise.clip` 一致；按 char 截断避免切坏 CJK，截断后补「…」）。
 pub fn clip(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
     } else {
-        s.chars().take(n).collect()
+        let mut out: String = s.chars().take(n).collect();
+        out.push('…');
+        out
     }
 }
 

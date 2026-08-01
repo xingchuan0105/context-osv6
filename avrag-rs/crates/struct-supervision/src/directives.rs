@@ -118,15 +118,19 @@ fn set_header(s: &mut Session, idx: usize, d: &serde_json::Value) -> Result<(), 
     Ok(())
 }
 
-/// merge_tables：同表头签名表合并（守卫：签名必须一致；目标外的表标记 excluded）。
+/// merge_tables：同表头签名表合并（守卫：签名必须一致；tid 必须在首位且不重复——禁自并）。
 fn merge_tables(s: &mut Session, tid: &str, idx: usize, d: &serde_json::Value) -> Result<(), String> {
     let mut ids: Vec<String> = d
         .get("table_ids")
         .and_then(|v| v.as_array())
         .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
         .unwrap_or_default();
-    if !ids.iter().any(|i| i == tid) {
-        ids.insert(0, tid.to_string());
+    // 从 ids 中移除 tid（如有），再插入首位；若 ids 中本已包含 tid 则拒绝（禁自并）。
+    let had_tid = ids.iter().any(|i| i == tid);
+    ids.retain(|i| i != tid);
+    ids.insert(0, tid.to_string());
+    if had_tid {
+        return Err("merge_tables 禁止自并（target 已在 table_ids 中）".into());
     }
     if ids.len() < 2 {
         return Err("merge_tables 需要 ≥2 个 table_id".into());
@@ -179,26 +183,28 @@ fn reparse_region(s: &mut Session, idx: usize, d: &serde_json::Value) -> Result<
         if !ln.starts_with('|') {
             continue;
         }
-        // 手动切管道符（Rust regex 无 look-behind）：跳过 `\|` 转义。
-        let mut cells = Vec::new();
+        // 手动切管道符（对齐 Python re.split(r"(?<!\\)\|", ln)[1:-1] + strip 语义）：
+        // 收集所有段（含空段），再丢弃首尾空段（模拟 [1:-1]），每段 trim。
+        let mut segments: Vec<String> = Vec::new();
         let mut cur = String::new();
         let mut prev_esc = false;
         for ch in ln.chars() {
             if ch == '|' && !prev_esc {
-                let c = cur.trim().to_string();
-                if !c.is_empty() {
-                    cells.push(c);
-                }
+                segments.push(cur.trim().to_string());
                 cur.clear();
             } else {
                 cur.push(ch);
             }
             prev_esc = ch == '\\';
         }
-        let tail = cur.trim().to_string();
-        if !tail.is_empty() {
-            cells.push(tail);
+        segments.push(cur.trim().to_string());
+        // [1:-1] 语义：丢弃首段（行以 | 开头时为空段）和尾段（行以 | 结尾时为空段；
+        // 若行不以 | 结尾则尾段有内容，Python 亦丢弃——有意保留此行为以对齐母本）。
+        if segments.len() >= 2 {
+            segments.remove(0);
+            segments.pop();
         }
+        let cells = segments;
         if !cells.is_empty() && !cells.iter().all(|c| sep_re.is_match(c)) {
             rows.push(Row { line: i + 1, cells });
         }

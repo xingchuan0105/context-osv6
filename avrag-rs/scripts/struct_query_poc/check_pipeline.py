@@ -61,6 +61,10 @@ def main() -> int:
     check("ipd: 序号自校验 max==count==370", seq == (370, 370), str(seq))
     meta = ipd.execute("SELECT status, notes FROM _meta WHERE table_name='t0'").fetchone()
     check("ipd: status=high_candidate", meta[0] == "high_candidate", str(meta))
+    # auto_rotate 退列后表头与数据行列数一致——column_count 通过（M1 修复验证）
+    cc = [c for c in json.loads(ipd.execute("SELECT checks FROM _meta WHERE table_name='t0'").fetchone()[0])
+          if c["name"] == "column_count"]
+    check("ipd: column_count 通过(auto_rotate 退列后列数对齐)", cc and cc[0]["passed"], str(cc))
 
     by = duckdb.connect(OUT["baiyao"], read_only=True)
     n = by.execute("SELECT COUNT(*) FROM _meta").fetchone()[0]

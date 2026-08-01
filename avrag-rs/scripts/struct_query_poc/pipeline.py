@@ -115,7 +115,7 @@ def auto_rotate(g: Grid):
         i for i in range(n)
         if not (re.match(r"^Unnamed", hdr[i]) and all(i >= len(r["cells"]) or r["cells"][i] == "" for r in g.data))
     ]
-    g.rows = [g.rows[1]] + [
+    g.rows = [{"line": g.rows[1]["line"], "cells": [g.rows[1]["cells"][i] if i < len(g.rows[1]["cells"]) else "" for i in keep]}] + [
         {"line": r["line"], "cells": [r["cells"][i] if i < len(r["cells"]) else "" for i in keep]}
         for r in g.rows[2:]
     ]

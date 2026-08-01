@@ -301,15 +301,22 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
         },
     });
 
-    // sequence：第 0 列全数字且连续无重复
+    // sequence：第 0 列全 ASCII 数字且连续无重复
+    // 对齐 pipeline.py:214-221：Python str.isdigit() 仅接受 ASCII 数字 0-9，
+    // 拒绝负号与 Unicode 数字；i128 + checked_sub 防极端值 debug panic。
     if !data.is_empty() {
         let col0: Vec<&str> = data.iter().filter_map(|r| r.cells.first().map(String::as_str)).collect();
-        let ints: Vec<i64> = col0.iter().filter_map(|c| c.parse().ok()).collect();
+        let ints: Vec<i128> = col0
+            .iter()
+            .filter(|c| c.bytes().all(|b| b.is_ascii_digit()) && !c.is_empty())
+            .filter_map(|c| c.parse().ok())
+            .collect();
         if ints.len() == col0.len() && !ints.is_empty() {
             let lo = *ints.iter().min().unwrap();
             let hi = *ints.iter().max().unwrap();
-            let uniq: std::collections::HashSet<i64> = ints.iter().copied().collect();
-            let ok = hi - lo + 1 == ints.len() as i64 && uniq.len() == ints.len();
+            let uniq: std::collections::HashSet<i128> = ints.iter().copied().collect();
+            let span = hi.checked_sub(lo).and_then(|d| d.checked_add(1));
+            let ok = span == Some(ints.len() as i128) && uniq.len() == ints.len();
             checks.push(Check {
                 name: "sequence".into(),
                 passed: ok,
@@ -318,30 +325,46 @@ pub fn checks_for(g: &Grid) -> Vec<Check> {
         }
     }
 
-    // total_reconcile：合计行 vs 明细行（仅首个合计行；数值列逐一求和比对）
+    // total_reconcile：合计行 vs 明细行（对齐 pipeline.py:223-235 叶子行口径；
+    // 排除所有首格命中 TOTAL_LABEL_RE 的合计/总计/小计行，仅对叶子行求和）。
     if !data.is_empty() {
-        let total_idx = data.iter().position(|r| {
-            r.cells
-                .first()
-                .map(|c| re(TOTAL_LABEL_RE).is_match(c))
-                .unwrap_or(false)
-        });
-        if let Some(ti) = total_idx {
+        let total_rows: Vec<usize> = data
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                r.cells
+                    .first()
+                    .map(|c| re(TOTAL_LABEL_RE).is_match(c))
+                    .unwrap_or(false)
+            })
+            .map(|(j, _)| j)
+            .collect();
+        // 仅对首个合计行做对账（对齐 Python `for _, tr in total_rows[:1]`）
+        if let Some(&ti) = total_rows.first() {
             let tr = &data[ti];
+            // 叶子行：所有首格不命中 TOTAL_LABEL_RE 的数据行
+            let detail_idxs: std::collections::HashSet<usize> = (0..data.len())
+                .filter(|j| {
+                    !data[*j]
+                        .cells
+                        .first()
+                        .map(|c| re(TOTAL_LABEL_RE).is_match(c))
+                        .unwrap_or(false)
+                })
+                .collect();
             let mut bad = Vec::new();
             for i in 1..n_cols {
                 let tv = tr.cells.get(i).map(String::as_str).and_then(to_num);
                 if tv.is_none() {
                     continue;
                 }
-                let s: f64 = data
+                let s: f64 = detail_idxs
                     .iter()
-                    .enumerate()
-                    .filter(|(j, _)| *j != ti)
-                    .filter_map(|(_, r)| r.cells.get(i).map(String::as_str).and_then(to_num))
+                    .filter_map(|&j| data[j].cells.get(i).map(String::as_str).and_then(to_num))
                     .sum();
                 let tv = tv.unwrap();
-                if (s - tv).abs() > tv.abs() * 0.001 + 1e-6 {
+                // 容差对齐 pipeline.py:232 取大语义
+                if (s - tv).abs() > (tv.abs() * 0.001).max(1e-6) {
                     let col = if hdr[i].is_empty() {
                         format!("col_{i}")
                     } else {
@@ -610,5 +633,50 @@ mod tests {
         assert!(sh.detail.contains('4'), "{:?}", sh.detail);
         assert!(!sh.detail.contains('2'), "首数据行不计: {:?}", sh.detail);
         assert!(rep.all_passed(), "提示信号不影响 status: {:?}", rep.failed_checks);
+    }
+
+    #[test]
+    fn total_reconcile_excludes_subtotals() {
+        // 「总计在前小计在后」版式：总计行（t1）在前，后面还有小计行（其中/西部）；
+        // 旧口径只排除第一个合计行，小计仍计入求和导致误报。
+        // 新口径排除所有首格命中 TOTAL_LABEL_RE 的行，仅叶子行参与求和。
+        let grid = g(&[
+            ("1", &["项目", "金额"]),
+            ("2", &["总计", "350"]),   // 第一个合计行 = 对账目标
+            ("3", &["东部", "100"]),
+            ("4", &["西部", "200"]),
+            ("5", &["小计", "50"]),    // 小计 — 应排除（命中 TOTAL_LABEL_RE）
+            ("6", &["西部-a", "120"]),
+            ("7", &["西部-b", "80"]),
+        ]);
+        let rep = table_report(0, &grid);
+        let tr = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "total_reconcile")
+            .unwrap();
+        // 叶子行: 东部100 + 西部200 + 西部-a120 + 西部-b80 = 500 ≠ 总计350 → 应报错
+        assert!(!tr.passed, "总计350 ≠ 叶子行之和500: {:?}", tr.detail);
+        assert!(tr.detail.contains("sum=500"), "{:?}", tr.detail);
+        assert!(tr.detail.contains("合计=350"), "{:?}", tr.detail);
+    }
+
+    #[test]
+    fn total_reconcile_leaf_only_passes() {
+        // 正常版式：合计在末尾，前面全是叶子行，应对账一致
+        let grid = g(&[
+            ("1", &["项目", "金额"]),
+            ("2", &["东部", "100"]),
+            ("3", &["西部", "200"]),
+            ("4", &["北部", "50"]),
+            ("5", &["合计", "350"]),
+        ]);
+        let rep = table_report(0, &grid);
+        let tr = rep
+            .checks_full
+            .iter()
+            .find(|c| c.name == "total_reconcile")
+            .unwrap();
+        assert!(tr.passed, "{:?}", tr.detail);
     }
 }

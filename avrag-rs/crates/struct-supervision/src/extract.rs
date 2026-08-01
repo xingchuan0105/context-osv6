@@ -283,7 +283,15 @@ pub fn auto_rotate(g: &mut Grid) {
         .collect();
     let mut new_rows = Vec::with_capacity(g.rows.len().saturating_sub(1));
     if g.rows.len() > 1 {
-        new_rows.push(g.rows[1].clone());
+        // 新表头行也按 keep 过滤（对齐 directives.rs:65-71 rotate_header 做法；
+        // 否则 Unnamed 列被丢后表头比数据行宽 → column_count 全灭）。
+        new_rows.push(Row {
+            line: g.rows[1].line,
+            cells: keep
+                .iter()
+                .map(|&k| g.rows[1].cells.get(k).cloned().unwrap_or_default())
+                .collect(),
+        });
         for r in g.rows.iter().skip(2) {
             new_rows.push(Row {
                 line: r.line,
@@ -488,5 +496,52 @@ mod tests {
         };
         auto_rotate(&mut g2);
         assert_eq!(g2.header(), &["Unnamed: 0", "Unnamed: 1"]);
+    }
+
+    #[test]
+    fn auto_rotate_keep_filters_new_header_too() {
+        // Unnamed: 1 在数据区全空 → 应被丢弃；新表头行也须按 keep 过滤，
+        // 否则表头宽于数据行 → column_count 全灭。
+        let mut g = Grid {
+            start_line: 0,
+            rows: vec![
+                Row { line: 0, cells: vec!["sheet title".into(), "Unnamed: 1".into(), "Unnamed: 2".into()] },
+                // 数据第 1 行 = 真表头，"Unnamed: 1" 在数据区全空，"Unnamed: 2" 非全空
+                Row { line: 1, cells: vec!["编号".into(), "".into(), "金额".into()] },
+                Row { line: 2, cells: vec!["1".into(), "".into(), "100".into()] },
+                Row { line: 3, cells: vec!["2".into(), "".into(), "200".into()] },
+            ],
+            notes: vec![],
+        };
+        auto_rotate(&mut g);
+        // Unnamed: 1 全空 → 丢弃；保留 {0,2} → 表头 ["编号", "金额"]
+        assert_eq!(g.header(), &["编号".to_string(), "金额".to_string()]);
+        assert_eq!(g.rows.len(), 3); // 表头 + 2 数据行
+        // 每行都应是 2 列
+        for r in &g.rows {
+            assert_eq!(r.cells.len(), 2, "行 L{} 列数应为 2: {:?}", r.line, r.cells);
+            assert!(!r.cells.iter().any(|c| c == "Unnamed"), "不应残留 Unnamed: {:?}", r.cells);
+        }
+    }
+
+    #[test]
+    fn auto_rotate_keep_retains_nonempty_unnamed() {
+        // Unnamed 列在数据区非全空 → 保留
+        let mut g = Grid {
+            start_line: 0,
+            rows: vec![
+                Row { line: 0, cells: vec!["Unnamed: 0".into(), "Unnamed: 1".into()] },
+                Row { line: 1, cells: vec!["a".into(), "b".into()] },
+                Row { line: 2, cells: vec!["1".into(), "2".into()] },
+            ],
+            notes: vec![],
+        };
+        auto_rotate(&mut g);
+        // 2 列都保留，表头 = 原数据第 1 行
+        assert_eq!(g.header(), &["a".to_string(), "b".to_string()]);
+        assert_eq!(g.rows.len(), 2);
+        for r in &g.rows {
+            assert_eq!(r.cells.len(), 2);
+        }
     }
 }
