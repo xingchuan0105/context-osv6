@@ -768,18 +768,19 @@ mod tests {
     #[test]
     fn doc_summary_caller_doc_ids_outside_scope_narrowed_to_scope() {
         // The codegen sandbox requests a doc id outside the session scope; the bridge
-        // must clamp it down to the session scope rather than honoring the request.
+        // must not honor the request. With fail-closed intersection semantics the
+        // resolved doc set is empty, so the doc-centric tool rejects the call rather
+        // than widening to the whole session scope.
         let runtime = make_runtime();
         let scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), scope.clone());
-        let call = bridge
+        let err = bridge
             .method_to_tool_call(
                 "doc_summary",
                 &json!({"doc_ids": ["00000000-0000-0000-0000-000000000099"]}),
             )
-            .expect("tool call");
-        let args: DocSummaryArgs = serde_json::from_value(call.args).unwrap();
-        assert_eq!(args.doc_ids, scope);
+            .expect_err("out-of-scope caller must fail closed");
+        assert_eq!(err["error"]["code"], "invalid_args");
     }
 
     #[test]

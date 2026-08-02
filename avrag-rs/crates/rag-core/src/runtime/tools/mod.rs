@@ -41,20 +41,6 @@ pub async fn dispatch(runtime: &RagRuntime, auth: &AuthContext, call: &ToolCall)
     }
 }
 
-/// Dispatch multiple ToolCalls in parallel.
-pub async fn dispatch_all(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    calls: Vec<ToolCall>,
-) -> Vec<ToolResult> {
-    let futures = calls
-        .into_iter()
-        .map(|call| async move { dispatch(runtime, auth, &call).await })
-        .collect::<Vec<_>>();
-
-    futures_util::future::join_all(futures).await
-}
-
 pub(crate) fn scored_chunk_to_json(chunk: &ScoredChunk) -> serde_json::Value {
     let is_page_raster = chunk.chunk_type == "page_raster"
         || chunk

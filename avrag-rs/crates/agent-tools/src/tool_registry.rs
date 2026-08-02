@@ -145,8 +145,11 @@ pub async fn dispatch_tool(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> To
     };
 
     match registered.exec {
-        ToolExecKind::Rag => reject_native_tool_surface(&call.tool),
-        ToolExecKind::Skill => dispatch_skill(call, ctx, &registered.meta).await,
+        Some(ToolExecKind::Skill) => dispatch_skill(call, ctx, &registered.meta).await,
+        // RAG runtime tools are metadata-only entries: dispatch rejects all of them
+        // via the SaC-superseded guard above before the match. Keep a defensive
+        // fail-closed arm in case the guard set ever drifts from the catalog.
+        None => reject_native_tool_surface(&call.tool),
     }
 }
 

@@ -4,6 +4,10 @@
 //! metadata for policy/disclosure + an execution kind (skill vs RAG).
 //! SkillComponent bodies remain in [`crate::skills::SkillRegistry`]; the catalog
 //! is the single lookup table for ids, meta, and dispatch routing.
+//!
+//! RAG runtime tools are registered for metadata/disclosure only (`exec: None`);
+//! they are never executed through the ReAct ToolCatalog — dispatch rejects them
+//! before the match (see `tool_registry::dispatch_tool`).
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -14,19 +18,20 @@ use crate::capability::{
 use crate::skills::{SkillComponent, SkillRegistry, builtin_registry_cached};
 
 /// How a registered tool is executed.
+///
+/// RAG runtime tools are registered with `None`: metadata-only entries that the
+/// dispatch path rejects before reaching the exec match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolExecKind {
     /// Builtin SkillComponent in SkillRegistry.
     Skill,
-    /// RagRuntime channel tool (`dense_retrieval`, …).
-    Rag,
 }
 
 /// One entry in the unified tool catalog.
 #[derive(Debug, Clone)]
 pub struct RegisteredTool {
     pub meta: ToolMetadata,
-    pub exec: ToolExecKind,
+    pub exec: Option<ToolExecKind>,
 }
 
 /// Process-wide tool id → RegisteredTool map.
@@ -68,7 +73,7 @@ impl ToolCatalog {
                 skill.id().to_string(),
                 RegisteredTool {
                     meta,
-                    exec: ToolExecKind::Skill,
+                    exec: Some(ToolExecKind::Skill),
                 },
             );
         }
@@ -77,7 +82,7 @@ impl ToolCatalog {
                 (*id).to_string(),
                 RegisteredTool {
                     meta: rag_tool_metadata(id),
-                    exec: ToolExecKind::Rag,
+                    exec: None,
                 },
             );
         }
@@ -93,16 +98,13 @@ impl ToolCatalog {
     }
 
     pub fn is_rag(&self, id: &str) -> bool {
-        matches!(
-            self.tools.get(id).map(|t| t.exec),
-            Some(ToolExecKind::Rag)
-        )
+        self.tools.get(id).is_some_and(|t| t.exec.is_none())
     }
 
     pub fn is_skill(&self, id: &str) -> bool {
         matches!(
             self.tools.get(id).map(|t| t.exec),
-            Some(ToolExecKind::Skill)
+            Some(Some(ToolExecKind::Skill))
         )
     }
 

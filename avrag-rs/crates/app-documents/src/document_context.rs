@@ -86,6 +86,29 @@ impl DocumentContext {
     ) -> Option<String> {
         objects.resolve_citation_asset_url(asset).await
     }
+
+    /// Completed document ids in a workspace, used as the RAG enforcement scope.
+    ///
+    /// Fail-closed: a missing/errored document store surfaces as an error rather than
+    /// an empty scope (an empty scope means "no enforcement / org-wide" upstream).
+    pub async fn completed_workspace_doc_ids(
+        &self,
+        auth: &AuthContext,
+        storage: &StorageContext,
+        workspace_id: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let workspace_uuid = Uuid::parse_str(workspace_id)
+            .map_err(|_| AppError::not_found("workspace_not_found", "workspace not found"))?;
+        let store = require_document_store(storage)?;
+        let documents = store
+            .list_documents(auth, Some(workspace_uuid), None)
+            .await?;
+        Ok(documents
+            .into_iter()
+            .filter(|document| matches!(document.status, DocumentStatus::Completed))
+            .map(|document| document.id)
+            .collect())
+    }
 }
 
 #[async_trait]

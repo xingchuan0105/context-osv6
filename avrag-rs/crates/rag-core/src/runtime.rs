@@ -66,15 +66,6 @@ impl RagRuntime {
         self.config.reranker.clone()
     }
 
-    /// Execute a batch of tool calls in parallel and return their results.
-    pub async fn execute_tools(
-        &self,
-        auth: &contracts::auth_runtime::AuthContext,
-        calls: Vec<contracts::ToolCall>,
-    ) -> Vec<contracts::ToolResult> {
-        tools::dispatch_all(self, auth, calls).await
-    }
-
     /// Count indexed text (body) chunks for a doc scope, for dynamic rough-recall sizing.
     pub async fn count_text_chunks(
         &self,
