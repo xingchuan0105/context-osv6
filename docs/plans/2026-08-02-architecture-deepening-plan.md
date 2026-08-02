@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 日期 | 2026-08-02 |
-| 状态 | **待执行**（决策已全部拍板，见 §1） |
+| 状态 | **进行中**：W1 已交付已审 + 返工已复核（`a051223f`，3 项全落地）；W2 / W3-C3 / W4 已提交**待双轴审**；W3-C5 未做（本窗口排期）；W5 已交付已审 + 小修已落地；详见 §5 |
 | 来源 | 架构审查报告 `/tmp/architecture-review-1785639147.html` + 深潜报告 `/tmp/architecture-deepdive-1785640412.html`（7 候选，均含现状接口/问题/加深设计/切片/测试存活/ADR 约束） |
 | 范围 | `avrag-rs`：rag-core / agent-tools / app-chat / agent-loop / llm / billing |
 | 不做 | push/PR/CI；failover 统一（C4 切片 3，留到有真实流式故障复现）；`RuntimeExecuteRequest` 加 `doc_scope` 字段（决策 1） |
@@ -36,6 +36,18 @@
 | W5 | C6 chat 流水线重组 | Worth exploring | 真私有子模块 + 文档顺序=代码顺序 | 低 |
 
 顺序理由：C1 唯一安全相关先做；C2 与 C6 共享 `service_postprocess.rs`，先收拢 profile 再重组文件；W3 含低成本减法；C4 failover 是行为密集区靠后；C6 最后。
+
+**波次实际状态（2026-08-02 核，与 git 事实对齐）**——并行执行窗口已先行提交，审查窗口此前记录的「W2–W4 未开始」已过期：
+
+| 波 | 候选 | 提交 | 状态 |
+|---|---|---|---|
+| W1 | C1 | `58d34c74`（交付）→ `a051223f`（返工） | 交付已审 + 返工已复核（§5） |
+| W2 | C2 | `eb1c972f` | 已提交**待双轴审** |
+| W3 | C5 引用语法 | — | **未做**（本窗口排期） |
+| W3 | C3 Billing | `c7458770` | 已提交**待双轴审** |
+| W4 | C7 | `2434df10` | 已提交**待双轴审** |
+| W4 | C4 | `7d23423a` | 已提交**待双轴审** |
+| W5 | C6 | `dc5876d0`（交付）+ 小修（本窗口） | 交付已审 + 小修已落地（§5） |
 
 ---
 
@@ -160,3 +172,54 @@ ADR：ADR-0006 §5a + T4 不塌层——catalog 仍是唯一表。
 3. 验证默认：`cargo test -p <pkg> --lib`（相关包）；每波末 `bash scripts/test-l1.sh`；WSL `jobs=2`，不叠加并发全量 cargo test。
 4. 本地 trunk 提交，不 push 不开 PR；commit 信息遵循仓库惯例。
 5. 遇计划与代码事实冲突：停下，把冲突写回本计划「状态」行并上报，不即兴改设计。
+
+---
+
+## 5. 审查记录（review 窗口回填）
+
+### W1 · C1 — 已交付已审（commit 58d34c74，2026-08-02）
+
+双轴审查结论：Standards 无硬违规（prompts-in-md / T1 / T7/T8 均合规）；Spec 核心目标达成（intersect 全仓单点、HTTP 面走 scoped 入口、contract 测试真实锁成功路径、`dispatch_rag_tool` 零引用）。**返工 3 项**：
+
+1. **必修（安全语义）**：`rag_execute.rs workspace_doc_scope()` 上游 `app-documents list_documents` 在 store 缺失/出错时返回空 vec，而 `intersect_doc_scope` 把空 scope 当「不强制」——存储故障 fail-open 关闭 scope 强制。需区分「工作区确实无文档」与「读取出错」，出错 fail-closed。同时修「调用方显式给 doc_scope 但相交为空 → 回退到全量 Completed 集合」的交互：显式 scope 相交为空应为空集。
+2. **补完切片 4**：`ToolExecKind::Rag` 变体（catalog.rs:80,98）+ match arm（tool_registry.rs:148，被改作 reject 用途）仍在——彻底删除（reject 前置已覆盖）；并删本次失去唯一生产调用者的 `runtime.rs execute_tools` → `tools/mod.rs dispatch_all` 无 scope 入口（reviewer 补充许可，正是 C1 初衷）。
+3. **可选**：`OrchestratorContext::set_rag_runtime` 收到 test-support feature-gate 后。
+
+判断级记录（不强制）：`test_set_rag_runtime` 手工重同步 `chat.orchestrator` 的 clone-and-resync 形态，持有者增多时脆弱。
+
+### W5 · C6 — 已交付已审（commit dc5876d0，2026-08-02）
+
+双轴审查结论：Standards 无硬违规（删除的 prompts eval 文件属清除既有 prompts-in-md 违规；include!→mod 无可见性泄漏；ADR-0007 pub 面未动）；Spec 切片 2/3/4 全达成（文档=代码逐行一致、删除物 grep 零调用者、`estimate_token_count` 保留、生产零行为变更）。**小修 1 项 + 记录 1 项**：
+
+1. **小修**：脊柱测试（pipeline_tests.rs:677-740）与 `chat/mod.rs` 文档虚标——测试只能锁 `audit → persist` 与 Start-first/Done-present，**锁不了「Done 在 persist 之前」**（事件流 await 后才比对）。二选一：测试真锁 Done-before-persist，或把测试名/文档声明降级为「audit→persist 已锁；Done 先于 persist 由代码检视保证」。倾向后者。
+2. **记录**：chat_private 3 个漏 pub（`build_rag_session_context`/`get_user_usage_limit`/`memory_session_visible`）决策点被静默搁置——暂记为「显式留 pub（现状默认）」，W2 动 chat_private 时一并定夺。
+3. 记录在案不返工：删 13 个 builders 超出计划字面清单 12 个（多删者均验证零调用者）；单 squashed commit 使「文档先于重构」顺序不可验证；`RecordingChatPersistence` 100 行纯委托 signal `ChatPersistencePort` 是胖接口（未来收窄 port 的候选）；测试内 `std::sync::Mutex` in async 宜换 `tokio::sync::Mutex`。
+
+### 本窗口（2026-08-02 执行窗口）补记
+
+**W1 返工复核（commit `a051223f`）— 审查 3 项全部落地，免返工**：
+1. **必修（安全语义）** 已落地：`workspace_doc_scope()`（app-chat/rag_execute.rs:44-51）改为 `Result`——仅当 auth 无 workspace_id 返回空 vec；store 缺失/出错经 `require_document_store`（app-documents/document_context.rs:15-21）→ `Err` 传播（fail-closed）。`intersect_doc_scope`（rag-core/scoped_rag_dispatch.rs:28-41，全仓唯一）空 scope→原样放行（上游不强制）；caller 非空但相交空→返回空集；`dispatch_scoped`（:86-103）对显式越界 caller 短路返回 `empty_scope_result`（:108-125），不回退全量 Completed。bridge.rs:111-116 共享同一实现。
+2. **切片 4 删除** 已落地：`ToolExecKind::Rag` 变体（catalog.rs 仅剩 Skill）、`dispatch_rag_tool`、`runtime.rs execute_tools` / `tools::dispatch_all` 全仓 grep 零引用；`runtime/execute.rs` 已 cfg(test) 门控。
+3. **可选项** 判定「现状已满足，跳过」：`set_rag_runtime` 方法无 gate，但 app-bootstrap 的 `test_set_rag_runtime` 包装已在 `test-support` feature 下（lib.rs:566-567）。
+
+**W5/C6 小修已落地（本窗口）**：脊柱测试名 `pipeline_spine_locks_terminal_events_before_persist_and_audit_stage` → `pipeline_spine_locks_audit_before_persist`（降级声明：只锁 audit→persist + Done 存在；Done-before-persist 由代码检视保证）；`chat/mod.rs` 文档锚点同步降级并注明测试不锁 Done 位置。`cargo test -p app-chat --lib` 75 passed / 0 failed。
+
+**C2-pub 定夺（C6 记录项结案）**：
+- `get_user_usage_limit`（chat_private/quota.rs:7）——真实跨 crate 调用（app-bootstrap → transport-http），**显式留 pub**。
+- `build_rag_session_context`（chat_private/memory.rs:7）——同 crate agent_runtime + 跨 crate 测试，**显式留 pub**。
+- `memory_session_visible`（chat_private/visibility.rs:11）——全仓零调用者（死 pub），**已删除**（自然减法，编译通过）。
+- 附带发现（W2 审查时请留意）：worker 日合并任务 `agent_memory_jobs.rs:185,228` 每跑必戳 `inferred_at=now`，是当前唯一会重置 dream 24h 闸门的第三方写入者。
+
+**治理项核实（§3）**：
+- ADR-0009 补录**已完成**：`docs/adr/0009-retrieval-bridge.md`（沙箱 codegen → 宿主 RAG 的 fd 管道 RPC，对齐 CONTEXT.md 引用）。
+- ADR 编号/文件名错位（0004-desktop 标题写 ADR 0003、0005-llm 标题写 ADR 0004）：**核实为历史冲突**——e2e 语料（07-05）问「ADR-0004」指 LLM Provider/Agent Loop（即 0005 标题），DESKTOP 审计（07-14）说「ADR-0004」指桌面混合（即 0004 文件）。改标题会破坏语料/正文引用，**需刻意重排决定，本窗口不动**。
+- policy.rs §5a 引用：**已成立**——实际引用在 agent-tools/capability/api.rs:4「ADR-0006 §5a」，对应 `0006-product-architecture-decisions-post-tn.md` 真实 `### 5a` 节；计划旧注（0006-unified-agent-loop-revised.md 文件名）已随 W4-C7 规整，无需处理。
+
+**待双轴审 commit 范围**（已提交未审，含并行窗口历史）：W1 返工 `a051223f`；W2/C2 `eb1c972f`；W3/C3 `c7458770`；W4/C7 `2434df10`；W4/C4 `7d23423a`；另 C5 整波 + C6 小修由本窗口提交后并入。
+
+**W3-C5 引用语法 — 切片 1–3 已交付（本窗口），切片 4 延后**：
+- **切片 1+2（golden + 收拢）**：rag-core 新建 `runtime/markers.rs` 统一 grammar——`extract_markers`（`[[cite:]]`/`[[image:]]`/`[[web:n]]`/裸 `[[n]]` 分类）+ `extract_chunk_ids`（cite+image，决策 3：image: 不再漏）+ `extract_web_indices`（复刻两趟序：web 先、裸后）+ `format_block`（`[block n]` 成功行唯一生产者）+ 内联 golden 测试。消费方全部改委托：`response_utils.rs`/`cite_extract.rs`/`answer_contract.rs` 的 `extract_cite_chunk_ids`/`extract_web_marker_indices`/`iteration_codegen.rs` 生产者。验证门：rag-core 116 + agent-loop 291 + app-chat 75 全绿。
+- **切片 3（减法）**：删 `app-chat/prompts/citations.rs` 死拷贝 + 整个 `prompts`/`rag_prompts` 死 re-export 模块（全仓零消费者，grep 复核）；删 `answer_contract` 真死 pub 项 `known_chunk_ids`、`collect_synthesis_validation_errors`（零调用者）。其余「仅内部自用却 pub」项留待切片 4 分相时随私有子模块自然收敛。
+- **线格式规范**：`[[cite:]]`/`[[image:]]`/`[[web:n]]`/`[block n]` 已写入 `prompts/capabilities/knowledge-base/SKILL.md`（prompts 硬规则）。
+- **切片 4（分相）已交付（本窗口）**：L1 文件大小门（>1000 行硬限）要求 `answer_contract.rs` 必须分解——拆为目录模块 `answer_contract/`：`mod.rs`（740 行，facade + lift/validate/salvage + pub API re-export）、`parse.rs`（430 行，structs + 解析/归一/升级/标记提取）、`final_answer_rules.rs`（~193 行，终答格式规则簇 + DRAFT_REFUSAL_CUES）、`tests.rs`（391 行，测试移出）。跨模块共享项升 `pub(crate)`，外部 pub 面由 mod.rs 精确 `pub use` 保持原样。验证门：agent-loop 291 全绿；`check_file_size_limits.sh` hard_failures=0（从 allowlist 移除已分解的 answer_contract.rs 条目）。
+- **顺手硬化（既有 flaky 竞态）**：host_markers.rs 两测试（`every_md_tag_candidate_is_registered` 扫描 `prompts/loop/*.md` vs `parity_fails_on_unregistered_md_tag` 写临时 probe）并行竞争致偶发失败——加共享 Mutex 串行化，6/6 稳定。
