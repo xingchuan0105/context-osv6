@@ -5,7 +5,8 @@
 //! 输出 markdown → Heading/Paragraph blocks。数字保真/结构/速度实测最优；
 //! 不做 OCR（扫描页由扫描检测 → PaddleOCR 链路，见设计 §5.2）。
 //!
-//! 配置：`LITEPARSE_BIN`（默认 `lit`）、`LITEPARSE_TIMEOUT_MS`（默认 120_000）。
+//! 配置：`LITEPARSE_BIN`（默认 `lit`）、`LITEPARSE_TIMEOUT_MS`（默认 120_000）、
+//! `LITEPARSE_SCANNED_MIN_CHARS`（默认 500，见 [`is_scanned_markdown`]）。
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -14,6 +15,20 @@ use uuid::Uuid;
 
 use crate::ir::{DocumentIr, DocumentType, ParseBackend};
 use crate::parser::markitdown::blocks_from_markdown;
+
+/// 扫描版检测：markdown 非空白字符数低于阈值 → 视为扫描版 PDF（需转 PaddleOCR）。
+///
+/// 阈值 `LITEPARSE_SCANNED_MIN_CHARS`（默认 500）。代价不对称：
+/// - 误报（文本 PDF 被判扫描）→ 多花一次 Paddle job，结果仍正确；
+/// - 漏报（真扫描件未 OCR）→ 空 IR → 终端 `EmptyIndex` 死档（不可重试）。
+/// 因此阈值偏低偏安全。调用方在 liteparse 路由后判定，命中即切 `paddle_ocr_pdf`。
+pub fn is_scanned_markdown(markdown: &str) -> bool {
+    let min = std::env::var("LITEPARSE_SCANNED_MIN_CHARS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(500);
+    markdown.chars().filter(|c| !c.is_whitespace()).count() < min
+}
 
 /// 子进程调用配置。
 #[derive(Debug, Clone)]
@@ -146,6 +161,25 @@ mod tests {
             .await
             .expect_err("missing binary must fail");
         assert!(error.to_string().contains("liteparse spawn failed"));
+    }
+
+    #[test]
+    fn scanned_detection_threshold() {
+        // 测试内改动 env 是全局副作用；串行测试环境下用 unsafe 块包裹（Rust 2024 起
+        // set_var/remove_var 为 unsafe）。真实 worker 中 env 由部署注入，不冲突。
+        unsafe {
+            std::env::remove_var("LITEPARSE_SCANNED_MIN_CHARS");
+            // 空/近空 markdown → 扫描
+            assert!(is_scanned_markdown(""));
+            assert!(is_scanned_markdown("  \n  \n"));
+            assert!(is_scanned_markdown("扫描件无文本层，仅此一段。"));
+            // 富文本 → 非扫描
+            assert!(!is_scanned_markdown(&"字".repeat(600)));
+            // 阈值可配置：调高后原本"非扫描"的文本被视作扫描
+            std::env::set_var("LITEPARSE_SCANNED_MIN_CHARS", "2000");
+            assert!(is_scanned_markdown(&"字".repeat(600)));
+            std::env::remove_var("LITEPARSE_SCANNED_MIN_CHARS");
+        }
     }
 
     #[tokio::test]

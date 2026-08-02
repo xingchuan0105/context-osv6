@@ -175,8 +175,8 @@ hex strip **不得全局套用**（代码块里的 git sha 拼接、长 hash、b
 
 ### 5.2 零 chunk 硬闸与重试（审查第 2 点追问）
 
-- 零 chunk 完整性检查拒灌时，文档必须落为**终态失败**（`ParseWarning` + `parse_confidence=Low` 或明确失败原因），**不进入无限重试循环**。
-- 对策：liteparse 路由后接**扫描页检测**（`lit is-complex` 或页字符数/可读率阈值），命中即转 PaddleOCR（复用 `pdf/paddle.rs` 整页渲染+OCR），**在零 chunk 检查前分流**。此链路为新增（§6.5）。
+- 零 chunk 完整性检查拒灌时，文档落为**终态失败**：`IngestionError::EmptyIndex` 的 `is_retryable()=false`（`error.rs`），**不进入无限重试循环**（文档 dead-letter 为 Failed，无 requeue）。
+- **已实施（2026-08-02）**：扫描版 PDF → 整本 PaddleOCR 链路。liteparse 路由后 `is_scanned_markdown`（`LITEPARSE_SCANNED_MIN_CHARS`，默认 500）判定近空即切 `execute_paddle_ocr_pdf`：`PaddleOcrClient::ocr_pdf_bytes` **整本单 job** → 逐页文本块（`pdf_route_mode=paddle_ocr_pdf`），**在零 chunk 检查前分流**——扫描件从「EmptyIndex 死档」变「可检索」。误报（文本 PDF 判扫描）仅多花一次 Paddle job，结果仍正确。
 
 ### 5.3 存量重灌与基线
 
@@ -202,16 +202,25 @@ hex strip **不得全局套用**（代码块里的 git sha 拼接、长 hash、b
 - 旧决策注释清理（见 §6.4）。
 - `markitdown` 对 `doc/ppt/xls` 无转换器（会静默 plain-text 乱码）——现状 router 路由是假支持，必须摘除。
 
+### 5.7 部署前置（VPS 解析器预置）——**暂缓**（2026-08-02 用户拍板）
+
+worker 生产跑在 **VPS**（非本机 WSL）：`deploy-backend.sh` 只推 bins/migrations/prompts，**不含**解析器依赖。上线前需在 VPS 预置：Python venv + `office-direct-extract`（mammoth/openpyxl/python-pptx）、`lit` CLI、LibreOffice writer/calc/impress 三组件。
+
+**决策：暂不预置/部署，等阶段工作（§6.5 扫描 PDF→PaddleOCR 链路、§6.6 存量重灌 + nightly 回归）全部完成后统一部署。**
+
 ---
 
-## 6. 建议实施顺序
+## 6. 实施状态与建议顺序
 
-1. Python 侧：`scripts/office-direct/` 落仓（pyproject + console-script + 单测：三格式 + 二进制回环 + soffice 失败路径 + 空占位 strip + 大表输出）。
-2. Rust 侧：`LocalParseKind` 三变体 + `ParseBackend::{LiteparseV2Pdf, OfficeDirect}` + router 映射 + `execute_local_parse` 分支（复用 markitdown 子进程骨架）。**先改 §3.1 撞名方案再动手**。
-3. 后处理层接入（pptx 限定 hex strip）。
-4. **旧决策注释清理**（审查次要点）：`router/mod.rs:10`、`parse_route.rs:7`、`ir.rs:48-51` 的「文档全类唯一解析器 markitdown」注释改写；`2026-07-29-markitdown-hard-gate-handover.md` 顶部加「部分被 2026-08-02 取代」横幅。
-5. 扫描 PDF 检测→PaddleOCR 链路（§5.2）。
-6. 目标文件重灌 + `blocks_from_markdown` 契约回归 + 全量 nightly；先做 §5.3 基线格式分布对照。
+**已实施（2026-08-02）：** 1–4（commit `2cc236ff`）+ 5 扫描 PDF→PaddleOCR 链路（working tree，未提交）。
+**未实施：** 6（存量重灌 + nightly 回归，待阶段工作）+ 部署（§5.7，暂缓）。
+
+1. ✅ Python 侧：`scripts/office-direct/` 落仓（pyproject + console-script + 单测：三格式 + 二进制回环 + soffice 失败路径 + 空占位 strip + 大表输出）。
+2. ✅ Rust 侧：`LocalParseKind` 三变体 + `ParseBackend::{LiteparseV2Pdf, OfficeDirect}` + router 映射 + `execute_local_parse` 分支（复用 markitdown 子进程骨架）。
+3. ✅ 后处理层接入（pptx 限定 hex strip，office-direct 脚本内）。
+4. ✅ **旧决策注释清理**：`router/mod.rs`、`parse_route.rs`、`ir.rs`、`markitdown.rs` 注释改写；`2026-07-29-markitdown-hard-gate-handover.md` 加取代横幅。
+5. ✅ 扫描 PDF 检测→PaddleOCR 链路（§5.2）：`is_scanned_markdown` + `execute_paddle_ocr_pdf`。
+6. ⏳ 目标文件重灌 + `blocks_from_markdown` 契约回归 + 全量 nightly；先做 §5.3 基线格式分布对照。
 
 ---
 
@@ -221,11 +230,13 @@ hex strip **不得全局套用**（代码块里的 git sha 拼接、长 hash、b
 |---|---|---|
 | `LITEPARSE_BIN` | `lit` | PDF 子进程 |
 | `LITEPARSE_TIMEOUT_MS` | 120_000 | PDF 解析超时 |
+| `LITEPARSE_SCANNED_MIN_CHARS` | 500 | 扫描版检测：liteparse markdown 非空白字符数低于此值 → 转整本 PaddleOCR |
 | `OFFICE_DIRECT_BIN` | `office-direct-extract` | Office 直读 console-script |
 | `OFFICE_DIRECT_TIMEOUT_MS` | 120_000 | 整体超时（soffice + 直读） |
 | `OFFICE_SOFFICE_TIMEOUT_MS` | 90_000 | soffice 子进程超时（`kill_on_drop`） |
 | `OFFICE_SOFFICE_MAX_CONCURRENT` | 1 | worker 级 soffice 并发信号量 |
 | `OFFICE_SOFFICE_BIN` | `soffice` | 二进制→OOXML 转换 |
+| （扫描 OCR 复用） | `PADDLE_OCR_*` | 现有 AI Studio Jobs 配置，扫描 PDF 整本单 job |
 
 ---
 

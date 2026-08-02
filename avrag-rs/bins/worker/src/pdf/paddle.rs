@@ -139,6 +139,41 @@ pub async fn execute_paddle_ocr_image(
     Ok(ir)
 }
 
+/// Scanned PDF ingest：整本 PDF 一个 Paddle job → 逐页 OCR 文本块。
+///
+/// 2026-08-02 起由 liteparse 路由触发：`lit parse` 产出近空 markdown（`is_scanned_markdown`）
+/// 即切此路径，避免扫描件空 IR → 终端 `EmptyIndex` 死档。整本 PDF 单 job 返回逐页结果
+/// （`PaddleOcrClient::ocr_pdf_bytes`），无需页面渲染器。`doc_type` 保持 `Pdf`。
+pub async fn execute_paddle_ocr_pdf(
+    bytes: &[u8],
+    filename: &str,
+    document_id: Uuid,
+) -> Result<DocumentIr, IngestionError> {
+    let config = PaddleOcrConfig::from_env()
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
+    let client = PaddleOcrClient::new(config);
+    let pages = client
+        .ocr_pdf_bytes(bytes, 1)
+        .await
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR PDF job failed: {e}")))?;
+
+    let table_pages = std::collections::HashSet::new();
+    let mut ir = build_document_ir_from_paddle(document_id, filename, &pages, &table_pages);
+    ir.metadata.insert(
+        "ingest_route_version".to_string(),
+        "liteparse-v1".to_string(),
+    );
+    ir.metadata
+        .insert("pdf_route_mode".to_string(), "paddle_ocr_pdf".to_string());
+    ir.metadata
+        .insert("paddle_jobs_requested".to_string(), "1".to_string());
+    ir.metadata
+        .insert("paddle_jobs_count".to_string(), "1".to_string());
+    ir.metadata
+        .insert("paddle_jobs_used".to_string(), "1".to_string());
+    Ok(ir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

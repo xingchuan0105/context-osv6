@@ -19,7 +19,7 @@ use uuid::Uuid;
 pub use code::CodeParser;
 pub use html::HtmlParser;
 pub use liteparse_pdf::{
-    LiteparsePdfConfig, parse_liteparse_pdf_document_ir, run_liteparse_pdf,
+    LiteparsePdfConfig, is_scanned_markdown, parse_liteparse_pdf_document_ir, run_liteparse_pdf,
 };
 pub use markitdown::{
     MarkitdownConfig, blocks_from_markdown, parse_markitdown_document_ir, run_markitdown,
