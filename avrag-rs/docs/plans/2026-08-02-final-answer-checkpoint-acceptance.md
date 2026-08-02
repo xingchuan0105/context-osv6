@@ -129,13 +129,15 @@ cargo test -p avrag-guardrails --lib                   # 预期 45 passed
 
 ## 5. 验收记录
 
-（发起人在此填写逐项结论，如发现偏差请注明文件:行号。）
+验收人：主窗口（本会话）。验收时间：2026-08-02。全部命令亲跑，未采信实施窗口口头结论。
 
-- [ ] G1：________
-- [ ] G2：________
-- [ ] G3：________
-- [ ] G4：________
-- [ ] G5：________
-- [ ] G6：________
-- [ ] 文风：________
-- 偏差：________
+- [x] G1：✅ 四卡齐全（`answer_contract.rs:1000`），顺序 code_only→host_shell→template_artifact→executable_code 即检测顺序；每卡 `check` 返回 `Option<&'static str>` 命中详情；`feedback_hint` 全为第三人称事实句；新增检测=表一行+函数+测试（结构符合）
+- [x] G2：✅ `synthesis.rs:299/321` + `exit_policy.rs:65` 三处统一 `check_final_answer`；`is_code_only_answer`/`contains_host_observation_shell` 在两文件零直调
+- [x] G3：✅ `synthesis-prose-repair.tmpl.md` 首行含 `{violation_detail}`；旧 nudge.md 已删；`prompt_assets.rs:134` subst 替换、:174 测试断言无占位符残留；`synthesis.rs:317` 传入 `violation.feedback_hint`
+- [x] G4：✅ `HostMarker {` 13 处匹配（12 条目 + 1 行 struct 定义，口径自洽）；4 parity 测试在（host_markers.rs:177/196/235/254），含 `parity_fails_on_unregistered_md_tag` 敏感性自测；发射端开标签经登记表派生（`iteration_codegen.rs:595-599`）；`:605` 闭合标签 `</code_execution_result>` 仍为字面量——闭合形态不在检测面，评估为可接受残留（若追求极致可从 marker 派生闭合串，非阻塞）
+- [x] G5：✅ `final_check:{rule_id}:repair` / `final_check:{rule_id}:fallback` 见于 counts 与 stage 双处（synthesis.rs:302/305/324/327）；旧名 `synthesis_code_answer_*` 在 synthesis.rs 零命中
+- [x] G6：✅ `cargo test -p agent-loop --lib -- --test-threads=1` = **291 passed, 0 failed**；`cargo test -p avrag-guardrails --lib` = **45 passed, 0 failed**（逐一执行）
+- [x] 文风：✅ tmpl.md 全文第三人称、无命令式；四张卡 feedback_hint 均为事实陈述；README:34 文件名与 `{violation_detail}` 描述同步；`AGENTS.md:30` 印章备案硬规则、`EXTENDING.md:79-83` 规则卡指向均在（WP4 闭环）
+- 偏差：无新增。预登记偏差两项成立（D2 LoopHooks 本轮不接线；D5 台账改名与历史报告断代）。备注：O1/O2 提交 `682f5b63`（预算口径+SKILL 分层）在验收基线内，291 含其新增测试。
+
+**结论：验收通过。**
