@@ -85,6 +85,9 @@ fn empty_state() -> IterationState {
         answer_deltas_streamed: false,
         compile_continuations: 0,
         retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashSet::new(),
+        )),
         session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
         sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
     }

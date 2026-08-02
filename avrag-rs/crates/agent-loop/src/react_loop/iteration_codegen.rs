@@ -133,10 +133,10 @@ impl ReActLoop {
         // calls gets an explicit note — otherwise the model guesses why the
         // observation is blank (and typically re-emits the same block).
         let no_output = !any_output && bridge_tool_results.is_empty();
-        let observation = format!(
-            "{}{}{}",
-            format_codegen_observation(&combined_result, any_error, no_output),
-            retrieval_callouts(&all_bridge_calls),
+            let observation = format!(
+                "{}{}{}",
+                format_codegen_observation(&combined_result, any_error, no_output),
+                retrieval_callouts(&all_bridge_calls, &state.seen_retrieval_aliases),
             markitdown_format_hints(&codes),
         );
         self.append_codegen_messages(state, llm_response, &observation);
@@ -403,7 +403,14 @@ impl ReActLoop {
 ///
 /// Also surfaces **environment facts**: visible `alias` values and grep
 /// `truncated` / zero-hit signals so the model need not re-scan raw JSON alone.
-fn retrieval_callouts(bridge_calls: &[super::deps::BridgeCallObs]) -> String {
+///
+/// `seen_aliases` is the run's cross-round set of already-surfaced aliases; the
+/// summary reports how many aliases are **new this round** vs already seen, so
+/// the model has a saturation signal (rounds that return zero new evidence).
+fn retrieval_callouts(
+    bridge_calls: &[super::deps::BridgeCallObs],
+    seen_aliases: &std::sync::Mutex<std::collections::HashSet<String>>,
+) -> String {
     const RETRIEVAL_METHODS: &[&str] = &["dense", "lexical", "grep", "web", "fetch"];
     let call_count = bridge_calls
         .iter()
@@ -441,7 +448,18 @@ fn retrieval_callouts(bridge_calls: &[super::deps::BridgeCallObs]) -> String {
     if call_count == 0 && hints.is_empty() {
         return String::new();
     }
-    let detail = build_retrieval_summary_detail(&aliases, any_truncated, any_grep_zero);
+    let mut seen = seen_aliases.lock().unwrap_or_else(|e| e.into_inner());
+    let new_aliases: Vec<&String> = aliases.iter().filter(|a| !seen.contains(*a)).collect();
+    let seen_count = aliases.len() - new_aliases.len();
+    seen.extend(aliases.iter().cloned());
+    drop(seen);
+    let detail = build_retrieval_summary_detail(
+        &aliases,
+        any_truncated,
+        any_grep_zero,
+        new_aliases.len(),
+        seen_count,
+    );
     let mut out = String::from("\n\n");
     out.push_str(&super::prompt_assets::retrieval_summary(
         call_count,
@@ -486,6 +504,8 @@ fn build_retrieval_summary_detail(
     aliases: &[String],
     any_truncated: bool,
     any_grep_zero: bool,
+    new_aliases: usize,
+    seen_aliases: usize,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !aliases.is_empty() {
@@ -497,6 +517,13 @@ fn build_retrieval_summary_detail(
         }
         parts.push(s);
     }
+    // Saturation signal: how much of this round's evidence is genuinely new.
+    parts.push(format!(
+        "本轮 {} 个 alias 中，{} 个为本轮新增、{} 个为历史已见",
+        aliases.len(),
+        new_aliases,
+        seen_aliases
+    ));
     if any_truncated {
         parts.push("存在 truncated=true（回传为样本，非全库枚举）".into());
     }
@@ -809,6 +836,9 @@ mod tests {
             answer_deltas_streamed: false,
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
         }
@@ -927,18 +957,26 @@ mod tests {
                 }),
             ),
         ];
-        let out = retrieval_callouts(&calls);
+        let seen: std::sync::Mutex<std::collections::HashSet<String>> =
+            std::sync::Mutex::new(std::collections::HashSet::new());
+        let out = retrieval_callouts(&calls, &seen);
         assert!(out.contains("本轮检索 3 次，共返回 3 条"), "{out}");
         assert!(out.contains("可见 alias: #1, #2, #3"), "{out}");
+        assert!(out.contains("3 个为本轮新增、0 个为历史已见"), "{out}");
         assert!(out.contains("grep total_hits=0"), "{out}");
         assert!(out.contains("SELECTED 仅能引用已出现的 alias"), "{out}");
         assert!(out.contains("命中明确"), "{out}");
         assert!(out.contains("区分度低"), "{out}");
+        // A second round returning the same aliases must report saturation.
+        let out2 = retrieval_callouts(&calls, &seen);
+        assert!(out2.contains("0 个为本轮新增、3 个为历史已见"), "{out2}");
     }
 
     #[test]
     fn retrieval_callouts_empty_without_retrieval() {
-        assert!(retrieval_callouts(&[]).is_empty());
+        let seen: std::sync::Mutex<std::collections::HashSet<String>> =
+            std::sync::Mutex::new(std::collections::HashSet::new());
+        assert!(retrieval_callouts(&[], &seen).is_empty());
         // A non-retrieval method (doc_profile) produces no summary line.
         let calls = vec![bridge_call(
             "doc_profile",
@@ -946,12 +984,12 @@ mod tests {
             contracts::ToolStatus::Ok,
             serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
         )];
-        assert!(retrieval_callouts(&calls).is_empty());
+        assert!(retrieval_callouts(&calls, &seen).is_empty());
     }
 
     #[test]
     fn retrieval_summary_detail_notes_truncation() {
-        let d = build_retrieval_summary_detail(&["#1".into()], true, false);
+        let d = build_retrieval_summary_detail(&["#1".into()], true, false, 1, 0);
         assert!(d.contains("truncated=true"), "{d}");
         assert!(d.contains("#1"), "{d}");
     }

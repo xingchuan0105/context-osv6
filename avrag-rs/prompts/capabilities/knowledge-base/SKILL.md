@@ -9,7 +9,7 @@ description: >-
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "4.1"
+version: "4.2"
 ---
 
 ## 证据与权威源
@@ -50,8 +50,8 @@ version: "4.1"
 
 - `dense` / `lexical` / `doc_*` → **list[dict]**（常见字段 `chunk_id`、`content`、`doc_id`、`score`、`alias`）。
 - `grep` → **dict**：`total_hits`（命中行数）、`hits[]`、`truncated`（是否因上限截断）。
-- `struct_catalog` → **dict**：`relations[]`（`name`、`headers`、`n_rows`、`sample_rows`、`caption`、`unit`、`confidence`、`fts`）。
-- `struct_query` → **dict**：`ok`、`columns`、`rows`、`row_count`、`truncated`、`evidence`；`ok=false` 时含 `error.code`（`forbidden` / `unknown_relation` / `no_relations` 等）。
+- `struct_catalog` → **dict**：`relations[]`（`name`、`headers`、`n_rows`、`sample_rows`、`caption`、`unit`、`confidence`、`fts`）。**catalog 只描述表**（表名/列名/行数/样例行/置信度）；表内数值与答案只出现在 `struct_query` 的 `rows` 单元格里，catalog 本身不返回答案。
+- `struct_query` → **dict**：`ok`、`columns`、`rows`、`row_count`、`truncated`、`evidence`；`ok=false` 时含 `error.code`（`forbidden` / `unknown_relation` / `no_relations` 等）。`row_count` 是 SQL **结果集**的行数，不是表总行数；COUNT/SUM 的数值在 `rows` 单元格内。
 - `fts: true` = 该表建有全文索引，`WHERE fts_main_<表名>.match_bm25(row_ord, '关键词') IS NOT NULL` 是表内值检索谓词（空格分隔 token 有效；整串中文是单 token，子串发现归 grep）。`fts: false` = 无索引，此情形 match_bm25 会报 schema 不存在。
 
 ```python
@@ -130,9 +130,17 @@ Claim checklist (copy and tick against returns):
 
 **默认低自由度路径（易碎结论）：**
 
-- **行计数** → `grep` + 采用 `total_hits`（不要肉眼数 hits、不要按列去重）。
-- **表内计数 / 过滤 / 表序 first** → `struct_catalog` 给出可见表名与列名；`struct_query` 执行单条 SELECT；「第一个」= `row_ord` 升序第一行（表出现序），非编号字典序；catalog 为空 = 该 doc 无表格存储，此情形 grep 仍可用。
-- **表内总数（如某类对象的总数）** → `struct_query` 聚合（COUNT/SUM/GROUP BY）是确定路径；看到部分分域计数而未见总数时，总数仍处于未覆盖状态，聚合查询可闭合它（表按行存储，`rows` 单元格给出聚合值，不是结果集行数）。表级证据未水合（回传无 alias 编号）时，以 `evidence`/`rows` 文本核对，勿虚构编号。
+表类问题（表内计数 / 过滤 / 表序 / 排序 / 聚合）的默认工作流是**「摸范围 → 收窄 → 下钻」一条链**：
+
+1. **摸范围**：并行扇出 `dense` / `lexical` / `grep` 或 `struct_catalog`，确认问题落在哪个 doc、哪张表。
+2. **收窄**：取到 doc_id 或表名后，后续调用带 `doc_ids=[...]`（多 doc 同名表时防止静默归属首个 doc）。
+3. **下钻**：`struct_catalog` 给出可见表名与列名后，**继续**用 `struct_query` 发单条 SELECT 取答案——catalog 只描述表，答案只在 `rows` 里。
+
+分流规则：**`grep` 数的是文本行，`struct_query` 的 COUNT/SUM 数的是记录**。表内计数、过滤、排序、聚合场景下，grep 是近似路径（按文本行/子串，可能与表结构错位），`struct_query` 是确定路径（按列与谓词）——两类场景一律先走 struct 两段式，`grep` 降为无表格存储（`relations=[]`）或纯子串/邻域场景的退路。
+
+- **表内计数 / 过滤 / 表序 / 聚合（表类问题首选）** → **struct 两段式**：`struct_catalog`（看可见表名与列名）→ `struct_query`（COUNT/WHERE/ORDER BY/GROUP BY，单条 SELECT）；「第一个」= `row_ord` 升序第一行（表出现序），非编号字典序；`struct_query` 的 `row_count` = 结果集行数，COUNT 数值在 `rows` 单元格。
+- **行计数 / 纯文本行** → `grep` + 采用 `total_hits`（不要肉眼数 hits、不要按列去重）；`struct_catalog` 返回 `relations=[]`（该 doc 无表格存储）时 grep 是可用退路。
+- **表内总数（如某类对象的总数）** → `struct_query` 聚合（COUNT/SUM/GROUP BY）是确定路径；看到部分分域计数而未见总数时，总数仍处于未覆盖状态，聚合查询可闭合它。表级证据未水合（回传无 alias 编号）时，以 `evidence`/`rows` 文本核对，勿虚构编号。
 - **表内「第一个 / 先后」** → 按 **回传中该过滤条件下的出现顺序**（或显式序号列）；编码字符串不做排序键。
 - **金额 / 活动号 / 表内字面** → 优先 `lexical` 或 `grep`；`dense` 仅作定位线索。
 - **元数据字段（日期/状态/作者/阶段数）** → 语料字段常为**英文**（如 `Date`、`Status`、`Phase`），中文语料正文用中文——检索词**中英双词并行**（`grep "Date"` 与 `grep "日期"` 都试；`Phase` 与 `阶段` 都试）；英文 0 命中不代表中文侧也无，反之亦然。

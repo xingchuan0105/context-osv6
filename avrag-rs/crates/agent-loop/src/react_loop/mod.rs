@@ -155,6 +155,9 @@ impl ReActLoop {
             answer_deltas_streamed: false,
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(alias_start)),
+            seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(mode.sdk_primitives.iter().cloned().collect()),
         };

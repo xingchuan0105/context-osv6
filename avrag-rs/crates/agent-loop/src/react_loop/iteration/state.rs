@@ -30,6 +30,10 @@ pub struct IterationState {
     /// sandbox bridge injects aliases in this order; downstream hydration
     /// replays the run's tool_results to resolve them.
     pub retrieval_aliases: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// K1: aliases already surfaced to the model in prior rounds of this run.
+    /// The per-round retrieval summary reports "new vs already-seen" so the
+    /// model has a saturation signal (rounds burning with zero new evidence).
+    pub seen_retrieval_aliases: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     /// A7: cross-block `save`/`load` workspace for this agent run.
     pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
     /// A3: allowed SaC methods for this run (empty = open).
