@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 76" fill="none" aria-hidden="true">
-  <!-- Brand mark: slate-ink plate + light ink + one indigo accent node -->
-  <rect width="76" height="76" rx="18" fill="#1b1f2d"/>
+  <!-- Brand mark: warm-ink plate + light ink + one orange accent node -->
+  <rect width="76" height="76" rx="18" fill="#26251e"/>
   <rect x="0.75" y="0.75" width="74.5" height="74.5" rx="17.25" stroke="#fff" stroke-opacity="0.14" stroke-width="1.5"/>
   <path d="M34 16C26.82 16 21 21.82 21 29V47C21 54.18 26.82 60 34 60" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
   <path d="M42 16C49.18 16 55 21.82 55 29V47C55 54.18 49.18 60 42 60" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
-  <circle cx="47" cy="44.5" r="4" fill="#4f7cf3" stroke="none"/>
+  <circle cx="47" cy="44.5" r="4" fill="#f54e00" stroke="none"/>
 </svg>

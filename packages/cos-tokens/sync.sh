@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync Monochrome Ink tokens + mark to product and satellite sites.
+# Sync Cream × Void tokens + mark to product and satellite sites.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SRC="$ROOT/packages/cos-tokens"

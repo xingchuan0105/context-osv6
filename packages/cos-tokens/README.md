@@ -1,4 +1,4 @@
-# cos-tokens — Context-OS Monochrome Ink
+# cos-tokens — Context-OS Cream × Void
 
 Canonical visual tokens for App + public sites.
 

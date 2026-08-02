@@ -1,150 +1,167 @@
 /**
  * Context-OS design tokens — canonical
- * Spec: docs/design/STYLE_BASELINE.md
- * Color direction (indigo × slate, amended 2026-07-22): docs/design/UI_REVIEW_AND_VIBRANT_COLOR_PROPOSAL_2026-07-21.md
+ * Spec: docs/design/STYLE_BASELINE.md (Cream × Void, 2026-08-02)
+ * Light palette = Cursor warm cream; Dark palette = xAI near-black monochrome.
  * Values are HSL channels without hsl() wrapper.
  * NOTE: canonical source — edit this file, then run sync.sh. Copies (e.g. frontend_next/app/design-tokens.css) will be overwritten.
  */
 
 :root {
-  /* === Neutrals (light, cool slate) === */
-  --background: 220 25% 98%;
-  --foreground: 225 25% 14%;
+  /* === Neutrals (light, Cursor warm cream) === */
+  --background: 60 18% 96%;
+  --foreground: 53 12% 13%;
   --card: 0 0% 100%;
-  --card-foreground: 225 25% 14%;
-  --surface-muted: 220 20% 95%;
-  --surface-soft: 220 16% 92%;
+  --card-foreground: 53 12% 13%;
+  --surface-muted: 60 23% 97%;
+  --surface-soft: 48 14% 92%;
   --surface-elevated: 0 0% 100%;
-  --surface-sunken: 220 18% 89%;
-  --surface-accent-soft: 232 60% 95%;
+  --surface-sunken: 50 11% 89%;
+  --surface-accent-soft: 22 63% 92%;
+  --body: 45 5% 34%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 225 25% 14%;
+  --popover-foreground: 53 12% 13%;
 
-  --primary: 225 25% 16%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 53 12% 13%;
+  --primary-foreground: 60 18% 96%;
 
-  /* Indigo — brand hue */
-  --accent: 235 65% 52%;
-  --accent-strong: 235 65% 45%;
-  --accent-text: 235 60% 46%;
-  --accent-soft: 232 60% 95%;
-  --accent-glow: 235 65% 52%;
-  --accent-cta: 235 55% 45%;
-  --accent-cta-hover: 235 58% 39%;
+  /* Brand — Cursor Orange (light) / white (dark, xAI monochrome) */
+  --accent: 19 100% 48%;
+  --accent-strong: 19 100% 41%;
+  --accent-text: 19 100% 41%;
+  --accent-soft: 22 63% 92%;
+  --accent-glow: 19 100% 48%;
+  --accent-cta: 19 100% 48%;
+  --accent-cta-hover: 19 100% 41%;
 
-  /* Semantic (vivid) */
-  --success: 155 55% 36%;
+  /* Semantic (status only) */
+  --success: 161 64% 33%;
   --warning: 38 90% 44%;
   --warning-foreground: 30 50% 22%;
   --warning-surface: 40 60% 94%;
   --warning-border: 38 60% 70%;
   --info: 205 85% 48%;
-  --destructive: 4 70% 52%;
+  --destructive: 345 64% 49%;
   --destructive-foreground: 0 0% 100%;
-  --destructive-soft: 4 65% 96%;
-  --destructive-border: 4 50% 80%;
+  --destructive-soft: 345 60% 96%;
+  --destructive-border: 345 50% 80%;
 
-  --secondary: 220 16% 92%;
-  --secondary-foreground: 225 25% 18%;
-  --muted: 220 16% 92%;
-  --muted-foreground: 222 12% 38%;
-  --subtle-foreground: 222 10% 46%;
+  --secondary: 48 14% 92%;
+  --secondary-foreground: 53 12% 13%;
+  --muted: 48 14% 92%;
+  --muted-foreground: 47 6% 47%;
+  --subtle-foreground: 43 7% 60%;
 
-  --border: 220 14% 85%;
-  --border-strong: 220 12% 74%;
-  --border-whisper: 220 16% 91%;
-  --input: 220 14% 85%;
-  --input-background: 220 20% 97%;
-  --switch-background: 222 12% 45%;
-  --ring: 235 65% 52%;
-  --focus-ring: 235 65% 52%;
+  --border: 50 11% 89%;
+  --border-strong: 49 10% 79%;
+  --border-whisper: 48 14% 92%;
+  --input: 50 11% 89%;
+  --input-background: 0 0% 100%;
+  --switch-background: 49 10% 79%;
+  --ring: 19 100% 48%;
+  --focus-ring: 19 100% 48%;
 
-  --badge-background: 220 16% 92%;
-  --badge-foreground: 222 12% 38%;
+  --badge-background: 48 14% 92%;
+  --badge-foreground: 47 6% 47%;
 
-  --sidebar: 220 20% 96%;
-  --sidebar-foreground: 225 25% 14%;
-  --sidebar-primary: 225 25% 16%;
+  --sidebar: 60 23% 97%;
+  --sidebar-foreground: 53 12% 13%;
+  --sidebar-primary: 53 12% 13%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 16% 92%;
-  --sidebar-accent-foreground: 225 25% 18%;
-  --sidebar-border: 220 14% 85%;
-  --sidebar-ring: 235 65% 52%;
+  --sidebar-accent: 48 14% 92%;
+  --sidebar-accent-foreground: 53 12% 13%;
+  --sidebar-border: 50 11% 89%;
+  --sidebar-ring: 19 100% 48%;
 
-  /* Workspace aliases → global neutrals */
-  --workspace-shell: 220 25% 98%;
-  --workspace-foreground: 225 25% 14%;
-  --workspace-panel: 0 0% 100%;
-  --workspace-panel-muted: 220 20% 95%;
-  --workspace-rail: 220 20% 96%;
-  --workspace-rail-strong: 220 16% 92%;
-  --workspace-border: 220 14% 85%;
-  --workspace-primary: 225 25% 16%;
-  --workspace-primary-foreground: 0 0% 100%;
-  --workspace-secondary: 220 16% 92%;
-  --workspace-secondary-foreground: 225 25% 18%;
-  --workspace-muted: 220 16% 92%;
-  --workspace-muted-foreground: 222 12% 38%;
-  --workspace-accent: 232 60% 95%;
-  --workspace-accent-foreground: 235 60% 46%;
-  --workspace-surface: 0 0% 100%;
-  --workspace-surface-muted: 220 20% 95%;
-  --workspace-pill: 220 16% 92%;
-  --workspace-input: 220 20% 97%;
-  --workspace-input-border: 220 14% 85%;
-  --workspace-menu: 0 0% 100%;
-  --workspace-menu-hover: 220 16% 92%;
-  --workspace-shadow: 225 25% 14%;
+  /* Timeline pastels — agent / tool-call timeline only (§4.5); dark keeps pastel */
+  --timeline-thinking: 19 56% 72%;
+  --timeline-grep: 124 28% 71%;
+  --timeline-read: 214 51% 75%;
+  --timeline-edit: 267 44% 76%;
+  --timeline-done: 35 59% 47%;
+
+  /* Workspace aliases → global tokens (§4.8) */
+  --workspace-shell: var(--background);
+  --workspace-foreground: var(--foreground);
+  --workspace-panel: var(--surface-elevated);
+  --workspace-panel-muted: var(--surface-muted);
+  --workspace-rail: var(--surface-muted);
+  --workspace-rail-strong: var(--surface-soft);
+  --workspace-border: var(--border);
+  --workspace-primary: var(--primary);
+  --workspace-primary-foreground: var(--primary-foreground);
+  --workspace-secondary: var(--secondary);
+  --workspace-secondary-foreground: var(--secondary-foreground);
+  --workspace-muted: var(--muted);
+  --workspace-muted-foreground: var(--muted-foreground);
+  --workspace-accent: var(--accent-soft);
+  --workspace-accent-foreground: var(--accent-text);
+  --workspace-surface: var(--card);
+  --workspace-surface-muted: var(--surface-muted);
+  --workspace-pill: var(--secondary);
+  --workspace-input: var(--input-background);
+  --workspace-input-border: var(--border);
+  --workspace-menu: var(--card);
+  --workspace-menu-hover: var(--surface-soft);
 
   /* Dashboard aliases */
-  --dashboard-shell: 220 25% 98%;
-  --dashboard-foreground: 225 25% 14%;
-  --dashboard-brand-foreground: 225 25% 14%;
-  --dashboard-header-border: 220 14% 85%;
-  --dashboard-border: 220 14% 85%;
-  --dashboard-border-strong: 220 12% 74%;
-  --dashboard-surface: 0 0% 100%;
-  --dashboard-surface-muted: 220 20% 95%;
-  --dashboard-surface-soft: 220 16% 92%;
-  --dashboard-muted-foreground: 222 12% 38%;
-  --dashboard-subtle-foreground: 222 10% 46%;
-  --dashboard-primary: 225 25% 16%;
-  --dashboard-primary-hover: 225 25% 24%;
-  --dashboard-primary-foreground: 0 0% 100%;
-  --dashboard-danger: 4 70% 52%;
-  --dashboard-shadow: 225 25% 14%;
-  --dashboard-overlay: 225 25% 14%;
+  --dashboard-shell: var(--background);
+  --dashboard-foreground: var(--foreground);
+  --dashboard-brand-foreground: var(--foreground);
+  --dashboard-header-border: var(--border);
+  --dashboard-border: var(--border);
+  --dashboard-border-strong: var(--border-strong);
+  --dashboard-surface: var(--card);
+  --dashboard-surface-muted: var(--surface-muted);
+  --dashboard-surface-soft: var(--surface-soft);
+  --dashboard-muted-foreground: var(--muted-foreground);
+  --dashboard-subtle-foreground: var(--subtle-foreground);
+  --dashboard-primary: var(--primary);
+  --dashboard-primary-hover: 53 12% 20%;
+  --dashboard-primary-foreground: var(--primary-foreground);
+  --dashboard-danger: var(--destructive);
+  --dashboard-overlay: 0 0% 0%;
 
-  /* CTA = ink (accent fill reserved for low-frequency paid actions) */
-  --cta-background: 225 25% 16%;
-  --cta-background-hover: 225 25% 24%;
-  --cta-background-active: 225 25% 20%;
+  /* CTA = ink (light) / white (dark); accent reserved for the single primary CTA (§4.6) */
+  --cta-background: 53 12% 13%;
+  --cta-background-hover: 53 12% 20%;
+  --cta-background-active: 53 12% 17%;
   --cta-foreground: 0 0% 100%;
 
-  /* Radius */
-  --radius: 0.75rem;
-  --radius-card: 0.75rem;
+  /* Radius — 0 / 8px / pill only (§7); buttons are always pill */
+  --radius: 0.5rem;
+  --radius-none: 0;
+  --radius-sm: 0.5rem;
+  --radius-card: 0.5rem;
   --radius-control: 0.5rem;
-  --radius-button: 0.5rem;
+  --radius-button: 999px;
   --radius-badge: 999px;
   --radius-pill: 999px;
-  --radius-message: 1rem;
 
-  /* Spacing */
+  /* Spacing — xAI scale, 4px base (§6) */
+  --space-xxs: 0.125rem;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  --space-3xl: 3rem;
+  --space-4xl: 4rem;
+  /* Migration aliases — mapped onto the scale (20px/96px tiers retired) */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
-  --space-5: 1.25rem;
+  --space-5: 1.5rem;
   --space-6: 1.5rem;
   --space-7: 2rem;
   --space-8: 3rem;
   --space-9: 4rem;
-  --space-10: 6rem;
+  --space-10: 4rem;
 
-  /* Typography (U13 product shell) */
-  --font-size-overline: 0.75rem;
+  /* Typography (Inter + JetBrains Mono; weight 400 only) */
+  --font-size-overline: 0.6875rem;
   --font-size-meta: 0.75rem;
   --font-size-control: 0.8125rem;
   --font-size-caption: 0.75rem;
@@ -152,11 +169,17 @@
   --font-size-label: 0.75rem;
   --font-size-body: 0.875rem;
   --font-size-body-strong: 0.9375rem;
+  --font-size-body-lg: 1rem;
   --font-size-section-title: 0.9375rem;
   --font-size-shell-title: 1.0625rem;
   --font-size-brand: 1rem;
   --font-size-title-sm: 1.125rem;
   --font-size-title: 1.5rem;
+  --font-size-display-xs: 20px;
+  --font-size-display-sm: 32px;
+  --font-size-display-md: 48px;
+  --font-size-display-lg: 72px;
+  --font-size-display-xl: 96px;
 
   --line-height-overline: 1.4;
   --line-height-meta: 1.5;
@@ -165,34 +188,40 @@
   --line-height-label: 1.5;
   --line-height-body: 1.65;
   --line-height-body-strong: 1.65;
+  --line-height-body-lg: 1.55;
   --line-height-section-title: 1.35;
   --line-height-shell-title: 1.25;
   --line-height-brand: 1.1;
   --line-height-title: 1.18;
+  --line-height-display-xs: 1.4;
+  --line-height-display-sm: 1.125;
+  --line-height-display-md: 1;
+  --line-height-display-lg: 1;
+  --line-height-display-xl: 1;
 
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 600;
+  --font-weight-regular: 400;
+  /* Deprecated weight aliases — pinned to 400 (xAI: hierarchy via size/spacing, not weight) */
+  --font-weight-medium: 400;
+  --font-weight-semibold: 400;
+  --font-weight-bold: 400;
 
   --letter-spacing-normal: 0;
-  --letter-spacing-overline: 0.05em;
-  --letter-spacing-title: -0.02em;
+  --letter-spacing-overline: 0.1em;
+  --letter-spacing-title: -0.01em;
   --letter-spacing-tight: -0.01em;
+  --letter-spacing-display-xs: 0;
+  --letter-spacing-display-sm: -0.6px;
+  --letter-spacing-display-md: -1.2px;
+  --letter-spacing-display-lg: -1.8px;
+  --letter-spacing-display-xl: -2.4px;
 
-  --font-body: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
     "Microsoft YaHei", sans-serif;
-  --font-heading: "Space Grotesk", "IBM Plex Sans", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-heading: var(--font-body);
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.04);
-  --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.06);
-  --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.08);
-  --shadow-xl: 0 16px 48px hsl(0 0% 0% / 0.12);
-  --shadow-glow: 0 0 20px hsl(235 65% 52% / 0.12);
-  --shadow-focus-ring: 0 0 0 3px hsl(235 65% 52% / 0.18);
-  --shadow-topbar: 0 1px 3px hsl(0 0% 0% / 0.06);
-  --shadow-popover: 0 12px 32px rgba(15, 23, 42, 0.12);
+  /* Shadows — hairline-only; focus ring is the only shadow token (§8) */
+  --shadow-focus-ring: 0 0 0 3px hsl(var(--focus-ring) / 0.18);
 
   /* Motion */
   --duration-fast: 120ms;
@@ -208,9 +237,9 @@
   --z-modal: 200;
   --z-toast: 300;
 
-  --app-citation-bg: 220 16% 92%;
-  --app-history-hover: 220 16% 92%;
-  --app-history-active: 220 16% 88%;
+  --app-citation-bg: 48 14% 92%;
+  --app-history-hover: 48 14% 92%;
+  --app-history-active: 50 11% 88%;
 
   /* Marketing / public-site aliases (dark-friendly sites may override theme) */
   --cos-bg: hsl(var(--background));
@@ -222,11 +251,11 @@
   --cos-text-subtle: hsl(var(--subtle-foreground));
   --cos-border: hsl(var(--border));
   --cos-accent: hsl(var(--accent));
-  --cos-accent-hover: hsl(235 65% 45%);
+  --cos-accent-hover: hsl(var(--accent-strong));
   --cos-accent-bg: hsl(var(--accent-soft));
   --cos-radius-sm: var(--radius-control);
   --cos-radius-md: var(--radius-card);
-  --cos-radius-lg: 1rem;
+  --cos-radius-lg: var(--radius-card);
   --cos-cta-bg: hsl(var(--cta-background));
   --cos-cta-fg: hsl(var(--cta-foreground));
   --cos-cta-hover: hsl(var(--cta-background-hover));
@@ -234,28 +263,30 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: 225 20% 9%;
-    --foreground: 220 20% 92%;
-    --card: 225 16% 12%;
-    --card-foreground: 220 20% 92%;
-    --surface-muted: 225 16% 12%;
-    --surface-soft: 225 14% 16%;
-    --surface-elevated: 225 16% 13%;
-    --surface-sunken: 225 18% 7%;
-    --surface-accent-soft: 232 30% 18%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
+    --surface-muted: 220 10% 11%;
+    --surface-soft: 220 10% 11%;
+    --surface-elevated: 0 0% 10%;
+    --surface-sunken: 0 0% 2%;
+    --surface-accent-soft: 0 0% 12%;
+    --body: 228 7% 86%;
 
-    --popover: 225 16% 12%;
-    --popover-foreground: 220 20% 92%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 220 22% 92%;
-    --primary-foreground: 225 20% 9%;
-    --accent: 230 85% 68%;
-    --accent-strong: 230 85% 75%;
-    --accent-text: 230 85% 70%;
-    --accent-soft: 232 30% 18%;
-    --accent-glow: 230 85% 68%;
-    --accent-cta: 235 70% 62%;
-    --accent-cta-hover: 235 72% 68%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+
+    --accent: 0 0% 100%;
+    --accent-strong: 0 0% 90%;
+    --accent-text: 0 0% 100%;
+    --accent-soft: 0 0% 12%;
+    --accent-glow: 0 0% 100%;
+    --accent-cta: 0 0% 100%;
+    --accent-cta-hover: 0 0% 90%;
 
     --success: 155 45% 52%;
     --warning: 38 88% 58%;
@@ -268,95 +299,84 @@
     --destructive-soft: 4 32% 14%;
     --destructive-border: 4 32% 28%;
 
-    --secondary: 225 14% 16%;
-    --secondary-foreground: 220 20% 92%;
-    --muted: 225 14% 16%;
-    --muted-foreground: 218 12% 68%;
-    --subtle-foreground: 218 10% 56%;
+    --secondary: 220 10% 11%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 10% 11%;
+    --muted-foreground: 216 4% 51%;
+    --subtle-foreground: 216 4% 51%;
 
-    --border: 220 10% 21%;
-    --border-strong: 220 10% 30%;
-    --border-whisper: 220 10% 16%;
-    --input: 220 10% 21%;
-    --input-background: 225 16% 12%;
-    --switch-background: 218 10% 42%;
-    --ring: 230 85% 68%;
-    --focus-ring: 230 85% 68%;
+    --border: 220 8% 14%;
+    --border-strong: 213 8% 23%;
+    --border-whisper: 220 8% 9%;
+    --input: 220 8% 14%;
+    --input-background: 220 10% 11%;
+    --switch-background: 220 8% 23%;
+    --ring: 0 0% 100%;
+    --focus-ring: 0 0% 100%;
 
-    --badge-background: 225 14% 16%;
-    --badge-foreground: 218 12% 68%;
+    --badge-background: 220 10% 11%;
+    --badge-foreground: 216 4% 51%;
 
-    --sidebar: 225 18% 8%;
-    --sidebar-foreground: 220 20% 92%;
-    --sidebar-primary: 220 22% 92%;
-    --sidebar-primary-foreground: 225 20% 9%;
-    --sidebar-accent: 225 14% 16%;
-    --sidebar-accent-foreground: 220 20% 92%;
-    --sidebar-border: 220 10% 21%;
-    --sidebar-ring: 230 85% 68%;
+    --sidebar: 0 0% 3%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 220 10% 11%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 8% 14%;
+    --sidebar-ring: 0 0% 100%;
 
-    --workspace-shell: 225 20% 9%;
-    --workspace-foreground: 220 20% 92%;
-    --workspace-panel: 225 16% 12%;
-    --workspace-panel-muted: 225 16% 12%;
-    --workspace-rail: 225 18% 10%;
-    --workspace-rail-strong: 225 14% 14%;
-    --workspace-border: 220 10% 21%;
-    --workspace-primary: 220 22% 92%;
-    --workspace-primary-foreground: 225 20% 9%;
-    --workspace-secondary: 225 14% 16%;
-    --workspace-secondary-foreground: 220 20% 92%;
-    --workspace-muted: 225 14% 16%;
-    --workspace-muted-foreground: 218 12% 65%;
-    --workspace-accent: 232 30% 18%;
-    --workspace-accent-foreground: 230 85% 72%;
-    --workspace-surface: 225 16% 12%;
-    --workspace-surface-muted: 225 16% 12%;
-    --workspace-pill: 225 14% 17%;
-    --workspace-input: 225 16% 12%;
-    --workspace-input-border: 220 10% 21%;
-    --workspace-menu: 225 16% 12%;
-    --workspace-menu-hover: 225 14% 16%;
-    --workspace-shadow: 0 0% 0%;
+    --workspace-shell: var(--background);
+    --workspace-foreground: var(--foreground);
+    --workspace-panel: var(--surface-elevated);
+    --workspace-panel-muted: var(--surface-muted);
+    --workspace-rail: var(--surface-muted);
+    --workspace-rail-strong: var(--surface-soft);
+    --workspace-border: var(--border);
+    --workspace-primary: var(--primary);
+    --workspace-primary-foreground: var(--primary-foreground);
+    --workspace-secondary: var(--secondary);
+    --workspace-secondary-foreground: var(--secondary-foreground);
+    --workspace-muted: var(--muted);
+    --workspace-muted-foreground: var(--muted-foreground);
+    --workspace-accent: var(--accent-soft);
+    --workspace-accent-foreground: var(--accent-text);
+    --workspace-surface: var(--card);
+    --workspace-surface-muted: var(--surface-muted);
+    --workspace-pill: var(--secondary);
+    --workspace-input: var(--input-background);
+    --workspace-input-border: var(--border);
+    --workspace-menu: var(--card);
+    --workspace-menu-hover: var(--surface-soft);
 
-    --dashboard-shell: 225 20% 9%;
-    --dashboard-foreground: 220 20% 92%;
-    --dashboard-brand-foreground: 220 20% 92%;
-    --dashboard-header-border: 220 10% 21%;
-    --dashboard-border: 220 10% 21%;
-    --dashboard-border-strong: 220 10% 30%;
-    --dashboard-surface: 225 16% 12%;
-    --dashboard-surface-muted: 225 16% 12%;
-    --dashboard-surface-soft: 225 14% 16%;
-    --dashboard-muted-foreground: 218 12% 65%;
-    --dashboard-subtle-foreground: 218 10% 56%;
-    --dashboard-primary: 220 22% 92%;
-    --dashboard-primary-hover: 220 22% 82%;
-    --dashboard-primary-foreground: 225 20% 9%;
-    --dashboard-danger: 4 68% 58%;
-    --dashboard-shadow: 0 0% 0%;
+    --dashboard-shell: var(--background);
+    --dashboard-foreground: var(--foreground);
+    --dashboard-brand-foreground: var(--foreground);
+    --dashboard-header-border: var(--border);
+    --dashboard-border: var(--border);
+    --dashboard-border-strong: var(--border-strong);
+    --dashboard-surface: var(--card);
+    --dashboard-surface-muted: var(--surface-muted);
+    --dashboard-surface-soft: var(--surface-soft);
+    --dashboard-muted-foreground: var(--muted-foreground);
+    --dashboard-subtle-foreground: var(--subtle-foreground);
+    --dashboard-primary: var(--primary);
+    --dashboard-primary-hover: 0 0% 82%;
+    --dashboard-primary-foreground: var(--primary-foreground);
+    --dashboard-danger: var(--destructive);
     --dashboard-overlay: 0 0% 0%;
 
-    --cta-background: 220 22% 92%;
-    --cta-background-hover: 220 22% 82%;
-    --cta-background-active: 220 22% 76%;
-    --cta-foreground: 225 20% 9%;
+    --cta-background: 0 0% 100%;
+    --cta-background-hover: 0 0% 82%;
+    --cta-background-active: 0 0% 76%;
+    --cta-foreground: 0 0% 4%;
 
-    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
-    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.4);
-    --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.5);
-    --shadow-xl: 0 16px 48px hsl(0 0% 0% / 0.6);
-    --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
-    --shadow-glow: 0 0 20px hsl(230 85% 68% / 0.2);
-    --shadow-focus-ring: 0 0 0 3px hsl(230 85% 68% / 0.22);
-    --shadow-topbar: 0 1px 3px hsl(0 0% 0% / 0.18);
-
-    --app-citation-bg: 225 14% 16%;
-    --app-history-hover: 225 14% 16%;
-    --app-history-active: 225 14% 20%;
+    --app-citation-bg: 220 10% 11%;
+    --app-history-hover: 220 10% 11%;
+    --app-history-active: 220 8% 16%;
 
     --cos-bg: hsl(var(--background));
-    --cos-bg-secondary: hsl(225 18% 5%);
+    --cos-bg-secondary: hsl(220 10% 5%);
     --cos-surface: hsl(0 0% 100% / 0.03);
     --cos-surface-hover: hsl(0 0% 100% / 0.06);
     --cos-text: hsl(var(--foreground));
@@ -364,8 +384,11 @@
     --cos-text-subtle: hsl(var(--subtle-foreground));
     --cos-border: hsl(0 0% 100% / 0.08);
     --cos-accent: hsl(var(--accent));
-    --cos-accent-hover: hsl(230 85% 75%);
-    --cos-accent-bg: hsl(230 85% 68% / 0.14);
+    --cos-accent-hover: hsl(var(--accent-strong));
+    --cos-accent-bg: hsl(var(--accent-soft));
+    --cos-radius-sm: var(--radius-control);
+    --cos-radius-md: var(--radius-card);
+    --cos-radius-lg: var(--radius-card);
     --cos-cta-bg: hsl(var(--cta-background));
     --cos-cta-fg: hsl(var(--cta-foreground));
     --cos-cta-hover: hsl(var(--cta-background-hover));
@@ -373,26 +396,31 @@
 }
 
 :root[data-theme="dark"] {
-  --background: 225 20% 9%;
-  --foreground: 220 20% 92%;
-  --card: 225 16% 12%;
-  --card-foreground: 220 20% 92%;
-  --surface-muted: 225 16% 12%;
-  --surface-soft: 225 14% 16%;
-  --surface-elevated: 225 16% 13%;
-  --surface-sunken: 225 18% 7%;
-  --surface-accent-soft: 232 30% 18%;
-  --popover: 225 16% 12%;
-  --popover-foreground: 220 20% 92%;
-  --primary: 220 22% 92%;
-  --primary-foreground: 225 20% 9%;
-  --accent: 230 85% 68%;
-  --accent-strong: 230 85% 75%;
-  --accent-text: 230 85% 70%;
-  --accent-soft: 232 30% 18%;
-  --accent-glow: 230 85% 68%;
-  --accent-cta: 235 70% 62%;
-  --accent-cta-hover: 235 72% 68%;
+  --background: 0 0% 4%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 100%;
+  --surface-muted: 220 10% 11%;
+  --surface-soft: 220 10% 11%;
+  --surface-elevated: 0 0% 10%;
+  --surface-sunken: 0 0% 2%;
+  --surface-accent-soft: 0 0% 12%;
+  --body: 228 7% 86%;
+
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 100%;
+
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 4%;
+
+  --accent: 0 0% 100%;
+  --accent-strong: 0 0% 90%;
+  --accent-text: 0 0% 100%;
+  --accent-soft: 0 0% 12%;
+  --accent-glow: 0 0% 100%;
+  --accent-cta: 0 0% 100%;
+  --accent-cta-hover: 0 0% 90%;
+
   --success: 155 45% 52%;
   --warning: 38 88% 58%;
   --warning-foreground: 40 50% 90%;
@@ -403,86 +431,85 @@
   --destructive-foreground: 0 0% 100%;
   --destructive-soft: 4 32% 14%;
   --destructive-border: 4 32% 28%;
-  --secondary: 225 14% 16%;
-  --secondary-foreground: 220 20% 92%;
-  --muted: 225 14% 16%;
-  --muted-foreground: 218 12% 68%;
-  --subtle-foreground: 218 10% 56%;
-  --border: 220 10% 21%;
-  --border-strong: 220 10% 30%;
-  --border-whisper: 220 10% 16%;
-  --input: 220 10% 21%;
-  --input-background: 225 16% 12%;
-  --switch-background: 218 10% 42%;
-  --ring: 230 85% 68%;
-  --focus-ring: 230 85% 68%;
-  --badge-background: 225 14% 16%;
-  --badge-foreground: 218 12% 68%;
-  --sidebar: 225 18% 8%;
-  --sidebar-foreground: 220 20% 92%;
-  --sidebar-primary: 220 22% 92%;
-  --sidebar-primary-foreground: 225 20% 9%;
-  --sidebar-accent: 225 14% 16%;
-  --sidebar-accent-foreground: 220 20% 92%;
-  --sidebar-border: 220 10% 21%;
-  --sidebar-ring: 230 85% 68%;
-  --workspace-shell: 225 20% 9%;
-  --workspace-foreground: 220 20% 92%;
-  --workspace-panel: 225 16% 12%;
-  --workspace-panel-muted: 225 16% 12%;
-  --workspace-rail: 225 18% 10%;
-  --workspace-rail-strong: 225 14% 14%;
-  --workspace-border: 220 10% 21%;
-  --workspace-primary: 220 22% 92%;
-  --workspace-primary-foreground: 225 20% 9%;
-  --workspace-secondary: 225 14% 16%;
-  --workspace-secondary-foreground: 220 20% 92%;
-  --workspace-muted: 225 14% 16%;
-  --workspace-muted-foreground: 218 12% 65%;
-  --workspace-accent: 232 30% 18%;
-  --workspace-accent-foreground: 230 85% 72%;
-  --workspace-surface: 225 16% 12%;
-  --workspace-surface-muted: 225 16% 12%;
-  --workspace-pill: 225 14% 17%;
-  --workspace-input: 225 16% 12%;
-  --workspace-input-border: 220 10% 21%;
-  --workspace-menu: 225 16% 12%;
-  --workspace-menu-hover: 225 14% 16%;
-  --workspace-shadow: 0 0% 0%;
-  --dashboard-shell: 225 20% 9%;
-  --dashboard-foreground: 220 20% 92%;
-  --dashboard-brand-foreground: 220 20% 92%;
-  --dashboard-header-border: 220 10% 21%;
-  --dashboard-border: 220 10% 21%;
-  --dashboard-border-strong: 220 10% 30%;
-  --dashboard-surface: 225 16% 12%;
-  --dashboard-surface-muted: 225 16% 12%;
-  --dashboard-surface-soft: 225 14% 16%;
-  --dashboard-muted-foreground: 218 12% 65%;
-  --dashboard-subtle-foreground: 218 10% 56%;
-  --dashboard-primary: 220 22% 92%;
-  --dashboard-primary-hover: 220 22% 82%;
-  --dashboard-primary-foreground: 225 20% 9%;
-  --dashboard-danger: 4 68% 58%;
-  --dashboard-shadow: 0 0% 0%;
+
+  --secondary: 220 10% 11%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 10% 11%;
+  --muted-foreground: 216 4% 51%;
+  --subtle-foreground: 216 4% 51%;
+
+  --border: 220 8% 14%;
+  --border-strong: 213 8% 23%;
+  --border-whisper: 220 8% 9%;
+  --input: 220 8% 14%;
+  --input-background: 220 10% 11%;
+  --switch-background: 220 8% 23%;
+  --ring: 0 0% 100%;
+  --focus-ring: 0 0% 100%;
+
+  --badge-background: 220 10% 11%;
+  --badge-foreground: 216 4% 51%;
+
+  --sidebar: 0 0% 3%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 0 0% 100%;
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent: 220 10% 11%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 220 8% 14%;
+  --sidebar-ring: 0 0% 100%;
+
+  --workspace-shell: var(--background);
+  --workspace-foreground: var(--foreground);
+  --workspace-panel: var(--surface-elevated);
+  --workspace-panel-muted: var(--surface-muted);
+  --workspace-rail: var(--surface-muted);
+  --workspace-rail-strong: var(--surface-soft);
+  --workspace-border: var(--border);
+  --workspace-primary: var(--primary);
+  --workspace-primary-foreground: var(--primary-foreground);
+  --workspace-secondary: var(--secondary);
+  --workspace-secondary-foreground: var(--secondary-foreground);
+  --workspace-muted: var(--muted);
+  --workspace-muted-foreground: var(--muted-foreground);
+  --workspace-accent: var(--accent-soft);
+  --workspace-accent-foreground: var(--accent-text);
+  --workspace-surface: var(--card);
+  --workspace-surface-muted: var(--surface-muted);
+  --workspace-pill: var(--secondary);
+  --workspace-input: var(--input-background);
+  --workspace-input-border: var(--border);
+  --workspace-menu: var(--card);
+  --workspace-menu-hover: var(--surface-soft);
+
+  --dashboard-shell: var(--background);
+  --dashboard-foreground: var(--foreground);
+  --dashboard-brand-foreground: var(--foreground);
+  --dashboard-header-border: var(--border);
+  --dashboard-border: var(--border);
+  --dashboard-border-strong: var(--border-strong);
+  --dashboard-surface: var(--card);
+  --dashboard-surface-muted: var(--surface-muted);
+  --dashboard-surface-soft: var(--surface-soft);
+  --dashboard-muted-foreground: var(--muted-foreground);
+  --dashboard-subtle-foreground: var(--subtle-foreground);
+  --dashboard-primary: var(--primary);
+  --dashboard-primary-hover: 0 0% 82%;
+  --dashboard-primary-foreground: var(--primary-foreground);
+  --dashboard-danger: var(--destructive);
   --dashboard-overlay: 0 0% 0%;
-  --cta-background: 220 22% 92%;
-  --cta-background-hover: 220 22% 82%;
-  --cta-background-active: 220 22% 76%;
-  --cta-foreground: 225 20% 9%;
-  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
-  --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.4);
-  --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.5);
-  --shadow-xl: 0 16px 48px hsl(0 0% 0% / 0.6);
-  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px hsl(230 85% 68% / 0.2);
-  --shadow-focus-ring: 0 0 0 3px hsl(230 85% 68% / 0.22);
-  --shadow-topbar: 0 1px 3px hsl(0 0% 0% / 0.18);
-  --app-citation-bg: 225 14% 16%;
-  --app-history-hover: 225 14% 16%;
-  --app-history-active: 225 14% 20%;
+
+  --cta-background: 0 0% 100%;
+  --cta-background-hover: 0 0% 82%;
+  --cta-background-active: 0 0% 76%;
+  --cta-foreground: 0 0% 4%;
+
+  --app-citation-bg: 220 10% 11%;
+  --app-history-hover: 220 10% 11%;
+  --app-history-active: 220 8% 16%;
+
   --cos-bg: hsl(var(--background));
-  --cos-bg-secondary: hsl(225 18% 5%);
+  --cos-bg-secondary: hsl(220 10% 5%);
   --cos-surface: hsl(0 0% 100% / 0.03);
   --cos-surface-hover: hsl(0 0% 100% / 0.06);
   --cos-text: hsl(var(--foreground));
@@ -490,8 +517,11 @@
   --cos-text-subtle: hsl(var(--subtle-foreground));
   --cos-border: hsl(0 0% 100% / 0.08);
   --cos-accent: hsl(var(--accent));
-  --cos-accent-hover: hsl(230 85% 75%);
-  --cos-accent-bg: hsl(230 85% 68% / 0.14);
+  --cos-accent-hover: hsl(var(--accent-strong));
+  --cos-accent-bg: hsl(var(--accent-soft));
+  --cos-radius-sm: var(--radius-control);
+  --cos-radius-md: var(--radius-card);
+  --cos-radius-lg: var(--radius-card);
   --cos-cta-bg: hsl(var(--cta-background));
   --cos-cta-fg: hsl(var(--cta-foreground));
   --cos-cta-hover: hsl(var(--cta-background-hover));
