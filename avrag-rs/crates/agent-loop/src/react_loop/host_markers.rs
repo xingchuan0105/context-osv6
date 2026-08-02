@@ -30,7 +30,7 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
     HostMarker {
         tag: "<code_execution_result>",
         forbidden_in_final: true,
-        emitted_at: "prompts/loop/synthesis-prose-repair.nudge.md::教学引用的闭合形态",
+        emitted_at: "prompts/loop/synthesis-prose-repair.tmpl.md::教学引用的闭合形态",
     },
     HostMarker {
         tag: "<code_execution_result ",

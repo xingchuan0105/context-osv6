@@ -296,16 +296,17 @@ impl SynthesisPhase {
         // One repair round; if the repair still comes back violating, use the
         // degraded fallback copy — never surface a raw code block or a host
         // observation shell as the final prose answer.
-        if super::answer_contract::final_answer_contract_violation(&full_answer) {
+        if let Some(violation) = super::answer_contract::check_final_answer(&full_answer) {
+            let rule_id = violation.rule_id;
             let mut repair_counts = std::collections::BTreeMap::new();
-            repair_counts.insert("synthesis_code_answer_repair".to_string(), 1usize);
+            repair_counts.insert(format!("final_check:{rule_id}:repair"), 1usize);
             let _ = sink
                 .emit(AgentEvent::Activity {
-                    stage: "synthesis_code_answer_repair".to_string(),
+                    stage: format!("final_check:{rule_id}:repair"),
                     message:
-                        "prose_only synthesis returned a code-only or host-observation-shell answer; one repair round follows"
+                        "final_answer quality gate fired ({rule_id}); one repair round follows"
                             .to_string(),
-                    detail: None,
+                    detail: Some(violation.matched.to_string()),
                     counts: repair_counts,
                     sources_preview: Vec::new(),
                 })
@@ -313,20 +314,21 @@ impl SynthesisPhase {
             let mut repair_messages = synthesis_messages.clone();
             repair_messages.push(ChatMessage::assistant(full_answer.as_str()));
             repair_messages.push(ChatMessage::user(
-                super::prompt_assets::synthesis_prose_repair_nudge(),
+                super::prompt_assets::synthesis_prose_repair_nudge(violation.feedback_hint),
             ));
             let (repaired, _) =
                 stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
-            if super::answer_contract::final_answer_contract_violation(&repaired) {
+            if let Some(violation) = super::answer_contract::check_final_answer(&repaired) {
+                let rule_id = violation.rule_id;
                 let mut violation_counts = std::collections::BTreeMap::new();
-                violation_counts.insert("synthesis_code_answer_violation".to_string(), 1usize);
+                violation_counts.insert(format!("final_check:{rule_id}:fallback"), 1usize);
                 let _ = sink
                     .emit(AgentEvent::Activity {
-                        stage: "synthesis_code_answer_violation".to_string(),
+                        stage: format!("final_check:{rule_id}:fallback"),
                         message:
-                            "prose_only repair still returned a code-only / host-shell answer; contract fallback used"
+                            "final_answer quality gate fired again after repair; contract fallback used"
                                 .to_string(),
-                        detail: None,
+                        detail: Some(violation.matched.to_string()),
                         counts: violation_counts,
                         sources_preview: Vec::new(),
                     })

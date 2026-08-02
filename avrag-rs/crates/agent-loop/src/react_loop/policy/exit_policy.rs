@@ -2,7 +2,7 @@ use avrag_llm::ChatMessage;
 use contracts::{ToolResult, ToolStatus};
 
 use super::config::{LoopExitConfig, ModeConfig};
-use super::super::answer_contract::final_answer_contract_violation;
+use super::super::answer_contract::check_final_answer;
 
 /// Tools whose payloads count as **answer-grade chunks** (unlock final answer).
 /// Catalog-only tools (`doc_profile` / `doc_metadata`) are intentionally excluded:
@@ -62,7 +62,7 @@ pub fn decide_synthesis_gate(
             // executable code form in a working draft) must not surface as
             // final prose — route to synthesis (which runs the one
             // repair-round gate) instead of short-circuiting.
-            if !final_answer_contract_violation(answer) {
+            if check_final_answer(answer).is_none() {
                 return SynthesisGate::SkipSynthesisUseDirect(answer.to_string());
             }
         }

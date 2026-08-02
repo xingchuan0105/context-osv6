@@ -126,8 +126,13 @@ pub fn synthesis_repair_nudge() -> &'static str {
 
 /// prose_only synthesis returned a code-only answer (retrieve framing leaked
 /// into the final turn): observation that precedes the one repair round.
-pub fn synthesis_prose_repair_nudge() -> &'static str {
-    trim_body(loop_prompt!("synthesis-prose-repair.nudge.md"))
+/// `detail` names the specific violated form (from the final-answer quality
+/// gate) so the model sees exactly which shape tripped.
+pub fn synthesis_prose_repair_nudge(detail: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("synthesis-prose-repair.tmpl.md")),
+        &[("violation_detail", detail)],
+    )
 }
 
 pub fn partial_evidence_insufficient() -> &'static str {
@@ -163,7 +168,10 @@ mod tests {
         assert!(!budget_exhausted_final_turn().is_empty());
         assert!(!budget_exhausted_final_turn_tokens().is_empty());
         assert!(!synthesis_repair_nudge().is_empty());
-        assert!(!synthesis_prose_repair_nudge().is_empty());
+        let r = synthesis_prose_repair_nudge("候选答复是代码块形态：围栏之外没有散文正文");
+        assert!(!r.is_empty());
+        assert!(r.contains("代码块形态"));
+        assert!(!r.contains("{violation_detail}"));
         assert!(!partial_evidence_insufficient().is_empty());
         assert!(!codegen_no_output_nudge().is_empty());
         assert!(!codegen_sandbox_error_nudge().is_empty());

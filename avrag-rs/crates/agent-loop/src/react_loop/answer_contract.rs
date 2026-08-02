@@ -948,8 +948,16 @@ pub fn contains_host_observation_shell(text: &str) -> bool {
 /// `` `</response> `` leak with retrieval recall 1.0 behind it. These tokens
 /// are never legitimate user-facing prose.
 pub fn contains_template_artifact(text: &str) -> bool {
+    template_artifact_matched(text).is_some()
+}
+
+/// The specific template token that tripped, if any.
+pub fn template_artifact_matched(text: &str) -> Option<&'static str> {
     const TEMPLATE_ARTIFACTS: &[&str] = &["</response>", "<response>", "<|im_end|>", "<|im_start|>"];
-    TEMPLATE_ARTIFACTS.iter().any(|t| text.contains(t))
+    TEMPLATE_ARTIFACTS
+        .iter()
+        .find(|t| text.contains(**t))
+        .copied()
 }
 
 /// Executable-form code span (`<code language="…">`) anywhere in the closing
@@ -960,18 +968,89 @@ pub fn contains_template_artifact(text: &str) -> bool {
 /// code block shipped as the answer, slipping past `is_code_only_answer`
 /// because narration prose surrounded the block.
 pub fn contains_executable_code_form(text: &str) -> bool {
+    executable_code_matched(text).is_some()
+}
+
+/// Rule-level hit marker for the executable-code-form detector (no single
+/// specific tag; the shape itself is the marker).
+pub fn executable_code_matched(text: &str) -> Option<&'static str> {
     text.contains("<code language=")
+        .then_some("<code language=…> executable-form span")
+}
+
+/// The specific host observation tag that tripped (from the host_markers
+/// single source of truth), if any.
+pub fn host_shell_matched(text: &str) -> Option<&'static str> {
+    super::host_markers::forbidden_in_final_tags()
+        .find(|tag| text.contains(tag))
+}
+
+// --- 规则卡注册表（D1：数据驱动的终答质检台） ---
+
+/// One final-answer contract rule. `check` returns the specific matched
+/// marker/description when the rule fires; `None` means pass. Rules run in
+/// table order. Adding a detector = one table row + one check fn + one test.
+pub struct FinalAnswerRule {
+    pub id: &'static str,
+    pub check: fn(&str) -> Option<&'static str>,
+    pub feedback_hint: &'static str,
+}
+
+/// The four format-level final-answer rules, in detection order.
+pub const FINAL_ANSWER_RULES: &[FinalAnswerRule] = &[
+    FinalAnswerRule {
+        id: "code_only",
+        check: |t| {
+            is_code_only_answer(t)
+                .then_some("代码块 / markdown 围栏构成全部内容，没有围栏之外的散文正文")
+        },
+        feedback_hint: "候选答复是代码块形态：围栏之外没有散文正文；代码只在检索轮经沙箱执行，终答是回传证据之上的普通文字。",
+    },
+    FinalAnswerRule {
+        id: "host_shell",
+        check: host_shell_matched,
+        feedback_hint: "候选答复中含有宿主观察标签外壳；该标签只由宿主注入，外壳内容不是回传证据。",
+    },
+    FinalAnswerRule {
+        id: "template_artifact",
+        check: template_artifact_matched,
+        feedback_hint: "候选答复中含有模板残留标记；该标记是模型侧输出残片，不是答复内容。",
+    },
+    FinalAnswerRule {
+        id: "executable_code",
+        check: executable_code_matched,
+        feedback_hint: "候选答复中含有可执行形态的代码 span（<code language=…>）；该形态只在检索轮经沙箱执行，出现在终答里是过程稿泄漏。",
+    },
+];
+
+/// A concrete violation found by the quality gate: which rule fired, which
+/// specific marker tripped, and the third-person feedback hint for the nudge.
+pub struct FinalAnswerViolation {
+    pub rule_id: &'static str,
+    pub matched: &'static str,
+    pub feedback_hint: &'static str,
+}
+
+/// The single quality-gate entry point. Every call site (DirectAnswer
+/// routing, synthesis pre-repair, synthesis post-repair re-check) uses this;
+/// rules are data-driven in [`FINAL_ANSWER_RULES`], so adding a rule never
+/// touches engine control flow.
+pub fn check_final_answer(text: &str) -> Option<FinalAnswerViolation> {
+    FINAL_ANSWER_RULES.iter().find_map(|rule| {
+        (rule.check)(text).map(|matched| FinalAnswerViolation {
+            rule_id: rule.id,
+            matched,
+            feedback_hint: rule.feedback_hint,
+        })
+    })
 }
 
 /// Every format-level final-answer contract violation, routed to the same
 /// one-repair-round flow (exit-policy direct-answer routing + synthesis
 /// gate). Format detection only — no semantic judgment (AGENTS.md
-/// stop-decision).
+/// stop-decision). Thin wrapper over [`check_final_answer`].
 pub fn final_answer_contract_violation(text: &str) -> bool {
-    is_code_only_answer(text)
-        || contains_host_observation_shell(text)
-        || contains_template_artifact(text)
-        || contains_executable_code_form(text)
+    check_final_answer(text).is_some()
 }
 
 /// prose_only-contract detector: true when `text` carries code spans
@@ -1431,6 +1510,36 @@ mod tests {
         assert!(!final_answer_contract_violation(
             "根据回传，概念阶段第一个活动是接受任务书（LPDT-03）。\n\nSELECTED: #2"
         ));
+    }
+
+    #[test]
+    fn rule_card_reports_rule_id_and_matched_marker() {
+        let cases: &[(&str, &str)] = &[
+            // (rule_id, offending input)
+            ("code_only", "```python\nprint(1)\n```"),
+            ("host_shell", "<retrieval_summary>"),
+            ("template_artifact", "</response>"),
+            ("executable_code", "先看看命中。\n<code language=\"python\">\npass\n</code>"),
+        ];
+        for (expected_id, text) in cases {
+            let v = check_final_answer(text).expect("expected a violation");
+            assert_eq!(v.rule_id, *expected_id, "input {text:?}");
+            assert!(!v.matched.is_empty(), "matched marker must be non-empty");
+            assert!(!v.feedback_hint.is_empty(), "feedback hint must be non-empty");
+        }
+    }
+
+    #[test]
+    fn rule_card_order_prefers_code_only_over_host_shell() {
+        // Both classes present → the first card (code_only) wins by order.
+        let v = check_final_answer("```python\n<retrieval_summary>\n```").expect("violation");
+        assert_eq!(v.rule_id, "code_only");
+    }
+
+    #[test]
+    fn rule_card_passes_clean_prose() {
+        assert!(check_final_answer("根据回传，概念阶段第一个活动是接受任务书（LPDT-03）。\n\nSELECTED: #2").is_none());
+        assert!(check_final_answer("").is_none());
     }
 
     /// Legacy `internal_answer_v1` envelope machinery tests: `modes/rag.yaml` is

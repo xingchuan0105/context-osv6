@@ -1,4 +1,4 @@
-上一条候选答复未通过终答形态校验。其可能的形态与对应环境事实：
+上一条候选答复未通过终答形态校验。本次命中形态：{violation_detail}。其可能的形态与对应环境事实：
 
 - 含 `<code language="python">` 块或 markdown 围栏代码：代码块仅在检索轮经沙箱执行；终答轮写出的代码不产生执行，也不构成用户可见答复。
 - 含宿主观察标签外壳（`<retrieval_summary>` / `<loop_budget>` / `<code_execution_result>` / `<docscope_metadata>` / `<retrieve_cluster_index>` / `<synthesis_skill_index>` 等）：这类标签只由宿主注入；候选答复中再现的外壳及其内容不是回传证据。
