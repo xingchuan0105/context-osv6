@@ -923,6 +923,29 @@ pub fn contract_violation_fallback(mode_id: &str) -> String {
     super::prompt_assets::contract_violation_fallback(mode_id).to_string()
 }
 
+/// Host observation tag shells a final answer must never reproduce. These are
+/// the exact tag shapes the host emits as observations in the retrieve phase:
+/// `<code_execution_result>`, `<loop_budget …>`, `[retrieval_summary]` (also
+/// the angle-bracket variant the model has produced when imitating the shell),
+/// and `<docscope_metadata>`. Pure format check — a final prose answer quoting
+/// one of these tags means the model pasted a host observation shell instead
+/// of writing grounded prose; same class as a code-only answer, routed through
+/// the same one-repair-round flow (AGENTS.md stop-decision: no semantic
+/// keyword bars, format-level detection only).
+pub fn contains_host_observation_shell(text: &str) -> bool {
+    const HOST_OBSERVATION_TAGS: &[&str] = &[
+        "<code_execution_result>",
+        "<code_execution_result ",
+        "<loop_budget",
+        "<retrieval_summary>",
+        "[retrieval_summary]",
+        "<docscope_metadata>",
+    ];
+    HOST_OBSERVATION_TAGS
+        .iter()
+        .any(|tag| text.contains(tag))
+}
+
 /// prose_only-contract detector: true when `text` carries code spans
 /// (`<code>…</code>` or markdown fences) but no prose outside them — the
 /// retrieve-phase "output one code block" framing leaked into the final
@@ -1317,6 +1340,23 @@ mod tests {
         // Empty / whitespace answers are a different classification.
         assert!(!is_code_only_answer(""));
         assert!(!is_code_only_answer("  \n  "));
+    }
+
+    #[test]
+    fn host_observation_shell_detector_flags_pasted_shells() {
+        // q088 observed failure: fabricated host observation shell as answer.
+        assert!(contains_host_observation_shell(
+            "<loop_budget round=\"1\" max_rounds=\"12\" />\n\n<retrieval_summary>\nDense hits: ...\n</retrieval_summary>"
+        ));
+        assert!(contains_host_observation_shell("<retrieval_summary>"));
+        assert!(contains_host_observation_shell("[retrieval_summary]"));
+        assert!(contains_host_observation_shell("<code_execution_result>"));
+        assert!(contains_host_observation_shell("<docscope_metadata>"));
+        // Plain prose must never trip the format check.
+        assert!(!contains_host_observation_shell(
+            "验证阶段与发布阶段均有主题相关片段。"
+        ));
+        assert!(!contains_host_observation_shell(""));
     }
 
     /// Legacy `internal_answer_v1` envelope machinery tests: `modes/rag.yaml` is

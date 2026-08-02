@@ -289,18 +289,23 @@ impl SynthesisPhase {
 
         // prose_only contract check (host structural): a code-only answer
         // means the retrieve-phase "output one <code> block" framing leaked
-        // into the closing turn (observed on budget-exhausted tails). One
-        // repair round; if the repair still comes back code-only, use the
-        // degraded fallback copy — never surface a raw code block as the
-        // final prose answer.
-        if super::answer_contract::is_code_only_answer(&full_answer) {
+        // into the closing turn (observed on budget-exhausted tails). The
+        // same class covers a final answer that pastes a host observation
+        // shell (`<retrieval_summary>`, `<loop_budget>`, …) — the model
+        // reproduced host-emitted format instead of writing grounded prose.
+        // One repair round; if the repair still comes back violating, use the
+        // degraded fallback copy — never surface a raw code block or a host
+        // observation shell as the final prose answer.
+        if super::answer_contract::is_code_only_answer(&full_answer)
+            || super::answer_contract::contains_host_observation_shell(&full_answer)
+        {
             let mut repair_counts = std::collections::BTreeMap::new();
             repair_counts.insert("synthesis_code_answer_repair".to_string(), 1usize);
             let _ = sink
                 .emit(AgentEvent::Activity {
                     stage: "synthesis_code_answer_repair".to_string(),
                     message:
-                        "prose_only synthesis returned a code-only answer; one repair round follows"
+                        "prose_only synthesis returned a code-only or host-observation-shell answer; one repair round follows"
                             .to_string(),
                     detail: None,
                     counts: repair_counts,
@@ -314,14 +319,16 @@ impl SynthesisPhase {
             ));
             let (repaired, _) =
                 stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
-            if super::answer_contract::is_code_only_answer(&repaired) {
+            if super::answer_contract::is_code_only_answer(&repaired)
+                || super::answer_contract::contains_host_observation_shell(&repaired)
+            {
                 let mut violation_counts = std::collections::BTreeMap::new();
                 violation_counts.insert("synthesis_code_answer_violation".to_string(), 1usize);
                 let _ = sink
                     .emit(AgentEvent::Activity {
                         stage: "synthesis_code_answer_violation".to_string(),
                         message:
-                            "prose_only repair still returned a code-only answer; contract fallback used"
+                            "prose_only repair still returned a code-only / host-shell answer; contract fallback used"
                                 .to_string(),
                         detail: None,
                         counts: violation_counts,
