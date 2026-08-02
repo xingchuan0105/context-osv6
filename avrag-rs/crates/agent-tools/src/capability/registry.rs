@@ -286,6 +286,11 @@ fn infer_skill_strategies(id: &str) -> Vec<String> {
 }
 
 fn infer_skill_risk_level(id: &str) -> super::RiskLevel {
+    // Single source of truth: registered tools read risk from the catalog.
+    if let Some(meta) = ToolCatalog::standard_cached().tool_meta(id) {
+        return meta.risk_level;
+    }
+    // Fallback for prompt skills not registered as tools.
     match id {
         "code_interpreter" | "web_search" | "web_fetch" => super::RiskLevel::High,
         _ => super::RiskLevel::Low,
@@ -336,6 +341,64 @@ mod tests {
         assert!(registry.tool("calculator").is_some());
         assert!(registry.tool("dense_retrieval").is_some());
         assert!(registry.skill_count() > 0, "registry should contain skills");
+    }
+
+    #[test]
+    fn cross_table_tool_metadata_is_consistent() {
+        use crate::capability::{
+            EnforcementCondition, Permission, standard_rules,
+        };
+
+        // Extract (id, permission) gate pairs from standard_rules (the policy
+        // table's hardcoded id lists must agree with the catalog's permissions).
+        let mut gates: Vec<(String, Permission)> = Vec::new();
+        for rule in standard_rules() {
+            if let EnforcementCondition::All(conds) = &rule.condition {
+                let ids = conds.iter().find_map(|c| match c {
+                    EnforcementCondition::ToolIsOneOf(ids) => Some(ids),
+                    _ => None,
+                });
+                let perm = conds.iter().find_map(|c| match c {
+                    EnforcementCondition::RequiresPermission(p)
+                    | EnforcementCondition::MissingPermission(p) => Some(p.clone()),
+                    _ => None,
+                });
+                if let (Some(ids), Some(perm)) = (ids, perm) {
+                    for id in ids {
+                        gates.push((id.clone(), perm.clone()));
+                    }
+                }
+            }
+        }
+
+        let catalog = ToolCatalog::standard_cached();
+        for tool in catalog.list() {
+            let id = tool.meta.id.as_str();
+            // Risk: the registry's risk inference must agree with the catalog's
+            // risk level for every tool id (Medium/Low drift guard).
+            assert_eq!(
+                infer_skill_risk_level(id),
+                tool.meta.risk_level,
+                "risk drift for {id}: catalog={:?} registry-infer={:?}",
+                tool.meta.risk_level,
+                infer_skill_risk_level(id),
+            );
+            // Permission gates: the policy table's gate set for this id must
+            // exactly match the catalog's declared permissions.
+            let mut gated: Vec<&Permission> = gates
+                .iter()
+                .filter(|(gid, _)| gid == id)
+                .map(|(_, p)| p)
+                .collect();
+            gated.sort_by_key(|p| format!("{p:?}"));
+            gated.dedup();
+            let mut catalog_perms: Vec<&Permission> = tool.meta.permissions.iter().collect();
+            catalog_perms.sort_by_key(|p| format!("{p:?}"));
+            assert_eq!(
+                gated, catalog_perms,
+                "permission gate drift for {id}"
+            );
+        }
     }
 
     #[test]

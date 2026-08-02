@@ -164,8 +164,7 @@ async fn dispatch_skill(
     meta: &crate::capability::ToolMetadata,
 ) -> ToolResult {
     if ctx.enforce_policy {
-        let enforcer =
-            crate::capability::PolicyEnforcer::new(crate::capability::standard_rules());
+        let enforcer = crate::capability::standard_enforcer();
         match enforcer.evaluate(meta, ctx.auth) {
             crate::capability::EnforcementAction::Allow => {}
             crate::capability::EnforcementAction::Deny { reason } => {
