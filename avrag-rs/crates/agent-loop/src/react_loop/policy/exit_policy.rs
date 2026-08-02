@@ -2,9 +2,7 @@ use avrag_llm::ChatMessage;
 use contracts::{ToolResult, ToolStatus};
 
 use super::config::{LoopExitConfig, ModeConfig};
-use super::super::answer_contract::{
-    contains_host_observation_shell, is_code_only_answer,
-};
+use super::super::answer_contract::final_answer_contract_violation;
 
 /// Tools whose payloads count as **answer-grade chunks** (unlock final answer).
 /// Catalog-only tools (`doc_profile` / `doc_metadata`) are intentionally excluded:
@@ -59,11 +57,12 @@ pub fn decide_synthesis_gate(
 
     if let Some(answer) = direct_answer {
         if loop_exit.skip_synthesis_on_direct_answer {
-            // A DirectAnswer that is code-only or pastes a host observation
-            // shell must not surface as final prose — same class as the
-            // synthesis prose-only contract. Route to synthesis (which runs
-            // the one-repair-round gate) instead of short-circuiting.
-            if !is_code_only_answer(answer) && !contains_host_observation_shell(answer) {
+            // A DirectAnswer that violates the final-answer format contract
+            // (code-only, host observation shell, template artifact, or
+            // executable code form in a working draft) must not surface as
+            // final prose — route to synthesis (which runs the one
+            // repair-round gate) instead of short-circuiting.
+            if !final_answer_contract_violation(answer) {
                 return SynthesisGate::SkipSynthesisUseDirect(answer.to_string());
             }
         }

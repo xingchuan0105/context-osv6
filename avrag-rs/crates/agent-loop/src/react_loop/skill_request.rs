@@ -1,12 +1,17 @@
 /// Single authoritative protocol for LLM skill-body requests (ADR-0007 / A2).
 ///
-/// Accepts only `{"skill_request":["token",...]}` as the full assistant content
+/// Accepts `{"skill_request":["token",...]}` as the full assistant content
 /// (after trim). Tokens are either a cluster id (`knowledge-base`, `memory`) or a
 /// progressive reference under a cluster (`knowledge-base/how-to-read-tables`).
-/// Embedded-in-prose extraction is intentionally unsupported.
 /// C6: a ```json / ``` fenced payload is unwrapped via the shared stripper
 /// first — a fenced skill request previously fell through unrecognized and
 /// leaked into the final answer.
+/// Embedded-in-prose extraction (2026-08-02, q006 regression): planning
+/// narration followed by a fenced/bare skill_request JSON is recognized too —
+/// the narration is dropped and the request honored; without this, the whole
+/// message leaked as the final answer with zero retrieval. Extraction only
+/// accepts payloads that parse as JSON and carry a `skill_request` array;
+/// catalog validation downstream filters unknown tokens.
 ///
 /// Token forms:
 /// - `cluster` — load cluster body (if not already disclosed)
@@ -68,21 +73,58 @@ pub fn split_skill_request_token(raw: &str) -> SkillRequestToken {
 
 pub fn parse_skill_request(content: &str) -> Vec<String> {
     let trimmed = super::json_fence::strip_json_fence(content);
-    if trimmed.is_empty() {
+    if let Some(tokens) = skill_request_tokens(&trimmed) {
+        return tokens;
+    }
+    extract_embedded_skill_request(content)
+}
+
+/// Strict shape: the whole text parses as JSON and carries a
+/// `skill_request` string array.
+fn skill_request_tokens(text: &str) -> Option<Vec<String>> {
+    if text.is_empty() {
+        return None;
+    }
+    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    let arr = value.get("skill_request")?.as_array()?;
+    Some(
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| split_skill_request_token(s).as_token()))
+            .collect(),
+    )
+}
+
+/// Tolerant shape (q006 regression, run v2_20260802-045319): the model
+/// prepended planning narration to its request. Try the last fenced block's
+/// body, then any trailing bare `{…}` JSON object (latest `{` first). Only
+/// payloads that parse and carry `skill_request` are accepted.
+fn extract_embedded_skill_request(content: &str) -> Vec<String> {
+    if !content.contains("skill_request") {
         return Vec::new();
     }
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&trimmed) else {
-        return Vec::new();
-    };
-    value
-        .get("skill_request")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| split_skill_request_token(s).as_token()))
-                .collect()
-        })
-        .unwrap_or_default()
+    // (a) Fenced blocks, last one first. Odd-index segments after splitting
+    // on the fence marker are fence bodies.
+    let segments: Vec<&str> = content.split("```").collect();
+    for body in segments.iter().skip(1).step_by(2).rev() {
+        // Strip an optional language tag line (`json` etc.).
+        let body = body.trim();
+        let body = match body.find('\n') {
+            Some(nl) if !body[..nl].contains('{') => body[nl + 1..].trim(),
+            _ => body,
+        };
+        if let Some(tokens) = skill_request_tokens(body) {
+            return tokens;
+        }
+    }
+    // (b) Trailing bare JSON object: attempt suffix parses from each '{',
+    // latest first.
+    let trimmed = content.trim();
+    for (idx, _) in trimmed.match_indices('{').collect::<Vec<_>>().into_iter().rev() {
+        if let Some(tokens) = skill_request_tokens(&trimmed[idx..]) {
+            return tokens;
+        }
+    }
+    Vec::new()
 }
 
 /// Filter parsed tokens against the mode skill catalog (and optional reference
@@ -185,11 +227,23 @@ mod tests {
     }
 
     #[test]
-    fn embedded_json_in_prose_is_unsupported() {
-        assert!(
-            parse_skill_request("I need memory context.\n{\"skill_request\":[\"memory\"]}")
-                .is_empty()
+    fn embedded_json_after_narration_is_recognized() {
+        // q006 regression (run v2_20260802-045319): narration + trailing
+        // request previously leaked as the final answer with zero retrieval.
+        assert_eq!(
+            parse_skill_request("I need memory context.\n{\"skill_request\":[\"memory\"]}"),
+            vec!["memory"]
         );
+        // q006's exact shape: planning narration + fenced json block.
+        assert_eq!(
+            parse_skill_request(
+                "我需要先查看更早的对话历史，再回答。让我加载记忆。\n```json\n{\"skill_request\": [\"memory\"]}\n```"
+            ),
+            vec!["memory"]
+        );
+        // Narration without a valid request payload stays empty.
+        assert!(parse_skill_request("我想先查一下再说。").is_empty());
+        assert!(parse_skill_request("skill_request 这个词出现在散文里而已").is_empty());
     }
 
     #[test]

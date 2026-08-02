@@ -31,7 +31,7 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + alias/truncation detail |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON (non–prose_only paths) |
-| `synthesis-prose-repair.nudge.md` | prose_only code-only answer repair (one round) |
+| `synthesis-prose-repair.nudge.md` | prose_only final-form repair (one round): code-only / host-observation shell / template artifact / executable-code working draft |
 | `contract-violation-*.md` | User-facing format failure fallbacks |
 | `degraded-no-evidence-*.md` | User-facing empty-evidence fallbacks |
 | `partial-evidence-insufficient.md` | Short partial-evidence line |

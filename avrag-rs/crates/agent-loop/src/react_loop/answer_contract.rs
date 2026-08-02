@@ -951,6 +951,37 @@ pub fn contains_host_observation_shell(text: &str) -> bool {
         .any(|tag| text.contains(tag))
 }
 
+/// Chat-template artifact tokens a final answer must never surface. q018
+/// regression (run v2_20260802-045319): the whole final answer was a 12-char
+/// `` `</response> `` leak with retrieval recall 1.0 behind it. These tokens
+/// are never legitimate user-facing prose.
+pub fn contains_template_artifact(text: &str) -> bool {
+    const TEMPLATE_ARTIFACTS: &[&str] = &["</response>", "<response>", "<|im_end|>", "<|im_start|>"];
+    TEMPLATE_ARTIFACTS.iter().any(|t| text.contains(t))
+}
+
+/// Executable-form code span (`<code language="…">`) anywhere in the closing
+/// message. Markdown fences are the legitimate way to quote code in prose;
+/// the `<code language=…>` shape is the retrieve-phase execution protocol, so
+/// its presence means a working draft leaked as the final answer — q095/q102
+/// (run v2_20260802-045319): debug narration + an unexecuted (even misspelled)
+/// code block shipped as the answer, slipping past `is_code_only_answer`
+/// because narration prose surrounded the block.
+pub fn contains_executable_code_form(text: &str) -> bool {
+    text.contains("<code language=")
+}
+
+/// Every format-level final-answer contract violation, routed to the same
+/// one-repair-round flow (exit-policy direct-answer routing + synthesis
+/// gate). Format detection only — no semantic judgment (AGENTS.md
+/// stop-decision).
+pub fn final_answer_contract_violation(text: &str) -> bool {
+    is_code_only_answer(text)
+        || contains_host_observation_shell(text)
+        || contains_template_artifact(text)
+        || contains_executable_code_form(text)
+}
+
 /// prose_only-contract detector: true when `text` carries code spans
 /// (`<code>…</code>` or markdown fences) but no prose outside them — the
 /// retrieve-phase "output one code block" framing leaked into the final
@@ -1368,6 +1399,46 @@ mod tests {
             "验证阶段与发布阶段均有主题相关片段。"
         ));
         assert!(!contains_host_observation_shell(""));
+    }
+
+    #[test]
+    fn template_artifact_detector_flags_response_tag_leak() {
+        // q018 observed failure (run v2_20260802-045319): entire final answer
+        // was a 12-char template-token leak.
+        assert!(contains_template_artifact("`</response>"));
+        assert!(contains_template_artifact("答案：</response>"));
+        assert!(contains_template_artifact("<|im_end|>"));
+        assert!(!contains_template_artifact("验证阶段与发布阶段均有主题相关片段。"));
+        // The word "response" in prose is fine.
+        assert!(!contains_template_artifact("该 response 的字段含义如下"));
+    }
+
+    #[test]
+    fn executable_code_form_detector_flags_working_drafts() {
+        // q095/q102 observed failure: debug narration + unexecuted code block
+        // leaked as the final answer (prose present → is_code_only_answer
+        // deliberately does not fire).
+        assert!(contains_executable_code_form(
+            "修正类型处理，稳妥打印 grep 命中。\n<code language=\"python\">\nimport asyncio\n</code>"
+        ));
+        // Markdown-fenced quotes are the legitimate prose form.
+        assert!(!contains_executable_code_form(
+            "可以这样写：\n```python\nprint(1)\n```"
+        ));
+        assert!(!contains_executable_code_form("答案是 LPDT-03。\n\nSELECTED: #1"));
+    }
+
+    #[test]
+    fn final_answer_contract_violation_covers_all_classes() {
+        assert!(final_answer_contract_violation("```python\nprint(1)\n```"));
+        assert!(final_answer_contract_violation("<retrieval_summary>"));
+        assert!(final_answer_contract_violation("`</response>"));
+        assert!(final_answer_contract_violation(
+            "先看看命中。\n<code language=\"python\">\npass\n</code>"
+        ));
+        assert!(!final_answer_contract_violation(
+            "根据回传，概念阶段第一个活动是接受任务书（LPDT-03）。\n\nSELECTED: #2"
+        ));
     }
 
     /// Legacy `internal_answer_v1` envelope machinery tests: `modes/rag.yaml` is

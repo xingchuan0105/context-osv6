@@ -296,9 +296,7 @@ impl SynthesisPhase {
         // One repair round; if the repair still comes back violating, use the
         // degraded fallback copy — never surface a raw code block or a host
         // observation shell as the final prose answer.
-        if super::answer_contract::is_code_only_answer(&full_answer)
-            || super::answer_contract::contains_host_observation_shell(&full_answer)
-        {
+        if super::answer_contract::final_answer_contract_violation(&full_answer) {
             let mut repair_counts = std::collections::BTreeMap::new();
             repair_counts.insert("synthesis_code_answer_repair".to_string(), 1usize);
             let _ = sink
@@ -319,9 +317,7 @@ impl SynthesisPhase {
             ));
             let (repaired, _) =
                 stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
-            if super::answer_contract::is_code_only_answer(&repaired)
-                || super::answer_contract::contains_host_observation_shell(&repaired)
-            {
+            if super::answer_contract::final_answer_contract_violation(&repaired) {
                 let mut violation_counts = std::collections::BTreeMap::new();
                 violation_counts.insert("synthesis_code_answer_violation".to_string(), 1usize);
                 let _ = sink

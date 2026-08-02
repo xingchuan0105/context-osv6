@@ -123,11 +123,18 @@ pub enum JudgeParseError {
 /// Parses via `serde_json::Value` first: duplicate object keys (observed in
 /// real Flash output, e.g. a repeated `rationale`) are last-wins there, while
 /// deserializing straight into `JudgeOutput` hard-fails on them.
+///
+/// Trailing commas (observed recurring in Flash output, e.g. run
+/// v2_20260802-045319: 6 JUDGE_ERRORs on otherwise-good answers) are stripped
+/// before parsing. The stripper is string-aware: only a comma whose next
+/// non-whitespace char is `}`/`]` **outside** a string literal is removed, so
+/// valid JSON and in-string text pass through unchanged.
 pub fn parse_judge_output(raw: &str) -> Result<JudgeOutput, JudgeParseError> {
     let json =
         crate::judge::extract_first_json_object(raw).ok_or(JudgeParseError::NoJsonObject)?;
-    let value: serde_json::Value =
-        serde_json::from_str(json).map_err(|e| JudgeParseError::InvalidJson(e.to_string()))?;
+    let sanitized = strip_trailing_commas(json);
+    let value: serde_json::Value = serde_json::from_str(&sanitized)
+        .map_err(|e| JudgeParseError::InvalidJson(e.to_string()))?;
     let output: JudgeOutput =
         serde_json::from_value(value).map_err(|e| JudgeParseError::InvalidJson(e.to_string()))?;
     if !output.schema_version.is_empty() && output.schema_version != SCHEMA_VERSION {
@@ -137,6 +144,54 @@ pub fn parse_judge_output(raw: &str) -> Result<JudgeOutput, JudgeParseError> {
         });
     }
     Ok(output)
+}
+
+/// Remove `,` directly before `}`/`]` outside string literals. A comma in
+/// that position is never valid JSON, so stripping it cannot change the
+/// meaning of a valid document; it only rescues the model's trailing-comma
+/// slips. String contents (including `"…,}"` inside a rationale) are left
+/// untouched.
+fn strip_trailing_commas(json: &str) -> String {
+    let chars: Vec<char> = json.chars().collect();
+    let mut out = String::with_capacity(json.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        if c == '"' {
+            in_string = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        if c == ',' {
+            let mut j = i + 1;
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j < chars.len() && (chars[j] == '}' || chars[j] == ']') {
+                // Drop the comma; keep the whitespace for error positions.
+                i += 1;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
 }
 
 #[cfg(test)]
@@ -266,5 +321,33 @@ mod tests {
         assert!(raw.matches("\"rationale\"").count() > 5, "test setup must duplicate a key");
         let out = parse_judge_output(&raw).unwrap();
         assert_eq!(out.refusal.rationale, "模型正常作答，符合预期");
+    }
+
+    #[test]
+    fn trailing_comma_is_tolerated() {
+        // Regression for run v2_20260802-045319 (6 JUDGE_ERRORs):
+        // `"score": 1.0,\n}` shapes failed schema validation outright.
+        let raw = FULL_SCHEMA_JSON.replace(
+            r#""rationale": "证据充分"
+        }"#,
+            r#""rationale": "证据充分",
+        }"#,
+        );
+        assert!(raw.contains(",\n        }"), "test setup must add a trailing comma");
+        let out = parse_judge_output(&raw).unwrap();
+        assert_eq!(out.context_sufficiency.verdict, SufficiencyVerdict::Sufficient);
+    }
+
+    #[test]
+    fn comma_inside_string_is_not_stripped() {
+        // A `,]` sequence inside a string literal must survive sanitizing
+        // (a brace variant would trip the upstream brace-matching extractor —
+        // a pre-existing limitation, not this sanitizer's concern).
+        let raw = FULL_SCHEMA_JSON.replace(
+            "模型正常作答，符合预期",
+            "列举 a,]b 在此",
+        );
+        let out = parse_judge_output(&raw).unwrap();
+        assert_eq!(out.refusal.rationale, "列举 a,]b 在此");
     }
 }
