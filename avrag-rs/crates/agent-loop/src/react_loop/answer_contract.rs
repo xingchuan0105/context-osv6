@@ -927,11 +927,14 @@ pub fn contract_violation_fallback(mode_id: &str) -> String {
 /// the exact tag shapes the host emits as observations in the retrieve phase:
 /// `<code_execution_result>`, `<loop_budget …>`, `[retrieval_summary]` (also
 /// the angle-bracket variant the model has produced when imitating the shell),
-/// and `<docscope_metadata>`. Pure format check — a final prose answer quoting
-/// one of these tags means the model pasted a host observation shell instead
-/// of writing grounded prose; same class as a code-only answer, routed through
-/// the same one-repair-round flow (AGENTS.md stop-decision: no semantic
-/// keyword bars, format-level detection only).
+/// `<docscope_metadata>`, and the per-phase cluster index blocks
+/// (`<retrieve_cluster_index>` / `<synthesis_skill_index>`). Pure format
+/// check — a final prose answer quoting one of these tags means the model
+/// pasted a host observation shell instead of writing grounded prose; same
+/// class as a code-only answer, routed through the same one-repair-round flow
+/// (AGENTS.md stop-decision: no semantic keyword bars, format-level detection
+/// only). Tags are matched as prefixes (like `<loop_budget`) so truncated /
+/// reworded-closing variants still trip.
 pub fn contains_host_observation_shell(text: &str) -> bool {
     const HOST_OBSERVATION_TAGS: &[&str] = &[
         "<code_execution_result>",
@@ -940,6 +943,8 @@ pub fn contains_host_observation_shell(text: &str) -> bool {
         "<retrieval_summary>",
         "[retrieval_summary]",
         "<docscope_metadata>",
+        "<retrieve_cluster_index>",
+        "<synthesis_skill_index>",
     ];
     HOST_OBSERVATION_TAGS
         .iter()
@@ -1352,6 +1357,12 @@ mod tests {
         assert!(contains_host_observation_shell("[retrieval_summary]"));
         assert!(contains_host_observation_shell("<code_execution_result>"));
         assert!(contains_host_observation_shell("<docscope_metadata>"));
+        // q086 observed failure: pasted `<retrieve_cluster_index>` shell
+        // (reworded inner description) instead of prose.
+        assert!(contains_host_observation_shell(
+            "<retrieve_cluster_index>\n- **knowledge-base**: Use dense/lexical/grep to locate the IPD\ndocument…\n</retrieve_cluster_index>"
+        ));
+        assert!(contains_host_observation_shell("<synthesis_skill_index>"));
         // Plain prose must never trip the format check.
         assert!(!contains_host_observation_shell(
             "验证阶段与发布阶段均有主题相关片段。"

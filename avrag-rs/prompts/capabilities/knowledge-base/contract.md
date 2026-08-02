@@ -12,7 +12,7 @@ applicable_strategies: [rag]
 
 ### 本能力能做什么
 
-知识库覆盖产品工作区里已灌入的文档。先经 **docscope**（文档清单）与 **struct_catalog**（表结构）摸清范围，再按语义（`dense`）、词面（`lexical` / `grep`）或结构化查询（`struct_query`）取回可引用的正文片段；单篇文档的画像、章节与摘要经 `doc_profile` / `doc_summary` 拿到。典型链路：文档清单（docscope）→ 单篇画像与章节（doc_profile）→ 正文片段（dense / lexical / grep / struct_query）→ 单篇摘要（doc_summary）。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。
+知识库覆盖产品工作区里已灌入的文档。**docscope**（文档清单）是 skill_request 注入的清单机制，不含 client 方法：它给出一轮可见文档的清单与画像概览，用于拿 `doc_id` 并判断命中落在哪篇文档。检索方法在沙箱中以 `client.*` 调用：按语义（`client.dense`）、词面（`client.lexical` / `client.grep`）或结构化查询（`client.struct_query`，先 `client.struct_catalog` 取表结构）取回可引用的正文片段；单篇文档的画像、章节与摘要经 `client.doc_profile` / `client.doc_summary` 拿到。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。
 
 ### 证据
 
@@ -39,6 +39,8 @@ applicable_strategies: [rag]
 | 冲突 | 回传说法不一致 → 并陈 |
 
 关键主张均已闭合（已覆盖，或答复中写明未覆盖）时，用散文写出终答即结束本轮检索过程。半截终答时，未命中侧表述为未覆盖。
+
+背景性补充（行业背景、市场规模、常识性常识等铺垫叙述）与主张同受回传约束：回传中未出现的背景数字与事实，同样只能以未知/未覆盖处理，不得作为确定事实写进终答。
 
 ### 与联网同时挂载时
 
