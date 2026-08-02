@@ -27,6 +27,8 @@
 
 **Exceptions (not “prompt authoring”):** pure control tokens (`exit_reason` ids), regex/match keyword lists used as detectors (not injected as instructions), short UI progress labels, machine-stable error codes. If text is **shown to the model as instruction or user-turn guidance**, it belongs in `prompts/`.
 
+**Host-observation markers must be registered first.** Any tag the host injects into the model context (loop observations, budget hints, cluster indices, `[retrieval_summary]`, …) must be registered in `avrag-rs/crates/agent-loop/src/react_loop/host_markers.rs` before first use — emitters reference the constant, detectors derive from the table, and a parity test fails on any unregistered tag in `prompts/loop/*.md`.
+
 Layout map: `avrag-rs/prompts/README.md`. Loop assets: `avrag-rs/prompts/loop/README.md`.
 
 ### Voice: third-person observation, not orders (LLM autonomy)

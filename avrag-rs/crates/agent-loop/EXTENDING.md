@@ -76,6 +76,11 @@ Custom transforms: `ReActLoop::run_with_hooks(..., &my_hooks)`.
 
 - Facade: `agent_loop::product_contract` (answer + handoff compiler).
 - Stable paths still work: `answer_contract`, `output_compiler`.
+- Final-answer quality gate: `react_loop::answer_contract::FINAL_ANSWER_RULES`
+  (rule-card registry) + `check_final_answer` (single entry point). Add a new
+  final-form detector as one rule-card row + detector fn + test — no control-flow
+  change. Host observation tags must be registered in
+  `react_loop::host_markers::HOST_OBSERVATION_MARKERS` before first use.
 - Worker ↔ loop metadata: `worker_contract::RETRIEVAL_ALIAS_START_METADATA`
   (app-chat `ALIAS_START_METADATA` aliases the same string).
 - HostTools: `app_chat::orchestrator::HOST_TOOL_NAMES` — never on `ToolCatalog`
