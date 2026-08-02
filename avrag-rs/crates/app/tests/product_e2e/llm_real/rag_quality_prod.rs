@@ -33,12 +33,15 @@
 //! ```
 
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures::StreamExt;
 use rag_quality::{
-    EvaluationMetrics, GoldenDataset, GoldenExample, ScorecardSummary, ToolCoverageScore,
-    ToolCoverageSummary, extract_cited_chunks, extract_retrieved_chunks, extract_tool_trace,
-    score_query,
+    CitationAccuracyResult, EvaluationMetrics, GoldenDataset, GoldenExample, HallucinationResult,
+    PerQueryScorecard, RecallResult, ScorecardSummary, ToolCoverageScore, ToolCoverageSummary,
+    extract_cited_chunks, extract_retrieved_chunks, extract_tool_trace, score_query,
 };
 // ADR-0012 eval v2 (judge-first generation metrics). Phase 0: report-only.
 use rag_quality::eval_v2;
@@ -231,7 +234,10 @@ struct V2RunCtx {
     run_id: String,
     run_dir: std::path::PathBuf,
     cache: eval_v2::JudgeCache,
-    scores: Vec<eval_v2::ScoreV2>,
+    /// Concurrent-sink for per-question `ScoreV2`s: the eval loop runs
+    /// questions in parallel (buffer_unordered), so this is an
+    /// `Arc<Mutex<Vec<_>>>`; aggregated serially at end of run.
+    scores: std::sync::Arc<std::sync::Mutex<Vec<eval_v2::ScoreV2>>>,
 }
 
 /// Outcome of the cached judge call path for one question.
@@ -250,7 +256,7 @@ impl V2RunCtx {
     /// envelope / parse error / empty answer): Layer A scores over empty
     /// chunks, label INFRA_ERROR, judge call skipped — there is no answer to
     /// judge (design §5 priority 0).
-    fn record_infra(&mut self, qnum: usize, example: &GoldenExample, subset: &str, reason: &str) {
+    fn record_infra(&self, qnum: usize, example: &GoldenExample, subset: &str, reason: &str) {
         let empty_retrieved = rag_quality::RetrievedChunks::default();
         let empty_cited = rag_quality::CitedChunks::default();
         let context_source =
@@ -279,7 +285,7 @@ impl V2RunCtx {
                 "score_v2": score,
             }),
         );
-        self.scores.push(score);
+        self.scores.lock().expect("scores mutex").push(score);
     }
 
     /// Layer A + Layer B for one answered question (design §9): deterministic
@@ -287,7 +293,7 @@ impl V2RunCtx {
     /// JSON gets exactly one retry (design §4.3); transport errors and second
     /// parse failures map to JUDGE_ERROR and the loop continues.
     async fn score_question(
-        &mut self,
+        &self,
         qnum: usize,
         example: &GoldenExample,
         subset: &str,
@@ -381,7 +387,7 @@ impl V2RunCtx {
                 "score_v2": score,
             }),
         );
-        self.scores.push(score);
+        self.scores.lock().expect("scores mutex").push(score);
     }
 
     /// Assemble a `ScoreV2` from its parts, deriving the label via the
@@ -556,7 +562,12 @@ impl V2RunCtx {
     /// (design §7.1) and print the compact Phase-0 report block (report-only —
     /// nothing here gates the test; design §7.2 Phase 0).
     fn print_and_write_summary(&self) {
-        let summary = eval_v2::SuiteSummaryV2::from_scores(&self.scores);
+        let scores = self
+            .scores
+            .lock()
+            .expect("scores mutex")
+            .clone();
+        let summary = eval_v2::SuiteSummaryV2::from_scores(&scores);
         self.write_json(
             "summary.json",
             &serde_json::json!({
@@ -572,13 +583,13 @@ impl V2RunCtx {
                 &self.run_id,
                 self.judge.model(),
                 &eval_v2::JudgeThresholds::default(),
-                &self.scores,
+                &scores,
                 &summary,
             ),
         );
         self.write_text(
             "per_query.tsv",
-            &eval_v2::render_per_query_tsv(&self.scores),
+            &eval_v2::render_per_query_tsv(&scores),
         );
         // Prompt version marker (design §7.1): schema version + git short hash
         // when the CI env provides one (same option_env convention as the
@@ -987,6 +998,332 @@ fn resolve_doc_scope(hint: &str, scope_keys: &[&str], doc_ids: &[String]) -> Vec
     }
 }
 
+/// Per-question result from a parallel `run_single_question` task. The metrics
+/// fields are `Option` because failure branches (transport / 5xx / envelope /
+/// parse / empty / code-only) skip the success-path scoring entirely — the
+/// main loop aggregates by `idx`, so the report order stays deterministic.
+struct QuestionOutcome {
+    idx: usize,
+    failures: Vec<(String, String)>,
+    subset: String,
+    recall: Option<RecallResult>,
+    citation: Option<CitationAccuracyResult>,
+    halluc: Option<HallucinationResult>,
+    scorecard: Option<PerQueryScorecard>,
+}
+
+/// One golden question end-to-end: chat → failure classification → retrieval /
+/// citation extraction → qNNN snapshot → G-16 / citations / G-17 gates → v2
+/// judge → legacy metrics. Returns a self-contained outcome so the main loop
+/// can run many questions concurrently (`buffer_unordered`). `v2` shares its
+/// `scores` through `Arc<Mutex<_>>`; `fail_fast_flag` is set on the first
+/// failure and checked at the top so unstarted tasks skip the rest.
+#[allow(clippy::too_many_arguments)]
+async fn run_single_question(
+    idx: usize,
+    example: &GoldenExample,
+    dataset: &GoldenDataset,
+    scope_keys: &[&str],
+    doc_ids: &[String],
+    workspace_id: &str,
+    client: &reqwest::Client,
+    base_url: &str,
+    v2: Option<&V2RunCtx>,
+    fail_fast: bool,
+    fail_fast_flag: &AtomicBool,
+    examples_len: usize,
+) -> QuestionOutcome {
+    let subset_name = dataset
+        .subsets
+        .iter()
+        .find(|s| s.examples.iter().any(|e| e.query == example.query))
+        .map(|s| s.name.as_str())
+        .unwrap_or("unknown");
+    eprintln!(
+        "\n[realistic_corpus] {}/{} subset={} Q={:?}",
+        idx + 1,
+        examples_len,
+        subset_name,
+        example.query.chars().take(60).collect::<String>()
+    );
+    if fail_fast_flag.load(Ordering::Relaxed) {
+        return QuestionOutcome {
+            idx,
+            failures: Vec::new(),
+            subset: subset_name.to_string(),
+            recall: None,
+            citation: None,
+            halluc: None,
+            scorecard: None,
+        };
+    }
+    let mut outcome = QuestionOutcome {
+        idx,
+        failures: Vec::new(),
+        subset: subset_name.to_string(),
+        recall: None,
+        citation: None,
+        halluc: None,
+        scorecard: None,
+    };
+    let mut mark_failure = |outcome: &mut QuestionOutcome, msg: String| {
+        outcome.failures.push((example.query.clone(), msg));
+        if fail_fast {
+            fail_fast_flag.store(true, Ordering::Relaxed);
+        }
+    };
+    // Non-fatal check helpers return whether to continue with scoring (false =
+    // skip, matching the original loop's `continue` on hard failures).
+    let scope = resolve_doc_scope(&example.doc_scope_hint, scope_keys, doc_ids);
+    let caps = example.resolved_capabilities();
+    let turns: Vec<(String, String)> = example
+        .prior_turns
+        .iter()
+        .map(|t| (t.query.clone(), t.answer.clone()))
+        .collect();
+    let resp = match crate::product_e2e::test_context::post_rag_chat(
+        client,
+        base_url,
+        &example.query,
+        workspace_id,
+        &scope,
+        Some(&caps),
+        if turns.is_empty() { None } else { Some(&turns) },
+        example.client_time.as_deref(),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("  FAIL: chat error: {e}");
+            mark_failure(&mut outcome, format!("chat: {e}"));
+            if let Some(v2) = v2 {
+                v2.record_infra(idx + 1, example, subset_name, "chat_transport");
+            }
+            return outcome;
+        }
+    };
+    let resp_status = resp.status;
+    let resp_body = resp.body_json.clone();
+    if resp_status >= 500 {
+        let raw = serde_json::to_string_pretty(&resp_body)
+            .unwrap_or_else(|_| "<serialize failed>".to_string());
+        let msg = format!(
+            "http_error status={} (internal_error envelope; ignore agent_operation_guide if present)",
+            resp_status
+        );
+        mark_failure(&mut outcome, msg.clone());
+        eprintln!("  FAIL: {msg}");
+        let preview: String = raw.chars().take(4000).collect();
+        eprintln!("  raw response: {preview}");
+        if let Some(v2) = v2 {
+            v2.record_infra(idx + 1, example, subset_name, "http_5xx");
+        }
+        return outcome;
+    }
+    if resp_body.get("error").is_some()
+        || resp_body
+            .get("error_category")
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| s.contains("internal") || s == "error")
+        || resp_body.pointer("/error/type").and_then(|v| v.as_str()) == Some("internal_error")
+    {
+        let raw = serde_json::to_string_pretty(&resp_body)
+            .unwrap_or_else(|_| "<serialize failed>".to_string());
+        let msg = format!(
+            "error_envelope (status={}); do not treat agent_operation_guide as answer",
+            resp_status
+        );
+        mark_failure(&mut outcome, msg.clone());
+        eprintln!("  FAIL: {msg}");
+        let preview: String = raw.chars().take(400).collect();
+        eprintln!("  raw: {preview}");
+        if let Some(v2) = v2 {
+            v2.record_infra(idx + 1, example, subset_name, "error_envelope");
+        }
+        return outcome;
+    }
+    let chat: ChatResponse = match resp.into_business() {
+        Ok(c) => c,
+        Err(e) => {
+            let raw = serde_json::to_string_pretty(&resp_body)
+                .unwrap_or_else(|_| "<serialize failed>".to_string());
+            mark_failure(&mut outcome, format!("parse: {e}"));
+            eprintln!("  FAIL: parse error: {e}");
+            let preview: String = raw.chars().take(500).collect();
+            eprintln!("  raw response (status={}): {}", resp_status, preview);
+            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/e2e_output/realistic_corpus_full_eval");
+            if std::fs::create_dir_all(&dir).is_ok() {
+                let _ = std::fs::write(dir.join(format!("q{:03}.raw.json", idx + 1)), raw);
+            }
+            if let Some(v2) = v2 {
+                v2.record_infra(idx + 1, example, subset_name, "parse_error");
+            }
+            return outcome;
+        }
+    };
+    if chat.answer.trim().is_empty() {
+        let msg = "empty_answer: chat.answer is empty after successful parse".to_string();
+        mark_failure(&mut outcome, msg.clone());
+        eprintln!("  FAIL: {msg}");
+        if let Some(v2) = v2 {
+            v2.record_infra(idx + 1, example, subset_name, "empty_answer");
+        }
+        return outcome;
+    }
+    if is_code_only_answer(&chat.answer) {
+        let msg = "code_block_answer: chat.answer is code-only, no prose".to_string();
+        mark_failure(&mut outcome, msg.clone());
+        eprintln!("  FAIL: {msg}");
+        if let Some(v2) = v2 {
+            v2.record_infra(idx + 1, example, subset_name, "code_block_answer");
+        }
+        return outcome;
+    }
+    let retrieved = extract_retrieved_chunks(&chat.tool_results);
+    let cited = extract_cited_chunks(&chat.citations);
+    if let Ok(json) = serde_json::to_string_pretty(&serde_json::json!({
+        "subset": subset_name,
+        "query": example.query,
+        "doc_scope": scope,
+        "capabilities": caps,
+        "answer": chat.answer.clone(),
+        "citations": chat.citations.clone(),
+        "sources": chat.sources.clone(),
+        "tool_results_count": chat.tool_results.len(),
+        "tool_trace": chat.tool_results.iter().map(|r| {
+            serde_json::json!({
+                "tool": r.tool,
+                "status": format!("{:?}", r.status),
+            })
+        }).collect::<Vec<_>>(),
+        "mode_debug": chat.mode_debug,
+    })) {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/e2e_output/realistic_corpus_full_eval");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            let _ = std::fs::write(dir.join(format!("q{:03}.json", idx + 1)), json);
+        }
+    }
+    let chunks: Vec<String> = retrieved.contents();
+    if caps.iter().any(|c| c == "rag")
+        && example.expected_should_answer
+        && !example.source_chunks.is_empty()
+        && !chat.tool_results.iter().any(|tr| {
+            tr.status == contracts::ToolStatus::Ok
+                && rag_quality::harness_extract::RETRIEVAL_TOOLS.contains(&tr.tool.as_str())
+        })
+    {
+        let msg = format!(
+            "eval_bridge_miss: rag expected a retrieval-layer tool_result \
+             (one of {:?}) after finalize; got tools={:?}",
+            rag_quality::harness_extract::RETRIEVAL_TOOLS,
+            chat.tool_results
+                .iter()
+                .map(|t| t.tool.as_str())
+                .collect::<Vec<_>>()
+        );
+        eprintln!("  FAIL: {msg}");
+        mark_failure(&mut outcome, msg);
+    }
+    let chunk_to_cite: std::collections::HashMap<String, i64> = chat
+        .citations
+        .iter()
+        .filter_map(|c| c.chunk_id.clone().map(|id| (id, c.citation_id)))
+        .collect();
+    let answer = rewrite_citations(&chat.answer, &chunk_to_cite);
+    let tool_outputs = builtin_tool_outputs(&chat.tool_results);
+    if let Some(v2) = v2 {
+        v2.score_question(
+            idx + 1,
+            example,
+            subset_name,
+            &retrieved,
+            &cited,
+            &chat.answer,
+            &tool_outputs,
+        )
+        .await;
+    }
+    if let Some(expect) = example.expect_citations {
+        let doc_n = chat
+            .citations
+            .iter()
+            .filter(|c| c.chunk_id.is_some())
+            .count() as u32;
+        let web_n = chat
+            .citations
+            .iter()
+            .filter(|c| {
+                c.chunk_id.is_none()
+                    && (c.chunk_type.as_deref() == Some("web") || c.source_locator.is_some())
+            })
+            .count() as u32;
+        if doc_n < expect.min_doc || web_n < expect.min_web {
+            let msg = format!(
+                "expect_citations min_doc={} min_web={} got doc={} web={}",
+                expect.min_doc, expect.min_web, doc_n, web_n
+            );
+            eprintln!("  FAIL: {msg}");
+            mark_failure(&mut outcome, msg);
+        }
+    }
+    if let Some(expected_tool) = example.expected_tool.as_deref() {
+        let is_utility = matches!(
+            expected_tool,
+            "calculator" | "weather_query" | "user_context"
+        );
+        if is_utility {
+            let ok_trace = extract_tool_trace(&chat.tool_results);
+            let any_trace: Vec<String> =
+                chat.tool_results.iter().map(|r| r.tool.clone()).collect();
+            let status_dump: Vec<String> = chat
+                .tool_results
+                .iter()
+                .map(|r| format!("{}:{:?}", r.tool, r.status))
+                .collect();
+            let score = ToolCoverageScore::score(example, &any_trace);
+            if !score.covered {
+                let msg = format!(
+                    "expected_tool={expected_tool} not in tool_results \
+                     any={any_trace:?} ok={ok_trace:?} status={status_dump:?} \
+                     (G-17 utility gate)"
+                );
+                eprintln!("  FAIL: {msg}");
+                mark_failure(&mut outcome, msg);
+            } else {
+                eprintln!("  tool_hit: {expected_tool} ok (any={any_trace:?} ok={ok_trace:?})");
+            }
+        }
+    }
+    let citation_indices = EvaluationMetrics::extract_citation_indices(&answer);
+    let recall = EvaluationMetrics::recall_at_k(&example.query, &chunks, example, 15);
+    let citation = EvaluationMetrics::citation_accuracy(&example.query, &citation_indices, example);
+    let halluc = EvaluationMetrics::hallucination_check(&example.query, &answer, &chunks);
+    let scorecard = score_query(&retrieved, &cited, &answer, example, 15);
+
+    eprintln!(
+        "  recall@15={:.0}% ({}/{}) cit_acc={:.0}% (tp={} missing={:?}) halluc={:.2} chunks={} ans_len={} label={}",
+        recall.recall * 100.0,
+        recall.matched_chunks.len(),
+        recall.golden_count,
+        citation.accuracy * 100.0,
+        citation.true_positives,
+        citation.missing,
+        halluc.hallucination_score,
+        chunks.len(),
+        chat.answer.len(),
+        scorecard.label.as_str()
+    );
+
+    outcome.recall = Some(recall);
+    outcome.citation = Some(citation);
+    outcome.halluc = Some(halluc);
+    outcome.scorecard = Some(scorecard);
+    outcome
+}
+
 #[tokio::test]
 #[ignore = "requires real LLM + embedding API keys; run with --ignored --test-threads=1"]
 async fn realistic_corpus_full_eval() {
@@ -1031,7 +1368,7 @@ async fn realistic_corpus_full_eval() {
             run_id,
             run_dir,
             cache,
-            scores: Vec::new(),
+            scores: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
     } else {
         None
@@ -1244,6 +1581,24 @@ async fn realistic_corpus_full_eval() {
     let mut per_subset_stats: std::collections::HashMap<String, (usize, usize, f64)> =
         std::collections::HashMap::new();
 
+    // E2E_CONCURRENCY=N: max concurrent in-flight questions. DeepSeek Flash
+    // allows 2500 concurrent requests; the real ceiling is the shared worker
+    // process + embedding API, so default 8 and let the env tune it.
+    let concurrency: usize = std::env::var("E2E_CONCURRENCY")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    // Fail-fast in parallel mode: the first failure flips this flag; tasks that
+    // have not started yet skip (weakened break — in-flight tasks still finish).
+    let fail_fast_flag = Arc::new(AtomicBool::new(false));
+    // TestContext is not Sync (owns oneshot senders / the worker child), so only
+    // the plain reqwest client + base URL are shared across concurrent tasks.
+    let http_client = ctx.http_client.clone();
+    let base_url = ctx.base_url.clone();
+
+    // Collect the (idx, example) pairs that pass the filters (same skip/break
+    // semantics as the original serial loop).
+    let mut run_items: Vec<(usize, &GoldenExample)> = Vec::new();
     for (idx, example) in examples.iter().enumerate() {
         if idx + 1 < start_at {
             continue;
@@ -1258,341 +1613,76 @@ async fn realistic_corpus_full_eval() {
                 continue;
             }
         }
-        let subset_name = dataset
-            .subsets
-            .iter()
-            .find(|s| s.examples.iter().any(|e| e.query == example.query))
-            .map(|s| s.name.as_str())
-            .unwrap_or("unknown");
-
-        eprintln!(
-            "\n[realistic_corpus] {}/{} subset={} Q={:?}",
-            idx + 1,
-            examples.len(),
-            subset_name,
-            example.query.chars().take(60).collect::<String>()
-        );
-
-        // Use non-streaming mode (stream:false). The streaming path has a
-        // "missing done payload" issue with Chinese queries on some LLM providers.
-        // Non-streaming mode runs the full RAG agent loop and returns a complete JSON
-        // response — some queries may return a degrade response without an `answer`
-        // field, which we catch and record as a failure with the raw JSON for debugging.
-        // v3: per-example doc_scope + capability tags (orchestrator paradigm).
         if example.requires_network && std::env::var("E2E_SKIP_NETWORK_CASES").is_ok() {
             eprintln!("  SKIP: requires_network and E2E_SKIP_NETWORK_CASES is set");
             continue;
         }
-        let scope = resolve_doc_scope(&example.doc_scope_hint, &scope_keys, &doc_ids);
-        let caps = example.resolved_capabilities();
-        let turns: Vec<(String, String)> = example
-            .prior_turns
-            .iter()
-            .map(|t| (t.query.clone(), t.answer.clone()))
-            .collect();
-        let resp = match ctx
-            .chat_v3(
-                &example.query,
-                &workspace_id,
-                &scope,
-                Some(&caps),
-                if turns.is_empty() { None } else { Some(&turns) },
-                example.client_time.as_deref(),
-            )
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                failures.push((example.query.clone(), format!("chat: {e}")));
-                eprintln!("  FAIL: chat error: {e}");
-                // ADR-0012: v2 labels this INFRA_ERROR and skips the judge.
-                if let Some(v2) = v2.as_mut() {
-                    v2.record_infra(idx + 1, example, subset_name, "chat_transport");
-                }
-                if fail_fast {
-                    break;
-                }
-                continue;
+        run_items.push((idx, example));
+    }
+    eprintln!(
+        "[realistic_corpus] running {} question(s) with E2E_CONCURRENCY={concurrency}",
+        run_items.len()
+    );
+
+    // Concurrent evaluation: chat + judge for each question is one in-flight
+    // future; `buffer_unordered` bounds how many run at once. Results are
+    // re-ordered by index afterwards so the aggregate/report block is identical.
+    // `#[tokio::test]` runs on the current-thread runtime, so the futures only
+    // need to borrow (not own/Send) the shared inputs — no Arc required.
+    let outcomes: Vec<QuestionOutcome> = futures::stream::iter(run_items.into_iter())
+        .map(|(idx, example)| {
+            // Bind references first so `async move` captures Copy references
+            // instead of moving the outer variables out of the FnMut closure.
+            let dataset = &dataset;
+            let scope_keys = scope_keys.as_slice();
+            let doc_ids = &doc_ids;
+            let workspace_id = &workspace_id;
+            let http_client = &http_client;
+            let base_url = &base_url;
+            let v2 = v2.as_ref();
+            let fail_fast_flag = &fail_fast_flag;
+            let examples_len = examples.len();
+            async move {
+                run_single_question(
+                    idx,
+                    example,
+                    dataset,
+                    scope_keys,
+                    doc_ids,
+                    workspace_id,
+                    http_client,
+                    base_url,
+                    v2,
+                    fail_fast,
+                    fail_fast_flag,
+                    examples_len,
+                )
+                .await
             }
+        })
+        .buffer_unordered(concurrency)
+        .collect()
+        .await;
+    let mut outcomes = outcomes;
+    outcomes.sort_by_key(|o| o.idx);
+    for outcome in outcomes {
+        failures.extend(outcome.failures);
+        let (Some(recall), Some(citation), Some(halluc), Some(scorecard)) = (
+            outcome.recall,
+            outcome.citation,
+            outcome.halluc,
+            outcome.scorecard,
+        ) else {
+            continue;
         };
-        let resp_status = resp.status;
-        let resp_body = resp.body_json.clone();
-        // G-11/G-12: infrastructure fail-fast — HTTP 5xx / error envelope before parse.
-        // Quality misses (RETRIEVAL_MISS) still do **not** stop the loop.
-        if resp_status >= 500 {
-            let raw = serde_json::to_string_pretty(&resp_body)
-                .unwrap_or_else(|_| "<serialize failed>".to_string());
-            let msg = format!(
-                "http_error status={} (internal_error envelope; ignore agent_operation_guide if present)",
-                resp_status
-            );
-            failures.push((example.query.clone(), msg.clone()));
-            eprintln!("  FAIL: {msg}");
-            let preview: String = raw.chars().take(4000).collect();
-            eprintln!("  raw response: {preview}");
-            if let Some(v2) = v2.as_mut() {
-                v2.record_infra(idx + 1, example, subset_name, "http_5xx");
-            }
-            if fail_fast {
-                break;
-            }
-            continue;
-        }
-        if resp_body.get("error").is_some()
-            || resp_body
-                .get("error_category")
-                .and_then(|v| v.as_str())
-                .is_some_and(|s| s.contains("internal") || s == "error")
-            || resp_body.pointer("/error/type").and_then(|v| v.as_str()) == Some("internal_error")
-        {
-            let raw = serde_json::to_string_pretty(&resp_body)
-                .unwrap_or_else(|_| "<serialize failed>".to_string());
-            let msg = format!(
-                "error_envelope (status={}); do not treat agent_operation_guide as answer",
-                resp_status
-            );
-            failures.push((example.query.clone(), msg.clone()));
-            eprintln!("  FAIL: {msg}");
-            let preview: String = raw.chars().take(400).collect();
-            eprintln!("  raw: {preview}");
-            if let Some(v2) = v2.as_mut() {
-                v2.record_infra(idx + 1, example, subset_name, "error_envelope");
-            }
-            if fail_fast {
-                break;
-            }
-            continue;
-        }
-        let chat: ChatResponse = match resp.into_business() {
-            Ok(c) => c,
-            Err(e) => {
-                let raw = serde_json::to_string_pretty(&resp_body)
-                    .unwrap_or_else(|_| "<serialize failed>".to_string());
-                failures.push((example.query.clone(), format!("parse: {e}")));
-                eprintln!("  FAIL: parse error: {e}");
-                // Char-boundary-safe truncation + full raw dump for the loop.
-                let preview: String = raw.chars().take(500).collect();
-                eprintln!("  raw response (status={}): {}", resp_status, preview);
-                let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/e2e_output/realistic_corpus_full_eval");
-                if std::fs::create_dir_all(&dir).is_ok() {
-                    let _ = std::fs::write(dir.join(format!("q{:03}.raw.json", idx + 1)), raw);
-                }
-                if let Some(v2) = v2.as_mut() {
-                    v2.record_infra(idx + 1, example, subset_name, "parse_error");
-                }
-                if fail_fast {
-                    break;
-                }
-                continue;
-            }
-        };
-        // Empty product answer is an infrastructure/contract failure (not RETRIEVAL_MISS).
-        if chat.answer.trim().is_empty() {
-            let msg = "empty_answer: chat.answer is empty after successful parse".to_string();
-            failures.push((example.query.clone(), msg.clone()));
-            eprintln!("  FAIL: {msg}");
-            if let Some(v2) = v2.as_mut() {
-                v2.record_infra(idx + 1, example, subset_name, "empty_answer");
-            }
-            if fail_fast {
-                break;
-            }
-            continue;
-        }
-        // A code-block-only answer (retrieve framing leaked through synthesis)
-        // is likewise an infrastructure/contract failure, not a wrong answer.
-        if is_code_only_answer(&chat.answer) {
-            let msg = "code_block_answer: chat.answer is code-only, no prose".to_string();
-            failures.push((example.query.clone(), msg.clone()));
-            eprintln!("  FAIL: {msg}");
-            if let Some(v2) = v2.as_mut() {
-                v2.record_infra(idx + 1, example, subset_name, "code_block_answer");
-            }
-            if fail_fast {
-                break;
-            }
-            continue;
-        }
-        let retrieved = extract_retrieved_chunks(&chat.tool_results);
-        let cited = extract_cited_chunks(&chat.citations);
-        // Per-question evidence dump (fail-fast iteration loop): full response
-        // JSON so a stopped run leaves answer-level artifacts behind.
-        if let Ok(json) = serde_json::to_string_pretty(&serde_json::json!({
-            "subset": subset_name,
-            "query": example.query,
-            "doc_scope": scope,
-            "capabilities": caps,
-            "answer": chat.answer.clone(),
-            "citations": chat.citations.clone(),
-            "sources": chat.sources.clone(),
-            "tool_results_count": chat.tool_results.len(),
-            "tool_trace": chat.tool_results.iter().map(|r| {
-                serde_json::json!({
-                    "tool": r.tool,
-                    "status": format!("{:?}", r.status),
-                })
-            }).collect::<Vec<_>>(),
-            "mode_debug": chat.mode_debug,
-        })) {
-            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests/e2e_output/realistic_corpus_full_eval");
-            if std::fs::create_dir_all(&dir).is_ok() {
-                let _ = std::fs::write(dir.join(format!("q{:03}.json", idx + 1)), json);
-            }
-        }
-        let chunks: Vec<String> = retrieved.contents();
-        // G-16: rag questions that expect an answer should leave **some**
-        // retrieval-layer tool_results after finalize. SaC sandbox capture uses
-        // dense/lexical/doc_grep/… (see harness_extract::RETRIEVAL_TOOLS), not
-        // only dense/hybrid — requiring only dense/hybrid false-fails grep-only runs.
-        if caps.iter().any(|c| c == "rag")
-            && example.expected_should_answer
-            && !example.source_chunks.is_empty()
-            && !chat.tool_results.iter().any(|tr| {
-                tr.status == contracts::ToolStatus::Ok
-                    && rag_quality::harness_extract::RETRIEVAL_TOOLS.contains(&tr.tool.as_str())
-            })
-        {
-            let msg = format!(
-                "eval_bridge_miss: rag expected a retrieval-layer tool_result \
-                 (one of {:?}) after finalize; got tools={:?}",
-                rag_quality::harness_extract::RETRIEVAL_TOOLS,
-                chat.tool_results
-                    .iter()
-                    .map(|t| t.tool.as_str())
-                    .collect::<Vec<_>>()
-            );
-            eprintln!("  FAIL: {msg}");
-            failures.push((example.query.clone(), msg));
-            if fail_fast {
-                break;
-            }
-        }
-        let chunk_to_cite: std::collections::HashMap<String, i64> = chat
-            .citations
-            .iter()
-            .filter_map(|c| c.chunk_id.clone().map(|id| (id, c.citation_id)))
-            .collect();
-        let answer = rewrite_citations(&chat.answer, &chunk_to_cite);
-
-        // ADR-0012 eval v2 — Layer A deterministic scores + Layer B Flash
-        // judge for this question (serial call, one retry on broken JSON;
-        // judge failure never aborts the loop). The judge sees the RAW
-        // user-visible answer (`chat.answer`); the rewritten `answer` with
-        // `[citation:N]` markers exists only for the legacy regex scorers.
-        // Builtin tool outputs (weather_query / calculator / doc_profile / …)
-        // are extracted as judge context for non-RAG turns (q125 class).
-        let tool_outputs = builtin_tool_outputs(&chat.tool_results);
-        if let Some(v2) = v2.as_mut() {
-            v2.score_question(
-                idx + 1,
-                example,
-                subset_name,
-                &retrieved,
-                &cited,
-                &chat.answer,
-                &tool_outputs,
-            )
-            .await;
-        }
-
-        // v3: typed citation minimums (doc `[[cite:…]]` / web `[[web:…]]` protocol).
-        if let Some(expect) = example.expect_citations {
-            let doc_n = chat
-                .citations
-                .iter()
-                .filter(|c| c.chunk_id.is_some())
-                .count() as u32;
-            let web_n = chat
-                .citations
-                .iter()
-                .filter(|c| {
-                    c.chunk_id.is_none()
-                        && (c.chunk_type.as_deref() == Some("web") || c.source_locator.is_some())
-                })
-                .count() as u32;
-            if doc_n < expect.min_doc || web_n < expect.min_web {
-                let msg = format!(
-                    "expect_citations min_doc={} min_web={} got doc={} web={}",
-                    expect.min_doc, expect.min_web, doc_n, web_n
-                );
-                eprintln!("  FAIL: {msg}");
-                failures.push((example.query.clone(), msg));
-                if fail_fast {
-                    break;
-                }
-            }
-        }
-
-        // G-17: utility / product tool expectation gate (calculator, weather_query,
-        // user_context, …). RAG codegen channel tools stay soft (worker-internal);
-        // pure-chat utility tools are observable on `tool_results` and hard-gated.
-        if let Some(expected_tool) = example.expected_tool.as_deref() {
-            let is_utility = matches!(
-                expected_tool,
-                "calculator" | "weather_query" | "user_context"
-            );
-            if is_utility {
-                // Ok-only trace (coverage scorer) + full status dump for diagnosis.
-                // Error results still count as "tool was invoked" for G-17 path smoke.
-                let ok_trace = extract_tool_trace(&chat.tool_results);
-                let any_trace: Vec<String> =
-                    chat.tool_results.iter().map(|r| r.tool.clone()).collect();
-                let status_dump: Vec<String> = chat
-                    .tool_results
-                    .iter()
-                    .map(|r| format!("{}:{:?}", r.tool, r.status))
-                    .collect();
-                let score = ToolCoverageScore::score(example, &any_trace);
-                if !score.covered {
-                    let msg = format!(
-                        "expected_tool={expected_tool} not in tool_results \
-                         any={any_trace:?} ok={ok_trace:?} status={status_dump:?} \
-                         (G-17 utility gate)"
-                    );
-                    eprintln!("  FAIL: {msg}");
-                    failures.push((example.query.clone(), msg));
-                    if fail_fast {
-                        break;
-                    }
-                } else {
-                    eprintln!("  tool_hit: {expected_tool} ok (any={any_trace:?} ok={ok_trace:?})");
-                }
-            }
-        }
-
-        let citation_indices = EvaluationMetrics::extract_citation_indices(&answer);
-        let recall = EvaluationMetrics::recall_at_k(&example.query, &chunks, example, 15);
-        let citation =
-            EvaluationMetrics::citation_accuracy(&example.query, &citation_indices, example);
-        let halluc = EvaluationMetrics::hallucination_check(&example.query, &answer, &chunks);
-        let scorecard = score_query(&retrieved, &cited, &answer, example, 15);
-
-        eprintln!(
-            "  recall@15={:.0}% ({}/{}) cit_acc={:.0}% (tp={} missing={:?}) halluc={:.2} chunks={} ans_len={} label={}",
-            recall.recall * 100.0,
-            recall.matched_chunks.len(),
-            recall.golden_count,
-            citation.accuracy * 100.0,
-            citation.true_positives,
-            citation.missing,
-            halluc.hallucination_score,
-            chunks.len(),
-            chat.answer.len(),
-            scorecard.label.as_str()
-        );
-
-        // Track per-subset stats: (count, matched_count, sum_recall)
         let entry = per_subset_stats
-            .entry(subset_name.to_string())
+            .entry(outcome.subset.clone())
             .or_insert((0, 0, 0.0));
         entry.0 += 1;
         if recall.recall >= 1.0 {
             entry.1 += 1;
         }
         entry.2 += recall.recall;
-
         recall_results.push(recall);
         citation_results.push(citation);
         hallucination_results.push(halluc);

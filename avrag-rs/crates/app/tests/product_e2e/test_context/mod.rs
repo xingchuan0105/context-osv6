@@ -11,6 +11,7 @@ mod profiles;
 
 pub(crate) use diagnostics::dump_ingestion_failure_diagnostics;
 pub(crate) use http::local_dev_email;
+pub(crate) use http::post_rag_chat;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};

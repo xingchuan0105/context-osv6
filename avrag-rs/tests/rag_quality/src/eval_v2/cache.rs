@@ -146,7 +146,15 @@ impl JudgeCache {
         if std::fs::create_dir_all(&self.dir).is_err() {
             return;
         }
-        let _ = std::fs::write(self.dir.join(format!("{key}.json")), json);
+        // Concurrent-safe write: the eval loop may store the same key from
+        // parallel judge tasks. Write to a temp file and atomically rename so
+        // a concurrent reader never sees a partially-written cache entry.
+        let path = self.dir.join(format!("{key}.json"));
+        let tmp = self.dir.join(format!(".{key}.json.tmp"));
+        let write_result = std::fs::write(&tmp, &json).and_then(|()| std::fs::rename(&tmp, &path));
+        if write_result.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
     }
 }
 

@@ -263,38 +263,17 @@ impl TestContext {
         prior_turns: Option<&[(String, String)]>,
         client_time: Option<&str>,
     ) -> anyhow::Result<HttpResponse> {
-        set_mock_rag_codegen_query(query);
-        let mut body = serde_json::json!({
-            "query": query,
-            "agent_type": "rag",
-            "workspace_id": workspace_id,
-            "doc_scope": doc_scope,
-            "stream": false,
-        });
-        if let Some(caps) = capabilities {
-            body["capabilities"] = serde_json::json!(caps);
-        }
-        if let Some(turns) = prior_turns {
-            let mut messages = Vec::with_capacity(turns.len() * 2);
-            for (q, a) in turns {
-                messages.push(serde_json::json!({"role": "user", "content": q}));
-                messages.push(serde_json::json!({"role": "assistant", "content": a}));
-            }
-            body["messages"] = serde_json::json!(messages);
-        }
-        if let Some(t) = client_time {
-            body["client_context"] =
-                serde_json::json!({"local_time": t, "timezone": "Asia/Shanghai"});
-        }
-        let resp = self
-            .http_client
-            .post(format!("{}/api/v1/chat", self.base_url))
-            .json(&body)
-            .send()
-            .await?;
-        let status = resp.status().as_u16();
-        let body_json = resp.json().await?;
-        Ok(HttpResponse { status, body_json })
+        post_rag_chat(
+            &self.http_client,
+            &self.base_url,
+            query,
+            workspace_id,
+            doc_scope,
+            capabilities,
+            prior_turns,
+            client_time,
+        )
+        .await
     }
 
     pub async fn chat_without_mock_chunk_pin(
@@ -972,4 +951,93 @@ impl TestContext {
 /// Email assigned by PG `ensure_org_and_actor` for proxy-header E2E users.
 pub fn local_dev_email(user_id: &str) -> String {
     format!("{user_id}@local.dev")
+}
+
+/// Free-standing RAG chat POST usable from concurrent eval tasks (a
+/// `TestContext` is not `Sync`, but a `reqwest::Client` + base URL are).
+///
+/// Retry policy for transient infra failures (2026-08: full-run observed
+/// HTTP 500 / 429 without retry → INFRA_ERROR):
+/// - HTTP 429: respect `Retry-After` header when present (bounded to 30s),
+///   else exponential backoff 1s/3s/9s — up to 3 attempts.
+/// - Other 5xx (500/502/503/504): exponential backoff 1s/3s/9s — up to 3 attempts.
+/// - Transport errors: exponential backoff 1s/3s/9s — up to 3 attempts.
+/// - 4xx (except 429) and 2xx/3xx return immediately on the first response.
+pub async fn post_rag_chat(
+    client: &reqwest::Client,
+    base_url: &str,
+    query: &str,
+    workspace_id: &str,
+    doc_scope: &[String],
+    capabilities: Option<&[String]>,
+    prior_turns: Option<&[(String, String)]>,
+    client_time: Option<&str>,
+) -> anyhow::Result<HttpResponse> {
+    set_mock_rag_codegen_query(query);
+    let mut body = serde_json::json!({
+        "query": query,
+        "agent_type": "rag",
+        "workspace_id": workspace_id,
+        "doc_scope": doc_scope,
+        "stream": false,
+    });
+    if let Some(caps) = capabilities {
+        body["capabilities"] = serde_json::json!(caps);
+    }
+    if let Some(turns) = prior_turns {
+        let mut messages = Vec::with_capacity(turns.len() * 2);
+        for (q, a) in turns {
+            messages.push(serde_json::json!({"role": "user", "content": q}));
+            messages.push(serde_json::json!({"role": "assistant", "content": a}));
+        }
+        body["messages"] = serde_json::json!(messages);
+    }
+    if let Some(t) = client_time {
+        body["client_context"] =
+            serde_json::json!({"local_time": t, "timezone": "Asia/Shanghai"});
+    }
+    let url = format!("{base_url}/api/v1/chat");
+    let mut last_transport: Option<reqwest::Error> = None;
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        let resp = match client.post(&url).json(&body).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_transport = Some(e);
+                if attempts >= 3 {
+                    break;
+                }
+                let wait = 1u64 << (attempts - 1); // 1s, 2s, 4s
+                tokio::time::sleep(Duration::from_secs(wait)).await;
+                continue;
+            }
+        };
+        let status = resp.status().as_u16();
+        let retry_after = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.trim().parse::<u64>().ok());
+        let body_json = resp.json().await?;
+        // 5xx (incl. 429 with Retry-After) get bounded exponential backoff.
+        let retriable = matches!(status, 429 | 500 | 502 | 503 | 504);
+        if !retriable || attempts >= 3 {
+            return Ok(HttpResponse { status, body_json });
+        }
+        let wait = if status == 429 {
+            retry_after
+                .map(|secs| secs.min(30))
+                .unwrap_or_else(|| 1u64 << (attempts - 1))
+        } else {
+            1u64 << (attempts - 1) // 1s, 2s
+        };
+        eprintln!(
+            "[post_rag_chat] HTTP {status} (attempt {attempts}/3); retry after {wait}s"
+        );
+        tokio::time::sleep(Duration::from_secs(wait)).await;
+    }
+    Err(anyhow::anyhow!(
+        "chat POST failed after 3 attempts: {last_transport:?}"
+    ))
 }
