@@ -1,0 +1,16 @@
+# 引用面训练（L3b，D2）。
+#
+# 目标：对时刻读对 reference（how-to-read-tables / strategies 等触发措辞）。
+# 信号 = 引用加载命中率 + 端到端。
+# 引用密集 subset（ipd_table/cross_document/baiyao/cross_adr）为训练池；
+# 其余组合（rag_search_joint/orchestrator）恒留出作回归门禁（D6-②）。
+#
+# 可训对象：prompts/capabilities/knowledge-base/SKILL.md 里引导 skill_request
+# 引用加载的措辞（"仅当…才读取 reference_*.md"这类条件规则）。
+_base_: default.yaml
+
+env:
+  prompt_target: capabilities/knowledge-base/SKILL.md
+  include_ids_file: avrag149/ids_reference.json      # 引用密集 36 题
+  skill_init: avrag149/skills/knowledge-base.md       # 起点 = 当前 KB SKILL.md 拷贝
+  holdout_subsets: "rag_search_joint,orchestrator_paradigm,memory_coreference,chat_builtin_tools,search_web"

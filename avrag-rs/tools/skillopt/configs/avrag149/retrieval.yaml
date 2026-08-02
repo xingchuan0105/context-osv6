@@ -1,0 +1,15 @@
+# 检索面训练（L1.5 代码 + L2 查询，D2）。
+#
+# 目标：写对代码（能跑、API 对、合沙箱契约）+ 写对查询（召回 source_chunks）。
+# 信号 = recall（per_query 列）+ sandbox_error/no_output（轨迹归因，WP3）。
+# 纯 rag subset（排除组合/chat/search）；组合 subset 恒留出（D6-②）。
+#
+# 可训对象：prompts/capabilities/knowledge-base/SKILL.md（方法表 + 硬约束 + 检索策略）。
+_base_: default.yaml
+
+env:
+  prompt_target: capabilities/knowledge-base/SKILL.md
+  include_ids_file: avrag149/ids_retrieval.json      # 纯 rag 95 题
+  skill_init: avrag149/skills/knowledge-base.md       # 起点 = 当前 KB SKILL.md 拷贝
+  # 组合 subset 整族留出（组合回归门禁）
+  holdout_subsets: "cross_document,ipd_table,rag_search_joint,cross_adr,orchestrator_paradigm"

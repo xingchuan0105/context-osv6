@@ -1,0 +1,19 @@
+# 停与答训练（L2.5 + L3 内容，D2）——先训层。
+#
+# 目标：控制行为——停/继续/降级/budget 收尾（"通过 skill 控制行为而非结果"）。
+# 失败覆盖 86%（UNGROUNDED 编造 + PARTIAL 答不全 + SELECTION_MISS + REFUSAL_WRONG，
+# 见 --signals v2_20260802-045319）。信号 = 停点覆盖度 + cited_gold
+# （WP0 分步信号，score_row/layer_signals）。
+#
+# 可训对象：prompts/system/agent-base.md 的"事实与不确定"节 + 对应 loop nudges
+# （degraded-no-evidence-* / partial-evidence-insufficient / budget-exhausted-*）。
+# 组合 subset 恒留出作回归门禁（D6-②）。
+_base_: default.yaml
+
+env:
+  prompt_target: system/agent-base.md
+  include_ids_file: avrag149/ids_stop_answer.json   # 错题+代表题（65 题；组合由 holdout 移出训练）
+  # 组合 subset 整族留出（组合回归门禁，训单层绝不倒退）
+  holdout_subsets: "cross_document,ipd_table,rag_search_joint,cross_adr,orchestrator_paradigm"
+  # D7：本层失败最多、归因最复杂，建议切 coding_agent 做评估/改写
+  reflect_backend: llm
