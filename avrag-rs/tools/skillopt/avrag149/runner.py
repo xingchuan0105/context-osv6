@@ -342,6 +342,107 @@ def load_artifact_answer(v2_dir: str | os.PathLike, n: int) -> str:
         return ""
 
 
+def load_attribution(v2_dir: str | os.PathLike, n: int) -> dict:
+    """WP3 轨迹归因：读题级 artifact 的 per-question 分步信号。
+
+    两个来源：
+    - ``<v2_dir>/q{n}.artifact.json`` → ``score_v2``（retrieval/selection/judge）
+    - ``e2e_output/realistic_corpus_full_eval/q{n}.json`` → ``mode_debug``/``tool_trace``
+      （与 v2_dir 同级：v2_dir.parent.parent = e2e_output）
+
+    归因字段（供 L1.5/L2、L2.5/L3 分离）：
+    - stop_recall / graded_recall：停点证据覆盖度（recall of golden source_chunks）
+    - selection_cited_gold：引用的 gold 命中数（SELECTION_MISS 判定）
+    - unsupported_claims：编造/无据主张数（UNGROUNDED 判定）
+    - code_error / no_output / tool_errors：代码层（L1.5）信号
+    - activities / capabilities / answer_model：行为指纹
+    """
+    attr: dict = {
+        "retrieval_recall": 0.0, "graded_recall": 0.0, "hit": False,
+        "stop_recall": 0.0, "selection_cited": 0, "selection_cited_gold": 0,
+        "selection_recall": 0.0, "unsupported_claims": 0, "code_error": False,
+        "no_output": False, "tool_errors": [], "activities": [],
+        "capabilities": [], "answer_model": "",
+    }
+    vdir = Path(v2_dir)
+
+    # 1. score_v2（检索/选择/判断分步信号）
+    art = vdir / f"q{n}.artifact.json"
+    if art.is_file():
+        try:
+            sv = (json.loads(art.read_text(encoding="utf-8")).get("score_v2") or {})
+            ret = sv.get("retrieval") or {}
+            sel = sv.get("selection") or {}
+            judge = sv.get("judge") or {}
+            attr["retrieval_recall"] = _to_float(ret.get("recall"))
+            attr["graded_recall"] = _to_float(ret.get("graded_recall"))
+            attr["hit"] = bool(ret.get("hit"))
+            attr["stop_recall"] = _to_float(ret.get("recall"))  # 停点证据覆盖度
+            attr["selection_cited"] = int(sel.get("cited_count") or 0)
+            attr["selection_cited_gold"] = int(sel.get("golden_matched_in_cited") or 0)
+            attr["selection_recall"] = _to_float(sel.get("recall"))
+            attr["unsupported_claims"] = len(
+                (judge.get("faithfulness") or {}).get("unsupported_claims") or []
+            )
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # 2. mode_debug + tool_trace（行为指纹 + 代码层）
+    mode_dir = vdir.parent.parent / "realistic_corpus_full_eval"
+    qf = mode_dir / f"q{n}.json"
+    if qf.is_file():
+        try:
+            d = json.loads(qf.read_text(encoding="utf-8"))
+            gen = ((d.get("mode_debug") or {}).get("general") or {})
+            attr["activities"] = list(gen.get("activity_counts") or [])
+            attr["answer_model"] = str(gen.get("answer_model") or "")
+            attr["capabilities"] = list(gen.get("capabilities") or [])
+            tt = d.get("tool_trace") or []
+            for t in tt:
+                if isinstance(t, dict) and t.get("status") != "Ok":
+                    attr["tool_errors"].append(str(t.get("tool")))
+            attr["code_error"] = bool(attr["tool_errors"])
+            # 无工具调用且零召回 → 代码层无产出（零检索直答类，行为报告 A 类）
+            if not tt and attr["retrieval_recall"] == 0.0:
+                attr["no_output"] = True
+        except (json.JSONDecodeError, OSError):
+            pass
+    return attr
+
+
+def summarize_attribution(label: str, attr: dict) -> str:
+    """把归因压缩成 reflect 能读的 ``fail_reason`` 一行（WP3 第二刀）。
+
+    层 → 信号：
+    - RETRIEVAL_MISS → 检索面（recall=0）；code_error/no_output → L1.5 代码层
+    - UNGROUNDED     → L2.5 停点编造（unsupported_claims）
+    - SELECTION_MISS → L3b 选择（cited_gold=0）
+    - PARTIAL        → L2.5/L3 边界（stop_recall vs unsupported_claims）
+    """
+    parts = [f"label={label}"]
+    if label == "RETRIEVAL_MISS":
+        if attr["code_error"]:
+            parts.append(f"code_error={attr['tool_errors']}")   # L1.5
+        elif attr["no_output"]:
+            parts.append("no_output")                            # L1.5 零检索直答
+        else:
+            parts.append(f"query_recall={attr['retrieval_recall']:.2f}")  # L2
+    elif label == "UNGROUNDED":
+        parts.append(f"unsupported_claims={attr['unsupported_claims']}")
+        parts.append(f"stop_recall={attr['stop_recall']:.2f}")
+    elif label == "SELECTION_MISS":
+        parts.append(f"cited={attr['selection_cited']} cited_gold={attr['selection_cited_gold']}")
+    elif label in ("PARTIAL", "REFUSAL_WRONG"):
+        parts.append(f"stop_recall={attr['stop_recall']:.2f}")
+        if attr["unsupported_claims"]:
+            parts.append(f"unsupported={attr['unsupported_claims']}")
+        if attr["code_error"]:
+            parts.append(f"code_error={attr['tool_errors']}")
+    if attr["activities"]:
+        parts.append(f"acts={len(attr['activities'])}")
+    return " ".join(parts)
+
+
 def _to_float(v) -> float:
     try:
         return float(v)

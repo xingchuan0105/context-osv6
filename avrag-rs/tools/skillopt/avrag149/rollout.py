@@ -10,6 +10,7 @@ NOTE（落地期简化）：首版 conversation 只含最小三件套，不含�
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -17,10 +18,15 @@ from .runner import (
     build_worker_prompt_tree,
     layer_signals,
     load_artifact_answer,
+    load_attribution,
     parse_report,
     run_eval,
     score_row,
+    summarize_attribution,
 )
+
+# 模型在 assistant 消息里发出的 skill_request（如 {"skill_request": ["memory"]}）
+_re_skill_request = re.compile(r'skill_request"\s*:\s*\[(.*?)\]', re.DOTALL)
 
 
 def run_batch(
@@ -102,6 +108,20 @@ def run_batch(
             json.dumps(conversation, ensure_ascii=False, indent=2), encoding="utf-8",
         )
 
+        # WP3 轨迹归因：分步信号 + 行为指纹（L1.5/L2、L2.5/L3 分离第二刀）
+        attr = load_attribution(v2_dir, n)
+        sr = _re_skill_request.search(answer)
+        if sr:
+            attr["skill_request"] = [
+                s.strip().strip('"').strip("'") for s in sr.group(1).split(",") if s.strip()
+            ]
+        else:
+            attr["skill_request"] = []
+        (task_dir / "trajectory_attribution.json").write_text(
+            json.dumps(attr, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        fail_reason = summarize_attribution(row.get("label", ""), attr)
+
         if skipped:
             # JUDGE_ERROR（judge API 故障）不是 skill 质量问题:轨迹留档,
             # 但不进聚合/训练,避免把好 skill 按 0 分惩罚(2026-08-01 评分点修正)。
@@ -119,10 +139,12 @@ def run_batch(
             "subset": row.get("subset") or item.get("subset", ""),
             "task_type": item.get("task_type", ""),
             "label": row.get("label", ""),
+            "fail_reason": fail_reason,
             "correctness": row.get("correctness", 0.0),
             "faithfulness": row.get("faithfulness", 0.0),
             "recall": signals["recall"],
             "signals": signals,
+            "attribution": attr,
             # C2/WP1（D6-①）：gold 答案绝不进 optimizer 视野——reference_text 会作为
             # Hidden Reference 喂给 analyst（gradient/reflect.py:160），空串断泄漏。
             # 评分（hard/soft）在宿主侧已算好，optimizer 不需要 gold 文本。
