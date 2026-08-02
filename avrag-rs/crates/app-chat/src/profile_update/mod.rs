@@ -56,11 +56,21 @@ impl ChatContext {
         session_uuid: Uuid,
         execution: &mut ChatExecution,
     ) -> bool {
-        let Ok(messages) = chat_persistence
+        let messages = match chat_persistence
             .list_messages(&self.auth, session_uuid)
             .await
-        else {
-            return false;
+        {
+            Ok(messages) => messages,
+            Err(error) => {
+                // P3-3: still best-effort (never fail the chat turn), but the
+                // failure is now log-visible — dream-cadence class issues are
+                // discovered from logs.
+                tracing::warn!(
+                    %session_uuid,
+                    "profile update skipped: list_messages failed: {error}"
+                );
+                return false;
+            }
         };
 
         let recent_turns = build_recent_turns_context(&messages, PROFILE_INPUT_TURN_WINDOW);

@@ -31,6 +31,17 @@ macro_rules! loop_prompt_legacy {
     };
 }
 
+/// Paths relative to `crates/agent-loop` → `avrag-rs/prompts/synthesis/`.
+macro_rules! synthesis_prompt {
+    ($file:literal) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../prompts/synthesis/",
+            $file
+        ))
+    };
+}
+
 fn trim_body(raw: &str) -> &str {
     raw.trim()
 }
@@ -124,6 +135,45 @@ pub fn synthesis_repair_nudge() -> &'static str {
     trim_body(loop_prompt!("synthesis-repair.nudge.md"))
 }
 
+// --- synthesis contract blocks (P2-2: verbatim move out of answer_contract) ---
+
+/// JSON-envelope contract appended to the synthesis system prompt
+/// (`InternalSearchAnswerV1` modes). Body: `prompts/synthesis/`.
+pub fn synthesis_contract_internal_search_answer_v1() -> &'static str {
+    trim_body(synthesis_prompt!("contract-internal-search-answer-v1.md"))
+}
+
+/// JSON-envelope contract for `InternalAnswerV1` modes.
+pub fn synthesis_contract_internal_answer_v1() -> &'static str {
+    trim_body(synthesis_prompt!("contract-internal-answer-v1.md"))
+}
+
+/// JSON-envelope contract for `InternalAnswerUnifiedV1` /
+/// `InternalHybridAnswerV1` modes (thin contract).
+pub fn synthesis_contract_internal_answer_unified_v1() -> &'static str {
+    trim_body(synthesis_prompt!("contract-internal-answer-unified-v1.md"))
+}
+
+// --- final-answer rule feedback hints (P2-2: verbatim move out of
+//     final_answer_rules; substituted as `{violation_detail}` into
+//     synthesis-prose-repair.tmpl.md) ---
+
+pub fn final_answer_feedback_code_only() -> &'static str {
+    trim_body(loop_prompt!("final-answer-feedback-code-only.md"))
+}
+
+pub fn final_answer_feedback_host_shell() -> &'static str {
+    trim_body(loop_prompt!("final-answer-feedback-host-shell.md"))
+}
+
+pub fn final_answer_feedback_template_artifact() -> &'static str {
+    trim_body(loop_prompt!("final-answer-feedback-template-artifact.md"))
+}
+
+pub fn final_answer_feedback_executable_code() -> &'static str {
+    trim_body(loop_prompt!("final-answer-feedback-executable-code.md"))
+}
+
 /// prose_only synthesis returned a code-only answer (retrieve framing leaked
 /// into the final turn): observation that precedes the one repair round.
 /// `detail` names the specific violated form (from the final-answer quality
@@ -184,5 +234,13 @@ mod tests {
         assert!(!s.contains("{detail}"));
         assert!(!contract_violation_fallback("rag").is_empty());
         assert!(!degraded_no_evidence_answer("search").is_empty());
+        // P2-2: synthesis contract blocks + final-answer feedback hints.
+        assert!(synthesis_contract_internal_search_answer_v1().contains("internal_search_answer_v1"));
+        assert!(synthesis_contract_internal_answer_v1().contains("internal_answer_v1"));
+        assert!(synthesis_contract_internal_answer_unified_v1().contains("internal_answer_unified_v1"));
+        assert!(!final_answer_feedback_code_only().is_empty());
+        assert!(!final_answer_feedback_host_shell().is_empty());
+        assert!(!final_answer_feedback_template_artifact().is_empty());
+        assert!(final_answer_feedback_executable_code().contains("<code language="));
     }
 }

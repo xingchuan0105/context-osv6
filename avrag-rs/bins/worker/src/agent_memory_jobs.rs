@@ -495,19 +495,17 @@ mod tests {
         if let Ok(url) = std::env::var("DATABASE_URL") {
             return url;
         }
+        // P3-3: machine-independent lookup — env var first, then the monorepo
+        // `.env` located relative to this crate (no absolute host paths).
         let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        for candidate in [
-            manifest.join("../../.env"),
-            std::path::PathBuf::from("/home/chuan/context-osv6/avrag-rs/.env"),
-        ] {
-            if let Ok(content) = std::fs::read_to_string(&candidate) {
-                for line in content.lines() {
-                    let line = line.trim();
-                    if let Some(rest) = line.strip_prefix("DATABASE_URL=") {
-                        let v = rest.trim().trim_matches('"').trim_matches('\'');
-                        if !v.is_empty() {
-                            return v.to_string();
-                        }
+        let candidate = manifest.join("../../.env");
+        if let Ok(content) = std::fs::read_to_string(&candidate) {
+            for line in content.lines() {
+                let line = line.trim();
+                if let Some(rest) = line.strip_prefix("DATABASE_URL=") {
+                    let v = rest.trim().trim_matches('"').trim_matches('\'');
+                    if !v.is_empty() {
+                        return v.to_string();
                     }
                 }
             }

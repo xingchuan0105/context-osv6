@@ -26,30 +26,20 @@ use contracts::ToolResult;
 use super::config::{AnswerContractKind, ModeConfig};
 
 pub fn synthesis_contract_block(mode: &ModeConfig) -> &'static str {
+    // P2-2: bodies live in prompts/synthesis/contract-*.md (verbatim move);
+    // loaded via prompt_assets. Voice rewrite is a separate future task.
     match mode.synthesis_output.contract {
         AnswerContractKind::InternalSearchAnswerV1 => {
-            "Respond with ONLY a JSON object (no markdown fences):\n\
-             {\"schema_version\":\"internal_search_answer_v1\",\"answer_text\":\"...\",\"citations\":[{\"index\":1}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
-             Use [[n]] in answer_text matching citations[].index from search observations."
+            super::prompt_assets::synthesis_contract_internal_search_answer_v1()
         }
         AnswerContractKind::ProseOnly => "",
         AnswerContractKind::InternalAnswerV1 => {
-            "Respond with ONLY a JSON object (no markdown fences):\n\
-             {\"schema_version\":\"internal_answer_v1\",\"answer_text\":\"prose with [[cite:CHUNK_ID]]\",\"citations\":[{\"chunk_id\":\"...\"}],\"coverage\":\"full\",\"refusal_reason\":null}\n\
-             Every citations[].chunk_id MUST appear as [[cite:CHUNK_ID]] in answer_text."
+            super::prompt_assets::synthesis_contract_internal_answer_v1()
         }
         AnswerContractKind::InternalAnswerUnifiedV1
         | AnswerContractKind::InternalHybridAnswerV1 => {
             // Thin contract: LLM owns prose; server only peels this envelope + hangs markers.
-            "Return ONLY this JSON (no markdown fences, no extra keys):\n\
-{\"schema_version\":\"internal_answer_unified_v1\",\"answer_text\":\"<markdown prose>\",\
-\"citations\":[{\"kind\":\"doc\",\"id\":\"<chunk_id>\"},{\"kind\":\"web\",\"id\":\"<n>\"}],\
-\"coverage\":\"full|partial|none\",\"refusal_reason\":null}\n\
-Rules:\n\
-- answer_text = user-visible markdown only (never paste this JSON into answer_text).\n\
-- Doc: [[cite:CHUNK_ID]] next to the claim; citations kind=doc id=CHUNK_ID from tools.\n\
-- Web: [[web:n]] next to the claim; citations kind=web id=n (1-based web_search index).\n\
-- Do not invent [来源：…] / source footnotes; UI renders markers."
+            super::prompt_assets::synthesis_contract_internal_answer_unified_v1()
         }
     }
 }

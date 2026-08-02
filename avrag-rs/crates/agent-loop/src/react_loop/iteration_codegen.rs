@@ -383,7 +383,10 @@ impl ReActLoop {
                 )
             }
             Err(e) => {
-                let text = format!("[block {}] Execution failed: {e}", idx);
+                // P3-1: failure form delegates to the same grammar owner as the
+                // success form (rag-core markers::format_block_failure).
+                let text =
+                    avrag_rag_core::runtime::markers::format_block_failure(idx, &e.to_string());
                 (
                     contracts::ToolStatus::Error,
                     text,

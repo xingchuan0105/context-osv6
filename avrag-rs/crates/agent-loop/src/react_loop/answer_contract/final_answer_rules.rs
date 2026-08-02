@@ -92,32 +92,37 @@ pub struct FinalAnswerRule {
     pub feedback_hint: &'static str,
 }
 
-/// The four format-level final-answer rules, in detection order.
-pub const FINAL_ANSWER_RULES: &[FinalAnswerRule] = &[
-    FinalAnswerRule {
-        id: "code_only",
-        check: |t| {
-            is_code_only_answer(t)
-                .then_some("代码块 / markdown 围栏构成全部内容，没有围栏之外的散文正文")
-        },
-        feedback_hint: "候选答复是代码块形态：围栏之外没有散文正文；代码只在检索轮经沙箱执行，终答是回传证据之上的普通文字。",
-    },
-    FinalAnswerRule {
-        id: "host_shell",
-        check: host_shell_matched,
-        feedback_hint: "候选答复中含有宿主观察标签外壳；该标签只由宿主注入，外壳内容不是回传证据。",
-    },
-    FinalAnswerRule {
-        id: "template_artifact",
-        check: template_artifact_matched,
-        feedback_hint: "候选答复中含有模板残留标记；该标记是模型侧输出残片，不是答复内容。",
-    },
-    FinalAnswerRule {
-        id: "executable_code",
-        check: executable_code_matched,
-        feedback_hint: "候选答复中含有可执行形态的代码 span（<code language=…>）；该形态只在检索轮经沙箱执行，出现在终答里是过程稿泄漏。",
-    },
-];
+/// The four format-level final-answer rules, in detection order. Hint bodies
+/// live in `prompts/loop/final-answer-feedback-*.md` (P2-2 verbatim move,
+/// loaded via `prompt_assets` — hence `LazyLock` instead of `const`).
+pub static FINAL_ANSWER_RULES: std::sync::LazyLock<Vec<FinalAnswerRule>> =
+    std::sync::LazyLock::new(|| {
+        vec![
+            FinalAnswerRule {
+                id: "code_only",
+                check: |t| {
+                    is_code_only_answer(t)
+                        .then_some("代码块 / markdown 围栏构成全部内容，没有围栏之外的散文正文")
+                },
+                feedback_hint: super::super::prompt_assets::final_answer_feedback_code_only(),
+            },
+            FinalAnswerRule {
+                id: "host_shell",
+                check: host_shell_matched,
+                feedback_hint: super::super::prompt_assets::final_answer_feedback_host_shell(),
+            },
+            FinalAnswerRule {
+                id: "template_artifact",
+                check: template_artifact_matched,
+                feedback_hint: super::super::prompt_assets::final_answer_feedback_template_artifact(),
+            },
+            FinalAnswerRule {
+                id: "executable_code",
+                check: executable_code_matched,
+                feedback_hint: super::super::prompt_assets::final_answer_feedback_executable_code(),
+            },
+        ]
+    });
 
 /// A concrete violation found by the quality gate: which rule fired, which
 /// specific marker tripped, and the third-person feedback hint for the nudge.

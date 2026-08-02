@@ -108,6 +108,27 @@ impl BillingService {
             .ok_or_else(|| ProviderError::Unsupported(provider.to_string()))
     }
 
+    /// Checkout-surface adapter lookup (P3-2): same routing as [`Self::adapter_for`]
+    /// with the error already mapped to the checkout error response, so the four
+    /// call sites share one copy of the `match { Ok, Err → return }` boilerplate.
+    fn checkout_adapter(
+        &self,
+        provider: BillingProvider,
+    ) -> Result<&dyn PaymentProvider, ApiResponse<CheckoutResponse>> {
+        self.adapter_for(provider)
+            .map_err(|error| ApiResponse::err("billing_checkout_failed", &error.to_string()))
+    }
+
+    /// Webhook-surface adapter lookup (P3-2): error pre-mapped through
+    /// [`webhook_error_response`], same as the former inline `Err` arms.
+    fn webhook_adapter(
+        &self,
+        provider: BillingProvider,
+    ) -> Result<&dyn PaymentProvider, ApiResponse<serde_json::Value>> {
+        self.adapter_for(provider)
+            .map_err(|error| webhook_error_response(error.into()))
+    }
+
     pub async fn get_plans(
         &self,
         store: Arc<dyn BillingStorePort>,
@@ -196,11 +217,9 @@ impl BillingService {
                         "Creem billing checkout is not configured",
                     );
                 }
-                let adapter = match self.adapter_for(requested_provider) {
+                let adapter = match self.checkout_adapter(requested_provider) {
                     Ok(adapter) => adapter,
-                    Err(error) => {
-                        return ApiResponse::err("billing_checkout_failed", &error.to_string());
-                    }
+                    Err(response) => return response,
                 };
                 match adapter.create_checkout(user_id, requested_plan, "").await {
                     Ok(CheckoutSession::Url { url, session_id }) => {
@@ -253,11 +272,9 @@ impl BillingService {
                     return ApiResponse::err("billing_checkout_failed", &error.to_string());
                 }
 
-                let adapter = match self.adapter_for(requested_provider) {
+                let adapter = match self.checkout_adapter(requested_provider) {
                     Ok(adapter) => adapter,
-                    Err(error) => {
-                        return ApiResponse::err("billing_checkout_failed", &error.to_string());
-                    }
+                    Err(response) => return response,
                 };
                 match adapter.create_checkout(user_id, requested_plan, &out_trade_no).await {
                     Ok(CheckoutSession::QrCode { qr_code, order_id }) => {
@@ -321,9 +338,9 @@ impl BillingService {
                 );
             }
             BillingProvider::Creem => {
-                let adapter = match self.adapter_for(provider) {
+                let adapter = match self.webhook_adapter(provider) {
                     Ok(adapter) => adapter,
-                    Err(error) => return webhook_error_response(error.into()),
+                    Err(response) => return response,
                 };
                 match adapter.parse_event(signature, payload).await {
                     Ok(delivery) => delivery,
@@ -334,9 +351,9 @@ impl BillingService {
                 }
             }
             BillingProvider::Alipay => {
-                let adapter = match self.adapter_for(provider) {
+                let adapter = match self.webhook_adapter(provider) {
                     Ok(adapter) => adapter,
-                    Err(error) => return webhook_error_response(error.into()),
+                    Err(response) => return response,
                 };
                 match adapter.parse_event(signature, payload).await {
                     Ok(delivery) => delivery,

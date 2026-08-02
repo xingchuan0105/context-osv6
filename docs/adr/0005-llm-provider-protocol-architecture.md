@@ -1,8 +1,10 @@
 # ADR 0004: LLM Provider 四轴架构——Protocol / Route / Provider 正交
 
+> **编号说明**：本文件标题「ADR 0004」为历史编号；规范引用以文件名编号 **ADR-0005** 为准。
+
 ## Status
 
-Proposed
+Accepted（已实施）
 
 ## Context
 

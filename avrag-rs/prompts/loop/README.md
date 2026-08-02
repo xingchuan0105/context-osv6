@@ -32,6 +32,7 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + alias/truncation detail |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON (non–prose_only paths) |
 | `synthesis-prose-repair.tmpl.md` | prose_only final-form repair (one round): code-only / host-observation shell / template artifact / executable-code working draft; `{violation_detail}` names the matched form/tag |
+| `final-answer-feedback-*.md` | Per-rule `{violation_detail}` bodies for the final-answer quality gate (code-only / host-shell / template-artifact / executable-code); substituted into `synthesis-prose-repair.tmpl.md` (P2-2) |
 | `contract-violation-*.md` | User-facing format failure fallbacks |
 | `degraded-no-evidence-*.md` | User-facing empty-evidence fallbacks |
 | `partial-evidence-insufficient.md` | Short partial-evidence line |

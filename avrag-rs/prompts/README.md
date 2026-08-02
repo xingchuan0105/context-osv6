@@ -34,6 +34,7 @@ Product and code use different short names for the **same** concepts. This is in
 | **Agent guide** | `agent-guide/` | `include_str!` from `app-chat::external_agent_guide` | Standalone API summaries (RAG / search / index / workspace-create) |
 | **Clusters** | `clusters/<id>/` | `PromptRegistry` + progressive disclose | Thick world models |
 | **Loop** | `loop/` | `agent-loop` `prompt_assets` | Runtime observations |
+| **Synthesis** | `synthesis/` | `agent-loop` `prompt_assets` (`synthesis_prompt!`) | Synthesis JSON-envelope contract blocks appended to the synthesis system prompt (P2-2) |
 | **Pipeline** | `pipeline/` | Workers / postprocess | Ingestion helpers |
 | **Templates** | `templates/` | Pipeline llm calls (`summary-*` / `section-index-*`) | User-turn templates for worker prompts |
 | **Deprecated** | `deprecated/**` | Not product SaC entry | Retired monomode, multi-agent, old voices |
@@ -83,7 +84,7 @@ Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_par
 
 ## Orchestrator code (architecture note)
 
-Multi-agent **prompts** live under `deprecated/orchestrator-multiagent/`. Product chat entry is **single-agent only** (`dispatch_agent_mode`). Rust `app-chat::orchestrator` remains for tests / optional `AGENT_ORCHESTRATOR_V2` re-entry — not the default product path. See `docs/engineering/2026-07-31-sac-orchestrator-isolation.md`.
+Multi-agent **prompts** live under `deprecated/orchestrator-multiagent/`. Product chat entry is **single-agent only** (`dispatch_agent_mode`). Rust `app-chat::orchestrator` was physically deleted on 2026-08-01 (commit `7f2d182d`); no `AGENT_ORCHESTRATOR_V2` re-entry flag exists. See `docs/engineering/2026-07-31-sac-orchestrator-isolation.md`.
 
 ## Deprecated
 

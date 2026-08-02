@@ -122,6 +122,13 @@ pub fn format_block(idx: usize, stdout: &str, stderr: &str) -> String {
     format!("[block {}] stdout: {}\nstderr: {}", idx, stdout, stderr)
 }
 
+/// `[block n]` code-execution observation line (error path) — single producer
+/// for the `Execution failed:` failure form parsed by [`parse_block`] (P3-1;
+/// the failure form used to be a handwritten `format!` in iteration_codegen).
+pub fn format_block_failure(idx: usize, error: &str) -> String {
+    format!("[block {idx}] Execution failed: {error}")
+}
+
 /// A parsed `[block n]` code-execution observation segment (the text after the
 /// opening `[block ` marker).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,6 +250,42 @@ mod tests {
         assert_eq!(parsed.idx, 1);
         assert_eq!(parsed.failure, Some("NameError: x"));
         assert_eq!(parsed.stdout, None);
+    }
+
+    #[test]
+    fn format_block_failure_matches_producer_contract() {
+        assert_eq!(
+            format_block_failure(2, "interpreter task panicked: boom"),
+            "[block 2] Execution failed: interpreter task panicked: boom"
+        );
+    }
+
+    #[test]
+    fn parse_block_roundtrips_format_block_failure() {
+        let line = format_block_failure(0, "NameError: name 'x' is not defined");
+        let parsed = parse_block(&line["[block ".len()..]).expect("parse failure block");
+        assert_eq!(parsed.idx, 0);
+        assert_eq!(parsed.failure, Some("NameError: name 'x' is not defined"));
+        assert_eq!(parsed.stdout, None);
+        assert_eq!(parsed.stderr, None);
+    }
+
+    #[test]
+    fn parse_block_error_form_wins_over_embedded_stdout_marker() {
+        // The failure form is matched before `stdout:`; an error message that
+        // merely mentions stdout stays a failure payload.
+        let parsed = parse_block("3] Execution failed: write to stdout: broken pipe")
+            .expect("failure form takes precedence");
+        assert_eq!(parsed.failure, Some("write to stdout: broken pipe"));
+        assert_eq!(parsed.stdout, None);
+    }
+
+    #[test]
+    fn parse_block_error_form_truncates_to_empty_payload() {
+        // A truncated failure line still parses as the error form (empty payload).
+        let parsed = parse_block("1] Execution failed:").expect("truncated failure");
+        assert_eq!(parsed.idx, 1);
+        assert_eq!(parsed.failure, Some(""));
     }
 
     #[test]
