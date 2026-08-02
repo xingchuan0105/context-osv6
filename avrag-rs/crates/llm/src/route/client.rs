@@ -219,12 +219,19 @@ impl<P: Protocol> Route<P> {
             let body_value = serde_json::to_value(&body)
                 .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 
-            let TransportBody::Chunks(mut chunks) = self
+            let body = self
                 .transport
                 .post_json(&url, headers, &body_value, true)
-                .await?
-            else {
-                panic!("transport must not return a buffered body for a streaming request")
+                .await?;
+            // P0-3: mirror the non-streaming branch — a TransportBody contract
+            // violation is a protocol error, not an abort (a custom Transport
+            // implementation bug must not kill the process). `?` routes through
+            // the try_stream error path, exactly like a transport failure.
+            let mut chunks = match body {
+                TransportBody::Chunks(chunks) => chunks,
+                TransportBody::Json(_) => Err(LlmError::protocol(
+                    "unexpected buffered body for a streaming request",
+                ))?,
             };
 
             let mut framer = SseFramer::new();

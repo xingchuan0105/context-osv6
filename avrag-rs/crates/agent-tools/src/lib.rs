@@ -40,8 +40,8 @@ pub use capability::{
     EnforcementAction, EnforcementCondition, EnforcementRule, ModeSchema, Permission,
     PolicyEnforcer, RetryPolicy, RiskLevel, SkillCapability, SkillMetadata, ToolCapability,
     ToolMetadata, build_capabilities_response, chat_mode_schema, permissive, rag_mode_schema,
-    search_mode_schema, standard_enforcer, standard_mode_schemas, standard_rules,
-    standard_rules_cached, strict, write_mode_schema,
+    search_mode_schema, standard_enforcer, standard_mode_schemas, standard_rules, strict,
+    write_mode_schema,
 };
 pub use catalog::{RAG_TOOL_IDS, RegisteredTool, ToolCatalog, ToolExecKind};
 pub use progressive::{

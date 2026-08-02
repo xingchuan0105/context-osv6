@@ -48,7 +48,7 @@ pub fn contains_template_artifact(text: &str) -> bool {
 }
 
 /// The specific template token that tripped, if any.
-pub fn template_artifact_matched(text: &str) -> Option<&'static str> {
+pub(crate) fn template_artifact_matched(text: &str) -> Option<&'static str> {
     const TEMPLATE_ARTIFACTS: &[&str] = &["</response>", "<response>", "<|im_end|>", "<|im_start|>"];
     TEMPLATE_ARTIFACTS
         .iter()
@@ -69,14 +69,14 @@ pub fn contains_executable_code_form(text: &str) -> bool {
 
 /// Rule-level hit marker for the executable-code-form detector (no single
 /// specific tag; the shape itself is the marker).
-pub fn executable_code_matched(text: &str) -> Option<&'static str> {
+pub(crate) fn executable_code_matched(text: &str) -> Option<&'static str> {
     text.contains("<code language=")
         .then_some("<code language=…> executable-form span")
 }
 
 /// The specific host observation tag that tripped (from the host_markers
 /// single source of truth), if any.
-pub fn host_shell_matched(text: &str) -> Option<&'static str> {
+pub(crate) fn host_shell_matched(text: &str) -> Option<&'static str> {
     super::super::host_markers::forbidden_in_final_tags()
         .find(|tag| text.contains(tag))
 }

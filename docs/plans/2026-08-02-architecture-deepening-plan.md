@@ -3,11 +3,11 @@
 | 项 | 内容 |
 |---|---|
 | 日期 | 2026-08-02 |
-| 状态 | **进行中**：W1 已交付已审 + 返工已复核（`a051223f`，3 项全落地）；W2 / W3-C3 / W4 已提交**待双轴审**；W3-C5 未做（本窗口排期）；W5 已交付已审 + 小修已落地；详见 §5 |
+| 状态 | **主体波次全部交付、全部双轴审毕**（W1–W5 + W1返工 + C6小修 + ADR-0009）：7 提交验收，无推倒项；余 P0×3 / P1×4 归并返工清单（§5 末）+ P2 记录项 |
 | 来源 | 架构审查报告 `/tmp/architecture-review-1785639147.html` + 深潜报告 `/tmp/architecture-deepdive-1785640412.html`（7 候选，均含现状接口/问题/加深设计/切片/测试存活/ADR 约束） |
 | 范围 | `avrag-rs`：rag-core / agent-tools / app-chat / agent-loop / llm / billing |
 | 不做 | push/PR/CI；failover 统一（C4 切片 3，留到有真实流式故障复现）；`RuntimeExecuteRequest` 加 `doc_scope` 字段（决策 1） |
-| 约束 | T1–T8；T5 行为保持切片、验证门不过不前进；prompts-in-md；第三人称观察式 prompt；solo 本地 trunk；WSL `jobs=2` 不叠加并发全量 cargo test；每波结构性改动后 `graphify update .`（不提交 graphify-out/） |
+| 约束 | T1–T8；T5 行为保持切片、验证门不过不前进；prompts-in-md；第三人称观察式 prompt；solo 本地 trunk；WSL `jobs=2` 不叠加并发全量 cargo test；每波结构性改动后 `code-review-graph update`（不提交 .code-review-graph/） |
 | 执行须知 | 报告中的文件/行号基于 2026-08-02 快照；**动手前逐条对照源码再核实**，前提不符就停下报告，不即兴发挥 |
 
 ---
@@ -163,7 +163,7 @@ ADR：ADR-0006 §5a + T4 不塌层——catalog 仍是唯一表。
 - **补录 ADR-0009**（Retrieval Bridge）：CONTEXT.md 引用但 `docs/adr/` 无此文件——补录或修正引用（W1 时一并）；
 - **ADR 编号/文件名对齐**：文件名 0005 内容标题为 ADR 0004（W4-C4 时）；`policy.rs:4` 引用 §5a 与 `0006-unified-agent-loop-revised.md` 文件名（W4-C7 时）；
 - **prompts 硬规则**：C5 的 `[block n]` 线格式（LLM 可见）规范写入 `prompts/capabilities/knowledge-base/SKILL.md`；任何新增 LLM 可见文本一律落 `avrag-rs/prompts/**/*.md`，第三人称观察式，不内联 Rust；
-- 每波结束：`graphify update .`（WSL，不提交 graphify-out/）。
+- 每波结束：`code-review-graph update`（WSL，不提交 .code-review-graph/）。
 
 ## 4. 执行窗口交接说明
 
@@ -223,3 +223,60 @@ ADR：ADR-0006 §5a + T4 不塌层——catalog 仍是唯一表。
 - **线格式规范**：`[[cite:]]`/`[[image:]]`/`[[web:n]]`/`[block n]` 已写入 `prompts/capabilities/knowledge-base/SKILL.md`（prompts 硬规则）。
 - **切片 4（分相）已交付（本窗口）**：L1 文件大小门（>1000 行硬限）要求 `answer_contract.rs` 必须分解——拆为目录模块 `answer_contract/`：`mod.rs`（740 行，facade + lift/validate/salvage + pub API re-export）、`parse.rs`（430 行，structs + 解析/归一/升级/标记提取）、`final_answer_rules.rs`（~193 行，终答格式规则簇 + DRAFT_REFUSAL_CUES）、`tests.rs`（391 行，测试移出）。跨模块共享项升 `pub(crate)`，外部 pub 面由 mod.rs 精确 `pub use` 保持原样。验证门：agent-loop 291 全绿；`check_file_size_limits.sh` hard_failures=0（从 allowlist 移除已分解的 answer_contract.rs 条目）。
 - **顺手硬化（既有 flaky 竞态）**：host_markers.rs 两测试（`every_md_tag_candidate_is_registered` 扫描 `prompts/loop/*.md` vs `parity_fails_on_unregistered_md_tag` 写临时 probe）并行竞争致偶发失败——加共享 Mutex 串行化，6/6 稳定。
+
+### 双轴审查记录（review 窗口，2026-08-02 第二批：W1返工 / W2 / C3 / C7 / C4 / C5 / C6小修 / docs）
+
+**总判**：7 个提交全部「验收+小修」或「验收」，无推倒重做项。返工按优先级归并到本节末清单。
+
+**W1 返工 `a051223f` — 验收**（review 窗口逐行复核）：fail-closed 三件套（`workspace_doc_scope` 改 Result 传播存储错误；空相交返回空集不回退；`dispatch_scoped` 对显式越界 caller 短路空结果且防「空 doc_scope=org-wide」）全部落地并有测试；`ToolExecKind::Rag` 变体+arm、`execute_tools`/`dispatch_all` grep 零引用。可选项 3（`set_rag_runtime` feature-gate）未做、判定可接受（`test_set_rag_runtime` 已在 test-support 下）。
+
+**C6 小修 `9ba6e735` — 验收**：测试名/文档声明降级与审查要求逐字对应；`memory_session_visible` 死 pub 删除，另两 pub 显式留（C2-pub 定夺结案）。
+
+**docs `743bd77f` — 验收**：ADR-0009 内容与技术事实相符（HostBridge fd3/fd4、RuntimeBridge、唯一 intersect 复用）；ADR 0004/0005 编号错位核实为历史冲突，**挂账待刻意重排**（e2e 语料与 DESKTOP 审计对「ADR-0004」指代不同，改标题会破坏引用）。
+
+**W2·C2 `eb1c972f` — 验收+小修（含 1 项必修）**：
+- Spec：切片 2/3 落地（profile_update 单模块、general-v1 grep 零引用、闸门单测真实断言、admin 保存不再戳 inferred_at 且有测试锁）。**必修**：worker 日合并 `agent_memory_jobs.rs:185,228` 每跑必戳 `inferred_at=now`——dream 24h 闸门在生产被持续重置，dream-v2 实际永不触发，「dream-v2 唯一写入者」名不副实，决策 2 语义未真正达成。切片 1 行为锁属部分交付（无死锁复现测试，记为已知缺陷）。
+- Standards：无硬违规。最重：`is_direct_chat_mode` 双份私有拷贝（profile_update/mod.rs:25 + service_postprocess.rs:273）应合一；`maybe_update_profiles` 返回 Result 但永 Ok（无效失败面）；存量 `user-profile-extraction.system.md` 第二人称指令体（非本提交引入，记入 prompt 债）。
+
+**W3·C3 `c7458770` — 验收+小修**：
+- Spec：四切片实质达成（真死文件删除判断正确——计划快照误标 core.rs/tier.rs 为死文件，实际非死，执行方判断对；process.rs 改写为 ProviderEvent 消费层而非删除，意图达成；Alipay 验签不对称/CJK percent-decoding/cents 比较均有真实测试）。问题：commit message 测试计数 17 vs 实际 14；两个未声明的小行为变更（错误码归并）。
+- Standards：surgical 越界 1 处——`contracts/tests/module_fixtures.rs` 整文件删除连带砍掉 2 个与 billing 无关的 fixture 测试（workspace_list / admin_health），**应恢复这两个测试**；`adapter_for` 的 `panic!` 在金钱 webhook 热路径留未来可触发的崩溃点，**应改显式错误**（最重）；handle_webhook 双 arm 逐行重复可合并。
+
+**W4·C7 `2434df10` — 验收+小修**：
+- Spec：派生等价回归测试扎实（5 auth 态 × 全工具对拍）。问题：一致性锁测试 risk 半边同义反复（单源化后永不可失败，「锁」名不副实）；registry.rs:294 三个不可达死 match 臂；`standard_rules_cached` 死导出；rag 工具 risk 投影 Low→Medium 行为变化未在 commit 标注（属修复漂移，应补注+测试锁投影值）。
+- Standards：最重——派生循环 `_ => continue` 静默跳过 User/Advanced/Admin 权限类型，未来工具挂这些权限将无声失去闸门，且等价测试同盲区；建议穷尽匹配或显式注释执法范围。双 OnceLock 重复构建规则集（轻微）。
+
+**P1-2 已落地（本窗口）**：
+- `policy.rs` 派生循环 `_ => continue` 改**穷尽匹配**：User/Advanced/Admin 显式列出并注释（RBAC 档位由 auth 层执法，非工具级能力闸门；新增 Permission 变体必须在此显式放置）。
+- `registry.rs` `infer_skill_risk_level` 删除三个不可达死 match 臂（code_interpreter/web_search/web_fetch 已注册，经 `tool_meta` 解析）。
+- 删除 `standard_rules_cached` 死导出 + `STANDARD_RULES` OnceLock + mod.rs/lib.rs re-export。
+- **rag risk Low→Medium 补注**：`2434df10` 的 rag 工具 risk 投影由 `infer_risk` 默认 Low 改为 catalog 单源 Medium（修复既有漂移），属有意的行为对齐；此补注即 commit 缺失标注的补录。`cargo test -p agent-tools` 145 绿。
+
+**W4·C4 `7d23423a` — 验收+小修**：
+- Spec：切片 1/2/4 全达标（usage 转换全仓唯一、pool 测试离网 109 绿、死面 grep 零残留）；切片 3 暂缓被严格遵守，failover/try_each 语义未动。
+- Standards（与 Spec 轴同指最重）：`route/client.rs:225` 流式分支 `panic!` 处理 TransportBody 契约违例——同函数非流式分支返回 `LlmError::protocol`，不对称；任何自定义 Transport 实现者的一个 bug 即 abort 进程，**应改 Err 返回**。`complete_stream_openai` 与 `Route::complete_stream` 平行重复（Feature Envy 残留，可留后续）。
+
+**W3·C5 `3a711d48` — 验收+小修**：
+- Spec：golden 6/6、三份 extract 归一、决策 3（image:）有显式测试、SKILL.md 线格式与代码实际格式一致、分相 pub 面逐项无丢失。缺口：① 切片 2 验证门具名项 `exit_policy.rs:112` 仍手写 `[block n]` 解析（markers 只有产出侧 `format_block`，缺 parse 侧 API）——线格式仍有第二实现；② 「删 4 个死 pub 项」只删 2 个，`strip_json_fences`/`template_artifact_matched`/`executable_code_matched`/`host_shell_matched`/`known_chunk_ids_with_messages` 仍 pub 且零外部调用者。host_markers Mutex 顺手修复诊断正确、修法最小，认可。
+- Standards：无硬违规（SKILL.md 全第三人称陈述，合规）。存量债记录：answer_contract 内 `synthesis_contract_block`/`feedback_hint` 中文化是 LLM-facing 散文硬编码于 Rust（字节级存量搬迁，本波不追责，记入 prompt 债）。
+
+#### 归并返工清单（执行窗口领走）
+
+- **P0-1（W2，语义必修）**：worker `agent_memory_jobs` upsert 不戳 `inferred_at`（保留既有值），让 dream 24h 闸门真实生效；补「worker 写入不重置 cadence」测试。
+- **P0-2（C3）**：`service.rs adapter_for` 的 `panic!` 改返回显式 `ProviderError`。
+- **P0-3（C4）**：`route/client.rs` 流式分支 `panic!` 改 `LlmError::protocol`，与非流式分支对齐。
+- **P1-1（C3）**：恢复 `module_fixtures.rs` 中被连带删除的 workspace_list / admin_health 两个 fixture 往返测试。
+- **P1-2（C7）**：派生循环 `_ => continue` 改穷尽匹配（或显式注释执法范围仅 ExternalNetwork/CodeExecution）；删 registry 死 match 臂与 `standard_rules_cached` 死导出；commit/文档补注 rag risk Low→Medium 变化。
+- **P1-3（C5）**：markers.rs 补 parse 侧 API（parse_block 行），exit_policy.rs:112 手写解析改委托；删 answer_contract 剩余死 pub re-export（5 项）。
+- **P1-4（W2）**：`is_direct_chat_mode` 双份合一；`maybe_update_profiles` 的 Result 签名收窄或让 list_messages 错误真实传播（二选一）。
+- **P2（记录，不阻塞）**：ADR 0004/0005 编号刻意重排（需动语料/审计引用，单独决策）；prompt 债两笔（`user-profile-extraction.system.md` 第二人称 voice；answer_contract 内 `synthesis_contract_block`/`feedback_hint` 内联散文迁 prompts/）；C3 commit message 测试计数 17→14 木已成舟，以此条为准。
+
+**P0×3 + P1×4 已全部落地（本窗口，2026-08-02）**：
+- **P0-1**：`agent_memory_jobs` 两处 upsert 提为共享 `PROFILE_UPSERT_SQL` const，`on conflict` 去掉 `inferred_at = excluded.inferred_at`（保留既有值）；补 SQL 回归守卫（PG-free）+ 真 PG 集成测试（种子 25h 旧 inferred_at → 跑 upsert → 断言不变，含 RLS/FK 种用户）。`cargo test -p avrag-worker` 33 绿。
+- **P0-2**：`ProviderError` 加 `Unsupported` 变体；`adapter_for` 返回 `Result<&dyn PaymentProvider, ProviderError>`，4 调用点（checkout×2/webhook×2）显式处理。billing 26 绿。
+- **P0-3**：llm `route/client.rs` 流式分支 TransportBody 契约违例由 `panic!` 改 `Err(LlmError::protocol(...))`（经 try_stream `?` 路径），与非流式分支对齐。llm 109 绿。
+- **P1-1**：恢复 `contracts/tests/module_fixtures.rs`（workspace_list + admin_health 往返测试；billing_plans 随 C3 合同重构正确退役）。contracts 15 绿。
+- **P1-2**：`policy.rs` 派生循环穷尽匹配（User/Advanced/Admin 显式列出 + RBAC 注释）；`infer_skill_risk_level` 删 3 不可达死臂；删 `standard_rules_cached` 死导出 + STANDARD_RULES OnceLock + re-export；rag risk Low→Medium 补注见 W4·C7 记录。agent-tools 145 绿。
+- **P1-3**：`markers.rs` 补 parse 侧 `parse_block`/`Block`（+ round-trip/error/truncated golden）；`exit_policy.rs:112` 手写解析改委托；answer_contract 删 5 个死 pub re-export（strip_json_fences/template_artifact_matched/executable_code_matched/host_shell_matched/known_chunk_ids_with_messages 降级）。rag-core 120 + agent-loop 291 绿。
+- **P1-4**：`is_direct_chat_mode` 合一（profile_update 唯一源，service_postprocess 删副本）；`maybe_update_profiles` Result→bool（尽力而为，list_messages 错误显式吞并注释），调用点去 `?`。app-chat 75 绿。
+- 验证：`test-l1`（worker 33 / billing 26 / llm 109 / contracts 15 / agent-tools 145 / rag-core 120 / agent-loop 291 / app-chat 75）**L1 OK**；`cargo check --workspace` 0 error。

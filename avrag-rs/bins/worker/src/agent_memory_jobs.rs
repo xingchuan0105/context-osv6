@@ -8,6 +8,23 @@ use uuid::Uuid;
 
 const DAILY_LOG_RETENTION_DAYS: i64 = 30;
 
+/// Profile upsert shared by both consolidation branches. `$4` is the
+/// `inferred_at` stamp used only on INSERT; the `on conflict` clause must NOT
+/// overwrite `inferred_at` (P0-1) — this job is an explicit-preference
+/// consolidation, not a dream inference, so the dream-v2 24h cadence clock
+/// (profile_update/dream.rs gate) must be preserved.
+const PROFILE_UPSERT_SQL: &str = r#"
+insert into user_profiles (
+    user_id, owner_user_id, expertise_domains, preferred_answer_style,
+    frequently_asked_topics, custom_preferences, inferred_at, inference_version
+)
+values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, $3, $4, 'agent-preference-memory-v1')
+on conflict (user_id) do update
+set custom_preferences = excluded.custom_preferences,
+    inference_version = excluded.inference_version,
+    updated_at = now()
+"#;
+
 pub(crate) struct AgentPreferenceConsolidationJobRunner {
     pool: sqlx::PgPool,
     interval: Duration,
@@ -165,20 +182,7 @@ impl AgentPreferenceConsolidationJobRunner {
                     truncate_agent_daily_log(&mut preferences, now.date_naive());
                     preferences.agent_memory.last_consolidated_at = Some(now_text);
 
-                    sqlx::query(
-                        r#"
-                        insert into user_profiles (
-                            user_id, owner_user_id, expertise_domains, preferred_answer_style,
-                            frequently_asked_topics, custom_preferences, inferred_at, inference_version
-                        )
-                        values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, $3, $4, 'agent-preference-memory-v1')
-                        on conflict (user_id) do update
-                        set custom_preferences = excluded.custom_preferences,
-                            inferred_at = excluded.inferred_at,
-                            inference_version = excluded.inference_version,
-                            updated_at = now()
-                        "#,
-                    )
+                    sqlx::query(PROFILE_UPSERT_SQL)
                     .bind(user_id)
                     .bind(owner_user_id)
                     .bind(serde_json::to_value(&preferences)?)
@@ -208,20 +212,7 @@ impl AgentPreferenceConsolidationJobRunner {
                     no_change: Vec::new(),
                 });
 
-                sqlx::query(
-                    r#"
-                    insert into user_profiles (
-                        user_id, owner_user_id, expertise_domains, preferred_answer_style,
-                        frequently_asked_topics, custom_preferences, inferred_at, inference_version
-                    )
-                    values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, $3, $4, 'agent-preference-memory-v1')
-                    on conflict (user_id) do update
-                    set custom_preferences = excluded.custom_preferences,
-                        inferred_at = excluded.inferred_at,
-                        inference_version = excluded.inference_version,
-                        updated_at = now()
-                    "#,
-                )
+                sqlx::query(PROFILE_UPSERT_SQL)
                 .bind(user_id)
                 .bind(owner_user_id)
                 .bind(serde_json::to_value(&preferences)?)
@@ -395,5 +386,132 @@ mod tests {
         );
         assert_eq!(preferences.agent_memory.daily_log.len(), 1);
         assert_eq!(preferences.agent_memory.daily_log[0].date, "2026-06-01");
+    }
+
+    /// P0-1 regression guard (PG-free): the consolidation upsert's `on conflict`
+    /// clause must never stamp `inferred_at` — the dream-v2 24h cadence clock is
+    /// owned by the dream writer, not by explicit-preference consolidation.
+    #[test]
+    fn consolidation_upsert_conflict_clause_preserves_inferred_at() {
+        let conflict_clause = PROFILE_UPSERT_SQL
+            .split("on conflict (user_id) do update")
+            .nth(1)
+            .expect("upsert must have an on-conflict clause");
+        assert!(
+            !conflict_clause.contains("inferred_at = excluded.inferred_at"),
+            "consolidation upsert must not reset inferred_at on conflict; conflict clause was:\n{conflict_clause}"
+        );
+        // Sanity: the clause must still update preferences + version + timestamp.
+        assert!(conflict_clause.contains("custom_preferences = excluded.custom_preferences"));
+        assert!(conflict_clause.contains("inference_version = excluded.inference_version"));
+        assert!(conflict_clause.contains("updated_at = now()"));
+    }
+
+    /// P0-1 (real PG, skips without DATABASE_URL): running the consolidation
+    /// upsert over a profile seeded with an old `inferred_at` must leave the
+    /// cadence clock intact (25h-old stays 25h-old, not reset to now).
+    #[tokio::test]
+    async fn worker_upsert_preserves_dream_cadence_clock() -> Result<(), Box<dyn std::error::Error>> {
+        let Some(pool) = test_pg_pool().await else {
+            eprintln!(
+                "SKIP worker_upsert_preserves_dream_cadence_clock: no DATABASE_URL / PG"
+            );
+            return Ok(());
+        };
+
+        // B2C personal account: user_id == owner_user_id.
+        let owner_user_id = Uuid::new_v4();
+        let user_id = owner_user_id;
+        let seeded_at = Utc::now() - ChronoDuration::hours(25);
+
+        // RLS keys off `app.current_user`; run everything in one transaction with
+        // the session var set (mirrors `run_once` per-owner loop).
+        let mut tx = pool.begin().await?;
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(owner_user_id.to_string())
+            .execute(tx.as_mut())
+            .await?;
+
+        // user_profiles has FKs on both user_id and owner_user_id → users.
+        let email = format!("p0c1test-{owner_user_id}@example.invalid");
+        sqlx::query("insert into users (id, email) values ($1, $2)")
+            .bind(owner_user_id)
+            .bind(&email)
+            .execute(tx.as_mut())
+            .await?;
+
+        sqlx::query(
+            r#"
+            insert into user_profiles (
+                user_id, owner_user_id, expertise_domains, preferred_answer_style,
+                frequently_asked_topics, custom_preferences, inferred_at, inference_version
+            )
+            values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, '{}'::jsonb, $3, 'dream-v2')
+            on conflict (user_id) do update set inferred_at = excluded.inferred_at
+            "#,
+        )
+        .bind(user_id)
+        .bind(owner_user_id)
+        .bind(seeded_at)
+        .execute(tx.as_mut())
+        .await?;
+
+        let preferences = serde_json::to_value(&UserPreferences::default()).unwrap();
+        sqlx::query(PROFILE_UPSERT_SQL)
+            .bind(user_id)
+            .bind(owner_user_id)
+            .bind(preferences)
+            .bind(Utc::now())
+            .execute(tx.as_mut())
+            .await?;
+
+        let inferred_at: DateTime<Utc> = sqlx::query_scalar(
+            "select inferred_at from user_profiles where user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        // Delete the seeded user (cascades to user_profiles via FK).
+        sqlx::query("delete from users where id = $1")
+            .bind(owner_user_id)
+            .execute(tx.as_mut())
+            .await?;
+        tx.commit().await?;
+
+        assert!(
+            inferred_at.signed_duration_since(seeded_at).num_seconds().abs() < 60,
+            "consolidation upsert must preserve the seeded inferred_at (cadence clock), got {inferred_at}"
+        );
+        Ok(())
+    }
+
+    /// Resolve DATABASE_URL from env or monorepo `.env` (honest PG test).
+    async fn test_pg_pool() -> Option<sqlx::PgPool> {
+        sqlx::PgPool::connect(&resolve_database_url()).await.ok()
+    }
+
+    fn resolve_database_url() -> String {
+        if let Ok(url) = std::env::var("DATABASE_URL") {
+            return url;
+        }
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for candidate in [
+            manifest.join("../../.env"),
+            std::path::PathBuf::from("/home/chuan/context-osv6/avrag-rs/.env"),
+        ] {
+            if let Ok(content) = std::fs::read_to_string(&candidate) {
+                for line in content.lines() {
+                    let line = line.trim();
+                    if let Some(rest) = line.strip_prefix("DATABASE_URL=") {
+                        let v = rest.trim().trim_matches('"').trim_matches('\'');
+                        if !v.is_empty() {
+                            return v.to_string();
+                        }
+                    }
+                }
+            }
+        }
+        "postgres://avrag:avrag@127.0.0.1:5432/avrag_rs".to_string()
     }
 }

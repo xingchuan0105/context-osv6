@@ -94,13 +94,18 @@ impl BillingService {
 
     /// Route a provider id to its registered adapter (Creem / Alipay). Stripe is
     /// rejected by callers before this lookup; there is deliberately no Stripe
-    /// adapter.
-    fn adapter_for(&self, provider: BillingProvider) -> &dyn PaymentProvider {
+    /// adapter. Returns an explicit [`ProviderError::Unsupported`] instead of
+    /// panicking when a provider has no adapter (P0-2 — webhook/checkout hot
+    /// paths must not carry a future-triggerable abort).
+    fn adapter_for(
+        &self,
+        provider: BillingProvider,
+    ) -> Result<&dyn PaymentProvider, ProviderError> {
         let adapters: [&dyn PaymentProvider; 2] = [&self.creem, &self.alipay];
         adapters
             .into_iter()
             .find(|adapter| adapter.id() == provider)
-            .unwrap_or_else(|| panic!("no payment adapter registered for {provider}"))
+            .ok_or_else(|| ProviderError::Unsupported(provider.to_string()))
     }
 
     pub async fn get_plans(
@@ -191,11 +196,13 @@ impl BillingService {
                         "Creem billing checkout is not configured",
                     );
                 }
-                match self
-                    .adapter_for(requested_provider)
-                    .create_checkout(user_id, requested_plan, "")
-                    .await
-                {
+                let adapter = match self.adapter_for(requested_provider) {
+                    Ok(adapter) => adapter,
+                    Err(error) => {
+                        return ApiResponse::err("billing_checkout_failed", &error.to_string());
+                    }
+                };
+                match adapter.create_checkout(user_id, requested_plan, "").await {
                     Ok(CheckoutSession::Url { url, session_id }) => {
                         ApiResponse::ok(CheckoutResponse {
                             url,
@@ -246,11 +253,13 @@ impl BillingService {
                     return ApiResponse::err("billing_checkout_failed", &error.to_string());
                 }
 
-                match self
-                    .adapter_for(requested_provider)
-                    .create_checkout(user_id, requested_plan, &out_trade_no)
-                    .await
-                {
+                let adapter = match self.adapter_for(requested_provider) {
+                    Ok(adapter) => adapter,
+                    Err(error) => {
+                        return ApiResponse::err("billing_checkout_failed", &error.to_string());
+                    }
+                };
+                match adapter.create_checkout(user_id, requested_plan, &out_trade_no).await {
                     Ok(CheckoutSession::QrCode { qr_code, order_id }) => {
                         ApiResponse::ok(CheckoutResponse {
                             url: "".to_string(),
@@ -311,27 +320,31 @@ impl BillingService {
                     "Stripe webhooks are no longer accepted; product billing is Creem + Alipay only",
                 );
             }
-            BillingProvider::Creem => match self
-                .adapter_for(provider)
-                .parse_event(signature, payload)
-                .await
-            {
-                Ok(delivery) => delivery,
-                Err(ProviderError::Signature(message)) => {
-                    return ApiResponse::err("billing_webhook_signature_failed", &message);
+            BillingProvider::Creem => {
+                let adapter = match self.adapter_for(provider) {
+                    Ok(adapter) => adapter,
+                    Err(error) => return webhook_error_response(error.into()),
+                };
+                match adapter.parse_event(signature, payload).await {
+                    Ok(delivery) => delivery,
+                    Err(ProviderError::Signature(message)) => {
+                        return ApiResponse::err("billing_webhook_signature_failed", &message);
+                    }
+                    Err(error) => return webhook_error_response(error.into()),
                 }
-                Err(error) => return webhook_error_response(error.into()),
-            },
-            BillingProvider::Alipay => match self
-                .adapter_for(provider)
-                .parse_event(signature, payload)
-                .await
-            {
-                Ok(delivery) => delivery,
-                Err(ProviderError::Signature(message)) => {
-                    return ApiResponse::err("billing_webhook_signature_failed", &message);
+            }
+            BillingProvider::Alipay => {
+                let adapter = match self.adapter_for(provider) {
+                    Ok(adapter) => adapter,
+                    Err(error) => return webhook_error_response(error.into()),
+                };
+                match adapter.parse_event(signature, payload).await {
+                    Ok(delivery) => delivery,
+                    Err(ProviderError::Signature(message)) => {
+                        return ApiResponse::err("billing_webhook_signature_failed", &message);
+                    }
+                    Err(error) => return webhook_error_response(error.into()),
                 }
-                Err(error) => return webhook_error_response(error.into()),
             },
         };
 

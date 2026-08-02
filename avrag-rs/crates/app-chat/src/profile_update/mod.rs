@@ -12,7 +12,6 @@ pub(crate) use dream::{LlmProfileDeltaStrategy, ProfileDeltaStrategy};
 pub(crate) use types::ProfileDelta;
 
 use app_core::ChatPersistencePort;
-use common::AppError;
 use uuid::Uuid;
 
 use crate::chat::ChatExecution;
@@ -22,7 +21,9 @@ use crate::context::ChatContext;
 const PROFILE_INPUT_TURN_WINDOW: usize = 12;
 
 /// True when the execution mode is direct (non-rag, non-search) chat.
-fn is_direct_chat_mode(mode: &str) -> bool {
+/// Single implementation (P1-4): service_postprocess delegates here instead of
+/// carrying a second copy.
+pub(crate) fn is_direct_chat_mode(mode: &str) -> bool {
     matches!(mode, "chat")
 }
 
@@ -44,38 +45,43 @@ impl ChatContext {
     /// Lists the session's messages once, then runs the single profile writer
     /// (dream-v2: an LLM-proposed semantic delta merged deterministically into
     /// `structured_profile`), gated on a 24h cadence.
+    ///
+    /// Returns `true` when a profile update was applied. Best-effort by design
+    /// (P1-4): profile enrichment is post-persist enrichment and must never fail
+    /// the chat turn, so a `list_messages` error is swallowed rather than
+    /// propagated — the signature is a plain `bool`, not a `Result`.
     pub(crate) async fn maybe_update_profiles(
         &self,
         chat_persistence: &dyn ChatPersistencePort,
         session_uuid: Uuid,
         execution: &mut ChatExecution,
-    ) -> Result<(), AppError> {
+    ) -> bool {
         let Ok(messages) = chat_persistence
             .list_messages(&self.auth, session_uuid)
             .await
         else {
-            return Ok(());
+            return false;
         };
 
         let recent_turns = build_recent_turns_context(&messages, PROFILE_INPUT_TURN_WINDOW);
-        if !recent_turns.trim().is_empty() {
-            let profile_updated = self
-                .maybe_update_structured_profile(
-                    chat_persistence,
-                    &recent_turns,
-                    &dream::LlmProfileDeltaStrategy,
-                )
-                .await;
-            if profile_updated
-                && is_direct_chat_mode(&execution.mode)
-                && let Some(mode_debug) = execution.response.mode_debug.as_mut()
-                && let Some(general) = mode_debug.general.as_mut()
-            {
-                general.insert("profile_updated".to_string(), serde_json::json!(true));
-            }
+        if recent_turns.trim().is_empty() {
+            return false;
         }
-
-        Ok(())
+        let profile_updated = self
+            .maybe_update_structured_profile(
+                chat_persistence,
+                &recent_turns,
+                &dream::LlmProfileDeltaStrategy,
+            )
+            .await;
+        if profile_updated
+            && is_direct_chat_mode(&execution.mode)
+            && let Some(mode_debug) = execution.response.mode_debug.as_mut()
+            && let Some(general) = mode_debug.general.as_mut()
+        {
+            general.insert("profile_updated".to_string(), serde_json::json!(true));
+        }
+        profile_updated
     }
 }
 

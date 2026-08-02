@@ -19,7 +19,7 @@ pub use metadata::{
 };
 pub use policy::{
     ContextRiskLevel, EnforcementAction, EnforcementCondition, EnforcementRule, PolicyEnforcer,
-    permissive, standard_enforcer, standard_rules, standard_rules_cached, strict,
+    permissive, standard_enforcer, standard_rules, strict,
 };
 pub use registry::CapabilityRegistry;
 

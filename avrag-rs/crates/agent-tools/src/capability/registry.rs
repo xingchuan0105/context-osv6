@@ -290,11 +290,10 @@ fn infer_skill_risk_level(id: &str) -> super::RiskLevel {
     if let Some(meta) = ToolCatalog::standard_cached().tool_meta(id) {
         return meta.risk_level;
     }
-    // Fallback for prompt skills not registered as tools.
-    match id {
-        "code_interpreter" | "web_search" | "web_fetch" => super::RiskLevel::High,
-        _ => super::RiskLevel::Low,
-    }
+    // Fallback for prompt skills not registered as tools. (P1-2: the former
+    // `code_interpreter | web_search | web_fetch => High` arms were dead — those
+    // ids are registered tools and resolve via `tool_meta` above.)
+    super::RiskLevel::Low
 }
 
 fn parse_activation_phase(s: &str) -> Option<ActivationPhase> {

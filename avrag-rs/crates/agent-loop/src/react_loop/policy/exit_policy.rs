@@ -110,14 +110,14 @@ pub fn code_execution_has_evidence(message_content: &str) -> bool {
     };
 
     for segment in inner.split("[block ") {
-        let Some(stdout_part) = segment.split_once("stdout:") else {
+        // Single parse-side implementation (markers::parse_block, P1-3) — the
+        // `[block n]` line format is produced and consumed by one grammar.
+        let Some(block) = avrag_rag_core::runtime::markers::parse_block(segment) else {
             continue;
         };
-        let after_stdout = stdout_part.1;
-        let stdout = after_stdout
-            .split_once("stderr:")
-            .map(|(stdout, _)| stdout)
-            .unwrap_or(after_stdout);
+        let Some(stdout) = block.stdout else {
+            continue;
+        };
         // C8c: non-placeholder stdout alone is NOT evidence — it must carry a
         // chunk carrier (uuid-shaped chunk/doc id), otherwise fabricated
         // prose ("no_investor_info_found") would suppress the

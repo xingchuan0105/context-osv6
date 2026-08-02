@@ -377,7 +377,7 @@ pub(crate) fn scrub_internal_answer_tokens(text: &str) -> String {
     t.trim().to_string()
 }
 
-pub fn known_chunk_ids_with_messages(
+pub(crate) fn known_chunk_ids_with_messages(
     tool_results: &[ToolResult],
     messages: &[ChatMessage],
 ) -> std::collections::HashSet<String> {

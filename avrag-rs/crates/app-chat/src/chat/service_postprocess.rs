@@ -128,8 +128,10 @@ impl ChatContext {
             .remember_explicit_agent_preference(req.query.trim())
             .await;
 
-        self.maybe_update_profiles(chat_persistence, session_uuid, execution)
-            .await?;
+        // Best-effort profile enrichment (returns bool; never fails the turn).
+        let _ = self
+            .maybe_update_profiles(chat_persistence, session_uuid, execution)
+            .await;
 
         let event_name = if req.source_type.as_deref() == Some("share") {
             analytics::ProductEventName::SharedKbChatCompleted
@@ -252,7 +254,7 @@ impl ChatContext {
         }
 
         let (title, body) = match execution.mode.as_str() {
-            mode if is_direct_chat_mode(mode) => (
+            mode if crate::profile_update::is_direct_chat_mode(mode) => (
                 "General mode degraded",
                 "General mode used a degraded path for the latest turn.",
             ),
@@ -280,8 +282,4 @@ impl ChatContext {
             .await;
         Ok(())
     }
-}
-
-fn is_direct_chat_mode(mode: &str) -> bool {
-    matches!(mode, "chat")
 }

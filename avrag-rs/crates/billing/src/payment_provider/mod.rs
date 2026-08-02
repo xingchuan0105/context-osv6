@@ -29,6 +29,8 @@ pub enum ProviderError {
     Invalid(String),
     #[error("provider request failed: {0}")]
     Request(String),
+    #[error("no payment adapter registered for provider {0}")]
+    Unsupported(String),
 }
 
 /// Provider checkout result. Creem redirects to a hosted URL; Alipay F2F

@@ -12,13 +12,12 @@ use final_answer_rules::*;
 pub use parse::{
     InternalAnswerUnifiedV1, InternalAnswerV1, InternalCitationV1, InternalSearchAnswerV1,
     InternalSearchCitationV1, ParsedSynthesisAnswer, UnifiedCitationV1,
-    extract_web_marker_indices_public, known_chunk_ids_with_messages, parse_synthesis_answer,
+    extract_web_marker_indices_public, parse_synthesis_answer,
 };
 pub use final_answer_rules::{
     FINAL_ANSWER_RULES, FinalAnswerRule, FinalAnswerViolation, check_final_answer,
     contract_violation_fallback, contains_executable_code_form, contains_host_observation_shell,
-    contains_template_artifact, executable_code_matched, final_answer_contract_violation,
-    host_shell_matched, is_code_only_answer, template_artifact_matched,
+    contains_template_artifact, final_answer_contract_violation, is_code_only_answer,
 };
 
 use avrag_llm::ChatMessage;
@@ -58,7 +57,7 @@ Rules:\n\
 /// C6: delegate to the shared stripper so every consumer sees the same fence
 /// semantics (json_fence::strip_json_fence). Kept as a wrapper to preserve
 /// this module's long-standing public name.
-pub fn strip_json_fences(raw: &str) -> String {
+fn strip_json_fences(raw: &str) -> String {
     super::json_fence::strip_json_fence(raw)
 }
 

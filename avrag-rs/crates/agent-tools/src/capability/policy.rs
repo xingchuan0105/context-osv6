@@ -69,9 +69,6 @@ pub struct PolicyEnforcer {
     rules: Vec<EnforcementRule>,
 }
 
-/// Process-wide cached standard rule set (built once, hot path reuses it).
-static STANDARD_RULES: OnceLock<Vec<EnforcementRule>> = OnceLock::new();
-
 impl PolicyEnforcer {
     pub fn new(rules: Vec<EnforcementRule>) -> Self {
         Self { rules }
@@ -199,7 +196,12 @@ pub fn standard_rules() -> Vec<EnforcementRule> {
                     "allow-external-network-with-permission",
                     "deny-external-network-without-permission",
                 ),
-                _ => continue,
+                // User / Advanced / Admin are RBAC tier gates enforced by the
+                // auth layer, not tool-level capability gates — the derived rules
+                // intentionally emit no allow/deny for them. Listed explicitly so
+                // a new `Permission` variant must be consciously placed here
+                // (P1-2: no silent `_ => continue` blind spot).
+                Permission::User | Permission::Advanced | Permission::Admin => continue,
             };
             let id = tool.meta.id.clone();
             rules.push(EnforcementRule {
@@ -236,12 +238,6 @@ pub fn standard_rules() -> Vec<EnforcementRule> {
         action: EnforcementAction::Allow,
     });
     rules
-}
-
-/// Cached view of the standard rule set — built once via `OnceLock`, reused
-/// by every dispatch so the derived rules are not recomputed on the hot path.
-pub fn standard_rules_cached() -> &'static [EnforcementRule] {
-    STANDARD_RULES.get_or_init(standard_rules).as_slice()
 }
 
 /// Process-wide cached standard enforcer — constructed once, injected into the

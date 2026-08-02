@@ -122,6 +122,49 @@ pub fn format_block(idx: usize, stdout: &str, stderr: &str) -> String {
     format!("[block {}] stdout: {}\nstderr: {}", idx, stdout, stderr)
 }
 
+/// A parsed `[block n]` code-execution observation segment (the text after the
+/// opening `[block ` marker).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Block<'a> {
+    pub idx: usize,
+    /// `stdout:` payload, trimmed.
+    pub stdout: Option<&'a str>,
+    /// `stderr:` payload (success form; `None` when the line is truncated).
+    pub stderr: Option<&'a str>,
+    /// `Execution failed:` payload (error form; `None` on success).
+    pub failure: Option<&'a str>,
+}
+
+/// Parse one `[block n]` observation segment: `{n}] stdout: <…>\nstderr: <…>`
+/// (success) or `{n}] Execution failed: <…>` (error). Returns `None` for
+/// non-block segments (no numeric index, or neither `stdout:` nor
+/// `Execution failed:` present). This is the single parse-side implementation
+/// behind the former hand-written scanner in exit_policy (P1-3).
+pub fn parse_block(segment: &str) -> Option<Block<'_>> {
+    let (idx_part, body) = segment.split_once(']')?;
+    let idx = idx_part.trim().parse::<usize>().ok()?;
+    let body = body.trim_start();
+    if let Some(failure) = body.strip_prefix("Execution failed:") {
+        return Some(Block {
+            idx,
+            stdout: None,
+            stderr: None,
+            failure: Some(failure.trim()),
+        });
+    }
+    let stdout = body.strip_prefix("stdout:")?;
+    let (stdout, stderr) = match stdout.split_once("stderr:") {
+        Some((stdout, stderr)) => (stdout.trim(), Some(stderr.trim())),
+        None => (stdout.trim(), None),
+    };
+    Some(Block {
+        idx,
+        stdout: Some(stdout),
+        stderr,
+        failure: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,5 +225,38 @@ mod tests {
             format_block(0, "42", "err"),
             "[block 0] stdout: 42\nstderr: err"
         );
+    }
+
+    #[test]
+    fn parse_block_roundtrips_format_block() {
+        let line = format_block(3, "chunk-a chunk-b text", "traceback");
+        let parsed = parse_block(&line["[block ".len()..]).expect("parse success block");
+        assert_eq!(parsed.idx, 3);
+        assert_eq!(parsed.stdout, Some("chunk-a chunk-b text"));
+        assert_eq!(parsed.stderr, Some("traceback"));
+        assert_eq!(parsed.failure, None);
+    }
+
+    #[test]
+    fn parse_block_reads_error_form() {
+        let parsed = parse_block("1] Execution failed: NameError: x").expect("parse error block");
+        assert_eq!(parsed.idx, 1);
+        assert_eq!(parsed.failure, Some("NameError: x"));
+        assert_eq!(parsed.stdout, None);
+    }
+
+    #[test]
+    fn parse_block_skips_non_block_segments() {
+        // Preamble / non-block text, missing index, or no stdout marker.
+        assert_eq!(parse_block("\n<code_execution_result>\n"), None);
+        assert_eq!(parse_block("abc] stdout: x"), None);
+        assert_eq!(parse_block("0] stderr only"), None);
+    }
+
+    #[test]
+    fn parse_block_handles_truncated_stdout_without_stderr() {
+        let parsed = parse_block("0] stdout: partial").expect("truncated block");
+        assert_eq!(parsed.stdout, Some("partial"));
+        assert_eq!(parsed.stderr, None);
     }
 }
