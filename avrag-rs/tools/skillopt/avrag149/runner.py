@@ -201,6 +201,8 @@ def parse_report(
                 "correctness": _to_float(r.get("correctness")),
                 "faithfulness": _to_float(r.get("faithfulness")),
                 "relevancy": _to_float(r.get("relevancy")),
+                "recall": _to_float(r.get("recall")),
+                "recall_at_k": _to_float(r.get("recall_at_k")),
                 "query": r.get("query", ""),
             }
 
@@ -241,6 +243,84 @@ def score_row(row: dict, no_context: bool = False) -> tuple[int, float, bool]:
     f = row.get("faithfulness", 0.0)
     soft = c if no_context else (c + f) / 2.0
     return hard, soft, False
+
+
+# ── 分步代理信号（WP0：按层取信号，黄金集综合 label 不直接当训练梯度）──
+#
+# 层 → 信号映射（与 docs/plans/2026-08-02-skillopt-layered-training-impl.md D4 一致）：
+#   L1.5 代码层 → sandbox_error / no_output（需轨迹，见 WP3；此处占位）
+#   L2  检索面   → recall（per_query 列）
+#   L2.5 停点    → label 归类：UNGROUNDED=overconfident / PARTIAL=premature / REFUSAL_WRONG=degrade
+#   L3  合成面   → correctness / faithfulness
+#   L3b 选择     → SELECTION_MISS（recall>0 但 cited_gold=0）
+
+def layer_signals(row: dict, no_context: bool = False) -> dict:
+    """按层取代理信号（评分点 2026-08-01 修正保持：JUDGE/INFRA 不算质量缺陷）。
+
+    返回字段：
+    - recall         检索面（L2）：召回率 0..1
+    - correctness    合成面（L3）：答案正确性
+    - faithfulness   合成面（L3）：答案忠实度（no_context 题不适用）
+    - stop_class     L2.5 停点归类：overconfident / premature / degrade / ok / infra
+    - selection_miss 选择面（L3b）：1 iff label==SELECTION_MISS（检索成功但未引用 gold）
+    """
+    label = row.get("label", "")
+    recall = _to_float(row.get("recall"))
+    c = _to_float(row.get("correctness"))
+    f = _to_float(row.get("faithfulness"))
+    if label in ("JUDGE_ERROR", "INFRA_ERROR"):
+        return {"recall": recall, "correctness": c, "faithfulness": f,
+                "stop_class": "infra", "selection_miss": 0}
+    if label == "UNGROUNDED":
+        stop = "overconfident"
+    elif label in ("PARTIAL", "RETRIEVAL_MISS") and recall > 0:
+        # 有证据但答不全/答错 → 过早停或合成不全（L2.5/L3 边界，需轨迹二刀，WP3）
+        stop = "premature"
+    elif label == "REFUSAL_WRONG":
+        stop = "degrade"
+    else:
+        stop = "ok"
+    return {"recall": recall, "correctness": c, "faithfulness": f,
+            "stop_class": stop, "selection_miss": 1 if label == "SELECTION_MISS" else 0}
+
+
+def aggregate_layer_signals(rows: dict[int, dict]) -> dict:
+    """从 per_query 行聚合分层失败分布（WP0 自检 / 训练信号可视化用）。
+
+    返回：{layer: 失败数} + 总体（pass/total/avg_recall/avg_correctness/avg_faithfulness）。
+    """
+    agg: dict = {"pass": 0, "retrieval_miss": 0, "selection_miss": 0,
+                 "overconfident": 0, "premature": 0, "degrade": 0,
+                 "infra": 0, "total": 0, "avg_recall": 0.0,
+                 "avg_correctness": 0.0, "avg_faithfulness": 0.0}
+    recall_sum = corr_sum = faith_sum = 0.0
+    for r in rows.values():
+        agg["total"] += 1
+        label = r.get("label", "")
+        if label == "PASS":
+            agg["pass"] += 1
+        elif label in ("JUDGE_ERROR", "INFRA_ERROR"):
+            agg["infra"] += 1
+        elif label == "RETRIEVAL_MISS":
+            agg["retrieval_miss"] += 1
+        elif label == "SELECTION_MISS":
+            agg["selection_miss"] += 1
+        elif label == "UNGROUNDED":
+            agg["overconfident"] += 1
+        elif label == "REFUSAL_WRONG":
+            agg["degrade"] += 1
+        elif label == "PARTIAL":
+            # 有证据但答不全 → 过早停或合成不全（L2.5/L3 边界，需轨迹二刀，WP3）
+            agg["premature"] += 1
+        s = layer_signals(r, no_context=False)
+        recall_sum += s["recall"]
+        corr_sum += s["correctness"]
+        faith_sum += s["faithfulness"]
+    n = agg["total"]
+    agg["avg_recall"] = recall_sum / n if n else 0.0
+    agg["avg_correctness"] = corr_sum / n if n else 0.0
+    agg["avg_faithfulness"] = faith_sum / n if n else 0.0
+    return agg
 
 
 def load_artifact_answer(v2_dir: str | os.PathLike, n: int) -> str:

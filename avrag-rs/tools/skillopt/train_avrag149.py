@@ -106,6 +106,49 @@ def sync_optimizer_env(flat: dict, avrag_rs_root: str | os.PathLike) -> None:
             print(f"  [env] {k} ← avrag-rs/.env (AGENT_LLM_*)")
 
 
+# ── --signals 分层信号自检（WP0：读已有 v2 报告，按层暴露失败分布）────────────
+
+def run_signals(v2_dir: str, avrag_rs_root: str | os.PathLike) -> None:
+    """读一个已有评测 v2 产物目录，打印分层失败分布（检索/选择/停点/合成）。
+
+    训练信号口径：黄金集综合 label 不进训练梯度，各层取各自代理信号
+    （D4：recall→L2、SELECTION_MISS→L3b、UNGROUNDED/PARTIAL/REFUSAL→L2.5、corr/faith→L3）。
+    """
+    from avrag149.runner import _EVAL_OUTPUT_REL, aggregate_layer_signals, parse_report
+
+    root = Path(avrag_rs_root)
+    p = Path(v2_dir)
+    # 相对路径按评测产物根解析（crates/app/tests/e2e_output/rag_eval_v2/<v2_dir>）
+    vdir = p if p.is_absolute() else root / _EVAL_OUTPUT_REL / p
+    rows, meta = parse_report(vdir, ids=None)
+    agg = aggregate_layer_signals(rows)
+    print("=" * 64)
+    print("  分层失败分布（分步代理信号，WP0）")
+    print("=" * 64)
+    print(f"  总体: {agg['total']} 题, PASS={agg['pass']} "
+          f"({agg['pass'] / agg['total'] * 100:.1f}%)")
+    print(f"  均值: recall={agg['avg_recall']:.3f} "
+          f"correctness={agg['avg_correctness']:.3f} "
+          f"faithfulness={agg['avg_faithfulness']:.3f}")
+    print("  按层失败:")
+    print(f"    L2  检索面     : {agg['retrieval_miss']}  (RETRIEVAL_MISS, recall=0)")
+    print(f"    L3b 选择面     : {agg['selection_miss']}  (SELECTION_MISS, recall>0 但未引用 gold)")
+    print(f"    L2.5 停点-编造 : {agg['overconfident']}  (UNGROUNDED)")
+    print(f"    L2.5 停点-过早 : {agg['premature']}  (PARTIAL, 有证据但答不全)")
+    print(f"    L2.5 降级      : {agg['degrade']}  (REFUSAL_WRONG)")
+    print(f"    基础设施        : {agg['infra']}  (JUDGE_ERROR/INFRA_ERROR，非 skill 质量)")
+    # 按 subset 失败热点
+    from collections import defaultdict
+    by_subset: dict[str, list[str]] = defaultdict(list)
+    for r in rows.values():
+        if r.get("label") not in ("PASS", "JUDGE_ERROR", "INFRA_ERROR"):
+            by_subset[r.get("subset", "?")].append(r["label"])
+    print("  subset 失败热点:")
+    for s, labels in sorted(by_subset.items(), key=lambda x: -len(x[1])):
+        print(f"    {s:22s} {len(labels)} 题 {dict((l, labels.count(l)) for l in set(labels))}")
+    print("=" * 64)
+
+
 # ── --check 静态自检 ─────────────────────────────────────────────────────────
 
 def run_check(flat: dict) -> None:
@@ -183,11 +226,21 @@ def run_check(flat: dict) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="avrag149 SkillOpt 训练入口")
-    p.add_argument("--config", required=True, help="YAML 配置路径")
+    p.add_argument("--config", help="YAML 配置路径（--check/训练必填；--signals 不需要）")
     p.add_argument("--check", action="store_true", help="静态自检，不触发评测/训练")
+    p.add_argument("--signals", type=str, help="读已有 v2 产物目录，打印分层失败分布（不评测/训练）")
     p.add_argument("--cfg-options", nargs="+", default=[], help="覆盖: section.key=value")
     p.add_argument("--out_root", type=str, help="产物目录覆盖")
     args = p.parse_args()
+
+    if args.signals:
+        # --signals 不依赖 config；avrag_rs_root 用 adapter 规范默认
+        from avrag149.adapter import _DEFAULT_AVRAG_RS_ROOT
+        run_signals(args.signals, _DEFAULT_AVRAG_RS_ROOT)
+        return
+
+    if not args.config:
+        p.error("--check / 训练需要 --config")
 
     flat = load_config(args.config, args.cfg_options)
     if args.out_root:

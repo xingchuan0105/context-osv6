@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .runner import (
     SwapPromptFile,
+    layer_signals,
     load_artifact_answer,
     parse_report,
     run_eval,
@@ -97,6 +98,8 @@ def run_batch(
             print(f"  [rollout] {n} JUDGE_ERROR → skip (轨迹已留档)")
             continue
 
+        # 分步代理信号（WP0：按层取信号，黄金集综合 label 不直接当训练梯度）
+        signals = layer_signals(row, no_context=bool(item.get("no_context")))
         results.append({
             "id": str(n),
             "hard": hard,
@@ -108,7 +111,9 @@ def run_batch(
             "label": row.get("label", ""),
             "correctness": row.get("correctness", 0.0),
             "faithfulness": row.get("faithfulness", 0.0),
-            "reference_text": item.get("ground_truth", ""),  # 仅评分反射用，不写 skill
+            "recall": signals["recall"],
+            "signals": signals,
+            "reference_text": item.get("ground_truth", ""),  # C2/WP1 断开：不喂 optimizer
             "n_turns": 1,
         })
 
