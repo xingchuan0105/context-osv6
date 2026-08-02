@@ -43,6 +43,9 @@ class Avrag149Adapter(EnvAdapter):
         # 精简集(2026-08-01):题号白名单文件(错题 ∪ 各题型代表题);
         # 空/缺省 → 全量 149。
         include_ids_file: str = "",
+        # per-family split 的整族留出(WP1 防记忆化地基):逗号分隔的 subset 名,
+        # 全部进 test,永不进训练/反射视野(D6-② 结构性 holdout)。
+        holdout_subsets: str = "",
         **kwargs,
     ) -> None:
         self.workers = int(workers)
@@ -66,6 +69,9 @@ class Avrag149Adapter(EnvAdapter):
                 p = Path(__file__).resolve().parent.parent / p
             include_ids = [int(x) for x in json.loads(p.read_text(encoding="utf-8"))]
 
+        # per-family split 的整族留出（WP1 防记忆化地基，D6-②）
+        holdout = [s.strip() for s in str(holdout_subsets).split(",") if s.strip()]
+
         self.dataloader = Avrag149DataLoader(
             split_dir=split_dir,
             data_path=data_path,
@@ -76,6 +82,7 @@ class Avrag149Adapter(EnvAdapter):
             seed=seed,
             limit=limit,
             include_ids=include_ids,
+            holdout_subsets=holdout,
         )
 
     # ── Lifecycle ────────────────────────────────────────────────────────
@@ -112,6 +119,16 @@ class Avrag149Adapter(EnvAdapter):
             eval_timeout_secs=self.eval_timeout_secs,
             verbose=kwargs.get("verbose", True),
         )
+
+    def build_reference_text(self, item: dict) -> str:
+        """C2/WP1：黄金集参考答案绝不进入 optimizer 视野（防记忆化，D6-①）。
+
+        skillopt 默认 reflect 把 ``reference_text`` 作为 ``#### Hidden Reference``
+        直接喂给 analyst（``gradient/reflect.py:160-164``）——这是记忆化泄漏口。
+        评分（hard/soft）已在 rollout 宿主侧完成，optimizer 只需要
+        query + answer + score + 检索指标，不需要 gold 文本。返回空串使该段不注入。
+        """
+        return ""
 
     # reflect() 继承默认实现（读 out_dir/predictions/<id>/conversation.json）
 

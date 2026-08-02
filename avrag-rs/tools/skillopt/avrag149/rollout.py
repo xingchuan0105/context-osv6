@@ -113,7 +113,10 @@ def run_batch(
             "faithfulness": row.get("faithfulness", 0.0),
             "recall": signals["recall"],
             "signals": signals,
-            "reference_text": item.get("ground_truth", ""),  # C2/WP1 断开：不喂 optimizer
+            # C2/WP1（D6-①）：gold 答案绝不进 optimizer 视野——reference_text 会作为
+            # Hidden Reference 喂给 analyst（gradient/reflect.py:160），空串断泄漏。
+            # 评分（hard/soft）在宿主侧已算好，optimizer 不需要 gold 文本。
+            "reference_text": "",
             "n_turns": 1,
         })
 

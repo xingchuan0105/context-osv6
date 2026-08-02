@@ -204,6 +204,23 @@ def run_check(flat: dict) -> None:
     if not dl.train_items:
         print("      [FAIL] train 为空")
         sys.exit(1)
+    # WP1（D6-②）:holdout 整族留出断言——组合 subset 绝不进 train/val
+    holdout = set(getattr(dl, "holdout_subsets", set()) or set())
+    if holdout:
+        train_subsets = {str(it.get("subset")) for it in dl.train_items}
+        val_subsets = {str(it.get("subset")) for it in dl.val_items}
+        leaked = sorted(holdout & (train_subsets | val_subsets))
+        if leaked:
+            print(f"      [FAIL] holdout subset 泄漏进 train/val: {leaked}")
+            sys.exit(1)
+        test_subsets = {str(it.get("subset")) for it in dl.test_items}
+        missing = sorted(holdout - test_subsets)
+        if missing:
+            print(f"      [FAIL] holdout subset 未完整进 test: {missing}")
+            sys.exit(1)
+        print(f"      [OK] holdout 整族留出: {sorted(holdout)}（只进 test，防记忆化）")
+    else:
+        print(f"      [..] 无 holdout_subsets（ratio 模式或未配置）")
     task_types = adapter.get_task_types()
     print(f"      task_types: {len(task_types)} 个（前 5: {task_types[:5]}）")
 

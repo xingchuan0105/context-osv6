@@ -45,9 +45,13 @@ evaluation:
 env:
   name: avrag149
   skill_init: avrag149/skills/initial.md   # 起点 = 当前 prompts/system/agent-base.md 拷贝
-  split_mode: ratio             # 149 题按比例确定性划分（不重排题号，id 即 E2E_QUESTIONS 索引）
-  split_ratio: "7:2:1"          # train≈104 / val≈30 / test≈15
+  # WP1（2026-08-02）:per-family split——subset 族内 7:2:1 + 整族留出。
+  # 防记忆化结构性 holdout(D6-②):组合 subset 的答案永不进训练/反射视野。
+  split_mode: per_family
+  split_ratio: "7:2:1"          # 族内比例;holdout 整族进 test
   split_seed: 42
+  # 组合 subset 整族留出(组合回归门禁,训单 skill 绝不在这上面倒退)
+  holdout_subsets: "cross_document,ipd_table,rag_search_joint,cross_adr,orchestrator_paradigm"
   data_path: ""                 # 留空 → <avrag_rs_root>/tests/rag_quality/golden_set_realistic.json
   avrag_rs_root: ""             # 留空 → 自动推断为仓库 avrag-rs 根
   prompt_target: system/agent-base.md   # 被优化/替换的 prompts 内文件（相对 prompts/）
