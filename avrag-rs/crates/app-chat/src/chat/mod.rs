@@ -5,12 +5,15 @@
 //   → audit → output_guard → terminal stream events
 //   → persist → usage → notifications → attach operation guide.
 //
-// Notes on the real order (verified by `pipeline_spine_locks_terminal_events_before_persist_and_audit_stage`):
+// Notes on the real order (locked by `pipeline_spine_locks_audit_before_persist`):
 // - The audit record is appended right after the agent step, before the output
 //   guard runs.
 // - Terminal stream events (Token / Citations / Done) are emitted by the
 //   pipeline itself before the turn is persisted — not as a final tail stage.
-// - The audit and terminal-event stages are undocumented in older revisions of
+//   This ordering is guaranteed by code inspection of `run_pipeline`; the spine
+//   test locks audit → persist and Done-presence only, not the position of the
+//   Done event (the event stream is drained only after the pipeline completes).
+// - The audit and terminal-event stages were undocumented in older revisions of
 //   this comment and were the source of an ordering lie; the pipeline test
 //   locks the spine as it is today.
 //

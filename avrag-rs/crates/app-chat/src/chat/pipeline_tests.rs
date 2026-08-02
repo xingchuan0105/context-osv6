@@ -675,7 +675,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pipeline_spine_locks_terminal_events_before_persist_and_audit_stage() {
+    async fn pipeline_spine_locks_audit_before_persist() {
         let (mut state, chatmem, _session, session_id) = test_chat_context_with_profiles();
 
         let markers: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
@@ -713,6 +713,10 @@ mod tests {
         });
 
         handle.await.unwrap().expect("pipeline must succeed");
+        // Events are drained only after the pipeline fully completes (persist and
+        // usage already ran), so this snapshot proves Done is present but not that
+        // it precedes persist. That ordering is locked by code inspection instead
+        // (see `chat/mod.rs`); this test locks audit → persist via the markers.
         let mut events = Vec::new();
         while let Ok(event) = rx.try_recv() {
             events.push(event);
