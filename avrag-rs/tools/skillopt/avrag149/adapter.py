@@ -12,10 +12,34 @@ from skillopt.datasets.base import BatchSpec
 from skillopt.envs.base import EnvAdapter
 
 from .dataloader import Avrag149DataLoader
-from .rollout import run_batch
+from .rollout import run_batch, run_batches_parallel
 
 # tools/skillopt/avrag149/adapter.py → avrag-rs（仓库根）
 _DEFAULT_AVRAG_RS_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _merge_worker_predictions(out_dir: Path) -> None:
+    """把 ``worker_*/predictions/<id>`` 合并回 ``out_dir/predictions/``。
+
+    WP2 并行 rollout 后，SkillOpt reflect 从 ``out_dir/predictions/<id>`` 读取
+    轨迹（gradient/reflect.py:141）；各 worker 的 predictions 先落在
+    ``out_dir/worker_<i>/predictions/``，这里合并回统一读取点。
+    """
+    import shutil
+
+    pred_dir = out_dir / "predictions"
+    pred_dir.mkdir(parents=True, exist_ok=True)
+    for w in sorted(out_dir.glob("worker_*")):
+        src = w / "predictions"
+        if not src.is_dir():
+            continue
+        for item in sorted(src.iterdir()):
+            dst = pred_dir / item.name
+            if not dst.exists():
+                if item.is_dir():
+                    shutil.copytree(item, dst)
+                else:
+                    shutil.copy2(item, dst)
 
 
 class Avrag149Adapter(EnvAdapter):
@@ -30,6 +54,7 @@ class Avrag149Adapter(EnvAdapter):
         split_seed: int = 42,
         split_output_dir: str = "",
         workers: int = 4,
+        eval_workers: int = 1,
         analyst_workers: int = 8,
         failure_only: bool = False,
         minibatch_size: int = 8,
@@ -49,6 +74,7 @@ class Avrag149Adapter(EnvAdapter):
         **kwargs,
     ) -> None:
         self.workers = int(workers)
+        self.eval_workers = max(1, int(eval_workers))
         self.analyst_workers = int(analyst_workers)
         self.failure_only = bool(failure_only)
         self.minibatch_size = int(minibatch_size)
@@ -110,15 +136,38 @@ class Avrag149Adapter(EnvAdapter):
     # ── Rollout ──────────────────────────────────────────────────────────
 
     def rollout(self, env_manager, skill_content: str, out_dir: str, **kwargs) -> list[dict]:
-        return run_batch(
-            items=env_manager,
-            skill_content=skill_content,
-            out_root=out_dir,
+        if self.eval_workers <= 1 or len(env_manager) <= 1:
+            return run_batch(
+                items=env_manager,
+                skill_content=skill_content,
+                out_root=out_dir,
+                avrag_rs_root=self.avrag_rs_root,
+                prompt_target=self.prompt_target,
+                eval_timeout_secs=self.eval_timeout_secs,
+                verbose=kwargs.get("verbose", True),
+            )
+        # WP2：切分 batch 并行 rollout（每 chunk 独立 prompt 树 + 独立 out 目录）
+        chunks = [env_manager[i::self.eval_workers] for i in range(self.eval_workers)]
+        jobs = [
+            (chunk, skill_content, str(Path(out_dir) / f"worker_{i}"))
+            for i, chunk in enumerate(chunks)
+            if chunk
+        ]
+        results_lists = run_batches_parallel(
+            jobs,
             avrag_rs_root=self.avrag_rs_root,
             prompt_target=self.prompt_target,
             eval_timeout_secs=self.eval_timeout_secs,
+            max_workers=len(jobs),
             verbose=kwargs.get("verbose", True),
         )
+        merged = [r for rl in results_lists for r in rl]
+        _merge_worker_predictions(Path(out_dir))
+        # 合并后的 rollouts.json 写到 out_dir（各 worker 的子目录保留审计）
+        (Path(out_dir) / "rollouts.json").write_text(
+            json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        return merged
 
     def build_reference_text(self, item: dict) -> str:
         """C2/WP1：黄金集参考答案绝不进入 optimizer 视野（防记忆化，D6-①）。

@@ -58,6 +58,10 @@ env:
   # 精简集(2026-08-01):题号白名单(错题 ∪ 各题型代表题,65 题);空 → 全量 149
   include_ids_file: avrag149/question_ids_include.json
   workers: 4
+  # WP2（2026-08-02）:rollout 并行 worker 数。>1 时单个 batch 切分为 eval_workers
+  # 块并行跑（每块独立 prompt 树 + 独立评测输出目录，并发安全）。
+  # 默认 1 = 串行（语义不变）；开并行前确认 WSL jobs=2 与共享服务吞吐。
+  eval_workers: 1
   max_completion_tokens: 4096
   eval_timeout_secs: 3600
   limit: 0

@@ -212,7 +212,14 @@ impl E2eBootstrapConfig {
                 if self.auto_migrate { "true" } else { "false" },
             )
             .env("AVRAG_OBJECT_ROOT", &self.object_root)
-            .env("PROMPT_DIR", Self::e2e_prompt_dir())
+            .env(
+                "PROMPT_DIR",
+                // WP2（2026-08-02）：skillopt 豁免通道——训练 worker 经
+                // E2E_SKILLOPT_PROMPT_DIR 注入各自独立的 prompt 树（per-worker，
+                // 不互斥共享 prompts 文件，可并发）。常规测试不设此变量 →
+                // 仍强制真实 prompts 树（守卫不变）。
+                std::env::var("E2E_SKILLOPT_PROMPT_DIR").unwrap_or_else(|_| Self::e2e_prompt_dir()),
+            )
             .env(
                 "AVRAG_ENABLE_RAG",
                 if self.enable_rag { "true" } else { "false" },

@@ -107,11 +107,17 @@ def run_eval(
     extra_env: dict[str, str] | None = None,
     timeout_secs: int = 3600,
     verbose: bool = True,
+    prompt_dir_override: str | os.PathLike | None = None,
+    out_dir_override: str | os.PathLike | None = None,
 ) -> Path:
     """跑一次产品评测（nightly realistic_corpus_full_eval），返回新增的 v2 产物目录。
 
     ``questions`` 为 None 时跑全量 149 题；否则传 ``E2E_QUESTIONS``（1-based）。
     环境 = 当前进程环境 + avrag-rs/.env + extra_env 覆盖。
+    ``prompt_dir_override``（WP2）：per-worker prompt 树——经 E2E_SKILLOPT_PROMPT_DIR
+    豁免通道注入（config.rs），并发安全，不互斥共享 prompts 文件。
+    ``out_dir_override``（WP2）：并行 worker 用独立评测输出目录（避免"最新目录"
+    检测在并发下竞争）；默认 None → 共享 ``rag_eval_v2`` + 最新目录检测（串行语义不变）。
     """
     root = Path(avrag_rs_root).resolve()
     if not (root / "Cargo.toml").is_file():
@@ -120,6 +126,8 @@ def run_eval(
     env = dict(os.environ)
     env.update(load_env_file(root / ".env"))
     env["E2E_MODE"] = "nightly"
+    if prompt_dir_override is not None:
+        env["E2E_SKILLOPT_PROMPT_DIR"] = str(prompt_dir_override)
     if extra_env:
         env.update(extra_env)
 
@@ -131,7 +139,7 @@ def run_eval(
         # 全量时不残留子集限制
         env.pop("E2E_QUESTIONS", None)
 
-    out_dir = _eval_output_dir(root)
+    out_dir = Path(out_dir_override) if out_dir_override is not None else _eval_output_dir(root)
     out_dir.mkdir(parents=True, exist_ok=True)
     before = set(out_dir.iterdir())
 
@@ -344,3 +352,29 @@ def _to_float(v) -> float:
 def copy_prompt_tree(prompts_root: str | os.PathLike, dst: str | os.PathLike) -> None:
     """拷贝 prompts 整树到 dst（用于镜像对比/审计，非注入路径）。"""
     shutil.copytree(prompts_root, dst, dirs_exist_ok=True)
+
+
+def build_worker_prompt_tree(
+    prompts_root: str | os.PathLike,
+    target_rel: str,
+    skill_content: str,
+) -> Path:
+    """WP2：构造 per-worker prompt 树（拷贝整树 + 注入 skill 到 target）。
+
+    并发安全：每个 worker 用自己的独立树，E2E 经 E2E_SKILLOPT_PROMPT_DIR 豁免
+    通道使用它——不再互斥共享 prompts 文件（原 SwapPromptFile 串行瓶颈）。
+    调用方负责清理返回的临时目录（``shutil.rmtree``）。
+    """
+    import tempfile
+
+    src = Path(prompts_root)
+    tmp = Path(tempfile.mkdtemp(prefix="skillopt_prompt_tree_"))
+    try:
+        shutil.copytree(src, tmp, dirs_exist_ok=True)
+    except OSError as err:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise OSError(f"构造 per-worker prompt 树失败: {err}") from err
+    target = tmp / target_rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(skill_content, encoding="utf-8")
+    return tmp

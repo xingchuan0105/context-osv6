@@ -10,10 +10,11 @@ NOTE（落地期简化）：首版 conversation 只含最小三件套，不含�
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from .runner import (
-    SwapPromptFile,
+    build_worker_prompt_tree,
     layer_signals,
     load_artifact_answer,
     parse_report,
@@ -31,11 +32,17 @@ def run_batch(
     prompt_target: str = "system/agent-base.md",
     eval_timeout_secs: int = 3600,
     verbose: bool = True,
+    eval_out_dir_override: str | Path | None = None,
 ) -> list[dict]:
     """跑一个 batch 的题目评测，返回 SkillOpt RolloutResult 列表。
 
     ``items`` 来自 dataloader（含 1-based ``id``）；``skill_content`` 是当前
-    skill 文档，评测期间临时替换 ``prompts/<prompt_target>``。
+    skill 文档，评测期间注入 ``prompts/<prompt_target>``。
+
+    WP2（2026-08-02）：改用 **per-worker prompt 树**注入（拷贝整树 + 写 skill），
+    E2E 经 E2E_SKILLOPT_PROMPT_DIR 豁免通道使用它——并发安全，不再互斥共享
+    prompts 文件（原 SwapPromptFile 是串行瓶颈）。进程被强杀时临时树会残留，
+    可用 ``git -C avrag-rs status`` 确认真实 prompts 树未被触碰。
     """
     out = Path(out_root)
     out.mkdir(parents=True, exist_ok=True)
@@ -47,19 +54,22 @@ def run_batch(
         raise ValueError("items 里没有可用的 1-based 题号 id")
 
     prompts_root = Path(avrag_rs_root) / "prompts"
-    backup_dir = out / ".prompt_backup"
-    with SwapPromptFile(
+    worker_tree = build_worker_prompt_tree(
         prompts_root=prompts_root,
         target_rel=prompt_target,
         skill_content=skill_content,
-        backup_dir=backup_dir,
-    ):
+    )
+    try:
         v2_dir = run_eval(
             avrag_rs_root,
             questions=ids,
             timeout_secs=eval_timeout_secs,
             verbose=verbose,
+            prompt_dir_override=worker_tree,
+            out_dir_override=eval_out_dir_override,
         )
+    finally:
+        shutil.rmtree(worker_tree, ignore_errors=True)
 
     rows, meta = parse_report(v2_dir, ids=ids)
     if verbose and meta:
@@ -124,3 +134,46 @@ def run_batch(
         json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8",
     )
     return results
+
+
+def run_batches_parallel(
+    jobs: list[tuple[list[dict], str, str]],
+    *,
+    avrag_rs_root: str | Path,
+    prompt_target: str = "system/agent-base.md",
+    eval_timeout_secs: int = 3600,
+    max_workers: int = 2,
+    verbose: bool = False,
+) -> list[list[dict]]:
+    """WP2：并行跑多个 batch 的 rollout。
+
+    每个 job = ``(items, skill_content, out_root)``；并发安全三要件：
+    - per-worker prompt 树（build_worker_prompt_tree，不互斥共享 prompts 文件）
+    - 独立评测输出目录（``<out_root>/eval_v2``，避免并发下"最新目录"检测竞争）
+    - 独立 predictions/out_root
+
+    ``max_workers`` 受 WSL jobs=2 约束：默认 2；Milvus/PG/Redis 是共享只读服务，
+    并发上限是服务吞吐而非 prompts 互斥。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    if max_workers < 1:
+        max_workers = 1
+    jobs = list(jobs)
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [
+            ex.submit(
+                run_batch,
+                items=items,
+                skill_content=skill_content,
+                out_root=out_root,
+                avrag_rs_root=avrag_rs_root,
+                prompt_target=prompt_target,
+                eval_timeout_secs=eval_timeout_secs,
+                verbose=verbose,
+                # 每 worker 独立评测输出目录（并发不竞争"最新目录"检测）
+                eval_out_dir_override=Path(out_root) / "eval_v2",
+            )
+            for items, skill_content, out_root in jobs
+        ]
+        return [f.result() for f in futures]
