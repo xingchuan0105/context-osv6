@@ -3,6 +3,7 @@ use std::sync::Arc;
 pub mod answer_contract;
 pub mod assembler;
 pub mod fallback;
+pub mod host_markers;
 pub mod policy;
 pub use policy::LoopPolicy;
 pub use policy::config;

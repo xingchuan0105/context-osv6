@@ -330,8 +330,10 @@ fn render_cluster_index(
         return String::new();
     }
     let title = match phase {
-        DiscloseAt::Retrieve => "<retrieve_cluster_index>",
-        DiscloseAt::Synthesis => "<synthesis_skill_index>",
+        DiscloseAt::Retrieve => {
+            marker("<retrieve_cluster_index>")
+        }
+        DiscloseAt::Synthesis => marker("<synthesis_skill_index>"),
     };
     let end = match phase {
         DiscloseAt::Retrieve => "</retrieve_cluster_index>",
@@ -417,10 +419,20 @@ fn inject_cluster_runtime_context(
     if cluster_id == "docscope" {
         if let Some(meta) = &request.docscope_metadata {
             let json = serde_json::to_string_pretty(meta).unwrap_or_default();
-            return format!("{body}\n\n<docscope_metadata>\n{json}\n</docscope_metadata>");
+            let open = marker("<docscope_metadata>");
+            return format!("{body}\n\n{open}\n{json}\n</docscope_metadata>");
         }
     }
     body
+}
+
+/// 从备案表取一枚宿主观察标签（发射端引用常量，杜绝手写字面量）。
+fn marker(tag: &str) -> &'static str {
+    super::super::host_markers::HOST_OBSERVATION_MARKERS
+        .iter()
+        .find(|m| m.tag == tag)
+        .unwrap_or_else(|| panic!("未备案宿主观察标签: {tag}（先登记 host_markers.rs）"))
+        .tag
 }
 
 fn render_skill_body_with_deps(skill_id: &str, disclosed: &DisclosedState) -> Option<String> {

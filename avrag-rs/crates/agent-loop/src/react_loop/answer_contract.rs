@@ -936,18 +936,10 @@ pub fn contract_violation_fallback(mode_id: &str) -> String {
 /// only). Tags are matched as prefixes (like `<loop_budget`) so truncated /
 /// reworded-closing variants still trip.
 pub fn contains_host_observation_shell(text: &str) -> bool {
-    const HOST_OBSERVATION_TAGS: &[&str] = &[
-        "<code_execution_result>",
-        "<code_execution_result ",
-        "<loop_budget",
-        "<retrieval_summary>",
-        "[retrieval_summary]",
-        "<docscope_metadata>",
-        "<retrieve_cluster_index>",
-        "<synthesis_skill_index>",
-    ];
-    HOST_OBSERVATION_TAGS
-        .iter()
+    // 检测集从备案表派生（host_markers.rs 单一事实源）：所有
+    // `forbidden_in_final = true` 的标签。新增宿主观察标签只登记表、
+    // 发射端引用常量，检测自动覆盖（parity 测试防漏登记）。
+    super::host_markers::forbidden_in_final_tags()
         .any(|tag| text.contains(tag))
 }
 

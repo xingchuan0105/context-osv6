@@ -199,8 +199,13 @@ pub fn build_loop_budget_hint(
     } else {
         tokens_max.saturating_sub(tokens_used)
     };
+    let open = super::host_markers::HOST_OBSERVATION_MARKERS
+        .iter()
+        .find(|m| m.tag == "<loop_budget")
+        .expect("loop_budget marker registered")
+        .tag;
     format!(
-        "<loop_budget round=\"{round}\" max_rounds=\"{max_iterations}\" remaining_rounds=\"{remaining_rounds}\" \
+        "{open} round=\"{round}\" max_rounds=\"{max_iterations}\" remaining_rounds=\"{remaining_rounds}\" \
          tokens_used=\"{tokens_used}\" tokens_max=\"{tokens_max}\" tokens_remaining=\"{tokens_remaining}\" />"
     )
 }

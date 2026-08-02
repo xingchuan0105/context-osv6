@@ -589,8 +589,16 @@ const CODEGEN_OBSERVATION_MAX_CHARS: usize = 8000;
 pub(crate) fn format_codegen_result_message(combined_result: &str) -> String {
     let safe = truncate_observation(combined_result, CODEGEN_OBSERVATION_MAX_CHARS);
     let prefix = super::prompt_assets::codegen_untrusted_prefix();
+    // 备案表中的空格形态（`<code_execution_result `）承载 untrusted 属性：
+    // 发射端拼接 `untrusted="true">` 还原完整开标签；闭合形态（
+    // `<code_execution_result>`）留给仿造外壳检测。
+    let open = super::host_markers::HOST_OBSERVATION_MARKERS
+        .iter()
+        .find(|m| m.tag == "<code_execution_result ")
+        .expect("code_execution_result (space form) marker registered")
+        .tag;
     format!(
-        "<code_execution_result untrusted=\"true\">\n\
+        "{open}untrusted=\"true\">\n\
          {prefix}\n\
          \n\
          {safe}\n\
