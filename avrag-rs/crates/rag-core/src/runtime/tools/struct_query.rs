@@ -1303,4 +1303,26 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    #[test]
+    fn real_store_ipd_catalog_returns_t0_from_workspace_root() {
+        // Decisive check for the P0-b CWD fix: the E2E worker now spawns with
+        // current_dir = avrag-rs (test_context::builder::WORKSPACE_ROOT), so
+        // `struct_store_dir()` resolves to <avrag-rs>/storage/struct_store.
+        // Mirror that resolution here via CARGO_MANIFEST_DIR (crates/rag-core)
+        // and assert the real IPD store exposes its t0 table.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../storage/struct_store");
+        if !dir.exists() {
+            eprintln!("skip: no real struct_store at {dir:?} (dev-only fixture)");
+            return;
+        }
+        let ipd = Uuid::parse_str("693eb189-0b1e-462e-9d72-127339ecacea").unwrap();
+        let (relations, ambiguous) = catalog_store(&dir, &[ipd]).unwrap();
+        assert!(ambiguous.is_empty(), "ambiguous: {ambiguous:?}");
+        assert!(
+            relations.iter().any(|r| r["name"] == "t0"),
+            "expected t0 in {relations:?}"
+        );
+    }
 }
