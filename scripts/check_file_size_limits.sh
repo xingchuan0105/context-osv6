@@ -19,8 +19,6 @@ files=(
   avrag-rs/crates/rag-core/src/runtime/execute.rs
   avrag-rs/crates/llm/src/embedding.rs
   avrag-rs/crates/app-chat/src/token_budget/simulate.rs
-  # Wave 6 relocates (was app-chat/agents/*)
-  avrag-rs/crates/agent-loop/src/react_loop/answer_contract.rs
   avrag-rs/crates/agent-tools/src/capability/registry.rs
   avrag-rs/crates/agent-tools/src/skills/registry.rs
   avrag-rs/crates/agent-tools/src/catalog.rs

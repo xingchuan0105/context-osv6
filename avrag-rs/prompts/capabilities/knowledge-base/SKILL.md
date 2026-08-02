@@ -111,3 +111,18 @@ await client.save("cands.json", chunks)
 终答采用的**每个主张**都应能指向回传中的 alias：只圈部分命中时，未圈的主张在证据面仍处于无引用状态（judge 按引用圈定的命中核对支撑）。
 
 与联网同时挂载时，doc 侧结论同样以 `SELECTED: #n` 末行圈定（联网侧 `[[web:n]]`）；doc 侧只陈述不圈 alias，其主张即处于无引用状态。
+
+## 引用标记与代码执行回传格式
+
+下列线格式由单一 grammar（`rag-core/runtime/markers`）统一解析/产出，各处含义一致：
+
+- `[[cite:<chunk_id>]]` —— 终答文本中的**文档块引用**标记；渲染时替换为 citation 编号。只圈 `[[cite:]]` 不圈 alias 的块，其引用状态与 SELECTED 无关。
+- `[[image:<chunk_id>]]` —— **内联图片块引用**标记，与 `[[cite:]]` 同为块引用（不因是图片而被丢弃）；渲染时替换为 `[[image:<编号>]]`。
+- `[[web:n]]` —— 联网引用索引（挂载联网侧时使用；旧式裸 `[[n]]` 按 web 索引兼容）。
+
+代码执行回传 `<code_execution_result>` 内部为**逐块观察行**，每块一行：
+
+`[block N] stdout: <stdout 内容>\nstderr: <stderr 内容>`
+
+- 成功块格式固定为 `stdout:` / `stderr:` 两个字段；失败块为 `[block N] Execution failed: <错误>`。
+- 多个块按 `[block 0]`、`[block 1]`… 递增编号；回传证据判定按块内 stdout 是否携带 chunk 载体（uuid 形 id）识别，占位性输出不算证据。

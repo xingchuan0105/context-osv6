@@ -4,6 +4,7 @@ mod config;
 /// Pure channel-budget helpers used by unit tests only (post ExecutePlan removal).
 #[cfg(test)]
 mod execute;
+pub mod markers;
 mod planner;
 mod response;
 mod response_utils;

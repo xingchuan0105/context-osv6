@@ -365,9 +365,10 @@ impl ReActLoop {
                 let stdout_for_observation = block_observation_stdout
                     .as_deref()
                     .unwrap_or(exec.stdout.as_str());
-                let text = format!(
-                    "[block {}] stdout: {}\nstderr: {}",
-                    idx, stdout_for_observation, exec.stderr
+                let text = avrag_rag_core::runtime::markers::format_block(
+                    idx,
+                    stdout_for_observation,
+                    &exec.stderr,
                 );
                 // C3: whether the block produced ANY visible output (stdout or
                 // stderr) — drives the empty-round feedback note.

@@ -23,10 +23,8 @@ pub mod i18n;
 pub mod llm_context;
 pub mod memory_helpers;
 pub mod orchestrator_context;
-pub mod prompts;
 pub mod profile_update;
 pub mod rag_execute;
-pub mod rag_prompts;
 pub mod sessions;
 #[cfg(any(test, feature = "dev-tools"))]
 pub mod token_budget;

@@ -108,6 +108,11 @@ mod tests {
 
     const PROMPTS_LOOP: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../prompts/loop");
 
+    /// `parity_fails_on_unregistered_md_tag` 会向 `prompts/loop/` 写临时 probe
+    /// 文件；`every_md_tag_candidate_is_registered` 并行扫描该目录时会撞见未登记
+    /// 的 probe 而误报失败。两测试共享一把锁串行化。
+    static PARITY_PROBE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// 扫描 `prompts/loop/*.md`，提取宿主观察标签候选：
     /// 行首/行内 `[tag]`（方括号包裹）与 `<tag…>`（尖括号开头）形态。
     /// 排除非观察形态：`[[web:n]]` 引用、`<code language="python">` 沙箱协议、
@@ -175,6 +180,7 @@ mod tests {
     /// （`<loop_budget>`）视为该前缀的实例，允许通过。
     #[test]
     fn every_md_tag_candidate_is_registered() {
+        let _guard = PARITY_PROBE_LOCK.lock().unwrap();
         let registered: Vec<&str> = HOST_OBSERVATION_MARKERS.iter().map(|m| m.tag).collect();
         for cand in collect_md_tag_candidates() {
             let known = registered.iter().any(|tag| {
@@ -252,6 +258,7 @@ mod tests {
     /// parity 敏感度：临时加一个未登记标签，测试 ① 应变红。
     #[test]
     fn parity_fails_on_unregistered_md_tag() {
+        let _guard = PARITY_PROBE_LOCK.lock().unwrap();
         let md = Path::new(PROMPTS_LOOP).join("_parity_probe.tmp.md");
         let _ = std::fs::write(&md, "[unregistered_probe_tag]\n");
         let detected = collect_md_tag_candidates()
