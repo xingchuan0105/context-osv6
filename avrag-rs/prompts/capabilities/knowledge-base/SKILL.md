@@ -156,3 +156,5 @@ Claim checklist (copy and tick against returns):
 编号来自回传中的 alias。历史轮次回传里已出现的 alias 仍有效。
 
 终答采用的**每个主张**都应能指向回传中的 alias：只圈部分命中时，未圈的主张在证据面仍处于无引用状态（judge 按引用圈定的命中核对支撑）。
+
+与联网同时挂载时，doc 侧结论同样以 `SELECTED: #n` 末行圈定（联网侧 `[[web:n]]`）；doc 侧只陈述不圈 alias，其主张即处于无引用状态。
