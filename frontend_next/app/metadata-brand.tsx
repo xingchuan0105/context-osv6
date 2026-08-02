@@ -5,23 +5,28 @@ const brandSquareStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   borderRadius: "24%",
-  background: "#1b1f2d",
+  background: "#26251e",
   border: "1px solid rgba(255,255,255,0.14)",
   position: "relative",
   overflow: "hidden",
 };
 
 function strokeStyle(left: string, top: string, width: string, height: string, borderSide: "left" | "right"): CSSProperties {
-  return {
+  const base: CSSProperties = {
     position: "absolute",
     left,
     top,
     width,
     height,
     borderRadius: "999px",
-    borderLeft: borderSide === "left" ? "6px solid white" : undefined,
-    borderRight: borderSide === "right" ? "6px solid white" : undefined,
   };
+  // Satori 不接受显式 undefined 的属性值，按边条件挂载
+  if (borderSide === "left") {
+    base.borderLeft = "6px solid white";
+  } else {
+    base.borderRight = "6px solid white";
+  }
+  return base;
 }
 
 function lineStyle(left: string, top: string, width: string, height: string): CSSProperties {
@@ -60,7 +65,7 @@ export function MetadataBrandIcon(): ReactElement {
       <div style={lineStyle("49.2%", "68.2%", "10%", "2.7%")} />
       <div style={dotStyle("34.6%", "39.4%", "6.6%")} />
       <div style={dotStyle("55.4%", "31.8%", "6.6%")} />
-      <div style={{ ...dotStyle("59.4%", "56.8%", "6.6%"), background: "#4f7cf3" }} />
+      <div style={{ ...dotStyle("59.4%", "56.8%", "6.6%"), background: "#f54e00" }} />
       <div style={dotStyle("55.6%", "66.2%", "5.8%")} />
     </div>
   );
@@ -75,8 +80,8 @@ export function MetadataPreviewCard(): ReactElement {
         height: "100%",
         flexDirection: "column",
         justifyContent: "space-between",
-        background: "#FFFFFF",
-        color: "#171717",
+        background: "#f7f7f4",
+        color: "#26251e",
         padding: "56px 64px",
         fontFamily: "Inter, sans-serif",
       }}
@@ -108,10 +113,10 @@ export function MetadataPreviewCard(): ReactElement {
             style={{
               display: "flex",
               fontSize: "20px",
-              fontWeight: 700,
+              fontWeight: 400,
               letterSpacing: "0.14em",
               textTransform: "uppercase",
-              color: "#737373",
+              color: "#807d72",
             }}
           >
             Context OS
@@ -120,9 +125,9 @@ export function MetadataPreviewCard(): ReactElement {
             style={{
               display: "flex",
               fontSize: "52px",
-              fontWeight: 700,
+              fontWeight: 400,
               lineHeight: 1.02,
-              letterSpacing: "-0.04em",
+              letterSpacing: "-0.025em",
               maxWidth: "860px",
             }}
           >
@@ -144,7 +149,7 @@ export function MetadataPreviewCard(): ReactElement {
             display: "flex",
             fontSize: "28px",
             lineHeight: 1.45,
-            color: "#2e2e2e",
+            color: "#5a5852",
           }}
         >
           Second-brain workspace for collecting content, writing notes, sharing context, and querying knowledge through AI.
@@ -155,8 +160,8 @@ export function MetadataPreviewCard(): ReactElement {
             alignItems: "center",
             gap: "12px",
             fontSize: "20px",
-            fontWeight: 600,
-            color: "#171717",
+            fontWeight: 400,
+            color: "#26251e",
           }}
         >
           <div
@@ -165,7 +170,7 @@ export function MetadataPreviewCard(): ReactElement {
               width: "12px",
               height: "12px",
               borderRadius: "999px",
-              background: "#3542d4",
+              background: "#f54e00",
             }}
           />
           Second-brain workspace for organizing, distributing, and querying knowledge

@@ -7,14 +7,14 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-toast);
-  padding: 1rem;
+  padding: var(--space-lg);
 }
 
 .modal {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-card);
-  padding: 2rem;
+  padding: var(--space-2xl);
   max-width: 24rem;
   width: 100%;
   max-height: 90vh;
@@ -22,8 +22,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  box-shadow: var(--shadow-xl);
+  gap: var(--space-lg);
 }
 
 .title {
@@ -87,7 +86,7 @@
   background: none;
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-button);
-  padding: 0.5rem 1rem;
+  padding: var(--space-sm) var(--space-lg);
   color: hsl(var(--muted-foreground));
   cursor: pointer;
   font-size: var(--font-size-caption-strong);

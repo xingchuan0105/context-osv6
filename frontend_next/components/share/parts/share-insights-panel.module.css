@@ -1,7 +1,7 @@
 .overviewSection {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4) 1rem 1rem;
+  padding: var(--space-4) var(--space-lg) var(--space-lg);
   scroll-margin-top: 6rem;
   background: linear-gradient(
     180deg,
@@ -19,7 +19,7 @@
 .trendSection {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4) 1rem 1rem;
+  padding: var(--space-4) var(--space-lg) var(--space-lg);
   background: linear-gradient(
     180deg,
     hsl(var(--background)) 0%,
@@ -42,20 +42,20 @@
 
 .trendRangeButton {
   min-height: 2.18rem;
-  padding: 0.48rem 0.72rem;
+  padding: var(--space-sm) var(--space-md);
   font-size: 0.84rem;
 }
 
 .chartPanel {
   display: grid;
-  gap: 0.52rem;
-  padding: 0.82rem 0.9rem 0.88rem;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
 }
 
 .chartRow {
   display: grid;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   grid-template-columns: 4.2rem 1fr auto;
 }
 

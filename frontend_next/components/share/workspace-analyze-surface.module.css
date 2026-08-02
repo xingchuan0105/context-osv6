@@ -32,7 +32,7 @@
 }
 
 .metricTitle {
-  margin: 0 0 0.35rem;
+  margin: 0 0 var(--space-xs);
 }
 
 .metricValue {
@@ -50,7 +50,7 @@
 }
 
 .logMeta {
-  margin-top: 0.35rem;
+  margin-top: var(--space-xs);
   color: hsl(var(--muted-foreground));
 }
 

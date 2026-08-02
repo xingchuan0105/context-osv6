@@ -1,10 +1,10 @@
 .page {
   max-width: 56rem;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
+  padding: var(--space-2xl) var(--space-xl) var(--space-4xl);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-xl);
 }
 
 .header {
@@ -26,7 +26,7 @@
   color: hsl(var(--cta-foreground));
   border: none;
   border-radius: var(--radius-button);
-  padding: 0.5rem 1rem;
+  padding: var(--space-sm) var(--space-lg);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
@@ -37,7 +37,7 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .currentPlan {
@@ -54,7 +54,7 @@
 .meters {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 @media (max-width: 768px) {
   .meters {
@@ -71,7 +71,7 @@
 
 .errorBanner {
   margin: 0;
-  padding: 0.75rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-card);
   background: hsl(var(--destructive) / 0.1);
   color: hsl(var(--destructive));

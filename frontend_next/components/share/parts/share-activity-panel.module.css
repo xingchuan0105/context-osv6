@@ -5,7 +5,7 @@
 .activitySection {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4) 1rem 1rem;
+  padding: var(--space-4) var(--space-lg) var(--space-lg);
   scroll-margin-top: 6rem;
   background: linear-gradient(
     180deg,
@@ -21,15 +21,15 @@
 
 .logItem {
   display: grid;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   grid-template-columns: minmax(0, 1fr);
-  padding: 0.72rem 0.82rem 0.78rem;
+  padding: var(--space-md) var(--space-md) var(--space-md);
   border-left: 3px solid hsl(var(--primary) / 0.24);
 }
 
 .logField {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-xs);
 }
 
 .logLabel {

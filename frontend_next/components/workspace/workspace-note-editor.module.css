@@ -2,8 +2,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.22rem;
-  padding: 0.5rem 0.6rem;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-sm);
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--card));
 }
@@ -14,13 +14,12 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  gap: var(--space-sm);
   width: min(22rem, calc(100% - 1.5rem));
-  padding: 0.6rem;
+  padding: var(--space-sm);
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--card));
-  box-shadow: 0 16px 30px hsl(0 0% 0% / 0.12);
   animation: editorLinkPanelIn var(--duration-base) var(--ease-standard);
 }
 
@@ -62,9 +61,9 @@
 .editorLinkInput {
   width: 100%;
   min-width: 0;
-  padding: 0.62rem 0.78rem;
+  padding: var(--space-sm) var(--space-md);
   border: 1px solid hsl(var(--border));
-  border-radius: 0.82rem;
+  border-radius: var(--radius-control);
   background: hsl(var(--card));
   color: hsl(var(--foreground));
   font: inherit;
@@ -91,7 +90,7 @@
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.38rem;
+  gap: var(--space-sm);
 }
 
 .editorLinkPanelButton {
@@ -100,7 +99,7 @@
   align-items: center;
   justify-content: center;
   min-height: 2rem;
-  padding: 0.4rem 0.72rem;
+  padding: var(--space-sm) var(--space-md);
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-button);
   background: hsl(var(--card));
@@ -170,15 +169,15 @@
   justify-content: center;
   min-width: 2.6rem;
   height: 2.6rem;
-  padding: 0 0.4rem;
+  padding: 0 var(--space-sm);
   border: 0;
-  border-radius: 0.45rem;
+  border-radius: var(--radius-control);
   background: transparent;
   color: hsl(var(--foreground));
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-control);
-  font-weight: 500;
+  font-weight: 400;
   line-height: var(--line-height-control);
   transition:
     background 120ms ease,
@@ -203,7 +202,7 @@
 .editorToolButtonActive {
   background: hsl(var(--surface-muted));
   color: hsl(var(--foreground));
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .editorToolIcon {
@@ -233,7 +232,7 @@
 .editorToolGlyphEmphasis {
   font-size: 1.6rem;
   font-style: italic;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1;
 }
 
@@ -296,7 +295,7 @@
 .editorProseMirror {
   height: 100%;
   min-height: 18rem;
-  padding: 1rem;
+  padding: var(--space-lg);
   background: transparent;
   color: hsl(var(--foreground));
   font-size: var(--font-size-body-strong);
@@ -332,13 +331,13 @@
 .editorProseMirror ol,
 .editorProseMirror h1,
 .editorProseMirror h2 {
-  margin: 0 0 0.9rem;
+  margin: 0 0 var(--space-lg);
 }
 
 .editorProseMirror h1,
 .editorProseMirror h2 {
   color: hsl(var(--foreground));
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: -0.02em;
 }
 
@@ -362,7 +361,7 @@
 
 .editorProseMirror ul,
 .editorProseMirror ol {
-  padding-left: 1.35rem;
+  padding-left: var(--space-xl);
 }
 
 .editorProseMirror a {

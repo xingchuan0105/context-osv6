@@ -12,7 +12,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
+  padding: var(--space-2xl) var(--space-lg);
 }
 
 .app-surface-card {
@@ -21,19 +21,18 @@
   border-radius: var(--radius-card);
   background: hsl(var(--card));
   color: hsl(var(--card-foreground));
-  box-shadow: var(--shadow-sm);
-  padding: 1.5rem;
+  padding: var(--space-xl);
 }
 
 .app-auth-card {
   max-width: 28rem;
-  padding: 1.625rem;
+  padding: var(--space-xl);
 }
 
 .app-auth-header {
   display: grid;
-  gap: 0.85rem;
-  margin-bottom: 1.375rem;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
 }
 
 /* Auth card only: stacked mark + label */
@@ -41,7 +40,7 @@
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.45rem;
+  gap: var(--space-sm);
   width: fit-content;
   color: inherit;
   text-decoration: none;
@@ -84,7 +83,7 @@
 .app-page-shell {
   width: 100%;
   min-height: 100vh;
-  padding: 2rem 1rem 4rem;
+  padding: var(--space-2xl) var(--space-lg) var(--space-4xl);
 }
 
 .app-page-center {
@@ -95,8 +94,8 @@
 .app-page-heading {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xl);
 }
 
 .app-page-title {
@@ -114,7 +113,7 @@
 
 .app-form-label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-sm);
   font-size: var(--font-size-label);
   font-weight: var(--font-weight-semibold);
 }
@@ -127,7 +126,7 @@
   color: hsl(var(--foreground));
   font-size: var(--font-size-control);
   line-height: var(--line-height-control);
-  padding: 0.9rem 1rem;
+  padding: var(--space-lg) var(--space-lg);
   outline: none;
   transition:
     border-color var(--duration-fast) var(--ease-standard),
@@ -158,7 +157,7 @@
 
 .app-button-row {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
@@ -170,7 +169,7 @@
   justify-content: center;
   appearance: none;
   border-radius: var(--radius-button);
-  padding: 0.8rem 1.15rem;
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid hsl(var(--border-whisper));
   cursor: pointer;
   font-size: var(--font-size-control);
@@ -195,12 +194,10 @@
   border-color: transparent;
   background: hsl(var(--cta-background));
   color: hsl(var(--cta-foreground));
-  box-shadow: var(--shadow-sm);
 }
 
 .app-button-primary:hover {
   background: hsl(var(--cta-background-hover));
-  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
 
@@ -298,7 +295,7 @@
   border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
-  padding: 1rem 1.1rem;
+  padding: var(--space-lg) var(--space-lg);
 }
 
 /* Settings tabs only (scoped via the settings-only tab bar): section cards
@@ -333,8 +330,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-sm);
 }
 
 .app-notice-banner {
@@ -343,20 +340,20 @@
   border-radius: var(--radius-control);
   background: hsl(var(--destructive-soft));
   color: hsl(var(--destructive));
-  padding: 0.9rem 1rem;
+  padding: var(--space-lg) var(--space-lg);
 }
 
 .app-form-footnote {
-  margin: 1.25rem 0 0;
+  margin: var(--space-xl) 0 0;
   text-align: center;
   color: hsl(var(--muted-foreground));
 }
 
 .app-tab-bar {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   overflow-x: auto;
-  padding-bottom: 0.25rem;
+  padding-bottom: var(--space-xs);
 }
 
 .app-tab-button {
@@ -364,7 +361,7 @@
   border: 1px solid hsl(var(--border-whisper));
   background: hsl(var(--card));
   color: hsl(var(--muted-foreground));
-  padding: 0.7rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-button);
   cursor: pointer;
   white-space: nowrap;
@@ -400,8 +397,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+  gap: var(--space-lg);
+  padding: var(--space-lg) var(--space-xl);
   border-bottom: 1px solid hsl(var(--workspace-border));
   background: color-mix(in srgb, hsl(var(--workspace-surface)) 86%, transparent);
   backdrop-filter: blur(18px);

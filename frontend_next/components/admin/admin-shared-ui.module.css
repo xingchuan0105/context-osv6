@@ -1,7 +1,7 @@
 .headingBlock {
   display: grid;
-  gap: 0.35rem;
-  margin-bottom: 1rem;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-lg);
 }
 
 .headingTitle {
@@ -17,13 +17,13 @@
 
 .metricCard {
   display: grid;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .metricLabel {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--space-sm);
   font-size: 0.78rem;
   color: hsl(var(--muted-foreground));
 }
@@ -31,7 +31,7 @@
 .metricDot {
   width: 0.6rem;
   height: 0.6rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .metricDotPrimary {

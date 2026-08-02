@@ -1,6 +1,6 @@
 .container {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .metricsGrid {
@@ -11,7 +11,7 @@
 
 .panel {
   display: grid;
-  gap: 0.7rem;
+  gap: var(--space-md);
 }
 
 .inlineRowFlat {

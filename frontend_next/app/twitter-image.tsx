@@ -1,14 +1,20 @@
-// 桌面端静态导出：使用静态图标文件替代动态生成
-// ImageResponse 在静态导出时有兼容性问题
+// Twitter 卡片图：与 opengraph-image 同图（Cream × Void）；
+// 桌面静态导出（BUILD_TARGET=desktop）下 ImageResponse 有兼容性问题，保持原重定向行为。
+
+import { ImageResponse } from "next/og";
+import { MetadataPreviewCard } from "./metadata-brand";
 
 export const dynamic = "force-static";
 
-// 返回一个简单的空响应，桌面端会使用 public/ 目录下的静态图标
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
 export default function TwitterImage() {
-  return new Response(null, {
-    status: 301,
-    headers: {
-      Location: "/twitter-image.png",
-    },
-  });
+  if (process.env.BUILD_TARGET === "desktop") {
+    return new Response(null, {
+      status: 301,
+      headers: { Location: "/twitter-image.png" },
+    });
+  }
+  return new ImageResponse(<MetadataPreviewCard />, { ...size });
 }

@@ -1,6 +1,6 @@
 .container {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .panel {
@@ -16,7 +16,7 @@
 
 .metaRow {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-lg);
   flex-wrap: wrap;
   font-size: var(--font-size-control);
   color: hsl(var(--muted-foreground));
@@ -30,7 +30,7 @@
 
 .statsPanel {
   display: grid;
-  gap: 0.7rem;
+  gap: var(--space-md);
 }
 
 .heading {

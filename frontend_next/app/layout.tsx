@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Space_Grotesk, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 
 import "./globals.css";
 import { AuthProvider } from "../lib/auth/context";
@@ -9,20 +9,15 @@ import { QueryProvider } from "../lib/query/provider";
 import { ClientI18nProvider } from "../lib/runtime/client-i18n";
 import { UiPreferencesProvider } from "../lib/ui-preferences";
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-heading",
-  display: "swap",
-});
-
-const ibmPlexSans = IBM_Plex_Sans({
-  weight: ["400", "500", "600"],
+const inter = Inter({
+  weight: ["400"],
   subsets: ["latin"],
   variable: "--font-body",
   display: "swap",
 });
 
 const jetbrainsMono = JetBrains_Mono({
+  weight: ["400"],
   subsets: ["latin"],
   variable: "--font-mono",
   display: "swap",
@@ -93,7 +88,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   if (isDesktopBuild) {
     return (
       <html lang={locale} suppressHydrationWarning>
-        <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
+        <body className={`${inter.variable} ${jetbrainsMono.variable}`}>
           {/* 避免主题 FOUC：与 lib/ui-preferences.tsx 的 THEME_STORAGE_KEY 保持一致 */}
           <script
             dangerouslySetInnerHTML={{
@@ -118,7 +113,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable}`}>
         {/* 避免主题 FOUC：与 lib/ui-preferences.tsx 的 THEME_STORAGE_KEY 保持一致 */}
         <script
           dangerouslySetInnerHTML={{

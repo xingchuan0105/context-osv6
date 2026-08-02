@@ -76,12 +76,11 @@ export function panelChoiceStyle(selected: boolean): CSSProperties {
     gap: "0.45rem",
     width: "100%",
     padding: "1rem",
-    borderRadius: "1rem",
-    // Unselected choices separate via background + elevation, not a 1px border;
+    borderRadius: "var(--radius-card)",
+    // Unselected choices separate via background, not a 1px border;
     // the accent border stays only as the selected-state indicator.
     border: `1px solid ${selected ? "hsl(var(--accent))" : "transparent"}`,
     background: selected ? "hsl(var(--surface-muted))" : "hsl(var(--card))",
-    boxShadow: selected ? "none" : "var(--shadow-sm)",
     color: "inherit",
     textAlign: "left",
   };
@@ -91,7 +90,7 @@ export function progressTrackStyle(): CSSProperties {
   return {
     width: "100%",
     height: "0.5rem",
-    borderRadius: "999px",
+    borderRadius: "var(--radius-pill)",
     background: "hsl(var(--muted))",
     overflow: "hidden",
   };
@@ -101,7 +100,7 @@ export function progressBarStyle(percent: number): CSSProperties {
   return {
     width: `${Math.max(0, Math.min(100, percent))}%`,
     height: "100%",
-    borderRadius: "999px",
+    borderRadius: "var(--radius-pill)",
     background:
       percent >= 90
         ? "hsl(var(--destructive))"

@@ -1,6 +1,6 @@
 .container {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .panel {
@@ -16,7 +16,7 @@
 
 .metaRow {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-lg);
   flex-wrap: wrap;
   font-size: var(--font-size-control);
   color: hsl(var(--muted-foreground));
@@ -43,7 +43,7 @@
 }
 
 .tableHeaderCell {
-  padding: 0.85rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   text-align: left;
   font-size: var(--font-size-meta);
   color: hsl(var(--muted-foreground));
@@ -54,5 +54,5 @@
 }
 
 .tableCell {
-  padding: 1rem;
+  padding: var(--space-lg);
 }

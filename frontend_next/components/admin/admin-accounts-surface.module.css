@@ -1,6 +1,6 @@
 .container {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .metricsGrid {
@@ -22,7 +22,7 @@
 
 .metaRow {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-lg);
   flex-wrap: wrap;
   font-size: var(--font-size-control);
   color: hsl(var(--muted-foreground));
@@ -43,7 +43,7 @@
 }
 
 .tableHeaderCell {
-  padding: 0.85rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   text-align: left;
   font-size: var(--font-size-meta);
   color: hsl(var(--muted-foreground));
@@ -54,24 +54,24 @@
 }
 
 .tableCell {
-  padding: 1rem;
+  padding: var(--space-lg);
 }
 
 .accountLink {
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .accountId {
   font-size: 0.78rem;
   color: hsl(var(--muted-foreground));
-  margin-top: 0.2rem;
+  margin-top: var(--space-xs);
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-pill);
 }
 
 .badgeBlocked {

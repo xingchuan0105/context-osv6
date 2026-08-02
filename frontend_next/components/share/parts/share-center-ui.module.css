@@ -1,6 +1,6 @@
 .sectionHeader {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-xs);
   padding-bottom: var(--space-4);
   border-bottom: 1px solid hsl(var(--border));
 }
@@ -16,7 +16,7 @@
 
 .metricCard {
   display: grid;
-  gap: 0.55rem;
+  gap: var(--space-sm);
   min-height: clamp(5.8rem, 18vw, 7.25rem);
   padding: clamp(0.9rem, 2.5vw, 1rem) clamp(0.9rem, 2.5vw, 1rem)
     clamp(0.95rem, 2.5vw, 1.05rem);
@@ -39,7 +39,7 @@
 }
 
 .statusBadge {
-  padding: 0.28rem 0.62rem;
+  padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-badge);
   font-size: var(--font-size-meta);
   font-weight: var(--font-weight-semibold);

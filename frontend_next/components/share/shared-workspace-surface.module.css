@@ -1,6 +1,6 @@
 .sectionStack {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .overviewHeader {
@@ -8,18 +8,18 @@
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .overviewMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .metaPair {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-xs);
   min-width: 8rem;
 }
 
@@ -36,18 +36,17 @@
 
 .metricGrid {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
 .metricCard {
   display: grid;
-  gap: 0.55rem;
-  padding: 1rem;
-  border-radius: 1.05rem;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  border-radius: var(--radius-card);
   border: 1px solid hsl(var(--border-whisper));
   background: color-mix(in srgb, hsl(var(--card)) 88%, hsl(var(--surface-muted)) 12%);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
 }
 
 .metricLabel {
@@ -74,14 +73,14 @@
 .metricSplit {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .semanticCode {
   display: inline-flex;
   align-items: center;
   min-height: 1.75rem;
-  padding: 0 0.625rem;
+  padding: 0 var(--space-md);
   border-radius: var(--radius-badge);
   border: 1px solid hsl(var(--border-whisper));
   background: hsl(var(--badge-background));
@@ -116,9 +115,9 @@
 
 .emptyState {
   display: grid;
-  gap: 0.35rem;
-  padding: 1rem;
-  border-radius: 1rem;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  border-radius: var(--radius-card);
   border: 1px dashed hsl(var(--border-strong));
   background: color-mix(in srgb, hsl(var(--surface-muted)) 72%, transparent);
   color: hsl(var(--muted-foreground));
@@ -126,15 +125,14 @@
 
 .sourceList {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .sourceCard {
-  padding: 0.875rem 1rem;
-  border-radius: 1rem;
+  padding: var(--space-lg) var(--space-lg);
+  border-radius: var(--radius-card);
   border: 1px solid hsl(var(--border-whisper));
   background: hsl(var(--card));
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
 }
 
 .sourceTitleRow {
@@ -142,13 +140,13 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .suggestionRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .suggestionChip {
@@ -156,13 +154,13 @@
   align-items: center;
   justify-content: center;
   min-height: 2.25rem;
-  padding: 0.5rem 0.875rem;
+  padding: var(--space-sm) var(--space-lg);
   border-radius: var(--radius-button);
   border: 1px solid hsl(var(--border-whisper));
   background: hsl(var(--surface-elevated));
   color: hsl(var(--foreground));
   font-size: var(--font-size-control);
-  font-weight: 500;
+  font-weight: 400;
   transition:
     border-color var(--duration-slow) var(--ease-standard),
     color var(--duration-slow) var(--ease-standard),
@@ -175,14 +173,13 @@
   border-color: hsl(var(--border-strong));
   color: hsl(var(--foreground));
   background: hsl(var(--surface-soft));
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.05);
 }
 
 .degradedBanner {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.875rem 1rem;
-  border-radius: 1rem;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-lg);
+  border-radius: var(--radius-card);
   border: 1px solid hsl(var(--warning-border));
   background: hsl(var(--warning-surface));
   color: hsl(var(--warning-foreground));
@@ -190,25 +187,24 @@
 
 .resultStack {
   display: grid;
-  gap: 1rem;
-  padding-top: 0.25rem;
+  gap: var(--space-lg);
+  padding-top: var(--space-xs);
 }
 
 .resultCard {
   display: grid;
-  gap: 0.75rem;
-  padding: 1rem;
-  border-radius: 1rem;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border-radius: var(--radius-card);
   border: 1px solid hsl(var(--border-whisper));
   background: hsl(var(--card));
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
 }
 
 .resultHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .resultCount {
@@ -225,14 +221,14 @@
 
 .resultList {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .resultItem {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.875rem 1rem;
-  border-radius: 0.875rem;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-lg);
+  border-radius: var(--radius-card);
   border: 1px solid hsl(var(--border-whisper));
   background: color-mix(in srgb, hsl(var(--background)) 82%, hsl(var(--surface-muted)) 18%);
 }

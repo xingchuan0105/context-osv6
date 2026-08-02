@@ -10,6 +10,6 @@
 
 .summaryCard {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--space-sm);
 }
 

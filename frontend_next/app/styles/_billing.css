@@ -11,13 +11,13 @@
 
 .plan-entry-default {
   min-height: calc(var(--font-size-shell-title) * 2.1);
-  padding: 0 0.9rem;
+  padding: 0 var(--space-lg);
   border-radius: var(--radius-button);
 }
 
 .plan-entry-compact {
   min-height: calc(var(--font-size-shell-title) * 2.1);
-  padding: 0.2rem 0.7rem;
+  padding: var(--space-xs) var(--space-md);
   border-radius: var(--radius-button);
   font-size: var(--font-size-control);
 }
@@ -42,12 +42,12 @@
 
 .plan-entry-badge.plan-entry-default {
   min-height: calc(var(--font-size-shell-title) * 2.1);
-  padding: 0 0.9rem;
+  padding: 0 var(--space-lg);
 }
 
 .plan-entry-badge.plan-entry-compact {
   min-height: 1.9rem;
-  padding: 0.2rem 0.7rem;
+  padding: var(--space-xs) var(--space-md);
 }
 
 .plan-entry-badge:hover {

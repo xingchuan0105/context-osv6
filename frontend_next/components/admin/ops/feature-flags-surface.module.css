@@ -1,6 +1,6 @@
 .container {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .metricsGrid {
@@ -27,24 +27,24 @@
 
 .card {
   display: grid;
-  gap: 0.7rem;
+  gap: var(--space-md);
 }
 
 .headRow {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-lg);
   align-items: start;
 }
 
 .titleStack {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--space-sm);
 }
 
 .titleRow {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -55,14 +55,14 @@
 
 .chipsRow {
   display: flex;
-  gap: 0.45rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
   font-size: var(--font-size-control);
 }
 
 .chipsRowMuted {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
   font-size: var(--font-size-control);
   color: hsl(var(--muted-foreground));
@@ -70,7 +70,7 @@
 
 .chipsRowSpaced {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
   font-size: var(--font-size-control);
 }
@@ -82,7 +82,7 @@
 
 .actionRow {
   display: flex;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
 }
 

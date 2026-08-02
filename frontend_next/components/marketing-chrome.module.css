@@ -24,25 +24,25 @@
 .nav {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
 .navLink {
   color: hsl(var(--muted-foreground));
-  font-weight: 500;
+  font-weight: 400;
   font-size: var(--font-size-body);
   text-decoration: none;
 }
 
 .navLinkActive {
   color: hsl(var(--foreground));
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .langGroup {
   display: inline-flex;
-  gap: 0.35rem;
+  gap: var(--space-xs);
   font-size: var(--font-size-control);
 }
 
@@ -50,19 +50,19 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  padding: 0.15rem 0.25rem;
-  font-weight: 500;
+  padding: var(--space-xxs) var(--space-xs);
+  font-weight: 400;
   color: hsl(var(--muted-foreground));
 }
 
 .langButtonActive {
-  font-weight: 700;
+  font-weight: 400;
   color: hsl(var(--foreground));
 }
 
 .navButton {
   font-size: var(--font-size-body);
-  padding: 0.35rem 0.75rem;
+  padding: var(--space-xs) var(--space-md);
 }
 
 .shell {

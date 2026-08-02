@@ -29,7 +29,7 @@
 }
 
 .empty {
-  padding: 2rem;
+  padding: var(--space-2xl);
   text-align: center;
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-body);

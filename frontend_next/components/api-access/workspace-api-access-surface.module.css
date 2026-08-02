@@ -1,27 +1,27 @@
 .container {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-xl);
   max-width: 56rem;
 }
 
 .stackLarge {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-xl);
 }
 
 .stack {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .header {
   display: grid;
-  gap: 0.85rem;
+  gap: var(--space-md);
 }
 
 .intro {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   max-width: 42rem;
 }
 
@@ -60,27 +60,27 @@
 
 .mutedTextSpaced {
   color: hsl(var(--muted-foreground));
-  margin: 0.35rem 0 0;
+  margin: var(--space-xs) 0 0;
 }
 
 .card {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .cardTitle {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--space-sm);
   font-size: var(--font-size-title-sm);
 }
 
 .cardTitleCompact {
-  margin: 0 0 0.35rem;
+  margin: 0 0 var(--space-xs);
   font-size: var(--font-size-title-sm);
 }
 
 .form {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--space-lg);
 }
 
 .fieldset {
@@ -91,23 +91,23 @@
 
 .checkboxGroup {
   display: grid;
-  gap: 0.5rem;
-  margin-top: 0.35rem;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
 }
 
 .checkboxLabel {
   align-items: center;
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .codeBlock {
   border: 1px solid hsl(var(--border));
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
   margin: 0;
   overflow-x: auto;
-  padding: 1rem;
+  padding: var(--space-lg);
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -115,14 +115,14 @@
 .sectionHeader {
   align-items: center;
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-md);
   justify-content: space-between;
 }
 
 .keyItem {
   align-items: start;
   display: flex;
-  gap: 1rem;
+  gap: var(--space-lg);
   justify-content: space-between;
 }
 
@@ -131,45 +131,45 @@
 }
 
 .keyName {
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .keyMeta {
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-body-strong);
-  margin-top: 0.25rem;
+  margin-top: var(--space-xs);
 }
 
 .keyMetaSpaced {
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-body-strong);
-  margin-top: 0.35rem;
+  margin-top: var(--space-xs);
 }
 
 .agentCard {
   background: linear-gradient(180deg, hsl(var(--surface-elevated)) 0%, hsl(var(--surface-muted)) 100%);
   border: 1px solid hsl(var(--border));
   display: grid;
-  gap: 1rem;
-  padding: 1.1rem 1.15rem;
+  gap: var(--space-lg);
+  padding: var(--space-lg) var(--space-lg);
 }
 
 .agentIntro {
   display: grid;
-  gap: 0.45rem;
+  gap: var(--space-sm);
 }
 
 .step {
   align-items: start;
   display: grid;
-  gap: 0.65rem;
+  gap: var(--space-md);
   grid-template-columns: 2rem minmax(0, 1fr);
 }
 
 .stepBadge {
   align-items: center;
   background: hsl(var(--foreground));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: hsl(var(--background));
   display: grid;
   font-size: 0.88rem;
@@ -183,7 +183,7 @@
   align-items: center;
   background: hsl(var(--surface-muted));
   border: 1px solid hsl(var(--border));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: hsl(var(--foreground));
   display: grid;
   font-size: 0.88rem;
@@ -195,6 +195,6 @@
 
 .stepBody {
   display: grid;
-  gap: 0.25rem;
+  gap: var(--space-xs);
   min-width: 0;
 }

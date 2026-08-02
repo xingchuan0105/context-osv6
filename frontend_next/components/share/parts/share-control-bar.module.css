@@ -8,7 +8,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .subtitle {
@@ -21,7 +21,7 @@
 .panel {
   display: grid;
   gap: var(--space-3);
-  padding: 0.78rem 0.88rem 0.82rem;
+  padding: var(--space-md) var(--space-lg) var(--space-md);
 }
 
 .switchRow {
@@ -34,7 +34,7 @@
 
 .switchLabelStack {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-xs);
 }
 
 .switchLabel {
@@ -54,7 +54,7 @@
   align-items: center;
   height: 2rem;
   min-width: 3.55rem;
-  padding: 0.16rem;
+  padding: var(--space-xxs);
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-badge);
 }
@@ -72,7 +72,7 @@
 
 .fieldStack {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .footnote {
@@ -82,7 +82,7 @@
 
 .urlStack {
   display: grid;
-  gap: 0.3rem;
+  gap: var(--space-xs);
   color: hsl(var(--muted-foreground));
 }
 
@@ -99,7 +99,7 @@
 
 .actions {
   display: grid;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -107,6 +107,6 @@
   justify-content: center;
   width: 100%;
   min-height: 2.4rem;
-  padding: 0.62rem var(--space-3);
+  padding: var(--space-sm) var(--space-3);
   font-size: 0.9rem;
 }

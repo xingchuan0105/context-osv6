@@ -1,18 +1,18 @@
 .panel {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4) 1rem 1rem;
+  padding: var(--space-4) var(--space-lg) var(--space-lg);
 }
 
 .formCard {
   display: grid;
   gap: var(--space-3);
-  padding: 0.82rem 0.9rem 0.88rem;
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
 }
 
 .fieldStack {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .submitButton {
@@ -26,13 +26,13 @@
 
 .memberCard {
   display: grid;
-  gap: 0.65rem;
-  padding: 0.72rem 0.82rem 0.78rem;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-md) var(--space-md);
 }
 
 .memberInfo {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-xs);
 }
 
 .memberMeta {

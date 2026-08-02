@@ -1,13 +1,13 @@
 .pageCenter {
   display: grid;
-  gap: 0.85rem;
+  gap: var(--space-md);
   width: 100%;
   max-width: 54rem;
 }
 
 .header {
   display: grid;
-  gap: 0.65rem;
+  gap: var(--space-md);
 }
 
 .headerGrid {
@@ -29,8 +29,8 @@
 
 .controlCard {
   display: grid;
-  gap: 0.85rem;
-  padding: 0.9rem var(--space-4) var(--space-4);
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-4) var(--space-4);
 }
 
 .actionMessage {
@@ -39,7 +39,7 @@
 
 .skeletonStack {
   display: grid;
-  gap: 0.65rem;
+  gap: var(--space-md);
 }
 
 .skeletonShort {

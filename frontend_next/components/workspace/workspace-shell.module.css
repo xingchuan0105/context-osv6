@@ -10,18 +10,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-lg);
   min-height: 4.5rem;
-  padding: 1rem 2rem;
+  padding: var(--space-lg) var(--space-2xl);
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--background));
-  box-shadow: var(--shadow-sm);
 }
 
 .topBarBrand {
   display: flex;
   align-items: center;
-  gap: 0.72rem;
+  gap: var(--space-md);
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -29,16 +28,15 @@
 .topBarBrandBlock {
   display: flex;
   align-items: center;
-  gap: 0.72rem;
+  gap: var(--space-md);
   flex: none;
 }
 
 .topBarMark {
   width: 2rem;
   height: 2rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-card);
   flex: none;
-  box-shadow: var(--shadow-sm);
   color: hsl(var(--foreground));
 }
 
@@ -85,10 +83,10 @@
 .dialogField input,
 .dialogField textarea {
   border: 1px solid transparent;
-  border-radius: 0.55rem;
+  border-radius: var(--radius-control);
   background: transparent;
   color: hsl(var(--foreground));
-  padding: 0.55rem 0.75rem;
+  padding: var(--space-sm) var(--space-md);
 }
 
 .titleInput {
@@ -99,8 +97,8 @@
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-shell-title);
   letter-spacing: var(--letter-spacing-title);
-  padding: 0.42rem 0.62rem;
-  border-radius: 0.7rem;
+  padding: var(--space-sm) var(--space-sm);
+  border-radius: var(--radius-control);
 }
 
 .titleInput:hover,
@@ -114,7 +112,7 @@
   appearance: none;
   min-width: 0;
   border: 0;
-  border-radius: 0.7rem;
+  border-radius: var(--radius-control);
   background: transparent;
   color: hsl(var(--foreground));
   cursor: pointer;
@@ -122,7 +120,7 @@
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-shell-title);
   letter-spacing: var(--letter-spacing-title);
-  padding: 0.4rem 0.6rem;
+  padding: var(--space-sm) var(--space-sm);
   text-align: left;
 }
 
@@ -133,7 +131,7 @@
 .topBarActions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   align-items: center;
   flex: 0 0 auto;
 }
@@ -142,7 +140,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: var(--space-sm);
   padding-right: 0;
 }
 
@@ -158,7 +156,7 @@
   appearance: none;
   border-radius: var(--radius-button);
   border: 1px solid transparent;
-  padding: 0.68rem 0.9rem;
+  padding: var(--space-md) var(--space-lg);
   cursor: pointer;
   white-space: nowrap;
   font-size: var(--font-size-control);
@@ -183,7 +181,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: var(--space-sm);
 }
 
 .secondaryButton,
@@ -198,7 +196,7 @@
   width: calc(var(--font-size-control) * 3.25);
   height: calc(var(--font-size-control) * 3.25);
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .actionIcon {
@@ -216,13 +214,11 @@
   border-color: hsl(var(--foreground));
   color: hsl(var(--primary-foreground));
   border-radius: var(--radius-button);
-  box-shadow: var(--shadow-sm);
 }
 
 .primaryButton:hover {
   background: hsl(var(--cta-background-hover));
   border-color: hsl(var(--cta-background-hover));
-  box-shadow: var(--shadow-glow);
 }
 
 .destructiveButton {
@@ -230,7 +226,6 @@
   border-color: hsl(var(--destructive));
   color: hsl(var(--destructive-foreground));
   border-radius: var(--radius-button);
-  box-shadow: var(--shadow-sm);
 }
 
 .destructiveButton:hover {
@@ -253,7 +248,7 @@
 .topBarPrimaryButton,
 .topBarActionButton {
   min-height: calc(var(--font-size-shell-title) * 2.1);
-  padding: 0.45rem 1rem;
+  padding: var(--space-sm) var(--space-lg);
   border-radius: var(--radius-button);
   text-decoration: none;
 }
@@ -263,14 +258,12 @@
   border: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   color: hsl(var(--muted-foreground));
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .topBarPrimaryButton {
   border-color: hsl(var(--foreground));
   background: hsl(var(--foreground));
   color: hsl(var(--primary-foreground));
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .topBarActionButton {
@@ -300,7 +293,6 @@
   border-color: hsl(var(--border));
   background: hsl(var(--card));
   color: hsl(var(--foreground));
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .topBarActionButton:focus-visible {
@@ -326,7 +318,6 @@
   color: hsl(var(--primary-foreground));
   border-radius: var(--radius-button);
   padding-inline: 1rem;
-  box-shadow: var(--shadow-sm);
 }
 
 .railPrimaryButton:hover {
@@ -342,7 +333,7 @@
   color: hsl(var(--muted-foreground));
   border-radius: var(--radius-button);
   min-height: calc(var(--font-size-shell-title) * 2.5);
-  padding: 0.68rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   box-shadow: none;
 }
 
@@ -355,7 +346,7 @@
 .dialogForm,
 .dialogField {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .dialogField textarea {
@@ -376,7 +367,7 @@
 .dialogActions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.65rem;
+  gap: var(--space-md);
 }
 
 .dialogDescription {
@@ -393,7 +384,7 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, hsl(var(--dashboard-overlay)) 38%, transparent);
-  padding: 1rem;
+  padding: var(--space-lg);
 }
 
 .modalCard {
@@ -401,7 +392,7 @@
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--card));
-  padding: 1rem;
+  padding: var(--space-lg);
 }
 
 .citationPopoverBackdrop {
@@ -413,17 +404,17 @@
 .citationPopoverCard {
   position: fixed;
   display: block;
-  border-radius: 0.9rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
   padding: 0;
-  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
 .citationPopoverContent {
   max-height: inherit;
   overflow-y: auto;
-  padding: 1rem 1.05rem;
+  padding: var(--space-lg) var(--space-lg);
   color: hsl(var(--foreground));
   font-size: var(--font-size-body-strong);
   line-height: 1.75;
@@ -446,7 +437,7 @@
   flex: 1 1 auto;
   min-height: 0;
   place-items: center;
-  padding: 2rem;
+  padding: var(--space-2xl);
   background:
     radial-gradient(circle at top, color-mix(in srgb, hsl(var(--surface-soft)) 84%, transparent), transparent 58%),
     hsl(var(--background));
@@ -454,13 +445,12 @@
 
 .workspaceUnavailableCard {
   display: grid;
-  gap: 0.9rem;
+  gap: var(--space-lg);
   width: min(42rem, 100%);
   border: 1px solid hsl(var(--border));
-  border-radius: 1.25rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
-  padding: 1.35rem 1.4rem;
-  box-shadow: var(--shadow-lg);
+  padding: var(--space-xl) var(--space-xl);
 }
 
 .workspaceUnavailableTitle {
@@ -482,7 +472,7 @@
 .workspaceUnavailableActions {
   display: flex;
   justify-content: flex-start;
-  padding-top: 0.2rem;
+  padding-top: var(--space-xs);
 }
 
 .desktopHistoryRail,
@@ -497,7 +487,7 @@
 .desktopHistoryRail {
   width: var(--workspace-history-rail-width);
   min-width: var(--workspace-history-rail-width);
-  padding: 0.9rem 0.65rem 0.85rem 0.7rem;
+  padding: var(--space-lg) var(--space-md) var(--space-md) var(--space-md);
 }
 
 .desktopRightRail {
@@ -533,7 +523,7 @@
   width: 0.2rem;
   height: 2.9rem;
   transform: translate(-50%, -50%);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: hsl(var(--border));
   opacity: 0.38;
   transition:
@@ -577,20 +567,20 @@
   top: 0;
   height: 100%;
   overflow: hidden;
+  border: 1px solid hsl(var(--border));
   background: hsl(var(--card));
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
 }
 
 .mobileHistoryDrawer {
   left: 0;
   width: min(84vw, 20rem);
-  padding: 1rem 0.75rem 1rem var(--space-3);
+  padding: var(--space-lg) var(--space-md) var(--space-lg) var(--space-3);
 }
 
 .mobileRightDrawer {
   right: 0;
   width: min(88vw, 26rem);
-  padding: 0.75rem 1rem;
+  padding: var(--space-md) var(--space-lg);
 }
 
 .railPanel {
@@ -598,12 +588,12 @@
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: var(--space-lg);
 }
 
 .railHeader {
   display: grid;
-  gap: 0.62rem;
+  gap: var(--space-sm);
 }
 
 .railActionIcon {
@@ -614,12 +604,12 @@
 .historyList {
   display: grid;
   flex: 1 1 0;
-  gap: 0.18rem;
+  gap: var(--space-xxs);
   min-height: 0;
   align-content: start;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 0.15rem;
+  padding-right: var(--space-xxs);
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border-strong)) transparent;
 }
@@ -630,7 +620,7 @@
 
 .historyList::-webkit-scrollbar-thumb {
   background: hsl(var(--border-strong));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .historyItem,
@@ -638,9 +628,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
-  gap: 0.18rem;
+  gap: var(--space-xxs);
   border-radius: var(--radius-control);
-  padding: 0.12rem;
+  padding: var(--space-xxs);
   background: transparent;
   transition: background var(--duration-fast) var(--ease-standard);
 }
@@ -658,7 +648,7 @@
   min-width: 0;
   text-align: left;
   border-radius: var(--radius-button);
-  padding: 0.38rem 0.55rem;
+  padding: var(--space-sm) var(--space-sm);
   display: grid;
   gap: 0;
   background: transparent;
@@ -668,13 +658,13 @@
 .historyItemHeader {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-sm);
   min-width: 0;
 }
 
 .historyItemTitle {
   font-size: var(--font-size-control);
-  font-weight: 500;
+  font-weight: 400;
   line-height: var(--line-height-control);
   color: hsl(var(--foreground));
   min-width: 0;
@@ -684,7 +674,7 @@
 }
 
 .historyItemActive .historyItemTitle {
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .historyItem:hover:not(.historyItemActive) {
@@ -695,7 +685,7 @@
 
 .historyMenuTrigger {
   align-self: start;
-  margin-top: 0.22rem;
+  margin-top: var(--space-xs);
   color: hsl(var(--subtle-foreground));
   opacity: 0;
   visibility: hidden;
@@ -725,21 +715,20 @@
 .historyExpandedMenuShell {
   display: flex;
   justify-content: flex-end;
-  padding: 0 0.12rem 0.12rem;
+  padding: 0 var(--space-xxs) var(--space-xxs);
   margin-top: -0.08rem;
 }
 
 .historyMenu {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-xs);
   width: fit-content;
   min-width: 6.4rem;
   max-width: 100%;
   border: 1px solid hsl(var(--border));
-  border-radius: 0.85rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
-  padding: 0.24rem;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  padding: var(--space-xs);
 }
 
 .historyMenuButton {
@@ -747,12 +736,12 @@
   display: block;
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 0.65rem;
+  border-radius: var(--radius-control);
   background: transparent;
   color: hsl(var(--foreground));
   font-size: var(--font-size-control);
   line-height: var(--line-height-control);
-  padding: 0.48rem 0.68rem;
+  padding: var(--space-sm) var(--space-md);
   text-align: left;
   cursor: pointer;
 }
@@ -801,12 +790,12 @@
 
 @media (max-width: 767px) {
   .panePanel {
-    padding: 0.75rem;
+    padding: var(--space-md);
   }
 
   .topBar {
     flex-wrap: wrap;
-    padding: 1rem;
+    padding: var(--space-lg);
   }
 
   .topBarBrand {

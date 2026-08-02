@@ -7,22 +7,21 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
-  padding: 1rem;
+  padding: var(--space-lg);
 }
 
 .modal {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-card);
-  padding: 2rem;
+  padding: var(--space-2xl);
   max-width: 56rem;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  box-shadow: var(--shadow-xl);
+  gap: var(--space-xl);
 }
 
 .title {
@@ -45,7 +44,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 1rem;
+  padding-top: var(--space-lg);
   border-top: 1px solid hsl(var(--border-whisper));
 }
 
@@ -53,7 +52,7 @@
   background: none;
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-button);
-  padding: 0.5rem 1rem;
+  padding: var(--space-sm) var(--space-lg);
   color: hsl(var(--muted-foreground));
   cursor: pointer;
   font-size: var(--font-size-caption-strong);

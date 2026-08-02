@@ -1,12 +1,12 @@
 .container {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .backRow {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .backLink {
@@ -15,19 +15,19 @@
 
 .card {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .accountHead {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-lg);
   align-items: start;
 }
 
 .accountTitle {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .heading {
@@ -50,7 +50,7 @@
 
 .metricsGrid {
   display: grid;
-  gap: 0.7rem;
+  gap: var(--space-md);
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
@@ -62,7 +62,7 @@
 
 .twoColumnGrid {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-lg);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
@@ -83,12 +83,12 @@
 
 .memberList {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .memberMeta {
   display: grid;
-  gap: 0.2rem;
+  gap: var(--space-xs);
 }
 
 .efficiencyGrid {
@@ -99,7 +99,7 @@
 
 .statPanel {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .tableWrapper {
@@ -117,7 +117,7 @@
 }
 
 .tableHeaderCell {
-  padding: 0.85rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   text-align: left;
   font-size: var(--font-size-meta);
   color: hsl(var(--muted-foreground));
@@ -128,5 +128,5 @@
 }
 
 .tableCell {
-  padding: 1rem;
+  padding: var(--space-lg);
 }
