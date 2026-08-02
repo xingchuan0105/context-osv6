@@ -56,9 +56,18 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 
 | 依赖 | 说明 |
 |------|------|
-| `markitdown` CLI（`MARKITDOWN_BIN`/`MARKITDOWN_TIMEOUT_MS`） | 唯一生产文档解析器；缺失时摄入以「markitdown 子进程启动失败」显式报错 |
+| `lit` CLI（`LITEPARSE_BIN`/`LITEPARSE_TIMEOUT_MS`/`LITEPARSE_SCANNED_MIN_CHARS`） | PDF 解析（`lit parse --format markdown --no-ocr`）；缺失/超时以「liteparse parse failed」显式报错 |
+| `office-direct-extract`（`OFFICE_DIRECT_BIN`/`OFFICE_DIRECT_TIMEOUT_MS`） | Office 直读（docx/xlsx/pptx），doc/ppt/xls 先经 soffice 转 OOXML；缺失以「office-direct parse failed」显式报错 |
+| LibreOffice `soffice`（`OFFICE_SOFFICE_BIN`/`OFFICE_SOFFICE_TIMEOUT_MS`/`OFFICE_SOFFICE_MAX_CONCURRENT`） | 仅 doc/ppt/xls 旧二进制转 OOXML 时调用；需 writer/calc/impress 三组件齐全 |
+| `markitdown` CLI（`MARKITDOWN_BIN`/`MARKITDOWN_TIMEOUT_MS`） | 文本/代码类兜底（txt/md/rst/csv/tsv/json/toml/yaml/html/代码）；缺失时摄入以「markitdown 子进程启动失败」显式报错 |
 | `.dev-logs/worker.log` | `product-dev-up` 默认 tee；避免只挂 pts 丢日志 |
-| ~~`PDF_RENDERER_BASE_URL`~~ | 已退役（2026-07-31 markitdown 切换），office parser(:9090)/PDF renderer(:9091) 不再被调用 |
+| ~~`PDF_RENDERER_BASE_URL`~~ | 已退役（2026-08-02），office parser(:9090)/PDF renderer(:9091) 不再被调用 |
+
+**解析器安装（本地 worker 三组件需在 PATH）：**
+
+- `lit` CLI（PDF）—— 见 `plans/2026-08-02-parser-pipeline-direct-readers.md` §5.7（VPS 预置项）。
+- `office-direct-extract` —— `pip install -e ./scripts/office-direct`（worker venv；自带 mammoth/openpyxl/python-pptx）。脚本自身 `#!/usr/bin/env python3` + `chmod +x`，`OFFICE_DIRECT_BIN` 也支持直接指向 .py 路径。
+- LibreOffice —— 系统安装并确保 `soffice --version` 可用，需 writer/calc/impress 三组件齐全（仅 doc/ppt/xls 旧二进制用到）。
 
 启动时建议先确认：
 
@@ -68,8 +77,8 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 2. **健康探针**
    - `AVRAG_WORKER_HEALTH_PORT=0` 时会自动选端口并写入 `AVRAG_WORKER_HEALTH_PORT_FILE`。
    - 本地可直接 `curl http://127.0.0.1:<port>/health` 验证存活。
-3. **markitdown CLI**
-   - `command -v markitdown && markitdown --version`（worker PATH 必须可见）。
+3. **解析器 CLI**
+   - `command -v lit && command -v office-direct-extract && command -v markitdown`（worker PATH 必须可见；旧二进制 Office 还需 `command -v soffice`）。
 
 ## 任务契约
 
@@ -172,15 +181,17 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 
 | 文档形态 | 处理方式 |
 |------|----------|
-| 文档类（含 PDF/xlsx/docx 等） | markitdown 子进程 → markdown → IR |
-| 扫描件 PDF | markitdown 提不出文本 → 空 IR → 按既有零块校验拒收 |
+| PDF（数字版） | liteparse（`lit parse --format markdown --no-ocr`）子进程 → markdown → IR |
+| PDF（扫描件，liteparse 提取近空） | 整本转 Paddle Jobs OCR（`paddle_ocr_pdf`，1 文件 1 Job，`pdf_route_mode=paddle_ocr_pdf`） |
+| Office（docx/xlsx/pptx/doc/ppt/xls） | office-direct-extract 直读（旧二进制 doc/ppt/xls 经 soffice 转 OOXML）→ markdown → IR |
+| 文本/代码（txt/md/csv/json/toml/yaml/html/代码） | markitdown 子进程 → markdown → IR |
 | 独立图片（png/jpg/webp） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`，现役唯一图片路径） |
 
 1. **Paddle Jobs（仅独立图片）**
    - `PADDLE_OCR_BASE_URL` — 默认 `https://paddleocr.aistudio-app.com/api/v2/ocr`
    - `PADDLE_OCR_API_TOKEN` — AI Studio Token（**禁止入库/日志**）
    - `PADDLE_OCR_MODEL` — 如 `PaddleOCR-VL-1.6`
-2. **E 类 VisualRaster sidecar** —— 已退役（2026-07-31 markitdown 切换）：`PDF_RENDERER_BASE_URL`、`PDF_VISUAL_PAGES_PER_CHUNK`、`PDF_RENDERER_TIMEOUT_MS` 均不再生效；`pdf-renderer-up.sh/down.sh` 已删除；扫描件 PDF 经 markitdown 提不出文本时按零块校验拒收。
+2. **E 类 VisualRaster sidecar** —— 已退役（2026-08-02 直读切换）：`PDF_RENDERER_BASE_URL`、`PDF_VISUAL_PAGES_PER_CHUNK`、`PDF_RENDERER_TIMEOUT_MS` 均不再生效；`pdf-renderer-up.sh/down.sh` 已删除；扫描件 PDF 现由 liteparse 提取近空检测后整本转 Paddle OCR（见上表），不再按零块校验拒收。
 3. 可选调参：`MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896`
 4. VLM 页摘要（INGESTION_LLM）与可选 triplet（`INGESTION_VLM_TRIPLET_ENABLED=1`）依赖 `INGESTION_LLM_*` 配置。
 
@@ -198,4 +209,4 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 
 ### Office 解析
 
-已统一退役（2026-07-31）：docx/xlsx/pptx/pdf 等一切文档类由 worker 子进程 `markitdown` 解析（`OFFICE_PARSER_BASE_URL` 不再生效，`office-parser-up.sh/down.sh` 已删除）。
+docx/xlsx/pptx/doc/ppt/xls 走 worker 子进程 `office-direct-extract` 直读（mammoth/openpyxl/python-pptx；旧二进制 doc/ppt/xls 经 soffice 转 OOXML），产出 markdown → IR/切块/索引；表格类另经 struct-query 表格阶段。`OFFICE_PARSER_BASE_URL` 与 `office-parser-up.sh/down.sh` 已退役删除。

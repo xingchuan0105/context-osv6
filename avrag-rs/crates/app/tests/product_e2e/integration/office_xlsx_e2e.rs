@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::product_e2e::setup;
 use crate::product_e2e::{DocumentStatus, TestContext};
+use crate::product_e2e::assertions::assert_primary_backend;
 
 fn contract_xlsx_path() -> std::path::PathBuf {
     setup::fixture_path("contract-xlsx.xlsx").expect("contract-xlsx.xlsx fixture")
@@ -33,11 +34,7 @@ async fn office_xlsx_ingest_e2e() {
         .query_latest_backend_summary(&upload.document_id)
         .await
         .expect("backend_summary");
-    let summary_text = summary.to_string();
-    assert!(
-        summary_text.contains("markitdown"),
-        "expected markitdown routing in backend_summary: {summary_text}"
-    );
+    assert_primary_backend(&summary, "office_direct");
 
     let chunk_count = ctx
         .query_document_chunk_count(&upload.document_id)
@@ -56,7 +53,7 @@ async fn office_xlsx_ingest_e2e() {
     .expect("first chunk content");
     assert!(
         row.0.contains("Revenue Q1 42"),
-        "chunk should contain markitdown-parsed xlsx cell text, got: {}",
+        "chunk should contain office-direct-parsed xlsx cell text, got: {}",
         row.0
     );
 }

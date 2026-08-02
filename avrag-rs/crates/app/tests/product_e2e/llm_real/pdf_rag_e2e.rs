@@ -1,4 +1,4 @@
-//! Real-LLM RAG after markitdown PDF ingest (ingest + retrieval + synthesis).
+//! Real-LLM RAG after liteparse v2 PDF ingest (ingest + retrieval + synthesis).
 
 use std::time::Duration;
 
@@ -7,7 +7,7 @@ use crate::product_e2e::{
     assertions::{
         assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
         assert_citation_referenced_in_answer, assert_has_citations,
-        assert_markitdown_backend_summary, assert_no_mineru_in_backend_summary,
+        assert_no_mineru_in_backend_summary, assert_primary_backend,
     },
     llm_real::{
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry_attempts, merge_llm_real_extra,
@@ -19,7 +19,7 @@ fn phase0_mini_fixture_path() -> std::path::PathBuf {
     setup::fixture_path("phase0-mini.pdf").expect("phase0-mini.pdf fixture")
 }
 
-fn apply_markitdown_profile() {
+fn apply_pdf_ingestion_profile() {
     unsafe {
         std::env::set_var("INGESTION_PDF_MAX_PAGES", "8");
         std::env::set_var("INGESTION_TRIPLET_ENABLED", "0");
@@ -33,7 +33,7 @@ fn apply_markitdown_profile() {
 #[ignore = "requires real LLM + embedding; run with --ignored --test-threads=1"]
 async fn real_llm_rag_after_markitdown_pdf_ingest_returns_citation() {
     super::require_nightly_suite();
-    apply_markitdown_profile();
+    apply_pdf_ingestion_profile();
     assert!(
         phase0_mini_fixture_path().is_file(),
         "missing bundled fixture phase0-mini.pdf"
@@ -58,7 +58,7 @@ async fn real_llm_rag_after_markitdown_pdf_ingest_returns_citation() {
         .query_latest_backend_summary(&upload.document_id)
         .await
         .expect("backend_summary");
-    assert_markitdown_backend_summary(&summary);
+    assert_primary_backend(&summary, "liteparse_v2_pdf");
     assert_no_mineru_in_backend_summary(&summary);
 
     let chunk_count = ctx
@@ -67,7 +67,7 @@ async fn real_llm_rag_after_markitdown_pdf_ingest_returns_citation() {
         .expect("chunk count");
     assert!(
         chunk_count > 0,
-        "expected chunks after markitdown PDF ingest"
+        "expected chunks after liteparse PDF ingest"
     );
 
     let result = chat_with_citations_retry_attempts(

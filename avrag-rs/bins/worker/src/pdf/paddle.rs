@@ -126,7 +126,7 @@ pub async fn execute_paddle_ocr_image(
     ir.doc_type = DocumentType::Image;
     ir.metadata.insert(
         "ingest_route_version".to_string(),
-        "liteparse-v1".to_string(),
+        "paddle-v1".to_string(),
     );
     ir.metadata
         .insert("pdf_route_mode".to_string(), "paddle_image".to_string());
@@ -161,7 +161,7 @@ pub async fn execute_paddle_ocr_pdf(
     let mut ir = build_document_ir_from_paddle(document_id, filename, &pages, &table_pages);
     ir.metadata.insert(
         "ingest_route_version".to_string(),
-        "liteparse-v1".to_string(),
+        "paddle-v1".to_string(),
     );
     ir.metadata
         .insert("pdf_route_mode".to_string(), "paddle_ocr_pdf".to_string());
