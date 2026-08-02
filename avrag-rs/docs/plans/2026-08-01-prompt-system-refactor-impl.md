@@ -227,6 +227,15 @@ WP1 → WP2 → WP3 → WP4 → WP5 → WP6，每 WP 一个本地 commit（solo 
 15. **修复（assembler.rs）**：`assemble_retrieve` 的 tools 恒定取自 `mode.tools_for_retrieve(registry)`（rag/search tool_pool 空 → `tools=[]`），不再在 memory 披露时附加两个原生记忆工具；删除 `memory_cluster_disclosed`/`dedupe_tools` 私有函数；更新 3 个相关单测。D8 自洽：memory 每轮散文披露、教学 `client.history`/`client.user_profile` 基础原语，原生工具是 legacy 点选式残留。`cargo test -p agent-loop --lib` = 279 全绿。
 16. **验证（4 题探针 thesis_factual Q1-Q4）**：2/4 PASS（recall=1.0），2 题 eval_bridge_miss 但已能写出 code 块（q002 为 `asyncio.run()` 与沙箱运行中事件循环冲突、q003 为 sandbox_error + synthesis 修复）——非系统性回归，属模型行为波动（与重构前基线中零星 miss 同量级）。
 
+### WP8（2026-08-02 全量 149 复跑后，E2E 并发提速；commit 2f4d81ab）
+
+17. **`realistic_corpus_full_eval` 主循环并发化**（A：chat 并行）：串行 `for` 改 `futures::stream::iter(...).map(...).buffer_unordered(N)`，`N = E2E_CONCURRENCY` env（默认 8）。循环体提取为 `run_single_question` async fn + `QuestionOutcome{idx, failures, subset, recall/citation/halluc/scorecard Option}`；按 idx 归位收集后再聚合，report 逻辑与顺序不变。
+18. **TestContext 不 Sync（含 oneshot Sender + tokio::process::Child），不跨 task 共享**：只提取 `http_client`（reqwest::Client，Clone）+ `base_url` 传入各 task。
+19. **judge 并行（B）**：judge 与 chat 共享同一 buffer_unordered 池（每 task 内 chat 完成后立即 judge），未拆独立 judge 池——`V2RunCtx.scores` 改 `Arc<Mutex<Vec<ScoreV2>>>`，`score_question`/`record_infra` 由 `&mut self` 改 `&self`（内部 lock），`print_and_write_summary` 开头 lock.clone()。
+20. **重试补全**：`post_rag_chat` 自由函数（自 `chat_v3` 提取，`chat_v3` 改调它）加重试——transport err 指数退避 1s/2s/4s 最多 3 次；状态码 429|500|502|503|504 时 retriable（429 读 `Retry-After` 头 min 30s，否则 1s/2s；5xx 用 1s/2s；attempts>=3 返回当前响应）；4xx(非429)/2xx/3xx 立即返回。此前 agent chat 的 http 500 无重试（全量跑 2 个 INFRA_ERROR）。`JudgeCache::store` 改临时文件 + `fs::rename` 原子替换（防并发读者读半写文件）。
+21. **fail_fast 语义弱化**：原 `break`（fail_fast 立即停）改 `Arc<AtomicBool>` 置位，各 task 开头查（置位则跳过后续），已在飞的 task 完成；聚合后保留 `fail_fast && !failures.is_empty()` panic。
+22. **验证**：编译 0 error；calculator 3 题探针（E2E_CONCURRENCY=3）11.75s；混合 6 题（E2E_QUESTIONS=1..6, E2E_CONCURRENCY=8）51.57s（串行基线 6 题约 4min，~4.7x）。6 题 v2 全 PASS。全量 149 串行 6622s 的并发期望 ~25-30min（embedding 侧 rate limit 未实测，探针未见 429/退避触发）。
+
 ## 9. 环境纪律（摘自 AGENTS.md，全文有效）
 
 - prompts-in-md：LLM 可见文案只住 `avrag-rs/prompts/**/*.md`；代码里只做加载与占位符替换。
