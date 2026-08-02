@@ -48,7 +48,7 @@
 # 推荐：product-dev-up 拉起 minio/api/worker/next，worker 日志 tee 到 .dev-logs/worker.log
 bash scripts/product-dev-up.sh   # 仓库根
 
-# 或单独（worker 依赖 PATH 上的 markitdown CLI——唯一生产解析器，xlsx/pdf/docx 等全类）：
+# 或单独（worker 依赖 PATH 上的解析器：lit CLI（PDF）、office-direct-extract（Office）、markitdown（文本/代码））：
 cd avrag-rs
 mkdir -p .dev-logs
 RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-logs/worker.log
@@ -166,9 +166,9 @@ cargo check -p avrag-worker
 
 ## 服务器部署提醒
 
-### PDF 入库（markitdown 单一路径，2026-07-31 起）
+### 文档入库（按格式分工，2026-08-02 起）
 
-PDF 与 Office 类文档走 **markitdown 单一路径**（2026-07-31 起唯一生产解析器）：worker 子进程 `markitdown` 把 xls/xlsx/doc/docx/ppt/pptx/pdf/txt/md/html/csv/代码文件统一转为 markdown，再进 IR/切块/索引；表格类文档另经 struct-query 表格阶段（per-doc duckdb + 证据 chunk）。原 LiteParse 主链（hybrid 探针/页路由/VisualRaster 兜底）已退役删除。
+PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类（docx/xlsx/pptx/doc/ppt/xls）走 **office-direct-extract**（docx/xlsx/pptx 直读，旧二进制 doc/ppt/xls 经 soffice 无损转 OOXML 后直读）；txt/md/html/csv/代码走 **markitdown**。各子进程均产出 markdown → IR/切块/索引；表格类文档另经 struct-query 表格阶段（per-doc duckdb + 证据 chunk）。原 LiteParse 主链（hybrid 探针/页路由/VisualRaster 兜底）已退役删除。设计见 `plans/2026-08-02-parser-pipeline-direct-readers.md`。
 
 | 文档形态 | 处理方式 |
 |------|----------|

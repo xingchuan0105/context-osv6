@@ -1,4 +1,5 @@
-//! Office XLSX ingest via markitdown（唯一解析器）→ worker → indexed chunks.
+//! Office XLSX ingest via office-direct（2026-08-02 起 Office 直读）→ worker → indexed chunks.
+//! 运行需 worker 装 office-direct-extract。
 
 use std::time::Duration;
 

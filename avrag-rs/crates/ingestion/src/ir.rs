@@ -45,7 +45,8 @@ impl DocumentType {
 
 /// Parser backend recorded on document IR blocks and pages.
 ///
-/// Post-2026-07-31 markitdown is the sole production document parser.
+/// 2026-08-02 起按格式分工（见 `docs/plans/2026-08-02-parser-pipeline-direct-readers.md`）：
+/// PDF→`liteparse_v2_pdf`、docx/xlsx/pptx/doc/ppt/xls→`office_direct`、文本/代码→`markitdown`。
 /// Variants prefixed with historical wire names (including `LiteParsePdf`,
 /// `LiteParseFigure`, `CalamineExcel`, `EdgeParsePdf`, `Mineru*`) remain
 /// for deserializing stored IR only — do not select them in new ingest paths.
@@ -77,9 +78,16 @@ pub enum ParseBackend {
     CodeLocal,
     /// Historical IR only (calamine 进程内 Excel 解析)。Do not emit on new ingest.
     CalamineExcel,
-    /// markitdown subprocess parse → markdown (sole document parse path;
-    /// xls/xlsx/doc/docx/ppt/pptx/pdf/txt/md/html/csv/code all route here).
+    /// markitdown subprocess parse → markdown (现役：文本/代码类兜底；
+    /// txt/md/rst/csv/tsv/json/toml/yaml/yml/html/htm/code route here).
     Markitdown,
+    /// liteparse PDFium native parse → markdown（现役：PDF 路径）。
+    /// Wire name 与历史 `LiteParsePdf` 区分——新路径产 markdown→Paragraph/Heading
+    /// 块（无 bbox），与旧 liteparse 行块形态不同，需可区分。
+    LiteparseV2Pdf,
+    /// Office 直读（mammoth/openpyxl/python-pptx，旧二进制 doc/ppt/xls 经
+    /// soffice 无损转 OOXML 后直读）→ markdown（现役：docx/xlsx/pptx/doc/ppt/xls）。
+    OfficeDirect,
     #[default]
     Unknown,
 }
@@ -121,6 +129,8 @@ impl ParseBackend {
             Self::CodeLocal => "code_local",
             Self::CalamineExcel => "calamine_excel",
             Self::Markitdown => "markitdown",
+            Self::LiteparseV2Pdf => "liteparse_v2_pdf",
+            Self::OfficeDirect => "office_direct",
             Self::Unknown => "unknown",
         }
     }

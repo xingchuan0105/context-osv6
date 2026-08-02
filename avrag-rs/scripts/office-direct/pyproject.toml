@@ -1,0 +1,31 @@
+[project]
+name = "office-direct"
+version = "0.1.0"
+description = "Office direct-read parser: docx/xlsx/pptx via mammoth/openpyxl/python-pptx, old binary doc/ppt/xls via soffice->OOXML. Emits markdown for blocks_from_markdown."
+requires-python = ">=3.10"
+dependencies = [
+    "mammoth>=1.6.0",
+    "markdownify>=0.12.0",
+    "openpyxl>=3.1.0",
+    "python-pptx>=0.6.21",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "python-docx>=1.0.0",  # 测试构造 docx fixture
+]
+
+[project.scripts]
+office-direct-extract = "office_direct.main:main"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

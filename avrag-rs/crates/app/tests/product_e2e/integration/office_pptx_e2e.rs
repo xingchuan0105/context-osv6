@@ -1,7 +1,7 @@
-//! Office PPTX ingest via markitdown（唯一解析器）→ worker → indexed chunks.
+//! Office PPTX ingest via office-direct（2026-08-02 起 Office 直读）→ worker → indexed chunks.
 //!
 //! fixture `phase0-mini.pptx` 2026-07-31 重建为标准 python-pptx 文件——旧 fixture
-//! 缺 `<p:spPr>`，markitdown（PptxConverter/python-pptx 系）无法解析。
+//! 缺 `<p:spPr>`，python-pptx 系解析器无法解析。运行需 worker 装 office-direct-extract。
 
 use std::time::Duration;
 

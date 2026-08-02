@@ -7,7 +7,8 @@ use mime::{
     normalize_mime_type,
 };
 
-/// 解析路由（2026-07-31 起：文档全类唯一解析器 markitdown；standalone 图片 PaddleOCR）。
+/// 解析路由（2026-08-02 起按格式分工：PDF→liteparse、Office 直读、文本/代码→
+/// markitdown；standalone 图片 PaddleOCR）。见 `docs/plans/2026-08-02-parser-pipeline-direct-readers.md`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ParseRoute {
@@ -62,11 +63,16 @@ pub struct ParseRouteDecision {
     pub plan: ParsePlan,
 }
 
-/// 文档类唯一解析路径：markitdown 子进程（原始字节 → markdown）。
+/// 文档类本地解析路径（子进程 → markdown → `blocks_from_markdown`）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalParseKind {
+    /// markitdown 子进程（文本/代码类兜底）。
     Markitdown,
+    /// liteparse PDFium 原生解析（PDF 路径）。
+    LiteparseV2Pdf,
+    /// Office 直读（docx/xlsx/pptx 直读；doc/ppt/xls 经 soffice 无损转 OOXML 后直读）。
+    OfficeDirect,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,13 +142,11 @@ impl ParseRouter {
         let extension =
             normalize_extension(filename).expect("validated file types must retain an extension");
 
-        let markitdown = |reason: RouteReason| {
+        let local = |kind: LocalParseKind, reason: RouteReason| {
             Ok(ParseRouteDecision {
                 route: ParseRoute::Local,
                 reason,
-                plan: ParsePlan::Local(LocalParsePlan {
-                    kind: LocalParseKind::Markitdown,
-                }),
+                plan: ParsePlan::Local(LocalParsePlan { kind }),
             })
         };
 
@@ -154,12 +158,20 @@ impl ParseRouter {
                     kind: ExternalParseKind::PaddleOcrImage,
                 }),
             }),
-            "doc" | "docx" => markitdown(RouteReason::OfficeDocument),
-            "ppt" | "pptx" => markitdown(RouteReason::PresentationFile),
-            "pdf" | "xls" | "xlsx" => markitdown(RouteReason::OfficeDocument),
+            "pdf" => local(
+                LocalParseKind::LiteparseV2Pdf,
+                RouteReason::OfficeDocument,
+            ),
+            "doc" | "docx" | "xls" | "xlsx" => local(
+                LocalParseKind::OfficeDirect,
+                RouteReason::OfficeDocument,
+            ),
+            "ppt" | "pptx" => local(LocalParseKind::OfficeDirect, RouteReason::PresentationFile),
             "txt" | "md" | "rst" | "csv" | "tsv" | "json" | "toml" | "yaml" | "yml" | "html"
-            | "htm" => markitdown(RouteReason::TextFile),
-            _ if is_code_extension(&extension) => markitdown(RouteReason::TextFile),
+            | "htm" => local(LocalParseKind::Markitdown, RouteReason::TextFile),
+            _ if is_code_extension(&extension) => {
+                local(LocalParseKind::Markitdown, RouteReason::TextFile)
+            }
             _ => Err(ParseRouteError::unsupported(format!(
                 "file {filename} uses unsupported extension .{extension}"
             ))),

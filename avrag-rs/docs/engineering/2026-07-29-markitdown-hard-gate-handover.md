@@ -1,5 +1,9 @@
 # 交接文档：markitdown 全量基线 · 三层诊断 · 记分对齐 · 无 chunk 硬闸（2026-07-29 → 07-30）
 
+> **部分过期** — 本文以 orchestrator / worker / brief / handoff 架构为当时现状叙述；该架构已于 2026-08-01 物理删除（commit `7f2d182d`），现行为单 agent SaC（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。文中 eval v2 / token 预算等内容仍然有效。（注释添加于 2026-08-02 文档体系梳理）
+>
+> **部分被取代（2026-08-02）** — 本文「markitdown 唯一文档解析器」决策已由按格式分工取代：PDF→liteparse、Office→office-direct 直读、markitdown 仅文本/代码兜底。见 [`../plans/2026-08-02-parser-pipeline-direct-readers.md`](../plans/2026-08-02-parser-pipeline-direct-readers.md)。本文的硬闸/记分/无 chunk 部分仍有效。
+
 | 项目 | 内容 |
 |---|---|
 | 类型 | 会话交接（Claude 限额后由 Grok 接手续作） |

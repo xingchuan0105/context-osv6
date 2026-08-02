@@ -371,7 +371,7 @@ impl E2eBootstrapConfig {
             );
         }
 
-        // markitdown 唯一解析器（2026-07-31）：worker 直接子进程调 markitdown；
+        // 按格式分工（2026-08-02）：PDF→liteparse、Office→office-direct、文本/代码→markitdown；
         // OFFICE_PARSER_*/LITEPARSE_*/PDF_RENDERER_* 已退役，不再转发。
         Self::forward_optional_env(
             cmd,

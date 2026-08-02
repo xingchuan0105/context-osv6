@@ -1,7 +1,8 @@
-//! markitdown 子进程后端（2026-07-31，用户拍板：markitdown 为生产唯一文档解析器）。
+//! markitdown 子进程后端（2026-08-02 起为文本/代码类兜底；PDF→liteparse、
+//! Office→office-direct，见 `docs/plans/2026-08-02-parser-pipeline-direct-readers.md`）。
 //!
-//! 文档全类（xls/xlsx/doc/docx/ppt/pptx/pdf/txt/md/html/csv/代码扩展名）统一经
-//! markitdown CLI 解析为 markdown，再切 Heading/Paragraph blocks（与 E2E harness
+//! txt/md/rst/csv/tsv/json/toml/yaml/yml/html/htm/代码扩展名经 markitdown CLI
+//! 解析为 markdown，再切 Heading/Paragraph blocks（与 E2E harness
 //! `markitdown_reingest.rs` 的切块形状一致——刻意不做管道表重检测，TableIr 退役）。
 //!
 //! 已知取舍（设计声明）：markitdown 不产多模态 asset（docx/pptx/pdf 内嵌图片不提取）、

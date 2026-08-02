@@ -1,13 +1,23 @@
 use super::*;
 
-fn assert_markitdown(decision: &ParseRouteDecision) {
+fn assert_local_kind(decision: &ParseRouteDecision, kind: LocalParseKind) {
     assert_eq!(decision.route, ParseRoute::Local);
     assert!(matches!(
         decision.plan,
-        ParsePlan::Local(LocalParsePlan {
-            kind: LocalParseKind::Markitdown
-        })
+        ParsePlan::Local(LocalParsePlan { kind: ref k }) if *k == kind
     ));
+}
+
+fn assert_markitdown(decision: &ParseRouteDecision) {
+    assert_local_kind(decision, LocalParseKind::Markitdown);
+}
+
+fn assert_office_direct(decision: &ParseRouteDecision) {
+    assert_local_kind(decision, LocalParseKind::OfficeDirect);
+}
+
+fn assert_liteparse_v2_pdf(decision: &ParseRouteDecision) {
+    assert_local_kind(decision, LocalParseKind::LiteparseV2Pdf);
 }
 
 #[test]
@@ -37,51 +47,75 @@ fn image_file_routing_uses_paddle_ocr_image_route() {
     ));
 }
 
+/// Office 直读：docx/doc/xls/xlsx 走 OfficeDirect。
 #[test]
-fn docx_file_routing_uses_markitdown() {
+fn docx_file_routing_uses_office_direct() {
     let decision = ParseRouter::route(
         b"fake docx",
         "test.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     .unwrap();
-    assert_markitdown(&decision);
+    assert_office_direct(&decision);
     assert!(matches!(decision.reason, RouteReason::OfficeDocument));
 }
 
+/// Office 直读：pptx/ppt 走 OfficeDirect。
 #[test]
-fn pptx_file_routing_uses_markitdown() {
+fn pptx_file_routing_uses_office_direct() {
     let decision = ParseRouter::route(
         b"fake pptx",
         "test.pptx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
     .unwrap();
-    assert_markitdown(&decision);
+    assert_office_direct(&decision);
     assert!(matches!(decision.reason, RouteReason::PresentationFile));
 }
 
-/// markitdown 唯一文档解析器：xlsx/xls 不再走 calamine 进程内解析。
+/// Office 直读：xlsx/xls 走 OfficeDirect（不再经 markitdown/calamine）。
 #[test]
-fn excel_routing_uses_markitdown() {
+fn excel_routing_uses_office_direct() {
     let decision = ParseRouter::route(
         b"fake xlsx",
         "ipd.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     .unwrap();
-    assert_markitdown(&decision);
+    assert_office_direct(&decision);
 
     let decision =
         ParseRouter::route(b"fake xls", "legacy.xls", "application/vnd.ms-excel").unwrap();
-    assert_markitdown(&decision);
+    assert_office_direct(&decision);
 }
 
-/// markitdown 唯一文档解析器：pdf 不再走 liteparse/VLM 页路由管线。
+/// PDF 走 liteparse（liteparse_v2_pdf）。
 #[test]
-fn pdf_routing_uses_markitdown() {
+fn pdf_routing_uses_liteparse_v2_pdf() {
     let decision = ParseRouter::route(b"%PDF-1.7 fake", "report.pdf", "application/pdf").unwrap();
-    assert_markitdown(&decision);
+    assert_liteparse_v2_pdf(&decision);
+    assert!(matches!(decision.reason, RouteReason::OfficeDocument));
+}
+
+/// 旧二进制 doc/ppt 走 OfficeDirect。
+#[test]
+fn doc_ppt_routing_uses_office_direct() {
+    let decision = ParseRouter::route(
+        b"fake doc",
+        "legacy.doc",
+        "application/msword",
+    )
+    .unwrap();
+    assert_office_direct(&decision);
+
+    let decision = ParseRouter::route(
+        b"fake ppt",
+        "legacy.ppt",
+        "application/vnd.ms-powerpoint",
+    )
+    .unwrap();
+    assert_office_direct(&decision);
+    assert!(matches!(decision.reason, RouteReason::PresentationFile));
 }
 
 #[test]
