@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::adapters::pg_session::set_current_role;
 use app_core::BillingStorePort;
 use app_core::{
-    BillingConfig, BillingProvider, Subscription, UsageForecastResponse, UsageHistoryResponse,
+    BillingProvider, ProviderEvent, Subscription, UsageForecastResponse, UsageHistoryResponse,
     UsageWindowResponse, WebhookClaim,
 };
 use async_trait::async_trait;
@@ -18,9 +18,9 @@ mod billing_sql {
 
     use anyhow::{Result, anyhow, bail};
     use app_core::{
-        ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, DailyUsage, ExistingSubscriptionFields,
-        LimitHits, PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
-        STATUS_UNPAID, StripeSubscriptionSnapshot, Subscription, SubscriptionStatus,
+        ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, DailyUsage, LimitHits, PLAN_FREE,
+        PLAN_PLUS, PLAN_PRO, ProviderEvent, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
+        STATUS_UNPAID, Subscription, SubscriptionStatus,
         UsageForecastResponse, UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse,
         WebhookClaim,
     };
@@ -298,10 +298,9 @@ impl BillingStorePort for PgBillingStoreAdapter {
     async fn process_webhook_event(
         &self,
         provider: BillingProvider,
-        payload: &serde_json::Value,
-        config: &BillingConfig,
+        event: &ProviderEvent,
     ) -> Result<(), AppError> {
-        billing_sql::process_webhook_event(self.repo.clone(), provider, payload, config)
+        billing_sql::process_webhook_event(self.repo.clone(), provider, event)
             .await
             .map_err(map_err)
     }

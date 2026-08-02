@@ -380,7 +380,7 @@ fn export_golden_fixtures() {
         serde_json::to_value(response).expect("serialize response"),
     );
 
-    use contracts::{HealthResponse, Workspace, WorkspaceListResponse, PlanRow, PlansResponse};
+    use contracts::{HealthResponse, Workspace, WorkspaceListResponse};
 
     write(
         "workspace_list_minimal.json",
@@ -400,19 +400,6 @@ fn export_golden_fixtures() {
             }],
         })
         .expect("serialize notebook list"),
-    );
-
-    write(
-        "billing_plans_minimal.json",
-        serde_json::to_value(PlansResponse {
-            plans: vec![PlanRow {
-                id: "free".to_string(),
-                name: "Free".to_string(),
-                price: 0,
-                features: vec!["base".to_string()],
-            }],
-        })
-        .expect("serialize plans response"),
     );
 
     write(

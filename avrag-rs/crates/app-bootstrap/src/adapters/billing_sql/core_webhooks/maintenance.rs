@@ -1,26 +1,3 @@
-async fn update_subscription_status(
-    repo: Arc<PgAppRepository>,
-    stripe_subscription_id: &str,
-    status: &str,
-) -> Result<()> {
-    let mut tx = repo.raw().begin().await?;
-    set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
-    sqlx::query(
-        r#"
-        update subscriptions
-        set status = $2,
-            updated_at = now()
-        where stripe_subscription_id = $1
-        "#,
-    )
-    .bind(stripe_subscription_id)
-    .bind(status)
-    .execute(tx.as_mut())
-    .await?;
-    tx.commit().await?;
-    Ok(())
-}
-
 async fn emit_billing_notification(
     repo: Arc<PgAppRepository>,
     user_id: &str,

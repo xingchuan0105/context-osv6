@@ -1,5 +1,5 @@
 use anyhow::Result;
-use app_core::BillingStorePort;
+use app_core::{BillingStorePort, ProviderEvent};
 use chrono::{Datelike, TimeZone, Utc};
 use common::UserId;
 use std::collections::HashMap;
@@ -162,11 +162,10 @@ pub(crate) async fn update_webhook_lease_status(
 pub(crate) async fn process_webhook_event(
     store: Arc<dyn BillingStorePort>,
     provider: BillingProvider,
-    payload: &serde_json::Value,
-    config: &BillingConfig,
+    event: &ProviderEvent,
 ) -> Result<()> {
     store
-        .process_webhook_event(provider, payload, config)
+        .process_webhook_event(provider, event)
         .await
         .map_err(map_store_error)
 }

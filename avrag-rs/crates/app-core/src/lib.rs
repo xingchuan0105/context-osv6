@@ -51,9 +51,9 @@ pub use auth_store::{
 };
 pub use billing_domain::{
     ADMIN_ROLE_SUPER, BillableFeature, BillingConfig, BillingEvent, BillingPlan, BillingPlanQuota,
-    BillingProvider, DailyUsage, ExistingSubscriptionFields, LimitHits, MeteringContext, PLAN_FREE,
-    PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE, STATUS_UNPAID,
-    StripeSubscriptionSnapshot, Subscription, SubscriptionStatus, UsageForecastResponse,
+    BillingProvider, DailyUsage, LimitHits, MeteringContext, PLAN_FREE,
+    PLAN_PLUS, PLAN_PRO, ProviderEvent, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
+    STATUS_UNPAID, Subscription, SubscriptionStatus, UsageForecastResponse,
     UsageHistoryResponse, UsageSource, UsageWindowBucket, UsageWindowResponse, WebhookClaim,
 };
 pub use billing_quota::BillingQuotaPort;

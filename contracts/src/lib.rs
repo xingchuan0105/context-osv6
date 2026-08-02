@@ -2,7 +2,6 @@ pub mod admin;
 pub mod agent_permissions;
 pub mod auth;
 pub mod auth_runtime;
-pub mod billing;
 pub mod chat;
 pub mod documents;
 pub mod errors;
@@ -34,7 +33,6 @@ pub use auth::{
 pub use auth_runtime::{
     ActorId, AuthContext, AuthError, SubjectKind, UserId, ensure_same_owner,
 };
-pub use billing::{BillingOverview, PlanRow, PlansResponse, SubscriptionResponse, UsageResponse};
 pub use chat::{
     AnswerBlock, ChatDonePayload, ChatEvent, ChatMessage, ChatMessageListResponse, ChatRequest,
     ChatResponse, ChatTurnInput, Citation, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport,

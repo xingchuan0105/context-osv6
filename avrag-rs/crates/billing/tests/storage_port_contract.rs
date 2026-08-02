@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use app_core::{
-    BillingConfig, BillingProvider, BillingStorePort, PLAN_FREE, PLAN_PRO, Subscription,
+    BillingConfig, BillingProvider, BillingStorePort, PLAN_FREE, PLAN_PRO, ProviderEvent, Subscription,
     SubscriptionStatus, UsageForecastResponse, UsageHistoryResponse, UsageWindowResponse,
     WebhookClaim,
 };
@@ -188,8 +188,7 @@ impl BillingStorePort for MemoryBillingStore {
     async fn process_webhook_event(
         &self,
         _provider: BillingProvider,
-        _payload: &serde_json::Value,
-        _config: &BillingConfig,
+        _event: &ProviderEvent,
     ) -> Result<(), AppError> {
         Ok(())
     }

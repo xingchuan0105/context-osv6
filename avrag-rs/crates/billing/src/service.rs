@@ -5,15 +5,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
-use hmac::Mac;
-
 use crate::core::{
     build_plan_payloads, claim_webhook_with_lease, current_metric_usage, get_current_subscription,
     load_plan_quotas, load_quota_limit, process_webhook_event, seconds_until_next_month,
     update_webhook_lease_status,
 };
+use crate::payment_provider::{
+    AlipayAdapter, CheckoutSession, CreemAdapter, PaymentProvider, ProviderError,
+};
 use crate::types::{BillingProvider, PLAN_FREE, PLAN_PRO};
-use crate::{AlipayClient, BillingConfig, CreemClient, Subscription};
+use crate::{BillingConfig, Subscription};
 
 #[derive(Deserialize)]
 pub struct CreateCheckoutRequest {
@@ -65,8 +66,8 @@ pub struct QuotaDecision {
 
 pub struct BillingService {
     config: BillingConfig,
-    creem: CreemClient,
-    alipay: AlipayClient,
+    creem: CreemAdapter,
+    alipay: AlipayAdapter,
 }
 
 static BILLING_SERVICE: LazyLock<BillingService> = LazyLock::new(BillingService::from_env);
@@ -74,8 +75,8 @@ static BILLING_SERVICE: LazyLock<BillingService> = LazyLock::new(BillingService:
 impl BillingService {
     pub fn from_env() -> Self {
         let config = BillingConfig::from_env();
-        let creem = CreemClient::new(config.clone());
-        let alipay = AlipayClient::new(config.clone());
+        let creem = CreemAdapter::new(config.clone());
+        let alipay = AlipayAdapter::new(config.clone());
         Self {
             config,
             creem,
@@ -89,6 +90,17 @@ impl BillingService {
 
     pub fn config(&self) -> &BillingConfig {
         &self.config
+    }
+
+    /// Route a provider id to its registered adapter (Creem / Alipay). Stripe is
+    /// rejected by callers before this lookup; there is deliberately no Stripe
+    /// adapter.
+    fn adapter_for(&self, provider: BillingProvider) -> &dyn PaymentProvider {
+        let adapters: [&dyn PaymentProvider; 2] = [&self.creem, &self.alipay];
+        adapters
+            .into_iter()
+            .find(|adapter| adapter.id() == provider)
+            .unwrap_or_else(|| panic!("no payment adapter registered for {provider}"))
     }
 
     pub async fn get_plans(
@@ -179,26 +191,26 @@ impl BillingService {
                         "Creem billing checkout is not configured",
                     );
                 }
-                let Some(product_id) = config
-                    .creem_checkout_product_for_plan(requested_plan)
-                    .map(str::to_string)
-                else {
-                    return ApiResponse::err(
-                        "invalid_billing_plan",
-                        "requested billing plan is not configured for checkout",
-                    );
-                };
                 match self
-                    .creem
-                    .create_checkout_session(&product_id, user_id, requested_plan)
+                    .adapter_for(requested_provider)
+                    .create_checkout(user_id, requested_plan, "")
                     .await
                 {
-                    Ok((url, session_id)) => ApiResponse::ok(CheckoutResponse {
-                        url,
-                        session_id,
-                        qr_code: None,
-                        order_id: None,
-                    }),
+                    Ok(CheckoutSession::Url { url, session_id }) => {
+                        ApiResponse::ok(CheckoutResponse {
+                            url,
+                            session_id,
+                            qr_code: None,
+                            order_id: None,
+                        })
+                    }
+                    Ok(CheckoutSession::QrCode { .. }) => ApiResponse::err(
+                        "billing_checkout_failed",
+                        "Creem checkout returned an unexpected QR session",
+                    ),
+                    Err(ProviderError::Request(error)) => {
+                        ApiResponse::err("billing_checkout_failed", &error)
+                    }
                     Err(error) => ApiResponse::err("billing_checkout_failed", &error.to_string()),
                 }
             }
@@ -209,16 +221,10 @@ impl BillingService {
                         "Alipay billing checkout is not configured",
                     );
                 }
-                let Some(amount_str) = config
+                let amount_cents = config
                     .alipay_checkout_price_for_plan(requested_plan)
-                    .map(str::to_string)
-                else {
-                    return ApiResponse::err(
-                        "invalid_billing_plan",
-                        "requested billing plan is not configured for Alipay checkout",
-                    );
-                };
-                let amount_cents = BillingConfig::decimal_price_to_cents(&amount_str);
+                    .map(BillingConfig::decimal_price_to_cents)
+                    .unwrap_or(0);
                 if amount_cents <= 0 {
                     return ApiResponse::err(
                         "invalid_billing_plan",
@@ -240,26 +246,26 @@ impl BillingService {
                     return ApiResponse::err("billing_checkout_failed", &error.to_string());
                 }
 
-                let notify_url = config.alipay_notify_url.clone().unwrap_or_else(|| {
-                    format!(
-                        "{}/webhooks/alipay",
-                        std::env::var("AVRAG_PUBLIC_BASE_URL")
-                            .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string())
-                    )
-                });
-
-                let subject = format!("Context OS - {} Subscription", requested_plan);
                 match self
-                    .alipay
-                    .create_precreate_order(&amount_str, &subject, &out_trade_no, &notify_url)
+                    .adapter_for(requested_provider)
+                    .create_checkout(user_id, requested_plan, &out_trade_no)
                     .await
                 {
-                    Ok(qr_code) => ApiResponse::ok(CheckoutResponse {
-                        url: "".to_string(),
-                        session_id: "".to_string(),
-                        qr_code: Some(qr_code),
-                        order_id: Some(out_trade_no),
-                    }),
+                    Ok(CheckoutSession::QrCode { qr_code, order_id }) => {
+                        ApiResponse::ok(CheckoutResponse {
+                            url: "".to_string(),
+                            session_id: "".to_string(),
+                            qr_code: Some(qr_code),
+                            order_id: Some(order_id),
+                        })
+                    }
+                    Ok(CheckoutSession::Url { .. }) => ApiResponse::err(
+                        "billing_checkout_failed",
+                        "Alipay checkout returned an unexpected URL session",
+                    ),
+                    Err(ProviderError::Request(error)) => {
+                        ApiResponse::err("billing_checkout_failed", &error)
+                    }
                     Err(error) => ApiResponse::err("billing_checkout_failed", &error.to_string()),
                 }
             }
@@ -296,111 +302,45 @@ impl BillingService {
         signature: Option<&str>,
         payload: &[u8],
     ) -> ApiResponse<serde_json::Value> {
-        let config = &self.config;
-
-        // 1. Verify signatures (Stripe provider permanently rejected).
-        match provider {
+        // 1. Verify signature and parse into the typed event via the provider
+        //    adapter. Stripe provider permanently rejected.
+        let delivery = match provider {
             BillingProvider::Stripe => {
                 return ApiResponse::err(
                     "billing_provider_removed",
                     "Stripe webhooks are no longer accepted; product billing is Creem + Alipay only",
                 );
             }
-            BillingProvider::Creem => {
-                let secret = std::env::var("CREEM_WEBHOOK_SECRET").unwrap_or_default();
-                let mut mac = match crate::types::HmacSha256::new_from_slice(secret.as_bytes()) {
-                    Ok(m) => m,
-                    Err(error) => {
-                        return ApiResponse::err(
-                            "billing_webhook_failed",
-                            &format!("invalid HMAC key: {error}"),
-                        );
-                    }
-                };
-                mac.update(payload);
-                let expected_sig = hex::encode(mac.finalize().into_bytes());
-                if signature.unwrap_or_default() != expected_sig {
-                    return ApiResponse::err(
-                        "billing_webhook_signature_failed",
-                        "invalid Creem signature",
-                    );
+            BillingProvider::Creem => match self
+                .adapter_for(provider)
+                .parse_event(signature, payload)
+                .await
+            {
+                Ok(delivery) => delivery,
+                Err(ProviderError::Signature(message)) => {
+                    return ApiResponse::err("billing_webhook_signature_failed", &message);
                 }
-            }
-            BillingProvider::Alipay => {
-                let query_str = String::from_utf8_lossy(payload);
-                let mut params = Vec::new();
-                for part in query_str.split('&') {
-                    if let Some((k, v)) = part.split_once('=') {
-                        params.push((percent_decode(k), percent_decode(v)));
-                    }
+                Err(error) => return webhook_error_response(error.into()),
+            },
+            BillingProvider::Alipay => match self
+                .adapter_for(provider)
+                .parse_event(signature, payload)
+                .await
+            {
+                Ok(delivery) => delivery,
+                Err(ProviderError::Signature(message)) => {
+                    return ApiResponse::err("billing_webhook_signature_failed", &message);
                 }
-                let sign = params
-                    .iter()
-                    .find(|(k, _)| k == "sign")
-                    .map(|(_, v)| v.as_str())
-                    .unwrap_or_default();
-                if sign.is_empty() {
-                    return ApiResponse::err(
-                        "billing_webhook_signature_failed",
-                        "missing Alipay signature",
-                    );
-                }
-                if let Err(error) = self.alipay.verify_signature(&params, sign) {
-                    return ApiResponse::err("billing_webhook_signature_failed", &error.to_string());
-                }
-            }
-        }
-
-        // 2. Parse payload to JSON and extract event_id
-        let (json, event_id) = match provider {
-            BillingProvider::Stripe | BillingProvider::Creem => {
-                let val: serde_json::Value = match serde_json::from_slice(payload) {
-                    Ok(v) => v,
-                    Err(error) => {
-                        return ApiResponse::err("billing_webhook_invalid", &error.to_string());
-                    }
-                };
-                let ev_id = val
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                (val, ev_id)
-            }
-            BillingProvider::Alipay => {
-                let val = alipay_payload_to_json(payload);
-                let ev_id = val
-                    .get("notify_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                (val, ev_id)
-            }
+                Err(error) => return webhook_error_response(error.into()),
+            },
         };
 
-        if event_id.is_empty() {
-            return ApiResponse::err("billing_webhook_invalid", "missing event/notify id");
-        }
-
-        // Alipay: the notify must target *this* app (anti spoofing / cross-merchant replay).
-        if provider == BillingProvider::Alipay {
-            let payload_app_id = json
-                .get("app_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default();
-            if payload_app_id.is_empty() || payload_app_id != config.alipay_app_id.trim() {
-                return ApiResponse::err(
-                    "billing_webhook_invalid",
-                    "alipay notify app_id mismatch",
-                );
-            }
-        }
-
-        // 3. Lease-based idempotence check
-        let claim = match claim_webhook_with_lease(store.clone(), provider, &event_id).await {
-            Ok(claim) => claim,
-            Err(error) => return webhook_error_response(error),
-        };
+        // 2. Lease-based idempotence check on the provider delivery id.
+        let claim =
+            match claim_webhook_with_lease(store.clone(), provider, &delivery.event_id).await {
+                Ok(claim) => claim,
+                Err(error) => return webhook_error_response(error),
+            };
 
         if claim.duplicate_processed {
             return ApiResponse::ok(serde_json::json!({
@@ -409,8 +349,11 @@ impl BillingService {
             }));
         }
 
-        // 4. Process event
-        if let Err(error) = process_webhook_event(store.clone(), provider, &json, config).await {
+        // 3. Process the typed event; `Ignored` acks the delivery with no store
+        //    writes (the explicit form of the previous silent no-op).
+        if let Err(error) =
+            process_webhook_event(store.clone(), provider, &delivery.event).await
+        {
             let _ = update_webhook_lease_status(
                 store,
                 provider,
@@ -503,18 +446,4 @@ fn webhook_error_response(error: anyhow::Error) -> ApiResponse<serde_json::Value
     } else {
         ApiResponse::err("billing_webhook_failed", &error.to_string())
     }
-}
-
-fn alipay_payload_to_json(payload: &[u8]) -> serde_json::Value {
-    let s = String::from_utf8_lossy(payload);
-    let mut map = serde_json::Map::new();
-    for part in s.split('&') {
-        let mut kv = part.splitn(2, '=');
-        if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-            let k_decoded = percent_decode(k);
-            let v_decoded = percent_decode(v);
-            map.insert(k_decoded, serde_json::Value::String(v_decoded));
-        }
-    }
-    serde_json::Value::Object(map)
 }

@@ -156,13 +156,6 @@ export interface AuthRuntimeCapabilitiesResponse {
 	password_reset_enabled: boolean;
 }
 
-export interface BillingOverview {
-	active_subscriptions: number;
-	past_due_subscriptions: number;
-	unpaid_subscriptions: number;
-	canceled_subscriptions: number;
-}
-
 export interface ChangePasswordRequest {
 	old_password: string;
 	new_password: string;
@@ -399,6 +392,13 @@ export interface ChatMessageListResponse {
 	messages: ChatMessage[];
 }
 
+export interface ClientContext {
+	/** ISO-8601 local datetime with offset when possible, e.g. `2026-07-15T14:32:00+08:00`. */
+	local_time?: string;
+	/** IANA timezone, e.g. `Asia/Shanghai`. */
+	timezone?: string;
+}
+
 export interface ChatTurnInput {
 	role: string;
 	content: string;
@@ -406,20 +406,19 @@ export interface ChatTurnInput {
 	resolved_query?: string;
 }
 
-export interface ChatClientContext {
-	local_time: string;
-	timezone: string;
-}
-
 export interface ChatRequest {
 	query: string;
 	workspace_id?: string;
 	session_id?: string;
 	agent_type: string;
-	/** Multiselect product capabilities (`rag` | `search`). Empty = pure chat. */
+	/**
+	 * Product capability tags. When **present** (including empty `[]`), wins over `agent_type` for tool exposure.
+	 * Allowed values: `rag`, `search`. Unknown values ignored at resolve time.
+	 */
 	capabilities?: string[];
-	/** Frontend clock for base `user_context` tool. */
-	client_context?: ChatClientContext;
+	client_context?: ClientContext;
+	/** Client IP for `user_context` geo. Server overwrites any client-supplied value. */
+	client_ip?: string;
 	source_type?: string;
 	source_token?: string;
 	doc_scope?: string[];
@@ -701,17 +700,6 @@ export interface ParsedPreviewResponse {
 	summary?: string;
 }
 
-export interface PlanRow {
-	id: string;
-	name: string;
-	price: number;
-	features: string[];
-}
-
-export interface PlansResponse {
-	plans: PlanRow[];
-}
-
 export interface WorkspaceNote {
 	id: string;
 	workspace_id: string;
@@ -806,12 +794,6 @@ export interface SourcesResponse {
 	sources: SourceRow[];
 }
 
-export interface SubscriptionResponse {
-	plan_id: string;
-	status: string;
-	current_period_end: string;
-}
-
 export interface UpdateChatSessionRequest {
 	title?: string;
 	pinned?: boolean;
@@ -860,13 +842,6 @@ export interface UsageLimitResponse {
 	breakdown: Record<string, number>;
 	scope: UsageScope;
 	has_estimated_usage?: boolean;
-}
-
-export interface UsageResponse {
-	used_tokens: number;
-	limit_tokens: number;
-	used_documents: number;
-	limit_documents: number;
 }
 
 export interface UserRow {

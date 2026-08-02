@@ -406,29 +406,42 @@ pub struct Subscription {
 }
 
 #[derive(Debug, Clone)]
-pub struct StripeSubscriptionSnapshot {
-    pub user_id: String,
-    pub stripe_customer_id: String,
-    pub stripe_subscription_id: String,
-    pub stripe_price_id: String,
-    pub plan_id: String,
-    pub status: String,
-    pub current_period_start: Option<DateTime<Utc>>,
-    pub current_period_end: Option<DateTime<Utc>>,
-    pub cancel_at_period_end: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct ExistingSubscriptionFields {
-    pub user_id: String,
-    pub stripe_price_id: Option<String>,
-    pub plan_id: String,
-}
-
-#[derive(Debug, Clone)]
 pub struct WebhookClaim {
     pub event_id: String,
     pub duplicate_processed: bool,
+}
+
+/// Normalized webhook event produced by a payment provider adapter. Providers
+/// parse their wire payloads into this typed shape; product code never reads
+/// raw provider JSON (previously the second dispatcher in the PG adapter did).
+#[derive(Debug, Clone)]
+pub enum ProviderEvent {
+    /// Creem `subscription.paid`.
+    SubscriptionPaid {
+        subscription_id: String,
+        user_id: String,
+        plan_id: String,
+        price_id: String,
+        amount_cents: i64,
+        currency: String,
+        current_period_start: Option<DateTime<Utc>>,
+        current_period_end: Option<DateTime<Utc>>,
+    },
+    /// Creem `subscription.canceled`.
+    SubscriptionCanceled {
+        subscription_id: String,
+    },
+    /// Alipay F2F `TRADE_SUCCESS` / `TRADE_FINISHED` notify. The adapter
+    /// computes `paid_cents` from `total_amount`; the store compares it against
+    /// the pending order's amount (anti-forgery) before activating.
+    AlipayOrderPaid {
+        out_trade_no: String,
+        paid_cents: i64,
+    },
+    /// Provider event type with no product effect (e.g. other Creem event
+    /// types, Alipay `TRADE_WAIT_BUYER_PAY`). Acked by the lease, no store
+    /// writes — this is the explicit form of the previous silent no-op.
+    Ignored,
 }
 
 #[derive(Debug, Clone)]

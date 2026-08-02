@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::billing_domain::{
-    BillingConfig, BillingProvider, MeteringContext, Subscription, UsageForecastResponse,
+    BillingProvider, MeteringContext, ProviderEvent, Subscription, UsageForecastResponse,
     UsageHistoryResponse, UsageSource, UsageWindowResponse, WebhookClaim,
 };
 
@@ -116,8 +116,7 @@ pub trait BillingStorePort: Send + Sync {
     async fn process_webhook_event(
         &self,
         provider: BillingProvider,
-        payload: &serde_json::Value,
-        config: &BillingConfig,
+        event: &ProviderEvent,
     ) -> Result<(), AppError>;
 
     async fn expire_subscriptions(&self) -> Result<(), AppError>;

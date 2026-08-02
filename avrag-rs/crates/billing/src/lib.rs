@@ -8,6 +8,7 @@ mod alipay_client;
 mod core;
 mod creem_client;
 mod handlers;
+mod payment_provider;
 pub mod quota_service;
 mod service;
 #[cfg(test)]
@@ -15,8 +16,6 @@ mod tests_impl;
 mod tier;
 mod types;
 pub mod usage_limit;
-#[allow(dead_code)]
-mod webhook_parse;
 
 pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 
