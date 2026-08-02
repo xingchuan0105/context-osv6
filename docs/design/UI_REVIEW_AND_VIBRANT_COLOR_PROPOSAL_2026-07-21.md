@@ -1,7 +1,7 @@
 # UI Review 与鲜活配色方案（2026-07-21）
 
-**状态**: 提案（Proposal），未定稿
-**关联**: [`STYLE_BASELINE.md`](./STYLE_BASELINE.md)(Monochrome Ink，现行 Canonical)
+**状态**: 已被采纳（Adopted）— 现行视觉基线见 [`STYLE_BASELINE.md`](./STYLE_BASELINE.md)（2026-08-02 文档体系梳理更新）
+**关联**: [`STYLE_BASELINE.md`](./STYLE_BASELINE.md)（Monochrome Ink 已被废除，STYLE_BASELINE.md 为现行 Canonical — 2026-08-02 标注）
 **重要说明**: 本文档第二部分的配色方向**修正** STYLE_BASELINE 的三条原则（中性优先 / 标志色克制 / 主行动=墨色）。若本方案被采纳，STYLE_BASELINE 需同步修订，且 `packages/cos-tokens/sync.sh` 会把令牌同步到 5 个站点（frontend_next、context-os-landing、whyiamright、context-os-theme、cchess),影响面需一并评估。
 
 ---

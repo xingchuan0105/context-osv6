@@ -1,13 +1,14 @@
 # Context-OS 样式基准（Style Baseline）
 
-**体系名**: Slate × Indigo（石板 × 靛蓝）  
-**状态**: Canonical（样式源规范；实现以本文件为准）  
-**实现源**: `packages/cos-tokens/`（`sync.sh` 同步到 App / Landing / Why / Ghost / Canju）  
-**日期**: 2026-07-10（2026-07-22 由 Monochrome Ink 全面修订为 Slate × Indigo）  
-**结构参考**: `frontend_next`（字阶 / 间距 / 圆角 / 控件纪律）  
-**色彩方向**: 冷石板调中性色 + **单一标志色 Indigo**（禁止品牌青 / 品牌绿 / 铜色系回潮）  
-**变更记录**: [`docs/design/UI_REVIEW_AND_VIBRANT_COLOR_PROPOSAL_2026-07-21.md`](./UI_REVIEW_AND_VIBRANT_COLOR_PROPOSAL_2026-07-21.md)（评审、四案比选、分层决策全过程）  
-**废止色轴**: 旧 Precision Lab 青色主轴；公域 `#10b981` 翠绿主轴；**Monochrome Ink 铜色轴（2026-07-22 废止）**
+**体系名**: Cream × Void（暖米白纸 × 深空近黑）
+**状态**: Canonical（样式源规范；实现以本文件为准）
+**实现源**: `packages/cos-tokens/`（`sync.sh` 同步到 App / Landing / Why / Ghost / Canju）
+**日期**: 2026-08-02（由 Slate × Indigo 全面修订为 Cream × Void）
+**上游标准**: 浅色色彩 = [`design-md/cursor/DESIGN.md`](../../design-md/cursor/DESIGN.md)；深色色彩 + **全部非颜色项**（字体 / 字重 / 字距 / 圆角 / 阴影 / 间距 / 组件形状）= [`design-md/x.ai/DESIGN.md`](../../design-md/x.ai/DESIGN.md)
+**色彩方向**: 浅色暖米纸（Cursor warm cream）+ 单一品牌色 **Cursor Orange**；深色近黑单色（xAI white-on-black）
+**品牌色扩展决议（2026-08-02，用户拍板）**: Cursor 原标准中橙色仅用于 CTA / wordmark；本产品**允许扩展到链接 / 选中态 / 焦点环 / 交互反馈态**。深色主题遵守 xAI 单色纪律，不用橙色（链接 / 选中走白灰层级）
+**变更记录**: 本文件 2026-08-02 版取代 2026-07-22 Slate × Indigo 版
+**废止色轴**: 旧 Precision Lab 青色主轴；公域 `#10b981` 翠绿主轴；Monochrome Ink 铜色轴；**Slate × Indigo 冷石板 + 靛蓝轴（2026-08-02 废止）**
 
 ---
 
@@ -19,7 +20,7 @@
 | Token 命名、语义、推荐值 | 业务 API / workspace 运维细节 |
 | 组件用法契约（按钮 / 输入 / 壳） | 逐文件改动清单 |
 
-**消费方**: `frontend_next` · `context-os-landing` · `context-os-theme`（Ghost）· `whyiamright` · `cchess`（仅 chrome）  
+**消费方**: `frontend_next` · `context-os-landing` · `context-os-theme`（Ghost）· `whyiamright` · `cchess`（仅 chrome）
 
 **实现约定**: CSS 变量存 **HSL 分量**（无 `hsl()` 包裹），使用时写 `hsl(var(--token))` 或 `hsl(var(--token) / 0.15)`。与现 v6 `design-tokens.css` 格式一致。
 
@@ -27,14 +28,15 @@
 
 ## 2. 设计原则
 
-1. **中性带色调** — 中性色不是纯灰：亮色是冷石板纸（hue 220），暗色是石板黑（hue 225）。面积上中性仍占 ~85%。  
-2. **颜色给品牌，灰度给交互** — Indigo 用于：logo、链接、焦点环、**交互反馈态**（选中 / 勾选 / 开启 / 激活）、状态点、小徽章、低频付费 CTA 实底。**导航区与高频动作按钮一律中性**（对齐 Gemini / Kimi / Grok：创建按钮 = 中性灰填充，选中态 = 浅灰底）。  
-3. **按钮三档** — 创建 = 中性灰填充；付费 / 转化 = 靛蓝实底（`--accent-cta`，每屏 ≤1 个）；高频行内动作（发送、登录、保存）= 墨色实底。次级 = 描边 / ghost。  
-4. **层级靠对比与间距** — 先字重 / 灰阶 / 边框，再用阴影；阴影宁少勿脏。  
-5. **亮色默认（产品）** — App / Workspace 默认 light；dark 为完整第二套，不是简单反色。  
-6. **公域可默认暗底** — Landing / Blog / Why 可用 dark 作为默认 `color-scheme`，但 **token 名与语义必须同一套**。  
-7. **领域皮肤例外** — 象棋棋盘红黑 / 宣纸底可保留本地 `--board-*`（**禁止**占用品牌令牌名，如 `--accent`）；**导航壳必须服从本基准**。  
-8. **中文优先可读** — Display 字体不假装覆盖汉字；中文标题用正文族 + 字阶。
+1. **浅色暖、深色黑** — 浅色是暖米纸（hue ~60 的 cream），不是冷白也不是纯白页底；深色是近黑 `#0a0a0a`，不是石板蓝黑。面积上中性仍占 ~85%。
+2. **颜色给品牌，灰度给交互** — 浅色品牌电压是 Cursor Orange：CTA、wordmark 节点、链接、选中 / 勾选 / 开启、焦点环。深色遵守 xAI 单色：一切交互色 = 白 / 灰层级，不用橙。
+3. **字重 400 走全场** — 层级靠字号阶梯 + 负字距 + 灰阶，不靠加粗。禁止 500/600/700（含 token 别名）。
+4. **pill 是唯一交互形状** — 按钮一律胶囊；卡片 / 输入 = 8px；全系统只有 0 / 8px / pill 三档圆角。
+5. **hairline-only** — 深度只靠 1px 边线 + 明度差。无 drop shadow（焦点环除外）。
+6. **亮色默认（产品）** — App / Workspace 默认 light；dark 为完整第二套，不是简单反色。
+7. **公域可默认暗底** — Landing / Blog / Why 可用 dark 作为默认 `color-scheme`，token 名与语义必须同一套。
+8. **领域皮肤例外** — 象棋棋盘红黑 / 宣纸底可保留本地 `--board-*`（**禁止**占用品牌令牌名）；**导航壳必须服从本基准**。
+9. **中文优先可读** — 中文标题用正文族 + 字阶做层级，不依赖字重。
 
 ---
 
@@ -45,7 +47,7 @@
 | 项 | 规范 |
 |----|------|
 | 唯一 mark | **ContextOsMark Full**（双弧 + 中轴 + 节点圆点）。组件：`frontend_next/components/context-os-mark.tsx`；静态：`public/brand/context-os-mark.svg` 与 `app/icon.svg`（favicon） |
-| 填色 | **plate = 墨**（React 组件 `hsl(var(--foreground))` 随主题：亮=石板墨、暗=纸白；静态 SVG 硬编码 `#1b1f2d`），**ink = 背景反色**（亮=白、暗=墨）。**右下节点 = `hsl(var(--accent))` 靛蓝**（静态 `#4f7cf3`）——墨族主体 + 蓝族血缘点，与 CTA 三档体系（创建灰 / 付费蓝 / 高频墨）角色一致 |
+| 填色 | **plate = 墨**（React 组件 `hsl(var(--foreground))` 随主题：亮=暖墨、暗=纸白），**ink = 背景反色**（亮=米白、暗=近黑）。**右下节点 = `hsl(var(--accent))`**（亮=Cursor Orange；暗=白，随 accent token 主题化） |
 | 尺寸 | 由 `size` / CSS 槽控制（nav ~28px、shell ~32px、auth ~56px）；**禁止**组件硬编码 90px |
 | 锁头布局 | 营销/家族顶栏用 **`.cos-brand-lockup` 横排**（mark + 「Context-OS」）；**禁止**营销壳复用 `.app-auth-brand-link` 的 column |
 | 对外命名 | 用户面 **Context-OS**；安装版 **Context-OS 客户端** / EN **Context-OS Client**；导航短标中文 **客户端**、英文 **Client**（勿用「桌面」作导航主文案） |
@@ -64,7 +66,7 @@
 
 | 表面 | 顶栏 |
 |------|------|
-| Marketing / Blog / Why / Canju chrome | 固定高 **3.5–4rem**（56–64px），底边 `1px solid hsl(var(--border))`；**须含「桌面」** |
+| Marketing / Blog / Why / Canju chrome | 固定高 **4rem**（64px，对齐 Cursor top-nav），底边 `1px solid hsl(var(--border))`；**须含「桌面」** |
 | App 营销 path（`/desktop` `/pricing` `/legal`） | 轻顶栏：Hub · 定价 · 桌面 · 登录 / 进入应用 |
 | App 内工作区 | 产品 chrome；**页脚/帮助**链到桌面，**勿**把营销项塞进工作顶栏 |
 
@@ -86,125 +88,149 @@
 
 | 角色 | Token 族 | 用途 |
 |------|----------|------|
-| 墨 / 纸 | `--foreground` / `--background` / `--cta-*` | 文字、页底、高频中性按钮 |
-| 石板灰阶表面 | `--surface-*` / `--muted*` / `--border*` | 侧栏、卡片、分割、创建按钮填充 |
-| **标志色 Indigo** | `--accent*` / `--ring` / `--focus-ring` | logo、链接、选中 / 勾选 / 开启、付费 CTA |
+| 墨 / 纸 | `--foreground` / `--background` / `--cta-*` | 文字、页底、墨色高频按钮 |
+| 暖灰阶表面 | `--surface-*` / `--muted*` / `--border*` | 侧栏、卡片、分割、输入底 |
+| **品牌色（亮=橙 / 暗=白）** | `--accent*` / `--ring` / `--focus-ring` | CTA、链接、选中 / 勾选 / 开启、焦点、logo 节点 |
+| 时间轴 pastel | `--timeline-*`（5 色） | **仅**产品内 agent / 工具调用时间轴 |
 | 状态 | `--success` / `--warning` / `--destructive` / `--info` | 仅状态；不抢品牌 |
 
-### 4.2 中性 — Light（冷石板纸）
+### 4.2 中性 — Light（Cursor 暖米纸）
 
-| Token | HSL 分量 | 用途 |
-|-------|----------|------|
-| `--background` | `220 25% 98%` | 页背景 |
-| `--foreground` | `225 25% 14%` | 主文字 |
-| `--card` | `0 0% 100%` | 卡片面（纯白，浮于石板底） |
-| `--card-foreground` | `225 25% 14%` | 卡片字 |
-| `--surface-elevated` | `0 0% 100%` | 浮层 / 面板 |
-| `--surface-muted` | `220 20% 95%` | 侧栏、次表面 |
-| `--surface-soft` | `220 16% 92%` | 创建按钮填充、hover、输入底 |
-| `--surface-sunken` | `220 18% 89%` | 创建按钮 hover、凹陷 |
-| `--popover` | `0 0% 100%` | 弹出层 |
-| `--popover-foreground` | `225 25% 14%` | |
-| `--muted` | `220 16% 92%` | 弱底 |
-| `--muted-foreground` | `222 12% 38%` | 次要文字 |
-| `--subtle-foreground` | `222 10% 46%` | 占位、禁用辅文 |
-| `--secondary` | `220 16% 92%` | 次按钮底 |
-| `--secondary-foreground` | `225 25% 18%` | 次按钮字 |
-| `--border` | `220 14% 85%` | 标准边 |
-| `--border-strong` | `220 12% 74%` | hover 边、强描边 |
-| `--border-whisper` | `220 16% 91%` | 极淡分割 |
-| `--input` | `220 14% 85%` | 输入边 |
-| `--input-background` | `220 20% 97%` | 输入底 |
-| `--primary` | `225 25% 16%` | 墨色强调 |
-| `--primary-foreground` | `0 0% 100%` | 墨底上的字 |
+| Token | Hex（标准值） | HSL 分量（约） | 用途 |
+|-------|--------------|----------------|------|
+| `--background` | `#f7f7f4` | `60 18% 96%` | 页背景（warm cream，**禁止纯白页底**） |
+| `--foreground` | `#26251e` | `53 12% 13%` | 主文字（warm ink，禁止纯黑） |
+| `--card` | `#ffffff` | `0 0% 100%` | 卡片面（纯白，浮于米白的微对比是签名） |
+| `--card-foreground` | `#26251e` | `53 12% 13%` | 卡片字 |
+| `--surface-elevated` | `#ffffff` | `0 0% 100%` | 浮层 / 面板 |
+| `--surface-muted` | `#fafaf7` | `60 23% 97%` | canvas-soft；侧栏、IDE pane 底 |
+| `--surface-soft` | `#efeee8` | `48 14% 92%` | hairline-soft；hover、弱底 |
+| `--surface-sunken` | `#e6e5e0` | `50 11% 89%` | 凹陷、按下 |
+| `--popover` | `#ffffff` | `0 0% 100%` | 弹出层 |
+| `--popover-foreground` | `#26251e` | `53 12% 13%` | |
+| `--muted` | `#efeee8` | `48 14% 92%` | 弱底 |
+| `--muted-foreground` | `#807d72` | `47 6% 47%` | 次要文字（Cursor muted） |
+| `--subtle-foreground` | `#a09c92` | `43 7% 60%` | 占位、禁用辅文（Cursor muted-soft） |
+| `--secondary` | `#efeee8` | `48 14% 92%` | 次按钮底 |
+| `--secondary-foreground` | `#26251e` | `53 12% 13%` | 次按钮字 |
+| `--border` | `#e6e5e0` | `50 11% 89%` | 标准 hairline |
+| `--border-strong` | `#cfcdc4` | `49 10% 79%` | hairline-strong；hover 边、面板外描 |
+| `--border-whisper` | `#efeee8` | `48 14% 92%` | 极淡分割 |
+| `--input` | `#e6e5e0` | `50 11% 89%` | 输入边 |
+| `--input-background` | `#ffffff` | `0 0% 100%` | 输入底 |
+| `--primary` | `#26251e` | `53 12% 13%` | 墨色强调（download 按钮等） |
+| `--primary-foreground` | `#f7f7f4` | `60 18% 96%` | 墨底上的字 |
+| `--body`（别名） | `#5a5852` | `45 5% 34%` | Cursor body 运行文（如需第三级文字） |
 
-### 4.3 中性 — Dark（石板黑）
+### 4.3 中性 — Dark（xAI 近黑）
 
-| Token | HSL 分量 |
-|-------|----------|
-| `--background` | `225 20% 9%` |
-| `--foreground` | `220 20% 92%` |
-| `--card` / `--popover` | `225 16% 12%` |
-| `--surface-elevated` | `225 16% 13%` |
-| `--surface-muted` | `225 16% 12%` |
-| `--surface-soft` | `225 14% 16%` |
-| `--surface-sunken` | `225 18% 7%` |
-| `--muted` | `225 14% 16%` |
-| `--muted-foreground` | `218 12% 68%` |
-| `--subtle-foreground` | `218 10% 56%` |
-| `--secondary` | `225 14% 16%` |
-| `--secondary-foreground` | `220 20% 92%` |
-| `--border` | `220 10% 21%` |
-| `--border-strong` | `220 10% 30%` |
-| `--border-whisper` | `220 10% 16%` |
-| `--input` | `220 10% 21%` |
-| `--input-background` | `225 16% 12%` |
-| `--primary` | `220 22% 92%` |
-| `--primary-foreground` | `225 20% 9%` |
+| Token | Hex（标准值） | HSL 分量（约） |
+|-------|--------------|----------------|
+| `--background` | `#0a0a0a` | `0 0% 4%` |
+| `--foreground` | `#ffffff` | `0 0% 100%` |
+| `--card` / `--popover` | `#191919` | `0 0% 10%` |
+| `--card-foreground` / `--popover-foreground` | `#ffffff` | `0 0% 100%` |
+| `--surface-elevated` | `#191919` | `0 0% 10%` |
+| `--surface-muted` | `#1a1c20` | `220 10% 11%` |
+| `--surface-soft` | `#1a1c20` | `220 10% 11%` |
+| `--surface-sunken` | `#060606` | `0 0% 2%` |
+| `--muted` | `#1a1c20` | `220 10% 11%` |
+| `--muted-foreground` | `#7d8187` | `216 4% 51%` |
+| `--subtle-foreground` | `#7d8187` | `216 4% 51%` |
+| `--secondary` | `#1a1c20` | `220 10% 11%` |
+| `--secondary-foreground` | `#ffffff` | `0 0% 100%` |
+| `--border` | `#212327` | `220 8% 14%` |
+| `--border-strong` | `#363a3f` | `213 8% 23%` |
+| `--border-whisper` | `#16181b` | `220 8% 9%` |
+| `--input` | `#212327` | `220 8% 14%` |
+| `--input-background` | `#1a1c20` | `220 10% 11%` |
+| `--primary` | `#ffffff` | `0 0% 100%` |
+| `--primary-foreground` | `#0a0a0a` | `0 0% 4%` |
+| `--body`（别名） | `#dadbdf` | `228 7% 86%` |
 
-### 4.4 标志色 Indigo（全站唯一品牌色相）
+### 4.4 品牌色（全站唯一品牌色相）
 
-| Token | Light HSL | Dark HSL | 用途 |
-|-------|-----------|----------|------|
-| `--accent` | `235 65% 52%` | `230 85% 68%` | 交互反馈实底（勾选 / 开关 / 选中项）、徽章、选中描边 |
-| `--accent-strong` | `235 65% 45%` | `230 85% 75%` | accent hover / 按下 |
-| `--accent-text` | `235 60% 46%` | `230 85% 70%` | 链接 / 彩色小字（AA 达标） |
-| `--accent-soft` | `232 60% 95%` | `232 30% 18%` | 极淡品牌底（chip、浅徽章） |
-| `--accent-glow` | 同 accent | 同 accent | 与 alpha 组合做光晕 |
-| `--surface-accent-soft` | 同 `--accent-soft` | | 别名 |
-| `--ring` / `--focus-ring` | = `--accent` | | 焦点 |
+**Light = Cursor Orange；Dark = 白（xAI 单色纪律）。**
+
+| Token | Light | Dark | 用途 |
+|-------|-------|------|------|
+| `--accent` | `#f54e00` ≈ `19 100% 48%` | `#ffffff` ≈ `0 0% 100%` | CTA 实底（亮）、勾选 / 开关 / 选中反馈、logo 节点 |
+| `--accent-strong` | `#d04200` ≈ `19 100% 41%` | `#e6e6e6` ≈ `0 0% 90%` | accent hover / 按下 |
+| `--accent-text` | `#d04200` ≈ `19 100% 41%` | `#ffffff` ≈ `0 0% 100%` | 链接 / 彩色小字（亮用 active 橙保证 AA；暗用白） |
+| `--accent-soft` | `#f54e00` at 8–12% alpha | `#ffffff` at 8% alpha | 极淡品牌底（chip、浅徽章、选中底） |
+| `--ring` / `--focus-ring` | = `--accent` | = `--accent` | 焦点 |
 
 **用法示例**
 
 ```css
-color: hsl(var(--accent-text));
-background: hsl(var(--accent));            /* 仅交互反馈态与付费 CTA */
+color: hsl(var(--accent-text));            /* 链接 */
+background: hsl(var(--accent));            /* 浅色 CTA 实底 / 交互反馈态 */
 box-shadow: 0 0 0 3px hsl(var(--focus-ring) / 0.18);
 ```
 
-**禁止**
+**橙色纪律（浅色）**
 
-- 导航区 / 高频按钮用 `hsl(var(--accent))` 实底（付费 CTA 除外）  
-- 大面积 hero 靛蓝渐变、彩色扫描动画  
-- 再引入第二品牌色相（青 / 绿 / 铜等）  
+- 允许：CTA、wordmark / logo 节点、链接、选中 / 勾选 / 开启、焦点环、小徽章。（2026-08-02 扩展决议）
+- 禁止：大面积橙色铺底、橙色渐变 hero、橙色装饰图形；橙色不是状态色（success / error 走 §4.6）。
+- 深色不用橙：链接 = `--accent-text`（白）或 `--body` 灰层级；选中 = `--surface-soft` 底 + 白字 / 白描边。
 
-### 4.5 CTA 三档
+**深色按钮纪律（xAI）**
 
-| 档位 | Token / 类 | 视觉 | 场景 |
-|------|-----------|------|------|
-| 付费 / 转化 | `--accent-cta`（亮 `235 55% 45%` / 暗 `235 70% 62%`）、`.app-button-accent` | 靛蓝实底 + 白字，每屏 ≤1 | 升级订阅、管理订阅、pricing 升级 |
-| 创建 | `.app-button-create`（`--surface-soft` 底 + `--foreground` 字，hover `--surface-sunken`）、`.app-button-create-soft`（描边 ghost） | 中性灰填充 / 描边 | 新建工作区、新建会话、添加内容源 |
-| 高频行内动作 | `--cta-background`（亮 `225 25% 16%` / 暗 `220 22% 92%`） | 墨色实底 | 发送、登录、保存 |
+- 默认按钮 = 白描边 outline pill：透明底 + `1px solid hsl(0 0% 100% / 0.25)` + 白字。
+- 白色实底 pill 仅保留给最高优先级 CTA（每屏 ≤1），白底 + 近黑字。
+
+### 4.5 时间轴 pastel（产品内 agent 签名，仅浅色语义）
+
+| Token | Hex | 用途 |
+|-------|-----|------|
+| `--timeline-thinking` | `#dfa88f` | Thinking（peach） |
+| `--timeline-grep` | `#9fc9a2` | Grepping（mint） |
+| `--timeline-read` | `#9fbbe0` | Reading（pastel blue） |
+| `--timeline-edit` | `#c0a8dd` | Editing（lavender） |
+| `--timeline-done` | `#c08532` | Done（warm gold，字用白） |
+
+- **仅**用于产品内 agent / 工具调用时间轴 pill（caption-mono 大写标签 + pill 形状）。
+- **禁止**用作系统动作色、链接色、状态色。深色主题下同一组 token 保持 pastel（时间轴是浅色签名组件，深色下可整体降低饱和度，实现时校准对比度）。
+
+### 4.6 CTA 档位
+
+| 档位 | Token / 类 | 视觉（亮 / 暗） | 场景 |
+|------|-----------|----------------|------|
+| 主 CTA / 转化 | `--accent` 实底（亮=橙 / 暗=白实底 pill） | 橙底白字 / 白底近黑字，每屏 ≤1 | 升级订阅、pricing、主转化 |
+| 高频行内动作 | `--cta-background`（亮 `#26251e` / 暗 `#ffffff`） | 墨实底 pill / 白实底 pill | 发送、登录、保存 |
+| 创建 / 次级 | `--surface-soft` 底或描边 pill | 中性填充 / hairline 描边 | 新建工作区、新建会话 |
+| Ghost | 透明 + hairline 描边 pill | 暗色下 = 白半透明描边（xAI 标准按钮） | 次动作 |
 
 **规则**
 
-- 同一视图 **最多一个** 视觉主按钮（三档中按其场景取最高者）。  
-- 禁用：`opacity: 0.55` + `cursor: not-allowed`。  
+- 同一视图 **最多一个** 视觉主按钮。
+- 所有按钮 **pill**（`--radius-pill`），无例外档位。
+- 禁用：`opacity: 0.55` + `cursor: not-allowed`。
 
-### 4.6 语义色（状态 only）
+### 4.7 语义色（状态 only）
 
-| Token | Light HSL | 说明 |
-|-------|-----------|------|
-| `--success` | `155 55% 36%` | 明确的绿，非 `#10b981` |
+| Token | Light | 说明 |
+|-------|-------|------|
+| `--success` | `#1f8a65` ≈ `161 64% 33%` | Cursor semantic-success |
 | `--warning` | `38 90% 44%` | 琥珀 |
 | `--warning-foreground` | `30 50% 22%` | |
 | `--warning-surface` | `40 60% 94%` | |
 | `--warning-border` | `38 60% 70%` | |
-| `--destructive` | `4 70% 52%` | 错误 / 删除 |
+| `--destructive` | `#cf2d56` ≈ `345 64% 49%` | Cursor semantic-error |
 | `--destructive-foreground` | `0 0% 100%` | |
-| `--destructive-soft` | `4 65% 96%` | |
-| `--destructive-border` | `4 50% 80%` | |
-| `--info` | `205 85% 48%` | 天蓝（与品牌靛蓝 hue 区隔 ≥30） |
+| `--destructive-soft` | `345 60% 96%` | |
+| `--destructive-border` | `345 50% 80%` | |
+| `--info` | `205 85% 48%` | 天蓝（与品牌橙 hue 区隔 ≥30） |
 
 Dark 模式：提高明度（见 tokens.css 暗色块），与表面对比 ≥ 可读即可。
 
-### 4.7 场景别名（Dashboard / Workspace）
+### 4.8 场景别名（Dashboard / Workspace）
 
 **原则**: 不再维护独立色相；映射到全局 token。
 
 ```text
 --dashboard-shell              → --background
---dashboard-foreground           → --foreground
+--dashboard-foreground         → --foreground
 --dashboard-surface            → --surface-elevated / --card
 --dashboard-surface-muted      → --surface-muted
 --dashboard-border             → --border
@@ -222,7 +248,7 @@ Dark 模式：提高明度（见 tokens.css 暗色块），与表面对比 ≥ �
 
 实现阶段允许暂时保留变量名做 alias，**禁止** alias 指向另一套色相。
 
-### 4.8 象棋领域色（仅棋盘局部）
+### 4.9 象棋领域色（仅棋盘局部）
 
 允许在 `cchess` 内使用本地变量，**必须** `--board-*` 前缀，**禁止**占用品牌令牌名（`--accent` / `--card` / `--muted` 等）：
 
@@ -236,13 +262,12 @@ Chrome（顶栏 / 页脚 / 全局按钮）必须用本基准 token。
 
 ## 5. 字体
 
-### 5.1 家族
+### 5.1 家族（xAI 标准）
 
 | 角色 | 字体 | CSS 变量 |
 |------|------|----------|
-| 正文 / UI | IBM Plex Sans + 中文系统栈 | `--font-body` |
-| 标题（拉丁 / 数字 / 品牌英文） | Space Grotesk | `--font-heading` |
-| 等宽 | JetBrains Mono | `--font-mono` |
+| Display / 正文 / UI（同一家族） | **Inter**（universalSans 的开源替代）+ 中文系统栈 | `--font-heading` = `--font-body` |
+| 等宽 / eyebrow / 技术标签 | **JetBrains Mono**（xAI 认可替代 Geist Mono） | `--font-mono` |
 
 **中文栈（body 与标题共用）**
 
@@ -252,168 +277,172 @@ Chrome（顶栏 / 页脚 / 全局按钮）必须用本基准 token。
 
 **规则**
 
-- 中文 UI 标题：**不要**依赖 Space Grotesk 出形；用 `--font-body` + 字阶 / `font-weight: 600`。  
-- 品牌英文 wordmark「Context-OS」可用 `--font-heading`。  
-- 全站 **禁止** 第三套 UI 字体（Geist / Inter 等）；Ghost 主题不得再引 Google Inter。  
-- 代码、FEN、API key、用量数字：一律 `--font-mono`。  
+- 全站只加载 **weight 400**。禁止 500/600/700，禁止 faux bold。
+- 层级手段：字号阶梯、display 负字距、灰阶（foreground → body → muted-foreground）、mono eyebrow。
+- 中文 UI 标题：用正文族 + 字阶；**不要**靠加粗出层级。
+- 代码、FEN、API key、用量数字、eyebrow 标签：一律 `--font-mono`。
+- 全站 **禁止** 第三套 UI 字体（Space Grotesk / IBM Plex Sans / Geist 等已废止）。
 
 ### 5.2 字阶
 
-**产品壳默认（U13，2026-07-10）**：相对旧 v6 字阶 **整体下一档**，优先服务 Chat / Workspace 密度。实现源：`frontend_next/app/design-tokens.css`。Marketing 页题可用更大本地 clamp，**不要**把 marketing 尺写回产品壳 token。
+**Display 阶梯（xAI，marketing 与产品大标题）**——负字距是签名，不可省略：
 
-| Token | 尺寸 | 行高 token | 字重 | 用途 |
-|-------|------|------------|------|------|
-| `--font-size-overline` | 0.6875rem (11) | `--line-height-overline` 1.4 | 600–700 | 上标、eyebrow；可 `letter-spacing: 0.05em`，**少用** |
-| `--font-size-caption` | 0.6875rem (11) | 1.45 | 400 | 图注、辅助 |
-| `--font-size-caption-strong` | 0.75rem (12) | 1.45 | 500 | 强调图注 / 弱 chip |
-| `--font-size-meta` | 0.75rem (12) | 1.5 | 400 | 元信息、进度行、会话 meta |
-| `--font-size-label` | 0.75rem (12) | 1.5 | 600 | 表单 label |
-| `--font-size-control` | 0.8125rem (13) | 1.48 | 500 | 按钮、输入、模式、会话列表标题 |
-| `--font-size-body` | 0.875rem (14) | 1.65 | 400 | 正文默认、助手回答 |
-| `--font-size-body-strong` | 0.9375rem (15) | 1.65 | 500 | 强调正文 |
-| `--font-size-section-title` | 0.9375rem (15) | 1.35 | 600 | 卡片 / 区标题 / 侧栏区标题 |
-| `--font-size-brand` | 1rem (16) | 1.1 | 600 | 品牌字 |
-| `--font-size-shell-title` | 1.0625rem (17) | 1.25 | 600 | 壳层标题 |
-| `--font-size-title-sm` | 1.125rem (18) | 1.2 | 600 | 小页题 |
-| `--font-size-title` | 1.5rem (24) | 1.18 | 600 | 页题 H1（产品内；Marketing 可更大） |
+| Token | 尺寸 | 行高 | 字距 | 用途 |
+|-------|------|------|------|------|
+| `--font-size-display-xl` | 96px | 1.0 | -2.4px | 最大 hero |
+| `--font-size-display-lg` | 72px | 1.0 | -1.8px | 次 hero |
+| `--font-size-display-md` | 48px | 1.0 | -1.2px | 区段标题 |
+| `--font-size-display-sm` | 32px | 1.125 | -0.6px | 卡片簇标题 |
+| `--font-size-display-xs` | 20px | 1.4 | 0 | 行内小标题 |
+
+**产品密度字阶（沿用 U13 尺寸，字重全部 400）**：
+
+| Token | 尺寸 | 行高 | 用途 |
+|-------|------|------|------|
+| `--font-size-overline` | 0.6875rem (11) | 1.4 | eyebrow；**配 `--font-mono` + 大写 + `0.1em` 正字距**（xAI caption-mono） |
+| `--font-size-caption` | 0.75rem (12) | 1.45 | 图注、辅助 |
+| `--font-size-meta` | 0.75rem (12) | 1.5 | 元信息、进度行 |
+| `--font-size-label` | 0.75rem (12) | 1.5 | 表单 label |
+| `--font-size-control` | 0.8125rem (13) | 1.48 | 按钮、输入、会话列表 |
+| `--font-size-body` | 0.875rem (14) | 1.65 | 正文默认、助手回答 |
+| `--font-size-body-lg` | 1rem (16) | 1.55 | 强调正文 / lead |
+| `--font-size-title` | 1.5rem (24) | 1.18（字距 `-0.01em`） | 页题 H1（产品内） |
 
 **字间距**
 
 | Token | 值 |
 |-------|-----|
-| `--letter-spacing-title` | `-0.02em` |
-| `--letter-spacing-tight` | `-0.01em` |
-| `--letter-spacing-overline` | `0.05em` |
+| `--letter-spacing-display-xl` | `-2.4px`（约 `-0.025em` @96px） |
+| `--letter-spacing-display-lg` | `-1.8px`（`-0.025em` @72px） |
+| `--letter-spacing-display-md` | `-1.2px`（`-0.025em` @48px） |
+| `--letter-spacing-display-sm` | `-0.6px`（约 `-0.019em` @32px） |
+| `--letter-spacing-title` | `-0.01em` |
+| `--letter-spacing-overline` | `0.1em`（mono eyebrow，xAI 1.4px@14px） |
 | `--letter-spacing-normal` | `0` |
 
-**字重 token**: `--font-weight-medium` 500 · `--font-weight-semibold` 600 · `--font-weight-bold` 600（webfont 只加载 400/500/600，禁止写 700 产生 faux bold）
+**字重 token**: 废止 `--font-weight-medium/semibold/bold`。保留单一 `--font-weight-regular: 400`（或不再设字重 token）。
 
-> 已知债：中文阅读场景 `--font-size-body` 偏小（14px）、caption 11px 对中文过小，计划正文升 15px、caption ≥12px（见 frontend-visual-debt.md）。
+> 已知债：中文阅读场景 `--font-size-body` 偏小（14px），计划正文升 15px（见 frontend-visual-debt.md）。
 
 ---
 
-## 6. 间距
+## 6. 间距（xAI scale，4px 基数）
 
 | Token | 值 |
 |-------|-----|
-| `--space-1` | 0.25rem (4px) |
-| `--space-2` | 0.5rem (8px) |
-| `--space-3` | 0.75rem (12px) |
-| `--space-4` | 1rem (16px) |
-| `--space-5` | 1.25rem (20px) |
-| `--space-6` | 1.5rem (24px) |
-| `--space-7` | 2rem (32px) |
-| `--space-8` | 3rem (48px) |
-| `--space-9` | 4rem (64px) |
-| `--space-10` | 6rem (96px) |
+| `--space-xxs` | 0.125rem (2px) |
+| `--space-xs` | 0.25rem (4px) |
+| `--space-sm` | 0.5rem (8px) |
+| `--space-md` | 0.75rem (12px) |
+| `--space-lg` | 1rem (16px) |
+| `--space-xl` | 1.5rem (24px) |
+| `--space-2xl` | 2rem (32px) |
+| `--space-3xl` | 3rem (48px) |
+| `--space-4xl` | 4rem (64px) |
+
+迁移期保留 `--space-1..8` 别名映射到上表；**禁止**新增 scale 外数值（20px / 96px 档取消，就近归并）。
 
 **习惯**
 
-- 表单字段垂直节奏：`space-4`  
-- 卡片内边距：`space-4`–`space-6`  
-- 页边：水平 `space-6`–`space-8`，移动端不少于 `space-4`  
+- 表单字段垂直节奏：`space-lg`
+- 卡片内边距：`space-xl`（24px）
+- 区段（band）垂直：`space-4xl`（64px）
+- 页边：水平 `space-xl`–`space-2xl`，移动端不少于 `space-lg`
 
 ---
 
-## 7. 圆角
+## 7. 圆角（xAI 三档）
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--radius-control` / `--radius-button` | `0.5rem` (8px) | 按钮、输入、小控件 |
-| `--radius-card` / `--radius` | `0.75rem` (12px) | 卡片、面板 |
-| `--radius-message` | `1rem` (16px) | 消息气泡 |
-| `--radius-badge` / `--radius-pill` | `999px` | **仅** badge、avatar、搜索胶囊 |
+| `--radius-none` | `0` | 全出血 band |
+| `--radius-sm` / `--radius-card` / `--radius-control` | `0.5rem` (8px) | 卡片、面板、输入、消息气泡 |
+| `--radius-pill` | `999px` | **所有按钮**、badge、avatar、时间轴 pill |
 
-禁止：全局按钮 `border-radius: 999px`（象棋棋子 chip 除外）。
+**纪律**
+
+- 全系统只有这三档。禁止组件硬编码其他值（20+ 种任意 rem 值是本次换标要清偿的债）。
+- 按钮一律 pill——这是对旧基准「禁止全局胶囊」的正式反转（xAI：pill 是唯一交互形状）。
+- 例外：象棋棋子 chip 沿用领域皮肤。
 
 ---
 
-## 8. 阴影与焦点
+## 8. 阴影与焦点（hairline-only）
 
-### 8.1 阴影（随主题变）
+### 8.1 阴影
 
-**Light**（墨色低透明）
+**原则：无 drop shadow。** 深度 = 1px hairline + 明度差（浅色：白卡浮于米白；深色：`#191919` 卡浮于 `#0a0a0a`）。
 
-| Token | 值 |
-|-------|-----|
-| `--shadow-sm` | `0 1px 2px hsl(0 0% 0% / 0.04)` |
-| `--shadow-md` | `0 4px 12px hsl(0 0% 0% / 0.06)` |
-| `--shadow-lg` | `0 8px 24px hsl(0 0% 0% / 0.08)` |
-| `--shadow-xl` | `0 16px 48px hsl(0 0% 0% / 0.12)` |
-| `--shadow-topbar` | `0 1px 3px hsl(0 0% 0% / 0.05)` |
-| `--shadow-glow` | `0 0 20px hsl(var(--accent) / 0.12)` | 极少用 |
-| `--shadow-focus-ring` | `0 0 0 3px hsl(var(--focus-ring) / 0.18)` | |
-| `--shadow-popover` | `0 12px 32px rgba(15, 23, 42, 0.12)` | 浮层专用 |
-
-**Dark**：提高不透明度（约 0.3–0.55），仍用 `hsl(0 0% 0% / …)`。
+| Token | 值 | 说明 |
+|-------|-----|------|
+| `--shadow-focus-ring` | `0 0 0 3px hsl(var(--focus-ring) / 0.18)` | **唯一保留的阴影 token**，无障碍焦点 |
+| `--shadow-sm/md/lg/xl/topbar/glow/popover` | **废止** | 全部删除；浮层用 hairline 描边代替 |
 
 ### 8.2 焦点
 
-- 可聚焦控件 `:focus-visible` → `outline: none` + `box-shadow: var(--shadow-focus-ring)` 或 `border-color: hsl(var(--focus-ring))`。  
-- 勿去掉焦点且无替代样式。  
+- 可聚焦控件 `:focus-visible` → `outline: none` + `box-shadow: var(--shadow-focus-ring)` 或 `border-color: hsl(var(--focus-ring))`。
+- 勿去掉焦点且无替代样式。
 
 ---
 
 ## 9. 控件契约
 
-### 9.1 按钮（见 §4.5 CTA 三档）
+### 9.1 按钮（见 §4.6 CTA 档位；全部 pill）
 
 | 级别 | 类名约定 | 视觉 |
 |------|----------------|------|
-| **Paid Primary** | `.app-button-accent` | `--accent-cta` 实底；仅付费/转化场景，每屏 ≤1 |
-| **Create** | `.app-button-create` / `.app-button-create-soft` | 中性灰填充 / 描边 ghost |
-| **Primary（高频中性）** | `.app-button-primary` | `cta-background` / `cta-foreground` 墨色 |
-| **Secondary** | `.app-button-secondary` | `secondary` 底 + `border` |
-| **Ghost** | `.app-button-ghost` | 透明 / 淡边 + `muted-foreground` |
+| **Primary CTA** | `.app-button-accent` | 亮：橙实底白字；暗：白实底近黑字；每屏 ≤1 |
+| **Primary（高频中性）** | `.app-button-primary` | `cta-background` 实底 pill（亮=墨 / 暗=白） |
+| **Secondary** | `.app-button-secondary` | 亮：`secondary` 底 + hairline；暗：透明底 + 白 25% 描边（xAI outline pill） |
+| **Ghost** | `.app-button-ghost` | 透明 + `muted-foreground` |
 | **Danger** | 扩展 | `destructive` 底或描边，不用于主流程 |
 
-微交互：优先 **背景 / 边框**；控件 **避免** `translateY` 跳动（卡片 hover 可极轻）。
+- 尺寸：`--font-size-control`（13px / 400）+ `padding: 8px 16px` 起步。
+- 无阴影、无 glow。微交互只动背景 / 边框；控件 **避免** `translateY` 跳动。
 
 ### 9.2 输入
 
-- 边：`border`；hover：`border-strong`；focus：`focus-ring` + `shadow-focus-ring`。  
-- 背景：`input-background`。  
-- 高度与 padding 对齐 `--font-size-control` 与 `space-3`–`space-4`。  
-- 原生 checkbox / radio：`accent-color: hsl(var(--accent))`；自定义勾选控件 checked 态 = `--accent` 底 + `--primary-foreground` 勾。  
+- 底：`input-background`；边：`border`；hover：`border-strong`；focus：`focus-ring`。
+- 圆角 8px；padding `12px 16px`。
+- 原生 checkbox / radio：`accent-color: hsl(var(--accent))`；自定义勾选 checked = `--accent` 底 + 反色勾。
 
 ### 9.3 链接
 
-- 默认：`color: hsl(var(--accent-text))`。  
-- 次要链接：`muted-foreground`，hover 到 `foreground`。  
-- 勿用下划线彩虹或青绿色。  
+- 默认：`color: hsl(var(--accent-text))`（亮=橙 / 暗=白或 body 灰）。
+- 次要链接：`muted-foreground`，hover 到 `foreground`。
 
 ### 9.4 卡片 / 面板
 
-- 边 `border` 或 `border-whisper` + 可选 `shadow-sm`。  
-- 圆角 `--radius-card`。  
-- 标题：`--font-size-section-title` + semibold。  
+- 底：`card`；边：1px `border`（hairline）；圆角 8px；padding 24px。**无阴影**。
+- 标题：用字阶（`--font-size-display-xs` 或 section 级字号），400。
 
 ### 9.5 Tab / Segment
 
-- 未选中：ghost / secondary。  
-- 选中：**浅灰底（`--surface-soft`）+ `--foreground` 字**（对齐 Gemini / Kimi / Grok）；品牌色只出现在选中态的描边或小图标上，不用品牌色铺底。  
+- 未选中：ghost / secondary。
+- 选中：浅色 = `--accent-soft` 淡橙底 或 `--surface-soft` + 橙小指示；深色 = `--surface-soft` 底 + 白字 / 白描边指示。
 
 ### 9.6 空状态
 
 结构固定为三件套：
 
-1. 简标或线框图标（可用 mark 简化版，**单色**）  
-2. 主句（`section-title` 或 `body-strong`）  
-3. 次句（`muted-foreground`）+ **一个** CTA（若有行动）  
+1. 简标或线框图标（可用 mark 简化版，**单色**）
+2. 主句（字阶标题，400）
+3. 次句（`muted-foreground`）+ **一个** CTA（若有行动）
 
 禁止：仅一行灰字居中当作完成态。
 
 ### 9.7 加载
 
-- 列表 / 卡片：与目标同圆角的 **skeleton**（`surface-soft` 脉冲）。  
-- 禁止布局塌缩：header 固定槽位预留高度。  
-- 长请求：文案 + 可选细进度，不用彩色转圈抢品牌色。  
+- 列表 / 卡片：与目标同圆角（8px）的 **skeleton**（`surface-soft` 脉冲）。
+- 禁止布局塌缩：header 固定槽位预留高度。
+- 长请求：文案 + 可选细进度，不用彩色转圈抢品牌色。
 
 ### 9.8 消息 / 聊天
 
-- 气泡圆角 `--radius-message`。  
-- 用户消息：`surface-soft` 或弱墨底；助手：透明 / card。  
-- 引用 chip：`accent-soft` + 小字 mono 可选。  
+- 气泡圆角 8px（`--radius-card`）。
+- 用户消息：`surface-soft` 或弱墨底；助手：透明 / card。
+- 工具调用时间轴：用 §4.5 pastel pill（mono 大写标签）。
+- 引用 chip：`accent-soft` + 小字 mono 可选。
 
 ---
 
@@ -444,12 +473,13 @@ Chrome（顶栏 / 页脚 / 全局按钮）必须用本基准 token。
 
 | 场景 | 建议 |
 |------|------|
+| 内容容器 | **max-width ≈ 75rem（1200px）**（统一现行 1152 / 896） |
 | 阅读 / 文章 | 正文柱 **≤ 42–45rem** |
 | 聊天 transcript | 内容柱 **44rem**，居中（Workspace 中栏） |
 | Workspace 三栏（≥1440px 视口） | 左栏默认 280（236–320）/ 右栏默认 336（280–360）/ 中栏 ≥55% |
-| Dashboard 主列 | **max-width ≈ 80rem** |
+| Dashboard 主列 | 容器内自适应 |
 | Auth 卡 | **max-width ≈ 28rem** |
-| 顶栏左右 padding | `space-6`–`space-8` |
+| 顶栏 | 高 64px；左右 padding `space-xl`–`space-2xl` |
 
 ---
 
@@ -463,23 +493,28 @@ Chrome（顶栏 / 页脚 / 全局按钮）必须用本基准 token。
 | App 拷贝 | `frontend_next/app/design-tokens.css` |
 | 全局基础 | `frontend_next/app/globals.css` |
 | Ghost | `context-os-theme/assets/css/tokens.css`（由 sync 生成），主题样式在 `brand.css` |
-| 品牌 mark | `packages/cos-tokens/mark.svg`（plate `#1b1f2d` + 白 ink + 靛蓝节点 `#4f7cf3`） |
+| 品牌 mark | `packages/cos-tokens/mark.svg`（plate 暖墨 `#26251e` + 反色 ink + 橙节点 `#f54e00`） |
 
 ### 12.2 使用模板
 
 ```css
 .element {
-  background: hsl(var(--background));
+  background: hsl(var(--card));
   color: hsl(var(--foreground));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid hsl(var(--border));   /* hairline-only，无阴影 */
+  border-radius: var(--radius-card);       /* 8px */
+  padding: var(--space-xl);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
 }
 
+.button {
+  border-radius: var(--radius-pill);       /* 按钮一律 pill */
+  font-weight: 400;                         /* 永远 400 */
+}
+
 .element:focus-visible {
-  box-shadow: var(--shadow-focus-ring);
+  box-shadow: var(--shadow-focus-ring);    /* 唯一允许的 shadow */
 }
 ```
 
@@ -490,7 +525,7 @@ Chrome（顶栏 / 页脚 / 全局按钮）必须用本基准 token。
 ```js
 // 示意
 accent: "hsl(var(--accent) / <alpha-value>)",
-// 禁止硬编码 hex 品牌色（' #c49a5c ' / '#10b981' 等）
+// 禁止硬编码 hex 品牌色
 ```
 
 ---
@@ -499,14 +534,22 @@ accent: "hsl(var(--accent) / <alpha-value>)",
 
 | 禁止 | 原因 |
 |------|------|
+| **靛蓝 / 冷石板（hue 220–235 彩色 accent）任何残留** | 2026-08-02 废止，已换橙（亮）/ 白（暗） |
 | 品牌青 / 青绿 / `#10b981` 作 accent | 已废止 |
-| **铜色系（`#c49a5c` / `#a66b30` / `28 55%` / `22 85%` 等）任何残留** | 2026-07-22 废止，已全面换靛蓝 |
-| 导航区 / 高频按钮品牌色实底（付费 CTA 除外） | 颜色给品牌，灰度给交互 |
+| 铜色系（`#c49a5c` / `#a66b30` 等）任何残留 | 2026-07-22 废止 |
+| **font-weight 500 / 600 / 700（含 faux bold、含 token 别名）** | xAI：400 走全场，层级靠字号 + 负字距 |
+| **按钮非 pill 圆角** | xAI：pill 是唯一交互形状 |
+| **8px / pill / 0 以外的圆角值** | 三档纪律 |
+| **drop shadow（focus-ring 除外）** | hairline-only |
+| 浅色纯白页底 / 纯黑文字 | 必须暖米 `#f7f7f4` + 暖墨 `#26251e` |
+| 深色使用橙色或任何彩色 accent | xAI 单色纪律 |
+| 深色实底按钮泛滥 | 白实底 pill 每屏 ≤1，其余白描边 outline |
+| display 标题省略负字距 | 负字距是 xAI 签名 |
+| eyebrow 用正文字体加粗 | 必须 mono + 大写 + 正字距 + 400 |
+| 时间轴 pastel 用作系统动作色 / 状态色 | 仅限 agent 时间轴 |
 | 新 Logo 变体 | 品牌分裂 |
-| 硬编码 `rgba(15, 23, 42, …)` 以外的硬编码阴影；组件内硬编码品牌 hex | 逃逸 token |
+| 组件内硬编码 hex / 阴影 rgba / 任意 rem 间距 | 逃逸 token |
 | 新增第三 UI 字体 | 噪音 |
-| 按钮全局胶囊圆角 | 不精密 |
-| Settings/Admin 新增大片 `style={{ color: '#…' }}` | 逃逸 token |
 | success 做成 `#10b981` 翠绿 | 与废止绿混淆 |
 | 无 `:focus-visible` 的可点控件 | 无障碍底线 |
 | 本地 `:root` 覆盖同步令牌（各站） | 换肤被短路；要改就改基准 + tokens.css |
@@ -516,45 +559,53 @@ accent: "hsl(var(--accent) / <alpha-value>)",
 
 ## 14. 与旧体系对照
 
-| 旧 | 新（本基准） |
+| 旧（Slate × Indigo，已废止） | 新（Cream × Void） |
 |----|----------------|
-| Precision Lab 青 accent | Indigo 靛蓝 |
-| Monochrome Ink 纯灰 + Copper 点缀（2026-07-10 ~ 07-22） | Slate 石板调中性 + Indigo |
-| CTA 一律墨色 / 曾短暂全铜实底 | 三档：创建灰 / 付费靛蓝 / 高频墨 |
-| 公域翠绿 `#10b981` | `--success` 绿（`155 55% 36%`） |
-| 绿块三线 logo / 黑底 mark | 靛蓝底 ContextOsMark |
-| Inter / Geist 混用 | IBM Plex + Space（拉丁）+ JetBrains |
-| dashboard/workspace 独立色相 | 全局 alias |
-| info = 中性灰 | `--info` 天蓝（`205 85% 48%`） |
+| 冷石板纸 `220 25% 98%` 页底 | 暖米 `#f7f7f4`（Cursor canvas） |
+| 冷藏青墨 `225 25% 14%` | 暖墨 `#26251e`（Cursor ink） |
+| 靛蓝 accent `235 65% 52%` | 亮：Cursor Orange `#f54e00`；暗：白（xAI 单色） |
+| 石板蓝黑暗色 `225 20% 9%` | 近黑 `#0a0a0a` + 卡 `#191919`（xAI） |
+| CTA 三档（创建灰 / 付费靛蓝 / 高频墨） | 主 CTA 橙（亮）/ 白实底（暗）；高频墨 pill；次级描边 pill |
+| Space Grotesk + IBM Plex Sans | Inter（display + body 同族） |
+| 字重 400/500/600 层级 | 全部 400；字号阶梯 + 负字距 |
+| 阴影 8 token + 组件 104 处 | hairline-only，仅保留 focus-ring |
+| 圆角 8/12/16/pill 四档 + 20+ 硬编码值 | 0 / 8px / pill 三档 |
+| 按钮 8px 圆角 | 按钮一律 pill |
+| 间距含 20px / 96px 档 | 2/4/8/12/16/24/32/48/64 |
+| 容器 1152 / 896 混用 | 统一 ~1200px |
+| eyebrow 正文字体 600 大写 | mono 400 大写 + 0.1em 字距 |
+| —（无） | 新增 5 色 timeline pastel（agent 时间轴专用） |
 
 ---
 
 ## 15. 变更流程
 
-1. 先改 **本文件** 数值与语义。  
-2. 再改 `packages/cos-tokens/tokens.css`（单源），跑 `sync.sh`。  
-3. 各站消费层跟进（含删除本地覆盖层）；禁止站点私自改 hex 而不回写基准。  
-4. 重大色相变更需同步：App · Landing · Ghost · Why · Canju chrome，并逐站人工核对渲染。  
+1. 先改 **本文件** 数值与语义。
+2. 再改 `packages/cos-tokens/tokens.css`（单源），跑 `sync.sh`。
+3. 各站消费层跟进（含删除本地覆盖层）；禁止站点私自改 hex 而不回写基准。
+4. 重大色相变更需同步：App · Landing · Ghost · Why · Canju chrome，并逐站人工核对渲染。
 
 ---
 
 ## 16. 速查卡片
 
 ```text
-页底/主字       background / foreground（石板调）
-创建按钮        app-button-create（灰填充）/ app-button-create-soft（描边）
-付费按钮        app-button-accent / --accent-cta（靛蓝实底，每屏 ≤1）
-高频中性按钮     cta-*（墨）
-链接/彩色小字    accent-text
-勾选/开关/选中   accent 实底（交互反馈态）
-Tab 选中        surface-soft 浅灰底
-边/线           border / border-strong / border-whisper
+页底/主字（亮）  background #f7f7f4 / foreground #26251e（暖米 + 暖墨）
+页底/主字（暗）  background #0a0a0a / foreground #ffffff（xAI 近黑）
+卡片            card（亮 #fff / 暗 #191919）+ 1px border + 8px，无阴影
+主 CTA          accent 实底 pill（亮=橙 #f54e00 / 暗=白），每屏 ≤1
+高频按钮        cta-* 实底 pill（亮=墨 / 暗=白）
+次级按钮        描边 pill（暗=白 25% 描边，xAI 标准）
+链接/选中/焦点   accent-text / accent / focus-ring（亮=橙 / 暗=白）
+时间轴          timeline-* 5 pastel pill（仅 agent 时间轴）
+边/线           border / border-strong / border-whisper（hairline）
 次文            muted-foreground / subtle-foreground
-卡片            card + radius-card + shadow-sm
-圆角控件        radius-control 8px
-正文字号        font-size-body 0.875rem（U13）
-等宽            font-mono only
-Logo            ContextOsMark（墨 plate + 反色 ink + 靛蓝节点）
+圆角            0 / 8px / 999px 三档；按钮一律 pill
+字重            400 only；层级靠字号 + 负字距
+字体            Inter + JetBrains Mono（eyebrow 大写 mono）
+间距            2/4/8/12/16/24/32/48/64
+容器            ~1200px；顶栏 64px
+Logo            ContextOsMark（墨 plate + 反色 ink + accent 节点）
 ```
 
 ---
