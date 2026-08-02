@@ -46,6 +46,62 @@ impl LlmUsage {
             self.model = other.model.clone();
         }
     }
+
+    /// Tokens charged against the loop's per-run token budget.
+    ///
+    /// The assembled system prefix (agent-base + capability contracts +
+    /// mandatory skills) is re-sent every retrieve round; providers serve the
+    /// unchanged prefix from their prompt cache (DeepSeek
+    /// `prompt_cache_hit_tokens`, OpenAI `prompt_tokens_details.cached_tokens`)
+    /// at a much lower cache-hit rate. Charging the cached prefix against the
+    /// round budget conflates "prompt weight" with "retrieval progress" — a
+    /// heavier system prompt would silently cost rounds. Billable therefore
+    /// counts only uncached tokens (≈ completion + new history/observations).
+    pub fn billable_tokens(&self) -> u32 {
+        self.total_tokens.saturating_sub(self.cached_tokens)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn billable_tokens_exclude_cached_prefix() {
+        let mut u = LlmUsage::zeroed();
+        u.accumulate(&LlmUsage {
+            prompt_tokens: 10_000,
+            completion_tokens: 300,
+            total_tokens: 10_300,
+            provider: "deepseek".into(),
+            model: "m".into(),
+            cached_tokens: 8_000,
+            reasoning_tokens: 0,
+        });
+        assert_eq!(u.billable_tokens(), 2_300);
+        // Accumulation keeps the invariant across rounds.
+        u.accumulate(&LlmUsage {
+            prompt_tokens: 11_000,
+            completion_tokens: 400,
+            total_tokens: 11_400,
+            provider: String::new(),
+            model: String::new(),
+            cached_tokens: 8_500,
+            reasoning_tokens: 0,
+        });
+        assert_eq!(u.billable_tokens(), 21_700 - 16_500);
+        // No cache reported → billable equals total (legacy behavior).
+        let plain = LlmUsage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            provider: String::new(),
+            model: String::new(),
+            cached_tokens: 0,
+            reasoning_tokens: 0,
+        };
+        assert_eq!(plain.billable_tokens(), 150);
+    }
 }
 
 /// Synthesized answer payload consumed by rag-core response assembly.

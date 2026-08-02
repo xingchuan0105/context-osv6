@@ -41,7 +41,9 @@ impl ReActLoop {
                 request,
                 state,
                 sink,
-                total_usage.total_tokens,
+                // Budget hint shows billable (uncached) tokens — same
+                // accounting as the loop budget gate.
+                total_usage.billable_tokens(),
                 tokens_max,
             )
             .await;

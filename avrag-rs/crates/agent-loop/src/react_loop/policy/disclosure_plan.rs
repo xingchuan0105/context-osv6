@@ -58,8 +58,13 @@ impl DisclosurePlanner {
             push_cluster_body(&mut slices, cluster_id, None, already_disclosed, true);
         }
 
-        // Table structure reference (ontology + few-shot): default-disclose once
-        // with knowledge-base so markitdown pipe tables are in context without skill_request.
+        // Table structure reference (ontology + few-shot) and the strategy
+        // layer (coverage checklist / gotchas / low-freedom paths):
+        // default-disclose once with knowledge-base so pipe-table reading and
+        // retrieval strategy are in context without skill_request. The
+        // every-round mandatory re-render covers only the SKILL body
+        // (methods + return shapes + hard constraints) — strategy spokes are
+        // first-round (re-pullable via `knowledge-base/<slug>`).
         if first_round
             && mode
                 .skill_catalog
@@ -72,6 +77,13 @@ impl DisclosurePlanner {
                 &mut slices,
                 "knowledge-base",
                 Some("how-to-read-tables"),
+                already_disclosed,
+                false,
+            );
+            push_cluster_body(
+                &mut slices,
+                "knowledge-base",
+                Some("strategies"),
                 already_disclosed,
                 false,
             );

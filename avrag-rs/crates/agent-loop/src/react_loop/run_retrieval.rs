@@ -67,7 +67,10 @@ impl ReActLoop {
                 break;
             }
 
-            let tokens_used = total_usage.total_tokens;
+            // Billable = uncached tokens only: the re-sent system prefix is
+            // provider-cached and must not consume the round budget
+            // (LlmUsage::billable_tokens).
+            let tokens_used = total_usage.billable_tokens();
             let rounds_exhausted = iteration >= effective_max_iters;
             let tokens_exhausted = effective_max_tokens > 0 && tokens_used >= effective_max_tokens;
 
