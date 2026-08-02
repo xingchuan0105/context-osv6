@@ -64,6 +64,9 @@ env:
   # 块并行跑（每块独立 prompt 树 + 独立评测输出目录，并发安全）。
   # 默认 1 = 串行（语义不变）；开并行前确认 WSL jobs=2 与共享服务吞吐。
   eval_workers: 1
+  # WP4/D7：reflect 后端可插拔。llm = skillopt 默认裸 LLM 反射；
+  # coding_agent = 走 reflect_agent.py（coding agent 代理，工作区无 ground_truth）。
+  reflect_backend: llm
   max_completion_tokens: 4096
   eval_timeout_secs: 3600
   limit: 0

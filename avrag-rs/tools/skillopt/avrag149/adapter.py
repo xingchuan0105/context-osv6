@@ -6,6 +6,7 @@ rollout 即「skill 文档注入产品 prompts → 跑真实 nightly 评测 → 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from skillopt.datasets.base import BatchSpec
@@ -56,6 +57,9 @@ class Avrag149Adapter(EnvAdapter):
         workers: int = 4,
         eval_workers: int = 1,
         analyst_workers: int = 8,
+        # WP4/D7：reflect 后端可插拔。llm = skillopt 默认裸 LLM 反射；
+        # coding_agent = 走 reflect_agent.py（coding agent 代理，工作区无 ground_truth）。
+        reflect_backend: str = "llm",
         failure_only: bool = False,
         minibatch_size: int = 8,
         edit_budget: int = 4,
@@ -76,6 +80,7 @@ class Avrag149Adapter(EnvAdapter):
         self.workers = int(workers)
         self.eval_workers = max(1, int(eval_workers))
         self.analyst_workers = int(analyst_workers)
+        self.reflect_backend = str(reflect_backend or "llm").strip().lower()
         self.failure_only = bool(failure_only)
         self.minibatch_size = int(minibatch_size)
         self.edit_budget = int(edit_budget)
@@ -179,7 +184,84 @@ class Avrag149Adapter(EnvAdapter):
         """
         return ""
 
-    # reflect() 继承默认实现（读 out_dir/predictions/<id>/conversation.json）
+    # ── Reflect（WP4/D7：后端可插拔）───────────────────────────────────────
+
+    def reflect(self, results, skill_content: str, out_dir: str, **kwargs):
+        """评估/改写后端：llm（默认）| coding_agent。
+
+        - ``llm``：skillopt 默认 minibatch reflect（裸 LLM，读 predictions/）。
+        - ``coding_agent``：构造无 ground_truth 的工作区 → 调 reflect_agent.py
+          （coding agent 代理）→ 解析 RawPatch。D6-① 红线：工作区不含 gold。
+        """
+        if self.reflect_backend != "coding_agent":
+            return self._reflect_llm(results, skill_content, out_dir, **kwargs)
+        return self._reflect_coding_agent(results, skill_content, out_dir, **kwargs)
+
+    def _reflect_llm(self, results, skill_content: str, out_dir: str, **kwargs):
+        """默认 llm 分支：完全对齐 skillopt 默认实现（run_minibatch_reflect）。"""
+        from skillopt.gradient.reflect import run_minibatch_reflect
+
+        return run_minibatch_reflect(
+            results=results,
+            skill_content=skill_content,
+            prediction_dir=kwargs.get("prediction_dir", str(Path(out_dir) / "predictions")),
+            patches_dir=kwargs.get("patches_dir", str(Path(out_dir) / "patches")),
+            workers=self.analyst_workers,
+            failure_only=self.failure_only,
+            minibatch_size=self.minibatch_size,
+            edit_budget=self.edit_budget,
+            random_seed=kwargs.get("random_seed"),
+            error_system=self.get_error_minibatch_prompt(),
+            success_system=self.get_success_minibatch_prompt(),
+            step_buffer_context=kwargs.get("step_buffer_context", ""),
+            meta_skill_context=kwargs.get("meta_skill_context", ""),
+            update_mode=kwargs.get("skill_update_mode", "patch"),
+        )
+
+    def _reflect_coding_agent(self, results, skill_content: str, out_dir: str, **kwargs):
+        """coding_agent 分支：工作区（无 ground_truth）→ reflect_agent.py → RawPatch。"""
+        import shutil
+        import subprocess
+        import tempfile
+
+        workspace = Path(tempfile.mkdtemp(prefix="skillopt_reflect_ws_"))
+        try:
+            # 工作区：skill + 轨迹（conversation + trajectory_attribution，均无 gold）
+            (workspace / "skill.md").write_text(skill_content, encoding="utf-8")
+            traj_dir = workspace / "trajectories"
+            traj_dir.mkdir()
+            pred_dir = Path(kwargs.get("prediction_dir", str(Path(out_dir) / "predictions")))
+            if pred_dir.is_dir():
+                for tid in sorted(pred_dir.iterdir()):
+                    if not tid.is_dir():
+                        continue
+                    dst = traj_dir / tid.name
+                    dst.mkdir()
+                    for fname in ("conversation.json", "trajectory_attribution.json"):
+                        src = tid / fname
+                        if src.is_file():
+                            shutil.copy2(src, dst / fname)
+
+            out_json = workspace / "patches.json"
+            script = Path(__file__).resolve().parent / "reflect_agent.py"
+            cmd = [sys.executable, str(script),
+                   "--workspace", str(workspace),
+                   "--skill", str(workspace / "skill.md"),
+                   "--trajectories", str(traj_dir),
+                   "--out", str(out_json),
+                   "--edit-budget", str(self.edit_budget)]
+            try:
+                proc = subprocess.run(cmd, check=True, timeout=600,
+                                      capture_output=True, text=True)
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    f"reflect_agent 失败 rc={exc.returncode}\n"
+                    f"--- stderr ---\n{(exc.stderr or '')[-2000:]}"
+                ) from exc
+            patches = json.loads(out_json.read_text(encoding="utf-8"))
+            return patches.get("patches") or []
+        finally:
+            shutil.rmtree(workspace, ignore_errors=True)
 
     # ── Prompts（2026-08-01）────────────────────────────────────────────
     # skillopt 0.2.0（PyPI）打包缺陷:skillopt/prompts/ 目录为空,load_prompt
