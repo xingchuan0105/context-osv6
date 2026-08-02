@@ -8,7 +8,6 @@ use app_core::ChatPersistencePort;
 use contracts::{ToolCall, ToolResult, ToolStatus};
 
 use crate::catalog::{ToolCatalog, ToolExecKind};
-use crate::rag_bridge::dispatch_rag_tool;
 
 /// LLM-facing reject hints from `avrag-rs/prompts/loop/*.md` (prompts-in-md).
 macro_rules! loop_prompt {
@@ -146,28 +145,9 @@ pub async fn dispatch_tool(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> To
     };
 
     match registered.exec {
-        ToolExecKind::Rag => dispatch_rag(call, ctx).await,
+        ToolExecKind::Rag => reject_native_tool_surface(&call.tool),
         ToolExecKind::Skill => dispatch_skill(call, ctx, &registered.meta).await,
     }
-}
-
-async fn dispatch_rag(call: &ToolCall, ctx: &ToolDispatchContext<'_>) -> ToolResult {
-    let (Some(runtime), Some(auth)) = (ctx.rag_runtime, ctx.auth) else {
-        return ToolResult {
-            tool: call.tool.clone(),
-            version: call.version.clone(),
-            status: ToolStatus::NotImplemented,
-            data: Some(serde_json::json!({
-                "error": if ctx.rag_runtime.is_none() {
-                    "rag runtime not configured"
-                } else {
-                    "auth context required for rag tools"
-                }
-            })),
-            trace: None,
-        };
-    };
-    dispatch_rag_tool(runtime, auth, call, ctx.doc_scope).await
 }
 
 /// Resolve tool metadata from the unified catalog.

@@ -41,5 +41,7 @@ lettre = { version = "0.11", default-features = false, features = ["builder", "s
 [dev-dependencies]
 app-bootstrap = { path = "../app-bootstrap", features = ["test-support"] }
 async-trait.workspace = true
+avrag-rag-core = { path = "../rag-core" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 http-body-util = "0.1"
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid"] }

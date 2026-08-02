@@ -8,6 +8,7 @@ mod planner;
 mod response;
 mod response_utils;
 mod retrieval;
+pub mod scoped_rag_dispatch;
 pub mod tools;
 
 #[cfg(test)]

@@ -48,7 +48,7 @@ pub use progressive::{
     atomic_tool_catalog, atomic_tool_catalog_cached, evaluate_calculator_expression,
     search_specific_tools, search_specific_tools_cached,
 };
-pub use rag_bridge::{dispatch_rag_tool, force_doc_scope, intersect_doc_scope};
+pub use rag_bridge::{force_doc_scope, intersect_doc_scope};
 pub use skills::{ExecutionContext, SkillComponent, SkillRegistry, builtin_registry_cached};
 pub use tool_registry::{
     CODEGEN_SDK_METHOD_NAMES, OwnedToolDeps, SAC_SUPERSEDED_NATIVE_TOOLS, ToolDispatchContext,

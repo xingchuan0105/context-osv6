@@ -16,7 +16,16 @@ impl ChatContext {
         }
 
         if let Some(rag_runtime) = self.orchestrator.rag_runtime() {
-            let results = rag_runtime.execute_tools(&self.auth, req.calls).await;
+            let scope = self.workspace_doc_scope().await;
+            let results = futures::future::join_all(req.calls.into_iter().map(|call| {
+                avrag_rag_core::runtime::scoped_rag_dispatch::dispatch_scoped(
+                    rag_runtime,
+                    &self.auth,
+                    call,
+                    &scope,
+                )
+            }))
+            .await;
             return Ok(contracts::RuntimeExecuteResponse { results });
         }
 
@@ -24,5 +33,28 @@ impl ChatContext {
             "rag_runtime_not_configured",
             "RAG runtime execute requires rag_runtime to be configured.",
         ))
+    }
+
+    /// Derive the enforcement scope from the authenticated workspace: all
+    /// completed document ids in `auth.workspace_id()`. Empty when auth carries
+    /// no workspace scope (scope is then unenforced upstream).
+    async fn workspace_doc_scope(&self) -> Vec<String> {
+        let Some(workspace_id) = self.auth.workspace_id() else {
+            return Vec::new();
+        };
+        self.documents
+            .list_documents(
+                &self.auth,
+                &self.storage,
+                Some(&workspace_id.to_string()),
+                None,
+            )
+            .await
+            .into_iter()
+            .filter(|document| {
+                document.status == contracts::documents::DocumentStatus::Completed
+            })
+            .map(|document| document.id)
+            .collect()
     }
 }

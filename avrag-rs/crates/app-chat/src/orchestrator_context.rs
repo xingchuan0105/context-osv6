@@ -48,4 +48,8 @@ impl OrchestratorContext {
     pub fn rag_runtime(&self) -> Option<&Arc<RagRuntime>> {
         self.rag_runtime.as_ref()
     }
+
+    pub fn set_rag_runtime(&mut self, rag_runtime: Arc<RagRuntime>) {
+        self.rag_runtime = Some(rag_runtime);
+    }
 }

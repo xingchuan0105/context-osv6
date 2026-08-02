@@ -109,10 +109,10 @@ impl RuntimeBridge {
     }
 
     /// Intersect caller-supplied doc ids against the bridge's session scope.
-    /// Mirrors the agent-loop `intersect_doc_scope`: the LLM/codegen caller can never
-    /// widen scope beyond what the session established.
+    /// Uses the single shared `intersect_doc_scope` (scoped_rag_dispatch): the
+    /// LLM/codegen caller can never widen scope beyond what the session established.
     fn resolve_doc_ids(&self, caller: &[String]) -> Vec<String> {
-        intersect_doc_scope(caller, &self.doc_scope)
+        super::scoped_rag_dispatch::intersect_doc_scope(caller, &self.doc_scope)
     }
 
     fn method_to_tool_call(&self, method: &str, args: &Value) -> Result<ToolCall, Value> {
@@ -387,34 +387,6 @@ impl RuntimeBridge {
             }
             _ => json!({ "chunks": data }),
         }
-    }
-}
-
-/// Intersect caller-supplied doc ids against the session scope.
-/// - If `scope` is empty: no enforcement (org-wide permitted by upstream).
-/// - If `scope` is non-empty: result is caller ∩ scope; if caller is empty, use scope;
-///   if caller has items but none match scope, return scope (fall back to session scope
-///   rather than allowing an out-of-scope id or an empty all-matching scope).
-///
-/// Mirrors the agent-loop `intersect_doc_scope` so the LLM/codegen caller can never
-/// widen scope beyond what the session established.
-fn intersect_doc_scope(caller: &[String], scope: &[String]) -> Vec<String> {
-    if scope.is_empty() {
-        return caller.to_vec();
-    }
-    if caller.is_empty() {
-        return scope.to_vec();
-    }
-    let scope_set: std::collections::HashSet<&String> = scope.iter().collect();
-    let intersection: Vec<String> = caller
-        .iter()
-        .filter(|c| scope_set.contains(*c))
-        .cloned()
-        .collect();
-    if intersection.is_empty() {
-        scope.to_vec()
-    } else {
-        intersection
     }
 }
 

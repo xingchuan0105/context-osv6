@@ -596,5 +596,10 @@ mod app_state_test_support {
             self.storage = storage.clone();
             self.chat.storage = storage;
         }
+
+        pub fn test_set_rag_runtime(&mut self, rag_runtime: std::sync::Arc<avrag_rag_core::RagRuntime>) {
+            self.orchestrator.set_rag_runtime(rag_runtime);
+            self.chat.orchestrator = self.orchestrator.clone();
+        }
     }
 }
