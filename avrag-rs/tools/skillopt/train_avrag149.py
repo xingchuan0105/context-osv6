@@ -149,6 +149,98 @@ def run_signals(v2_dir: str, avrag_rs_root: str | os.PathLike) -> None:
     print("=" * 64)
 
 
+# ── 记忆化扫描（D6-③）────────────────────────────────────────────────────────
+
+def _install_memorization_guard(flat: dict) -> None:
+    """wrap trainer 的 apply_patch_with_report——记忆化候选 → no-op。
+
+    命中时返回原 skill（candidate == current，gate 必然不通过），记忆化编辑
+    走拒绝路径。gold 判定用编辑增量（相对 skill_init，已知干净的产品 prompt）。
+    必须 patch ``skillopt.engine.trainer.apply_patch_with_report``（trainer 模块
+    顶层 from-import 的绑定名），不是 skillopt.optimizer.skill 模块属性。
+    """
+    from skillopt.engine import trainer as trainer_mod
+
+    from avrag149.memorization_scanner import MemorizationScanner
+
+    root = Path(flat.get("avrag_rs_root") or _DEFAULT_AVRAG_RS_ROOT)
+    scanner = MemorizationScanner(root)
+    init_path = Path(flat.get("skill_init") or "")
+    base_skill = init_path.read_text(encoding="utf-8") if init_path.is_file() else ""
+    if not base_skill:
+        print(f"  [memorization-guard] 警告: skill_init 不存在（{init_path}），guard 跳过")
+        return
+    orig = trainer_mod.apply_patch_with_report
+
+    def wrapped(skill: str, patch) -> tuple[str, list[dict]]:
+        new_skill, report = orig(skill, patch)
+        if new_skill != skill:
+            hits = scanner.scan(new_skill, base_skill)
+            if hits:
+                print(f"  [memorization-guard] 拒绝 {len(hits)} 条记忆化编辑"
+                      f"（首条: {hits[0][:60]}…）")
+                return skill, report
+        return new_skill, report
+
+    trainer_mod.apply_patch_with_report = wrapped
+    print("  [memorization-guard] 已安装（记忆化候选 → no-op，gate 不通过）")
+
+
+def run_scan(skill_path: str, avrag_rs_root: str) -> None:
+    """D6-③ 自检：扫一个 skill 文件的编辑增量对黄金集的记忆化命中。"""
+    from avrag149.memorization_scanner import MemorizationScanner, load_gold_fragments
+
+    root = Path(avrag_rs_root)
+    skill = Path(skill_path).read_text(encoding="utf-8")
+    base = root / "tools/skillopt/avrag149/skills/initial.md"
+    base_skill = base.read_text(encoding="utf-8") if base.is_file() else ""
+    scanner = MemorizationScanner(root)
+    hits = scanner.scan(skill, base_skill)
+    print("=" * 64)
+    print("  记忆化扫描（D6-③）")
+    print(f"  gold 片段数: {len(load_gold_fragments(root))}")
+    print(f"  skill: {skill_path}（{len(skill)} 字符）")
+    if not hits:
+        print("  未命中记忆化——干净。")
+    else:
+        print(f"  命中 {len(hits)} 条编辑增量（应拒绝，禁止回填）：")
+        for h in hits:
+            print(f"    - {h[:100]}")
+    print("=" * 64)
+
+
+def run_gap(train_v2: str, val_v2: str, avrag_rs_root: str) -> None:
+    """D6-④ 过拟合早报警：train/val 的 hard 差距。
+
+    两个 v2 目录（相对 avrag-rs/crates/app/tests/e2e_output/rag_eval_v2）。
+    大 gap = 训练集记忆化嫌疑（D6-② 结构性 holdout 就是为了让 gap 可信）。
+    """
+    from avrag149.runner import parse_report
+
+    root = Path(avrag_rs_root)
+    base = root / "crates/app/tests/e2e_output/rag_eval_v2"
+
+    def passrate(name: str) -> tuple[int, float]:
+        rows = parse_report(base / name, ids=None)[0]
+        total = len(rows)
+        p = sum(1 for r in rows.values() if r.get("label") == "PASS")
+        return total, (p / total * 100 if total else 0.0)
+
+    t_n, t_p = passrate(train_v2)
+    v_n, v_p = passrate(val_v2)
+    gap = t_p - v_p
+    print("=" * 64)
+    print("  train/val gap 报告（D6-④）")
+    print(f"  train: {train_v2}  {t_p:.1f}% ({t_n} 题)")
+    print(f"  val  : {val_v2}  {v_p:.1f}% ({v_n} 题)")
+    print(f"  gap  : {gap:+.1f}pp")
+    if gap > 10:
+        print("  ⚠ 大 gap = 过拟合信号（训练集记忆化嫌疑，检查 D6-③ 扫描日志）")
+    else:
+        print("  gap 正常（结构性 holdout 下可信）。")
+    print("=" * 64)
+
+
 # ── --check 静态自检 ─────────────────────────────────────────────────────────
 
 def run_check(flat: dict) -> None:
@@ -246,14 +338,27 @@ def main() -> None:
     p.add_argument("--config", help="YAML 配置路径（--check/训练必填；--signals 不需要）")
     p.add_argument("--check", action="store_true", help="静态自检，不触发评测/训练")
     p.add_argument("--signals", type=str, help="读已有 v2 产物目录，打印分层失败分布（不评测/训练）")
+    p.add_argument("--scan", type=str, help="记忆化扫描一个 skill 文件（D6-③ 自检，不评测/训练）")
+    p.add_argument("--gap", nargs=2, metavar=("TRAIN_V2", "VAL_V2"),
+                   help="train/val hard gap 报告（D6-④ 过拟合早报警）")
+    p.add_argument("--no-memorization-guard", action="store_true",
+                   help="训练时禁用记忆化 guard（默认开启，D6-③）")
     p.add_argument("--cfg-options", nargs="+", default=[], help="覆盖: section.key=value")
     p.add_argument("--out_root", type=str, help="产物目录覆盖")
     args = p.parse_args()
 
+    from avrag149.adapter import _DEFAULT_AVRAG_RS_ROOT
+
     if args.signals:
-        # --signals 不依赖 config；avrag_rs_root 用 adapter 规范默认
-        from avrag149.adapter import _DEFAULT_AVRAG_RS_ROOT
         run_signals(args.signals, _DEFAULT_AVRAG_RS_ROOT)
+        return
+
+    if args.scan:
+        run_scan(args.scan, str(_DEFAULT_AVRAG_RS_ROOT))
+        return
+
+    if args.gap:
+        run_gap(args.gap[0], args.gap[1], str(_DEFAULT_AVRAG_RS_ROOT))
         return
 
     if not args.config:
@@ -267,6 +372,10 @@ def main() -> None:
     if args.check:
         run_check(flat)
         return
+
+    # D6-③ 记忆化 guard：训练默认开启
+    if not args.no_memorization_guard and flat.get("memorization_guard", True):
+        _install_memorization_guard(flat)
 
     print(f"  env={flat.get('env')} optimizer_backend={flat.get('optimizer_backend')} "
           f"optimizer_model={flat.get('optimizer_model')}")

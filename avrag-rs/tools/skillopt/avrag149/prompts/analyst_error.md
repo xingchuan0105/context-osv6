@@ -12,6 +12,10 @@ the batch and propose a concise set of skill edits.
 4. Propose skill edits that address the COMMON patterns — not individual edge cases.
 5. Edits must be generalizable; do not hardcode task-specific values.
 6. Only patch gaps in the skill — do not duplicate existing content.
+7. ANTI-MEMORIZATION (hard rule, D6-⑤): NEVER write any concrete question,
+   entity name, number, reference answer, or citation fragment into the skill.
+   If an edit depends on a specific task's fact, rewrite it as an abstract
+   generalizable rule, or drop it. The skill must generalize to unseen questions.
 
 You will be told the maximum number of edits (the budget L). Produce AT MOST L edits,
 focusing on the highest-impact patterns. You may produce fewer if warranted.
