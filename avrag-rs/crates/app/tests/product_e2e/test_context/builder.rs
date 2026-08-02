@@ -22,6 +22,12 @@ use super::super::{
 use super::TestContext;
 use super::config::E2eBootstrapConfig;
 
+/// Workspace root (avrag-rs/) as an absolute path resolved at compile time.
+/// Worker processes inherit CWD from the harness, and several runtime paths
+/// (`struct_store_dir` → `storage/struct_store`, prompt dirs) resolve relative
+/// to the workspace root; spawning the worker with this CWD keeps them reachable.
+pub(crate) const WORKSPACE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+
 /// Persistent PG + object store for long-lived RAG smoke corpora (survives `cargo test` reruns).
 pub(crate) struct PersistentSmokeInfra {
     pub postgres_url: String,
@@ -482,6 +488,7 @@ impl TestContext {
             .expect("find worker binary");
         let worker_log_path = object_store_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
+        cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();
         worker_bootstrap.auto_migrate = false;
         let worker_id = smoke_worker_id();
@@ -607,6 +614,7 @@ impl TestContext {
             .expect("find worker binary");
         let worker_log_path = placeholder_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
+        cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();
         worker_bootstrap.auto_migrate = false;
         let worker_id = smoke_worker_id();
@@ -727,6 +735,7 @@ impl TestContext {
             .expect("find worker binary");
         let worker_log_path = placeholder_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
+        cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();
         worker_bootstrap.auto_migrate = false;
         let worker_id = smoke_worker_id();
