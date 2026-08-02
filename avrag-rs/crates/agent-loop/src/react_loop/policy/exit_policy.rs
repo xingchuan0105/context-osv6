@@ -2,6 +2,9 @@ use avrag_llm::ChatMessage;
 use contracts::{ToolResult, ToolStatus};
 
 use super::config::{LoopExitConfig, ModeConfig};
+use super::super::answer_contract::{
+    contains_host_observation_shell, is_code_only_answer,
+};
 
 /// Tools whose payloads count as **answer-grade chunks** (unlock final answer).
 /// Catalog-only tools (`doc_profile` / `doc_metadata`) are intentionally excluded:
@@ -56,7 +59,13 @@ pub fn decide_synthesis_gate(
 
     if let Some(answer) = direct_answer {
         if loop_exit.skip_synthesis_on_direct_answer {
-            return SynthesisGate::SkipSynthesisUseDirect(answer.to_string());
+            // A DirectAnswer that is code-only or pastes a host observation
+            // shell must not surface as final prose — same class as the
+            // synthesis prose-only contract. Route to synthesis (which runs
+            // the one-repair-round gate) instead of short-circuiting.
+            if !is_code_only_answer(answer) && !contains_host_observation_shell(answer) {
+                return SynthesisGate::SkipSynthesisUseDirect(answer.to_string());
+            }
         }
     }
 
@@ -440,6 +449,42 @@ mod tests {
         assert_eq!(
             decide_synthesis_gate(&loop_exit, false, Some("model prose"), &[], "q"),
             SynthesisGate::SkipSynthesisUseDirect("model prose".to_string())
+        );
+    }
+
+    #[test]
+    fn decide_synthesis_gate_routes_code_only_direct_to_synthesis() {
+        let loop_exit = LoopExitConfig {
+            require_evidence: true,
+            allow_content_early_stop: true,
+            skip_synthesis_on_direct_answer: true,
+        };
+        // Code-only and host-observation-shell direct answers must not
+        // short-circuit; they route to synthesis (which runs the prose-only
+        // repair gate). Prose is unaffected.
+        assert_eq!(
+            decide_synthesis_gate(
+                &loop_exit,
+                false,
+                Some("<code language=\"python\">\nprint(1)\n</code>"),
+                &[],
+                "q"
+            ),
+            SynthesisGate::EnterSynthesis
+        );
+        assert_eq!(
+            decide_synthesis_gate(
+                &loop_exit,
+                false,
+                Some("<retrieval_summary>\nfake\n</retrieval_summary>"),
+                &[],
+                "q"
+            ),
+            SynthesisGate::EnterSynthesis
+        );
+        assert_eq!(
+            decide_synthesis_gate(&loop_exit, false, Some("```python\nprint(1)\n```"), &[], "q"),
+            SynthesisGate::EnterSynthesis
         );
     }
 
