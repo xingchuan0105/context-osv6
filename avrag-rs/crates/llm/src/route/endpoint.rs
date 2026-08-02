@@ -40,19 +40,6 @@ impl Endpoint {
         }
         Ok(url)
     }
-
-    pub fn merge(mut self, other: &Endpoint) -> Self {
-        if other.base_url.is_some() {
-            self.base_url = other.base_url.clone();
-        }
-        if !other.path.is_empty() {
-            self.path = other.path.clone();
-        }
-        if !other.query.is_empty() {
-            self.query.extend(other.query.iter().cloned());
-        }
-        self
-    }
 }
 
 fn urlencoding(value: &str) -> String {

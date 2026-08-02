@@ -4,7 +4,6 @@ pub mod embedding;
 pub mod planner;
 pub mod protocols;
 pub mod provider_profiles;
-pub mod providers;
 pub mod rate_limiter;
 pub mod reranker;
 pub mod route;
@@ -28,7 +27,6 @@ pub use provider_profiles::{
     AuthStyle, PROVIDER_PROFILES, ProtocolKind, ProviderProfile, api_key_url_for_provider,
     find_provider_profile,
 };
-pub use providers::Provider;
 pub use rate_limiter::{
     RateLimitError, RateLimiter, SharedRateLimiter, default_rpm_limit, default_tpm_limit,
     provider_defaults,
@@ -37,7 +35,7 @@ pub use reranker::{
     MultiModalRerankDocument, MultiModalRerankResult, RerankResult, RerankerClient,
 };
 pub use route::{
-    AnyRoute, Auth, DetectedProtocol, Endpoint, Framing, Route, RoutePatch,
+    AnyRoute, Auth, DetectedProtocol, Endpoint, ReqwestTransport, Route, Transport, TransportBody,
     build_openai_chat_route, build_openai_responses_route, build_route_from_config,
     detect_protocol,
 };
@@ -57,47 +55,6 @@ pub use summary::SummaryGenerator;
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 pub use usage_observer::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
-
-#[async_trait::async_trait]
-pub trait LlmProvider: Send + Sync {
-    async fn complete(
-        &self,
-        messages: &[ChatMessage],
-        temperature: Option<f32>,
-    ) -> anyhow::Result<LlmResponse>;
-
-    async fn complete_with_tools(
-        &self,
-        messages: &[ChatMessage],
-        tools: &[contracts::ToolSpec],
-        temperature: Option<f32>,
-    ) -> anyhow::Result<LlmResponse> {
-        let _ = messages;
-        let _ = tools;
-        let _ = temperature;
-        anyhow::bail!("Native tool calls not supported")
-    }
-}
-
-#[async_trait::async_trait]
-impl LlmProvider for LlmClient {
-    async fn complete(
-        &self,
-        messages: &[ChatMessage],
-        temperature: Option<f32>,
-    ) -> anyhow::Result<LlmResponse> {
-        self.complete(messages, temperature).await
-    }
-
-    async fn complete_with_tools(
-        &self,
-        messages: &[ChatMessage],
-        tools: &[contracts::ToolSpec],
-        temperature: Option<f32>,
-    ) -> anyhow::Result<LlmResponse> {
-        self.complete_with_tools(messages, tools, temperature).await
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]

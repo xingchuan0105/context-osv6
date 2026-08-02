@@ -1,5 +1,5 @@
 //! Shared types for the OpenAI Responses protocol (DeepSeek `/v1/responses`).
-use crate::schema::{LlmUsage, Usage};
+use crate::schema::LlmUsage;
 use serde::Deserialize;
 
 pub(crate) const TEXT_BLOCK_ID: &str = "text-0";
@@ -143,13 +143,4 @@ pub(crate) struct ResponsesError {
     /// Machine-stable error code; surfaced via the message only for now.
     #[allow(dead_code)]
     pub(crate) code: Option<String>,
-}
-
-pub(crate) fn usage_to_event_usage(usage: &LlmUsage) -> Usage {
-    Usage {
-        prompt_tokens: usage.prompt_tokens,
-        completion_tokens: usage.completion_tokens,
-        total_tokens: usage.total_tokens,
-        cached_tokens: usage.cached_tokens,
-    }
 }

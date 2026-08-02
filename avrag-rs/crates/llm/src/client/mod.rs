@@ -64,12 +64,28 @@ impl LlmClient {
             .timeout(std::time::Duration::from_millis(config.timeout_ms))
             .build()
             .expect("reqwest client should build");
+        let transport: Arc<dyn crate::route::Transport> =
+            Arc::new(crate::route::ReqwestTransport::new(client));
+        Self::new_with_pool_and_transport(config, pool_config, transport)
+    }
+
+    /// Test seam: build a client whose single route and (optionally) its pool
+    /// share the given transport. Injecting a fake transport lets the pool
+    /// path run offline.
+    pub(crate) fn new_with_pool_and_transport(
+        config: ModelProviderConfig,
+        pool_config: LlmPoolConfig,
+        transport: Arc<dyn crate::route::Transport>,
+    ) -> Self {
         let rate_limit = ClientRateLimit::from_config(&config);
-        let route = build_route_from_config(&config, client);
+        let route = build_route_from_config(&config, transport.clone());
         let pool = if pool_config.is_empty() {
             None
         } else {
-            Some(std::sync::Arc::new(ProviderPool::new(pool_config)))
+            Some(std::sync::Arc::new(ProviderPool::new_with_transport(
+                pool_config,
+                transport,
+            )))
         };
         Self {
             config,
@@ -471,42 +487,23 @@ impl LlmClient {
             .map_err(Self::map_route_error)?;
         let mut headers = reqwest::header::HeaderMap::new();
         openai_route.auth.apply(&mut headers);
+        let body_value = serde_json::to_value(&body)
+            .map_err(|e| anyhow::anyhow!("failed to serialize completion body: {e}"))?;
 
-        let http_request = openai_route
-            .http_client
-            .post(url)
-            .headers(headers)
-            .header(
-                reqwest::header::CONTENT_TYPE,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("text/event-stream"),
-            )
-            .json(&body);
-
-        let response = tokio::select! {
-            res = http_request.send() => res,
+        let transport_body = tokio::select! {
+            res = openai_route.transport.post_json(&url, headers, &body_value, true) => res,
             _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
         };
-
-        let response = match response {
-            Ok(response) => {
-                if response.status().is_success() {
-                    response
-                } else {
-                    let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
-                    Self::record_call_failure(call);
-                    anyhow::bail!("Chat completion stream API error {}: {}", status, body);
-                }
-            }
-            Err(error) => {
+        let transport_body = match transport_body {
+            Ok(body) => body,
+            Err(err) => {
                 Self::record_call_failure(call);
-                return Err(anyhow::Error::new(error))
+                return Err(anyhow::Error::new(err))
                     .context("Failed to send chat completion stream request");
             }
+        };
+        let crate::route::TransportBody::Chunks(mut chunks) = transport_body else {
+            anyhow::bail!("unexpected buffered response for streaming request");
         };
 
         let mut parser = stream_parser::ChatCompletionStreamParser::new(
@@ -514,15 +511,16 @@ impl LlmClient {
             call.configured_model.clone(),
         );
 
-        let mut response = response;
         loop {
             let next_chunk = tokio::select! {
-                chunk = response.chunk() => chunk.context("Failed to read chat completion stream chunk")?,
+                chunk = chunks.next() => chunk,
                 _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
             };
             let Some(chunk) = next_chunk else {
                 break;
             };
+            let chunk = chunk
+                .map_err(|e| anyhow::Error::new(e).context("Failed to read chat completion stream chunk"))?;
 
             parser.feed_chunk(&chunk, on_content_delta, on_reasoning_delta)?;
         }
@@ -847,7 +845,6 @@ mod tests {
     use crate::routing::{LlmPoolConfig, PoolMemberConfig};
     use crate::{ApiStyle, ChatMessage};
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn provider_config(base_url: &str) -> ModelProviderConfig {
         ModelProviderConfig {
@@ -871,63 +868,121 @@ mod tests {
         }
     }
 
-    async fn serve(router: axum::Router) -> String {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
-        format!("http://{addr}")
-    }
-
-    fn sse(body: &'static str) -> impl axum::response::IntoResponse {
-        (
-            [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
-            body,
-        )
-    }
-
     const ROLE_FRAME: &str = "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n";
     const SUCCESS_BODY: &str = "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"B-WORLD\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\ndata: [DONE]\n\n";
+
+    /// Offline transport stub: routes by base-url prefix, records call URLs.
+    /// Pool tests run against this instead of real axum sockets.
+    #[derive(Debug, Clone)]
+    enum FakeHandler {
+        /// Serve an SSE body as a single chunk.
+        Sse(&'static str),
+        /// Fail with a non-2xx status.
+        Status(u16),
+        /// Inspect the Authorization header; if it equals `on_auth`, fail with
+        /// `error_status`, otherwise serve the success SSE body.
+        AuthGate {
+            on_auth: &'static str,
+            error_status: u16,
+        },
+    }
+
+    #[derive(Debug, Clone)]
+    struct FakeTransport {
+        handlers: std::sync::Arc<std::sync::Mutex<Vec<(String, FakeHandler)>>>,
+        calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl FakeTransport {
+        fn with_handlers(handlers: Vec<(String, FakeHandler)>) -> Self {
+            Self {
+                handlers: std::sync::Arc::new(std::sync::Mutex::new(handlers)),
+                calls: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            }
+        }
+
+        fn calls_for(&self, prefix: &str) -> usize {
+            self.calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|url| url.starts_with(prefix))
+                .count()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::route::Transport for FakeTransport {
+        async fn post_json(
+            &self,
+            url: &str,
+            headers: reqwest::header::HeaderMap,
+            _body: &serde_json::Value,
+            _stream: bool,
+        ) -> Result<crate::route::TransportBody, LlmError> {
+            self.calls.lock().unwrap().push(url.to_string());
+            let handler = self
+                .handlers
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(prefix, _)| url.starts_with(prefix))
+                .map(|(_, handler)| handler.clone())
+                .unwrap_or(FakeHandler::Status(500));
+            let sse = |body: &'static str| {
+                crate::route::TransportBody::Chunks(Box::pin(futures::stream::iter(vec![
+                    Ok(body.as_bytes().to_vec()),
+                ])))
+            };
+            match handler {
+                FakeHandler::Sse(body) => Ok(sse(body)),
+                FakeHandler::Status(status) => Err(LlmError::Api {
+                    status,
+                    body: format!("Chat completion stream API error {status}: fake"),
+                }),
+                FakeHandler::AuthGate {
+                    on_auth,
+                    error_status,
+                } => {
+                    let bearer = headers
+                        .get(reqwest::header::AUTHORIZATION)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or_default()
+                        .to_string();
+                    if bearer == on_auth {
+                        Err(LlmError::Api {
+                            status: error_status,
+                            body: format!(
+                                "Chat completion stream API error {error_status}: fake"
+                            ),
+                        })
+                    } else {
+                        Ok(sse(SUCCESS_BODY))
+                    }
+                }
+            }
+        }
+    }
 
     /// 交付边界（2026-08-01 验收必修）：首事件是 TextStart 标记（role chunk），
     /// 内容 delta 已交付后流内出错——不得 failover、不得退款、不得重复输出。
     #[tokio::test]
     async fn pool_stream_failure_after_delivered_delta_does_not_failover() {
-        let calls_a = Arc::new(AtomicUsize::new(0));
-        let calls_b = Arc::new(AtomicUsize::new(0));
-        let ca = calls_a.clone();
-        let url_a = serve(axum::Router::new().route(
-            "/chat/completions",
-            axum::routing::post(move || {
-                let c = ca.clone();
-                async move {
-                    c.fetch_add(1, Ordering::SeqCst);
-                    sse(concat!(
-                        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n",
-                        "data: {\"choices\":[{\"delta\":{\"content\":\"A-HELLO\"}}]}\n\n",
-                        "data: {not-valid-json\n\n"
-                    ))
-                }
-            }),
-        ))
-        .await;
-        let cb = calls_b.clone();
-        let url_b = serve(axum::Router::new().route(
-            "/chat/completions",
-            axum::routing::post(move || {
-                let c = cb.clone();
-                async move {
-                    c.fetch_add(1, Ordering::SeqCst);
-                    sse(SUCCESS_BODY)
-                }
-            }),
-        ))
-        .await;
-
-        let client = LlmClient::new_with_pool(
-            provider_config(&url_a),
-            LlmPoolConfig::new(vec![member(&url_a), member(&url_b)]),
+        let fake = FakeTransport::with_handlers(vec![
+            (
+                "fake://a".to_string(),
+                FakeHandler::Sse(concat!(
+                    "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n",
+                    "data: {\"choices\":[{\"delta\":{\"content\":\"A-HELLO\"}}]}\n\n",
+                    "data: {not-valid-json\n\n"
+                )),
+            ),
+            ("fake://b".to_string(), FakeHandler::Sse(SUCCESS_BODY)),
+        ]);
+        let client = LlmClient::new_with_pool_and_transport(
+            provider_config("fake://a"),
+            LlmPoolConfig::new(vec![member("fake://a"), member("fake://b")]),
+            Arc::new(fake.clone()),
         );
         let mut received = String::new();
         let result = client
@@ -942,9 +997,9 @@ mod tests {
 
         assert!(result.is_err(), "流内错误应报错返回");
         assert_eq!(received, "A-HELLO", "内容只交付一次，不得被 failover 重放");
-        assert_eq!(calls_a.load(Ordering::SeqCst), 1);
+        assert_eq!(fake.calls_for("fake://a"), 1);
         assert_eq!(
-            calls_b.load(Ordering::SeqCst),
+            fake.calls_for("fake://b"),
             0,
             "交付后失败不得切到下一 member"
         );
@@ -956,28 +1011,14 @@ mod tests {
     /// 交付前失败（首事件即 HTTP 错误）→ 正常 failover 到下一 member。
     #[tokio::test]
     async fn pool_stream_failure_before_first_event_fails_over() {
-        let calls_a = Arc::new(AtomicUsize::new(0));
-        let ca = calls_a.clone();
-        let url_a = serve(axum::Router::new().route(
-            "/chat/completions",
-            axum::routing::post(move || {
-                let c = ca.clone();
-                async move {
-                    c.fetch_add(1, Ordering::SeqCst);
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR
-                }
-            }),
-        ))
-        .await;
-        let url_b = serve(axum::Router::new().route(
-            "/chat/completions",
-            axum::routing::post(|| async { sse(SUCCESS_BODY) }),
-        ))
-        .await;
-
-        let client = LlmClient::new_with_pool(
-            provider_config(&url_a),
-            LlmPoolConfig::new(vec![member(&url_a), member(&url_b)]),
+        let fake = FakeTransport::with_handlers(vec![
+            ("fake://a".to_string(), FakeHandler::Status(500)),
+            ("fake://b".to_string(), FakeHandler::Sse(SUCCESS_BODY)),
+        ]);
+        let client = LlmClient::new_with_pool_and_transport(
+            provider_config("fake://a"),
+            LlmPoolConfig::new(vec![member("fake://a"), member("fake://b")]),
+            Arc::new(fake.clone()),
         );
         let mut received = String::new();
         let result = client
@@ -992,39 +1033,27 @@ mod tests {
 
         assert!(result.is_ok(), "交付前失败应 failover 成功: {result:?}");
         assert_eq!(received, "B-WORLD");
-        assert_eq!(calls_a.load(Ordering::SeqCst), 1);
+        assert_eq!(fake.calls_for("fake://a"), 1);
     }
 
     /// 429 未交付 → KeyOnly 冷却(只冷却该 key),同 member 的 sibling key 仍被尝试;
     /// 若误判 Provider 会冷却整个 member 导致 NoCapacity(验收建议①)。
     #[tokio::test]
     async fn pool_stream_429_cools_key_only_sibling_key_still_tried() {
-        let url = serve(axum::Router::new().route(
-            "/chat/completions",
-            axum::routing::post(|req: axum::http::Request<axum::body::Body>| async move {
-                let bearer = req
-                    .headers()
-                    .get(axum::http::header::AUTHORIZATION)
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or_default()
-                    .to_string();
-                if bearer == "Bearer key-429" {
-                    axum::response::IntoResponse::into_response(
-                        axum::http::StatusCode::TOO_MANY_REQUESTS,
-                    )
-                } else {
-                    axum::response::IntoResponse::into_response(sse(SUCCESS_BODY))
-                }
-            }),
-        ))
-        .await;
-
-        let client = LlmClient::new_with_pool(
-            provider_config(&url),
+        let fake = FakeTransport::with_handlers(vec![(
+            "fake://url".to_string(),
+            FakeHandler::AuthGate {
+                on_auth: "Bearer key-429",
+                error_status: 429,
+            },
+        )]);
+        let client = LlmClient::new_with_pool_and_transport(
+            provider_config("fake://url"),
             LlmPoolConfig::new(vec![PoolMemberConfig::with_keys(
-                provider_config(&url),
+                provider_config("fake://url"),
                 vec!["key-429".to_string(), "key-ok".to_string()],
             )]),
+            Arc::new(fake.clone()),
         );
         let mut received = String::new();
         let result = client

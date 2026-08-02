@@ -1,10 +1,20 @@
-use crate::schema::{LlmError, LlmEvent, LlmRequest, LlmResponse};
+use crate::schema::{LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage, Usage};
 use serde::Serialize;
 
 pub mod anthropic_messages;
 pub mod gemini;
 pub mod openai_chat;
 pub mod openai_responses;
+
+/// Single `LlmUsage -> Usage` projection shared by all protocols.
+pub(crate) fn usage_to_event_usage(usage: &LlmUsage) -> Usage {
+    Usage {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        total_tokens: usage.total_tokens,
+        cached_tokens: usage.cached_tokens,
+    }
+}
 
 pub use anthropic_messages::AnthropicMessagesProtocol;
 pub use gemini::GeminiProtocol;

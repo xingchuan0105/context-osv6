@@ -2,12 +2,13 @@ use crate::protocols::{
     AnthropicMessagesProtocol, GeminiProtocol, OpenAiChatProtocol, OpenAiResponsesProtocol,
     Protocol,
 };
-use crate::route::{auth::Auth, endpoint::Endpoint, framing::SseFramer, transport};
+use crate::route::{auth::Auth, endpoint::Endpoint, framing::SseFramer, Transport, TransportBody};
 use crate::schema::{LlmError, LlmEvent, LlmRequest, LlmResponse};
 use async_stream::try_stream;
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use reqwest::header::HeaderMap;
 use std::pin::Pin;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Route<P: Protocol> {
@@ -16,8 +17,7 @@ pub struct Route<P: Protocol> {
     pub protocol: P,
     pub endpoint: Endpoint,
     pub auth: Auth,
-    pub framing: super::framing::Framing,
-    pub http_client: reqwest::Client,
+    pub transport: Arc<dyn Transport>,
 }
 
 #[derive(Debug, Clone)]
@@ -125,13 +125,13 @@ pub fn detect_protocol(base_url: &str) -> DetectedProtocol {
 
 pub fn build_route_from_config(
     config: &crate::ModelProviderConfig,
-    http_client: reqwest::Client,
+    transport: Arc<dyn Transport>,
 ) -> AnyRoute {
     // Explicit `api_style=responses` opts a provider into the Responses
     // protocol even though its base_url is shared with chat completions
     // (e.g. `https://api.deepseek.com` serves both).
     if config.api_style == Some(crate::ApiStyle::OpenAiResponses) {
-        return AnyRoute::OpenAiResponses(build_openai_responses_route(config, http_client));
+        return AnyRoute::OpenAiResponses(build_openai_responses_route(config, transport));
     }
 
     let provider = config.provider_name();
@@ -142,8 +142,7 @@ pub fn build_route_from_config(
             protocol: AnthropicMessagesProtocol,
             endpoint: Endpoint::new(config.base_url.clone(), "/messages"),
             auth: Auth::Anthropic(config.api_key.clone()),
-            framing: super::framing::Framing::Sse,
-            http_client,
+            transport,
         }),
         DetectedProtocol::Gemini => AnyRoute::Gemini(Route {
             id: provider.clone(),
@@ -151,44 +150,15 @@ pub fn build_route_from_config(
             protocol: GeminiProtocol,
             endpoint: Endpoint::new(config.base_url.clone(), "/models"),
             auth: Auth::XGoogApiKey(config.api_key.clone()),
-            framing: super::framing::Framing::Sse,
-            http_client,
+            transport,
         }),
         DetectedProtocol::OpenAiChat | DetectedProtocol::OpenAiResponses => {
-            AnyRoute::OpenAi(build_openai_chat_route(config, http_client))
+            AnyRoute::OpenAi(build_openai_chat_route(config, transport))
         }
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct RoutePatch {
-    pub id: Option<String>,
-    pub provider: Option<String>,
-    pub endpoint: Option<Endpoint>,
-    pub auth: Option<Auth>,
-    pub framing: Option<super::framing::Framing>,
 }
 
 impl<P: Protocol> Route<P> {
-    pub fn with(mut self, patch: RoutePatch) -> Self {
-        if let Some(id) = patch.id {
-            self.id = id;
-        }
-        if let Some(provider) = patch.provider {
-            self.provider = provider;
-        }
-        if let Some(endpoint) = patch.endpoint {
-            self.endpoint = self.endpoint.merge(&endpoint);
-        }
-        if let Some(auth) = patch.auth {
-            self.auth = auth;
-        }
-        if let Some(framing) = patch.framing {
-            self.framing = framing;
-        }
-        self
-    }
-
     fn render_url(&self, req: &LlmRequest) -> Result<String, LlmError> {
         let mut endpoint = self.endpoint.clone();
         if let Some(path) = self.protocol.endpoint_path(req) {
@@ -209,13 +179,21 @@ impl<P: Protocol> Route<P> {
         let url = self.render_url(&req)?;
         let mut headers = HeaderMap::new();
         self.auth.apply(&mut headers);
+        let body_value = serde_json::to_value(&body)
+            .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 
-        let response = transport::post_json(&self.http_client, &url, headers, &body, false).await?;
-        let response = transport::ensure_success(response, false).await?;
-        let value: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| LlmError::parse(format!("failed to read completion JSON: {e}")))?;
+        let value = match self
+            .transport
+            .post_json(&url, headers, &body_value, false)
+            .await?
+        {
+            TransportBody::Json(value) => value,
+            TransportBody::Chunks(_) => {
+                return Err(LlmError::protocol(
+                    "unexpected streaming response for non-streaming request",
+                ))
+            }
+        };
 
         let mut state = self.protocol.initial_state(&req);
         let _events = self.protocol.step(&mut state, &value)?;
@@ -238,15 +216,22 @@ impl<P: Protocol> Route<P> {
             let url = self.render_url(&req)?;
             let mut headers = HeaderMap::new();
             self.auth.apply(&mut headers);
+            let body_value = serde_json::to_value(&body)
+                .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 
-            let response = transport::post_json(&self.http_client, &url, headers, &body, true).await?;
-            let response = transport::ensure_success(response, true).await?;
+            let TransportBody::Chunks(mut chunks) = self
+                .transport
+                .post_json(&url, headers, &body_value, true)
+                .await?
+            else {
+                panic!("transport must not return a buffered body for a streaming request")
+            };
 
             let mut framer = SseFramer::new();
             let mut state = self.protocol.initial_state(&req);
-            let mut response = response;
 
-            while let Some(chunk) = response.chunk().await.map_err(LlmError::Http)? {
+            while let Some(chunk) = chunks.next().await {
+                let chunk = chunk?;
                 let frames = framer.feed_chunk(&chunk)?;
                 for frame in frames {
                     let event = self.protocol.decode_frame(&frame)?;
@@ -273,7 +258,7 @@ impl<P: Protocol> Route<P> {
 
 pub fn build_openai_chat_route(
     config: &crate::ModelProviderConfig,
-    http_client: reqwest::Client,
+    transport: Arc<dyn Transport>,
 ) -> Route<OpenAiChatProtocol> {
     let auth = if config.api_key.is_empty()
         && config.base_url.to_ascii_lowercase().contains("localhost")
@@ -290,14 +275,13 @@ pub fn build_openai_chat_route(
         protocol: OpenAiChatProtocol,
         endpoint: Endpoint::new(config.base_url.clone(), "/chat/completions"),
         auth,
-        framing: super::framing::Framing::Sse,
-        http_client,
+        transport,
     }
 }
 
 pub fn build_openai_responses_route(
     config: &crate::ModelProviderConfig,
-    http_client: reqwest::Client,
+    transport: Arc<dyn Transport>,
 ) -> Route<OpenAiResponsesProtocol> {
     let auth = if config.api_key.is_empty()
         && config.base_url.to_ascii_lowercase().contains("localhost")
@@ -316,14 +300,19 @@ pub fn build_openai_responses_route(
         // segment (e.g. `https://api.deepseek.com`); keep the same semantics.
         endpoint: Endpoint::new(config.base_url.clone(), "/v1/responses"),
         auth,
-        framing: super::framing::Framing::Sse,
-        http_client,
+        transport,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{AnyRoute, DetectedProtocol, build_route_from_config, detect_protocol};
+    use crate::route::ReqwestTransport;
+    use std::sync::Arc;
+
+    fn offline_transport() -> Arc<dyn crate::route::Transport> {
+        Arc::new(ReqwestTransport::new(reqwest::Client::new()))
+    }
 
     #[test]
     fn detect_protocol_routes_anthropic_and_gemini() {
@@ -347,7 +336,7 @@ mod tests {
 
     #[test]
     fn api_style_responses_selects_responses_protocol() {
-        let client = reqwest::Client::new();
+        let transport = offline_transport();
         let responses = build_route_from_config(
             &crate::ModelProviderConfig {
                 base_url: "https://api.deepseek.com".into(),
@@ -361,7 +350,7 @@ mod tests {
                 rpm_limit: None,
                 tpm_limit: None,
             },
-            client.clone(),
+            transport.clone(),
         );
         assert_eq!(responses.protocol_id(), "openai_responses");
         let endpoint = match &responses {
@@ -384,14 +373,14 @@ mod tests {
                 rpm_limit: None,
                 tpm_limit: None,
             },
-            client,
+            transport,
         );
         assert_eq!(chat.protocol_id(), "openai_chat");
     }
 
     #[test]
     fn build_route_from_config_selects_protocol() {
-        let client = reqwest::Client::new();
+        let transport = offline_transport();
         let anthropic = build_route_from_config(
             &crate::ModelProviderConfig {
                 base_url: "https://api.anthropic.com/v1".into(),
@@ -405,7 +394,7 @@ mod tests {
                 rpm_limit: None,
                 tpm_limit: None,
             },
-            client.clone(),
+            transport.clone(),
         );
         assert_eq!(anthropic.protocol_id(), "anthropic_messages");
 
@@ -422,7 +411,7 @@ mod tests {
                 rpm_limit: None,
                 tpm_limit: None,
             },
-            client.clone(),
+            transport.clone(),
         );
         assert_eq!(gemini.protocol_id(), "gemini");
 
@@ -439,7 +428,7 @@ mod tests {
                 rpm_limit: None,
                 tpm_limit: None,
             },
-            client,
+            transport,
         );
         assert_eq!(openai.protocol_id(), "openai_chat");
     }

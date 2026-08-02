@@ -13,7 +13,7 @@
 
 use crate::ModelProviderConfig;
 use crate::client::rate_limit::ClientRateLimit;
-use crate::route::{AnyRoute, build_route_from_config};
+use crate::route::{AnyRoute, ReqwestTransport, Transport, build_route_from_config};
 use crate::schema::{LlmError, LlmResponse};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
@@ -175,6 +175,23 @@ impl std::fmt::Debug for ProviderPool {
 
 impl ProviderPool {
     pub fn new(config: LlmPoolConfig) -> Self {
+        Self::build(config, |member_config, keys| {
+            build_keys(member_config, keys, None)
+        })
+    }
+
+    /// Build a pool where every member route shares the given transport. Tests
+    /// inject a fake transport so the pool path runs offline (no sockets).
+    pub fn new_with_transport(config: LlmPoolConfig, transport: Arc<dyn Transport>) -> Self {
+        Self::build(config, |member_config, keys| {
+            build_keys(member_config, keys, Some(transport.clone()))
+        })
+    }
+
+    fn build(
+        config: LlmPoolConfig,
+        build_keys: impl Fn(ModelProviderConfig, Vec<String>) -> Vec<KeyState>,
+    ) -> Self {
         let cooldown = Duration::from_secs(config.cooldown_secs.max(1));
         let members = config
             .members
@@ -339,11 +356,21 @@ impl ProviderPool {
     }
 }
 
-fn build_keys(mut config: ModelProviderConfig, api_keys: Vec<String>) -> Vec<KeyState> {
-    let http_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(config.timeout_ms))
-        .build()
-        .expect("reqwest client should build");
+fn build_keys(
+    mut config: ModelProviderConfig,
+    api_keys: Vec<String>,
+    transport: Option<Arc<dyn Transport>>,
+) -> Vec<KeyState> {
+    let transport = match transport {
+        Some(transport) => transport,
+        None => {
+            let http_client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(config.timeout_ms))
+                .build()
+                .expect("reqwest client should build");
+            Arc::new(ReqwestTransport::new(http_client))
+        }
+    };
     let provider = config.provider_name();
     let model = config.model.clone();
     api_keys
@@ -351,7 +378,7 @@ fn build_keys(mut config: ModelProviderConfig, api_keys: Vec<String>) -> Vec<Key
         .filter(|key| !key.is_empty())
         .map(|key| {
             config.api_key = key;
-            let route = build_route_from_config(&config, http_client.clone());
+            let route = build_route_from_config(&config, transport.clone());
             KeyState {
                 provider: provider.clone(),
                 model: model.clone(),

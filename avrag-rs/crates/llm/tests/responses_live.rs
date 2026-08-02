@@ -13,12 +13,13 @@
 //!   - `AGENT_LLM_MODEL` must be `deepseek-v4-flash` (the only model that
 //!     currently supports Responses; `deepseek-v4-pro` arrives 2026-08)
 
-use avrag_llm::route::build_route_from_config;
+use avrag_llm::route::{ReqwestTransport, build_route_from_config};
 use avrag_llm::{
     ApiStyle, ChatMessage, GenerationOptions, LlmEvent, LlmRequest, LlmResponse,
     ModelProviderConfig, ToolDefinition,
 };
 use futures::StreamExt;
+use std::sync::Arc;
 
 fn env_config() -> Option<ModelProviderConfig> {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -55,7 +56,7 @@ async fn responses_live_non_streaming() {
         return;
     };
     let http = reqwest::Client::new();
-    let route = build_route_from_config(&config, http);
+    let route = build_route_from_config(&config, Arc::new(ReqwestTransport::new(http)));
     assert_eq!(route.protocol_id(), "openai_responses");
 
     let request = LlmRequest::new(vec![ChatMessage::user("Reply with exactly: OK")], config)
@@ -84,7 +85,7 @@ async fn responses_live_streaming() {
         return;
     };
     let http = reqwest::Client::new();
-    let route = build_route_from_config(&config, http);
+    let route = build_route_from_config(&config, Arc::new(ReqwestTransport::new(http)));
     assert_eq!(route.protocol_id(), "openai_responses");
 
     let request = LlmRequest::new(vec![ChatMessage::user("Count from 1 to 3.")], config)
@@ -121,7 +122,7 @@ async fn responses_live_tool_call() {
         return;
     };
     let http = reqwest::Client::new();
-    let route = build_route_from_config(&config, http);
+    let route = build_route_from_config(&config, Arc::new(ReqwestTransport::new(http)));
 
     let request = LlmRequest::new(
         vec![ChatMessage::user(

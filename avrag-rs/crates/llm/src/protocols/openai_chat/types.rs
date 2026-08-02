@@ -1,5 +1,5 @@
 //! Shared types for the OpenAI chat-completions protocol.
-use crate::schema::{LlmUsage, Usage};
+use crate::schema::LlmUsage;
 use serde::Deserialize;
 
 pub(crate) const TEXT_BLOCK_ID: &str = "text-0";
@@ -211,14 +211,5 @@ pub(crate) fn apply_delta_to_accumulators(
             accumulated_content.push_str(content);
             on_content_delta(content);
         }
-    }
-}
-
-pub(crate) fn usage_to_event_usage(usage: &LlmUsage) -> Usage {
-    Usage {
-        prompt_tokens: usage.prompt_tokens,
-        completion_tokens: usage.completion_tokens,
-        total_tokens: usage.total_tokens,
-        cached_tokens: usage.cached_tokens,
     }
 }

@@ -1,11 +1,5 @@
 use crate::schema::LlmError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Framing {
-    #[default]
-    Sse,
-}
-
 #[derive(Debug, Default)]
 pub struct SseFramer {
     buffer: Vec<u8>,

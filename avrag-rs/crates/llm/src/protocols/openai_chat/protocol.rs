@@ -1,6 +1,7 @@
 //! [`Protocol`] implementation for OpenAI chat completions.
 use super::request::build_chat_completion_request_body;
 use super::types::*;
+use crate::protocols::usage_to_event_usage;
 use crate::protocols::Protocol;
 use crate::schema::{FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage};
 

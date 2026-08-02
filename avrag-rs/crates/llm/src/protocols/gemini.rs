@@ -1,5 +1,6 @@
+use super::usage_to_event_usage;
 use super::Protocol;
-use crate::schema::{FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage, Usage};
+use crate::schema::{FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, LlmUsage};
 use serde::Deserialize;
 
 const TEXT_BLOCK_ID: &str = "text-0";
@@ -117,15 +118,6 @@ fn usage_from_gemini(usage: &GeminiUsageMetadata, provider: &str, model: &str) -
         model: model.to_string(),
         cached_tokens: 0,
         reasoning_tokens: 0,
-    }
-}
-
-fn usage_to_event_usage(usage: &LlmUsage) -> Usage {
-    Usage {
-        prompt_tokens: usage.prompt_tokens,
-        completion_tokens: usage.completion_tokens,
-        total_tokens: usage.total_tokens,
-        cached_tokens: usage.cached_tokens,
     }
 }
 
