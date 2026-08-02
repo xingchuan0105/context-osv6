@@ -1,4 +1,4 @@
-use super::profile_types::{
+use super::types::{
     ObservedConflict, ProfileDelta, ProfileSingleton, ProfileSlot, SessionHint, SingletonUpdate,
     SlotUpdate, StoredConflict, StoredSessionHint, UserProfile,
 };

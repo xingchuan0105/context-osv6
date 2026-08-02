@@ -24,6 +24,7 @@ pub mod llm_context;
 pub mod memory_helpers;
 pub mod orchestrator_context;
 pub mod prompts;
+pub mod profile_update;
 pub mod rag_execute;
 pub mod rag_prompts;
 pub mod sessions;
@@ -47,9 +48,7 @@ pub use external_agent_guide::{attach_operation_guide, load_invoke_operation_gui
 pub use llm_context::LlmContext;
 pub use memory_helpers::{
     agent_icon, agent_name, build_answer, build_citations, build_degrade_trace, build_mode_debug,
-    build_planner_output, build_sources, derive_profile_domains, derive_profile_topics,
-    detect_preferred_style, estimate_token_count, merge_general_profile_custom_preferences,
-    next_message_id, status_label,
+    build_planner_output, build_sources, estimate_token_count, next_message_id, status_label,
 };
 pub use mode_assemble::{AssembledMode, assemble_mode};
 pub use orchestrator_context::OrchestratorContext;

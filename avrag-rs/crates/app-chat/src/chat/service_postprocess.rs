@@ -116,78 +116,8 @@ impl ChatContext {
             .remember_explicit_agent_preference(req.query.trim())
             .await;
 
-        if is_direct_chat_mode(&execution.mode)
-            && let Some(ref cm) = self.orchestrator.chatmemory()
-            && let Ok(messages) = chat_persistence.list_messages(&self.auth, session_uuid).await
-            && let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid())
-        {
-            let existing_profile = chat_persistence
-                .get_user_profile(&self.auth, user_id)
-                .await
-                .ok()
-                .flatten();
-
-            let should_update = match &existing_profile {
-                Some(profile) => {
-                    let since_last =
-                        chrono::Utc::now().signed_duration_since(profile.inferred_at);
-                    since_last.num_hours() >= 24
-                }
-                None => true,
-            };
-
-            if should_update {
-                let raw_custom_preferences = existing_profile
-                    .as_ref()
-                    .map(|p| p.custom_preferences.clone())
-                    .unwrap_or_else(|| serde_json::json!({}));
-                let agent_memory = self
-                    .current_user_preferences()
-                    .await
-                    .ok()
-                    .map(|preferences| preferences.agent_memory)
-                    .unwrap_or_default();
-                let custom_preferences = merge_general_profile_custom_preferences(
-                    raw_custom_preferences,
-                    agent_memory,
-                    req.query.trim(),
-                    &execution.input_usage_text,
-                );
-                let structured_profile = existing_profile
-                    .as_ref()
-                    .map(|p| p.structured_profile.clone())
-                    .unwrap_or_else(|| serde_json::json!({}));
-                let _ = cm
-                    .update_user_profile(
-                        &self.auth,
-                        avrag_chatmemory::UserProfileUpdate {
-                            expertise_domains: derive_profile_domains(&messages, req.query.trim()),
-                            preferred_answer_style: detect_preferred_style(req.query.trim()),
-                            frequently_asked_topics: derive_profile_topics(&messages, req.query.trim()),
-                            custom_preferences,
-                            structured_profile,
-                            inference_version: "general-v1".to_string(),
-                        },
-                    )
-                    .await;
-            }
-        }
-
-        if let Ok(messages) = chat_persistence.list_messages(&self.auth, session_uuid).await {
-            let recent_turns = build_recent_turns_context(&messages, PROFILE_INPUT_TURN_WINDOW);
-            if !recent_turns.trim().is_empty() {
-                let profile_updated = self
-                    .maybe_update_structured_profile(chat_persistence, session, &recent_turns)
-                    .await;
-                if profile_updated
-                    && is_direct_chat_mode(&execution.mode)
-                    && let Some(mode_debug) = execution.response.mode_debug.as_mut()
-                    && let Some(general) = mode_debug.general.as_mut()
-                {
-                    general.insert("profile_updated".to_string(), serde_json::json!(true));
-                }
-            }
-        }
+        self.maybe_update_profiles(chat_persistence, session_uuid, execution)
+            .await?;
 
         let event_name = if req.source_type.as_deref() == Some("share") {
             analytics::ProductEventName::SharedKbChatCompleted
@@ -342,18 +272,4 @@ impl ChatContext {
 
 fn is_direct_chat_mode(mode: &str) -> bool {
     matches!(mode, "chat")
-}
-
-/// Recent raw turns fed to the L3 dream layer (not session-summary).
-const PROFILE_INPUT_TURN_WINDOW: usize = 12;
-
-fn build_recent_turns_context(messages: &[contracts::chat::ChatMessage], max_turns: usize) -> String {
-    messages
-        .iter()
-        .rev()
-        .take(max_turns)
-        .rev()
-        .map(|item| format!("{}: {}", item.role, item.content))
-        .collect::<Vec<_>>()
-        .join("\n")
 }

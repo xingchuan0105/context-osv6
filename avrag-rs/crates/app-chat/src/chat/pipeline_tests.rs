@@ -11,6 +11,7 @@ mod tests {
         StorageContext, StorageContextParts, StorageInfra, StorageStores,
     };
     use app_documents::DocumentContext;
+    use app_core::ProfilePort;
     use avrag_guardrails::GuardPipeline;
     use common::{AppError, new_id, now_rfc3339};
     use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
@@ -20,15 +21,19 @@ mod tests {
     use uuid::Uuid;
 
     use crate::chat::pipeline_steps::{dispatch_mode, inject_assembled_metadata};
+    use crate::chat::pipeline::ChatExecution;
     use crate::{
         CapabilitySet, ChatContext, LlmContext, OrchestratorContext, assemble_mode,
         resolve_capabilities,
     };
+    use contracts::chat::{ChatResponse, ModeDebug, TraceInfo};
 
     use crate::agents::service::UnifiedAgentService;
     use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
     use async_trait::async_trait;
     use std::sync::Mutex;
+
+    use crate::profile_update::{ProfileDelta, ProfileDeltaStrategy};
 
     struct PipelineEchoAgent;
 
@@ -192,6 +197,358 @@ mod tests {
             created_at: now.clone(),
             updated_at: now,
         }
+    }
+
+    /// Build a ChatContext with the in-memory chat persistence wired into BOTH the
+    /// storage chat_persistence slot and the orchestrator chatmemory (ChatMemory),
+    /// plus a seeded workspace + session. Returns the context and the persistence
+    /// handle (for asserting stored profile rows).
+    fn test_chat_context_with_profiles() -> (
+        ChatContext,
+        Arc<app_core::MemoryChatPersistence>,
+        ChatSession,
+        String,
+    ) {
+        let user_id = Uuid::nil();
+        let workspace_id = new_id();
+        let session_id = new_id();
+        let notebook = Workspace {
+            id: workspace_id.clone(),
+            owner_user_id: test_auth().user_id().to_string(),
+            owner_id: user_id.to_string(),
+            name: "Test Workspace".to_string(),
+            title: "Test Workspace".to_string(),
+            description: String::new(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            document_count: 0,
+            status_summary: Default::default(),
+            shared: false,
+        };
+        let now = now_rfc3339();
+        let session = ChatSession {
+            id: session_id.clone(),
+            workspace_id: workspace_id.clone(),
+            title: None,
+            agent_type: "chat".to_string(),
+            pinned: false,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let mut memory = MemoryState::default();
+        memory
+            .workspaces
+            .insert(workspace_id.clone(), notebook.clone());
+        memory.sessions.insert(session_id.clone(), session.clone());
+        let memory_arc: Arc<RwLock<MemoryState>> = Arc::new(RwLock::new(memory));
+        let chatmem: Arc<app_core::MemoryChatPersistence> =
+            Arc::new(app_core::MemoryChatPersistence::new(memory_arc.clone()));
+        let state = ChatContext {
+            auth: test_auth(),
+            storage: StorageContext::from_parts(StorageContextParts {
+                infra: StorageInfra {
+                    postgres_health: None,
+                    postgres_configured: false,
+                    uses_memory_adapters: StorageInfra::memory_adapters_flag(true),
+                    max_upload_file_size_bytes: 10 * 1024 * 1024,
+                },
+                stores: StorageStores {
+                    document_store: None,
+                    auth_store: None,
+                    admin_store: None,
+                    billing_quota: None,
+                    billing_store: None,
+                    share_store: None,
+                    chat_persistence: Some(chatmem.clone()),
+                },
+                memory: MemoryStateHandles {
+                    inner: memory_arc.clone(),
+                    api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+                    api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+                },
+                objects: ObjectStoreConfig {
+                    object_store: Arc::new(TestObjectStore),
+                    public_base_url: "http://localhost".to_string(),
+                    object_root: "/tmp/avrag-test".to_string(),
+                    upload_expire_sec: 3600,
+                    download_expire_sec: 3600,
+                },
+            }),
+            llm_ctx: LlmContext::new(None, None),
+            orchestrator: OrchestratorContext::new(
+                Some(Arc::new(UnifiedAgentService::new(Box::new(
+                    PipelineEchoAgent,
+                )))),
+                Some(Arc::new(avrag_chatmemory::ChatMemory::new(
+                    chatmem.clone(),
+                    chatmem.clone(),
+                ))),
+                Arc::new(GuardPipeline::new()),
+                None,
+            ),
+            analytics: AnalyticsServiceCtx::new(None),
+            billing: BillingContext::new(None, "shadow".to_string()),
+            admin: AdminContext::new(),
+            documents: DocumentContext::new(),
+        };
+        (state, chatmem, session, session_id)
+    }
+
+    fn chat_mode_execution(session_id: &str) -> ChatExecution {
+        ChatExecution {
+            mode: "chat".to_string(),
+            input_usage_text: String::new(),
+            apply_output_guard: false,
+            response: ChatResponse {
+                answer: "echo".to_string(),
+                answer_blocks: vec![],
+                session_id: session_id.to_string(),
+                agent_type: "general".to_string(),
+                sources: vec![],
+                citations: vec![],
+                trace: TraceInfo {
+                    mode: "chat".to_string(),
+                },
+                degrade_trace: vec![],
+                planner_output: None,
+                mode_debug: Some(ModeDebug {
+                    rag: None,
+                    search: None,
+                    general: Some(BTreeMap::new()),
+                }),
+                message_id: None,
+                guard_report: None,
+                tool_results: vec![],
+                usage: None,
+                agent_operation_guide: None,
+            },
+            llm_usage: None,
+            debug_metadata: None,
+            tokens_emitted: false,
+            citations_emitted: false,
+            assistant_turn_metadata: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn persist_chat_mode_fresh_user_without_llm_writes_no_profile() {
+        let (state, chatmem, session, session_id) = test_chat_context_with_profiles();
+        let mut request = request_with_mode("chat", vec![]);
+        request.session_id = Some(session_id.clone());
+        let mut execution = chat_mode_execution(&session_id.to_string());
+        let chat_persistence: Arc<dyn app_core::ChatPersistencePort> = chatmem.clone();
+
+        state
+            .persist_chat_execution(&request, &session, &mut execution, chat_persistence.as_ref())
+            .await
+            .unwrap();
+
+        // dream-v2 is the sole writer; with no LLM clients its strategy yields an
+        // empty delta, so a fresh user must not get a profile row at all.
+        let profile = chatmem
+            .get_user_profile(&test_auth(), Uuid::nil())
+            .await
+            .unwrap();
+        assert!(profile.is_none(), "no LLM -> no profile write");
+        let general = execution
+            .response
+            .mode_debug
+            .as_ref()
+            .and_then(|m| m.general.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        assert!(!general.contains_key("profile_updated"));
+    }
+
+    #[tokio::test]
+    async fn persist_chat_mode_without_llm_writes_nothing_on_second_run() {
+        let (state, chatmem, session, session_id) = test_chat_context_with_profiles();
+        let mut request = request_with_mode("chat", vec![]);
+        request.session_id = Some(session_id.clone());
+        let mut execution = chat_mode_execution(&session_id.to_string());
+
+        state
+            .persist_chat_execution(&request, &session, &mut execution, chatmem.as_ref())
+            .await
+            .unwrap();
+        let after_first = chatmem
+            .get_user_profile(&test_auth(), Uuid::nil())
+            .await
+            .unwrap();
+        assert!(after_first.is_none(), "no profile written on first run");
+
+        let mut execution = chat_mode_execution(&session_id.to_string());
+        state
+            .persist_chat_execution(&request, &session, &mut execution, chatmem.as_ref())
+            .await
+            .unwrap();
+
+        let after_second = chatmem
+            .get_user_profile(&test_auth(), Uuid::nil())
+            .await
+            .unwrap();
+        assert!(
+            after_second.is_none(),
+            "no LLM -> no profile write on second run either"
+        );
+        let general = execution
+            .response
+            .mode_debug
+            .as_ref()
+            .and_then(|m| m.general.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        assert!(!general.contains_key("profile_updated"));
+    }
+
+    #[tokio::test]
+    async fn persist_chat_mode_old_inferred_at_without_llm_keeps_seeded_profile() {
+        let (state, chatmem, session, session_id) = test_chat_context_with_profiles();
+        let mut request = request_with_mode("chat", vec![]);
+        request.session_id = Some(session_id.clone());
+        // Pre-seed an aged profile: the 24h gate opens, but with no LLM clients the
+        // dream strategy yields an empty delta -> no write; the seeded row survives.
+        let aged_at = chrono::Utc::now() - chrono::Duration::hours(25);
+        chatmem
+            .upsert_user_profile(
+                &test_auth(),
+                &app_core::domain_rows::UserProfileRow {
+                    user_id: Uuid::nil(),
+                    owner_user_id: test_auth().user_id(),
+                    expertise_domains: vec![],
+                    preferred_answer_style: None,
+                    frequently_asked_topics: vec![],
+                    custom_preferences: serde_json::json!({}),
+                    structured_profile: serde_json::json!({"seeded": true}),
+                    inferred_at: aged_at,
+                    inference_version: "seeded".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let mut execution = chat_mode_execution(&session_id.to_string());
+        state
+            .persist_chat_execution(&request, &session, &mut execution, chatmem.as_ref())
+            .await
+            .unwrap();
+
+        let profile = chatmem
+            .get_user_profile(&test_auth(), Uuid::nil())
+            .await
+            .unwrap()
+            .expect("seeded profile present");
+        // dream-v2 gate opened but no LLM -> no write; seeded row untouched.
+        assert_eq!(profile.inference_version, "seeded");
+        assert_eq!(profile.structured_profile, serde_json::json!({"seeded": true}));
+        let general = execution
+            .response
+            .mode_debug
+            .as_ref()
+            .and_then(|m| m.general.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        assert!(!general.contains_key("profile_updated"));
+    }
+
+    struct FakeProfileDeltaStrategy {
+        result: ProfileDelta,
+        calls: Arc<Mutex<usize>>,
+    }
+
+    #[async_trait]
+    impl ProfileDeltaStrategy for FakeProfileDeltaStrategy {
+        async fn infer_delta(
+            &self,
+            _ctx: &ChatContext,
+            _recent_turns: &str,
+            _existing_profile: &serde_json::Value,
+        ) -> ProfileDelta {
+            *self.calls.lock().unwrap() += 1;
+            self.result.clone()
+        }
+    }
+
+    async fn wired_strategy_context() -> (
+        ChatContext,
+        Arc<app_core::MemoryChatPersistence>,
+        Arc<Mutex<usize>>,
+    ) {
+        let (state, chatmem, _session, _session_id) = test_chat_context_with_profiles();
+        (state, chatmem, Arc::new(Mutex::new(0)))
+    }
+
+    async fn seed_profile_inferred_at(
+        chatmem: &app_core::MemoryChatPersistence,
+        inferred_at: chrono::DateTime<chrono::Utc>,
+    ) {
+        chatmem
+            .upsert_user_profile(
+                &test_auth(),
+                &app_core::domain_rows::UserProfileRow {
+                    user_id: Uuid::nil(),
+                    owner_user_id: test_auth().user_id(),
+                    expertise_domains: vec![],
+                    preferred_answer_style: None,
+                    frequently_asked_topics: vec![],
+                    custom_preferences: serde_json::json!({}),
+                    structured_profile: serde_json::json!({"base": true}),
+                    inferred_at,
+                    inference_version: "seeded".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn dream_gate_skips_strategy_within_24h() {
+        let (state, chatmem, calls) = wired_strategy_context().await;
+        seed_profile_inferred_at(&chatmem, chrono::Utc::now()).await;
+
+        let strategy = FakeProfileDeltaStrategy {
+            result: ProfileDelta {
+                global_summary: Some("would write".to_string()),
+                ..Default::default()
+            },
+            calls: calls.clone(),
+        };
+        let updated = state
+            .maybe_update_structured_profile(chatmem.as_ref(), "some turns", &strategy)
+            .await;
+        assert!(!updated, "24h gate must keep the dream layer from firing");
+        assert_eq!(*calls.lock().unwrap(), 0, "strategy must not be consulted");
+    }
+
+    #[tokio::test]
+    async fn dream_fires_after_24h_and_merges_delta() {
+        let (state, chatmem, calls) = wired_strategy_context().await;
+        seed_profile_inferred_at(&chatmem, chrono::Utc::now() - chrono::Duration::hours(25))
+            .await;
+
+        let strategy = FakeProfileDeltaStrategy {
+            result: ProfileDelta {
+                global_summary: Some("summarized".to_string()),
+                ..Default::default()
+            },
+            calls: calls.clone(),
+        };
+        let updated = state
+            .maybe_update_structured_profile(chatmem.as_ref(), "some turns", &strategy)
+            .await;
+        assert!(updated, "aged profile must let the dream layer fire");
+        assert_eq!(*calls.lock().unwrap(), 1);
+
+        let profile = chatmem
+            .get_user_profile(&test_auth(), Uuid::nil())
+            .await
+            .unwrap()
+            .expect("dream-v2 write present");
+        assert_eq!(profile.inference_version, "dream-v2");
+        assert_eq!(
+            profile.structured_profile["global_summary"],
+            serde_json::json!("summarized")
+        );
     }
 
     #[tokio::test]

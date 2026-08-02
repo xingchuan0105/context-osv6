@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use app_admin::AdminContext;
 use app_core::{
     AdminStorePort, MemoryAdminStore, MemoryState, MemoryStateHandles, ObjectStoreConfig,
     ObjectStorePort, StorageContext, StorageContextParts, StorageInfra, StorageStores,
+    domain_rows::UserProfileRow,
 };
 use async_trait::async_trait;
 use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
@@ -456,4 +457,289 @@ async fn memory_mode_api_keys_use_in_memory_map() {
         .unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, created.api_key.id);
+}
+
+/// A profile store that returns a pre-seeded row and records the upserted row, so a test can
+/// assert the cadence clock (`inferred_at`) survives an admin preferences save.
+#[derive(Clone, Default)]
+struct SeededProfileAdminStore {
+    seeded_inferred_at: Arc<Mutex<Option<chrono::DateTime<chrono::Utc>>>>,
+    upserted: Arc<Mutex<Option<UserProfileRow>>>,
+}
+
+#[async_trait]
+impl AdminStorePort for SeededProfileAdminStore {
+    async fn get_user_profile(
+        &self,
+        _auth: &AuthContext,
+        _user_id: Uuid,
+    ) -> Result<Option<UserProfileRow>, AppError> {
+        Ok(self.seeded_inferred_at.lock().unwrap().map(|inferred_at| {
+            UserProfileRow {
+                user_id: Uuid::nil(),
+                owner_user_id: UserId::from(Uuid::nil()),
+                expertise_domains: vec![],
+                preferred_answer_style: None,
+                frequently_asked_topics: vec![],
+                custom_preferences: serde_json::json!({}),
+                structured_profile: serde_json::json!({}),
+                inferred_at,
+                inference_version: "seeded".to_string(),
+            }
+        }))
+    }
+
+    async fn upsert_user_profile(
+        &self,
+        _auth: &AuthContext,
+        profile: &UserProfileRow,
+    ) -> Result<(), AppError> {
+        *self.upserted.lock().unwrap() = Some(profile.clone());
+        Ok(())
+    }
+
+    async fn list_api_keys(
+        &self,
+        _auth: &AuthContext,
+        _workspace_id: Option<Uuid>,
+    ) -> Result<Vec<ApiKeyRow>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn create_api_key(
+        &self,
+        _auth: &AuthContext,
+        _workspace_id: Option<Uuid>,
+        _name: &str,
+        _permissions: &[String],
+        _rate_limit_rpm: i32,
+        _expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<common::CreateApiKeyResponse, AppError> {
+        Err(AppError::internal("not implemented"))
+    }
+
+    async fn revoke_api_key(
+        &self,
+        _auth: &AuthContext,
+        _workspace_id: Option<Uuid>,
+        _key_id: Uuid,
+    ) -> Result<bool, AppError> {
+        Ok(false)
+    }
+
+    async fn list_notifications(
+        &self,
+        _auth: &AuthContext,
+        _user_id: Uuid,
+        _limit: usize,
+        _offset: usize,
+    ) -> Result<Vec<NotificationRow>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn mark_notification_read(
+        &self,
+        _auth: &AuthContext,
+        _user_id: Uuid,
+        _notification_id: Uuid,
+    ) -> Result<bool, AppError> {
+        Ok(false)
+    }
+
+    async fn ensure_admin_access(&self, _auth: &AuthContext) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn billing_overview(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminBillingOverview, AppError> {
+        Ok(app_core::AdminBillingOverview {
+            active_subscriptions: 0,
+            past_due_subscriptions: 0,
+            unpaid_subscriptions: 0,
+            canceled_subscriptions: 0,
+        })
+    }
+
+    async fn rag_health(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminRagHealthStatus, AppError> {
+        Ok(app_core::AdminRagHealthStatus {
+            failed_documents: 0,
+            queued_tasks: 0,
+            processing_tasks: 0,
+            dead_letter_tasks: 0,
+            recent_guard_events: 0,
+        })
+    }
+
+    async fn worker_status(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminWorkerStatus, AppError> {
+        Ok(app_core::AdminWorkerStatus {
+            runtime_mode: "memory",
+            queued_tasks: 0,
+            processing_tasks: 0,
+            dead_letter_tasks: 0,
+            failed_documents: 0,
+        })
+    }
+
+    async fn degradation_status(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminDegradationStatus, AppError> {
+        Ok(app_core::AdminDegradationStatus {
+            failed_documents: 0,
+            recent_guard_events: 0,
+            share_access_events: 0,
+        })
+    }
+
+    async fn list_feature_flags(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<Vec<app_core::AdminFeatureFlagEntry>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn list_feature_flag_change_requests(
+        &self,
+        _auth: &AuthContext,
+        _status: Option<&str>,
+    ) -> Result<Vec<app_core::AdminFeatureFlagChangeRequest>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn create_feature_flag_change_request(
+        &self,
+        _auth: &AuthContext,
+        _key: &str,
+        _enabled: bool,
+        _reason: &str,
+    ) -> Result<app_core::AdminFeatureFlagChangeRequest, AppError> {
+        Err(AppError::internal("not implemented"))
+    }
+
+    async fn review_feature_flag_change_request(
+        &self,
+        _auth: &AuthContext,
+        _request_id: &str,
+        _approved: bool,
+        _review_note: Option<&str>,
+    ) -> Result<app_core::AdminFeatureFlagChangeRequest, AppError> {
+        Err(AppError::internal("not implemented"))
+    }
+
+    async fn list_accounts(
+        &self,
+        _auth: &AuthContext,
+        _page: usize,
+        _per_page: usize,
+    ) -> Result<Vec<app_core::AdminAccountInfo>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn get_account(
+        &self,
+        _auth: &AuthContext,
+        _org_id: UserId,
+    ) -> Result<app_core::AdminAccountInfo, AppError> {
+        Err(AppError::not_found(
+            "org_not_found",
+            "Organization not found",
+        ))
+    }
+
+    async fn list_users(
+        &self,
+        _auth: &AuthContext,
+        _org_id: UserId,
+    ) -> Result<Vec<app_core::AdminUserInfo>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn delete_user(
+        &self,
+        _auth: &AuthContext,
+        _org_id: UserId,
+        _user_id: Uuid,
+    ) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn get_usage(
+        &self,
+        _auth: &AuthContext,
+        _org_id: UserId,
+        _period: &str,
+    ) -> Result<app_core::AdminUsageStats, AppError> {
+        Err(AppError::not_found(
+            "org_not_found",
+            "Organization not found",
+        ))
+    }
+
+    async fn set_account_blocked(
+        &self,
+        _auth: &AuthContext,
+        _org_id: UserId,
+        _blocked: bool,
+    ) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn list_audit_logs(
+        &self,
+        _auth: &AuthContext,
+        _query: &app_core::AdminAuditLogQuery,
+    ) -> Result<app_core::AdminAuditLogPage, AppError> {
+        Ok(app_core::AdminAuditLogPage {
+            items: Vec::new(),
+            total: 0,
+            page: 1,
+            per_page: 50,
+        })
+    }
+
+    async fn export_audit_logs_csv(
+        &self,
+        _auth: &AuthContext,
+        _query: &app_core::AdminAuditLogQuery,
+    ) -> Result<String, AppError> {
+        Ok(String::new())
+    }
+}
+
+#[tokio::test]
+async fn admin_preferences_save_preserves_profile_cadence_clock() {
+    // An admin/explicit-preference save must not reset the profile's `inferred_at`
+    // to now: that would starve the dream-v2 writer's 24h cadence gate.
+    let store = Arc::new(SeededProfileAdminStore::default());
+    let seeded_at = chrono::Utc::now() - chrono::Duration::hours(25);
+    *store.seeded_inferred_at.lock().unwrap() = Some(seeded_at);
+    let storage = storage_with_admin_store(store.clone());
+    let admin = AdminContext::new();
+    let auth = test_auth();
+    let user_id = auth.actor_id().unwrap().into_uuid();
+
+    let prefs = UserPreferences::default();
+    admin
+        .save_user_preferences(&auth, &storage, user_id, &prefs)
+        .await
+        .unwrap();
+
+    let upserted = store
+        .upserted
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("save_user_preferences must upsert a profile");
+    assert_eq!(
+        upserted.inferred_at, seeded_at,
+        "admin save must carry the existing inferred_at through, not reset the cadence clock"
+    );
 }

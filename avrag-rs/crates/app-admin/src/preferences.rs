@@ -63,7 +63,10 @@ impl AdminContext {
                 .as_ref()
                 .map(|profile| profile.structured_profile.clone())
                 .unwrap_or_else(|| serde_json::json!({})),
-            inferred_at: chrono::Utc::now(),
+            inferred_at: existing_profile
+                .as_ref()
+                .map(|profile| profile.inferred_at)
+                .unwrap_or_else(chrono::Utc::now),
             inference_version: existing_profile
                 .as_ref()
                 .map(|profile| profile.inference_version.clone())

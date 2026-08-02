@@ -172,46 +172,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn general_profile_custom_preferences_preserves_agent_memory() {
-        let mut agent_memory = contracts::preferences::AgentPreferenceMemory::default();
-        agent_memory
-            .active
-            .push(contracts::preferences::AgentPreference {
-                id: "pref-1".to_string(),
-                text: "Use concise answers".to_string(),
-                category: "interaction".to_string(),
-                scope: "global".to_string(),
-                confidence: "explicit".to_string(),
-                source: "test".to_string(),
-                updated_at: "2026-04-26T00:00:00Z".to_string(),
-            });
-
-        let merged = merge_general_profile_custom_preferences(
-            serde_json::json!({ "theme": "dark" }),
-            agent_memory,
-            "hello",
-            "hello refined",
-        );
-
-        assert_eq!(
-            merged.get("theme").and_then(|value| value.as_str()),
-            Some("dark")
-        );
-        assert_eq!(
-            merged
-                .pointer("/agent_memory/active/0/text")
-                .and_then(|value| value.as_str()),
-            Some("Use concise answers")
-        );
-        assert_eq!(
-            merged
-                .get("last_general_query")
-                .and_then(|value| value.as_str()),
-            Some("hello")
-        );
-    }
-
     #[tokio::test]
     async fn memory_delete_document_soft_deletes_and_hides_document() {
         let state = AppState::new(AppConfig::default());

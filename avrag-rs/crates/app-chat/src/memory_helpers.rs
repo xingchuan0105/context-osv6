@@ -1,9 +1,8 @@
 use app_core::{MemoryState, RetrievedContext, StoredDocument};
 use common::ParsedPreviewItem;
 use contracts::chat::{
-    ChatMessage, ChatRequest, Citation, DegradeReason, DegradeTraceItem, ModeDebug, PlannerOutput,
-    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, SourceRef,
-    SummaryInjectionTrace,
+    ChatRequest, Citation, DegradeReason, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug,
+    RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, SourceRef, SummaryInjectionTrace,
 };
 use contracts::documents::DocumentStatus;
 
@@ -24,78 +23,6 @@ pub fn status_label(status: &DocumentStatus) -> &'static str {
         DocumentStatus::Deleted => "deleted",
         DocumentStatus::UploadInvalid => "upload_invalid",
     }
-}
-
-pub fn derive_profile_domains(messages: &[ChatMessage], query: &str) -> Vec<String> {
-    let corpus = messages
-        .iter()
-        .map(|m| m.content.as_str())
-        .chain(std::iter::once(query))
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_ascii_lowercase();
-    let mut domains = Vec::new();
-    if corpus.contains("rust") || corpus.contains("code") || corpus.contains("api") {
-        domains.push("software".to_string());
-    }
-    if corpus.contains("contract") || corpus.contains("policy") || corpus.contains("regulation") {
-        domains.push("policy".to_string());
-    }
-    if domains.is_empty() {
-        domains.push("general".to_string());
-    }
-    domains
-}
-
-pub fn derive_profile_topics(messages: &[ChatMessage], query: &str) -> Vec<String> {
-    messages
-        .iter()
-        .map(|m| m.content.trim())
-        .chain(std::iter::once(query.trim()))
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .rev()
-        .take(5)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect()
-}
-
-pub fn detect_preferred_style(query: &str) -> Option<String> {
-    let normalized = query.to_ascii_lowercase();
-    if normalized.contains("brief") || normalized.contains("concise") || normalized.contains("??") {
-        Some("concise".to_string())
-    } else if normalized.contains("detail") || normalized.contains("??") {
-        Some("detailed".to_string())
-    } else {
-        None
-    }
-}
-
-pub fn merge_general_profile_custom_preferences(
-    mut custom_preferences: serde_json::Value,
-    agent_memory: contracts::preferences::AgentPreferenceMemory,
-    query: &str,
-    refined_query: &str,
-) -> serde_json::Value {
-    if !custom_preferences.is_object() {
-        custom_preferences = serde_json::json!({});
-    }
-    if let Some(object) = custom_preferences.as_object_mut() {
-        object.entry("agent_memory".to_string()).or_insert_with(|| {
-            serde_json::to_value(agent_memory).unwrap_or_else(|_| serde_json::json!({}))
-        });
-        object.insert(
-            "last_general_query".to_string(),
-            serde_json::json!(query.trim()),
-        );
-        object.insert(
-            "refined_query".to_string(),
-            serde_json::json!(refined_query.trim()),
-        );
-    }
-    custom_preferences
 }
 
 pub fn build_degrade_trace(agent_type: &str, has_context: bool) -> Vec<DegradeTraceItem> {

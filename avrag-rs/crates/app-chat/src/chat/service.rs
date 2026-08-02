@@ -9,10 +9,7 @@ use uuid::Uuid;
 
 use super::{ChatExecution, ChatPreflight, PipelineLane, execute_pipeline};
 use crate::context::ChatContext;
-use crate::{
-    derive_profile_domains, derive_profile_topics, detect_preferred_style, estimate_token_count,
-    merge_general_profile_custom_preferences,
-};
+use crate::estimate_token_count;
 
 impl ChatContext {
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id))]
