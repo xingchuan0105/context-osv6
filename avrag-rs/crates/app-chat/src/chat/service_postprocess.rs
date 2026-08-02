@@ -1,3 +1,15 @@
+use app_core::parse_uuid_or_app_error;
+use app_documents::{AuditAction, AuditRecord};
+use common::{AppError, now_rfc3339};
+use contracts::chat::ChatRequest;
+use contracts::workspaces::ChatSession;
+use tracing::info;
+use uuid::Uuid;
+
+use super::ChatExecution;
+use crate::context::ChatContext;
+use crate::estimate_token_count;
+
 impl ChatContext {
     pub(crate) async fn apply_output_guard_to_execution(
         &self,

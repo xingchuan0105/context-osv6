@@ -1,3 +1,10 @@
+use common::AppError;
+use contracts::chat::{ChatRequest, ChatResponse, ModeDebug, TraceInfo};
+use contracts::workspaces::ChatSession;
+
+use super::ChatExecution;
+use crate::context::ChatContext;
+
 impl ChatContext {
     pub(crate) async fn execute_clarify_mode_core(
         &self,

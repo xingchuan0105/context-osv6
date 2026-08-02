@@ -46,9 +46,6 @@ pub use chat_streaming::{
 pub use context::ChatContext;
 pub use external_agent_guide::{attach_operation_guide, load_invoke_operation_guide};
 pub use llm_context::LlmContext;
-pub use memory_helpers::{
-    agent_icon, agent_name, build_answer, build_citations, build_degrade_trace, build_mode_debug,
-    build_planner_output, build_sources, estimate_token_count, next_message_id, status_label,
-};
+pub use memory_helpers::estimate_token_count;
 pub use mode_assemble::{AssembledMode, assemble_mode};
 pub use orchestrator_context::OrchestratorContext;

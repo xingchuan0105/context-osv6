@@ -12,11 +12,9 @@ mod pg_error;
 mod services;
 
 pub use app_state::{
-    AppState, CostEventRecord, MemoryState, RetrievedContext, StoredDocument, agent_icon,
-    agent_name, build_answer, build_citations, build_degrade_trace, build_docscope_metadata,
-    build_mode_debug, build_parsed_preview, build_planner_output, build_redis_url, build_sources,
-    build_summary, document_is_deleting_or_deleted, estimate_token_count,
-    infer_mime_type_from_path, is_remote_asset_reference, next_message_id, status_label,
+    AppState, CostEventRecord, MemoryState, RetrievedContext, StoredDocument, build_docscope_metadata,
+    build_parsed_preview, build_redis_url, build_summary, document_is_deleting_or_deleted,
+    estimate_token_count, infer_mime_type_from_path, is_remote_asset_reference, status_label,
 };
 
 pub use adapters::{

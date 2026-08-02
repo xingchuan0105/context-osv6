@@ -2,12 +2,12 @@ use app_core::parse_uuid_or_app_error;
 use app_documents::{AuditAction, AuditRecord};
 use chrono::Utc;
 use common::{AppError, now_rfc3339};
-use contracts::chat::{ChatRequest, ChatResponse, ModeDebug, TraceInfo};
+use contracts::chat::{ChatRequest, ChatResponse};
 use contracts::workspaces::{ChatSession, CreateChatSessionRequest};
 use tracing::info;
 use uuid::Uuid;
 
-use super::{ChatExecution, ChatPreflight, PipelineLane, execute_pipeline};
+use super::{ChatPreflight, PipelineLane, execute_pipeline};
 use crate::context::ChatContext;
 use crate::estimate_token_count;
 
@@ -324,6 +324,3 @@ fn chat_workspace_id_for_request(state: &ChatContext, req: &ChatRequest) -> Opti
                 .flatten()
         })
 }
-
-include!("service_modes.rs");
-include!("service_postprocess.rs");

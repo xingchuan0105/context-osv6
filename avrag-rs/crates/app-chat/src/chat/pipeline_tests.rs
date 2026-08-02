@@ -11,17 +11,27 @@ mod tests {
         StorageContext, StorageContextParts, StorageInfra, StorageStores,
     };
     use app_documents::DocumentContext;
-    use app_core::ProfilePort;
+    use app_core::chat_persistence::{
+        AppendChatTurn, ChatCatalogPort, ChatContentPort, ChatPersistencePort, ChatSideEffectPort,
+        MessagePort, ProfilePort, SessionPort,
+    };
+    use app_core::domain_rows::{
+        ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
+        NotificationCreateParams, UserProfileRow,
+    };
+    use app_documents::AuditRecord;
     use avrag_guardrails::GuardPipeline;
-    use common::{AppError, new_id, now_rfc3339};
+    use common::{AppError, IndexedChunk, SourceRow, SummaryMetadata, new_id, now_rfc3339};
     use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
-    use contracts::chat::ChatRequest;
+    use contracts::chat::{ChatEvent, ChatMessage, ChatRequest};
     use contracts::workspaces::{ChatSession, Workspace};
     use tokio::sync::RwLock;
+    use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
     use uuid::Uuid;
 
+    use crate::chat::pipeline::{ChatExecution, PipelineLane, execute_pipeline_stream};
     use crate::chat::pipeline_steps::{dispatch_mode, inject_assembled_metadata};
-    use crate::chat::pipeline::ChatExecution;
     use crate::{
         CapabilitySet, ChatContext, LlmContext, OrchestratorContext, assemble_mode,
         resolve_capabilities,
@@ -103,6 +113,119 @@ mod tests {
 
         async fn presigned_get_url(&self, _path: &str, _ttl_secs: u64) -> Result<String, AppError> {
             Ok(String::new())
+        }
+    }
+
+    /// ChatPersistencePort wrapper that records spine-stage markers (audit, persist)
+    /// into a shared vec, letting the pipeline test lock the real stage order.
+    struct RecordingChatPersistence {
+        inner: Arc<app_core::MemoryChatPersistence>,
+        markers: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl RecordingChatPersistence {
+        fn new(inner: Arc<app_core::MemoryChatPersistence>, markers: Arc<Mutex<Vec<String>>>) -> Self {
+            Self { inner, markers }
+        }
+    }
+
+    #[async_trait]
+    impl SessionPort for RecordingChatPersistence {
+        async fn search_sessions(&self, auth: &AuthContext, pattern: &str) -> Result<Vec<ChatSession>, AppError> {
+            self.inner.search_sessions(auth, pattern).await
+        }
+        async fn list_sessions(&self, auth: &AuthContext, workspace_id: Option<Uuid>) -> Result<Vec<ChatSession>, AppError> {
+            self.inner.list_sessions(auth, workspace_id).await
+        }
+        async fn get_session(&self, auth: &AuthContext, session_id: Uuid) -> Result<Option<ChatSession>, AppError> {
+            self.inner.get_session(auth, session_id).await
+        }
+        async fn create_session(&self, auth: &AuthContext, workspace_id: Uuid, title: Option<&str>, agent_type: &str) -> Result<ChatSession, AppError> {
+            self.inner.create_session(auth, workspace_id, title, agent_type).await
+        }
+        async fn update_session(&self, auth: &AuthContext, session_id: Uuid, title: Option<&str>, pinned: Option<bool>) -> Result<Option<ChatSession>, AppError> {
+            self.inner.update_session(auth, session_id, title, pinned).await
+        }
+        async fn delete_session(&self, auth: &AuthContext, session_id: Uuid) -> Result<bool, AppError> {
+            self.inner.delete_session(auth, session_id).await
+        }
+    }
+
+    #[async_trait]
+    impl MessagePort for RecordingChatPersistence {
+        async fn list_messages(&self, auth: &AuthContext, session_id: Uuid) -> Result<Vec<ChatMessage>, AppError> {
+            self.inner.list_messages(auth, session_id).await
+        }
+        async fn get_message(&self, auth: &AuthContext, session_id: Uuid, message_id: i64) -> Result<Option<ChatMessage>, AppError> {
+            self.inner.get_message(auth, session_id, message_id).await
+        }
+        async fn append_chat_turn(&self, auth: &AuthContext, session_id: Uuid, turn: AppendChatTurn<'_>) -> Result<i64, AppError> {
+            self.markers.lock().unwrap().push("persist".to_string());
+            self.inner.append_chat_turn(auth, session_id, turn).await
+        }
+        async fn search_conversation_history(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            query: &str,
+            scope: ConversationHistoryScope,
+            limit: i64,
+            exclude_message_ids: &[i64],
+        ) -> Result<Vec<ConversationHistoryHit>, AppError> {
+            self.inner.search_conversation_history(auth, session_id, query, scope, limit, exclude_message_ids).await
+        }
+    }
+
+    #[async_trait]
+    impl ChatCatalogPort for RecordingChatPersistence {
+        async fn search_workspaces(&self, auth: &AuthContext, pattern: &str) -> Result<Vec<Workspace>, AppError> {
+            self.inner.search_workspaces(auth, pattern).await
+        }
+        async fn search_sources(&self, auth: &AuthContext, pattern: &str) -> Result<Vec<SourceRow>, AppError> {
+            self.inner.search_sources(auth, pattern).await
+        }
+        async fn get_workspace(&self, auth: &AuthContext, workspace_id: Uuid) -> Result<Option<Workspace>, AppError> {
+            self.inner.get_workspace(auth, workspace_id).await
+        }
+    }
+
+    #[async_trait]
+    impl ProfilePort for RecordingChatPersistence {
+        async fn get_user_profile(&self, auth: &AuthContext, user_id: Uuid) -> Result<Option<UserProfileRow>, AppError> {
+            self.inner.get_user_profile(auth, user_id).await
+        }
+        async fn upsert_user_profile(&self, auth: &AuthContext, profile: &UserProfileRow) -> Result<(), AppError> {
+            self.inner.upsert_user_profile(auth, profile).await
+        }
+    }
+
+    #[async_trait]
+    impl ChatContentPort for RecordingChatPersistence {
+        async fn get_document_asset_by_id(&self, auth: &AuthContext, asset_id: Uuid) -> Result<Option<DocumentAssetRow>, AppError> {
+            self.inner.get_document_asset_by_id(auth, asset_id).await
+        }
+        async fn get_multimodal_chunk_by_id(&self, auth: &AuthContext, chunk_id: Uuid) -> Result<Option<MultimodalChunkRow>, AppError> {
+            self.inner.get_multimodal_chunk_by_id(auth, chunk_id).await
+        }
+        async fn get_chunk_by_id(&self, auth: &AuthContext, chunk_id: Uuid) -> Result<Option<IndexedChunk>, AppError> {
+            self.inner.get_chunk_by_id(auth, chunk_id).await
+        }
+        async fn get_summary_metadata(&self, auth: &AuthContext, doc_ids: &[Uuid]) -> Result<Vec<SummaryMetadata>, AppError> {
+            self.inner.get_summary_metadata(auth, doc_ids).await
+        }
+    }
+
+    #[async_trait]
+    impl ChatSideEffectPort for RecordingChatPersistence {
+        async fn create_notification(&self, auth: &AuthContext, params: NotificationCreateParams) -> Result<(), AppError> {
+            self.inner.create_notification(auth, params).await
+        }
+        async fn record_usage_event(&self, auth: &AuthContext, metric_type: &str, quantity: i64, source: &str) -> Result<(), AppError> {
+            self.inner.record_usage_event(auth, metric_type, quantity, source).await
+        }
+        async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
+            self.markers.lock().unwrap().push("audit".to_string());
+            self.inner.append_audit_record(record).await
         }
     }
 
@@ -548,6 +671,71 @@ mod tests {
         assert_eq!(
             profile.structured_profile["global_summary"],
             serde_json::json!("summarized")
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_spine_locks_terminal_events_before_persist_and_audit_stage() {
+        let (mut state, chatmem, _session, session_id) = test_chat_context_with_profiles();
+
+        let markers: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let recording = Arc::new(RecordingChatPersistence::new(chatmem.clone(), markers.clone()));
+        state.storage = StorageContext::from_parts(StorageContextParts {
+            infra: state.storage.infra().clone(),
+            stores: StorageStores {
+                chat_persistence: Some(recording.clone()),
+                ..state.storage.stores().clone()
+            },
+            memory: state.storage.memory().clone(),
+            objects: state.storage.objects().clone(),
+        });
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<ChatEvent>();
+        let token = CancellationToken::new();
+        let mut request = request_with_mode("chat", vec![]);
+        request.session_id = Some(session_id.clone());
+        request.stream = true;
+
+        let handle = tokio::spawn({
+            let request_id = "spine-lock-test".to_string();
+            let pipeline_state = state.clone();
+            async move {
+                execute_pipeline_stream(
+                    pipeline_state,
+                    request,
+                    request_id,
+                    tx,
+                    token,
+                    PipelineLane::Agent,
+                )
+                .await
+            }
+        });
+
+        handle.await.unwrap().expect("pipeline must succeed");
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        let markers = markers.lock().unwrap().clone();
+        assert_eq!(
+            markers,
+            vec!["audit".to_string(), "persist".to_string()],
+            "spine order: audit must precede persist (doc omits audit)"
+        );
+        assert!(matches!(events.first(), Some(ChatEvent::Start { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, ChatEvent::Done { .. })),
+            "terminal Done event must be streamed by the pipeline itself"
+        );
+        assert!(
+            events
+                .iter()
+                .all(|e| !matches!(e, ChatEvent::Error { .. })),
+            "no error event expected"
         );
     }
 
