@@ -1,9 +1,15 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "graphify": {
+    "code-review-graph": {
       "type": "local",
-      "command": ["/home/chuan/.local/share/pipx/venvs/graphifyy/bin/python", "-m", "graphify.serve", "/home/chuan/context-osv6/graphify-out/graph.json"]
+      "command": [
+        "uvx",
+        "code-review-graph",
+        "serve",
+        "--repo",
+        "/home/chuan/context-osv6"
+      ]
     }
   }
 }
