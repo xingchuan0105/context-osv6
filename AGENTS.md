@@ -3,7 +3,7 @@
 ## Precedence
 
 1. User's explicit request for this turn
-2. This repo's hard rules (Product T1–T8, **prompts-in-md**, **third-person observation not orders**, no golden-set leakage, workspace/org, `.env` reuse, solo trunk, graphify update after structural edits, deploy scripts only, service assumptions)
+2. This repo's hard rules (Product T1–T8, **prompts-in-md**, **third-person observation not orders**, no golden-set leakage, workspace/org, `.env` reuse, solo trunk, code-review-graph update after structural edits, deploy scripts only, service assumptions)
 3. Generic style preferences
 
 ## Behavior (project deltas only)
@@ -49,7 +49,7 @@ Layout map: `avrag-rs/prompts/README.md`. Loop assets: `avrag-rs/prompts/loop/RE
 
 ### Stop decision (who may end the retrieve loop)
 
-Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **whether to stop is model + skill**. Host does **not** run semantic “coverage / completeness” heuristics to refuse `DirectAnswer`.
+Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **whether to stop is model + skill**. Host does **not** run semantic “coverage / completeness” heuristics to refuse `DirectAnswer`, but does run **structural evidence gates** (zero Ok returns while rag/web primitives are mounted → DirectAnswer not accepted; budget exhausted → release + host-appended disclosure).
 
 | Term (prefer) | Meaning | Owner |
 |---------------|---------|--------|
@@ -58,10 +58,11 @@ Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **wheth
 | **observation** | Host-injected user message stating runtime facts (`prompts/loop/*`) | Host reports; model acts |
 | **compile_feedback** | Free correction turn after **structural** handoff compile fail (worker path only) | Host structural only |
 | **require_evidence** | Product/skill **intent** that grounded facts come from observation — **not** a host hard gate | **Skill + model** only |
-| **compile_feedback** | Free structural correction (worker handoff) | Host structural only |
+| **evidence_missing_continue** | Structural gate: `requires_evidence(mode)` && zero Ok retrieval returns → `DirectAnswer` 不收，注入证据缺失观察 + Continue | Host structural (rounds budget) only |
+| **required_action_missing_continue** | Structural gate: query-card 声明动作无 Ok 回传 → 注入动作缺失观察 + Continue | Host structural (rounds budget) only |
 | **token / round budget** | Primary stop when cost ceiling hit | Host cost policy |
 
-**Do not:** host-side claim checklists, multi-entity scanners, soft-refusal keyword bars, or **no-chunk refuse DirectAnswer** for `require_evidence`. Grounding and multi-claim coverage live in **skill/capability prose** (third-person), not `exit_policy` enforcement.
+**Do not:** host-side claim checklists, multi-entity scanners, soft-refusal keyword bars, or semantic “no chunk ⇒ no answer” refusal for `require_evidence`. Grounding and multi-claim coverage live in **skill/capability prose** (third-person), not `exit_policy` enforcement. Host-side structural gates count **Ok returns** only (evidence gate on rag/web group mounted + zero Ok retrieval; required-action gate on query-card declared actions) — both release when budget is exhausted and then append a host disclosure line.
 
 ## Product hard rules (`avrag-rs`) — non-negotiable (formerly §8)
 
@@ -81,9 +82,9 @@ Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **wheth
 
 ## Code intelligence
 
-- Structure / relations / blast radius: **graphify first** (MCP `query_graph` etc. with `project_path: "/home/chuan/context-osv6"`, or CLI `graphify query|path|explain`). Full rules: `docs/agent/graphify.md`.
+- Structure / relations / blast radius: **code-review-graph first** (MCP `code-review-graph` server: `get_minimal_context_tool` → `get_impact_radius_tool` / `query_graph_tool` / `detect_changes_tool`, or CLI `code-review-graph build|update|detect-changes`). Full rules: `docs/agent/code-review-graph.md`.
 - Semantic chunk search: `semble`; exact literal strings: `grep` last.
-- **After structural code changes, run `graphify update .` (or `--force`) in the same session before claiming done.** Never commit `graphify-out/`.
+- **After structural code changes, run `code-review-graph update` in the same session before claiming done.** Never commit `.code-review-graph/`.
 
 ## Environment & solo
 
@@ -107,9 +108,10 @@ Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **wheth
 
 ## More (links only)
 
+- `docs/README.md` — 文档索引：哪些是现行权威、哪些已被取代、ADR 编号已知问题
 - `docs/agent/product-apps.md` — full T1–T8 / workspace / org text
 - `avrag-rs/prompts/README.md` · `avrag-rs/prompts/loop/README.md` — prompt CDS + loop nudge load path
-- `docs/agent/graphify.md` — graphify query & update rules
+- `docs/agent/code-review-graph.md` — code-review-graph query & update rules
 - `docs/agent/wsl-services.md` — services, ports, VPS
 - `docs/agent/rust-resources.md` — target/cache policy
 - `docs/agent/coding-behavior.md` — original long-form behavior essays (human reference)
