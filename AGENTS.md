@@ -98,6 +98,7 @@ Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **wheth
 - Frontend (`frontend_next`): `pnpm test` / typecheck.
 - WSL: respect `jobs=2`; never stack concurrent full `cargo test` runs. Details: `docs/agent/rust-resources.md`.
 - Real LLM / full Playwright: not required mid-wave (E2E semantics: `avrag-rs/docs/e2e-gates.md`).
+- Long E2E runs (full-149, staging ingest, DR2/L3): never block on one global timeout — background + log file + poll progress; use `scripts/with-watchdog.sh` (silence kill) and `scripts/test-full149.sh` (canonical full-149, circuit breaker `E2E_ABORT_AFTER_CONSECUTIVE_FAILS=8`). Full conventions: `avrag-rs/docs/e2e-gates.md` §Agent run conventions.
 
 ## Repo map
 

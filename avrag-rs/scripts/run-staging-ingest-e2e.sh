@@ -24,7 +24,12 @@ export INGESTION_VLM_TRIPLET_ENABLED="${INGESTION_VLM_TRIPLET_ENABLED:-0}"
 export INGESTION_VLM_SUMMARY_ENABLED="${INGESTION_VLM_SUMMARY_ENABLED:-0}"
 export INGESTION_PAGE_RASTER_WITH_OCR="${INGESTION_PAGE_RASTER_WITH_OCR:-0}"
 
-cargo build -p avrag-worker -p app --features product-e2e --tests
+# 阶段级超时（挂死即死，exit 124；不等全局兜底）。纪律：最长合法耗时 ×2。
+BUILD_TIMEOUT_SECS="${E2E_BUILD_TIMEOUT_SECS:-1800}"
+SMOKE_TIMEOUT_SECS="${E2E_SMOKE_TIMEOUT_SECS:-1800}"
+BOOK_TIMEOUT_SECS="${E2E_BOOK_TIMEOUT_SECS:-3600}"
+
+timeout "$BUILD_TIMEOUT_SECS" cargo build -p avrag-worker -p app --features product-e2e --tests
 
 # LiteParse + office staging E2E 已退役（2026-07-31 markitdown 唯一解析器）。
 # 原 liteparse_pdf_e2e / office_*_staging_e2e 测试已删除。
@@ -33,7 +38,7 @@ black_swan_default="/mnt/e/OneDrive/桌面/知境笔记/the-black-swan_-the-impa
 black_swan="${E2E_LLM_REAL_BLACK_SWAN_PDF:-$black_swan_default}"
 if [[ -f "$black_swan" ]]; then
   echo "== Black Swan Paddle PDF smoke (20 pages) =="
-  E2E_MODE=smoke cargo test --test product_e2e -p app --features product-e2e \
+  E2E_MODE=smoke timeout "$SMOKE_TIMEOUT_SECS" cargo test --test product_e2e -p app --features product-e2e \
     smoke::paddle_pdf_smoke::black_swan_paddle_pdf_smoke \
     -- --ignored --test-threads=1 --nocapture
 else
@@ -42,7 +47,7 @@ fi
 
 if [[ -n "${E2E_LLM_REAL_STAGING_PDF:-}" && -f "${E2E_LLM_REAL_STAGING_PDF}" ]]; then
   echo "== Optional local book llm_real staging PDF =="
-  E2E_MODE=nightly SEARCH_REQUIRE_REAL=1 cargo test --test product_e2e -p app --features product-e2e \
+  E2E_MODE=nightly SEARCH_REQUIRE_REAL=1 timeout "$BOOK_TIMEOUT_SECS" cargo test --test product_e2e -p app --features product-e2e \
     llm_real::pdf_corpus::real_llm_rag_staging_local_book_pdf \
     -- --ignored --test-threads=1 --nocapture
 else

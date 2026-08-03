@@ -294,6 +294,21 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 | `AVRAG_WORKER_QUEUE_GROUP` / `AVRAG_INGESTION_QUEUE_GROUP` | Queue-group isolation for worker claim + enqueue paths (`default` in dev, `e2e-smoke` in smoke fixtures) |
 | `RAG_QUALITY_SMOKE_DATABASE_URL` | Optional dedicated PG URL for smoke-v5 persistent corpus |
 | `RAG_QUALITY_SMOKE_ALLOW_SHARED_DB` | Keep `0` to enforce DB isolation preflight; set `1` only for explicit shared-db diagnostics |
+| `E2E_ABORT_AFTER_CONSECUTIVE_FAILS` | Full-149 circuit breaker: trailing streak of consecutive non-PASS v2 labels stops scheduling new questions and fails the run (default `8`; `0` disables; inert when `RAG_EVAL_V2=0` or on `E2E_QUESTIONS` filtered runs) |
+| `E2E_BUILD_TIMEOUT_SECS` / `E2E_SMOKE_TIMEOUT_SECS` / `E2E_BOOK_TIMEOUT_SECS` | Per-stage `timeout` caps in `run-staging-ingest-e2e.sh` (defaults 1800/1800/3600; timeout exits 124) |
+| `E2E_FULL149_SILENT_CAP_SECS` / `E2E_FULL149_TOTAL_CAP_SECS` | `test-full149.sh` watchdog silence cap (default 900) and total `timeout` cap (default 14400) |
+
+## Agent run conventions (long tasks)
+
+Long runs (full-149 eval, staging ingest, DR2, L3 suites) must stay **observable while running**, not only at exit. A human watches the output and Ctrl-Cs on the first wrong line; the agent equivalent is polling for *progress*, and the scripts' job is to make failure fast and loud.
+
+- **Never block on one global timeout.** Launch in background with output to a log file; poll the log every 1–2 min (tail freshness = heartbeat). Watch progress, not process exit.
+- **Silence watchdog**: `scripts/with-watchdog.sh <logfile> <max_silent_secs> -- <cmd...>` kills the whole process group after `<max_silent_secs>` without log growth (exit `124`, dumps the tail on stderr). Compose with `timeout` for a total cap: `timeout 7200 scripts/with-watchdog.sh /tmp/run.log 900 -- cargo test ...`. Size the silence cap at ~2× the longest legitimate *quiet* stage — it is a hang detector, not a slowness police (a real-LLM question may stay quiet for minutes).
+- **Stage-level timeouts**: long shell scripts wrap every stage in `timeout` (see `run-staging-ingest-e2e.sh`); no stage may wait longer than ~2× its longest legitimate duration.
+- **Circuit breaker**: full-149 trips `E2E_ABORT_AFTER_CONSECUTIVE_FAILS` (default 8) on a trailing run of consecutive non-PASS v2 labels — a systemic break carries no information past that point. The run prints `[circuit-breaker] ... trip at qNNN`, finishes in-flight questions, writes the partial report, then fails non-zero.
+- **Canonical full-149 runner**: `bash scripts/test-full149.sh` (nightly mode, concurrency 8, watchdog 900s, total cap 4h, timestamped log under `output/runtime-logs/`). Prefer `E2E_QUESTIONS="58,88" bash scripts/test-full149.sh` for targeted re-runs — never debug a single-question problem with the full corpus.
+- **Death signs while polling**: exit `124`, `[WATCHDOG] FAIL`, `[PYRAMID] FAIL`, `[circuit-breaker]` trip line, first `panic`. On any of these: stop, capture the log tail, diagnose — do not wait out the remaining budget.
+- **Iteration order is bottom-up**: unit → single-doc E2E → full corpus. The full-149 run is confirmation, not an iteration vehicle.
 
 ## Local prerequisites (Product E2E)
 
@@ -377,6 +392,11 @@ cargo test -p app --test product_e2e integration::embedding_cache -- --test-thre
 
 # Rust real LLM
 E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
+
+# Full-149 realistic-corpus eval (watchdog + circuit breaker; see §Agent run conventions).
+# Script lives in repo-root scripts/ — from repo root: `bash scripts/test-full149.sh`
+# (from avrag-rs: `bash ../scripts/test-full149.sh`); it cds into avrag-rs itself.
+bash scripts/test-full149.sh
 
 # Playwright C + D
 cd frontend_next && npx playwright test --project=auth --project=functional --project=journey --project=skills
