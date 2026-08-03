@@ -54,8 +54,13 @@ impl ReActLoop {
         }
 
         // Stop / DirectAnswer is model+skill owned (including whether to answer
-        // without retrieval). Host does not block prose for missing evidence —
-        // `require_evidence` is skill prose only, not a loop hard gate.
+        // without retrieval). Host does not run semantic coverage gates.
+        // Since 2026-08-03 (runtime QC) the host DOES run two STRUCTURAL count
+        // gates before accepting a DirectAnswer (see below): zero Ok retrieval
+        // returns while the mode requires evidence, and query-card required
+        // actions with no Ok ToolResult. `require_evidence` (skill prose) stays
+        // model+skill owned — these gates only count Ok returns, they never
+        // judge answer quality or coverage.
 
         // S2: worker loops compile the candidate final output at this
         // decision point (design 2026-07-27 §4.3). Error diagnostics reject
@@ -91,8 +96,79 @@ impl ReActLoop {
             }
         }
 
+        // L2 / L2.5 structural gates (2026-08-03, runtime QC). Both fire ONLY
+        // when the numbered-iteration budget is not about to be exhausted —
+        // on exhaustion both gates release (the loop breaks at the next
+        // top-of-loop budget check anyway, then C5 synthesis / disclosure
+        // handles the final turn). Each rejection is a `Continue` that eats a
+        // normal numbered iteration (`consumes_iteration_budget`), so the
+        // rounds ceiling guarantees termination.
+        // Budget-exhaustion check uses the run's resolved iteration budget
+        // (same value the loop's top-of-loop check uses), not a re-resolution.
+        let budget_exhausted = iteration.saturating_add(1) >= state.max_iterations;
+
+        if !budget_exhausted {
+            // L2 evidence gate: mode requires retrieval evidence (rag/search
+            // primitives mounted) but zero Ok retrieval returns so far. The
+            // third-person observation states the runtime fact; the model
+            // decides the next action (AGENTS.md stop-decision).
+            let evidence_required = super::super::policy::exit_policy::requires_evidence(mode);
+            if evidence_required
+                && !super::super::policy::exit_policy::has_retrieval_observation(
+                    &state.messages,
+                    &state.tool_results,
+                    mode,
+                )
+            {
+                let observation = super::super::prompt_assets::evidence_missing_nudge();
+                state.messages.push(ChatMessage::user(observation.to_string()));
+                let exit_reason = "evidence_missing_continue".to_string();
+                return Ok(IterationOutcome {
+                    control: IterationControl::Continue,
+                    record: Some(ReActIterationRecord {
+                        iteration,
+                        disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                        action_type: exit_reason.clone(),
+                        observation_preview: truncate_preview(&observation, 200),
+                        llm_usage: Some(llm_usage),
+                        elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                        exit_reason,
+                    }),
+                    sandbox_break: false,
+                });
+            }
+
+            // L2.5 required-action gate: query card declared actions; any
+            // required action without an Ok ToolResult blocks the DirectAnswer
+            // once per round (same budget mechanics as above).
+            if let Some(card) = state.query_card.as_ref() {
+                if let Some(missing) = card.required_actions.iter().find(|action| {
+                    !super::super::query_card::required_action_satisfied(action, &state.tool_results)
+                }) {
+                    let observation =
+                        super::super::prompt_assets::required_action_missing(missing);
+                    state.messages.push(ChatMessage::user(observation.clone()));
+                    let exit_reason = "required_action_missing_continue".to_string();
+                    return Ok(IterationOutcome {
+                        control: IterationControl::Continue,
+                        record: Some(ReActIterationRecord {
+                            iteration,
+                            disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                            action_type: exit_reason.clone(),
+                            observation_preview: truncate_preview(&observation, 200),
+                            llm_usage: Some(llm_usage),
+                            elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                            exit_reason,
+                        }),
+                        sandbox_break: false,
+                    });
+                }
+            }
+        }
+
         // Stop decision: model-owned (pi-style). Worker path may still
-        // compile_feedback (structural only). No host require_evidence bar.
+        // compile_feedback (structural only). The L2/L2.5 gates above are the
+        // host's structural count gates — no semantic require_evidence bar.
 
         let exit_reason = "direct_content".to_string();
         Ok(IterationOutcome {

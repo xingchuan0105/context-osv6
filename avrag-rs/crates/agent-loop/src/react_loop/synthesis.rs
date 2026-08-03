@@ -39,7 +39,7 @@ impl SynthesisPhase {
         let contract = mode.synthesis_output.contract;
         if contract == AnswerContractKind::ProseOnly {
             return self
-                .run_prose_stream(llm, assembled, mode, messages, sink, cancel)
+                .run_prose_stream(llm, assembled, mode, messages, tool_results, sink, cancel)
                 .await;
         }
 
@@ -272,6 +272,7 @@ impl SynthesisPhase {
         assembled: &AssembledContext,
         mode: &ModeConfig,
         messages: &[ChatMessage],
+        tool_results: &[ToolResult],
         sink: &dyn AgentEventSink,
         cancel: &CancellationToken,
     ) -> Result<String, AppError> {
@@ -283,6 +284,11 @@ impl SynthesisPhase {
             }
         }
         let temperature = mode.temperature.unwrap_or(0.7);
+        // L3 salvage decision: whether the retrieval loop actually returned
+        // evidence. Reuse the structural observer so the rerender / degraded
+        // fork is grounded in the same fact the L2 gate used.
+        let has_evidence =
+            super::exit_policy::has_retrieval_observation(messages, tool_results, mode);
 
         let (mut full_answer, response) =
             stream_prose_to_sink(llm, &synthesis_messages, temperature, sink, cancel).await?;
@@ -319,26 +325,81 @@ impl SynthesisPhase {
             let (repaired, _) =
                 stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
             if let Some(violation) = super::answer_contract::check_final_answer(&repaired) {
+                // L3 salvage (2026-08-03): distinguish "repair failed because
+                // the model mangled the form again" from "there was never any
+                // evidence to write from". With evidence, replay the pooled
+                // tool results one more time and re-ask; without evidence,
+                // degrade honestly instead of pretending material was found.
                 let rule_id = violation.rule_id;
-                let mut violation_counts = std::collections::BTreeMap::new();
-                violation_counts.insert(format!("final_check:{rule_id}:fallback"), 1usize);
-                let _ = sink
-                    .emit(AgentEvent::Activity {
-                        stage: format!("final_check:{rule_id}:fallback"),
-                        message:
-                            "final_answer quality gate fired again after repair; contract fallback used"
-                                .to_string(),
-                        detail: Some(violation.matched.to_string()),
-                        counts: violation_counts,
-                        sources_preview: Vec::new(),
-                    })
-                    .await;
-                full_answer = contract_violation_fallback(&mode.id);
-                let _ = sink
-                    .emit(AgentEvent::MessageDelta {
-                        text: full_answer.clone(),
-                    })
-                    .await;
+                if has_evidence {
+                    let mut rerender_counts = std::collections::BTreeMap::new();
+                    rerender_counts.insert(format!("final_check:{rule_id}:rerender"), 1usize);
+                    let _ = sink
+                        .emit(AgentEvent::Activity {
+                            stage: format!("final_check:{rule_id}:rerender"),
+                            message:
+                                "final_answer quality gate fired after repair; evidence-pool rerender follows"
+                                    .to_string(),
+                            detail: Some(violation.matched.to_string()),
+                            counts: rerender_counts,
+                            sources_preview: Vec::new(),
+                        })
+                        .await;
+                    let mut rerender_messages = synthesis_messages.clone();
+                    rerender_messages.push(ChatMessage::assistant(repaired.as_str()));
+                    append_tool_results_observation(&mut rerender_messages, tool_results);
+                    rerender_messages.push(ChatMessage::user(
+                        super::prompt_assets::synthesis_rerender_nudge(),
+                    ));
+                    let (rerendered, _) =
+                        stream_prose_to_sink(llm, &rerender_messages, temperature, sink, cancel)
+                            .await?;
+                    if let Some(violation) = super::answer_contract::check_final_answer(&rerendered)
+                    {
+                        let rule_id = violation.rule_id;
+                        let mut violation_counts = std::collections::BTreeMap::new();
+                        violation_counts.insert(format!("final_check:{rule_id}:fallback"), 1usize);
+                        let _ = sink
+                            .emit(AgentEvent::Activity {
+                                stage: format!("final_check:{rule_id}:fallback"),
+                                message:
+                                    "final_answer quality gate fired after rerender; contract fallback used"
+                                        .to_string(),
+                                detail: Some(violation.matched.to_string()),
+                                counts: violation_counts,
+                                sources_preview: Vec::new(),
+                            })
+                            .await;
+                        full_answer = contract_violation_fallback(&mode.id);
+                        let _ = sink
+                            .emit(AgentEvent::MessageDelta {
+                                text: full_answer.clone(),
+                            })
+                            .await;
+                    } else {
+                        full_answer = rerendered;
+                    }
+                } else {
+                    let mut degraded_counts = std::collections::BTreeMap::new();
+                    degraded_counts.insert(format!("final_check:{rule_id}:degraded"), 1usize);
+                    let _ = sink
+                        .emit(AgentEvent::Activity {
+                            stage: format!("final_check:{rule_id}:degraded"),
+                            message:
+                                "final_answer quality gate fired after repair; no evidence → degraded answer"
+                                    .to_string(),
+                            detail: Some(violation.matched.to_string()),
+                            counts: degraded_counts,
+                            sources_preview: Vec::new(),
+                        })
+                        .await;
+                    full_answer = super::prompt_assets::degraded_no_evidence_answer(&mode.id).to_string();
+                    let _ = sink
+                        .emit(AgentEvent::MessageDelta {
+                            text: full_answer.clone(),
+                        })
+                        .await;
+                }
             } else {
                 full_answer = repaired;
             }

@@ -53,6 +53,12 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         forbidden_in_final: true,
         emitted_at: "crates/agent-loop/src/react_loop/assembler.rs::build_loop_budget_hint",
     },
+    // --- 题型卡（L0, 2026-08-03）---
+    HostMarker {
+        tag: "<query_card",
+        forbidden_in_final: true,
+        emitted_at: "crates/agent-loop/src/react_loop/assembler.rs::build_query_card_block",
+    },
     // --- 检索汇总 / 提示观察 ---
     HostMarker {
         tag: "[retrieval_summary]",

@@ -220,6 +220,11 @@ pub struct AgentRunResult {
     /// Routing decision that selected this strategy (white-box observability).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_decision: Option<String>,
+    /// Pre-loop query-card (L0 question classification + required actions)
+    /// when the classification call succeeded; `None` = card instrumentation
+    /// inactive for this run (white-box observability).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_card: Option<crate::react_loop::query_card::QueryCard>,
 }
 
 /// Budget consumption at a point in time.

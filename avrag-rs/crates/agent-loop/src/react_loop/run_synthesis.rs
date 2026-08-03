@@ -4,7 +4,9 @@ use contracts::ToolResult;
 
 use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
-use super::exit_policy::{SynthesisGate, decide_synthesis_gate, has_retrieval_observation};
+use super::exit_policy::{
+    SynthesisGate, decide_synthesis_gate, has_retrieval_observation, requires_evidence,
+};
 use super::reasoning_emit;
 use super::run_result::{RunContext, build_run_result};
 use super::synthesis::SynthesisPhase;
@@ -12,6 +14,37 @@ use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, truncate_preview};
 use crate::events::{AgentEvent, AgentEventSink};
 use crate::runtime::{AgentRequest, AgentRunResult, FinalDecision};
+
+/// Host-determined disclosure line (plan decision ④): when the mode requires
+/// evidence and none was collected, deterministically append a short
+/// user-visible note at the end of the final answer. Covers both routes:
+/// budget-exhausted released DirectAnswer and no-evidence synthesis. The
+/// copy lives in `prompts/loop/evidence-missing-disclosure.md`; it is never
+/// model-authored so it cannot be dropped.
+fn maybe_append_evidence_disclosure(
+    answer: String,
+    mode: &ModeConfig,
+    messages: &[ChatMessage],
+    collected_tool_results: &[ToolResult],
+) -> String {
+    if requires_evidence(mode)
+        && !has_retrieval_observation(messages, collected_tool_results, mode)
+    {
+        // The degraded no-evidence fallback already states the same fact —
+        // appending the disclosure on top would double the message.
+        if answer.trim() == super::prompt_assets::degraded_no_evidence_answer(&mode.id).trim() {
+            return answer;
+        }
+        let mut out = answer;
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(super::prompt_assets::evidence_missing_disclosure());
+        out
+    } else {
+        answer
+    }
+}
 
 impl ReActLoop {
     pub(super) async fn resolve_synthesis_gate(
@@ -34,6 +67,7 @@ impl ReActLoop {
         reasoning_summary_acc: &str,
         start_time: std::time::Instant,
         answer_deltas_streamed: bool,
+        query_card: Option<&super::query_card::QueryCard>,
     ) -> Result<Option<AgentRunResult>, AppError> {
         // auth / retrieval_query reserved for a future budget-path auto_fallback re-entry.
         let _ = auth;
@@ -62,6 +96,12 @@ impl ReActLoop {
                         messages.pop();
                     }
                 } else {
+                    let answer = maybe_append_evidence_disclosure(
+                        answer,
+                        mode,
+                        messages,
+                        collected_tool_results,
+                    );
                     return Ok(Some(
                         self.finish_direct_answer_run(
                             answer,
@@ -79,6 +119,7 @@ impl ReActLoop {
                             "skip_synthesis_direct",
                             FinalDecision::DirectAnswer,
                             answer_deltas_streamed,
+                            query_card,
                         )
                         .await?,
                     ));
@@ -106,6 +147,7 @@ impl ReActLoop {
         telemetry_label: &str,
         final_decision: FinalDecision,
         content_already_streamed: bool,
+        query_card: Option<&super::query_card::QueryCard>,
     ) -> Result<AgentRunResult, AppError> {
         let disclosed_skills: Vec<String> = disclosed_state
             .disclosed_skill_ids
@@ -150,6 +192,7 @@ impl ReActLoop {
             total_tool_calls,
             start_time,
             Some(final_decision),
+            query_card,
         )
         .await
     }
@@ -171,6 +214,7 @@ impl ReActLoop {
         total_usage: &LlmUsage,
         reasoning_summary_acc: &str,
         start_time: std::time::Instant,
+        query_card: Option<&super::query_card::QueryCard>,
     ) -> Result<AgentRunResult, AppError> {
         let synthesis_ctx = ContextAssembler::assemble_synthesis(
             mode,
@@ -233,6 +277,13 @@ impl ReActLoop {
         )
         .await;
 
+        let final_answer = maybe_append_evidence_disclosure(
+            final_answer,
+            mode,
+            messages,
+            collected_tool_results,
+        );
+
         self.finish_run(
             sink,
             final_answer,
@@ -246,6 +297,7 @@ impl ReActLoop {
             total_tool_calls,
             start_time,
             Some(FinalDecision::Synthesized),
+            query_card,
         )
         .await
     }
@@ -277,6 +329,7 @@ impl ReActLoop {
         total_tool_calls: u32,
         start_time: std::time::Instant,
         final_decision: Option<FinalDecision>,
+        query_card: Option<&super::query_card::QueryCard>,
     ) -> Result<AgentRunResult, AppError> {
         let ctx = RunContext {
             iteration,
@@ -286,6 +339,7 @@ impl ReActLoop {
             total_usage,
             reasoning_summary_acc,
             start_time,
+            query_card,
         };
         let result = build_run_result(
             &self.llm,

@@ -44,6 +44,7 @@ use rag_quality::{
     extract_cited_chunks, extract_retrieved_chunks, extract_tool_trace, score_query,
 };
 // ADR-0012 eval v2 (judge-first generation metrics). Phase 0: report-only.
+use rag_quality::circuit_breaker::ConsecutiveNonPassBreaker;
 use rag_quality::eval_v2;
 use regex::Regex;
 
@@ -224,6 +225,145 @@ fn is_code_only_answer(answer: &str) -> bool {
     saw_code && prose.trim().is_empty()
 }
 
+/// Dynamic-QC loop observability mirrored by app-chat into
+/// `ChatResponse.mode_debug.general` (see `insert_loop_observability` in
+/// app-chat `chat/pipeline_steps.rs`). All fields optional so artifacts stay
+/// comparable with runs predating the mirror.
+#[derive(Debug, Clone, Default)]
+struct LoopObservability {
+    /// Terminal exit reason of the agent loop (last per-round decision, e.g.
+    /// `evidence_missing_continue` on an early round or the stop reason).
+    exit_reason: Option<String>,
+    /// Pre-loop query-card (question_type + required_actions), when the L0
+    /// classification call produced one.
+    query_card: Option<QueryCardObservability>,
+    /// Compact rounds summary: iteration count, tool calls, per-round exits.
+    loop_rounds: Option<LoopRoundsObservability>,
+}
+
+/// Typed view of the query-card mirrored into `mode_debug.general`
+/// (shape: `agent_loop::react_loop::query_card::QueryCard`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct QueryCardObservability {
+    question_type: String,
+    #[serde(default)]
+    required_actions: Vec<String>,
+}
+
+/// Typed view of the compact rounds summary mirrored into
+/// `mode_debug.general.loop_rounds`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct LoopRoundsObservability {
+    iterations: usize,
+    total_tool_calls: u32,
+    #[serde(default)]
+    exit_reasons: Vec<String>,
+}
+
+fn extract_loop_observability(chat: &ChatResponse) -> LoopObservability {
+    let Some(general) = chat
+        .mode_debug
+        .as_ref()
+        .and_then(|d| d.general.as_ref())
+    else {
+        return LoopObservability::default();
+    };
+    LoopObservability {
+        exit_reason: general
+            .get("exit_reason")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        query_card: general
+            .get("query_card")
+            .and_then(|v| serde_json::from_value(v.clone()).ok()),
+        loop_rounds: general
+            .get("loop_rounds")
+            .and_then(|v| serde_json::from_value(v.clone()).ok()),
+    }
+}
+
+#[cfg(test)]
+mod loop_observability_tests {
+    use super::*;
+
+    fn chat_with_general(general: std::collections::BTreeMap<String, serde_json::Value>) -> ChatResponse {
+        ChatResponse {
+            answer: "a".to_string(),
+            answer_blocks: Vec::new(),
+            session_id: "s".to_string(),
+            agent_type: "rag".to_string(),
+            sources: Vec::new(),
+            citations: Vec::new(),
+            trace: contracts::chat::TraceInfo {
+                mode: "rag".to_string(),
+            },
+            degrade_trace: Vec::new(),
+            planner_output: None,
+            mode_debug: Some(contracts::chat::ModeDebug {
+                rag: None,
+                search: None,
+                general: Some(general),
+            }),
+            message_id: None,
+            guard_report: None,
+            tool_results: Vec::new(),
+            usage: None,
+            agent_operation_guide: None,
+        }
+    }
+
+    #[test]
+    fn extracts_exit_reason_query_card_and_rounds() {
+        let general = serde_json::json!({
+            "exit_reason": "evidence_missing_continue",
+            "query_card": { "question_type": "rag_fact", "required_actions": ["dense"] },
+            "loop_rounds": {
+                "iterations": 2,
+                "total_tool_calls": 3,
+                "exit_reasons": ["evidence_missing_continue", "code_gen"],
+            },
+        });
+        let chat = chat_with_general(
+            general
+                .as_object()
+                .expect("object")
+                .clone()
+                .into_iter()
+                .collect(),
+        );
+        let obs = extract_loop_observability(&chat);
+        assert_eq!(obs.exit_reason.as_deref(), Some("evidence_missing_continue"));
+        let card = obs.query_card.expect("query_card parsed");
+        assert_eq!(card.question_type, "rag_fact");
+        assert_eq!(card.required_actions, vec!["dense".to_string()]);
+        let rounds = obs.loop_rounds.expect("loop_rounds parsed");
+        assert_eq!(rounds.iterations, 2);
+        assert_eq!(rounds.total_tool_calls, 3);
+        assert_eq!(
+            rounds.exit_reasons,
+            vec![
+                "evidence_missing_continue".to_string(),
+                "code_gen".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn absent_keys_yield_none_fields() {
+        let mut chat = chat_with_general(std::collections::BTreeMap::new());
+        let obs = extract_loop_observability(&chat);
+        assert!(obs.exit_reason.is_none());
+        assert!(obs.query_card.is_none());
+        assert!(obs.loop_rounds.is_none());
+        // No mode_debug at all (older server builds) → same absence.
+        chat.mode_debug = None;
+        let obs = extract_loop_observability(&chat);
+        assert!(obs.exit_reason.is_none());
+        assert!(obs.query_card.is_none());
+        assert!(obs.loop_rounds.is_none());
+    }
+}
+
 /// ADR-0012 eval-v2 run state: one judge client, one per-run artifact dir
 /// (`tests/e2e_output/rag_eval_v2/{run_id}/`), the judge response cache
 /// (design §4.4, shared across run ids), and the per-question `ScoreV2` sink
@@ -238,6 +378,10 @@ struct V2RunCtx {
     /// questions in parallel (buffer_unordered), so this is an
     /// `Arc<Mutex<Vec<_>>>`; aggregated serially at end of run.
     scores: std::sync::Arc<std::sync::Mutex<Vec<eval_v2::ScoreV2>>>,
+    /// `E2E_ABORT_AFTER_CONSECUTIVE_FAILS` breaker (default 8, 0 disables):
+    /// trips on a trailing run of consecutive non-PASS v2 labels so a systemic
+    /// break stops scheduling new questions instead of burning the full run.
+    breaker: std::sync::Arc<std::sync::Mutex<ConsecutiveNonPassBreaker>>,
 }
 
 /// Outcome of the cached judge call path for one question.
@@ -252,6 +396,29 @@ struct JudgeAttempt {
 }
 
 impl V2RunCtx {
+    /// Feed one question's final v2 label to the circuit breaker; logs once
+    /// on the record that trips it.
+    fn note_label(&self, qnum: usize, label: eval_v2::LabelV2) {
+        let newly_tripped = self
+            .breaker
+            .lock()
+            .expect("breaker mutex")
+            .record(qnum, label == eval_v2::LabelV2::Pass);
+        if newly_tripped {
+            eprintln!(
+                "  [circuit-breaker] E2E_ABORT_AFTER_CONSECUTIVE_FAILS trip at q{qnum}: \
+                 {} consecutive non-PASS — remaining questions skip",
+                self.breaker.lock().expect("breaker mutex").threshold()
+            );
+        }
+    }
+
+    /// Whether the circuit breaker has tripped (unstarted questions should
+    /// skip, mirroring the fail-fast early-out).
+    fn abort_requested(&self) -> bool {
+        self.breaker.lock().expect("breaker mutex").tripped()
+    }
+
     /// Record an infrastructure failure (chat transport / HTTP 5xx / error
     /// envelope / parse error / empty answer): Layer A scores over empty
     /// chunks, label INFRA_ERROR, judge call skipped — there is no answer to
@@ -285,6 +452,7 @@ impl V2RunCtx {
                 "score_v2": score,
             }),
         );
+        self.note_label(qnum, score.label);
         self.scores.lock().expect("scores mutex").push(score);
     }
 
@@ -301,6 +469,7 @@ impl V2RunCtx {
         cited: &rag_quality::CitedChunks,
         answer: &str,
         tool_outputs: &[String],
+        obs: &LoopObservability,
     ) {
         let retrieval = eval_v2::score_retrieval(retrieved, example, RETRIEVAL_K);
         let selection = eval_v2::score_selection(cited, example);
@@ -374,19 +543,30 @@ impl V2RunCtx {
                 "parsed": score.judge,
             }),
         );
-        self.write_json(
-            &format!("q{qnum:03}.artifact.json"),
-            &serde_json::json!({
-                "question": example.query,
-                "subset": subset,
-                "answer": answer,
-                "context_source": judge_input.context_source.as_str(),
-                // M1(2026-08-01):judge 输入快照持久化——JUDGE_ERROR 题可离线
-                // 重判(rejudge 入口读此重建 JudgeInput),无需重生成答案。
-                "judge_input": judge_input,
-                "score_v2": score,
-            }),
-        );
+        // Dynamic-QC observability (exit_reason / query_card / loop_rounds) is
+        // optional — keys are skipped when the run predates the mode_debug
+        // mirror so old artifacts stay comparable.
+        let mut artifact = serde_json::json!({
+            "question": example.query,
+            "subset": subset,
+            "answer": answer,
+            "context_source": judge_input.context_source.as_str(),
+            // M1(2026-08-01):judge 输入快照持久化——JUDGE_ERROR 题可离线
+            // 重判(rejudge 入口读此重建 JudgeInput),无需重生成答案。
+            "judge_input": judge_input,
+            "score_v2": score,
+        });
+        if let Some(exit_reason) = obs.exit_reason.as_deref() {
+            artifact["exit_reason"] = serde_json::json!(exit_reason);
+        }
+        if let Some(query_card) = obs.query_card.as_ref() {
+            artifact["query_card"] = serde_json::json!(query_card);
+        }
+        if let Some(loop_rounds) = obs.loop_rounds.as_ref() {
+            artifact["loop_rounds"] = serde_json::json!(loop_rounds);
+        }
+        self.write_json(&format!("q{qnum:03}.artifact.json"), &artifact);
+        self.note_label(qnum, score.label);
         self.scores.lock().expect("scores mutex").push(score);
     }
 
@@ -1046,7 +1226,9 @@ async fn run_single_question(
         subset_name,
         example.query.chars().take(60).collect::<String>()
     );
-    if fail_fast_flag.load(Ordering::Relaxed) {
+    if fail_fast_flag.load(Ordering::Relaxed)
+        || v2.is_some_and(V2RunCtx::abort_requested)
+    {
         return QuestionOutcome {
             idx,
             failures: Vec::new(),
@@ -1234,6 +1416,7 @@ async fn run_single_question(
         .collect();
     let answer = rewrite_citations(&chat.answer, &chunk_to_cite);
     let tool_outputs = builtin_tool_outputs(&chat.tool_results);
+    let loop_obs = extract_loop_observability(&chat);
     if let Some(v2) = v2 {
         v2.score_question(
             idx + 1,
@@ -1243,6 +1426,7 @@ async fn run_single_question(
             &cited,
             &chat.answer,
             &tool_outputs,
+            &loop_obs,
         )
         .await;
     }
@@ -1363,12 +1547,26 @@ async fn realistic_corpus_full_eval() {
             "[realistic_corpus] eval v2 ON (default since P5; RAG_EVAL_V2=0 opts out), artifacts → {}",
             run_dir.display()
         );
+        // Circuit breaker (RAG_EVAL_V2=0 disables it along with v2): a trailing
+        // run of this many consecutive non-PASS labels stops scheduling new
+        // questions — a systemic break carries no information past that point.
+        let breaker_threshold: usize = std::env::var("E2E_ABORT_AFTER_CONSECUTIVE_FAILS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8);
+        eprintln!(
+            "[realistic_corpus] circuit breaker: E2E_ABORT_AFTER_CONSECUTIVE_FAILS={} (0 disables)",
+            breaker_threshold
+        );
         Some(V2RunCtx {
             judge,
             run_id,
             run_dir,
             cache,
             scores: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            breaker: std::sync::Arc::new(std::sync::Mutex::new(
+                ConsecutiveNonPassBreaker::new(breaker_threshold),
+            )),
         })
     } else {
         None
@@ -1408,18 +1606,22 @@ async fn realistic_corpus_full_eval() {
         .await
         .expect("grant e2e unlimited quota for fixed test identity");
 
+    // 2026-08-02 起灌原件（新解析管线路由：PDF→liteparse、Office→office-direct、
+    // 文本/代码→markitdown）。docx/xlsx/pdf 原件在 fixtures 内；adr 两篇原生 md。
+    // 超时按原件规模放宽：office-direct/struct_tables/LLM profile 使 docx/xlsx
+    // 明显慢于派生 txt（实测 thesis.docx 单文档 struct_tables≈5min+materialize≈4min）。
     let corpus_files = [
-        ("thesis_y_refrigeration.txt", 600),         // 52K chars, thesis
+        ("thesis_y_refrigeration.docx", 1800),        // 484KB docx, thesis（实测超 600s）
         ("adr-0004-rag-agent-loop.md", 120),         // 4.8KB MD
         ("adr-0009-codegen-sandbox-bridge.md", 300), // 13.6KB MD (materialize+summary LLM can exceed 120s)
-        ("consulting_platform_network_effects.txt", 300), // 18K chars
-        ("consulting_compensation_design.txt", 120), // 3K chars
-        ("huawei_ipd_370_activities.txt", 300),      // 54K chars, table as TSV
-        ("baiyao_it_planning.txt", 300),             // 20K chars, PDF->TXT
+        ("consulting_platform_network_effects.docx", 900), // 45KB docx
+        ("consulting_compensation_design.docx", 600), // 91KB docx
+        ("huawei_ipd_370_activities.xlsx", 1800),     // 90KB xlsx, 370 行大表 struct 重
+        ("baiyao_it_planning.pdf", 900),             // 1.9MB PDF (text, liteparse)
         // v4 增量语料（智遥咨询 3 篇，OneDrive 原件已入库 fixtures）
-        ("consulting_rbf_drc.txt", 120),       // 4K chars, 滴灌通&RBF
-        ("consulting_prepared_food.txt", 120), // 4.3K chars, 预制菜
-        ("consulting_craftsman_paradox.txt", 120), // 1.4K chars, 手艺人模式
+        ("consulting_rbf_drc.docx", 600),       // 23KB docx, 滴灌通&RBF
+        ("consulting_prepared_food.docx", 600), // 74KB docx, 预制菜
+        ("consulting_craftsman_paradox.docx", 600), // 18KB docx, 手艺人模式
     ];
     // v3 scope keys — parallel to `corpus_files` order (doc_scope_hint → ids).
     let scope_keys = [
@@ -1478,8 +1680,16 @@ async fn realistic_corpus_full_eval() {
             continue;
         }
         eprintln!("[realistic_corpus] uploading {filename} ...");
+        // 2026-08-02 起灌原件（docx/xlsx/pdf 二进制）：`upload_document_to_notebook`
+        // 走 `load_fixture`(read_to_string) 仅支持文本；原件走读 bytes 的
+        // `upload_file_from_path_to_notebook`。txt/md 两者皆可，统一走 bytes。
+        let fixture_abs = super::super::setup::fixture_path(filename)
+            .unwrap_or_else(|e| panic!("fixture_path {filename}: {e}"));
         let upload = ctx
-            .upload_document_to_notebook(filename, &workspace_id)
+            .upload_file_from_path_to_notebook(
+                fixture_abs.to_str().expect("fixture path utf-8"),
+                &workspace_id,
+            )
             .await
             .unwrap_or_else(|e| panic!("upload {filename}: {e}"));
         let status = ctx
@@ -1747,6 +1957,17 @@ async fn realistic_corpus_full_eval() {
         eprintln!("Failures ({}):", failures.len());
         for (q, err) in &failures {
             eprintln!("  - {:?}: {}", q.chars().take(50).collect::<String>(), err);
+        }
+    }
+
+    // Circuit-breaker trip: partial report is already printed above; fail the
+    // run loudly so the caller (watchdog/observer) sees a fast non-zero exit.
+    if let Some(v2) = &v2 {
+        if v2.abort_requested() {
+            panic!(
+                "E2E_ABORT_AFTER_CONSECUTIVE_FAILS: circuit breaker tripped — \
+                 aborted early, the report above is partial"
+            );
         }
     }
 

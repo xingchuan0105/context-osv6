@@ -281,6 +281,21 @@ pub fn has_retrieval_observation(
     true
 }
 
+/// L2 (2026-08-03): whether the mode requires retrieval evidence structurally.
+/// True when the mounted SDK primitives include any rag-group or search-group
+/// id (grouping per `contracts::sdk_primitives::ids_for`). This is a
+/// **structural count gate** (zero Ok retrieval returns → DirectAnswer not
+/// accepted), NOT a semantic coverage gate — `require_evidence` (skill prose)
+/// stays model+skill owned.
+pub fn requires_evidence(mode: &ModeConfig) -> bool {
+    use contracts::sdk_primitives::{SdkCapability, ids_for};
+    let rag: Vec<&str> = ids_for(SdkCapability::RAG);
+    let search: Vec<&str> = ids_for(SdkCapability::SEARCH);
+    mode.sdk_primitives
+        .iter()
+        .any(|p| rag.contains(&p.as_str()) || search.contains(&p.as_str()))
+}
+
 /// Formerly host hard gate for require_evidence. Always false: stop/grounding
 /// is model+skill owned (AGENTS.md). Kept for call-site compatibility/tests.
 pub fn should_block_content_early_stop(_loop_exit: &LoopExitConfig, _has_evidence: bool) -> bool {

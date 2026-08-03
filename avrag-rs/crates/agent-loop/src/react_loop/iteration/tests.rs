@@ -71,6 +71,7 @@ fn fake_llm_response(content: &str) -> LlmResponse {
         usage: LlmUsage::zeroed(),
         model: "test-model".to_string(),
         tool_calls: None,
+        response_id: None,
     }
 }
 
@@ -90,6 +91,8 @@ fn empty_state() -> IterationState {
         )),
         session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
         sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
+        query_card: None,
+        max_iterations: 100,
     }
 }
 
@@ -570,6 +573,281 @@ async fn content_without_evidence_still_direct_with_early_stop_flags() {
         .await
         .unwrap();
 
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+}
+
+// --- L2 evidence gate / L2.5 required-action gate (2026-08-03, runtime QC) ---
+
+fn rag_mode_with_primitives() -> super::super::config::ModeConfig {
+    let mut mode = rag_mode();
+    mode.sdk_primitives = crate::react_loop::sdk_primitives_for_caps(true, false)
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    mode
+}
+
+#[tokio::test]
+async fn evidence_gate_blocks_direct_answer_with_zero_ok_returns() {
+    let loop_ = test_loop();
+    let mode = rag_mode_with_primitives(); // rag primitives mounted → requires evidence
+    let mut state = empty_state();
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Answer without retrieval.");
+
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "evidence_missing_continue"
+    );
+    // The third-person observation is pushed as a user message for the next round.
+    assert!(state
+        .messages
+        .iter()
+        .any(|m| m.role == "user" && m.content.contains("回传")));
+}
+
+#[tokio::test]
+async fn evidence_gate_releases_when_ok_chunks_present() {
+    let loop_ = test_loop();
+    let mode = rag_mode_with_primitives();
+    let mut state = empty_state();
+    state.tool_results = vec![ok_chunk_tool_result("c1")];
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Grounded answer.");
+
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+}
+
+#[tokio::test]
+async fn evidence_gate_releases_on_round_budget_exhaustion() {
+    // Budget about to exhaust → gates release (loop breaks next top check).
+    let loop_ = test_loop();
+    let mode = rag_mode_with_primitives();
+    let mut state = empty_state();
+    state.max_iterations = 1; // iteration 0 + 1 >= 1 → exhausted
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Last-chance answer.");
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+}
+
+#[tokio::test]
+async fn required_action_gate_blocks_until_action_satisfied() {
+    let loop_ = test_loop();
+    let mode = rag_mode();
+    let mut state = empty_state();
+    state.query_card = Some(crate::react_loop::query_card::QueryCard {
+        question_type: crate::react_loop::query_card::QuestionType::Calculation,
+        required_actions: vec!["calculator".to_string()],
+    });
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Answer without calling calculator.");
+
+    // First: no calculator Ok result → Continue, required_action_missing_continue.
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "required_action_missing_continue"
+    );
+    assert!(state
+        .messages
+        .iter()
+        .any(|m| m.role == "user" && m.content.contains("calculator")));
+
+    // Now the calculator Ok result exists → DirectAnswer accepted.
+    state.tool_results.push(contracts::ToolResult {
+        tool: "calculator".into(),
+        version: "1".into(),
+        status: contracts::ToolStatus::Ok,
+        data: Some(serde_json::json!({"result": 42})),
+        trace: None,
+    });
+    let response2 = fake_llm_response("Computed: 42.");
+    let outcome = loop_
+        .apply_llm_output(
+            1,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response2,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+}
+
+#[tokio::test]
+async fn chat_mode_never_fires_evidence_gate() {
+    // chat mode: no rag/search primitives mounted → no evidence requirement.
+    let loop_ = test_loop();
+    let mode = chat_mode();
+    let mut state = empty_state();
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Just chatting.");
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Chat),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        outcome.control,
+        IterationControl::DirectAnswer { .. }
+    ));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
+}
+
+#[tokio::test]
+async fn validated_card_with_unmounted_action_does_not_block() {
+    // 2026-08-03 review P1 regression: production wires `QueryCard::validate`
+    // at the pre-loop fetch site (react_loop/mod.rs), so a card declaring an
+    // action the sandbox can never reach ("web" on a rag-only mode) arrives
+    // at the gate with that action already dropped. Without validate this
+    // test would ping-pong until budget exhaustion.
+    let loop_ = test_loop();
+    let mode = rag_mode(); // rag-only: "web" primitive not mounted
+    let raw_card = crate::react_loop::query_card::QueryCard {
+        question_type: crate::react_loop::query_card::QuestionType::RagFact,
+        required_actions: vec!["web".to_string()],
+    };
+    let mut state = empty_state();
+    state.query_card = Some(raw_card.validate(&mode));
+    assert!(state
+        .query_card
+        .as_ref()
+        .unwrap()
+        .required_actions
+        .is_empty());
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Answer with no reachable action.");
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
     assert!(matches!(
         outcome.control,
         IterationControl::DirectAnswer { .. }

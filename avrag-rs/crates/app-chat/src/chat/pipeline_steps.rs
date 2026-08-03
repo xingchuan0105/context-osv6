@@ -177,6 +177,7 @@ async fn run_general_mode(
                 serde_json::json!(usage.model.clone()),
             );
         }
+        insert_loop_observability(&mut general_debug, &agent_result);
 
         let mut execution = crate::chat::build_chat_execution_from_result(
             &agent_result,
@@ -210,6 +211,7 @@ async fn run_general_mode(
             serde_json::json!(usage.model.clone()),
         );
     }
+    insert_loop_observability(&mut general_debug, &agent_result);
 
     let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
@@ -299,6 +301,41 @@ pub(crate) fn attach_activity_counts_from_sink(
         serde_json::to_value(counts).unwrap_or_default(),
     );
     execution.debug_metadata = Some(serde_json::Value::Object(meta));
+}
+
+/// Mirror dynamic-QC loop observability (query-card, terminal exit reason,
+/// compact rounds summary) into `mode_debug.general` so non-streaming
+/// harnesses (rag_eval_v2) can attribute gate behavior per question. All keys
+/// are optional: no card → no `query_card`; no iteration records → no
+/// `exit_reason` / `loop_rounds`.
+fn insert_loop_observability(
+    general_debug: &mut BTreeMap<String, serde_json::Value>,
+    agent_result: &agent_loop::runtime::AgentRunResult,
+) {
+    if let Some(card) = agent_result.query_card.as_ref()
+        && let Ok(v) = serde_json::to_value(card)
+    {
+        general_debug.insert("query_card".to_string(), v);
+    }
+    if agent_result.iterations.is_empty() {
+        return;
+    }
+    let exit_reasons: Vec<&str> = agent_result
+        .iterations
+        .iter()
+        .map(|i| i.decision.as_str())
+        .collect();
+    if let Some(last) = exit_reasons.last() {
+        general_debug.insert("exit_reason".to_string(), serde_json::json!(last));
+    }
+    general_debug.insert(
+        "loop_rounds".to_string(),
+        serde_json::json!({
+            "iterations": agent_result.iterations.len(),
+            "total_tool_calls": agent_result.total_tool_calls,
+            "exit_reasons": exit_reasons,
+        }),
+    );
 }
 
 /// Mirror the folded `activity_counts` from `debug_metadata` into the

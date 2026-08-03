@@ -82,6 +82,14 @@ impl ReActLoop {
         if !assembled.budget_hint.is_empty() {
             round_messages.push(ChatMessage::user(assembled.budget_hint.clone()));
         }
+        // L0 (2026-08-03): query card injected the same way — trailing user
+        // message, keeping the system prefix stable. `None` when the card is
+        // absent (pre-loop classification failed → instrumentation inactive).
+        if let Some(card) = state.query_card.as_ref() {
+            if let Some(block) = super::super::assembler::build_query_card_block(card) {
+                round_messages.push(ChatMessage::user(block));
+            }
+        }
         // B5: LLM boundary transform (default: identity).
         let round_messages = hooks.convert_to_llm(&round_messages);
 

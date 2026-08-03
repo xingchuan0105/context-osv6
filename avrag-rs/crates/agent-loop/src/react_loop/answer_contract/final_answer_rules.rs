@@ -74,6 +74,24 @@ pub(crate) fn executable_code_matched(text: &str) -> Option<&'static str> {
         .then_some("<code language=…> executable-form span")
 }
 
+/// Working-draft tail: the answer *ends* with a markdown code fence — nothing
+/// but whitespace after the closing marker — while prose exists before it
+/// (the no-prose case is `code_only`, earlier in rule order). q017
+/// (run v2_20260803-030014): retrieve-phase debug narration + an unexecuted
+/// ```python block shipped as the final answer; it slipped past `code_only`
+/// (narration prose present) and `executable_code` (markdown fence, not the
+/// `<code language=…>` form). A fence with no prose tail is the retrieve-phase
+/// codegen shape — the code never executes in the answer phase — so a grounded
+/// answer closes on prose (or SELECTED citations), not on a fence.
+pub(crate) fn trailing_code_fence_matched(text: &str) -> Option<&'static str> {
+    if !text.trim_end().ends_with("```") {
+        return None;
+    }
+    let (saw_code, prose) = split_code_spans(text);
+    (saw_code && !prose.trim().is_empty())
+        .then_some("markdown 代码围栏收尾：最后一个代码块之后没有正文")
+}
+
 /// The specific host observation tag that tripped (from the host_markers
 /// single source of truth), if any.
 pub(crate) fn host_shell_matched(text: &str) -> Option<&'static str> {
@@ -92,7 +110,7 @@ pub struct FinalAnswerRule {
     pub feedback_hint: &'static str,
 }
 
-/// The four format-level final-answer rules, in detection order. Hint bodies
+/// The format-level final-answer rules, in detection order. Hint bodies
 /// live in `prompts/loop/final-answer-feedback-*.md` (P2-2 verbatim move,
 /// loaded via `prompt_assets` — hence `LazyLock` instead of `const`).
 pub static FINAL_ANSWER_RULES: std::sync::LazyLock<Vec<FinalAnswerRule>> =
@@ -120,6 +138,11 @@ pub static FINAL_ANSWER_RULES: std::sync::LazyLock<Vec<FinalAnswerRule>> =
                 id: "executable_code",
                 check: executable_code_matched,
                 feedback_hint: super::super::prompt_assets::final_answer_feedback_executable_code(),
+            },
+            FinalAnswerRule {
+                id: "trailing_code_fence",
+                check: trailing_code_fence_matched,
+                feedback_hint: super::super::prompt_assets::final_answer_feedback_trailing_code_fence(),
             },
         ]
     });
@@ -164,6 +187,15 @@ pub fn final_answer_contract_violation(text: &str) -> bool {
 /// purpose: a prose answer that *quotes* one fenced query is a valid answer
 /// and must not trigger a repair round.
 pub fn is_code_only_answer(text: &str) -> bool {
+    let (saw_code, prose) = split_code_spans(text);
+    saw_code && prose.trim().is_empty()
+}
+
+/// Split `text` into code spans vs outside prose. Returns `(saw_code, prose)`
+/// where `prose` is everything outside `<code …>…</code>` spans and markdown
+/// fences (any language). Shared by `is_code_only_answer` and
+/// `trailing_code_fence_matched`.
+fn split_code_spans(text: &str) -> (bool, String) {
     let mut saw_code = false;
     let mut outside = String::new();
     let mut rest = text;
@@ -196,5 +228,5 @@ pub fn is_code_only_answer(text: &str) -> bool {
             prose.push('\n');
         }
     }
-    saw_code && prose.trim().is_empty()
+    (saw_code, prose)
 }

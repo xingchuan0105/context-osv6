@@ -22,6 +22,7 @@ mod message_format;
 pub mod message_queue;
 pub mod parse;
 pub mod prompt_assets;
+pub mod query_card;
 pub mod sdk_gate;
 pub mod session_fs;
 // rag_bridge moved to agent-tools (TN Wave 6)
@@ -138,6 +139,15 @@ impl ReActLoop {
         let (request, base_message_count, max_iterations, auth, loop_user_query) =
             self.prepare_run_request(mode, request, sink).await?;
 
+        // L0 题型卡（2026-08-03）：pre-loop 一次 json_mode 调用做结构化分类 +
+        // 必做动作声明。失败 → None（卡缺省 = 埋点不激活，通用证据闸仍在）。
+        // 该调用不占迭代预算（budget 在 run_retrieval_loop 内计）。
+        // validate：声明了未知/未挂载动作的卡必须清洗——否则 L2.5 闸对一个
+        // 沙箱里根本不可达的动作永远弹回，烧满轮次预算（2026-08-03 评审 P1）。
+        let query_card = query_card::fetch_query_card(&self.llm, mode, &request.query)
+            .await
+            .map(|card| card.validate(mode));
+
         // W1 (2026-07-28, channel-persistent worker): a resumed worker session
         // passes its alias cursor so retrieval-log aliases stay unique across
         // briefs of the same turn (see worker_contract::RETRIEVAL_ALIAS_START_METADATA).
@@ -161,6 +171,8 @@ impl ReActLoop {
             )),
             session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(mode.sdk_primitives.iter().cloned().collect()),
+            query_card,
+            max_iterations,
         };
         let (iteration, direct_answer, telemetry_records, total_usage, budget_exhaustion) = self
             .run_retrieval_loop(
@@ -183,6 +195,7 @@ impl ReActLoop {
         let total_tool_calls = state.total_tool_calls;
         let reasoning_summary_acc = state.reasoning_acc;
         let answer_deltas_streamed = state.answer_deltas_streamed;
+        let query_card = state.query_card;
 
         if cancel.is_cancelled() {
             return Err(cancellation_error());
@@ -209,6 +222,7 @@ impl ReActLoop {
                 &reasoning_summary_acc,
                 start_time,
                 answer_deltas_streamed,
+                query_card.as_ref(),
             )
             .await?
         {
@@ -231,6 +245,7 @@ impl ReActLoop {
             &total_usage,
             &reasoning_summary_acc,
             start_time,
+            query_card.as_ref(),
         )
         .await
     }

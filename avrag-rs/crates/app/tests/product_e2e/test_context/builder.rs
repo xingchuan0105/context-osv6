@@ -486,7 +486,14 @@ impl TestContext {
         let worker_binary = setup::find_worker_binary()
             .await
             .expect("find worker binary");
-        let worker_log_path = object_store_dir.path().join("worker.log");
+        // Worker 日志落与 object_root 同源的稳定目录：persistent infra 时写到
+        // e2e_output/realistic_object_store/worker.log（跨 run 可定位、可 grep），
+        // 而非随机临时目录——诊断重灌/慢阶段时不用翻 /tmp/.tmp*/worker.log。
+        let worker_log_path = if let Some(infra) = persistent_infra {
+            infra.object_store_path.join("worker.log")
+        } else {
+            object_store_dir.path().join("worker.log")
+        };
         let mut cmd = tokio::process::Command::new(&worker_binary);
         cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();

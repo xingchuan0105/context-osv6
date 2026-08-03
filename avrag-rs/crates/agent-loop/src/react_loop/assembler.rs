@@ -210,6 +210,36 @@ pub fn build_loop_budget_hint(
     )
 }
 
+/// Render the per-run query card as a trailing user-message host observation
+/// (L0, 2026-08-03). Mirrors `build_loop_budget_hint`'s P0 trailing-message
+/// injection: the system + history prefix stays stable across ReAct rounds so
+/// provider prefix cache can hit. `None` when no card was produced (card
+/// absent = instrumentation inactive; generic evidence gate still on).
+///
+/// Format:
+/// `<query_card type="calculation" required="calculator" />`
+pub fn build_query_card_block(card: &super::query_card::QueryCard) -> Option<String> {
+    if card.question_type == super::query_card::QuestionType::Other
+        && card.required_actions.is_empty()
+    {
+        return None;
+    }
+    let open = super::host_markers::HOST_OBSERVATION_MARKERS
+        .iter()
+        .find(|m| m.tag == "<query_card")
+        .expect("query_card marker registered")
+        .tag;
+    let required = if card.required_actions.is_empty() {
+        String::new()
+    } else {
+        format!(" required=\"{}\"", card.required_actions.join(","))
+    };
+    Some(format!(
+        "{open} type=\"{}\"{required} />",
+        card.question_type.as_str()
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -38,6 +38,14 @@ pub struct IterationState {
     pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
     /// A3: allowed SaC methods for this run (empty = open).
     pub sdk_allowed: std::sync::Arc<std::collections::HashSet<String>>,
+    /// L0 题型卡（2026-08-03）：pre-loop json_mode 分类结果。`None` =
+    /// 卡缺省（解析失败或必填缺失）→ 题型卡埋点不激活，通用证据闸仍在。
+    /// 注入：`<query_card>` 观察块（host_markers 备案，assembler 渲染）。
+    pub query_card: Option<super::super::query_card::QueryCard>,
+    /// 本轮已解析的迭代预算（prepare_run_request 的 resolved 值）。L2/L2.5
+    /// 闸据此判定「预算即将耗尽」并放行——闸与循环共用同一 resolved 值，
+    /// 不在闸内重算（2026-08-03 评审 P3-3）。
+    pub max_iterations: u8,
 }
 
 pub enum IterationControl {

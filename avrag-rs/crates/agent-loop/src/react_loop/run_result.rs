@@ -18,6 +18,9 @@ pub struct RunContext<'a> {
     pub total_usage: &'a LlmUsage,
     pub reasoning_summary_acc: &'a str,
     pub start_time: Instant,
+    /// Pre-loop query-card from `IterationState.query_card` (L0 题型卡), when
+    /// the classification call succeeded; surfaced for white-box observability.
+    pub query_card: Option<&'a super::query_card::QueryCard>,
 }
 
 pub fn build_run_result(
@@ -103,5 +106,6 @@ pub fn build_run_result(
         }),
         total_elapsed_ms: Some(total_elapsed_ms),
         routing_decision: None,
+        query_card: ctx.query_card.cloned(),
     }
 }

@@ -97,6 +97,7 @@ mod tests {
             tool_calls: None,
             usage: avrag_llm::LlmUsage::zeroed(),
             model: String::new(),
+            response_id: None,
         }
     }
 

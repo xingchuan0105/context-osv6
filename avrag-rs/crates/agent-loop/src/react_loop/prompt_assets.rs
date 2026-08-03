@@ -109,6 +109,24 @@ pub fn codegen_untrusted_prefix() -> &'static str {
     trim_body(loop_prompt!("codegen-untrusted-prefix.nudge.md"))
 }
 
+// --- L2 evidence / L2.5 required-action structural gates (2026-08-03) ---
+
+/// Structural evidence gate observation: zero Ok retrieval returns so far,
+/// yet the mode requires evidence. Third-person statement of the runtime
+/// fact; the model decides the next action (AGENTS.md stop-decision).
+pub fn evidence_missing_nudge() -> &'static str {
+    trim_body(loop_prompt!("evidence-missing.nudge.md"))
+}
+
+/// Required-action gate observation: the query card declared `{action}` but
+/// no Ok ToolResult for it has been collected yet.
+pub fn required_action_missing(action: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("required-action-missing.tmpl.md")),
+        &[("action", action)],
+    )
+}
+
 pub fn format_hint_no_space_pipe() -> &'static str {
     trim_body(loop_prompt!("format-hint-no-space-pipe.nudge.md"))
 }
@@ -174,6 +192,10 @@ pub fn final_answer_feedback_executable_code() -> &'static str {
     trim_body(loop_prompt!("final-answer-feedback-executable-code.md"))
 }
 
+pub fn final_answer_feedback_trailing_code_fence() -> &'static str {
+    trim_body(loop_prompt!("final-answer-feedback-trailing-code-fence.md"))
+}
+
 /// prose_only synthesis returned a code-only answer (retrieve framing leaked
 /// into the final turn): observation that precedes the one repair round.
 /// `detail` names the specific violated form (from the final-answer quality
@@ -183,6 +205,20 @@ pub fn synthesis_prose_repair_nudge(detail: &str) -> String {
         trim_body(loop_prompt!("synthesis-prose-repair.tmpl.md")),
         &[("violation_detail", detail)],
     )
+}
+
+/// Evidence-pool rerender observation for prose synthesis: the repair pass
+/// still violated the final-form contract, but grounded evidence exists, so
+/// the evidence pool is replayed once more for a third synthesis pass.
+pub fn synthesis_rerender_nudge() -> &'static str {
+    trim_body(loop_prompt!("synthesis-rerender.tmpl.md"))
+}
+
+/// User-visible disclosure line deterministically appended by the host when
+/// a final answer is released without any retrieval evidence (budget
+/// exhaustion or no-evidence synthesis). Not model-authored.
+pub fn evidence_missing_disclosure() -> &'static str {
+    trim_body(loop_prompt!("evidence-missing-disclosure.md"))
 }
 
 pub fn partial_evidence_insufficient() -> &'static str {
@@ -242,5 +278,6 @@ mod tests {
         assert!(!final_answer_feedback_host_shell().is_empty());
         assert!(!final_answer_feedback_template_artifact().is_empty());
         assert!(final_answer_feedback_executable_code().contains("<code language="));
+        assert!(final_answer_feedback_trailing_code_fence().contains("代码围栏"));
     }
 }

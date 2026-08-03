@@ -853,6 +853,8 @@ mod tests {
             )),
             session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
+            query_card: None,
+            max_iterations: 100,
         }
     }
 

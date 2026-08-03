@@ -79,6 +79,28 @@ use super::*;
     }
 
     #[test]
+    fn trailing_code_fence_detector_flags_working_draft_tail() {
+        // q017 observed failure (run v2_20260803-030014): debug narration +
+        // an unexecuted ```python block as the tail of the final answer. It
+        // slips past code_only (narration prose) and executable_code
+        // (markdown fence, not the `<code language=…>` form).
+        let v = check_final_answer(
+            "grep 返回结构里 text 字段是 list，我的处理方式有误。先打一下原始结构确认字段形态。\n\n```python\nprint(1)\n```",
+        )
+        .expect("violation");
+        assert_eq!(v.rule_id, "trailing_code_fence");
+        // No prose at all still classifies as code_only (rule order).
+        let v = check_final_answer("```python\nprint(1)\n```").expect("violation");
+        assert_eq!(v.rule_id, "code_only");
+        // Prose after the fence is a grounded answer.
+        assert!(check_final_answer("可以这样写：\n```python\nprint(1)\n```\n如上所示。").is_none());
+        // Inline code tail in prose is not a fence.
+        assert!(check_final_answer("入口是 `main()`。").is_none());
+        // SELECTED citation tail after a quoted block stays clean.
+        assert!(check_final_answer("命中两行：\n```\nfoo\n```\n\nSELECTED: #1").is_none());
+    }
+
+    #[test]
     fn final_answer_contract_violation_covers_all_classes() {
         assert!(final_answer_contract_violation("```python\nprint(1)\n```"));
         assert!(final_answer_contract_violation("<retrieval_summary>"));
@@ -99,6 +121,7 @@ use super::*;
             ("host_shell", "<retrieval_summary>"),
             ("template_artifact", "</response>"),
             ("executable_code", "先看看命中。\n<code language=\"python\">\npass\n</code>"),
+            ("trailing_code_fence", "先确认字段形态。\n```python\npass\n```"),
         ];
         for (expected_id, text) in cases {
             let v = check_final_answer(text).expect("expected a violation");
