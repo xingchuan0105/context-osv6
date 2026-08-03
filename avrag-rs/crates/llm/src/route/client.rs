@@ -309,30 +309,23 @@ pub fn build_openai_responses_route(
     config: &crate::ModelProviderConfig,
     transport: Arc<dyn Transport>,
 ) -> Route<OpenAiResponsesProtocol> {
-    let auth = if config.api_key.is_empty()
-        && config.base_url.to_ascii_lowercase().contains("localhost")
-    {
-        Auth::None
-    } else if config.api_key.is_empty() {
-        Auth::None
-    } else {
-        Auth::Bearer(config.api_key.clone())
-    };
-    Route {
-        id: config.provider_name(),
-        provider: config.provider_name(),
-        protocol: OpenAiResponsesProtocol,
-        // OpenAI SDK appends `/v1/responses` for base URLs without a version
-        // segment (e.g. `https://api.deepseek.com`); keep the same semantics.
-        endpoint: Endpoint::new(config.base_url.clone(), "/v1/responses"),
-        auth,
-        transport,
-    }
+    // OpenAI SDK appends `/v1/responses` for base URLs without a version
+    // segment (e.g. `https://api.deepseek.com`); keep the same semantics.
+    build_responses_route(config, transport, "/v1/responses")
 }
 
 pub fn build_dashscope_responses_route(
     config: &crate::ModelProviderConfig,
     transport: Arc<dyn Transport>,
+) -> Route<OpenAiResponsesProtocol> {
+    // DashScope compatible-mode base_url already ends in `/v1`.
+    build_responses_route(config, transport, "/responses")
+}
+
+fn build_responses_route(
+    config: &crate::ModelProviderConfig,
+    transport: Arc<dyn Transport>,
+    path: &str,
 ) -> Route<OpenAiResponsesProtocol> {
     let auth = if config.api_key.is_empty() {
         Auth::None
@@ -343,8 +336,7 @@ pub fn build_dashscope_responses_route(
         id: config.provider_name(),
         provider: config.provider_name(),
         protocol: OpenAiResponsesProtocol,
-        // DashScope compatible-mode base_url already ends in `/v1`.
-        endpoint: Endpoint::new(config.base_url.clone(), "/responses"),
+        endpoint: Endpoint::new(config.base_url.clone(), path),
         auth,
         transport,
     }

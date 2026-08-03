@@ -60,7 +60,8 @@ struct ModelSummaryEnvelope {
     summary_metadata: ModelSummaryMetadata,
 }
 
-/// SummaryGenerator creates structured summaries for documents based on their content type.
+/// Offline/legacy summary generator. Production ingestion continues the
+/// document session (`summary-session-user.tmpl`); keep this type for rollback.
 pub struct SummaryGenerator {
     llm: LlmClient,
     prompt_template: Option<String>,

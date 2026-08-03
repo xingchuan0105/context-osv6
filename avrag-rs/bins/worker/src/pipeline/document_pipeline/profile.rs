@@ -60,7 +60,7 @@ pub(crate) async fn generate_document_summary(
         .produce(
             &[INTERACTION_SESSION_SYSTEM, avrag_llm::summary_system_prompt()],
             &user_message,
-            Some(0.3),
+            Some(super::super::helpers::SUMMARY_TEMPERATURE),
         )
         .await
     {

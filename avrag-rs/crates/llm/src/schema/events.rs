@@ -45,10 +45,6 @@ impl LlmResponse {
     pub fn tool_calls(&self) -> Option<&[contracts::ToolCall]> {
         self.tool_calls.as_deref()
     }
-
-    pub fn response_id(&self) -> Option<&str> {
-        self.response_id.as_deref()
-    }
 }
 
 #[derive(Debug, Clone)]

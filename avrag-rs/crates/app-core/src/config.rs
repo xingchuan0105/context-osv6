@@ -25,7 +25,8 @@ pub struct AppConfig {
     pub agent_llm_pool: Option<avrag_llm::LlmPoolConfig>,
     pub memory_llm: ModelProviderConfig,
     pub ingestion_llm: ModelProviderConfig,
-    /// LLM for KG triplet extraction during document ingest (defaults to DeepSeek).
+    /// Optional standalone triplet LLM (e2e probes / rollback). Production
+    /// text triplets continue the ingestion Responses session (`INGESTION_LLM_*`).
     pub triplet_llm: ModelProviderConfig,
     pub search: SearchConfig,
     pub redis: RedisConfig,

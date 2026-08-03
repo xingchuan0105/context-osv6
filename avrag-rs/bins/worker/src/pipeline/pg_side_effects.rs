@@ -235,7 +235,7 @@ pub(crate) async fn generate_document_profile_with_llm(
                 .seed(
                     &[INTERACTION_SESSION_SYSTEM, avrag_llm::section_index_system_prompt()],
                     &message,
-                    Some(0.1),
+                    Some(super::helpers::PROFILE_SEED_TEMPERATURE),
                 )
                 .await;
         }
@@ -271,7 +271,7 @@ pub(crate) async fn generate_document_profile_with_llm(
         .seed(
             &[INTERACTION_SESSION_SYSTEM, avrag_llm::section_index_system_prompt()],
             &user_message,
-            Some(0.1),
+            Some(super::helpers::PROFILE_SEED_TEMPERATURE),
         )
         .await
     {

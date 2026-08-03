@@ -43,6 +43,9 @@ pub struct SectionIndexChunk {
     pub text: String,
 }
 
+/// Offline/legacy section-index generator. Production ingestion seeds a
+/// Responses session via [`build_session_seed_user_message`]; keep this type
+/// for rollback / isolated probes.
 pub struct SectionIndexGenerator {
     llm: LlmClient,
     system_prompt: String,

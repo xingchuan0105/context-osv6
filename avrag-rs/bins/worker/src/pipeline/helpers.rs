@@ -21,6 +21,12 @@ pub(crate) use super::triplet_extraction::{
 };
 use crate::runtime_support::safe_relative_object_key;
 
+/// Profile / section-index seed and triplet extraction (low entropy).
+pub(crate) const PROFILE_SEED_TEMPERATURE: f32 = 0.1;
+pub(crate) const TRIPLET_TEMPERATURE: f32 = 0.1;
+/// Document summary follow-up turn (slightly higher for prose).
+pub(crate) const SUMMARY_TEMPERATURE: f32 = 0.3;
+
 #[cfg(test)]
 pub(crate) use super::index_dispatch::embed_text_vectors_with_client;
 #[cfg(test)]

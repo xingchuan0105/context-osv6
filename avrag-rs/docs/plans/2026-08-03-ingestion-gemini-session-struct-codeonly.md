@@ -261,6 +261,7 @@ INGESTION_LLM_ENABLE_THINKING=false   # reasoning: {effort: "none"}
 | **数据驻留** | DashScope 会话缓存存储对话上下文；用户文档全文进会话 | 治理决策：可接受则写明；不可接受则 session 缓存只对 chunks 前缀（摘要/画像产出仍本地落库）——**本期默认接受，worker-dev.md 明示** |
 | **prompts-in-md 合规** | seed/续接轮措辞是新增 LLM 文案，须落 `prompts/**/*.md`（仓库硬规则） | §5 文件清单补 prompts 条目：新增 `prompts/pipeline/interaction-session.system.md`（会话引导），summary/profile/triplet 复用现有 include_str! prompts |
 | **completion_cache × 会话链** | result cache 命中跳过 LLM → 拿不到 response_id → 链断 | §4.3 B 已定：会话路径绕开 result cache |
+| **visual triplet × completion_cache** | page_raster VLM 抽三元组**不在** session 链上（独立 complete 调用） | **接受** result-level `completion_cache`（重灌去重）；与 session 链互斥策略不冲突（2026-08-03 收口拍板） |
 | **summary batch** | 大文档 summary 现拆多批 + finalize | 单会话内多轮续接组织方式按实测调 |
 | **Pandoc 依赖** | 新增 apt 系统依赖 | 记录到 worker-dev.md / 部署脚本 |
 | **struct 语义字段 None** | caption/unit/table_kind 为空 | **查询侧不崩，但 caption 语义信号缺失**：多表文档选表依赖 DESCRIBE + 样例行，选表准确率可能降。如观测到选表退化再单独加轻量标注 |

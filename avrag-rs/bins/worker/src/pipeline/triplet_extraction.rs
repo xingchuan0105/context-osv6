@@ -9,7 +9,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;
-use super::helpers::{estimate_token_count, record_graph_degrade};
+use super::helpers::{estimate_token_count, record_graph_degrade, TRIPLET_TEMPERATURE};
 use super::ingestion_session::INTERACTION_SESSION_SYSTEM;
 use super::processor::PgTaskProcessor;
 use super::triplet_semantic_lint::triplet_semantic_violation;
@@ -188,7 +188,7 @@ pub(crate) async fn extract_triplets_for_index(
             .produce(
                 &[INTERACTION_SESSION_SYSTEM, TRIPLET_EXTRACTION_SYSTEM_PROMPT],
                 &user_message,
-                Some(0.1),
+                Some(TRIPLET_TEMPERATURE),
             )
             .await
         {
@@ -272,14 +272,15 @@ fn build_triplet_extraction_batches(
 
 const TRIPLET_EXTRACTION_SYSTEM_PROMPT: &str =
     include_str!("../../../../prompts/pipeline/triplet-extraction.system.md");
+const TRIPLET_EXTRACTION_USER_TEMPLATE: &str =
+    include_str!("../../../../prompts/templates/triplet-extraction-user.tmpl");
+
 
 fn build_triplet_extraction_user_message(batch: &TripletExtractionBatch) -> String {
     let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
-    format!(
-        "Valid chunk IDs: {}\n\nChunks:\n{}\n\nExtract triplets with chunk_id:",
-        valid_chunk_ids.join(", "),
-        batch.payload
-    )
+    TRIPLET_EXTRACTION_USER_TEMPLATE
+        .replace("{chunk_ids}", &valid_chunk_ids.join(", "))
+        .replace("{chunks_json}", &batch.payload.to_string())
 }
 
 /// DeepSeek v4-flash non-reasoning (`thinking: disabled`) may wrap JSON in markdown
@@ -308,7 +309,7 @@ async fn complete_triplet_extraction(
     }
     // Large batches can emit long JSON arrays; cap high enough to avoid truncation.
     let response = llm
-        .complete_with_max_tokens(messages, Some(0.1), 8_192)
+        .complete_with_max_tokens(messages, Some(TRIPLET_TEMPERATURE), 8_192)
         .await?;
     if let Some(cache) = cache {
         cache
