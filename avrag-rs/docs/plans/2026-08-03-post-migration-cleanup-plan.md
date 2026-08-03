@@ -1,10 +1,10 @@
-# 迁移后未竟事项收口计划：生产接线 / 密钥卫生 / 工作区提交 / review 欠账
+# 迁移后未竟事项收口计划：密钥卫生 / 工作区提交 / review 欠账
 
 | 项目 | 内容 |
 |---|---|
 | 类型 | 收口计划（多来源未竟项汇总） |
 | 日期 | 2026-08-03 |
-| 范围 | SiliconFlow 迁移生产侧接线；密钥泄漏处置；工作区剩余改动提交；两轴 review 未修项；验证欠账 |
+| 范围 | 密钥泄漏处置；工作区剩余改动提交；两轴 review 未修项；验证欠账。**生产/VPS 部署不在本计划范围（用户拍板）** |
 | 前序 | `docs/engineering/2026-08-03-siliconflow-migration-handover.md`（迁移+门禁）；commit `14bd76c9`（迁移）/ `e027ea67`（ingestion 提速）/ `db1d052c`（E2E 工具） |
 | 状态 | 执行中（2026-08-03）：P0(a) 全文 seed 已在 e027ea67；pandoc timeout 已齐；.env.example 已 scrub；live .env 未用泄漏 key。**仍需在百炼控制台 revoke `sk-292b16…`（git 历史残留）** |
 
@@ -12,21 +12,13 @@
 
 ## 0. 一句话
 
-迁移与提速已 commit、E2E 侧全绿；剩下的是**生产切流量、一个必须轮换的泄漏 key、73 项工作区残留的分桶提交、review 发现的 1 个 P0 质量回退（summary 输入截断）+ 若干 P1/P2、以及三条验证欠账**。无一是新设计，全是收尾。
+迁移与提速已 commit、E2E 侧全绿；剩下的是**一个必须轮换的泄漏 key、73 项工作区残留的分桶提交、review 发现的 1 个 P0 质量回退（summary 输入截断）+ 若干 P1/P2、以及三条验证欠账**。无一是新设计，全是收尾。
 
 ---
 
-## 1. 生产侧接线（SiliconFlow 切流量）
+## 1. 生产侧接线
 
-现状：`.env`（dev）已切 SiliconFlow 且门禁绿；**生产未切**（迁移 handover §8.4）。
-
-| # | 步骤 | 验收 |
-|---|---|---|
-| 1.1 | 生产 `.env` 四槽位按 handover §4 终态写入（key 复用 `SILICONFLOW_API_KEY`；`EMBEDDING_DIMENSIONS` 留空、`RERANK_API_STYLE` 留空） | 配置落位 |
-| 1.2 | 部署仅走 `scripts/deploy-*.sh`（仓库硬规则）。`deploy-backend.sh` 的 pandoc 安装段在工作区未提交 → 先随 §3 桶 C 提交再部署 | worker 重启后 `command -v pandoc` 可见 |
-| 1.3 | **生产库重灌**（bge-m3 与百炼向量不能混排）：生产 Milvus 集合按既有 prefix/drop 机制重建 → 全量重灌。重灌期间查询侧质量退化（旧向量仍在、新模型查询向量空间不匹配）→ **先切 embedding 配置并重灌完成，再放查询流量**；或选低峰窗口 | 重灌完成、集合维度 1024 |
-| 1.4 | 切换后观察：rerank 在查询关键路径（实测 32 文档 SF 比百炼慢 ~0.25s/次），看 P95；mm embed 图文 ~0.86s/张（扫描 PDF 页图路径会累积） | 无超基线告警 |
-| 1.5 | 回滚预案：四组键改回百炼（handover §6）+ 重灌；代码分支（OpenAiVl*）保留无害 | 预案写进部署记录 |
+**不在本计划范围**（用户拍板 2026-08-03：本文档不写 VPS/生产部署）。需要切流量时单独立项，参考材料：`docs/engineering/2026-08-03-siliconflow-migration-handover.md` §4（.env 终态）/§6（回滚点）、`docs/agent/wsl-services.md`（VPS 拓扑与部署纪律）。
 
 ## 2. 密钥卫生（P0，先做）
 
@@ -90,6 +82,5 @@
 1. **§2 密钥轮换**（P0，独立于代码，先做）
 2. §3 桶 A-D 提交（E 桶问用户后定）→ 工作区清零
 3. §4 P0（拍板 a/b 后实施）+ P1 三条 → `cargo test -p avrag-llm --lib` + `-p avrag-struct-supervision --lib` + office-direct pytest 过门
-4. §1 生产接线（1.2 依赖桶 A 先提交；1.3 选窗口重灌）
-5. §5 验证欠账择机补（5.1/5.2 可与 §4 同批跑）
-6. §4 P2 卫生包随手收
+4. §5 验证欠账择机补（5.1/5.2 可与 §4 同批跑）
+5. §4 P2 卫生包随手收

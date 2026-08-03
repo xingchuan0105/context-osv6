@@ -59,6 +59,15 @@ pub fn default_image_token_estimate() -> usize {
         .unwrap_or(896)
 }
 
+/// L2-normalize; zero vectors pass through unchanged (avoids NaN).
+fn l2_normalized(v: &[f32]) -> Vec<f32> {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm <= f32::EPSILON {
+        return v.to_vec();
+    }
+    v.iter().map(|x| x / norm).collect()
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MultiModalEmbeddingInput {
     pub text: Option<String>,
@@ -500,7 +509,14 @@ impl EmbeddingClient {
     /// SiliconFlow Qwen3-VL-Embedding-8B: OpenAI-shaped `POST {base}/embeddings`
     /// with multimodal `input` object array (`[{image}, {text}]`) + `dimensions`.
     /// Reuses `build_dashscope_multimodal_contents` object shape for `input`.
-    /// Returns `(vector, actual_tokens)`.
+    ///
+    /// **SF does NOT fuse server-side**: a mixed list is batch input and the
+    /// response carries one vector per item (verified 2026-08-03: `data[0]` ==
+    /// image-only, `data[1]` == text-only, cos=1.0; official docs define no
+    /// fusion semantics). Taking `data[0]` would silently drop the caption.
+    /// Multi-part inputs are fused client-side (L2-normalize → mean →
+    /// renormalize); single-part results pass through untouched (DashScope
+    /// parity). Returns `(vector, actual_tokens)`.
     async fn embed_multimodal_fused_openai_vl(
         &self,
         input: &MultiModalEmbeddingInput,
@@ -556,14 +572,32 @@ impl EmbeddingClient {
             .await
             .context("Failed to parse OpenAI-VL multimodal embedding response")?;
 
-        let vector = resp
-            .data
-            .into_iter()
-            .next()
-            .map(|item| item.embedding)
+        let vectors: Vec<Vec<f32>> = resp.data.into_iter().map(|item| item.embedding).collect();
+        let (first, rest) = vectors
+            .split_first()
             .context("OpenAI-VL multimodal embedding response did not include any vectors")?;
+        if rest.is_empty() {
+            return Ok((first.clone(), None));
+        }
 
-        Ok((vector, None))
+        // No server-side fusion on SF: fuse per-item vectors client-side.
+        let dim = first.len();
+        let mut acc = vec![0f32; dim];
+        for v in std::iter::once(first).chain(rest.iter()) {
+            anyhow::ensure!(
+                v.len() == dim,
+                "OpenAI-VL embedding part dim mismatch: {} vs {dim}",
+                v.len()
+            );
+            for (a, b) in acc.iter_mut().zip(l2_normalized(v)) {
+                *a += b;
+            }
+        }
+        let count = (rest.len() + 1) as f32;
+        for a in acc.iter_mut() {
+            *a /= count;
+        }
+        Ok((l2_normalized(&acc), None))
     }
 
     fn uses_openai_vl_embedding(&self) -> bool {
@@ -826,6 +860,105 @@ mod tests {
             .expect("openai-vl multimodal embed");
         assert_eq!(vector.len(), 1024, "vector dim must match requested dimensions");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// SF returns per-item vectors for mixed input (no server-side fusion):
+    /// the client must fuse so the caption contributes — mean of L2-normalized
+    /// parts, renormalized. Mock returns data[[1,0,0],[0,1,0]] → [1/√2,1/√2,0].
+    #[tokio::test]
+    async fn openai_vl_embedding_fuses_per_item_vectors() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+
+        let app = Router::new().route(
+            "/embeddings",
+            post(|_req: Json<serde_json::Value>| async move {
+                Json(json!({
+                    "data": [
+                        { "embedding": [1.0, 0.0, 0.0] },
+                        { "embedding": [0.0, 1.0, 0.0] }
+                    ]
+                }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock openai-vl fusion listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "Qwen/Qwen3-VL-Embedding-8B".to_string(),
+            timeout_ms: 5_000,
+            api_style: Some(crate::ApiStyle::OpenAiVlEmbedding),
+            dimensions: Some(3),
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        let input = MultiModalEmbeddingInput {
+            text: Some("caption".to_string()),
+            images: vec!["http://example.com/img.png".to_string()],
+            ..Default::default()
+        };
+        let vector = client
+            .embed_multimodal_fused(&input, Some(3))
+            .await
+            .expect("openai-vl fused embed");
+        let inv_sqrt2 = 1.0f32 / 2.0f32.sqrt();
+        assert_eq!(vector.len(), 3);
+        assert!((vector[0] - inv_sqrt2).abs() < 1e-5, "x={}", vector[0]);
+        assert!((vector[1] - inv_sqrt2).abs() < 1e-5, "y={}", vector[1]);
+        assert!(vector[2].abs() < 1e-5, "z={}", vector[2]);
+    }
+
+    /// Single-item response passes through untouched (DashScope parity — no
+    /// client-side normalization when there is nothing to fuse).
+    #[tokio::test]
+    async fn openai_vl_embedding_single_item_passes_through() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+
+        let app = Router::new().route(
+            "/embeddings",
+            post(|_req: Json<serde_json::Value>| async move {
+                Json(json!({ "data": [{ "embedding": [3.0, 4.0, 0.0] }] }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock openai-vl single listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "Qwen/Qwen3-VL-Embedding-8B".to_string(),
+            timeout_ms: 5_000,
+            api_style: Some(crate::ApiStyle::OpenAiVlEmbedding),
+            dimensions: Some(3),
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        let vector = client
+            .embed_multimodal_fused(&MultiModalEmbeddingInput::text("仅文本"), Some(3))
+            .await
+            .expect("openai-vl single embed");
+        assert_eq!(vector, vec![3.0, 4.0, 0.0]);
     }
 
     /// OpenAiVlRerank style must NOT route through the multimodal embedding path.

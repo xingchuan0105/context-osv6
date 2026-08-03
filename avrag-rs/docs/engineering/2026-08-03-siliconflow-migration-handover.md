@@ -192,5 +192,6 @@ key 均复用 `SILICONFLOW_API_KEY`。其余 `MILVUS_TEXT_VECTOR_DIM=1024` / `MI
    - 落账佐证缺口：E2E 收尾清理了测试 PG 容器，`llm_usage_events` 查询不可得；但 embedding 失败=硬失败（上次 400 死信即证），灌库全绿本身即供应商切换成功的硬证据。
 3. 质量判定：按新口径通过（旧判据 recall≥0.949/PASS≥137 随 149 评测一并退役）。
 4. 待办：commit（用户确认后）；生产切流量前确认无旧百炼向量残留（E2E 语料已全量 bge-m3；生产库重灌属后续动作）。
+5. **文档审计补记（2026-08-03 晚，对照 SF 官方文档复核接口）**：text embed / text rerank / mm rerank 三接口合规；**mm embed 发现语义 bug 并已修复**——SF VL embedding 对混合输入 `[{image},{text}]` 不做服务端融合，返回逐元素独立向量（实测 `data[0]`==纯图、`data[1]`==纯文本，cos=1.0），原实现取 `data[0]` 导致 caption 零贡献。修复：`embed_multimodal_fused_openai_vl` 改客户端融合（L2 归一化→均值→再归一化），单元素直通不动；回归单测 ×2（融合数学 [1,0,0]+[0,1,0]→[1/√2,1/√2,0]、单元素直通），`cargo test -p avrag-llm --lib` 122 绿；真机复验 fused 向量对图/文 cos 均 0.8018（修复前对文 0.2859）。**注：此前门禁（灌库+4 题冒烟）走的是文本 RAG，mm 路径未被检验——本条正属于那类盲区；E2E 语料中 mm 页面向量需在下次重灌后才是融合向量。**
 
 *完。*
