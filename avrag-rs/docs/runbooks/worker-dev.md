@@ -183,9 +183,19 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 |------|----------|
 | PDF（数字版） | liteparse（`lit parse --format markdown --no-ocr`）子进程 → markdown → IR |
 | PDF（扫描件，liteparse 提取近空） | 整本转 Paddle Jobs OCR（`paddle_ocr_pdf`，1 文件 1 Job，`pdf_route_mode=paddle_ocr_pdf`） |
-| Office（docx/xlsx/pptx/doc/ppt/xls） | office-direct-extract 直读（旧二进制 doc/ppt/xls 经 soffice 转 OOXML）→ markdown → IR |
 | 文本/代码（txt/md/csv/json/toml/yaml/html/代码） | markitdown 子进程 → markdown → IR |
 | 独立图片（png/jpg/webp） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`，现役唯一图片路径） |
+
+### Embedding / Rerank 供应商（2026-08-03 起：SiliconFlow）
+
+| 槽位 | 模型 | 约束 |
+|---|---|---|
+| `EMBEDDING_*`（text） | `Pro/BAAI/bge-m3`（1024d） | **禁 dimensions 参数（400）→ `EMBEDDING_DIMENSIONS` 必须留空**（代码空串→None→不发字段）；base_url `https://api.siliconflow.cn/v1` |
+| `RERANK_*`（text） | `Pro/BAAI/bge-reranker-v2-m3` | 只收裸字符串 documents；**`RERANK_API_STYLE` 留空**（不走 dashscope_vl_rerank） |
+| `MM_EMBEDDING_*`（multimodal） | `Qwen/Qwen3-VL-Embedding-8B` | OpenAI 形状 `/embeddings`，`input` 混合对象数组 `[{text},{image}]` + `dimensions`（`MM_EMBEDDING_API_STYLE=openai_vl_embedding`） |
+| `MM_RERANK_*`（multimodal） | `Qwen/Qwen3-VL-Reranker-8B` | OpenAI 形状 `/rerank`，裸字符串 `query` + `documents` 对象数组（`MM_RERANK_API_STYLE=openai_vl_rerank`） |
+
+所有槽位 key 复用 `SILICONFLOW_API_KEY`。向量维度全部 1024（与 Milvus collection schema 兼容；换模型后**必须重灌**，新旧向量不能混排）。
 
 1. **Paddle Jobs（仅独立图片）**
    - `PADDLE_OCR_BASE_URL` — 默认 `https://paddleocr.aistudio-app.com/api/v2/ocr`
@@ -193,7 +203,6 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
    - `PADDLE_OCR_MODEL` — 如 `PaddleOCR-VL-1.6`
 2. **E 类 VisualRaster sidecar** —— 已退役（2026-08-02 直读切换）：`PDF_RENDERER_BASE_URL`、`PDF_VISUAL_PAGES_PER_CHUNK`、`PDF_RENDERER_TIMEOUT_MS` 均不再生效；`pdf-renderer-up.sh/down.sh` 已删除；扫描件 PDF 现由 liteparse 提取近空检测后整本转 Paddle OCR（见上表），不再按零块校验拒收。
 3. 可选调参：`MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896`
-4. VLM 页摘要（INGESTION_LLM）与可选 triplet（`INGESTION_VLM_TRIPLET_ENABLED=1`）依赖 `INGESTION_LLM_*` 配置。
 
 > **已删除：** MinerU PDF OCR、`LITEPARSE_ENABLED` / shadow / 灰度开关。历史见 `docs/archive/p4-mineru-shadow-migration-historical.md`。liteparse/office parser 退役见 `docs/plans/2026-07-31-struct-query-w2-s4-window2-handoff.md`。
 

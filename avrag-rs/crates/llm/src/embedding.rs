@@ -344,11 +344,6 @@ impl EmbeddingClient {
         if !self.config.is_configured() {
             anyhow::bail!("Embedding API not configured: API key or base_url is empty");
         }
-        if !self.uses_dashscope_multimodal_embedding() {
-            anyhow::bail!(
-                "embed_multimodal_fused requires a DashScope multimodal embedding config"
-            );
-        }
 
         let effective_dimension = dimension.or(self.config.dimensions);
         let cache_key = mm_embedding_cache_key(&self.config.model, effective_dimension, input);
@@ -365,6 +360,47 @@ impl EmbeddingClient {
         let estimated_tokens = input.estimate_tokens();
         self.check_rate_limit(estimated_tokens)?;
 
+        let (vector, actual_tokens_u32) = if self.uses_openai_vl_embedding() {
+            self.embed_multimodal_fused_openai_vl(input, effective_dimension)
+                .await?
+        } else if self.uses_dashscope_multimodal_embedding() {
+            self.embed_multimodal_fused_dashscope(input, effective_dimension)
+                .await?
+        } else {
+            anyhow::bail!(
+                "embed_multimodal_fused requires a DashScope or OpenAiVlEmbedding multimodal config"
+            )
+        };
+
+        if let Some(limiter) = &self.rate_limiter {
+            let actual_tokens = actual_tokens_u32
+                .map(|value| value as usize)
+                .unwrap_or(estimated_tokens);
+            if actual_tokens > estimated_tokens {
+                let _ = limiter.check_request(actual_tokens.saturating_sub(estimated_tokens));
+            }
+        }
+
+        if let Some(cache) = &self.cache {
+            if let Ok(raw) = serde_json::to_string(&vector) {
+                let _ = cache.set(&cache_key, &raw, EMBEDDING_CACHE_TTL_SECS).await;
+            }
+        }
+
+        self.record_embedding_usage(estimated_tokens as u32, actual_tokens_u32)
+            .await;
+
+        Ok(vector)
+    }
+
+    /// DashScope native multimodal embedding (`input.contents` object array +
+    /// `parameters.{output_type,enable_fusion,dimension}`). Returns `(vector,
+    /// actual_tokens)`.
+    async fn embed_multimodal_fused_dashscope(
+        &self,
+        input: &MultiModalEmbeddingInput,
+        effective_dimension: Option<usize>,
+    ) -> anyhow::Result<(Vec<f32>, Option<u32>)> {
         let contents = build_dashscope_multimodal_contents(input);
         if contents.is_empty() {
             anyhow::bail!("multimodal embedding input is empty");
@@ -375,7 +411,7 @@ impl EmbeddingClient {
         if contents.len() > 1 {
             parameters.insert("enable_fusion".to_string(), json!(true));
         }
-        if let Some(dimension) = dimension.or(self.config.dimensions) {
+        if let Some(dimension) = effective_dimension {
             parameters.insert("dimension".to_string(), json!(dimension));
         }
 
@@ -450,15 +486,6 @@ impl EmbeddingClient {
                     .and_then(|item| item.image_tokens)
             });
 
-        if let Some(limiter) = &self.rate_limiter {
-            let actual_tokens = actual_tokens_u32
-                .map(|value| value as usize)
-                .unwrap_or(estimated_tokens);
-            if actual_tokens > estimated_tokens {
-                let _ = limiter.check_request(actual_tokens.saturating_sub(estimated_tokens));
-            }
-        }
-
         let vector = resp
             .output
             .embeddings
@@ -467,16 +494,80 @@ impl EmbeddingClient {
             .map(|item| item.embedding)
             .context("DashScope multimodal embedding response did not include any vectors")?;
 
-        if let Some(cache) = &self.cache {
-            if let Ok(raw) = serde_json::to_string(&vector) {
-                let _ = cache.set(&cache_key, &raw, EMBEDDING_CACHE_TTL_SECS).await;
-            }
+        Ok((vector, actual_tokens_u32))
+    }
+
+    /// SiliconFlow Qwen3-VL-Embedding-8B: OpenAI-shaped `POST {base}/embeddings`
+    /// with multimodal `input` object array (`[{image}, {text}]`) + `dimensions`.
+    /// Reuses `build_dashscope_multimodal_contents` object shape for `input`.
+    /// Returns `(vector, actual_tokens)`.
+    async fn embed_multimodal_fused_openai_vl(
+        &self,
+        input: &MultiModalEmbeddingInput,
+        effective_dimension: Option<usize>,
+    ) -> anyhow::Result<(Vec<f32>, Option<u32>)> {
+        let contents = build_dashscope_multimodal_contents(input);
+        if contents.is_empty() {
+            anyhow::bail!("multimodal embedding input is empty");
         }
 
-        self.record_embedding_usage(estimated_tokens as u32, actual_tokens_u32)
-            .await;
+        let mut request_body = json!({
+            "model": self.config.model,
+            "input": contents,
+        });
+        if let Some(dimension) = effective_dimension {
+            request_body["dimensions"] = json!(dimension);
+        }
 
-        Ok(vector)
+        let response = self
+            .client
+            .post(format!(
+                "{}/embeddings",
+                self.config.base_url.trim_end_matches('/')
+            ))
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send OpenAI-VL multimodal embedding request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "OpenAI-VL multimodal embedding API error {}: {}",
+                status,
+                body
+            );
+        }
+
+        #[derive(Deserialize)]
+        struct OpenAIEmbeddingResponse {
+            data: Vec<OpenAIEmbeddingItem>,
+        }
+        #[derive(Deserialize)]
+        struct OpenAIEmbeddingItem {
+            embedding: Vec<f32>,
+        }
+
+        let resp: OpenAIEmbeddingResponse = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI-VL multimodal embedding response")?;
+
+        let vector = resp
+            .data
+            .into_iter()
+            .next()
+            .map(|item| item.embedding)
+            .context("OpenAI-VL multimodal embedding response did not include any vectors")?;
+
+        Ok((vector, None))
+    }
+
+    fn uses_openai_vl_embedding(&self) -> bool {
+        self.config.api_style == Some(crate::ApiStyle::OpenAiVlEmbedding)
     }
 
     fn uses_dashscope_multimodal_embedding(&self) -> bool {
@@ -671,6 +762,92 @@ mod tests {
         assert!(client.uses_dashscope_multimodal_embedding());
     }
 
+    /// OpenAiVlEmbedding (SiliconFlow Qwen3-VL-Embedding-8B) branch: body has
+    /// multimodal `input` object array + `dimensions`, response is OpenAI-shaped
+    /// `data[].embedding`, and the returned vector dim matches.
+    #[tokio::test]
+    async fn openai_vl_embedding_sends_object_array_and_dimensions() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let call_counter = calls.clone();
+        let app = Router::new().route(
+            "/embeddings",
+            post(move |Json(req): Json<serde_json::Value>| {
+                call_counter.fetch_add(1, Ordering::SeqCst);
+                // body: {model, input:[{image},{text}], dimensions}
+                let input = req["input"].as_array().cloned().unwrap_or_default();
+                let has_image = input.iter().any(|v| v.get("image").is_some());
+                let has_text = input.iter().any(|v| v.get("text").is_some());
+                let dim = req["dimensions"].as_u64().unwrap_or(1024) as usize;
+                let vector: Vec<f32> = (0..dim).map(|i| 0.05 + i as f32 * 0.001).collect();
+                let data = vec![json!({ "embedding": vector })];
+                async move {
+                    assert!(has_image, "multimodal input must include image object");
+                    assert!(has_text, "multimodal input must include text object");
+                    Json(json!({ "data": data }))
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock openai-vl listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "Qwen/Qwen3-VL-Embedding-8B".to_string(),
+            timeout_ms: 5_000,
+            api_style: Some(crate::ApiStyle::OpenAiVlEmbedding),
+            dimensions: Some(1024),
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        let input = MultiModalEmbeddingInput {
+            text: Some("速冻设备".to_string()),
+            images: vec!["http://example.com/img.png".to_string()],
+            ..Default::default()
+        };
+        let vector = client
+            .embed_multimodal_fused(&input, Some(1024))
+            .await
+            .expect("openai-vl multimodal embed");
+        assert_eq!(vector.len(), 1024, "vector dim must match requested dimensions");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// OpenAiVlRerank style must NOT route through the multimodal embedding path.
+    #[tokio::test]
+    async fn openai_vl_rerank_style_is_not_multimodal_embedding() {
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url: "http://127.0.0.1:1".to_string(),
+            api_key: "sk-test".to_string(),
+            model: "Qwen/Qwen3-VL-Reranker-8B".to_string(),
+            timeout_ms: 1000,
+            api_style: Some(crate::ApiStyle::OpenAiVlRerank),
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+        assert!(!client.uses_dashscope_multimodal_embedding());
+        assert!(!client.uses_openai_vl_embedding());
+        assert!(client.embed_multimodal_fused(&MultiModalEmbeddingInput::default(), None).await.is_err());
+    }
+
     /// Same input text → Redis cache hit → mock embedding HTTP called once.
     ///
     /// Skips when Redis is unavailable (no `TEST_REDIS_URL` / local docker).
@@ -751,6 +928,64 @@ mod tests {
             1,
             "second identical embed should hit Redis, not call HTTP again"
         );
+    }
+
+    /// Regression (2026-08-03 SiliconFlow migration): when `dimensions` is not
+    /// configured (bge-m3 rejects the field with 400 code:20015), the request body
+    /// must NOT contain a `dimensions` key — provider returns its native dim.
+    #[tokio::test]
+    async fn embed_omits_dimensions_when_unset() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let call_counter = calls.clone();
+        let app = Router::new().route(
+            "/embeddings",
+            post(move |Json(req): Json<serde_json::Value>| {
+                call_counter.fetch_add(1, Ordering::SeqCst);
+                assert!(
+                    req.get("dimensions").is_none(),
+                    "request must not carry dimensions when unset: {req}"
+                );
+                let texts = req["input"]
+                    .as_array()
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                let vector: Vec<f32> = (0..8).map(|i| 0.1 + i as f32 * 0.01).collect();
+                let data: Vec<serde_json::Value> =
+                    texts.iter().map(|_| json!({ "embedding": vector })).collect();
+                async move { Json(json!({ "data": data })) }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock embedding listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "Pro/BAAI/bge-m3".to_string(),
+            timeout_ms: 5_000,
+            api_style: None,
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        let vectors = client.embed(&["one", "two"]).await.expect("embed without dimensions");
+        assert_eq!(vectors.len(), 2);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     /// Provider returning fewer embeddings than texts must fail loud, not silently

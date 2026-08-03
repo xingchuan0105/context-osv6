@@ -63,6 +63,12 @@ pub enum ApiStyle {
     OpenAiResponses,
     DashScopeMultimodalEmbedding,
     DashScopeVlRerank,
+    /// SiliconFlow Qwen3-VL-Embedding-8B: OpenAI-shaped `/embeddings` with
+    /// multimodal `input` object array + `dimensions`. See `embedding.rs`.
+    OpenAiVlEmbedding,
+    /// SiliconFlow Qwen3-VL-Reranker-8B: OpenAI-shaped `/rerank` with multimodal
+    /// `documents` object array. See `reranker.rs`.
+    OpenAiVlRerank,
     Auto,
 }
 
@@ -73,6 +79,8 @@ impl ApiStyle {
             "responses" | "openai_responses" => Some(Self::OpenAiResponses),
             "dashscope_multimodal_embedding" => Some(Self::DashScopeMultimodalEmbedding),
             "dashscope_vl_rerank" => Some(Self::DashScopeVlRerank),
+            "openai_vl_embedding" => Some(Self::OpenAiVlEmbedding),
+            "openai_vl_rerank" => Some(Self::OpenAiVlRerank),
             "auto" => Some(Self::Auto),
             _ => None,
         }
@@ -86,6 +94,8 @@ impl std::fmt::Display for ApiStyle {
             Self::OpenAiResponses => "responses",
             Self::DashScopeMultimodalEmbedding => "dashscope_multimodal_embedding",
             Self::DashScopeVlRerank => "dashscope_vl_rerank",
+            Self::OpenAiVlEmbedding => "openai_vl_embedding",
+            Self::OpenAiVlRerank => "openai_vl_rerank",
             Self::Auto => "auto",
         };
         f.write_str(s)

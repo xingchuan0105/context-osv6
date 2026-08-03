@@ -190,7 +190,12 @@ impl Default for AppConfig {
                 timeout_ms: 15000,
                 temperature: None,
                 api_style: None,
-                dimensions: Some(1024),
+                // Request-side `dimensions` only when explicitly configured
+                // (`EMBEDDING_DIMENSIONS`) or inferred for DashScope models
+                // (`inferred_embedding_dimensions`). Default None keeps providers
+                // that reject the field (SiliconFlow bge-m3 → 400 code:20015)
+                // working; schema dim comes from `MILVUS_TEXT_VECTOR_DIM`.
+                dimensions: None,
                 enable_thinking: None,
                 enable_cache: None,
                 rpm_limit: None,
@@ -362,8 +367,16 @@ impl AppConfig {
             &config.embedding,
             env_optional_string("DASHSCOPE_API_KEY"),
         );
-        config.embedding.dimensions =
-            env_usize_optional("AVRAG_EMBEDDING_DIM").or(config.embedding.dimensions);
+        // `AVRAG_EMBEDDING_DIM` declares the provider's output dim for schema sizing
+        // (Milvus/pgvector), NOT a request-side `dimensions` parameter. It must not
+        // flow into `embedding.dimensions` — SiliconFlow bge-m3 rejects the field
+        // with 400 code:20015 and returns its native 1024d regardless.
+        config.milvus.text_vector_dim = env_usize(
+            "MILVUS_TEXT_VECTOR_DIM",
+            env_usize_optional("AVRAG_EMBEDDING_DIM")
+                .or(config.embedding.dimensions)
+                .unwrap_or(config.milvus.text_vector_dim),
+        );
         config.mm_embedding = model_config_from_env(
             "MM_EMBEDDING",
             &config.mm_embedding,
@@ -378,13 +391,6 @@ impl AppConfig {
             "RERANK",
             &config.rerank,
             env_optional_string("DASHSCOPE_API_KEY"),
-        );
-        config.milvus.text_vector_dim = env_usize(
-            "MILVUS_TEXT_VECTOR_DIM",
-            config
-                .embedding
-                .dimensions
-                .unwrap_or(config.milvus.text_vector_dim),
         );
         config.milvus.multimodal_vector_dim = env_usize(
             "MILVUS_MULTIMODAL_VECTOR_DIM",

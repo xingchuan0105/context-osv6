@@ -194,8 +194,10 @@ impl RerankerClient {
         if !self.config.is_configured() {
             anyhow::bail!("Reranker not configured");
         }
-        if !self.uses_dashscope_vl_rerank() {
-            anyhow::bail!("rerank_multimodal_text_query requires a qwen3-vl-rerank config");
+        if !self.uses_dashscope_vl_rerank() && !self.uses_openai_vl_rerank() {
+            anyhow::bail!(
+                "rerank_multimodal_text_query requires a qwen3-vl-rerank or openai_vl_rerank config"
+            );
         }
 
         // Batch at the provider's 100-documents-per-request limit and merge
@@ -205,9 +207,13 @@ impl RerankerClient {
         let mut batches = Vec::new();
         for (start, end) in batch_ranges(documents.len(), DASHSCOPE_VL_RERANK_MAX_DOCS) {
             let batch = &documents[start..end];
-            let results = self
-                .dashscope_vl_rerank_once(query, batch, batch.len())
-                .await?;
+            let results = if self.uses_openai_vl_rerank() {
+                self.openai_vl_rerank_once(query, batch, batch.len())
+                    .await?
+            } else {
+                self.dashscope_vl_rerank_once(query, batch, batch.len())
+                    .await?
+            };
             batches.push((
                 start,
                 results.into_iter().map(|r| (r.index, r.score)).collect(),
@@ -289,11 +295,76 @@ impl RerankerClient {
             .collect())
     }
 
+    /// One SiliconFlow Qwen3-VL-Reranker-8B request: OpenAI-shaped `POST
+    /// {base}/rerank` with a bare-string `query` and multimodal `documents`
+    /// object array (`[{text}, {image}]`). Response reuses the OpenAI rerank
+    /// `results[index, relevance_score]` shape.
+    async fn openai_vl_rerank_once(
+        &self,
+        query: &str,
+        documents: &[MultiModalRerankDocument],
+        top_n: usize,
+    ) -> anyhow::Result<Vec<MultiModalRerankResult>> {
+        let request_body = json!({
+            "model": self.config.model,
+            "query": query,
+            "documents": documents.iter().map(multimodal_document_to_json).collect::<Vec<_>>(),
+            "top_n": top_n,
+        });
+
+        let response = self
+            .client
+            .post(format!(
+                "{}/rerank",
+                self.config.base_url.trim_end_matches('/')
+            ))
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send OpenAI-VL multimodal rerank request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI-VL multimodal rerank API error {}: {}", status, body);
+        }
+
+        #[derive(Deserialize)]
+        struct OpenAiRerankResponse {
+            results: Vec<OpenAiRerankItem>,
+        }
+        #[derive(Deserialize)]
+        struct OpenAiRerankItem {
+            index: usize,
+            relevance_score: f32,
+        }
+
+        let resp: OpenAiRerankResponse = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI-VL multimodal rerank response")?;
+
+        Ok(resp
+            .results
+            .into_iter()
+            .map(|result| MultiModalRerankResult {
+                index: result.index,
+                score: result.relevance_score,
+            })
+            .collect())
+    }
+
     fn uses_dashscope_vl_rerank(&self) -> bool {
         matches!(
             self.config.api_style,
             Some(crate::ApiStyle::DashScopeVlRerank)
         ) || self.config.model == "qwen3-vl-rerank"
+    }
+
+    fn uses_openai_vl_rerank(&self) -> bool {
+        self.config.api_style == Some(crate::ApiStyle::OpenAiVlRerank)
     }
 }
 
@@ -315,6 +386,81 @@ pub struct RerankResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// OpenAiVlRerank (SiliconFlow Qwen3-VL-Reranker-8B) branch: body sends a
+    /// bare-string `query` + multimodal `documents` object array + `top_n`;
+    /// response is OpenAI `results[index, relevance_score]`; merged ranking
+    /// honors input order ties.
+    #[tokio::test]
+    async fn openai_vl_rerank_sends_object_documents_and_merges() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let call_counter = calls.clone();
+        let app = Router::new().route(
+            "/rerank",
+            post(move |Json(req): Json<serde_json::Value>| {
+                call_counter.fetch_add(1, Ordering::SeqCst);
+                let query = req["query"].as_str().unwrap_or("").to_string();
+                let docs = req["documents"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let has_object_text = docs.iter().any(|v| v.get("text").is_some());
+                let has_object_image = docs.iter().any(|v| v.get("image").is_some());
+                let dim = docs.len();
+                let results: Vec<serde_json::Value> = (0..dim)
+                    .map(|i| json!({"index": dim - 1 - i, "relevance_score": (i as f32 + 1.0) / 10.0}))
+                    .collect();
+                async move {
+                    assert!(!query.is_empty(), "query must be a bare string");
+                    assert!(has_object_text, "documents must include text object");
+                    assert!(has_object_image, "documents must include image object");
+                    Json(json!({ "results": results }))
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock openai-vl rerank listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = RerankerClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "Qwen/Qwen3-VL-Reranker-8B".to_string(),
+            timeout_ms: 5_000,
+            api_style: Some(crate::ApiStyle::OpenAiVlRerank),
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        let docs = vec![
+            MultiModalRerankDocument::Text("速冻设备".to_string()),
+            MultiModalRerankDocument::Image("http://example.com/img.png".to_string()),
+        ];
+        let ranked = client
+            .rerank_multimodal_text_query("速冻机", &docs, 2)
+            .await
+            .expect("openai-vl rerank");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(ranked.len(), 2);
+        // Mock scores: index0=0.2, index1=0.1 → merged desc by score → [0, 1].
+        assert_eq!(ranked[0].index, 0);
+        assert_eq!(ranked[1].index, 1);
+        assert!(ranked[0].score > ranked[1].score);
+    }
 
     #[test]
     fn batch_ranges_split_250_into_3_batches() {

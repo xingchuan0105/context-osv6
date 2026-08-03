@@ -40,7 +40,7 @@ pub async fn run() -> Result<()> {
     let mut config = AppConfig::from_env();
     apply_e2e_object_store_overrides(&mut config);
     let database_url = config.database_url.clone();
-    let embedding_dim = config.embedding.dimensions.unwrap_or(64);
+    let embedding_dim = config.milvus.text_vector_dim;
     let heartbeat_secs = std::env::var("AVRAG_WORKER_HEARTBEAT_SECS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
