@@ -108,23 +108,7 @@ impl SectionIndexGenerator {
             });
         }
 
-        let chunk_ids: Vec<String> = chunks.iter().map(|c| c.chunk_id.to_string()).collect();
-        let mut chunks_map = serde_json::Map::new();
-        for chunk in chunks {
-            let preview = if chunk.text.len() > 1200 {
-                let end = chunk.text.floor_char_boundary(1200);
-                format!("{}…", &chunk.text[..end])
-            } else {
-                chunk.text.clone()
-            };
-            chunks_map.insert(
-                chunk.chunk_id.to_string(),
-                serde_json::Value::String(preview),
-            );
-        }
-        let chunks_json = serde_json::to_string_pretty(&chunks_map)
-            .context("serialize chunks for section index")?;
-
+        let (chunk_ids, chunks_json) = build_section_index_chunks(chunks)?;
         let user = self
             .user_template
             .replace("{title}", title)
@@ -158,6 +142,7 @@ impl SectionIndexGenerator {
                     usage: crate::LlmUsage::zeroed(),
                     model,
                     tool_calls: None,
+                    response_id: None,
                 });
             }
         }
@@ -177,6 +162,75 @@ impl SectionIndexGenerator {
         }
         Ok(response)
     }
+}
+
+/// Default section-index system prompt (session/profile reuse).
+pub fn section_index_system_prompt() -> &'static str {
+    DEFAULT_SECTION_INDEX_SYSTEM
+}
+
+/// Build the section-index user message for an ingestion session turn.
+pub fn build_section_index_user_message(
+    title: &str,
+    filename: &str,
+    chunks: &[SectionIndexChunk],
+) -> anyhow::Result<String> {
+    let (chunk_ids, chunks_json) = build_section_index_chunks(chunks)?;
+    Ok(DEFAULT_SECTION_INDEX_USER
+        .replace("{title}", title)
+        .replace("{filename}", filename)
+        .replace("{chunk_ids}", &chunk_ids.join(", "))
+        .replace("{chunks_json}", &chunks_json))
+}
+
+fn build_section_index_chunks(chunks: &[SectionIndexChunk]) -> anyhow::Result<(Vec<String>, String)> {
+    let chunk_ids: Vec<String> = chunks.iter().map(|c| c.chunk_id.to_string()).collect();
+    let mut chunks_map = serde_json::Map::new();
+    for chunk in chunks {
+        let preview = if chunk.text.len() > 1200 {
+            let end = chunk.text.floor_char_boundary(1200);
+            format!("{}…", &chunk.text[..end])
+        } else {
+            chunk.text.clone()
+        };
+        chunks_map.insert(
+            chunk.chunk_id.to_string(),
+            serde_json::Value::String(preview),
+        );
+    }
+    let chunks_json = serde_json::to_string_pretty(&chunks_map)
+        .context("serialize chunks for section index")?;
+    Ok((chunk_ids, chunks_json))
+}
+
+/// Build the session **seed** user message with **full** chunk text (no 1200-byte
+/// truncation). The ingestion session chain is seeded once with the whole
+/// document so every follow-up turn (summary / profile / triplet) sees the full
+/// context and hits the provider-side session cache (DashScope
+/// `x-dashscope-session-cache`). Truncating the seed would make the session
+/// prompt's "document already in context" claim false — the summary turn has no
+/// other body. `section-index` output still needs `chunk_ids` (profile parses
+/// sections against them), so this reuses the same template with full text.
+pub fn build_session_seed_user_message(
+    title: &str,
+    filename: &str,
+    chunks: &[SectionIndexChunk],
+) -> anyhow::Result<String> {
+    let chunk_ids: Vec<String> = chunks.iter().map(|c| c.chunk_id.to_string()).collect();
+    let mut chunks_map = serde_json::Map::new();
+    for chunk in chunks {
+        chunks_map.insert(
+            chunk.chunk_id.to_string(),
+            serde_json::Value::String(chunk.text.clone()),
+        );
+    }
+    let chunks_json = serde_json::to_string_pretty(&chunks_map)
+        .context("serialize full chunks for session seed")?;
+    Ok(DEFAULT_SECTION_INDEX_USER
+        .replace("{title}", title)
+        .replace("{filename}", filename)
+        .replace("{chunk_ids}", &chunk_ids.join(", "))
+        .replace("{chunks_json}", &chunks_json))
 }
 
 pub fn build_profile_metadata(
@@ -276,6 +330,47 @@ mod tests {
         assert_eq!(out.sections.len(), 1);
         assert_eq!(out.sections[0].chunk_ids, vec!["a"]);
         assert_eq!(out.document_metadata.language.as_deref(), Some("zh"));
+    }
+
+        #[test]
+    fn build_section_index_user_message_renders_template() {
+        let chunks = vec![
+            SectionIndexChunk {
+                chunk_id: Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+                text: "short chunk".to_string(),
+            },
+            SectionIndexChunk {
+                chunk_id: Uuid::parse_str("6ba7b811-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+                text: "x".repeat(1300),
+            },
+        ];
+        let msg = build_section_index_user_message("Title", "file.md", &chunks).unwrap();
+        assert!(msg.contains("Document title: Title"));
+        assert!(msg.contains("Filename: file.md"));
+        assert!(msg.contains("6ba7b810-9dad-11d1-80b4-00c04fd430c8"));
+        assert!(msg.contains("…"));
+    }
+
+    #[test]
+    fn session_seed_message_keeps_full_chunk_text() {
+        let chunks = vec![
+            SectionIndexChunk {
+                chunk_id: Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+                text: "short chunk".to_string(),
+            },
+            SectionIndexChunk {
+                chunk_id: Uuid::parse_str("6ba7b811-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+                text: "x".repeat(1300),
+            },
+        ];
+        let msg = build_session_seed_user_message("Title", "file.md", &chunks).unwrap();
+        assert!(msg.contains("Document title: Title"));
+        assert!(msg.contains("Filename: file.md"));
+        assert!(msg.contains("6ba7b810-9dad-11d1-80b4-00c04fd430c8"));
+        // Full text preserved: the 1300-char chunk must NOT be truncated to a
+        // 1200-byte preview (session seed feeds every later turn's context).
+        assert!(msg.contains(&"x".repeat(1300)));
+        assert!(!msg.contains('…'));
     }
 
     #[test]

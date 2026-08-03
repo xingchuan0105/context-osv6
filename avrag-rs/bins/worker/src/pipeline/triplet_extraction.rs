@@ -5,12 +5,12 @@ use crate::indexing::{
 use anyhow::Result;
 use avrag_llm::ChatMessage;
 use avrag_retrieval_data_plane::TextChunkIndexRecord;
-use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;
 use super::helpers::{estimate_token_count, record_graph_degrade};
+use super::ingestion_session::INTERACTION_SESSION_SYSTEM;
 use super::processor::PgTaskProcessor;
 use super::triplet_semantic_lint::triplet_semantic_violation;
 
@@ -70,7 +70,7 @@ pub(crate) async fn extract_visual_triplets_for_index(
     multimodal_chunks: &[StoredMultimodalChunk],
     parse_run_state: &mut ParseRunState,
 ) -> TripletExtractionOutput {
-    let Some(llm) = processor.llm.triplet_llm.clone() else {
+    let Some(llm) = processor.llm.ingestion_llm.clone() else {
         return TripletExtractionOutput::default();
     };
 
@@ -128,7 +128,12 @@ pub(crate) async fn extract_visual_triplets_for_index(
             ),
             ChatMessage::user(prompt),
         ];
-        match complete_triplet_extraction(&llm, None, &messages).await {
+        match complete_triplet_extraction(
+            &llm,
+            processor.llm.completion_cache.as_ref(),
+            &messages,
+        )
+        .await {
             Ok(response) => {
                 output.total_tokens = output
                     .total_tokens
@@ -160,70 +165,63 @@ pub(crate) async fn extract_visual_triplets_for_index(
 }
 
 pub(crate) async fn extract_triplets_for_index(
-    processor: &PgTaskProcessor,
+    _processor: &PgTaskProcessor,
     document_id: Uuid,
     text_chunks: &[TextChunkIndexRecord],
     parse_run_state: &mut ParseRunState,
 ) -> TripletExtractionOutput {
-    let Some(llm) = processor.llm.triplet_llm.clone() else {
+    let Some(session) = parse_run_state.session.as_mut() else {
         return TripletExtractionOutput::default();
     };
-    let completion_cache = processor.llm.completion_cache.clone();
 
     let batches = build_triplet_extraction_batches(text_chunks);
     if batches.is_empty() {
         return TripletExtractionOutput::default();
     }
 
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
-    let mut handles = Vec::with_capacity(batches.len());
-    for batch in batches {
-        let llm = llm.clone();
-        let cache = completion_cache.clone();
-        let sem = semaphore.clone();
-        handles.push(tokio::spawn(async move {
-            let _permit = sem
-                .acquire_owned()
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
-            let messages = build_triplet_extraction_messages(&batch);
-            let response = complete_triplet_extraction(&llm, cache.as_ref(), &messages).await?;
-            let raw_triplets = parse_triplet_response(&response.content, &batch.chunk_ids)?;
-            Ok::<_, anyhow::Error>((raw_triplets, response.usage.total_tokens))
-        }));
-    }
-
     let mut output = TripletExtractionOutput::default();
     let mut triplet_map: std::collections::HashMap<(String, String, String), ExtractedTriplet> =
         std::collections::HashMap::new();
-    for handle in handles {
-        match handle.await {
-            Ok(Ok((triplets, total_tokens))) => {
-                output.total_tokens = output.total_tokens.saturating_add(total_tokens);
-                for triplet in triplets {
-                    let key = (
-                        triplet.subject.to_lowercase(),
-                        triplet.predicate.to_lowercase(),
-                        triplet.object.to_lowercase(),
-                    );
-                    if let Some(existing) = triplet_map.get_mut(&key) {
-                        for cid in triplet.supporting_chunk_ids {
-                            if !existing.supporting_chunk_ids.contains(&cid) {
-                                existing.supporting_chunk_ids.push(cid);
+    for batch in batches {
+        let user_message = build_triplet_extraction_user_message(&batch);
+        match session
+            .produce(
+                &[INTERACTION_SESSION_SYSTEM, TRIPLET_EXTRACTION_SYSTEM_PROMPT],
+                &user_message,
+                Some(0.1),
+            )
+            .await
+        {
+            Ok(turn) => {
+                output.total_tokens = output.total_tokens.saturating_add(turn.usage.total_tokens);
+                match parse_triplet_response(&turn.content, &batch.chunk_ids) {
+                    Ok(triplets) => {
+                        for triplet in triplets {
+                            let key = (
+                                triplet.subject.to_lowercase(),
+                                triplet.predicate.to_lowercase(),
+                                triplet.object.to_lowercase(),
+                            );
+                            if let Some(existing) = triplet_map.get_mut(&key) {
+                                for cid in triplet.supporting_chunk_ids {
+                                    if !existing.supporting_chunk_ids.contains(&cid) {
+                                        existing.supporting_chunk_ids.push(cid);
+                                    }
+                                }
+                            } else {
+                                triplet_map.insert(key, triplet);
                             }
                         }
-                    } else {
-                        triplet_map.insert(key, triplet);
+                    }
+                    Err(error) => {
+                        let reason = format!("triplet extraction failed: {error}");
+                        record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
+                        info!(document_id = %document_id, error = %reason, "triplet extraction degraded");
                     }
                 }
             }
-            Ok(Err(error)) => {
-                let reason = format!("triplet extraction failed: {error}");
-                record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
-                info!(document_id = %document_id, error = %reason, "triplet extraction degraded");
-            }
             Err(error) => {
-                let reason = format!("triplet extraction task join failed: {error}");
+                let reason = format!("triplet extraction failed: {error}");
                 record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
                 info!(document_id = %document_id, error = %reason, "triplet extraction degraded");
             }
@@ -275,16 +273,13 @@ fn build_triplet_extraction_batches(
 const TRIPLET_EXTRACTION_SYSTEM_PROMPT: &str =
     include_str!("../../../../prompts/pipeline/triplet-extraction.system.md");
 
-fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
+fn build_triplet_extraction_user_message(batch: &TripletExtractionBatch) -> String {
     let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
-    vec![
-        ChatMessage::system(TRIPLET_EXTRACTION_SYSTEM_PROMPT),
-        ChatMessage::user(format!(
-            "Valid chunk IDs: {}\n\nChunks:\n{}\n\nExtract triplets with chunk_id:",
-            valid_chunk_ids.join(", "),
-            batch.payload
-        )),
-    ]
+    format!(
+        "Valid chunk IDs: {}\n\nChunks:\n{}\n\nExtract triplets with chunk_id:",
+        valid_chunk_ids.join(", "),
+        batch.payload
+    )
 }
 
 /// DeepSeek v4-flash non-reasoning (`thinking: disabled`) may wrap JSON in markdown
@@ -307,6 +302,7 @@ async fn complete_triplet_extraction(
                 usage: avrag_llm::LlmUsage::zeroed(),
                 model,
                 tool_calls: None,
+                response_id: None,
             });
         }
     }

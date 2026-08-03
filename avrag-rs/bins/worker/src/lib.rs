@@ -10,9 +10,8 @@ mod runtime_support;
 mod sources;
 
 use anyhow::Result;
-use app_core::{AppConfig, load_prompt_template};
+use app_core::AppConfig;
 use avrag_cache_redis::DocumentLock;
-use avrag_llm::SummaryGenerator;
 use avrag_storage_pg::{BootstrapRepository, PgAppRepository, TenantPgPool};
 use ingestion::{
     NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, WorkerRuntime, WorkerTick,
@@ -25,9 +24,9 @@ use ingestion_guard::run_document_cleanup_once;
 use pipeline::{EmbeddingDeps, LlmDeps, MeteringDeps, PgTaskProcessor, StorageDeps};
 use runtime_support::{
     apply_e2e_object_store_overrides, build_worker_embedding_client, build_worker_ingestion_llm,
-    build_worker_object_store, build_worker_retrieval_data_plane, build_worker_triplet_llm,
-    describe_object_store_config, probe_object_store, spawn_health_listener, worker_health_port,
-    worker_poll_interval, worker_runtime_mode, worker_system_tenant,
+    build_worker_object_store, build_worker_retrieval_data_plane, describe_object_store_config,
+    probe_object_store, spawn_health_listener, worker_health_port, worker_poll_interval,
+    worker_runtime_mode, worker_system_tenant,
 };
 use sources::{PgAuditSink, PgStateSink, PgTaskSource};
 
@@ -204,69 +203,6 @@ pub async fn run() -> Result<()> {
                         ),
                     },
                     llm: LlmDeps {
-                        summary_generator: {
-                            let sc = &config.ingestion_llm;
-                            if let Some(llm_config) = sc.to_llm_config() {
-                                let mut llm =
-                                    avrag_llm::LlmClient::new(llm_config).with_feature("summary");
-                                if let Some((obs, tenant)) = &usage_observer {
-                                    llm = llm.with_observer(obs.clone(), tenant.clone());
-                                }
-                                let mut generator = SummaryGenerator::from_client(llm);
-                                if let Some(template) = load_prompt_template(
-                                    &config.prompts.dir,
-                                    &config.prompts.summary_version,
-                                    "summary-generation",
-                                )
-                                .await
-                                {
-                                    generator = generator.with_prompt_template(template);
-                                }
-                                if let Some(template) = load_prompt_template(
-                                    &config.prompts.dir,
-                                    &config.prompts.summary_version,
-                                    "summary-generation-finalize",
-                                )
-                                .await
-                                {
-                                    generator = generator.with_finalize_prompt_template(template);
-                                }
-                                if let Some(cache) = completion_cache.clone() {
-                                    generator = generator.with_completion_cache(cache);
-                                }
-                                Some(generator)
-                            } else {
-                                None
-                            }
-                        },
-                        section_index_generator: {
-                            let sc = &config.ingestion_llm;
-                            sc.to_llm_config().map(|cfg| {
-                                let mut llm =
-                                    avrag_llm::LlmClient::new(cfg).with_feature("section_index");
-                                if let Some((obs, tenant)) = &usage_observer {
-                                    llm = llm.with_observer(obs.clone(), tenant.clone());
-                                }
-                                let mut section_gen =
-                                    avrag_llm::SectionIndexGenerator::from_client(llm);
-                                if let Ok(system) = std::fs::read_to_string(format!(
-                                    "{}/pipeline/section-index.system.v1.md",
-                                    config.prompts.dir.trim()
-                                )) {
-                                    if let Ok(user) = std::fs::read_to_string(format!(
-                                        "{}/templates/section-index-user.tmpl",
-                                        config.prompts.dir.trim()
-                                    )) {
-                                        section_gen = section_gen.with_prompts(system, user);
-                                    }
-                                }
-                                if let Some(cache) = completion_cache.clone() {
-                                    section_gen = section_gen.with_completion_cache(cache);
-                                }
-                                section_gen
-                            })
-                        },
-                        triplet_llm: build_worker_triplet_llm(&config, &usage_observer),
                         ingestion_llm: build_worker_ingestion_llm(&config, &usage_observer),
                         completion_cache,
                     },

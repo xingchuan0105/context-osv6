@@ -106,6 +106,9 @@ pub struct LlmRequest {
     pub options: GenerationOptions,
     pub tools: Vec<super::options::ToolDefinition>,
     pub config: ModelProviderConfig,
+    /// Previous Responses-API response id for multi-turn session chaining
+    /// (DashScope session cache). `None` starts a fresh session.
+    pub previous_response_id: Option<String>,
 }
 
 impl LlmRequest {
@@ -115,6 +118,7 @@ impl LlmRequest {
             options: GenerationOptions::default(),
             tools: Vec::new(),
             config,
+            previous_response_id: None,
         }
     }
 
@@ -125,6 +129,11 @@ impl LlmRequest {
 
     pub fn with_tools(mut self, tools: Vec<super::options::ToolDefinition>) -> Self {
         self.tools = tools;
+        self
+    }
+
+    pub fn with_previous_response_id(mut self, previous_response_id: Option<String>) -> Self {
+        self.previous_response_id = previous_response_id;
         self
     }
 }

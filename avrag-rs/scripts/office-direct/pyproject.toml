@@ -1,11 +1,9 @@
 [project]
 name = "office-direct"
 version = "0.1.0"
-description = "Office direct-read parser: docx/xlsx/pptx via mammoth/openpyxl/python-pptx, old binary doc/ppt/xls via soffice->OOXML. Emits markdown for blocks_from_markdown."
+description = "Office direct-read parser: docx via pandoc -t gfm, xlsx via openpyxl, pptx via python-pptx; old binary doc/ppt/xls via soffice->OOXML. Emits markdown for blocks_from_markdown."
 requires-python = ">=3.10"
 dependencies = [
-    "mammoth>=1.6.0",
-    "markdownify>=0.12.0",
     "openpyxl>=3.1.0",
     "python-pptx>=0.6.21",
 ]

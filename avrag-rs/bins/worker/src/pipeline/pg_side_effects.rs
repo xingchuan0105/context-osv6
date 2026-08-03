@@ -7,6 +7,8 @@ use std::path::Path;
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use super::document_pipeline::ParseRunState;
+use super::ingestion_session::{DocumentIngestionSession, INTERACTION_SESSION_SYSTEM};
 use super::processor::PgTaskProcessor;
 
 pub(crate) fn build_document_block_rows(
@@ -183,15 +185,21 @@ pub(crate) async fn generate_document_profile_with_llm(
     document_ir: &DocumentIr,
     chunks: &[avrag_storage_pg::IndexedChunk],
     filename: &str,
+    parse_run_state: &mut ParseRunState,
 ) -> DocumentProfileLlmResult {
-    let Some(generator) = processor.llm.section_index_generator.as_ref() else {
-        info!(document_id = %document_id, "section index generator not configured; skipping profile");
+    let Some(llm) = processor.llm.ingestion_llm.clone() else {
+        info!(document_id = %document_id, "ingestion llm not configured; skipping profile");
         return DocumentProfileLlmResult {
             toc_entries: Vec::new(),
             profile_metadata: None,
         };
     };
 
+    // 会话 seed 使用全文 chunks（不截断）——整个会话链（summary/profile/triplet）
+    // 依赖此轮把文档全文载入上下文并命中 provider 侧会话缓存。若用 1200B preview
+    // 截断，后续 summary 轮将看不到正文（"文档已在上下文"为假），质量回退。
+    // chunk_id 由存储层生成合法 UUID，故 index_chunks 实际恒非空；此处仍防御——
+    // 即使解析失败也建会话 seed 原文，避免 summary 被 profile 的解析成功连带跳过。
     let index_chunks: Vec<avrag_llm::SectionIndexChunk> = chunks
         .iter()
         .filter_map(|c| {
@@ -204,16 +212,80 @@ pub(crate) async fn generate_document_profile_with_llm(
         })
         .collect();
     if index_chunks.is_empty() {
+        // 防御：无合法 chunk_id 时仍建会话并 seed 文档全文（summary 依赖会话正文），
+        // profile 返回空。materialize 已拒绝零 chunk，此路径理论不可达。
+        let session = parse_run_state
+            .session
+            .get_or_insert_with(|| DocumentIngestionSession::new(llm));
+        let fallback_text = chunks
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let fallback = avrag_llm::build_session_seed_user_message(
+            &document_ir.title,
+            filename,
+            &[avrag_llm::SectionIndexChunk {
+                chunk_id: Uuid::new_v4(),
+                text: fallback_text,
+            }],
+        );
+        if let Ok(message) = fallback {
+            let _ = session
+                .seed(
+                    &[INTERACTION_SESSION_SYSTEM, avrag_llm::section_index_system_prompt()],
+                    &message,
+                    Some(0.1),
+                )
+                .await;
+        }
         return DocumentProfileLlmResult {
             toc_entries: Vec::new(),
             profile_metadata: None,
         };
     }
 
-    match generator
-        .generate(&document_ir.title, filename, &index_chunks)
+    let user_message = match avrag_llm::build_session_seed_user_message(
+        &document_ir.title,
+        filename,
+        &index_chunks,
+    ) {
+        Ok(message) => message,
+        Err(error) => {
+            info!(error = %error, "failed to build session seed user message");
+            return DocumentProfileLlmResult {
+                toc_entries: Vec::new(),
+                profile_metadata: None,
+            };
+        }
+    };
+
+    let session = parse_run_state
+        .session
+        .get_or_insert_with(|| DocumentIngestionSession::new(llm));
+    let chunk_ids: Vec<String> = index_chunks
+        .iter()
+        .map(|chunk| chunk.chunk_id.to_string())
+        .collect();
+    let turn = match session
+        .seed(
+            &[INTERACTION_SESSION_SYSTEM, avrag_llm::section_index_system_prompt()],
+            &user_message,
+            Some(0.1),
+        )
         .await
     {
+        Ok(turn) => turn,
+        Err(error) => {
+            info!(error = %error, "LLM document profile index failed");
+            return DocumentProfileLlmResult {
+                toc_entries: Vec::new(),
+                profile_metadata: None,
+            };
+        }
+    };
+
+    match avrag_llm::parse_section_index_response(&turn.content, &chunk_ids) {
         Ok(output) if !output.sections.is_empty() => {
             info!(
                 sections = output.sections.len(),
@@ -235,7 +307,7 @@ pub(crate) async fn generate_document_profile_with_llm(
             profile_metadata: None,
         },
         Err(error) => {
-            info!(error = %error, "LLM document profile index failed");
+            info!(error = %error, "LLM document profile parse failed");
             DocumentProfileLlmResult {
                 toc_entries: Vec::new(),
                 profile_metadata: None,

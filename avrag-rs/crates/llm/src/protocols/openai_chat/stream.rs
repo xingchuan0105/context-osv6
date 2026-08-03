@@ -82,6 +82,7 @@ impl ChatCompletionStreamParser {
             }),
             model: self.model,
             tool_calls: None,
+            response_id: None,
         })
     }
 

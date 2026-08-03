@@ -415,6 +415,50 @@ impl LlmClient {
             .await
     }
 
+    /// Session-chained completion for Responses-style providers (DashScope
+    /// session cache): attaches `previous_response_id` so the provider resumes
+    /// the same cached session instead of re-processing the full context.
+    ///
+    /// Returns the response together with its `response_id` for the next turn.
+    /// Uses the fixed `self.route` (never the pool) so the chain stays on one
+    /// endpoint/key; caller owns `previous_response_id` bookkeeping.
+    pub async fn complete_response(
+        &self,
+        previous_response_id: Option<&str>,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<(LlmResponse, Option<String>)> {
+        let call = self.prepare_completion(messages)?;
+        let request = self
+            .build_llm_request(messages, temperature, false, None, false, None)
+            .with_previous_response_id(previous_response_id.map(str::to_owned));
+
+        let response = self
+            .route
+            .generate(request)
+            .await
+            .map_err(Self::map_route_error)
+            .with_context(|| "Failed to complete session-chained chat request")?;
+
+        let next_response_id = response.response_id.clone();
+        self.record_completion_success(
+            &call,
+            &response.model,
+            &ApiUsageRaw::from_token_counts(
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.total_tokens,
+                response.usage.cached_tokens,
+            ),
+            response.usage.cached_tokens as u64,
+            response.usage.reasoning_tokens,
+            true,
+        )
+        .await;
+
+        Ok((response, next_response_id))
+    }
+
     pub async fn complete_stream(
         &self,
         messages: &[ChatMessage],
@@ -797,6 +841,7 @@ impl LlmClient {
             },
             model: model.clone(),
             tool_calls: None,
+            response_id: None,
         })
     }
 
@@ -877,6 +922,8 @@ mod tests {
     enum FakeHandler {
         /// Serve an SSE body as a single chunk.
         Sse(&'static str),
+        /// Serve a JSON body for a non-streaming request.
+        Json(&'static str),
         /// Fail with a non-2xx status.
         Status(u16),
         /// Inspect the Authorization header; if it equals `on_auth`, fail with
@@ -891,6 +938,8 @@ mod tests {
     struct FakeTransport {
         handlers: std::sync::Arc<std::sync::Mutex<Vec<(String, FakeHandler)>>>,
         calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        bodies: std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+        headers: std::sync::Arc<std::sync::Mutex<Vec<reqwest::header::HeaderMap>>>,
     }
 
     impl FakeTransport {
@@ -898,6 +947,8 @@ mod tests {
             Self {
                 handlers: std::sync::Arc::new(std::sync::Mutex::new(handlers)),
                 calls: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+                bodies: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+                headers: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             }
         }
 
@@ -909,6 +960,24 @@ mod tests {
                 .filter(|url| url.starts_with(prefix))
                 .count()
         }
+
+        fn last_body(&self) -> serde_json::Value {
+            self.bodies
+                .lock()
+                .unwrap()
+                .last()
+                .cloned()
+                .unwrap_or(serde_json::Value::Null)
+        }
+
+        fn last_headers(&self) -> reqwest::header::HeaderMap {
+            self.headers
+                .lock()
+                .unwrap()
+                .last()
+                .cloned()
+                .unwrap_or_default()
+        }
     }
 
     #[async_trait::async_trait]
@@ -917,10 +986,12 @@ mod tests {
             &self,
             url: &str,
             headers: reqwest::header::HeaderMap,
-            _body: &serde_json::Value,
+            body: &serde_json::Value,
             _stream: bool,
         ) -> Result<crate::route::TransportBody, LlmError> {
             self.calls.lock().unwrap().push(url.to_string());
+            self.bodies.lock().unwrap().push(body.clone());
+            self.headers.lock().unwrap().push(headers.clone());
             let handler = self
                 .handlers
                 .lock()
@@ -936,6 +1007,11 @@ mod tests {
             };
             match handler {
                 FakeHandler::Sse(body) => Ok(sse(body)),
+                FakeHandler::Json(body) => {
+                    let value: serde_json::Value =
+                        serde_json::from_str(body).expect("fake json body parses");
+                    Ok(crate::route::TransportBody::Json(value))
+                }
                 FakeHandler::Status(status) => Err(LlmError::Api {
                     status,
                     body: format!("Chat completion stream API error {status}: fake"),
@@ -1074,5 +1150,86 @@ mod tests {
         // 冷却落在 key 级:member 未冷却,下一次 pick 仍选同一 member 的 key-ok。
         let pick = client.pool.as_ref().unwrap().pick(1).unwrap();
         assert_eq!(pick.member_idx, 0);
+    }
+
+    const RESPONSES_JSON: &str = r#"{
+        "id": "resp-session-1",
+        "status": "completed",
+        "model": "qwen3.7-flash",
+        "output": [{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "session reply"}]
+        }],
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "total_tokens": 15,
+            "input_tokens_details": {"cached_tokens": 7, "reasoning_tokens": 0},
+            "output_tokens_details": {"cached_tokens": 0, "reasoning_tokens": 0}
+        }
+    }"#;
+
+    fn dashscope_config() -> ModelProviderConfig {
+        ModelProviderConfig {
+            base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "qwen3.7-flash".to_string(),
+            timeout_ms: 5000,
+            api_style: Some(ApiStyle::DashScopeResponses),
+            dimensions: None,
+            enable_thinking: Some(false),
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        }
+    }
+
+    /// 会话续接单测：complete_response 首轮（无 prev id）返回 response_id；
+    /// 续接轮携带 previous_response_id 并带上会话缓存 header。
+    #[tokio::test]
+    async fn complete_response_chains_session_with_previous_id_and_header() {
+        let fake = FakeTransport::with_handlers(vec![(
+            "https://dashscope.aliyuncs.com".to_string(),
+            FakeHandler::Json(RESPONSES_JSON),
+        )]);
+        let client = LlmClient::new_with_pool_and_transport(
+            dashscope_config(),
+            LlmPoolConfig::new(Vec::new()),
+            Arc::new(fake.clone()),
+        );
+
+        // First turn: no previous id.
+        let (first, next_id) = client
+            .complete_response(None, &[ChatMessage::user("hi")], Some(0.1))
+            .await
+            .unwrap();
+        assert_eq!(first.content, "session reply");
+        assert_eq!(next_id.as_deref(), Some("resp-session-1"));
+
+        let first_body = fake.last_body();
+        assert_eq!(first_body["previous_response_id"], serde_json::Value::Null);
+        assert_eq!(first_body["reasoning"]["effort"], "none");
+        let first_headers = fake.last_headers();
+        assert_eq!(
+            first_headers
+                .get("x-dashscope-session-cache")
+                .and_then(|v| v.to_str().ok()),
+            Some("enable")
+        );
+
+        // Second turn: chains the prior response id.
+        let (second, next_id2) = client
+            .complete_response(
+                Some("resp-session-1"),
+                &[ChatMessage::user("continue")],
+                Some(0.1),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.content, "session reply");
+        assert_eq!(next_id2.as_deref(), Some("resp-session-1"));
+        let second_body = fake.last_body();
+        assert_eq!(second_body["previous_response_id"], "resp-session-1");
     }
 }

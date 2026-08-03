@@ -274,6 +274,7 @@ impl Protocol for GeminiProtocol {
             }),
             model: state.model,
             tool_calls: None,
+            response_id: None,
         })
     }
 }

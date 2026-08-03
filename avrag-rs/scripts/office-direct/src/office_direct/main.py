@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Office 直读解析器（avrag-rs 解析管线 OfficeDirect 后端）。
 
-docx/xlsx/pptx 用直读专用库（mammoth / openpyxl / python-pptx）；旧二进制
+docx/xlsx/pptx 用直读专用库（pandoc / openpyxl / python-pptx）；旧二进制
 doc/ppt/xls 先经 soffice **无损转 OOXML** 再直读（不做 PDF 渲染，避免丢列丢行）。
 
 输出 markdown，供 `blocks_from_markdown` 切成 Heading/Paragraph IR（与 markitdown
@@ -32,8 +32,10 @@ __all__ = ["convert", "main", "ConverterError"]
 _HEX_BLOB = re.compile(r"^[0-9A-Fa-f]{40,}$")
 #: pptx 限定防御层：长 hex run（git sha 拼接/base64 片段不进代码/文本路径，仅 pptx）。
 _HEX_RUN = re.compile(r"[0-9A-Fa-f]{100,}")
-#: 空图片占位（mammoth 关内嵌后 markdownify 产 `![]()`）——不进 Paragraph 文本。
-_EMPTY_IMG = re.compile(r"!\[\]\(\s*\)")
+#: 图片语法死引用（media 未落盘，进 chunk 就是死引用）——pandoc 对 docx 嵌入图
+#: 产 `<img src="media/imageN.png" />` HTML 标签（markdown 模式），对 pptx 直读产
+#: `![](media/imageN.png)`；两种形态都 strip。
+_IMG_SYNTAX = re.compile(r"!\[[^\]]*\]\([^)]*\)|<img[^>]*src=\"[^\"]*media/[^\"]*\"[^>]*/?>")
 
 
 class ConverterError(Exception):
@@ -94,17 +96,37 @@ def _run_soffice_convert(src: str, out_dir: str, target_ext: str) -> str:
     return os.path.join(out_dir, matches[0])
 
 
-def _extract_docx(src: str) -> str:
-    import mammoth
-    import markdownify
+def _pandoc_timeout_s() -> float:
+    return float(os.environ.get("OFFICE_DIRECT_TIMEOUT_MS", "120000")) / 1000.0
 
-    drop_img = mammoth.images.img_element(lambda image: {"src": ""})
-    with open(src, "rb") as f:
-        html = mammoth.convert_to_html(f, convert_image=drop_img).value
-    md = markdownify.markdownify(html, heading_style="ATX", bullets="-")
-    # 空图片占位不进 Paragraph（`![]()`），直读路径不产 embedded_images_json，
-    # normalize_parsed_document 的 ImageWithContext 分支不会触发。
-    md = _EMPTY_IMG.sub("", md)
+
+def _extract_docx(src: str) -> str:
+    # mammoth + markdownify 换 Pandoc -t gfm（标准 GFM 表格输出，源头统一）。
+    bin_ = "pandoc"
+    try:
+        proc = subprocess.run(
+            [bin_, src, "-t", "gfm"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_pandoc_timeout_s(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ConverterError(
+            f"pandoc timed out after {_pandoc_timeout_s()}s: {src}"
+        ) from exc
+    except FileNotFoundError as exc:
+        raise ConverterError(
+            f"pandoc binary not found: {bin_} (worker 需装 pandoc)"
+        ) from exc
+    if proc.returncode != 0:
+        raise ConverterError(
+            f"pandoc docx conversion failed (rc={proc.returncode}): {proc.stderr.strip()}"
+        )
+    md = proc.stdout
+    # Pandoc 产 `![](media/imageN.png)` 死引用（media 未落盘）——strip 图片语法，
+    # 否则死引用进 chunk。直读路径不产 embedded_images_json。
+    md = _IMG_SYNTAX.sub("", md)
     return md
 
 

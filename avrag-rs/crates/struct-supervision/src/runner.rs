@@ -95,6 +95,23 @@ fn build_tool_message(call_id: &str, result: &str) -> ChatMessage {
     }
 }
 
+/// 纯代码监督入口（2026-08-03，零 LLM）：grid 提取 + checks 判定 → 兜底终态 →
+/// 落库 + evidence。语义字段（caption/unit/table_kind/confidence）保持 None/"low"，
+/// status 由 `checks::table_report` 判定（high_candidate/needs_diagnosis），不 quarantine。
+/// 行号经 `Row.line` 保留到 duckdb `__src_line`（struct_query 行级 cite 依赖）。
+///
+/// 背景：原 `supervise` 的 40 轮 LLM tool-calling 循环是 ingestion 表格阶段的主要
+/// 耗时（单文档 ~2.4min），且 LLM 语义标注/质量判定对已规整的解析表格收益低、
+/// 成本高。此入口复用既有纯代码路径（`Session::new` 无 LLM + `finish` 兜底终态），
+/// 让 ingestion 表格阶段零 LLM 直达。
+pub async fn supervise_code_only(
+    input: &crate::SuperviseInput,
+    cfg: &SuperviseConfig,
+) -> anyhow::Result<SuperviseReport> {
+    let session = Session::new(input)?;
+    finish(input, session, cfg, 0, None, Vec::new())
+}
+
 /// 监督主入口：简报 → loop → 兜底终态 → 落库 + sidecar + 报告。
 pub async fn supervise(
     input: &crate::SuperviseInput,
@@ -296,6 +313,7 @@ mod tests {
                     version: "v1".into(),
                     args,
                 }]),
+                response_id: None,
             }
         }
 
@@ -314,6 +332,7 @@ mod tests {
                 },
                 model: "mock".into(),
                 tool_calls: None,
+                response_id: None,
             }
         }
     }
@@ -397,5 +416,23 @@ mod tests {
                 .iter()
                 .any(|(t, _, o)| t == "nope" || o.contains("未知工具"))
         );
+    }
+
+    #[tokio::test]
+    async fn code_only_builds_tables_without_llm() {
+        let rep = supervise_code_only(&fixture(), &cfg()).await.unwrap();
+        // 零 LLM：无 turns、无 log、无 done_summary（finish 共享派生
+        // budget_exhausted=true——代码路径无预算语义，worker 仅作日志记录）。
+        assert_eq!(rep.turns, 0);
+        assert!(rep.log.is_empty());
+        assert!(rep.done_summary.is_none());
+        assert!(rep.budget_exhausted);
+        // 纯代码建表：duckdb 文件 + evidence + 行号保真（src_line 写入）。
+        assert!(std::path::Path::new(&rep.duckdb).exists());
+        assert!(!rep.evidence.is_empty());
+        assert!(rep.evidence.iter().all(|c| !c.md.is_empty()));
+        // 表格终态为确定初态：confidence low、非 excluded。
+        assert_eq!(rep.tables["t0"]["final"]["confidence"], serde_json::json!("low"));
+        assert_eq!(rep.tables["t0"]["final"]["excluded"], serde_json::json!(false));
     }
 }

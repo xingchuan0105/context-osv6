@@ -48,10 +48,12 @@ pub use schema::{
     ToolChoice, ToolDefinition, Usage,
 };
 pub use section_index::{
-    SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput, SectionIndexSection,
-    build_profile_metadata,
+    DocumentProfileMetadata, SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput,
+    SectionIndexSection, build_profile_metadata, build_session_seed_user_message,
+    build_section_index_user_message,
+    parse_section_index_response, section_index_system_prompt,
 };
-pub use summary::SummaryGenerator;
+pub use summary::{SummaryGenerator, parse_summary_text, summary_system_prompt};
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 pub use usage_observer::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
@@ -63,6 +65,7 @@ pub enum ApiStyle {
     OpenAiResponses,
     DashScopeMultimodalEmbedding,
     DashScopeVlRerank,
+    DashScopeResponses,
     /// SiliconFlow Qwen3-VL-Embedding-8B: OpenAI-shaped `/embeddings` with
     /// multimodal `input` object array + `dimensions`. See `embedding.rs`.
     OpenAiVlEmbedding,
@@ -79,6 +82,7 @@ impl ApiStyle {
             "responses" | "openai_responses" => Some(Self::OpenAiResponses),
             "dashscope_multimodal_embedding" => Some(Self::DashScopeMultimodalEmbedding),
             "dashscope_vl_rerank" => Some(Self::DashScopeVlRerank),
+            "dashscope_responses" => Some(Self::DashScopeResponses),
             "openai_vl_embedding" => Some(Self::OpenAiVlEmbedding),
             "openai_vl_rerank" => Some(Self::OpenAiVlRerank),
             "auto" => Some(Self::Auto),
@@ -94,6 +98,7 @@ impl std::fmt::Display for ApiStyle {
             Self::OpenAiResponses => "responses",
             Self::DashScopeMultimodalEmbedding => "dashscope_multimodal_embedding",
             Self::DashScopeVlRerank => "dashscope_vl_rerank",
+            Self::DashScopeResponses => "dashscope_responses",
             Self::OpenAiVlEmbedding => "openai_vl_embedding",
             Self::OpenAiVlRerank => "openai_vl_rerank",
             Self::Auto => "auto",

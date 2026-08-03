@@ -32,6 +32,7 @@ impl Protocol for OpenAiResponsesProtocol {
             req.options.json_mode,
             req.options.max_tokens,
             &req.tools,
+            req.previous_response_id.as_deref(),
         ))
     }
 
@@ -273,6 +274,7 @@ impl Protocol for OpenAiResponsesProtocol {
             }),
             model: state.model,
             tool_calls: state.tool_calls,
+            response_id: state.response_id,
         })
     }
 }
@@ -290,6 +292,9 @@ fn apply_responses_object(
     })?;
 
     let mut events = Vec::new();
+    if let Some(id) = obj.id {
+        state.response_id = Some(id);
+    }
     if let Some(model) = obj.model {
         state.model = model;
     }

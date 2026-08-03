@@ -13,6 +13,8 @@ pub(crate) struct ParseRunState {
     pub(crate) outputs: ParseRunOutputs,
     /// markitdown 产出的 markdown 原文（表格阶段消费；图片等非 markitdown 路径为 None）。
     pub(crate) markdown: Option<String>,
+    /// 单文档 LLM 摄取会话链（profile→summary→triplet 续接；本材料化阶段建立）。
+    pub(crate) session: Option<super::ingestion_session::DocumentIngestionSession>,
 }
 
 pub(crate) struct IngestionPipelineMetrics {
@@ -205,8 +207,8 @@ pub(crate) async fn run_document_pipeline(
         task,
         document_id,
         filename,
-        materialize.content.as_str(),
         &document_ir.title,
+        parse_run_state,
     )
     .await;
     info!(

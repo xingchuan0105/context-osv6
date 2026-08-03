@@ -57,7 +57,7 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 | 依赖 | 说明 |
 |------|------|
 | `lit` CLI（`LITEPARSE_BIN`/`LITEPARSE_TIMEOUT_MS`/`LITEPARSE_SCANNED_MIN_CHARS`） | PDF 解析（`lit parse --format markdown --no-ocr`）；缺失/超时以「liteparse parse failed」显式报错 |
-| `office-direct-extract`（`OFFICE_DIRECT_BIN`/`OFFICE_DIRECT_TIMEOUT_MS`） | Office 直读（docx/xlsx/pptx），doc/ppt/xls 先经 soffice 转 OOXML；缺失以「office-direct parse failed」显式报错 |
+| `office-direct-extract`（`OFFICE_DIRECT_BIN`/`OFFICE_DIRECT_TIMEOUT_MS`） | Office 直读（docx/xlsx/pptx），doc/ppt/xls 先经 soffice 转 OOXML；docx 经 `pandoc -t gfm`（标准 GFM 表格，strip 图片死引用）；缺失以「office-direct parse failed」显式报错 |
 | LibreOffice `soffice`（`OFFICE_SOFFICE_BIN`/`OFFICE_SOFFICE_TIMEOUT_MS`/`OFFICE_SOFFICE_MAX_CONCURRENT`） | 仅 doc/ppt/xls 旧二进制转 OOXML 时调用；需 writer/calc/impress 三组件齐全 |
 | `markitdown` CLI（`MARKITDOWN_BIN`/`MARKITDOWN_TIMEOUT_MS`） | 文本/代码类兜底（txt/md/rst/csv/tsv/json/toml/yaml/html/代码）；缺失时摄入以「markitdown 子进程启动失败」显式报错 |
 | `.dev-logs/worker.log` | `product-dev-up` 默认 tee；避免只挂 pts 丢日志 |
@@ -66,7 +66,7 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 **解析器安装（本地 worker 三组件需在 PATH）：**
 
 - `lit` CLI（PDF）—— 见 `plans/2026-08-02-parser-pipeline-direct-readers.md` §5.7（VPS 预置项）。
-- `office-direct-extract` —— `pip install -e ./scripts/office-direct`（worker venv；自带 mammoth/openpyxl/python-pptx）。脚本自身 `#!/usr/bin/env python3` + `chmod +x`，`OFFICE_DIRECT_BIN` 也支持直接指向 .py 路径。
+- `office-direct-extract` —— `pip install -e ./scripts/office-direct`（worker venv；自带 openpyxl/python-pptx）。docx 路径还需系统级 `pandoc`（`pandoc --version`，GFM writer），缺失时 docx 解析以「office-direct parse failed」显式报错。脚本自身 `#!/usr/bin/env python3` + `chmod +x`，`OFFICE_DIRECT_BIN` 也支持直接指向 .py 路径。
 - LibreOffice —— 系统安装并确保 `soffice --version` 可用，需 writer/calc/impress 三组件齐全（仅 doc/ppt/xls 旧二进制用到）。
 
 启动时建议先确认：
@@ -78,7 +78,7 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
    - `AVRAG_WORKER_HEALTH_PORT=0` 时会自动选端口并写入 `AVRAG_WORKER_HEALTH_PORT_FILE`。
    - 本地可直接 `curl http://127.0.0.1:<port>/health` 验证存活。
 3. **解析器 CLI**
-   - `command -v lit && command -v office-direct-extract && command -v markitdown`（worker PATH 必须可见；旧二进制 Office 还需 `command -v soffice`）。
+   - `command -v lit && command -v office-direct-extract && command -v markitdown`（worker PATH 必须可见；docx 还需 `command -v pandoc`；旧二进制 Office 还需 `command -v soffice`）。
 
 ## 任务契约
 
@@ -183,6 +183,7 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 |------|----------|
 | PDF（数字版） | liteparse（`lit parse --format markdown --no-ocr`）子进程 → markdown → IR |
 | PDF（扫描件，liteparse 提取近空） | 整本转 Paddle Jobs OCR（`paddle_ocr_pdf`，1 文件 1 Job，`pdf_route_mode=paddle_ocr_pdf`） |
+| Office（docx/xlsx/pptx/doc/ppt/xls） | office-direct-extract 直读（docx 经 `pandoc -t gfm` 产标准 GFM 表格并 strip 图片语法；xlsx/pptx 直读；旧二进制 doc/ppt/xls 经 soffice 转 OOXML）→ markdown → IR |
 | 文本/代码（txt/md/csv/json/toml/yaml/html/代码） | markitdown 子进程 → markdown → IR |
 | 独立图片（png/jpg/webp） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`，现役唯一图片路径） |
 
@@ -203,6 +204,7 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
    - `PADDLE_OCR_MODEL` — 如 `PaddleOCR-VL-1.6`
 2. **E 类 VisualRaster sidecar** —— 已退役（2026-08-02 直读切换）：`PDF_RENDERER_BASE_URL`、`PDF_VISUAL_PAGES_PER_CHUNK`、`PDF_RENDERER_TIMEOUT_MS` 均不再生效；`pdf-renderer-up.sh/down.sh` 已删除；扫描件 PDF 现由 liteparse 提取近空检测后整本转 Paddle OCR（见上表），不再按零块校验拒收。
 3. 可选调参：`MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896`
+4. **摄取 LLM 会话（profile/summary/triplet 同一 DashScope 会话链）**：profile、summary、triplet 三件套由 `INGESTION_LLM_*` 驱动的**同一会话续接**（Responses API `previous_response_id` 链 + `x-dashscope-session-cache` 会话缓存，`INGESTION_LLM_API_STYLE=dashscope_responses`）。`INGESTION_VLM_TRIPLET_ENABLED=1` 的可选 VLM triplet 走无状态 `INGESTION_LLM` 直连。**数据驻留：会话缓存由 DashScope 侧保存文档全文，最长保留 7 天**（`previous_response_id` 有效期），按文档合规要求需明确知悉。
 
 > **已删除：** MinerU PDF OCR、`LITEPARSE_ENABLED` / shadow / 灰度开关。历史见 `docs/archive/p4-mineru-shadow-migration-historical.md`。liteparse/office parser 退役见 `docs/plans/2026-07-31-struct-query-w2-s4-window2-handoff.md`。
 
@@ -218,4 +220,4 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 
 ### Office 解析
 
-docx/xlsx/pptx/doc/ppt/xls 走 worker 子进程 `office-direct-extract` 直读（mammoth/openpyxl/python-pptx；旧二进制 doc/ppt/xls 经 soffice 转 OOXML），产出 markdown → IR/切块/索引；表格类另经 struct-query 表格阶段。`OFFICE_PARSER_BASE_URL` 与 `office-parser-up.sh/down.sh` 已退役删除。
+docx/xlsx/pptx/doc/ppt/xls 走 worker 子进程 `office-direct-extract` 直读（docx 经 `pandoc -t gfm`；xlsx/pptx 用 openpyxl/python-pptx；旧二进制 doc/ppt/xls 经 soffice 转 OOXML），产出 markdown → IR/切块/索引；表格类另经 struct-query 表格阶段。`OFFICE_PARSER_BASE_URL` 与 `office-parser-up.sh/down.sh` 已退役删除。

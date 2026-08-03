@@ -564,6 +564,7 @@ mod tests {
             },
             model: "test-model".to_string(),
             tool_calls: None,
+            response_id: None,
         }
     }
 

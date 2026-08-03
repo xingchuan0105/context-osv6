@@ -28,7 +28,7 @@ pub(crate) enum StructTablesOutcome {
     OldKept,
     /// 无 grids，旧库/证据已清理
     NoGrids,
-    /// LLM 缺失 / markdown=None / dir 创建失败，未动库
+    /// markdown=None / dir 创建失败，未动库
     Skipped,
 }
 
@@ -97,11 +97,6 @@ pub(crate) async fn stage_struct_tables(
         return StructTablesOutcome::NoGrids;
     }
 
-    let Some(llm) = processor.llm.ingestion_llm.clone() else {
-        warn!(stage = "struct_tables", document_id = %document_id, filename = %filename,
-            "ingestion_llm 未配置；表格阶段跳过（grids 非空）");
-        return StructTablesOutcome::Skipped;
-    };
     if let Err(error) = std::fs::create_dir_all(struct_store_dir()) {
         warn!(stage = "struct_tables", document_id = %document_id, error = %error, "struct store dir create failed; table stage skipped");
         return StructTablesOutcome::Skipped;
@@ -115,13 +110,13 @@ pub(crate) async fn stage_struct_tables(
         report_path: None,
     };
     let grid_count = input.grids.len();
-    let report = match avrag_struct_supervision::supervise(&input, llm.as_ref(), &cfg).await {
+    let report = match avrag_struct_supervision::supervise_code_only(&input, &cfg).await {
         Ok(report) => report,
         Err(error) => {
             // 失败时保留既有 duckdb/证据（同版本重灌：内容仍有效；新版本文档与旧库
             // 互相一致——行号可能错位，但表级证据保真；_line_map 由调用方据此 gating 跳过）。
             warn!(stage = "struct_tables", document_id = %document_id, filename = %filename, error = %error,
-                "supervision loop failed; table stage degraded, previous struct store kept");
+                "supervision code_only failed; table stage degraded, previous struct store kept");
             return StructTablesOutcome::OldKept;
         }
     };

@@ -90,6 +90,7 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
         document_ir,
         filename,
         &chunks,
+        parse_run_state,
     )
     .await?;
 
@@ -175,10 +176,17 @@ async fn persist_profile_and_toc(
     document_ir: &DocumentIr,
     filename: &str,
     chunks: &[avrag_storage_pg::IndexedChunk],
+    parse_run_state: &mut ParseRunState,
 ) -> Result<(), IngestionError> {
-    let profile_result =
-        generate_document_profile_with_llm(processor, document_id, document_ir, chunks, filename)
-            .await;
+    let profile_result = generate_document_profile_with_llm(
+        processor,
+        document_id,
+        document_ir,
+        chunks,
+        filename,
+        parse_run_state,
+    )
+    .await;
     if !profile_result.toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
             &processor.storage.repo,

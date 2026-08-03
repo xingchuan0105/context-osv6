@@ -11,6 +11,7 @@ pub fn build_responses_request_body(
     json_mode: bool,
     max_tokens: Option<u32>,
     tools: &[ToolDefinition],
+    previous_response_id: Option<&str>,
 ) -> serde_json::Value {
     let mut request_body = serde_json::json!({
         "model": config.model,
@@ -37,6 +38,18 @@ pub fn build_responses_request_body(
         request_body["reasoning"] = serde_json::json!({
             "effort": if enable_thinking { "high" } else { "low" },
         });
+    }
+    // DashScope session cache: continuation turns reference the previous
+    // response id. Non-thinking is the ingestion default (`effort: "none"`),
+    // but an explicit `enable_thinking=true` must be respected — the knob is
+    // the source of truth, not an unconditional override.
+    if config.api_style == Some(crate::ApiStyle::DashScopeResponses) {
+        if let Some(previous_id) = previous_response_id {
+            request_body["previous_response_id"] = serde_json::json!(previous_id);
+        }
+        if config.enable_thinking != Some(true) {
+            request_body["reasoning"] = serde_json::json!({ "effort": "none" });
+        }
     }
     if !tools.is_empty() {
         request_body["tools"] = serde_json::json!(
@@ -178,9 +191,31 @@ mod tests {
         }
     }
 
+    fn build_body(
+        config: &ModelProviderConfig,
+        messages: &[crate::schema::ChatMessage],
+        temperature: Option<f32>,
+        stream: bool,
+        json_mode: bool,
+        max_tokens: Option<u32>,
+        tools: &[ToolDefinition],
+        previous_response_id: Option<&str>,
+    ) -> serde_json::Value {
+        build_responses_request_body(
+            config,
+            messages,
+            temperature,
+            stream,
+            json_mode,
+            max_tokens,
+            tools,
+            previous_response_id,
+        )
+    }
+
     #[test]
     fn system_messages_become_instructions() {
-        let body = build_responses_request_body(
+        let body = build_body(
             &test_config(),
             &[
                 ChatMessage::system("You are helpful."),
@@ -191,6 +226,7 @@ mod tests {
             false,
             None,
             &[],
+            None,
         );
         assert_eq!(body["instructions"], "You are helpful.");
         let input = body["input"].as_array().unwrap();
@@ -242,7 +278,7 @@ mod tests {
 
     #[test]
     fn tools_are_flat_function_entries() {
-        let body = build_responses_request_body(
+        let body = build_body(
             &test_config(),
             &[ChatMessage::user("hi")],
             None,
@@ -254,6 +290,7 @@ mod tests {
                 description: "Search the web".to_string(),
                 input_schema: serde_json::json!({ "type": "object" }),
             }],
+            None,
         );
         let tools = body["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 1);
@@ -265,7 +302,7 @@ mod tests {
 
     #[test]
     fn thinking_and_json_mode_are_mapped() {
-        let body = build_responses_request_body(
+        let body = build_body(
             &test_config(),
             &[ChatMessage::user("hi")],
             None,
@@ -273,6 +310,7 @@ mod tests {
             true,
             Some(512),
             &[],
+            None,
         );
         assert_eq!(body["reasoning"]["effort"], "high");
         assert_eq!(body["text"]["format"]["type"], "json_object");
@@ -284,7 +322,7 @@ mod tests {
     fn disabled_thinking_maps_to_low_effort() {
         let mut config = test_config();
         config.enable_thinking = Some(false);
-        let body = build_responses_request_body(
+        let body = build_body(
             &config,
             &[ChatMessage::user("hi")],
             None,
@@ -292,7 +330,68 @@ mod tests {
             false,
             None,
             &[],
+            None,
         );
         assert_eq!(body["reasoning"]["effort"], "low");
+    }
+
+    #[test]
+    fn dashscope_style_defaults_to_noneffort_and_sets_previous_response_id() {
+        // DashScope 摄取默认 nonthinking（enable_thinking 未设 → effort:none）。
+        // 显式 enable_thinking=true 时尊重 knob（effort:high），不死开关。
+        let mut config = test_config();
+        config.api_style = Some(crate::ApiStyle::DashScopeResponses);
+        config.enable_thinking = None;
+        let body = build_body(
+            &config,
+            &[ChatMessage::user("hi")],
+            None,
+            false,
+            false,
+            None,
+            &[],
+            Some("resp_prev_1"),
+        );
+        assert_eq!(body["reasoning"]["effort"], "none");
+        assert_eq!(body["previous_response_id"], "resp_prev_1");
+    }
+
+    #[test]
+    fn dashscope_style_without_previous_response_id_omits_field() {
+        let mut config = test_config();
+        config.api_style = Some(crate::ApiStyle::DashScopeResponses);
+        config.enable_thinking = None;
+        let body = build_body(
+            &config,
+            &[ChatMessage::user("hi")],
+            None,
+            false,
+            false,
+            None,
+            &[],
+            None,
+        );
+        assert_eq!(body["reasoning"]["effort"], "none");
+        assert!(body.get("previous_response_id").is_none());
+    }
+
+    #[test]
+    fn dashscope_style_respects_explicit_thinking_knob() {
+        // 显式开启 thinking 时不再被无条件覆写为 none（死开关修复）。
+        let mut config = test_config();
+        config.api_style = Some(crate::ApiStyle::DashScopeResponses);
+        config.enable_thinking = Some(true);
+        let body = build_body(
+            &config,
+            &[ChatMessage::user("hi")],
+            None,
+            false,
+            false,
+            None,
+            &[],
+            Some("resp_prev_1"),
+        );
+        assert_eq!(body["reasoning"]["effort"], "high");
+        assert_eq!(body["previous_response_id"], "resp_prev_1");
     }
 }

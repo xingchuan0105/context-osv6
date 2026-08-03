@@ -129,9 +129,15 @@ pub fn build_route_from_config(
 ) -> AnyRoute {
     // Explicit `api_style=responses` opts a provider into the Responses
     // protocol even though its base_url is shared with chat completions
-    // (e.g. `https://api.deepseek.com` serves both).
+    // (e.g. `https://api.deepseek.com` serves both). DashScope's Responses
+    // endpoint shares the same wire shape and adds session-cache semantics,
+    // but its compatible-mode base_url already carries `/v1`, so the path
+    // is `/responses` rather than `/v1/responses`.
     if config.api_style == Some(crate::ApiStyle::OpenAiResponses) {
         return AnyRoute::OpenAiResponses(build_openai_responses_route(config, transport));
+    }
+    if config.api_style == Some(crate::ApiStyle::DashScopeResponses) {
+        return AnyRoute::OpenAiResponses(build_dashscope_responses_route(config, transport));
     }
 
     let provider = config.provider_name();
@@ -159,6 +165,17 @@ pub fn build_route_from_config(
 }
 
 impl<P: Protocol> Route<P> {
+    /// DashScope's Responses endpoint honors a session-cache header; without it
+    /// the previous_response_id chain degrades to a full-context resend each turn.
+    fn apply_session_header(req: &LlmRequest, headers: &mut HeaderMap) {
+        if req.config.api_style == Some(crate::ApiStyle::DashScopeResponses) {
+            headers.insert(
+                reqwest::header::HeaderName::from_static("x-dashscope-session-cache"),
+                reqwest::header::HeaderValue::from_static("enable"),
+            );
+        }
+    }
+
     fn render_url(&self, req: &LlmRequest) -> Result<String, LlmError> {
         let mut endpoint = self.endpoint.clone();
         if let Some(path) = self.protocol.endpoint_path(req) {
@@ -179,6 +196,7 @@ impl<P: Protocol> Route<P> {
         let url = self.render_url(&req)?;
         let mut headers = HeaderMap::new();
         self.auth.apply(&mut headers);
+        Self::apply_session_header(&req, &mut headers);
         let body_value = serde_json::to_value(&body)
             .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 
@@ -216,6 +234,7 @@ impl<P: Protocol> Route<P> {
             let url = self.render_url(&req)?;
             let mut headers = HeaderMap::new();
             self.auth.apply(&mut headers);
+            Self::apply_session_header(&req, &mut headers);
             let body_value = serde_json::to_value(&body)
                 .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 
@@ -311,6 +330,26 @@ pub fn build_openai_responses_route(
     }
 }
 
+pub fn build_dashscope_responses_route(
+    config: &crate::ModelProviderConfig,
+    transport: Arc<dyn Transport>,
+) -> Route<OpenAiResponsesProtocol> {
+    let auth = if config.api_key.is_empty() {
+        Auth::None
+    } else {
+        Auth::Bearer(config.api_key.clone())
+    };
+    Route {
+        id: config.provider_name(),
+        provider: config.provider_name(),
+        protocol: OpenAiResponsesProtocol,
+        // DashScope compatible-mode base_url already ends in `/v1`.
+        endpoint: Endpoint::new(config.base_url.clone(), "/responses"),
+        auth,
+        transport,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AnyRoute, DetectedProtocol, build_route_from_config, detect_protocol};
@@ -383,6 +422,35 @@ mod tests {
             transport,
         );
         assert_eq!(chat.protocol_id(), "openai_chat");
+    }
+
+    #[test]
+    fn dashscope_responses_selects_responses_protocol() {
+        let transport = offline_transport();
+        let responses = build_route_from_config(
+            &crate::ModelProviderConfig {
+                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".into(),
+                api_key: "k".into(),
+                model: "qwen3.7-flash".into(),
+                timeout_ms: 1000,
+                api_style: Some(crate::ApiStyle::DashScopeResponses),
+                dimensions: None,
+                enable_thinking: Some(false),
+                enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
+            transport,
+        );
+        assert_eq!(responses.protocol_id(), "openai_responses");
+        let endpoint = match &responses {
+            AnyRoute::OpenAiResponses(route) => route.endpoint.render().unwrap(),
+            _ => panic!("expected responses route"),
+        };
+        assert_eq!(
+            endpoint,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/responses"
+        );
     }
 
     #[test]

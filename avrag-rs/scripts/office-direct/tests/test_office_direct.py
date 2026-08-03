@@ -91,7 +91,40 @@ def test_docx_empty_image_placeholder_stripped(tmp_path, out_file):
     md = open(out_file).read()
     assert "![]()" not in md  # 空图片占位被敲掉
     assert "![]( )" not in md
+    # Pandoc 对嵌入图产 `![](media/imageN.png)` 死引用（media 未落盘）——
+    # _IMG_SYNTAX 必须敲掉整条图片语法，否则死引用进 chunk 文本。
+    assert "![" not in md  # 任何剩余图片语法都是死引用（直读不产 embedded_images_json）
+    assert "media/" not in md
     assert "图前文字" in md and "图后文字" in md
+
+
+def test_docx_table_standard_gfm(tmp_path, out_file):
+    """Pandoc -t gfm：表头行 → |---| 分隔行 → 数据行（标准 GFM，无空表头行）。"""
+    import docx
+
+    d = docx.Document()
+    d.add_paragraph("表前文字")
+    tbl = d.add_table(rows=2, cols=3)
+    tbl.rows[0].cells[0].text = "措施"
+    tbl.rows[0].cells[1].text = "内容"
+    tbl.rows[0].cells[2].text = "影响"
+    tbl.rows[1].cells[0].text = "健全冷链物流标准和服务规范体系"
+    tbl.rows[1].cells[1].text = "系统梳理修订完善"
+    tbl.rows[1].cells[2].text = "监管"
+    src = tmp_path / "t.docx"
+    d.save(str(src))
+
+    convert(str(src), out_file)
+    md = open(out_file).read()
+    # 标准 GFM：表头行后紧跟 |---| 分隔行（Pandoc pipe table，列宽对齐填充）。
+    assert "| 措施" in md
+    assert "| 影响 |" in md
+    lines = md.splitlines()
+    hdr_idx = next(i for i, l in enumerate(lines) if l.startswith("| 措施"))
+    assert lines[hdr_idx + 1].startswith("|---") or lines[hdr_idx + 1].startswith("| ---")
+    # 无 "空表头行 → 分隔行" 的非标准形态（markdownify 的 bug）。
+    assert "|  |  |  |" not in md
+    assert "健全冷链物流标准和服务规范体系" in md
 
 
 def test_pptx_skips_pure_hex_shape(tmp_path, out_file):

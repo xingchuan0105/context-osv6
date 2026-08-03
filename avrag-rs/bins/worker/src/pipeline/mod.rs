@@ -2,6 +2,7 @@ mod document_pipeline;
 mod graph_index;
 pub(crate) mod helpers;
 mod index_dispatch;
+mod ingestion_session;
 mod parse_route;
 mod pg_side_effects;
 mod processor;

@@ -205,6 +205,7 @@ impl SummaryGenerator {
                     usage: crate::LlmUsage::zeroed(),
                     model,
                     tool_calls: None,
+                    response_id: None,
                 });
             }
         }
@@ -226,7 +227,11 @@ impl SummaryGenerator {
     }
 }
 
-pub(crate) fn parse_summary_text(raw_output: &str) -> String {
+pub fn summary_system_prompt() -> &'static str {
+    DEFAULT_SUMMARY_SYSTEM_PROMPT
+}
+
+pub fn parse_summary_text(raw_output: &str) -> String {
     let trimmed_output = raw_output.trim();
 
     if let Some(summary_text) = extract_first_code_block(trimmed_output, SUMMARY_BLOCK_LABELS) {

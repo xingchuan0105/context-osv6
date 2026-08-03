@@ -207,19 +207,6 @@ fn apply_worker_observer(
     client
 }
 
-pub(crate) fn build_worker_triplet_llm(
-    config: &AppConfig,
-    observer: &WorkerUsageObserver,
-) -> Option<Arc<avrag_llm::LlmClient>> {
-    config.triplet_llm.to_llm_config().map(|cfg| {
-        Arc::new(apply_worker_observer(
-            avrag_llm::LlmClient::new(cfg),
-            "triplet",
-            observer,
-        ))
-    })
-}
-
 pub(crate) fn build_worker_ingestion_llm(
     config: &AppConfig,
     observer: &WorkerUsageObserver,

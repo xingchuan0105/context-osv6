@@ -33,6 +33,8 @@ pub struct OpenAiResponsesState {
     pub(crate) reasoning_started: bool,
     pub(crate) failed_message: Option<String>,
     pub(crate) incomplete: bool,
+    /// Responses-API response id (DashScope session chaining).
+    pub(crate) response_id: Option<String>,
 }
 
 /// Provider usage block for the Responses protocol.
@@ -123,6 +125,8 @@ pub(crate) struct ResponsesContentPart {
 /// / `response.failed` stream events.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ResponsesObject {
+    #[serde(default)]
+    pub(crate) id: Option<String>,
     #[serde(default)]
     pub(crate) output: Vec<ResponsesOutputItem>,
     #[serde(default)]

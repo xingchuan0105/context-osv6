@@ -24,7 +24,7 @@ pub mod tools;
 
 pub use checks::{Check, TableReport};
 pub use grid::{Grid, Row, header_sig, quote_ident, render_table_md, sanitize_headers};
-pub use runner::{SuperviseConfig, SuperviseReport, SupervisorLlm, supervise};
+pub use runner::{SuperviseConfig, SuperviseReport, SupervisorLlm, supervise, supervise_code_only};
 pub use session::{FinalState, Session};
 pub use store::EvidenceChunk;
 

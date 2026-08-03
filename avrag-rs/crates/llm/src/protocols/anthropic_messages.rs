@@ -484,6 +484,7 @@ impl Protocol for AnthropicMessagesProtocol {
             }),
             model: state.model,
             tool_calls: state.tool_calls,
+            response_id: None,
         })
     }
 }

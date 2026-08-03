@@ -3,8 +3,13 @@ use ingestion::IngestionTask;
 use tracing::info;
 use uuid::Uuid;
 
+use super::super::ingestion_session::INTERACTION_SESSION_SYSTEM;
 use super::super::processor::PgTaskProcessor;
+use super::ParseRunState;
 use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
+
+const SUMMARY_SESSION_USER_TEMPLATE: &str =
+    include_str!("../../../../../prompts/templates/summary-session-user.tmpl");
 
 pub(crate) async fn generate_document_summary(
     processor: &PgTaskProcessor,
@@ -12,12 +17,9 @@ pub(crate) async fn generate_document_summary(
     task: &IngestionTask,
     document_id: Uuid,
     filename: &str,
-    content: &str,
     title: &str,
+    parse_run_state: &mut ParseRunState,
 ) {
-    let Some(ref summary_gen) = processor.llm.summary_generator else {
-        return;
-    };
     let user_uuid = task
         .requested_by
         .as_deref()
@@ -46,14 +48,39 @@ pub(crate) async fn generate_document_summary(
         return;
     }
 
-    let generated_summary = summary_gen
-        .synthesize(&document_id.to_string(), title, filename, content)
-        .await;
-
-    let Ok((summary, llm_usage)) = generated_summary else {
-        info!(document_id = %document_id, "Summary generation failed, keeping naive fallback");
+    let Some(session) = parse_run_state.session.as_mut() else {
+        info!(document_id = %document_id, "ingestion session not available; skipping LLM summary");
         return;
     };
+
+    let user_message = SUMMARY_SESSION_USER_TEMPLATE
+        .replace("{title}", title)
+        .replace("{filename}", filename);
+    let turn = match session
+        .produce(
+            &[INTERACTION_SESSION_SYSTEM, avrag_llm::summary_system_prompt()],
+            &user_message,
+            Some(0.3),
+        )
+        .await
+    {
+        Ok(turn) => turn,
+        Err(error) => {
+            info!(document_id = %document_id, error = %error, "Summary generation failed, keeping naive fallback");
+            return;
+        }
+    };
+
+    let summary = common::SummaryOutput {
+        summary_text: avrag_llm::parse_summary_text(&turn.content),
+        summary_metadata: avrag_llm::build_profile_metadata(
+            &document_id.to_string(),
+            title,
+            filename,
+            &avrag_llm::DocumentProfileMetadata::default(),
+        ),
+    };
+    let llm_usage = turn.usage;
 
     if ensure_ingestion_side_effects_allowed(
         &processor.storage.repo,

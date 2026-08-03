@@ -114,14 +114,11 @@ pub(crate) struct EmbeddingDeps {
     pub(crate) mm_embedding_client: Option<avrag_llm::EmbeddingClient>,
 }
 
-/// LLM clients used during ingestion (summary, section index, triplets, VLM).
+/// LLM clients used during ingestion (session chain, VLM).
 pub(crate) struct LlmDeps {
-    pub(crate) summary_generator: Option<avrag_llm::SummaryGenerator>,
-    pub(crate) section_index_generator: Option<avrag_llm::SectionIndexGenerator>,
-    pub(crate) triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
-    /// Result-level completion cache shared by deterministic ingestion calls
-    /// (summary / section index / triplets). `None` when Redis is unavailable.
+    /// Result-level completion cache shared by deterministic non-session
+    /// calls (VLM / visual triplets). `None` when Redis is unavailable.
     pub(crate) completion_cache: Option<avrag_llm::CompletionCache>,
 }
 

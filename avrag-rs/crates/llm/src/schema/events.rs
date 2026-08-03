@@ -28,6 +28,9 @@ pub struct LlmResponse {
     pub usage: LlmUsage,
     pub model: String,
     pub tool_calls: Option<Vec<contracts::ToolCall>>,
+    /// Responses-API response id, present when the provider returns one
+    /// (DashScope session chaining).
+    pub response_id: Option<String>,
 }
 
 impl LlmResponse {
@@ -41,6 +44,10 @@ impl LlmResponse {
 
     pub fn tool_calls(&self) -> Option<&[contracts::ToolCall]> {
         self.tool_calls.as_deref()
+    }
+
+    pub fn response_id(&self) -> Option<&str> {
+        self.response_id.as_deref()
     }
 }
 
