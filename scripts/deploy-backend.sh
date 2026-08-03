@@ -173,6 +173,40 @@ fi
 markitdown --help >/dev/null 2>&1 || { echo "deploy-backend: ERROR 'markitdown --help' failed" >&2; exit 1; }
 echo "deploy-backend: markitdown OK (\$(command -v markitdown))"
 
+# Pandoc: docx→gfm (office-direct 直读的 docx 路径，标准 GFM 表格输出；2026-08-03 起
+# 替代 mammoth+markdownify)。生产主机需 apt 安装。worker-dev.md 同步记录。
+if command -v pandoc >/dev/null 2>&1; then
+  echo "deploy-backend: pandoc present (\$(command -v pandoc)); install skipped"
+else
+  echo "deploy-backend: installing pandoc (apt)"
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq pandoc
+  else
+    echo "deploy-backend: ERROR apt-get unavailable; install pandoc manually" >&2
+    exit 1
+  fi
+fi
+pandoc --version >/dev/null 2>&1 || { echo "deploy-backend: ERROR 'pandoc --version' failed" >&2; exit 1; }
+echo "deploy-backend: pandoc OK (\$(command -v pandoc))"
+
+# office-direct 直读 venv（docx/xlsx/pptx）：scripts/office-direct 包 + console-script
+# office-direct-extract。OFFICE_DIRECT_BIN 指向该 venv 的 console-script（见 .env）。
+if [[ -x "\$HOME/.venvs/office-direct/bin/office-direct-extract" ]]; then
+  echo "deploy-backend: office-direct venv present; install skipped"
+else
+  echo "deploy-backend: installing office-direct venv"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -m venv "\$HOME/.venvs/office-direct"
+    "\$HOME/.venvs/office-direct/bin/pip" install -e "\$STAGE/scripts/office-direct"
+  else
+    echo "deploy-backend: ERROR python3 unavailable for office-direct venv" >&2
+    exit 1
+  fi
+fi
+"\$HOME/.venvs/office-direct/bin/office-direct-extract" --help >/dev/null 2>&1 \
+  || { echo "deploy-backend: ERROR office-direct-extract failed" >&2; exit 1; }
+echo "deploy-backend: office-direct OK"
+
 if [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" != "1" ]]; then
   bash "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
 elif [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" == "1" ]]; then
