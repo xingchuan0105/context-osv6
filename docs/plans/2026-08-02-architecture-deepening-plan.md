@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 日期 | 2026-08-02 |
-| 状态 | **主体波次全部交付、全部双轴审毕**（W1–W5 + W1返工 + C6小修 + ADR-0009）：7 提交验收，无推倒项；余 P0×3 / P1×4 归并返工清单（§5 末）+ P2 记录项 |
+| 状态 | **全部波次交付并审毕，归并返工（`eb1b917b`）已验收**：P0×3/P1×4 清零；余 P3×3 小项挂账（§5 末）+ P2 记录项待单独决策 |
 | 来源 | 架构审查报告 `/tmp/architecture-review-1785639147.html` + 深潜报告 `/tmp/architecture-deepdive-1785640412.html`（7 候选，均含现状接口/问题/加深设计/切片/测试存活/ADR 约束） |
 | 范围 | `avrag-rs`：rag-core / agent-tools / app-chat / agent-loop / llm / billing |
 | 不做 | push/PR/CI；failover 统一（C4 切片 3，留到有真实流式故障复现）；`RuntimeExecuteRequest` 加 `doc_scope` 字段（决策 1） |
@@ -280,3 +280,13 @@ ADR：ADR-0006 §5a + T4 不塌层——catalog 仍是唯一表。
 - **P1-3**：`markers.rs` 补 parse 侧 `parse_block`/`Block`（+ round-trip/error/truncated golden）；`exit_policy.rs:112` 手写解析改委托；answer_contract 删 5 个死 pub re-export（strip_json_fences/template_artifact_matched/executable_code_matched/host_shell_matched/known_chunk_ids_with_messages 降级）。rag-core 120 + agent-loop 291 绿。
 - **P1-4**：`is_direct_chat_mode` 合一（profile_update 唯一源，service_postprocess 删副本）；`maybe_update_profiles` Result→bool（尽力而为，list_messages 错误显式吞并注释），调用点去 `?`。app-chat 75 绿。
 - 验证：`test-l1`（worker 33 / billing 26 / llm 109 / contracts 15 / agent-tools 145 / rag-core 120 / agent-loop 291 / app-chat 75）**L1 OK**；`cargo check --workspace` 0 error。
+
+**返工 `eb1b917b` 双轴复审（review 窗口）— 验收**：P0×3 + P1×4 逐项核对真实落地（P0-1 PG 集成测试真断言 25h 旧 inferred_at 存活；P0-2 service.rs 零 panic!、4 调用点显式处理；P0-3 流式分支 Err 对齐；P1-1 恢复的两测试做字节级 round-trip；P1-2 穷尽匹配编译期强制、死臂/死导出 grep 零引用；P1-3 parse_block golden 与 format_block 产出字节一致、exit_policy 已委托；P1-4 合一+签名收窄）。无 scope creep、无硬违规。余 3 个小项转 P3 挂账：
+
+- **P3-1**：`[block n] Execution failed:` 错误形态产出侧仍是 `iteration_codegen.rs:386` 手写 `format!`——grammar 闭环只合了成功形态，错误形态字面量仍分散三处（产出×2/解析×1）。补 `format_block_failure` 或显式挂账。
+- **P3-2**：billing `adapter_for` 的 `match { Ok→adapter, Err→return }` 样板本次从 2 份扩到 4 份（checkout×2 + webhook×2）——提一个小 helper 或 `?` 化。
+- **P3-3**：`maybe_update_profiles` 吞 `list_messages` 错误时无 `tracing::warn!`——dream cadence 类问题靠日志发现，补一行。另：worker 测试 helper 硬编码 `.env` 绝对路径（轻，随 P3 顺手）。
+
+**P2/P3 批次 `7bbf0bd6` 双轴复审（review 窗口）— 验收+小修**：P3-1（format_block_failure 落地、全仓唯一产出者已委托、round-trip/截断/优先级 golden 真实）、P3-2（两 helper 是真去重非 Middle Man、HTTP 面错误逐字不变）、P3-3（warn 日志 + 路径简化）、P2-2（抽查逐字一致、parity 扫描器安全、synthesis/ 复活合法且 README 已登记、const→LazyLock 无外部破坏）全部通过，硬性违规 0。**唯一问题**：P2-1 超出「只加消歧注记」授权——ADR 0004/0005 夹带 `Proposed → Accepted（已实施）` Status 翻转与 0004 价格改动（Plus ¥49→¥19），commit message 未披露。**已结案：用户裁决「都保留（属实）」**——两处内容经确认为事实正确，予以保留；执行侧教训（未授权改动须披露或单独成 commit）记录在此。另记：synthesis/ 目录不在 host_markers parity 扫描范围（既有缺口，非本提交引入）；`FinalAnswerViolation.matched` 内联中文（UI/debug 面，不进模型上下文）确认为残留 prompt 债，随 voice 重写任务一并评估。
+
+**prompt voice 重写 `1d4108d2`（review 窗口自实施，2026-08-02）— 完成**：① `user-profile-extraction.system.md` 全文第三人称化（schema/枚举/示例 delta 逐字保留，diff +35/−35 手术式）；② `synthesis/contract-internal-*.md` ×3 改「本步骤输出是唯一 JSON 对象」式契约陈述（schema_version 与 marker 语法不变）；③ `final-answer-feedback-*.md` ×4 核查后确认已是第三人称事实句（质检台 G1 已锁），未动；④ `FinalAnswerViolation.matched` 实证仅进 `AgentEvent::Activity.detail`（synthesis.rs:309/331，UI/debug 面），出 voice 与 prompts-in-md 双规则范围，不动。验证：agent-loop 291 / app-chat 75 / avrag-guardrails 45 全绿（与质检台 G6 基线一致）；文风 grep 零第二人称/命令式。**注意**：此为无 LLM 的单测级验证；voice 变更对 dream-v2 抽取质量与终答契约遵从的真实影响，需下次真实语料跑批时观察（若退化，回退本提交即可，schema 未动）。**至此 §5 全部挂账清零。**

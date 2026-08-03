@@ -1,5 +1,7 @@
 # avrag-rs 产品架构基准版（2026-05-12）
 
+> **SUPERSEDED** — 本文自称「产品架构基准版」，但其描述的 UnifiedAgentService + 多 agent + 原生工具调用 RAG 架构已经多轮演进淘汰；现行架构为单 agent SaC（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）+ Product Apps 组合根（见根 `docs/adr/0007-product-apps-composition-root.md`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **状态**：已确认定稿。取代所有更早日期文档中的冲突内容。
 > **文档优先级**：本基准版 > 2026-05-10 > 2026-05-09 > 2026-04-26 > 2026-04-27 > 更早文档。
 > **生效日期**：2026-05-12。后续修改需更新日期并说明变更原因。

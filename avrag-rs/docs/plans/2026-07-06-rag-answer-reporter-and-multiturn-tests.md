@@ -1,5 +1,7 @@
 # RAG Agent 问答校正 & 多轮记忆测试总结（2026-07-06）
 
+> **SUPERSEDED** — 文中 synthesis「reporter posture」提示词已随 2026-08-01 prompt 体系重构（见 `2026-08-01-prompt-system-refactor-impl.md`）重建。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **会话范围**：从交接文档 `2026-07-05-full116-rerun3-handoff.md` 出发，解决 Q19/Q77 层级歧义问题，重写合成 prompt（reporter 姿态），新增多轮记忆与指代消解测试套件。
 
 ---

@@ -1,7 +1,7 @@
 # LLM Usage Exit-Point Metering — Design Spec (v2)
 
 **Date**: 2026-07-05
-**Status**: Draft (revised after code review)
+**Status**: 现行（2026-08-02 标注：rolling 窗口与出口计量语义为当前计费实现所沿用）
 **Author**: AI + chuan
 
 ## 1. Problem Statement

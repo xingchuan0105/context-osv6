@@ -1,5 +1,7 @@
 # E2E 测试组件重构设计（适配 v6 架构）
 
+> **SUPERSEDED（部分）** — 本文以 `notebook` 为产品主术语；现行法则为 workspace 唯一产品真相（T7，见根 `AGENTS.md` 与 `docs/agent/product-apps.md`），notebook 仅为遗留别名。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > 状态：评审中  
 > 评审日期：2026-06-07  
 > 决策：方案 B（合并前端 E2E，按技术栈二分）+ 新增 Tool & Skill Availability 层

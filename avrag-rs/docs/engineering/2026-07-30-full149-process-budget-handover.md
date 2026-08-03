@@ -1,5 +1,7 @@
 # 交接文档：token 主预算落地 · 全量 149 · 非 PASS 过程诊断（2026-07-30）
 
+> **部分过期** — 本文以 orchestrator / worker / brief / handoff 架构为当时现状叙述；该架构已于 2026-08-01 物理删除（commit `7f2d182d`），现行为单 agent SaC（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。文中 eval v2 / token 预算等内容仍然有效。（注释添加于 2026-08-02 文档体系梳理）
+
 | 项目 | 内容 |
 |---|---|
 | 类型 | 会话交接（人话优先，附路径/数字） |

@@ -1,5 +1,7 @@
 # SaC 黄金集 6 错题修复计划（待评审）
 
+> **SUPERSEDED** — 本文状态行自称「未开工」，其关注点已由其后的 `docs/plans/2026-07-31-ocr-review-fix-plan.md` 与 `docs/plans/2026-08-02-architecture-deepening-plan.md` 吸收；文内引用的 `prompts/orchestrators/` 路径已随 orchestrator 删除而移除。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 | 项 | 内容 |
 |---|---|
 | 日期 | 2026-07-30（WP-S1 写法 2026-07-31 纠正） |

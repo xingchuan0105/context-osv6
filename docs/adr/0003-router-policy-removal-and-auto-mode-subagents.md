@@ -1,5 +1,7 @@
 # ADR 0003: RouterPolicy 移除与 Auto Mode 架构方向
 
+> **部分取代** — RouterPolicy 删除决定仍然有效；但本文前瞻的「auto mode = orchestrator + Chat/RAG/Search subagents」方向已被取代：2026-07-30 起产品路径为单 agent（SaC，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 已物理删除。（注释添加于 2026-08-02 文档体系梳理）
+
 ## Status
 
 Decided
@@ -74,5 +76,5 @@ User Query
 
 ## Related
 
-- `docs/agents/router-policy-removal-design.md`
-- `docs/agents/schema-terminology-alignment-design.md`
+- `docs/agents/router-policy-removal-design.md`（链接已失效，目标文档已不存在）
+- `docs/agents/schema-terminology-alignment-design.md`（链接已失效，目标文档已不存在）

@@ -1,5 +1,7 @@
 # Skill Development Guide
 
+> **SUPERSEDED** — 文中所有具体路径（`crates/app/src/agents/skills/`、`planner_routing_eval.rs`、`prompts/*.txt` frontmatter、`tool_catalog.rs` PhaseConfig）均已不存在，描述的是 v5 原生工具 SkillComponent 时代。现行 skill 撰写规则见 `avrag-rs/prompts/README.md`（prompt-MD CDS 体系）。（横幅添加于 2026-08-02 文档体系梳理）
+
 > 基于 Perplexity 的 [Agent Skills 工程方法论](https://www.perplexity.ai/hub/blog/designing-refining-and-maintaining-agent-skills-at-perplexity) 和本项目的 `SkillComponent` 架构。
 
 ---

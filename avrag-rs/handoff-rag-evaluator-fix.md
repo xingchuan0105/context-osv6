@@ -1,5 +1,7 @@
 # Handoff: 修复 RAG Evaluator 无限 "insufficient" 循环
 
+> **历史快照** — 2026-06-05 的 evaluator 调查记录；相关路径此后已在单 agent 架构下重构，仅作历史记录。（注释添加于 2026-08-02 文档体系梳理）
+
 ## 背景
 
 正在调查 RAG evaluator 总是返回 "insufficient" 的根因（路径A的后续任务）。

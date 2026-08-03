@@ -1,5 +1,7 @@
 # CDS v1.1 — Cluster Disclosure Spec
 
+> **部分过期** — A/B/C 族模型仍可辨认，但 `orchestrators/` 目录已不存在（现为 `system/` + `agent-guide/`），`codegen` 基线 cluster 已退役，`capabilities/`、`loop/`、`templates/` 等新根未收录。现行 prompt 布局真相见 `avrag-rs/prompts/README.md`。（注释添加于 2026-08-02 文档体系梳理）
+
 | 项目 | 内容 |
 |------|------|
 | 状态 | 已采纳（2026-06-09） |

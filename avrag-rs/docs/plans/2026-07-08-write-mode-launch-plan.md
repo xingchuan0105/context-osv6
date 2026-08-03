@@ -1,5 +1,7 @@
 # Write 模式上线计划 — API + 最小 UI + 产品文档
 
+> **SUPERSEDED** — Write 产品模式已于 2026-07-15 移除，文首「待实施」状态无效。write_refine 写作链路仍以独立 lane 存在于树内，但与本文描述的产品模式无关。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **状态：待实施**  
 > **决策日期：2026-07-08**  
 > **关联规格：** [`2026-07-06-heavytail-writer-v2-design.md`](../superpowers/specs/2026-07-06-heavytail-writer-v2-design.md) §6.1（`write` 与 chat/rag/search 并列）  

@@ -1,5 +1,7 @@
 # LiteParse + Paddle Jobs 统一入库架构
 
+> **SUPERSEDED** — LiteParse 已于 2026-07-31 移除，markitdown 成为唯一生产解析器（commit `b0dc1722`）；本文「当前实现」声明不再成立。现行入库真相见 `runbooks/worker-dev.md` 与 `plans/2026-07-31-struct-query-virtual-tables.md`。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **Status:** P4 已实现（2026-06）；本文描述**当前实现 + 已知缺口**  
 > **日期:** 2026-06-13（v1.3 — doc/docx/ppt/pptx 改 office-parser 直连，2026-06-15 对齐）  
 > **取代范围:** 以本文为准，覆盖 `docs/ingestion-routing-discussion-2026-06-10.md` 中关于 MinerU、Paddle 慢线、EdgeParse/lopdf 主路径的待定项  

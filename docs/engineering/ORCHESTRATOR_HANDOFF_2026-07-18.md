@@ -1,5 +1,7 @@
 # Handoff: Agent 编排器（Orchestrator + Subagents + 共享证据库）
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 **日期:** 2026-07-18 起 · **验收更新:** 2026-07-19 · **主线:** `master`（本地 trunk，未 push）  
 **状态:** **验收通过** — A1–A7 全过；A4 流式 + 残缺标记两缺陷已修并复验（`68d8369`）
 

@@ -1,5 +1,7 @@
 # Pricing Tiers Revamp Implementation Plan
 
+> **SUPERSEDED（部分）** — 本文的配额模型（quota_limits 硬上限）已被取代：现行真相为 rolling 窗口单一事实源 + soft limit（见 `docs/adr/0006-product-architecture-decisions-post-tn.md` 决策 1）。档位命名等其余内容仍可能有效，阅读时以 ADR-0006 为准。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 实施 `2026-06-07-pricing-tiers-revamp-design.md` 定义的三档定价重构（Free/Plus/Pro）+ 4 个前端展示界面（价格页、用量仪表盘、对话 toast、Paywall），5 周分阶段交付。

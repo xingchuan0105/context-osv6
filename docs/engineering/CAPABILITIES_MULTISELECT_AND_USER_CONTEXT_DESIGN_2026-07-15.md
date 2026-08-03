@@ -1,5 +1,7 @@
 # Design: Capability Multiselect, Write Offline, and `user_context`
 
+> **部分过期** — 本文的产品面（capabilities 多选、user_context）仍然有效；但文中 "Runtime follow-on" 相关指针指向的 orchestrator 架构已于 2026-07-30 后移除（单 agent SaC，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。（注释添加于 2026-08-02 文档体系梳理）
+
 **Date:** 2026-07-15  
 **Status:** Approved (product design)  
 **Scope:** Product chat mode selection, agent tool exposure, write lane product removal, base locale tool  

@@ -55,5 +55,5 @@ Decided
 
 ## Related
 
-- `docs/agents/loop-optimizer-design.md`
-- `docs/agents/v5-state-machine-cleanup-design.md`
+- `docs/agents/loop-optimizer-design.md`（链接已失效，目标文档已不存在）
+- `docs/agents/v5-state-machine-cleanup-design.md`（链接已失效，目标文档已不存在）

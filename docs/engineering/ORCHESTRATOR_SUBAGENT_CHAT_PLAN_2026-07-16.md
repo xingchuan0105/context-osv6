@@ -1,5 +1,7 @@
 # Orchestrator + Channel Workers + Chat Exit — Implementation Plan
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **For agentic workers:** Use subagent-driven-development or executing-plans. Track steps with `- [ ]`.
 
 **Goal:** Replace the agent-lane **unioned single ReAct** (`mode_assemble` tool/skill merge) with **Orchestrator agent loop (delegate-only) → Rag/Search workers (EvidencePack only) → Chat agent (sole final answer)**. Preserve product `capabilities[]` (RAG/Search tags only). Close dual “web-only / 未提供报告” via §7 materialize + completion invariant + synthesize policy.

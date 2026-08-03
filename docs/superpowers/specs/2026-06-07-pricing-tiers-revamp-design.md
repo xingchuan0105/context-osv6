@@ -1,5 +1,7 @@
 # Pricing Tiers Revamp & Frontend Display Logic — Design Spec
 
+> **SUPERSEDED（部分）** — 本文的配额模型（quota_limits 硬上限）已被取代：现行真相为 rolling 窗口单一事实源 + soft limit（见 `docs/adr/0006-product-architecture-decisions-post-tn.md` 决策 1）。档位命名等其余内容仍可能有效，阅读时以 ADR-0006 为准。（横幅添加于 2026-08-02 文档体系梳理）
+
 > Date: 2026-06-07
 > Status: approved (brainstorming phase)
 > Scope: Backend (avrag-rs) quota + config; Frontend (frontend_next) pricing page, usage dashboard, in-conversation toast, paywall

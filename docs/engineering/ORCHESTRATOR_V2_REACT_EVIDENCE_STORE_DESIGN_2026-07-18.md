@@ -1,5 +1,7 @@
 # Design: ReAct Orchestrator + Shared Evidence Store (V2)
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 **Date:** 2026-07-18
 **Status:** Proposed (product owner direction + best-practice review)
 **Supersedes:** O1 structural host (`run_orchestrated_turn` first-wave fan-out). Keeps §7 channel-integrity invariants and Option B (chat sole user-facing exit) from [ORCHESTRATOR_SUBAGENT_CHAT_DESIGN_2026-07-16.md](./ORCHESTRATOR_SUBAGENT_CHAT_DESIGN_2026-07-16.md).

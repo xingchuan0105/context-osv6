@@ -1,5 +1,14 @@
 # ADR-0005: 统一智能体内核（AgentKernel）+ 三模式配置
 
+> **⛔ SUPERSEDED — do not implement from this document**  
+> Historical v5 kernel + Strategy state-machine narrative.  
+> **Current architecture:** unified `ReActLoop` + progressive disclosure —  
+> [0006-unified-agent-loop-revised.md](0006-unified-agent-loop-revised.md) (partially superseded on disclosure),  
+> [0007-react-phased-context-disclosure.md](0007-react-phased-context-disclosure.md),  
+> Product Apps [docs/adr/0007-product-apps-composition-root.md](../../../docs/adr/0007-product-apps-composition-root.md),  
+> plan [2026-07-29-pi-informed-agent-architecture-optimization.md](../plans/2026-07-29-pi-informed-agent-architecture-optimization.md).  
+> Index: [ARCHIVE-superseded-by-adr-0007.md](../agents/ARCHIVE-superseded-by-adr-0007.md)
+
 | 项目 | 内容 |
 |---|---|
 | 状态 | 已采纳 |

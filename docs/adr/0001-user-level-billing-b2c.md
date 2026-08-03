@@ -1,5 +1,7 @@
 # ADR 0001: User-Level Billing for B2C Business Model
 
+> **注释（2026-08-02 文档体系梳理）** — 用户级计费（UserId 而非 OrgId）的决定仍然有效；文中 Stripe 相关描述已过期：Stripe 已于 2026-07-13 移除，现行支付渠道为 Creem + Alipay（见 `docs/engineering/STRIPE_BILLING_REMOVAL_2026-07-13.md`、`docs/engineering/ALIPAY_F2F_INTEGRATION_2026-07-17.md`）。
+
 ## Status
 Decided
 

@@ -1,5 +1,7 @@
 # 状态：黄金测试集（Orchestrator 新范式 + 能力分组）扩充任务
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 **日期:** 2026-07-19（当日多次更新，覆盖至 r7 + q1–q65 复盘）  
 **状态总览:** **v4 已提交（143 题 + 3 篇语料）；runner 已硬化为「语料只灌一次 + 每题失败即停 + 断点续跑」；r8 排程 2026-07-20 01:12（配额恢复后）从 q66 续跑；q1–q65 复盘完成，核心疑点是 RAG worker 取证系统性失效（见 §5）**
 

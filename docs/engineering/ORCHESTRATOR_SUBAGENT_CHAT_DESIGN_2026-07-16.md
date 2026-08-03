@@ -1,5 +1,7 @@
 # Design: Orchestrator Agent + Channel Subagents + Chat Exit
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 **Date:** 2026-07-16  
 **Status:** Approved (product / architecture design); **O1 implemented** (flag `AGENT_ORCHESTRATOR_V1`, default off) as a **structural host** — code-driven first-wave dispatch + chat exit (Option B). The LLM orchestrator loop, `delegate_*` tool surface, and multi-hop re-dispatch (§4.1, §6) are **not** part of O1; they remain O2, deferred until O1 fixes land and one real flag-on dual query validates quality/latency (fix plan: [ORCHESTRATOR_O1_FIX_PLAN_2026-07-17.md](./ORCHESTRATOR_O1_FIX_PLAN_2026-07-17.md)).  
 **Supersedes (runtime shape):** Single ReAct brain with capability **tool/prompt union** (`mode_assemble` dual path) for agent-lane execute.  

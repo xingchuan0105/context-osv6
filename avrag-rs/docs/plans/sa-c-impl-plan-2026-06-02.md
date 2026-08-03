@@ -1,5 +1,7 @@
 # SaC 改造实施计划（开发计划版）
 
+> **SUPERSEDED** — 文首「待执行」状态无效：SaC 最终以另一形态于 2026-07-30 设计、2026-07-31 落地（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。本文为其早期探索记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > 来源研究：[Perplexity Search-as-Code 借鉴分析](./perplexity-sac-learnings-2026-06-02.md)
 > 日期：2026-06-02
 > 状态：待执行

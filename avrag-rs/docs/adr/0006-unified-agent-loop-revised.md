@@ -3,7 +3,8 @@
 > **⚠️ 部分废止（2026-06-08）**  
 > ReAct+Synthesis 循环骨架、三 mode 分工动机**仍有效**。  
 > **以下以 [ADR-0007](0007-react-phased-context-disclosure.md) 为准**：`native_tools`、`disclosure` 轮次、skill 披露、citation 位置、`session_summary`、`format_hint` 机制、planner skill。  
-> 归档索引：[ARCHIVE-superseded-by-adr-0007.md](../agents/ARCHIVE-superseded-by-adr-0007.md)
+> 归档索引：[ARCHIVE-superseded-by-adr-0007.md](../agents/ARCHIVE-superseded-by-adr-0007.md)  
+> **后续（2026-08-02 标注）**：上述取代链终点为 2026-07-30 SaC 单 agent 设计（根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）；多 agent orchestrator 代码已于 2026-08-01 物理删除（commit 7f2d182d）。
 
 | 项目 | 内容 |
 |---|---|

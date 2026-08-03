@@ -1,3 +1,5 @@
+> **STALE** — 根目录 DESIGN.md 已被 `docs/design/STYLE_BASELINE.md`（Cream × Void）取代；上游参考见 `design-md/cursor/` 与 `design-md/x.ai/`。本文仅作历史记录。（横幅添加于 2026-08-03 文档体系梳理）
+
 # Design System Inspired by Notion
 
 ## 1. Visual Theme & Atmosphere

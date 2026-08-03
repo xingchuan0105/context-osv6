@@ -1,5 +1,7 @@
 # ADR-0004: RAG Agent Loop & Native Tool Calling
 
+> **SUPERSEDED** — 原生检索 function-calling（native tools）已从 LLM 表面移除；现行检索一律经沙箱 SDK + fd 管道桥（见本目录 `0009-codegen-sandbox-retrieval-bridge.md` 与根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 * **Status**: Accepted (Converged in design discussion)
 * **Author**: Antigravity & User Pair Programming
 * **Date**: 2026-06-06

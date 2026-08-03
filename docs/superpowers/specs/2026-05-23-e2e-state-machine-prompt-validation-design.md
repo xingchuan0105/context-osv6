@@ -1,5 +1,7 @@
 # E2E State Machine + Progressive Disclosure Validation Design
 
+> **SUPERSEDED** — 本文验证对象的 v5 策略状态机（Chat/RAG/Search replan loop）已从架构中移除；当前 E2E 门径语义见 `avrag-rs/docs/e2e-gates.md`。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > Staging-automated end-to-end test that verifies v5 strategy state machine
 > correctness and progressive-disclosure prompt injection against real LLM,
 > real vector DB, and real web search.

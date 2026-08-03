@@ -1,5 +1,7 @@
 # Orchestrator O1 Fix Plan — Citations, Progress i18n, Worker Hygiene
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **For agentic workers:** Track steps with `- [ ]`. Targeted verifies per task; no CI theater.
 
 **Goal:** Close the gaps/bugs/drift found in the 2026-07-17 review of the O1 orchestrator implementation before `AGENT_ORCHESTRATOR_V1` can be turned on. Scope: **P0** (citations lost, `rag+search` progress restore), **P1** (progress i18n, O2 decision), **P2** (retrieval-query pollution, double-synthesis cost), **D4** (plan bookkeeping, dead-code annotation), plus commit hygiene.

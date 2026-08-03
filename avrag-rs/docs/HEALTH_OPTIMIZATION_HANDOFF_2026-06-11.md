@@ -1,5 +1,7 @@
 # Health Optimization Handoff — 2026-06-11
 
+> **历史快照** — T13 app 拆分已完成；crate 现状以代码及 `t13-app-split-inventory.md` 为准。（注释添加于 2026-08-02 文档体系梳理）
+
 Session handoff for codebase health work (T13 app split, test debt, facade cleanup).
 
 ## 1. Context

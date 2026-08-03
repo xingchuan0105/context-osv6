@@ -1,5 +1,7 @@
 # ADR 0003: Agent v5 架构 —— 能力统一注册，策略各自定义
 
+> **SUPERSEDED** — v5「能力注册 + 各模式 Strategy 状态机」架构已移除；其后经 ADR-0005/0006/0007 演进，现行架构为单 agent SaC（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > Status: Accepted
 > Date: 2026-05-21
 > Author: Context OS Team

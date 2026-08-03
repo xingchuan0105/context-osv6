@@ -235,6 +235,7 @@ WP1 → WP2 → WP3 → WP4 → WP5 → WP6，每 WP 一个本地 commit（solo 
 20. **重试补全**：`post_rag_chat` 自由函数（自 `chat_v3` 提取，`chat_v3` 改调它）加重试——transport err 指数退避 1s/2s/4s 最多 3 次；状态码 429|500|502|503|504 时 retriable（429 读 `Retry-After` 头 min 30s，否则 1s/2s；5xx 用 1s/2s；attempts>=3 返回当前响应）；4xx(非429)/2xx/3xx 立即返回。此前 agent chat 的 http 500 无重试（全量跑 2 个 INFRA_ERROR）。`JudgeCache::store` 改临时文件 + `fs::rename` 原子替换（防并发读者读半写文件）。
 21. **fail_fast 语义弱化**：原 `break`（fail_fast 立即停）改 `Arc<AtomicBool>` 置位，各 task 开头查（置位则跳过后续），已在飞的 task 完成；聚合后保留 `fail_fast && !failures.is_empty()` panic。
 22. **验证**：编译 0 error；calculator 3 题探针（E2E_CONCURRENCY=3）11.75s；混合 6 题（E2E_QUESTIONS=1..6, E2E_CONCURRENCY=8）51.57s（串行基线 6 题约 4min，~4.7x）。6 题 v2 全 PASS。全量 149 串行 6622s 的并发期望 ~25-30min（embedding 侧 rate limit 未实测，探针未见 429/退避触发）。
+23. **全量 149 并发档位实测（2026-08-02，`v2_20260802-143621`）**：**`E2E_CONCURRENCY=8` 定为安全档**。实测对比：并发 8 → 938s（~15.6min）、**0 HTTP 500**、PASS 137/149（91.9%，历史最高）；并发 16 → 288s 但 **103 HTTP 500**（q1–30 全 PASS 后 q31 起大量 `synthesis stream failed: Failed to read chat completion stream chunk`），串行探针 q35–44 全 PASS 证实非代码回归、是并发打崩 DeepSeek 合成流。**结论：并发 16 是危险档，>8 需先在上游加连接复用/限流保护。**
 
 ## 9. 环境纪律（摘自 AGENTS.md，全文有效）
 

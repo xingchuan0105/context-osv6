@@ -1,5 +1,7 @@
 # 归档索引：已被 ADR-0007 取代或部分取代的文档
 
+> **部分过期** — 本文声明的权威链止步于 ADR-0007；此后架构再度演进，现行实现权威为 2026-07-30 SaC 单 agent 设计（根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。文中多个 `prompts/skills/*/SKILL.md` 链接已失效（`prompts/skills/` 目录已不存在）。（注释添加于 2026-08-02 文档体系梳理）
+
 > **Coding agent**：实现 ReAct 披露、orchestrator、skill 簇、tool 按需传递时，**只以** [ADR-0007](../adr/0007-react-phased-context-disclosure.md) **为准**。本页所列文档仅供历史对照，**不得**作为实现依据。
 
 **权威顺序**：ADR-0007 > ADR-0006/0005 仍有效章节 > 本归档列表中的文件。

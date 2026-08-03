@@ -1,5 +1,7 @@
 # Perplexity Search-as-Code (SaC) 借鉴分析
 
+> **历史记录** — 本文当时结论为「code-gen 编排暂不引入」；该方向在 2026-07-30 SaC 设计中反转并落地（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。（注释添加于 2026-08-02 文档体系梳理）
+
 > 参考资料：[Rethinking Search as Code Generation](https://research.perplexity.ai/articles/rethinking-search-as-code-generation)（Perplexity Research, 2026-06-01）
 > 日期：2026-06-02
 > 状态：调研文档（research note），非实施计划

@@ -1,5 +1,7 @@
 # pi 最佳实践对照：Agent 架构代码现实与优化建议
 
+> **部分过期** — 本文诊断的双 loop 轴（worker ReActLoop + orchestrator brain）债务已通过 2026-08-01 orchestrator 物理删除（commit `7f2d182d`）解决；对 `react_loop` 薄 loop / hooks 的批评可能仍适用于现行单 agent 循环。（注释添加于 2026-08-02 文档体系梳理）
+
 | 项目 | 内容 |
 |------|------|
 | 状态 | **Wave A–B 已合入；B1 follow-up + Wave C 落地中**（见 §10） |

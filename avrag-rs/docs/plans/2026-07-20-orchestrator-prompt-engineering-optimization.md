@@ -1,5 +1,7 @@
 # 编排 / 能力 提示词工程优化（2026-07-20）
 
+> **SUPERSEDED** — 本文描述的 orchestrator / worker / brief / handoff 多 agent 架构已被取代：2026-07-30 起产品路径改为单 agent（SaC 设计，见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`），orchestrator 代码已于 2026-08-01 物理删除（commit `7f2d182d`）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 > **Runtime 结构已被 Option D 取代（2026-07-20 hard cutover）。**  
 > 有检索时的「独立 Chat exit 子 agent」终态 → **同一 Product Agent 运行时 Answer 相位换装**。  
 > 本文 **P0–P3 提示词装配结论仍有效**（chat-base、capability 派发节、积木、pure-chat 入口绕过）；  

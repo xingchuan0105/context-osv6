@@ -1,5 +1,7 @@
 # Capability Multiselect + Write Offline + `user_context` Implementation Plan
 
+> **部分过期** — 本文的产品面（capabilities 多选、user_context）仍然有效；但文中 "Runtime follow-on" 相关指针指向的 orchestrator 架构已于 2026-07-30 后移除（单 agent SaC，见 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。（注释添加于 2026-08-02 文档体系梳理）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace mutually exclusive chat modes with multi-select RAG/Search capabilities, product-reject Write, compose prompts as base + manuals, and add base tool `user_context` (frontend clock + MaxMind city).

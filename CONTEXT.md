@@ -1,5 +1,7 @@
 # Context-OS Global Context & Domain Dictionary (CONTEXT.md)
 
+> **STALE** — 本文自称「source of truth」，但内容已落后于多次架构变更，不再可信。当前真相源：根 `AGENTS.md`（法则）+ `docs/README.md`（文档索引与现行架构入口）。本文仅作历史记录。（横幅添加于 2026-08-02 文档体系梳理）
+
 This document serves as the project's source of truth for architecture, domain terminology, development status, and remaining work.
 
 ---

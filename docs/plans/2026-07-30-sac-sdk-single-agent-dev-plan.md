@@ -1,7 +1,7 @@
 # SaC SDK + 单 Agent 开发计划
 
 **日期**：2026-07-30  
-**状态**：实施中 — WP0–WP6 已落地（2026-07-30）；待 WP7 全量 149 + 可选 orchestrator 物理删除  
+**状态**：已落地 — WP0–WP7 已全部落地（WP7 全量 149 验收已回填）；orchestrator 已物理删除（commit `7f2d182d`，2026-08-01）  
 **设计锚点**：[`2026-07-30-sac-sdk-single-agent-design.md`](./2026-07-30-sac-sdk-single-agent-design.md)（A1–A8 不可偏离）  
 **基线**：全量 149 v2 **PASS 135/149**（`avrag-rs/docs/engineering/2026-07-30-full149-process-budget-handover.md`）  
 **策略**：按负责人决策**整体一步到位**——实施有序、每 WP 有单元门禁，但**不**做 W1→W5 独立全量验收；全量 149 放在体系接通后一次跑。
@@ -376,7 +376,7 @@ E2E_MODE=nightly cargo test -p app --test product_e2e realistic_corpus_full_eval
 
 **业务门槛**：v2 PASS **≥ 135/149**，且 q088 + 跨文档簇不低于现状。
 
-4. **结构后处理**：`graphify update .`（若改了模块边界）；**不** commit `graphify-out/`。
+4. **结构后处理**：`code-review-graph update`（若改了模块边界）；**不** commit `.code-review-graph/`。
 
 ---
 

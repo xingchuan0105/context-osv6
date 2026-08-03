@@ -1,5 +1,7 @@
 # Figma Parity Gate (Design Drift 防护)
 
+> **STALE** — 本 runbook 锚定 `frontend_rust/.run/visual_compare/` 与 PowerShell 脚本；`frontend_rust` 已是历史前端，现行前端为 `frontend_next`（视觉回归见 `visual-regression-testing.md`）。（注释添加于 2026-08-02 文档体系梳理）
+
 目标：把 Figma 定稿与 `frontend_rust` 预览页面做固定口径截图对比，量化漂移并在超阈值时直接失败。
 
 ## 目录约定
