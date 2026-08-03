@@ -28,7 +28,28 @@ impl BootstrapRepository {
             .unwrap_or_else(|_| {
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../migrations")
             });
-        let migrator = sqlx::migrate::Migrator::new(migrations_path.as_path()).await?;
+        // pgvector retrieval data plane (0060 rag_pgvector / 0061 rag_bigm) is a
+        // local/private backend option; Milvus production (the default) must not
+        // run `CREATE EXTENSION vector` / `pg_bigm`. Match app-core's
+        // RetrievalBackend parse of RETRIEVAL_BACKEND (env: milvus | pgvector).
+        let retrieval_backend = std::env::var("RETRIEVAL_BACKEND")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        let mut migrator = sqlx::migrate::Migrator::new(migrations_path.as_path()).await?;
+        let pgvector_backend = matches!(
+            retrieval_backend.as_str(),
+            "pgvector" | "postgres" | "pg"
+        );
+        if !pgvector_backend {
+            migrator.migrations = std::borrow::Cow::Owned(
+                migrator
+                    .iter()
+                    .filter(|m| !matches!(m.version, 60 | 61))
+                    .cloned()
+                    .collect(),
+            );
+        }
         migrator.run(self.pool.raw()).await?;
         if std::env::var("AVRAG_SKIP_SEARCH_TOKEN_RESEGMENT")
             .map(|value| matches!(
