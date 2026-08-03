@@ -11,6 +11,7 @@
 - State assumptions explicitly; **stop and ask** when a request is ambiguous. Push back with a simpler option when warranted.
 - Surgical edits: every changed line traces to the user's request. Match local style. Remove only unused symbols **you** introduced — **do not delete pre-existing dead code unless asked**.
 - Multi-step work: brief plan with verify gates; do not advance past a failing gate.
+- **Time-cost consent:** before any compile or script run (`cargo build/test`, `pnpm`, deploy scripts, E2E, …), estimate the time cost and get user approval first; never launch long-running commands unannounced — keep the dev rhythm predictable.
 
 ## Prompts — non-negotiable (`avrag-rs`)
 
