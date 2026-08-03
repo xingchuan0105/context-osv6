@@ -67,7 +67,7 @@ fi
 [[ -d "$AVRAG_DIR/migrations" ]] || die "missing migrations/"
 [[ -d "$AVRAG_DIR/prompts" ]] || die "missing prompts/"
 
-mkdir -p "$STAGE/bin" "$STAGE/migrations" "$STAGE/prompts" "$STAGE/docker"
+mkdir -p "$STAGE/bin" "$STAGE/migrations" "$STAGE/prompts" "$STAGE/docker" "$STAGE/scripts"
 
 if [[ "$ASSETS_ONLY" != "1" ]]; then
   cp -a "$API_BIN" "$STAGE/bin/avrag-api"
@@ -87,6 +87,15 @@ rsync -a --delete \
 
 cp -a "$ROOT/deploy/docker/run-avrag-containers.sh" "$STAGE/docker/run-avrag-containers.sh"
 chmod 755 "$STAGE/docker/run-avrag-containers.sh"
+cp -a "$ROOT/deploy/docker/avrag-runtime.Dockerfile" "$STAGE/docker/avrag-runtime.Dockerfile"
+
+# office-direct package (installed into /opt/avrag-rs/tools on the host, mounted
+# into the runtime container via PATH).
+rsync -a --delete \
+  --exclude '__pycache__/' \
+  --exclude '*.egg-info/' \
+  --exclude '.pytest_cache/' \
+  "$AVRAG_DIR/scripts/office-direct/" "$STAGE/scripts/office-direct/"
 
 cat > "$STAGE/DEPLOY_META.backend.json" <<EOF
 {
@@ -139,73 +148,56 @@ rsync -a --delete \
 install -m 755 "\$STAGE/docker/run-avrag-containers.sh" "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
 install -m 644 "\$STAGE/DEPLOY_META.backend.json" "\$REMOTE_ROOT/DEPLOY_META.backend.json"
 
-# markitdown CLI: production document parsing runs in the worker by invoking
-# the `markitdown` binary on PATH (env MARKITDOWN_BIN, MARKITDOWN_TIMEOUT_MS).
-# Provision it here, idempotently: skip when already installed.
-# NOTE: the old office parser service (:9090) and PDF renderer (:9091) are
-# retired — they are no longer called and this script does not deploy them.
-if command -v markitdown >/dev/null 2>&1; then
-  echo "deploy-backend: markitdown present (\$(command -v markitdown)); install skipped"
-else
-  echo "deploy-backend: installing markitdown CLI"
-  if command -v uv >/dev/null 2>&1; then
-    uv tool install markitdown
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 -m pip install --user 'markitdown[all]'
-    # pip --user lands in ~/.local/bin, which non-login shells may not have on
-    # PATH; expose it via /usr/local/bin when writable.
-    if ! command -v markitdown >/dev/null 2>&1 && [[ -x "\$HOME/.local/bin/markitdown" ]]; then
-      if [[ -w /usr/local/bin ]]; then
-        ln -sf "\$HOME/.local/bin/markitdown" /usr/local/bin/markitdown
-      else
-        export PATH="\$HOME/.local/bin:\$PATH"
-      fi
-    fi
-  else
-    echo "deploy-backend: ERROR neither uv nor python3 available to install markitdown" >&2
-    exit 1
-  fi
-fi
-if ! command -v markitdown >/dev/null 2>&1; then
-  echo "deploy-backend: ERROR markitdown CLI not on PATH after install" >&2
+# Rebuild avrag-runtime so the worker container has parser CLIs (markitdown /
+# pandoc / office-direct). Host-path venvs are NOT visible inside the minimal
+# runtime; bake tools into the image instead. markitdown CLI must not be
+# probed with `--help` (it treats unknown flags as convert inputs).
+echo "deploy-backend: rebuilding avrag-runtime:24.04 with parser CLIs"
+RUNTIME_BUILD=/tmp/avrag-runtime-build
+rm -rf "\$RUNTIME_BUILD"
+mkdir -p "\$RUNTIME_BUILD"
+cp "\$STAGE/docker/avrag-runtime.Dockerfile" "\$RUNTIME_BUILD/Dockerfile"
+if [[ ! -d "\$STAGE/scripts/office-direct" ]]; then
+  echo "deploy-backend: ERROR stage missing scripts/office-direct" >&2
   exit 1
 fi
-markitdown --help >/dev/null 2>&1 || { echo "deploy-backend: ERROR 'markitdown --help' failed" >&2; exit 1; }
-echo "deploy-backend: markitdown OK (\$(command -v markitdown))"
+cp -a "\$STAGE/scripts/office-direct" "\$RUNTIME_BUILD/office-direct"
+docker build -t avrag-runtime:24.04 "\$RUNTIME_BUILD"
+docker run --rm avrag-runtime:24.04 bash -lc \
+  'command -v markitdown && markitdown -h >/dev/null && command -v pandoc && pandoc --version >/dev/null && command -v office-direct-extract' \
+  || { echo "deploy-backend: ERROR runtime image missing parser CLIs" >&2; exit 1; }
+echo "deploy-backend: runtime image OK (markitdown+pandoc+office-direct)"
 
-# Pandoc: docx→gfm (office-direct 直读的 docx 路径，标准 GFM 表格输出；2026-08-03 起
-# 替代 mammoth+markdownify)。生产主机需 apt 安装。worker-dev.md 同步记录。
-if command -v pandoc >/dev/null 2>&1; then
-  echo "deploy-backend: pandoc present (\$(command -v pandoc)); install skipped"
-else
-  echo "deploy-backend: installing pandoc (apt)"
-  if command -v apt-get >/dev/null 2>&1; then
-    apt-get update -qq && apt-get install -y -qq pandoc
-  else
-    echo "deploy-backend: ERROR apt-get unavailable; install pandoc manually" >&2
-    exit 1
-  fi
+# Point env at in-image binaries.
+if [[ -f /etc/avrag-rs/avrag.env ]]; then
+  python3 - <<'PY'
+from pathlib import Path
+p = Path("/etc/avrag-rs/avrag.env")
+text = p.read_text()
+updates = {
+    "MARKITDOWN_BIN": "markitdown",
+    "OFFICE_DIRECT_BIN": "office-direct-extract",
+}
+lines = text.splitlines()
+out = []
+seen = set()
+for line in lines:
+    if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+        out.append(line)
+        continue
+    k, v = line.split("=", 1)
+    if k in updates:
+        out.append(f"{k}={updates[k]}")
+        seen.add(k)
+    else:
+        out.append(line)
+for k, v in updates.items():
+    if k not in seen:
+        out.append(f"{k}={v}")
+p.write_text("\\n".join(out) + "\\n")
+print("deploy-backend: env parser bins -> in-image PATH")
+PY
 fi
-pandoc --version >/dev/null 2>&1 || { echo "deploy-backend: ERROR 'pandoc --version' failed" >&2; exit 1; }
-echo "deploy-backend: pandoc OK (\$(command -v pandoc))"
-
-# office-direct 直读 venv（docx/xlsx/pptx）：scripts/office-direct 包 + console-script
-# office-direct-extract。OFFICE_DIRECT_BIN 指向该 venv 的 console-script（见 .env）。
-if [[ -x "\$HOME/.venvs/office-direct/bin/office-direct-extract" ]]; then
-  echo "deploy-backend: office-direct venv present; install skipped"
-else
-  echo "deploy-backend: installing office-direct venv"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -m venv "\$HOME/.venvs/office-direct"
-    "\$HOME/.venvs/office-direct/bin/pip" install -e "\$STAGE/scripts/office-direct"
-  else
-    echo "deploy-backend: ERROR python3 unavailable for office-direct venv" >&2
-    exit 1
-  fi
-fi
-"\$HOME/.venvs/office-direct/bin/office-direct-extract" --help >/dev/null 2>&1 \
-  || { echo "deploy-backend: ERROR office-direct-extract failed" >&2; exit 1; }
-echo "deploy-backend: office-direct OK"
 
 if [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" != "1" ]]; then
   bash "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
