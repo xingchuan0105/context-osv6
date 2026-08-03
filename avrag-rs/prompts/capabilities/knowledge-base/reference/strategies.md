@@ -35,6 +35,7 @@ Claim checklist (copy and tick against returns):
 | 多数字题只见一个数 | 其余主张仍未知 | 只答一半即结束 |
 | 知识库与联网同时挂载，问题含「文章称/文中提到/报告称」 | 该前提通常指向**文档库**，可用 `dense`/`grep` 直接核实原文 | 当成外部事实只走 `client.web`，文档侧前提未覆盖 |
 | 谓词类 `grep`（废弃/deprecat/remove/obsolete…）连续 0 命中 | 谓词可能是概念性的，不一定逐字出现在正文；需要**实体侧探测**（`grep` 目标文件/类/方法名、`doc_profile` 看章节结构）换角度 | 0 命中直接得出「未覆盖」并停止 |
+| `dense` / `lexical` chunk 正文已含目标表述，同词 `grep` 0 命中 | 覆盖判定以回传正文为准；`grep` 未命中只反映 pattern 形态与词面差异 | 以 `grep` 未命中为由宣布「未覆盖」 |
 
 ## 默认低自由度路径（易碎结论）
 
@@ -50,5 +51,5 @@ Claim checklist (copy and tick against returns):
 - **行计数 / 纯文本行** → `grep` + 采用 `total_hits`（不要肉眼数 hits、不要按列去重）；`struct_catalog` 返回 `relations=[]`（该 doc 无表格存储）时 grep 是可用退路。
 - **表内总数（如某类对象的总数）** → `struct_query` 聚合（COUNT/SUM/GROUP BY）是确定路径；看到部分分域计数而未见总数时，总数仍处于未覆盖状态，聚合查询可闭合它。表级证据未水合（回传无 alias 编号）时，以 `evidence`/`rows` 文本核对，勿虚构编号。
 - **表内「第一个 / 先后」** → 按 **回传中该过滤条件下的出现顺序**（或显式序号列）；编码字符串不做排序键。
-- **金额 / 活动号 / 表内字面** → 优先 `lexical` 或 `grep`；`dense` 仅作定位线索。
+- **金额 / 活动号 / 表内字面** → 优先 `lexical` 或 `grep`；`dense` 用作定位线索——定位到的 chunk 正文里出现的数字与表述即为有效证据，`grep` 同词 0 命中不改变已回传 chunk 的覆盖状态。
 - **元数据字段（日期/状态/作者/阶段数）** → 语料字段常为**英文**（如 `Date`、`Status`、`Phase`），中文语料正文用中文——检索词**中英双词并行**（`grep "Date"` 与 `grep "日期"` 都试；`Phase` 与 `阶段` 都试）；英文 0 命中不代表中文侧也无，反之亦然。

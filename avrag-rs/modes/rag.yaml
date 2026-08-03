@@ -35,6 +35,9 @@ loop_exit:
   # Skill-owned grounding; host does not hard-block DirectAnswer.
   require_evidence: false
   allow_content_early_stop: false
-  skip_synthesis_on_direct_answer: true
+  # DirectAnswer 不再短路：模型停后一律进 synthesis，用不带检索指南的
+  # 干净上下文写终答（2026-08-03：Q67/Q138 假拒答归因——检索指南在场时
+  # 「grep 仲裁覆盖」偏见会带进取证判断与终答）。
+  skip_synthesis_on_direct_answer: false
 synthesis_output:
   contract: prose_only
