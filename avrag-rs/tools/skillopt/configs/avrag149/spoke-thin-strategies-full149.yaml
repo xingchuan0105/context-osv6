@@ -1,0 +1,17 @@
+# 渐进披露 · 薄层 strategies（原则 + spoke 目录，非 few-shot 主战场）
+# 中间 spoke 不做 test 全量（eval_test=false）；全部层训完再用 eval_avrag149 统一验收。
+_base_: default.yaml
+
+train:
+  num_epochs: 1
+  batch_size: 8
+
+evaluation:
+  eval_test: false
+
+env:
+  prompt_target: capabilities/knowledge-base/reference/strategies.md
+  skill_init: avrag149/skills/strategies.md
+  include_ids_file: ""
+  holdout_subsets: "cross_document,ipd_table,rag_search_joint,cross_adr,orchestrator_paradigm"
+  eval_timeout_secs: 7200

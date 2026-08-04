@@ -21,6 +21,7 @@ from .runner import (
     load_attribution,
     parse_report,
     run_eval,
+    score_code_pass,
     score_row,
     summarize_attribution,
 )
@@ -39,6 +40,7 @@ def run_batch(
     eval_timeout_secs: int = 3600,
     verbose: bool = True,
     eval_out_dir_override: str | Path | None = None,
+    score_mode: str = "answer",
 ) -> list[dict]:
     """跑一个 batch 的题目评测，返回 SkillOpt RolloutResult 列表。
 
@@ -117,10 +119,25 @@ def run_batch(
             ]
         else:
             attr["skill_request"] = []
+
+        mode = (score_mode or "answer").strip().lower()
+        code_detail: dict = {}
+        if mode in {"code_pass", "code", "l1.5", "l15"}:
+            # 与终答 PASS 解耦：以代码一次通过率为 hard/soft
+            ch, cs, code_detail = score_code_pass(answer, attr)
+            hard, soft = ch, cs
+            attr["code_pass"] = bool(code_detail.get("code_pass"))
+            attr["code_pass_reasons"] = list(code_detail.get("reasons") or [])
+
         (task_dir / "trajectory_attribution.json").write_text(
             json.dumps(attr, ensure_ascii=False, indent=2), encoding="utf-8",
         )
         fail_reason = summarize_attribution(row.get("label", ""), attr)
+        if code_detail.get("reasons"):
+            fail_reason = (
+                f"{fail_reason} code_pass={code_detail.get('code_pass')} "
+                f"reasons={','.join(code_detail['reasons'])}"
+            )
 
         if skipped:
             # JUDGE_ERROR（judge API 故障）不是 skill 质量问题:轨迹留档,
@@ -130,6 +147,10 @@ def run_batch(
 
         # 分步代理信号（WP0：按层取信号，黄金集综合 label 不直接当训练梯度）
         signals = layer_signals(row, no_context=bool(item.get("no_context")))
+        if mode in {"code_pass", "code", "l1.5", "l15"}:
+            signals = dict(signals)
+            signals["code_pass"] = hard
+            signals["code_pass_soft"] = soft
         results.append({
             "id": str(n),
             "hard": hard,
@@ -150,6 +171,7 @@ def run_batch(
             # 评分（hard/soft）在宿主侧已算好，optimizer 不需要 gold 文本。
             "reference_text": "",
             "n_turns": 1,
+            "score_mode": mode,
         })
 
     (out / "rollouts.json").write_text(
@@ -166,6 +188,7 @@ def run_batches_parallel(
     eval_timeout_secs: int = 3600,
     max_workers: int = 2,
     verbose: bool = False,
+    score_mode: str = "answer",
 ) -> list[list[dict]]:
     """WP2：并行跑多个 batch 的 rollout。
 
@@ -195,6 +218,7 @@ def run_batches_parallel(
                 verbose=verbose,
                 # 每 worker 独立评测输出目录（并发不竞争"最新目录"检测）
                 eval_out_dir_override=Path(out_root) / "eval_v2",
+                score_mode=score_mode,
             )
             for items, skill_content, out_root in jobs
         ]

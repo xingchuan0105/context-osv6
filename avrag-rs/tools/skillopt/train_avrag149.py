@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import os
 import shutil
 import sys
 from pathlib import Path
 
 _TOOLS_ROOT = Path(__file__).resolve().parent
+# …/avrag-rs/tools/skillopt → …/avrag-rs
+_DEFAULT_AVRAG_RS_ROOT = _TOOLS_ROOT.parent.parent
 if str(_TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOOLS_ROOT))
 
@@ -104,6 +107,148 @@ def sync_optimizer_env(flat: dict, avrag_rs_root: str | os.PathLike) -> None:
         if v and not os.environ.get(k):
             os.environ[k] = v
             print(f"  [env] {k} ← avrag-rs/.env (AGENT_LLM_*)")
+
+
+def resolve_optimizer_models(flat: dict) -> None:
+    """Fill empty model.optimizer/target so ReflACTTrainer does not fall back to
+    skillopt default ``Qwen/Qwen3.5-4B`` (``set_optimizer_deployment("")``).
+
+    Source order for optimizer: flat.optimizer_model → QWEN_CHAT_MODEL →
+    OPTIMIZER_DEPLOYMENT. Target (unused by product e2e) mirrors optimizer when empty.
+    """
+    env_model = (
+        (os.environ.get("QWEN_CHAT_MODEL") or "").strip()
+        or (os.environ.get("OPTIMIZER_DEPLOYMENT") or "").strip()
+    )
+    opt = str(flat.get("optimizer_model") or "").strip()
+    if not opt:
+        if not env_model:
+            raise SystemExit(
+                "optimizer_model is empty and QWEN_CHAT_MODEL/OPTIMIZER_DEPLOYMENT "
+                "unset — would default to Qwen/Qwen3.5-4B and fail on Ollama/Go."
+            )
+        flat["optimizer_model"] = env_model
+        print(f"  [model] optimizer_model ← {env_model}")
+    else:
+        flat["optimizer_model"] = opt
+
+    tgt = str(flat.get("target_model") or "").strip()
+    if not tgt:
+        flat["target_model"] = flat["optimizer_model"]
+    else:
+        flat["target_model"] = tgt
+
+    # Pin process env before ReflACTTrainer.__init__ (which calls set_optimizer_deployment).
+    os.environ["QWEN_CHAT_MODEL"] = flat["optimizer_model"]
+    os.environ["OPTIMIZER_DEPLOYMENT"] = flat["optimizer_model"]
+    os.environ["TARGET_DEPLOYMENT"] = flat["target_model"]
+
+    # Refuse known-broken package default if something reintroduces it.
+    bad = {"Qwen/Qwen3.5-4B", "Qwen/Qwen3-4B"}
+    if flat["optimizer_model"] in bad:
+        raise SystemExit(
+            f"optimizer_model={flat['optimizer_model']!r} is the skillopt package "
+            "default and is not available on our dual-channel endpoints. "
+            "Set QWEN_CHAT_MODEL (e.g. deepseek-v4-flash:0731-cloud)."
+        )
+
+
+def ensure_skillopt_prompts() -> None:
+    """skillopt 0.2.0 PyPI 包 prompts/ 为空；从 avrag149/prompts 同步到 site-packages。
+
+    slow_update / meta_skill 等路径直接 ``load_prompt``，不经 adapter._load_env_prompt。
+    """
+    try:
+        import skillopt.prompts as prompts_mod
+    except ImportError:
+        return
+    src = _TOOLS_ROOT / "avrag149" / "prompts"
+    dst = Path(prompts_mod.__file__).resolve().parent
+    if not src.is_dir():
+        return
+    n = 0
+    for md in sorted(src.glob("*.md")):
+        target = dst / md.name
+        if (not target.is_file()) or (md.stat().st_mtime > target.stat().st_mtime):
+            shutil.copy2(md, target)
+            n += 1
+    if n:
+        print(f"  [prompts] synced {n} file(s) → {dst}")
+
+
+def install_deepseek_content_fallback() -> None:
+    """DeepSeek Flash 偶发只填 reasoning(_content)；skillopt 只读 content → 空 patch。"""
+    try:
+        import skillopt.model.qwen_backend as qb
+    except ImportError:
+        return
+    if getattr(qb, "_avrag_content_fallback", False):
+        return
+
+    def _chat_messages_impl_with_fallback(  # type: ignore[no-untyped-def]
+        messages,
+        max_completion_tokens,
+        retries,
+        stage,
+        *,
+        role,
+        tools=None,
+        tool_choice=None,
+        return_message=False,
+        deployment=None,
+        timeout=None,
+    ):
+        import time as _time
+
+        config = qb.OPTIMIZER_CONFIG if role == "optimizer" else qb.TARGET_CONFIG
+        payload: dict = {
+            "model": deployment or config.deployment,
+            "messages": qb._json_safe(messages),
+            "max_tokens": min(max_completion_tokens, config.max_tokens),
+        }
+        if config.enable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
+        if config.temperature is not None:
+            payload["temperature"] = config.temperature
+        if tools:
+            payload["tools"] = qb._json_safe(tools)
+            if tool_choice is not None:
+                payload["tool_choice"] = qb._json_safe(tool_choice)
+
+        last_err: Exception | None = None
+        for attempt in range(retries):
+            try:
+                data = qb._post_chat_completion(payload, timeout, config)
+                choices = data.get("choices") or []
+                if not choices:
+                    raise RuntimeError(f"Qwen chat API returned no choices: {data}")
+                choice0 = choices[0]
+                message = choice0.get("message") or {}
+                text = message.get("content") or ""
+                if not (isinstance(text, str) and text.strip()):
+                    # DeepSeek: final answer may land only in reasoning fields
+                    text = (
+                        message.get("reasoning_content")
+                        or message.get("reasoning")
+                        or ""
+                    )
+                if not isinstance(text, str):
+                    text = json.dumps(text, ensure_ascii=False)
+                usage_info = qb._usage_from_payload(data)
+                qb.tracker.record(
+                    stage, usage_info["prompt_tokens"], usage_info["completion_tokens"]
+                )
+                if return_message:
+                    return qb._compat_message_from_payload(message, choice0), usage_info
+                return text, usage_info
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                _time.sleep(min(2**attempt, 30))
+        raise RuntimeError(f"Qwen chat call failed after {retries} retries: {last_err}")
+
+    qb._chat_messages_impl = _chat_messages_impl_with_fallback  # type: ignore[assignment]
+    qb._avrag_content_fallback = True
+    print("  [patch] deepseek content←reasoning fallback installed")
 
 
 # ── --signals 分层信号自检（WP0：读已有 v2 报告，按层暴露失败分布）────────────
@@ -367,7 +512,26 @@ def main() -> None:
     flat = load_config(args.config, args.cfg_options)
     if args.out_root:
         flat["out_root"] = os.path.abspath(args.out_root)
-    sync_optimizer_env(flat, flat.get("avrag_rs_root") or ".")
+    if not flat.get("avrag_rs_root"):
+        flat["avrag_rs_root"] = str(_DEFAULT_AVRAG_RS_ROOT)
+    sync_optimizer_env(flat, flat["avrag_rs_root"])
+    resolve_optimizer_models(flat)
+    ensure_skillopt_prompts()
+    install_deepseek_content_fallback()
+    # Re-bind optimizer config from process env (import-time snapshot may be stale).
+    try:
+        from skillopt.model import qwen_backend as qb
+
+        qb.configure_qwen_chat(
+            base_url=os.environ.get("QWEN_CHAT_BASE_URL"),
+            api_key=os.environ.get("QWEN_CHAT_API_KEY"),
+            max_tokens=os.environ.get("QWEN_CHAT_MAX_TOKENS"),
+            enable_thinking=os.environ.get("QWEN_CHAT_ENABLE_THINKING", "false"),
+        )
+        qb.set_optimizer_deployment(flat["optimizer_model"])
+        qb.set_target_deployment(flat["target_model"])
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [warn] configure_qwen_chat skipped: {exc}")
 
     if args.check:
         run_check(flat)
@@ -379,11 +543,42 @@ def main() -> None:
 
     print(f"  env={flat.get('env')} optimizer_backend={flat.get('optimizer_backend')} "
           f"optimizer_model={flat.get('optimizer_model')}")
+    print(f"  optimizer_url={os.environ.get('QWEN_CHAT_BASE_URL', '')}")
     print(f"  out_root={flat['out_root']}")
 
     adapter = get_adapter(flat)
     from skillopt.engine.trainer import ReflACTTrainer
     trainer = ReflACTTrainer(flat, adapter)
+    # Trainer.__init__ calls set_optimizer_deployment(cfg['optimizer_model']) —
+    # re-assert after in case any internal path re-defaulted.
+    try:
+        from skillopt.model import qwen_backend as qb
+
+        if qb.OPTIMIZER_CONFIG.deployment != flat["optimizer_model"]:
+            print(
+                f"  [model] re-pin deployment "
+                f"{qb.OPTIMIZER_CONFIG.deployment!r} → {flat['optimizer_model']!r}"
+            )
+            qb.set_optimizer_deployment(flat["optimizer_model"])
+        print(f"  [model] live OPTIMIZER_CONFIG.deployment={qb.OPTIMIZER_CONFIG.deployment}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [warn] post-trainer model pin skipped: {exc}")
+
+    # Fail-fast smoke: one tiny optimizer chat before multi-hour e2e loop.
+    try:
+        from skillopt.model import qwen_backend as qb
+
+        smoke_text, _ = qb._chat_messages_impl(
+            [{"role": "user", "content": 'Reply with exactly: {"ok":true}'}],
+            max_completion_tokens=64,
+            retries=2,
+            stage="optimizer_smoke",
+            role="optimizer",
+        )
+        print(f"  [smoke] optimizer chat ok content={smoke_text[:80]!r}")
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(f"optimizer smoke failed (abort train): {exc}") from exc
+
     summary = trainer.train()
     if summary.get("test_hard") is not None:
         print(f"  Final test: {summary['test_hard']:.4f}")

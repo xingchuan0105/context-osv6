@@ -58,13 +58,17 @@ impl DisclosurePlanner {
             push_cluster_body(&mut slices, cluster_id, None, already_disclosed, true);
         }
 
-        // Table structure reference (ontology + few-shot) and the strategy
-        // layer (coverage checklist / gotchas / low-freedom paths):
-        // default-disclose once with knowledge-base so pipe-table reading and
-        // retrieval strategy are in context without skill_request. The
-        // every-round mandatory re-render covers only the SKILL body
-        // (methods + return shapes + hard constraints) — strategy spokes are
-        // first-round (re-pullable via `knowledge-base/<slug>`).
+        // Thin strategy layer only on first retrieve round (coverage checklist +
+        // entity-first principles + spoke index). Long few-shot / gotcha packs
+        // and how-to-read-tables load on demand via skill_request
+        // (`knowledge-base/strategies-graph|tables|grounding|codegen`,
+        // `knowledge-base/how-to-read-tables`). SKILL body stays every-round
+        // mandatory (methods + return shapes).
+        //
+        // SkillOpt: when training a spoke, set E2E_SKILLOPT_FORCE_KB_REFS to a
+        // comma-separated list of reference slugs (e.g. `strategies-graph`) so
+        // the file under edit is actually in context (otherwise progressive
+        // disclosure would hide the trainable few-shot/gotcha body).
         if first_round
             && mode
                 .skill_catalog
@@ -76,17 +80,24 @@ impl DisclosurePlanner {
             push_cluster_body(
                 &mut slices,
                 "knowledge-base",
-                Some("how-to-read-tables"),
-                already_disclosed,
-                false,
-            );
-            push_cluster_body(
-                &mut slices,
-                "knowledge-base",
                 Some("strategies"),
                 already_disclosed,
                 false,
             );
+            if let Ok(forced) = std::env::var("E2E_SKILLOPT_FORCE_KB_REFS") {
+                for slug in forced.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+                    if slug == "strategies" {
+                        continue; // already pushed
+                    }
+                    push_cluster_body(
+                        &mut slices,
+                        "knowledge-base",
+                        Some(slug),
+                        already_disclosed,
+                        false,
+                    );
+                }
+            }
         }
 
         if let Some(requested) = skill_request {
@@ -570,5 +581,91 @@ mod tests {
         let mode = super::super::config::load_mode_config("chat").unwrap();
         let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
         assert!(!plan.slices.contains(&DisclosureSlice::RetrievalQuery));
+    }
+
+    #[test]
+    fn retrieve_first_round_discloses_thin_strategies_not_table_or_graph_spokes() {
+        let mode = rag_mode();
+        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
+        let refs: Vec<Option<&str>> = plan
+            .slices
+            .iter()
+            .filter_map(|s| match s {
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference,
+                } if cluster_id == "knowledge-base" => Some(reference.as_deref()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            refs.iter().any(|r| *r == Some("strategies")),
+            "expected thin strategies spoke, got {refs:?}"
+        );
+        assert!(
+            !refs.iter().any(|r| *r == Some("how-to-read-tables")),
+            "how-to-read-tables is on-demand, not default first-round"
+        );
+        assert!(
+            !refs.iter().any(|r| {
+                matches!(
+                    r,
+                    Some("strategies-graph")
+                        | Some("strategies-tables")
+                        | Some("strategies-grounding")
+                        | Some("strategies-codegen")
+                )
+            }),
+            "scenario spokes are on-demand, got {refs:?}"
+        );
+    }
+
+    #[test]
+    fn skill_request_can_load_strategies_graph_spoke() {
+        let mode = rag_mode();
+        let mut disclosed = HashSet::new();
+        disclosed.insert("knowledge-base".to_string());
+        disclosed.insert("knowledge-base/strategies".to_string());
+        let plan = DisclosurePlanner::plan_retrieve(
+            &mode,
+            false,
+            Some(&["knowledge-base/strategies-graph".to_string()]),
+            &disclosed,
+            None,
+        );
+        assert!(plan.slices.iter().any(|s| matches!(
+            s,
+            DisclosureSlice::ClusterBody {
+                cluster_id,
+                reference: Some(r),
+            } if cluster_id == "knowledge-base" && r == "strategies-graph"
+        )));
+    }
+
+    #[test]
+    fn skillopt_force_kb_refs_discloses_spoke_on_first_round() {
+        let mode = rag_mode();
+        // SAFETY: process-local env for this unit test
+        unsafe {
+            std::env::set_var("E2E_SKILLOPT_FORCE_KB_REFS", "strategies-graph,strategies-tables");
+        }
+        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
+        unsafe {
+            std::env::remove_var("E2E_SKILLOPT_FORCE_KB_REFS");
+        }
+        let refs: Vec<&str> = plan
+            .slices
+            .iter()
+            .filter_map(|s| match s {
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference: Some(r),
+                } if cluster_id == "knowledge-base" => Some(r.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(refs.contains(&"strategies"));
+        assert!(refs.contains(&"strategies-graph"));
+        assert!(refs.contains(&"strategies-tables"));
     }
 }

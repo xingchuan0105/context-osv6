@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -123,8 +124,10 @@ def run_eval(
     if not (root / "Cargo.toml").is_file():
         raise FileNotFoundError(f"不是 avrag-rs 根目录: {root}")
 
-    env = dict(os.environ)
-    env.update(load_env_file(root / ".env"))
+    # dotenv fills gaps only — process env (and extra_env) win, so launch
+    # scripts can pin OpenCode Go / Ollama dual-channel without editing .env.
+    env = load_env_file(root / ".env")
+    env.update({k: v for k, v in os.environ.items() if v is not None})
     env["E2E_MODE"] = "nightly"
     if prompt_dir_override is not None:
         env["E2E_SKILLOPT_PROMPT_DIR"] = str(prompt_dir_override)
@@ -253,6 +256,164 @@ def score_row(row: dict, no_context: bool = False) -> tuple[int, float, bool]:
     return hard, soft, False
 
 
+# ── 代码一次通过率（L1.5 code_pass）────────────────────────────────────
+# 主取证：mode_debug.general.loop_rounds.exit_reasons 中的 code_gen / code_gen_error
+# （终答通常已无 ```python 块；sandbox 源码不进 qNNN.json）。
+# 辅取证：sandbox_error activity、tool_trace 执行错误、终答/代码块脏 API。
+
+_CODE_EXEC_FAIL_RE = re.compile(
+    r"Execution failed|AttributeError|NameError|TypeError|SyntaxError|"
+    r"ModuleNotFoundError|ImportError|Traceback \(most recent call last\)",
+    re.I,
+)
+_BAD_API_RE = re.compile(
+    r"\b(dense_search|lexical_search|graph_search|read_lines)\s*\(|\btop_k\s*=",
+    re.I,
+)
+_BAD_IMPORT_RE = re.compile(
+    r"(?:^|\n)\s*(?:import\s+(?:os|subprocess)\b|from\s+(?:os|subprocess)\b)",
+)
+_CODE_FENCE_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.I | re.S)
+_CODEGEN_OK = "code_gen"
+_CODEGEN_ERR = "code_gen_error"
+
+
+def extract_code_blocks(text: str) -> list[str]:
+    return [m.group(1) for m in _CODE_FENCE_RE.finditer(text or "")]
+
+
+def score_code_pass(answer: str, attr: dict | None = None) -> tuple[int, float, dict]:
+    """代码一次通过率评分。
+
+    **主信号**（产品 loop 已写入 mode_debug）：
+    - ``exit_reasons`` 含 ``code_gen_error`` → 未一次通过
+      - 若首次 codegen 相关 reason 就是 error → hard=0 soft=0
+      - 若先 error 后 code_gen（修好） → hard=0 soft=0.35（非一次通过）
+    - 仅有 ``code_gen``、无 error → hard=1 soft=1
+    - ``activity_counts.sandbox_error`` > 0 → hard=0
+
+    **辅信号**：tool_errors / 终答 Execution failed / 终答代码块脏 API。
+
+    **无 codegen 尝试**：hard=1 soft=1，reason=no_codegen_attempt（不惩罚 native 路径）。
+    """
+    attr = attr or {}
+    detail: dict = {
+        "code_pass": True,
+        "reasons": [],
+        "codegen_ok_rounds": 0,
+        "codegen_err_rounds": 0,
+        "first_codegen": None,
+    }
+    ans = answer or ""
+
+    exit_reasons = [str(x) for x in (attr.get("exit_reasons") or []) if x]
+    final_er = str(attr.get("exit_reason") or "").strip()
+    if final_er and final_er not in exit_reasons:
+        exit_reasons = exit_reasons + [final_er]
+
+    n_ok = sum(1 for r in exit_reasons if r == _CODEGEN_OK)
+    n_err = sum(1 for r in exit_reasons if r == _CODEGEN_ERR)
+    detail["codegen_ok_rounds"] = n_ok
+    detail["codegen_err_rounds"] = n_err
+    first_codegen = next(
+        (r for r in exit_reasons if r in (_CODEGEN_OK, _CODEGEN_ERR)), None
+    )
+    detail["first_codegen"] = first_codegen
+    sandbox_n = int(attr.get("sandbox_error_count") or 0)
+
+    # ── 主路径：loop exit_reasons ─────────────────────────────────────
+    if n_err > 0 or sandbox_n > 0:
+        detail["code_pass"] = False
+        if sandbox_n > 0:
+            detail["reasons"].append(f"sandbox_error_activity={sandbox_n}")
+        if first_codegen == _CODEGEN_ERR:
+            detail["reasons"].append("first_codegen_failed")
+            # 若后续仍有成功 code_gen，给 soft 部分分；hard 仍 0（非一次通过）
+            if n_ok > 0:
+                detail["reasons"].append(f"later_codegen_ok rounds={n_ok}")
+                return 0, 0.35, detail
+            return 0, 0.0, detail
+        # 首次 code_gen 成功、后续才 error（少见）
+        detail["reasons"].append(
+            f"codegen_error_after_ok ok={n_ok} err={n_err}"
+        )
+        return 0, 0.5, detail
+
+    if n_ok > 0:
+        detail["reasons"].append(f"codegen_all_ok rounds={n_ok}")
+        # 辅：tool_trace 级失败仍算通过失败（TypeError 等）
+        if attr.get("code_error") or attr.get("tool_errors"):
+            # 过滤 embedding/infra 类噪声：只认明确代码契约错误
+            te = [str(x) for x in (attr.get("tool_errors") or [])]
+            codeish = [
+                t
+                for t in te
+                if any(
+                    k in t
+                    for k in (
+                        "TypeError",
+                        "AttributeError",
+                        "NameError",
+                        "SyntaxError",
+                        "answer_exec_fail",
+                        "stderr:",
+                    )
+                )
+            ]
+            if codeish:
+                detail["code_pass"] = False
+                detail["reasons"].append(f"tool_code_errors={codeish}")
+                return 0, 0.2, detail
+        return 1, 1.0, detail
+
+    # ── 无 codegen 轮次：回退到终答/代码块（通常无块）────────────────
+    if attr.get("code_error") or attr.get("tool_errors"):
+        te = [str(x) for x in (attr.get("tool_errors") or [])]
+        codeish = [
+            t
+            for t in te
+            if any(
+                k in t
+                for k in (
+                    "TypeError",
+                    "AttributeError",
+                    "NameError",
+                    "SyntaxError",
+                    "answer_exec_fail",
+                    "stderr:",
+                )
+            )
+        ]
+        if codeish:
+            detail["code_pass"] = False
+            detail["reasons"].append(f"tool_code_errors={codeish}")
+            return 0, 0.0, detail
+
+    if _CODE_EXEC_FAIL_RE.search(ans):
+        detail["code_pass"] = False
+        detail["reasons"].append("exec_fail_in_answer")
+        return 0, 0.0, detail
+
+    blocks = extract_code_blocks(ans)
+    first = blocks[0] if blocks else ""
+    if not first.strip():
+        detail["reasons"].append("no_codegen_attempt")
+        return 1, 1.0, detail
+
+    if _BAD_API_RE.search(first) or _BAD_IMPORT_RE.search(first):
+        detail["code_pass"] = False
+        detail["reasons"].append("dirty_api_or_import_in_first_block")
+        return 0, 0.25, detail
+
+    if "client." in first and "await" not in first:
+        detail["code_pass"] = False
+        detail["reasons"].append("client_without_await_in_first_block")
+        return 0, 0.5, detail
+
+    detail["reasons"].append("first_block_clean")
+    return 1, 1.0, detail
+
+
 # ── 分步代理信号（WP0：按层取信号，黄金集综合 label 不直接当训练梯度）──
 #
 # 层 → 信号映射（与 docs/plans/2026-08-02-skillopt-layered-training-impl.md D4 一致）：
@@ -363,6 +524,7 @@ def load_attribution(v2_dir: str | os.PathLike, n: int) -> dict:
         "selection_recall": 0.0, "unsupported_claims": 0, "code_error": False,
         "no_output": False, "tool_errors": [], "activities": [],
         "capabilities": [], "answer_model": "",
+        "exit_reason": "", "exit_reasons": [], "sandbox_error_count": 0,
     }
     vdir = Path(v2_dir)
 
@@ -388,19 +550,45 @@ def load_attribution(v2_dir: str | os.PathLike, n: int) -> dict:
             pass
 
     # 2. mode_debug + tool_trace（行为指纹 + 代码层）
+    # code_pass 主信号：loop_rounds.exit_reasons 的 code_gen / code_gen_error
     mode_dir = vdir.parent.parent / "realistic_corpus_full_eval"
     qf = mode_dir / f"q{n}.json"
     if qf.is_file():
         try:
             d = json.loads(qf.read_text(encoding="utf-8"))
             gen = ((d.get("mode_debug") or {}).get("general") or {})
-            attr["activities"] = list(gen.get("activity_counts") or [])
+            acts = gen.get("activity_counts") or {}
+            if isinstance(acts, dict):
+                attr["activities"] = list(acts.keys())
+                attr["sandbox_error_count"] = int(acts.get("sandbox_error") or 0)
+            else:
+                attr["activities"] = list(acts or [])
+                attr["sandbox_error_count"] = 0
             attr["answer_model"] = str(gen.get("answer_model") or "")
             attr["capabilities"] = list(gen.get("capabilities") or [])
+            attr["exit_reason"] = str(gen.get("exit_reason") or "")
+            lr = gen.get("loop_rounds") or {}
+            if isinstance(lr, dict):
+                attr["exit_reasons"] = [
+                    str(x) for x in (lr.get("exit_reasons") or []) if x
+                ]
+            else:
+                attr["exit_reasons"] = []
             tt = d.get("tool_trace") or []
             for t in tt:
-                if isinstance(t, dict) and t.get("status") != "Ok":
-                    attr["tool_errors"].append(str(t.get("tool")))
+                if not isinstance(t, dict):
+                    continue
+                if t.get("status") not in (None, "Ok", "ok"):
+                    attr["tool_errors"].append(str(t.get("tool") or t.get("status")))
+                se = str(t.get("stderr") or "")
+                if se and _CODE_EXEC_FAIL_RE.search(se):
+                    attr["tool_errors"].append(f"stderr:{t.get('tool')}")
+                err = str(t.get("error") or "")
+                if err and _CODE_EXEC_FAIL_RE.search(err):
+                    attr["tool_errors"].append(f"error:{t.get('tool')}:{err[:80]}")
+            ans = str(d.get("answer") or "")
+            if _CODE_EXEC_FAIL_RE.search(ans):
+                attr["tool_errors"].append("answer_exec_fail")
             attr["code_error"] = bool(attr["tool_errors"])
             # 无工具调用且零召回 → 代码层无产出（零检索直答类，行为报告 A 类）
             if not tt and attr["retrieval_recall"] == 0.0:

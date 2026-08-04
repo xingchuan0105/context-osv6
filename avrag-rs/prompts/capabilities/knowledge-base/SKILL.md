@@ -9,7 +9,7 @@ description: >-
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "4.3"
+version: "4.7"
 ---
 
 ## 证据与权威源
@@ -36,8 +36,8 @@ version: "4.3"
 
 | 作用 | 调用 | 适用 | 局限 / 风险 |
 |------|------|------|-------------|
-| 语义相近 | `await client.dense(query)` | 概念、定义、换说法 | 易偏主题叙述；金额/编号/表内字面可能漏 |
-| 关键词 | `await client.lexical(query)` | 编号、日期、金额、表内字面；结果可能附带关系上下文 | 同义改写、简称可能 0 命中 |
+| 语义相近 | `await client.dense(query)` | 概念、定义、换说法；宿主在向量召回上**以 query 文本为种子**扩邻关系，再融合为同一 chunk 列表。`query` 越贴近**可独立核验的实体/专名短语**（可选最短属性槽），扩邻方向通常越稳；多实体/关系型问题常见形态是**按实体拆多次** `dense` 并行，而非一次整句 | 易偏主题叙述；金额/编号/表内字面可能漏；**多实体长句作单一种子时扩邻方向散**；关系型问句整句「A 与 B」作唯一种子时两端邻域不易同时打开 |
+| 关键词 | `await client.lexical(query)` | 编号、日期、金额、表内字面 | 同义改写、简称可能 0 命中 |
 | 按行查找 | `await client.grep(pattern, doc_ids=None, regex=False, context=0, max_hits=50)` | 行计数、表记录、精确字面、顺序邻域 | pattern 与库内空白/管道格式不对齐时假 0；`total_hits` 是**命中行数** |
 | 表结构目录 | `await client.struct_catalog(doc_ids=None)` | 查看表格存储里的表：表名、列名、行数、样例行、置信度 | `relations` 为空 = 当前 scope 无表格存储，不是检索失败；多 doc 同名表时响应含 `ambiguous_relations` 表名列表，同名表查询静默归属首个出现的 doc |
 | 表格查询 | `await client.struct_query(sql, doc_ids=None)` | 表内 COUNT / 过滤 / 排序 / 分组（单条 SELECT） | 仅单条 SELECT；禁 DDL/DML/文件函数；表名与列名以 catalog 为准；多 doc 同名表查询静默归属首个 doc——用 `doc_ids` 收窄范围后再查 |
@@ -45,7 +45,7 @@ version: "4.3"
 | 摘要 | `await client.doc_summary(level="doc", doc_ids=None)` | 整篇/章节概览 | 摘要不是逐字证据 |
 | 跨块存储 | `await client.save(path, data)` / `await client.load(path)` | 中间结果 | 仅相对路径 |
 
-没有 `top_k`；没有 `graph_search`、`read_lines`。
+没有 `top_k`；没有 `client.graph` / `graph_search`、`read_lines`。图关系扩邻**不是**独立沙箱 API：由 `client.dense` 的 query（及召回命中）触发宿主侧扩邻，关系向片段出现在 **dense 回传的同一 chunk 列表**里，与普通 dense 行同一 alias 命名空间。LLM 侧可控的是 query 粒度与并行次数；entity-first / 双端种子细则见 **strategies**「图扩邻种子策略」。
 
 **返回形状**
 
@@ -58,6 +58,7 @@ version: "4.3"
 ```python
 import asyncio
 
+# 方法组合扇出（语义 + 词面 + 行级）
 chunks, hits, g = await asyncio.gather(
     client.dense("概念定义"),
     client.lexical("保修年限"),
@@ -68,6 +69,13 @@ print("dense n=", len(chunks), "| lexical n=", len(hits),
 for h in g["hits"][:5]:
     print(h["line"], h["text"][:100], h.get("before"), h.get("after"))
 await client.save("cands.json", chunks)
+
+# 关系型 / 双实体：两端各一次 dense（种子分开），同块并行
+side_a, side_b = await asyncio.gather(
+    client.dense("实体甲"),
+    client.dense("实体乙"),
+)
+print("side_a n=", len(side_a), "| side_b n=", len(side_b))
 ```
 
 ## 空结果、截断与失败
@@ -95,11 +103,21 @@ await client.save("cands.json", chunks)
 - 表内「第一个」= **`row_ord`（表出现序）升序第一行**，或显式序号列，不是编码标签的字典序。
 - 单元格两侧常有 `|`；`grep(..., regex=True, context=…)` 的 before/after 提供邻行邻列。
 
-完整 ontology、**误读对照**与虚构示例见 **how-to-read-tables**（默认随本说明披露）。
+管道表完整 ontology 与误读对照见 **how-to-read-tables**（按需：`{"skill_request": ["knowledge-base/how-to-read-tables"]}`，非首轮默认全开）。
 
-## 策略层（strategies spoke）
+## 策略层（渐进披露）
 
-多主张覆盖清单、读法误读对照（gotchas）、表类「摸范围 → 收窄 → 下钻」工作流与各场景默认路径，见 **knowledge-base/strategies**——首轮已随本说明披露；后续轮次若不在上下文，可用 `{"skill_request": ["knowledge-base/strategies"]}` 重新加载。
+首轮默认只披露薄层 **knowledge-base/strategies**（覆盖清单、entity-first 原则、spoke 目录、通用短 gotcha）。  
+场景 few-shot / 长 gotcha **不**默认塞入上下文，环境中可按需加载：
+
+| 需要时 | skill_request |
+|--------|----------------|
+| 图扩邻种子、双端 dense、图向 gotcha | `knowledge-base/strategies-graph` |
+| 表路径、行数/去重、struct vs grep | `knowledge-base/strategies-tables` |
+| 结构人数≠访谈、跨文档联系、未覆盖边界 | `knowledge-base/strategies-grounding` |
+| 沙箱方法名/`top_k`/await 噪声 | `knowledge-base/strategies-codegen` |
+| 管道表 ontology | `knowledge-base/how-to-read-tables` |
+| 重载薄层 | `knowledge-base/strategies` |
 
 ## 采用了哪些命中
 

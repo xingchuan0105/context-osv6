@@ -75,6 +75,8 @@ class Avrag149Adapter(EnvAdapter):
         # per-family split 的整族留出(WP1 防记忆化地基):逗号分隔的 subset 名,
         # 全部进 test,永不进训练/反射视野(D6-② 结构性 holdout)。
         holdout_subsets: str = "",
+        # answer = 终答 PASS（默认）；code_pass = L1.5 代码一次通过率
+        score_mode: str = "answer",
         **kwargs,
     ) -> None:
         self.workers = int(workers)
@@ -88,6 +90,7 @@ class Avrag149Adapter(EnvAdapter):
         self.avrag_rs_root = str(avrag_rs_root or _DEFAULT_AVRAG_RS_ROOT)
         self.prompt_target = prompt_target
         self.eval_timeout_secs = int(eval_timeout_secs)
+        self.score_mode = str(score_mode or "answer").strip().lower()
 
         if not data_path:
             data_path = str(Path(self.avrag_rs_root) / "tests/rag_quality/golden_set_realistic.json")
@@ -150,6 +153,7 @@ class Avrag149Adapter(EnvAdapter):
                 prompt_target=self.prompt_target,
                 eval_timeout_secs=self.eval_timeout_secs,
                 verbose=kwargs.get("verbose", True),
+                score_mode=self.score_mode,
             )
         # WP2：切分 batch 并行 rollout（每 chunk 独立 prompt 树 + 独立 out 目录）
         chunks = [env_manager[i::self.eval_workers] for i in range(self.eval_workers)]
@@ -165,6 +169,7 @@ class Avrag149Adapter(EnvAdapter):
             eval_timeout_secs=self.eval_timeout_secs,
             max_workers=len(jobs),
             verbose=kwargs.get("verbose", True),
+            score_mode=self.score_mode,
         )
         merged = [r for rl in results_lists for r in rl]
         _merge_worker_predictions(Path(out_dir))

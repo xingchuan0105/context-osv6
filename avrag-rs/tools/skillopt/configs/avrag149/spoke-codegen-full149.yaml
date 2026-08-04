@@ -1,0 +1,22 @@
+# 渐进披露 · 沙箱 codegen 写码形态（一次可执行 / 少噪声）
+# few-shot + gotcha；FORCE=strategies-codegen
+# 中间 spoke 不做 test 全量（eval_test=false）；全部层训完再用 eval_avrag149 统一验收。
+_base_: default.yaml
+
+train:
+  num_epochs: 2
+  batch_size: 8
+
+gradient:
+  minibatch_size: 8
+
+evaluation:
+  eval_test: false
+
+env:
+  prompt_target: capabilities/knowledge-base/reference/strategies-codegen.md
+  skill_init: avrag149/skills/strategies-codegen.md
+  include_ids_file: ""
+  holdout_subsets: "cross_document,ipd_table,rag_search_joint,cross_adr,orchestrator_paradigm"
+  eval_timeout_secs: 7200
+  reflect_backend: llm

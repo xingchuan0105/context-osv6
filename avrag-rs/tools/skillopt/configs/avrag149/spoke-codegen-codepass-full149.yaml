@@ -1,0 +1,24 @@
+# 渐进披露 · 沙箱「代码一次通过率」专用轮
+# hard/soft 用 L1.5 code_pass（执行失败 + 首块脏 API/import/漏 await），不用终答 PASS。
+# FORCE=strategies-codegen；eval_test=false；failure_only 聚焦失败轨迹。
+_base_: default.yaml
+
+train:
+  num_epochs: 2
+  batch_size: 8
+
+gradient:
+  minibatch_size: 8
+  failure_only: true
+
+evaluation:
+  eval_test: false
+
+env:
+  prompt_target: capabilities/knowledge-base/reference/strategies-codegen.md
+  skill_init: avrag149/skills/strategies-codegen.md
+  score_mode: code_pass
+  include_ids_file: ""
+  holdout_subsets: "cross_document,ipd_table,rag_search_joint,cross_adr,orchestrator_paradigm"
+  eval_timeout_secs: 7200
+  reflect_backend: llm
