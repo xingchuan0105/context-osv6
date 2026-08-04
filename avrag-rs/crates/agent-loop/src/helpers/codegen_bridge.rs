@@ -1,6 +1,16 @@
 //! Codegen sandbox observation bridge — aligns with `iteration_codegen.rs`.
 
 use contracts::{ToolResult, ToolStatus};
+use serde_json::{Value, json};
+
+fn l_eval_rrf_env_on() -> bool {
+    std::env::var("GRAPH_L_EVAL_RRF")
+        .map(|v| {
+            let t = v.trim().to_ascii_lowercase();
+            t == "1" || t == "true" || t == "yes" || t == "on"
+        })
+        .unwrap_or(false)
+}
 
 /// Parse sandbox stdout JSON into retrieval items for citation building.
 ///
@@ -74,9 +84,14 @@ fn normalize_retrieval_items(items: Vec<serde_json::Value>) -> Vec<serde_json::V
 ///
 /// Includes compact `graph_context` from lexical force-augment telemetry so the model still
 /// sees 1-hop structure when it did not print the bridge return value.
+///
+/// With `GRAPH_L_EVAL_RRF=1`, performs **three-way** dense ∪ BM25 ∪ graph RRF into `chunks`.
 pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) -> Option<String> {
-    let mut items = Vec::new();
+    let mut dense_items = Vec::new();
+    let mut bm25_items = Vec::new();
+    let mut graph_items = Vec::new();
     let mut graph_context = Vec::new();
+    let mut items = Vec::new();
     let mut doc_scan_only = true;
     let mut doc_scan_chunk_count = 0usize;
 
@@ -89,7 +104,7 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
         if result.status != ToolStatus::Ok {
             continue;
         }
-        // Force-augment telemetry: collect graph_context only (not as cite chunks).
+        // Force-augment telemetry: graph_context only.
         if is_graph_augment_telemetry(result) {
             if let Some(data) = &result.data {
                 if let Some(arr) = data.get("graph_context").and_then(|v| v.as_array()) {
@@ -102,9 +117,40 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
             continue;
         };
         match data {
-            serde_json::Value::Array(arr) => items.extend(normalize_retrieval_items(arr.clone())),
-            serde_json::Value::Object(map) => {
-                if let Some(arr) = map.get("chunks").and_then(|v| v.as_array()) {
+            Value::Array(arr) => {
+                let norm = normalize_retrieval_items(arr.clone());
+                if result.tool == "dense_retrieval" || result.tool == "dense" {
+                    dense_items.extend(norm.clone());
+                } else if result.tool == "graph_retrieval" || result.tool == "graph" {
+                    // Explicit graph tool returns supporting chunks as array.
+                    let mut marked = norm;
+                    for it in &mut marked {
+                        if let Some(obj) = it.as_object_mut() {
+                            obj.insert("source".into(), json!("graph"));
+                        }
+                    }
+                    graph_items.extend(marked);
+                } else {
+                    items.extend(norm);
+                }
+            }
+            Value::Object(map) => {
+                if result.tool == "lexical_retrieval" || result.tool == "lexical" {
+                    // Prefer pure BM25 list for three-way fuse when present.
+                    if let Some(arr) = map.get("bm25_chunks").and_then(|v| v.as_array()) {
+                        bm25_items.extend(normalize_retrieval_items(arr.clone()));
+                    } else if let Some(arr) = map.get("chunks").and_then(|v| v.as_array()) {
+                        // Fall back: keep non-graph-tagged rows as lexical.
+                        for it in normalize_retrieval_items(arr.clone()) {
+                            let src = it.get("source").and_then(|s| s.as_str()).unwrap_or("");
+                            if src == "graph" {
+                                graph_items.push(it);
+                            } else {
+                                bm25_items.push(it);
+                            }
+                        }
+                    }
+                } else if let Some(arr) = map.get("chunks").and_then(|v| v.as_array()) {
                     items.extend(normalize_retrieval_items(arr.clone()));
                 }
                 if let Some(arr) = map.get("graph_context").and_then(|v| v.as_array()) {
@@ -114,31 +160,144 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
             _ => {}
         }
     }
+
+    // Pull graph evidence from contexts into graph_items for RRF.
+    for g in &graph_context {
+        if let Some(evs) = g.get("evidence_chunks").and_then(|e| e.as_array()) {
+            for ev in evs {
+                let Some(text) = ev.get("text").and_then(|t| t.as_str()) else {
+                    continue;
+                };
+                if text.trim().is_empty() {
+                    continue;
+                }
+                let cid = ev
+                    .get("chunk_id")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or_default();
+                if cid.is_empty() {
+                    continue;
+                }
+                graph_items.push(json!({
+                    "chunk_id": cid,
+                    "doc_id": ev.get("doc_id").and_then(|d| d.as_str()).unwrap_or(""),
+                    "text": text,
+                    "content": text,
+                    "score": ev.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0),
+                    "source": "graph",
+                }));
+            }
+        }
+    }
+
+    if l_eval_rrf_env_on()
+        && (!dense_items.is_empty() || !bm25_items.is_empty() || !graph_items.is_empty())
+    {
+        let fused = rrf_merge_json_lists(
+            [
+                ("dense", dense_items),
+                ("bm25", bm25_items),
+                ("graph", graph_items),
+            ],
+            60,
+        );
+        let graph_in_top15 = fused
+            .iter()
+            .take(15)
+            .filter(|c| c.get("source").and_then(|s| s.as_str()) == Some("graph"))
+            .count();
+        return serde_json::to_string(&json!({
+            "chunks": fused,
+            "graph_context": graph_context,
+            "l_eval_rrf": true,
+            "l_eval_channels": ["dense", "bm25", "graph"],
+            "graph_chunk_in_top15": graph_in_top15,
+            "graph_context_len": graph_context.len(),
+        }))
+        .ok();
+    }
+
+    // Legacy path (no L-eval): concatenate as before.
+    items.extend(dense_items);
+    items.extend(bm25_items);
+    items.extend(graph_items.into_iter().filter(|it| {
+        // Prefer not dumping raw graph rows into non-L-eval chunks unless alone.
+        it.get("source").and_then(|s| s.as_str()) != Some("graph")
+    }));
+
     if !items.is_empty() {
         if graph_context.is_empty() {
             return serde_json::to_string(&items).ok();
         }
-        return serde_json::to_string(&serde_json::json!({
+        return serde_json::to_string(&json!({
             "chunks": items,
             "graph_context": graph_context,
         }))
         .ok();
     }
     if !graph_context.is_empty() {
-        return serde_json::to_string(&serde_json::json!({
+        return serde_json::to_string(&json!({
             "chunks": [],
             "graph_context": graph_context,
         }))
         .ok();
     }
     if doc_scan_only && doc_scan_chunk_count > 0 {
-        // Material is in the sandbox for code-side scan; only a compact hint
-        // goes back into the LLM observation (not the full chunk dump).
         return Some(format!(
             "doc_scan loaded {doc_scan_chunk_count} segments into the sandbox for code-side scan/count; print a compact result (numbers or a short list)"
         ));
     }
     None
+}
+
+/// JSON-level RRF over channel lists (dedupe by chunk_id).
+fn rrf_merge_json_lists(
+    channels: [(&str, Vec<Value>); 3],
+    rrf_k: usize,
+) -> Vec<Value> {
+    use std::collections::HashMap;
+    let mut scores: HashMap<String, f64> = HashMap::new();
+    let mut best: HashMap<String, Value> = HashMap::new();
+    for (channel, list) in channels {
+        for (rank, mut item) in list.into_iter().enumerate() {
+            let Some(id) = item
+                .get("chunk_id")
+                .and_then(|c| c.as_str())
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            if id.is_empty() {
+                continue;
+            }
+            let add = 1.0 / (rrf_k as f64 + rank as f64);
+            *scores.entry(id.clone()).or_insert(0.0) += add;
+            if let Some(obj) = item.as_object_mut() {
+                if !obj.contains_key("source") {
+                    obj.insert("source".into(), json!(channel));
+                }
+                // Prefer text field for model; keep content alias.
+                if !obj.contains_key("text") {
+                    if let Some(c) = obj.get("content").cloned() {
+                        obj.insert("text".into(), c);
+                    }
+                }
+            }
+            best.entry(id).or_insert(item);
+        }
+    }
+    let mut fused: Vec<(f64, Value)> = scores
+        .into_iter()
+        .filter_map(|(id, sc)| {
+            let mut v = best.remove(&id)?;
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert("score".into(), json!(sc));
+            }
+            Some((sc, v))
+        })
+        .collect();
+    fused.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    fused.into_iter().map(|(_, v)| v).collect()
 }
 
 fn is_graph_augment_telemetry(result: &ToolResult) -> bool {
@@ -181,7 +340,15 @@ fn count_bridge_tool_chunks(result: &ToolResult) -> usize {
 }
 
 /// Resolve stdout text shown to the model after codegen; bridge chunks fill empty stdout.
+///
+/// With `GRAPH_L_EVAL_RRF=1`, prefer block-level three-way fused observation over raw prints
+/// so dense∪BM25∪graph is always what the model and exit policy see.
 pub fn codegen_observation_stdout(exec_stdout: &str, block_bridge: &[ToolResult]) -> String {
+    if l_eval_rrf_env_on() {
+        if let Some(fused) = bridge_tool_results_to_observation_stdout(block_bridge) {
+            return fused;
+        }
+    }
     if !crate::react_loop::exit_policy::stdout_is_placeholder(exec_stdout.trim())
         && !exec_stdout.trim().is_empty()
     {
@@ -237,9 +404,11 @@ mod tests {
             tr(
                 "lexical_retrieval",
                 ToolStatus::Ok,
-                Some(serde_json::json!([
-                    {"chunk_id": "c1", "doc_id": "d1", "content": "body", "score": 0.9}
-                ])),
+                Some(serde_json::json!({
+                    "chunks": [
+                        {"chunk_id": "c1", "doc_id": "d1", "content": "body", "score": 0.9}
+                    ]
+                })),
             ),
             ToolResult {
                 tool: "graph_retrieval".into(),
@@ -249,8 +418,15 @@ mod tests {
                     "graph_context": [{
                         "subject": "DRC",
                         "object": "DRO",
-                        "hop": 1,
-                        "evidence_chunks": [{"score": 1.0, "score_gap_to_top1": 0.0, "kept_reason": "top1"}]
+                        "expansion_hop_limit": 1,
+                        "evidence_chunks": [{
+                            "chunk_id": "g1",
+                            "doc_id": "d1",
+                            "text": "graph body",
+                            "score": 1.0,
+                            "score_gap_to_top1": 0.0,
+                            "kept_reason": "top1"
+                        }]
                     }]
                 })),
                 trace: Some(ToolTrace {
@@ -272,6 +448,51 @@ mod tests {
     }
 
     #[test]
+    fn test_l_eval_three_way_prefers_fused_with_dense_bm25_graph() {
+        // SAFETY: test-only env toggle; serial in practice for this module tests.
+        unsafe { std::env::set_var("GRAPH_L_EVAL_RRF", "1") };
+        let bridge = vec![
+            tr(
+                "dense_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "d1", "doc_id": "x", "text": "dense", "score": 0.9}
+                ])),
+            ),
+            tr(
+                "lexical_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!({
+                    "bm25_chunks": [
+                        {"chunk_id": "b1", "doc_id": "x", "text": "bm25", "score": 0.8}
+                    ],
+                    "chunks": [
+                        {"chunk_id": "b1", "doc_id": "x", "text": "bm25", "score": 0.8}
+                    ]
+                })),
+            ),
+            tr(
+                "graph_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "g1", "doc_id": "x", "text": "graph", "score": 0.7, "source": "graph"}
+                ])),
+            ),
+        ];
+        let stdout = bridge_tool_results_to_observation_stdout(&bridge).expect("stdout");
+        let v: serde_json::Value = serde_json::from_str(&stdout).expect("json");
+        assert_eq!(v["l_eval_rrf"], true);
+        let chunks = v["chunks"].as_array().expect("chunks");
+        assert_eq!(chunks.len(), 3);
+        let ids: Vec<&str> = chunks
+            .iter()
+            .filter_map(|c| c.get("chunk_id").and_then(|x| x.as_str()))
+            .collect();
+        assert!(ids.contains(&"d1") && ids.contains(&"b1") && ids.contains(&"g1"));
+        unsafe { std::env::remove_var("GRAPH_L_EVAL_RRF") };
+    }
+
+    #[test]
     fn test_codegen_observation_stdout_keeps_exec_stdout_when_present() {
         let bridge = vec![tr(
             "dense_retrieval",
@@ -280,6 +501,35 @@ mod tests {
         )];
         let stdout = codegen_observation_stdout(r#"{"chunk_id":"from_print"}"#, &bridge);
         assert_eq!(stdout, r#"{"chunk_id":"from_print"}"#);
+    }
+
+    #[test]
+    fn test_l_eval_prefers_fused_over_model_print() {
+        unsafe { std::env::set_var("GRAPH_L_EVAL_RRF", "1") };
+        let bridge = vec![
+            tr(
+                "dense_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "d1", "doc_id": "x", "text": "dense", "score": 0.9}
+                ])),
+            ),
+            tr(
+                "lexical_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!({
+                    "bm25_chunks": [
+                        {"chunk_id": "b1", "doc_id": "x", "text": "bm25", "score": 0.8}
+                    ]
+                })),
+            ),
+        ];
+        let stdout = codegen_observation_stdout(r#"{"chunk_id":"from_print"}"#, &bridge);
+        let v: serde_json::Value = serde_json::from_str(&stdout).expect("json");
+        assert_eq!(v["l_eval_rrf"], true);
+        assert!(v["chunks"].as_array().map(|a| a.len() >= 2).unwrap_or(false));
+        assert!(!stdout.contains("from_print"));
+        unsafe { std::env::remove_var("GRAPH_L_EVAL_RRF") };
     }
 
     #[test]

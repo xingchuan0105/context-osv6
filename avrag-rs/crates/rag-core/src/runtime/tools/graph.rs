@@ -49,6 +49,23 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     };
 
     let started = std::time::Instant::now();
+    // Internal/native graph_retrieval: query seeds via term split + optional dense ANN.
+    let cfg = super::graph_augment::GraphAugmentConfig::resolve();
+    let mut query_entities: Vec<String> = Vec::new();
+    let mut query_entity_vectors: Vec<Vec<f32>> = Vec::new();
+    if let Some(ref q) = args.query {
+        query_entities = q
+            .split_whitespace()
+            .map(|s| s.to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if cfg.dense_seed && !query_entities.is_empty() {
+            let texts: Vec<&str> = query_entities.iter().map(String::as_str).collect();
+            if let Ok(vectors) = runtime.config.embedding_client.embed(&texts).await {
+                query_entity_vectors = vectors;
+            }
+        }
+    }
     match runtime
         .data_plane
         .search_graph(GraphSearchRequest {
@@ -58,9 +75,9 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             relation_hints,
             relation_limit: args.relation_limit,
             supporting_chunk_limit: args.supporting_chunk_limit,
-            query_entities: Vec::new(),
-            query_entity_vectors: Vec::new(),
-            hop_limit: args.hop_limit,
+            query_entities,
+            query_entity_vectors,
+            hop_limit: args.hop_limit.max(1),
             fan_out_limit: args.fan_out_limit,
             owner_user_id: auth.user_id().to_string(),
         })
@@ -138,7 +155,10 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 }
             }
 
-            let chunks: Vec<crate::ScoredChunk> = supporting_chunks;
+            let mut chunks: Vec<crate::ScoredChunk> = supporting_chunks;
+            for c in &mut chunks {
+                c.source = "graph".to_string();
+            }
             ToolResult {
                 tool: "graph_retrieval".to_string(),
                 version: "1.0".to_string(),

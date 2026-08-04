@@ -1,8 +1,8 @@
 use crate::{GRAPH_CHUNK_SCORE, PgvectorDataPlane};
-use pgvector::Vector;
 use avrag_retrieval_data_plane::{
     GraphSearchOutput, GraphSearchRequest, RelationPathCandidate, ScoredChunk,
 };
+use pgvector::Vector;
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -18,8 +18,9 @@ impl PgvectorDataPlane {
         // Seed entities (names + query entities + ANN on entity vectors).
         let mut seed_entities: HashSet<String> = HashSet::new();
         for name in &request.entity_names {
-            if !name.trim().is_empty() {
-                seed_entities.insert(name.clone());
+            let trimmed = name.trim();
+            if !trimmed.is_empty() {
+                seed_entities.insert(trimmed.to_string());
             }
         }
         for name in &request.query_entities {
@@ -30,7 +31,6 @@ impl PgvectorDataPlane {
         }
 
         let owner = Uuid::parse_str(&request.owner_user_id).unwrap_or(Uuid::nil());
-        // Prefer GraphSearchRequest.owner_user_id; fall back handled above.
 
         if !request.query_entity_vectors.is_empty() {
             for vector in &request.query_entity_vectors {
@@ -43,11 +43,23 @@ impl PgvectorDataPlane {
             }
         }
 
+        // Map lower(name)/normalized_name seeds → surface `name` stored on edges.
+        // Combined with case-insensitive relation match (below), G1-S2 lowercase
+        // query_entities expand correctly against subject/object like "Alpha".
+        let resolved = self
+            .resolve_entity_surface_names(owner, request.doc_ids.as_deref(), &seed_entities)
+            .await?;
+        seed_entities.extend(resolved);
+
         if seed_entities.is_empty() {
             return Ok(GraphSearchOutput::default());
         }
 
-        let mut visited_entities = seed_entities.clone();
+        // Visit key is lower(entity) so "alpha" and "Alpha" do not re-expand.
+        let mut visited_lower: HashSet<String> = seed_entities
+            .iter()
+            .map(|s| s.to_lowercase())
+            .collect();
         let mut current_boundary: Vec<String> = seed_entities.into_iter().collect();
         let mut all_relations = Vec::new();
         let mut supporting_chunks = Vec::new();
@@ -80,6 +92,7 @@ impl PgvectorDataPlane {
                         object: row.object.clone(),
                         score: GRAPH_CHUNK_SCORE,
                         supporting_chunk_ids: row.supporting_chunk_ids.clone(),
+                        doc_id: row.doc_id,
                     });
 
                     if supporting_chunks.len() < request.supporting_chunk_limit {
@@ -101,16 +114,18 @@ impl PgvectorDataPlane {
                     }
                 }
 
-                if !visited_entities.contains(&row.subject) {
+                let subj_l = row.subject.to_lowercase();
+                let obj_l = row.object.to_lowercase();
+                if !visited_lower.contains(&subj_l) {
                     next_boundary.insert(row.subject.clone());
                 }
-                if !visited_entities.contains(&row.object) {
+                if !visited_lower.contains(&obj_l) {
                     next_boundary.insert(row.object.clone());
                 }
             }
 
             for entity in &next_boundary {
-                visited_entities.insert(entity.clone());
+                visited_lower.insert(entity.to_lowercase());
             }
             current_boundary = next_boundary.into_iter().collect();
 
@@ -123,6 +138,53 @@ impl PgvectorDataPlane {
             relation_paths: all_relations,
             supporting_chunks,
         })
+    }
+
+    /// Resolve seed tokens (any case) to surface `name` values on `rag_kg_entities`.
+    async fn resolve_entity_surface_names(
+        &self,
+        owner: Uuid,
+        doc_ids: Option<&[Uuid]>,
+        seeds: &HashSet<String>,
+    ) -> anyhow::Result<HashSet<String>> {
+        if seeds.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let seeds_lower: Vec<String> = seeds.iter().map(|s| s.to_lowercase()).collect();
+        let rows = if let Some(doc_ids) = doc_ids {
+            sqlx::query_as::<_, (String,)>(
+                r#"
+                SELECT name FROM rag_kg_entities
+                WHERE owner_user_id = $1
+                  AND doc_id = ANY($2)
+                  AND (
+                    lower(name) = ANY($3)
+                    OR lower(normalized_name) = ANY($3)
+                  )
+                "#,
+            )
+            .bind(owner)
+            .bind(doc_ids)
+            .bind(&seeds_lower)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, (String,)>(
+                r#"
+                SELECT name FROM rag_kg_entities
+                WHERE owner_user_id = $1
+                  AND (
+                    lower(name) = ANY($2)
+                    OR lower(normalized_name) = ANY($2)
+                  )
+                "#,
+            )
+            .bind(owner)
+            .bind(&seeds_lower)
+            .fetch_all(&self.pool)
+            .await?
+        };
+        Ok(rows.into_iter().map(|(n,)| n).collect())
     }
 
     async fn ann_entity_names(
@@ -177,6 +239,9 @@ impl PgvectorDataPlane {
         fan_out_limit: usize,
     ) -> anyhow::Result<Vec<RelationRow>> {
         let limit = fan_out_limit as i64;
+        // Case-insensitive edge match: seeds from query_entities are lowercased
+        // while relation subject/object keep surface form (e.g. "Alpha").
+        let boundary_lower: Vec<String> = boundary.iter().map(|s| s.to_lowercase()).collect();
         let rows = if let Some(doc_ids) = doc_ids {
             sqlx::query_as::<_, RelationRow>(
                 r#"
@@ -185,13 +250,16 @@ impl PgvectorDataPlane {
                 FROM rag_kg_relations
                 WHERE owner_user_id = $1
                   AND doc_id = ANY($2)
-                  AND (subject = ANY($3) OR object = ANY($3))
+                  AND (
+                    lower(subject) = ANY($3)
+                    OR lower(object) = ANY($3)
+                  )
                 LIMIT $4
                 "#,
             )
             .bind(owner)
             .bind(doc_ids)
-            .bind(boundary)
+            .bind(&boundary_lower)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?
@@ -202,12 +270,15 @@ impl PgvectorDataPlane {
                        relation_text, supporting_chunk_ids
                 FROM rag_kg_relations
                 WHERE owner_user_id = $1
-                  AND (subject = ANY($2) OR object = ANY($2))
+                  AND (
+                    lower(subject) = ANY($2)
+                    OR lower(object) = ANY($2)
+                  )
                 LIMIT $3
                 "#,
             )
             .bind(owner)
-            .bind(boundary)
+            .bind(&boundary_lower)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?

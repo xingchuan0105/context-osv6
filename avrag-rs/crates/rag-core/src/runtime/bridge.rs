@@ -158,6 +158,7 @@ impl RuntimeBridge {
                     .unwrap_or_default(),
                 })
             }
+            // `client.graph` removed from SaC surface: graph expand is inside dense (VGRAG).
             "doc_summary" => {
                 let caller_doc_ids = args
                     .get("doc_ids")
@@ -606,6 +607,7 @@ mod tests {
                     object: "DRO".to_string(),
                     score: 0.85,
                     supporting_chunk_ids: vec![rel_id],
+                    doc_id: self.doc_id,
                 }],
                 supporting_chunks: vec![ScoredChunk {
                     chunk_id: rel_id,
@@ -868,7 +870,7 @@ print(json.dumps(chunks))
         assert!(!gc.is_empty(), "expected non-empty graph_context: {data}");
         assert_eq!(gc[0]["subject"], "DRC");
         assert_eq!(gc[0]["object"], "DRO");
-        assert_eq!(gc[0]["hop"], 1);
+        assert_eq!(gc[0]["expansion_hop_limit"], 1);
         let evidence = gc[0]["evidence_chunks"]
             .as_array()
             .expect("evidence_chunks");

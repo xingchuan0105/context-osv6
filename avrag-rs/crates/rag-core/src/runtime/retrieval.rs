@@ -417,50 +417,67 @@ impl RagRuntime {
             return chunks;
         }
 
-        if let Some(mm_reranker) = &self.config.mm_reranker {
-            let documents = build_multimodal_rerank_documents(&chunks);
-            match mm_reranker
-                .rerank_multimodal_text_query(query, &documents, rerank_budget.min(documents.len()))
-                .await
-            {
-                Ok(results) => {
-                    let mut ranked = chunks;
-                    let original_index_by_chunk = ranked
-                        .iter()
-                        .enumerate()
-                        .map(|(index, chunk)| (chunk.chunk_id, index))
-                        .collect::<HashMap<_, _>>();
-                    let mut score_by_index = HashMap::new();
-                    for result in results {
-                        score_by_index.insert(result.index, result.score);
-                    }
-                    // Write rerank scores back into chunk.score so downstream
-                    // cut_top_k / dual_threshold_cut order by rerank relevance
-                    // instead of the stale dense score.
-                    for chunk in &mut ranked {
-                        if let Some(&index) = original_index_by_chunk.get(&chunk.chunk_id) {
-                            if let Some(&score) = score_by_index.get(&index) {
-                                chunk.score = score;
+        // 2026-08-04: text rerank is the default hot path. VL/mm rerank only when
+        // the candidate pool actually contains image-bearing chunks (and mm is configured).
+        // Pure-text pools must not pay for Qwen3-VL-Reranker-class models.
+        let pool_has_image = chunks.iter().any(|c| {
+            c.image_path
+                .as_ref()
+                .is_some_and(|p| !p.trim().is_empty())
+                || c.asset_id.is_some()
+        });
+
+        if pool_has_image {
+            if let Some(mm_reranker) = &self.config.mm_reranker {
+                let documents = build_multimodal_rerank_documents(&chunks);
+                match mm_reranker
+                    .rerank_multimodal_text_query(
+                        query,
+                        &documents,
+                        rerank_budget.min(documents.len()),
+                    )
+                    .await
+                {
+                    Ok(results) => {
+                        let mut ranked = chunks;
+                        let original_index_by_chunk = ranked
+                            .iter()
+                            .enumerate()
+                            .map(|(index, chunk)| (chunk.chunk_id, index))
+                            .collect::<HashMap<_, _>>();
+                        let mut score_by_index = HashMap::new();
+                        for result in results {
+                            score_by_index.insert(result.index, result.score);
+                        }
+                        // Write rerank scores back into chunk.score so downstream
+                        // cut_top_k / dual_threshold_cut order by rerank relevance
+                        // instead of the stale dense score.
+                        for chunk in &mut ranked {
+                            if let Some(&index) = original_index_by_chunk.get(&chunk.chunk_id) {
+                                if let Some(&score) = score_by_index.get(&index) {
+                                    chunk.score = score;
+                                }
                             }
                         }
+                        ranked.sort_by(|left, right| {
+                            right
+                                .score
+                                .partial_cmp(&left.score)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        return cut_top_k(ranked, rerank_budget);
                     }
-                    ranked.sort_by(|left, right| {
-                        right
-                            .score
-                            .partial_cmp(&left.score)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    });
-                    return cut_top_k(ranked, rerank_budget);
-                }
-                Err(error) => {
-                    degrade_trace.push(DegradeTraceItem {
-                        stage: "mm_reranker".to_string(),
-                        reason: DegradeReason::Other(format!(
-                            "Multimodal reranker call failed: {}",
-                            error
-                        )),
-                        impact: "Falling back to text rerank or pre-rerank ordering".to_string(),
-                    });
+                    Err(error) => {
+                        degrade_trace.push(DegradeTraceItem {
+                            stage: "mm_reranker".to_string(),
+                            reason: DegradeReason::Other(format!(
+                                "Multimodal reranker call failed: {}",
+                                error
+                            )),
+                            impact: "Falling back to text rerank or pre-rerank ordering"
+                                .to_string(),
+                        });
+                    }
                 }
             }
         }

@@ -1,7 +1,7 @@
 ---
 name: capability-knowledge-base
 description: "Knowledge-base capability — short task contract when KB retrieval is mounted"
-version: "1.2"
+version: "1.3"
 category: "system-prompt"
 applicable_strategies: [rag]
 ---
@@ -12,7 +12,7 @@ applicable_strategies: [rag]
 
 ### 本能力能做什么
 
-知识库覆盖产品工作区里已灌入的文档。**docscope**（文档清单）是 skill_request 注入的清单机制，不含 client 方法：它给出一轮可见文档的清单与画像概览，用于拿 `doc_id` 并判断命中落在哪篇文档。检索方法在沙箱中以 `client.*` 调用：按语义（`client.dense`）、词面（`client.lexical` / `client.grep`）或结构化查询（`client.struct_query`，先 `client.struct_catalog` 取表结构）取回可引用的正文片段；单篇文档的画像、章节与摘要经 `client.doc_profile` / `client.doc_summary` 拿到。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。
+知识库覆盖产品工作区里已灌入的文档。**docscope**（文档清单）是 skill_request 注入的清单机制，不含 client 方法：它给出一轮可见文档的清单与画像概览，用于拿 `doc_id` 并判断命中落在哪篇文档。检索方法在沙箱中以 `client.*` 调用：按语义（`client.dense`）、词面（`client.lexical` / `client.grep`）或结构化查询（`client.struct_query`，先 `client.struct_catalog` 取表结构）取回可引用的正文片段；单篇文档的画像、章节与摘要经 `client.doc_profile` / `client.doc_summary` 拿到。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。`client.dense` 的 query 文本同时作为关系图扩邻的种子来源；多实体/关系型问题在轨迹中常见形态是按实体拆 subquery 并行调用，而非以整句作为单一种子。
 
 ### 证据
 

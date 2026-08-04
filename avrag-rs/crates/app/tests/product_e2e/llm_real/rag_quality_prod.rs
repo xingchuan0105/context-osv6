@@ -282,6 +282,101 @@ fn extract_loop_observability(chat: &ChatResponse) -> LoopObservability {
     }
 }
 
+/// Truncate error/stderr strings for eval dumps (P1-b). Char-safe on UTF-8.
+const TOOL_TRACE_ERR_CAP: usize = 500;
+
+fn truncate_utf8(s: &str, max_chars: usize) -> String {
+    let count = s.chars().count();
+    if count <= max_chars {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max_chars).collect();
+    out.push('…');
+    out
+}
+
+/// Compact one tool_result for qNNN.json + v2 artifact (request + vgrag + error/stderr).
+fn compact_tool_trace_entry(r: &contracts::ToolResult) -> serde_json::Value {
+    let data = r.data.as_ref();
+    let request = data.and_then(|d| {
+        d.get("request_query")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                d.get("request_terms")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|x| x.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+            })
+            .or_else(|| {
+                d.get("request_pattern")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+    });
+    let vgrag_graph_n = data.and_then(|d| d.get("vgrag_graph_n").and_then(|v| v.as_u64()));
+    let vgrag_relation_n = data.and_then(|d| d.get("vgrag_relation_n").and_then(|v| v.as_u64()));
+    let vgrag_evidence_raw_n =
+        data.and_then(|d| d.get("vgrag_evidence_raw_n").and_then(|v| v.as_u64()));
+    let vgrag_evidence_dropped =
+        data.and_then(|d| d.get("vgrag_evidence_dropped").and_then(|v| v.as_u64()));
+    let retrieval_path = data
+        .and_then(|d| d.get("retrieval_path").and_then(|v| v.as_str()))
+        .map(|s| s.to_string());
+
+    // Prefer structured error fields; fall back to degrade_reason.
+    let error = data
+        .and_then(|d| {
+            d.get("error").and_then(|e| {
+                if let Some(s) = e.as_str() {
+                    Some(s.to_string())
+                } else if let Some(obj) = e.as_object() {
+                    obj.get("message")
+                        .and_then(|m| m.as_str())
+                        .or_else(|| obj.get("code").and_then(|c| c.as_str()))
+                        .map(|s| s.to_string())
+                        .or_else(|| Some(e.to_string()))
+                } else {
+                    Some(e.to_string())
+                }
+            })
+        })
+        .or_else(|| {
+            data.and_then(|d| d.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()))
+        })
+        .or_else(|| {
+            r.trace
+                .as_ref()
+                .and_then(|t| t.degrade_reason.clone())
+        })
+        .map(|s| truncate_utf8(&s, TOOL_TRACE_ERR_CAP));
+
+    let stderr = data
+        .and_then(|d| d.get("stderr").and_then(|v| v.as_str()))
+        .map(|s| truncate_utf8(s, TOOL_TRACE_ERR_CAP));
+
+    serde_json::json!({
+        "tool": r.tool,
+        "status": format!("{:?}", r.status),
+        "request": request,
+        "vgrag_graph_n": vgrag_graph_n,
+        "vgrag_relation_n": vgrag_relation_n,
+        "vgrag_evidence_raw_n": vgrag_evidence_raw_n,
+        "vgrag_evidence_dropped": vgrag_evidence_dropped,
+        "retrieval_path": retrieval_path,
+        "error": error,
+        "stderr": stderr,
+    })
+}
+
+fn compact_tool_trace(results: &[contracts::ToolResult]) -> Vec<serde_json::Value> {
+    results.iter().map(compact_tool_trace_entry).collect()
+}
+
 #[cfg(test)]
 mod loop_observability_tests {
     use super::*;
@@ -361,6 +456,44 @@ mod loop_observability_tests {
         assert!(obs.exit_reason.is_none());
         assert!(obs.query_card.is_none());
         assert!(obs.loop_rounds.is_none());
+    }
+
+    #[test]
+    fn truncate_utf8_is_char_safe() {
+        let s = "测".repeat(10);
+        let t = truncate_utf8(&s, 3);
+        assert_eq!(t.chars().count(), 4); // 3 chars + ellipsis
+        assert!(t.ends_with('…'));
+    }
+
+    #[test]
+    fn compact_tool_trace_captures_request_vgrag_and_error() {
+        let long_err = "x".repeat(600);
+        let r = contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1.0".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "request_query": "实体甲",
+                "vgrag_graph_n": 3,
+                "vgrag_relation_n": 5,
+                "vgrag_evidence_raw_n": 5,
+                "vgrag_evidence_dropped": 2,
+                "retrieval_path": "vgrag",
+                "error": long_err,
+                "stderr": "TypeError: boom",
+            })),
+            trace: None,
+        };
+        let v = compact_tool_trace_entry(&r);
+        assert_eq!(v["tool"], "dense_retrieval");
+        assert_eq!(v["request"], "实体甲");
+        assert_eq!(v["vgrag_graph_n"], 3);
+        assert_eq!(v["retrieval_path"], "vgrag");
+        let err = v["error"].as_str().expect("error string");
+        assert!(err.chars().count() <= TOOL_TRACE_ERR_CAP + 1);
+        assert!(err.ends_with('…'));
+        assert_eq!(v["stderr"], "TypeError: boom");
     }
 }
 
@@ -470,6 +603,7 @@ impl V2RunCtx {
         answer: &str,
         tool_outputs: &[String],
         obs: &LoopObservability,
+        tool_trace: &[serde_json::Value],
     ) {
         let retrieval = eval_v2::score_retrieval(retrieved, example, RETRIEVAL_K);
         let selection = eval_v2::score_selection(cited, example);
@@ -564,6 +698,11 @@ impl V2RunCtx {
         }
         if let Some(loop_rounds) = obs.loop_rounds.as_ref() {
             artifact["loop_rounds"] = serde_json::json!(loop_rounds);
+        }
+        // P1-c: same compact tool_trace as realistic_corpus_full_eval/qNNN.json
+        // so behavior diagnosis does not need a second directory.
+        if !tool_trace.is_empty() {
+            artifact["tool_trace"] = serde_json::json!(tool_trace);
         }
         self.write_json(&format!("q{qnum:03}.artifact.json"), &artifact);
         self.note_label(qnum, score.label);
@@ -1374,12 +1513,7 @@ async fn run_single_question(
         "citations": chat.citations.clone(),
         "sources": chat.sources.clone(),
         "tool_results_count": chat.tool_results.len(),
-        "tool_trace": chat.tool_results.iter().map(|r| {
-            serde_json::json!({
-                "tool": r.tool,
-                "status": format!("{:?}", r.status),
-            })
-        }).collect::<Vec<_>>(),
+        "tool_trace": compact_tool_trace(&chat.tool_results),
         "mode_debug": chat.mode_debug,
     })) {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1388,6 +1522,7 @@ async fn run_single_question(
             let _ = std::fs::write(dir.join(format!("q{:03}.json", idx + 1)), json);
         }
     }
+    let tool_trace = compact_tool_trace(&chat.tool_results);
     let chunks: Vec<String> = retrieved.contents();
     if caps.iter().any(|c| c == "rag")
         && example.expected_should_answer
@@ -1427,6 +1562,7 @@ async fn run_single_question(
             &chat.answer,
             &tool_outputs,
             &loop_obs,
+            &tool_trace,
         )
         .await;
     }

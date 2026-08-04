@@ -236,6 +236,12 @@ pub(crate) fn scored_text_chunk(
         .map_err(|e| anyhow::anyhow!("scored_text_chunk chunk_id error on row {}: {}", row, e))?;
     let doc_id = uuid_field(&row, "doc_id")
         .map_err(|e| anyhow::anyhow!("scored_text_chunk doc_id error on row {}: {}", row, e))?;
+    let source_locator = row
+        .get("source_locator")
+        .cloned()
+        .filter(|value| !value.is_null());
+    // Figure dual-write (2026-08-04): asset_id/image_path/caption live on source_locator.
+    let (asset_id, image_path, caption) = figure_meta_from_locator(source_locator.as_ref());
     Ok(ScoredChunk {
         chunk_id,
         doc_id,
@@ -244,16 +250,36 @@ pub(crate) fn scored_text_chunk(
         source: channel.to_string(),
         page: row.get("page").and_then(Value::as_i64),
         chunk_type: string_field(&row, "chunk_type").unwrap_or_else(|| "text".to_string()),
-        asset_id: None,
-        caption: None,
-        image_path: None,
+        asset_id,
+        caption,
+        image_path,
         parser_backend: string_field(&row, "parser_backend"),
-        source_locator: row
-            .get("source_locator")
-            .cloned()
-            .filter(|value| !value.is_null()),
+        source_locator,
         parse_run_id: optional_uuid_field(&row, "parse_run_id")?,
     })
+}
+
+fn figure_meta_from_locator(
+    locator: Option<&Value>,
+) -> (Option<Uuid>, Option<String>, Option<String>) {
+    let Some(obj) = locator.and_then(|v| v.as_object()) else {
+        return (None, None, None);
+    };
+    let asset_id = obj
+        .get("asset_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
+    let image_path = obj
+        .get("image_path")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .filter(|s| !s.trim().is_empty());
+    let caption = obj
+        .get("caption")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .filter(|s| !s.trim().is_empty());
+    (asset_id, image_path, caption)
 }
 
 pub(crate) fn scored_multimodal_chunk(

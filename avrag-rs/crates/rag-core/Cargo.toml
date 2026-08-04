@@ -31,3 +31,7 @@ avrag-code-interpreter = { path = "../code-interpreter" }
 
 [dev-dependencies]
 insta.workspace = true
+avrag-storage-pgvector = { path = "../storage-pgvector" }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json", "macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+async-trait.workspace = true

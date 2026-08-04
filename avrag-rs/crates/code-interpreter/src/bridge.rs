@@ -72,7 +72,7 @@ def _rpc(method, args):
     return msg["data"]
 
 class _Client:
-    """SaC SDK: query-only dense/lexical; grep for line-level; web/fetch; memory; no graph/topk."""
+    """SaC SDK: dense/lexical; grep for line-level; web/fetch; memory; no topk."""
 {methods}
 # Module-level aliases (design §5 examples use bare save/load).
 async def save(path, data):
@@ -543,8 +543,9 @@ mod bridge_shim_tests {
                 "fetch",
             ]
         );
-        // Removed anchors (A4/A5): no graph / chunk_fetch / read_lines / aggregators.
+        // Removed anchors: no graph / graph_search / chunk_fetch / read_lines / aggregators.
         for banned in [
+            "graph",
             "graph_search",
             "chunk_fetch",
             "read_lines",

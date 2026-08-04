@@ -245,6 +245,8 @@ pub async fn run_grep(
             "truncated": truncated,
             "hits": hits,
             "chunks": chunks,
+            "request_pattern": args.pattern,
+            "request_regex": args.regex,
         })),
         trace: Some(ToolTrace {
             elapsed_ms: Some(started.elapsed().as_millis() as u64),

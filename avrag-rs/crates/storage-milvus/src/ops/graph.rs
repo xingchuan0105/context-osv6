@@ -191,6 +191,7 @@ pub(crate) fn relation_path_candidate(row: &Value) -> anyhow::Result<RelationPat
                     .collect()
             })
             .unwrap_or_default(),
+        doc_id: uuid_field(row, "doc_id").unwrap_or_else(|_| Uuid::nil()),
     })
 }
 

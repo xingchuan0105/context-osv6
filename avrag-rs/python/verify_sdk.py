@@ -37,10 +37,11 @@ def main() -> int:
         AvragAPIError,
     )
 
+    # Product SaC surface: graph expand is inside dense (VGRAG). HTTP client may
+    # still expose a deprecated graph() for legacy scripts — not required here.
     expected_methods = [
         "dense", "dense_batch",
         "lexical",
-        "graph",
         "index_lookup",
         "doc_summary", "doc_metadata",
         "rerank", "rerank_batch",
@@ -55,6 +56,8 @@ def main() -> int:
         return 1
 
     print(f"✅ AvragClient has all {len(expected_methods)} expected methods")
+    if hasattr(client_cls, "graph"):
+        print("ℹ️  AvragClient.graph still present (deprecated; prefer dense/VGRAG)")
 
     # Construct a client (don't make HTTP calls, just check it works)
     client = AvragClient(base_url="http://localhost:9999")

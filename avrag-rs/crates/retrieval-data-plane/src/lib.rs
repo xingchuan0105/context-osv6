@@ -155,6 +155,8 @@ pub struct RelationPathCandidate {
     pub object: String,
     pub score: f32,
     pub supporting_chunk_ids: Vec<Uuid>,
+    /// Source document of this relation edge (for cite-safe evidence fallback).
+    pub doc_id: Uuid,
 }
 
 #[derive(Debug, Clone, Default)]

@@ -171,10 +171,19 @@ class AvragClient:
         relation_limit: int = 10,
         supporting_chunk_limit: int = 10,
     ) -> list[Relation]:
-        """Knowledge graph traversal from named entities.
+        """Deprecated: product SaC sandbox no longer exposes client.graph.
 
-        Best for: entity-relation queries (股权结构 / 上下游 / 组织关系).
+        Graph expand is fused inside dense (VGRAG). Prefer ``dense(query)``.
+        This HTTP helper is retained for legacy scripts only.
         """
+        import warnings
+
+        warnings.warn(
+            "AvragClient.graph is deprecated; use dense() (VGRAG-as-dense). "
+            "SaC sandbox has no client.graph slot.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         payload = {
             "entity_names": entity_names,
             "relation_limit": relation_limit,

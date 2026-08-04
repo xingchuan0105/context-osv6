@@ -69,6 +69,7 @@ mod tests {
         assert!(p.contains(&"dense"));
         assert!(p.contains(&"lexical"));
         assert!(p.contains(&"grep"));
+        assert!(!p.contains(&"graph"));
         assert!(!p.contains(&"web"));
         assert!(!p.contains(&"fetch"));
     }

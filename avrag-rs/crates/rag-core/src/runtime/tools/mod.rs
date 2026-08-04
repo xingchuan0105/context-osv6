@@ -9,6 +9,7 @@ pub mod graph_augment;
 pub mod index_lookup;
 pub mod lexical;
 pub mod struct_query;
+pub mod vgrag;
 
 use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::ScoredChunk;

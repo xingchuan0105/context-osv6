@@ -190,11 +190,17 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                     Vec::new()
                 }
             };
-            // K1: adaptive top-k on the reranked (display) scores — the cut
-            // width comes from the score shape, not a fixed ratio.
-            let rerank_scores: Vec<f32> = reranked.iter().map(|c| c.score).collect();
-            let adaptive = super::super::adaptive_k::adaptive_k(&rerank_scores);
-            let mut chunks = runtime.cut_final_candidates_stage_with_budget(reranked, adaptive.k);
+            // Keep a **large** rerank pool for VGRAG fuse (P0); do not adaptive_k-cut yet.
+            let backend = super::vgrag::DenseBackend::from_env();
+            let pool_cap = match backend {
+                super::vgrag::DenseBackend::Vgrag => super::vgrag::VGRAG_DENSE_POOL_CAP,
+                super::vgrag::DenseBackend::Ann => {
+                    // Ann path: still need a bound before adaptive_k; use pool cap as max.
+                    super::vgrag::VGRAG_DENSE_POOL_CAP
+                }
+            };
+            let mut chunks =
+                runtime.cut_final_candidates_stage_with_budget(reranked, pool_cap);
 
             if chunks.is_empty()
                 && (embedding_failure_in_trace(&degrade_trace) || !degrade_trace.is_empty())
@@ -210,8 +216,6 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 let lexical_args = lexical_args_from_dense(&args);
                 let lexical_result = super::lexical::run(runtime, auth, &lexical_args).await;
                 if lexical_result.status == ToolStatus::Ok {
-                    // K1: lexical data is now always the object shape; the
-                    // legacy array shape is still tolerated here.
                     let lexical_items = lexical_result
                         .data
                         .as_ref()
@@ -236,7 +240,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                                         as f32,
                                     item.get("source")
                                         .and_then(|v| v.as_str())
-                                        .unwrap_or("")
+                                        .unwrap_or("dense")
                                         .to_string(),
                                     item.get("page").and_then(|v| v.as_i64()),
                                 ));
@@ -245,6 +249,40 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                     }
                 }
             }
+
+            // Display-scale scores of the pre-fuse pool (for adaptive_k shape — not RRF).
+            let pool_scores: Vec<f32> = chunks.iter().map(|c| c.score).collect();
+            let (chunks, vgrag_stats, adaptive_k, score_shape, retrieval_path) =
+                match backend {
+                    super::vgrag::DenseBackend::Ann => {
+                        let adaptive = super::super::adaptive_k::adaptive_k(&pool_scores);
+                        chunks.truncate(adaptive.k);
+                        (
+                            chunks,
+                            super::vgrag::VgragFuseStats::default(),
+                            adaptive.k,
+                            adaptive.shape.as_str(),
+                            "ann",
+                        )
+                    }
+                    super::vgrag::DenseBackend::Vgrag => {
+                        let (fused, vstats) = super::vgrag::fuse_vgrag_into_dense(
+                            runtime,
+                            auth,
+                            &query,
+                            &args.doc_scope,
+                            chunks,
+                        )
+                        .await;
+                        let n_g = vstats.graph_n;
+                        let (k, shape) =
+                            super::vgrag::final_cut_k(&pool_scores, fused.len(), n_g);
+                        let mut fused = fused;
+                        fused.truncate(k);
+                        (fused, vstats, k, shape.as_str(), "vgrag")
+                    }
+                };
+            let vgrag_graph_n = vgrag_stats.graph_n;
 
             let degrade_reason = if degrade_trace.is_empty() {
                 None
@@ -258,15 +296,33 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 )
             };
 
-            // K1: data carries the adaptive-k decision + coaching hint in the
-            // object shape (native tool message dumps `data` verbatim to the
-            // model; store/progress/eval extractors tolerate both shapes).
             let chunk_json: Vec<_> = chunks.iter().map(super::scored_chunk_to_json).collect();
-            let hint = super::super::adaptive_k::hint_text(&adaptive);
+            // Hint uses AdaptiveK reconstructed for vgrag path shape string.
+            let adaptive_for_hint = super::super::adaptive_k::AdaptiveK {
+                k: adaptive_k,
+                shape: match score_shape {
+                    "steep" => super::super::adaptive_k::ScoreShape::Steep,
+                    "flat_low_discrimination" => {
+                        super::super::adaptive_k::ScoreShape::FlatLowDiscrimination
+                    }
+                    _ => super::super::adaptive_k::ScoreShape::FlatAllSame,
+                },
+            };
+            let hint = super::super::adaptive_k::hint_text(&adaptive_for_hint);
             let mut data = serde_json::json!({
                 "chunks": chunk_json,
-                "adaptive_k": adaptive.k,
-                "score_shape": adaptive.shape.as_str(),
+                "adaptive_k": adaptive_k,
+                "score_shape": score_shape,
+                // Echo LLM-facing request for eval/telemetry (not shown as instruction).
+                "request_query": query,
+                "retrieval_path": retrieval_path,
+                "dense_backend": backend.as_str(),
+                "vgrag_hops": super::vgrag::VGRAG_HOPS,
+                "vgrag_graph_n": vgrag_graph_n,
+                "vgrag_relation_n": vgrag_stats.relation_n,
+                "vgrag_evidence_raw_n": vgrag_stats.evidence_raw_n,
+                "vgrag_evidence_dropped": vgrag_stats.evidence_dropped,
+                "vgrag_pool_cap": super::vgrag::VGRAG_DENSE_POOL_CAP,
             });
             if let Some(hint) = hint {
                 data["retrieval_hint"] = serde_json::json!(hint);

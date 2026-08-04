@@ -26,7 +26,8 @@ pub use avrag_retrieval_data_plane::{RetrievalDataPlane, RetrievalReadPort, Weig
 /// stage-level retrieval operations and tool dispatch for RAG.
 #[derive(Clone)]
 pub struct RagRuntime {
-    config: RagConfig,
+    /// Crate-visible for tools (embedding seed for graph B4, etc.).
+    pub(crate) config: RagConfig,
     /// Crate-visible for tools (graph / graph_augment) without widening product surface.
     pub(crate) data_plane: Arc<dyn RetrievalReadPort>,
 }

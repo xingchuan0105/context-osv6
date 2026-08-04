@@ -1,16 +1,19 @@
-//! Lexical-forced 1-hop graph augment (canonical: 2026-07-23-lexical-graph-augment-scoring-design).
+//! Lexical-forced graph augment (canonical: 2026-07-23-lexical-graph-augment-scoring-design).
 //!
-//! - Trigger: only from lexical_search bridge path when `RETRIEVAL_GRAPH_AUGMENT=1`.
-//! - Seeds: this-hop **terms** (not full user-query embed / dense ANN).
-//! - Hop: forced to 1.
-//! - Evidence: score vs terms + TOP1 score-gap cut (得分落差).
-//! - Does **not** register as a ToolCatalog tool; does **not** fake graph_retrieval calls.
+//! - Trigger: lexical_search bridge path when `RETRIEVAL_GRAPH_AUGMENT=1`.
+//! - Seeds (default): this-hop **terms** (exact / substring match).
+//! - Seeds (eval B4): `RETRIEVAL_GRAPH_SEED=dense_multiway` embeds terms → `query_entity_vectors` ANN.
+//! - Hop: default 1; `GRAPH_AUGMENT_HOPS` (1..=3) for eval (e.g. B3 hop=3).
+//! - L-eval RRF: `GRAPH_L_EVAL_RRF=1` merges BM25 chunks + graph evidence into fused `chunks`.
+//! - Evidence: score vs terms + TOP1 score-gap cut.
+//! - Does **not** register as a ToolCatalog tool; telemetry may emit graph_retrieval + degrade_reason=graph_augment.
 
-use avrag_retrieval_data_plane::GraphSearchRequest;
+use avrag_retrieval_data_plane::{GraphSearchRequest, ScoredChunk};
 use contracts::auth_runtime::AuthContext;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::merge::global_rrf_merge;
 use crate::RagRuntime;
 
 /// Env-driven config for lexical graph augment.
@@ -19,24 +22,30 @@ pub struct GraphAugmentConfig {
     pub enabled: bool,
     pub max_relations: usize,
     pub seed_limit: usize,
-    /// Forced augment always clamps to 1 regardless of env.
+    /// Subgraph expansion hops (product default 1; eval may set 2–3).
     pub hops: usize,
     pub margin_abs: f32,
     pub margin_rel: f32,
     pub evidence_max_k: usize,
+    /// When true, embed terms and pass entity ANN seeds (eval B4).
+    pub dense_seed: bool,
+    /// When true, RRF-merge BM25 chunks with graph evidence into observation `chunks` (L-eval).
+    pub l_eval_rrf: bool,
 }
 
 impl Default for GraphAugmentConfig {
     fn default() -> Self {
         Self {
-            // Product default on (P2); explicit env 0/false/off disables.
-            enabled: true,
+            // Product default off: graph expand lives inside dense (VGRAG), not lexical side-car.
+            enabled: false,
             max_relations: 5,
             seed_limit: 8,
             hops: 1,
             margin_abs: 0.08,
             margin_rel: 0.90,
             evidence_max_k: 3,
+            dense_seed: false,
+            l_eval_rrf: false,
         }
     }
 }
@@ -95,10 +104,10 @@ pub fn telemetry_tool_result(graph_context: &[Value], elapsed_ms: u64) -> contra
 impl GraphAugmentConfig {
     pub fn from_env() -> Self {
         let mut c = Self::default();
-        // Unset → product default on; explicit 0/false/off → off.
+        // Unset → off (VGRAG is dense-internal). Explicit 1/true/on → lexical side-car (eval only).
         c.enabled = match std::env::var("RETRIEVAL_GRAPH_AUGMENT") {
             Ok(v) => env_truthy_str(&v),
-            Err(_) => true,
+            Err(_) => false,
         };
         if let Some(v) = env_usize("GRAPH_AUGMENT_MAX_RELATIONS") {
             c.max_relations = v.max(1);
@@ -106,9 +115,13 @@ impl GraphAugmentConfig {
         if let Some(v) = env_usize("GRAPH_AUGMENT_SEED_LIMIT") {
             c.seed_limit = v.max(1);
         }
-        // Forced path is always 1 hop; read env only for telemetry/docs consistency.
-        let _ = env_usize("GRAPH_AUGMENT_HOPS");
-        c.hops = 1;
+        // Product default hop=1. hops>1 only when eval/baseline flags set (B3).
+        let hops_requested = env_usize("GRAPH_AUGMENT_HOPS").unwrap_or(1).clamp(1, 3);
+        c.hops = if hops_requested > 1 && graph_eval_mode_enabled() {
+            hops_requested
+        } else {
+            1
+        };
         if let Some(v) = env_f32("GRAPH_EVIDENCE_MARGIN_ABS") {
             c.margin_abs = v.max(0.0);
         }
@@ -118,6 +131,19 @@ impl GraphAugmentConfig {
         if let Some(v) = env_usize("GRAPH_EVIDENCE_MAX_K") {
             c.evidence_max_k = v.max(1);
         }
+        // B4: dense multi-way entity ANN seeds (unset / terms → lexical terms only).
+        c.dense_seed = match std::env::var("RETRIEVAL_GRAPH_SEED") {
+            Ok(v) => {
+                let t = v.trim().to_ascii_lowercase();
+                t == "dense_multiway" || t == "dense" || t == "ann"
+            }
+            Err(_) => false,
+        };
+        // L-eval: fuse graph evidence into observation chunks via RRF.
+        c.l_eval_rrf = match std::env::var("GRAPH_L_EVAL_RRF") {
+            Ok(v) => env_truthy_str(&v),
+            Err(_) => false,
+        };
         c
     }
 
@@ -296,6 +322,25 @@ pub async fn graph_augment_from_terms(
     let entity_names = seeds.clone();
     let query_entities: Vec<String> = seeds.iter().map(|s| s.to_lowercase()).collect();
 
+    // B4 / dense_multiway: embed terms (+ joined string) for entity ANN seeds.
+    let query_entity_vectors = if config.dense_seed {
+        let mut texts: Vec<&str> = terms.iter().map(String::as_str).collect();
+        let joined = terms.join(" ");
+        if !joined.is_empty() && !terms.iter().any(|t| t == &joined) {
+            texts.push(joined.as_str());
+        }
+        match runtime.config.embedding_client.embed(&texts).await {
+            Ok(vectors) => vectors,
+            Err(e) => {
+                tracing::warn!(error = %e, "graph_augment dense_seed embed failed; terms-only fallback");
+                Vec::new()
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let hop_limit = config.hops.max(1);
     let output = match runtime
         .data_plane
         .search_graph(GraphSearchRequest {
@@ -306,8 +351,8 @@ pub async fn graph_augment_from_terms(
             relation_limit: config.max_relations,
             supporting_chunk_limit: config.max_relations.saturating_mul(config.evidence_max_k),
             query_entities,
-            query_entity_vectors: Vec::new(), // no dense ANN seed on force path
-            hop_limit: 1,
+            query_entity_vectors,
+            hop_limit,
             fan_out_limit: config.max_relations.max(10),
             owner_user_id: auth.user_id().to_string(),
         })
@@ -331,12 +376,10 @@ pub async fn graph_augment_from_terms(
 
     let relation_path_count = output.relation_paths.len();
 
-    // Map relation_id-as-chunk → content from supporting_chunks (storage uses relation_id as chunk_id).
-    let mut chunk_by_id: std::collections::HashMap<Uuid, &avrag_retrieval_data_plane::ScoredChunk> =
-        std::collections::HashMap::new();
-    for c in &output.supporting_chunks {
-        chunk_by_id.insert(c.chunk_id, c);
-    }
+    // Storage puts relation_id as supporting_chunks[].chunk_id (not body chunk ids).
+    // Index those rows by content touch for weak fallback only.
+    let relation_proxy_chunks: &[avrag_retrieval_data_plane::ScoredChunk] =
+        output.supporting_chunks.as_slice();
 
     // Rank relations: more term hits on ends first, then existing path score.
     let mut ranked: Vec<_> = output.relation_paths.into_iter().collect();
@@ -350,6 +393,39 @@ pub async fn graph_augment_from_terms(
         })
     });
     ranked.truncate(config.max_relations);
+
+    // Best-effort hydrate via control-plane ContentStore (`chunks` table).
+    // Graph supporting_chunk_ids usually point at retrieval-index ids (`rag_text_chunks`);
+    // those often miss here — cite-safe fallback below still emits UUID+doc_id+relation_text.
+    let mut hydrated: std::collections::HashMap<Uuid, common::IndexedChunk> =
+        std::collections::HashMap::new();
+    if let Some(store) = runtime.content_store() {
+        let mut ids: Vec<Uuid> = ranked
+            .iter()
+            .flat_map(|p| p.supporting_chunk_ids.iter().copied())
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        if !ids.is_empty() {
+            match store.get_chunks_by_ids(auth, &ids).await {
+                Ok(map) => {
+                    tracing::debug!(
+                        requested = ids.len(),
+                        hydrated = map.len(),
+                        "graph_augment content_store hydrate"
+                    );
+                    hydrated = map;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        n_ids = ids.len(),
+                        "graph_augment content_store hydrate failed; cite-safe relation fallback"
+                    );
+                }
+            }
+        }
+    }
 
     let mut graph_context = Vec::new();
     for path in ranked {
@@ -373,48 +449,82 @@ pub async fn graph_augment_from_terms(
             },
         );
 
-        // Candidate evidence: supporting chunk texts for this path + relation short text.
-        let mut candidates: Vec<(String, String, f32)> = Vec::new(); // (chunk_id, text, score)
+        // Candidate evidence: (chunk_id, doc_id, text, score) — prefer cite-safe UUIDs.
+        let mut candidates: Vec<(String, String, String, f32)> = Vec::new();
 
-        // Prefer explicit supporting_chunk_ids when present; fall back to relation-as-chunk.
-        if path.supporting_chunk_ids.is_empty() {
-            // Find relation chunk by matching content or any supporting chunk with same ends in text.
-            let mut found = false;
-            for c in &output.supporting_chunks {
-                if c.content.contains(&path.subject) || c.content.contains(&path.object) {
-                    let s = evidence_score_term_coverage(&c.content, terms);
-                    candidates.push((c.chunk_id.to_string(), c.content.clone(), s));
-                    found = true;
-                    break;
+        for id in &path.supporting_chunk_ids {
+            if let Some(ic) = hydrated.get(id) {
+                let s = evidence_score_term_coverage(&ic.content, terms);
+                let doc = Uuid::parse_str(&ic.doc_id).unwrap_or(path.doc_id);
+                if doc.is_nil() {
+                    continue;
                 }
+                candidates.push((id.to_string(), doc.to_string(), ic.content.clone(), s));
             }
-            if !found {
-                let s = evidence_score_term_coverage(&relation_text, terms);
-                candidates.push((
-                    format!("relation:{}", relation_text),
-                    relation_text.clone(),
-                    s,
-                ));
-            }
-        } else {
+        }
+
+        // Cite-safe fallback when hydrate miss but we know body chunk ids + relation doc.
+        if candidates.is_empty()
+            && !path.supporting_chunk_ids.is_empty()
+            && !path.doc_id.is_nil()
+        {
             for id in &path.supporting_chunk_ids {
-                if let Some(c) = chunk_by_id.get(id) {
-                    let s = evidence_score_term_coverage(&c.content, terms);
-                    candidates.push((c.chunk_id.to_string(), c.content.clone(), s));
-                }
-            }
-            if candidates.is_empty() {
                 let s = evidence_score_term_coverage(&relation_text, terms);
+                // Prefer relation_text as body when chunk text unavailable (still citeable id).
                 candidates.push((
-                    format!("relation:{}", relation_text),
+                    id.to_string(),
+                    path.doc_id.to_string(),
                     relation_text.clone(),
                     s,
                 ));
             }
         }
 
-        candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-        let scores: Vec<f32> = candidates.iter().map(|c| c.2).collect();
+        // No supporting ids: match storage relation-proxy rows (UUID chunk_id + real doc_id).
+        if candidates.is_empty() {
+            for c in relation_proxy_chunks {
+                if c.doc_id.is_nil() {
+                    continue;
+                }
+                if c.content.contains(&path.subject) || c.content.contains(&path.object) {
+                    let s = evidence_score_term_coverage(&c.content, terms);
+                    candidates.push((
+                        c.chunk_id.to_string(),
+                        c.doc_id.to_string(),
+                        c.content.clone(),
+                        s,
+                    ));
+                    break;
+                }
+            }
+        }
+
+        // Last resort: relation_text with path.doc_id + first support id or stable key only if doc known.
+        // Skip nil-doc synthetic rows — VGRAG C8 drops them; do not invent non-UUID chunk_ids.
+        if candidates.is_empty() && !path.doc_id.is_nil() {
+            if let Some(id) = path.supporting_chunk_ids.first() {
+                let s = evidence_score_term_coverage(&relation_text, terms);
+                candidates.push((
+                    id.to_string(),
+                    path.doc_id.to_string(),
+                    relation_text.clone(),
+                    s,
+                ));
+            }
+        }
+
+        if candidates.is_empty() {
+            tracing::debug!(
+                subject = %path.subject,
+                object = %path.object,
+                support_n = path.supporting_chunk_ids.len(),
+                "graph_augment: relation has no cite-safe evidence candidates"
+            );
+            continue;
+        }
+
+        candidates.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+        let scores: Vec<f32> = candidates.iter().map(|c| c.3).collect();
         let kept_idx = keep_evidence_by_gap(
             &scores,
             config.margin_abs,
@@ -427,11 +537,12 @@ pub async fn graph_augment_from_terms(
             .into_iter()
             .enumerate()
             .map(|(rank, i)| {
-                let (cid, text, s) = &candidates[i];
+                let (cid, doc_id, text, s) = &candidates[i];
                 let gap = s1 - *s;
                 let reason = if rank == 0 { "top1" } else { "within_margin" };
                 json!({
                     "chunk_id": cid,
+                    "doc_id": doc_id,
                     "text": text,
                     "score": s,
                     "score_gap_to_top1": gap,
@@ -444,9 +555,12 @@ pub async fn graph_augment_from_terms(
             "subject": path.subject,
             "predicate": path.predicate,
             "object": path.object,
+            "doc_id": path.doc_id.to_string(),
             "relation_text": relation_text,
-            "hop": 1,
+            // Actual per-edge hop is not tracked in storage BFS; this is the expand limit used.
+            "expansion_hop_limit": hop_limit,
             "seed_terms_hit": hits,
+            "seed_mode": if config.dense_seed { "dense_multiway" } else { "terms" },
             "evidence_chunks": evidence_chunks,
             "retrieval_hint": "结构/关系补充；主体答案优先依据 chunks",
         }));
@@ -479,6 +593,125 @@ pub async fn graph_augment_from_terms(
     );
 
     graph_context
+}
+
+fn stable_uuid_from_key(key: &str) -> Uuid {
+    // Deterministic 16-byte id without uuid v5 feature (eval-only synthetic keys).
+    let mut bytes = [0u8; 16];
+    for (i, b) in key.as_bytes().iter().enumerate() {
+        bytes[i % 16] ^= b.wrapping_mul(31).wrapping_add(i as u8);
+    }
+    // Set RFC4122 variant/version nibbles loosely so parsers accept the id.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
+/// Eval/baseline mode: allow hops>1 and mark L-eval runs.
+pub fn graph_eval_mode_enabled() -> bool {
+    for key in [
+        "GRAPH_EVAL_MODE",
+        "GRAPH_L_EVAL_RRF",
+        "GRAPH_EVAL_FORCE_REQUIRED_GRAPH",
+        "E2E_GRAPH_BASELINE",
+    ] {
+        if let Ok(v) = std::env::var(key) {
+            let t = v.trim().to_ascii_lowercase();
+            if t == "1" || t == "true" || t == "yes" || t == "on" || t.starts_with('b') {
+                return true;
+            }
+        }
+    }
+    if let Ok(v) = std::env::var("RETRIEVAL_GRAPH_SEED") {
+        let t = v.trim().to_ascii_lowercase();
+        if t == "dense_multiway" || t == "dense" || t == "ann" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Extract graph evidence texts into ScoredChunks for L-eval RRF (channel source=`graph`).
+pub fn graph_evidence_as_scored_chunks(graph_context: &[Value]) -> Vec<ScoredChunk> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for g in graph_context {
+        let Some(evs) = g.get("evidence_chunks").and_then(|e| e.as_array()) else {
+            continue;
+        };
+        for ev in evs {
+            let Some(text) = ev.get("text").and_then(|t| t.as_str()) else {
+                continue;
+            };
+            if text.trim().is_empty() {
+                continue;
+            }
+            let cid_raw = ev
+                .get("chunk_id")
+                .and_then(|c| c.as_str())
+                .unwrap_or_default();
+            // Skip synthetic relation-only rows when a real UUID is required for cite stability
+            // unless no real chunks exist — still include with stable id.
+            let chunk_id = Uuid::parse_str(cid_raw).unwrap_or_else(|_| stable_uuid_from_key(cid_raw));
+            if !seen.insert(chunk_id) {
+                continue;
+            }
+            let doc_id = ev
+                .get("doc_id")
+                .and_then(|d| d.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok())
+                .unwrap_or_else(Uuid::nil);
+            let score = ev.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32;
+            out.push(ScoredChunk::new_text(
+                chunk_id,
+                doc_id,
+                text.to_string(),
+                score,
+                "graph".to_string(),
+                None,
+            ));
+        }
+    }
+    out
+}
+
+/// L-eval: RRF-merge BM25/lexical chunks with graph evidence chunks.
+/// Returns (fused list, graph_chunk_count_in_input).
+pub fn l_eval_rrf_fuse(
+    bm25_chunks: Vec<ScoredChunk>,
+    graph_context: &[Value],
+    rrf_k: usize,
+) -> (Vec<ScoredChunk>, usize) {
+    let graph_chunks = graph_evidence_as_scored_chunks(graph_context);
+    l_eval_rrf_three(Vec::new(), bm25_chunks, graph_chunks, rrf_k)
+}
+
+/// L-eval three-way: dense ∪ BM25 ∪ graph → RRF.
+/// Returns (fused, graph_input_n).
+pub fn l_eval_rrf_three(
+    dense_chunks: Vec<ScoredChunk>,
+    bm25_chunks: Vec<ScoredChunk>,
+    graph_chunks: Vec<ScoredChunk>,
+    rrf_k: usize,
+) -> (Vec<ScoredChunk>, usize) {
+    let n_graph = graph_chunks.len();
+    let mut lists = Vec::new();
+    if !dense_chunks.is_empty() {
+        lists.push((dense_chunks, 1.0));
+    }
+    if !bm25_chunks.is_empty() {
+        lists.push((bm25_chunks, 1.0));
+    }
+    if !graph_chunks.is_empty() {
+        lists.push((graph_chunks, 1.0));
+    }
+    if lists.is_empty() {
+        return (Vec::new(), 0);
+    }
+    if lists.len() == 1 {
+        return (lists.remove(0).0, n_graph);
+    }
+    (global_rrf_merge(lists, rrf_k), n_graph)
 }
 
 #[cfg(test)]
@@ -519,6 +752,124 @@ mod tests {
         ];
         let seeds = seed_entities_from_terms(&terms, 8);
         assert_eq!(seeds, vec!["DRC".to_string(), "DRO".to_string()]);
+    }
+
+    #[test]
+    fn l_eval_rrf_three_merges_channels_and_marks_graph() {
+        let dense = vec![ScoredChunk::new_text(
+            Uuid::from_u128(1),
+            Uuid::from_u128(10),
+            "d".into(),
+            0.9,
+            "dense".into(),
+            None,
+        )];
+        let bm25 = vec![ScoredChunk::new_text(
+            Uuid::from_u128(2),
+            Uuid::from_u128(10),
+            "b".into(),
+            0.8,
+            "bm25".into(),
+            None,
+        )];
+        let graph = vec![ScoredChunk::new_text(
+            Uuid::from_u128(3),
+            Uuid::from_u128(10),
+            "g".into(),
+            0.7,
+            "graph".into(),
+            None,
+        )];
+        let (fused, n_g) = l_eval_rrf_three(dense, bm25, graph, 60);
+        assert_eq!(n_g, 1);
+        assert_eq!(fused.len(), 3);
+        assert!(fused.iter().any(|c| c.source == "graph"));
+        // All three ranks contribute; scores are RRF not original.
+        assert!(fused[0].score > 0.0);
+    }
+
+    #[test]
+    fn graph_eval_mode_and_stable_uuid() {
+        // Without eval env keys, mode is off (clamp path: hops>1 → 1 in from_env).
+        // Do not assert false globally: parallel tests may set GRAPH_* briefly.
+        let _ = graph_eval_mode_enabled();
+        assert_eq!(
+            stable_uuid_from_key("relation:a"),
+            stable_uuid_from_key("relation:a")
+        );
+        assert_ne!(
+            stable_uuid_from_key("relation:a"),
+            stable_uuid_from_key("relation:b")
+        );
+    }
+
+    #[test]
+    fn hops_gt_one_clamped_without_eval_mode() {
+        // SAFETY: process-local env for this test; serial with TEST_CONFIG_SERIAL.
+        let _guard = TEST_CONFIG_SERIAL.lock().expect("serial");
+        // Clear eval flags that would unlock hops>1.
+        for k in [
+            "GRAPH_EVAL_MODE",
+            "GRAPH_L_EVAL_RRF",
+            "GRAPH_EVAL_FORCE_REQUIRED_GRAPH",
+            "E2E_GRAPH_BASELINE",
+            "RETRIEVAL_GRAPH_SEED",
+        ] {
+            unsafe { std::env::remove_var(k) };
+        }
+        unsafe { std::env::set_var("GRAPH_AUGMENT_HOPS", "3") };
+        let cfg = GraphAugmentConfig::from_env();
+        assert_eq!(cfg.hops, 1, "product path must clamp hop>1 without eval flags");
+        unsafe { std::env::remove_var("GRAPH_AUGMENT_HOPS") };
+
+        unsafe {
+            std::env::set_var("GRAPH_EVAL_MODE", "1");
+            std::env::set_var("GRAPH_AUGMENT_HOPS", "3");
+        }
+        let cfg_eval = GraphAugmentConfig::from_env();
+        assert_eq!(cfg_eval.hops, 3, "eval mode unlocks hop=3");
+        unsafe {
+            std::env::remove_var("GRAPH_EVAL_MODE");
+            std::env::remove_var("GRAPH_AUGMENT_HOPS");
+        }
+    }
+
+    #[test]
+    fn graph_evidence_preserves_doc_id_and_source() {
+        let doc = Uuid::from_u128(42);
+        let ctx = vec![json!({
+            "subject": "A",
+            "object": "B",
+            "evidence_chunks": [{
+                "chunk_id": Uuid::from_u128(7).to_string(),
+                "doc_id": doc.to_string(),
+                "text": "edge body",
+                "score": 0.95
+            }]
+        })];
+        let scored = graph_evidence_as_scored_chunks(&ctx);
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].doc_id, doc);
+        assert_eq!(scored[0].source, "graph");
+    }
+
+    #[test]
+    fn l_eval_graph_evidence_keeps_support_uuid_rows() {
+        // After P0, evidence uses real support chunk UUID + doc_id (not relation:… synthetic).
+        let support = Uuid::from_u128(99);
+        let doc = Uuid::from_u128(11);
+        let ctx = vec![json!({
+            "evidence_chunks": [{
+                "chunk_id": support.to_string(),
+                "doc_id": doc.to_string(),
+                "text": "A -位于-> B",
+                "score": 1.0
+            }]
+        })];
+        let scored = graph_evidence_as_scored_chunks(&ctx);
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].chunk_id, support);
+        assert_eq!(scored[0].doc_id, doc);
     }
 
     #[test]

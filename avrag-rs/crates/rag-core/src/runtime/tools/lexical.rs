@@ -76,14 +76,27 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
 
     match bm25_result {
         Ok((lists, degrade_trace)) => {
-            let chunks: Vec<crate::ScoredChunk> =
+            let mut chunks: Vec<crate::ScoredChunk> =
                 lists.into_iter().flat_map(|list| list.chunks).collect();
-            // K1: adaptive top-k on the similarity scores (no rerank here —
-            // the retrieval order is the display order).
+            // Preserve pure BM25 list for block-level three-way L-eval (dense∪bm25∪graph).
+            let bm25_json: Vec<_> = chunks.iter().map(super::scored_chunk_to_json).collect();
+            // Local lexical L-eval (bm25∪graph) so single-tool prints still see fused evidence.
+            let graph_in_rrf = if cfg.l_eval_rrf && !graph_context.is_empty() {
+                let (fused, n_g) = graph_augment::l_eval_rrf_fuse(chunks, &graph_context, 60);
+                chunks = fused;
+                n_g
+            } else {
+                0
+            };
             let scores: Vec<f32> = chunks.iter().map(|c| c.score).collect();
             let adaptive = super::super::adaptive_k::adaptive_k(&scores);
-            let mut chunks = chunks;
             chunks.truncate(adaptive.k);
+            let graph_in_top15 = chunks
+                .iter()
+                .take(15)
+                .filter(|c| c.source == "graph")
+                .count();
+
             let chunk_json: Vec<_> = chunks.iter().map(super::scored_chunk_to_json).collect();
             // K1: always the object shape — carries the adaptive-k decision +
             // coaching hint; graph_context rides as before. Extractors
@@ -92,7 +105,15 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 "chunks": chunk_json,
                 "adaptive_k": adaptive.k,
                 "score_shape": adaptive.shape.as_str(),
+                "request_query": query,
+                "request_terms": terms_for_hint,
             });
+            if cfg.l_eval_rrf {
+                data["l_eval_rrf"] = json!(true);
+                data["bm25_chunks"] = json!(bm25_json);
+                data["graph_chunk_in_rrf"] = json!(graph_in_rrf);
+                data["graph_chunk_in_top15"] = json!(graph_in_top15);
+            }
             if chunks.is_empty() {
                 // 2026-07-29: 0 命中数据 hint——AND 语义下哪个词杀死了查询是
                 // 服务端可确定的事实（按词命中数），直接给数据而非建议。
@@ -104,6 +125,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             }
             if !graph_context.is_empty() {
                 data["graph_context"] = json!(graph_context);
+                data["graph_context_len"] = json!(graph_context.len());
             }
             ToolResult {
                 tool: "lexical_retrieval".to_string(),

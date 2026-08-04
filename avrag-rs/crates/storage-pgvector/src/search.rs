@@ -300,6 +300,8 @@ struct TextChunkRow {
 
 impl TextChunkRow {
     fn into_scored(self, channel: &str) -> ScoredChunk {
+        // Figure dual-write (2026-08-04) stores asset_id/image_path/caption on source_locator.
+        let (asset_id, image_path, caption) = figure_meta_from_locator(self.source_locator.as_ref());
         ScoredChunk {
             chunk_id: self.chunk_id,
             doc_id: self.doc_id,
@@ -308,14 +310,37 @@ impl TextChunkRow {
             source: channel.to_string(),
             page: self.page,
             chunk_type: self.chunk_type,
-            asset_id: None,
-            caption: None,
-            image_path: None,
+            asset_id,
+            caption,
+            image_path,
             parser_backend: self.parser_backend,
             source_locator: self.source_locator,
             parse_run_id: Some(self.parse_run_id),
         }
     }
+}
+
+fn figure_meta_from_locator(
+    locator: Option<&Value>,
+) -> (Option<Uuid>, Option<String>, Option<String>) {
+    let Some(obj) = locator.and_then(|v| v.as_object()) else {
+        return (None, None, None);
+    };
+    let asset_id = obj
+        .get("asset_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
+    let image_path = obj
+        .get("image_path")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .filter(|s| !s.trim().is_empty());
+    let caption = obj
+        .get("caption")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .filter(|s| !s.trim().is_empty());
+    (asset_id, image_path, caption)
 }
 
 #[derive(sqlx::FromRow)]

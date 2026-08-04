@@ -100,6 +100,36 @@ impl AssetRepository {
         map_multimodal_chunk(row)
     }
 
+    /// Refresh VLM/OCR-derived retrieval text after the row was first inserted.
+    pub async fn update_multimodal_chunk_context_text(
+        &self,
+        context: &AuthContext,
+        chunk_id: Uuid,
+        context_text: &str,
+    ) -> Result<(), PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let result = sqlx::query(
+            r#"
+            UPDATE document_multimodal_chunks
+            SET context_text = $2
+            WHERE chunk_id = $1
+              AND owner_user_id = $3
+            "#,
+        )
+        .bind(chunk_id)
+        .bind(context_text)
+        .bind(context.user_id().into_uuid())
+        .execute(tx.inner())
+        .await?;
+        tx.commit().await?;
+        if result.rows_affected() == 0 {
+            return Err(PgStorageError::NotFound(format!(
+                "multimodal chunk {chunk_id} not found for context_text update"
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn get_document_asset_by_id(
         &self,
         context: &AuthContext,

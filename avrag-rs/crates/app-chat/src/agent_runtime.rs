@@ -123,25 +123,11 @@ impl ChatContext {
             })
             .collect();
 
+        // Keep only the recent prior-user window. Older turns stay in PG and are
+        // loaded on demand via memory tools (`client.history`) — no host-side
+        // MEMORY_LLM session summary (L2 removed; migration 0044).
         let recent_count = agent_loop::runtime::MAX_PROMPT_HISTORY_TURNS;
-        let mut resolved = Vec::with_capacity(recent_count + 1);
-        // Beyond the recent window, earlier turns are compressed into a
-        // session summary (MEMORY_LLM) instead of being dropped entirely —
-        // later turns keep referencing early facts, decisions and goals.
-        if history.len() > recent_count {
-            let older = &history[..history.len() - recent_count];
-            if let Some(memory) = self.llm_ctx.memory_client() {
-                if let Some(summary) = summarize_older_turns(memory, older).await {
-                    resolved.push(ChatTurnInput {
-                        role: "user".to_string(),
-                        content: format!("[早前对话摘要]\n{summary}"),
-                        resolved_query: None,
-                    });
-                }
-            }
-        }
-        resolved.extend(agent_loop::runtime::recent_messages(&history, recent_count).to_vec());
-        resolved
+        agent_loop::runtime::recent_messages(&history, recent_count).to_vec()
     }
 
     pub async fn build_agent_request(
@@ -228,32 +214,4 @@ impl ChatContext {
         );
         general_debug
     }
-}
-
-/// Session-summary system prompt (LLM-facing prose lives in prompts/, not code).
-const SESSION_SUMMARY_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/pipeline/session-summary.system.md");
-
-/// Compress turns beyond the recent window into a summary via MEMORY_LLM.
-/// Returns `None` when the call fails — callers fall back to the
-/// recent-turns-only behavior (drop the older turns).
-async fn summarize_older_turns(
-    memory: &avrag_llm::LlmClient,
-    older: &[ChatTurnInput],
-) -> Option<String> {
-    let transcript = older
-        .iter()
-        .map(|turn| format!("{}: {}", turn.role, turn.content))
-        .collect::<Vec<_>>()
-        .join("\n");
-    if transcript.trim().is_empty() {
-        return None;
-    }
-    let messages = vec![
-        avrag_llm::ChatMessage::system(SESSION_SUMMARY_SYSTEM_PROMPT),
-        avrag_llm::ChatMessage::user(transcript),
-    ];
-    let response = memory.complete(&messages, Some(0.2)).await.ok()?;
-    let summary = response.content.trim().to_string();
-    (!summary.is_empty()).then_some(summary)
 }

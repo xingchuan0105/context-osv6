@@ -122,7 +122,8 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     SdkPrimitive {
         id: "dense",
         capability: SdkCapability::RAG_SEARCH,
-        docstring: "Semantic dense retrieval. topk is fixed by the host — only pass query.",
+        docstring: "Semantic retrieval (host may expand via entity graph and return a fused chunk list). \
+            topk is fixed by the host — only pass query.",
         handler: "retrieval_dense",
         py_sig: "self, query",
         py_payload: "{\"query\": query}",
@@ -131,7 +132,7 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     SdkPrimitive {
         id: "lexical",
         capability: SdkCapability::RAG,
-        docstring: "BM25/keyword retrieval. When graph augment is on, observation may include graph_context.",
+        docstring: "BM25/keyword retrieval. Returns a chunk list (no graph side-car in product default).",
         handler: "retrieval_lexical",
         py_sig: "self, query",
         py_payload: "{\"query\": query}",
