@@ -30,14 +30,16 @@ impl DocumentType {
 
         match extension.as_str() {
             "pdf" => Self::Pdf,
-            "docx" | "doc" => Self::Docx,
-            "xlsx" | "xls" => Self::Xlsx,
-            "ppt" => Self::Ppt,
-            "pptx" => Self::Pptx,
+            "docx" | "doc" | "docm" | "odt" | "rtf" => Self::Docx,
+            "xlsx" | "xls" | "xlsm" | "xlsb" | "ods" => Self::Xlsx,
+            "ppt" | "pps" | "pot" => Self::Ppt,
+            "pptx" | "pptm" | "ppsx" | "ppsm" | "odp" => Self::Pptx,
             "html" | "htm" => Self::Html,
             "rs" | "py" | "js" | "ts" | "tsx" | "go" | "java" | "c" | "cpp" | "h" => Self::Code,
             "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" => Self::Image,
-            "txt" | "md" | "rst" | "csv" | "tsv" | "json" | "toml" | "yaml" | "yml" => Self::Text,
+            "txt" | "md" | "rst" | "csv" | "tsv" | "json" | "toml" | "yaml" | "yml" | "epub" => {
+                Self::Text
+            }
             _ => Self::Unknown,
         }
     }
@@ -45,10 +47,10 @@ impl DocumentType {
 
 /// Parser backend recorded on document IR blocks and pages.
 ///
-/// 2026-08-02 起按格式分工（见 `docs/plans/2026-08-02-parser-pipeline-direct-readers.md`）：
-/// PDF→`liteparse_v2_pdf`、docx/xlsx/pptx/doc/ppt/xls→`office_direct`、文本/代码→`markitdown`。
+/// 2026-08-05 起按格式分工（见 `docs/plans/2026-08-05-parser-pipeline-anydoc.md`）：
+/// PDF→`liteparse_v2_pdf`、Office/ODF/RTF/EPUB/CSV 等→`anydoc`、文本/代码→`markitdown`。
 /// Variants prefixed with historical wire names (including `LiteParsePdf`,
-/// `LiteParseFigure`, `CalamineExcel`, `EdgeParsePdf`, `Mineru*`) remain
+/// `LiteParseFigure`, `CalamineExcel`, `EdgeParsePdf`, `Mineru*`, `OfficeDirect`) remain
 /// for deserializing stored IR only — do not select them in new ingest paths.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -78,16 +80,17 @@ pub enum ParseBackend {
     CodeLocal,
     /// Historical IR only (calamine 进程内 Excel 解析)。Do not emit on new ingest.
     CalamineExcel,
-    /// markitdown subprocess parse → markdown (现役：文本/代码类兜底；
-    /// txt/md/rst/csv/tsv/json/toml/yaml/yml/html/htm/code route here).
+    /// markitdown subprocess parse → markdown（现役：anydoc 不支持的文本/代码长尾；
+    /// txt/md/rst/tsv/json/toml/yaml/yml/html/htm/code route here）。
     Markitdown,
     /// liteparse PDFium native parse → markdown（现役：PDF 路径）。
     /// Wire name 与历史 `LiteParsePdf` 区分——新路径产 markdown→Paragraph/Heading
     /// 块（无 bbox），与旧 liteparse 行块形态不同，需可区分。
     LiteparseV2Pdf,
-    /// Office 直读（mammoth/openpyxl/python-pptx，旧二进制 doc/ppt/xls 经
-    /// soffice 无损转 OOXML 后直读）→ markdown（现役：docx/xlsx/pptx/doc/ppt/xls）。
+    /// Historical IR only（2026-08-02 office-direct 路径）。Do not emit on new ingest.
     OfficeDirect,
+    /// anydoc subprocess → GFM markdown（现役：Office/ODF/RTF/EPUB/CSV 等，非 PDF）。
+    Anydoc,
     #[default]
     Unknown,
 }
@@ -108,6 +111,7 @@ impl ParseBackend {
                 | Self::PoiPpt
                 | Self::MineruPdfOcr
                 | Self::MineruImage
+                | Self::OfficeDirect
         )
     }
 
@@ -131,6 +135,7 @@ impl ParseBackend {
             Self::Markitdown => "markitdown",
             Self::LiteparseV2Pdf => "liteparse_v2_pdf",
             Self::OfficeDirect => "office_direct",
+            Self::Anydoc => "anydoc",
             Self::Unknown => "unknown",
         }
     }

@@ -1,5 +1,11 @@
 # 解析管线重构：Office 直读 + PDF liteparse + markitdown 兜底
 
+> **SUPERSEDED（2026-08-05）— Office 段已作废。**  
+> 「docx/xlsx/pptx/doc/ppt/xls → office-direct（mammoth/openpyxl/python-pptx + soffice）」决策已被  
+> **[`2026-08-05-parser-pipeline-anydoc.md`](2026-08-05-parser-pipeline-anydoc.md)** 取代：  
+> **anydoc 广覆盖（除 PDF）+ pptx hex strip；PDF 仍 liteparse；文本/代码仍 markitdown。**  
+> 本文 §1 实测表与 PDF/liteparse 否决 pdf-inspector 的结论仍可作历史证据引用；**实施以 2026-08-05 文为准**，勿再按本文接 office-direct。
+
 | 项目 | 内容 |
 |---|---|
 | 类型 | 设计决策（解析管线路由重构） |
@@ -7,7 +13,7 @@
 | 范围 | PDF / docx / pptx / xlsx / doc / ppt / xls / 文本代码类 的解析路由；四方案实测对比 |
 | 分支 | 本地 `master`（solo trunk；未 commit） |
 | 前序 | `docs/engineering/2026-07-29-markitdown-hard-gate-handover.md`（本文部分取代其「markitdown 唯一解析器」决策）、`docs/liteparse-paddle-ingestion-architecture-2026-06-13.md`（已 supersede） |
-| 状态 | 方案已定，待实施 |
+| 状态 | **已被 2026-08-05 anydoc 方案取代（Office 段）**；PDF→liteparse 仍有效 |
 | 审查 | 2026-08-02 code review 已吸收：撞名、调用形态、soffice 失败语义、chunker 表格切分、hex 误杀面等逐条修订 |
 
 ---

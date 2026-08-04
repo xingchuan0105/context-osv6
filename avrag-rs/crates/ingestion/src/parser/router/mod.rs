@@ -7,8 +7,9 @@ use mime::{
     normalize_mime_type,
 };
 
-/// 解析路由（2026-08-02 起按格式分工：PDF→liteparse、Office 直读、文本/代码→
-/// markitdown；standalone 图片 PaddleOCR）。见 `docs/plans/2026-08-02-parser-pipeline-direct-readers.md`。
+/// 解析路由（2026-08-05 起：PDF→liteparse、Office/ODF/RTF/EPUB/CSV→anydoc、
+/// 文本/代码→markitdown；standalone 图片 PaddleOCR）。
+/// 见 `docs/plans/2026-08-05-parser-pipeline-anydoc.md`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ParseRoute {
@@ -67,12 +68,12 @@ pub struct ParseRouteDecision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalParseKind {
-    /// markitdown 子进程（文本/代码类兜底）。
+    /// markitdown 子进程（anydoc 不支持的文本/代码长尾）。
     Markitdown,
     /// liteparse PDFium 原生解析（PDF 路径）。
     LiteparseV2Pdf,
-    /// Office 直读（docx/xlsx/pptx 直读；doc/ppt/xls 经 soffice 无损转 OOXML 后直读）。
-    OfficeDirect,
+    /// anydoc 子进程（Office/ODF/RTF/EPUB/CSV 等；非 PDF）。
+    Anydoc,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,13 +163,17 @@ impl ParseRouter {
                 LocalParseKind::LiteparseV2Pdf,
                 RouteReason::OfficeDocument,
             ),
-            "doc" | "docx" | "xls" | "xlsx" => local(
-                LocalParseKind::OfficeDirect,
-                RouteReason::OfficeDocument,
-            ),
-            "ppt" | "pptx" => local(LocalParseKind::OfficeDirect, RouteReason::PresentationFile),
-            "txt" | "md" | "rst" | "csv" | "tsv" | "json" | "toml" | "yaml" | "yml" | "html"
-            | "htm" => local(LocalParseKind::Markitdown, RouteReason::TextFile),
+            // anydoc 广覆盖（除 PDF）：Word / Excel / ODF text-spreadsheet / RTF / EPUB / CSV
+            "doc" | "docx" | "docm" | "xls" | "xlsx" | "xlsm" | "xlsb" | "odt" | "ods" | "rtf"
+            | "epub" | "csv" => local(LocalParseKind::Anydoc, RouteReason::OfficeDocument),
+            // 演示文稿族
+            "ppt" | "pps" | "pot" | "pptx" | "pptm" | "ppsx" | "ppsm" | "odp" => {
+                local(LocalParseKind::Anydoc, RouteReason::PresentationFile)
+            }
+            // anydoc 不支持的文本/代码长尾
+            "txt" | "md" | "rst" | "tsv" | "json" | "toml" | "yaml" | "yml" | "html" | "htm" => {
+                local(LocalParseKind::Markitdown, RouteReason::TextFile)
+            }
             _ if is_code_extension(&extension) => {
                 local(LocalParseKind::Markitdown, RouteReason::TextFile)
             }

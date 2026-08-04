@@ -12,8 +12,8 @@ fn assert_markitdown(decision: &ParseRouteDecision) {
     assert_local_kind(decision, LocalParseKind::Markitdown);
 }
 
-fn assert_office_direct(decision: &ParseRouteDecision) {
-    assert_local_kind(decision, LocalParseKind::OfficeDirect);
+fn assert_anydoc(decision: &ParseRouteDecision) {
+    assert_local_kind(decision, LocalParseKind::Anydoc);
 }
 
 fn assert_liteparse_v2_pdf(decision: &ParseRouteDecision) {
@@ -47,49 +47,49 @@ fn image_file_routing_uses_paddle_ocr_image_route() {
     ));
 }
 
-/// Office 直读：docx/doc/xls/xlsx 走 OfficeDirect。
+/// Office / spreadsheet → anydoc.
 #[test]
-fn docx_file_routing_uses_office_direct() {
+fn docx_file_routing_uses_anydoc() {
     let decision = ParseRouter::route(
         b"fake docx",
         "test.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     .unwrap();
-    assert_office_direct(&decision);
+    assert_anydoc(&decision);
     assert!(matches!(decision.reason, RouteReason::OfficeDocument));
 }
 
-/// Office 直读：pptx/ppt 走 OfficeDirect。
+/// Presentations → anydoc.
 #[test]
-fn pptx_file_routing_uses_office_direct() {
+fn pptx_file_routing_uses_anydoc() {
     let decision = ParseRouter::route(
         b"fake pptx",
         "test.pptx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
     .unwrap();
-    assert_office_direct(&decision);
+    assert_anydoc(&decision);
     assert!(matches!(decision.reason, RouteReason::PresentationFile));
 }
 
-/// Office 直读：xlsx/xls 走 OfficeDirect（不再经 markitdown/calamine）。
+/// Excel → anydoc（含 xls）。
 #[test]
-fn excel_routing_uses_office_direct() {
+fn excel_routing_uses_anydoc() {
     let decision = ParseRouter::route(
         b"fake xlsx",
         "ipd.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     .unwrap();
-    assert_office_direct(&decision);
+    assert_anydoc(&decision);
 
     let decision =
         ParseRouter::route(b"fake xls", "legacy.xls", "application/vnd.ms-excel").unwrap();
-    assert_office_direct(&decision);
+    assert_anydoc(&decision);
 }
 
-/// PDF 走 liteparse（liteparse_v2_pdf）。
+/// PDF 走 liteparse（liteparse_v2_pdf）—— 永不 anydoc。
 #[test]
 fn pdf_routing_uses_liteparse_v2_pdf() {
     let decision = ParseRouter::route(b"%PDF-1.7 fake", "report.pdf", "application/pdf").unwrap();
@@ -97,16 +97,11 @@ fn pdf_routing_uses_liteparse_v2_pdf() {
     assert!(matches!(decision.reason, RouteReason::OfficeDocument));
 }
 
-/// 旧二进制 doc/ppt 走 OfficeDirect。
+/// 旧二进制 doc/ppt → anydoc。
 #[test]
-fn doc_ppt_routing_uses_office_direct() {
-    let decision = ParseRouter::route(
-        b"fake doc",
-        "legacy.doc",
-        "application/msword",
-    )
-    .unwrap();
-    assert_office_direct(&decision);
+fn doc_ppt_routing_uses_anydoc() {
+    let decision = ParseRouter::route(b"fake doc", "legacy.doc", "application/msword").unwrap();
+    assert_anydoc(&decision);
 
     let decision = ParseRouter::route(
         b"fake ppt",
@@ -114,8 +109,55 @@ fn doc_ppt_routing_uses_office_direct() {
         "application/vnd.ms-powerpoint",
     )
     .unwrap();
-    assert_office_direct(&decision);
+    assert_anydoc(&decision);
     assert!(matches!(decision.reason, RouteReason::PresentationFile));
+}
+
+/// 扩展 anydoc 面：csv / odt / rtf / epub / docm / xlsm。
+#[test]
+fn expanded_anydoc_formats_route_to_anydoc() {
+    let cases: &[(&str, &str, RouteReason)] = &[
+        ("a.csv", "text/csv", RouteReason::OfficeDocument),
+        (
+            "a.odt",
+            "application/vnd.oasis.opendocument.text",
+            RouteReason::OfficeDocument,
+        ),
+        ("a.rtf", "application/rtf", RouteReason::OfficeDocument),
+        ("a.epub", "application/epub+zip", RouteReason::OfficeDocument),
+        (
+            "a.docm",
+            "application/vnd.ms-word.document.macroenabled.12",
+            RouteReason::OfficeDocument,
+        ),
+        (
+            "a.xlsm",
+            "application/vnd.ms-excel.sheet.macroenabled.12",
+            RouteReason::OfficeDocument,
+        ),
+        (
+            "a.odp",
+            "application/vnd.oasis.opendocument.presentation",
+            RouteReason::PresentationFile,
+        ),
+    ];
+    for (name, mime, reason) in cases {
+        let decision = ParseRouter::route(b"x", name, mime).unwrap();
+        assert_anydoc(&decision);
+        assert_eq!(
+            std::mem::discriminant(&decision.reason),
+            std::mem::discriminant(reason),
+            "{name}"
+        );
+    }
+}
+
+/// TSV 仍 markitdown（anydoc 不宣称支持）。
+#[test]
+fn tsv_stays_markitdown() {
+    let decision =
+        ParseRouter::route(b"a\tb", "t.tsv", "text/tab-separated-values").unwrap();
+    assert_markitdown(&decision);
 }
 
 #[test]

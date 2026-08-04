@@ -1,9 +1,10 @@
-//! markitdown 子进程后端（2026-08-02 起为文本/代码类兜底；PDF→liteparse、
-//! Office→office-direct，见 `docs/plans/2026-08-02-parser-pipeline-direct-readers.md`）。
+//! markitdown 子进程后端（2026-08-05 起为 anydoc 不支持的文本/代码长尾；
+//! PDF→liteparse、Office 等→anydoc，见 `docs/plans/2026-08-05-parser-pipeline-anydoc.md`）。
 //!
-//! txt/md/rst/csv/tsv/json/toml/yaml/yml/html/htm/代码扩展名经 markitdown CLI
+//! txt/md/rst/tsv/json/toml/yaml/yml/html/htm/代码扩展名经 markitdown CLI
 //! 解析为 markdown，再切 Heading/Paragraph blocks（与 E2E harness
 //! `markitdown_reingest.rs` 的切块形状一致——刻意不做管道表重检测，TableIr 退役）。
+//! CSV 已迁至 anydoc。
 //!
 //! 已知取舍（设计声明）：markitdown 不产多模态 asset（docx/pptx/pdf 内嵌图片不提取）、
 //! 不做 OCR（扫描版 PDF 产出近空文本，会被终端零 chunk 完整性检查拒灌）；standalone

@@ -1,9 +1,9 @@
+pub mod anydoc;
 mod code;
 pub mod csv_table;
 mod html;
 pub mod liteparse_pdf;
 pub mod markitdown;
-pub mod office_direct;
 pub mod paddle_ocr;
 mod page_status;
 mod router;
@@ -16,6 +16,9 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use uuid::Uuid;
 
+pub use anydoc::{
+    AnydocConfig, is_presentation_ext, parse_anydoc_document_ir, run_anydoc, strip_pptx_hex_runs,
+};
 pub use code::CodeParser;
 pub use html::HtmlParser;
 pub use liteparse_pdf::{
@@ -23,9 +26,6 @@ pub use liteparse_pdf::{
 };
 pub use markitdown::{
     MarkitdownConfig, blocks_from_markdown, parse_markitdown_document_ir, run_markitdown,
-};
-pub use office_direct::{
-    OfficeDirectConfig, parse_office_direct_document_ir, run_office_direct,
 };
 pub use paddle_ocr::{
     PaddleJobsOcrService, PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult,

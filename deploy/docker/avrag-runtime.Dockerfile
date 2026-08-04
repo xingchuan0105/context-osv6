@@ -13,15 +13,14 @@ RUN apt-get update -qq \
     python3 \
     python3-pip \
     python3-venv \
-    pandoc \
   && rm -rf /var/lib/apt/lists/*
 
-# markitdown on PATH
+# markitdown on PATH (text/code long-tail)
 RUN python3 -m pip install --break-system-packages --no-cache-dir 'markitdown[all]'
 
-# office-direct (docx/xlsx/pptx). Build context must include ./office-direct.
-COPY office-direct /tmp/office-direct
-RUN python3 -m pip install --break-system-packages --no-cache-dir /tmp/office-direct \
-  && rm -rf /tmp/office-direct
+# anydoc-extract (Office/ODF/RTF/EPUB/CSV). Build context must include ./anydoc-extract.
+COPY anydoc-extract /tmp/anydoc-extract
+RUN python3 -m pip install --break-system-packages --no-cache-dir /tmp/anydoc-extract \
+  && rm -rf /tmp/anydoc-extract
 
 WORKDIR /opt/avrag-rs

@@ -371,8 +371,7 @@ impl E2eBootstrapConfig {
             );
         }
 
-        // 按格式分工（2026-08-02）：PDF→liteparse、Office→office-direct、文本/代码→markitdown；
-        // OFFICE_PARSER_*/PDF_RENDERER_* 与旧 LITEPARSE_*（OCR/页路由探针）已退役，不再转发。
+        // 按格式分工（2026-08-05）：PDF→liteparse、Office 等→anydoc、文本/代码→markitdown。
         Self::forward_optional_env(
             cmd,
             &[
@@ -381,11 +380,8 @@ impl E2eBootstrapConfig {
                 "LITEPARSE_BIN",
                 "LITEPARSE_TIMEOUT_MS",
                 "LITEPARSE_SCANNED_MIN_CHARS",
-                "OFFICE_DIRECT_BIN",
-                "OFFICE_DIRECT_TIMEOUT_MS",
-                "OFFICE_SOFFICE_BIN",
-                "OFFICE_SOFFICE_TIMEOUT_MS",
-                "OFFICE_SOFFICE_MAX_CONCURRENT",
+                "ANYDOC_BIN",
+                "ANYDOC_TIMEOUT_MS",
                 "STRUCT_STORE_DIR",
                 "STRUCT_SUPERVISE_MAX_TURNS",
             ],

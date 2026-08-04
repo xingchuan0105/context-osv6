@@ -1,5 +1,5 @@
-//! Office DOCX ingest via office-direct（2026-08-02 起 Office 直读）→ worker → indexed chunks.
-//! 运行需 worker 装 office-direct-extract。
+//! Office DOCX ingest via anydoc（2026-08-05）→ worker → indexed chunks.
+//! 运行需 worker 装 anydoc-extract。
 
 use std::time::Duration;
 
@@ -34,7 +34,7 @@ async fn office_docx_ingest_e2e() {
         .query_latest_backend_summary(&upload.document_id)
         .await
         .expect("backend_summary");
-    assert_primary_backend(&summary, "office_direct");
+    assert_primary_backend(&summary, "anydoc");
 
     let chunk_count = ctx
         .query_document_chunk_count(&upload.document_id)
@@ -53,7 +53,7 @@ async fn office_docx_ingest_e2e() {
     .expect("first chunk content");
     assert!(
         row.0.contains("Context-OS phase0 mini docx fixture"),
-        "chunk should contain office-direct-parsed docx text, got: {}",
+        "chunk should contain anydoc-parsed docx text, got: {}",
         row.0
     );
 }

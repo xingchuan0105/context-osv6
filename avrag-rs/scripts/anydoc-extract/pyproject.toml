@@ -1,0 +1,18 @@
+[project]
+name = "anydoc-extract"
+version = "0.1.0"
+description = "Thin CLI wrapper: firecrawl-anydoc → markdown file (avrag-rs Anydoc parse backend)."
+requires-python = ">=3.10"
+dependencies = [
+    "firecrawl-anydoc>=0.1.2",
+]
+
+[project.scripts]
+anydoc-extract = "anydoc_extract.main:main"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -16,10 +16,10 @@ pub(super) fn normalize_mime_type(mime_type: &str) -> String {
 pub(super) fn is_supported_extension(extension: &str) -> bool {
     matches!(
         extension,
+        // text/code long-tail (markitdown)
         "txt"
             | "md"
             | "rst"
-            | "csv"
             | "tsv"
             | "json"
             | "toml"
@@ -27,6 +27,7 @@ pub(super) fn is_supported_extension(extension: &str) -> bool {
             | "yml"
             | "html"
             | "htm"
+            // PDF / images
             | "pdf"
             | "png"
             | "jpg"
@@ -34,12 +35,30 @@ pub(super) fn is_supported_extension(extension: &str) -> bool {
             | "webp"
             | "gif"
             | "bmp"
+            // anydoc — Word
             | "doc"
             | "docx"
+            | "docm"
+            // anydoc — Excel
             | "xls"
             | "xlsx"
+            | "xlsm"
+            | "xlsb"
+            // anydoc — PowerPoint
             | "ppt"
+            | "pps"
+            | "pot"
             | "pptx"
+            | "pptm"
+            | "ppsx"
+            | "ppsm"
+            // anydoc — ODF / RTF / EPUB / CSV
+            | "odt"
+            | "ods"
+            | "odp"
+            | "rtf"
+            | "epub"
+            | "csv"
     ) || is_code_extension(extension)
 }
 
@@ -100,12 +119,49 @@ pub(super) fn mime_matches_extension(extension: &str, mime_type: &str) -> bool {
         "docx" => {
             mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         }
+        "docm" => {
+            mime_type == "application/vnd.ms-word.document.macroenabled.12"
+                || mime_type
+                    == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }
         "xls" => mime_type == "application/vnd.ms-excel",
         "xlsx" => mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "ppt" => mime_type == "application/vnd.ms-powerpoint",
+        "xlsm" => {
+            mime_type == "application/vnd.ms-excel.sheet.macroenabled.12"
+                || mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+        "xlsb" => mime_type == "application/vnd.ms-excel.sheet.binary.macroenabled.12",
+        "ppt" | "pps" | "pot" => mime_type == "application/vnd.ms-powerpoint",
         "pptx" => {
             mime_type == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         }
+        "pptm" => {
+            mime_type == "application/vnd.ms-powerpoint.presentation.macroenabled.12"
+                || mime_type
+                    == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        }
+        "ppsx" => {
+            mime_type == "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
+        }
+        "ppsm" => {
+            mime_type == "application/vnd.ms-powerpoint.slideshow.macroenabled.12"
+                || mime_type
+                    == "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
+        }
+        "odt" => {
+            mime_type == "application/vnd.oasis.opendocument.text"
+                || mime_type == "application/x-vnd.oasis.opendocument.text"
+        }
+        "ods" => {
+            mime_type == "application/vnd.oasis.opendocument.spreadsheet"
+                || mime_type == "application/x-vnd.oasis.opendocument.spreadsheet"
+        }
+        "odp" => {
+            mime_type == "application/vnd.oasis.opendocument.presentation"
+                || mime_type == "application/x-vnd.oasis.opendocument.presentation"
+        }
+        "rtf" => mime_type == "application/rtf" || mime_type == "text/rtf",
+        "epub" => mime_type == "application/epub+zip",
         "html" | "htm" => {
             mime_type == "application/xhtml+xml"
                 || mime_type == "application/xml"

@@ -89,13 +89,12 @@ cp -a "$ROOT/deploy/docker/run-avrag-containers.sh" "$STAGE/docker/run-avrag-con
 chmod 755 "$STAGE/docker/run-avrag-containers.sh"
 cp -a "$ROOT/deploy/docker/avrag-runtime.Dockerfile" "$STAGE/docker/avrag-runtime.Dockerfile"
 
-# office-direct package (installed into /opt/avrag-rs/tools on the host, mounted
-# into the runtime container via PATH).
+# anydoc-extract package (baked into avrag-runtime image).
 rsync -a --delete \
   --exclude '__pycache__/' \
   --exclude '*.egg-info/' \
   --exclude '.pytest_cache/' \
-  "$AVRAG_DIR/scripts/office-direct/" "$STAGE/scripts/office-direct/"
+  "$AVRAG_DIR/scripts/anydoc-extract/" "$STAGE/scripts/anydoc-extract/"
 
 cat > "$STAGE/DEPLOY_META.backend.json" <<EOF
 {
@@ -149,24 +148,24 @@ install -m 755 "\$STAGE/docker/run-avrag-containers.sh" "\$REMOTE_ROOT/docker/ru
 install -m 644 "\$STAGE/DEPLOY_META.backend.json" "\$REMOTE_ROOT/DEPLOY_META.backend.json"
 
 # Rebuild avrag-runtime so the worker container has parser CLIs (markitdown /
-# pandoc / office-direct). Host-path venvs are NOT visible inside the minimal
-# runtime; bake tools into the image instead. markitdown CLI must not be
-# probed with `--help` (it treats unknown flags as convert inputs).
+# anydoc-extract). Host-path venvs are NOT visible inside the minimal runtime;
+# bake tools into the image instead. markitdown CLI must not be probed with
+# `--help` (it treats unknown flags as convert inputs).
 echo "deploy-backend: rebuilding avrag-runtime:24.04 with parser CLIs"
 RUNTIME_BUILD=/tmp/avrag-runtime-build
 rm -rf "\$RUNTIME_BUILD"
 mkdir -p "\$RUNTIME_BUILD"
 cp "\$STAGE/docker/avrag-runtime.Dockerfile" "\$RUNTIME_BUILD/Dockerfile"
-if [[ ! -d "\$STAGE/scripts/office-direct" ]]; then
-  echo "deploy-backend: ERROR stage missing scripts/office-direct" >&2
+if [[ ! -d "\$STAGE/scripts/anydoc-extract" ]]; then
+  echo "deploy-backend: ERROR stage missing scripts/anydoc-extract" >&2
   exit 1
 fi
-cp -a "\$STAGE/scripts/office-direct" "\$RUNTIME_BUILD/office-direct"
+cp -a "\$STAGE/scripts/anydoc-extract" "\$RUNTIME_BUILD/anydoc-extract"
 docker build -t avrag-runtime:24.04 "\$RUNTIME_BUILD"
 docker run --rm avrag-runtime:24.04 bash -lc \
-  'command -v markitdown && markitdown -h >/dev/null && command -v pandoc && pandoc --version >/dev/null && command -v office-direct-extract' \
+  'command -v markitdown && markitdown -h >/dev/null && command -v anydoc-extract' \
   || { echo "deploy-backend: ERROR runtime image missing parser CLIs" >&2; exit 1; }
-echo "deploy-backend: runtime image OK (markitdown+pandoc+office-direct)"
+echo "deploy-backend: runtime image OK (markitdown+anydoc-extract)"
 
 # Point env at in-image binaries.
 if [[ -f /etc/avrag-rs/avrag.env ]]; then
@@ -176,7 +175,7 @@ p = Path("/etc/avrag-rs/avrag.env")
 text = p.read_text()
 updates = {
     "MARKITDOWN_BIN": "markitdown",
-    "OFFICE_DIRECT_BIN": "office-direct-extract",
+    "ANYDOC_BIN": "anydoc-extract",
 }
 lines = text.splitlines()
 out = []

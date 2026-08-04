@@ -1742,9 +1742,9 @@ async fn realistic_corpus_full_eval() {
         .await
         .expect("grant e2e unlimited quota for fixed test identity");
 
-    // 2026-08-02 起灌原件（新解析管线路由：PDF→liteparse、Office→office-direct、
+    // 2026-08-05 起灌原件（解析路由：PDF→liteparse、Office→anydoc、
     // 文本/代码→markitdown）。docx/xlsx/pdf 原件在 fixtures 内；adr 两篇原生 md。
-    // 超时按原件规模放宽：office-direct/struct_tables/LLM profile 使 docx/xlsx
+    // 超时按原件规模放宽：anydoc 解析快，但 struct_tables/LLM profile 仍使 docx/xlsx
     // 明显慢于派生 txt（实测 thesis.docx 单文档 struct_tables≈5min+materialize≈4min）。
     let corpus_files = [
         ("thesis_y_refrigeration.docx", 1800),        // 484KB docx, thesis（实测超 600s）

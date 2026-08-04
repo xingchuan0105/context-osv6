@@ -2,7 +2,7 @@
 
 > **部分过期** — 本文以 orchestrator / worker / brief / handoff 架构为当时现状叙述；该架构已于 2026-08-01 物理删除（commit `7f2d182d`），现行为单 agent SaC（见根 `docs/plans/2026-07-30-sac-sdk-single-agent-design.md`）。文中 eval v2 / token 预算等内容仍然有效。（注释添加于 2026-08-02 文档体系梳理）
 >
-> **部分被取代（2026-08-02）** — 本文「markitdown 唯一文档解析器」决策已由按格式分工取代：PDF→liteparse、Office→office-direct 直读、markitdown 仅文本/代码兜底。见 [`../plans/2026-08-02-parser-pipeline-direct-readers.md`](../plans/2026-08-02-parser-pipeline-direct-readers.md)。本文的硬闸/记分/无 chunk 部分仍有效。
+> **部分被取代（2026-08-02 → 2026-08-05）** — 本文「markitdown 唯一文档解析器」决策已由按格式分工取代。现行：PDF→liteparse；Office/ODF/RTF/EPUB/CSV 等→**anydoc**；文本/代码→markitdown。权威：[`../plans/2026-08-05-parser-pipeline-anydoc.md`](../plans/2026-08-05-parser-pipeline-anydoc.md)（08-02 office-direct 方案已 SUPERSEDED）。本文的硬闸/记分/无 chunk 部分仍有效。
 
 | 项目 | 内容 |
 |---|---|

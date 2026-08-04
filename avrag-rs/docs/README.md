@@ -1,6 +1,6 @@
 # avrag-rs 文档索引
 
-> 最后更新：2026-08-02（文档体系梳理重写）。
+> 最后更新：2026-08-05（解析层 anydoc 广覆盖设计）。
 > 本索引是 avrag-rs 文档的入口：哪些是当前权威、哪些已被取代、哪些是历史快照。全仓库总索引见根 [`docs/README.md`](../../docs/README.md)。
 > 维护规则：新增现行参考文档时登记到「当前权威」；带日期戳的计划/交接/报告属于时间点快照，无需随架构演进更新内容；文档被取代时在文首加 SUPERSEDED 横幅并登记到「已被取代」。
 
@@ -10,7 +10,7 @@
 - **Product Apps + AppState 组合根**：T1–T8 法则（根 `docs/adr/0007-product-apps-composition-root.md`、`docs/agent/product-apps.md`）；workspace 唯一产品真相，无 org。
 - **计费**：用户级；Creem + Alipay；rolling 窗口 + soft limit。语义参考：[`superpowers/specs/2026-07-05-llm-usage-exit-metering-design.md`](superpowers/specs/2026-07-05-llm-usage-exit-metering-design.md)。
 - **Prompts**：全部 LLM 面向文案在 `../prompts/**/*.md`（CDS，第三人称观察文体）；规则见 `../prompts/README.md`、`../prompts/loop/README.md`。
-- **解析/入库**：按格式分工（2026-08-02）：PDF→liteparse、Office（docx/xlsx/pptx/doc/ppt/xls）→office-direct 直读、文本/代码→markitdown 兜底；设计真相：[`plans/2026-08-02-parser-pipeline-direct-readers.md`](plans/2026-08-02-parser-pipeline-direct-readers.md)；struct query（DuckDB 只读结构化查询）设计真相：[`plans/2026-07-31-struct-query-virtual-tables.md`](plans/2026-07-31-struct-query-virtual-tables.md)；运维真相：[`runbooks/worker-dev.md`](runbooks/worker-dev.md)。
+- **解析/入库**：按格式分工（2026-08-05）：PDF→liteparse；**Office/ODF/RTF/EPUB/CSV 等（anydoc 非 PDF 全集）→anydoc**（+ pptx 族 hex strip）；文本/代码/tsv/html…→markitdown；图片→PaddleOCR。设计真相：[`plans/2026-08-05-parser-pipeline-anydoc.md`](plans/2026-08-05-parser-pipeline-anydoc.md)（取代 08-02 office-direct 决策；历史：[`plans/2026-08-02-parser-pipeline-direct-readers.md`](plans/2026-08-02-parser-pipeline-direct-readers.md)）。struct query：[`plans/2026-07-31-struct-query-virtual-tables.md`](plans/2026-07-31-struct-query-virtual-tables.md)；运维：[`runbooks/worker-dev.md`](runbooks/worker-dev.md)（实施 anydoc 后同步）。
 - **检索数据面**：云端 Milvus / 本地 pgvector；图增强仅 lexical 1 跳 + 得分落差截断（canonical：[`plans/2026-07-23-lexical-graph-augment-scoring-design.md`](plans/2026-07-23-lexical-graph-augment-scoring-design.md)）。
 - **评测**：分轨记分卡（ADR-0011）+ judge-first 生成层（ADR-0012，设计：[`plans/2026-07-24-rag-eval-judge-v2-design.md`](plans/2026-07-24-rag-eval-judge-v2-design.md)）。
 - **代码情报**：code-review-graph（graphify 已退役），规则见根 `docs/agent/code-review-graph.md`。

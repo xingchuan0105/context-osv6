@@ -48,7 +48,7 @@
 # 推荐：product-dev-up 拉起 minio/api/worker/next，worker 日志 tee 到 .dev-logs/worker.log
 bash scripts/product-dev-up.sh   # 仓库根
 
-# 或单独（worker 依赖 PATH 上的解析器：lit CLI（PDF）、office-direct-extract（Office）、markitdown（文本/代码））：
+# 或单独（worker 依赖 PATH 上的解析器：lit CLI（PDF）、anydoc-extract（Office 等）、markitdown（文本/代码））：
 cd avrag-rs
 mkdir -p .dev-logs
 RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-logs/worker.log
@@ -57,17 +57,17 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
 | 依赖 | 说明 |
 |------|------|
 | `lit` CLI（`LITEPARSE_BIN`/`LITEPARSE_TIMEOUT_MS`/`LITEPARSE_SCANNED_MIN_CHARS`） | PDF 解析（`lit parse --format markdown --no-ocr`）；缺失/超时以「liteparse parse failed」显式报错 |
-| `office-direct-extract`（`OFFICE_DIRECT_BIN`/`OFFICE_DIRECT_TIMEOUT_MS`） | Office 直读（docx/xlsx/pptx），doc/ppt/xls 先经 soffice 转 OOXML；docx 经 `pandoc -t gfm`（标准 GFM 表格，strip 图片死引用）；缺失以「office-direct parse failed」显式报错 |
-| LibreOffice `soffice`（`OFFICE_SOFFICE_BIN`/`OFFICE_SOFFICE_TIMEOUT_MS`/`OFFICE_SOFFICE_MAX_CONCURRENT`） | 仅 doc/ppt/xls 旧二进制转 OOXML 时调用；需 writer/calc/impress 三组件齐全 |
-| `markitdown` CLI（`MARKITDOWN_BIN`/`MARKITDOWN_TIMEOUT_MS`） | 文本/代码类兜底（txt/md/rst/csv/tsv/json/toml/yaml/html/代码）；缺失时摄入以「markitdown 子进程启动失败」显式报错 |
+| `anydoc-extract`（`ANYDOC_BIN`/`ANYDOC_TIMEOUT_MS`） | Office/ODF/RTF/EPUB/CSV 等（**非 PDF**）→ GFM markdown；pptx 族由 Rust 侧 hex strip；缺失以「anydoc parse failed」显式报错 |
+| `markitdown` CLI（`MARKITDOWN_BIN`/`MARKITDOWN_TIMEOUT_MS`） | 文本/代码长尾（txt/md/rst/tsv/json/toml/yaml/html/代码）；缺失时摄入以「markitdown 子进程启动失败」显式报错 |
 | `.dev-logs/worker.log` | `product-dev-up` 默认 tee；避免只挂 pts 丢日志 |
 | ~~`PDF_RENDERER_BASE_URL`~~ | 已退役（2026-08-02），office parser(:9090)/PDF renderer(:9091) 不再被调用 |
+| ~~`office-direct-extract` / LibreOffice~~ | 已退役（2026-08-05），由 anydoc 取代 |
 
 **解析器安装（本地 worker 三组件需在 PATH）：**
 
-- `lit` CLI（PDF）—— 见 `plans/2026-08-02-parser-pipeline-direct-readers.md` §5.7（VPS 预置项）。
-- `office-direct-extract` —— `pip install -e ./scripts/office-direct`（worker venv；自带 openpyxl/python-pptx）。docx 路径还需系统级 `pandoc`（`pandoc --version`，GFM writer），缺失时 docx 解析以「office-direct parse failed」显式报错。脚本自身 `#!/usr/bin/env python3` + `chmod +x`，`OFFICE_DIRECT_BIN` 也支持直接指向 .py 路径。
-- LibreOffice —— 系统安装并确保 `soffice --version` 可用，需 writer/calc/impress 三组件齐全（仅 doc/ppt/xls 旧二进制用到）。
+- `lit` CLI（PDF）—— 见 `plans/2026-08-05-parser-pipeline-anydoc.md`。
+- `anydoc-extract` —— `pip install -e ./scripts/anydoc-extract`（worker venv；依赖 `firecrawl-anydoc`）。
+- `markitdown` —— `pip install 'markitdown[all]'`。
 
 启动时建议先确认：
 
@@ -78,7 +78,7 @@ RUST_LOG=info,avrag_worker=info cargo run -p avrag-worker 2>&1 | tee -a .dev-log
    - `AVRAG_WORKER_HEALTH_PORT=0` 时会自动选端口并写入 `AVRAG_WORKER_HEALTH_PORT_FILE`。
    - 本地可直接 `curl http://127.0.0.1:<port>/health` 验证存活。
 3. **解析器 CLI**
-   - `command -v lit && command -v office-direct-extract && command -v markitdown`（worker PATH 必须可见；docx 还需 `command -v pandoc`；旧二进制 Office 还需 `command -v soffice`）。
+   - `command -v lit && command -v anydoc-extract && command -v markitdown`（worker PATH 必须可见）。
 
 ## 任务契约
 
@@ -175,16 +175,16 @@ cargo check -p avrag-worker
 
 ## 服务器部署提醒
 
-### 文档入库（按格式分工，2026-08-02 起）
+### 文档入库（按格式分工，2026-08-05 起）
 
-PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类（docx/xlsx/pptx/doc/ppt/xls）走 **office-direct-extract**（docx/xlsx/pptx 直读，旧二进制 doc/ppt/xls 经 soffice 无损转 OOXML 后直读）；txt/md/html/csv/代码走 **markitdown**。各子进程均产出 markdown → IR/切块/索引；表格类文档另经 struct-query 表格阶段（per-doc duckdb + 证据 chunk）。原 LiteParse 主链（hybrid 探针/页路由/VisualRaster 兜底）已退役删除。设计见 `plans/2026-08-02-parser-pipeline-direct-readers.md`。
+PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office/ODF/RTF/EPUB/CSV 等走 **anydoc-extract**（GFM markdown，pptx 族 hex strip）；txt/md/html/tsv/代码走 **markitdown**。各子进程均产出 markdown → IR/切块/索引；表格类文档另经 struct-query 表格阶段（per-doc duckdb + 证据 chunk）。设计见 `plans/2026-08-05-parser-pipeline-anydoc.md`。
 
 | 文档形态 | 处理方式 |
 |------|----------|
 | PDF（数字版） | liteparse（`lit parse --format markdown --no-ocr`）子进程 → markdown → IR |
 | PDF（扫描件，liteparse 提取近空） | 整本转 Paddle Jobs OCR（`paddle_ocr_pdf`，1 文件 1 Job，`pdf_route_mode=paddle_ocr_pdf`） |
-| Office（docx/xlsx/pptx/doc/ppt/xls） | office-direct-extract 直读（docx 经 `pandoc -t gfm` 产标准 GFM 表格并 strip 图片语法；xlsx/pptx 直读；旧二进制 doc/ppt/xls 经 soffice 转 OOXML）→ markdown → IR |
-| 文本/代码（txt/md/csv/json/toml/yaml/html/代码） | markitdown 子进程 → markdown → IR |
+| Office/ODF/RTF/EPUB/CSV（docx/xlsx/pptx/doc/ppt/xls/…） | anydoc-extract → GFM markdown（pptx 族 Rust hex strip）→ IR |
+| 文本/代码（txt/md/tsv/json/toml/yaml/html/代码） | markitdown 子进程 → markdown → IR |
 | 独立图片（png/jpg/webp） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`，现役唯一图片路径） |
 
 ### Embedding / Rerank 供应商（2026-08-03 起：SiliconFlow）
@@ -221,6 +221,6 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 
 产出：`DocumentType::Image`，`pdf_route_mode=paddle_image`，文本块 + Figure 块（含 MM 索引）。
 
-### Office 解析
+### Office / 广覆盖解析（anydoc）
 
-docx/xlsx/pptx/doc/ppt/xls 走 worker 子进程 `office-direct-extract` 直读（docx 经 `pandoc -t gfm`；xlsx/pptx 用 openpyxl/python-pptx；旧二进制 doc/ppt/xls 经 soffice 转 OOXML），产出 markdown → IR/切块/索引；表格类另经 struct-query 表格阶段。`OFFICE_PARSER_BASE_URL` 与 `office-parser-up.sh/down.sh` 已退役删除。
+docx/xlsx/pptx/doc/ppt/xls 及 ODF/RTF/EPUB/CSV 等走 worker 子进程 `anydoc-extract`（`firecrawl-anydoc`），产出 GFM markdown → IR/切块/索引；演示文稿族另做 hex strip；表格类另经 struct-query 表格阶段。`office-direct` / soffice / `OFFICE_PARSER_BASE_URL` 已退役删除（2026-08-05）。
