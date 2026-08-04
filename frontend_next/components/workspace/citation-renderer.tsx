@@ -11,12 +11,65 @@ import {
   type Citation,
 } from "../../lib/workspace/stream";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { buildApiUrl } from "../../lib/http/request";
 import { toSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
 import { markdownToInlineHtml, markdownToRichTextHtml } from "./workspace-note-rich-text";
 import { sanitizeWorkspaceHtml } from "./workspace-html-sanitize";
 import styles from "./workspace-chat.module.css";
 import type { UiChatMessage } from "../../hooks/use-chat-session";
 import { ToolResultsPanel } from "./tool-result-card";
+
+/** Resolve a displayable image URL for a citation (signed/http URL or asset API). */
+function getCitationImageSrc(citation: Citation): string | null {
+  const direct = citation.image_url?.trim();
+  if (direct) {
+    const safe = toSafeHttpUrl(direct) ?? (direct.startsWith("/") ? direct : null);
+    if (safe) {
+      return safe;
+    }
+    // Relative product paths (e.g. /api/v1/chat/citations/assets/…) are intentional.
+    if (direct.startsWith("/")) {
+      return direct;
+    }
+  }
+  const assetId = citation.asset_id?.trim();
+  if (assetId) {
+    return buildApiUrl(`/api/v1/chat/citations/assets/${encodeURIComponent(assetId)}`);
+  }
+  return null;
+}
+
+type AnswerSegment =
+  | { kind: "text"; text: string }
+  | { kind: "image"; chunkId: string };
+
+/**
+ * Split answer markup so `[[image:chunk_id]]` becomes a first-class image segment
+ * (rendered as an <img>, not a click-to-open citation chip).
+ */
+function splitAnswerSegments(markdown: string): AnswerSegment[] {
+  const segments: AnswerSegment[] = [];
+  const re = /\[\[image:([^\]]+)\]\]/giu;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(markdown)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ kind: "text", text: markdown.slice(lastIndex, match.index) });
+    }
+    const chunkId = match[1]?.trim() ?? "";
+    if (chunkId) {
+      segments.push({ kind: "image", chunkId });
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < markdown.length) {
+    segments.push({ kind: "text", text: markdown.slice(lastIndex) });
+  }
+  if (segments.length === 0 && markdown.length > 0) {
+    segments.push({ kind: "text", text: markdown });
+  }
+  return segments;
+}
 
 function getCitationLabel(citation: Citation, index: number) {
   return citation.doc_name.trim().length > 0 ? citation.doc_name : `Source ${index + 1}`;
@@ -210,6 +263,10 @@ type RichMarkdownCitationToken = {
   fallbackOnly?: boolean;
 };
 
+/**
+ * Text-only citation chips. Image markers (`[[image:…]]`) are handled outside this
+ * helper and rendered as real <img> figures (not click-to-open chips).
+ */
 function markdownToRichTextHtmlWithCitationButtons(
   markdown: string,
   citations: Citation[],
@@ -232,18 +289,18 @@ function markdownToRichTextHtmlWithCitationButtons(
 
   // Placeholders must be plain text so markdown/escapeHtml does not mangle them;
   // real <button>/<span> HTML is injected only after markdownToRichTextHtml.
+  // Note: [[image:…]] is intentionally NOT matched here — images render as figures.
   const tokenizedMarkdown = markdown.replace(
-    /\[\[cite:([^\]]+)\]\]|\[\[image:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
+    /\[\[cite:([^\]]+)\]\]|\[\[web:(\d+)\]\]|\[\[(\d+)\]\]|\[(?:web:|citation:)?\s*(\d+)\]/giu,
     (
       _marker,
       citeChunkId: string | undefined,
-      imageChunkId: string | undefined,
       webId: string | undefined,
       bracketedId: string | undefined,
       prefixedId: string | undefined,
     ) => {
       const citation = resolveCitationFromMarker(citations, {
-        chunkId: citeChunkId ?? imageChunkId,
+        chunkId: citeChunkId,
         displayId: webId ?? bracketedId ?? prefixedId,
       });
       if (!citation) {
@@ -424,36 +481,125 @@ export function CitationRenderer({
     );
   }
 
+  /**
+   * Inline figure: image is always shown (no click-to-reveal). Optional click
+   * opens citation details; does not gate visibility.
+   */
   function renderImageCard(citation: Citation, key: string) {
     const citationIndex = findCitationIndex(message.citations, citation);
     const resolvedIndex = citationIndex >= 0 ? citationIndex : 0;
-    const imageUrl = citation.image_url?.trim();
+    const imageSrc = getCitationImageSrc(citation);
     const caption = citation.caption?.trim() || getCitationLabel(citation, resolvedIndex);
+    const aria = getInlineCitationAriaLabel(locale, citation, resolvedIndex);
 
     return (
-      <button
-        aria-label={getInlineCitationAriaLabel(locale, citation, resolvedIndex)}
+      <figure
+        aria-label={aria}
         className={styles.answerImageCard}
+        data-testid="workspace-answer-image"
         key={key}
         onClick={(event) => {
           onSelectCitation(citation, event.currentTarget);
         }}
-        type="button"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelectCitation(citation, event.currentTarget);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
-        {imageUrl ? (
-          <img alt={caption} className={styles.answerImage} src={imageUrl} />
+        {imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- citation asset URLs are dynamic API/store paths
+          <img alt={caption} className={styles.answerImage} loading="lazy" src={imageSrc} />
         ) : (
           <span className={styles.answerImageFallback}>
-            {locale === "zh-CN" ? "查看图片引用" : "Open cited image"}
+            {locale === "zh-CN" ? "图片暂不可用" : "Image unavailable"}
           </span>
         )}
-        <span className={styles.answerImageMeta}>
+        <figcaption className={styles.answerImageMeta}>
           <span className={styles.answerImageBadge}>
             {getCitationDisplayId(citation, resolvedIndex)}
           </span>
           <span className={styles.answerImageCaption}>{caption}</span>
-        </span>
-      </button>
+        </figcaption>
+      </figure>
+    );
+  }
+
+  /** Markdown answer with `[[image:chunk]]` expanded to visible figures in-flow. */
+  function renderSegmentedMarkdown(markdown: string, keyPrefix: string) {
+    const segments = splitAnswerSegments(markdown);
+    const citationTokensAll: RichMarkdownCitationToken[] = [];
+
+    const nodes = segments.map((segment, segmentIndex) => {
+      if (segment.kind === "image") {
+        const citation = findCitationByChunkId(message.citations, segment.chunkId);
+        if (!citation) {
+          return null;
+        }
+        return renderImageCard(citation, `${keyPrefix}-img-${segmentIndex}`);
+      }
+
+      const trimmed = segment.text.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const richMarkdown = markdownToRichTextHtmlWithCitationButtons(
+        segment.text,
+        message.citations,
+        locale,
+      );
+      citationTokensAll.push(...richMarkdown.citationTokens);
+
+      return (
+        <MarkdownContent
+          html={sanitizeWorkspaceHtml(richMarkdown.html)}
+          key={`${keyPrefix}-text-${segmentIndex}`}
+          locale={locale}
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            const button = target.closest<HTMLButtonElement>(
+              "button[data-inline-citation-token-index]",
+            );
+            if (!button) {
+              return;
+            }
+            const localIndex = Number.parseInt(button.dataset.inlineCitationTokenIndex ?? "", 10);
+            if (Number.isNaN(localIndex)) {
+              return;
+            }
+            // Per-segment token indices (0..n-1) for this MarkdownContent only.
+            const citation = richMarkdown.citationTokens[localIndex]?.citation ?? null;
+            if (citation) {
+              handleCitationClick(citation, button);
+            }
+          }}
+        />
+      );
+    });
+
+    const hasAnyImage = segments.some((s) => s.kind === "image");
+    const resolvedCitationCount = citationTokensAll.filter((t) => t.citation).length;
+    const trailingCitations =
+      !hasAnyImage &&
+      resolvedCitationCount === 0 &&
+      message.citations.length > 0
+        ? dedupeCitations(message.citations)
+        : [];
+
+    return (
+      <>
+        <div className={styles.answerBlockStack}>{nodes}</div>
+        {trailingCitations.length > 0 ? (
+          <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
+            {trailingCitations.map((citation, idx) =>
+              renderCitationButton(citation, `${keyPrefix}-trailing-${idx}`),
+            )}
+          </div>
+        ) : null}
+      </>
     );
   }
 
@@ -475,40 +621,14 @@ export function CitationRenderer({
 
   if (message.answerBlocks.length > 0) {
     if (hasOnlyTextAnswerBlocks(message.answerBlocks)) {
-      const mergedText = getAnswerBlockText(message.answerBlocks);
-      const richMarkdown = markdownToRichTextHtmlWithCitationButtons(mergedText, message.citations, locale);
-      const trailingCitations =
-        richMarkdown.citationTokens.length === 0 && message.citations.length > 0
-          ? dedupeCitations(message.citations)
-          : [];
-
+      // Prefer full message.content when it still carries [[image:]] / cite markup
+      // (answer_blocks text-only merge drops image markers).
+      const sourceText = hasRenderedCitationMarkup(message.content)
+        ? message.content
+        : getAnswerBlockText(message.answerBlocks);
       return (
         <>
-          <MarkdownContent
-            html={sanitizeWorkspaceHtml(richMarkdown.html)}
-            locale={locale}
-            onClick={(event) => {
-              const target = event.target as HTMLElement;
-              const button = target.closest<HTMLButtonElement>(
-                "button[data-inline-citation-token-index]",
-              );
-              if (!button) {
-                return;
-              }
-              const tokenIndex = Number.parseInt(button.dataset.inlineCitationTokenIndex ?? "", 10);
-              const citation = richMarkdown.citationTokens[tokenIndex]?.citation ?? null;
-              if (citation) {
-                handleCitationClick(citation, button);
-              }
-            }}
-          />
-          {trailingCitations.length > 0 ? (
-            <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
-              {trailingCitations.map((citation, idx) =>
-                renderCitationButton(citation, `trailing-${idx}`),
-              )}
-            </div>
-          ) : null}
+          {renderSegmentedMarkdown(sourceText, "blocks-text")}
           <ToolResultsPanel locale={locale} results={message.toolResults} />
         </>
       );
@@ -524,6 +644,15 @@ export function CitationRenderer({
                 return null;
               }
               return renderImageCard(citation, `image-${blockIndex}`);
+            }
+
+            // Text blocks may still embed [[image:]] if markup was inlined in text.
+            if (/\[\[image:/iu.test(block.text)) {
+              return (
+                <div key={`text-seg-${blockIndex}`}>
+                  {renderSegmentedMarkdown(block.text, `block-${blockIndex}`)}
+                </div>
+              );
             }
 
             const blockHtml = markdownToInlineHtml(block.text);
@@ -557,45 +686,9 @@ export function CitationRenderer({
   }
 
   if (hasRenderedCitationMarkup(message.content)) {
-    // Prefer the same rich-markdown path so sequential chips + safe token injection apply.
-    const richMarkdown = markdownToRichTextHtmlWithCitationButtons(
-      message.content,
-      message.citations,
-      locale,
-    );
-    const trailingCitationsMarkup =
-      richMarkdown.citationTokens.filter((t) => t.citation).length === 0 &&
-      message.citations.length > 0
-        ? dedupeCitations(message.citations)
-        : [];
-
     return (
       <>
-        <MarkdownContent
-          html={sanitizeWorkspaceHtml(richMarkdown.html)}
-          locale={locale}
-          onClick={(event) => {
-            const target = event.target as HTMLElement;
-            const button = target.closest<HTMLButtonElement>(
-              "button[data-inline-citation-token-index]",
-            );
-            if (!button) {
-              return;
-            }
-            const tokenIndex = Number.parseInt(button.dataset.inlineCitationTokenIndex ?? "", 10);
-            const citation = richMarkdown.citationTokens[tokenIndex]?.citation ?? null;
-            if (citation) {
-              handleCitationClick(citation, button);
-            }
-          }}
-        />
-        {trailingCitationsMarkup.length > 0 ? (
-          <div className={`${styles.inlineCitationGroup} ${styles.inlineCitationGroupTrailing}`}>
-            {trailingCitationsMarkup.map((citation, idx) =>
-              renderCitationButton(citation, `trailing-${idx}`),
-            )}
-          </div>
-        ) : null}
+        {renderSegmentedMarkdown(message.content, "content")}
         <ToolResultsPanel locale={locale} results={message.toolResults} />
       </>
     );

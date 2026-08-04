@@ -1,0 +1,21 @@
+{
+  "stamp": "20260804-132417",
+  "arm": "D1-pgvector",
+  "retrieval_backend": "pgvector",
+  "dense_backend": "vgrag",
+  "slice": "slice",
+  "n_selected": 12,
+  "n_graph81_total": 81,
+  "e2e_questions": "1,3,6,9,10,11,12,13,14,15,16,17",
+  "milvus_d1_reference": {
+    "pass": 78,
+    "n": 81,
+    "source": "docs/engineering/_reports/graph81_baselines_summary.tsv / VGRAG accept plan"
+  },
+  "pass_criteria": {
+    "note": "Compare pass rate to Milvus D1 78/81 (~96%). Slice is diagnostic; full is gate.",
+    "slice_soft": "manual review; flag if pass_rate < 0.75 on slice",
+    "full_hard": "pass_rate >= 0.90 * milvus_d1 (≈0.87) or absolute >= 70/81"
+  },
+  "status": "prepared"
+}

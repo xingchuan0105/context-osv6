@@ -308,6 +308,7 @@
   display: grid;
   gap: var(--space-sm);
   width: min(100%, 28rem);
+  margin: var(--space-sm) 0;
   padding: var(--space-sm);
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);

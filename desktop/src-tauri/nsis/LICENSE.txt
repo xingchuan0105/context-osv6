@@ -1,0 +1,60 @@
+﻿Context-OS Client Software License Agreement
+Context-OS 客户端软件许可协议
+
+Last updated / 更新日期: 2026-08-04
+
+ENGLISH
+-------
+IMPORTANT: PLEASE READ THIS AGREEMENT CAREFULLY BEFORE INSTALLING OR USING CONTEXT-OS CLIENT ("SOFTWARE").
+
+1. License. Subject to this agreement, Context-OS grants you a personal, non-exclusive, non-transferable license to install and use the Software on devices you control, subject to a valid trial or paid license.
+
+2. Ownership. The Software is licensed, not sold. All rights not expressly granted are reserved by Context-OS and its licensors.
+
+3. Restrictions. You may not reverse engineer, decompile, or circumvent license/activation mechanisms except to the extent permitted by applicable law. You may not rent, lease, or sublicense the Software.
+
+4. Local data. Local documents, indexes, and configuration stored on your machine remain your responsibility. You control where data is stored on your device.
+
+5. Third-party services. Optional LLM/embedding providers require your own API keys. Their terms apply to your use of those services. Context-OS does not control third-party models or availability.
+
+6. No cloud login required for core local use. License activation may require network access.
+
+7. Disclaimer. THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, TO THE MAXIMUM EXTENT PERMITTED BY LAW.
+
+8. Limitation of liability. TO THE MAXIMUM EXTENT PERMITTED BY LAW, CONTEXT-OS SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES, OR LOSS OF DATA/PROFITS.
+
+9. Termination. This license ends if you breach this agreement or your trial/subscription expires. Upon termination you must stop using the Software and uninstall it.
+
+10. Governing law. Where permitted, local mandatory consumer protections still apply.
+
+By clicking "I Agree" / "我接受" you accept this agreement. If you do not agree, cancel installation.
+
+
+中文
+----
+重要提示：安装或使用 Context-OS 客户端（「本软件」）前，请仔细阅读本协议。
+
+1. 许可。在遵守本协议的前提下，Context-OS 授予您个人、非独占、不可转让的许可，可在您控制的设备上安装与使用本软件，并以有效试用或付费许可为前提。
+
+2. 权利归属。本软件为许可使用，而非出售。未明确授予的权利均由 Context-OS 及其许可方保留。
+
+3. 限制。除适用法律允许外，您不得对本软件进行反向工程、反编译或规避许可/激活机制；不得出租、出借或再许可本软件。
+
+4. 本地数据。保存在您设备上的文档、索引与配置由您自行负责；数据存储位置由您控制。
+
+5. 第三方服务。可选的大模型 / Embedding 服务需您自备 API Key，并遵守其服务条款。Context-OS 不控制第三方模型或其可用性。
+
+6. 核心本机使用无需云账号登录；许可激活可能需要联网。
+
+7. 免责声明。在法律允许的最大范围内，本软件按「现状」提供，不附带任何明示或默示保证，包括适销性、特定用途适用性等。
+
+8. 责任限制。在法律允许的最大范围内，Context-OS 不对间接、附带、特殊或后果性损害，或数据/利润损失承担责任。
+
+9. 终止。若您违反本协议或试用/订阅到期，本许可终止。终止后您应停止使用并卸载本软件。
+
+10. 适用法律。在允许范围内，当地强制性消费者保护规定仍适用。
+
+点击「我接受」/ "I Agree" 即表示您接受本协议。若不同意，请取消安装。
+
+Full product terms and privacy: see in-app Legal or https://context-os.com
+完整产品条款与隐私政策：见应用内「法律信息」或官网。

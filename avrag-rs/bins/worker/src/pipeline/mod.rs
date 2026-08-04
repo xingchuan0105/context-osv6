@@ -6,6 +6,7 @@ mod ingestion_session;
 mod parse_route;
 mod pg_side_effects;
 mod processor;
+mod predicate_normalize;
 mod triplet_extraction;
 pub(crate) mod triplet_semantic_lint;
 

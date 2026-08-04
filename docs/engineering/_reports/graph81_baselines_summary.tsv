@@ -1,0 +1,7 @@
+arm	pass	retrieval_miss	selection_miss	ungrounded	partial	other	note
+B_frozen	78	?	?	?	?	?	archived full149 slice
+B1	78	2	0	1	0	0	graph_off
+B0	73	0	5	1	2	0	sidecar+l_eval_rrf
+B2	72	2	6	0	1	0	explicit_graph+rrf
+B4	72	0	7	1	1	0	dense_seed+rrf
+B3	72	1	4	2	1	1	sidecar_hop3+rrf

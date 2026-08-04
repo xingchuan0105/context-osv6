@@ -139,6 +139,8 @@ load_env() {
   export AVRAG_PUBLIC_BASE_URL
   export AVRAG_OBJECT_ROOT
   export MILVUS_COLLECTION_PREFIX
+  # Desktop slim stack: VGRAG via storage-pgvector (do not inherit monorepo milvus default).
+  export RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-pgvector}"
   # Migrations already applied by stack ensure; avoid double work on every API boot.
   export AVRAG_RUN_MIGRATIONS="${AVRAG_RUN_MIGRATIONS_PRODUCT:-false}"
   export REDIS_ADDR="${CLIENT_REDIS_HOST:-127.0.0.1}:${CLIENT_REDIS_PORT:-6380}"
@@ -164,11 +166,12 @@ start_procs() {
   load_env
 
   if ! port_open "${CLIENT_PG_HOST:-127.0.0.1}" "${CLIENT_PG_PORT:-5433}"; then
-    die "Postgres not up on :${CLIENT_PG_PORT:-5433} — run: bash scripts/desktop-local-stack.sh ensure"
+    die "Postgres+pgvector not up on :${CLIENT_PG_PORT:-5433} — run: bash scripts/desktop-local-stack.sh ensure"
   fi
   if ! port_open "${CLIENT_REDIS_HOST:-127.0.0.1}" "${CLIENT_REDIS_PORT:-6380}"; then
     die "Redis not up on :${CLIENT_REDIS_PORT:-6380} — run: bash scripts/desktop-local-stack.sh ensure"
   fi
+  # No Milvus wait — desktop uses RETRIEVAL_BACKEND=pgvector.
 
   if pid_alive "$PID_API" && curl -fsS --max-time 2 "http://${CLIENT_API_HOST}:${CLIENT_API_PORT}/health" >/dev/null 2>&1; then
     log "API already running (pid $(cat "$PID_API"))"
@@ -189,6 +192,7 @@ start_procs() {
       source "$ENV_FILE"
       set +a
       export AVRAG_API_ADDR AVRAG_PUBLIC_BASE_URL AVRAG_OBJECT_ROOT MILVUS_COLLECTION_PREFIX
+      export RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-pgvector}"
       export AVRAG_RUN_MIGRATIONS="${AVRAG_RUN_MIGRATIONS_PRODUCT:-false}"
       export REDIS_ADDR="${CLIENT_REDIS_HOST:-127.0.0.1}:${CLIENT_REDIS_PORT:-6380}"
       export RUST_LOG="${RUST_LOG:-info,avrag_api=info}"
@@ -196,6 +200,7 @@ start_procs() {
       # shellcheck disable=SC1090
       set -a; source "$ENV_FILE"; set +a
       export AVRAG_API_ADDR AVRAG_PUBLIC_BASE_URL AVRAG_OBJECT_ROOT MILVUS_COLLECTION_PREFIX
+      export RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-pgvector}"
       export AVRAG_RUN_MIGRATIONS="${AVRAG_RUN_MIGRATIONS_PRODUCT:-false}"
       export REDIS_ADDR="${CLIENT_REDIS_HOST:-127.0.0.1}:${CLIENT_REDIS_PORT:-6380}"
       nohup "$api_bin" >>"$LOG_DIR/api.log" 2>&1 &
@@ -220,11 +225,13 @@ start_procs() {
       source "$ENV_FILE"
       set +a
       export AVRAG_API_ADDR AVRAG_PUBLIC_BASE_URL AVRAG_OBJECT_ROOT MILVUS_COLLECTION_PREFIX
+      export RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-pgvector}"
       export AVRAG_RUN_MIGRATIONS="${AVRAG_RUN_MIGRATIONS_PRODUCT:-false}"
       export REDIS_ADDR="${CLIENT_REDIS_HOST:-127.0.0.1}:${CLIENT_REDIS_PORT:-6380}"
       export RUST_LOG="${RUST_LOG:-info,avrag_worker=info}"
       set -a; source "$ENV_FILE"; set +a
       export AVRAG_API_ADDR AVRAG_PUBLIC_BASE_URL AVRAG_OBJECT_ROOT MILVUS_COLLECTION_PREFIX
+      export RETRIEVAL_BACKEND="${RETRIEVAL_BACKEND:-pgvector}"
       export AVRAG_RUN_MIGRATIONS="${AVRAG_RUN_MIGRATIONS_PRODUCT:-false}"
       export REDIS_ADDR="${CLIENT_REDIS_HOST:-127.0.0.1}:${CLIENT_REDIS_PORT:-6380}"
       nohup "$worker_bin2" >>"$LOG_DIR/worker.log" 2>&1 &

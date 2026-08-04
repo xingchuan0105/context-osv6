@@ -8,7 +8,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;
-use super::ingestion_session::{DocumentIngestionSession, INTERACTION_SESSION_SYSTEM};
+use super::ingestion_session::DocumentIngestionSession;
 use super::processor::PgTaskProcessor;
 
 pub(crate) fn build_document_block_rows(
@@ -233,7 +233,7 @@ pub(crate) async fn generate_document_profile_with_llm(
         if let Ok(message) = fallback {
             let _ = session
                 .seed(
-                    &[INTERACTION_SESSION_SYSTEM, avrag_llm::section_index_system_prompt()],
+                    avrag_llm::section_index_system_prompt(),
                     &message,
                     Some(super::helpers::PROFILE_SEED_TEMPERATURE),
                 )
@@ -269,7 +269,7 @@ pub(crate) async fn generate_document_profile_with_llm(
         .collect();
     let turn = match session
         .seed(
-            &[INTERACTION_SESSION_SYSTEM, avrag_llm::section_index_system_prompt()],
+            avrag_llm::section_index_system_prompt(),
             &user_message,
             Some(super::helpers::PROFILE_SEED_TEMPERATURE),
         )

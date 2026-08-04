@@ -7,7 +7,7 @@ This step produces a small structured card for the current user query before the
 
 A query has exactly one type:
 
-- `calculation` — the query asks for a computed or quantitative result (sum, count, average, ratio, conversion, arithmetic) that requires running a calculation.
+- `calculation` — the query asks for a computed or quantitative result (sum, count, average, ratio, conversion, arithmetic) that requires running a calculation. When operands or rates are stated as document facts (or the question implies verifying them against the knowledge base), list retrieval actions (`dense` and/or `lexical`/`grep`) **together with** `calculator`; pure `calculator` alone is only for self-contained arithmetic whose numbers are fully given in the question with no document grounding expected.
 - `rag_fact` — the query asks for a factual statement grounded in the user's documents; retrieval over the workspace knowledge base is expected.
 - `table_count` — the query asks "how many X" and the answer must come from counting rows or entries of a structured result, not from reading prose.
 - `chitchat` — the query is conversational, opinion, or general talk with no retrieval or computation expected.
@@ -25,7 +25,7 @@ The available action ids are:
 - `weather_query` — weather lookup
 - `web` — web search
 - `fetch` — fetch a web page
-- `dense`, `lexical`, `grep` — retrieval / search over documents
+- `dense`, `lexical`, `grep` — retrieval / search over documents (`dense` may include host-side relation expansion in its chunk list)
 - `doc_profile`, `doc_summary`, `struct_catalog`, `struct_query` — document and structure reads
 - `history`, `user_profile`, `user_context` — user state reads
 - `save`, `load` — session storage

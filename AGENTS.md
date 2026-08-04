@@ -3,14 +3,27 @@
 ## Precedence
 
 1. User's explicit request for this turn
-2. This repo's hard rules (Product T1–T8, **prompts-in-md**, **third-person observation not orders**, no golden-set leakage, workspace/org, `.env` reuse, solo trunk, code-review-graph update after structural edits, deploy scripts only, service assumptions)
-3. Generic style preferences
+2. **Design principles** (below) — when they conflict with older local habits or generic style, **these win**
+3. This repo's hard rules (Product T1–T8, **prompts-in-md**, **third-person observation not orders**, no golden-set leakage, workspace/org, `.env` reuse, solo trunk, code-review-graph update after structural edits, deploy scripts only, service assumptions)
+4. Generic style preferences
+
+## Design principles (authoritative)
+
+These replace softer “keep compat / leave dead paths / temporary stopgap” habits when they conflict.
+
+- **No backward compatibility tax.** Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
+- **Simplest that fully works.** Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
+- **Layered growth.** Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works. Never trade a working product for unfinished complexity.
+- **Modular separation.** Keep components modular and concerns clearly separated.
+- **Prefer proven libraries.** Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.
+- **Reuse project deps first.** Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
+- **Long-term architecture.** Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
 
 ## Behavior (project deltas only)
 
 - State assumptions explicitly; **stop and ask** when a request is ambiguous. Push back with a simpler option when warranted.
-- Surgical edits: every changed line traces to the user's request. Match local style. Remove only unused symbols **you** introduced — **do not delete pre-existing dead code unless asked**.
-- Multi-step work: brief plan with verify gates; do not advance past a failing gate.
+- Surgical edits: every changed line traces to the user's request. Match local style. When replacing a path, **delete the obsolete path** (no compat shim); do not drive-by delete unrelated code outside the request.
+- Multi-step work: brief plan with verify gates; do not advance past a failing gate. Prefer a thin end-to-end slice that works, then layer — never ship unfinished complexity in place of a working product.
 - **Time-cost consent:** before any compile or script run (`cargo build/test`, `pnpm`, deploy scripts, E2E, …), estimate the time cost and get user approval first; never launch long-running commands unannounced — keep the dev rhythm predictable.
 
 ## Prompts — non-negotiable (`avrag-rs`)
@@ -73,7 +86,7 @@ Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **wheth
 | T2 | Write forever outside ReAct ToolCatalog; `write_refine_*` only via `write_refine::tool_specs_for_pool` |
 | T3 | Chat/RAG/Search tool execute only via `ToolCatalog` / `dispatch_tool` |
 | T4 | No C4: Capability / Skill / Tool stay three layers |
-| T5 | Behavior-preserving slices; verify with targeted `cargo test -p …` / L1 |
+| T5 | Behavior-preserving slices for the **current** contract; verify with targeted `cargo test -p …` / L1 — not a license for dual APIs or compat shims (see Design principles) |
 | T6 | Solo local trunk; no CI theater |
 | T7 | `workspace` is the sole product truth (never new notebook-primary APIs) |
 | T8 | No product `org`: ownership `user_id`/`owner_user_id`, scope `workspace_id` |

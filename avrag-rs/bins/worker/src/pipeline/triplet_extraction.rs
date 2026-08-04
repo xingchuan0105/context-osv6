@@ -10,7 +10,6 @@ use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;
 use super::helpers::{estimate_token_count, record_graph_degrade, TRIPLET_TEMPERATURE};
-use super::ingestion_session::INTERACTION_SESSION_SYSTEM;
 use super::processor::PgTaskProcessor;
 use super::triplet_semantic_lint::triplet_semantic_violation;
 
@@ -186,7 +185,7 @@ pub(crate) async fn extract_triplets_for_index(
         let user_message = build_triplet_extraction_user_message(&batch);
         match session
             .produce(
-                &[INTERACTION_SESSION_SYSTEM, TRIPLET_EXTRACTION_SYSTEM_PROMPT],
+                TRIPLET_EXTRACTION_SYSTEM_PROMPT,
                 &user_message,
                 Some(TRIPLET_TEMPERATURE),
             )
@@ -396,11 +395,17 @@ fn parse_triplet_item(
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())?;
-    let predicate = item
+    let predicate_raw = item
         .get("predicate")
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())?;
+    // Closed-set ontology: map synonyms → canonical; drop unknown (strict default).
+    let (predicate, _pred_orig) =
+        super::predicate_normalize::normalize_predicate(&predicate_raw);
+    if predicate.is_empty() {
+        return None;
+    }
     let object = item
         .get("object")
         .and_then(|v| v.as_str())

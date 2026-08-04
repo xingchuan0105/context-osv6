@@ -1,0 +1,18 @@
+{
+  "stamp": "20260804-052549",
+  "g3_status": "harness_ready_slice_dry",
+  "offline_gates": {
+    "G1_graph_hop_contract": "pass (storage-pgvector graph_hop_g1 17/17)",
+    "G2_vgrag_fuse_pgvector": "pass (rag-core vgrag_pgvector_g2 3/3, relation_n=3 graph_n=1)"
+  },
+  "online_gate": {
+    "script": "scripts/run-graph81-pgvector-g3.sh",
+    "slice_default_n": 12,
+    "full": "G3_SLICE=full",
+    "requires": "E2E_MODE=nightly + real LLM + corpus + avrag-api on RETRIEVAL_BACKEND=pgvector",
+    "milvus_d1_reference": "78/81 PASS (product VGRAG accept)",
+    "dry_run_meta": "docs/engineering/_reports/graph81_g3_pgvector_20260804-132417.json",
+    "dry_run_ids_n": 12
+  },
+  "recommendation": "Run full/slice G3 when LLM keys ready; until then G1+G2 allow desktop ship with quality caveat."
+}

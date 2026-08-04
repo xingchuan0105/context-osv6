@@ -1,10 +1,32 @@
 use avrag_llm::ChatMessage;
-use tracing::warn;
+use tracing::{info, warn};
 
 use super::env::{env_flag_enabled, vlm_summary_enabled};
 use super::media::{MediaResolveContext, resolve_visual_chunk_image_refs};
 use super::types::{StoredMultimodalChunk, record_multimodal_degrade};
 
+/// Chunk types that represent figures / page visuals worth VLM description.
+/// OCR-success full-page rasters are gated separately (ING-4).
+fn is_visual_desc_chunk(chunk_type: &str) -> bool {
+    matches!(
+        chunk_type,
+        "page_raster"
+            | "figure"
+            | "image"
+            | "picture"
+            | "chart"
+            | "diagram"
+            | "photo"
+            | "screenshot"
+    ) || chunk_type.contains("figure")
+        || chunk_type.contains("image")
+}
+
+/// Retrieval-oriented figure/page description via ingestion LLM (true multimodal).
+///
+/// Plan: `docs/engineering/2026-08-04-mm-off-vlm-figure-text-plan.md`
+/// - Write description into `context_text` for text-index dual-write + citation.
+/// - Does **not** require MM embedding.
 pub async fn maybe_enrich_visual_multimodal_summaries(
     processor: &crate::PgTaskProcessor,
     chunks: &mut [StoredMultimodalChunk],
@@ -22,25 +44,33 @@ pub async fn maybe_enrich_visual_multimodal_summaries(
         asset_url_ttl_secs: processor.storage.asset_url_ttl_secs,
     };
 
+    let mut enriched = 0usize;
     for chunk in chunks.iter_mut() {
-        if chunk.chunk_type != "page_raster" {
+        if !is_visual_desc_chunk(&chunk.chunk_type) {
             continue;
         }
         // ING-4: When OCR was used, page_raster chunks are unlikely to be useful.
         // Architecturally, PaddleOCR pages don't produce PageRaster blocks.
         // This gate is for edge cases where VisualRaster fallback created rasters for OCR-failed pages.
-        if skip_raster_for_ocr && chunk.parser_backend == "visual_raster_pdf" {
-            if chunk.context_text.is_empty() || chunk.context_text.starts_with("PDF page") {
+        if skip_raster_for_ocr && chunk.chunk_type == "page_raster" {
+            if chunk.parser_backend == "visual_raster_pdf"
+                && (chunk.context_text.is_empty() || chunk.context_text.starts_with("PDF page"))
+            {
+                continue;
+            }
+            // If context already looks like OCR body text, skip VLM.
+            if chunk.context_text.chars().count() > 200 {
                 continue;
             }
         }
+
         let image_refs = match resolve_visual_chunk_image_refs(&media_ctx, chunk).await {
             Ok(refs) => refs,
             Err(error) => {
                 record_multimodal_degrade(
                     outputs,
                     format!(
-                        "chunk {}: failed to resolve page images for VLM summary: {error}",
+                        "chunk {}: failed to resolve images for VLM summary: {error}",
                         chunk.chunk_id
                     ),
                 );
@@ -51,31 +81,37 @@ pub async fn maybe_enrich_visual_multimodal_summaries(
             record_multimodal_degrade(
                 outputs,
                 format!(
-                    "chunk {}: VLM summary skipped because no resolvable page images were found",
+                    "chunk {}: VLM summary skipped because no resolvable images were found",
                     chunk.chunk_id
                 ),
             );
             continue;
         }
+
         let caption = chunk
             .caption
             .clone()
-            .unwrap_or_else(|| "PDF page raster".to_string());
-        let image_list = image_refs.join(", ");
+            .filter(|c| !c.trim().is_empty())
+            .unwrap_or_else(|| chunk.chunk_type.clone());
         let prompt = format!(
-            "Summarize the readable content of these PDF page images for retrieval. \
-             Caption: {caption}. Image URL(s): {image_list}. \
-             Return 2-4 sentences of factual summary only."
+            "Describe this document figure/image for retrieval indexing.\n\
+             Caption/type: {caption}.\n\
+             Write 2-6 factual sentences in the document's language covering: \
+             what the figure shows, labeled entities, relationships/arrows, and any \
+             readable numbers or key text. No markdown, no preamble."
         );
+        // True multimodal: model must receive image parts (not URL-only text).
         let messages = vec![
             ChatMessage::system(
-                "You summarize document page images for a RAG index. Be factual and concise.",
+                "You write short retrieval descriptions of document figures. Be factual and concise.",
             ),
-            ChatMessage::user(prompt),
+            ChatMessage::user_multimodal(prompt, image_refs),
         ];
         match llm.complete(&messages, Some(0.1)).await {
             Ok(response) if !response.content.trim().is_empty() => {
-                chunk.context_text = response.content.trim().to_string();
+                let desc = response.content.trim().to_string();
+                chunk.context_text = desc;
+                enriched += 1;
             }
             Ok(_) => {
                 record_multimodal_degrade(
@@ -98,5 +134,8 @@ pub async fn maybe_enrich_visual_multimodal_summaries(
                 );
             }
         }
+    }
+    if enriched > 0 {
+        info!(enriched, "VLM figure descriptions written to context_text");
     }
 }

@@ -1,26 +1,33 @@
-# Tauri 图标文件
+# Desktop shell icons & NSIS chrome
 
-此目录需要放置以下图标文件：
+Canonical mark is the **Full ContextOsMark** (dual-arc + spine + nodes), matching
+`frontend_next/app/icon.svg` / `components/context-os-mark.tsx`.
 
-- `32x32.png` - 32x32 像素的 PNG 图标
-- `128x128.png` - 128x128 像素的 PNG 图标
-- `128x128@2x.png` - 256x256 像素的 PNG 图标（Retina）
-- `icon.icns` - macOS 图标文件
-- `icon.ico` - Windows 图标文件
+| File | Use |
+|------|-----|
+| `icon.svg` | Source mark (slate plate) |
+| `32x32.png` / `128x128.png` / `128x128@2x.png` | Tauri bundle icons |
+| `icon.ico` | Windows app / shell |
+| `nsis/installer.ico` | NSIS installer + uninstaller icon |
+| `nsis/header.bmp` | 150×57 installer page header |
+| `nsis/sidebar.bmp` | 164×314 welcome/finish sidebar |
+| `nsis/uninstaller-header.bmp` | 150×57 uninstaller header (muted bar) |
+| `nsis/preview-install-ui.png` | Design QA only (not bundled) |
 
-## 生成图标
+Installer license + language strings: see `desktop/src-tauri/nsis/`.
 
-可以使用 Tauri CLI 自动生成所有尺寸的图标：
+## Regenerate
 
 ```bash
-pnpm tauri icon <source-icon.png>
+# From repo root (needs rsvg-convert + pillow)
+rsvg-convert -w 256 -h 256 desktop/src-tauri/icons/icon.svg -o /tmp/cos-256.png
+# Or re-run the generator used in the branding wave (see git history / scripts).
 ```
 
-或者手动创建这些文件。
+After changing `icon.svg`, re-export PNG/ICO/BMP and rebuild the Windows installer:
 
-## 临时方案
+```bash
+bash scripts/build-windows.sh
+```
 
-在正式图标设计完成前，可以使用以下占位图标：
-
-1. 创建一个 1024x1024 的 PNG 图标
-2. 运行 `pnpm tauri icon icon.png` 自动生成所有尺寸
+Product display name: **Context-OS Client** (`tauri.conf.json` → `productName` / window title).

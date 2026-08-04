@@ -69,6 +69,23 @@ bash scripts/publish-desktop-release.sh
 
 nginx：`app.contextlm.top` 的 `location /releases/desktop/`（见 `deploy/nginx/app-releases-desktop.snippet.conf`）。
 
+### 3.1 便携 runtime 原料（构建机用，非终端用户）
+
+设计：`docs/desktop/2026-08-04-portable-runtime-design.md` §15.1。  
+**用户不二次下载**；zip 仅供 stage 进 NSIS。
+
+```bash
+# 本地已有 windows-x64 树时
+bash scripts/stage-desktop-bundled-runtime.sh pack
+bash scripts/publish-desktop-bundled-runtime.sh
+
+# 其它构建机：从 VPS 拉回
+bash scripts/stage-desktop-bundled-runtime.sh fetch
+```
+
+VPS：`/var/www/releases/desktop/runtime/`  
+公网：`https://app.contextlm.top/releases/desktop/runtime/manifest.json`
+
 ## 4. 网页
 
 - 介绍/下载：`/desktop`

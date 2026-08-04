@@ -3,7 +3,6 @@ use ingestion::IngestionTask;
 use tracing::info;
 use uuid::Uuid;
 
-use super::super::ingestion_session::INTERACTION_SESSION_SYSTEM;
 use super::super::processor::PgTaskProcessor;
 use super::ParseRunState;
 use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
@@ -58,7 +57,7 @@ pub(crate) async fn generate_document_summary(
         .replace("{filename}", filename);
     let turn = match session
         .produce(
-            &[INTERACTION_SESSION_SYSTEM, avrag_llm::summary_system_prompt()],
+            avrag_llm::summary_system_prompt(),
             &user_message,
             Some(super::super::helpers::SUMMARY_TEMPERATURE),
         )

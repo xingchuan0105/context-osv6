@@ -182,6 +182,8 @@ def _extract_docx(src: str) -> str:
 | 3（续接） | triplet | **35062** | **~100%** |
 
 > **措辞修正**：会话模式不自动省钱——服务端每轮处理全量上下文并按全量计费，**只有缓存命中的部分才按 10% 计费**。本方案实测命中 ~100%（chunks 前缀不变 + 会话缓存），输入成本降 ~90%。
+>
+> **缓存键约束（2026-08-03 实测补记，Rust 探针 `crates/llm/tests/dashscope_session_probe.rs`）**：`x-dashscope-session-cache` 的缓存键**包含 `instructions`（system 消息）**——续接轮与 seed 轮 instructions 完全一致才命中（真机 A/B：同 → cached 2217；异/无 → 0）。因此 `DocumentIngestionSession` 的 instructions 恒定为 `INTERACTION_SESSION_SYSTEM`，阶段 system prompt（section-index/summary/triplet）折叠进当轮 user 消息前导块；若按原实现每轮换 system prompt，缓存永远不命中（该 bug 曾被真机探针抓获：cached=0、每轮全价 prompt≈全上下文）。探针终态：turn2 cached=2217/2286（~97%）。
 
 ### 4.3 改造分块
 

@@ -189,6 +189,9 @@ PDF 走 **liteparse**（`lit parse --format markdown --no-ocr`）；Office 类�
 
 ### Embedding / Rerank 供应商（2026-08-03 起：SiliconFlow）
 
+> **2026-08-04 产品默认**：查询侧 **关闭** `MM_EMBEDDING_*` / `MM_RERANK_*`（字多图少成本）。插图走 VLM 描述 → text 索引；扫描 Paddle。权威：`docs/engineering/2026-08-04-mm-off-vlm-figure-text-plan.md`。
+
+
 | 槽位 | 模型 | 约束 |
 |---|---|---|
 | `EMBEDDING_*`（text） | `Pro/BAAI/bge-m3`（1024d） | **禁 dimensions 参数（400）→ `EMBEDDING_DIMENSIONS` 必须留空**（代码空串→None→不发字段）；base_url `https://api.siliconflow.cn/v1` |

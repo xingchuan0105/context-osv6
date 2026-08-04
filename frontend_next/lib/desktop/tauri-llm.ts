@@ -83,13 +83,16 @@ export type LocalStackStatus = {
 export type ClientRuntimeConfig = {
   database_url: string;
   redis_url: string;
-  milvus_url: string;
+  /** Desktop default: `pgvector`. Cloud SaaS uses milvus. */
+  retrieval_backend?: string;
+  /** Legacy; unused on slim desktop stack. */
+  milvus_url?: string;
   pg_host: string;
   pg_port: number;
   redis_host: string;
   redis_port: number;
-  milvus_host: string;
-  milvus_port: number;
+  milvus_host?: string;
+  milvus_port?: number;
   migrations_dir?: string | null;
   env_file_path?: string | null;
   env_file_exists: boolean;

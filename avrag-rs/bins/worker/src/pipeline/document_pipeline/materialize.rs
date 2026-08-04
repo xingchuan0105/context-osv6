@@ -127,6 +127,28 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
     )
     .await;
 
+    // Persist VLM descriptions (store_multimodal_chunk runs before VLM; refresh PG).
+    for chunk in &stored_multimodal_chunks {
+        if chunk.context_text.trim().is_empty() {
+            continue;
+        }
+        if let Err(error) = processor
+            .storage
+            .repo
+            .assets()
+            .update_multimodal_chunk_context_text(context, chunk.chunk_id, &chunk.context_text)
+            .await
+        {
+            record_multimodal_degrade(
+                &mut parse_run_state.outputs,
+                format!(
+                    "chunk {}: failed to persist VLM context_text: {error}",
+                    chunk.chunk_id
+                ),
+            );
+        }
+    }
+
     Ok(MaterializeOutput {
         content,
         processed_chunk_count,

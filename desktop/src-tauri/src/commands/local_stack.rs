@@ -1,5 +1,5 @@
 //! Local data-plane health probes + stack ensure for desktop
-//! (Postgres / Redis / full Milvus via docker compose).
+//! (Postgres+pgvector + Redis via docker compose; no Milvus).
 
 use serde::Serialize;
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
@@ -32,17 +32,25 @@ pub struct LocalStackStatus {
     pub docker: Option<super::docker_status::DockerStatus>,
 }
 
-/// Connection strings for local PG / Redis / Milvus (and related process flags).
+/// Connection strings for local PG / Redis and retrieval backend flags.
 #[derive(Debug, Clone, Serialize)]
 pub struct ClientRuntimeConfig {
     pub database_url: String,
     pub redis_url: String,
+    /// Desktop default is `pgvector` (storage-pgvector). Cloud SaaS uses milvus.
+    pub retrieval_backend: String,
+    /// Legacy field: unused on slim desktop stack (kept for older UI JSON).
+    #[serde(default)]
     pub milvus_url: String,
     pub pg_host: String,
     pub pg_port: u16,
     pub redis_host: String,
     pub redis_port: u16,
+    /// Legacy: always empty / unused on slim stack.
+    #[serde(default)]
     pub milvus_host: String,
+    /// Legacy: always 0 on slim stack.
+    #[serde(default)]
     pub milvus_port: u16,
     pub migrations_dir: Option<String>,
     pub env_file_path: Option<String>,
@@ -128,31 +136,30 @@ fn migrations_dir(root: &Path) -> PathBuf {
     root.join("avrag-rs/migrations")
 }
 
-fn default_runtime_endpoints() -> (String, u16, String, u16, String, u16) {
+fn default_runtime_endpoints() -> (String, u16, String, u16) {
     let pg_host = env_or("CLIENT_PG_HOST", "127.0.0.1");
     let pg_port: u16 = env_or("CLIENT_PG_PORT", "5433").parse().unwrap_or(5433);
     let redis_host = env_or("CLIENT_REDIS_HOST", "127.0.0.1");
     let redis_port: u16 = env_or("CLIENT_REDIS_PORT", "6380").parse().unwrap_or(6380);
-    let milvus_host = env_or("CLIENT_MILVUS_HOST", "127.0.0.1");
-    let milvus_port: u16 = env_or("CLIENT_MILVUS_PORT", "19530")
-        .parse()
-        .unwrap_or(19530);
-    (pg_host, pg_port, redis_host, redis_port, milvus_host, milvus_port)
+    (pg_host, pg_port, redis_host, redis_port)
 }
 
 fn build_status() -> LocalStackStatus {
-    let (pg_host, pg_port, redis_host, redis_port, milvus_host, milvus_port) =
-        default_runtime_endpoints();
+    let (pg_host, pg_port, redis_host, redis_port) = default_runtime_endpoints();
 
     let mut services = Vec::new();
 
     let (pg_ok, pg_detail) = probe_tcp(&pg_host, pg_port);
     services.push(LocalStackServiceStatus {
         id: "postgres".into(),
-        label: "PostgreSQL".into(),
+        label: "PostgreSQL + pgvector".into(),
         endpoint: format!("{pg_host}:{pg_port}"),
         ok: pg_ok,
-        detail: pg_detail,
+        detail: if pg_ok {
+            "port open (control plane + VGRAG retrieval)".into()
+        } else {
+            pg_detail
+        },
     });
 
     let (redis_ok, redis_detail) = probe_tcp(&redis_host, redis_port);
@@ -164,15 +171,6 @@ fn build_status() -> LocalStackStatus {
         detail: redis_detail,
     });
 
-    let (milvus_ok, milvus_detail) = probe_tcp(&milvus_host, milvus_port);
-    services.push(LocalStackServiceStatus {
-        id: "milvus".into(),
-        label: "Milvus".into(),
-        endpoint: format!("{milvus_host}:{milvus_port}"),
-        ok: milvus_ok,
-        detail: milvus_detail,
-    });
-
     let root = monorepo_root();
     let script = root.as_ref().map(|r| script_path(r).display().to_string());
     let env_path = root.as_ref().map(|r| env_file_path(r));
@@ -181,12 +179,14 @@ fn build_status() -> LocalStackStatus {
         .map(|p| p.is_file())
         .unwrap_or(false);
 
+    // Slim stack: only PG + Redis are required for overall_ok.
     let overall_ok = services.iter().all(|s| s.ok);
     let docker = Some(super::docker_status::docker_status_snapshot());
     LocalStackStatus {
         overall_ok,
         services,
-        compose_hint: "bash scripts/desktop-local-stack.sh ensure".into(),
+        compose_hint: "ensure_local_stack IPC (Rust native) or bash scripts/desktop-local-stack.sh ensure"
+            .into(),
         script_path: script,
         env_file_path: env_path.map(|p| p.display().to_string()),
         env_file_exists: env_exists,
@@ -195,18 +195,14 @@ fn build_status() -> LocalStackStatus {
 }
 
 fn build_runtime_config() -> ClientRuntimeConfig {
-    let (pg_host, pg_port, redis_host, redis_port, milvus_host, milvus_port) =
-        default_runtime_endpoints();
+    let (pg_host, pg_port, redis_host, redis_port) = default_runtime_endpoints();
 
     let database_url = env_or(
         "DATABASE_URL",
         &format!("postgres://avrag:avrag@{pg_host}:{pg_port}/avrag_client"),
     );
     let redis_url = env_or("REDIS_URL", &format!("redis://{redis_host}:{redis_port}/0"));
-    let milvus_url = env_or(
-        "MILVUS_URL",
-        &format!("http://{milvus_host}:{milvus_port}"),
-    );
+    let retrieval_backend = env_or("RETRIEVAL_BACKEND", "pgvector");
 
     let root = monorepo_root();
     let env_path = root.as_ref().map(|r| env_file_path(r));
@@ -216,26 +212,25 @@ fn build_runtime_config() -> ClientRuntimeConfig {
         .unwrap_or(false);
     let migrations = root.as_ref().map(|r| migrations_dir(r).display().to_string());
 
-    // Prefer values already written to client.env when process env is still default
-    // (UI can show the on-disk target even before the shell exports it).
     let note = if root.is_none() {
         "Monorepo root not found. Set CONTEXT_OS_ROOT or run scripts from the repo. Packaged clients will use bundled stack paths later.".into()
     } else if !env_exists {
-        "Run ensure_local_stack (or `bash scripts/desktop-local-stack.sh ensure`) to start services, write client.env, and apply migrations.".into()
+        "Run ensure_local_stack (or `bash scripts/desktop-local-stack.sh ensure`) to start native Postgres+pgvector + Redis (no Docker), write client.env, and apply migrations.".into()
     } else {
-        "Data plane ready. Start product with bash scripts/desktop-local-product.sh ensure (API :18080). Desktop chat remains BYOK; REST goes via api_call proxy when product is up.".into()
+        "Data plane ready (STACK_MODE prefer native, RETRIEVAL_BACKEND=pgvector). Start product with bash scripts/desktop-local-product.sh ensure (API :18080). Desktop chat remains BYOK; REST via api_call.".into()
     };
 
     ClientRuntimeConfig {
         database_url,
         redis_url,
-        milvus_url,
+        retrieval_backend,
+        milvus_url: String::new(),
         pg_host,
         pg_port,
         redis_host,
         redis_port,
-        milvus_host,
-        milvus_port,
+        milvus_host: String::new(),
+        milvus_port: 0,
         migrations_dir: migrations,
         env_file_path: env_path.map(|p| p.display().to_string()),
         env_file_exists: env_exists,
@@ -287,84 +282,149 @@ pub fn get_client_runtime_config() -> ClientRuntimeConfig {
     build_runtime_config()
 }
 
-/// Bring up compose stack, write `client.env`, apply SQL migrations (`ensure`).
+/// Bring up data plane: **Rust native first** (no bash/Docker), then bash script fallback.
 #[tauri::command]
 pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError> {
-    // Fail fast with install guidance when Docker is missing / daemon down.
     let docker = super::docker_status::docker_status_snapshot();
-    if !docker.overall_ok {
+
+    // 1) Pure-Rust native path when pg_ctl + redis-server are available.
+    if super::native_stack::native_tools_available() {
+        let report = tokio::task::spawn_blocking(super::native_stack::ensure_native)
+            .await
+            .map_err(|e| IpcApiError::internal(format!("native ensure join: {e}")))?;
         let status = build_status();
         let config = build_runtime_config();
-        return Ok(EnsureLocalStackResult {
-            ok: false,
-            message: format!(
-                "Docker 未就绪：{}。{}",
-                docker.detail, docker.install_hint
-            ),
-            stdout: String::new(),
-            stderr: docker.detail.clone(),
-            status,
-            config,
-        });
+        if report.ok && status.overall_ok {
+            return Ok(EnsureLocalStackResult {
+                ok: true,
+                message: format!(
+                    "本机数据面已就绪（Rust native，无 Docker/bash）。{}",
+                    report.message
+                ),
+                stdout: report.log,
+                stderr: String::new(),
+                status,
+                config,
+            });
+        }
+        // Soft-fail into bash fallback with log attached.
+        let native_log = report.log;
+        let native_msg = report.message;
+        if let Ok((code, stdout, stderr)) =
+            tokio::task::spawn_blocking(|| run_stack_script("ensure"))
+                .await
+                .map_err(|e| IpcApiError::internal(format!("ensure task join error: {e}")))?
+        {
+            let status = build_status();
+            let config = build_runtime_config();
+            let ok = code == 0 && status.overall_ok;
+            return Ok(EnsureLocalStackResult {
+                ok,
+                message: if ok {
+                    format!("bash ensure 成功（native 先试：{native_msg}）")
+                } else {
+                    format!(
+                        "native 与 bash ensure 均未完全就绪：native={native_msg}; bash exit={code}"
+                    )
+                },
+                stdout: format!("--- native ---\n{native_log}\n--- bash ---\n{stdout}"),
+                stderr,
+                status,
+                config,
+            });
+        }
     }
 
-    let (code, stdout, stderr) =
-        tokio::task::spawn_blocking(|| run_stack_script("ensure"))
-            .await
-            .map_err(|e| IpcApiError::internal(format!("ensure task join error: {e}")))??;
-
-    let status = build_status();
-    let config = build_runtime_config();
-    let ok = code == 0 && status.overall_ok;
-    let message = if code == 0 {
-        if status.overall_ok {
-            "Local stack is up; client.env written; migrations applied (if sqlx available)."
-                .into()
-        } else {
-            "Script finished but not all ports are open yet — retry probe shortly.".into()
+    // 2) Bash script (auto native/docker).
+    let script_result = tokio::task::spawn_blocking(|| run_stack_script("ensure")).await;
+    match script_result {
+        Ok(Ok((code, stdout, stderr))) => {
+            let status = build_status();
+            let config = build_runtime_config();
+            let ok = code == 0 && status.overall_ok;
+            let message = if code == 0 {
+                if status.overall_ok {
+                    "本机数据面已就绪（脚本 ensure）；client.env 已写入。".into()
+                } else {
+                    "脚本结束但端口尚未全部开放 — 请稍后重新探测。".into()
+                }
+            } else {
+                let tail = stderr
+                    .lines()
+                    .chain(stdout.lines())
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("see stderr");
+                let hint = if !docker.overall_ok && !super::native_stack::native_tools_available()
+                {
+                    " · 请安装 postgresql-16 + pgvector + redis-server，或 STACK_MODE=docker"
+                } else {
+                    ""
+                };
+                format!("desktop-local-stack.sh ensure failed (exit {code}). {tail}{hint}")
+            };
+            Ok(EnsureLocalStackResult {
+                ok,
+                message,
+                stdout,
+                stderr,
+                status,
+                config,
+            })
         }
-    } else {
-        let tail = stderr.lines().last().unwrap_or("see stderr");
-        let docker_hint = if !docker.overall_ok {
-            format!(" · {}", docker.install_hint)
-        } else {
-            String::new()
-        };
-        format!("desktop-local-stack.sh ensure failed (exit {code}). {tail}{docker_hint}")
-    };
-
-    Ok(EnsureLocalStackResult {
-        ok,
-        message,
-        stdout,
-        stderr,
-        status,
-        config,
-    })
+        Ok(Err(e)) => {
+            // No bash / no monorepo script
+            let status = build_status();
+            let config = build_runtime_config();
+            Ok(EnsureLocalStackResult {
+                ok: false,
+                message: format!(
+                    "无法 ensure：{}。请安装本机 PostgreSQL+pgvector 与 Redis，或在 monorepo 中运行 scripts/desktop-local-stack.sh。",
+                    e.message
+                ),
+                stdout: String::new(),
+                stderr: e.message,
+                status,
+                config,
+            })
+        }
+        Err(e) => Err(IpcApiError::internal(format!("ensure task join error: {e}"))),
+    }
 }
 
-/// Stop compose stack (data volumes retained under desktop/runtime/data).
+/// Stop data plane: native stop + optional bash down.
 #[tauri::command]
 pub async fn stop_local_stack() -> Result<EnsureLocalStackResult, IpcApiError> {
-    let (code, stdout, stderr) = tokio::task::spawn_blocking(|| run_stack_script("down"))
+    let native = tokio::task::spawn_blocking(super::native_stack::stop_native)
         .await
-        .map_err(|e| IpcApiError::internal(format!("stop task join error: {e}")))??;
+        .map_err(|e| IpcApiError::internal(format!("native stop join: {e}")))?;
+
+    let mut stdout = format!("--- native ---\n{}\n", native.log);
+    let mut stderr = String::new();
+    let mut bash_ok = true;
+    if monorepo_root().is_some() {
+        match tokio::task::spawn_blocking(|| run_stack_script("down")).await {
+            Ok(Ok((code, out, err))) => {
+                stdout.push_str("--- bash ---\n");
+                stdout.push_str(&out);
+                stderr = err;
+                bash_ok = code == 0;
+            }
+            Ok(Err(_)) => {}
+            Err(_) => {}
+        }
+    }
 
     let status = build_status();
     let config = build_runtime_config();
-    let ok = code == 0;
-    let message = if ok {
-        "Local stack stopped (data retained).".into()
-    } else {
-        format!(
-            "desktop-local-stack.sh down failed (exit {code}). {}",
-            stderr.lines().last().unwrap_or("see stderr")
-        )
-    };
-
+    let ok = bash_ok || native.ok;
     Ok(EnsureLocalStackResult {
         ok,
-        message,
+        message: if !status.overall_ok {
+            "本机数据面已停止（或端口已释放）。".into()
+        } else {
+            "stop 已调用，但仍有端口在监听（可能是系统 Redis）。".into()
+        },
         stdout,
         stderr,
         status,
@@ -381,16 +441,20 @@ mod tests {
         let cfg = build_runtime_config();
         assert_eq!(cfg.pg_port, 5433);
         assert_eq!(cfg.redis_port, 6380);
-        assert_eq!(cfg.milvus_port, 19530);
+        assert_eq!(cfg.retrieval_backend, "pgvector");
         assert!(cfg.database_url.contains("5433"));
         assert!(cfg.redis_url.contains("6380"));
-        assert!(cfg.milvus_url.contains("19530"));
+        assert!(cfg.milvus_url.is_empty());
+        assert_eq!(cfg.milvus_port, 0);
     }
 
     #[test]
-    fn status_lists_three_services() {
+    fn status_lists_pg_and_redis_only() {
         let st = build_status();
-        assert_eq!(st.services.len(), 3);
+        assert_eq!(st.services.len(), 2);
+        assert_eq!(st.services[0].id, "postgres");
+        assert_eq!(st.services[1].id, "redis");
         assert!(st.compose_hint.contains("desktop-local-stack"));
+        assert!(!st.services.iter().any(|s| s.id == "milvus"));
     }
 }

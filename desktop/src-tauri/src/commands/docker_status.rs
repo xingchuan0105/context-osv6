@@ -53,18 +53,25 @@ fn platform_label() -> &'static str {
 }
 
 fn install_meta() -> (String, String) {
+    // Desktop default is **native** PG+Redis (no Docker). Docker is optional fallback only.
     match platform_label() {
         "windows" => (
-            "https://docs.docker.com/desktop/setup/install/windows-install/".into(),
-            "请安装 Docker Desktop for Windows，启动后确保引擎 Running，再回到设置点击「启动并迁移」。需启用 WSL2 后端。".into(),
+            "https://www.postgresql.org/download/windows/".into(),
+            "默认不使用 Docker。请安装 PostgreSQL 16 + pgvector 扩展，以及 Redis（或 Memurai），\
+             保证 pg_ctl / redis-server 在 PATH；然后点「启动并迁移」。仅当无法装本机 PG 时才考虑 Docker Desktop。"
+                .into(),
         ),
         "macos" => (
-            "https://docs.docker.com/desktop/setup/install/mac-install/".into(),
-            "请安装 Docker Desktop for Mac 并启动引擎，再启动本机数据栈。".into(),
+            "https://www.postgresql.org/download/macosx/".into(),
+            "默认不使用 Docker。可用 Homebrew：brew install postgresql@16 redis，并安装 pgvector；\
+             然后点「启动并迁移」。Docker 仅作可选回退。"
+                .into(),
         ),
         _ => (
-            "https://docs.docker.com/engine/install/".into(),
-            "请安装 Docker Engine（或 Docker Desktop）并确保当前用户可执行 docker / docker compose。".into(),
+            "https://www.postgresql.org/download/linux/".into(),
+            "默认不使用 Docker。Debian/Ubuntu：sudo apt-get install -y postgresql-16 \
+             postgresql-16-pgvector redis-server；然后点「启动并迁移」。Docker 仅作可选回退。"
+                .into(),
         ),
     }
 }

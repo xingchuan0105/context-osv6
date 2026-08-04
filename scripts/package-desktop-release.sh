@@ -18,7 +18,7 @@ mkdir -p "$STAGE"
 find_nsis() {
   # Prefer Context-OS_* names, then newest mtime under nsis bundle dirs
   local preferred
-  preferred="$(find "$TAURI_TARGET_BASE" -type f -path '*/bundle/nsis/Context-OS*-setup.exe' 2>/dev/null | head -1 || true)"
+  preferred="$(find "$TAURI_TARGET_BASE" -type f \( -path '*/bundle/nsis/Context-OS-Client*-setup.exe' -o -path '*/bundle/nsis/Context-OS*-setup.exe' \) 2>/dev/null | head -1 || true)"
   if [[ -n "$preferred" && -f "$preferred" ]]; then
     echo "$preferred"
     return 0
@@ -47,7 +47,8 @@ ALLOW_PORTABLE="${ALLOW_PORTABLE:-0}"
 if [[ -n "$NSIS" && -f "$NSIS" ]]; then
   FORMAT="nsis"
   SRC="$NSIS"
-  OUT_NAME="Context-OS_${VERSION}_x64-setup.exe"
+  # Prefer full client name; also match legacy Context-OS_* filenames from older builds.
+  OUT_NAME="Context-OS-Client_${VERSION}_x64-setup.exe"
 elif [[ "$ALLOW_PORTABLE" == "1" && -n "$PORTABLE" && -f "$PORTABLE" ]]; then
   FORMAT="portable"
   SRC="$PORTABLE"
@@ -133,15 +134,21 @@ cp -f "$ROOT/scripts/desktop-local-product.sh" "$SIDECAR_STAGE/" 2>/dev/null || 
 cat >"$SIDECAR_STAGE/INSTALL.txt" <<'SIDEEOF'
 Context-OS — companion runtime (data plane + product binaries)
 
-1. Install Docker Desktop (Windows/Mac) or Docker Engine (Linux).
-   Windows: https://docs.docker.com/desktop/setup/install/windows-install/
-2. Start Docker until the engine is Running.
-3. The NSIS installer embeds avrag-api.exe / avrag-worker.exe next to the app
-   when built with scripts/build-windows.sh (externalBin).
-4. Optional: set CONTEXT_OS_CLIENT_HOME to this folder for script-based control.
-5. API: http://127.0.0.1:18080 · local user local@context-os.client (no cloud login).
+Data plane (default **no Docker**):
+  - PostgreSQL 16 + pgvector
+  - Redis
+Retrieval: RETRIEVAL_BACKEND=pgvector (no Milvus)
 
-Settings → 本机数据栈 shows Docker probe + install guide if the engine is missing.
+1. Install native tools:
+   - Linux:  sudo apt-get install -y postgresql-16 postgresql-16-pgvector redis-server
+   - macOS:  brew install postgresql@16 redis  (+ pgvector)
+   - Windows: PostgreSQL 16 installer + pgvector + Redis/Memurai
+2. Optional: Docker only if native tools are unavailable (STACK_MODE=docker).
+3. NSIS embeds avrag-api.exe / avrag-worker.exe when built with build-windows.sh.
+4. Optional: CONTEXT_OS_CLIENT_HOME → this folder for script control.
+5. API: http://127.0.0.1:18080 · local@context-os.client (no cloud login).
+
+Settings → 本机数据栈 →「启动并迁移」uses STACK_MODE=auto (native first).
 SIDEEOF
 
 # Tauri externalBin staging dir (windows triple + host if present)

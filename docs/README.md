@@ -31,6 +31,8 @@
 | `desktop/RELEASE-AND-DOWNLOAD.md` | 桌面端构建/签名/发布 runbook |
 | `desktop/VERSIONING.md` | 桌面 SemVer 与云端 API 兼容矩阵 |
 | `desktop/SUPPORT-AND-SLA.md` | 桌面 vs 云端支持边界 |
+| `desktop/SMOKE_CHECKLIST.md` | 客户端安装与本机栈冒烟清单 |
+| `desktop/2026-08-04-portable-runtime-design.md` | **便携 PG+pgvector+Redis 捆绑设计**（装进 NSIS，无 Docker） |
 | `specs/usage-export-and-retention.md` | 用量导出与保留规格（Draft，与 ADR-0006 一致） |
 | `../avrag-rs/docs/e2e-gates.md` | L1/L2/L3 E2E 门径语义（本目录外，生效中） |
 | `../avrag-rs/prompts/README.md` | prompt CDS 布局与撰写规则 |

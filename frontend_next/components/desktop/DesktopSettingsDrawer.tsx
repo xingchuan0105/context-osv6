@@ -488,49 +488,52 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         {tab === "stack" ? (
           <div className={styles.drawerSection}>
             <p className={styles.subtitle}>
-              本机数据面：PostgreSQL、Redis、完整 Milvus。依赖 Docker（Windows 请使用 Docker
-              Desktop）。一键「启动并迁移」会拉起 compose 栈、写出 client.env，并执行 migrations。
+              本机数据面（无 Docker）：PostgreSQL + pgvector（控制面与 Vector Graph RAG）+ Redis。
+              默认用系统 <code>pg_ctl</code> / <code>redis-server</code>；一键「启动并迁移」写出
+              client.env（RETRIEVAL_BACKEND=pgvector）并执行 migrations。Docker 仅在未安装本机
+              PG/Redis 时可选回退（STACK_MODE=docker）。
             </p>
 
             <div className={styles.dockerStatusCard}>
               <p className={styles.flushParagraph}>
-                <strong>Docker</strong> —{" "}
-                <span className={docker?.overall_ok ? styles.statusActive : styles.statusError}>
-                  {docker
-                    ? docker.overall_ok
-                      ? "就绪"
-                      : !docker.cli_ok
-                        ? "未安装"
-                        : !docker.daemon_ok
-                          ? "引擎未运行"
-                          : "compose 不可用"
-                    : "未探测"}
-                </span>
+                <strong>运行时</strong> — 优先 <span className={styles.statusActive}>native</span>
+                {docker ? (
+                  <>
+                    {" "}
+                    · Docker{" "}
+                    <span className={docker.overall_ok ? styles.statusActive : styles.statusError}>
+                      {docker.overall_ok
+                        ? "可选回退可用"
+                        : !docker.cli_ok
+                          ? "未安装（不需要）"
+                          : !docker.daemon_ok
+                            ? "引擎未运行（不需要）"
+                            : "compose 不可用"}
+                    </span>
+                  </>
+                ) : null}
               </p>
-              {docker ? <p className={styles.subtitle}>{docker.detail}</p> : null}
+              {docker?.install_hint ? (
+                <p className={styles.subtitle}>{docker.install_hint}</p>
+              ) : null}
               {docker && !docker.overall_ok ? (
-                <>
-                  <p className={styles.subtitle}>
-                    {docker.install_hint}
-                  </p>
-                  <div className={`app-button-row ${styles.buttonRowWrap}`}>
-                    <button
-                      type="button"
-                      className="app-button-primary"
-                      onClick={() => void openInBrowser(docker.install_url)}
-                    >
-                      打开 Docker 安装指南
-                    </button>
-                    <button
-                      type="button"
-                      className="app-button-secondary"
-                      disabled={loading}
-                      onClick={() => void refreshStack()}
-                    >
-                      重新检测 Docker
-                    </button>
-                  </div>
-                </>
+                <div className={`app-button-row ${styles.buttonRowWrap}`}>
+                  <button
+                    type="button"
+                    className="app-button-secondary"
+                    onClick={() => void openInBrowser(docker.install_url)}
+                  >
+                    本机 PG 安装说明
+                  </button>
+                  <button
+                    type="button"
+                    className="app-button-secondary"
+                    disabled={loading}
+                    onClick={() => void refreshStack()}
+                  >
+                    重新探测
+                  </button>
+                </div>
               ) : null}
             </div>
 
@@ -553,13 +556,9 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
               <button
                 type="button"
                 className="app-button-primary"
-                disabled={loading || stackBusy || (docker != null && !docker.overall_ok)}
+                disabled={loading || stackBusy}
                 onClick={() => void handleEnsureStack()}
-                title={
-                  docker && !docker.overall_ok
-                    ? "请先安装并启动 Docker Desktop"
-                    : undefined
-                }
+                title="优先使用本机 PostgreSQL + Redis（无需 Docker）"
               >
                 {stackBusy ? "处理中…" : "启动并迁移"}
               </button>
@@ -593,7 +592,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                   REDIS_URL={runtimeConfig.redis_url}
                 </code>
                 <code className={`${styles.subtitle} ${styles.codeBlock}`}>
-                  MILVUS_URL={runtimeConfig.milvus_url}
+                  RETRIEVAL_BACKEND={runtimeConfig.retrieval_backend ?? "pgvector"}
                 </code>
                 {runtimeConfig.env_file_path ? (
                   <p className={styles.subtitle}>

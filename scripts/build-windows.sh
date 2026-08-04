@@ -85,13 +85,16 @@ log "tauri build --target $TARGET --bundles nsis (+ sidecars)"
   fi
 )
 
-# Locate setup.exe — prefer Context-OS_* (newest product name), then newest mtime
+# Locate setup.exe — prefer Context-OS-Client_* (current product name), then legacy Context-OS_*
 NSIS_DIR="$DESKTOP/src-tauri/target/${TARGET}/release/bundle/nsis"
 SETUP=""
-if [[ -f "$NSIS_DIR/Context-OS_0.1.0_x64-setup.exe" ]]; then
-  SETUP="$NSIS_DIR/Context-OS_0.1.0_x64-setup.exe"
-elif [[ -f "$NSIS_DIR/Context-OS_${VERSION:-0.1.0}_x64-setup.exe" ]]; then
-  SETUP="$NSIS_DIR/Context-OS_${VERSION}_x64-setup.exe"
+VER="${VERSION:-0.1.0}"
+if [[ -f "$NSIS_DIR/Context-OS Client_${VER}_x64-setup.exe" ]]; then
+  SETUP="$NSIS_DIR/Context-OS Client_${VER}_x64-setup.exe"
+elif [[ -f "$NSIS_DIR/Context-OS-Client_${VER}_x64-setup.exe" ]]; then
+  SETUP="$NSIS_DIR/Context-OS-Client_${VER}_x64-setup.exe"
+elif [[ -f "$NSIS_DIR/Context-OS_${VER}_x64-setup.exe" ]]; then
+  SETUP="$NSIS_DIR/Context-OS_${VER}_x64-setup.exe"
 fi
 if [[ -z "$SETUP" || ! -f "$SETUP" ]]; then
   SETUP="$(find "$NSIS_DIR" -type f -name 'Context-OS*-setup.exe' 2>/dev/null | head -1 || true)"

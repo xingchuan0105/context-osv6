@@ -122,4 +122,9 @@ desktop/runtime/logs/
 desktop/runtime/objects/
 desktop/runtime/bin/
 desktop/runtime/LAYOUT
+# Portable PG/Redis stage trees (large binaries; pins/README stay tracked)
+desktop/runtime/bundled/windows-x64/
+desktop/runtime/bundled/linux-x64/
+# Packed runtime zips for VPS publish
+dist/desktop-runtime/
 desktop/src-tauri/binaries/

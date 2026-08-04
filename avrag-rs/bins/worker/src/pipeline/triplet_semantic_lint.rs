@@ -1,7 +1,8 @@
 //! Column-semantics lint for catalog mapping edges (prompt G1–G3).
 //! Generalizes by cell role / label shape — not document-specific code prefixes.
 
-const MAPPING_PREDICATES: &[&str] = &["标识为", "maps to"];
+// Ontological denotation edge (catalog id → short name).
+const MAPPING_PREDICATES: &[&str] = &["标识"];
 const MAX_MAPPING_OBJECT_CHARS: usize = 12;
 const MAX_ZH_PREDICATE_CHARS: usize = 8;
 
@@ -71,13 +72,13 @@ mod tests {
 
     #[test]
     fn allows_catalog_mapping() {
-        assert!(triplet_semantic_violation("ACT-100", "标识为", "概念启动").is_none());
+        assert!(triplet_semantic_violation("ACT-100", "标识", "概念启动").is_none());
     }
 
     #[test]
     fn rejects_duty_sentence_object() {
         assert_eq!(
-            triplet_semantic_violation("ME-10", "标识为", "探索可选概念和提供技术可选方案"),
+            triplet_semantic_violation("ME-10", "标识", "探索可选概念和提供技术可选方案"),
             Some(TripletSemanticViolation::MappingObjectNotShortLabel)
         );
     }
