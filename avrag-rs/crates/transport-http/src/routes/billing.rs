@@ -29,6 +29,8 @@ pub(crate) fn router() -> Router<AppState> {
             axum::routing::post(create_portal),
         )
         .route("/billing/orders/{order_id}", get(get_order_status))
+        // ADR-0010: balance in fen (分); 2000 fen = ¥20 signup grant.
+        .route("/billing/wallet", get(get_wallet))
 }
 
 async fn get_plans(
@@ -110,4 +112,10 @@ async fn get_usage_export(
     Path(export_id): Path<Uuid>,
 ) -> Json<ApiResponse<avrag_billing::UsageExportStatusResponse>> {
     Json(state.billing_api().get_usage_export(export_id).await)
+}
+
+async fn get_wallet(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Json<ApiResponse<avrag_billing::WalletBalanceResponse>> {
+    Json(state.billing_api().get_wallet().await)
 }

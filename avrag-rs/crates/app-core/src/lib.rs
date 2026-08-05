@@ -9,6 +9,8 @@ pub mod billing_domain;
 pub mod billing_quota;
 pub mod billing_store;
 pub mod billing_usage_units;
+pub mod wallet_domain;
+pub mod wallet_store;
 pub mod chat_persistence;
 pub mod config;
 mod config_helpers;
@@ -61,6 +63,12 @@ pub use billing_store::{
     BillingStorePort, UsageExportJobRow, UsageLimitOverrideRow, UsageLimitPlanPolicyRow,
     UsageLimitStorePort, UsageLimitUsageRecord,
 };
+pub use wallet_domain::{
+    ApplyLedgerInput, ApplyLedgerResult, SIGNUP_GRANT_FEN, WALLET_KIND_REFERRAL_BONUS,
+    WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, Wallet,
+    WalletLedgerEntry, signup_grant_idempotency_key,
+};
+pub use wallet_store::WalletStorePort;
 pub use billing_usage_units::{
     compute_usage_units, compute_usage_units_three_bucket, compute_usage_units_with_rates,
     tokens_approx_from_units,

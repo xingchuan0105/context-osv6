@@ -16,6 +16,7 @@ mod tests_impl;
 mod tier;
 mod types;
 pub mod usage_limit;
+pub mod wallet;
 
 pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 
@@ -42,3 +43,11 @@ pub use service::{
 };
 
 pub use core::{expire_subscriptions, process_outbox};
+
+pub use wallet::{
+    WalletBalanceResponse, get_wallet_balance, grant_signup_bonus, handle_get_wallet,
+};
+// Re-export fen constants for callers (signup hook, HTTP).
+pub use app_core::{
+    SIGNUP_GRANT_FEN, WALLET_KIND_SIGNUP_GRANT, signup_grant_idempotency_key,
+};
