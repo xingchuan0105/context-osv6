@@ -2,33 +2,35 @@ import { describe, expect, it } from "vitest";
 
 import { sanitizeAssistantDisplayContent } from "../../hooks/chat-session/helpers";
 
+/**
+ * Fixtures stay structural/synthetic — no product copy, no real tool catalogues,
+ * no realistic user confessions (repo prompt / golden-set rules).
+ */
 describe("sanitizeAssistantDisplayContent", () => {
-  it("strips python code fences that leaked into the final answer", () => {
-    const raw = `你好\n\n\`\`\`python\nawait client.weather_query(city="北京")\n\`\`\`\n\n今天晴。`;
-    expect(sanitizeAssistantDisplayContent(raw)).toBe("你好\n\n今天晴。");
+  it("strips triple-backtick fences and keeps surrounding prose", () => {
+    const raw = "alpha\n\n```lang\nawait client.foo()\n```\n\nbeta";
+    expect(sanitizeAssistantDisplayContent(raw)).toBe("alpha\n\nbeta");
   });
 
-  it("strips double-backtick fences (broken fences from the model)", () => {
-    const raw = `\`\`python\nimport asyncio\n\nctx = await client.user_context()\nprint(ctx)\n\`\``;
+  it("strips double-backtick fences", () => {
+    const raw = "``lang\nimport x\nawait client.foo()\nprint(1)\n``";
     expect(sanitizeAssistantDisplayContent(raw).trim()).toBe("");
   });
 
-  it("strips implementation confession about wrong client APIs", () => {
-    const raw =
-      "抱歉，我错误地调用了 `client.weather_data()` 这个不存在的函数——正确的调用方式是 `client.weather_query(...)`。\n\n今天日期：2026-08-05";
+  it("strips inline client.* tokens without language-specific heuristics", () => {
+    const raw = "prefix `client.foo_bar()` mid client.baz suffix";
     const out = sanitizeAssistantDisplayContent(raw);
-    expect(out).not.toMatch(/weather_data|调用方式/);
-    expect(out).toMatch(/今天日期/);
+    expect(out).not.toMatch(/client\./);
+    expect(out).toMatch(/prefix/);
+    expect(out).toMatch(/suffix/);
   });
 
-  it("strips code_execution_result shells", () => {
-    const raw = `结论\n<code_execution_result>{"ok":true}</code_execution_result>`;
-    expect(sanitizeAssistantDisplayContent(raw)).toBe("结论");
+  it("strips host observation tag shells by structure", () => {
+    const raw = 'keep\n<code_execution_result>{"ok":true}</code_execution_result>';
+    expect(sanitizeAssistantDisplayContent(raw)).toBe("keep");
   });
 
-  it("still blanks pure tool JSON dumps", () => {
-    expect(sanitizeAssistantDisplayContent(JSON.stringify({ tool: "weather", chunks: [] }))).toBe(
-      "",
-    );
+  it("blanks whole-message tool-shaped JSON by keys", () => {
+    expect(sanitizeAssistantDisplayContent(JSON.stringify({ tool: "x", chunks: [] }))).toBe("");
   });
 });
