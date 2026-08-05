@@ -215,11 +215,8 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
       return;
     }
 
-    if (!auth.token) {
-      setChatError(formatUiMessage(locale, "sharedPublic.signInRequiredBody"));
-      return;
-    }
-
+    // ADR-0010: do not require auth.token client-side. Backend allows anonymous
+    // when workspace visibility is `public`; otherwise returns login_required.
     setAnswering(true);
     setChatError("");
     setAnswer("");
@@ -234,14 +231,14 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
         payload.knowledge_base.id,
         nextQuery,
         handleStreamEvent,
-        auth.token,
+        auth.token ?? null,
       );
     } catch (submitFailure) {
-      setChatError(
+      const msg =
         submitFailure instanceof Error
           ? submitFailure.message
-          : formatUiMessage(locale, "sharedPublic.signInRequiredBody"),
-      );
+          : formatUiMessage(locale, "sharedPublic.signInRequiredBody");
+      setChatError(msg);
       setAnswering(false);
     }
   }
@@ -249,7 +246,8 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   const answerText = streamingAnswer || answer;
   const readySourceCount = payload?.sources.filter((source) => matches(source.status)).length ?? 0;
   const pendingSourceCount = payload ? payload.sources.length - readySourceCount : 0;
-  const canInteract = auth.initialized && Boolean(auth.token);
+  // Loaded shared page can chat; login only if backend rejects (link mode).
+  const canInteract = Boolean(payload);
   const nextPath = `/shared/kb/${shareToken}`;
   const promptSuggestions = payload
     ? buildPromptSuggestions(payload, formatUiMessage(locale, "sharedPublic.questionPlaceholder"))

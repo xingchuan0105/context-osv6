@@ -184,14 +184,15 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         user_id: Uuid,
         since: DateTime<Utc>,
     ) -> Result<i64, AppError> {
-        // ADR 0006 §7: only customer-billable rows count toward rolling quotas.
-        // B2C: owner_user_id == user_id for RLS; set GUC to that principal.
+        // ADR 0006 §7 + ADR-0010 Owner-pays: sum by **owner_user_id** so share
+        // traffic (events may store visitor as user_id / nil) still counts against
+        // the paying account. RLS GUC is the owner principal.
         let mut tx = self.begin_as_owner(user_id).await?;
         let row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(usage_units), 0)::bigint AS total
             FROM llm_usage_events
-            WHERE user_id = $1
+            WHERE owner_user_id = $1
               AND created_at >= $2
               AND billable = true
             "#,
@@ -219,7 +220,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             r#"
             SELECT created_at
             FROM llm_usage_events
-            WHERE user_id = $1
+            WHERE owner_user_id = $1
               AND created_at >= $2
               AND billable = true
             ORDER BY created_at ASC

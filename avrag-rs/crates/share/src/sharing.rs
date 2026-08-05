@@ -275,6 +275,20 @@ impl ShareService {
             bail!("insufficient permission to revoke share link");
         }
         let _ = self.store.revoke_token(ctx, token).await?;
+        // ADR-0010: free share slot when no live tokens remain (bare API path).
+        if let Ok(ws_uuid) = Uuid::parse_str(&workspace_id) {
+            if let Ok((_level, _dl, tokens)) = self.store.get_share_settings(ctx, ws_uuid).await {
+                let has_live = tokens.iter().any(|t| {
+                    t.revoked_at.is_none() && !t.token.trim().is_empty() && t.token != token
+                });
+                if !has_live {
+                    let _ = self
+                        .store
+                        .update_share_settings(ctx, ws_uuid, Some("private"), None)
+                        .await;
+                }
+            }
+        }
         self.record_share_event(
             ctx,
             &workspace_id,

@@ -3,7 +3,6 @@
 use app_core::{ShareStorePort, StorageContext};
 use contracts::auth_runtime::AuthContext;
 use std::sync::Arc;
-use uuid::Uuid;
 
 pub struct ShareApp<'a> {
     pub(crate) auth: &'a AuthContext,
@@ -227,14 +226,6 @@ impl<'a> ShareApp<'a> {
                     && !settings.access_level.eq_ignore_ascii_case("private")
             })
             .unwrap_or(false)
-    }
-
-    pub async fn resolve_share_chat_workspace_scope(&self, token: &str) -> Option<Uuid> {
-        let store = self.storage.share_store()?;
-        let workspace_id = avrag_share::handle_validate_token(token, store)
-            .await
-            .ok()??;
-        Uuid::parse_str(&workspace_id).ok()
     }
 
     /// Owner-pays share chat context (ADR-0010): owner, workspace, visitor mode.

@@ -24,19 +24,15 @@ export default function HomePage() {
     let cancelled = false;
 
     async function routeDesktop() {
-      setLabel("正在检查客户端许可…");
+      setLabel("正在启动客户端…");
       try {
-        const status = await getLicenseStatus();
+        // ADR-0010: free client — license status optional; never block on activate.
+        await getLicenseStatus().catch(() => undefined);
         if (cancelled) return;
-        const open =
-          status.kind === "trial" ||
-          status.kind === "active" ||
-          status.kind === "offline_grace";
-        router.replace(open ? "/dashboard" : "/activate");
+        router.replace("/dashboard");
       } catch {
         if (!cancelled) {
-          // License IPC missing → still stay on client path (never cloud login).
-          router.replace("/activate");
+          router.replace("/dashboard");
         }
       }
     }

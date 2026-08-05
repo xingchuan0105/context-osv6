@@ -202,6 +202,7 @@ pub struct UsageDebitInput {
 /// Debit the wallet for one platform-proxy usage event.
 ///
 /// - Computes `list_fen = ceil(official * 1.5)`; returns `Ok(None)` when fen is 0.
+/// - Unknown (non-whitelist) models → validation error (no silent free ride).
 /// - Writes a negative `usage_debit` ledger row via [`WalletStorePort::apply_ledger_entry`].
 /// - Same `event_id` is always idempotent (`applied = false` on replay).
 /// - Insufficient balance → `wallet_insufficient_balance` validation error; balance unchanged.
@@ -215,7 +216,16 @@ pub async fn debit_platform_usage(
         input.prompt_tokens,
         input.completion_tokens,
         input.cached_tokens,
-    );
+    )
+    .ok_or_else(|| {
+        AppError::validation(
+            "wallet_model_not_whitelisted",
+            format!(
+                "model not on platform-proxy price whitelist: {}/{}",
+                input.provider, input.model
+            ),
+        )
+    })?;
     if list_fen <= 0 {
         return Ok(None);
     }

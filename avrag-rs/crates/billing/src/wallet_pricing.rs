@@ -50,54 +50,60 @@ const RATES_SILICONFLOW_EMBED: OfficialRates = OfficialRates {
     output_fen_per_mtok: 0.0,
 };
 
-/// Resolve official fen/1M rates for a provider+model pair (whitelist + default).
-pub fn official_rates_for(provider: &str, model: &str) -> OfficialRates {
+/// Resolve official fen/1M rates for a **whitelist** provider+model pair.
+///
+/// ADR-0010 §3.1: unknown models return `None` (do not silently price as flash).
+/// Match is by stable substrings; marketing names can change — ops should align
+/// env model ids with these patterns or extend this table deliberately.
+pub fn official_rates_for(provider: &str, model: &str) -> Option<OfficialRates> {
     let p = provider.trim().to_ascii_lowercase();
     let m = model.trim().to_ascii_lowercase();
 
-    // Embedding whitelist (SiliconFlow / generic embed models).
-    if m.contains("embed") {
-        return RATES_SILICONFLOW_EMBED;
+    // Embedding whitelist (SiliconFlow / names containing embed/bge).
+    if m.contains("embed") || m.contains("bge-m3") || m.contains("bge_m3") {
+        return Some(RATES_SILICONFLOW_EMBED);
     }
     if p.contains("siliconflow") && (m.contains("bge") || m.contains("qwen")) {
-        // Common SF embedding model ids without "embed" in the name.
-        if !m.contains("instruct") && !m.contains("chat") {
-            return RATES_SILICONFLOW_EMBED;
+        if !m.contains("instruct") && !m.contains("chat") && !m.contains("turbo") {
+            return Some(RATES_SILICONFLOW_EMBED);
         }
     }
 
-    // Qwen flash tier.
+    // Qwen flash tier (avoid hardcoding a single marketing revision).
     if m.contains("qwen") && m.contains("flash") {
-        return RATES_QWEN_FLASH;
+        return Some(RATES_QWEN_FLASH);
     }
 
-    // DeepSeek tiers.
+    // DeepSeek flash / pro tiers.
     if p == "deepseek" || m.contains("deepseek") {
         if m.contains("flash") {
-            return RATES_DEEPSEEK_FLASH;
+            return Some(RATES_DEEPSEEK_FLASH);
         }
-        return RATES_DEEPSEEK_PRO;
+        if m.contains("chat") || m.contains("reasoner") || m.contains("pro") {
+            return Some(RATES_DEEPSEEK_PRO);
+        }
+        // Known deepseek without flash/pro: refuse rather than invent a tier.
+        return None;
     }
 
-    // Default: treat unknown platform-proxy models as flash-class.
-    RATES_DEEPSEEK_FLASH
+    None
 }
 
-/// List price in fen for a usage event: `ceil(official * 1.5)`.
+/// List price in fen: `ceil(official * 1.5)`.
 ///
-/// Returns `0` when both token counts are zero (nothing to bill).
-/// Fractional fen below 1 still ceil to at least 1 when official × 1.5 > 0.
+/// - `0` when both token counts are zero.
+/// - `None` when the model is **not** on the platform-proxy whitelist (caller must not bill silently).
 pub fn list_price_fen(
     provider: &str,
     model: &str,
     prompt_tokens: u32,
     completion_tokens: u32,
     cached_tokens: u32,
-) -> i64 {
+) -> Option<i64> {
     if prompt_tokens == 0 && completion_tokens == 0 {
-        return 0;
+        return Some(0);
     }
-    let rates = official_rates_for(provider, model);
+    let rates = official_rates_for(provider, model)?;
     let cached = (cached_tokens.min(prompt_tokens)) as f64;
     let miss = (prompt_tokens as f64) - cached;
     let out = completion_tokens as f64;
@@ -106,9 +112,9 @@ pub fn list_price_fen(
         + out / 1_000_000.0 * rates.output_fen_per_mtok;
     let list = (official * LIST_PRICE_MULTIPLIER).ceil();
     if list.is_finite() && list > 0.0 {
-        list as i64
+        Some(list as i64)
     } else {
-        0
+        Some(0)
     }
 }
 
@@ -139,7 +145,7 @@ mod tests {
         // official 100 fen → ×1.5 = 150
         assert_eq!(
             list_price_fen("deepseek", "deepseek-v4-flash", 1_000_000, 0, 0),
-            150
+            Some(150)
         );
     }
 
@@ -148,7 +154,7 @@ mod tests {
         // official 200 fen → ×1.5 = 300
         assert_eq!(
             list_price_fen("deepseek", "deepseek-v4-flash", 0, 1_000_000, 0),
-            300
+            Some(300)
         );
     }
 
@@ -157,20 +163,28 @@ mod tests {
         // 1k in + 1k out flash: official = 0.1 + 0.2 = 0.3 → *1.5 = 0.45 → ceil 1
         assert_eq!(
             list_price_fen("deepseek", "deepseek-v4-flash", 1000, 1000, 0),
-            1
+            Some(1)
         );
     }
 
     #[test]
     fn zero_tokens_zero_fen() {
-        assert_eq!(list_price_fen("deepseek", "deepseek-v4-flash", 0, 0, 0), 0);
+        assert_eq!(
+            list_price_fen("deepseek", "deepseek-v4-flash", 0, 0, 0),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn unknown_model_not_whitelisted() {
+        assert_eq!(list_price_fen("openai", "gpt-4o", 1000, 1000, 0), None);
     }
 
     #[test]
     fn qwen_flash_and_embed_use_whitelist_rates() {
         assert_eq!(
             list_price_fen("dashscope", "qwen3.5-flash", 1_000_000, 0, 0),
-            75 // 50 * 1.5
+            Some(75) // 50 * 1.5
         );
         assert_eq!(
             list_price_fen(
@@ -180,14 +194,15 @@ mod tests {
                 0,
                 0
             ),
-            15 // 10 * 1.5
+            Some(15) // 10 * 1.5
         );
     }
 
     #[test]
     fn cache_hit_cheaper_than_miss() {
-        let miss = list_price_fen("deepseek", "deepseek-v4-flash", 1_000_000, 0, 0);
-        let hit = list_price_fen("deepseek", "deepseek-v4-flash", 1_000_000, 0, 1_000_000);
+        let miss = list_price_fen("deepseek", "deepseek-v4-flash", 1_000_000, 0, 0).unwrap();
+        let hit =
+            list_price_fen("deepseek", "deepseek-v4-flash", 1_000_000, 0, 1_000_000).unwrap();
         assert!(hit < miss);
         // full cache hit: official 2 fen → *1.5 = 3
         assert_eq!(hit, 3);

@@ -461,6 +461,24 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     if let Some(obs) = usage_observer.clone() {
         billing = billing.with_usage_observer(obs);
     }
+    // ADR-0010 §1.1 protective preflight: require BYOK or wallet balance for platform LLM.
+    if let Some(wallet) = wallet_store.clone() {
+        billing = billing.with_wallet(wallet);
+    }
+    if let Some(repository) = pg.as_ref() {
+        match PgProviderSecretStoreAdapter::from_env(repository.clone()) {
+            Ok(adapter) => {
+                let secrets: Arc<dyn app_core::ProviderSecretStorePort> = Arc::new(adapter);
+                billing = billing.with_provider_secrets(secrets);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "BYOK_MASTER_KEY not configured; spend preflight will not count cloud BYOK"
+                );
+            }
+        }
+    }
     let analytics = AnalyticsServiceCtx::new(
         pg.as_ref()
             .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone()))),

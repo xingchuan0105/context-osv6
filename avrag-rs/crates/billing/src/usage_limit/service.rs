@@ -53,14 +53,21 @@ impl UsageLimitService {
     }
 
     pub async fn get_user_usage(&self, owner_user_id: Uuid, user_id: Uuid) -> Result<UsageLimitResponse> {
-        let _ = owner_user_id;
-        let policy = self.load_effective_policy(user_id).await?;
-        let windows = self.compute_windows(user_id, &policy).await?;
-        let breakdown = self.load_breakdown(user_id).await?;
-        let scope = self.determine_scope(user_id).await?;
+        // ADR-0010 Owner-pays: plan + rolling windows are always the **account owner**.
+        // `user_id` (actor/visitor) is ignored for metering windows (may be nil on anonymous share).
+        let _ = user_id;
+        let payer = if owner_user_id.is_nil() {
+            user_id
+        } else {
+            owner_user_id
+        };
+        let policy = self.load_effective_policy(payer).await?;
+        let windows = self.compute_windows(payer, &policy).await?;
+        let breakdown = self.load_breakdown(payer).await?;
+        let scope = self.determine_scope(payer).await?;
         let has_estimated = self
             .store
-            .has_estimated_usage(user_id)
+            .has_estimated_usage(payer)
             .await
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
@@ -84,9 +91,16 @@ impl UsageLimitService {
     }
 
     pub async fn check_quota(&self, owner_user_id: Uuid, user_id: Uuid) -> Result<QuotaCheckResult> {
-        let _ = owner_user_id;
-        let policy = self.load_effective_policy(user_id).await?;
-        let windows = self.compute_windows(user_id, &policy).await?;
+        // ADR-0010: never meter rolling windows on visitor/nil actor.
+        // Share chat remaps auth.user_id → owner; actor may be visitor or Uuid::nil().
+        let _ = user_id;
+        let payer = if owner_user_id.is_nil() {
+            user_id
+        } else {
+            owner_user_id
+        };
+        let policy = self.load_effective_policy(payer).await?;
+        let windows = self.compute_windows(payer, &policy).await?;
         let mult = Self::hard_cap_multiplier();
 
         let hard_cap_5h = if policy.rolling_5h_limit_units > 0 {

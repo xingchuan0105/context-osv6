@@ -41,18 +41,12 @@ export default function LoginPage() {
     }
     setDesktopEscape(true);
     let cancelled = false;
+    // ADR-0010: free client — no activate wall after desktop login entry.
     void getLicenseStatus()
-      .then((status) => {
-        if (cancelled) return;
-        const open =
-          status.kind === "trial" ||
-          status.kind === "active" ||
-          status.kind === "offline_grace";
-        router.replace(open ? "/dashboard" : "/activate");
-      })
-      .catch(() => {
+      .catch(() => undefined)
+      .finally(() => {
         if (!cancelled) {
-          router.replace("/activate");
+          router.replace("/dashboard");
         }
       });
     return () => {

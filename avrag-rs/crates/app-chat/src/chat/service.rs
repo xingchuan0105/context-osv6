@@ -66,10 +66,13 @@ impl ChatContext {
             );
         }
 
-        // Rolling windows: ADR-0010 demotes them from "main product wall" to
-        // protective soft signals for private use. Hard-block only when:
-        // - share chat (Denial-of-Wallet / owner burn protection), or
-        // - ops kill-switch USAGE_LIMIT_HARD_ENFORCE=true.
+        // ADR-0010 §1.1: no free ride on platform env keys without BYOK or balance.
+        // Fail closed **before** LLM (not post-hoc wallet fail-open alone).
+        self.billing.ensure_payer_can_spend(&self.auth).await?;
+
+        // Rolling windows: DoW protection for share + optional hard enforce kill-switch.
+        // Private use with wallet/BYOK already passed ensure_payer_can_spend; rolling
+        // hard-block only for share (owner burn) or USAGE_LIMIT_HARD_ENFORCE.
         let force_hard = matches!(
             std::env::var("USAGE_LIMIT_HARD_ENFORCE").as_deref(),
             Ok("1") | Ok("true") | Ok("yes")

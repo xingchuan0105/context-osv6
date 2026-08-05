@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use app_core::{
-    AnalyticsContext, CostEventRecord as AnalyticsCostRecord, util::non_empty_or_unknown,
+    AnalyticsContext, CostEventRecord as AnalyticsCostRecord, ProviderSecretPurpose,
+    ProviderSecretStorePort, WalletStorePort, util::non_empty_or_unknown,
 };
 use avrag_billing::usage_limit::BillableFeature;
 use avrag_llm::{LlmUsage, UsageObserver};
@@ -15,6 +16,10 @@ pub struct BillingContext {
     usage_limit_phase: String,
     /// Exit-metering observer for LLM clients outside UnifiedAgent (e.g. write path).
     usage_observer: Option<Arc<dyn UsageObserver>>,
+    /// Optional wallet for ADR-0010 protective preflight (no free platform key ride).
+    wallet: Option<Arc<dyn WalletStorePort>>,
+    /// Optional BYOK secrets for protective preflight.
+    provider_secrets: Option<Arc<dyn ProviderSecretStorePort>>,
 }
 
 impl BillingContext {
@@ -26,12 +31,64 @@ impl BillingContext {
             quota_manager,
             usage_limit_phase,
             usage_observer: None,
+            wallet: None,
+            provider_secrets: None,
         }
     }
 
     pub fn with_usage_observer(mut self, observer: Arc<dyn UsageObserver>) -> Self {
         self.usage_observer = Some(observer);
         self
+    }
+
+    pub fn with_wallet(mut self, wallet: Arc<dyn WalletStorePort>) -> Self {
+        self.wallet = Some(wallet);
+        self
+    }
+
+    pub fn with_provider_secrets(mut self, secrets: Arc<dyn ProviderSecretStorePort>) -> Self {
+        self.provider_secrets = Some(secrets);
+        self
+    }
+
+    /// ADR-0010 §1.1: platform LLM path requires BYOK **or** positive wallet balance.
+    /// Returns Ok when spend is allowed; Err when the call would be free-ride on env keys.
+    pub async fn ensure_payer_can_spend(&self, auth: &AuthContext) -> Result<(), AppError> {
+        // Unit tests / minimal bootstraps without wallet+secrets ports: do not block.
+        if self.wallet.is_none() && self.provider_secrets.is_none() {
+            return Ok(());
+        }
+        let owner = auth.user_id().into_uuid();
+        if owner.is_nil() {
+            return Err(AppError::unauthorized("payer identity missing"));
+        }
+        if let Some(secrets) = &self.provider_secrets {
+            match secrets
+                .has_active(owner, ProviderSecretPurpose::Llm)
+                .await
+            {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, "provider secret list failed during spend preflight");
+                }
+            }
+        }
+        if let Some(wallet) = &self.wallet {
+            match wallet.ensure_wallet(owner).await {
+                Ok(w) if w.balance_fen > 0 => return Ok(()),
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(AppError::internal(format!(
+                        "wallet preflight failed: {e}"
+                    )));
+                }
+            }
+        }
+        Err(AppError::validation(
+            "payer_funds_required",
+            "No cloud BYOK key and wallet balance is empty. Configure an API key or top up the wallet before using platform models.",
+        ))
     }
 
     pub fn is_available(&self) -> bool {
