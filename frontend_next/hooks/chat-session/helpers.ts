@@ -45,8 +45,10 @@ export function sanitizeAssistantDisplayContent(content: string): string {
     return content;
   }
   let s = content
-    // Markdown fences (often codegen that the model echoed into the final turn)
-    .replace(/```[\w-]*\r?\n[\s\S]*?```/g, "")
+    // 2–3 backtick fences (models sometimes emit ``python … `` without the third)
+    .replace(/`{2,3}[\w-]*\r?\n[\s\S]*?`{2,3}/g, "")
+    // Orphan opening fence without close (strip until end of message)
+    .replace(/`{2,3}[\w-]*\r?\n[\s\S]*$/g, "")
     // Inline HTML-ish code / host observation shells
     .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, "")
     .replace(/<code_execution_result\b[^>]*>[\s\S]*?<\/code_execution_result>/gi, "")
@@ -54,11 +56,29 @@ export function sanitizeAssistantDisplayContent(content: string): string {
     .replace(/<loop_budget\b[^>]*>[\s\S]*?<\/loop_budget>/gi, "")
     // Common tool-call XML shells
     .replace(/<\/?tool_call\b[^>]*>/gi, "")
-    .replace(/<\/?function_call\b[^>]*>/gi, "");
+    .replace(/<\/?function_call\b[^>]*>/gi, "")
+    // Sandbox lines that leaked as prose
+    .replace(/^import\s+asyncio\s*$/gim, "")
+    .replace(/^.*\bawait\s+client\.\w+\s*\([\s\S]*?\)\s*$/gim, "")
+    .replace(/^.*\bclient\.(weather_query|weather_data|user_context|calculator)\b.*$/gim, "")
+    .replace(/^print\s*\(.*\)\s*$/gim, "");
+
+  // If the whole message is still mostly sandbox/debug, blank it
+  const lower = s.toLowerCase();
+  if (
+    /\bclient\.(weather_|user_context|calculator)/i.test(s) &&
+    /attributeerror|正确的调用|不存在的函数|沙箱|sdk/i.test(s)
+  ) {
+    // Drop paragraphs that are pure implementation confession
+    s = s
+      .split(/\n{2,}/)
+      .filter((para) => !/\bclient\.\w+|attributeerror|调用方式|weather_data/i.test(para))
+      .join("\n\n");
+  }
+  void lower;
 
   // Collapse leftover blank runs after stripping
   s = s.replace(/\n{3,}/g, "\n\n").trim();
-
   const trimmed = s.trim();
   if (!trimmed) {
     return "";

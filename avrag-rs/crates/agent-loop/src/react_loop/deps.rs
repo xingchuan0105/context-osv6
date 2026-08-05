@@ -454,19 +454,28 @@ impl SacHostBridge {
     }
 
     async fn call_weather_query(&self, args: &Value) -> Value {
-        // SDK 面签名是 city/lat/lon;host 技能面用 location("city" 或 "lat,lon")。
+        // SDK: city= | location= | lat=+lon= → skill location string.
         let coord = |key: &str| {
             args.get(key)
                 .and_then(|v| v.as_str().map(str::to_owned))
                 .or_else(|| args.get(key).and_then(|v| v.as_f64()).map(|f| f.to_string()))
         };
-        let location = match args.get("city").and_then(|v| v.as_str()) {
-            Some(city) if !city.is_empty() => city.to_string(),
-            _ => match (coord("lat"), coord("lon")) {
-                (Some(lat), Some(lon)) => format!("{lat},{lon}"),
-                _ => String::new(),
-            },
-        };
+        let location = args
+            .get("location")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                args.get("city")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+            })
+            .or_else(|| match (coord("lat"), coord("lon")) {
+                (Some(lat), Some(lon)) => Some(format!("{lat},{lon}")),
+                _ => None,
+            })
+            .unwrap_or_default();
         let skill = WeatherQuerySkill;
         let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _));
         let result = skill.execute(&json!({ "location": location }), &ctx).await;

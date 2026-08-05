@@ -112,10 +112,10 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     SdkPrimitive {
         id: "weather_query",
         capability: SdkCapability::BASE,
-        docstring: "Current weather for a location (QWeather 和风; OpenWeather fallback).",
+        docstring: "Current weather (QWeather). Pass city='北京' or lat= & lon=. Only this method name exists.",
         handler: "base_weather_query",
-        py_sig: "self, city=None, lat=None, lon=None",
-        py_payload: "{\"city\": city, \"lat\": lat, \"lon\": lon}",
+        py_sig: "self, city=None, location=None, lat=None, lon=None",
+        py_payload: "{\"city\": city, \"location\": location, \"lat\": lat, \"lon\": lon}",
         py_return: "",
     },
     // ── Rag(知识库检索)─────────────────────────────────────────────────
