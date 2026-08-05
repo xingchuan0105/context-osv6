@@ -191,6 +191,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(crate::routes::chat::router())
         .merge(crate::routes::rag::router())
         .merge(crate::routes::billing::router())
+        .merge(crate::routes::settings::router())
         .merge(crate::routes::license::router())
         .merge(crate::routes::admin::router())
         .route_layer(axum::middleware::from_fn_with_state(

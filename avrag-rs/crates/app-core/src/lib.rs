@@ -13,6 +13,9 @@ pub mod referral_domain;
 pub mod referral_store;
 pub mod wallet_domain;
 pub mod wallet_store;
+pub mod byok_crypto;
+pub mod provider_secret_domain;
+pub mod provider_secret_store;
 pub mod chat_persistence;
 pub mod config;
 mod config_helpers;
@@ -82,6 +85,12 @@ pub use wallet_domain::{
     signup_grant_idempotency_key, topup_idempotency_key, topup_pack_by_id,
 };
 pub use wallet_store::WalletStorePort;
+pub use byok_crypto::{BYOK_KEY_LEN, BYOK_NONCE_LEN, ByokMasterKey};
+pub use provider_secret_domain::{
+    ProviderSecretPurpose, ProviderSecretView, ResolvedProviderSecret, UpsertProviderSecretInput,
+    key_fingerprint,
+};
+pub use provider_secret_store::ProviderSecretStorePort;
 pub use billing_usage_units::{
     compute_usage_units, compute_usage_units_three_bucket, compute_usage_units_with_rates,
     tokens_approx_from_units,

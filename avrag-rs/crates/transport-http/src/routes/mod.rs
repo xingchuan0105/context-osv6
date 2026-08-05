@@ -5,5 +5,6 @@ pub mod chat;
 pub mod e2e;
 pub mod infra;
 pub mod license;
+pub mod settings;
 pub mod workspaces;
 pub mod rag;

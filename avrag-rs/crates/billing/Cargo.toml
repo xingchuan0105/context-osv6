@@ -25,6 +25,7 @@ base64 = "0.22"
 
 [dev-dependencies]
 async-trait.workspace = true
+base64 = "0.22"
 rand = "0.8"
 sqlx = { version = "0.8", features = ["macros", "migrate", "postgres", "runtime-tokio"] }
 tokio.workspace = true

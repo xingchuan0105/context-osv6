@@ -8,7 +8,9 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+aes-gcm = "0.10"
 analytics = { path = "../analytics" }
+base64 = "0.22"
 contracts = { path = "../../../contracts" }
 serde.workspace = true
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
@@ -23,6 +25,7 @@ common = { path = "../common" }
 chrono.workspace = true
 hex.workspace = true
 hmac.workspace = true
+rand = "0.8"
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true

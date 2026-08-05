@@ -15,6 +15,7 @@ mod service;
 mod tests_impl;
 mod tier;
 mod types;
+pub mod provider_secrets;
 pub mod referral;
 pub mod usage_limit;
 pub mod wallet;
@@ -58,6 +59,11 @@ pub use wallet_pricing::{
 pub use referral::{
     ApplyReferralOutcome, ReferralStatsResponse, apply_referral_on_register, get_my_referral_stats,
     handle_get_referral,
+};
+pub use provider_secrets::{
+    ProviderSecretListResponse, ProviderSecretResponse, UpsertProviderSecretRequest,
+    handle_list_provider_secrets, handle_revoke_provider_secret, handle_upsert_provider_secret,
+    list_provider_secrets, resolve_provider_secret, revoke_provider_secret, upsert_provider_secret,
 };
 // Re-export fen constants for callers (signup / referral / topup / usage debit, HTTP).
 pub use app_core::{

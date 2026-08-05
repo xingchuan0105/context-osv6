@@ -1,6 +1,9 @@
-//! Product App — Billing (ADR-0007 / ADR-0010 wallet).
+//! Product App — Billing (ADR-0007 / ADR-0010 wallet + BYOK secrets).
 
-use app_core::{BillingStorePort, ReferralStorePort, StorageContext, WalletStorePort};
+use app_core::{
+    BillingStorePort, ByokMasterKey, ProviderSecretStorePort, ReferralStorePort, StorageContext,
+    WalletStorePort,
+};
 use avrag_storage_pg::PgAppRepository;
 use common::{ApiResponse, UserId};
 use contracts::auth_runtime::AuthContext;
@@ -247,5 +250,64 @@ impl<'a> BillingApp<'a> {
         let referral: Arc<dyn ReferralStorePort> =
             Arc::new(crate::adapters::PgReferralStoreAdapter::new(repo));
         avrag_billing::handle_get_referral(wallet, referral, actor_id.into_uuid()).await
+    }
+
+    fn provider_secret_store(&self) -> Result<Arc<dyn ProviderSecretStorePort>, common::AppError> {
+        let repo = self.postgres.clone().ok_or_else(|| {
+            common::AppError::validation(
+                "postgres_not_configured",
+                "postgres backend is not configured",
+            )
+        })?;
+        let master = ByokMasterKey::from_env()?;
+        Ok(Arc::new(crate::adapters::PgProviderSecretStoreAdapter::new(
+            repo, master,
+        )) as Arc<dyn ProviderSecretStorePort>)
+    }
+
+    /// Upsert encrypted cloud BYOK secret (ADR-0010 PR7). Response is fingerprint-only.
+    pub async fn upsert_provider_secret(
+        &self,
+        body: avrag_billing::UpsertProviderSecretRequest,
+    ) -> ApiResponse<avrag_billing::ProviderSecretResponse> {
+        let Some(actor_id) = self.auth.actor_id() else {
+            return Self::auth_required();
+        };
+        let store = match self.provider_secret_store() {
+            Ok(s) => s,
+            Err(e) => return ApiResponse::err(e.code(), e.message()),
+        };
+        avrag_billing::handle_upsert_provider_secret(store, actor_id.into_uuid(), body).await
+    }
+
+    /// List cloud BYOK secrets (fingerprints only).
+    pub async fn list_provider_secrets(
+        &self,
+        include_revoked: bool,
+    ) -> ApiResponse<avrag_billing::ProviderSecretListResponse> {
+        let Some(actor_id) = self.auth.actor_id() else {
+            return Self::auth_required();
+        };
+        let store = match self.provider_secret_store() {
+            Ok(s) => s,
+            Err(e) => return ApiResponse::err(e.code(), e.message()),
+        };
+        avrag_billing::handle_list_provider_secrets(store, actor_id.into_uuid(), include_revoked)
+            .await
+    }
+
+    /// Revoke a cloud BYOK secret (soft). Resolve will stop returning it.
+    pub async fn revoke_provider_secret(
+        &self,
+        id: Uuid,
+    ) -> ApiResponse<avrag_billing::ProviderSecretResponse> {
+        let Some(actor_id) = self.auth.actor_id() else {
+            return Self::auth_required();
+        };
+        let store = match self.provider_secret_store() {
+            Ok(s) => s,
+            Err(e) => return ApiResponse::err(e.code(), e.message()),
+        };
+        avrag_billing::handle_revoke_provider_secret(store, actor_id.into_uuid(), id).await
     }
 }
