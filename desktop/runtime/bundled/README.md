@@ -17,14 +17,20 @@ desktop/runtime/bundled/
   linux-x64/                # optional monorepo Linux portable (BR4)
 ```
 
-**Install-time layout** (NSIS, after BR2) copies the same tree to:
+**Install-time layout** (NSIS via `build-windows.sh`, BR2) embeds:
 
 ```text
 $INSTDIR/runtime/pgsql/
 $INSTDIR/runtime/redis/
+$INSTDIR/runtime/migrations/   # avrag-rs migrations
+$INSTDIR/runtime/runtime.version
 ```
 
-(`native_stack` resolves install path first, then monorepo `bundled/*`.)
+State (data + `client.env`) lives in `%LOCALAPPDATA%\Context-OS Client\` — not under Program Files.
+
+(`native_stack`: bins = install `runtime/`, monorepo `bundled/*`; state = AppData when packaged.)
+
+Build flags: `SKIP_BUNDLED_RUNTIME=1` for slim ~37MB setup without PG/Redis.
 
 ## Commands
 

@@ -22,7 +22,7 @@ SKIP_FRONTEND=1 SKIP_SIDECARS=1 bash scripts/build-windows.sh
 |------|------|
 | NSIS 路径 | `desktop/src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis/*setup.exe` |
 | 产品名 | **Context-OS Client**（文件名可能含空格） |
-| 体积 | 约 37MB（`Context-OS Client_0.1.0_x64-setup.exe`，2026-08-04 构建） |
+| 体积 | **含便携 runtime** 实测 ~**60MB**（2026-08-05 LZMA；`SKIP_BUNDLED_RUNTIME=1` 时约 37MB 壳） |
 
 可选打包发布元数据：
 
@@ -59,7 +59,9 @@ bash scripts/package-desktop-release.sh
 
 ## 3. 本机数据面（native，无 Docker）
 
-**Windows 需本机已装**: PostgreSQL 16 + pgvector、Redis（或 Memurai）。  
+**Windows 干净机（BR2，默认安装包）**: **不**需系统 PostgreSQL / Redis / Docker。  
+安装目录应有 `runtime/pgsql` + `runtime/redis`；数据在 `%LOCALAPPDATA%\Context-OS Client\`。
+
 **Linux/WSL 开发机**可直接：
 
 ```bash
@@ -69,11 +71,13 @@ bash scripts/desktop-local-product.sh ensure
 
 | # | 步骤 | 通过标准 | 结果 |
 |---|------|----------|------|
-| S1 | 设置 → 本机数据栈 | 展示 PG+pgvector / Redis；**不**要求 Docker 就绪才能点「启动并迁移」 | ☐ |
-| S2 | 启动并迁移 | `STACK_MODE=native` 或脚本 ensure 成功；`:5433` / `:6380` 通 | ☐ |
-| S3 | client.env | 含 `RETRIEVAL_BACKEND=pgvector` | ☐ |
+| S0 | 安装树 | `…\runtime\pgsql\bin\pg_ctl.exe` + `redis\redis-server.exe` + `pgsql\lib\vector.dll` | ✅ 2026-08-05 silent（`%LocalAppData%\Context-OS Client`） |
+| S1 | 设置 → 本机数据栈 | 展示 PG+pgvector / Redis；**不**要求 Docker 就绪才能点「启动并迁移」 | ☐ UI 待手测 |
+| S2 | 启动并迁移 | native ensure 成功；`:5433` / `:6380` 通；`CREATE EXTENSION vector` OK | ✅ 脚本：`pg_ctl` 16.14 + vector **0.8.5**；redis listen OK（全量 ensure/UI 待手测） |
+| S3 | client.env | 在 AppData；含 `RETRIEVAL_BACKEND=pgvector` | ☐ |
 | S4 | 产品进程 | api `:18080` health OK；worker 有进程/日志 | ☐ |
 | S5 | 本机会话 | 自动 `local@context-os.client` JWT；无云登录 | ☐ |
+| S6 | 退出客户端 | 库进程停止（默认停库） | ☐ |
 
 ---
 

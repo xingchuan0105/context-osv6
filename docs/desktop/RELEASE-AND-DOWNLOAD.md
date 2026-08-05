@@ -10,8 +10,10 @@
 ```bash
 # 依赖：mingw-w64、nsis、Rust 1.96+（desktop/src-tauri/rust-toolchain.toml）
 # sudo apt-get install -y mingw-w64 nsis
+# 默认嵌入便携 PG+pgvector+Redis（需先有 desktop/runtime/bundled/windows-x64，否则自动 fetch）
 bash scripts/build-windows.sh
 # 已有 frontend_next/out 时可：SKIP_FRONTEND=1 bash scripts/build-windows.sh
+# 仅壳（~37MB，不嵌库）：SKIP_BUNDLED_RUNTIME=1 bash scripts/build-windows.sh
 ```
 
 或 Windows 本机：

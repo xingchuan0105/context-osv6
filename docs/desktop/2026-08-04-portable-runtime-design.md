@@ -361,14 +361,16 @@ COS_RUNTIME_VERSION=2026.08.04-pg16.4-vec0.8.0
 - [x] `scripts/publish-desktop-bundled-runtime.sh` → VPS `releases/desktop/runtime/`  
 - [x] `native_stack` + `desktop-local-stack.sh`：优先捆绑/安装路径  
 - [x] monorepo 路径：`desktop/runtime/bundled/{windows,linux}-x64/`（stage 后 ensure 可发现；Linux 便携二进制属 BR4）  
-- [ ] 首次 assemble + 放入 pgvector + pack 发布到 VPS（需网络与 vector 预编译物）
+- [x] 首次 assemble + pgvector 0.8.5 + pack + 发布到 VPS（`runtime_id=2026.08.05-pg16.14-vec0.8.5-redis5.0.14.1`，zip ~37MB）
 
 ### Wave BR2 — 装进 NSIS
 
-- [ ] `build-windows.sh` 嵌入 `runtime/bundled`  
-- [ ] 安装后路径探测  
-- [ ] 卸载不删数据；可选删  
-- [ ] 更新 `SMOKE_CHECKLIST`：干净机无系统 PG  
+- [x] `build-windows.sh` 嵌入 `runtime/bundled`（`SKIP_BUNDLED_RUNTIME=1` 可关）  
+- [x] 安装后路径探测：`native_stack` bins=`$INSTDIR/runtime`，state=`%LOCALAPPDATA%\Context-OS Client`  
+- [x] 卸载默认不删 AppData 数据（NSIS 只清安装目录；可选删属 BR3 UI）  
+- [x] 更新 `SMOKE_CHECKLIST`：干净机无系统 PG  
+- [x] `build-windows.sh` 产出含 runtime 的 setup（2026-08-05：**~60MB** LZMA；release 树 `runtime/` ~107MB 含 pgsql+vector+redis+migrations）  
+- [x] 干净 Windows 真机冒烟（2026-08-05 silent install：S0 树齐；`pg_ctl` 16.14；`CREATE EXTENSION vector` → **0.8.5**；redis 可监听）
 
 ### Wave BR3 — 体验与硬化
 
@@ -414,10 +416,11 @@ COS_RUNTIME_VERSION=2026.08.04-pg16.4-vec0.8.0
 
 | 组件 | 候选版本 | 来源 | sha256 | 备注 |
 |------|----------|------|--------|------|
-| PostgreSQL | 16.14 | EDB Windows binaries zip | 首次 assemble 后回填 `PG_WIN_SHA256` | |
-| pgvector | 0.8.0 | 预编译 DLL 入 cache / `PGVECTOR_WIN_ZIP` | 同上 | 与 PG 16 ABI |
-| Redis Windows | 5.0.14.1 | tporadowski/redis release zip | 同上 | R1；升级前审许可 |
-| 试裁未压缩 | _ MB | | | pack 后记 |
+| PostgreSQL | 16.14 | EDB Windows binaries zip | `pins.env` 已填 | |
+| pgvector | 0.8.5 | andreiramani `0.8.5_16.14` / `vector.v0.8.5-pg16.zip` | `pins.env` 已填 | 非官方预编译，与 PG 16.14 ABI |
+| Redis Windows | 5.0.14.1 | tporadowski/redis release zip | `pins.env` 已填 | R1 |
+| 试裁 stage 未压缩 | ~107 MB | | | `bundled/windows-x64` |
+| 试裁 cos-runtime zip | **~37 MB** | VPS `…/runtime/windows-x64/` | sha 见 manifest | 构建机原料；NSIS 再压后另计 |
 | 试裁 NSIS 增量 | _ MB | | | BR2 |
 
 ---

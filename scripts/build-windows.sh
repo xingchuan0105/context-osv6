@@ -45,6 +45,22 @@ else
   log "SKIP_SIDECARS=1 — NSIS will not embed avrag-api/worker"
 fi
 
+# Portable PG+pgvector+Redis (BR2). Default embed; SKIP_BUNDLED_RUNTIME=1 for slim setup.
+SKIP_BUNDLED_RUNTIME="${SKIP_BUNDLED_RUNTIME:-0}"
+BUNDLED_WIN="$DESKTOP/runtime/bundled/windows-x64"
+if [[ "$SKIP_BUNDLED_RUNTIME" != "1" ]]; then
+  if [[ ! -f "$BUNDLED_WIN/pgsql/bin/pg_ctl.exe" || ! -f "$BUNDLED_WIN/redis/redis-server.exe" ]]; then
+    log "bundled runtime missing — fetch from VPS (or run assemble)…"
+    bash "$ROOT/scripts/stage-desktop-bundled-runtime.sh" fetch || true
+  fi
+  [[ -f "$BUNDLED_WIN/pgsql/bin/pg_ctl.exe" ]] || die "missing $BUNDLED_WIN/pgsql (run: bash scripts/stage-desktop-bundled-runtime.sh fetch|assemble)"
+  [[ -f "$BUNDLED_WIN/redis/redis-server.exe" ]] || die "missing redis-server.exe in bundled runtime"
+  [[ -f "$BUNDLED_WIN/pgsql/lib/vector.dll" ]] || die "missing vector.dll in bundled runtime"
+  log "bundled runtime: $BUNDLED_WIN ($(du -sh "$BUNDLED_WIN" | awk '{print $1}'))"
+else
+  log "SKIP_BUNDLED_RUNTIME=1 — NSIS will not embed portable PG/Redis"
+fi
+
 if [[ "$SKIP_FRONTEND" != "1" ]]; then
   log "building frontend static export (BUILD_TARGET=desktop)…"
   (
@@ -58,15 +74,38 @@ else
   [[ -d "$FE/out" ]] || die "frontend_next/out missing"
 fi
 
-# Merge Tauri config: embed sidecars as externalBin (next to app after install)
-# and ship compose/README as resources. Only applied for this Windows build so
-# host linux/mac builds stay free of missing externalBin requirements.
-TAURI_EXTRA_CONFIG='{"bundle":{"externalBin":["binaries/avrag-api","binaries/avrag-worker"],"resources":["../runtime/docker-compose.client.yml","../runtime/README.md"]}}'
-if [[ "$SKIP_SIDECARS" == "1" ]]; then
-  TAURI_EXTRA_CONFIG='{"bundle":{"resources":["../runtime/docker-compose.client.yml","../runtime/README.md"]}}'
-fi
+# Merge Tauri config: externalBin sidecars + resources map for portable runtime (BR2).
+# Written to a temp file so nested JSON is not shell-escaped to death.
+TAURI_EXTRA_FILE="$(mktemp "${TMPDIR:-/tmp}/tauri-extra-XXXXXX.json")"
+cleanup_extra() { rm -f "$TAURI_EXTRA_FILE"; }
+trap cleanup_extra EXIT
 
-log "tauri build --target $TARGET --bundles nsis (+ sidecars)"
+python3 - "$TAURI_EXTRA_FILE" "$SKIP_SIDECARS" "$SKIP_BUNDLED_RUNTIME" <<'PY'
+import json, sys
+path, skip_sidecars, skip_rt = sys.argv[1], sys.argv[2] == "1", sys.argv[3] == "1"
+bundle = {}
+if not skip_sidecars:
+    bundle["externalBin"] = ["binaries/avrag-api", "binaries/avrag-worker"]
+# Map form: source (rel to src-tauri) → install path under $RESOURCES
+resources = {
+    "../runtime/docker-compose.client.yml": "runtime/docker-compose.client.yml",
+    "../runtime/README.md": "runtime/README.md",
+}
+if not skip_rt:
+    resources.update({
+        "../runtime/bundled/windows-x64/pgsql": "runtime/pgsql",
+        "../runtime/bundled/windows-x64/redis": "runtime/redis",
+        "../runtime/bundled/windows-x64/runtime.version": "runtime/runtime.version",
+        "../runtime/bundled/windows-x64/THIRD_PARTY.txt": "runtime/THIRD_PARTY.txt",
+        # migrations for AVRAG_RUN_MIGRATIONS / sqlx on first ensure
+        "../../avrag-rs/migrations": "runtime/migrations",
+    })
+bundle["resources"] = resources
+json.dump({"bundle": bundle}, open(path, "w"), indent=2)
+print(path)
+PY
+log "tauri extra config: $TAURI_EXTRA_FILE"
+log "tauri build --target $TARGET --bundles nsis (+ sidecars + bundled runtime)"
 (
   cd "$DESKTOP"
   export CI=true
@@ -78,10 +117,10 @@ log "tauri build --target $TARGET --bundles nsis (+ sidecars)"
   if [[ "$SKIP_FRONTEND" == "1" ]]; then
     pnpm tauri build --target "$TARGET" --bundles nsis \
       --config '{"build":{"beforeBuildCommand":""}}' \
-      --config "$TAURI_EXTRA_CONFIG"
+      --config "$TAURI_EXTRA_FILE"
   else
     pnpm tauri build --target "$TARGET" --bundles nsis \
-      --config "$TAURI_EXTRA_CONFIG"
+      --config "$TAURI_EXTRA_FILE"
   fi
 )
 

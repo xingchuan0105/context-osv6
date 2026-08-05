@@ -132,23 +132,26 @@ cp -f "$ROOT/desktop/runtime/README.md" "$SIDECAR_STAGE/" 2>/dev/null || true
 cp -f "$ROOT/scripts/desktop-local-stack.sh" "$SIDECAR_STAGE/" 2>/dev/null || true
 cp -f "$ROOT/scripts/desktop-local-product.sh" "$SIDECAR_STAGE/" 2>/dev/null || true
 cat >"$SIDECAR_STAGE/INSTALL.txt" <<'SIDEEOF'
-Context-OS — companion runtime (data plane + product binaries)
+Context-OS — companion notes (data plane + product binaries)
 
-Data plane (default **no Docker**):
-  - PostgreSQL 16 + pgvector
-  - Redis
-Retrieval: RETRIEVAL_BACKEND=pgvector (no Milvus)
+Windows NSIS (build-windows.sh, default):
+  - Embeds avrag-api / avrag-worker next to Context-OS.exe
+  - Embeds portable runtime under install dir: runtime/pgsql + runtime/redis
+    (PostgreSQL 16 + pgvector + Redis; no Docker / no system PG required)
+  - Data + client.env: %LOCALAPPDATA%\Context-OS Client\
+  - Retrieval: RETRIEVAL_BACKEND=pgvector
 
-1. Install native tools:
-   - Linux:  sudo apt-get install -y postgresql-16 postgresql-16-pgvector redis-server
-   - macOS:  brew install postgresql@16 redis  (+ pgvector)
-   - Windows: PostgreSQL 16 installer + pgvector + Redis/Memurai
-2. Optional: Docker only if native tools are unavailable (STACK_MODE=docker).
-3. NSIS embeds avrag-api.exe / avrag-worker.exe when built with build-windows.sh.
-4. Optional: CONTEXT_OS_CLIENT_HOME → this folder for script control.
-5. API: http://127.0.0.1:18080 · local@context-os.client (no cloud login).
+Dev monorepo / Linux:
+  bash scripts/desktop-local-stack.sh ensure
+  bash scripts/desktop-local-product.sh ensure
 
-Settings → 本机数据栈 →「启动并迁移」uses STACK_MODE=auto (native first).
+Optional env:
+  CONTEXT_OS_CLIENT_HOME  state root override
+  CONTEXT_OS_RUNTIME      portable bins root override
+  COS_USE_SYSTEM_PG=1     prefer system PostgreSQL/Redis
+
+API: http://127.0.0.1:18080 · local@context-os.client (no cloud login).
+Settings → 本机数据栈 →「启动并迁移」uses native-first ensure.
 SIDEEOF
 
 # Tauri externalBin staging dir (windows triple + host if present)

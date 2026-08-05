@@ -55,16 +55,56 @@ fn wait_port(host: &str, port: u16, secs: u64, log: &mut String) -> bool {
     false
 }
 
-/// Monorepo root or install layout that contains `desktop/runtime`.
-pub fn runtime_home() -> Option<PathBuf> {
-    if let Ok(root) = std::env::var("CONTEXT_OS_ROOT") {
-        let p = PathBuf::from(root).join("desktop/runtime");
-        if p.is_dir() {
+/// True if this directory looks like a portable runtime (has pgsql bin tree).
+fn looks_like_bins_runtime(dir: &Path) -> bool {
+    pg_ctl_exists(&dir.join("pgsql/bin"))
+        || pg_ctl_exists(&dir.join("bundled/windows-x64/pgsql/bin"))
+        || pg_ctl_exists(&dir.join("bundled/linux-x64/pgsql/bin"))
+        || pg_ctl_exists(&dir.join("native/pgsql/bin"))
+}
+
+/// Install layout: `$INSTDIR/runtime` or `$INSTDIR/resources/runtime` next to Context-OS.exe.
+fn install_bins_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let candidates = [
+        dir.join("runtime"),
+        dir.join("resources").join("runtime"),
+        dir.to_path_buf(),
+    ];
+    candidates.into_iter().find(|p| looks_like_bins_runtime(p))
+}
+
+/// Packaged client state under `%LOCALAPPDATA%\Context-OS Client` (not Program Files).
+fn install_state_dir() -> Option<PathBuf> {
+    if install_bins_dir().is_none() {
+        return None;
+    }
+    if let Ok(p) = std::env::var("CONTEXT_OS_STATE_HOME") {
+        let p = PathBuf::from(p);
+        if !p.as_os_str().is_empty() {
             return Some(p);
         }
     }
-    if let Ok(home) = std::env::var("CONTEXT_OS_CLIENT_HOME") {
-        let p = PathBuf::from(home);
+    #[cfg(windows)]
+    {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            return Some(PathBuf::from(local).join("Context-OS Client"));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(PathBuf::from(home).join(".local/share/context-os-client"));
+        }
+    }
+    None
+}
+
+/// Monorepo `desktop/runtime` (dev).
+fn monorepo_runtime_dir() -> Option<PathBuf> {
+    if let Ok(root) = std::env::var("CONTEXT_OS_ROOT") {
+        let p = PathBuf::from(root).join("desktop/runtime");
         if p.is_dir() {
             return Some(p);
         }
@@ -97,6 +137,35 @@ pub fn runtime_home() -> Option<PathBuf> {
     None
 }
 
+/// Where portable **binaries** live (`pgsql/`, `redis/`). Install layout preferred.
+pub fn bins_runtime_home() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("CONTEXT_OS_RUNTIME") {
+        let p = PathBuf::from(home);
+        if looks_like_bins_runtime(&p) || p.is_dir() {
+            return Some(p);
+        }
+    }
+    if let Some(d) = install_bins_dir() {
+        return Some(d);
+    }
+    monorepo_runtime_dir()
+}
+
+/// Where **state** lives: `client.env`, `data/`, `logs/`.
+/// Install: AppData; monorepo: `desktop/runtime`.
+pub fn runtime_home() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("CONTEXT_OS_CLIENT_HOME") {
+        let p = PathBuf::from(home);
+        if p.is_dir() || p.parent().map(|x| x.is_dir()).unwrap_or(false) {
+            return Some(p);
+        }
+    }
+    if let Some(state) = install_state_dir() {
+        return Some(state);
+    }
+    monorepo_runtime_dir()
+}
+
 pub fn monorepo_root_from_runtime(rt: &Path) -> Option<PathBuf> {
     // .../desktop/runtime → repo root
     let mut p = rt.to_path_buf();
@@ -110,6 +179,22 @@ pub fn monorepo_root_from_runtime(rt: &Path) -> Option<PathBuf> {
         }
     }
     std::env::var("CONTEXT_OS_ROOT").ok().map(PathBuf::from)
+}
+
+fn resolve_migrations_dir(bins_rt: &Path, state_rt: &Path) -> Option<PathBuf> {
+    for cand in [
+        bins_rt.join("migrations"),
+        state_rt.join("migrations"),
+        bins_rt.join("bundled/windows-x64/migrations"),
+    ] {
+        if cand.is_dir() {
+            return Some(cand);
+        }
+    }
+    monorepo_root_from_runtime(state_rt)
+        .or_else(|| monorepo_root_from_runtime(bins_rt))
+        .map(|r| r.join("avrag-rs/migrations"))
+        .filter(|p| p.is_dir())
 }
 
 fn pg_ctl_exists(dir: &Path) -> bool {
@@ -165,17 +250,11 @@ fn find_pg_bin() -> Option<PathBuf> {
     }
 
     if !use_system_pg_only() {
-        if let Some(rt) = runtime_home() {
+        if let Some(rt) = bins_runtime_home() {
             for cand in bundled_pg_bin_candidates(&rt) {
                 if pg_ctl_exists(&cand) {
                     return Some(cand);
                 }
-            }
-        }
-        if let Ok(extra) = std::env::var("CONTEXT_OS_RUNTIME") {
-            let p = PathBuf::from(extra).join("pgsql/bin");
-            if pg_ctl_exists(&p) {
-                return Some(p);
             }
         }
     }
@@ -204,18 +283,10 @@ fn find_redis_server() -> Option<PathBuf> {
     }
 
     if !use_system_pg_only() {
-        if let Some(rt) = runtime_home() {
+        if let Some(rt) = bins_runtime_home() {
             for cand in bundled_redis_candidates(&rt) {
                 if redis_server_exists(&cand) {
                     return Some(cand);
-                }
-            }
-        }
-        if let Ok(extra) = std::env::var("CONTEXT_OS_RUNTIME") {
-            for name in ["redis-server.exe", "redis-server"] {
-                let p = PathBuf::from(&extra).join("redis").join(name);
-                if redis_server_exists(&p) {
-                    return Some(p);
                 }
             }
         }
@@ -491,15 +562,24 @@ pub fn native_tools_available() -> bool {
 
 pub fn ensure_native() -> NativeEnsureReport {
     let mut log = String::new();
-    let Some(rt) = runtime_home() else {
+    let Some(state_rt) = runtime_home() else {
         return NativeEnsureReport {
             ok: false,
-            message: "desktop/runtime not found (set CONTEXT_OS_ROOT or CONTEXT_OS_CLIENT_HOME)"
+            message: "runtime state dir not found (set CONTEXT_OS_CLIENT_HOME or install/monorepo layout)"
                 .into(),
             log,
         };
     };
-    append_log(&mut log, format!("runtime={}", rt.display()));
+    let bins_rt = bins_runtime_home().unwrap_or_else(|| state_rt.clone());
+    if let Err(e) = fs::create_dir_all(&state_rt) {
+        return NativeEnsureReport {
+            ok: false,
+            message: format!("cannot create state dir {}: {e}", state_rt.display()),
+            log,
+        };
+    }
+    append_log(&mut log, format!("state={}", state_rt.display()));
+    append_log(&mut log, format!("bins={}", bins_rt.display()));
 
     let Some(pg_bin) = find_pg_bin() else {
         return NativeEnsureReport {
@@ -518,11 +598,12 @@ pub fn ensure_native() -> NativeEnsureReport {
     append_log(&mut log, format!("pg_bin={}", pg_bin.display()));
     append_log(&mut log, format!("redis={}", redis_bin.display()));
 
-    let pgdata = rt.join("data/pg-native");
-    let redis_dir = rt.join("data/redis-native");
-    let run_dir = rt.join("run");
-    let logs = rt.join("logs");
+    let pgdata = state_rt.join("data/pg-native");
+    let redis_dir = state_rt.join("data/redis-native");
+    let run_dir = state_rt.join("run");
+    let logs = state_rt.join("logs");
     fs::create_dir_all(&logs).ok();
+    fs::create_dir_all(&run_dir).ok();
 
     if let Err(e) = ensure_redis(
         &redis_bin,
@@ -551,8 +632,8 @@ pub fn ensure_native() -> NativeEnsureReport {
         };
     }
 
-    let mig = monorepo_root_from_runtime(&rt).map(|r| r.join("avrag-rs/migrations"));
-    if let Err(e) = write_client_env(&rt, mig.as_deref(), &mut log) {
+    let mig = resolve_migrations_dir(&bins_rt, &state_rt);
+    if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
         return NativeEnsureReport {
             ok: false,
             message: e,
@@ -579,14 +660,14 @@ pub fn ensure_native() -> NativeEnsureReport {
 
 pub fn stop_native() -> NativeEnsureReport {
     let mut log = String::new();
-    let Some(rt) = runtime_home() else {
+    let Some(state_rt) = runtime_home() else {
         return NativeEnsureReport {
             ok: true,
             message: "no runtime dir".into(),
             log,
         };
     };
-    let pgdata = rt.join("data/pg-native");
+    let pgdata = state_rt.join("data/pg-native");
     if let Some(pg_bin) = find_pg_bin() {
         if pgdata.join("PG_VERSION").is_file() {
             let (c, o, e) = run_capture(
@@ -601,12 +682,22 @@ pub fn stop_native() -> NativeEnsureReport {
             append_log(&mut log, format!("pg_ctl stop {c} {o}{e}"));
         }
     }
-    let pid_file = rt.join("run/redis-native.pid");
+    let pid_file = state_rt.join("run/redis-native.pid");
     if pid_file.is_file() {
         if let Ok(pid_s) = fs::read_to_string(&pid_file) {
             if let Ok(pid) = pid_s.trim().parse::<i32>() {
-                let _ = Command::new("kill").arg(pid.to_string()).status();
-                append_log(&mut log, format!("killed redis pid {pid}"));
+                // Windows: taskkill; Unix: kill
+                #[cfg(windows)]
+                {
+                    let _ = Command::new("taskkill")
+                        .args(["/PID", &pid.to_string(), "/F"])
+                        .status();
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = Command::new("kill").arg(pid.to_string()).status();
+                }
+                append_log(&mut log, format!("stopped redis pid {pid}"));
             }
         }
         let _ = fs::remove_file(&pid_file);
