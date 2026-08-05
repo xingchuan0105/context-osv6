@@ -23,13 +23,13 @@ import {
   IconThumbDown,
   IconThumbUp,
 } from "./chat-icons";
+import { userVisibleDegradeReasons } from "../../lib/workspace/degrade-display";
 import { CitationRenderer, collectWebSources, getCitationAnchorRect } from "./citation-renderer";
 import { ProgressStatusLine } from "./progress-status-line";
 
 export { ToolResultCard, ToolResultsPanel } from "./tool-result-card";
 
-/** Completed-turn progress line, restored after refresh/done (single-line,
- * same component as the live indicator — 2026-07-23 product direction). */
+/** Completed-turn progress: always default-collapsed with expand/collapse control. */
 function MessageProgressCard({
   locale,
   snapshot,
@@ -37,13 +37,18 @@ function MessageProgressCard({
   locale: "zh-CN" | "en";
   snapshot: UiProgressSnapshot;
 }) {
+  // Force collapsed on first mount even if older snapshots had collapsed:false.
+  const [collapsed, setCollapsed] = useState(true);
+  const endedAtMs = snapshot.endedAtMs ?? snapshot.startedAtMs ?? Date.now();
   return (
     <ProgressStatusLine
       activities={snapshot.activities}
+      collapsed={collapsed}
       locale={locale}
       mode={snapshot.mode}
+      onToggleCollapsed={() => setCollapsed((c) => !c)}
       startedAtMs={snapshot.startedAtMs}
-      endedAtMs={snapshot.endedAtMs}
+      endedAtMs={endedAtMs}
     />
   );
 }
@@ -148,6 +153,7 @@ type ChatMessageListProps = {
   onCopyMessage: (content: string) => void;
   onEditMessage: (content: string) => void;
   onSubmitFeedback: (messageId: string, rating: "up" | "down") => void;
+  onToggleProgressCollapsed?: () => void;
 };
 
 export function ChatMessageList({
@@ -160,6 +166,7 @@ export function ChatMessageList({
   onCopyMessage,
   onEditMessage,
   onSubmitFeedback,
+  onToggleProgressCollapsed,
 }: ChatMessageListProps) {
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
@@ -288,8 +295,10 @@ export function ChatMessageList({
     showLiveProgress && progress.mode != null ? (
     <ProgressStatusLine
       activities={progress.activities}
+      collapsed={progress.collapsed}
       locale={locale}
       mode={progress.mode}
+      onToggleCollapsed={onToggleProgressCollapsed}
       startedAtMs={progress.startedAtMs}
       endedAtMs={progress.endedAtMs}
     />
@@ -523,22 +532,30 @@ export function ChatMessageList({
                 ) : null}
 
                 {message.role === "assistant" &&
-                (message.guarded || message.degradeTrace.length > 0) ? (
+                (() => {
+                  const visibleDegrade = userVisibleDegradeReasons(
+                    message.degradeTrace.map((entry) => entry.reason),
+                  );
+                  if (!message.guarded && visibleDegrade.length === 0) {
+                    return null;
+                  }
+                  return (
                   <div className={styles.messageNotice}>
                     {message.guarded ? (
                       <div className={styles.messageNoticeTitle}>
                         {formatUiMessage(locale, "workspaceGuardIntervened")}
                       </div>
                     ) : null}
-                    {message.degradeTrace.length > 0 ? (
+                    {visibleDegrade.length > 0 ? (
                       <div className={styles.messageNoticeBody}>
                         {formatUiMessage(locale, "workspaceDegradeReasons", {
-                          reasons: message.degradeTrace.map((entry) => entry.reason).join(" / "),
+                          reasons: visibleDegrade.join(" / "),
                         })}
                       </div>
                     ) : null}
                   </div>
-                ) : null}
+                  );
+                })()}
               </div>
             </article>
           </Fragment>

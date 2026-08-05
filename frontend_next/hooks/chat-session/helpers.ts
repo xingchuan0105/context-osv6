@@ -35,14 +35,36 @@ export function normalizeMessageCapabilities(
   return capabilitiesFromAgentType(message.agent_id);
 }
 
-/** Hide tool-payload dumps that leaked into assistant `content` (e.g. doc_profile JSON). */
+/**
+ * Hide non-user-facing payload that sometimes leaks into assistant `content`:
+ * - sandbox / tool code fences and host observation shells
+ * - whole-message tool JSON dumps (e.g. doc_profile)
+ */
 export function sanitizeAssistantDisplayContent(content: string): string {
-  const trimmed = content.trim();
-  if (!trimmed) {
+  if (!content) {
     return content;
   }
+  let s = content
+    // Markdown fences (often codegen that the model echoed into the final turn)
+    .replace(/```[\w-]*\r?\n[\s\S]*?```/g, "")
+    // Inline HTML-ish code / host observation shells
+    .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, "")
+    .replace(/<code_execution_result\b[^>]*>[\s\S]*?<\/code_execution_result>/gi, "")
+    .replace(/<retrieval_summary\b[^>]*>[\s\S]*?<\/retrieval_summary>/gi, "")
+    .replace(/<loop_budget\b[^>]*>[\s\S]*?<\/loop_budget>/gi, "")
+    // Common tool-call XML shells
+    .replace(/<\/?tool_call\b[^>]*>/gi, "")
+    .replace(/<\/?function_call\b[^>]*>/gi, "");
+
+  // Collapse leftover blank runs after stripping
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+
+  const trimmed = s.trim();
+  if (!trimmed) {
+    return "";
+  }
   if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
-    return content;
+    return s;
   }
   try {
     const parsed: unknown = JSON.parse(trimmed);
@@ -64,9 +86,9 @@ export function sanitizeAssistantDisplayContent(content: string): string {
       }
     }
   } catch {
-    return content;
+    return s;
   }
-  return content;
+  return s;
 }
 
 export function mapTranscriptMessage(

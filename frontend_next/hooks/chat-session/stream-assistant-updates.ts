@@ -13,6 +13,7 @@ import {
   hasGuardrailIntervention,
   normalizeMessageMode,
   normalizeStreamMessageId,
+  sanitizeAssistantDisplayContent,
 } from "./helpers";
 import type { MessageHistory } from "./use-message-history";
 import type { PendingDoneEvent, UiChatMessage, UiProgressSnapshot } from "./types";
@@ -211,9 +212,11 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
               ? deriveAgentTypeLabel(capabilities)
               : deps.effectiveChatModeRef.current),
           capabilities,
-          content: getAnswerText(
-            answer || current?.content || "",
-            payload.answer_blocks ?? current?.answerBlocks ?? [],
+          content: sanitizeAssistantDisplayContent(
+            getAnswerText(
+              answer || current?.content || "",
+              payload.answer_blocks ?? current?.answerBlocks ?? [],
+            ),
           ),
           answerBlocks:
             payload.answer_blocks && payload.answer_blocks.length > 0

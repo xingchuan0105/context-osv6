@@ -12,6 +12,7 @@ import {
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { ChatResponse } from "../../lib/contracts";
+import { userVisibleDegradeReasons } from "../../lib/workspace/degrade-display";
 import {
   type AnswerBlock,
   type Citation,
@@ -184,7 +185,11 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
         setStreamingAnswer("");
         setCitations(nextCitations);
         setSources(nextSources);
-        setDegradeReasons((payload.degrade_trace ?? []).map((item) => item.reason).filter(Boolean));
+        setDegradeReasons(
+          userVisibleDegradeReasons(
+            (payload.degrade_trace ?? []).map((item) => item.reason).filter(Boolean),
+          ),
+        );
         setAnswering(false);
         break;
       }

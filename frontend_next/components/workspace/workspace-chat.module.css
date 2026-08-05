@@ -1595,6 +1595,53 @@
   color: hsl(var(--muted-foreground));
 }
 
+.statusLineMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.statusLineToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.statusLineToggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.statusLineToggle:not(:disabled):hover .statusLineSummaryTitle {
+  color: hsl(var(--foreground) / 0.9);
+}
+
+.statusLineSummaryTitle {
+  font-weight: 500;
+  color: hsl(var(--foreground) / 0.8);
+}
+
+.statusLineChevron {
+  flex: none;
+  color: hsl(var(--subtle-foreground));
+  font-size: 0.75em;
+}
+
+.statusLineCollapsed .statusLineSummaryTitle {
+  color: hsl(var(--muted-foreground));
+}
+
 .statusLineSpinner {
   flex: none;
   width: 0.85rem;

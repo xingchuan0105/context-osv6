@@ -156,6 +156,7 @@ export function progressSnapshotFromTurnMetadata(
     activities,
     startedAtMs: typeof p.startedAtMs === "number" ? p.startedAtMs : null,
     endedAtMs: typeof p.endedAtMs === "number" ? p.endedAtMs : Date.now(),
-    collapsed: p.collapsed === true,
+    // Completed turns default collapsed unless explicitly expanded in cache.
+    collapsed: p.collapsed !== false,
   };
 }

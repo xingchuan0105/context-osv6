@@ -203,11 +203,14 @@ describe("WorkspaceChatPane streaming search flow", () => {
     expect(screen.getAllByText("Hello")).toHaveLength(1);
     expect(screen.getByText("Hello").closest('[data-testid="workspace-answer-bubble"]')?.getAttribute("data-mode")).toBe("search");
 
-    // End-state: the status line freezes at completed with the last step; not hidden.
+    // End-state: completed and collapsed by default (expand via toggle).
     await waitFor(() => {
       const statusLine = screen.getByTestId("workspace-progress-status-line");
       expect(statusLine.getAttribute("data-progress-state")).toBe("completed");
-      expect(within(statusLine).getByText("正在搜索网页")).toBeTruthy();
+      expect(statusLine.getAttribute("data-collapsed")).toBe("true");
+      expect(within(statusLine).getByText("网络搜索")).toBeTruthy();
+      expect(within(statusLine).getByTestId("workspace-progress-collapse-toggle")).toBeTruthy();
+      expect(within(statusLine).queryByText("正在搜索网页")).toBeNull();
     });
 
     expect(onSessionChange).toHaveBeenCalledWith("sess-new");
@@ -215,6 +218,8 @@ describe("WorkspaceChatPane streaming search flow", () => {
       expect(screen.getByText("Guardrail 已介入当前回答。")).toBeTruthy();
       expect(screen.getByText("降级原因：fallback_to_summary")).toBeTruthy();
     });
+    // Internal tool plumbing codes must not surface.
+    expect(screen.queryByText(/tool_unavailable/)).toBeNull();
 
     expect(screen.queryByRole("button", { name: "Doc Two" })).toBeNull();
     expect(onFocusSource).not.toHaveBeenCalled();

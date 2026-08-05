@@ -247,6 +247,7 @@ export function WorkspaceChatPane({
         onCopyMessage={handleCopyMessage}
         onEditMessage={handleEditMessage}
         onSubmitFeedback={handleSubmitFeedback}
+        onToggleProgressCollapsed={chatSession.toggleProgressCollapsed}
       />
 
       <ChatComposer

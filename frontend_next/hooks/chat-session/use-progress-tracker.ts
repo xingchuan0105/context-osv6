@@ -71,22 +71,22 @@ export function useProgressTracker(locale: "zh-CN" | "en") {
     setEndedAtMs(null);
   }, []);
 
-  /** Freeze timer; card stays expanded. Returns a snapshot for attachment to the assistant row. */
+  /** Freeze timer and collapse thinking (expand via toggle). Snapshot for assistant row. */
   const finalize = useCallback((): UiProgressSnapshot | null => {
     if (modeRef.current == null) {
       return null;
     }
     const ended = Date.now();
     endedAtMsRef.current = ended;
-    collapsedRef.current = false;
+    collapsedRef.current = true;
     setEndedAtMs(ended);
-    setCollapsed(false);
+    setCollapsed(true);
     return {
       mode: modeRef.current,
       activities: activitiesRef.current.map((entry) => ({ ...entry })),
       startedAtMs: startedAtMsRef.current,
       endedAtMs: ended,
-      collapsed: false,
+      collapsed: true,
     };
   }, []);
 

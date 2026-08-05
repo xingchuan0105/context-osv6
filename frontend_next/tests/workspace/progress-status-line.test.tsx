@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { ProgressStatusLine } from "../../components/workspace/progress-status-line";
 import type { ProgressEntry } from "../../hooks/use-chat-session";
@@ -17,7 +17,7 @@ function entry(id: string, title: string, detail: string | null = null): Progres
 }
 
 describe("ProgressStatusLine", () => {
-  it("renders only the latest 4 steps in a rolling window", () => {
+  it("renders only the latest 4 steps in a rolling window while live", () => {
     const activities = [
       entry("a1", "正在理解问题"),
       entry("a2", "正在检索网页"),
@@ -47,24 +47,49 @@ describe("ProgressStatusLine", () => {
     expect(screen.getByTestId("workspace-progress-elapsed")).toBeTruthy();
   });
 
-  it("shows fallback row before the first fact and done icon when completed", () => {
-    const { container } = render(
+  it("auto-collapses when completed and toggles via the collapse button", () => {
+    const onToggle = vi.fn();
+    const activities = [entry("a1", "正在理解问题"), entry("a2", "正在整理回答")];
+    const { rerender } = render(
       <ProgressStatusLine
-        activities={[]}
+        activities={activities}
+        collapsed
         locale="zh-CN"
         mode="chat"
-        startedAtMs={Date.now() - 1000}
+        onToggleCollapsed={onToggle}
+        startedAtMs={Date.now() - 3000}
         endedAtMs={Date.now()}
       />,
     );
-    expect(screen.getByText("正在理解问题")).toBeTruthy();
+
     expect(
       screen.getByTestId("workspace-progress-status-line").getAttribute("data-progress-state"),
     ).toBe("completed");
-    expect(container.querySelectorAll("strong").length).toBe(1);
+    expect(screen.getByTestId("workspace-progress-status-line").getAttribute("data-collapsed")).toBe(
+      "true",
+    );
+    // Collapsed: summary title only, not step bodies.
+    expect(screen.getByText("思考完成")).toBeTruthy();
+    expect(screen.queryByText("正在整理回答")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("workspace-progress-collapse-toggle"));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ProgressStatusLine
+        activities={activities}
+        collapsed={false}
+        locale="zh-CN"
+        mode="chat"
+        onToggleCollapsed={onToggle}
+        startedAtMs={Date.now() - 3000}
+        endedAtMs={Date.now()}
+      />,
+    );
+    expect(screen.getByText("正在整理回答")).toBeTruthy();
   });
 
-  it("keeps step detail inline with the title", () => {
+  it("keeps step detail inline with the title while live", () => {
     render(
       <ProgressStatusLine
         activities={[entry("a1", "正在网页搜索", "2025 市场规模 预测")]}
