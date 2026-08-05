@@ -5,21 +5,26 @@
 //! `avrag-retrieval-data-plane` so worker / RagRuntime stay backend-agnostic.
 
 mod config;
+mod export;
 mod graph;
 mod index;
 mod search;
 
 use async_trait::async_trait;
 use avrag_retrieval_data_plane::{
-    Bm25SearchOutput, Bm25SearchRequest, DocumentIndexBatch, GraphSearchOutput, GraphSearchRequest,
-    IndexWriteReport, MultimodalSearchRequest, RetrievalDataPlane, RetrievalReadPort, ScoredChunk,
-    TextDenseSearchRequest,
+    Bm25SearchOutput, Bm25SearchRequest, DocumentExportMeta, DocumentIndexBatch,
+    DocumentIndexExport, ExportDocumentRequest, GraphSearchOutput, GraphSearchRequest,
+    IndexWriteReport, MultimodalSearchRequest, RetrievalDataPlane, RetrievalExportPort,
+    RetrievalReadPort, ScoredChunk, TextDenseSearchRequest,
 };
 use contracts::auth_runtime::AuthContext;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 pub use config::PgvectorConfig;
+pub use avrag_retrieval_data_plane::{
+    validate_batch_vector_dims, validate_vector_dim, PublishFingerprint,
+};
 
 /// Storage **channel_proxy** for graph-derived rows (same as storage-milvus).
 /// Not evidence relevance — lexical graph-augment uses terms + TOP1 score-gap instead.
@@ -144,17 +149,33 @@ impl RetrievalDataPlane for PgvectorDataPlane {
     }
 }
 
-pub(crate) fn validate_vector_dim(
-    path: &str,
-    actual: usize,
-    expected: usize,
-) -> anyhow::Result<()> {
-    if actual == expected {
-        return Ok(());
+#[async_trait]
+impl RetrievalExportPort for PgvectorDataPlane {
+    async fn export_document_index(
+        &self,
+        request: ExportDocumentRequest,
+    ) -> anyhow::Result<DocumentIndexExport> {
+        self.export_document_index_impl(request).await
     }
-    Err(anyhow::anyhow!(
-        "vector dimension mismatch for {path}: expected {expected}, got {actual}"
-    ))
+
+    async fn export_document_meta(
+        &self,
+        _auth: &AuthContext,
+        _document_id: Uuid,
+    ) -> anyhow::Result<DocumentExportMeta> {
+        // Summary/TOC live on product document tables (not rag_*). Stub for PR11;
+        // packager can fill from workspace/document services later.
+        Ok(DocumentExportMeta::default())
+    }
+
+    async fn list_indexed_document_ids(
+        &self,
+        auth: &AuthContext,
+        workspace_id: Option<Uuid>,
+    ) -> anyhow::Result<Vec<Uuid>> {
+        self.list_indexed_document_ids_impl(auth, workspace_id)
+            .await
+    }
 }
 
 pub(crate) fn owner_uuid(auth: &AuthContext) -> Uuid {

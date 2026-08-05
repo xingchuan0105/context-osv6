@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
 use avrag_retrieval_data_plane::{
-    DocumentIndexBatch, FALLBACK_RETRIEVAL_WEIGHT, MultimodalChunkIndexRecord, RetrievalDataPlane,
-    RetrievalReadPort, TextDenseSearchRequest, multimodal_retrieval_weight,
+    DocumentIndexBatch, EXPORT_SCHEMA_VERSION, FALLBACK_RETRIEVAL_WEIGHT,
+    MultimodalChunkIndexRecord, PublishFingerprint, RetrievalDataPlane, RetrievalReadPort,
+    TextDenseSearchRequest, multimodal_retrieval_weight, validate_vector_dim,
 };
 use uuid::Uuid;
 
@@ -247,4 +248,35 @@ fn index_write_report_default_is_zero_counts() {
     assert_eq!(report.entity_count, 0);
     assert_eq!(report.relation_count, 0);
     assert_eq!(report.graph_passage_count, 0);
+}
+
+#[test]
+fn publish_fingerprint_defaults_schema_version_and_validates_dim() {
+    let fp = PublishFingerprint::new("embed-model-x", 8);
+    assert_eq!(fp.schema_version, EXPORT_SCHEMA_VERSION);
+    assert_eq!(fp.multimodal_dim(), 8);
+    assert!(validate_vector_dim("t", 8, fp.vector_dim).is_ok());
+    assert!(validate_vector_dim("t", 4, fp.vector_dim).is_err());
+
+    let batch = DocumentIndexBatch {
+        owner_user_id: UserId::from(Uuid::from_u128(1)),
+        workspace_id: None,
+        document_id: Uuid::from_u128(2),
+        parse_run_id: Uuid::from_u128(3),
+        doc_version: 1,
+        text_chunks: vec![avrag_retrieval_data_plane::TextChunkIndexRecord {
+            chunk_id: Uuid::from_u128(4),
+            content: "x".into(),
+            vector: vec![0.0; 8],
+            page: None,
+            chunk_type: "text".into(),
+            parser_backend: None,
+            source_locator: None,
+        }],
+        multimodal_chunks: Vec::new(),
+        entities: Vec::new(),
+        relations: Vec::new(),
+        graph_passages: Vec::new(),
+    };
+    fp.validate_batch(&batch).expect("matching dims");
 }

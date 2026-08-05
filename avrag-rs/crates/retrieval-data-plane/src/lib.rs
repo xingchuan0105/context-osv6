@@ -287,6 +287,169 @@ pub struct IndexWriteReport {
     pub graph_passage_count: usize,
 }
 
+// ── Publish / export (ADR-0010 §5.6) ────────────────────────────────────────
+
+/// Bundle format version for WorkspacePublishBundle (manifest schema_version).
+pub const EXPORT_SCHEMA_VERSION: &str = "workspace_publish_bundle_v1";
+
+/// Model / schema fingerprint required so cloud import can accept vectors
+/// without re-embedding. Not stored on [`DocumentIndexBatch`] today — lives on
+/// the export manifest only.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PublishFingerprint {
+    pub embedding_model_id: String,
+    pub vector_dim: usize,
+    /// When multimodal embedding dim differs from text; defaults to `vector_dim`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multimodal_vector_dim: Option<usize>,
+    pub schema_version: String,
+}
+
+impl PublishFingerprint {
+    pub fn new(embedding_model_id: impl Into<String>, vector_dim: usize) -> Self {
+        Self {
+            embedding_model_id: embedding_model_id.into(),
+            vector_dim,
+            multimodal_vector_dim: None,
+            schema_version: EXPORT_SCHEMA_VERSION.to_string(),
+        }
+    }
+
+    pub fn multimodal_dim(&self) -> usize {
+        self.multimodal_vector_dim.unwrap_or(self.vector_dim)
+    }
+
+    /// Validate every vector in `batch` against this fingerprint's dims.
+    pub fn validate_batch(&self, batch: &DocumentIndexBatch) -> anyhow::Result<()> {
+        validate_batch_vector_dims(batch, self.vector_dim, self.multimodal_dim())
+    }
+}
+
+/// Counts + identity + fingerprint for one document export (publish manifest slice).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DocumentExportManifest {
+    pub fingerprint: PublishFingerprint,
+    pub owner_user_id: UserId,
+    pub workspace_id: Option<Uuid>,
+    pub document_id: Uuid,
+    pub parse_run_id: Uuid,
+    pub doc_version: u32,
+    pub text_chunk_count: usize,
+    pub multimodal_chunk_count: usize,
+    pub entity_count: usize,
+    pub relation_count: usize,
+    pub graph_passage_count: usize,
+}
+
+/// Full export payload: manifest (fingerprint + counts) + index batch with vectors.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentIndexExport {
+    pub manifest: DocumentExportManifest,
+    pub batch: DocumentIndexBatch,
+}
+
+/// Request to export one document's retrieval index including embedding vectors.
+#[derive(Debug, Clone)]
+pub struct ExportDocumentRequest {
+    pub auth: AuthContext,
+    pub document_id: Uuid,
+    /// When set, only rows with this `workspace_id` are exported.
+    pub workspace_id: Option<Uuid>,
+    /// Caller-supplied model fingerprint (not persisted in rag_* tables today).
+    pub fingerprint: PublishFingerprint,
+}
+
+/// Optional document-level meta for publish packaging (summary / TOC / profile).
+/// Implementors may return empty until product document tables are wired.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DocumentExportMeta {
+    pub summary: Option<String>,
+    pub toc: Option<Value>,
+    pub profile: Option<Value>,
+}
+
+/// Validate a single vector length (shared write + export path).
+pub fn validate_vector_dim(path: &str, actual: usize, expected: usize) -> anyhow::Result<()> {
+    if actual == expected {
+        return Ok(());
+    }
+    Err(anyhow::anyhow!(
+        "vector dimension mismatch for {path}: expected {expected}, got {actual}"
+    ))
+}
+
+/// Validate all dense vectors on a [`DocumentIndexBatch`].
+pub fn validate_batch_vector_dims(
+    batch: &DocumentIndexBatch,
+    text_dim: usize,
+    multimodal_dim: usize,
+) -> anyhow::Result<()> {
+    for (idx, chunk) in batch.text_chunks.iter().enumerate() {
+        validate_vector_dim(
+            &format!("text_chunks[{idx}].text_dense"),
+            chunk.vector.len(),
+            text_dim,
+        )?;
+    }
+    for (idx, chunk) in batch.multimodal_chunks.iter().enumerate() {
+        validate_vector_dim(
+            &format!("multimodal_chunks[{idx}].multimodal_dense"),
+            chunk.vector.len(),
+            multimodal_dim,
+        )?;
+    }
+    for (idx, entity) in batch.entities.iter().enumerate() {
+        validate_vector_dim(
+            &format!("entities[{idx}].entity_dense"),
+            entity.vector.len(),
+            text_dim,
+        )?;
+    }
+    for (idx, relation) in batch.relations.iter().enumerate() {
+        validate_vector_dim(
+            &format!("relations[{idx}].relation_dense"),
+            relation.vector.len(),
+            text_dim,
+        )?;
+    }
+    for (idx, passage) in batch.graph_passages.iter().enumerate() {
+        validate_vector_dim(
+            &format!("graph_passages[{idx}].passage_dense"),
+            passage.vector.len(),
+            text_dim,
+        )?;
+    }
+    Ok(())
+}
+
+/// Export port: read back full index records **including vectors** for publish
+/// (ADR-0010 §5.6). Separate from [`RetrievalReadPort`] (search has no vectors).
+#[async_trait]
+pub trait RetrievalExportPort: Send + Sync {
+    /// Export one document's index rows with embedding vectors.
+    async fn export_document_index(
+        &self,
+        request: ExportDocumentRequest,
+    ) -> anyhow::Result<DocumentIndexExport>;
+
+    /// Optional document meta (summary/TOC/profile). Default: empty.
+    async fn export_document_meta(
+        &self,
+        _auth: &AuthContext,
+        _document_id: Uuid,
+    ) -> anyhow::Result<DocumentExportMeta> {
+        Ok(DocumentExportMeta::default())
+    }
+
+    /// List document ids that have at least one index row for the owner,
+    /// optionally scoped to a workspace.
+    async fn list_indexed_document_ids(
+        &self,
+        auth: &AuthContext,
+        workspace_id: Option<Uuid>,
+    ) -> anyhow::Result<Vec<Uuid>>;
+}
+
 /// Read/query contract for the retrieval data plane.
 ///
 /// Consumers that only run queries (e.g. `RagRuntime` during a chat turn) depend
@@ -475,5 +638,100 @@ mod tests {
             err.to_string().contains("search_graph"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn validate_vector_dim_ok_and_mismatch() {
+        assert!(validate_vector_dim("v", 1024, 1024).is_ok());
+        let err = validate_vector_dim("v", 4, 1024).unwrap_err();
+        assert!(err.to_string().contains("dimension mismatch"), "{err}");
+    }
+
+    #[test]
+    fn fingerprint_validate_batch_checks_all_record_kinds() {
+        let fp = PublishFingerprint::new("test-embed", 2);
+        let batch = DocumentIndexBatch {
+            owner_user_id: UserId::from(Uuid::from_u128(1)),
+            workspace_id: None,
+            document_id: Uuid::from_u128(2),
+            parse_run_id: Uuid::from_u128(3),
+            doc_version: 1,
+            text_chunks: vec![TextChunkIndexRecord {
+                chunk_id: Uuid::from_u128(4),
+                content: "c".into(),
+                vector: vec![0.0, 1.0],
+                page: None,
+                chunk_type: "text".into(),
+                parser_backend: None,
+                source_locator: None,
+            }],
+            multimodal_chunks: vec![MultimodalChunkIndexRecord {
+                chunk_id: Uuid::from_u128(5),
+                asset_id: Uuid::from_u128(6),
+                context_text: "m".into(),
+                caption: None,
+                image_path: None,
+                vector: vec![0.5, 0.5],
+                page: None,
+                chunk_type: "multimodal".into(),
+                parser_backend: None,
+                source_locator: None,
+                retrieval_weight: None,
+            }],
+            entities: vec![EntityIndexRecord {
+                entity_id: Uuid::from_u128(7),
+                name: "A".into(),
+                normalized_name: "a".into(),
+                entity_type: None,
+                vector: vec![1.0, 0.0],
+                supporting_chunk_ids: vec![],
+                metadata: None,
+            }],
+            relations: vec![RelationIndexRecord {
+                relation_id: Uuid::from_u128(8),
+                subject: "A".into(),
+                predicate: "r".into(),
+                object: "B".into(),
+                relation_text: "A r B".into(),
+                vector: vec![0.1, 0.9],
+                supporting_chunk_ids: vec![],
+                metadata: None,
+            }],
+            graph_passages: vec![GraphPassageIndexRecord {
+                passage_id: Uuid::from_u128(9),
+                chunk_id: None,
+                text: "p".into(),
+                vector: vec![0.2, 0.8],
+                relation_ids: vec![],
+                metadata: None,
+            }],
+        };
+        fp.validate_batch(&batch).unwrap();
+
+        let mut bad = batch.clone();
+        bad.text_chunks[0].vector = vec![1.0]; // dim 1 != 2
+        let err = fp.validate_batch(&bad).unwrap_err();
+        assert!(err.to_string().contains("text_chunks[0]"), "{err}");
+    }
+
+    #[test]
+    fn export_manifest_roundtrip_preserves_fingerprint() {
+        let manifest = DocumentExportManifest {
+            fingerprint: PublishFingerprint::new("bge-m3", 1024),
+            owner_user_id: UserId::from(Uuid::from_u128(1)),
+            workspace_id: Some(Uuid::from_u128(2)),
+            document_id: Uuid::from_u128(3),
+            parse_run_id: Uuid::from_u128(4),
+            doc_version: 7,
+            text_chunk_count: 1,
+            multimodal_chunk_count: 0,
+            entity_count: 0,
+            relation_count: 0,
+            graph_passage_count: 0,
+        };
+        let encoded = serde_json::to_value(&manifest).unwrap();
+        let decoded: DocumentExportManifest = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, manifest);
+        assert_eq!(decoded.fingerprint.schema_version, EXPORT_SCHEMA_VERSION);
     }
 }

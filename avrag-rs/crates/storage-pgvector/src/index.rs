@@ -1,6 +1,8 @@
-use crate::{PgvectorDataPlane, validate_vector_dim};
+use crate::PgvectorDataPlane;
 use pgvector::Vector;
-use avrag_retrieval_data_plane::{DocumentIndexBatch, IndexWriteReport};
+use avrag_retrieval_data_plane::{
+    validate_batch_vector_dims, DocumentIndexBatch, IndexWriteReport,
+};
 use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
@@ -243,40 +245,9 @@ fn validate_batch(
     batch: &DocumentIndexBatch,
     config: &crate::PgvectorConfig,
 ) -> anyhow::Result<()> {
-    for (idx, chunk) in batch.text_chunks.iter().enumerate() {
-        validate_vector_dim(
-            &format!("text_chunks[{idx}].text_dense"),
-            chunk.vector.len(),
-            config.text_vector_dim,
-        )?;
-    }
-    for (idx, chunk) in batch.multimodal_chunks.iter().enumerate() {
-        validate_vector_dim(
-            &format!("multimodal_chunks[{idx}].multimodal_dense"),
-            chunk.vector.len(),
-            config.multimodal_vector_dim,
-        )?;
-    }
-    for (idx, entity) in batch.entities.iter().enumerate() {
-        validate_vector_dim(
-            &format!("entities[{idx}].entity_dense"),
-            entity.vector.len(),
-            config.text_vector_dim,
-        )?;
-    }
-    for (idx, relation) in batch.relations.iter().enumerate() {
-        validate_vector_dim(
-            &format!("relations[{idx}].relation_dense"),
-            relation.vector.len(),
-            config.text_vector_dim,
-        )?;
-    }
-    for (idx, passage) in batch.graph_passages.iter().enumerate() {
-        validate_vector_dim(
-            &format!("graph_passages[{idx}].passage_dense"),
-            passage.vector.len(),
-            config.text_vector_dim,
-        )?;
-    }
-    Ok(())
+    validate_batch_vector_dims(
+        batch,
+        config.text_vector_dim,
+        config.multimodal_vector_dim,
+    )
 }
