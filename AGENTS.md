@@ -106,6 +106,7 @@ Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **wheth
 - Default: local trunk `master`; commit locally. No push / PR / CI babysitting unless the user asks. Full discipline: `docs/engineering/SOLO_DISCIPLINE.md`.
 - Services (Milvus/PG/Redis/MinIO): assume running per `docs/agent/wsl-services.md`; do not `docker-compose up` blindly; do not prune `avrag-test-pg-*` containers.
 - Deploy: only `scripts/deploy-*.sh` (status: `scripts/deploy-status.sh`). Never ad-hoc ssh/scp product code from chat.
+- **VPS fleet: main only.** Cloud product host is a single machine (`VPS_MAIN_*` in `.env` — backend, frontend, public sites). The former **qdrant** VPS subscription is cancelled; do **not** use or reintroduce `VPS_QDRANT_*`, and do not assume a second cloud box for vectors (local/SaaS retrieval is pgvector or Milvus per `RETRIEVAL_BACKEND`, not a dedicated Qdrant host).
 
 ## Verify defaults
 

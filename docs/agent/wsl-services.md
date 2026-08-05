@@ -47,8 +47,8 @@ All connection endpoints are pre-configured in `avrag-rs/.env` (`MILVUS_URL`, `D
 
 **The formal deploy path is scripts only.** Do not ad-hoc ssh/scp product code from chat.
 
-- Credentials live in `avrag-rs/.env`: `VPS_MAIN_HOST` / `VPS_MAIN_USER` / `VPS_MAIN_PASSWORD`, `VPS_QDRANT_HOST` / `VPS_QDRANT_USER` / `VPS_QDRANT_PASSWORD`. Read from there; never ask the user, never paste values into docs or chat.
+- Credentials live in `avrag-rs/.env`: **`VPS_MAIN_HOST` / `VPS_MAIN_USER` / `VPS_MAIN_PASSWORD` only.** Read from there; never ask the user, never paste values into docs or chat.
 - Publish via `scripts/deploy-frontend.sh`, `scripts/deploy-backend.sh`, `scripts/deploy-public-sites.sh`, `scripts/publish-desktop-release.sh`; status via `scripts/deploy-status.sh`.
 - Alignment plan: [`docs/engineering/LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md`](../engineering/LOCAL_VPS_ALIGNMENT_PLAN_2026-07-14.md).
 - When deploying, always verify service health on the VPS before reporting success.
-- Servers: **main** (backend + frontend) and **qdrant** (Qdrant today, Milvus future). IPs are intentionally not repeated here — read `VPS_*_HOST` from `.env` when a script or runbook needs them.
+- **Fleet: main only.** One cloud host runs backend + frontend (+ public sites / desktop static as published). The former **qdrant** VPS is **cancelled** (no `VPS_QDRANT_*`). Retrieval is not a second VPS — use local/SaaS `RETRIEVAL_BACKEND` (`pgvector` or `milvus`). IPs are intentionally not repeated here — read `VPS_MAIN_HOST` from `.env` when a script or runbook needs it.
