@@ -1,0 +1,13 @@
+[package]
+name = "evidence-form"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Pure evidence hit form protocol: expanded / card / stub + adjacent (no budgets)"
+
+[dependencies]
+serde_json.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

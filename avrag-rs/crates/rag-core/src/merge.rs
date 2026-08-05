@@ -125,6 +125,11 @@ pub fn dual_threshold_cut(
     results
 }
 
+/// Default S+L cursor radius (same-doc neighbors).
+pub const ADJACENT_MERGE_RADIUS: i32 = 1;
+/// Max L-only neighbors pulled into the package per call.
+pub const ADJACENT_MERGE_PULL_BUDGET: usize = 8;
+
 /// Env: `RETRIEVAL_ADJACENT_MERGE` — product default **on** (chunk semantic
 /// continuity: S-anchor + L-neighborhood). Set `0`/`false`/`off` to disable.
 pub fn adjacent_merge_enabled() -> bool {
@@ -241,6 +246,29 @@ pub fn adjacent_merge_shortlist_longlist(
 fn is_table_chunk(c: &ScoredChunk) -> bool {
     let t = c.chunk_type.to_ascii_lowercase();
     t.contains("table") || t == "struct" || t == "row_group"
+}
+
+/// Tools-layer finalizer: optional cursor hydrate → S+L adjacent merge.
+/// Single exit for dense/lexical so radius/pull_budget stay localized.
+pub async fn finalize_evidence_package(
+    store: Option<&dyn crate::ports::ContentStore>,
+    auth: &contracts::auth_runtime::AuthContext,
+    mut shortlist: Vec<ScoredChunk>,
+    mut longlist: Vec<ScoredChunk>,
+) -> Vec<ScoredChunk> {
+    if !adjacent_merge_enabled() {
+        return shortlist;
+    }
+    if let Some(store) = store {
+        hydrate_cursors_from_store(store, auth, &mut shortlist).await;
+        hydrate_cursors_from_store(store, auth, &mut longlist).await;
+    }
+    adjacent_merge_shortlist_longlist(
+        shortlist,
+        &longlist,
+        ADJACENT_MERGE_RADIUS,
+        ADJACENT_MERGE_PULL_BUDGET,
+    )
 }
 
 /// Hydrate `cursor` from content-store metadata when missing on scored hits.

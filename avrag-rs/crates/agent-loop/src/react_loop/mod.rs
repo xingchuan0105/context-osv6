@@ -21,6 +21,8 @@ pub mod json_fence;
 mod message_format;
 mod context_visibility;
 mod claim_notes;
+pub(crate) mod evidence_pool;
+mod model_visible;
 pub mod message_queue;
 pub mod parse;
 pub mod prompt_assets;
@@ -168,13 +170,7 @@ impl ReActLoop {
             answer_deltas_streamed: false,
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(alias_start)),
-            seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::HashSet::new(),
-            )),
-            seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
-            evidence_notes: Vec::new(),
+            evidence: evidence_pool::EvidencePool::new(),
             session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(mode.sdk_primitives.iter().cloned().collect()),
             query_card,

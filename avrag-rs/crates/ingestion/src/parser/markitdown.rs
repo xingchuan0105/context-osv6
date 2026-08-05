@@ -14,7 +14,6 @@
 //! （默认 120_000）。
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
 use uuid::Uuid;
@@ -23,6 +22,7 @@ use crate::ir::{
     BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, MD_LINE_END_KEY,
     MD_LINE_START_KEY, ParseBackend, SourceLocator,
 };
+use crate::parser::markdown_cli;
 
 /// 子进程调用配置。
 #[derive(Debug, Clone)]
@@ -51,73 +51,22 @@ impl Default for MarkitdownConfig {
     }
 }
 
-fn temp_input_path(filename: &str) -> PathBuf {
-    let extension = filename
-        .rsplit('.')
-        .next()
-        .filter(|ext| !ext.is_empty() && *ext != filename)
-        .map(|ext| ext.to_ascii_lowercase())
-        .unwrap_or_else(|| "bin".to_string());
-    std::env::temp_dir().join(format!("avrag-markitdown-{}.{extension}", Uuid::new_v4()))
-}
-
 /// bytes → 临时文件（markitdown 按扩展名选 converter）→ 子进程 → markdown stdout。
 pub async fn run_markitdown(
     bytes: &[u8],
     filename: &str,
     config: &MarkitdownConfig,
 ) -> anyhow::Result<String> {
-    let input_path = temp_input_path(filename);
-    tokio::fs::write(&input_path, bytes)
-        .await
-        .map_err(|error| {
-            anyhow::anyhow!("markitdown temp file {}: {error}", input_path.display())
-        })?;
-    let run_result = run_markitdown_on_path(&input_path, config).await;
+    let input_path = markdown_cli::write_temp_input("markitdown", filename, bytes).await?;
+    let run_result = markdown_cli::run_cli_capture_stdout(
+        &config.bin,
+        &[input_path.as_os_str()],
+        config.timeout,
+        "markitdown",
+    )
+    .await;
     let _ = tokio::fs::remove_file(&input_path).await;
     run_result
-}
-
-async fn run_markitdown_on_path(
-    input_path: &std::path::Path,
-    config: &MarkitdownConfig,
-) -> anyhow::Result<String> {
-    let child = tokio::process::Command::new(&config.bin)
-        .arg(input_path)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "markitdown spawn failed (bin {:?}): {error} — worker host 需安装 markitdown CLI",
-                config.bin
-            )
-        })?;
-    let output = match tokio::time::timeout(config.timeout, child.wait_with_output()).await {
-        Ok(result) => result.map_err(|error| anyhow::anyhow!("markitdown wait: {error}"))?,
-        Err(_) => {
-            // kill_on_drop：child 在此作用域结束即回收。
-            anyhow::bail!(
-                "markitdown timed out after {}ms for {}",
-                config.timeout.as_millis(),
-                input_path.display()
-            );
-        }
-    };
-    if !output.status.success() {
-        let stderr_tail = String::from_utf8_lossy(&output.stderr)
-            .chars()
-            .take(500)
-            .collect::<String>();
-        anyhow::bail!(
-            "markitdown exited with {} for {}: {stderr_tail}",
-            output.status,
-            input_path.display()
-        );
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// markitdown markdown → Heading/Paragraph blocks（不触发管道表重检测：

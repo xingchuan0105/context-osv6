@@ -416,6 +416,108 @@ fn parse_jsonl_or_json_pages(body: &str, start_page: u32) -> Result<Vec<PaddleOc
     Ok(pages)
 }
 
+/// Assemble DocumentIr from Paddle page results (co-located with OCR client).
+pub fn build_document_ir_from_paddle(
+    document_id: uuid::Uuid,
+    filename: &str,
+    pages: &[PaddleOcrPageResult],
+    table_ocr_pages: &std::collections::HashSet<u32>,
+) -> crate::ir::DocumentIr {
+    use crate::ir::{
+        AssetIr, AssetKind, BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, PageIr,
+        ParseBackend, SourceLocator,
+    };
+    use std::collections::BTreeMap;
+
+    let mut ir = DocumentIr::new(
+        document_id.to_string(),
+        filename.to_string(),
+        DocumentType::Pdf,
+        ParseBackend::PaddleOcrPdf,
+    );
+    ir.metadata
+        .insert("ocr_backend".to_string(), "paddle_jobs".to_string());
+
+    for page in pages {
+        let is_table_page = table_ocr_pages.contains(&page.page_number);
+        ir.pages.push(PageIr {
+            page_number: page.page_number,
+            width: None,
+            height: None,
+            backend: ParseBackend::PaddleOcrPdf,
+            text_char_count: page.text.len(),
+            image_count: page.figures.len(),
+            metadata: Default::default(),
+        });
+
+        if !page.text.is_empty() {
+            ir.blocks.push(BlockIr {
+                block_id: format!("paddle-p{}-text", page.page_number),
+                page: Some(page.page_number),
+                block_type: if is_table_page {
+                    BlockType::Table
+                } else {
+                    BlockType::Paragraph
+                },
+                modality: BlockModality::TextOnly,
+                text: page.text.clone(),
+                alt_text: None,
+                asset_refs: Vec::new(),
+                caption: None,
+                section_path: Vec::new(),
+                source_locator: SourceLocator {
+                    page: Some(page.page_number),
+                    ..SourceLocator::default()
+                },
+                parser_backend: ParseBackend::PaddleOcrPdf,
+                metadata: Default::default(),
+            });
+        }
+
+        for (fig_idx, figure) in page.figures.iter().enumerate() {
+            let asset_id = format!("paddle-p{}-fig{}", page.page_number, fig_idx);
+            let mut asset_metadata = BTreeMap::new();
+            asset_metadata.insert("source".to_string(), "paddle_ocr".to_string());
+            asset_metadata.insert("ephemeral_url".to_string(), "true".to_string());
+            asset_metadata.insert("original_url".to_string(), figure.image_url.clone());
+            ir.assets.push(AssetIr {
+                asset_id: asset_id.clone(),
+                page: Some(page.page_number),
+                asset_kind: AssetKind::Image,
+                storage_path: figure.image_url.clone(),
+                mime_type: None,
+                width: None,
+                height: None,
+                parser_backend: ParseBackend::PaddleOcrPdf,
+                metadata: asset_metadata,
+            });
+
+            ir.blocks.push(BlockIr {
+                block_id: format!("paddle-p{}-fig{}", page.page_number, fig_idx),
+                page: Some(page.page_number),
+                block_type: BlockType::Figure,
+                modality: BlockModality::ImageWithContext,
+                text: figure.surrounding_text.clone(),
+                alt_text: Some(figure.image_key.clone()),
+                asset_refs: vec![asset_id],
+                caption: None,
+                section_path: Vec::new(),
+                source_locator: SourceLocator {
+                    page: Some(page.page_number),
+                    ..SourceLocator::default()
+                },
+                parser_backend: ParseBackend::PaddleOcrPdf,
+                metadata: BTreeMap::from([(
+                    "paddle_image_key".to_string(),
+                    figure.image_key.clone(),
+                )]),
+            });
+        }
+    }
+
+    ir
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

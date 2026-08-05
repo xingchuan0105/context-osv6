@@ -15,15 +15,13 @@ pub const HISTORY_FULL_RETRIEVAL_ROUNDS: usize = 2;
 /// (Unicode scalar / char count, not UTF-8 bytes). Shared account for near-round
 /// full bodies after history stub (U-P2 / D4).
 pub const WORKING_SET_CHAR_BUDGET: usize = 16_000;
-/// Snippet length when demoting expanded → card under working-set pressure.
-const WORKING_SET_CARD_CHARS: usize = 280;
-
 fn looks_like_retrieval_payload(s: &str) -> bool {
     s.contains("chunk_id")
         && (s.contains("\"text\"") || s.contains("\"content\"") || s.contains("body_omitted"))
 }
 
 /// Collapse chunk bodies in a JSON value tree (in place).
+/// Morphology via `evidence-form::mark_stub_map`; `history_cleared` is loop policy.
 fn strip_chunk_bodies(v: &mut Value) {
     match v {
         Value::Array(arr) => {
@@ -32,19 +30,8 @@ fn strip_chunk_bodies(v: &mut Value) {
             }
         }
         Value::Object(map) => {
-            let is_chunk = map.contains_key("chunk_id")
-                && (map.contains_key("text")
-                    || map.contains_key("content")
-                    || map.contains_key("alias"));
-            if is_chunk {
-                if let Some(t) = map.get_mut("text") {
-                    *t = Value::String(String::new());
-                }
-                if let Some(t) = map.get_mut("content") {
-                    *t = Value::String(String::new());
-                }
-                map.insert("body_omitted".into(), Value::Bool(true));
-                map.insert("visibility".into(), Value::String("stub".into()));
+            if evidence_form::is_chunk_map(map) {
+                evidence_form::mark_stub_map(map);
                 map.insert("history_cleared".into(), Value::Bool(true));
             } else {
                 for (_k, child) in map.iter_mut() {
@@ -114,67 +101,20 @@ fn find_json_string_end(s: &str) -> Option<usize> {
 }
 
 fn is_adjacent_chunk(map: &serde_json::Map<String, Value>) -> bool {
-    map.get("adjacent").and_then(|v| v.as_bool()) == Some(true)
-        || map
-            .get("source")
-            .and_then(|v| v.as_str())
-            .is_some_and(|s| s.contains("+adjacent"))
-        || map
-            .get("member_chunk_ids")
-            .and_then(|v| v.as_array())
-            .is_some_and(|a| a.len() > 1)
+    evidence_form::is_adjacent_map(map)
 }
 
 fn chunk_text_len(map: &serde_json::Map<String, Value>) -> usize {
-    map.get("text")
-        .and_then(|v| v.as_str())
-        .or_else(|| map.get("content").and_then(|v| v.as_str()))
-        .map(|s| s.chars().count())
-        .unwrap_or(0)
+    evidence_form::chunk_text_len_map(map)
 }
 
 fn is_expanded_body(map: &serde_json::Map<String, Value>) -> bool {
-    if map.get("body_omitted").and_then(|v| v.as_bool()) == Some(true) {
-        return false;
-    }
-    if map.get("reseen").is_some() {
-        return false;
-    }
-    if map.get("visibility").and_then(|v| v.as_str()) == Some("stub")
-        || map.get("visibility").and_then(|v| v.as_str()) == Some("card")
-    {
-        return false;
-    }
-    chunk_text_len(map) > WORKING_SET_CARD_CHARS
+    evidence_form::is_expanded_body_map(map)
 }
 
 fn demote_chunk_to_card(map: &mut serde_json::Map<String, Value>) {
-    let full = map
-        .get("text")
-        .and_then(|v| v.as_str())
-        .or_else(|| map.get("content").and_then(|v| v.as_str()))
-        .unwrap_or("")
-        .to_string();
-    let snip = if full.chars().count() <= WORKING_SET_CARD_CHARS {
-        full
-    } else {
-        let head: String = full
-            .chars()
-            .take(WORKING_SET_CARD_CHARS.saturating_sub(1))
-            .collect();
-        format!("{head}…")
-    };
-    if map.contains_key("text") {
-        map.insert("text".into(), Value::String(snip.clone()));
-    }
-    if map.contains_key("content") {
-        map.insert("content".into(), Value::String(snip));
-    }
-    if !map.contains_key("text") && !map.contains_key("content") {
-        map.insert("text".into(), Value::String(String::new()));
-    }
-    map.insert("body_omitted".into(), Value::Bool(true));
-    map.insert("visibility".into(), Value::String("card".into()));
+    evidence_form::demote_map_to_card(map);
+    // Policy tag: working-set path demoted this hit (not in form protocol).
     map.insert("working_set_demoted".into(), Value::Bool(true));
 }
 
@@ -212,7 +152,7 @@ fn demote_matching_in_value(
                     return 0;
                 }
                 let cost = chunk_text_len(map);
-                if cost <= WORKING_SET_CARD_CHARS {
+                if cost <= evidence_form::CARD_SNIPPET_CHARS {
                     return 0;
                 }
                 demote_chunk_to_card(map);
@@ -324,8 +264,10 @@ fn apply_working_set_budget(
                 if before_chars == 0 {
                     continue;
                 }
-                let trimmed =
-                    collapse_long_strings_to_card(&messages[*idx].content, WORKING_SET_CARD_CHARS);
+                let trimmed = collapse_long_strings_to_card(
+                    &messages[*idx].content,
+                    evidence_form::CARD_SNIPPET_CHARS,
+                );
                 let after_chars = heuristic_expanded_chars(&trimmed);
                 if after_chars < before_chars {
                     used = used.saturating_sub(before_chars.saturating_sub(after_chars));
@@ -370,7 +312,7 @@ fn sum_long_quoted_after_key(content: &str, key: &str) -> usize {
                 if let Some(end) = find_json_string_end(s) {
                     let body = &s[..end.saturating_sub(1)];
                     let n = body.chars().count();
-                    if n > WORKING_SET_CARD_CHARS {
+                    if n > evidence_form::CARD_SNIPPET_CHARS {
                         total = total.saturating_add(n);
                     }
                     rest = &s[end..];

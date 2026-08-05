@@ -60,7 +60,7 @@ pub fn default_image_token_estimate() -> usize {
 }
 
 /// L2-normalize; zero vectors pass through unchanged (avoids NaN).
-fn l2_normalized(v: &[f32]) -> Vec<f32> {
+pub fn l2_normalized(v: &[f32]) -> Vec<f32> {
     let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm <= f32::EPSILON {
         return v.to_vec();
@@ -68,53 +68,43 @@ fn l2_normalized(v: &[f32]) -> Vec<f32> {
     v.iter().map(|x| x / norm).collect()
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct MultiModalEmbeddingInput {
-    pub text: Option<String>,
-    pub image: Option<String>,
-    pub images: Vec<String>,
-    pub video: Option<String>,
+/// Client-side multimodal fusion: L2 each part → mean → L2 (SiliconFlow VL).
+/// Single-part: pass through **without** L2 (DashScope / SF single-item parity).
+pub fn fuse_part_vectors(parts: &[Vec<f32>]) -> anyhow::Result<Vec<f32>> {
+    let (first, rest) = parts
+        .split_first()
+        .ok_or_else(|| anyhow::anyhow!("fuse_part_vectors: empty parts"))?;
+    if rest.is_empty() {
+        return Ok(first.clone());
+    }
+    let dim = first.len();
+    let mut acc = vec![0f32; dim];
+    for v in std::iter::once(first).chain(rest.iter()) {
+        anyhow::ensure!(
+            v.len() == dim,
+            "embedding part dim mismatch: {} vs {dim}",
+            v.len()
+        );
+        for (a, b) in acc.iter_mut().zip(l2_normalized(v)) {
+            *a += b;
+        }
+    }
+    let count = (rest.len() + 1) as f32;
+    for a in acc.iter_mut() {
+        *a /= count;
+    }
+    Ok(l2_normalized(&acc))
 }
 
-impl MultiModalEmbeddingInput {
-    pub fn text(text: impl Into<String>) -> Self {
-        Self {
-            text: Some(text.into()),
-            image: None,
-            images: Vec::new(),
-            video: None,
-        }
-    }
+/// Single type source: `avrag_rag_core_ports` (T5 deepen).
+pub use avrag_rag_core_ports::MultiModalEmbeddingInput;
 
-    pub fn text_image(text: impl Into<String>, image: impl Into<String>) -> Self {
-        Self {
-            text: Some(text.into()),
-            image: Some(image.into()),
-            images: Vec::new(),
-            video: None,
-        }
-    }
-
-    pub fn text_images(text: impl Into<String>, images: Vec<String>) -> Self {
-        Self {
-            text: Some(text.into()),
-            image: None,
-            images,
-            video: None,
-        }
-    }
-
-    pub fn image_count(&self) -> usize {
-        usize::from(self.image.is_some()) + self.images.len()
-    }
-
-    pub fn estimate_tokens(&self) -> usize {
-        let text_tokens = self.text.as_deref().map(crate::count_tokens).unwrap_or(0);
-        let per_image = default_image_token_estimate();
-        let image_tokens = self.image_count() * per_image;
-        let video_tokens = usize::from(self.video.is_some()) * per_image;
-        text_tokens + image_tokens + video_tokens
-    }
+fn estimate_mm_tokens(input: &MultiModalEmbeddingInput) -> usize {
+    let text_tokens = input.text.as_deref().map(crate::count_tokens).unwrap_or(0);
+    let per_image = default_image_token_estimate();
+    let image_tokens = input.image_count() * per_image;
+    let video_tokens = usize::from(input.video.is_some()) * per_image;
+    text_tokens + image_tokens + video_tokens
 }
 
 fn build_dashscope_multimodal_contents(input: &MultiModalEmbeddingInput) -> Vec<serde_json::Value> {
@@ -366,7 +356,7 @@ impl EmbeddingClient {
             }
         }
 
-        let estimated_tokens = input.estimate_tokens();
+        let estimated_tokens = estimate_mm_tokens(input);
         self.check_rate_limit(estimated_tokens)?;
 
         let (vector, actual_tokens_u32) = if self.uses_openai_vl_embedding() {
@@ -573,31 +563,12 @@ impl EmbeddingClient {
             .context("Failed to parse OpenAI-VL multimodal embedding response")?;
 
         let vectors: Vec<Vec<f32>> = resp.data.into_iter().map(|item| item.embedding).collect();
-        let (first, rest) = vectors
-            .split_first()
-            .context("OpenAI-VL multimodal embedding response did not include any vectors")?;
-        if rest.is_empty() {
-            return Ok((first.clone(), None));
-        }
-
+        anyhow::ensure!(
+            !vectors.is_empty(),
+            "OpenAI-VL multimodal embedding response did not include any vectors"
+        );
         // No server-side fusion on SF: fuse per-item vectors client-side.
-        let dim = first.len();
-        let mut acc = vec![0f32; dim];
-        for v in std::iter::once(first).chain(rest.iter()) {
-            anyhow::ensure!(
-                v.len() == dim,
-                "OpenAI-VL embedding part dim mismatch: {} vs {dim}",
-                v.len()
-            );
-            for (a, b) in acc.iter_mut().zip(l2_normalized(v)) {
-                *a += b;
-            }
-        }
-        let count = (rest.len() + 1) as f32;
-        for a in acc.iter_mut() {
-            *a /= count;
-        }
-        Ok((l2_normalized(&acc), None))
+        Ok((fuse_part_vectors(&vectors)?, None))
     }
 
     fn uses_openai_vl_embedding(&self) -> bool {
@@ -688,19 +659,28 @@ impl avrag_rag_core_ports::EmbeddingPort for EmbeddingClient {
         input: &avrag_rag_core_ports::MultiModalEmbeddingInput,
         dimension: Option<usize>,
     ) -> anyhow::Result<Vec<f32>> {
-        let mapped = MultiModalEmbeddingInput {
-            text: input.text.clone(),
-            image: input.image.clone(),
-            images: input.images.clone(),
-            video: input.video.clone(),
-        };
-        EmbeddingClient::embed_multimodal_fused(self, &mapped, dimension).await
+        EmbeddingClient::embed_multimodal_fused(self, input, dimension).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fuse_part_vectors_single_passthrough() {
+        let v = fuse_part_vectors(&[vec![3.0, 4.0, 0.0]]).unwrap();
+        assert_eq!(v, vec![3.0, 4.0, 0.0]);
+    }
+
+    #[test]
+    fn fuse_part_vectors_mean_l2() {
+        let v = fuse_part_vectors(&[vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]]).unwrap();
+        let inv = 1.0f32 / 2.0f32.sqrt();
+        assert!((v[0] - inv).abs() < 1e-5);
+        assert!((v[1] - inv).abs() < 1e-5);
+        assert!(v[2].abs() < 1e-5);
+    }
 
     #[test]
     fn test_model_provider_config_is_configured() {
@@ -751,8 +731,8 @@ mod tests {
                 "data:image/jpeg;base64,d".to_string(),
             ],
         );
-        assert!(multi.estimate_tokens() > single.estimate_tokens());
-        assert!(multi.estimate_tokens() >= 4 * default_image_token_estimate());
+        assert!(estimate_mm_tokens(&multi) > estimate_mm_tokens(&single));
+        assert!(estimate_mm_tokens(&multi) >= 4 * default_image_token_estimate());
     }
 
     #[test]
@@ -763,7 +743,7 @@ mod tests {
             images: Vec::new(),
             video: None,
         };
-        assert!(input.estimate_tokens() >= default_image_token_estimate());
+        assert!(estimate_mm_tokens(&input) >= default_image_token_estimate());
     }
 
     #[test]

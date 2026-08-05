@@ -147,6 +147,7 @@ impl LoopRuntimeDeps {
         doc_scope: &[String],
         alias_counter: Arc<AtomicU64>,
         seen_chunk_aliases: Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+        seen_chunk_bodies: Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
         session_id: Option<uuid::Uuid>,
         session_fs: Arc<super::session_fs::SessionFs>,
         client_ip: Option<String>,
@@ -174,6 +175,7 @@ impl LoopRuntimeDeps {
             )
             .with_alias_counter(Arc::clone(&alias_counter))
             .with_seen_chunk_aliases(Arc::clone(&seen_chunk_aliases))
+            .with_seen_chunk_bodies(Arc::clone(&seen_chunk_bodies))
         });
 
         let bridge = Arc::new(SacHostBridge {

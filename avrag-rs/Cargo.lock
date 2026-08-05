@@ -44,6 +44,7 @@ dependencies = [
  "chrono",
  "common",
  "contracts",
+ "evidence-form",
  "futures",
  "regex",
  "serde",
@@ -844,6 +845,7 @@ dependencies = [
  "common",
  "contracts",
  "duckdb",
+ "evidence-form",
  "futures-util",
  "hex",
  "insta",
@@ -2595,6 +2597,13 @@ dependencies = [
  "futures-core",
  "nom 7.1.3",
  "pin-project-lite",
+]
+
+[[package]]
+name = "evidence-form"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

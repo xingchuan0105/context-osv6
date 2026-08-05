@@ -71,41 +71,17 @@ impl ReActLoop {
         hooks: &dyn LoopHooks,
     ) -> Result<LlmResponse, AppError> {
         let mut round_messages = vec![ChatMessage::system(assembled.system_content.clone())];
-        // P1′: collapse older retrieval observations before the LLM boundary.
-        let visible = super::super::context_visibility::transform_messages_for_llm(
-            &state.messages,
-            super::super::context_visibility::HISTORY_FULL_RETRIEVAL_ROUNDS,
+        // Model-visible View (retrieve): history + budget + query_card + claims.
+        // Order fixed for prefix-cache; system stays outside the View.
+        let visible = super::super::model_visible::build_retrieve_model_visible(
+            super::super::model_visible::RetrieveViewInputs::defaults(
+                &state.messages,
+                &assembled.budget_hint,
+                state.query_card.as_ref(),
+                &state.evidence.claim_notes,
+            ),
         );
-        for msg in &visible {
-            if msg.role != "system" {
-                round_messages.push(msg.clone());
-            }
-        }
-        // P0 (2026-07-30): budget_hint injected as trailing user message (not in
-        // system) so the system + history prefix stays stable across rounds →
-        // DeepSeek/OpenAI prefix cache can hit.
-        if !assembled.budget_hint.is_empty() {
-            round_messages.push(ChatMessage::user(assembled.budget_hint.clone()));
-        }
-        // L0 (2026-08-03): query card injected the same way — trailing user
-        // message, keeping the system prefix stable. `None` when the card is
-        // absent (pre-loop classification failed → instrumentation inactive).
-        if let Some(card) = state.query_card.as_ref() {
-            if let Some(block) = super::super::assembler::build_query_card_block(card) {
-                round_messages.push(ChatMessage::user(block));
-            }
-        }
-        // P1″: durable claim notes board (host excerpts from expanded hits).
-        // Trailing user message so system+history prefix stays cacheable; not
-        // stored in state.messages (rebuilt each LLM call from evidence_notes).
-        if !state.evidence_notes.is_empty() {
-            let lines = super::super::claim_notes::format_claim_note_lines(&state.evidence_notes);
-            round_messages.push(ChatMessage::user(super::super::prompt_assets::claim_notes(
-                &lines,
-                state.evidence_notes.len(),
-                super::super::claim_notes::MAX_CLAIM_NOTES,
-            )));
-        }
+        round_messages.extend(visible);
         // B5: LLM boundary transform (default: identity).
         let round_messages = hooks.convert_to_llm(&round_messages);
 

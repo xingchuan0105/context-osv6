@@ -14,6 +14,7 @@ pub use evidence_gate::{
 pub use focus_mode::{CompressedChunk, FocusError, FocusMode, ScoreBasedFocusMode};
 pub use merge::{
     adjacent_merge_enabled, adjacent_merge_shortlist_longlist, cut_top_k, dual_threshold_cut,
+    finalize_evidence_package, ADJACENT_MERGE_PULL_BUDGET, ADJACENT_MERGE_RADIUS,
     global_rrf_merge, hydrate_cursors_from_store, rrf_merge,
 };
 pub use ports::{CachePort, ContentStore, ContentStoreError, IndexedChunk};

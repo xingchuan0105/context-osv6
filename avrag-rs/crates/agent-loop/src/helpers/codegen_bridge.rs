@@ -2,6 +2,10 @@
 
 use contracts::{ToolResult, ToolStatus};
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicU8, Ordering};
+
+/// 0 = read `GRAPH_L_EVAL_RRF` env; 1 = force on; 2 = force off (tests only).
+static L_EVAL_RRF_OVERRIDE: AtomicU8 = AtomicU8::new(0);
 
 fn l_eval_rrf_env_on() -> bool {
     std::env::var("GRAPH_L_EVAL_RRF")
@@ -10,6 +14,15 @@ fn l_eval_rrf_env_on() -> bool {
             t == "1" || t == "true" || t == "yes" || t == "on"
         })
         .unwrap_or(false)
+}
+
+/// Effective L-eval switch: test override (if set) else process env.
+fn l_eval_rrf_on() -> bool {
+    match L_EVAL_RRF_OVERRIDE.load(Ordering::Relaxed) {
+        1 => true,
+        2 => false,
+        _ => l_eval_rrf_env_on(),
+    }
 }
 
 /// Parse sandbox stdout JSON into retrieval items for citation building.
@@ -190,7 +203,7 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
         }
     }
 
-    if l_eval_rrf_env_on()
+    if l_eval_rrf_on()
         && (!dense_items.is_empty() || !bm25_items.is_empty() || !graph_items.is_empty())
     {
         let fused = rrf_merge_json_lists(
@@ -344,7 +357,7 @@ fn count_bridge_tool_chunks(result: &ToolResult) -> usize {
 /// With `GRAPH_L_EVAL_RRF=1`, prefer block-level three-way fused observation over raw prints
 /// so dense∪BM25∪graph is always what the model and exit policy see.
 pub fn codegen_observation_stdout(exec_stdout: &str, block_bridge: &[ToolResult]) -> String {
-    if l_eval_rrf_env_on() {
+    if l_eval_rrf_on() {
         if let Some(fused) = bridge_tool_results_to_observation_stdout(block_bridge) {
             return fused;
         }
@@ -363,6 +376,34 @@ mod tests {
     use super::*;
     use crate::helpers::citations::build_citations_from_tool_results;
     use contracts::ToolResult;
+    use std::sync::Mutex;
+
+    /// Serializes tests that mutate `L_EVAL_RRF_OVERRIDE` so parallel lib tests
+    /// cannot interleave force-on / force-off.
+    static L_EVAL_TEST_SERIAL: Mutex<()> = Mutex::new(());
+
+    /// Scoped force of L-eval without touching process env (review Issue 9).
+    struct LEvalForceGuard {
+        _serial: std::sync::MutexGuard<'static, ()>,
+        prev: u8,
+    }
+
+    impl Drop for LEvalForceGuard {
+        fn drop(&mut self) {
+            L_EVAL_RRF_OVERRIDE.store(self.prev, Ordering::Relaxed);
+        }
+    }
+
+    fn force_l_eval_rrf(on: bool) -> LEvalForceGuard {
+        let serial = L_EVAL_TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prev = L_EVAL_RRF_OVERRIDE.swap(if on { 1 } else { 2 }, Ordering::Relaxed);
+        LEvalForceGuard {
+            _serial: serial,
+            prev,
+        }
+    }
 
     fn tr(tool: &str, status: ToolStatus, data: Option<serde_json::Value>) -> ToolResult {
         ToolResult {
@@ -449,8 +490,7 @@ mod tests {
 
     #[test]
     fn test_l_eval_three_way_prefers_fused_with_dense_bm25_graph() {
-        // SAFETY: test-only env toggle; serial in practice for this module tests.
-        unsafe { std::env::set_var("GRAPH_L_EVAL_RRF", "1") };
+        let _force = force_l_eval_rrf(true);
         let bridge = vec![
             tr(
                 "dense_retrieval",
@@ -489,11 +529,12 @@ mod tests {
             .filter_map(|c| c.get("chunk_id").and_then(|x| x.as_str()))
             .collect();
         assert!(ids.contains(&"d1") && ids.contains(&"b1") && ids.contains(&"g1"));
-        unsafe { std::env::remove_var("GRAPH_L_EVAL_RRF") };
     }
 
     #[test]
     fn test_codegen_observation_stdout_keeps_exec_stdout_when_present() {
+        // Force L-eval off so env left by other suites cannot flip this path.
+        let _force = force_l_eval_rrf(false);
         let bridge = vec![tr(
             "dense_retrieval",
             ToolStatus::Ok,
@@ -505,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_l_eval_prefers_fused_over_model_print() {
-        unsafe { std::env::set_var("GRAPH_L_EVAL_RRF", "1") };
+        let _force = force_l_eval_rrf(true);
         let bridge = vec![
             tr(
                 "dense_retrieval",
@@ -529,7 +570,6 @@ mod tests {
         assert_eq!(v["l_eval_rrf"], true);
         assert!(v["chunks"].as_array().map(|a| a.len() >= 2).unwrap_or(false));
         assert!(!stdout.contains("from_print"));
-        unsafe { std::env::remove_var("GRAPH_L_EVAL_RRF") };
     }
 
     #[test]

@@ -68,7 +68,8 @@ impl ReActLoop {
                     auth,
                     &interpreter_lock,
                     &state.retrieval_aliases,
-                    &state.seen_chunk_aliases,
+                    &state.evidence.seen_chunk_aliases,
+                    &state.evidence.seen_chunk_bodies,
                     &state.session_fs,
                     &state.sdk_allowed,
                 )
@@ -142,6 +143,8 @@ impl ReActLoop {
         } else {
             0
         };
+        // Evidence Intake at Ok-retrieval boundary (durable; not observation format).
+        state.evidence.intake_from_bridge_calls(&all_bridge_calls);
         let observation = format!(
             "{}{}{}",
             format_codegen_observation(
@@ -153,8 +156,7 @@ impl ReActLoop {
             ),
             retrieval_callouts(
                 &all_bridge_calls,
-                &state.seen_retrieval_aliases,
-                &mut state.evidence_notes,
+                &state.evidence.seen_retrieval_aliases,
             ),
             markitdown_format_hints(&codes),
         );
@@ -337,6 +339,9 @@ impl ReActLoop {
         seen_chunk_aliases: &Arc<
             std::sync::Mutex<std::collections::HashMap<String, String>>,
         >,
+        seen_chunk_bodies: &Arc<
+            std::sync::Mutex<std::collections::HashMap<String, String>>,
+        >,
         session_fs: &Arc<super::session_fs::SessionFs>,
         sdk_allowed: &Arc<std::collections::HashSet<String>>,
     ) -> (
@@ -378,6 +383,7 @@ impl ReActLoop {
                     &request.doc_scope,
                     Arc::clone(retrieval_aliases),
                     Arc::clone(seen_chunk_aliases),
+                    Arc::clone(seen_chunk_bodies),
                     session_id,
                     Arc::clone(session_fs),
                     meta_str("client_ip"),
@@ -467,30 +473,27 @@ impl ReActLoop {
 /// (`retrieval_hint` set by dense/lexical tools). Model-visible suffix of
 /// the codegen observation; empty when no retrieval happened this round.
 ///
-/// Also surfaces **environment facts**: visible `alias` values and grep
-/// `truncated` / zero-hit signals so the model need not re-scan raw JSON alone.
-///
-/// `seen_aliases` is the run's cross-round set of already-surfaced aliases; the
-/// summary reports how many aliases are **new this round** vs already seen, so
-/// the model has a saturation signal (rounds that return zero new evidence).
-///
-/// `evidence_notes` is the durable P1″ claim board: host extracts one-line
-/// facts from expanded hits and merges them for later LLM-boundary inject.
+/// **Pure format** (no claim board mutation). Durable Intake runs earlier via
+/// `EvidencePool::intake_from_bridge_calls`. This still updates
+/// `seen_aliases` for the model-visible saturation signal (new vs already-seen).
 fn retrieval_callouts(
     bridge_calls: &[super::deps::BridgeCallObs],
     seen_aliases: &std::sync::Mutex<std::collections::HashSet<String>>,
-    evidence_notes: &mut Vec<super::claim_notes::ClaimNoteLine>,
 ) -> String {
-    const RETRIEVAL_METHODS: &[&str] = &["dense", "lexical", "grep", "web", "fetch"];
+    use super::evidence_pool::RETRIEVAL_INTAKE_METHODS;
     let call_count = bridge_calls
         .iter()
-        .filter(|c| RETRIEVAL_METHODS.contains(&c.method.as_str()))
+        .filter(|c| RETRIEVAL_INTAKE_METHODS.contains(&c.method.as_str()))
         .count();
     let mut total_chunks = 0usize;
     let mut hints = String::new();
     let mut aliases: Vec<String> = Vec::new();
     let mut any_truncated = false;
     let mut any_grep_zero = false;
+    let mut expanded = 0usize;
+    let mut cards = 0usize;
+    let mut stubs = 0usize;
+    let mut expand_chars = 0usize;
     for call in bridge_calls {
         if call.result.status != contracts::ToolStatus::Ok {
             continue;
@@ -513,6 +516,22 @@ fn retrieval_callouts(
                 hints.push_str("\n\n[retrieval_hint] ");
                 hints.push_str(hint);
             }
+            expanded += data
+                .get("visibility_expanded_n")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            cards += data
+                .get("visibility_card_n")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            stubs += data
+                .get("visibility_stub_n")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            expand_chars += data
+                .get("visibility_expand_chars")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
         }
     }
     if call_count == 0 && hints.is_empty() {
@@ -530,40 +549,6 @@ fn retrieval_callouts(
         new_aliases.len(),
         seen_count,
     );
-    // Aggregate visibility counters from tool data when present.
-    let mut expanded = 0usize;
-    let mut cards = 0usize;
-    let mut stubs = 0usize;
-    let mut expand_chars = 0usize;
-    let mut claim_datas: Vec<&serde_json::Value> = Vec::new();
-    for call in bridge_calls {
-        if call.result.status != contracts::ToolStatus::Ok {
-            continue;
-        }
-        if let Some(data) = call.result.data.as_ref() {
-            expanded += data
-                .get("visibility_expanded_n")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
-            cards += data
-                .get("visibility_card_n")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
-            stubs += data
-                .get("visibility_stub_n")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
-            expand_chars += data
-                .get("visibility_expand_chars")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
-            if RETRIEVAL_METHODS.contains(&call.method.as_str()) {
-                claim_datas.push(data);
-            }
-        }
-    }
-    // P1″: host claim board from expanded bodies (durable; LLM boundary injects).
-    super::claim_notes::accumulate_from_tool_datas(evidence_notes, claim_datas);
     let mut out = String::from("\n\n");
     out.push_str(&super::prompt_assets::retrieval_summary(
         call_count,
@@ -954,13 +939,7 @@ mod tests {
             answer_deltas_streamed: false,
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::HashSet::new(),
-            )),
-            seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
-            evidence_notes: Vec::new(),
+            evidence: crate::react_loop::evidence_pool::EvidencePool::new(),
             session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
             query_card: None,
@@ -1083,8 +1062,7 @@ mod tests {
         ];
         let seen: std::sync::Mutex<std::collections::HashSet<String>> =
             std::sync::Mutex::new(std::collections::HashSet::new());
-        let mut notes = Vec::new();
-        let out = retrieval_callouts(&calls, &seen, &mut notes);
+        let out = retrieval_callouts(&calls, &seen);
         assert!(out.contains("本轮检索 3 次，共返回 3 条"), "{out}");
         assert!(out.contains("可见 alias: #1, #2, #3"), "{out}");
         assert!(out.contains("3 个为本轮新增、0 个为历史已见"), "{out}");
@@ -1093,7 +1071,7 @@ mod tests {
         assert!(out.contains("命中明确"), "{out}");
         assert!(out.contains("区分度低"), "{out}");
         // A second round returning the same aliases must report saturation.
-        let out2 = retrieval_callouts(&calls, &seen, &mut notes);
+        let out2 = retrieval_callouts(&calls, &seen);
         assert!(out2.contains("0 个为本轮新增、3 个为历史已见"), "{out2}");
     }
 
@@ -1101,8 +1079,7 @@ mod tests {
     fn retrieval_callouts_empty_without_retrieval() {
         let seen: std::sync::Mutex<std::collections::HashSet<String>> =
             std::sync::Mutex::new(std::collections::HashSet::new());
-        let mut notes = Vec::new();
-        assert!(retrieval_callouts(&[], &seen, &mut notes).is_empty());
+        assert!(retrieval_callouts(&[], &seen).is_empty());
         // A non-retrieval method (doc_profile) produces no summary line.
         let calls = vec![bridge_call(
             "doc_profile",
@@ -1110,11 +1087,11 @@ mod tests {
             contracts::ToolStatus::Ok,
             serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
         )];
-        assert!(retrieval_callouts(&calls, &seen, &mut notes).is_empty());
+        assert!(retrieval_callouts(&calls, &seen).is_empty());
     }
 
     #[test]
-    fn retrieval_callouts_accumulates_claim_notes_from_expanded() {
+    fn evidence_pool_intake_accumulates_claim_notes_from_expanded() {
         let calls = vec![bridge_call(
             "dense",
             "q",
@@ -1129,13 +1106,15 @@ mod tests {
                 "visibility_expanded_n": 1,
             }),
         )];
-        let seen: std::sync::Mutex<std::collections::HashSet<String>> =
-            std::sync::Mutex::new(std::collections::HashSet::new());
-        let mut notes = Vec::new();
-        let _ = retrieval_callouts(&calls, &seen, &mut notes);
-        assert_eq!(notes.len(), 1);
-        assert_eq!(notes[0].alias, "#1");
-        assert!(notes[0].excerpt.contains("marker_beta"));
+        let mut pool = crate::react_loop::evidence_pool::EvidencePool::new();
+        pool.intake_from_bridge_calls(&calls);
+        assert_eq!(pool.claim_notes.len(), 1);
+        assert_eq!(pool.claim_notes[0].alias, "#1");
+        assert!(pool.claim_notes[0].excerpt.contains("marker_beta"));
+        // Format path stays pure (no claim mutation).
+        let out = retrieval_callouts(&calls, &pool.seen_retrieval_aliases);
+        assert!(!out.is_empty());
+        assert_eq!(pool.claim_notes.len(), 1);
     }
 
     #[test]

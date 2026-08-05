@@ -92,25 +92,13 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             let adaptive = super::super::adaptive_k::adaptive_k(&scores);
             let longlist = chunks.clone();
             chunks.truncate(adaptive.k);
-            if crate::merge::adjacent_merge_enabled() {
-                if let Some(store) = runtime.content_store() {
-                    crate::merge::hydrate_cursors_from_store(store.as_ref(), auth, &mut chunks)
-                        .await;
-                    let mut long_owned = longlist;
-                    crate::merge::hydrate_cursors_from_store(
-                        store.as_ref(),
-                        auth,
-                        &mut long_owned,
-                    )
-                    .await;
-                    chunks = crate::merge::adjacent_merge_shortlist_longlist(
-                        chunks, &long_owned, 1, 8,
-                    );
-                } else {
-                    chunks =
-                        crate::merge::adjacent_merge_shortlist_longlist(chunks, &longlist, 1, 8);
-                }
-            }
+            chunks = crate::merge::finalize_evidence_package(
+                runtime.content_store().as_deref(),
+                auth,
+                chunks,
+                longlist,
+            )
+            .await;
             let graph_in_top15 = chunks
                 .iter()
                 .take(15)

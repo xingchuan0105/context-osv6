@@ -3,6 +3,7 @@ mod code;
 pub mod csv_table;
 mod html;
 pub mod liteparse_pdf;
+pub mod markdown_cli;
 pub mod markitdown;
 pub mod paddle_ocr;
 mod page_status;
@@ -29,7 +30,7 @@ pub use markitdown::{
 };
 pub use paddle_ocr::{
     PaddleJobsOcrService, PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult,
-    optional_payload_hash, optional_payload_json,
+    build_document_ir_from_paddle, optional_payload_hash, optional_payload_json,
 };
 pub use page_status::{PageParseStatus, PageStatusEntry, parse_page_status_from_ir};
 pub use router::{

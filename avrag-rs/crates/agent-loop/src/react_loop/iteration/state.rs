@@ -2,6 +2,7 @@ use avrag_llm::ChatMessage;
 use contracts::ToolResult;
 
 use super::super::assembler::DisclosedState;
+use super::super::evidence_pool::EvidencePool;
 use super::super::telemetry::ReActIterationRecord;
 
 pub struct IterationState {
@@ -30,17 +31,8 @@ pub struct IterationState {
     /// sandbox bridge injects aliases in this order; downstream hydration
     /// replays the run's tool_results to resolve them.
     pub retrieval_aliases: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    /// K1: aliases already surfaced to the model in prior rounds of this run.
-    /// The per-round retrieval summary reports "new vs already-seen" so the
-    /// model has a saturation signal (rounds burning with zero new evidence).
-    pub seen_retrieval_aliases: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
-    /// Cross-round `chunk_id → first #alias` for bridge body delta-only returns
-    /// (multi-round context management P0). Shared into RuntimeBridge.
-    pub seen_chunk_aliases:
-        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
-    /// P1″ host claim notes board: one-line fact excerpts from expanded hits,
-    /// accumulated across rounds. Injected at the LLM boundary as `[claim_notes]`.
-    pub evidence_notes: Vec<super::super::claim_notes::ClaimNoteLine>,
+    /// Run-scoped durable evidence (aliases, bodies, claim board, surfaced set).
+    pub evidence: EvidencePool,
     /// A7: cross-block `save`/`load` workspace for this agent run.
     pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
     /// A3: allowed SaC methods for this run (empty = open).

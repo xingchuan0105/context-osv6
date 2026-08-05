@@ -25,6 +25,7 @@ members = [
   "crates/ingestion-types",
   "crates/licensing",
   "crates/llm",
+  "crates/evidence-form",
   "crates/rag-core",
   "crates/rag-core-ports",
   "crates/retrieval-data-plane",

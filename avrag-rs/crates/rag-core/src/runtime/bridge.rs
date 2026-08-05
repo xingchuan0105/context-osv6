@@ -1020,6 +1020,8 @@ print(json.dumps(chunks))
 
     #[tokio::test]
     async fn aliases_increment_across_methods_within_one_worker() {
+        // Stub plane always returns the same chunk_id: first hit assigns #1;
+        // later hits are reseen (same alias, body omitted) — multi-round P0.
         let runtime = make_runtime();
         let doc_scope = vec!["00000000-0000-0000-0000-000000000010".to_string()];
         let bridge = RuntimeBridge::new(runtime, make_auth(), doc_scope);
@@ -1032,8 +1034,21 @@ print(json.dumps(chunks))
 
         let alias_of = |data: &Value| data["chunks"][0]["alias"].as_str().unwrap().to_string();
         assert_eq!(alias_of(&d1), "#1");
-        assert_eq!(alias_of(&d2), "#2", "cross-round increment, no reset");
-        assert_eq!(alias_of(&d3), "#3", "all chunk methods share the namespace");
+        assert_eq!(
+            alias_of(&d2),
+            "#1",
+            "same stub chunk_id reseens first alias"
+        );
+        assert!(
+            d2["chunks"][0].get("reseen").is_some(),
+            "second dense should mark reseen: {}",
+            d2
+        );
+        assert_eq!(
+            alias_of(&d3),
+            "#1",
+            "lexical same stub chunk shares reseen alias"
+        );
     }
 
     #[tokio::test]
@@ -1052,9 +1067,14 @@ print(json.dumps(chunks))
         let b1 = worker_b.call("dense", json!({"query": "q"})).await;
 
         assert_eq!(a1["chunks"][0]["alias"], "#1");
-        assert_eq!(a2["chunks"][0]["alias"], "#2");
+        assert_eq!(
+            a2["chunks"][0]["alias"], "#1",
+            "reseen keeps first alias within worker"
+        );
+        assert!(a2["chunks"][0].get("reseen").is_some());
         assert_eq!(b1["chunks"][0]["alias"], "#1", "per-worker namespace");
-        assert_eq!(counter_a.load(std::sync::atomic::Ordering::Relaxed), 2);
+        // Only one *new* alias assignment per worker (second a-call reseens).
+        assert_eq!(counter_a.load(std::sync::atomic::Ordering::Relaxed), 1);
         assert_eq!(counter_b.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 }

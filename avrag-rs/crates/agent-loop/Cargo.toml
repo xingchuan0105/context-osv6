@@ -21,6 +21,7 @@ avrag-code-interpreter = { path = "../code-interpreter" }
 avrag-guardrails = { path = "../guardrails" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
+evidence-form = { path = "../evidence-form" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-search = { path = "../search" }
 chrono.workspace = true

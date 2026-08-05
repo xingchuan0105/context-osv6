@@ -10,13 +10,14 @@
 //!
 //! 配置：`ANYDOC_BIN`（默认 `anydoc-extract`）、`ANYDOC_TIMEOUT_MS`（默认 120_000）。
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use uuid::Uuid;
 
 use crate::ir::{DocumentIr, DocumentType, ParseBackend};
 use crate::parser::markitdown::blocks_from_markdown;
+use crate::parser::markdown_cli;
 
 /// 子进程调用配置。
 #[derive(Debug, Clone)]
@@ -86,27 +87,14 @@ pub fn strip_pptx_hex_runs(md: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned())
 }
 
-fn temp_input_path(filename: &str) -> PathBuf {
-    let extension = filename
-        .rsplit('.')
-        .next()
-        .filter(|ext| !ext.is_empty() && *ext != filename)
-        .map(|ext| ext.to_ascii_lowercase())
-        .unwrap_or_else(|| "bin".to_string());
-    std::env::temp_dir().join(format!("avrag-anydoc-{}.{extension}", Uuid::new_v4()))
-}
-
 /// bytes → 临时输入 → `anydoc-extract <in> <out>` → markdown（pptx 族 strip hex）。
 pub async fn run_anydoc(
     bytes: &[u8],
     filename: &str,
     config: &AnydocConfig,
 ) -> anyhow::Result<String> {
-    let input_path = temp_input_path(filename);
+    let input_path = markdown_cli::write_temp_input("anydoc", filename, bytes).await?;
     let output_path = std::env::temp_dir().join(format!("avrag-anydoc-out-{}.md", Uuid::new_v4()));
-    tokio::fs::write(&input_path, bytes)
-        .await
-        .map_err(|error| anyhow::anyhow!("anydoc temp file {}: {error}", input_path.display()))?;
 
     let run_result = run_anydoc_on_paths(&input_path, &output_path, config).await;
 
@@ -125,44 +113,15 @@ async fn run_anydoc_on_paths(
     output_path: &Path,
     config: &AnydocConfig,
 ) -> anyhow::Result<String> {
-    let child = tokio::process::Command::new(&config.bin)
-        .arg(input_path)
-        .arg(output_path)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "anydoc spawn failed (bin {:?}): {error} — worker 需安装 anydoc-extract",
-                config.bin
-            )
-        })?;
-    let output = match tokio::time::timeout(config.timeout, child.wait_with_output()).await {
-        Ok(result) => result.map_err(|error| anyhow::anyhow!("anydoc wait: {error}"))?,
-        Err(_) => {
-            anyhow::bail!(
-                "anydoc timed out after {}ms for {}",
-                config.timeout.as_millis(),
-                input_path.display()
-            );
-        }
-    };
-    if !output.status.success() {
-        let stderr_tail = String::from_utf8_lossy(&output.stderr)
-            .chars()
-            .take(500)
-            .collect::<String>();
-        anyhow::bail!(
-            "anydoc exited with {} for {}: {stderr_tail}",
-            output.status,
-            input_path.display()
-        );
-    }
-    tokio::fs::read_to_string(output_path)
-        .await
-        .map_err(|error| anyhow::anyhow!("anydoc read output {}: {error}", output_path.display()))
+    // File-based product output: only check process status, then read out file.
+    let _ = markdown_cli::run_cli_status(
+        &config.bin,
+        &[input_path.as_os_str(), output_path.as_os_str()],
+        config.timeout,
+        "anydoc",
+    )
+    .await?;
+    markdown_cli::read_output_file(output_path, "anydoc").await
 }
 
 /// 文档原件 → anydoc markdown + DocumentIr（backend=anydoc）。
