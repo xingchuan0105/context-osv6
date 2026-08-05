@@ -41,7 +41,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.1
 
       - name: Restore cargo cache
         # cache/restore (not actions/cache): no post-step save, which avoids the
@@ -155,7 +155,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.1
 
       - name: Restore cargo cache
         # See journey-e2e: cache/restore avoids the post-save hashFiles template
