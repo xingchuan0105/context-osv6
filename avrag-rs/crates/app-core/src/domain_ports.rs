@@ -11,6 +11,7 @@ pub use crate::admin_store::AdminStorePort;
 pub use crate::auth_store::AuthStorePort;
 pub use crate::billing_quota::BillingQuotaPort;
 pub use crate::billing_store::{BillingStorePort, UsageLimitStorePort};
+pub use crate::referral_store::ReferralStorePort;
 pub use crate::wallet_store::WalletStorePort;
 pub use crate::chat_persistence::ChatPersistencePort;
 pub use crate::document_store::DocumentStorePort;

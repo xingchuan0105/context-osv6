@@ -28,6 +28,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [referralCode, setReferralCode] = useState(
+    () => searchParams.get("ref")?.trim() ?? searchParams.get("referral")?.trim() ?? "",
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [consented, setConsented] = useState(false);
@@ -68,6 +71,7 @@ export default function RegisterPage() {
         full_name: fullName.trim() ? fullName.trim() : null,
         terms_version: PUBLISHED_TERMS_VERSION,
         privacy_version: PUBLISHED_PRIVACY_VERSION,
+        referral_code: referralCode.trim() ? referralCode.trim() : null,
       });
 
       if (!response.success || !response.data) {
@@ -149,6 +153,23 @@ export default function RegisterPage() {
               placeholder={formatUiMessage(locale, "authConfirmPasswordLabel")}
               type="password"
               value={confirmPassword}
+            />
+          </div>
+          <div>
+            <label className="app-form-label" htmlFor="register-referral-code">
+              {formatUiMessage(locale, "authReferralCodeLabel")}{" "}
+              <span className="app-form-hint">
+                ({formatUiMessage(locale, "authReferralCodeHint")})
+              </span>
+            </label>
+            <input
+              autoComplete="off"
+              className="app-input"
+              id="register-referral-code"
+              onChange={(event) => setReferralCode(event.target.value)}
+              placeholder={formatUiMessage(locale, "authReferralCodePlaceholder")}
+              type="text"
+              value={referralCode}
             />
           </div>
           <ConsentCheckbox onConsentChange={setConsented} />

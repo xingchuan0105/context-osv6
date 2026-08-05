@@ -18,7 +18,7 @@ pub use app_state::{
 };
 
 pub use adapters::{
-    PgBillingStoreAdapter, PgUsageLimitStoreAdapter, PgWalletStoreAdapter,
+    PgBillingStoreAdapter, PgReferralStoreAdapter, PgUsageLimitStoreAdapter, PgWalletStoreAdapter,
     RedisFixedWindowRateLimiter, RedisRateLimitBackend, build_rate_limit_backend,
 };
 

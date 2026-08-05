@@ -97,6 +97,18 @@ export const authMessages = {
     zh: "使用邮箱创建账号，开始使用 Context OS。",
     en: "Create your account with email to get started with Context OS.",
   },
+  authReferralCodeLabel: {
+    zh: "邀请码",
+    en: "Invite code",
+  },
+  authReferralCodeHint: {
+    zh: "可选，填写后双方各得 ¥5 储值",
+    en: "Optional — both sides get ¥5 credit",
+  },
+  authReferralCodePlaceholder: {
+    zh: "例如 COS-A1B2C3",
+    en: "e.g. COS-A1B2C3",
+  },
   authResetBackToLogin: {
     zh: "返回登录",
     en: "Back to sign in",

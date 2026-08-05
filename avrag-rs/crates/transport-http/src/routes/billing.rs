@@ -31,6 +31,8 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/billing/orders/{order_id}", get(get_order_status))
         // ADR-0010: balance in fen (分); 2000 fen = ¥20 signup grant.
         .route("/billing/wallet", get(get_wallet))
+        // ADR-0010 PR4: my referral code + quota stats.
+        .route("/billing/referral", get(get_referral))
 }
 
 async fn get_plans(
@@ -118,4 +120,10 @@ async fn get_wallet(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::WalletBalanceResponse>> {
     Json(state.billing_api().get_wallet().await)
+}
+
+async fn get_referral(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Json<ApiResponse<avrag_billing::ReferralStatsResponse>> {
+    Json(state.billing_api().get_referral().await)
 }

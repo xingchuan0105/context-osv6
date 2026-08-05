@@ -10,9 +10,16 @@ use uuid::Uuid;
 /// Signup gift: ¥20 = 2000 fen (分). One-time per user via idempotency key.
 pub const SIGNUP_GRANT_FEN: i64 = 2000;
 
+/// Referral bilateral gift: ¥5 = 500 fen each side (ADR-0010 §6).
+pub const REFERRAL_BONUS_FEN: i64 = 500;
+/// Base rewarded-invite quota before paid top-ups.
+pub const REFERRAL_BASE_QUOTA: i64 = 5;
+/// Each ¥50 (5000 fen) lifetime paid top-up adds +1 invite quota.
+pub const REFERRAL_TOPUP_STEP_FEN: i64 = 5000;
+
 /// Ledger kind: one-time registration gift (ADR-0010 §3.1 / §6).
 pub const WALLET_KIND_SIGNUP_GRANT: &str = "signup_grant";
-/// Reserved for PR4 referral bonuses.
+/// Referral bilateral bonus (PR4).
 pub const WALLET_KIND_REFERRAL_BONUS: &str = "referral_bonus";
 /// Reserved for PR5 paid top-up webhooks.
 pub const WALLET_KIND_TOPUP: &str = "topup";
@@ -22,6 +29,22 @@ pub const WALLET_KIND_USAGE_DEBIT: &str = "usage_debit";
 /// Stable idempotency key for the one-time signup grant.
 pub fn signup_grant_idempotency_key(user_id: Uuid) -> String {
     format!("signup_grant:{user_id}")
+}
+
+/// Inviter-side referral bonus idempotency (keyed by invitee so double path is safe).
+pub fn referral_bonus_inviter_idempotency_key(invitee_id: Uuid) -> String {
+    format!("referral_bonus:inviter:{invitee_id}")
+}
+
+/// Invitee-side referral bonus idempotency.
+pub fn referral_bonus_invitee_idempotency_key(invitee_id: Uuid) -> String {
+    format!("referral_bonus:invitee:{invitee_id}")
+}
+
+/// `referral_quota = 5 + floor(lifetime_paid_topup_fen / 5000)`.
+pub fn referral_quota(lifetime_paid_topup_fen: i64) -> i64 {
+    let paid = lifetime_paid_topup_fen.max(0);
+    REFERRAL_BASE_QUOTA + paid / REFERRAL_TOPUP_STEP_FEN
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

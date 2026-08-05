@@ -35,6 +35,9 @@ pub(crate) struct RegisterRequest {
     pub terms_version: Option<String>,
     /// 隐私政策版本号（注册必填；缺省或空字符串返回 `consent_required`）
     pub privacy_version: Option<String>,
+    /// Optional referral code (ADR-0010 PR4). Invalid / over-quota codes do not block register.
+    #[serde(default)]
+    pub referral_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

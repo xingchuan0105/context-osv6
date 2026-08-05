@@ -1,6 +1,6 @@
 //! Product App — Billing (ADR-0007 / ADR-0010 wallet).
 
-use app_core::{BillingStorePort, StorageContext, WalletStorePort};
+use app_core::{BillingStorePort, ReferralStorePort, StorageContext, WalletStorePort};
 use avrag_storage_pg::PgAppRepository;
 use common::{ApiResponse, UserId};
 use contracts::auth_runtime::AuthContext;
@@ -223,5 +223,20 @@ impl<'a> BillingApp<'a> {
         let store: Arc<dyn WalletStorePort> =
             Arc::new(crate::adapters::PgWalletStoreAdapter::new(repo));
         avrag_billing::handle_get_wallet(store, actor_id.into_uuid()).await
+    }
+
+    /// My referral code + quota stats (ADR-0010 PR4).
+    pub async fn get_referral(&self) -> ApiResponse<avrag_billing::ReferralStatsResponse> {
+        let Some(repo) = self.postgres.clone() else {
+            return Self::postgres_not_configured();
+        };
+        let Some(actor_id) = self.auth.actor_id() else {
+            return Self::auth_required();
+        };
+        let wallet: Arc<dyn WalletStorePort> =
+            Arc::new(crate::adapters::PgWalletStoreAdapter::new(repo.clone()));
+        let referral: Arc<dyn ReferralStorePort> =
+            Arc::new(crate::adapters::PgReferralStoreAdapter::new(repo));
+        avrag_billing::handle_get_referral(wallet, referral, actor_id.into_uuid()).await
     }
 }

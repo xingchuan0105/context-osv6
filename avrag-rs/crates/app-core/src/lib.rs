@@ -9,6 +9,8 @@ pub mod billing_domain;
 pub mod billing_quota;
 pub mod billing_store;
 pub mod billing_usage_units;
+pub mod referral_domain;
+pub mod referral_store;
 pub mod wallet_domain;
 pub mod wallet_store;
 pub mod chat_persistence;
@@ -63,10 +65,19 @@ pub use billing_store::{
     BillingStorePort, UsageExportJobRow, UsageLimitOverrideRow, UsageLimitPlanPolicyRow,
     UsageLimitStorePort, UsageLimitUsageRecord,
 };
+pub use referral_domain::{
+    REFERRAL_REJECT_CODE_INVALID, REFERRAL_REJECT_CODE_REVOKED, REFERRAL_REJECT_QUOTA_EXHAUSTED,
+    REFERRAL_REJECT_SELF_INVITE, REFERRAL_STATUS_PENDING, REFERRAL_STATUS_REJECTED,
+    REFERRAL_STATUS_REWARDED, Referral, ReferralCode, ReferralStats, generate_referral_code,
+    normalize_referral_code,
+};
+pub use referral_store::{InsertPendingResult, ReferralStorePort};
 pub use wallet_domain::{
-    ApplyLedgerInput, ApplyLedgerResult, SIGNUP_GRANT_FEN, WALLET_KIND_REFERRAL_BONUS,
-    WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, Wallet,
-    WalletLedgerEntry, signup_grant_idempotency_key,
+    ApplyLedgerInput, ApplyLedgerResult, REFERRAL_BASE_QUOTA, REFERRAL_BONUS_FEN,
+    REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN, WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT,
+    WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, Wallet, WalletLedgerEntry,
+    referral_bonus_invitee_idempotency_key, referral_bonus_inviter_idempotency_key, referral_quota,
+    signup_grant_idempotency_key,
 };
 pub use wallet_store::WalletStorePort;
 pub use billing_usage_units::{

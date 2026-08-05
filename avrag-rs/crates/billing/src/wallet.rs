@@ -1,8 +1,8 @@
 //! User wallet service — balance query + ledger credits (ADR-0010 PR3).
 //!
 //! **Amount unit: integer fen (分).** 100 fen = ¥1; signup grant = [`SIGNUP_GRANT_FEN`] = 2000 fen = ¥20.
-//! Referral (PR4), top-up webhook (PR5), and usage debit wiring (PR6) are not implemented here;
-//! their ledger kinds are reserved on the schema.
+//! Referral bilateral grant lives in [`crate::referral`]. Top-up webhook (PR5) and usage debit (PR6)
+//! are not implemented here; their ledger kinds are reserved on the schema.
 
 use std::sync::Arc;
 

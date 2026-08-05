@@ -31,6 +31,8 @@ export type RegisterRequest = {
   full_name?: string | null;
   terms_version?: string;
   privacy_version?: string;
+  /** Optional referral code (ADR-0010 PR4). */
+  referral_code?: string | null;
 };
 
 export type ChangePasswordRequest = {

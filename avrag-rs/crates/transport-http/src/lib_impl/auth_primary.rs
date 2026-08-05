@@ -127,12 +127,12 @@ pub(crate) async fn auth_register_handler(
         }
     };
 
-    // ADR-0010 PR3: one-time ¥20 (2000 fen) signup grant — idempotent; failure must not
-    // block registration (retry via same idempotency key is safe).
+    // ADR-0010 PR3/PR4: signup ¥20 grant, then optional bilateral referral ¥5.
+    // Failures must not block registration (ledger + invitee unique are idempotent).
     if let Some(repo) = state.postgres_repo() {
         let wallet_store: std::sync::Arc<dyn app_core::WalletStorePort> =
-            std::sync::Arc::new(app_bootstrap::PgWalletStoreAdapter::new(repo));
-        match avrag_billing::grant_signup_bonus(wallet_store, result.user_id).await {
+            std::sync::Arc::new(app_bootstrap::PgWalletStoreAdapter::new(repo.clone()));
+        match avrag_billing::grant_signup_bonus(wallet_store.clone(), result.user_id).await {
             Ok(grant) => {
                 if grant.applied {
                     tracing::info!(
@@ -148,6 +148,50 @@ pub(crate) async fn auth_register_handler(
                     user_id = %result.user_id,
                     "signup wallet grant failed (idempotent retry possible)"
                 );
+            }
+        }
+
+        if let Some(ref code) = req.referral_code {
+            let referral_store: std::sync::Arc<dyn app_core::ReferralStorePort> =
+                std::sync::Arc::new(app_bootstrap::PgReferralStoreAdapter::new(repo));
+            match avrag_billing::apply_referral_on_register(
+                wallet_store,
+                referral_store,
+                result.user_id,
+                Some(code.as_str()),
+            )
+            .await
+            {
+                Ok(avrag_billing::ApplyReferralOutcome::Rewarded { referral, .. }) => {
+                    tracing::info!(
+                        user_id = %result.user_id,
+                        inviter_id = %referral.inviter_id,
+                        referral_id = %referral.id,
+                        "referral bilateral grant applied"
+                    );
+                }
+                Ok(avrag_billing::ApplyReferralOutcome::RecordedRejected { referral }) => {
+                    tracing::info!(
+                        user_id = %result.user_id,
+                        reason = ?referral.reject_reason,
+                        "referral rejected (no grant)"
+                    );
+                }
+                Ok(avrag_billing::ApplyReferralOutcome::Rejected { reason }) => {
+                    tracing::info!(
+                        user_id = %result.user_id,
+                        reason,
+                        "referral code not applied"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    warn!(
+                        error = %error,
+                        user_id = %result.user_id,
+                        "referral apply failed (idempotent retry possible)"
+                    );
+                }
             }
         }
     }

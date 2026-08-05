@@ -15,6 +15,7 @@ mod service;
 mod tests_impl;
 mod tier;
 mod types;
+pub mod referral;
 pub mod usage_limit;
 pub mod wallet;
 
@@ -47,7 +48,13 @@ pub use core::{expire_subscriptions, process_outbox};
 pub use wallet::{
     WalletBalanceResponse, get_wallet_balance, grant_signup_bonus, handle_get_wallet,
 };
-// Re-export fen constants for callers (signup hook, HTTP).
+pub use referral::{
+    ApplyReferralOutcome, ReferralStatsResponse, apply_referral_on_register, get_my_referral_stats,
+    handle_get_referral,
+};
+// Re-export fen constants for callers (signup / referral hook, HTTP).
 pub use app_core::{
-    SIGNUP_GRANT_FEN, WALLET_KIND_SIGNUP_GRANT, signup_grant_idempotency_key,
+    REFERRAL_BASE_QUOTA, REFERRAL_BONUS_FEN, REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN,
+    WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT, referral_quota,
+    signup_grant_idempotency_key,
 };
