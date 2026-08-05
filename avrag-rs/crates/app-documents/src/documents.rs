@@ -75,6 +75,22 @@ impl DocumentContext {
             ));
         }
 
+        // ADR-0010 §2.2 soft/hard guardrails (retained md+index, not original files).
+        // Ops can tighten via env; defaults match free-tier product expectations.
+        let hard_bytes: i64 = std::env::var("PRIVATE_STORAGE_HARD_BYTES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(15_i64 * 1024 * 1024 * 1024);
+        if (req.file_size as i64) > hard_bytes {
+            return Err(AppError::validation(
+                "private_storage_hard_cap",
+                format!(
+                    "file size {} exceeds private storage hard cap of {} bytes (retained content; originals are deleted after parse)",
+                    req.file_size, hard_bytes
+                ),
+            ));
+        }
+
         let store = storage.document_store().ok_or_else(|| {
             AppError::internal("document store is required for document uploads")
         })?;

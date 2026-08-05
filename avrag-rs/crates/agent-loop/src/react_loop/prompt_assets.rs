@@ -78,6 +78,11 @@ pub fn budget_exhausted_final_turn_tokens() -> &'static str {
     trim_body(loop_prompt!("budget-exhausted-final-tokens.nudge.md"))
 }
 
+/// Shared-workspace visitor mode: answer only from shared KB observations.
+pub fn share_grounded_only_nudge() -> &'static str {
+    trim_body(loop_prompt!("share-grounded-only.nudge.md"))
+}
+
 pub fn budget_exhausted_carryover(tool: &str, body: &str) -> String {
     subst(
         trim_body(loop_prompt!("budget-exhausted-carryover.tmpl.md")),

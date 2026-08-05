@@ -31,14 +31,10 @@ pub enum LicenseStatusKind {
     UpgradeRequired,
 }
 
-pub fn license_allows_chat(kind: LicenseStatusKind) -> bool {
-    matches!(
-        kind,
-        LicenseStatusKind::Active
-            | LicenseStatusKind::Trial
-            | LicenseStatusKind::OfflineGrace
-            | LicenseStatusKind::UpgradeRequired
-    )
+/// ADR-0010: client is free — activation is not a chat gate.
+/// License kinds remain for legacy status UI only.
+pub fn license_allows_chat(_kind: LicenseStatusKind) -> bool {
+    true
 }
 
 /// Domain license failure. Converts to [`crate::commands::api::IpcApiError`] at

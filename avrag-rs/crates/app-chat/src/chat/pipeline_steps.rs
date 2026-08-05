@@ -138,6 +138,18 @@ async fn run_general_mode(
         session,
     );
     inject_assembled_metadata(&mut agent_request, caps, assembled);
+    // ADR-0010: shared KB visitors stay grounded in that workspace's evidence.
+    if request.source_type.as_deref() == Some("share") {
+        let nudge = agent_loop::react_loop::prompt_assets::share_grounded_only_nudge();
+        agent_request.metadata.insert(
+            "share_grounded_only".to_string(),
+            serde_json::Value::String(nudge.to_string()),
+        );
+        // Prepend observation as synthetic user context line (third-person).
+        if !agent_request.query.contains("[share_grounded_only]") {
+            agent_request.query = format!("{nudge}\n\n{}", agent_request.query);
+        }
+    }
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());

@@ -668,7 +668,7 @@ async fn auth_legal_status_reflects_current_acceptance_when_database_available()
 
 
 #[tokio::test]
-async fn anonymous_share_chat_requires_login_without_persisting_owner_session() {
+async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
     let Some(state) = pg_test_app_state().await else {
         return;
     };
@@ -712,20 +712,41 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
     let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
     let workspace_id = notebook["workspace"]["id"].as_str().unwrap().to_string();
 
+    let owner_auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::UserId::from(owner_user_id),
+        contracts::auth_runtime::SubjectKind::User,
+    )
+    .with_actor_id(contracts::auth_runtime::ActorId::new(user_id));
+
+    // Mark workspace public + share_enabled so anonymous chat is allowed (ADR-0010).
+    let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
+        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false))
+        .await;
+
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .create_share_token(
-            &contracts::auth_runtime::AuthContext::new(
-                contracts::auth_runtime::UserId::from(owner_user_id),
-                contracts::auth_runtime::SubjectKind::User,
-            )
-            .with_actor_id(contracts::auth_runtime::ActorId::new(user_id)),
-            &workspace_id,
-            avrag_share::AccessLevel::Read,
-            None,
-        )
+        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
         .await
         .expect("share token should create");
 
+    // link mode still requires login
+    let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
+        .update_share_settings(&owner_auth, &workspace_id, Some("link"), Some(false))
+        .await;
+    let chat_req_link = Request::builder()
+        .uri("/api/v1/chat")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(format!(
+            r#"{{"query":"hello shared","workspace_id":"{workspace_id}","agent_type":"chat","source_type":"share","source_token":"{share_token}","doc_scope":[],"messages":[],"stream":false}}"#
+        )))
+        .unwrap();
+    let chat_resp_link = app.clone().oneshot(chat_req_link).await.unwrap();
+    assert_eq!(chat_resp_link.status(), StatusCode::UNAUTHORIZED);
+
+    // public allows anonymous (may fail later in pipeline for missing LLM; must not be login_required)
+    let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
+        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false))
+        .await;
     let chat_req = Request::builder()
         .uri("/api/v1/chat")
         .method("POST")
@@ -735,14 +756,12 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
         )))
         .unwrap();
     let chat_resp = app.clone().oneshot(chat_req).await.unwrap();
-    assert_eq!(chat_resp.status(), StatusCode::UNAUTHORIZED);
     let chat_body = to_bytes(chat_resp.into_body(), usize::MAX).await.unwrap();
     let chat_payload: serde_json::Value = serde_json::from_slice(&chat_body).unwrap();
-    assert_eq!(chat_payload["error"].as_str(), Some("login_required"));
-    assert!(
-        chat_payload["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("asking questions requires sign-in"))
+    assert_ne!(
+        chat_payload["error"].as_str(),
+        Some("login_required"),
+        "public share chat must not require visitor login: {chat_payload}"
     );
 
     let sessions = state.agent().list_sessions(Some(&workspace_id)).await;

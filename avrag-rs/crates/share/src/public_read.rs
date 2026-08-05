@@ -75,6 +75,8 @@ impl ShareService {
                 owner_user_id: snapshot.owner_user_id,
                 workspace_id: snapshot.workspace_id,
                 access_level: snapshot.access_level.into(),
+                workspace_visibility: snapshot.workspace_visibility,
+                share_enabled: snapshot.share_enabled,
             }))
     }
 }

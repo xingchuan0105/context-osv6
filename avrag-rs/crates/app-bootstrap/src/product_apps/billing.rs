@@ -215,17 +215,19 @@ impl<'a> BillingApp<'a> {
         avrag_billing::handle_webhook(store, provider, signature, body).await
     }
 
-    /// Wallet balance for the authenticated user (fen / 分). ADR-0010 PR3.
+    /// Wallet balance for the **account owner** (fen / 分). ADR-0010.
     pub async fn get_wallet(&self) -> ApiResponse<avrag_billing::WalletBalanceResponse> {
         let Some(repo) = self.postgres.clone() else {
             return Self::postgres_not_configured();
         };
-        let Some(actor_id) = self.auth.actor_id() else {
+        // Prefer account owner (`user_id`); fall back to actor for legacy callers.
+        let owner = self.auth.user_id().into_uuid();
+        if owner.is_nil() {
             return Self::auth_required();
-        };
+        }
         let store: Arc<dyn WalletStorePort> =
             Arc::new(crate::adapters::PgWalletStoreAdapter::new(repo));
-        avrag_billing::handle_get_wallet(store, actor_id.into_uuid()).await
+        avrag_billing::handle_get_wallet(store, owner).await
     }
 
     /// Fixed wallet top-up packs (ADR-0010 PR5).

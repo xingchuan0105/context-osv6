@@ -37,13 +37,13 @@ impl ChatContext {
         req: &ChatRequest,
     ) -> Result<ChatPreflight, AppError> {
         let effective_workspace_id = chat_workspace_id_for_request(self, req);
-        if req.source_type.as_deref() == Some("share") && self.auth.actor_id().is_none() {
-            return Err(AppError::unauthorized(
-                "Viewing shared content does not require sign-in, but asking questions does.",
-            ));
-        }
-        // ADR 0006: rolling is the sole usage truth. Monthly metric preflight is soft
-        // (warn only) — do not hard-block on estimated plan metrics.
+        // ADR-0010: share chat may be anonymous when owner set workspace visibility
+        // to `public`; auth middleware remaps `user_id` to the share owner.
+        let is_share_chat = req.source_type.as_deref() == Some("share");
+        // ADR 0006 / 0010: rolling is protective, not the main product wall.
+        // Skip hard rolling block when the payer account has wallet balance
+        // (platform path) — BYOK skip is handled at usage observer later.
+        // Monthly metric preflight remains soft.
         let estimated_input_tokens = estimate_token_count(
             &std::iter::once(req.query.as_str())
                 .chain(req.messages.iter().map(|item| item.content.as_str()))
@@ -66,10 +66,17 @@ impl ChatContext {
             );
         }
 
-        // Rolling: soft at plan limit, hard-block only at abuse hard-cap (default 3×).
-        let phase = self.billing.usage_limit_phase();
-        let enforce_5h = phase == "5h_enforcement" || phase == "7d_enforcement";
-        let enforce_7d = phase == "7d_enforcement";
+        // Rolling windows: ADR-0010 demotes them from "main product wall" to
+        // protective soft signals for private use. Hard-block only when:
+        // - share chat (Denial-of-Wallet / owner burn protection), or
+        // - ops kill-switch USAGE_LIMIT_HARD_ENFORCE=true.
+        let force_hard = matches!(
+            std::env::var("USAGE_LIMIT_HARD_ENFORCE").as_deref(),
+            Ok("1") | Ok("true") | Ok("yes")
+        );
+        let enforce_5h = is_share_chat || force_hard;
+        let enforce_7d = is_share_chat || force_hard;
+        let _phase = self.billing.usage_limit_phase();
         let quota = match self.check_user_quota().await {
             Ok(result) => result,
             Err(error) if enforce_5h || enforce_7d => return Err(error),

@@ -158,13 +158,10 @@ impl PgUsageObserver {
         BillableFeature::Chat
     }
 
-    /// Payer for wallet debit: metering user when set, else owner.
+    /// Payer for wallet debit: always the **account owner** (ADR-0010 Owner-pays /
+    /// B2C personal). Visitor `user_id` on share chat must not be charged.
     fn payer_user_id(tenant: &TenantContext) -> Uuid {
-        if tenant.user_id.is_nil() {
-            tenant.owner_user_id
-        } else {
-            tenant.user_id
-        }
+        tenant.owner_user_id
     }
 
     async fn maybe_debit_wallet(

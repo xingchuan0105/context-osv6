@@ -236,4 +236,16 @@ impl<'a> ShareApp<'a> {
             .ok()??;
         Uuid::parse_str(&workspace_id).ok()
     }
+
+    /// Owner-pays share chat context (ADR-0010): owner, workspace, visitor mode.
+    pub async fn resolve_public_share_chat_context(
+        &self,
+        token: &str,
+    ) -> Option<avrag_share::PublicShareChatContext> {
+        let store = self.storage.share_store()?;
+        avrag_share::handle_resolve_public_share_chat_context(token, store)
+            .await
+            .ok()
+            .flatten()
+    }
 }

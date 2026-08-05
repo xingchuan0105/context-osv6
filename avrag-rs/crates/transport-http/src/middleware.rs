@@ -133,23 +133,83 @@ pub(crate) async fn request_context_middleware(
             .into_response();
     }
 
-    let share_chat_workspace_scope = share_chat_workspace_scope_from_request(&state, &mut req).await;
-    let auth = auth_from_bearer(&state, &headers)
-        .await
-        .or_else(|| {
-            if proxy_auth_allowed(&state) {
-                auth_from_proxy_headers(&headers)
-            } else {
-                None
+    // ADR-0010: share chat bills the **Owner**. Auth is remapped so
+    // `user_id` = share owner (RLS + wallet), visitor is optional `actor_id`.
+    let share_chat = share_chat_context_from_request(&state, &mut req).await;
+    let visitor_auth = auth_from_bearer(&state, &headers).await.or_else(|| {
+        if proxy_auth_allowed(&state) {
+            auth_from_proxy_headers(&headers)
+        } else {
+            None
+        }
+    });
+
+    let auth = match (&share_chat, visitor_auth) {
+        (Some(share), visitor) => {
+            if !share.allows_share_chat() {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "error": "share_not_enabled",
+                        "message": "This workspace is not shared for chat.",
+                    })),
+                )
+                    .into_response();
             }
-        })
-        .map(|auth| {
-            if let Some(workspace_scope) = share_chat_workspace_scope {
-                auth.with_workspace_scope(workspace_scope)
-            } else {
-                auth
+            if !share.allows_anonymous_chat() && visitor.is_none() {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "error": "login_required",
+                        "message": "This shared workspace requires sign-in before asking questions.",
+                    })),
+                )
+                    .into_response();
             }
-        });
+            // Per-share cost-oriented rate limit (application layer, ADR-0010 §9).
+            let share_rpm: u32 = std::env::var("SHARE_CHAT_RATE_LIMIT_RPM")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30);
+            let share_key = format!(
+                "share:{}:{}",
+                share.workspace_id,
+                visitor
+                    .as_ref()
+                    .and_then(|a| a.actor_id())
+                    .map(|a| a.into_uuid())
+                    .unwrap_or(Uuid::nil())
+            );
+            let (share_allowed, _, _) =
+                check_rate_limit_with_fallback(state.rate_limit_backend(), &share_key, share_rpm)
+                    .await;
+            if !share_allowed {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({
+                        "error": "share_rate_limit_exceeded",
+                        "message": "Share chat rate limit exceeded for this visitor.",
+                    })),
+                )
+                    .into_response();
+            }
+
+            let mut auth = AuthContext::new(
+                UserId::from(share.owner_user_id),
+                SubjectKind::User,
+            )
+            .with_workspace_scope(share.workspace_id)
+            .grant("share_chat");
+            if let Some(v) = visitor {
+                if let Some(actor) = v.actor_id() {
+                    auth = auth.with_actor_id(actor);
+                }
+            }
+            Some(auth)
+        }
+        (None, Some(auth)) => Some(auth),
+        (None, None) => None,
+    };
 
     let Some(auth) = auth else {
         return (
@@ -157,7 +217,7 @@ pub(crate) async fn request_context_middleware(
             Json(json!({
                 "error": if is_chat_endpoint { "login_required" } else { "unauthorized" },
                 "message": if is_chat_endpoint {
-                    "Viewing shared content does not require sign-in, but asking questions requires sign-in."
+                    "Authentication required to chat. Shared public links may allow anonymous questions when the owner enables them."
                 } else {
                     "Authentication required. Provide a Bearer token or x-owner-user-id header."
                 },
@@ -231,10 +291,10 @@ pub(crate) async fn request_context_middleware(
     response
 }
 
-async fn share_chat_workspace_scope_from_request(
+async fn share_chat_context_from_request(
     state: &AppState,
     req: &mut Request,
-) -> Option<Uuid> {
+) -> Option<avrag_share::PublicShareChatContext> {
     if req.method() != Method::POST || !is_chat_endpoint_path(req.uri().path()) {
         return None;
     }
@@ -255,14 +315,14 @@ async fn share_chat_workspace_scope_from_request(
         return None;
     }
     let token = chat_request.source_token.as_deref()?;
-    let workspace_scope = state.share().resolve_share_chat_workspace_scope(token).await?;
+    let ctx = state.share().resolve_public_share_chat_context(token).await?;
     if let Some(workspace_id) = chat_request.workspace_id.as_deref()
-        && uuid::Uuid::parse_str(workspace_id).ok()? != workspace_scope
+        && uuid::Uuid::parse_str(workspace_id).ok()? != ctx.workspace_id
     {
         return None;
     }
 
-    Some(workspace_scope)
+    Some(ctx)
 }
 
 fn is_chat_endpoint_path(path: &str) -> bool {

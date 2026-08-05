@@ -95,6 +95,8 @@ async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
                 owner_user_id,
                 workspace_id,
                 access_level: ShareAccessLevel::Read,
+                workspace_visibility: "public".to_string(),
+                share_enabled: true,
             },
         )
         .await;
@@ -109,6 +111,7 @@ async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
     assert_eq!(context.owner_user_id, owner_user_id);
     assert_eq!(context.workspace_id, workspace_id);
     assert_eq!(context.access_level, AccessLevel::Read);
+    assert!(context.allows_anonymous_chat());
 }
 
 #[tokio::test]

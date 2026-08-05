@@ -61,6 +61,11 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
     },
     // --- 检索汇总 / 提示观察 ---
     HostMarker {
+        tag: "[share_grounded_only]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/share-grounded-only.nudge.md",
+    },
+    HostMarker {
         tag: "[retrieval_summary]",
         forbidden_in_final: true,
         emitted_at: "prompts/loop/retrieval-summary.tmpl.md (prompt_assets::retrieval_summary)",

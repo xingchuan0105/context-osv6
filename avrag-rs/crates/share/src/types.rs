@@ -169,6 +169,23 @@ pub struct PublicShareChatContext {
     pub owner_user_id: uuid::Uuid,
     pub workspace_id: uuid::Uuid,
     pub access_level: AccessLevel,
+    /// `private` | `link` | `public` — visitor login requirement.
+    pub workspace_visibility: String,
+    pub share_enabled: bool,
+}
+
+impl PublicShareChatContext {
+    /// Anonymous visitors may ask when workspace is marked `public`.
+    pub fn allows_anonymous_chat(&self) -> bool {
+        self.share_enabled && self.workspace_visibility.eq_ignore_ascii_case("public")
+    }
+
+    /// Registered (or anonymous if public) visitors may use share chat.
+    pub fn allows_share_chat(&self) -> bool {
+        self.share_enabled
+            && !self.workspace_visibility.eq_ignore_ascii_case("private")
+            && !self.workspace_visibility.is_empty()
+    }
 }
 
 pub struct ShareService {

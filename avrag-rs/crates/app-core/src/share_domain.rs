@@ -121,7 +121,12 @@ pub struct ShareAnalyticsEntry {
 pub struct PublicShareChatContextSnapshot {
     pub owner_user_id: Uuid,
     pub workspace_id: Uuid,
+    /// Token-level access (viewer/editor) — not workspace visibility.
     pub access_level: ShareAccessLevel,
+    /// Workspace visibility from `workspaces.access_level`: `private` | `link` | `public`.
+    /// `public` allows anonymous chat; `link` requires a registered visitor.
+    pub workspace_visibility: String,
+    pub share_enabled: bool,
 }
 
 #[derive(Debug, Clone)]

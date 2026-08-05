@@ -135,10 +135,11 @@
         let row = sqlx::query(
             r#"
             select
-              st.owner_user_id,
+              coalesce(n.owner_id, st.owner_user_id, st.created_by) as owner_user_id,
               st.workspace_id,
-              st.access_level,
-              coalesce(n.owner_id, st.created_by) as owner_user_id
+              st.access_level as token_access_level,
+              coalesce(n.access_level, 'private') as workspace_visibility,
+              coalesce(n.share_enabled, false) as share_enabled
             from share_tokens st
             join workspaces n on n.id = st.workspace_id
             where st.token = $1
@@ -169,7 +170,13 @@
             .try_get::<Uuid, _>("workspace_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
         let access_level = row
-            .try_get::<String, _>("access_level")
+            .try_get::<String, _>("token_access_level")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let workspace_visibility = row
+            .try_get::<String, _>("workspace_visibility")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let share_enabled = row
+            .try_get::<bool, _>("share_enabled")
             .map_err(|error| AppError::internal(error.to_string()))?;
         sqlx::query(
             r#"
@@ -190,5 +197,7 @@
             owner_user_id,
             workspace_id,
             access_level: ShareAccessLevel::from_role(&access_level),
+            workspace_visibility,
+            share_enabled,
         }))
     }
