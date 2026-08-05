@@ -19,6 +19,21 @@ impl CreemAdapter {
         Self { config, client }
     }
 
+    /// Hosted Creem checkout for a fixed wallet top-up pack (metadata purpose=wallet_topup).
+    pub async fn client_create_topup_checkout(
+        &self,
+        user_id: UserId,
+        pack: &app_core::TopupPack,
+        product_id: &str,
+    ) -> Result<CheckoutSession, ProviderError> {
+        let (url, session_id) = self
+            .client
+            .create_topup_checkout_session(product_id, user_id, pack.id, pack.amount_fen)
+            .await
+            .map_err(|error| ProviderError::Request(error.to_string()))?;
+        Ok(CheckoutSession::Url { url, session_id })
+    }
+
     fn verify_signature(&self, signature: Option<&str>, payload: &[u8]) -> Result<(), ProviderError> {
         let mut mac = match crate::types::HmacSha256::new_from_slice(
             self.config.creem_webhook_secret.as_bytes(),
@@ -92,60 +107,17 @@ impl PaymentProvider for CreemAdapter {
             .unwrap_or_default();
 
         let event = match event_type {
-            "subscription.paid" => {
+            "subscription.paid" | "checkout.completed" | "payment.succeeded" => {
                 let data = value
                     .get("data")
                     .ok_or_else(|| ProviderError::Invalid("missing data field".to_string()))?;
-                let subscription_id = string_or_nested(data, "id", "subscription_id")?;
-                let user_id = data
-                    .get("user_id")
-                    .or_else(|| data.pointer("/metadata/user_id"))
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                    .ok_or_else(|| ProviderError::Invalid("missing user_id".to_string()))?
-                    .to_string();
-                let plan_id = data
-                    .get("plan_id")
-                    .or_else(|| data.pointer("/metadata/plan_id"))
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                    .ok_or_else(|| ProviderError::Invalid("missing plan_id".to_string()))?
-                    .to_string();
-                let price_id = data
-                    .get("price_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                let amount_cents = data
-                    .get("amount")
-                    .or_else(|| data.get("amount_cents"))
-                    .and_then(|v| v.as_i64())
-                    .ok_or_else(|| {
-                        ProviderError::Invalid("missing amount for subscription.paid".to_string())
-                    })?;
-                let currency = data
-                    .get("currency")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                    .ok_or_else(|| {
-                        ProviderError::Invalid("missing currency for subscription.paid".to_string())
-                    })?
-                    .to_string();
-                ProviderEvent::SubscriptionPaid {
-                    subscription_id,
-                    user_id,
-                    plan_id,
-                    price_id,
-                    amount_cents,
-                    currency,
-                    current_period_start: data
-                        .get("current_period_start")
-                        .and_then(|v| v.as_i64())
-                        .and_then(|ts| chrono::Utc.timestamp_opt(ts, 0).single()),
-                    current_period_end: data
-                        .get("current_period_end")
-                        .and_then(|v| v.as_i64())
-                        .and_then(|ts| chrono::Utc.timestamp_opt(ts, 0).single()),
+                if is_wallet_topup_metadata(data) {
+                    parse_wallet_topup(data, &event_id)?
+                } else if event_type == "subscription.paid" {
+                    parse_subscription_paid(data)?
+                } else {
+                    // One-time payment events without top-up purpose have no product effect yet.
+                    ProviderEvent::Ignored
                 }
             }
             "subscription.canceled" => {
@@ -161,6 +133,115 @@ impl PaymentProvider for CreemAdapter {
 
         Ok(ProviderWebhook { event_id, event })
     }
+}
+
+fn is_wallet_topup_metadata(data: &serde_json::Value) -> bool {
+    data.get("purpose")
+        .or_else(|| data.pointer("/metadata/purpose"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case(app_core::PRODUCT_KIND_WALLET_TOPUP))
+        .unwrap_or(false)
+}
+
+fn parse_wallet_topup(
+    data: &serde_json::Value,
+    event_id: &str,
+) -> Result<ProviderEvent, ProviderError> {
+    let user_id = data
+        .get("user_id")
+        .or_else(|| data.pointer("/metadata/user_id"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ProviderError::Invalid("missing user_id for wallet_topup".to_string()))?
+        .to_string();
+    let pack_id = data
+        .get("pack_id")
+        .or_else(|| data.pointer("/metadata/pack_id"))
+        .or_else(|| data.get("plan_id"))
+        .or_else(|| data.pointer("/metadata/plan_id"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ProviderError::Invalid("missing pack_id for wallet_topup".to_string()))?
+        .to_string();
+    let amount_fen = data
+        .get("amount_fen")
+        .or_else(|| data.pointer("/metadata/amount_fen"))
+        .and_then(|v| v.as_i64())
+        .or_else(|| {
+            app_core::topup_pack_by_id(&pack_id).map(|p| p.amount_fen)
+        })
+        .ok_or_else(|| {
+            ProviderError::Invalid("missing amount_fen for wallet_topup".to_string())
+        })?;
+    if amount_fen <= 0 {
+        return Err(ProviderError::Invalid(
+            "invalid amount_fen for wallet_topup".to_string(),
+        ));
+    }
+    let provider_order_id = string_or_nested(data, "id", "subscription_id")
+        .or_else(|_| string_or_nested(data, "checkout_id", "order_id"))
+        .unwrap_or_else(|_| event_id.to_string());
+    Ok(ProviderEvent::WalletTopupPaid {
+        user_id,
+        pack_id,
+        amount_fen,
+        provider_order_id,
+        event_id: event_id.to_string(),
+    })
+}
+
+fn parse_subscription_paid(data: &serde_json::Value) -> Result<ProviderEvent, ProviderError> {
+    let subscription_id = string_or_nested(data, "id", "subscription_id")?;
+    let user_id = data
+        .get("user_id")
+        .or_else(|| data.pointer("/metadata/user_id"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ProviderError::Invalid("missing user_id".to_string()))?
+        .to_string();
+    let plan_id = data
+        .get("plan_id")
+        .or_else(|| data.pointer("/metadata/plan_id"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ProviderError::Invalid("missing plan_id".to_string()))?
+        .to_string();
+    let price_id = data
+        .get("price_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let amount_cents = data
+        .get("amount")
+        .or_else(|| data.get("amount_cents"))
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| {
+            ProviderError::Invalid("missing amount for subscription.paid".to_string())
+        })?;
+    let currency = data
+        .get("currency")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            ProviderError::Invalid("missing currency for subscription.paid".to_string())
+        })?
+        .to_string();
+    Ok(ProviderEvent::SubscriptionPaid {
+        subscription_id,
+        user_id,
+        plan_id,
+        price_id,
+        amount_cents,
+        currency,
+        current_period_start: data
+            .get("current_period_start")
+            .and_then(|v| v.as_i64())
+            .and_then(|ts| chrono::Utc.timestamp_opt(ts, 0).single()),
+        current_period_end: data
+            .get("current_period_end")
+            .and_then(|v| v.as_i64())
+            .and_then(|ts| chrono::Utc.timestamp_opt(ts, 0).single()),
+    })
 }
 
 fn string_or_nested(value: &serde_json::Value, key: &str, alt: &str) -> Result<String, ProviderError> {

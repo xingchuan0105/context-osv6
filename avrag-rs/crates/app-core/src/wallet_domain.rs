@@ -21,10 +21,72 @@ pub const REFERRAL_TOPUP_STEP_FEN: i64 = 5000;
 pub const WALLET_KIND_SIGNUP_GRANT: &str = "signup_grant";
 /// Referral bilateral bonus (PR4).
 pub const WALLET_KIND_REFERRAL_BONUS: &str = "referral_bonus";
-/// Reserved for PR5 paid top-up webhooks.
+/// Paid wallet top-up via Creem/Alipay (PR5).
 pub const WALLET_KIND_TOPUP: &str = "topup";
-/// Reserved for PR6 platform-proxy usage debits.
+/// Platform-proxy usage debits (PR6).
 pub const WALLET_KIND_USAGE_DEBIT: &str = "usage_debit";
+
+/// Checkout / order product kind: share-slot subscription (existing rails).
+pub const PRODUCT_KIND_SUBSCRIPTION: &str = "subscription";
+/// Checkout / order product kind: wallet top-up (ADR-0010 PR5).
+pub const PRODUCT_KIND_WALLET_TOPUP: &str = "wallet_topup";
+/// Checkout request `kind` for subscription (default).
+pub const CHECKOUT_KIND_SUBSCRIPTION: &str = "subscription";
+/// Checkout request `kind` for wallet top-up.
+pub const CHECKOUT_KIND_WALLET_TOPUP: &str = "wallet_topup";
+
+/// Fixed top-up pack ids (fen packs; 100 fen = ¥1).
+pub const TOPUP_PACK_50: &str = "topup_50";
+pub const TOPUP_PACK_100: &str = "topup_100";
+pub const TOPUP_PACK_200: &str = "topup_200";
+
+/// One fixed CNY top-up pack (v1 catalog).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TopupPack {
+    pub id: &'static str,
+    /// Credit amount in fen (分). Also the Alipay `amount_cents` for CNY.
+    pub amount_fen: i64,
+    /// Display yuan integer (e.g. 50 for ¥50).
+    pub amount_yuan: i64,
+}
+
+/// Default packs: ¥50 / ¥100 / ¥200.
+pub const DEFAULT_TOPUP_PACKS: &[TopupPack] = &[
+    TopupPack {
+        id: TOPUP_PACK_50,
+        amount_fen: 5000,
+        amount_yuan: 50,
+    },
+    TopupPack {
+        id: TOPUP_PACK_100,
+        amount_fen: 10_000,
+        amount_yuan: 100,
+    },
+    TopupPack {
+        id: TOPUP_PACK_200,
+        amount_fen: 20_000,
+        amount_yuan: 200,
+    },
+];
+
+/// Resolve a pack by id (`topup_50`, …). Unknown ids return `None`.
+pub fn topup_pack_by_id(pack_id: &str) -> Option<&'static TopupPack> {
+    let id = pack_id.trim();
+    DEFAULT_TOPUP_PACKS.iter().find(|p| p.id == id)
+}
+
+/// Alipay `total_amount` / precreate amount string from fen (e.g. 5000 → `"50.00"`).
+pub fn fen_to_decimal_amount(fen: i64) -> String {
+    let yuan = fen / 100;
+    let cents = (fen % 100).abs();
+    format!("{yuan}.{cents:02}")
+}
+
+/// Stable idempotency key for paid top-up ledger rows.
+/// Prefer provider delivery / order id so duplicate webhooks do not double-credit.
+pub fn topup_idempotency_key(provider: &str, order_or_event_id: &str) -> String {
+    format!("topup:{provider}:{order_or_event_id}")
+}
 
 /// Stable idempotency key for the one-time signup grant.
 pub fn signup_grant_idempotency_key(user_id: Uuid) -> String {

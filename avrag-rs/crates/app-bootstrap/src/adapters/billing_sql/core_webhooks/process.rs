@@ -183,6 +183,26 @@ pub(super) async fn process_webhook_event(
                     .await;
                 }
             }
+            ProviderEvent::WalletTopupPaid {
+                user_id,
+                pack_id,
+                amount_fen,
+                provider_order_id,
+                event_id: _,
+            } => {
+                // Ledger key uses provider order id (not delivery id) so re-notifies
+                // that share the same paid order cannot double-credit.
+                credit_wallet_topup_from_webhook(
+                    repo.clone(),
+                    "creem",
+                    user_id,
+                    pack_id,
+                    *amount_fen,
+                    provider_order_id,
+                    provider_order_id,
+                )
+                .await?;
+            }
             ProviderEvent::AlipayOrderPaid { .. } => {
                 bail!("alipay notify cannot arrive for provider creem");
             }
@@ -197,7 +217,8 @@ pub(super) async fn process_webhook_event(
                 set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
 
                 let row = sqlx::query(
-                    "SELECT user_id, plan_id, amount_cents FROM billing_orders WHERE provider = 'alipay' AND provider_order_id = $1",
+                    "SELECT user_id, plan_id, amount_cents, product_kind \
+                     FROM billing_orders WHERE provider = 'alipay' AND provider_order_id = $1",
                 )
                 .bind(out_trade_no)
                 .fetch_one(tx.as_mut())
@@ -205,9 +226,14 @@ pub(super) async fn process_webhook_event(
 
                 let user_id = row.try_get::<Uuid, _>("user_id")?;
                 let plan_id = row.try_get::<String, _>("plan_id")?;
+                let product_kind = row
+                    .try_get::<String, _>("product_kind")
+                    .unwrap_or_else(|_| "subscription".to_string());
 
-                // Anti-forgery: the paid amount must match the pending order we created.
-                let expected_cents = i64::from(row.try_get::<i32, _>("amount_cents")?);
+                // amount_cents is BIGINT (migration 0051); accept i64 or i32.
+                let expected_cents = row
+                    .try_get::<i64, _>("amount_cents")
+                    .or_else(|_| row.try_get::<i32, _>("amount_cents").map(i64::from))?;
                 if *paid_cents != expected_cents {
                     bail!(
                         "alipay amount mismatch for {}: notify total_amount={} cents vs order amount_cents={}",
@@ -228,6 +254,28 @@ pub(super) async fn process_webhook_event(
                 .bind(out_trade_no)
                 .execute(tx.as_mut())
                 .await?;
+
+                // Wallet top-up: mark paid only; credit after commit (ledger has own idempotency).
+                if product_kind == PRODUCT_KIND_WALLET_TOPUP {
+                    tx.commit().await?;
+
+                    let amount_fen = if let Some(pack) = topup_pack_by_id(&plan_id) {
+                        pack.amount_fen
+                    } else {
+                        expected_cents
+                    };
+                    credit_wallet_topup_from_webhook(
+                        repo.clone(),
+                        "alipay",
+                        &user_id.to_string(),
+                        &plan_id,
+                        amount_fen,
+                        out_trade_no,
+                        out_trade_no,
+                    )
+                    .await?;
+                    return Ok(());
+                }
 
                 sqlx::query(
                     r#"
@@ -322,12 +370,101 @@ pub(super) async fn process_webhook_event(
                 )
                 .await;
             }
-            ProviderEvent::SubscriptionPaid { .. } | ProviderEvent::SubscriptionCanceled { .. } => {
+            ProviderEvent::SubscriptionPaid { .. }
+            | ProviderEvent::SubscriptionCanceled { .. }
+            | ProviderEvent::WalletTopupPaid { .. } => {
                 bail!("creem event cannot arrive for provider alipay");
             }
             ProviderEvent::Ignored => {}
         },
     }
+
+    Ok(())
+}
+
+/// Credit wallet for a confirmed top-up payment. Idempotent via ledger key
+/// `topup:{provider}:{order_or_event_id}`.
+async fn credit_wallet_topup_from_webhook(
+    repo: Arc<PgAppRepository>,
+    provider: &str,
+    user_id: &str,
+    pack_id: &str,
+    amount_fen: i64,
+    provider_order_id: &str,
+    order_or_event_id: &str,
+) -> Result<()> {
+    let user_uuid = Uuid::parse_str(user_id)?;
+    let amount_fen = if let Some(pack) = topup_pack_by_id(pack_id) {
+        if amount_fen > 0 && amount_fen != pack.amount_fen {
+            bail!(
+                "wallet topup amount_fen mismatch for pack {}: got {} expected {}",
+                pack_id,
+                amount_fen,
+                pack.amount_fen
+            );
+        }
+        pack.amount_fen
+    } else if amount_fen > 0 {
+        amount_fen
+    } else {
+        bail!("wallet topup missing amount for pack {}", pack_id);
+    };
+
+    // Persist a paid order row for Creem (Alipay already has one).
+    if provider == "creem" {
+        let mut tx = repo.raw().begin().await?;
+        set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
+        sqlx::query(
+            r#"
+            insert into billing_orders (
+                user_id, provider, provider_order_id, plan_id, status,
+                amount_cents, currency, product_kind
+            )
+            values ($1, 'creem', $2, $3, 'paid', $4, 'CNY', $5)
+            on conflict do nothing
+            "#,
+        )
+        .bind(user_uuid)
+        .bind(provider_order_id)
+        .bind(pack_id)
+        .bind(amount_fen)
+        .bind(PRODUCT_KIND_WALLET_TOPUP)
+        .execute(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+    }
+
+    let wallet = PgWalletStoreAdapter::new(repo.clone());
+    let result = avrag_billing::credit_paid_topup(
+        Arc::new(wallet),
+        &avrag_billing::PaidTopupInput {
+            user_id: user_uuid,
+            pack_id: pack_id.to_string(),
+            amount_fen,
+            provider: provider.to_string(),
+            order_or_event_id: order_or_event_id.to_string(),
+        },
+    )
+    .await
+    .map_err(|error| anyhow!(error.to_string()))?;
+
+    let _ = emit_billing_notification(
+        repo,
+        user_id,
+        "billing.wallet.topup",
+        "Wallet top-up credited",
+        "Your wallet balance was increased after a successful payment.",
+        serde_json::json!({
+            "provider": provider,
+            "pack_id": pack_id,
+            "amount_fen": amount_fen,
+            "balance_fen": result.wallet.balance_fen,
+            "lifetime_paid_topup_fen": result.wallet.lifetime_paid_topup_fen,
+            "applied": result.applied,
+            "provider_order_id": provider_order_id,
+        }),
+    )
+    .await;
 
     Ok(())
 }

@@ -389,6 +389,46 @@ export const settingsMessages = {
     zh: "已取消",
     en: "Canceled",
   },
+  "settings.billing.walletTitle": {
+    zh: "模型代购钱包",
+    en: "Model proxy wallet",
+  },
+  "settings.billing.walletSubtitle": {
+    zh: "余额用于平台代购模型调用。充值会计入累计充值（邀请额度每 ¥50 增加 1 次）。",
+    en: "Balance pays platform proxy model usage. Paid top-ups count toward lifetime total (+1 invite per ¥50).",
+  },
+  "settings.billing.walletBalanceLabel": {
+    zh: "可用余额",
+    en: "Available balance",
+  },
+  "settings.billing.walletLifetimePaidLabel": {
+    zh: "累计充值",
+    en: "Lifetime paid top-ups",
+  },
+  "settings.billing.walletTopupTitle": {
+    zh: "充值",
+    en: "Top up",
+  },
+  "settings.billing.walletTopupAction": {
+    zh: "充值 {label}",
+    en: "Top up {label}",
+  },
+  "settings.billing.walletTopupLoading": {
+    zh: "正在创建结账…",
+    en: "Starting checkout…",
+  },
+  "settings.billing.walletTopupFailed": {
+    zh: "无法开始充值：{message}",
+    en: "Could not start top-up: {message}",
+  },
+  "settings.billing.walletLoading": {
+    zh: "正在加载钱包…",
+    en: "Loading wallet…",
+  },
+  "settings.billing.failedItem.wallet": {
+    zh: "钱包",
+    en: "wallet",
+  },
   "settings.appearance.themeDescription.system": {
     zh: "自动匹配设备当前主题。",
     en: "Follow the operating system preference.",

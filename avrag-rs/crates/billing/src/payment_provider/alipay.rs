@@ -27,6 +27,31 @@ impl AlipayAdapter {
         Self { config, client }
     }
 
+    /// F2F QR for wallet top-up (amount already resolved from pack fen).
+    pub async fn client_create_topup_qr(
+        &self,
+        amount_str: &str,
+        subject: &str,
+        order_ref: &str,
+    ) -> Result<CheckoutSession, ProviderError> {
+        let notify_url = self.config.alipay_notify_url.clone().unwrap_or_else(|| {
+            format!(
+                "{}/webhooks/alipay",
+                std::env::var("AVRAG_PUBLIC_BASE_URL")
+                    .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string())
+            )
+        });
+        let qr_code = self
+            .client
+            .create_precreate_order(amount_str, subject, order_ref, &notify_url)
+            .await
+            .map_err(|error| ProviderError::Request(error.to_string()))?;
+        Ok(CheckoutSession::QrCode {
+            qr_code,
+            order_id: order_ref.to_string(),
+        })
+    }
+
     /// Percent-decode each `k=v` pair, preserving bytes (CJK-safe).
     fn decode_params(&self, raw: &[u8]) -> Vec<(String, String)> {
         let query_str = String::from_utf8_lossy(raw);

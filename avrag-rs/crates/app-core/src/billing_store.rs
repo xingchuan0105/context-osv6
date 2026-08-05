@@ -84,12 +84,17 @@ pub trait BillingStorePort: Send + Sync {
     async fn load_usage_forecast(&self, user_id: UserId)
     -> Result<UsageForecastResponse, AppError>;
 
+    /// Insert a pending Alipay F2F order.
+    ///
+    /// `product_kind` is `subscription` or `wallet_topup`. For top-ups, `plan_id`
+    /// stores the pack id (e.g. `topup_50`) and `amount_cents` equals pack fen.
     async fn insert_pending_alipay_order(
         &self,
         user_id: UserId,
         out_trade_no: &str,
         plan_id: &str,
         amount_cents: i64,
+        product_kind: &str,
     ) -> Result<(), AppError>;
 
     /// Returns `(status, plan_id)` for the user's own Alipay order, or `None` when absent.

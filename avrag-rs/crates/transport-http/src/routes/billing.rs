@@ -31,6 +31,8 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/billing/orders/{order_id}", get(get_order_status))
         // ADR-0010: balance in fen (分); 2000 fen = ¥20 signup grant.
         .route("/billing/wallet", get(get_wallet))
+        // ADR-0010 PR5: fixed wallet top-up packs (¥50/¥100/¥200).
+        .route("/billing/wallet/topup-packs", get(list_topup_packs))
         // ADR-0010 PR4: my referral code + quota stats.
         .route("/billing/referral", get(get_referral))
 }
@@ -120,6 +122,12 @@ async fn get_wallet(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::WalletBalanceResponse>> {
     Json(state.billing_api().get_wallet().await)
+}
+
+async fn list_topup_packs(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Json<ApiResponse<Vec<avrag_billing::TopupPackResponse>>> {
+    Json(state.billing_api().list_topup_packs().await)
 }
 
 async fn get_referral(

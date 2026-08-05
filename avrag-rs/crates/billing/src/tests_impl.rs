@@ -66,6 +66,39 @@ fn alipay_amount_compare_uses_cents() {
 }
 
 #[test]
+fn topup_pack_fen_matches_alipay_decimal_and_cents() {
+    for pack in app_core::DEFAULT_TOPUP_PACKS {
+        let decimal = app_core::fen_to_decimal_amount(pack.amount_fen);
+        assert_eq!(
+            BillingConfig::decimal_price_to_cents(&decimal),
+            pack.amount_fen,
+            "pack {} fen/cents round-trip",
+            pack.id
+        );
+        assert_eq!(decimal, format!("{}.00", pack.amount_yuan));
+    }
+}
+
+#[test]
+fn create_checkout_request_defaults_subscription_without_kind() {
+    let raw = r#"{"plan_id":"pro","provider":"alipay"}"#;
+    let parsed: crate::CreateCheckoutRequest =
+        serde_json::from_str(raw).expect("legacy subscription body still deserializes");
+    assert_eq!(parsed.plan_id.as_deref(), Some("pro"));
+    assert!(parsed.kind.is_none());
+    assert!(parsed.topup_pack_id.is_none());
+}
+
+#[test]
+fn create_checkout_request_wallet_topup_fields() {
+    let raw = r#"{"kind":"wallet_topup","topup_pack_id":"topup_50","provider":"creem"}"#;
+    let parsed: crate::CreateCheckoutRequest =
+        serde_json::from_str(raw).expect("wallet topup body deserializes");
+    assert_eq!(parsed.kind.as_deref(), Some("wallet_topup"));
+    assert_eq!(parsed.topup_pack_id.as_deref(), Some("topup_50"));
+}
+
+#[test]
 fn build_plan_payloads_does_not_require_stripe() {
     let config = BillingConfig {
         billing_price_label_pro: "$20/month".to_string(),

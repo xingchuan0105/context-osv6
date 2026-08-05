@@ -1,7 +1,14 @@
-//! User wallet service — balance query, signup credit, platform usage debit (ADR-0010 PR3/PR6).
+//! User wallet service — balance query, signup credit, paid top-up, usage debit
+//! (ADR-0010 PR3/PR5/PR6).
 //!
 //! **Amount unit: integer fen (分).** 100 fen = ¥1; signup grant = [`SIGNUP_GRANT_FEN`] = 2000 fen = ¥20.
-//! Referral bilateral grant lives in [`crate::referral`]. Top-up webhook (PR5) is separate.
+//! Referral bilateral grant lives in [`crate::referral`].
+//!
+//! # PR5 paid top-up
+//!
+//! After Creem/Alipay webhook confirms payment, call [`credit_paid_topup`] with
+//! `counts_as_paid_topup: true` so `lifetime_paid_topup_fen` rises (referral quota steps).
+//! Idempotency: `topup:{provider}:{order_or_event_id}`.
 //!
 //! # PR6 usage debit behavior
 //!
@@ -20,8 +27,9 @@
 use std::sync::Arc;
 
 use app_core::{
-    ApplyLedgerInput, ApplyLedgerResult, SIGNUP_GRANT_FEN, WALLET_KIND_SIGNUP_GRANT,
-    WALLET_KIND_USAGE_DEBIT, Wallet, WalletStorePort, signup_grant_idempotency_key,
+    ApplyLedgerInput, ApplyLedgerResult, DEFAULT_TOPUP_PACKS, SIGNUP_GRANT_FEN, TopupPack,
+    WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, Wallet, WalletStorePort,
+    signup_grant_idempotency_key, topup_idempotency_key, topup_pack_by_id,
 };
 use common::{ApiResponse, AppError};
 use serde::{Deserialize, Serialize};
@@ -84,6 +92,94 @@ pub async fn handle_get_wallet(
         Ok(balance) => ApiResponse::ok(balance),
         Err(error) => ApiResponse::err("billing_wallet_failed", &error.to_string()),
     }
+}
+
+/// API view of a fixed top-up pack.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TopupPackResponse {
+    pub pack_id: String,
+    pub amount_fen: i64,
+    pub amount_yuan: i64,
+    pub label_cny: String,
+}
+
+impl From<&TopupPack> for TopupPackResponse {
+    fn from(p: &TopupPack) -> Self {
+        Self {
+            pack_id: p.id.to_string(),
+            amount_fen: p.amount_fen,
+            amount_yuan: p.amount_yuan,
+            label_cny: format!("¥{}", p.amount_yuan),
+        }
+    }
+}
+
+/// List fixed wallet top-up packs (code defaults; env product ids optional on checkout).
+pub fn list_topup_packs() -> Vec<TopupPackResponse> {
+    DEFAULT_TOPUP_PACKS.iter().map(TopupPackResponse::from).collect()
+}
+
+pub fn handle_list_topup_packs() -> ApiResponse<Vec<TopupPackResponse>> {
+    ApiResponse::ok(list_topup_packs())
+}
+
+/// Inputs for a paid top-up credit after provider webhook (PR5).
+#[derive(Debug, Clone)]
+pub struct PaidTopupInput {
+    pub user_id: Uuid,
+    pub pack_id: String,
+    pub amount_fen: i64,
+    /// `creem` / `alipay` (used in ledger idempotency key + metadata).
+    pub provider: String,
+    /// Provider order id or webhook event id.
+    pub order_or_event_id: String,
+}
+
+/// Credit wallet for a confirmed paid top-up. Bumps `lifetime_paid_topup_fen`.
+///
+/// Same `provider` + `order_or_event_id` is always idempotent (`applied = false` on replay).
+pub async fn credit_paid_topup(
+    store: Arc<dyn WalletStorePort>,
+    input: &PaidTopupInput,
+) -> Result<ApplyLedgerResult, AppError> {
+    if input.amount_fen <= 0 {
+        return Err(AppError::validation(
+            "wallet_topup_amount_invalid",
+            "top-up amount_fen must be positive",
+        ));
+    }
+    if let Some(pack) = topup_pack_by_id(&input.pack_id) {
+        if pack.amount_fen != input.amount_fen {
+            return Err(AppError::validation(
+                "wallet_topup_pack_amount_mismatch",
+                "top-up amount does not match pack catalog",
+            ));
+        }
+    }
+    let order_key = input.order_or_event_id.trim();
+    if order_key.is_empty() {
+        return Err(AppError::validation(
+            "wallet_topup_order_required",
+            "order_or_event_id is required for top-up idempotency",
+        ));
+    }
+
+    let ledger = ApplyLedgerInput {
+        user_id: input.user_id,
+        kind: WALLET_KIND_TOPUP.to_string(),
+        amount_fen: input.amount_fen,
+        idempotency_key: topup_idempotency_key(&input.provider, order_key),
+        metadata: serde_json::json!({
+            "source": "paid_topup",
+            "provider": input.provider,
+            "pack_id": input.pack_id,
+            "amount_fen": input.amount_fen,
+            "order_or_event_id": order_key,
+            "purpose": "wallet_topup",
+        }),
+        counts_as_paid_topup: true,
+    };
+    store.apply_ledger_entry(&ledger).await
 }
 
 /// Inputs for a platform-proxy usage debit (PR6).
@@ -360,6 +456,69 @@ mod tests {
         // Newest first
         assert_eq!(ledger[0].kind, app_core::WALLET_KIND_TOPUP);
         assert_eq!(ledger[1].kind, WALLET_KIND_SIGNUP_GRANT);
+    }
+
+    #[tokio::test]
+    async fn paid_topup_increases_balance_and_lifetime_paid() {
+        let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        grant_signup_bonus(store.clone(), user_id).await.unwrap();
+
+        let first = credit_paid_topup(
+            store.clone(),
+            &PaidTopupInput {
+                user_id,
+                pack_id: app_core::TOPUP_PACK_50.to_string(),
+                amount_fen: 5000,
+                provider: "alipay".into(),
+                order_or_event_id: "order-abc".into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(first.applied);
+        assert_eq!(first.wallet.balance_fen, SIGNUP_GRANT_FEN + 5000);
+        assert_eq!(first.wallet.lifetime_paid_topup_fen, 5000);
+
+        let second = credit_paid_topup(
+            store.clone(),
+            &PaidTopupInput {
+                user_id,
+                pack_id: app_core::TOPUP_PACK_50.to_string(),
+                amount_fen: 5000,
+                provider: "alipay".into(),
+                order_or_event_id: "order-abc".into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(!second.applied);
+        assert_eq!(second.wallet.balance_fen, SIGNUP_GRANT_FEN + 5000);
+        assert_eq!(second.wallet.lifetime_paid_topup_fen, 5000);
+        assert_eq!(second.ledger_id, first.ledger_id);
+
+        let ledger = store.list_ledger(user_id, 10).await.unwrap();
+        assert_eq!(
+            ledger
+                .iter()
+                .filter(|e| e.kind == WALLET_KIND_TOPUP)
+                .count(),
+            1
+        );
+        assert_eq!(
+            ledger[0].idempotency_key,
+            topup_idempotency_key("alipay", "order-abc")
+        );
+    }
+
+    #[tokio::test]
+    async fn list_topup_packs_matches_catalog() {
+        let packs = list_topup_packs();
+        assert_eq!(packs.len(), 3);
+        assert_eq!(packs[0].pack_id, app_core::TOPUP_PACK_50);
+        assert_eq!(packs[0].amount_fen, 5000);
+        assert_eq!(packs[1].amount_fen, 10_000);
+        assert_eq!(packs[2].amount_fen, 20_000);
     }
 
     #[tokio::test]

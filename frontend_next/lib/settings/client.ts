@@ -278,6 +278,10 @@ export type CheckoutRequest = {
   plan_id?: string;
   /** Product checkout providers only (Stripe removed 2026-07-13). */
   provider?: "creem" | "alipay";
+  /** `subscription` (default) or `wallet_topup` (ADR-0010 PR5). */
+  kind?: "subscription" | "wallet_topup";
+  /** Required when kind is wallet_topup (`topup_50` / `topup_100` / `topup_200`). */
+  topup_pack_id?: string;
 };
 
 export type CheckoutResponse = {
@@ -285,6 +289,21 @@ export type CheckoutResponse = {
   session_id: string;
   qr_code?: string | null;
   order_id?: string | null;
+};
+
+export type WalletBalanceResponse = {
+  user_id: string;
+  /** Spendable balance in fen (分). 2000 = ¥20. */
+  balance_fen: number;
+  /** Lifetime paid top-ups in fen (excludes gifts). */
+  lifetime_paid_topup_fen: number;
+};
+
+export type TopupPack = {
+  pack_id: string;
+  amount_fen: number;
+  amount_yuan: number;
+  label_cny: string;
 };
 
 export async function createCheckoutSession(token: string, requestPayload: CheckoutRequest) {
@@ -296,6 +315,24 @@ export async function createCheckoutSession(token: string, requestPayload: Check
     },
     token,
     "Failed to create checkout session",
+  );
+}
+
+export async function getWalletBalance(token: string) {
+  return requestEnvelope<WalletBalanceResponse>(
+    "/api/v1/billing/wallet",
+    { method: "GET" },
+    token,
+    "Failed to load wallet balance",
+  );
+}
+
+export async function listTopupPacks(token: string) {
+  return requestEnvelope<TopupPack[]>(
+    "/api/v1/billing/wallet/topup-packs",
+    { method: "GET" },
+    token,
+    "Failed to load top-up packs",
   );
 }
 

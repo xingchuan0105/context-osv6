@@ -18,8 +18,13 @@ use crate::{BillingConfig, Subscription};
 
 #[derive(Deserialize)]
 pub struct CreateCheckoutRequest {
+    /// Subscription plan id when `kind` is subscription (default).
     pub plan_id: Option<String>,
     pub provider: Option<BillingProvider>,
+    /// `subscription` (default) or `wallet_topup` (ADR-0010 PR5).
+    pub kind: Option<String>,
+    /// Required when `kind = wallet_topup` (`topup_50` / `topup_100` / `topup_200`).
+    pub topup_pack_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -192,6 +197,23 @@ impl BillingService {
         user_id: UserId,
         body: CreateCheckoutRequest,
     ) -> ApiResponse<CheckoutResponse> {
+        let kind = body
+            .kind
+            .as_deref()
+            .unwrap_or(app_core::CHECKOUT_KIND_SUBSCRIPTION)
+            .trim();
+        if kind.eq_ignore_ascii_case(app_core::CHECKOUT_KIND_WALLET_TOPUP) {
+            return self
+                .create_wallet_topup_checkout(store, user_id, body)
+                .await;
+        }
+        if !kind.is_empty() && !kind.eq_ignore_ascii_case(app_core::CHECKOUT_KIND_SUBSCRIPTION) {
+            return ApiResponse::err(
+                "billing_checkout_kind_invalid",
+                "kind must be subscription or wallet_topup",
+            );
+        }
+
         let config = &self.config;
         let requested_plan = body.plan_id.as_deref().unwrap_or(PLAN_PRO).trim();
         if requested_plan == PLAN_FREE {
@@ -266,6 +288,7 @@ impl BillingService {
                         &out_trade_no,
                         requested_plan,
                         amount_cents,
+                        app_core::PRODUCT_KIND_SUBSCRIPTION,
                     )
                     .await
                 {
@@ -288,6 +311,127 @@ impl BillingService {
                     Ok(CheckoutSession::Url { .. }) => ApiResponse::err(
                         "billing_checkout_failed",
                         "Alipay checkout returned an unexpected URL session",
+                    ),
+                    Err(ProviderError::Request(error)) => {
+                        ApiResponse::err("billing_checkout_failed", &error)
+                    }
+                    Err(error) => ApiResponse::err("billing_checkout_failed", &error.to_string()),
+                }
+            }
+        }
+    }
+
+    /// Wallet top-up checkout (Creem hosted URL or Alipay F2F QR).
+    async fn create_wallet_topup_checkout(
+        &self,
+        store: Arc<dyn BillingStorePort>,
+        user_id: UserId,
+        body: CreateCheckoutRequest,
+    ) -> ApiResponse<CheckoutResponse> {
+        let pack_id = body
+            .topup_pack_id
+            .as_deref()
+            .or(body.plan_id.as_deref())
+            .unwrap_or("")
+            .trim();
+        let Some(pack) = app_core::topup_pack_by_id(pack_id) else {
+            return ApiResponse::err(
+                "billing_topup_pack_invalid",
+                "unknown top-up pack; use topup_50, topup_100, or topup_200",
+            );
+        };
+
+        let config = &self.config;
+        let requested_provider = body
+            .provider
+            .unwrap_or_else(|| config.default_checkout_provider());
+
+        match requested_provider {
+            BillingProvider::Stripe => ApiResponse::err(
+                "billing_provider_removed",
+                "Stripe is not a product payment provider; use Creem (international) or Alipay (China)",
+            ),
+            BillingProvider::Creem => {
+                if !config.creem_enabled() {
+                    return ApiResponse::err(
+                        "billing_unconfigured",
+                        "Creem billing checkout is not configured",
+                    );
+                }
+                let Some(product_id) = config
+                    .creem_checkout_product_for_topup_pack(pack.id)
+                    .map(str::to_string)
+                else {
+                    return ApiResponse::err(
+                        "billing_topup_unconfigured",
+                        "Creem top-up product is not configured for this pack",
+                    );
+                };
+                match self
+                    .creem
+                    .client_create_topup_checkout(user_id, pack, &product_id)
+                    .await
+                {
+                    Ok(CheckoutSession::Url { url, session_id }) => {
+                        ApiResponse::ok(CheckoutResponse {
+                            url,
+                            session_id,
+                            qr_code: None,
+                            order_id: None,
+                        })
+                    }
+                    Ok(CheckoutSession::QrCode { .. }) => ApiResponse::err(
+                        "billing_checkout_failed",
+                        "Creem top-up checkout returned an unexpected QR session",
+                    ),
+                    Err(ProviderError::Request(error)) => {
+                        ApiResponse::err("billing_checkout_failed", &error)
+                    }
+                    Err(error) => ApiResponse::err("billing_checkout_failed", &error.to_string()),
+                }
+            }
+            BillingProvider::Alipay => {
+                if !config.alipay_enabled() {
+                    return ApiResponse::err(
+                        "billing_unconfigured",
+                        "Alipay billing checkout is not configured",
+                    );
+                }
+                // CNY: fen == amount_cents.
+                let amount_cents = pack.amount_fen;
+                let out_trade_no = uuid::Uuid::new_v4().to_string();
+
+                if let Err(error) = store
+                    .insert_pending_alipay_order(
+                        user_id,
+                        &out_trade_no,
+                        pack.id,
+                        amount_cents,
+                        app_core::PRODUCT_KIND_WALLET_TOPUP,
+                    )
+                    .await
+                {
+                    return ApiResponse::err("billing_checkout_failed", &error.to_string());
+                }
+
+                let amount_str = app_core::fen_to_decimal_amount(pack.amount_fen);
+                let subject = format!("Context OS - Wallet Top-up ¥{}", pack.amount_yuan);
+                match self
+                    .alipay
+                    .client_create_topup_qr(&amount_str, &subject, &out_trade_no)
+                    .await
+                {
+                    Ok(CheckoutSession::QrCode { qr_code, order_id }) => {
+                        ApiResponse::ok(CheckoutResponse {
+                            url: "".to_string(),
+                            session_id: "".to_string(),
+                            qr_code: Some(qr_code),
+                            order_id: Some(order_id),
+                        })
+                    }
+                    Ok(CheckoutSession::Url { .. }) => ApiResponse::err(
+                        "billing_checkout_failed",
+                        "Alipay top-up checkout returned an unexpected URL session",
                     ),
                     Err(ProviderError::Request(error)) => {
                         ApiResponse::err("billing_checkout_failed", &error)

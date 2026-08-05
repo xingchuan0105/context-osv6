@@ -19,10 +19,10 @@ mod billing_sql {
     use anyhow::{Result, anyhow, bail};
     use app_core::{
         ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, DailyUsage, LimitHits, PLAN_FREE,
-        PLAN_PLUS, PLAN_PRO, ProviderEvent, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
-        STATUS_UNPAID, Subscription, SubscriptionStatus,
+        PLAN_PLUS, PLAN_PRO, PRODUCT_KIND_WALLET_TOPUP, ProviderEvent, STATUS_ACTIVE,
+        STATUS_CANCELED, STATUS_PAST_DUE, STATUS_UNPAID, Subscription, SubscriptionStatus,
         UsageForecastResponse, UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse,
-        WebhookClaim,
+        WebhookClaim, topup_pack_by_id,
     };
     use avrag_storage_pg::PgAppRepository;
     use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
@@ -31,6 +31,7 @@ mod billing_sql {
     use uuid::Uuid;
 
     use crate::adapters::pg_session::{set_current_role_sqlx, set_current_user_sqlx};
+    use crate::adapters::PgWalletStoreAdapter;
 
     pub(super) async fn set_current_user(
         conn: &mut sqlx::PgConnection,
@@ -201,7 +202,14 @@ impl BillingStorePort for PgBillingStoreAdapter {
         out_trade_no: &str,
         plan_id: &str,
         amount_cents: i64,
+        product_kind: &str,
     ) -> Result<(), AppError> {
+        let kind = product_kind.trim();
+        let kind = if kind.is_empty() {
+            app_core::PRODUCT_KIND_SUBSCRIPTION
+        } else {
+            kind
+        };
         let mut tx = self
             .repo
             .raw()
@@ -211,14 +219,18 @@ impl BillingStorePort for PgBillingStoreAdapter {
         set_current_role(tx.as_mut(), "super_admin").await?;
         sqlx::query(
             r#"
-            insert into billing_orders (user_id, provider, provider_order_id, plan_id, status, amount_cents, currency)
-            values ($1, 'alipay', $2, $3, 'pending', $4, 'CNY')
+            insert into billing_orders (
+                user_id, provider, provider_order_id, plan_id, status,
+                amount_cents, currency, product_kind
+            )
+            values ($1, 'alipay', $2, $3, 'pending', $4, 'CNY', $5)
             "#,
         )
         .bind(user_id.into_uuid())
         .bind(out_trade_no)
         .bind(plan_id)
         .bind(amount_cents)
+        .bind(kind)
         .execute(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;

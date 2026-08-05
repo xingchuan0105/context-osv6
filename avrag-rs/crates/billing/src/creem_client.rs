@@ -12,6 +12,12 @@ pub struct CreemClient {
 struct CreemMetadata {
     user_id: String,
     plan_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    purpose: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pack_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    amount_fen: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -42,13 +48,56 @@ impl CreemClient {
         user_id: UserId,
         plan_id: &str,
     ) -> Result<(String, String)> {
+        self.create_checkout_session_with_metadata(
+            product_id,
+            user_id,
+            plan_id,
+            None,
+            None,
+            None,
+            "/dashboard?billing=success",
+        )
+        .await
+    }
+
+    /// Wallet top-up checkout: metadata carries `purpose=wallet_topup` for webhook routing.
+    pub async fn create_topup_checkout_session(
+        &self,
+        product_id: &str,
+        user_id: UserId,
+        pack_id: &str,
+        amount_fen: i64,
+    ) -> Result<(String, String)> {
+        self.create_checkout_session_with_metadata(
+            product_id,
+            user_id,
+            pack_id,
+            Some(app_core::PRODUCT_KIND_WALLET_TOPUP.to_string()),
+            Some(pack_id.to_string()),
+            Some(amount_fen),
+            "/settings?tab=billing&wallet_topup=success",
+        )
+        .await
+    }
+
+    async fn create_checkout_session_with_metadata(
+        &self,
+        product_id: &str,
+        user_id: UserId,
+        plan_id: &str,
+        purpose: Option<String>,
+        pack_id: Option<String>,
+        amount_fen: Option<i64>,
+        success_path: &str,
+    ) -> Result<(String, String)> {
         if !self.config.creem_enabled() {
             bail!("creem_billing_unconfigured");
         }
 
         let success_url = format!(
-            "{}/dashboard?billing=success",
-            self.config.public_app_base_url
+            "{}{}",
+            self.config.public_app_base_url,
+            success_path
         );
 
         let req_body = CreateCreemCheckoutRequest {
@@ -58,6 +107,9 @@ impl CreemClient {
             metadata: CreemMetadata {
                 user_id: user_id.to_string(),
                 plan_id: plan_id.to_string(),
+                purpose,
+                pack_id,
+                amount_fen,
             },
         };
 

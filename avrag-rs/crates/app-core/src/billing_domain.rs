@@ -36,6 +36,10 @@ pub struct BillingConfig {
     pub creem_product_plus: String,
     pub creem_product_desktop_standard: String,
     pub creem_product_desktop_pro: String,
+    /// Optional Creem one-time product ids for wallet top-up packs (ADR-0010 PR5).
+    pub creem_product_topup_50: String,
+    pub creem_product_topup_100: String,
+    pub creem_product_topup_200: String,
 
     // Alipay Config
     pub alipay_app_id: String,
@@ -74,6 +78,9 @@ impl BillingConfig {
                 .unwrap_or_default(),
             creem_product_desktop_pro: std::env::var("CREEM_PRODUCT_DESKTOP_PRO")
                 .unwrap_or_default(),
+            creem_product_topup_50: std::env::var("CREEM_PRODUCT_TOPUP_50").unwrap_or_default(),
+            creem_product_topup_100: std::env::var("CREEM_PRODUCT_TOPUP_100").unwrap_or_default(),
+            creem_product_topup_200: std::env::var("CREEM_PRODUCT_TOPUP_200").unwrap_or_default(),
             creem_price_pro: std::env::var("CREEM_PRICE_PRO")
                 .unwrap_or_else(|_| "19.00".to_string()),
             creem_price_plus: std::env::var("CREEM_PRICE_PLUS")
@@ -142,6 +149,26 @@ impl BillingConfig {
             }
             PLAN_DESKTOP_PRO if !self.creem_product_desktop_pro.trim().is_empty() => {
                 Some(self.creem_product_desktop_pro.as_str())
+            }
+            _ => None,
+        }
+    }
+
+    /// Creem product id for a wallet top-up pack (`topup_50` / `topup_100` / `topup_200`).
+    pub fn creem_checkout_product_for_topup_pack(&self, pack_id: &str) -> Option<&str> {
+        match pack_id.trim() {
+            crate::wallet_domain::TOPUP_PACK_50 if !self.creem_product_topup_50.trim().is_empty() => {
+                Some(self.creem_product_topup_50.as_str())
+            }
+            crate::wallet_domain::TOPUP_PACK_100
+                if !self.creem_product_topup_100.trim().is_empty() =>
+            {
+                Some(self.creem_product_topup_100.as_str())
+            }
+            crate::wallet_domain::TOPUP_PACK_200
+                if !self.creem_product_topup_200.trim().is_empty() =>
+            {
+                Some(self.creem_product_topup_200.as_str())
             }
             _ => None,
         }
@@ -442,6 +469,19 @@ pub enum ProviderEvent {
     AlipayOrderPaid {
         out_trade_no: String,
         paid_cents: i64,
+    },
+    /// One-time wallet top-up paid (Creem checkout with `purpose=wallet_topup`).
+    /// Alipay top-ups still arrive as [`Self::AlipayOrderPaid`] and branch on
+    /// `billing_orders.product_kind` in the store.
+    WalletTopupPaid {
+        user_id: String,
+        pack_id: String,
+        /// Credit amount in fen (分); must match pack catalog.
+        amount_fen: i64,
+        /// Provider order / checkout / subscription id for ledger + order rows.
+        provider_order_id: String,
+        /// Webhook delivery id used in `topup:{provider}:{event_id}` when set.
+        event_id: String,
     },
     /// Provider event type with no product effect (e.g. other Creem event
     /// types, Alipay `TRADE_WAIT_BUYER_PAY`). Acked by the lease, no store

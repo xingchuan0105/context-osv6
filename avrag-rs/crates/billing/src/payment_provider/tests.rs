@@ -172,6 +172,47 @@ async fn creem_unknown_event_type_is_explicit_ignored() {
 }
 
 #[tokio::test]
+async fn creem_wallet_topup_metadata_parses_typed_event() {
+    let adapter = CreemAdapter::new(creem_config());
+    let payload = serde_json::json!({
+        "id": "evt_topup_1",
+        "type": "checkout.completed",
+        "data": {
+            "id": "chk_topup_1",
+            "metadata": {
+                "user_id": "11111111-1111-1111-1111-111111111111",
+                "purpose": "wallet_topup",
+                "pack_id": "topup_50",
+                "amount_fen": 5000,
+                "plan_id": "topup_50"
+            }
+        }
+    });
+    let payload = serde_json::to_vec(&payload).unwrap();
+    let delivery = adapter
+        .parse_event(Some(&creem_signature(&payload)), &payload)
+        .await
+        .expect("wallet topup checkout.completed should parse");
+    assert_eq!(delivery.event_id, "evt_topup_1");
+    match delivery.event {
+        ProviderEvent::WalletTopupPaid {
+            user_id,
+            pack_id,
+            amount_fen,
+            provider_order_id,
+            event_id,
+        } => {
+            assert_eq!(user_id, "11111111-1111-1111-1111-111111111111");
+            assert_eq!(pack_id, "topup_50");
+            assert_eq!(amount_fen, 5000);
+            assert_eq!(provider_order_id, "chk_topup_1");
+            assert_eq!(event_id, "evt_topup_1");
+        }
+        other => panic!("expected WalletTopupPaid, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn creem_missing_amount_fails_explicitly_not_defaulted() {
     // Regression: the old second dispatcher silently defaulted amount to 2000
     // and plan to "pro". The adapter must fail instead.

@@ -142,6 +142,7 @@ impl BillingStorePort for MemoryBillingStore {
         out_trade_no: &str,
         plan_id: &str,
         _amount_cents: i64,
+        _product_kind: &str,
     ) -> Result<(), AppError> {
         self.alipay_orders.write().await.insert(
             out_trade_no.to_string(),
@@ -255,7 +256,7 @@ async fn get_order_status_returns_pending_order_for_owner() {
     let store = Arc::new(MemoryBillingStore::new());
     let user_id = UserId::new(Uuid::new_v4());
     store
-        .insert_pending_alipay_order(user_id, "trade-1", PLAN_PRO, 12900)
+        .insert_pending_alipay_order(user_id, "trade-1", PLAN_PRO, 12900, "subscription")
         .await
         .expect("seed pending order");
 
@@ -274,7 +275,7 @@ async fn get_order_status_hides_other_users_orders() {
     let owner = UserId::new(Uuid::new_v4());
     let stranger = UserId::new(Uuid::new_v4());
     store
-        .insert_pending_alipay_order(owner, "trade-2", PLAN_PRO, 12900)
+        .insert_pending_alipay_order(owner, "trade-2", PLAN_PRO, 12900, "subscription")
         .await
         .expect("seed pending order");
 

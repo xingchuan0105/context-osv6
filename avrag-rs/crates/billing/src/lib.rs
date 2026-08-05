@@ -47,8 +47,9 @@ pub use service::{
 pub use core::{expire_subscriptions, process_outbox};
 
 pub use wallet::{
-    UsageDebitInput, WalletBalanceResponse, debit_platform_usage, get_wallet_balance,
-    grant_signup_bonus, handle_get_wallet,
+    PaidTopupInput, TopupPackResponse, UsageDebitInput, WalletBalanceResponse, credit_paid_topup,
+    debit_platform_usage, get_wallet_balance, grant_signup_bonus, handle_get_wallet,
+    handle_list_topup_packs, list_topup_packs,
 };
 pub use wallet_pricing::{
     LIST_PRICE_MULTIPLIER, OfficialRates, list_price_fen, official_rates_for,
@@ -58,9 +59,12 @@ pub use referral::{
     ApplyReferralOutcome, ReferralStatsResponse, apply_referral_on_register, get_my_referral_stats,
     handle_get_referral,
 };
-// Re-export fen constants for callers (signup / referral / usage debit, HTTP).
+// Re-export fen constants for callers (signup / referral / topup / usage debit, HTTP).
 pub use app_core::{
-    REFERRAL_BASE_QUOTA, REFERRAL_BONUS_FEN, REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN,
-    WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_USAGE_DEBIT, referral_quota,
-    signup_grant_idempotency_key,
+    CHECKOUT_KIND_SUBSCRIPTION, CHECKOUT_KIND_WALLET_TOPUP, DEFAULT_TOPUP_PACKS,
+    PRODUCT_KIND_SUBSCRIPTION, PRODUCT_KIND_WALLET_TOPUP, REFERRAL_BASE_QUOTA, REFERRAL_BONUS_FEN,
+    REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN, TOPUP_PACK_50, TOPUP_PACK_100, TOPUP_PACK_200,
+    TopupPack, WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP,
+    WALLET_KIND_USAGE_DEBIT, fen_to_decimal_amount, referral_quota, signup_grant_idempotency_key,
+    topup_idempotency_key, topup_pack_by_id,
 };

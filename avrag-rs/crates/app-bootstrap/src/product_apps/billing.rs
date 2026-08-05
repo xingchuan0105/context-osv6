@@ -225,6 +225,15 @@ impl<'a> BillingApp<'a> {
         avrag_billing::handle_get_wallet(store, actor_id.into_uuid()).await
     }
 
+    /// Fixed wallet top-up packs (ADR-0010 PR5).
+    pub async fn list_topup_packs(&self) -> ApiResponse<Vec<avrag_billing::TopupPackResponse>> {
+        let Some(actor_id) = self.auth.actor_id() else {
+            return Self::auth_required();
+        };
+        let _ = actor_id;
+        avrag_billing::handle_list_topup_packs()
+    }
+
     /// My referral code + quota stats (ADR-0010 PR4).
     pub async fn get_referral(&self) -> ApiResponse<avrag_billing::ReferralStatsResponse> {
         let Some(repo) = self.postgres.clone() else {
