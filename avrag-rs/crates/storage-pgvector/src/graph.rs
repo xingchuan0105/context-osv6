@@ -111,6 +111,7 @@ impl PgvectorDataPlane {
                             source_locator: None,
                             parse_run_id: Some(row.parse_run_id),
             cursor: None,
+            member_chunk_ids: vec![],
                         });
                     }
                 }

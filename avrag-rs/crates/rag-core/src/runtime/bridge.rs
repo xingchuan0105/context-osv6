@@ -36,9 +36,11 @@ pub struct RuntimeBridge {
     /// of one worker run (per-worker namespace; agent-loop IterationState
     /// owns the Arc). Tests default to a fresh counter.
     alias_counter: Arc<std::sync::atomic::AtomicU64>,
-    /// Cross-round `chunk_id → first alias` for delta-only body (multi-round
-    /// context management P0). Shared across the run like `alias_counter`.
+    /// Cross-round `chunk_id → first alias` for reseen closure (any member of
+    /// an S+L run maps to the same alias). Shared across the run.
     seen_chunk_aliases: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    /// Durable full body text keyed by chunk_id (for card/expand plan).
+    seen_chunk_bodies: Arc<Mutex<std::collections::HashMap<String, String>>>,
 }
 
 impl RuntimeBridge {
@@ -51,6 +53,7 @@ impl RuntimeBridge {
             captured_calls: Arc::new(Mutex::new(Vec::new())),
             alias_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             seen_chunk_aliases: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            seen_chunk_bodies: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -60,12 +63,21 @@ impl RuntimeBridge {
         self
     }
 
-    /// Share cross-round chunk→alias map for body dedupe.
+    /// Share cross-round chunk→alias map for body dedupe / reseen closure.
     pub fn with_seen_chunk_aliases(
         mut self,
         map: Arc<Mutex<std::collections::HashMap<String, String>>>,
     ) -> Self {
         self.seen_chunk_aliases = map;
+        self
+    }
+
+    /// Share durable body store (optional; default private map).
+    pub fn with_seen_chunk_bodies(
+        mut self,
+        map: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    ) -> Self {
+        self.seen_chunk_bodies = map;
         self
     }
 
@@ -460,40 +472,58 @@ impl HostBridge for RuntimeBridge {
         if ALIASED_METHODS.contains(&canonical)
             && let Some(items) = data.get_mut("chunks").and_then(|v| v.as_array_mut())
         {
-            let mut seen = self
-                .seen_chunk_aliases
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            for item in items {
-                let Some(cid) = item
-                    .get("chunk_id")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string)
-                else {
-                    continue;
-                };
-                if let Some(prev_alias) = seen.get(&cid).cloned() {
-                    // Cross-round reseen: keep pointer, omit body (P0 multi-round).
-                    item["alias"] = json!(prev_alias.clone());
-                    item["reseen"] = json!(prev_alias);
-                    item["body_omitted"] = json!(true);
-                    if let Some(obj) = item.as_object_mut() {
-                        if let Some(t) = obj.get_mut("text") {
-                            *t = json!("");
+            {
+                let mut seen = self
+                    .seen_chunk_aliases
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                for item in items.iter_mut() {
+                    let members = super::visibility::member_ids_from_item(item);
+                    if members.is_empty() {
+                        continue;
+                    }
+                    // Reseen if **any** member already registered (S+L closure).
+                    let prev = members.iter().find_map(|m| seen.get(m).cloned());
+                    if let Some(prev_alias) = prev {
+                        item["alias"] = json!(prev_alias.clone());
+                        item["reseen"] = json!(prev_alias);
+                        item["body_omitted"] = json!(true);
+                        if let Some(obj) = item.as_object_mut() {
+                            if let Some(t) = obj.get_mut("text") {
+                                *t = json!("");
+                            }
+                            if let Some(t) = obj.get_mut("content") {
+                                *t = json!("");
+                            }
                         }
-                        if let Some(t) = obj.get_mut("content") {
-                            *t = json!("");
+                    } else {
+                        let n = self
+                            .alias_counter
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                            + 1;
+                        let alias = format!("#{n}");
+                        item["alias"] = json!(alias.clone());
+                        for m in members {
+                            seen.insert(m, alias.clone());
                         }
                     }
-                } else {
-                    let n = self
-                        .alias_counter
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                        + 1;
-                    let alias = format!("#{n}");
-                    item["alias"] = json!(alias.clone());
-                    seen.insert(cid, alias);
                 }
+            }
+            // U-P1: expand / card / stub (adjacent always expand).
+            let mut bodies = self
+                .seen_chunk_bodies
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let (exp_n, card_n, stub_n, exp_chars) = super::visibility::apply_visibility_to_chunks(
+                items,
+                &mut bodies,
+                super::visibility::EXPAND_CHAR_BUDGET_PER_CALL,
+            );
+            if let Some(obj) = data.as_object_mut() {
+                obj.insert("visibility_expanded_n".into(), json!(exp_n));
+                obj.insert("visibility_card_n".into(), json!(card_n));
+                obj.insert("visibility_stub_n".into(), json!(stub_n));
+                obj.insert("visibility_expand_chars".into(), json!(exp_chars));
             }
         }
 
@@ -580,6 +610,7 @@ mod tests {
                 source_locator: None,
                 parse_run_id: None,
             cursor: None,
+            member_chunk_ids: vec![],
             }])
         }
 
@@ -602,6 +633,7 @@ mod tests {
                 source_locator: None,
                 parse_run_id: None,
             cursor: None,
+            member_chunk_ids: vec![],
             };
             Ok(Bm25SearchOutput {
                 chunks: vec![chunk],
@@ -665,6 +697,7 @@ mod tests {
                     source_locator: None,
                     parse_run_id: None,
             cursor: None,
+            member_chunk_ids: vec![],
                 }],
             })
         }
@@ -692,6 +725,7 @@ mod tests {
                 source_locator: None,
                 parse_run_id: None,
             cursor: None,
+            member_chunk_ids: vec![],
             }])
         }
     }

@@ -257,6 +257,7 @@ pub(crate) fn scored_text_chunk(
         source_locator,
         parse_run_id: optional_uuid_field(&row, "parse_run_id")?,
             cursor: None,
+            member_chunk_ids: vec![],
     })
 }
 
@@ -314,6 +315,7 @@ pub(crate) fn scored_multimodal_chunk(
             .filter(|value| !value.is_null()),
         parse_run_id: optional_uuid_field(&row, "parse_run_id")?,
             cursor: None,
+            member_chunk_ids: vec![],
     })
 }
 

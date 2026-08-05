@@ -522,12 +522,47 @@ fn retrieval_callouts(
         new_aliases.len(),
         seen_count,
     );
+    // Aggregate visibility counters from tool data when present.
+    let mut expanded = 0usize;
+    let mut cards = 0usize;
+    let mut stubs = 0usize;
+    let mut expand_chars = 0usize;
+    for call in bridge_calls {
+        if let Some(data) = call.result.data.as_ref() {
+            expanded += data
+                .get("visibility_expanded_n")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            cards += data
+                .get("visibility_card_n")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            stubs += data
+                .get("visibility_stub_n")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            expand_chars += data
+                .get("visibility_expand_chars")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+        }
+    }
     let mut out = String::from("\n\n");
     out.push_str(&super::prompt_assets::retrieval_summary(
         call_count,
         total_chunks,
         &detail,
     ));
+    if expanded + cards + stubs > 0 {
+        out.push_str("\n\n");
+        out.push_str(&super::prompt_assets::evidence_index(
+            expanded,
+            cards,
+            stubs,
+            expand_chars,
+            aliases.len().saturating_add(seen_count),
+        ));
+    }
     out.push_str(&hints);
     out
 }

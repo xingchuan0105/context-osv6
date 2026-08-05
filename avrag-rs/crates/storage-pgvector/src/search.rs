@@ -318,6 +318,7 @@ impl TextChunkRow {
             source_locator: self.source_locator,
             parse_run_id: Some(self.parse_run_id),
             cursor,
+            member_chunk_ids: vec![],
         }
     }
 }
@@ -383,6 +384,7 @@ impl MultimodalChunkRow {
             source_locator: self.source_locator,
             parse_run_id: Some(self.parse_run_id),
             cursor: None,
+            member_chunk_ids: vec![],
         }
     }
 }

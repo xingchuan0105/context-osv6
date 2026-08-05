@@ -113,6 +113,26 @@ pub fn codegen_sandbox_error_nudge(n_fail: u8, n_max: u8) -> String {
     )
 }
 
+/// Per-round evidence visibility facts (S+L × P1+).
+pub fn evidence_index(
+    expanded: usize,
+    cards: usize,
+    stubs: usize,
+    expand_chars: usize,
+    pool_aliases: usize,
+) -> String {
+    subst(
+        trim_body(loop_prompt!("evidence-index.tmpl.md")),
+        &[
+            ("expanded", &expanded.to_string()),
+            ("cards", &cards.to_string()),
+            ("stubs", &stubs.to_string()),
+            ("expand_chars", &expand_chars.to_string()),
+            ("pool_aliases", &pool_aliases.to_string()),
+        ],
+    )
+}
+
 pub fn codegen_untrusted_prefix() -> &'static str {
     trim_body(loop_prompt!("codegen-untrusted-prefix.nudge.md"))
 }

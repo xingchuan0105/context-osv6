@@ -258,6 +258,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
                 source_locator: None,
                 parse_run_id: None,
                 cursor: None,
+                member_chunk_ids: vec![],
             }])
         }
 

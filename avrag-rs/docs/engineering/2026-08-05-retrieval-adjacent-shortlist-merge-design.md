@@ -225,3 +225,4 @@ tool_trace / 日志字段建议：
 2. 用 full149 列表断裂题（q017 等）做开关对照。  
 3. 并行讨论 non-PASS 下一题——与邻并正交。
 4. 多轮回传叠厚 / 注意力稀释 → 见 `2026-08-05-multi-round-retrieval-context-management-design.md`（EvidencePool × notes × clearing）。
+5. **与 P1+ 机制冲突与统一管线** → `2026-08-05-s-plus-l-vs-p1-plus-conflict-and-unification.md`（身份闭包、预算、expand 优先）。

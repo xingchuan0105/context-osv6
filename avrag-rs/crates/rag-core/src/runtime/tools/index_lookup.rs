@@ -86,6 +86,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                         cursor: avrag_retrieval_data_plane::cursor_from_value(Some(
                             &chunk.metadata,
                         )),
+                        member_chunk_ids: vec![],
                     }
                 })
                 .collect();

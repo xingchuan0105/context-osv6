@@ -212,5 +212,6 @@ pub(crate) fn scored_relation_chunk(row: &Value, channel: &str) -> anyhow::Resul
         source_locator: None,
         parse_run_id: optional_uuid_field(row, "parse_run_id")?,
             cursor: None,
+            member_chunk_ids: vec![],
     })
 }

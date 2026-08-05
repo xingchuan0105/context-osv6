@@ -348,6 +348,7 @@ mod tests {
             source_locator: None,
             parse_run_id: None,
             cursor: None,
+            member_chunk_ids: vec![],
         }
     }
 

@@ -207,15 +207,31 @@ pub fn adjacent_merge_shortlist_longlist(
             .filter(|c| s_ids.contains(&c.chunk_id))
             .map(|c| c.score)
             .fold(anchor.score, f32::max);
-        let mut merged = run[0].clone();
+        // Anchor = highest-score S member for cite; keep its id as primary chunk_id.
+        let anchor_best = run
+            .iter()
+            .filter(|c| s_ids.contains(&c.chunk_id))
+            .max_by(|a, b| {
+                a.score
+                    .partial_cmp(&b.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(&run[0]);
+        let mut merged = anchor_best.clone();
         merged.score = score;
+        merged.member_chunk_ids = run.iter().map(|c| c.chunk_id).collect();
         if run.len() > 1 {
             merged.content = run
                 .iter()
                 .map(|c| c.content.as_str())
                 .collect::<Vec<_>>()
                 .join("\n\n");
-            merged.source = format!("{}+adjacent", merged.source);
+            if !merged.source.contains("+adjacent") {
+                merged.source = format!("{}+adjacent", merged.source);
+            }
+            // Prefer min cursor row's page for display continuity.
+            merged.page = run[0].page;
+            merged.cursor = run[0].cursor;
         }
         out.push(merged);
     }
@@ -278,6 +294,8 @@ mod adjacent_tests {
         let out = adjacent_merge_shortlist_longlist(s, &l, 1, 8);
         assert_eq!(out.len(), 1);
         assert!(out[0].content.contains("a") && out[0].content.contains("b"));
+        assert_eq!(out[0].member_chunk_ids.len(), 2);
+        assert!(out[0].source.contains("+adjacent"));
     }
 
     #[test]
@@ -287,6 +305,7 @@ mod adjacent_tests {
         let out = adjacent_merge_shortlist_longlist(s, &l, 1, 8);
         assert_eq!(out.len(), 1);
         assert!(out[0].content.contains("a") && out[0].content.contains("b"));
+        assert_eq!(out[0].members().len(), 2);
     }
 
     #[test]

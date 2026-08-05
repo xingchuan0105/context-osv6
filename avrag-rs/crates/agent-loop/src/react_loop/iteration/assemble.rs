@@ -71,7 +71,12 @@ impl ReActLoop {
         hooks: &dyn LoopHooks,
     ) -> Result<LlmResponse, AppError> {
         let mut round_messages = vec![ChatMessage::system(assembled.system_content.clone())];
-        for msg in &state.messages {
+        // P1′: collapse older retrieval observations before the LLM boundary.
+        let visible = super::super::context_visibility::transform_messages_for_llm(
+            &state.messages,
+            super::super::context_visibility::HISTORY_FULL_RETRIEVAL_ROUNDS,
+        );
+        for msg in &visible {
             if msg.role != "system" {
                 round_messages.push(msg.clone());
             }

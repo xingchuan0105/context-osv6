@@ -61,6 +61,16 @@ pub(crate) fn scored_chunk_to_json(chunk: &ScoredChunk) -> serde_json::Value {
     if let Some(c) = chunk.cursor {
         value["cursor"] = serde_json::json!(c);
     }
+    let members = chunk.members();
+    if members.len() > 1 || chunk.source.contains("+adjacent") {
+        value["member_chunk_ids"] = serde_json::json!(
+            members
+                .iter()
+                .map(|u| u.to_string())
+                .collect::<Vec<_>>()
+        );
+        value["adjacent"] = serde_json::json!(true);
+    }
     if is_page_raster {
         value["modality"] = serde_json::json!("page_raster");
         value["retrieval_hint"] =

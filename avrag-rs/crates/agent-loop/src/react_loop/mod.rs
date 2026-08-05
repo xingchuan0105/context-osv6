@@ -19,6 +19,7 @@ mod iteration_codegen;
 mod iteration_tools;
 pub mod json_fence;
 mod message_format;
+mod context_visibility;
 pub mod message_queue;
 pub mod parse;
 pub mod prompt_assets;

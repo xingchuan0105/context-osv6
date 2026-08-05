@@ -34,6 +34,9 @@ pub struct ScoredChunk {
     /// In-document sequence from ingest `metadata.cursor` (optional; missing → skip adjacent merge).
     #[serde(default)]
     pub cursor: Option<i32>,
+    /// Atomic chunk ids in an S+L evidence run (cursor order). Empty ⇒ treat as `[chunk_id]`.
+    #[serde(default)]
+    pub member_chunk_ids: Vec<Uuid>,
 }
 
 impl ScoredChunk {
@@ -60,6 +63,16 @@ impl ScoredChunk {
             source_locator: None,
             parse_run_id: None,
             cursor: None,
+            member_chunk_ids: Vec::new(),
+        }
+    }
+
+    /// Member ids for reseen closure; falls back to `[chunk_id]` when empty.
+    pub fn members(&self) -> Vec<Uuid> {
+        if self.member_chunk_ids.is_empty() {
+            vec![self.chunk_id]
+        } else {
+            self.member_chunk_ids.clone()
         }
     }
 
