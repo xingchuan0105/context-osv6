@@ -12,7 +12,7 @@
         set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
         let row = sqlx::query(
             r#"
-            select owner_id, access_level
+            select owner_id, access_level, share_enabled
             from workspaces
             where id = $1 and owner_user_id = $2
             "#,
@@ -30,6 +30,7 @@
             notebook_access_level: row
                 .try_get::<String, _>("access_level")
                 .unwrap_or_else(|_| "private".to_string()),
+            share_enabled: row.try_get::<bool, _>("share_enabled").unwrap_or(false),
         }))
     }
 

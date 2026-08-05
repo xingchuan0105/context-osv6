@@ -32,6 +32,7 @@ fn share_modules_do_not_call_storage_pg_escape_hatch() {
         include_str!("../src/handlers.rs"),
         include_str!("../src/members.rs"),
         include_str!("../src/public_read.rs"),
+        include_str!("../src/quota.rs"),
         include_str!("../src/sharing.rs"),
     ];
     for source in sources {

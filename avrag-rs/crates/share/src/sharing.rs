@@ -1,9 +1,13 @@
 use anyhow::{bail, Result};
+use common::AppError;
 use contracts::auth_runtime::AuthContext;
 use chrono::{Duration, Utc};
 use tracing::warn;
 use uuid::Uuid;
 
+use crate::quota::{
+    access_level_enables_share, SHARE_WORKSPACE_QUOTA_EXCEEDED,
+};
 use crate::{AccessLevel, ShareAnalytics, ShareService, ShareSettings, ShareTokenInfo};
 
 impl ShareService {
@@ -34,6 +38,60 @@ impl ShareService {
         if let Err(error) = self.store.record_share_product_event(event).await {
             warn!(error = %error, event_name = ?event_name, "failed to record share event");
         }
+    }
+
+    /// Enable `share_enabled` if needed; reject with stable 403 when over plan quota.
+    async fn ensure_share_enabled(&self, ctx: &AuthContext, workspace_id: &str) -> Result<()> {
+        let workspace_uuid = Uuid::parse_str(workspace_id)?;
+        let Some(snapshot) = self
+            .store
+            .query_workspace_access(ctx, workspace_uuid)
+            .await
+            .map_err(map_store_error)?
+        else {
+            bail!("workspace not found");
+        };
+        if snapshot.share_enabled {
+            return Ok(());
+        }
+        let owner_user_id = snapshot
+            .owner_id
+            .unwrap_or_else(|| ctx.user_id().into_uuid());
+        let count = self
+            .store
+            .count_share_enabled_workspaces(ctx, owner_user_id)
+            .await
+            .map_err(map_store_error)?;
+        let max = self
+            .store
+            .max_shared_workspaces_for_owner(ctx, owner_user_id)
+            .await
+            .map_err(map_store_error)?;
+        if count >= i64::from(max) {
+            return Err(map_store_error(AppError::forbidden(
+                SHARE_WORKSPACE_QUOTA_EXCEEDED,
+                format!(
+                    "plan allows at most {max} share-enabled workspaces (currently {count})"
+                ),
+            )));
+        }
+        self.store
+            .set_share_enabled(ctx, workspace_uuid, true)
+            .await
+            .map_err(map_store_error)?;
+        Ok(())
+    }
+
+    async fn set_share_enabled_flag(
+        &self,
+        ctx: &AuthContext,
+        workspace_id: &str,
+        enabled: bool,
+    ) -> Result<()> {
+        self.store
+            .set_share_enabled(ctx, Uuid::parse_str(workspace_id)?, enabled)
+            .await
+            .map_err(map_store_error)
     }
 
     pub async fn get_share_settings(
@@ -83,6 +141,11 @@ impl ShareService {
             "private" | "link" | "public" => access_level.trim(),
             _ => bail!("invalid access level"),
         };
+        if access_level_enables_share(normalized) {
+            self.ensure_share_enabled(ctx, workspace_id).await?;
+        } else {
+            self.set_share_enabled_flag(ctx, workspace_id, false).await?;
+        }
         self.store
             .update_workspace_access_level(ctx, Uuid::parse_str(workspace_id)?, normalized)
             .await?;
@@ -108,6 +171,13 @@ impl ShareService {
                 _ => bail!("invalid access level"),
             })
             .transpose()?;
+        if let Some(ref level) = normalized_access_level {
+            if access_level_enables_share(level) {
+                self.ensure_share_enabled(ctx, workspace_id).await?;
+            } else {
+                self.set_share_enabled_flag(ctx, workspace_id, false).await?;
+            }
+        }
         self.store
             .update_share_settings(
                 ctx,
@@ -133,6 +203,8 @@ impl ShareService {
         {
             bail!("insufficient permission to create share link");
         }
+        // Creating an active share link occupies a share_enabled slot.
+        self.ensure_share_enabled(ctx, workspace_id).await?;
         let expires_at = expires_in_secs.map(|secs| Utc::now() + Duration::seconds(secs));
         let token = self
             .store
@@ -212,4 +284,8 @@ impl ShareService {
             })
             .collect())
     }
+}
+
+fn map_store_error(error: common::AppError) -> anyhow::Error {
+    anyhow::Error::new(error)
 }

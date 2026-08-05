@@ -128,4 +128,6 @@ pub struct PublicShareChatContextSnapshot {
 pub struct WorkspaceAccessSnapshot {
     pub owner_id: Option<Uuid>,
     pub notebook_access_level: String,
+    /// ADR-0010: whether this workspace counts toward the owner's share quota.
+    pub share_enabled: bool,
 }

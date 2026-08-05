@@ -133,4 +133,26 @@ pub trait ShareStorePort: Send + Sync {
         &self,
         event: analytics::ProductEvent,
     ) -> Result<(), AppError>;
+
+    /// Count workspaces owned by `owner_user_id` with `share_enabled = true`.
+    async fn count_share_enabled_workspaces(
+        &self,
+        auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<i64, AppError>;
+
+    /// Max share-enabled workspaces allowed for the owner's current plan.
+    async fn max_shared_workspaces_for_owner(
+        &self,
+        auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<i32, AppError>;
+
+    /// Set `workspaces.share_enabled` (true occupies a plan quota slot).
+    async fn set_share_enabled(
+        &self,
+        auth: &AuthContext,
+        workspace_id: Uuid,
+        enabled: bool,
+    ) -> Result<(), AppError>;
 }

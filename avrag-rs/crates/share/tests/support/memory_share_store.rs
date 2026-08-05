@@ -6,6 +6,7 @@ use app_core::{
     ShareAnalyticsEntry, ShareWorkspaceMember, ShareStorePort, SharedWorkspaceSnapshot,
 };
 use async_trait::async_trait;
+use avrag_share::max_shared_workspaces_for_plan;
 use contracts::auth_runtime::AuthContext;
 use chrono::{DateTime, Utc};
 use common::AppError;
@@ -28,6 +29,8 @@ pub struct MemoryShareStore {
     shared_workspaces: Arc<RwLock<HashMap<String, SharedWorkspaceSnapshot>>>,
     public_chat_contexts: Arc<RwLock<HashMap<String, PublicShareChatContextSnapshot>>>,
     invites: Arc<RwLock<Vec<ShareWorkspaceMember>>>,
+    /// owner_user_id → plan_id for quota tests (default free).
+    owner_plans: Arc<RwLock<HashMap<Uuid, String>>>,
 }
 
 #[allow(dead_code)]
@@ -42,6 +45,7 @@ impl MemoryShareStore {
             WorkspaceAccessSnapshot {
                 owner_id: Some(owner_id),
                 notebook_access_level: "private".to_string(),
+                share_enabled: false,
             },
         );
     }
@@ -51,6 +55,13 @@ impl MemoryShareStore {
             .write()
             .await
             .insert((workspace_id, user_id), role.to_string());
+    }
+
+    pub async fn seed_owner_plan(&self, owner_id: Uuid, plan_id: &str) {
+        self.owner_plans
+            .write()
+            .await
+            .insert(owner_id, plan_id.to_string());
     }
 
     pub async fn seed_shared_workspace(&self, token: &str, snapshot: SharedWorkspaceSnapshot) {
@@ -73,6 +84,24 @@ impl MemoryShareStore {
 
     pub async fn invited_members(&self) -> Vec<ShareWorkspaceMember> {
         self.invites.read().await.clone()
+    }
+
+    pub async fn is_share_enabled(&self, workspace_id: Uuid) -> bool {
+        self.workspaces
+            .read()
+            .await
+            .get(&workspace_id)
+            .map(|s| s.share_enabled)
+            .unwrap_or(false)
+    }
+
+    pub async fn count_enabled_for_owner(&self, owner_id: Uuid) -> i64 {
+        self.workspaces
+            .read()
+            .await
+            .values()
+            .filter(|s| s.owner_id == Some(owner_id) && s.share_enabled)
+            .count() as i64
     }
 }
 
@@ -103,9 +132,16 @@ impl ShareStorePort for MemoryShareStore {
     async fn get_share_settings(
         &self,
         _auth: &AuthContext,
-        _workspace_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<(String, bool, Vec<app_core::ShareTokenSnapshot>), AppError> {
-        Ok(("private".to_string(), false, Vec::new()))
+        let access_level = self
+            .workspaces
+            .read()
+            .await
+            .get(&workspace_id)
+            .map(|s| s.notebook_access_level.clone())
+            .unwrap_or_else(|| "private".to_string());
+        Ok((access_level, false, Vec::new()))
     }
 
     async fn list_members(
@@ -119,19 +155,27 @@ impl ShareStorePort for MemoryShareStore {
     async fn update_workspace_access_level(
         &self,
         _auth: &AuthContext,
-        _workspace_id: Uuid,
-        _access_level: &str,
+        workspace_id: Uuid,
+        access_level: &str,
     ) -> Result<(), AppError> {
+        if let Some(snapshot) = self.workspaces.write().await.get_mut(&workspace_id) {
+            snapshot.notebook_access_level = access_level.to_string();
+        }
         Ok(())
     }
 
     async fn update_share_settings(
         &self,
         _auth: &AuthContext,
-        _workspace_id: Uuid,
-        _access_level: Option<&str>,
+        workspace_id: Uuid,
+        access_level: Option<&str>,
         _allow_download: Option<bool>,
     ) -> Result<(), AppError> {
+        if let Some(level) = access_level {
+            if let Some(snapshot) = self.workspaces.write().await.get_mut(&workspace_id) {
+                snapshot.notebook_access_level = level.to_string();
+            }
+        }
         Ok(())
     }
 
@@ -283,6 +327,41 @@ impl ShareStorePort for MemoryShareStore {
         &self,
         _event: analytics::ProductEvent,
     ) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn count_share_enabled_workspaces(
+        &self,
+        _auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<i64, AppError> {
+        Ok(self.count_enabled_for_owner(owner_user_id).await)
+    }
+
+    async fn max_shared_workspaces_for_owner(
+        &self,
+        _auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<i32, AppError> {
+        let plan = self
+            .owner_plans
+            .read()
+            .await
+            .get(&owner_user_id)
+            .cloned()
+            .unwrap_or_else(|| "free".to_string());
+        Ok(max_shared_workspaces_for_plan(&plan))
+    }
+
+    async fn set_share_enabled(
+        &self,
+        _auth: &AuthContext,
+        workspace_id: Uuid,
+        enabled: bool,
+    ) -> Result<(), AppError> {
+        if let Some(snapshot) = self.workspaces.write().await.get_mut(&workspace_id) {
+            snapshot.share_enabled = enabled;
+        }
         Ok(())
     }
 }
