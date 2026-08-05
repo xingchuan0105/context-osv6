@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-_Generated: 2026-08-01 via `scripts/generate-third-party-notices.sh`_
+_Generated: 2026-08-05 via `scripts/generate-third-party-notices.sh`_
 
 This project (Context-OS / AVRag) is licensed under the [MIT License](LICENSE).
 Third-party components listed below are subject to their own licenses.
@@ -10,24 +10,59 @@ Third-party components listed below are subject to their own licenses.
 | Priority | Component | License | Action |
 |----------|-----------|---------|--------|
 | P1 | MinIO (upload / Milvus compose) | AGPL-3.0 | Prefer cloud S3/OSS via `S3_*` env vars |
-| P1 | Redis server 7.4+ | RSALv2 / SSPL | Internal cache only; pin ≤7.2 or use Valkey |
+| P1 | Redis **server 7.4+** (Linux SaaS/docker) | RSALv2 / SSPL | Internal cache only; pin ≤7.2 **or** use Valkey. **Not** the desktop Windows pin (see below). |
 | P2 | `@img/sharp-libvips-linux-x64` (Next.js web) | LGPL-3.0 | NOTICE only; desktop build uses `images.unoptimized` |
 | P2 | `cssparser` / `selectors` (via `scraper`) | MPL-2.0 | NOTICE; share file changes only if you modify MPL files |
 | P2 | `dompurify` | MPL-2.0 OR Apache-2.0 | Compliance: choose Apache-2.0 |
+| P2 | `markitdown[all]` transitive extras | varies | Worker image installs Microsoft markitdown (MIT core). Review extras on upgrade; do **not** reintroduce AGPL PDF stacks (e.g. PyMuPDF) without a separate legal review. |
 
 ## Runtime infrastructure (not npm/cargo)
 
 | Component | Typical license | Notes |
 |-----------|-----------------|-------|
-| PostgreSQL | PostgreSQL License | Permissive |
-| Milvus | Apache-2.0 | Permissive |
+| PostgreSQL | PostgreSQL License | Server DB (SaaS/local) and **desktop bundled** EDB Windows binaries |
+| pgvector | PostgreSQL License | Extension for `RETRIEVAL_BACKEND=pgvector`; also in desktop portable runtime |
+| Milvus | Apache-2.0 | Optional dense backend (`RETRIEVAL_BACKEND=milvus`) |
 | etcd | Apache-2.0 | Bundled with Milvus compose |
+| Redis (Linux server) | See checklist | Prefer Valkey or pre-SSPL pin for SaaS |
 | Paddle OCR Jobs | API Terms of Service | External SaaS, not open source |
-| LLM / Embedding providers | API Terms of Service | DeepSeek, DashScope, Brave, etc. |
+| LLM / Embedding / Search providers | API Terms of Service | DeepSeek, DashScope/SiliconFlow, Brave, etc. |
+
+## Document parsers (worker / avrag-runtime image)
+
+Baked into `avrag-runtime` (see `deploy/docker/avrag-runtime.Dockerfile`). Not Rust/npm crates.
+
+| Component | License | Role | Source |
+|-----------|---------|------|--------|
+| **markitdown** (Microsoft) | MIT | PDF / text / long-tail convert → markdown | https://github.com/microsoft/markitdown · PyPI `markitdown` |
+| **firecrawl-anydoc** | MIT | Office/ODF/RTF/EPUB/CSV → markdown (product non-PDF path) | https://github.com/firecrawl/anydoc · PyPI `firecrawl-anydoc` |
+| **anydoc-extract** | MIT (this repo) | Thin CLI wrapper over firecrawl-anydoc for the worker | `avrag-rs/scripts/anydoc-extract/` |
+
+## Desktop client — shell and bundled data-plane
+
+### Shell (Tauri 2)
+
+| Component | License | Notes |
+|-----------|---------|-------|
+| Tauri 2 + plugins (`desktop/src-tauri`) | MIT OR Apache-2.0 (upstream) | Desktop shell only; product logic is MIT Context-OS code |
+| WebView2 (Windows) | Microsoft software license | System/runtime dependency of Tauri on Windows |
+
+### Bundled portable runtime (optional NSIS `runtime/`)
+
+Pins: `desktop/runtime/bundled/pins.env`. Stage/pack writes `runtime/THIRD_PARTY.txt` via
+`scripts/stage-desktop-bundled-runtime.sh`. End-user setup may embed this tree under `$INSTDIR/runtime/`.
+
+| Component | Version pin (see pins.env) | License | Distribution notes |
+|-----------|----------------------------|---------|---------------------|
+| PostgreSQL Windows binaries | PG 16.x (EDB zip) | PostgreSQL License | Retain notices under `runtime/pgsql/` |
+| pgvector | 0.8.x matching PG 16 | PostgreSQL License | Upstream https://github.com/pgvector/pgvector ; Windows DLL may come from unofficial prebuild (andreiramani `pgvector_pgsql_windows`) — same license family |
+| Redis for Windows | **5.0.14.1** (tporadowski port) | **BSD-3-Clause** (historical Redis COPYING) | **Chosen to avoid SSPL/RSALv2**. Do not silently upgrade to Redis 7.4+ Windows builds without license review. Source: https://github.com/tporadowski/redis |
+
+Redis **desktop pin ≠ SaaS Redis**: commercial checklist P1 applies to Linux server Redis 7.4+; the client ships the BSD-era Windows port above.
 
 ## Rust dependencies (avrag-rs)
 
-Total crates: **677**
+Total crates: **678**
 
 ### Apache-2.0 OR MIT (338 crates)
 
@@ -370,7 +405,7 @@ Total crates: **677**
 - zstd-safe
 - zstd-sys
 
-### MIT (162 crates)
+### MIT (163 crates)
 
 - agent-loop
 - agent-tools
@@ -432,6 +467,7 @@ Total crates: **677**
 - e2e-analyzer
 - email_address
 - evalexpr
+- evidence-form
 - fancy-regex
 - fs_extra
 - generic-array

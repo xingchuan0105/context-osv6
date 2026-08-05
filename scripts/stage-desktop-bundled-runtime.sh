@@ -181,14 +181,18 @@ PostgreSQL ${PG_WIN_VERSION:-16.x}
   Source: ${PG_WIN_URL:-EDB Windows binaries}
 
 pgvector ${PGVECTOR_VERSION:-}
-  License: PostgreSQL License
-  Source: https://github.com/pgvector/pgvector
+  License: PostgreSQL License (upstream)
+  Upstream source: https://github.com/pgvector/pgvector
+  Windows prebuild (if used): ${PGVECTOR_WIN_ZIP:-see pins.env}
+  Prebuild project: https://github.com/andreiramani/pgvector_pgsql_windows (unofficial; same license family)
 
 Redis for Windows ${REDIS_WIN_VERSION:-}
-  Port: tporadowski/redis (historical Windows port; review license before upgrade)
+  License: BSD-3-Clause (historical Redis COPYING; not SSPL/RSALv2)
+  Port: tporadowski/redis — do not upgrade without license review
   Source: ${REDIS_WIN_URL:-}
 
 Do not redistribute without retaining upstream notices under each tree (pgsql/, redis/).
+Also see repository root THIRD_PARTY_NOTICES.md (Desktop client section).
 EOF
 }
 
@@ -275,19 +279,39 @@ cmd_fetch() {
 
 # ── pack: zip staged tree for VPS ────────────────────────────────────────────
 
+make_zip() {
+  # Prefer zip(1); fall back to Python (common on minimal WSL images).
+  local src_dir="$1" dest_zip="$2"
+  if command -v zip >/dev/null 2>&1; then
+    (
+      cd "$src_dir"
+      zip -qr "$dest_zip" .
+    )
+    return 0
+  fi
+  need_cmd python3
+  python3 - "$src_dir" "$dest_zip" <<'PY'
+import sys, zipfile
+from pathlib import Path
+src, dest = Path(sys.argv[1]), Path(sys.argv[2])
+if dest.exists():
+    dest.unlink()
+with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+    for p in src.rglob("*"):
+        if p.is_file():
+            zf.write(p, p.relative_to(src).as_posix())
+PY
+}
+
 cmd_pack() {
   load_pins
-  need_cmd zip
   cmd_verify
   mkdir -p "$OUT_ROOT/$PLATFORM"
   local zip_path="$OUT_ROOT/$PLATFORM/$COS_RUNTIME_ZIP_NAME"
   local sha_path="${zip_path}.sha256"
   rm -f "$zip_path" "$sha_path"
   log "zip $STAGE_DIR → $zip_path"
-  (
-    cd "$STAGE_DIR"
-    zip -qr "$zip_path" .
-  )
+  make_zip "$STAGE_DIR" "$zip_path"
   local sum
   sum="$(sha256_of "$zip_path")"
   printf '%s  %s\n' "$sum" "$(basename "$zip_path")" >"$sha_path"
@@ -319,6 +343,7 @@ cmd_pack() {
   "notes": "Builders only. End users download full setup.exe with runtime embedded."
 }
 EOF
+  mkdir -p "$CACHE_DIR"
   cp -f "$OUT_ROOT/manifest.json" "$CACHE_DIR/manifest.json" 2>/dev/null || true
   log "pack ok"
   log "  zip:      $zip_path ($(du -h "$zip_path" | awk '{print $1}'))"
@@ -389,12 +414,14 @@ cmd_assemble() {
   rcli="$(find "$redis_extract" -type f \( -name 'redis-cli.exe' -o -name 'redis-cli' \) | head -1 || true)"
   [[ -n "$rcli" ]] && cp -f "$rcli" "$STAGE_DIR/redis/"
 
-  # pgvector optional input
+  # pgvector: local file, URL (pins), or loose files in cache
+  mkdir -p "$STAGE_DIR/pgsql/lib" "$STAGE_DIR/pgsql/share/extension"
   if [[ -n "${PGVECTOR_WIN_ZIP:-}" ]]; then
     local vz="$PGVECTOR_WIN_ZIP"
     if [[ ! -f "$vz" ]]; then
-      download "$vz" "$CACHE_DIR/$(basename "$vz")"
-      vz="$CACHE_DIR/$(basename "$vz")"
+      local vz_local="$CACHE_DIR/$(basename "${vz%%\?*}")"
+      download "$vz" "$vz_local"
+      vz="$vz_local"
     fi
     verify_sha "$vz" "${PGVECTOR_WIN_SHA256:-}" "pgvector zip"
     local vx="$CACHE_DIR/extract-vector-$$"
@@ -402,18 +429,16 @@ cmd_assemble() {
     unzip -q -o "$vz" -d "$vx"
     find "$vx" -name 'vector.dll' -exec cp -f {} "$STAGE_DIR/pgsql/lib/" \;
     find "$vx" -name 'vector.control' -exec cp -f {} "$STAGE_DIR/pgsql/share/extension/" \;
-    find "$vx" -name 'vector--*.sql' -exec cp -f {} "$STAGE_DIR/pgsql/share/extension/" \;
+    find "$vx" \( -name 'vector--*.sql' -o -name 'vector.sql' \) -exec cp -f {} "$STAGE_DIR/pgsql/share/extension/" \;
     rm -rf "$vx"
+    log "placed pgvector from $vz"
   elif [[ -f "$CACHE_DIR/vector.dll" ]]; then
-    mkdir -p "$STAGE_DIR/pgsql/lib" "$STAGE_DIR/pgsql/share/extension"
     cp -f "$CACHE_DIR/vector.dll" "$STAGE_DIR/pgsql/lib/"
     [[ -f "$CACHE_DIR/vector.control" ]] && cp -f "$CACHE_DIR/vector.control" "$STAGE_DIR/pgsql/share/extension/"
     cp -f "$CACHE_DIR"/vector--*.sql "$STAGE_DIR/pgsql/share/extension/" 2>/dev/null || true
     log "placed pgvector from $CACHE_DIR/vector.*"
   else
-    log "warn: no pgvector yet — drop vector.dll + vector.control + vector--*.sql into"
-    log "      $CACHE_DIR/ or set PGVECTOR_WIN_ZIP, then re-run assemble / copy manually"
-    mkdir -p "$STAGE_DIR/pgsql/lib" "$STAGE_DIR/pgsql/share/extension"
+    log "warn: no pgvector yet — set PGVECTOR_WIN_ZIP in pins.env or drop vector.dll into $CACHE_DIR/"
   fi
 
   write_stage_meta

@@ -30,16 +30,19 @@ describe("LicensesSummary", () => {
     render(<LicensesSummary />);
     expect(screen.getByText("Web框架")).toBeTruthy();
     expect(screen.getByText("后端运行时")).toBeTruthy();
-    expect(screen.getByText("向量数据库")).toBeTruthy();
-    expect(screen.getByText("PDF解析")).toBeTruthy();
+    expect(screen.getByText("向量检索")).toBeTruthy();
+    expect(screen.getByText("文档解析")).toBeTruthy();
+    expect(screen.getByText("客户端壳")).toBeTruthy();
     expect(screen.getByText("AI推理")).toBeTruthy();
   });
 
   it("renders license badges", () => {
     render(<LicensesSummary />);
-    expect(screen.getAllByText("MIT")).toHaveLength(2);
-    expect(screen.getAllByText("Apache-2.0")).toHaveLength(2);
+    expect(screen.getAllByText("MIT").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("商业API")).toBeTruthy();
+    expect(screen.getByText(/markitdown/)).toBeTruthy();
+    expect(screen.getByText(/firecrawl-anydoc/)).toBeTruthy();
+    expect(screen.getAllByText(/pgvector/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders weak copyleft section", () => {
@@ -48,6 +51,7 @@ describe("LicensesSummary", () => {
     expect(screen.getByText(/选择Apache-2.0版本/)).toBeTruthy();
     expect(screen.getByText("cssparser")).toBeTruthy();
     expect(screen.getByText(/MPL，未修改则仅需NOTICE/)).toBeTruthy();
+    expect(screen.getByText(/MinIO/)).toBeTruthy();
   });
 
   it("renders links to full third-party notices", () => {
@@ -69,6 +73,7 @@ describe("LicensesSummary", () => {
   it("renders desktop client section", () => {
     render(<LicensesSummary />);
     expect(screen.getByText("客户端")).toBeTruthy();
-    expect(screen.getByText(/客户端安装包内另附声明/)).toBeTruthy();
+    expect(screen.getByText(/runtime\/THIRD_PARTY\.txt/)).toBeTruthy();
+    expect(screen.getByText(/BSD-3-Clause/)).toBeTruthy();
   });
 });

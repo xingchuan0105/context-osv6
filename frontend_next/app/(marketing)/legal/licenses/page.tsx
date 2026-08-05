@@ -11,19 +11,32 @@ export const metadata: Metadata = {
 export default function LicensesSummary() {
   const majorComponents = [
     { category: 'Web框架', components: 'Next.js, React', license: 'MIT' },
-    { category: '后端运行时', components: 'Tokio, Axum', license: 'MIT' },
-    { category: '向量数据库', components: 'Milvus', license: 'Apache-2.0' },
-    { category: 'PDF解析', components: 'markitdown', license: 'MIT' },
-    { category: 'AI推理', components: 'DeepSeek, DashScope', license: '商业API' },
+    { category: '后端运行时', components: 'Tokio, Axum', license: 'MIT / Apache-2.0' },
+    {
+      category: '向量检索',
+      components: 'Milvus · pgvector',
+      license: 'Apache-2.0 / PostgreSQL',
+    },
+    {
+      category: '文档解析',
+      components: 'markitdown · firecrawl-anydoc',
+      license: 'MIT',
+    },
+    { category: '客户端壳', components: 'Tauri 2', license: 'MIT / Apache-2.0' },
+    { category: 'AI推理', components: 'DeepSeek, DashScope 等', license: '商业API' },
   ];
 
   const weakCopyleft = [
     { component: 'dompurify', note: '选择Apache-2.0版本' },
     { component: 'cssparser', note: 'MPL，未修改则仅需NOTICE' },
+    {
+      component: 'MinIO / Redis 7.4+（服务端）',
+      note: '见第三方声明商业清单：优先云 S3/OSS；Redis 用 Valkey 或 ≤7.2',
+    },
   ];
 
   return (
-    <LegalLayout title="开源软件说明" lastUpdated="2026-06-13">
+    <LegalLayout title="开源软件说明" lastUpdated="2026-08-05">
       <div className="licenses-summary">
         <section className="licenses-overview">
           <h2>我们的产品</h2>
@@ -87,7 +100,10 @@ export default function LicensesSummary() {
         <section className="licenses-desktop">
           <h2>客户端</h2>
           <p>
-            客户端安装包内另附声明；可在 About 对话框中查看。
+            客户端壳层使用 Tauri 2（MIT / Apache-2.0）。完整安装包可捆绑便携
+            PostgreSQL、pgvector 与 Redis Windows 端口（BSD-3-Clause 历史端口，
+            非 SSPL），声明见安装目录 <code>runtime/THIRD_PARTY.txt</code>，
+            以及完整第三方声明中的 Desktop 章节。About 对话框亦可查看摘要。
           </p>
         </section>
       </div>
