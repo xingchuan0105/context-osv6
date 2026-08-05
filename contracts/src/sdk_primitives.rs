@@ -112,7 +112,7 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     SdkPrimitive {
         id: "weather_query",
         capability: SdkCapability::BASE,
-        docstring: "Current conditions or forecast for a location (OpenWeatherMap).",
+        docstring: "Current weather for a location (QWeather 和风; OpenWeather fallback).",
         handler: "base_weather_query",
         py_sig: "self, city=None, lat=None, lon=None",
         py_payload: "{\"city\": city, \"lat\": lat, \"lon\": lon}",

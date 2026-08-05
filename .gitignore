@@ -128,3 +128,6 @@ desktop/runtime/bundled/linux-x64/
 # Packed runtime zips for VPS publish
 dist/desktop-runtime/
 desktop/src-tauri/binaries/
+
+# local secrets (never commit)
+**/.secrets/

@@ -17,9 +17,10 @@ chrono.workspace = true
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 evalexpr.workspace = true
+jsonwebtoken = "9"
 maxminddb = "0.24"
 regex.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["json", "gzip"] }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml = "0.9"
