@@ -28,10 +28,13 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts (`{n_fail}`, `{n_max}` consecutive threshold) |
 | `evidence-index.tmpl.md` | Per-round expand/card/stub counts (`{expanded}`, `{cards}`, `{stubs}`, `{expand_chars}`, `{pool_aliases}`) |
 | `claim-notes.tmpl.md` | P1″ cumulative claim board (`{lines}`, `{n}`, `{max}`) — host excerpts from expanded hits |
+| `working-set-trimmed.nudge.md` | Near-round expanded bodies demoted under char budget |
+| `history-cleared.nudge.md` | Older retrieval observation bodies stubbed |
 | `codegen-untrusted-prefix.nudge.md` | Untrusted tool-output prefix |
 | `native-tools-closed.tmpl.md` | Single fixed rejection for the closed native model surface (SDK method or superseded native tool name issued as a native tool call; error code `native_tools_closed`) |
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
-| `retrieval-summary.tmpl.md` | Per-round retrieve counts + alias/truncation detail |
+| `retrieval-summary.tmpl.md` | Per-round retrieve counts + `{detail}` |
+| `retrieval-summary-detail-*.tmpl.md` / `*-nudge.md` | `{detail}` fragments: aliases / saturation / truncated / grep0 / selected / wrap |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON (non–prose_only paths) |
 | `synthesis-prose-repair.tmpl.md` | prose_only final-form repair (one round): code-only / host-observation shell / template artifact / executable-code or trailing-fence working draft; `{violation_detail}` names the matched form/tag |
 | `final-answer-feedback-*.md` | Per-rule `{violation_detail}` bodies for the final-answer quality gate (code-only / host-shell / template-artifact / executable-code / trailing-code-fence); substituted into `synthesis-prose-repair.tmpl.md` (P2-2) |
@@ -48,6 +51,6 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 
 `../deprecated/loop-legacy/no-chunk-*.md` — host no-chunk continue/grace. Kept for unit tests via `prompt_assets` only.
 
-Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`, `{violation_detail}`, `{action}`, `{n_fail}`, `{n_max}`, `{expanded}`, `{cards}`, `{stubs}`, `{expand_chars}`, `{pool_aliases}`, `{lines}`, `{n}`, `{max}`.
+Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`, `{violation_detail}`, `{action}`, `{n_fail}`, `{n_max}`, `{expanded}`, `{cards}`, `{stubs}`, `{expand_chars}`, `{pool_aliases}`, `{lines}`, `{n}`, `{max}`, `{aliases}`, `{n_aliases}`, `{new_aliases}`, `{seen_aliases}`, `{parts}`.
 
 `pipeline/table-supervision/obs-*.md` observations (`{sql}`, `{rows}`, `{table_id}`, …) are **not** loaded here: they are rendered by the `avrag-struct-supervision` `prompts.rs` mini engine (`include_str!` + key/block/pick substitution).

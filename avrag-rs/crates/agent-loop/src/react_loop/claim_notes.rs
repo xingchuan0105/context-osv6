@@ -56,10 +56,12 @@ fn push_from_item(item: &Value, out: &mut Vec<ClaimNoteLine>) {
     if item.get("visibility").and_then(|v| v.as_str()) == Some("stub") {
         return;
     }
-    // Prefer expanded; allow card only when explicitly expanded flag missing
-    // but body is still substantial (bridge path without visibility field).
+    // Prefer expanded full bodies only (never card/stub residual).
     let vis = item.get("visibility").and_then(|v| v.as_str());
     let body_omitted = item.get("body_omitted").and_then(|v| v.as_bool()) == Some(true);
+    if body_omitted {
+        return;
+    }
     let text = item
         .get("text")
         .and_then(|v| v.as_str())
@@ -70,7 +72,7 @@ fn push_from_item(item: &Value, out: &mut Vec<ClaimNoteLine>) {
         return;
     }
     let is_expanded = vis == Some("expanded")
-        || (vis.is_none() && !body_omitted && text.chars().count() > 40);
+        || (vis.is_none() && text.chars().count() > 40);
     if !is_expanded {
         return;
     }
@@ -112,7 +114,7 @@ pub fn accumulate_claim_notes(board: &mut Vec<ClaimNoteLine>, fresh: &[ClaimNote
             }
             continue;
         }
-        // Soft dedupe: skip near-identical excerpt already present under another alias.
+        // Exact excerpt dedupe across aliases (same one-line fact, different #n).
         if board.iter().any(|n| n.excerpt == line.excerpt) {
             continue;
         }
@@ -153,17 +155,19 @@ mod tests {
 
     #[test]
     fn extracts_expanded_only() {
+        // Synthetic fixtures only — no realistic corpus / product policy prose.
         let data = json!({
             "chunks": [
-                {"chunk_id":"a","alias":"#1","visibility":"expanded","text":"事实甲：预算为 120 万元。"},
-                {"chunk_id":"b","alias":"#2","visibility":"card","text":"噪声卡片不应进板","body_omitted":true},
+                {"chunk_id":"a","alias":"#1","visibility":"expanded","text":"tok_expanded marker_alpha"},
+                {"chunk_id":"b","alias":"#2","visibility":"card","text":"tok_card","body_omitted":true},
                 {"chunk_id":"c","alias":"#3","reseen":"#1","text":""},
+                {"chunk_id":"d","alias":"#4","visibility":"expanded","body_omitted":true,"text":"tok_omitted_residual"},
             ]
         });
         let lines = extract_claim_lines(&data);
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].alias, "#1");
-        assert!(lines[0].excerpt.contains("120"));
+        assert!(lines[0].excerpt.contains("marker_alpha"));
     }
 
     #[test]

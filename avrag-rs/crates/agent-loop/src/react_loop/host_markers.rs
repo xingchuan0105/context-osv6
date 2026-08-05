@@ -76,6 +76,16 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         emitted_at: "prompts/loop/claim-notes.tmpl.md (prompt_assets::claim_notes)",
     },
     HostMarker {
+        tag: "[working_set_trimmed]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/working-set-trimmed.nudge.md (prompt_assets::working_set_trimmed)",
+    },
+    HostMarker {
+        tag: "[history_cleared]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/history-cleared.nudge.md (prompt_assets::history_cleared)",
+    },
+    HostMarker {
         tag: "<retrieval_summary>",
         forbidden_in_final: true,
         emitted_at: "prompts/loop/retrieval-summary.tmpl.md::[retrieval_summary] 角括号仿造变体",

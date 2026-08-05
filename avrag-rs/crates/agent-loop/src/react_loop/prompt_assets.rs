@@ -145,6 +145,16 @@ pub fn claim_notes(lines: &str, n: usize, max: usize) -> String {
     )
 }
 
+/// Working-set char budget demotion fact (LLM-boundary, third-person).
+pub fn working_set_trimmed() -> &'static str {
+    trim_body(loop_prompt!("working-set-trimmed.nudge.md"))
+}
+
+/// Older retrieval observation bodies stubbed (history clear).
+pub fn history_cleared() -> &'static str {
+    trim_body(loop_prompt!("history-cleared.nudge.md"))
+}
+
 pub fn codegen_untrusted_prefix() -> &'static str {
     trim_body(loop_prompt!("codegen-untrusted-prefix.nudge.md"))
 }
@@ -184,6 +194,56 @@ pub fn retrieval_summary(call_count: usize, total_chunks: usize, detail: &str) -
             ("total_chunks", &total_chunks.to_string()),
             ("detail", detail),
         ],
+    )
+}
+
+/// Assemble the `{detail}` clause for [`retrieval_summary`] from fragment prompts.
+/// Runtime only fills numbers / alias lists; Chinese observation prose lives in
+/// `prompts/loop/retrieval-summary-detail-*.md`.
+pub fn retrieval_summary_detail(
+    aliases: &[String],
+    any_truncated: bool,
+    any_grep_zero: bool,
+    new_aliases: usize,
+    seen_aliases: usize,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !aliases.is_empty() {
+        // Cap list length so observation stays small.
+        let shown: Vec<&str> = aliases.iter().take(24).map(String::as_str).collect();
+        let mut list = shown.join(", ");
+        if aliases.len() > 24 {
+            list.push_str(" …");
+        }
+        parts.push(subst(
+            trim_body(loop_prompt!("retrieval-summary-detail-aliases.tmpl.md")),
+            &[("aliases", &list)],
+        ));
+    }
+    parts.push(subst(
+        trim_body(loop_prompt!("retrieval-summary-detail-saturation.tmpl.md")),
+        &[
+            ("n_aliases", &aliases.len().to_string()),
+            ("new_aliases", &new_aliases.to_string()),
+            ("seen_aliases", &seen_aliases.to_string()),
+        ],
+    ));
+    if any_truncated {
+        parts.push(
+            trim_body(loop_prompt!("retrieval-summary-detail-truncated.nudge.md")).to_string(),
+        );
+    }
+    if any_grep_zero {
+        parts.push(
+            trim_body(loop_prompt!("retrieval-summary-detail-grep-zero.nudge.md")).to_string(),
+        );
+    }
+    parts.push(trim_body(loop_prompt!("retrieval-summary-detail-selected.nudge.md")).to_string());
+    // Structural join only (semicolon); wrapping punctuation is in the wrap tmpl.
+    let joined = parts.join("；");
+    subst(
+        trim_body(loop_prompt!("retrieval-summary-detail-wrap.tmpl.md")),
+        &[("parts", &joined)],
     )
 }
 

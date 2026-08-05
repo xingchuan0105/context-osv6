@@ -614,6 +614,7 @@ fn collect_aliases_from_tool_data(data: &serde_json::Value, out: &mut Vec<String
     }
 }
 
+/// Thin wrapper: observation prose is authored under `prompts/loop/retrieval-summary-detail-*`.
 fn build_retrieval_summary_detail(
     aliases: &[String],
     any_truncated: bool,
@@ -621,31 +622,13 @@ fn build_retrieval_summary_detail(
     new_aliases: usize,
     seen_aliases: usize,
 ) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if !aliases.is_empty() {
-        // Cap list length so observation stays small.
-        let shown: Vec<&str> = aliases.iter().take(24).map(String::as_str).collect();
-        let mut s = format!("可见 alias: {}", shown.join(", "));
-        if aliases.len() > 24 {
-            s.push_str(" …");
-        }
-        parts.push(s);
-    }
-    // Saturation signal: how much of this round's evidence is genuinely new.
-    parts.push(format!(
-        "本轮 {} 个 alias 中，{} 个为本轮新增、{} 个为历史已见",
-        aliases.len(),
+    super::prompt_assets::retrieval_summary_detail(
+        aliases,
+        any_truncated,
+        any_grep_zero,
         new_aliases,
-        seen_aliases
-    ));
-    if any_truncated {
-        parts.push("存在 truncated=true（回传为样本，非全库枚举）".into());
-    }
-    if any_grep_zero {
-        parts.push("有 grep total_hits=0".into());
-    }
-    parts.push("SELECTED 仅能引用已出现的 alias".into());
-    format!("。{}。", parts.join("；"))
+        seen_aliases,
+    )
 }
 
 /// markitdown 静态格式校验（2026-07-29，spec §5 静态层）：执行前扫代码块中
@@ -1141,7 +1124,7 @@ mod tests {
                     "chunk_id": "c1",
                     "alias": "#1",
                     "visibility": "expanded",
-                    "text": "项目预算为 120 万元，工期 18 个月。"
+                    "text": "tok_expanded marker_beta round_fact"
                 }],
                 "visibility_expanded_n": 1,
             }),
@@ -1152,7 +1135,7 @@ mod tests {
         let _ = retrieval_callouts(&calls, &seen, &mut notes);
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].alias, "#1");
-        assert!(notes[0].excerpt.contains("120"));
+        assert!(notes[0].excerpt.contains("marker_beta"));
     }
 
     #[test]

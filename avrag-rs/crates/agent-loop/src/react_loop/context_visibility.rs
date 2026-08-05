@@ -11,8 +11,9 @@ use serde_json::Value;
 /// Keep this many most-recent retrieval-bearing user/tool messages fully expanded
 /// (structurally — still subject to working-set char budget).
 pub const HISTORY_FULL_RETRIEVAL_ROUNDS: usize = 2;
-/// Soft cap for expanded chunk text retained across the working set (UTF-8 chars).
-/// Shared account for near-round full bodies after history stub (U-P2 / D4).
+/// Soft cap for expanded chunk text retained across the working set
+/// (Unicode scalar / char count, not UTF-8 bytes). Shared account for near-round
+/// full bodies after history stub (U-P2 / D4).
 pub const WORKING_SET_CHAR_BUDGET: usize = 16_000;
 /// Snippet length when demoting expanded → card under working-set pressure.
 const WORKING_SET_CARD_CHARS: usize = 280;
@@ -59,7 +60,10 @@ fn collapse_message_content(content: &str) -> String {
     // Try whole content as JSON first (native tool messages).
     if let Ok(mut v) = serde_json::from_str::<Value>(content) {
         strip_chunk_bodies(&mut v);
-        return v.to_string();
+        let mut out = v.to_string();
+        out.push('\n');
+        out.push_str(super::prompt_assets::history_cleared());
+        return out;
     }
     // Heuristic: strip "text":"..." / "content":"..." values inside retrieval-ish blobs.
     let mut out = content.to_string();
@@ -89,7 +93,8 @@ fn collapse_message_content(content: &str) -> String {
         out = result;
     }
     if out.len() + 64 < content.len() {
-        out.push_str("\n[history_cleared] older retrieval bodies stubbed");
+        out.push('\n');
+        out.push_str(super::prompt_assets::history_cleared());
     }
     out
 }
@@ -173,26 +178,22 @@ fn demote_chunk_to_card(map: &mut serde_json::Map<String, Value>) {
     map.insert("working_set_demoted".into(), Value::Bool(true));
 }
 
-/// Walk JSON and demote expanded chunks until `used` would fit under budget.
-/// Demotion order: non-adjacent first, then adjacent; within each pass, tree order
-/// (callers process older messages first so older expands go first).
-fn demote_expanded_in_value(v: &mut Value, used: &mut usize, budget: usize) -> usize {
+/// Demote expanded chunks matching `want_adjacent` until `used` ≤ budget.
+/// After demote, cards no longer count as expanded — subtract full pre-demote cost.
+fn demote_matching_in_value(
+    v: &mut Value,
+    used: &mut usize,
+    budget: usize,
+    want_adjacent: bool,
+) -> usize {
     let mut demoted = 0usize;
     match v {
         Value::Array(arr) => {
-            // Pass 1: non-adjacent
             for item in arr.iter_mut() {
                 if *used <= budget {
                     break;
                 }
-                demoted += demote_one_chunk(item, used, budget, false);
-            }
-            // Pass 2: adjacent only if still over
-            for item in arr.iter_mut() {
-                if *used <= budget {
-                    break;
-                }
-                demoted += demote_one_chunk(item, used, budget, true);
+                demoted += demote_matching_in_value(item, used, budget, want_adjacent);
             }
         }
         Value::Object(map) => {
@@ -201,62 +202,51 @@ fn demote_expanded_in_value(v: &mut Value, used: &mut usize, budget: usize) -> u
                     || map.contains_key("content")
                     || map.contains_key("alias"));
             if is_chunk {
-                // Single root chunk object — demote regardless of adjacent flag
-                // (caller already walked messages oldest-first).
-                if is_expanded_body(map) {
-                    let cost = chunk_text_len(map);
-                    if *used > budget && cost > WORKING_SET_CARD_CHARS {
-                        demote_chunk_to_card(map);
-                        *used = used.saturating_sub(cost.saturating_sub(WORKING_SET_CARD_CHARS));
-                        demoted += 1;
-                    }
+                if !is_expanded_body(map) {
+                    return 0;
                 }
+                if is_adjacent_chunk(map) != want_adjacent {
+                    return 0;
+                }
+                if *used <= budget {
+                    return 0;
+                }
+                let cost = chunk_text_len(map);
+                if cost <= WORKING_SET_CARD_CHARS {
+                    return 0;
+                }
+                demote_chunk_to_card(map);
+                // Card no longer counts toward expanded; drop full pre-demote cost.
+                *used = used.saturating_sub(cost);
+                demoted = 1;
             } else {
                 // Prefer demoting nested chunks under "chunks" / "hits" first.
                 for key in ["chunks", "hits"] {
+                    if *used <= budget {
+                        break;
+                    }
                     if let Some(child) = map.get_mut(key) {
-                        demoted += demote_expanded_in_value(child, used, budget);
+                        demoted += demote_matching_in_value(child, used, budget, want_adjacent);
                     }
                 }
-                for (k, child) in map.iter_mut() {
-                    if k == "chunks" || k == "hits" {
-                        continue;
+                let keys: Vec<String> = map
+                    .keys()
+                    .filter(|k| *k != "chunks" && *k != "hits")
+                    .cloned()
+                    .collect();
+                for k in keys {
+                    if *used <= budget {
+                        break;
                     }
-                    demoted += demote_expanded_in_value(child, used, budget);
+                    if let Some(child) = map.get_mut(&k) {
+                        demoted += demote_matching_in_value(child, used, budget, want_adjacent);
+                    }
                 }
             }
         }
         _ => {}
     }
     demoted
-}
-
-fn demote_one_chunk(item: &mut Value, used: &mut usize, budget: usize, adjacent_only: bool) -> usize {
-    let Some(map) = item.as_object_mut() else {
-        return demote_expanded_in_value(item, used, budget);
-    };
-    let is_chunk = map.contains_key("chunk_id")
-        && (map.contains_key("text") || map.contains_key("content") || map.contains_key("alias"));
-    if !is_chunk {
-        return demote_expanded_in_value(item, used, budget);
-    }
-    if !is_expanded_body(map) {
-        return 0;
-    }
-    let adj = is_adjacent_chunk(map);
-    if adjacent_only != adj {
-        return 0;
-    }
-    if *used <= budget {
-        return 0;
-    }
-    let cost = chunk_text_len(map);
-    if cost <= WORKING_SET_CARD_CHARS {
-        return 0;
-    }
-    demote_chunk_to_card(map);
-    *used = used.saturating_sub(cost.saturating_sub(WORKING_SET_CARD_CHARS));
-    1
 }
 
 fn measure_expanded_chars(v: &Value) -> usize {
@@ -281,10 +271,19 @@ fn measure_expanded_chars(v: &Value) -> usize {
     }
 }
 
-/// Within kept (recent) retrieval messages, demote oldest expanded bodies first
-/// until total expanded chars ≤ `budget`. Adjacent runs demoted last.
+/// Within kept (recent) retrieval messages, demote expanded bodies until total
+/// expanded chars ≤ `budget`.
+///
+/// Global order (U-P2 / §6.3):
+/// 1. non-adjacent expands, oldest kept message → newest
+/// 2. only then adjacent runs, oldest → newest
+///
 /// Returns total demoted chunk count.
-fn apply_working_set_budget(messages: &mut [ChatMessage], keep_indices: &[usize], budget: usize) -> usize {
+fn apply_working_set_budget(
+    messages: &mut [ChatMessage],
+    keep_indices: &[usize],
+    budget: usize,
+) -> usize {
     // Measure current expanded usage across kept messages.
     let mut used = 0usize;
     let mut parsed: Vec<(usize, Option<Value>)> = Vec::new();
@@ -294,7 +293,6 @@ fn apply_working_set_budget(messages: &mut [ChatMessage], keep_indices: &[usize]
             used = used.saturating_add(measure_expanded_chars(&v));
             parsed.push((idx, Some(v)));
         } else {
-            // Heuristic payloads: count long "text"/"content" string lengths roughly.
             used = used.saturating_add(heuristic_expanded_chars(content));
             parsed.push((idx, None));
         }
@@ -304,105 +302,131 @@ fn apply_working_set_budget(messages: &mut [ChatMessage], keep_indices: &[usize]
     }
 
     let mut demoted_total = 0usize;
-    // Oldest kept first.
-    for (idx, maybe_v) in parsed.iter_mut() {
+
+    // Pass 1: non-adjacent (global, oldest first). Pass 2: adjacent last.
+    for want_adjacent in [false, true] {
         if used <= budget {
             break;
         }
-        if let Some(v) = maybe_v {
-            demoted_total += demote_expanded_in_value(v, &mut used, budget);
-            messages[*idx].content = v.to_string();
-        } else {
-            // Non-JSON: if still over, collapse long string values toward cards.
-            let before = messages[*idx].content.len();
-            let trimmed = collapse_long_strings_to_card(&messages[*idx].content, WORKING_SET_CARD_CHARS);
-            if trimmed.len() < before {
-                let saved = before.saturating_sub(trimmed.len());
-                used = used.saturating_sub(saved);
-                messages[*idx].content = trimmed;
-                demoted_total += 1;
+        for (idx, maybe_v) in parsed.iter_mut() {
+            if used <= budget {
+                break;
+            }
+            if let Some(v) = maybe_v {
+                let n = demote_matching_in_value(v, &mut used, budget, want_adjacent);
+                if n > 0 {
+                    messages[*idx].content = v.to_string();
+                    demoted_total += n;
+                }
+            } else if !want_adjacent {
+                // Heuristic payloads have no adjacent flag — demote in pass 1 only.
+                let before_chars = heuristic_expanded_chars(&messages[*idx].content);
+                if before_chars == 0 {
+                    continue;
+                }
+                let trimmed =
+                    collapse_long_strings_to_card(&messages[*idx].content, WORKING_SET_CARD_CHARS);
+                let after_chars = heuristic_expanded_chars(&trimmed);
+                if after_chars < before_chars {
+                    used = used.saturating_sub(before_chars.saturating_sub(after_chars));
+                    messages[*idx].content = trimmed;
+                    demoted_total += 1;
+                }
             }
         }
     }
+
     if demoted_total > 0 {
-        // Mark the most recent kept message with a third-person fact line.
         if let Some(&last) = keep_indices.last() {
             if !messages[last].content.contains("[working_set_trimmed]") {
+                messages[last].content.push('\n');
                 messages[last]
                     .content
-                    .push_str("\n[working_set_trimmed] near-round expanded bodies demoted under char budget");
+                    .push_str(super::prompt_assets::working_set_trimmed());
             }
         }
     }
     demoted_total
 }
 
+/// Sum long string values after `"text"` (preferred) or, if none, `"content"`.
+/// Matches JSON measure precedence: text OR content, not both.
 fn heuristic_expanded_chars(content: &str) -> usize {
-    // Rough: sum lengths of quoted values after "text"/"content" when > card size.
+    let text_total = sum_long_quoted_after_key(content, "\"text\"");
+    if text_total > 0 {
+        return text_total;
+    }
+    sum_long_quoted_after_key(content, "\"content\"")
+}
+
+fn sum_long_quoted_after_key(content: &str, key: &str) -> usize {
     let mut total = 0usize;
-    for key in ["\"text\"", "\"content\""] {
-        let mut rest = content;
-        while let Some(pos) = rest.find(key) {
-            let after = rest[pos + key.len()..].trim_start();
-            if let Some(after) = after.strip_prefix(':') {
-                let after = after.trim_start();
-                if let Some(s) = after.strip_prefix('"') {
-                    if let Some(end) = find_json_string_end(s) {
-                        let body = &s[..end.saturating_sub(1)];
-                        let n = body.chars().count();
-                        if n > WORKING_SET_CARD_CHARS {
-                            total = total.saturating_add(n);
-                        }
-                        rest = &s[end..];
-                        continue;
+    let mut rest = content;
+    while let Some(pos) = rest.find(key) {
+        let after = rest[pos + key.len()..].trim_start();
+        if let Some(after) = after.strip_prefix(':') {
+            let after = after.trim_start();
+            if let Some(s) = after.strip_prefix('"') {
+                if let Some(end) = find_json_string_end(s) {
+                    let body = &s[..end.saturating_sub(1)];
+                    let n = body.chars().count();
+                    if n > WORKING_SET_CARD_CHARS {
+                        total = total.saturating_add(n);
                     }
+                    rest = &s[end..];
+                    continue;
                 }
             }
-            rest = &rest[pos + key.len()..];
         }
+        rest = &rest[pos + key.len()..];
     }
     total
 }
 
 fn collapse_long_strings_to_card(content: &str, max_chars: usize) -> String {
-    let mut out = content.to_string();
-    for key in ["\"text\"", "\"content\""] {
-        let mut result = String::with_capacity(out.len());
-        let mut rest = out.as_str();
-        while let Some(pos) = rest.find(key) {
-            result.push_str(&rest[..pos]);
-            result.push_str(key);
-            let after_key = &rest[pos + key.len()..];
-            let after_key = after_key.trim_start();
-            if let Some(stripped) = after_key.strip_prefix(':') {
-                let stripped = stripped.trim_start();
-                if let Some(s) = stripped.strip_prefix('"') {
-                    if let Some(end) = find_json_string_end(s) {
-                        let body = &s[..end.saturating_sub(1)];
-                        let n = body.chars().count();
-                        if n > max_chars {
-                            let head: String = body.chars().take(max_chars.saturating_sub(1)).collect();
-                            result.push_str(": \"");
-                            result.push_str(&head);
-                            result.push('…');
-                            result.push('"');
-                            rest = &s[end..];
-                            continue;
-                        }
+    // Prefer demoting text fields; if none changed, demote content.
+    let via_text = collapse_key_long_strings(content, "\"text\"", max_chars);
+    if via_text != content {
+        return via_text;
+    }
+    collapse_key_long_strings(content, "\"content\"", max_chars)
+}
+
+fn collapse_key_long_strings(content: &str, key: &str, max_chars: usize) -> String {
+    let mut result = String::with_capacity(content.len());
+    let mut rest = content;
+    while let Some(pos) = rest.find(key) {
+        result.push_str(&rest[..pos]);
+        result.push_str(key);
+        let after_key = &rest[pos + key.len()..];
+        let after_key = after_key.trim_start();
+        if let Some(stripped) = after_key.strip_prefix(':') {
+            let stripped = stripped.trim_start();
+            if let Some(s) = stripped.strip_prefix('"') {
+                if let Some(end) = find_json_string_end(s) {
+                    let body = &s[..end.saturating_sub(1)];
+                    let n = body.chars().count();
+                    if n > max_chars {
+                        let head: String = body.chars().take(max_chars.saturating_sub(1)).collect();
                         result.push_str(": \"");
-                        result.push_str(body);
+                        result.push_str(&head);
+                        result.push('…');
                         result.push('"');
                         rest = &s[end..];
                         continue;
                     }
+                    result.push_str(": \"");
+                    result.push_str(body);
+                    result.push('"');
+                    rest = &s[end..];
+                    continue;
                 }
             }
-            rest = after_key;
         }
-        result.push_str(rest);
-        out = result;
+        rest = after_key;
     }
-    out
+    result.push_str(rest);
+    result
 }
 
 /// Build model-facing messages: keep last `keep_recent` retrieval payloads full;
@@ -454,6 +478,17 @@ pub fn transform_messages_for_llm_with_budget(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
+
+    fn expanded_chars_in_messages(msgs: &[ChatMessage], indices: &[usize]) -> usize {
+        let mut total = 0usize;
+        for &i in indices {
+            if let Ok(v) = serde_json::from_str::<Value>(&msgs[i].content) {
+                total = total.saturating_add(measure_expanded_chars(&v));
+            }
+        }
+        total
+    }
 
     #[test]
     fn keeps_recent_retrieval_full() {
@@ -473,12 +508,14 @@ mod tests {
         // Last two stay large
         assert!(out[3].content.contains("chunk_id"));
         assert!(out[4].content.contains("xxx") || out[4].content.len() > 50);
+        // Durable input unchanged.
+        assert!(msgs[1].content.contains("xxx") || msgs[1].content.contains("x".repeat(50).as_str()));
     }
 
     #[test]
     fn working_set_budget_demotes_older_kept_expand() {
-        // Two recent rounds, each with a large expanded body; tight budget
-        // should demote the older kept message first.
+        // Two recent rounds, each with a large expanded body; budget fits one full
+        // body (800) — older should demote, newer stay largely intact.
         let body_a = "A".repeat(800);
         let body_b = "B".repeat(800);
         let msgs = vec![
@@ -490,32 +527,36 @@ mod tests {
                 r##"{{"chunks":[{{"chunk_id":"b","alias":"#2","text":"{body_b}","visibility":"expanded"}}]}}"##
             )),
         ];
-        let out = transform_messages_for_llm_with_budget(&msgs, 2, 900);
-        // Older kept (#1) demoted to card-sized; newer may stay larger.
+        let budget = 900usize;
+        let out = transform_messages_for_llm_with_budget(&msgs, 2, budget);
         let c1 = &out[1].content;
         let c2 = &out[2].content;
+
         assert!(
-            c1.contains("working_set_demoted")
-                || c1.contains("body_omitted")
-                || c1.len() < body_a.len(),
-            "older expand should shrink under budget: len={}",
-            c1.len()
-        );
-        // Total expanded in kept set should be constrained.
-        let total_approx = c1.len() + c2.len();
-        assert!(
-            total_approx < body_a.len() + body_b.len(),
-            "working set should be smaller than raw sum: {total_approx}"
+            c1.contains("working_set_demoted") || c1.contains("body_omitted"),
+            "older expand should demote: {c1}"
         );
         assert!(
-            out.iter().any(|m| m.content.contains("[working_set_trimmed]"))
-                || c1.contains("working_set_demoted"),
+            c2.contains(&body_b) || c2.matches('B').count() > 500,
+            "newer expand should remain largely intact: len={}",
+            c2.len()
+        );
+        let remaining = expanded_chars_in_messages(&out, &[1, 2]);
+        assert!(
+            remaining <= budget,
+            "remaining expanded {remaining} should be ≤ budget {budget}"
+        );
+        assert!(
+            out.iter().any(|m| m.content.contains("[working_set_trimmed]")),
             "trim signal expected"
         );
+        // Source slice immutable.
+        assert!(msgs[1].content.contains(&body_a));
+        assert!(msgs[2].content.contains(&body_b));
     }
 
     #[test]
-    fn working_set_prefers_keeping_adjacent() {
+    fn working_set_prefers_keeping_adjacent_same_message() {
         let plain = "P".repeat(600);
         let adj = "Q".repeat(600);
         let msgs = vec![ChatMessage::user(format!(
@@ -524,13 +565,50 @@ mod tests {
               {{"chunk_id":"a","alias":"#2","text":"{adj}","visibility":"expanded","adjacent":true,"member_chunk_ids":["a","b"]}}
             ]}}"##
         ))];
-        let out = transform_messages_for_llm_with_budget(&msgs, 1, 700);
+        let budget = 700usize;
+        let out = transform_messages_for_llm_with_budget(&msgs, 1, budget);
         let c = &out[0].content;
-        // Adjacent should still hold more of its body when possible.
+        // Plain demoted first; adjacent body retained.
         assert!(
-            c.contains("QQQQ") || c.contains("\"adjacent\":true"),
-            "adjacent run should be preferred: {c}"
+            c.contains("working_set_demoted") || c.contains("body_omitted"),
+            "plain should demote: {c}"
         );
+        assert!(
+            c.contains(&adj) || c.matches('Q').count() > 500,
+            "adjacent full body should be preferred: {c}"
+        );
+        let remaining = expanded_chars_in_messages(&out, &[0]);
+        assert!(remaining <= budget, "remaining {remaining} > budget {budget}");
+    }
+
+    #[test]
+    fn working_set_demotes_newer_plain_before_older_adjacent() {
+        // Cross-message: older = adjacent mega, newer = plain. Budget fits one body.
+        // Global policy: demote plain first even though it is newer.
+        let adj_body = "Q".repeat(600);
+        let plain_body = "P".repeat(600);
+        let msgs = vec![
+            ChatMessage::user(format!(
+                r##"{{"chunks":[{{"chunk_id":"a","alias":"#1","text":"{adj_body}","visibility":"expanded","adjacent":true,"member_chunk_ids":["a","b"]}}]}}"##
+            )),
+            ChatMessage::user(format!(
+                r##"{{"chunks":[{{"chunk_id":"p","alias":"#2","text":"{plain_body}","visibility":"expanded"}}]}}"##
+            )),
+        ];
+        let budget = 700usize;
+        let out = transform_messages_for_llm_with_budget(&msgs, 2, budget);
+        let older = &out[0].content;
+        let newer = &out[1].content;
+        assert!(
+            older.contains(&adj_body) || older.matches('Q').count() > 500,
+            "older adjacent should survive: {older}"
+        );
+        assert!(
+            newer.contains("working_set_demoted") || newer.contains("body_omitted"),
+            "newer plain should demote first: {newer}"
+        );
+        let remaining = expanded_chars_in_messages(&out, &[0, 1]);
+        assert!(remaining <= budget, "remaining {remaining} > budget {budget}");
     }
 
     #[test]
@@ -542,5 +620,35 @@ mod tests {
         let out = transform_messages_for_llm_with_budget(&msgs, 2, 16_000);
         assert!(out[0].content.contains(&body));
         assert!(!out[0].content.contains("working_set_demoted"));
+        assert!(!out[0].content.contains("[working_set_trimmed]"));
+    }
+
+    #[test]
+    fn does_not_over_demote_when_one_suffices() {
+        // 3×500 expands, budget 1100 → demote exactly two oldest, keep newest full.
+        let bodies: Vec<String> = (0..3).map(|i| format!("{}", (b'A' + i as u8) as char).repeat(500)).collect();
+        let msgs: Vec<ChatMessage> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                ChatMessage::user(format!(
+                    r##"{{"chunks":[{{"chunk_id":"{i}","alias":"#{i}","text":"{b}","visibility":"expanded"}}]}}"##
+                ))
+            })
+            .collect();
+        let budget = 1100usize;
+        let out = transform_messages_for_llm_with_budget(&msgs, 3, budget);
+        let remaining = expanded_chars_in_messages(&out, &[0, 1, 2]);
+        assert!(remaining <= budget, "remaining {remaining} > {budget}");
+        // Newest should still hold ~500 expanded chars.
+        assert!(
+            out[2].content.contains(&bodies[2]),
+            "newest expand should remain when demoting two older is enough"
+        );
+        // Should not demote all three: remaining should be close to 500 (one full).
+        assert!(
+            remaining >= 400,
+            "should not over-demote; remaining expanded={remaining}"
+        );
     }
 }
