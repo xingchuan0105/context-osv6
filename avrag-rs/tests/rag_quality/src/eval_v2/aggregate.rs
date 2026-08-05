@@ -21,6 +21,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::golden_set::EvalGate;
+
 use super::artifact::ContextSource;
 use super::judge_parse::{CorrectnessVerdict, FaithfulnessVerdict, JudgeOutput, RefusalJudgment};
 use super::{JudgeStatus, JudgeThresholds, LabelV2, ScoreV2};
@@ -55,6 +57,8 @@ pub struct LabelInput<'a> {
     /// status without output is treated as a judge failure (never silent-pass).
     pub judge: Option<&'a JudgeOutput>,
     pub thresholds: &'a JudgeThresholds,
+    /// Label weight profile from `GoldenExample.eval_gate` (default Full).
+    pub eval_gate: EvalGate,
 }
 
 /// Refusal correctness derived deterministically from observed behavior vs
@@ -72,12 +76,20 @@ pub fn derived_refusal_correct(refusal: &RefusalJudgment, expected_should_answer
 /// already good) → SELECTION_MISS → REFUSAL_WRONG → UNGROUNDED → INCORRECT →
 /// PARTIAL → PASS.
 ///
+/// When `eval_gate == RetrievalPrimary` (open synthesis / dual-read gold):
+/// INFRA / JUDGE / REFUSAL_WRONG still apply; hard quality is **full-stream
+/// gold recall** (0 → RETRIEVAL_MISS, (0,1) → PARTIAL, 1 → PASS). Answer
+/// correctness, faithfulness, and selection do **not** change the label
+/// (still stored on `ScoreV2` for reports). See
+/// `docs/engineering/2026-08-05-eval-v2-retrieval-primary-gate.md`.
+///
 /// RETRIEVAL_MISS used to fire on `recall==0` alone, which mislabeled
 /// markitdown/grep-era answers that were correct and grounded while Layer-A
 /// substring gold no longer matched the dense/lexical stream. Align: zero
 /// recall is a retrieval failure only when the answer is not already at/above
 /// τ_c (and not a correct-refusal NA). Good answers fall through so
-/// faithfulness / PASS can still apply.
+/// faithfulness / PASS can still apply. (`RetrievalPrimary` always treats
+/// recall==0 as RETRIEVAL_MISS when gold is expected.)
 pub fn label_for(input: &LabelInput) -> LabelV2 {
     if input.has_infra_error {
         return LabelV2::InfraError;
@@ -101,6 +113,24 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
         || (correctness >= t.tau_correctness
             && judge.answer_correctness.verdict != CorrectnessVerdict::Partial
             && judge.answer_correctness.verdict != CorrectnessVerdict::Incorrect);
+
+    // --- retrieval_primary: retrieval is the hard gate; answer is report-only
+    if input.eval_gate.is_retrieval_primary() {
+        if !derived_refusal_correct(&judge.refusal, input.expected_should_answer) {
+            return LabelV2::RefusalWrong;
+        }
+        if input.gold_exists && !input.expect_no_retrieval {
+            if input.retrieval_recall <= 0.0 {
+                return LabelV2::RetrievalMiss;
+            }
+            // Incomplete gold coverage (e.g. 1 of 2 cross-doc chunks): PARTIAL
+            // here means retrieval partial, not answer partial.
+            if input.retrieval_recall + f64::EPSILON < 1.0 {
+                return LabelV2::Partial;
+            }
+        }
+        return LabelV2::Pass;
+    }
 
     if input.gold_exists
         && !input.expect_no_retrieval
@@ -131,12 +161,16 @@ pub fn label_for(input: &LabelInput) -> LabelV2 {
     let faithfulness_applicable = !input.no_context
         && !input.expect_no_retrieval
         && judge.faithfulness.verdict != FaithfulnessVerdict::NotApplicable;
-    // UNGROUNDED:faithfulness 不达标且有具名 unsupported claim(编造/无据)。
-    // 一票否决保留——「核心答对+附加编造」仍按编造从严处理(q041 系教训)。
+    // FA low + unsupported claims: split path-missing (CORRECT_UNGROUNDED) from
+    // fabrication with evidence present (UNGROUNDED). See
+    // docs/engineering/2026-08-05-eval-v2-correct-ungrounded-label-design.md.
     if faithfulness_applicable
         && judge.faithfulness.score < t.tau_faithfulness
         && !judge.faithfulness.unsupported_claims.is_empty()
     {
+        if answer_quality_ok && input.retrieval_recall == 0.0 && !input.expect_no_retrieval {
+            return LabelV2::CorrectUngrounded;
+        }
         return LabelV2::Ungrounded;
     }
     if !correctness_na && correctness < t.partial_min {
@@ -457,6 +491,7 @@ mod tests {
             model_answer: Some("ans".to_string()),
             context_source,
             expect_no_retrieval: false,
+            eval_gate: crate::golden_set::EvalGate::Full,
         }
     }
 
@@ -472,6 +507,7 @@ mod tests {
             cited_gold_hits: 1,
             judge: Some(judge),
             thresholds: &DEFAULT_THRESHOLDS,
+            eval_gate: crate::golden_set::EvalGate::Full,
         }
     }
 
@@ -500,6 +536,7 @@ mod tests {
             cited_gold_hits: 0,
             judge: None,
             thresholds: &DEFAULT_THRESHOLDS,
+            eval_gate: crate::golden_set::EvalGate::Full,
         };
         assert_eq!(label_for(&input), LabelV2::JudgeError);
     }
@@ -527,7 +564,24 @@ mod tests {
     }
 
     #[test]
-    fn ungrounded_still_wins_when_correct_but_unsupported_with_recall_zero() {
+    fn correct_ungrounded_when_ac_ok_fa_bad_and_recall_zero() {
+        // q030 class: answer correct, no retrieval path, FA fails on path claims.
+        let judge = judge_output(
+            1.0,
+            CorrectnessVerdict::Correct,
+            0.0,
+            &["no rag context"],
+            true,
+        );
+        let mut input = base_input(&judge);
+        input.retrieval_recall = 0.0;
+        input.cited_gold_hits = 0;
+        assert_eq!(label_for(&input), LabelV2::CorrectUngrounded);
+    }
+
+    #[test]
+    fn ungrounded_when_correct_but_unsupported_with_evidence_present() {
+        // q088 class: AC ok but fabricated claims while context/recall present.
         let judge = judge_output(
             1.0,
             CorrectnessVerdict::Correct,
@@ -536,7 +590,7 @@ mod tests {
             true,
         );
         let mut input = base_input(&judge);
-        input.retrieval_recall = 0.0;
+        input.retrieval_recall = 1.0;
         input.cited_gold_hits = 0;
         assert_eq!(label_for(&input), LabelV2::Ungrounded);
     }
@@ -709,6 +763,57 @@ mod tests {
         assert_eq!(label_for(&base_input(&judge)), LabelV2::Pass);
     }
 
+    // -- retrieval_primary gate (open synthesis / dual-read) ----------------
+
+    #[test]
+    fn retrieval_primary_pass_despite_partial_answer() {
+        // q105-class: dual-read rubric → AC partial must not fail the hard gate
+        // when full-stream gold recall is 1.0.
+        let judge = judge_output(0.7, CorrectnessVerdict::Partial, 0.7, &["sf 细分"], true);
+        let mut input = base_input(&judge);
+        input.eval_gate = crate::golden_set::EvalGate::RetrievalPrimary;
+        input.retrieval_recall = 1.0;
+        input.cited_gold_hits = 0; // selection ignored
+        assert_eq!(label_for(&input), LabelV2::Pass);
+    }
+
+    #[test]
+    fn retrieval_primary_retrieval_miss_on_zero_recall() {
+        let judge = judge_output(1.0, CorrectnessVerdict::Correct, 1.0, &[], true);
+        let mut input = base_input(&judge);
+        input.eval_gate = crate::golden_set::EvalGate::RetrievalPrimary;
+        input.retrieval_recall = 0.0;
+        assert_eq!(label_for(&input), LabelV2::RetrievalMiss);
+    }
+
+    #[test]
+    fn retrieval_primary_partial_on_incomplete_gold() {
+        let judge = judge_output(0.5, CorrectnessVerdict::Partial, 0.5, &[], true);
+        let mut input = base_input(&judge);
+        input.eval_gate = crate::golden_set::EvalGate::RetrievalPrimary;
+        input.retrieval_recall = 0.5;
+        assert_eq!(label_for(&input), LabelV2::Partial);
+    }
+
+    #[test]
+    fn retrieval_primary_still_refusal_wrong() {
+        // expected_should_answer=true but model refused → REFUSAL_WRONG even under
+        // retrieval_primary (infra/contract still hard).
+        let judge = judge_output_full(
+            0.0,
+            CorrectnessVerdict::NotApplicable,
+            1.0,
+            FaithfulnessVerdict::NotApplicable,
+            &[],
+            true,  // is_refusal
+            false, // raw correct_for_expectation (ignored by label layer)
+        );
+        let mut input = base_input(&judge);
+        input.eval_gate = crate::golden_set::EvalGate::RetrievalPrimary;
+        input.retrieval_recall = 1.0;
+        assert_eq!(label_for(&input), LabelV2::RefusalWrong);
+    }
+
     #[test]
     fn ok_status_without_output_is_judge_error_not_silent_pass() {
         let input = LabelInput {
@@ -730,6 +835,7 @@ mod tests {
             cited_gold_hits: 1,
             judge: None,
             thresholds: &DEFAULT_THRESHOLDS,
+            eval_gate: crate::golden_set::EvalGate::Full,
         }
     }
 
@@ -929,10 +1035,9 @@ mod tests {
         input.cited_gold_hits = 0;
         input.expect_no_retrieval = true;
         assert_eq!(label_for(&input), LabelV2::Pass);
-        // Without the flag: answer score is already ≥τ_c so recall=0 does not
-        // force RETRIEVAL_MISS; low faithfulness + unsupported claims → UNGROUNDED.
+        // Without the flag: AC ok + FA low + recall=0 → CORRECT_UNGROUNDED (path miss).
         input.expect_no_retrieval = false;
-        assert_eq!(label_for(&input), LabelV2::Ungrounded);
+        assert_eq!(label_for(&input), LabelV2::CorrectUngrounded);
     }
 
     #[test]

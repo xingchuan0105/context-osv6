@@ -132,6 +132,41 @@ pub struct GoldenExample {
     /// not_applicable). eval_v2 only; the legacy path ignores this field.
     #[serde(default)]
     pub expect_no_retrieval: bool,
+
+    /// Which dimensions drive the v2 root-cause **label** (design:
+    /// `2026-08-05-eval-v2-retrieval-primary-gate.md`). Default `full` keeps
+    /// judge correctness / faithfulness / selection in the hard path.
+    /// `retrieval_primary` is for open synthesis / dual-read items: PASS when
+    /// gold chunks surface (full-stream recall); answer prose is report-only.
+    #[serde(default)]
+    pub eval_gate: EvalGate,
+}
+
+/// Label-weight profile for eval v2 (`GoldenExample.eval_gate`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvalGate {
+    /// Default: answer correctness, faithfulness, selection participate in
+    /// `label_for` (design §5 full table).
+    #[default]
+    Full,
+    /// Open synthesis / dual-read / “similarity” rubrics: hard gate is
+    /// full-stream gold retrieval; AC/FA/selection do not force PARTIAL /
+    /// UNGROUNDED / SELECTION_MISS. Judge scores still stored for report.
+    RetrievalPrimary,
+}
+
+impl EvalGate {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EvalGate::Full => "full",
+            EvalGate::RetrievalPrimary => "retrieval_primary",
+        }
+    }
+
+    pub fn is_retrieval_primary(self) -> bool {
+        matches!(self, EvalGate::RetrievalPrimary)
+    }
 }
 
 /// A scripted prior user→assistant exchange (see `prior_turns`).
@@ -316,12 +351,27 @@ mod tests {
         let ex: GoldenExample = serde_json::from_str(v2).unwrap();
         assert_eq!(ex.reference_answer(), "Y公司2019年在大连建厂。");
         assert_eq!(ex.rubric_notes.as_deref(), Some("接受「2019 年」「2019年」"));
+        assert_eq!(ex.eval_gate, EvalGate::Full);
 
         // Legacy spelling still works; rubric_notes stays optional.
         let legacy = r#"{"query": "q", "expected_answer": "a", "source_chunks": []}"#;
         let ex: GoldenExample = serde_json::from_str(legacy).unwrap();
         assert_eq!(ex.reference_answer(), "a");
         assert_eq!(ex.rubric_notes, None);
+        assert_eq!(ex.eval_gate, EvalGate::Full);
+    }
+
+    #[test]
+    fn eval_gate_retrieval_primary_deserializes() {
+        let v = r#"{
+            "query": "q",
+            "expected_answer": "a",
+            "source_chunks": [],
+            "eval_gate": "retrieval_primary"
+        }"#;
+        let ex: GoldenExample = serde_json::from_str(v).unwrap();
+        assert_eq!(ex.eval_gate, EvalGate::RetrievalPrimary);
+        assert!(ex.eval_gate.is_retrieval_primary());
     }
 
     #[test]

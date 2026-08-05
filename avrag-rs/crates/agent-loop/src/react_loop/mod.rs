@@ -169,6 +169,9 @@ impl ReActLoop {
             seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),
+            seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
             session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(mode.sdk_primitives.iter().cloned().collect()),
             query_card,

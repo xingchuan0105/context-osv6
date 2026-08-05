@@ -101,8 +101,16 @@ pub fn codegen_no_output_nudge() -> &'static str {
     trim_body(loop_prompt!("codegen-no-output.nudge.md"))
 }
 
-pub fn codegen_sandbox_error_nudge() -> &'static str {
-    trim_body(loop_prompt!("codegen-sandbox-error.nudge.md"))
+/// Sandbox error observation. `{n_fail}` / `{n_max}` = consecutive failure
+/// count and host break threshold (third-person environment facts).
+pub fn codegen_sandbox_error_nudge(n_fail: u8, n_max: u8) -> String {
+    subst(
+        trim_body(loop_prompt!("codegen-sandbox-error.nudge.md")),
+        &[
+            ("n_fail", &n_fail.to_string()),
+            ("n_max", &n_max.to_string()),
+        ],
+    )
 }
 
 pub fn codegen_untrusted_prefix() -> &'static str {
@@ -260,7 +268,9 @@ mod tests {
         assert!(!r.contains("{violation_detail}"));
         assert!(!partial_evidence_insufficient().is_empty());
         assert!(!codegen_no_output_nudge().is_empty());
-        assert!(!codegen_sandbox_error_nudge().is_empty());
+        let se = codegen_sandbox_error_nudge(2, 4);
+        assert!(!se.is_empty());
+        assert!(se.contains("2/4") && !se.contains("{n_fail}"));
         let b = blocks_skipped_nudge(3, 2);
         assert!(b.contains('3') && b.contains('2'));
         assert!(!b.contains("{n_blocks}"));

@@ -31,6 +31,9 @@ pub struct ScoredChunk {
     pub parser_backend: Option<String>,
     pub source_locator: Option<Value>,
     pub parse_run_id: Option<Uuid>,
+    /// In-document sequence from ingest `metadata.cursor` (optional; missing → skip adjacent merge).
+    #[serde(default)]
+    pub cursor: Option<i32>,
 }
 
 impl ScoredChunk {
@@ -56,6 +59,7 @@ impl ScoredChunk {
             parser_backend: None,
             source_locator: None,
             parse_run_id: None,
+            cursor: None,
         }
     }
 
@@ -67,9 +71,29 @@ impl ScoredChunk {
     ) -> Self {
         self.chunk_type = chunk_type;
         self.parser_backend = parser_backend;
+        if self.cursor.is_none() {
+            self.cursor = cursor_from_value(source_locator.as_ref());
+        }
         self.source_locator = source_locator;
         self
     }
+
+    pub fn with_cursor(mut self, cursor: Option<i32>) -> Self {
+        self.cursor = cursor;
+        self
+    }
+}
+
+/// Parse ingest cursor from `source_locator` or chunk metadata JSON.
+pub fn cursor_from_value(v: Option<&Value>) -> Option<i32> {
+    let obj = v?.as_object()?;
+    obj.get("cursor")
+        .and_then(|c| {
+            c.as_i64()
+                .or_else(|| c.as_u64().map(|u| u as i64))
+                .or_else(|| c.as_str().and_then(|s| s.parse().ok()))
+        })
+        .map(|i| i as i32)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

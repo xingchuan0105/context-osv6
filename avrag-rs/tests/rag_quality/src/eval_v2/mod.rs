@@ -43,6 +43,8 @@ pub enum LabelV2 {
     RetrievalMiss,
     SelectionMiss,
     RefusalWrong,
+    /// AC ok but FA failed mainly due to missing retrieval path (q030 class).
+    CorrectUngrounded,
     Ungrounded,
     Incorrect,
     Partial,
@@ -57,6 +59,7 @@ impl LabelV2 {
             LabelV2::RetrievalMiss => "RETRIEVAL_MISS",
             LabelV2::SelectionMiss => "SELECTION_MISS",
             LabelV2::RefusalWrong => "REFUSAL_WRONG",
+            LabelV2::CorrectUngrounded => "CORRECT_UNGROUNDED",
             LabelV2::Ungrounded => "UNGROUNDED",
             LabelV2::Incorrect => "INCORRECT",
             LabelV2::Partial => "PARTIAL",
@@ -104,6 +107,9 @@ pub struct ScoreV2 {
     /// from retrieval means and the faithfulness mean.
     #[serde(default)]
     pub expect_no_retrieval: bool,
+    /// Label-weight profile from golden (`full` / `retrieval_primary`).
+    #[serde(default)]
+    pub eval_gate: crate::golden_set::EvalGate,
 }
 
 /// Judge label thresholds (design §5 initial values). Report-only until

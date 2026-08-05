@@ -25,7 +25,7 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `budget-exhausted-final-tokens.nudge.md` | Same closing turn, token-ceiling variant (states token fact) |
 | `budget-exhausted-carryover.tmpl.md` | Last successful tool payload (`{tool}`, `{body}`) |
 | `codegen-no-output.nudge.md` | Empty sandbox round |
-| `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts |
+| `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts (`{n_fail}`, `{n_max}` consecutive threshold) |
 | `codegen-untrusted-prefix.nudge.md` | Untrusted tool-output prefix |
 | `native-tools-closed.tmpl.md` | Single fixed rejection for the closed native model surface (SDK method or superseded native tool name issued as a native tool call; error code `native_tools_closed`) |
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
@@ -46,6 +46,6 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 
 `../deprecated/loop-legacy/no-chunk-*.md` — host no-chunk continue/grace. Kept for unit tests via `prompt_assets` only.
 
-Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`, `{violation_detail}`, `{action}`.
+Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`, `{violation_detail}`, `{action}`, `{n_fail}`, `{n_max}` (sandbox consecutive failures).
 
 `pipeline/table-supervision/obs-*.md` observations (`{sql}`, `{rows}`, `{table_id}`, …) are **not** loaded here: they are rendered by the `avrag-struct-supervision` `prompts.rs` mini engine (`include_str!` + key/block/pick substitution).

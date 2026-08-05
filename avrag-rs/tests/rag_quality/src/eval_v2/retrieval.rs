@@ -301,6 +301,7 @@ mod tests {
             client_time: None,
             rubric_notes: None,
             expect_no_retrieval: false,
+            eval_gate: crate::golden_set::EvalGate::Full,
         }
     }
 

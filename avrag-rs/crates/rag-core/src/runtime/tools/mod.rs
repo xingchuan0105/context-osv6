@@ -58,6 +58,9 @@ pub(crate) fn scored_chunk_to_json(chunk: &ScoredChunk) -> serde_json::Value {
         "chunk_type": chunk.chunk_type,
         "parser_backend": chunk.parser_backend,
     });
+    if let Some(c) = chunk.cursor {
+        value["cursor"] = serde_json::json!(c);
+    }
     if is_page_raster {
         value["modality"] = serde_json::json!("page_raster");
         value["retrieval_hint"] =

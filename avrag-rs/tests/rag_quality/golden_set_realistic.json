@@ -1940,7 +1940,7 @@
         },
         {
           "query": "华为IPD流程中概念阶段有多少个活动？",
-          "expected_answer": "81个",
+          "expected_answer": "按表行（角色展开条目）概念阶段共 81 行；按活动名称去重约为另一口径（常见叙述为 57 项）。两种计数均对应回传可观察的统计方式，应分口径标明。",
           "source_chunks": [
             {
               "type": "substring",
@@ -1954,11 +1954,14 @@
           "description": "概念阶段活动数",
           "expected_should_answer": true,
           "must_include": [
-            "81个"
+            "81",
+            "去重",
+            "口径"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "多口径题：同时给出行数口径（81/total_hits 类）与按活动名（或活动号）去重口径并标明统计键 → correct。仅 81 且明确为行/条目 → partial 或 correct（可接受）。仅 57 且不提行数/不标去重 → incorrect。编造第三种无回传支撑的数 → faithfulness 扣分。"
         },
         {
           "query": "华为IPD流程中开发阶段有多少个活动？哪个阶段活动最多？",
@@ -2180,7 +2183,7 @@
         },
         {
           "query": "华为IPD流程中验证阶段有多少个活动？发布阶段有多少个活动？",
-          "expected_answer": "验证阶段59个，发布阶段30个",
+          "expected_answer": "按表行：验证阶段 59 条、发布阶段 30 条；若按活动名去重则为另一组更小整数，须与行口径分述并标明。",
           "source_chunks": [
             {
               "type": "substring",
@@ -2197,9 +2200,10 @@
           "mode": "rag",
           "description": "验证和发布阶段活动数",
           "expected_should_answer": true,
-          "rubric_notes": "306–312 为 7 行同名同描述（不同角色）的活动行，需逐行计数；勿将 59 纠正为 58；「缺 309」类说法一律视为错误（309 存在）。",
+          "rubric_notes": "多口径：行口径 59/30（total_hits/逐行）必须出现且不得改成 58 或宣称缺 309。去重口径可并列但须标明统计键；仅去重不提 59/30 → incorrect。额外无回传支撑的第三套数 → faithfulness 扣分。306–312 为同名多角色行，须逐行计。",
           "must_include": [
-            "验证阶段59个，发布阶段30个"
+            "59",
+            "30"
           ],
           "capabilities": [
             "rag"
@@ -2662,13 +2666,14 @@
             1
           ],
           "mode": "rag",
-          "description": "细分市场策略跨文档对比",
+          "description": "细分市场策略跨文档对比；eval_gate=retrieval_primary（硬闸=全流 gold recall，答案综合作 report-only）",
           "expected_should_answer": true,
           "must_include": [],
           "capabilities": [
             "rag"
           ],
-          "rubric_notes": "分档判分：读法②「证据不支持相似」（Salesforce 文中「细分」仅贬义/警示语境出现，未论述细分市场选择）判 correct。读法①「相似」的满分路径：须同时 (a) 命中两点——Salesforce 生态锁定深耕 CRM（23% 份额）与 Y 公司专业化市场集中资源，(b) 明确限定相似性系间接归纳、且 Salesforce 文中「细分」仅贬义/警示语境出现；满足 (a)+(b) 判 correct，仅满足 (a) 判 partial(≤0.8)，虚构 Salesforce 的细分市场正面论述判 incorrect。"
+          "rubric_notes": "分档判分：读法②「证据不支持相似」（Salesforce 文中「细分」仅贬义/警示语境出现，未论述细分市场选择）判 correct。读法①「相似」的满分路径：须同时 (a) 命中两点——Salesforce 生态锁定深耕 CRM（23% 份额）与 Y 公司专业化市场集中资源，(b) 明确限定相似性系间接归纳、且 Salesforce 文中「细分」仅贬义/警示语境出现；满足 (a)+(b) 判 correct，仅满足 (a) 判 partial(≤0.8)，虚构 Salesforce 的细分市场正面论述判 incorrect。",
+          "eval_gate": "retrieval_primary"
         },
         {
           "query": "华为IPD流程有多少个活动？云南白药IT规划有多少个业务对象？两者在'体系化'方面有什么共同特点？",

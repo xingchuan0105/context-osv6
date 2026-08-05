@@ -34,6 +34,10 @@ pub struct IterationState {
     /// The per-round retrieval summary reports "new vs already-seen" so the
     /// model has a saturation signal (rounds burning with zero new evidence).
     pub seen_retrieval_aliases: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// Cross-round `chunk_id → first #alias` for bridge body delta-only returns
+    /// (multi-round context management P0). Shared into RuntimeBridge.
+    pub seen_chunk_aliases:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
     /// A7: cross-block `save`/`load` workspace for this agent run.
     pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
     /// A3: allowed SaC methods for this run (empty = open).

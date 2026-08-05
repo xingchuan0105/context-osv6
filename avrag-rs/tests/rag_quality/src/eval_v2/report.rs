@@ -106,10 +106,11 @@ pub fn render_summary_md(
     md.push_str("\n## Per-question\n\n");
     for (i, s) in scores.iter().enumerate() {
         md.push_str(&format!(
-            "### Q{} [{}] label={}\n\n",
+            "### Q{} [{}] label={} eval_gate={}\n\n",
             i + 1,
             s.subset,
-            s.label.as_str()
+            s.label.as_str(),
+            s.eval_gate.as_str(),
         ));
         md.push_str(&format!(
             "- retrieval: recall={:.2} (@{}={:.2}) hit={}\n",
@@ -159,7 +160,7 @@ pub fn render_summary_md(
 /// ANY round); `recall_at_k` is the top-k view.
 pub fn render_per_query_tsv(scores: &[ScoreV2]) -> String {
     let mut out = String::from(
-        "n\tsubset\tlabel\tcorrectness\tfaithfulness\trelevancy\trecall\trecall_at_k\tquery\n",
+        "n\tsubset\tlabel\teval_gate\tcorrectness\tfaithfulness\trelevancy\trecall\trecall_at_k\tquery\n",
     );
     for (i, s) in scores.iter().enumerate() {
         let (correctness, faithfulness, relevancy) = match &s.judge {
@@ -172,10 +173,11 @@ pub fn render_per_query_tsv(scores: &[ScoreV2]) -> String {
         };
         let clean = |v: &str| v.replace(['\t', '\n', '\r'], " ");
         out.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{:.4}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{:.4}\t{}\n",
             i + 1,
             clean(&s.subset),
             s.label.as_str(),
+            s.eval_gate.as_str(),
             correctness,
             faithfulness,
             relevancy,
@@ -273,6 +275,7 @@ mod tests {
             model_answer: Some("2019 年，Y公司在大连投资建厂。".to_string()),
             context_source: crate::eval_v2::ContextSource::Cited,
             expect_no_retrieval: false,
+            eval_gate: crate::golden_set::EvalGate::Full,
         }
     }
 

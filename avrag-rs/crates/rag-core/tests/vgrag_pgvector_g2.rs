@@ -188,6 +188,7 @@ async fn try_fixture() -> Option<Fixture> {
             chunk_type: "text".into(),
             parser_backend: Some("g2".into()),
             source_locator: None,
+            cursor: None,
         }],
         multimodal_chunks: vec![],
         entities: vec![

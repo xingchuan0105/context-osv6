@@ -83,6 +83,9 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                         parser_backend: None,
                         source_locator: None,
                         parse_run_id: None,
+                        cursor: avrag_retrieval_data_plane::cursor_from_value(Some(
+                            &chunk.metadata,
+                        )),
                     }
                 })
                 .collect();

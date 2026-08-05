@@ -28,7 +28,7 @@ pub mod metrics;
 pub mod metrics_v2;
 pub mod tool_coverage;
 
-pub use golden_set::{GoldenDataset, GoldenDifficulty, GoldenExample, GoldenSubset};
+pub use golden_set::{EvalGate, GoldenDataset, GoldenDifficulty, GoldenExample, GoldenSubset};
 pub use harness::{EvaluationHarness, HarnessConfig, RagEvaluator};
 pub use harness_extract::{
     CitedChunk, CitedChunks, RetrievedChunk, RetrievedChunks, extract_cited_chunks,

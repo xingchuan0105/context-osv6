@@ -36,6 +36,9 @@ pub struct RuntimeBridge {
     /// of one worker run (per-worker namespace; agent-loop IterationState
     /// owns the Arc). Tests default to a fresh counter.
     alias_counter: Arc<std::sync::atomic::AtomicU64>,
+    /// Cross-round `chunk_id → first alias` for delta-only body (multi-round
+    /// context management P0). Shared across the run like `alias_counter`.
+    seen_chunk_aliases: Arc<Mutex<std::collections::HashMap<String, String>>>,
 }
 
 impl RuntimeBridge {
@@ -47,12 +50,22 @@ impl RuntimeBridge {
             captured_results: Arc::new(Mutex::new(Vec::new())),
             captured_calls: Arc::new(Mutex::new(Vec::new())),
             alias_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            seen_chunk_aliases: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
     /// K2: share one alias counter across the worker run's blocks.
     pub fn with_alias_counter(mut self, counter: Arc<std::sync::atomic::AtomicU64>) -> Self {
         self.alias_counter = counter;
+        self
+    }
+
+    /// Share cross-round chunk→alias map for body dedupe.
+    pub fn with_seen_chunk_aliases(
+        mut self,
+        map: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    ) -> Self {
+        self.seen_chunk_aliases = map;
         self
     }
 
@@ -447,13 +460,39 @@ impl HostBridge for RuntimeBridge {
         if ALIASED_METHODS.contains(&canonical)
             && let Some(items) = data.get_mut("chunks").and_then(|v| v.as_array_mut())
         {
+            let mut seen = self
+                .seen_chunk_aliases
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             for item in items {
-                if item.get("chunk_id").and_then(|v| v.as_str()).is_some() {
+                let Some(cid) = item
+                    .get("chunk_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                else {
+                    continue;
+                };
+                if let Some(prev_alias) = seen.get(&cid).cloned() {
+                    // Cross-round reseen: keep pointer, omit body (P0 multi-round).
+                    item["alias"] = json!(prev_alias.clone());
+                    item["reseen"] = json!(prev_alias);
+                    item["body_omitted"] = json!(true);
+                    if let Some(obj) = item.as_object_mut() {
+                        if let Some(t) = obj.get_mut("text") {
+                            *t = json!("");
+                        }
+                        if let Some(t) = obj.get_mut("content") {
+                            *t = json!("");
+                        }
+                    }
+                } else {
                     let n = self
                         .alias_counter
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                         + 1;
-                    item["alias"] = json!(format!("#{n}"));
+                    let alias = format!("#{n}");
+                    item["alias"] = json!(alias.clone());
+                    seen.insert(cid, alias);
                 }
             }
         }
@@ -540,6 +579,7 @@ mod tests {
                 parser_backend: None,
                 source_locator: None,
                 parse_run_id: None,
+            cursor: None,
             }])
         }
 
@@ -561,6 +601,7 @@ mod tests {
                 parser_backend: None,
                 source_locator: None,
                 parse_run_id: None,
+            cursor: None,
             };
             Ok(Bm25SearchOutput {
                 chunks: vec![chunk],
@@ -623,6 +664,7 @@ mod tests {
                     parser_backend: None,
                     source_locator: None,
                     parse_run_id: None,
+            cursor: None,
                 }],
             })
         }
@@ -649,6 +691,7 @@ mod tests {
                 parser_backend: None,
                 source_locator: None,
                 parse_run_id: None,
+            cursor: None,
             }])
         }
     }

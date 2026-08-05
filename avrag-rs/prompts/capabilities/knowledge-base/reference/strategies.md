@@ -47,7 +47,7 @@ Claim checklist (copy and tick against returns):
 
 ## 默认路径（一屏）
 
-- **表类**（计数/过滤/表序/聚合）→ 优先 struct 两段式（catalog→query）；`grep` 的 `total_hits` 数文本行；未声明去重时行数口径优先。细项：**strategies-tables** + **how-to-read-tables**。
+- **表类**（计数/过滤/表序/聚合）→ 优先 struct 两段式（catalog→query）；`grep` 的 `total_hits` 数**命中行**；同名多行展开时行数与去重项数是**可并列的两种口径**（分述并标明，而非只裁决一个整数）。细项：**strategies-tables** + **how-to-read-tables**。
 - **金额/编号/表内字面** → `lexical` / `grep`；`dense` 作定位线索。
 - **元数据 Date/Status** → 中英双词并行探测。
 - **证据** → 终答主张指向回传 alias；`SELECTED: #n`。
@@ -58,6 +58,7 @@ Claim checklist (copy and tick against returns):
 |------|--------------|----------|
 | `dense` 高分只有概念叙述 | 主题相关；目标数字可能仍未知 | 从叙述「推」出未出现数字 |
 | 多数字题只见一个数 | 其余主张仍未知 | 只答一半即结束 |
+| 回传已并列多项（编号点/具名原则），终答只写其中几条 | 未写项仍在回传中 | 以「够完整」收束而漏写；细项见 **strategies-grounding** |
 | 连续轮次新 alias≈0 | 该查询形态饱和 | 同义重扫却期待新覆盖 |
 | 零轮 `client.*` 即终答意图 | 文档侧均未覆盖 | 常识当库内已检索 |
 | `dense` 有 alias 终答无 `SELECTED` | 主张无引用圈定 | 有 hit 仍不圈 alias |

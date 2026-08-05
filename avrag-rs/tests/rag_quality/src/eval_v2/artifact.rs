@@ -174,6 +174,7 @@ mod tests {
             client_time: None,
             rubric_notes: Some("接受「2019 年」「2019年」".to_string()),
             expect_no_retrieval: false,
+            eval_gate: crate::golden_set::EvalGate::Full,
         }
     }
 

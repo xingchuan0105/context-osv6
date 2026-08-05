@@ -302,6 +302,7 @@ impl TextChunkRow {
     fn into_scored(self, channel: &str) -> ScoredChunk {
         // Figure dual-write (2026-08-04) stores asset_id/image_path/caption on source_locator.
         let (asset_id, image_path, caption) = figure_meta_from_locator(self.source_locator.as_ref());
+        let cursor = avrag_retrieval_data_plane::cursor_from_value(self.source_locator.as_ref());
         ScoredChunk {
             chunk_id: self.chunk_id,
             doc_id: self.doc_id,
@@ -316,6 +317,7 @@ impl TextChunkRow {
             parser_backend: self.parser_backend,
             source_locator: self.source_locator,
             parse_run_id: Some(self.parse_run_id),
+            cursor,
         }
     }
 }
@@ -380,6 +382,7 @@ impl MultimodalChunkRow {
             parser_backend: self.parser_backend,
             source_locator: self.source_locator,
             parse_run_id: Some(self.parse_run_id),
+            cursor: None,
         }
     }
 }

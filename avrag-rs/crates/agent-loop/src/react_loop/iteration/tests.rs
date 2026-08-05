@@ -89,6 +89,9 @@ fn empty_state() -> IterationState {
         seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
             std::collections::HashSet::new(),
         )),
+        seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
         session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
         sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
         query_card: None,
@@ -254,6 +257,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
                 parser_backend: None,
                 source_locator: None,
                 parse_run_id: None,
+                cursor: None,
             }])
         }
 
@@ -445,7 +449,9 @@ async fn consecutive_code_errors_break_to_synthesis() {
     let loop_ = test_loop();
     let mode = rag_mode();
     let mut state = empty_state();
-    state.consecutive_sandbox_errors = 1;
+    // Threshold is MAX_CONSECUTIVE_SANDBOX_ERRORS (4): counter increments on
+    // this failing turn, so start at 3 → become 4 → break.
+    state.consecutive_sandbox_errors = ReActLoop::MAX_CONSECUTIVE_SANDBOX_ERRORS.saturating_sub(1);
     let sink = CollectingSink::new();
     let auth = test_auth();
     let response =
@@ -471,8 +477,10 @@ async fn consecutive_code_errors_break_to_synthesis() {
         outcome.control,
         IterationControl::BreakToSynthesis { .. }
     ));
-    assert!(outcome.sandbox_break);
-    assert!(outcome.record.is_none());
+    // Break is recorded for eval visibility (no longer silent sandbox_break).
+    assert!(!outcome.sandbox_break);
+    let rec = outcome.record.expect("break should be recorded");
+    assert_eq!(rec.exit_reason, "sandbox_break_to_synthesis");
 }
 
 #[tokio::test]

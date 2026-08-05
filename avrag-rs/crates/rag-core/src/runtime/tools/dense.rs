@@ -252,13 +252,15 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
 
             // Display-scale scores of the pre-fuse pool (for adaptive_k shape — not RRF).
             let pool_scores: Vec<f32> = chunks.iter().map(|c| c.score).collect();
-            let (chunks, vgrag_stats, adaptive_k, score_shape, retrieval_path) =
+            let (mut shortlist, longlist, vgrag_stats, adaptive_k, score_shape, retrieval_path) =
                 match backend {
                     super::vgrag::DenseBackend::Ann => {
                         let adaptive = super::super::adaptive_k::adaptive_k(&pool_scores);
+                        let longlist = chunks.clone();
                         chunks.truncate(adaptive.k);
                         (
                             chunks,
+                            longlist,
                             super::vgrag::VgragFuseStats::default(),
                             adaptive.k,
                             adaptive.shape.as_str(),
@@ -277,12 +279,43 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                         let n_g = vstats.graph_n;
                         let (k, shape) =
                             super::vgrag::final_cut_k(&pool_scores, fused.len(), n_g);
-                        let mut fused = fused;
-                        fused.truncate(k);
-                        (fused, vstats, k, shape.as_str(), "vgrag")
+                        let longlist = fused.clone();
+                        let mut short = fused;
+                        short.truncate(k);
+                        (short, longlist, vstats, k, shape.as_str(), "vgrag")
                     }
                 };
             let vgrag_graph_n = vgrag_stats.graph_n;
+
+            // S+L adjacent merge: shortlist S + longlist L by cursor (design 2026-08-05).
+            let chunks = if crate::merge::adjacent_merge_enabled() {
+                if let Some(store) = runtime.content_store() {
+                    crate::merge::hydrate_cursors_from_store(
+                        store.as_ref(),
+                        auth,
+                        &mut shortlist,
+                    )
+                    .await;
+                    // Also hydrate longlist neighbors we might pull.
+                    let mut long_owned = longlist;
+                    crate::merge::hydrate_cursors_from_store(
+                        store.as_ref(),
+                        auth,
+                        &mut long_owned,
+                    )
+                    .await;
+                    crate::merge::adjacent_merge_shortlist_longlist(
+                        shortlist,
+                        &long_owned,
+                        1,
+                        8,
+                    )
+                } else {
+                    crate::merge::adjacent_merge_shortlist_longlist(shortlist, &longlist, 1, 8)
+                }
+            } else {
+                shortlist
+            };
 
             let degrade_reason = if degrade_trace.is_empty() {
                 None

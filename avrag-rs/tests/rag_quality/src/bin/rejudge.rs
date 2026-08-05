@@ -201,6 +201,8 @@ fn main() -> anyhow::Result<()> {
                 cited_gold_hits: old_score.selection.golden_matched_in_cited,
                 judge: Some(&parsed),
                 thresholds: &JudgeThresholds::default(),
+                // Prefer gate persisted on ScoreV2; default Full for pre-field artifacts.
+                eval_gate: old_score.eval_gate,
             });
             let new_score = ScoreV2 {
                 query: old_score.query.clone(),
@@ -214,6 +216,7 @@ fn main() -> anyhow::Result<()> {
                 model_answer: old_score.model_answer.clone(),
                 context_source: judge_input.context_source,
                 expect_no_retrieval: judge_input.expect_no_retrieval,
+                eval_gate: old_score.eval_gate,
             };
             let mut updated = artifact.clone();
             updated["score_v2"] = serde_json::to_value(&new_score)?;

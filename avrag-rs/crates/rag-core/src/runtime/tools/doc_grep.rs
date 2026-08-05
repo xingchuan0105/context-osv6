@@ -347,6 +347,7 @@ mod tests {
             parser_backend: None,
             source_locator: None,
             parse_run_id: None,
+            cursor: None,
         }
     }
 

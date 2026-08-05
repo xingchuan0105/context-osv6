@@ -211,5 +211,6 @@ pub(crate) fn scored_relation_chunk(row: &Value, channel: &str) -> anyhow::Resul
         parser_backend: None,
         source_locator: None,
         parse_run_id: optional_uuid_field(row, "parse_run_id")?,
+            cursor: None,
     })
 }

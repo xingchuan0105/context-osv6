@@ -95,6 +95,7 @@ fn make_scored_chunk(seed: u128, source: &str) -> ScoredChunk {
         parser_backend: None,
         source_locator: None,
         parse_run_id: None,
+        cursor: None,
     }
 }
 

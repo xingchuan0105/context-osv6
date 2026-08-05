@@ -110,6 +110,7 @@ impl PgvectorDataPlane {
                             parser_backend: None,
                             source_locator: None,
                             parse_run_id: Some(row.parse_run_id),
+            cursor: None,
                         });
                     }
                 }

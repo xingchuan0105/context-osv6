@@ -68,6 +68,7 @@ impl ReActLoop {
                     auth,
                     &interpreter_lock,
                     &state.retrieval_aliases,
+                    &state.seen_chunk_aliases,
                     &state.session_fs,
                     &state.sdk_allowed,
                 )
@@ -133,10 +134,24 @@ impl ReActLoop {
         // calls gets an explicit note — otherwise the model guesses why the
         // observation is blank (and typically re-emits the same block).
         let no_output = !any_output && bridge_tool_results.is_empty();
-            let observation = format!(
-                "{}{}{}",
-                format_codegen_observation(&combined_result, any_error, no_output),
-                retrieval_callouts(&all_bridge_calls, &state.seen_retrieval_aliases),
+        // Count consecutive failures before building observation so the nudge
+        // can report n_fail/n_max as environment facts (not after the fact).
+        let n_fail = if any_error {
+            state.consecutive_sandbox_errors = state.consecutive_sandbox_errors.saturating_add(1);
+            state.consecutive_sandbox_errors
+        } else {
+            0
+        };
+        let observation = format!(
+            "{}{}{}",
+            format_codegen_observation(
+                &combined_result,
+                any_error,
+                no_output,
+                n_fail,
+                Self::MAX_CONSECUTIVE_SANDBOX_ERRORS,
+            ),
+            retrieval_callouts(&all_bridge_calls, &state.seen_retrieval_aliases),
             markitdown_format_hints(&codes),
         );
         self.append_codegen_messages(state, llm_response, &observation);
@@ -147,7 +162,10 @@ impl ReActLoop {
             // errored round. Error-status items are filtered downstream
             // (EvidenceStore::insert_from_tool_results skips non-Ok results).
             Self::record_bridge_evidence(state, &combined_result, bridge_tool_results);
-            if let Some(outcome) = self.handle_codegen_error(iteration, state, sink).await {
+            if let Some(outcome) = self
+                .handle_codegen_error(iteration, state, sink, &llm_usage, elapsed_ms)
+                .await
+            {
                 return Ok(outcome);
             }
         } else {
@@ -202,22 +220,36 @@ impl ReActLoop {
         });
     }
 
+    /// Host break after this many **consecutive** sandbox failures (Traceback /
+    /// non-zero exit / `!success`). Lower values starve model repair turns;
+    /// higher values burn round budget. Raised 2→4 (2026-08-05).
+    ///
+    /// Counter is incremented **before** this call when `any_error`; here we
+    /// only decide whether to break.
+    pub(crate) const MAX_CONSECUTIVE_SANDBOX_ERRORS: u8 = 4;
+
     async fn handle_codegen_error(
         &self,
         iteration: u8,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,
+        llm_usage: &crate::runtime::AgentRunUsage,
+        elapsed_ms: u64,
     ) -> Option<IterationOutcome> {
-        state.consecutive_sandbox_errors += 1;
-        if state.consecutive_sandbox_errors < 2 {
+        if state.consecutive_sandbox_errors < Self::MAX_CONSECUTIVE_SANDBOX_ERRORS {
             return None;
         }
         let disclosed_skills = disclosed_skill_ids(&state.disclosed);
+        let msg = format!(
+            "consecutive sandbox errors ({}/{}), breaking to synthesis",
+            state.consecutive_sandbox_errors,
+            Self::MAX_CONSECUTIVE_SANDBOX_ERRORS
+        );
         reasoning_emit::emit_evaluation_telemetry(
             sink,
             iteration,
             "sandbox_break_to_synthesis",
-            "consecutive sandbox errors, breaking to synthesis",
+            &msg,
             &disclosed_skills,
             "sandbox_break_to_synthesis",
         )
@@ -225,18 +257,40 @@ impl ReActLoop {
         let _ = sink
             .emit(AgentEvent::Activity {
                 stage: "sandbox_error".to_string(),
-                message: "consecutive sandbox errors, breaking to synthesis".to_string(),
-                detail: None,
+                message: msg.clone(),
+                detail: Some(msg),
                 counts: Default::default(),
                 sources_preview: Vec::new(),
             })
             .await;
+        // Record the break so eval loop_rounds is not "silent" (previously
+        // sandbox_break skipped TurnEnd and left only the prior code_gen_error).
+        let exit_reason = "sandbox_break_to_synthesis".to_string();
         Some(IterationOutcome {
             control: IterationControl::BreakToSynthesis {
-                reason: "sandbox_break_to_synthesis".to_string(),
+                reason: exit_reason.clone(),
             },
-            record: None,
-            sandbox_break: true,
+            record: Some(ReActIterationRecord {
+                iteration,
+                disclosed_skills,
+                action_type: exit_reason.clone(),
+                observation_preview: truncate_preview(
+                    &format!(
+                        "consecutive sandbox errors {}/{}",
+                        state.consecutive_sandbox_errors,
+                        Self::MAX_CONSECUTIVE_SANDBOX_ERRORS
+                    ),
+                    200,
+                ),
+                llm_usage: Some(llm_usage.clone()),
+                elapsed_ms,
+                exit_reason,
+            }),
+            // Keep true so callers can still detect the break path; telemetry
+            // now has a record — run_retrieval emits TurnEnd when record is Some
+            // only if !sandbox_break. Prefer visible record: clear sandbox_break
+            // skip so the break reason lands in mode_debug.exit_reasons.
+            sandbox_break: false,
         })
     }
 
@@ -276,6 +330,9 @@ impl ReActLoop {
         auth: &contracts::auth_runtime::AuthContext,
         interpreter_lock: &Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
         retrieval_aliases: &Arc<std::sync::atomic::AtomicU64>,
+        seen_chunk_aliases: &Arc<
+            std::sync::Mutex<std::collections::HashMap<String, String>>,
+        >,
         session_fs: &Arc<super::session_fs::SessionFs>,
         sdk_allowed: &Arc<std::collections::HashSet<String>>,
     ) -> (
@@ -316,6 +373,7 @@ impl ReActLoop {
                     auth,
                     &request.doc_scope,
                     Arc::clone(retrieval_aliases),
+                    Arc::clone(seen_chunk_aliases),
                     session_id,
                     Arc::clone(session_fs),
                     meta_str("client_ip"),
@@ -613,7 +671,14 @@ pub(crate) fn format_codegen_result_message(combined_result: &str) -> String {
 /// Append sandbox error recovery hints so the next LLM turn can fix bad API calls.
 /// `no_output` (C3): the round produced nothing at all — empty stdout AND
 /// stderr AND zero bridge calls — so the model gets told instead of guessing.
-fn format_codegen_observation(combined_result: &str, had_error: bool, no_output: bool) -> String {
+/// `n_fail` / `n_max`: consecutive failure count and host break threshold.
+fn format_codegen_observation(
+    combined_result: &str,
+    had_error: bool,
+    no_output: bool,
+    n_fail: u8,
+    n_max: u8,
+) -> String {
     let mut out = combined_result.to_string();
     if no_output {
         out.push_str("\n\n");
@@ -626,7 +691,7 @@ fn format_codegen_observation(combined_result: &str, had_error: bool, no_output:
     // inventing native tool_calls (dense_search as tool schema). Body from
     // prompts/loop/codegen-sandbox-error.nudge.md
     out.push_str("\n\n");
-    out.push_str(super::prompt_assets::codegen_sandbox_error_nudge());
+    out.push_str(&super::prompt_assets::codegen_sandbox_error_nudge(n_fail, n_max));
     out
 }
 
@@ -698,7 +763,7 @@ mod tests {
     #[test]
     fn sandbox_error_observation_includes_sdk_reminder() {
         let raw = "[block 0] stdout: \nstderr: AttributeError: no attribute 'hybrid_search'\n";
-        let obs = format_codegen_observation(raw, true, false);
+        let obs = format_codegen_observation(raw, true, false, 1, 4);
         assert!(obs.contains("[sandbox_error]"), "{obs}");
         // Observational: lists available client methods (not "please use").
         assert!(
@@ -709,24 +774,30 @@ mod tests {
             obs.contains("client.方法名") || obs.contains("client."),
             "{obs}"
         );
+        assert!(
+            obs.contains("1/4") && obs.contains("print") && obs.contains("AttributeError"),
+            "{obs}"
+        );
+        assert!(!obs.contains("{n_fail}") && !obs.contains("{n_max}"), "{obs}");
     }
 
     #[test]
     fn no_output_round_gets_feedback_note() {
         // C3: empty stdout + empty stderr + zero bridge calls → explicit note.
         let raw = "[block 0] stdout: \nstderr: \n";
-        let obs = format_codegen_observation(raw, false, true);
+        let obs = format_codegen_observation(raw, false, true, 0, 4);
         assert!(obs.contains("[no_output]"));
         assert!(
             obs.contains("stdout") && obs.contains("stderr") && obs.contains("client.*"),
             "{obs}"
         );
         // A round that produced output must NOT get the note.
-        let obs = format_codegen_observation("[block 0] stdout: 42\nstderr: ", false, false);
+        let obs = format_codegen_observation("[block 0] stdout: 42\nstderr: ", false, false, 0, 4);
         assert!(!obs.contains("[no_output]"));
         // Note composes with the sandbox-error hint.
-        let obs = format_codegen_observation(raw, true, true);
+        let obs = format_codegen_observation(raw, true, true, 2, 4);
         assert!(obs.contains("[no_output]") && obs.contains("[sandbox_error]"));
+        assert!(obs.contains("2/4"), "{obs}");
     }
 
     #[test]
@@ -850,6 +921,9 @@ mod tests {
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             seen_retrieval_aliases: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashSet::new(),
+            )),
+            seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
             )),
             session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),

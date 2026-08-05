@@ -735,6 +735,7 @@ impl V2RunCtx {
             cited_gold_hits: selection.golden_matched_in_cited,
             judge: judge.as_ref(),
             thresholds: &eval_v2::JudgeThresholds::default(),
+            eval_gate: example.eval_gate,
         });
         eval_v2::ScoreV2 {
             query: example.query.clone(),
@@ -748,6 +749,7 @@ impl V2RunCtx {
             model_answer: answer.map(str::to_string),
             context_source,
             expect_no_retrieval: example.expect_no_retrieval,
+            eval_gate: example.eval_gate,
         }
     }
 
