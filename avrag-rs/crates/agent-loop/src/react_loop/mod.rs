@@ -20,6 +20,7 @@ mod iteration_tools;
 pub mod json_fence;
 mod message_format;
 mod context_visibility;
+mod claim_notes;
 pub mod message_queue;
 pub mod parse;
 pub mod prompt_assets;
@@ -173,6 +174,7 @@ impl ReActLoop {
             seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            evidence_notes: Vec::new(),
             session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(mode.sdk_primitives.iter().cloned().collect()),
             query_card,

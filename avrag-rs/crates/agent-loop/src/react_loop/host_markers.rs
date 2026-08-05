@@ -71,6 +71,11 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         emitted_at: "prompts/loop/evidence-index.tmpl.md (prompt_assets::evidence_index)",
     },
     HostMarker {
+        tag: "[claim_notes]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/claim-notes.tmpl.md (prompt_assets::claim_notes)",
+    },
+    HostMarker {
         tag: "<retrieval_summary>",
         forbidden_in_final: true,
         emitted_at: "prompts/loop/retrieval-summary.tmpl.md::[retrieval_summary] 角括号仿造变体",

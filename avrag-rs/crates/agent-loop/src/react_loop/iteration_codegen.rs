@@ -151,7 +151,11 @@ impl ReActLoop {
                 n_fail,
                 Self::MAX_CONSECUTIVE_SANDBOX_ERRORS,
             ),
-            retrieval_callouts(&all_bridge_calls, &state.seen_retrieval_aliases),
+            retrieval_callouts(
+                &all_bridge_calls,
+                &state.seen_retrieval_aliases,
+                &mut state.evidence_notes,
+            ),
             markitdown_format_hints(&codes),
         );
         self.append_codegen_messages(state, llm_response, &observation);
@@ -469,9 +473,13 @@ impl ReActLoop {
 /// `seen_aliases` is the run's cross-round set of already-surfaced aliases; the
 /// summary reports how many aliases are **new this round** vs already seen, so
 /// the model has a saturation signal (rounds that return zero new evidence).
+///
+/// `evidence_notes` is the durable P1″ claim board: host extracts one-line
+/// facts from expanded hits and merges them for later LLM-boundary inject.
 fn retrieval_callouts(
     bridge_calls: &[super::deps::BridgeCallObs],
     seen_aliases: &std::sync::Mutex<std::collections::HashSet<String>>,
+    evidence_notes: &mut Vec<super::claim_notes::ClaimNoteLine>,
 ) -> String {
     const RETRIEVAL_METHODS: &[&str] = &["dense", "lexical", "grep", "web", "fetch"];
     let call_count = bridge_calls
@@ -527,7 +535,11 @@ fn retrieval_callouts(
     let mut cards = 0usize;
     let mut stubs = 0usize;
     let mut expand_chars = 0usize;
+    let mut claim_datas: Vec<&serde_json::Value> = Vec::new();
     for call in bridge_calls {
+        if call.result.status != contracts::ToolStatus::Ok {
+            continue;
+        }
         if let Some(data) = call.result.data.as_ref() {
             expanded += data
                 .get("visibility_expanded_n")
@@ -545,8 +557,13 @@ fn retrieval_callouts(
                 .get("visibility_expand_chars")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0) as usize;
+            if RETRIEVAL_METHODS.contains(&call.method.as_str()) {
+                claim_datas.push(data);
+            }
         }
     }
+    // P1″: host claim board from expanded bodies (durable; LLM boundary injects).
+    super::claim_notes::accumulate_from_tool_datas(evidence_notes, claim_datas);
     let mut out = String::from("\n\n");
     out.push_str(&super::prompt_assets::retrieval_summary(
         call_count,
@@ -960,6 +977,7 @@ mod tests {
             seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            evidence_notes: Vec::new(),
             session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
             query_card: None,
@@ -1082,7 +1100,8 @@ mod tests {
         ];
         let seen: std::sync::Mutex<std::collections::HashSet<String>> =
             std::sync::Mutex::new(std::collections::HashSet::new());
-        let out = retrieval_callouts(&calls, &seen);
+        let mut notes = Vec::new();
+        let out = retrieval_callouts(&calls, &seen, &mut notes);
         assert!(out.contains("本轮检索 3 次，共返回 3 条"), "{out}");
         assert!(out.contains("可见 alias: #1, #2, #3"), "{out}");
         assert!(out.contains("3 个为本轮新增、0 个为历史已见"), "{out}");
@@ -1091,7 +1110,7 @@ mod tests {
         assert!(out.contains("命中明确"), "{out}");
         assert!(out.contains("区分度低"), "{out}");
         // A second round returning the same aliases must report saturation.
-        let out2 = retrieval_callouts(&calls, &seen);
+        let out2 = retrieval_callouts(&calls, &seen, &mut notes);
         assert!(out2.contains("0 个为本轮新增、3 个为历史已见"), "{out2}");
     }
 
@@ -1099,7 +1118,8 @@ mod tests {
     fn retrieval_callouts_empty_without_retrieval() {
         let seen: std::sync::Mutex<std::collections::HashSet<String>> =
             std::sync::Mutex::new(std::collections::HashSet::new());
-        assert!(retrieval_callouts(&[], &seen).is_empty());
+        let mut notes = Vec::new();
+        assert!(retrieval_callouts(&[], &seen, &mut notes).is_empty());
         // A non-retrieval method (doc_profile) produces no summary line.
         let calls = vec![bridge_call(
             "doc_profile",
@@ -1107,7 +1127,32 @@ mod tests {
             contracts::ToolStatus::Ok,
             serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
         )];
-        assert!(retrieval_callouts(&calls, &seen).is_empty());
+        assert!(retrieval_callouts(&calls, &seen, &mut notes).is_empty());
+    }
+
+    #[test]
+    fn retrieval_callouts_accumulates_claim_notes_from_expanded() {
+        let calls = vec![bridge_call(
+            "dense",
+            "q",
+            contracts::ToolStatus::Ok,
+            serde_json::json!({
+                "chunks": [{
+                    "chunk_id": "c1",
+                    "alias": "#1",
+                    "visibility": "expanded",
+                    "text": "项目预算为 120 万元，工期 18 个月。"
+                }],
+                "visibility_expanded_n": 1,
+            }),
+        )];
+        let seen: std::sync::Mutex<std::collections::HashSet<String>> =
+            std::sync::Mutex::new(std::collections::HashSet::new());
+        let mut notes = Vec::new();
+        let _ = retrieval_callouts(&calls, &seen, &mut notes);
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].alias, "#1");
+        assert!(notes[0].excerpt.contains("120"));
     }
 
     #[test]

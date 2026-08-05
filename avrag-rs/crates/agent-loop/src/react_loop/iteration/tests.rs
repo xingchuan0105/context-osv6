@@ -92,6 +92,7 @@ fn empty_state() -> IterationState {
         seen_chunk_aliases: std::sync::Arc::new(std::sync::Mutex::new(
             std::collections::HashMap::new(),
         )),
+        evidence_notes: Vec::new(),
         session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
         sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
         query_card: None,

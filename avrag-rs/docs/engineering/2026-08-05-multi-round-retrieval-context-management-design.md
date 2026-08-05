@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |------|------|
 | 日期 | 2026-08-05 |
-| 状态 | **P0 + U-P0～U-P3 已实现**（reseen 成员闭包、visibility card/expand、history stub、evidence_index）；P1″ 深度 notes 板可续 |
+| 状态 | **P0 + U-P0～U-P3 + working-set char 裁剪 + P1″ claim_notes 已实现**（reseen、visibility、history stub、`WORKING_SET_CHAR_BUDGET` demote、`state.evidence_notes` + `[claim_notes]`） |
 | 动机 | 多轮 `client.dense` / codegen 回传叠厚，稀释 agent 注意力（context rot）；单 call 内已有 RRF/VGRAG cap，**跨轮无 body 级去重与折叠** |
 | 非目标 | Host 语义「够了禁止再检」；替代 skill 的 claim 覆盖决策；全量 transcript 丢弃（持久化/评测仍可全量） |
 | 相关 | pi-book ch08 `transformContext` / ch09 tool pipeline；Anthropic compaction + tool-result clearing + memory；`retrieval_summary` / `seen_aliases`；`trim_tool_results_for_synthesis`；邻接 S+L 设计；VGRAG final cut；波次审查 `2026-08-05-wave-doc-review.md`；**与 S+L 统一**见 `2026-08-05-s-plus-l-vs-p1-plus-conflict-and-unification.md` |

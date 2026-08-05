@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |------|------|
 | 日期 | 2026-08-05 |
-| 状态 | **U-P0～U-P3 已实现**（member 闭包 reseen、visibility expand/card/stub、history clear、evidence_index）；working-set 精细 token 账户可续 |
+| 状态 | **U-P0～U-P3 + working-set char 裁剪 + P1″ claim_notes 已实现**（member 闭包 reseen、visibility、history stub、`WORKING_SET_CHAR_BUDGET` 近轮 demote、`[claim_notes]` 板） |
 | 相关 | `2026-08-05-retrieval-adjacent-shortlist-merge-design.md`；`2026-08-05-multi-round-retrieval-context-management-design.md`；现码 `merge::adjacent_merge_*`、`bridge` reseen |
 | 验收锚 | q017（邻并增益）；q141（多轮噪声 / 假拒） |
 
@@ -298,11 +298,12 @@ on later hit(chunk_id=X):
 ## 10. 落地阶段（实现时）
 
 ```text
-U-P0  member_chunk_ids 输出 + reseen 闭包登记          // 修 C1 双灌
+U-P0  member_chunk_ids 输出 + reseen 闭包登记          // 修 C1 双灌  ✓
 U-P1  visibility_plan + expand_token_budget
-      adjacent 优先 expand；普通 card                  // 修 C3
-U-P2  assemble 前 history stub + working_set token     // 修 C2/C5/q141
-U-P3  evidence_index / notes 板 + 遥测字段
+      adjacent 优先 expand；普通 card                  // 修 C3  ✓
+U-P2  assemble 前 history stub + working_set char      // 修 C2/C5/q141  ✓
+      （HISTORY_FULL_RETRIEVAL_ROUNDS + WORKING_SET_CHAR_BUDGET demote）
+U-P3  evidence_index + claim_notes 板（P1″） + 遥测字段  ✓
 U-P4  可选：饱和时 pull_budget 降档
 ```
 

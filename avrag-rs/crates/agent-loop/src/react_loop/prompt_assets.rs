@@ -133,6 +133,18 @@ pub fn evidence_index(
     )
 }
 
+/// P1″ cumulative claim notes board (host-extracted fact lines).
+pub fn claim_notes(lines: &str, n: usize, max: usize) -> String {
+    subst(
+        trim_body(loop_prompt!("claim-notes.tmpl.md")),
+        &[
+            ("lines", lines),
+            ("n", &n.to_string()),
+            ("max", &max.to_string()),
+        ],
+    )
+}
+
 pub fn codegen_untrusted_prefix() -> &'static str {
     trim_body(loop_prompt!("codegen-untrusted-prefix.nudge.md"))
 }

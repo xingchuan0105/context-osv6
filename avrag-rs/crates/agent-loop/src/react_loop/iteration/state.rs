@@ -38,6 +38,9 @@ pub struct IterationState {
     /// (multi-round context management P0). Shared into RuntimeBridge.
     pub seen_chunk_aliases:
         std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+    /// P1″ host claim notes board: one-line fact excerpts from expanded hits,
+    /// accumulated across rounds. Injected at the LLM boundary as `[claim_notes]`.
+    pub evidence_notes: Vec<super::super::claim_notes::ClaimNoteLine>,
     /// A7: cross-block `save`/`load` workspace for this agent run.
     pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
     /// A3: allowed SaC methods for this run (empty = open).

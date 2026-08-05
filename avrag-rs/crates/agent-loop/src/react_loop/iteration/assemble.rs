@@ -95,6 +95,17 @@ impl ReActLoop {
                 round_messages.push(ChatMessage::user(block));
             }
         }
+        // P1″: durable claim notes board (host excerpts from expanded hits).
+        // Trailing user message so system+history prefix stays cacheable; not
+        // stored in state.messages (rebuilt each LLM call from evidence_notes).
+        if !state.evidence_notes.is_empty() {
+            let lines = super::super::claim_notes::format_claim_note_lines(&state.evidence_notes);
+            round_messages.push(ChatMessage::user(super::super::prompt_assets::claim_notes(
+                &lines,
+                state.evidence_notes.len(),
+                super::super::claim_notes::MAX_CLAIM_NOTES,
+            )));
+        }
         // B5: LLM boundary transform (default: identity).
         let round_messages = hooks.convert_to_llm(&round_messages);
 
