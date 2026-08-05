@@ -1,10 +1,16 @@
 # ADR 0003: 桌面端混合商业模式——SaaS 订阅 + Desktop 软件许可
 
+> **SUPERSEDED（商业模式）** — 收费对象与客户端许可已被
+> [`docs/adr/0010-share-service-business-model.md`](./0010-share-service-business-model.md)
+> 取代（2026-08-05）：客户端免费无激活；主商品为可分享 Workspace 名额；模型代购储值（×1.5）；
+> 本地分享经 Publish 上云。本文仅作历史决策记录；桌面便携数据面等工程设计仍见
+> `docs/desktop/2026-08-04-portable-runtime-design.md`。
+
 > **编号说明**：本文件标题「ADR 0003」为历史编号；规范引用以文件名编号 **ADR-0004** 为准。
 
 ## Status
 
-Accepted（已实施）
+**Superseded** by ADR-0010（2026-08-05）。下文为原 Accepted 正文，不再作为现行商业叙事。
 
 ## Context
 

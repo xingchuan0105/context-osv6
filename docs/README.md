@@ -8,7 +8,7 @@
 - **单 agent SaC**（Search as Code）：一条 ReAct 循环从指令到答案，检索全部走沙箱 SDK；orchestrator 多 agent 架构已物理删除。设计：`plans/2026-07-30-sac-sdk-single-agent-design.md`
 - **Product Apps + AppState 组合根**：T1–T8 法则生效。见根 `../AGENTS.md` + `agent/product-apps.md`
 - **workspace 唯一产品真相**，无 org（T7/T8）
-- **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；rolling 窗口 + soft limit
+- **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；**现行商业模式见 ADR-0010**（可分享 Workspace 名额 + 代购储值）；旧 token 滚动套餐 / 桌面买断见已取代 ADR-0004
 - **检索桥**：沙箱↔宿主 fd 管道 RPC（`adr/0009-retrieval-bridge.md`）
 - **代码情报工具**：code-review-graph（graphify 已退役，`agent/code-review-graph.md`）
 
@@ -26,7 +26,8 @@
 | `engineering/frontend-visual-debt.md` | 前端视觉债登记册 |
 | `engineering/TEST_PYRAMID_DEDUP_MAP.md` | 测试去重原则与标准语料约定 |
 | `engineering/PROFILE_MEMORY_SCOPE_CHAT_SEARCH.md` | 产品决策：profile memory 仅 Chat+Search |
-| `engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` | 现行用量计费语义参考（frozen v2） |
+| `engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` | 旧 token 套餐用量语义（frozen）；**主商品已由 ADR-0010 翻转**，事件/计量可复用为钱包流水 |
+| `adr/0010-share-service-business-model.md` | **现行商业模式**：可分享 Workspace 订阅、代购×1.5、邀请码、本地 Publish 上云 |
 | `design/STYLE_BASELINE.md` | 现行视觉基线（Slate × Indigo，Canonical） |
 | `desktop/RELEASE-AND-DOWNLOAD.md` | 桌面端构建/签名/发布 runbook |
 | `desktop/VERSIONING.md` | 桌面 SemVer 与云端 API 兼容矩阵 |
@@ -49,7 +50,8 @@
 | `adr/0001-user-level-billing-b2c.md` | 用户级计费 B2C | **现行**（Stripe 描述已过期，文首有注释） |
 | `adr/0002-agent-decision-model-messenger-first.md` | messenger-first 决策模型 | **现行**（尾部两个 Related 链接已失效，已就地标注） |
 | `adr/0003-router-policy-removal-and-auto-mode-subagents.md` | RouterPolicy 移除 | **部分取代**：删除决定有效；orchestrator+subagents 前瞻方向已被 SaC 单 agent 取代（文首有横幅） |
-| `adr/0004-desktop-hybrid-business-model.md` | （文内题 "ADR 0003"）桌面混合商业模式 | **现行**，Accepted（已实施） |
+| `adr/0004-desktop-hybrid-business-model.md` | （文内题 "ADR 0003"）桌面混合商业模式 | **已被 ADR-0010 取代**（客户端买断 + SaaS token） |
+| `adr/0010-share-service-business-model.md` | 分享服务商业模式 | **现行** Accepted（2026-08-05） |
 | `adr/0005-llm-provider-protocol-architecture.md` | （文内题 "ADR 0004"）LLM 四轴协议架构 | **现行**，Accepted（已实施） |
 | `adr/0006-product-architecture-decisions-post-tn.md` | TN 后 13 条产品/架构裁决 | **现行**，最常被引用的决策文档 |
 | `adr/0006-execute-plan-removal-inventory.md` | execute-plan 删除清单 | 已完成快照 |
@@ -62,10 +64,13 @@
 - 存在三个编号 0006 的文件（post-tn / execute-plan / write-heavytail）。
 - `0004-desktop-*.md` 文内标题为 "ADR 0003"、`0005-llm-*.md` 文内标题为 "ADR 0004"：历史编号碰撞，e2e 语料与审计文档引用了 "ADR-0004"，改名会破坏引用，故保留（决策见 `plans/2026-08-02-architecture-deepening-plan.md` §5）。
 - 无 0008。
-- 新增 ADR 时请使用 0010 起的编号。
+- `0010-share-service-business-model.md` 已占用；新增 ADR 请使用 **0011** 起的编号。
 
 ## 已被取代（文首有 SUPERSEDED 横幅，仅作历史记录）
 
+- 商业模式（被 ADR-0010 分享服务取代，2026-08-05）：
+  - `adr/0004-desktop-hybrid-business-model.md`（桌面买断 + SaaS token 托管）
+  - 主商品意义上的 token 三档：`superpowers/specs/2026-06-07-pricing-tiers-revamp-design.md`（及 plan）；`engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` 仅保留计量公式参考
 - orchestrator 时代（被 2026-07-30 SaC 单 agent 设计取代）：
   - `engineering/ORCHESTRATOR_SUBAGENT_CHAT_DESIGN_2026-07-16.md`
   - `engineering/ORCHESTRATOR_SUBAGENT_CHAT_PLAN_2026-07-16.md`
