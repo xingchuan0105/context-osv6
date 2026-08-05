@@ -1,26 +1,63 @@
 //! Postgres-backed exit-metering observer for LLM / embedding calls.
+//!
+//! # Wallet debit (ADR-0010 PR6)
+//!
+//! When a [`WalletStorePort`] is attached and the row is billable, the observer
+//! debits the payer wallet after a successful `llm_usage_events` insert:
+//!
+//! - `list_fen = ceil(official * 1.5)` via [`avrag_billing::list_price_fen`]
+//! - ledger kind `usage_debit` (negative fen)
+//! - idempotency key `usage_debit:{event_id}`
+//!
+//! ## Skip rules
+//!
+//! | Condition | Debit? |
+//! |-----------|--------|
+//! | no wallet store wired | no |
+//! | `billable = false` (worker path) | no |
+//! | `skip_wallet_debit = true` (BYOK / billing_mode) | no |
+//! | list_fen == 0 | no |
+//!
+//! ## Insufficient balance
+//!
+//! Debit failures (including `wallet_insufficient_balance`) are logged at
+//! **error** level and do **not** fail the LLM path (UsageObserver is
+//! fail-open). Balance is never driven negative by the store. A pre-flight
+//! hard-stop is out of scope for PR6; rolling token walls remain interim
+//! protection.
 
 use std::sync::Arc;
 
 use app_core::{
     BillableFeature, MeteringContext, UsageLimitStorePort, UsageLimitUsageRecord, UsageSource,
+    WalletStorePort,
 };
 use async_trait::async_trait;
+use avrag_billing::{UsageDebitInput, debit_platform_usage};
 use avrag_llm::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
-/// Writes exit-metered usage into `llm_usage_events` via [`UsageLimitStorePort`].
+/// Writes exit-metered usage into `llm_usage_events` via [`UsageLimitStorePort`],
+/// and optionally debits the user wallet for platform-proxy spend.
 #[derive(Clone)]
 pub struct PgUsageObserver {
     store: Arc<dyn UsageLimitStorePort>,
     /// When false, rows do not count toward user rolling quotas (ADR 0006 §7 worker path).
     billable: bool,
+    /// Optional wallet store for platform-proxy usage debits (PR6).
+    wallet: Option<Arc<dyn WalletStorePort>>,
+    /// When true, skip wallet debit even if billable (BYOK / billing_mode flag).
+    /// Default `false` → debit platform path.
+    skip_wallet_debit: bool,
 }
 
 impl std::fmt::Debug for PgUsageObserver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PgUsageObserver")
             .field("billable", &self.billable)
+            .field("has_wallet", &self.wallet.is_some())
+            .field("skip_wallet_debit", &self.skip_wallet_debit)
             .finish_non_exhaustive()
     }
 }
@@ -30,6 +67,8 @@ impl PgUsageObserver {
         Self {
             store,
             billable: true,
+            wallet: None,
+            skip_wallet_debit: false,
         }
     }
 
@@ -38,10 +77,33 @@ impl PgUsageObserver {
         self
     }
 
+    /// Attach a wallet store so billable platform-proxy usage debits the payer.
+    pub fn with_wallet(mut self, wallet: Arc<dyn WalletStorePort>) -> Self {
+        self.wallet = Some(wallet);
+        self
+    }
+
+    /// BYOK / billing_mode: when true, metering still writes usage events but
+    /// never debits the platform wallet (default false = platform path debits).
+    pub fn with_skip_wallet_debit(mut self, skip: bool) -> Self {
+        self.skip_wallet_debit = skip;
+        self
+    }
+
     /// Test/diagnostics: whether recorded rows count toward user rolling quotas.
     #[cfg(test)]
     pub(crate) fn is_billable(&self) -> bool {
         self.billable
+    }
+
+    #[cfg(test)]
+    pub(crate) fn skips_wallet_debit(&self) -> bool {
+        self.skip_wallet_debit
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_wallet(&self) -> bool {
+        self.wallet.is_some()
     }
 
     /// Map free-text feature tags set by `LlmClient::with_feature` to billable buckets.
@@ -96,6 +158,76 @@ impl PgUsageObserver {
         BillableFeature::Chat
     }
 
+    /// Payer for wallet debit: metering user when set, else owner.
+    fn payer_user_id(tenant: &TenantContext) -> Uuid {
+        if tenant.user_id.is_nil() {
+            tenant.owner_user_id
+        } else {
+            tenant.user_id
+        }
+    }
+
+    async fn maybe_debit_wallet(
+        &self,
+        tenant: &TenantContext,
+        provider: &str,
+        model: &str,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        cached_tokens: u32,
+        usage_kind: &str,
+        request_id: Option<String>,
+    ) {
+        if !self.billable || self.skip_wallet_debit {
+            return;
+        }
+        let Some(wallet) = self.wallet.as_ref() else {
+            return;
+        };
+
+        let event_id = Uuid::new_v4();
+        let input = UsageDebitInput {
+            user_id: Self::payer_user_id(tenant),
+            provider: provider.to_string(),
+            model: model.to_string(),
+            prompt_tokens,
+            completion_tokens,
+            cached_tokens,
+            usage_kind: usage_kind.to_string(),
+            event_id,
+            request_id,
+        };
+
+        match debit_platform_usage(wallet.clone(), &input).await {
+            Ok(Some(result)) => {
+                tracing::debug!(
+                    user_id = %input.user_id,
+                    event_id = %event_id,
+                    applied = result.applied,
+                    balance_fen = result.wallet.balance_fen,
+                    "platform usage wallet debit applied"
+                );
+            }
+            Ok(None) => {
+                // zero fen — nothing to bill
+            }
+            Err(e) => {
+                // Fail-open for the LLM path; loud log so ops see free-ride risk.
+                tracing::error!(
+                    user_id = %input.user_id,
+                    owner_user_id = %tenant.owner_user_id,
+                    event_id = %event_id,
+                    provider = %provider,
+                    model = %model,
+                    prompt_tokens,
+                    completion_tokens,
+                    error = %e,
+                    "PgUsageObserver wallet debit failed; usage recorded but not charged"
+                );
+            }
+        }
+    }
+
     pub async fn record_chat_for(&self, tenant: &TenantContext, record: &ChatUsageRecord) {
         let ctx = MeteringContext {
             user_id: tenant.user_id,
@@ -123,13 +255,28 @@ impl PgUsageObserver {
             usage_kind: "chat",
             billable: self.billable,
         };
-        if let Err(e) = self.store.insert_llm_usage_event(&ctx, usage).await {
-            tracing::warn!(
-                owner_user_id = %tenant.owner_user_id,
-                user_id = %tenant.user_id,
-                error = %e,
-                "PgUsageObserver::record_chat failed; continuing"
-            );
+        match self.store.insert_llm_usage_event(&ctx, usage).await {
+            Ok(_) => {
+                self.maybe_debit_wallet(
+                    tenant,
+                    &record.provider,
+                    &record.model,
+                    record.prompt_tokens,
+                    record.completion_tokens,
+                    record.cached_tokens,
+                    "chat",
+                    record.request_id.clone(),
+                )
+                .await;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    owner_user_id = %tenant.owner_user_id,
+                    user_id = %tenant.user_id,
+                    error = %e,
+                    "PgUsageObserver::record_chat failed; continuing"
+                );
+            }
         }
     }
 
@@ -171,13 +318,28 @@ impl PgUsageObserver {
             usage_kind,
             billable: self.billable,
         };
-        if let Err(e) = self.store.insert_llm_usage_event(&ctx, usage).await {
-            tracing::warn!(
-                owner_user_id = %tenant.owner_user_id,
-                user_id = %tenant.user_id,
-                error = %e,
-                "PgUsageObserver::record_embedding failed; continuing"
-            );
+        match self.store.insert_llm_usage_event(&ctx, usage).await {
+            Ok(_) => {
+                self.maybe_debit_wallet(
+                    tenant,
+                    &record.provider,
+                    &record.model,
+                    total_tokens,
+                    0,
+                    0,
+                    usage_kind,
+                    None,
+                )
+                .await;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    owner_user_id = %tenant.owner_user_id,
+                    user_id = %tenant.user_id,
+                    error = %e,
+                    "PgUsageObserver::record_embedding failed; continuing"
+                );
+            }
         }
     }
 }
@@ -210,6 +372,7 @@ impl std::fmt::Debug for TaskTenantUsageObserver {
 
 impl TaskTenantUsageObserver {
     /// Worker metering: rebinds task tenant; rows are **non-billable** (ADR 0006 §7).
+    /// Non-billable implies no wallet debit even if a wallet is later attached.
     pub fn new(store: Arc<dyn UsageLimitStorePort>, initial: TenantContext) -> Self {
         Self {
             inner: PgUsageObserver::new(store).with_billable(false),
@@ -248,14 +411,15 @@ impl UsageObserver for TaskTenantUsageObserver {
 mod tests {
     use super::*;
     use app_core::{
-        MeteringContext, UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort,
-        UsageLimitUsageRecord,
+        ApplyLedgerInput, ApplyLedgerResult, MeteringContext, UsageLimitOverrideRow,
+        UsageLimitPlanPolicyRow, UsageLimitStorePort, UsageLimitUsageRecord, Wallet,
+        WalletLedgerEntry, WalletStorePort,
     };
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
     use common::AppError;
     use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use uuid::Uuid;
 
     #[test]
@@ -362,16 +526,172 @@ mod tests {
         }
     }
 
+    /// In-memory wallet for observer integration tests.
+    struct MemoryWalletStore {
+        wallets: Mutex<HashMap<Uuid, Wallet>>,
+        ledger: Mutex<Vec<WalletLedgerEntry>>,
+        by_key: Mutex<HashMap<String, Uuid>>,
+    }
+
+    impl MemoryWalletStore {
+        fn new() -> Self {
+            Self {
+                wallets: Mutex::new(HashMap::new()),
+                ledger: Mutex::new(Vec::new()),
+                by_key: Mutex::new(HashMap::new()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl WalletStorePort for MemoryWalletStore {
+        async fn get_wallet(&self, user_id: Uuid) -> Result<Option<Wallet>, AppError> {
+            Ok(self.wallets.lock().unwrap().get(&user_id).cloned())
+        }
+
+        async fn ensure_wallet(&self, user_id: Uuid) -> Result<Wallet, AppError> {
+            let mut wallets = self.wallets.lock().unwrap();
+            if let Some(w) = wallets.get(&user_id) {
+                return Ok(w.clone());
+            }
+            let now = Utc::now();
+            let w = Wallet {
+                user_id,
+                balance_fen: 0,
+                lifetime_paid_topup_fen: 0,
+                created_at: now,
+                updated_at: now,
+            };
+            wallets.insert(user_id, w.clone());
+            Ok(w)
+        }
+
+        async fn apply_ledger_entry(
+            &self,
+            input: &ApplyLedgerInput,
+        ) -> Result<ApplyLedgerResult, AppError> {
+            if input.amount_fen == 0 {
+                return Err(AppError::validation(
+                    "wallet_amount_zero",
+                    "ledger amount_fen must be non-zero",
+                ));
+            }
+            if input.idempotency_key.trim().is_empty() {
+                return Err(AppError::validation(
+                    "wallet_idempotency_required",
+                    "idempotency_key is required",
+                ));
+            }
+            {
+                let by_key = self.by_key.lock().unwrap();
+                if let Some(ledger_id) = by_key.get(&input.idempotency_key).copied() {
+                    let ledger = self.ledger.lock().unwrap();
+                    let entry = ledger
+                        .iter()
+                        .find(|e| e.id == ledger_id)
+                        .cloned()
+                        .ok_or_else(|| AppError::internal("idempotent ledger row missing"))?;
+                    let wallet = self
+                        .wallets
+                        .lock()
+                        .unwrap()
+                        .get(&input.user_id)
+                        .cloned()
+                        .ok_or_else(|| AppError::internal("wallet missing after ledger"))?;
+                    return Ok(ApplyLedgerResult {
+                        wallet,
+                        applied: false,
+                        ledger_id: entry.id,
+                    });
+                }
+            }
+
+            let mut wallets = self.wallets.lock().unwrap();
+            let now = Utc::now();
+            let wallet = wallets.entry(input.user_id).or_insert_with(|| Wallet {
+                user_id: input.user_id,
+                balance_fen: 0,
+                lifetime_paid_topup_fen: 0,
+                created_at: now,
+                updated_at: now,
+            });
+            let new_balance = wallet.balance_fen + input.amount_fen;
+            if new_balance < 0 {
+                return Err(AppError::validation(
+                    "wallet_insufficient_balance",
+                    "insufficient wallet balance",
+                ));
+            }
+            wallet.balance_fen = new_balance;
+            if input.counts_as_paid_topup && input.amount_fen > 0 {
+                wallet.lifetime_paid_topup_fen += input.amount_fen;
+            }
+            wallet.updated_at = now;
+            let wallet_snapshot = wallet.clone();
+            drop(wallets);
+
+            let entry = WalletLedgerEntry {
+                id: Uuid::new_v4(),
+                user_id: input.user_id,
+                kind: input.kind.clone(),
+                amount_fen: input.amount_fen,
+                balance_after_fen: wallet_snapshot.balance_fen,
+                idempotency_key: input.idempotency_key.clone(),
+                metadata: input.metadata.clone(),
+                created_at: now,
+            };
+            self.by_key
+                .lock()
+                .unwrap()
+                .insert(input.idempotency_key.clone(), entry.id);
+            self.ledger.lock().unwrap().push(entry.clone());
+            Ok(ApplyLedgerResult {
+                wallet: wallet_snapshot,
+                applied: true,
+                ledger_id: entry.id,
+            })
+        }
+
+        async fn list_ledger(
+            &self,
+            user_id: Uuid,
+            limit: i64,
+        ) -> Result<Vec<WalletLedgerEntry>, AppError> {
+            let mut rows: Vec<_> = self
+                .ledger
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|e| e.user_id == user_id)
+                .cloned()
+                .collect();
+            rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            rows.truncate(limit.max(0) as usize);
+            Ok(rows)
+        }
+    }
+
     #[test]
     fn default_observer_is_billable() {
         let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore));
         assert!(observer.is_billable());
+        assert!(!observer.skips_wallet_debit());
+        assert!(!observer.has_wallet());
     }
 
     #[test]
     fn with_billable_false_marks_non_customer_rows() {
         let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore)).with_billable(false);
         assert!(!observer.is_billable());
+    }
+
+    #[test]
+    fn byok_flag_skips_wallet_debit() {
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore))
+            .with_wallet(Arc::new(MemoryWalletStore::new()))
+            .with_skip_wallet_debit(true);
+        assert!(observer.has_wallet());
+        assert!(observer.skips_wallet_debit());
     }
 
     #[test]
@@ -384,6 +704,170 @@ mod tests {
         assert!(
             !observer.records_billable(),
             "ADR 0006 §7: worker metering must not count toward user rolling quotas"
+        );
+    }
+
+    #[tokio::test]
+    async fn recorded_chat_usage_debits_wallet_at_list_price() {
+        let wallet = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        // Seed ¥20 grant.
+        wallet
+            .apply_ledger_entry(&ApplyLedgerInput {
+                user_id,
+                kind: app_core::WALLET_KIND_SIGNUP_GRANT.to_string(),
+                amount_fen: app_core::SIGNUP_GRANT_FEN,
+                idempotency_key: format!("signup_grant:{user_id}"),
+                metadata: serde_json::json!({}),
+                counts_as_paid_topup: false,
+            })
+            .await
+            .unwrap();
+
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore))
+            .with_wallet(wallet.clone() as Arc<dyn WalletStorePort>);
+
+        let tenant = TenantContext {
+            owner_user_id: user_id,
+            user_id,
+        };
+        let record = ChatUsageRecord {
+            prompt_tokens: 1_000_000,
+            completion_tokens: 0,
+            total_tokens: 1_000_000,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
+            provider: "deepseek".into(),
+            model: "deepseek-v4-flash".into(),
+            feature: "agent_loop".into(),
+            stage: "chat".into(),
+            session_id: None,
+            document_id: None,
+            request_id: Some("req-1".into()),
+            trace_id: None,
+        };
+        observer.record_chat_for(&tenant, &record).await;
+
+        let w = wallet.get_wallet(user_id).await.unwrap().unwrap();
+        // 1M input flash → list 150 fen
+        assert_eq!(w.balance_fen, app_core::SIGNUP_GRANT_FEN - 150);
+
+        let ledger = wallet.list_ledger(user_id, 10).await.unwrap();
+        let debits: Vec<_> = ledger
+            .iter()
+            .filter(|e| e.kind == app_core::WALLET_KIND_USAGE_DEBIT)
+            .collect();
+        assert_eq!(debits.len(), 1);
+        assert_eq!(debits[0].amount_fen, -150);
+    }
+
+    #[tokio::test]
+    async fn skip_wallet_debit_does_not_charge() {
+        let wallet = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        wallet
+            .apply_ledger_entry(&ApplyLedgerInput {
+                user_id,
+                kind: app_core::WALLET_KIND_SIGNUP_GRANT.to_string(),
+                amount_fen: app_core::SIGNUP_GRANT_FEN,
+                idempotency_key: format!("signup_grant:{user_id}"),
+                metadata: serde_json::json!({}),
+                counts_as_paid_topup: false,
+            })
+            .await
+            .unwrap();
+
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore))
+            .with_wallet(wallet.clone() as Arc<dyn WalletStorePort>)
+            .with_skip_wallet_debit(true);
+
+        let tenant = TenantContext {
+            owner_user_id: user_id,
+            user_id,
+        };
+        observer
+            .record_chat_for(
+                &tenant,
+                &ChatUsageRecord {
+                    prompt_tokens: 1_000_000,
+                    completion_tokens: 0,
+                    total_tokens: 1_000_000,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    feature: "chat".into(),
+                    stage: "chat".into(),
+                    session_id: None,
+                    document_id: None,
+                    request_id: None,
+                    trace_id: None,
+                },
+            )
+            .await;
+
+        assert_eq!(
+            wallet.get_wallet(user_id).await.unwrap().unwrap().balance_fen,
+            app_core::SIGNUP_GRANT_FEN
+        );
+        assert!(
+            wallet
+                .list_ledger(user_id, 10)
+                .await
+                .unwrap()
+                .iter()
+                .all(|e| e.kind != app_core::WALLET_KIND_USAGE_DEBIT)
+        );
+    }
+
+    #[tokio::test]
+    async fn non_billable_observer_does_not_debit() {
+        let wallet = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        wallet
+            .apply_ledger_entry(&ApplyLedgerInput {
+                user_id,
+                kind: app_core::WALLET_KIND_SIGNUP_GRANT.to_string(),
+                amount_fen: app_core::SIGNUP_GRANT_FEN,
+                idempotency_key: format!("signup_grant:{user_id}"),
+                metadata: serde_json::json!({}),
+                counts_as_paid_topup: false,
+            })
+            .await
+            .unwrap();
+
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore))
+            .with_billable(false)
+            .with_wallet(wallet.clone() as Arc<dyn WalletStorePort>);
+
+        let tenant = TenantContext {
+            owner_user_id: user_id,
+            user_id,
+        };
+        observer
+            .record_chat_for(
+                &tenant,
+                &ChatUsageRecord {
+                    prompt_tokens: 1_000_000,
+                    completion_tokens: 0,
+                    total_tokens: 1_000_000,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    feature: "chat".into(),
+                    stage: "chat".into(),
+                    session_id: None,
+                    document_id: None,
+                    request_id: None,
+                    trace_id: None,
+                },
+            )
+            .await;
+
+        assert_eq!(
+            wallet.get_wallet(user_id).await.unwrap().unwrap().balance_fen,
+            app_core::SIGNUP_GRANT_FEN
         );
     }
 }

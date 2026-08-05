@@ -18,6 +18,7 @@ mod types;
 pub mod referral;
 pub mod usage_limit;
 pub mod wallet;
+pub mod wallet_pricing;
 
 pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 
@@ -46,15 +47,20 @@ pub use service::{
 pub use core::{expire_subscriptions, process_outbox};
 
 pub use wallet::{
-    WalletBalanceResponse, get_wallet_balance, grant_signup_bonus, handle_get_wallet,
+    UsageDebitInput, WalletBalanceResponse, debit_platform_usage, get_wallet_balance,
+    grant_signup_bonus, handle_get_wallet,
+};
+pub use wallet_pricing::{
+    LIST_PRICE_MULTIPLIER, OfficialRates, list_price_fen, official_rates_for,
+    usage_debit_idempotency_key, usage_debit_idempotency_key_for_request,
 };
 pub use referral::{
     ApplyReferralOutcome, ReferralStatsResponse, apply_referral_on_register, get_my_referral_stats,
     handle_get_referral,
 };
-// Re-export fen constants for callers (signup / referral hook, HTTP).
+// Re-export fen constants for callers (signup / referral / usage debit, HTTP).
 pub use app_core::{
     REFERRAL_BASE_QUOTA, REFERRAL_BONUS_FEN, REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN,
-    WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT, referral_quota,
+    WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_USAGE_DEBIT, referral_quota,
     signup_grant_idempotency_key,
 };

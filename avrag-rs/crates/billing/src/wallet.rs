@@ -1,18 +1,33 @@
-//! User wallet service — balance query + ledger credits (ADR-0010 PR3).
+//! User wallet service — balance query, signup credit, platform usage debit (ADR-0010 PR3/PR6).
 //!
 //! **Amount unit: integer fen (分).** 100 fen = ¥1; signup grant = [`SIGNUP_GRANT_FEN`] = 2000 fen = ¥20.
-//! Referral bilateral grant lives in [`crate::referral`]. Top-up webhook (PR5) and usage debit (PR6)
-//! are not implemented here; their ledger kinds are reserved on the schema.
+//! Referral bilateral grant lives in [`crate::referral`]. Top-up webhook (PR5) is separate.
+//!
+//! # PR6 usage debit behavior
+//!
+//! - **Platform proxy (default):** after billable LLM/embedding metering, debit
+//!   `usage_debit` at `list_fen = ceil(official * 1.5)` (see [`crate::wallet_pricing`]).
+//! - **BYOK / `skip_wallet_debit`:** observer skips the ledger write.
+//! - **Non-billable rows** (worker path): no debit.
+//! - **Insufficient balance:** [`WalletStorePort::apply_ledger_entry`] rejects with
+//!   `wallet_insufficient_balance` (balance never goes negative). The usage
+//!   observer logs this loudly and **does not** fail the LLM path (fail-open
+//!   metering). A hard pre-flight stop is not wired in PR6; rolling token walls
+//!   remain interim protection until pre-check lands.
+//! - **Idempotency:** debits use `usage_debit:{event_id}` (or request-scoped keys);
+//!   replaying the same key does not double-charge.
 
 use std::sync::Arc;
 
 use app_core::{
-    ApplyLedgerInput, ApplyLedgerResult, SIGNUP_GRANT_FEN, WALLET_KIND_SIGNUP_GRANT, Wallet,
-    WalletStorePort, signup_grant_idempotency_key,
+    ApplyLedgerInput, ApplyLedgerResult, SIGNUP_GRANT_FEN, WALLET_KIND_SIGNUP_GRANT,
+    WALLET_KIND_USAGE_DEBIT, Wallet, WalletStorePort, signup_grant_idempotency_key,
 };
 use common::{ApiResponse, AppError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::wallet_pricing::{list_price_fen, usage_debit_idempotency_key};
 
 /// HTTP/API view of a user's wallet balance (fen).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -69,6 +84,66 @@ pub async fn handle_get_wallet(
         Ok(balance) => ApiResponse::ok(balance),
         Err(error) => ApiResponse::err("billing_wallet_failed", &error.to_string()),
     }
+}
+
+/// Inputs for a platform-proxy usage debit (PR6).
+#[derive(Debug, Clone)]
+pub struct UsageDebitInput {
+    /// Payer wallet (B2C user; share Owner-pays is PR8).
+    pub user_id: Uuid,
+    pub provider: String,
+    pub model: String,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub cached_tokens: u32,
+    pub usage_kind: String,
+    /// Stable event identity for the ledger idempotency key.
+    pub event_id: Uuid,
+    /// Optional request correlation for metadata only.
+    pub request_id: Option<String>,
+}
+
+/// Debit the wallet for one platform-proxy usage event.
+///
+/// - Computes `list_fen = ceil(official * 1.5)`; returns `Ok(None)` when fen is 0.
+/// - Writes a negative `usage_debit` ledger row via [`WalletStorePort::apply_ledger_entry`].
+/// - Same `event_id` is always idempotent (`applied = false` on replay).
+/// - Insufficient balance → `wallet_insufficient_balance` validation error; balance unchanged.
+pub async fn debit_platform_usage(
+    store: Arc<dyn WalletStorePort>,
+    input: &UsageDebitInput,
+) -> Result<Option<ApplyLedgerResult>, AppError> {
+    let list_fen = list_price_fen(
+        &input.provider,
+        &input.model,
+        input.prompt_tokens,
+        input.completion_tokens,
+        input.cached_tokens,
+    );
+    if list_fen <= 0 {
+        return Ok(None);
+    }
+
+    let ledger = ApplyLedgerInput {
+        user_id: input.user_id,
+        kind: WALLET_KIND_USAGE_DEBIT.to_string(),
+        amount_fen: -list_fen,
+        idempotency_key: usage_debit_idempotency_key(input.event_id),
+        metadata: serde_json::json!({
+            "provider": input.provider,
+            "model": input.model,
+            "prompt_tokens": input.prompt_tokens,
+            "completion_tokens": input.completion_tokens,
+            "cached_tokens": input.cached_tokens,
+            "usage_kind": input.usage_kind,
+            "list_fen": list_fen,
+            "list_price_multiplier": crate::wallet_pricing::LIST_PRICE_MULTIPLIER,
+            "request_id": input.request_id,
+            "event_id": input.event_id,
+        }),
+        counts_as_paid_topup: false,
+    };
+    store.apply_ledger_entry(&ledger).await.map(Some)
 }
 
 #[cfg(test)]
@@ -285,5 +360,143 @@ mod tests {
         // Newest first
         assert_eq!(ledger[0].kind, app_core::WALLET_KIND_TOPUP);
         assert_eq!(ledger[1].kind, WALLET_KIND_SIGNUP_GRANT);
+    }
+
+    #[tokio::test]
+    async fn usage_debit_reduces_balance_by_list_fen() {
+        let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        grant_signup_bonus(store.clone(), user_id).await.unwrap();
+
+        // 1M input deepseek-flash → list 150 fen
+        let event_id = Uuid::new_v4();
+        let result = debit_platform_usage(
+            store.clone(),
+            &UsageDebitInput {
+                user_id,
+                provider: "deepseek".into(),
+                model: "deepseek-v4-flash".into(),
+                prompt_tokens: 1_000_000,
+                completion_tokens: 0,
+                cached_tokens: 0,
+                usage_kind: "chat".into(),
+                event_id,
+                request_id: Some("req-a".into()),
+            },
+        )
+        .await
+        .unwrap()
+        .expect("should debit");
+
+        assert!(result.applied);
+        assert_eq!(result.wallet.balance_fen, SIGNUP_GRANT_FEN - 150);
+
+        let ledger = store.list_ledger(user_id, 10).await.unwrap();
+        assert_eq!(ledger[0].kind, WALLET_KIND_USAGE_DEBIT);
+        assert_eq!(ledger[0].amount_fen, -150);
+        assert_eq!(
+            ledger[0].idempotency_key,
+            usage_debit_idempotency_key(event_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn usage_debit_is_idempotent_for_same_event_id() {
+        let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        grant_signup_bonus(store.clone(), user_id).await.unwrap();
+        let event_id = Uuid::new_v4();
+        let input = UsageDebitInput {
+            user_id,
+            provider: "deepseek".into(),
+            model: "deepseek-v4-flash".into(),
+            prompt_tokens: 1_000_000,
+            completion_tokens: 0,
+            cached_tokens: 0,
+            usage_kind: "chat".into(),
+            event_id,
+            request_id: None,
+        };
+
+        let first = debit_platform_usage(store.clone(), &input)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(first.applied);
+        let second = debit_platform_usage(store.clone(), &input)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!second.applied);
+        assert_eq!(second.wallet.balance_fen, first.wallet.balance_fen);
+        assert_eq!(second.ledger_id, first.ledger_id);
+
+        let ledger = store.list_ledger(user_id, 10).await.unwrap();
+        assert_eq!(
+            ledger
+                .iter()
+                .filter(|e| e.kind == WALLET_KIND_USAGE_DEBIT)
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn zero_balance_usage_debit_fails_without_changing_balance() {
+        let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        // Ensure wallet exists at 0 fen (no signup grant).
+        store.ensure_wallet(user_id).await.unwrap();
+
+        let err = debit_platform_usage(
+            store.clone(),
+            &UsageDebitInput {
+                user_id,
+                provider: "deepseek".into(),
+                model: "deepseek-v4-flash".into(),
+                prompt_tokens: 1_000_000,
+                completion_tokens: 0,
+                cached_tokens: 0,
+                usage_kind: "chat".into(),
+                event_id: Uuid::new_v4(),
+                request_id: None,
+            },
+        )
+        .await
+        .expect_err("insufficient balance must error");
+
+        assert_eq!(err.code(), "wallet_insufficient_balance");
+        let wallet = store.get_wallet(user_id).await.unwrap().unwrap();
+        assert_eq!(wallet.balance_fen, 0);
+        assert!(store.list_ledger(user_id, 10).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn zero_token_usage_skips_ledger() {
+        let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        grant_signup_bonus(store.clone(), user_id).await.unwrap();
+
+        let result = debit_platform_usage(
+            store.clone(),
+            &UsageDebitInput {
+                user_id,
+                provider: "deepseek".into(),
+                model: "deepseek-v4-flash".into(),
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                cached_tokens: 0,
+                usage_kind: "chat".into(),
+                event_id: Uuid::new_v4(),
+                request_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(result.is_none());
+        assert_eq!(
+            store.get_wallet(user_id).await.unwrap().unwrap().balance_fen,
+            SIGNUP_GRANT_FEN
+        );
     }
 }

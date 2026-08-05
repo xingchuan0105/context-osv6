@@ -332,11 +332,19 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         Arc::new(PgUsageLimitStoreAdapter::new(repository.clone()))
             as Arc<dyn app_core::UsageLimitStorePort>
     });
+    // ADR-0010 PR6: platform-proxy usage → wallet debit at list = official × 1.5.
+    let wallet_store: Option<Arc<dyn app_core::WalletStorePort>> = pg.as_ref().map(|repository| {
+        Arc::new(PgWalletStoreAdapter::new(repository.clone()))
+            as Arc<dyn app_core::WalletStorePort>
+    });
 
     let usage_observer: Option<Arc<dyn avrag_llm::UsageObserver>> =
         usage_limit_store.as_ref().map(|store| {
-            Arc::new(app_billing::PgUsageObserver::new(store.clone()))
-                as Arc<dyn avrag_llm::UsageObserver>
+            let mut observer = app_billing::PgUsageObserver::new(store.clone());
+            if let Some(wallet) = wallet_store.clone() {
+                observer = observer.with_wallet(wallet);
+            }
+            Arc::new(observer) as Arc<dyn avrag_llm::UsageObserver>
         });
     // Embeddings use bootstrap org/user (system-ish); chat agent rebinds tenant per request.
     let embedding_tenant = {
