@@ -1,12 +1,44 @@
 use super::config_types::{LoopExitConfig, ModeConfig};
 
 pub fn load_mode_config(mode_id: &str) -> Result<ModeConfig, common::AppError> {
-    let mut resolved_path = std::path::PathBuf::from(format!("modes/{}.yaml", mode_id));
+    let file_name = format!("{mode_id}.yaml");
+    let mut resolved_path = std::path::PathBuf::from("modes").join(&file_name);
+
+    // Explicit install root (product / VPS): MODE_CONFIG_DIR or AVRAG_OPT_ROOT/modes
+    if !resolved_path.exists() {
+        for key in ["MODE_CONFIG_DIR", "AVRAG_MODES_DIR"] {
+            if let Ok(dir) = std::env::var(key) {
+                let p = std::path::PathBuf::from(dir).join(&file_name);
+                if p.exists() {
+                    resolved_path = p;
+                    break;
+                }
+            }
+        }
+    }
+    if !resolved_path.exists() {
+        if let Ok(opt_root) = std::env::var("AVRAG_OPT_ROOT") {
+            let p = std::path::PathBuf::from(opt_root)
+                .join("modes")
+                .join(&file_name);
+            if p.exists() {
+                resolved_path = p;
+            }
+        }
+    }
+    // Packaged default on VPS (WORKDIR /opt/avrag-rs; modes shipped next to bin/)
+    if !resolved_path.exists() {
+        let p = std::path::PathBuf::from("/opt/avrag-rs/modes").join(&file_name);
+        if p.exists() {
+            resolved_path = p;
+        }
+    }
     if !resolved_path.exists() {
         if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
             let workspace_path = std::path::PathBuf::from(manifest_dir)
                 .join("../..")
-                .join(format!("modes/{}.yaml", mode_id));
+                .join("modes")
+                .join(&file_name);
             if workspace_path.exists() {
                 resolved_path = workspace_path;
             }
@@ -15,7 +47,7 @@ pub fn load_mode_config(mode_id: &str) -> Result<ModeConfig, common::AppError> {
     if !resolved_path.exists() {
         let mut dir = std::env::current_dir().unwrap_or_default();
         loop {
-            let check_path = dir.join("modes").join(format!("{}.yaml", mode_id));
+            let check_path = dir.join("modes").join(&file_name);
             if check_path.exists() {
                 resolved_path = check_path;
                 break;

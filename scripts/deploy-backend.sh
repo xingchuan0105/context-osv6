@@ -66,8 +66,9 @@ fi
 
 [[ -d "$AVRAG_DIR/migrations" ]] || die "missing migrations/"
 [[ -d "$AVRAG_DIR/prompts" ]] || die "missing prompts/"
+[[ -d "$AVRAG_DIR/modes" ]] || die "missing modes/"
 
-mkdir -p "$STAGE/bin" "$STAGE/migrations" "$STAGE/prompts" "$STAGE/docker" "$STAGE/scripts"
+mkdir -p "$STAGE/bin" "$STAGE/migrations" "$STAGE/prompts" "$STAGE/modes" "$STAGE/docker" "$STAGE/scripts"
 
 if [[ "$ASSETS_ONLY" != "1" ]]; then
   cp -a "$API_BIN" "$STAGE/bin/avrag-api"
@@ -84,6 +85,13 @@ rsync -a --delete \
 rsync -a --delete \
   --exclude '_backups/' \
   "$AVRAG_DIR/prompts/" "$STAGE/prompts/"
+
+# Agent mode YAML (chat/rag/search/write_refine) — required at runtime CWD /opt/avrag-rs
+rsync -a --delete \
+  --include '*/' \
+  --include '*.yaml' \
+  --exclude '*' \
+  "$AVRAG_DIR/modes/" "$STAGE/modes/"
 
 cp -a "$ROOT/deploy/docker/run-avrag-containers.sh" "$STAGE/docker/run-avrag-containers.sh"
 chmod 755 "$STAGE/docker/run-avrag-containers.sh"
@@ -129,7 +137,7 @@ rm -rf "\$STAGE"
 mkdir -p "\$STAGE"
 tar xzf /tmp/avrag-backend-deploy.tgz -C "\$STAGE"
 
-mkdir -p "\$REMOTE_ROOT/bin" "\$REMOTE_ROOT/migrations" "\$REMOTE_ROOT/prompts" "\$REMOTE_ROOT/docker"
+mkdir -p "\$REMOTE_ROOT/bin" "\$REMOTE_ROOT/migrations" "\$REMOTE_ROOT/prompts" "\$REMOTE_ROOT/modes" "\$REMOTE_ROOT/docker"
 
 if [[ "\$ASSETS_ONLY" != "1" ]]; then
   install -m 755 "\$STAGE/bin/avrag-api" "\$REMOTE_ROOT/bin/avrag-api"
@@ -143,6 +151,8 @@ rsync -a --delete \
 rsync -a --delete \
   --exclude '_backups/' \
   "\$STAGE/prompts/" "\$REMOTE_ROOT/prompts/"
+rsync -a --delete \
+  "\$STAGE/modes/" "\$REMOTE_ROOT/modes/"
 
 install -m 755 "\$STAGE/docker/run-avrag-containers.sh" "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
 install -m 644 "\$STAGE/DEPLOY_META.backend.json" "\$REMOTE_ROOT/DEPLOY_META.backend.json"
