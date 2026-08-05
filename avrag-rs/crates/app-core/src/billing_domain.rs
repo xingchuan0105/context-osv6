@@ -57,8 +57,13 @@ impl BillingConfig {
             billing_price_label_plus: std::env::var("BILLING_PRICE_LABEL_PLUS")
                 .or_else(|_| std::env::var("BILLING_PRICE_LABEL_ENTERPRISE"))
                 .unwrap_or_else(|_| "¥49 / 月 · $9 / 月".to_string()),
+            // Prefer PUBLIC_APP_BASE_URL; fall back to AVRAG_PUBLIC_BASE_URL (same value on
+            // product hosts) so Creem success_url is never the localhost default in prod.
             public_app_base_url: std::env::var("PUBLIC_APP_BASE_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string()),
+                .or_else(|_| std::env::var("AVRAG_PUBLIC_BASE_URL"))
+                .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string())
+                .trim_end_matches('/')
+                .to_string(),
 
             // Creem Config
             creem_api_key: std::env::var("CREEM_API_KEY").unwrap_or_default(),
