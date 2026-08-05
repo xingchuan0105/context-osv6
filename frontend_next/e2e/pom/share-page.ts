@@ -13,6 +13,10 @@ export class SharePage {
     const isChecked = await toggle.getAttribute("aria-checked");
     if (isChecked !== "true") {
       await toggle.click();
+      // PR2: owner-cost confirm is required before enabling share.
+      const confirm = this.page.locator('[data-testid="share-enable-confirm-action"]');
+      await confirm.waitFor({ state: "visible", timeout: 5_000 });
+      await confirm.click();
       await this.page.locator('[data-testid="share-link"]').filter({ hasText: /\/shared\/kb\// }).waitFor({
         timeout: 10_000,
       });

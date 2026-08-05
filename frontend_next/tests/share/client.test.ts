@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/http/request";
 import {
+  accessLevelFromVisitorMode,
   buildShareUrl,
   getShareAccessLogs,
   getShareAnalytics,
+  getShareQuota,
   getShareSettings,
   getSharedWorkspace,
   isShareEnabled,
+  shareActionErrorMessage,
+  visitorModeFromAccessLevel,
 } from "../../lib/share/client";
 
 const fetchMock = vi.fn();
@@ -210,5 +215,41 @@ describe("share client", () => {
     });
 
     await expect(getSharedWorkspace("expired-token")).rejects.toThrow("invalid share token");
+  });
+
+  it("loads share quota summary for the signed-in owner", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ used: 2, max: 10, plan_id: "plus" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getShareQuota("token-123")).resolves.toEqual({
+      used: 2,
+      max: 10,
+      plan_id: "plus",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.test/api/v1/share/quota",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("maps visitor mode through access_level and formats quota errors", () => {
+    expect(visitorModeFromAccessLevel("public")).toBe("anonymous");
+    expect(visitorModeFromAccessLevel("link")).toBe("require_register");
+    expect(accessLevelFromVisitorMode("anonymous")).toBe("public");
+    expect(accessLevelFromVisitorMode("require_register")).toBe("link");
+
+    expect(
+      shareActionErrorMessage(
+        new ApiError(403, "share_workspace_quota_exceeded", "plan allows at most 3"),
+        "en",
+        "shareCenter.saveError",
+        (_locale, key) => (key === "shareCenter.quotaExceeded" ? "quota full" : "fallback"),
+      ),
+    ).toBe("quota full");
   });
 });

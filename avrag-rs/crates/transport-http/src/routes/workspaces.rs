@@ -51,6 +51,11 @@ pub(crate) fn router() -> Router<AppState> {
 
 fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
     Router::new()
+        // User-level share quota (not workspace-scoped).
+        .route(
+            "/share/quota",
+            get(handlers::get_share_quota_handler),
+        )
         .route(
             prefix,
             get(handlers::list_workspaces).post(handlers::create_workspace),

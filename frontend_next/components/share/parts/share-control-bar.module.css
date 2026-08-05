@@ -47,6 +47,45 @@
   letter-spacing: var(--letter-spacing-tight);
 }
 
+.quotaLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.quotaLabel {
+  color: hsl(var(--muted-foreground));
+}
+
+.confirmPanel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid hsl(var(--accent) / 0.28);
+  background: hsl(var(--accent) / 0.08);
+}
+
+.confirmTitle {
+  font-size: var(--font-size-body-strong);
+}
+
+.confirmBody {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
 /* background and justify-content stay inline (runtime state). The :hover
    rule preserves the static border against .app-button-ghost:hover. */
 .switchTrack {

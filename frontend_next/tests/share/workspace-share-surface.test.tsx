@@ -19,6 +19,7 @@ vi.mock("../../lib/share/client", async () => {
     ...actual,
     buildShareUrl: mocks.buildShareUrlMock,
     getShareSettings: mocks.getShareSettingsMock,
+    getShareQuota: mocks.getShareQuotaMock,
     listMembers: mocks.listMembersMock,
     updateShareSettings: mocks.updateShareSettingsMock,
     createShareLink: mocks.createShareLinkMock,
@@ -77,6 +78,7 @@ describe("WorkspaceShareCenterSurface", () => {
     };
     mocks.buildShareUrlMock.mockReset();
     mocks.getShareSettingsMock.mockReset();
+    mocks.getShareQuotaMock.mockReset();
     mocks.listMembersMock.mockReset();
     mocks.updateShareSettingsMock.mockReset();
     mocks.createShareLinkMock.mockReset();
@@ -94,6 +96,11 @@ describe("WorkspaceShareCenterSurface", () => {
       access_level: "link",
       expires_at: "2026-04-30T18:00:00Z",
       allow_download: true,
+    });
+    mocks.getShareQuotaMock.mockResolvedValue({
+      used: 1,
+      max: 3,
+      plan_id: "free",
     });
     mocks.listMembersMock.mockResolvedValue({
       members: [
@@ -148,7 +155,7 @@ describe("WorkspaceShareCenterSurface", () => {
     });
   });
 
-  it("generates the first share link with the selected validity window", async () => {
+  it("requires owner-cost confirm before enabling share and shows quota", async () => {
     const user = userEvent.setup();
 
     mocks.getShareSettingsMock.mockResolvedValue({
@@ -167,8 +174,21 @@ describe("WorkspaceShareCenterSurface", () => {
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
     expect((await screen.findAllByText("Inactive")).length).toBeGreaterThan(0);
+    expect(await screen.findByTestId("share-quota")).toHaveTextContent(
+      "1 used / 3 max (free)",
+    );
+
     await user.selectOptions(screen.getByLabelText("Validity"), "never");
     await user.click(screen.getByRole("switch"));
+
+    // Toggle alone must not create a link — force confirm first.
+    expect(mocks.createShareLinkMock).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("share-enable-confirm")).toBeTruthy();
+    expect(
+      screen.getByText(/Model usage and API costs from visitors on this share are billed to you/i),
+    ).toBeTruthy();
+
+    await user.click(screen.getByTestId("share-enable-confirm-action"));
 
     await waitFor(() => {
       expect(mocks.createShareLinkMock).toHaveBeenCalledWith("token-123", "ws-1", {
@@ -181,6 +201,63 @@ describe("WorkspaceShareCenterSurface", () => {
       expect(mocks.updateShareSettingsMock).toHaveBeenCalledWith("token-123", "ws-1", {
         access_level: "link",
         allow_download: false,
+      });
+    });
+  });
+
+  it("surfaces a friendly message when share quota is exceeded", async () => {
+    const user = userEvent.setup();
+    const { ApiError } = await import("../../lib/http/request");
+
+    mocks.getShareSettingsMock.mockResolvedValue({
+      share_token: "",
+      access_level: "private",
+      expires_at: null,
+      allow_download: false,
+    });
+    mocks.createShareLinkMock.mockRejectedValue(
+      new ApiError(403, "share_workspace_quota_exceeded", "plan allows at most 3"),
+    );
+
+    renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
+
+    await screen.findAllByText("Inactive");
+    await user.click(screen.getByRole("switch"));
+    await user.click(await screen.findByTestId("share-enable-confirm-action"));
+
+    expect(
+      await screen.findByText(
+        "You have reached the shareable workspace limit. Disable sharing on another workspace or upgrade your plan.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("maps visitor mode to access_level when share is already live", async () => {
+    const user = userEvent.setup();
+    const futureExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    mocks.getShareSettingsMock.mockResolvedValue({
+      share_token: "share-123",
+      access_level: "link",
+      expires_at: futureExpiry,
+      allow_download: true,
+    });
+    mocks.updateShareSettingsMock.mockResolvedValue({
+      share_token: "share-123",
+      access_level: "public",
+      expires_at: futureExpiry,
+      allow_download: true,
+    });
+
+    renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
+
+    await screen.findByText("https://app.example.test/shared/kb/share-123");
+    await user.selectOptions(screen.getByLabelText("Visitor mode"), "anonymous");
+
+    await waitFor(() => {
+      expect(mocks.updateShareSettingsMock).toHaveBeenCalledWith("token-123", "ws-1", {
+        access_level: "public",
+        allow_download: true,
       });
     });
   });

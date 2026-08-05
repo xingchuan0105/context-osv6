@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::{
     AccessLevel, WorkspaceMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics,
-    ShareService, ShareSettings, SharedWorkspacePayload,
+    ShareQuotaSummary, ShareService, ShareSettings, SharedWorkspacePayload,
 };
 
 pub async fn handle_create_share_link(
@@ -54,6 +54,17 @@ pub async fn handle_resolve_public_share_chat_context(
     let service = ShareService::new(store);
     service
         .resolve_public_share_chat_context(token)
+        .await
+        .map_err(map_anyhow_error)
+}
+
+pub async fn handle_get_share_quota(
+    ctx: AuthContext,
+    store: Arc<dyn ShareStorePort>,
+) -> Result<ShareQuotaSummary, AppError> {
+    let service = ShareService::new(store);
+    service
+        .get_share_quota_summary(&ctx)
         .await
         .map_err(map_anyhow_error)
 }

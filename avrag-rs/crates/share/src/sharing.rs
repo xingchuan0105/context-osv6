@@ -8,7 +8,9 @@ use uuid::Uuid;
 use crate::quota::{
     access_level_enables_share, SHARE_WORKSPACE_QUOTA_EXCEEDED,
 };
-use crate::{AccessLevel, ShareAnalytics, ShareService, ShareSettings, ShareTokenInfo};
+use crate::{
+    AccessLevel, ShareAnalytics, ShareQuotaSummary, ShareService, ShareSettings, ShareTokenInfo,
+};
 
 impl ShareService {
     async fn record_share_event(
@@ -92,6 +94,31 @@ impl ShareService {
             .set_share_enabled(ctx, Uuid::parse_str(workspace_id)?, enabled)
             .await
             .map_err(map_store_error)
+    }
+
+    /// Current user's share-enabled workspace quota (used / max / plan).
+    pub async fn get_share_quota_summary(&self, ctx: &AuthContext) -> Result<ShareQuotaSummary> {
+        let owner_user_id = ctx.user_id().into_uuid();
+        let used = self
+            .store
+            .count_share_enabled_workspaces(ctx, owner_user_id)
+            .await
+            .map_err(map_store_error)?;
+        let max = self
+            .store
+            .max_shared_workspaces_for_owner(ctx, owner_user_id)
+            .await
+            .map_err(map_store_error)?;
+        let plan_id = self
+            .store
+            .owner_plan_id(ctx, owner_user_id)
+            .await
+            .map_err(map_store_error)?;
+        Ok(ShareQuotaSummary {
+            used,
+            max,
+            plan_id,
+        })
     }
 
     pub async fn get_share_settings(

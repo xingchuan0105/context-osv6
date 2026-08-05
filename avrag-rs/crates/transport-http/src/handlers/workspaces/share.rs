@@ -121,6 +121,21 @@ pub(crate) async fn revoke_share_handler(
     share_empty_ok!(state.share().revoke_share_link(token).await)
 }
 
+pub(crate) async fn get_share_quota_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Response {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
+        return app_error_response(error);
+    }
+    if !state.postgres_configured() {
+        return postgres_unavailable_response();
+    }
+    share_ok!(state.share().get_share_quota().await)
+}
+
 pub(crate) async fn get_share_settings_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(workspace_id): Path<String>,

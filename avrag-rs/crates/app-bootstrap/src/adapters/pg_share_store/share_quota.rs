@@ -28,12 +28,12 @@
         Ok(row.try_get::<i64, _>("total").unwrap_or(0))
     }
 
-    async fn max_shared_workspaces_for_owner(
+    async fn owner_plan_id(
         &self,
         _auth: &AuthContext,
         owner_user_id: Uuid,
-    ) -> Result<i32, AppError> {
-        // Plan rows are global policy; no RLS on usage_limit_plan_policies / subscriptions.
+    ) -> Result<String, AppError> {
+        // Plan rows are global policy; no RLS on subscriptions.
         let plan_row = sqlx::query(
             r#"
             select plan_id
@@ -47,9 +47,17 @@
         .fetch_optional(self.repo.raw())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
-        let plan_id = plan_row
+        Ok(plan_row
             .and_then(|row| row.try_get::<String, _>("plan_id").ok())
-            .unwrap_or_else(|| "free".to_string());
+            .unwrap_or_else(|| "free".to_string()))
+    }
+
+    async fn max_shared_workspaces_for_owner(
+        &self,
+        auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<i32, AppError> {
+        let plan_id = self.owner_plan_id(auth, owner_user_id).await?;
 
         let policy_row = sqlx::query(
             r#"

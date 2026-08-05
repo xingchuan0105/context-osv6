@@ -6,17 +6,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../../lib/auth/context";
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import {
+  accessLevelFromVisitorMode,
   buildShareUrl,
   createShareLink,
   getShareAccessLogs,
   getShareAnalytics,
+  getShareQuota,
   getShareSettings,
   inviteMember,
   listMembers,
   removeMember,
   revokeShareLink,
+  shareActionErrorMessage,
   type MembersResponse,
+  type VisitorAccessMode,
   updateShareSettings,
+  visitorModeFromAccessLevel,
 } from "../../../lib/share/client";
 import { useUiPreferences } from "../../../lib/ui-preferences";
 import {
@@ -45,6 +50,8 @@ export function useShareCenter(workspaceId: string) {
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [expiresAtDraft, setExpiresAtDraft] = useState<ShareValidityOption>("30d");
+  const [visitorModeDraft, setVisitorModeDraft] = useState<VisitorAccessMode>("require_register");
+  const [pendingEnableConfirm, setPendingEnableConfirm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
   const [inviteError, setInviteError] = useState("");
@@ -53,6 +60,11 @@ export function useShareCenter(workspaceId: string) {
     queryKey: shareKeys.settings(workspaceId, auth.token),
     enabled: Boolean(auth.token && workspaceReady),
     queryFn: () => getShareSettings(auth.token as string, workspaceId),
+  });
+  const quotaQuery = useQuery({
+    queryKey: shareKeys.quota(auth.token),
+    enabled: Boolean(auth.token),
+    queryFn: () => getShareQuota(auth.token as string),
   });
   const membersQuery = useQuery<MembersResponse>({
     queryKey: shareKeys.members(workspaceId, auth.token),
@@ -100,7 +112,7 @@ export function useShareCenter(workspaceId: string) {
           expires_at: buildExpiresAtFromValidity(expiresAtDraft),
         });
         return updateShareSettings(auth.token, workspaceId, {
-          access_level: "link",
+          access_level: accessLevelFromVisitorMode(visitorModeDraft),
           allow_download: false,
         });
       }
@@ -111,6 +123,9 @@ export function useShareCenter(workspaceId: string) {
       queryClient.setQueryData(shareKeys.settings(workspaceId, auth.token), settings);
       await queryClient.invalidateQueries({
         queryKey: shareKeys.settings(workspaceId, auth.token),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: shareKeys.quota(auth.token),
       });
     },
   });
@@ -137,11 +152,46 @@ export function useShareCenter(workspaceId: string) {
       });
 
       return updateShareSettings(auth.token, workspaceId, {
-        access_level: "link",
+        access_level: accessLevelFromVisitorMode(visitorModeDraft),
         allow_download: false,
       });
     },
     onSuccess: async (settings) => {
+      queryClient.setQueryData(shareKeys.settings(workspaceId, auth.token), settings);
+      await queryClient.invalidateQueries({
+        queryKey: shareKeys.settings(workspaceId, auth.token),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: shareKeys.quota(auth.token),
+      });
+    },
+  });
+  const visitorModeMutation = useMutation({
+    mutationFn: async (mode: VisitorAccessMode) => {
+      if (!auth.token) {
+        throw new Error(formatUiMessage(locale, "shareCenter.loginRequired"));
+      }
+
+      if (!workspaceReady) {
+        throw new Error(invalidWorkspaceMessage);
+      }
+
+      // Only persist when share is configured (not private). Draft still updates locally.
+      const currentLevel = settingsQuery.data?.access_level;
+      if (!currentLevel || currentLevel === "private") {
+        return settingsQuery.data ?? null;
+      }
+
+      return updateShareSettings(auth.token, workspaceId, {
+        access_level: accessLevelFromVisitorMode(mode),
+        allow_download: settingsQuery.data?.allow_download ?? false,
+      });
+    },
+    onSuccess: async (settings) => {
+      if (!settings) {
+        return;
+      }
+
       queryClient.setQueryData(shareKeys.settings(workspaceId, auth.token), settings);
       await queryClient.invalidateQueries({
         queryKey: shareKeys.settings(workspaceId, auth.token),
@@ -193,6 +243,9 @@ export function useShareCenter(workspaceId: string) {
     }
 
     setExpiresAtDraft(resolveValidityOption(settingsQuery.data.expires_at));
+    if (settingsQuery.data.access_level !== "private") {
+      setVisitorModeDraft(visitorModeFromAccessLevel(settingsQuery.data.access_level));
+    }
   }, [settingsQuery.data]);
 
   const shareUrl = buildShareUrl(settingsQuery.data?.share_token ?? "");
@@ -220,22 +273,68 @@ export function useShareCenter(workspaceId: string) {
   const canUseShareLink = shareStatus === "active" && Boolean(shareUrl);
   const shareSwitchChecked = shareStatus === "active";
   const validityOptions: ShareValidityOption[] = ["7d", "30d", "90d", "never"];
+  const quotaSummary = quotaQuery.data ?? null;
+  const quotaLabel = quotaSummary
+    ? formatUiMessage(locale, "shareCenter.quotaValue", {
+        used: quotaSummary.used,
+        max: quotaSummary.max,
+        plan: quotaSummary.plan_id,
+      })
+    : null;
+
+  function mapShareError(error: unknown) {
+    return shareActionErrorMessage(error, locale, "shareCenter.saveError", formatUiMessage);
+  }
+
+  async function runToggleShare() {
+    setActionError("");
+    setActionMessage("");
+    setPendingEnableConfirm(false);
+
+    try {
+      await toggleShareMutation.mutateAsync();
+    } catch (error) {
+      setActionError(mapShareError(error));
+    }
+  }
 
   async function handleToggleShare() {
     setActionError("");
     setActionMessage("");
 
-    try {
-      await toggleShareMutation.mutateAsync();
-    } catch (error) {
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : formatUiMessage(locale, "shareCenter.saveError"),
-      );
+    // Force explicit confirm only when enabling (not when turning off).
+    if (!shareSwitchChecked) {
+      setPendingEnableConfirm(true);
+      return;
     }
+
+    await runToggleShare();
   }
 
+  function handleCancelEnableConfirm() {
+    setPendingEnableConfirm(false);
+  }
+
+  async function handleConfirmEnableShare() {
+    await runToggleShare();
+  }
+
+  async function handleVisitorModeChange(mode: VisitorAccessMode) {
+    setVisitorModeDraft(mode);
+    setActionError("");
+    setActionMessage("");
+
+    const currentLevel = settingsQuery.data?.access_level;
+    if (!currentLevel || currentLevel === "private") {
+      return;
+    }
+
+    try {
+      await visitorModeMutation.mutateAsync(mode);
+    } catch (error) {
+      setActionError(mapShareError(error));
+    }
+  }
 
   async function handleCopyShareLink() {
     setActionError("");
@@ -274,11 +373,7 @@ export function useShareCenter(workspaceId: string) {
       await refreshShareMutation.mutateAsync();
       setActionMessage(formatUiMessage(locale, "shareCenter.updateShareSuccess"));
     } catch (error) {
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : formatUiMessage(locale, "shareCenter.saveError"),
-      );
+      setActionError(mapShareError(error));
     }
   }
 
@@ -327,19 +422,26 @@ export function useShareCenter(workspaceId: string) {
     analyticsQuery,
     canUseShareLink,
     expiresAtDraft,
+    handleCancelEnableConfirm,
+    handleConfirmEnableShare,
     handleConfirmRemove,
     handleCopyShareLink,
     handleInviteMember,
     handleOpenSharePage,
     handleRefreshShare,
     handleToggleShare,
+    handleVisitorModeChange,
     inviteEmail,
     inviteError,
     inviteMemberMutation,
     inviteRole,
     locale,
     membersQuery,
+    pendingEnableConfirm,
     pendingRemoveMemberId,
+    quotaLabel,
+    quotaQuery,
+    quotaSummary,
     refreshShareMutation,
     removeMemberMutation,
     setActionError,
@@ -358,6 +460,8 @@ export function useShareCenter(workspaceId: string) {
     trendSeries,
     trendWindowDays,
     validityOptions,
+    visitorModeDraft,
+    visitorModeMutation,
     activeDaysValue,
     latestAccessValue,
     recentViewsValue,

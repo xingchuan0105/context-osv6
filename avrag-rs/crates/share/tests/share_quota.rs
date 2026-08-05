@@ -25,6 +25,32 @@ fn plan_policy_lookup_free_plus_pro() {
 }
 
 #[tokio::test]
+async fn share_quota_summary_reports_used_max_and_plan() {
+    let store = Arc::new(MemoryShareStore::new());
+    let owner_id = Uuid::new_v4();
+    store.seed_owner_plan(owner_id, "plus").await;
+    let service = ShareService::new(store.clone());
+    let auth = owner_auth(owner_id);
+
+    for _ in 0..2 {
+        let workspace_id = Uuid::new_v4();
+        store.seed_workspace_owner(workspace_id, owner_id).await;
+        service
+            .update_access_level(&auth, &workspace_id.to_string(), "link")
+            .await
+            .expect("enable share");
+    }
+
+    let summary = service
+        .get_share_quota_summary(&auth)
+        .await
+        .expect("quota summary");
+    assert_eq!(summary.used, 2);
+    assert_eq!(summary.max, 10);
+    assert_eq!(summary.plan_id, "plus");
+}
+
+#[tokio::test]
 async fn free_user_can_enable_three_shares_fourth_fails() {
     let store = Arc::new(MemoryShareStore::new());
     let owner_id = Uuid::new_v4();

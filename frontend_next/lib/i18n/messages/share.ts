@@ -409,6 +409,50 @@ export const shareMessages = {
     zh: "分享开关",
     en: "Share switch",
   },
+  "shareCenter.ownerCostConfirmTitle": {
+    zh: "开启分享前请确认费用归属",
+    en: "Confirm cost before enabling share",
+  },
+  "shareCenter.ownerCostConfirmBody": {
+    zh: "访客使用本分享产生的模型调用与 API 费用将计入你（工作区所有者）的额度与密钥，而不是访客本人。开启后请留意用量与预算。",
+    en: "Model usage and API costs from visitors on this share are billed to you (the workspace owner)—your credits and keys—not the visitor. Review usage and budget after enabling.",
+  },
+  "shareCenter.ownerCostConfirmAction": {
+    zh: "确认开启分享",
+    en: "Confirm enable share",
+  },
+  "shareCenter.ownerCostConfirmCancel": {
+    zh: "取消",
+    en: "Cancel",
+  },
+  "shareCenter.quotaLabel": {
+    zh: "可分享工作区名额",
+    en: "Shareable workspaces",
+  },
+  "shareCenter.quotaValue": {
+    zh: "已用 {used} / 上限 {max}（{plan}）",
+    en: "{used} used / {max} max ({plan})",
+  },
+  "shareCenter.quotaExceeded": {
+    zh: "可分享工作区名额已用尽。请关闭其他工作区的分享，或升级套餐后再试。",
+    en: "You have reached the shareable workspace limit. Disable sharing on another workspace or upgrade your plan.",
+  },
+  "shareCenter.visitorModeLabel": {
+    zh: "访客模式",
+    en: "Visitor mode",
+  },
+  "shareCenter.visitorMode.anonymous": {
+    zh: "允许匿名",
+    en: "Allow anonymous",
+  },
+  "shareCenter.visitorMode.requireRegister": {
+    zh: "须注册",
+    en: "Require register",
+  },
+  "shareCenter.visitorModeHint": {
+    zh: "「允许匿名」对应公开链接；「须注册」对应仅链接访问。完整 Owner-pays 与匿名问答将在后续版本生效。",
+    en: "\"Allow anonymous\" maps to a public link; \"Require register\" maps to link-only access. Full owner-pays and anonymous Q&A land in a later release.",
+  },
   "shareCenter.validityLabel": {
     zh: "有效期",
     en: "Validity",

@@ -1,8 +1,11 @@
-import { fetchResponse, request, type ApiEnvelope } from "../http/request";
+import { ApiError, fetchResponse, request, type ApiEnvelope } from "../http/request";
 import {
   parseWorkspaceChatEventStream,
   type WorkspaceChatStreamEvent,
 } from "../workspace/stream";
+
+/** Stable backend code when enabling share exceeds plan slots (ADR-0010). */
+export const SHARE_WORKSPACE_QUOTA_EXCEEDED = "share_workspace_quota_exceeded";
 
 export type ShareSettings = {
   share_token: string;
@@ -10,6 +13,28 @@ export type ShareSettings = {
   expires_at: string | null;
   allow_download: boolean;
 };
+
+/** Owner share-slot usage for the current plan. */
+export type ShareQuotaSummary = {
+  used: number;
+  max: number;
+  plan_id: string;
+};
+
+/**
+ * Visitor access preference persisted via `access_level`:
+ * - `public` → anonymous visitors allowed
+ * - `link` → require register (signed-in) for interaction
+ */
+export type VisitorAccessMode = "anonymous" | "require_register";
+
+export function visitorModeFromAccessLevel(accessLevel: string | null | undefined): VisitorAccessMode {
+  return accessLevel === "public" ? "anonymous" : "require_register";
+}
+
+export function accessLevelFromVisitorMode(mode: VisitorAccessMode): "link" | "public" {
+  return mode === "anonymous" ? "public" : "link";
+}
 
 export type ShareAnalyticsResponse = {
   total_views: number;
@@ -145,6 +170,10 @@ export async function getShareSettings(token: string, workspaceId: string) {
   return mapShareSettings(raw);
 }
 
+export async function getShareQuota(token: string) {
+  return request<ShareQuotaSummary>("/api/v1/share/quota", { method: "GET" }, token);
+}
+
 export async function updateShareSettings(
   token: string,
   workspaceId: string,
@@ -160,6 +189,24 @@ export async function updateShareSettings(
   );
 
   return mapShareSettings(raw);
+}
+
+/** Map known share API error codes to i18n message keys when possible. */
+export function shareActionErrorMessage(
+  error: unknown,
+  locale: "zh-CN" | "en",
+  fallbackKey: string,
+  formatMessage: (locale: "zh-CN" | "en", key: string) => string,
+): string {
+  if (error instanceof ApiError && error.code === SHARE_WORKSPACE_QUOTA_EXCEEDED) {
+    return formatMessage(locale, "shareCenter.quotaExceeded");
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return formatMessage(locale, fallbackKey);
 }
 
 export async function createShareLink(

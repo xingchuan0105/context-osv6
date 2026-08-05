@@ -15,6 +15,7 @@ export const shareKeys = {
     ["share-center", workspaceId, "analytics", token] as const,
   members: (workspaceId: string, token: string | null) =>
     ["share-center", workspaceId, "members", token] as const,
+  quota: (token: string | null) => ["share-center", "quota", token] as const,
   settings: (workspaceId: string, token: string | null) =>
     ["share-center", workspaceId, "settings", token] as const,
 };

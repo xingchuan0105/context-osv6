@@ -340,17 +340,25 @@ impl ShareStorePort for MemoryShareStore {
 
     async fn max_shared_workspaces_for_owner(
         &self,
-        _auth: &AuthContext,
+        auth: &AuthContext,
         owner_user_id: Uuid,
     ) -> Result<i32, AppError> {
-        let plan = self
+        let plan = self.owner_plan_id(auth, owner_user_id).await?;
+        Ok(max_shared_workspaces_for_plan(&plan))
+    }
+
+    async fn owner_plan_id(
+        &self,
+        _auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<String, AppError> {
+        Ok(self
             .owner_plans
             .read()
             .await
             .get(&owner_user_id)
             .cloned()
-            .unwrap_or_else(|| "free".to_string());
-        Ok(max_shared_workspaces_for_plan(&plan))
+            .unwrap_or_else(|| "free".to_string()))
     }
 
     async fn set_share_enabled(

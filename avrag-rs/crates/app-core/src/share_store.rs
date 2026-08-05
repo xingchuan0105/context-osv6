@@ -148,6 +148,13 @@ pub trait ShareStorePort: Send + Sync {
         owner_user_id: Uuid,
     ) -> Result<i32, AppError>;
 
+    /// Active subscription `plan_id` for the owner (defaults to `"free"`).
+    async fn owner_plan_id(
+        &self,
+        auth: &AuthContext,
+        owner_user_id: Uuid,
+    ) -> Result<String, AppError>;
+
     /// Set `workspaces.share_enabled` (true occupies a plan quota slot).
     async fn set_share_enabled(
         &self,

@@ -95,6 +95,14 @@ pub struct ShareSettings {
     pub members: Vec<WorkspaceMember>,
 }
 
+/// Owner share-slot usage for the current plan (ADR-0010).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareQuotaSummary {
+    pub used: i64,
+    pub max: i32,
+    pub plan_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareTokenInfo {
     pub token: String,

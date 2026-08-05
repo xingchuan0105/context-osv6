@@ -196,6 +196,7 @@ export function createWorkspaceShareSurfaceMocks() {
     },
     buildShareUrlMock: vi.fn(),
     getShareSettingsMock: vi.fn(),
+    getShareQuotaMock: vi.fn(),
     listMembersMock: vi.fn(),
     updateShareSettingsMock: vi.fn(),
     createShareLinkMock: vi.fn(),

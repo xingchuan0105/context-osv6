@@ -76,6 +76,13 @@ impl<'a> ShareApp<'a> {
         avrag_share::handle_revoke_share_link(self.auth.clone(), token, store).await
     }
 
+    pub async fn get_share_quota(
+        &self,
+    ) -> Result<avrag_share::ShareQuotaSummary, common::AppError> {
+        let store = self.require_store()?;
+        avrag_share::handle_get_share_quota(self.auth.clone(), store).await
+    }
+
     pub async fn get_share_settings(
         &self,
         workspace_id: String,
