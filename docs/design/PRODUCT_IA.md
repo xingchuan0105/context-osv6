@@ -106,6 +106,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | 分享数据（单库） | `/dashboard/:id/share`（页内 insights / 活动） | 汇总下钻、顶栏「访问」、旧 `/analyze` 与 `/share/analytics` |
 | 上手 / 产品地图 | **弹窗**（Dashboard 入口）或 `/help` 长文 | 顶栏「上手」、空状态、账户→帮助 |
 | 工作台 | `/dashboard` | 品牌标题、footer |
+| 快速跳转 | **Cmd/Ctrl+K** 命令面板 | 登录后 App shell；条目仅链到本节 Canonical |
 
 **禁止**: 在设置账单再实现第二套充值 checkout（可保留余额展示 + 链到 `#topup`）。  
 **禁止**: 升级弹窗内完成支付（仅营销说明 + 跳转 canonical）。

@@ -47,7 +47,7 @@
 |----|------|------|
 | P2-1 | 术语 Owner-pays / RAG 中英（copy-catalog） | **done**（高触达 share/pricing/help/degrade） |
 | P2-2 | 升级弹窗与 pricing 文案重复 | 可接受；保持弹窗短、pricing 全 |
-| P2-3 | 无 Cmd+K 命令面板 | 可选增强，非本轮 |
+| P2-3 | 无 Cmd+K 命令面板 | **done**（`CommandPaletteHost`，Canonical 路由） |
 
 ---
 
@@ -94,11 +94,12 @@
 - [x] 邀请页 / 同意框 / 法律页脚 / 客户端状态徽章 i18n 收口  
 - [x] API Access 面 + providers 行标签 i18n  
 - [x] admin 导航/状态术语（检索健康、后台任务、限速策略、护栏文案）  
+- [x] P2-3 Cmd/Ctrl+K 命令面板  
 
 ## 6. 建议下一迭代（非本轮）
 
 1. 后端通知 / 邮件模板化（copy-catalog P7）。  
-2. 可选 Cmd+K 命令面板（P2-3）。
+2. 命令面板扩展：工作区搜索 / 最近打开（目前为静态 Canonical 列表）。
 
 ---
 

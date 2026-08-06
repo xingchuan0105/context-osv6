@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth/context";
 import { formatUiMessage } from "../lib/i18n/messages";
 import { useUiPreferences } from "../lib/ui-preferences";
+import { CommandPaletteHost } from "./command-palette/command-palette";
 import { LegalReacceptanceGate } from "./legal/LegalReacceptanceGate";
 
 function FullscreenMessage({ message }: { message: string }) {
@@ -39,6 +40,7 @@ export function ProtectedRouteGate({ children }: { children: ReactNode }) {
 
   return (
     <LegalReacceptanceGate>
+      <CommandPaletteHost />
       {children}
     </LegalReacceptanceGate>
   );

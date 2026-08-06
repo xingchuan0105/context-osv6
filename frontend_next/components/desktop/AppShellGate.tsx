@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { ProtectedRouteGate } from "@/components/auth-gates";
+import { CommandPaletteHost } from "@/components/command-palette/command-palette";
 import { ClientLicenseGate } from "@/components/desktop/ClientLicenseGate";
 import { ClientLocalSessionBootstrap } from "@/components/desktop/ClientLocalSessionBootstrap";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
@@ -32,7 +33,10 @@ export function AppShellGate({ children }: { children: ReactNode }) {
   if (mode === "desktop") {
     return (
       <ClientLicenseGate>
-        <ClientLocalSessionBootstrap>{children}</ClientLocalSessionBootstrap>
+        <ClientLocalSessionBootstrap>
+          <CommandPaletteHost />
+          {children}
+        </ClientLocalSessionBootstrap>
       </ClientLicenseGate>
     );
   }
