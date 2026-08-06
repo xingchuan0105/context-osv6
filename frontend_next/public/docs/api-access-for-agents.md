@@ -93,6 +93,7 @@ These are the tools personal agents should use after the human shares a workspac
 | `workspace.share_get_settings` | user session | Settings, tokens, members |
 | `workspace.share_update_settings` | user session | `access_level` private\|link\|public, download, daily limits |
 | `workspace.share_revoke_link` | user session | Revoke token |
+| `workspace.share_invite_member` | user session | Invite member by email |
 | `account.share_quota` | user session | Owner used/max/plan share slots |
 
 Workspace API keys receive MCP/JSON-RPC error `api_key_forbidden` on these tools.

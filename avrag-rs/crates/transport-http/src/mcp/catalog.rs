@@ -121,6 +121,22 @@ fn share_tools() -> Vec<Value> {
                 }
             }
         }),
+        json!({
+            "name": "workspace.share_invite_member",
+            "description": "Invite a member by email (viewer|editor|owner). User session only.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workspace_id", "email"],
+                "properties": {
+                    "workspace_id": workspace_id_property(),
+                    "email": { "type": "string" },
+                    "role": {
+                        "type": "string",
+                        "description": "viewer|editor|owner (default viewer)"
+                    }
+                }
+            }
+        }),
     ]
 }
 
@@ -257,6 +273,7 @@ pub(crate) fn operation_guide_mode_for_tool(tool_name: &str) -> Option<&'static 
         | "workspace.share_get_settings"
         | "workspace.share_update_settings"
         | "workspace.share_revoke_link"
+        | "workspace.share_invite_member"
         | "account.share_quota" => Some("workspace.create"),
         _ => None,
     }

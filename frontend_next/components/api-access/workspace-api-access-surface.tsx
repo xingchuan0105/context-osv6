@@ -581,9 +581,10 @@ export function WorkspaceApiAccessSurface({
           </div>
 
           <p className={styles.note}>
-            探活：<code>context-os status</code> 或 <code>context-os-mcp --check</code>。脚本可用{" "}
-            <code>context-os ingest</code> / <code>ask</code>（env：<code>CONTEXT_OS_WORKSPACE_ID</code>）。工具调用时{" "}
-            <code>arguments.workspace_id</code> 须与本页一致。分享 / 成员 / 密钥管理仍仅用户会话可用。
+            探活：<code>context-os status</code>。本机桌面可 <code>context-os auth from-desktop --save</code>{" "}
+            写入 <code>~/.config/context-os/user.token</code>（CLI/MCP 自动加载）。脚本：{" "}
+            <code>context-os ingest</code> / <code>ask</code> / <code>share enable</code>（需 user
+            token）。工具参数 <code>workspace_id</code> 须与本页一致。
           </p>
         </div>
       </section>

@@ -19,9 +19,11 @@ context-os — thin client for local/cloud Context-OS (same auth as MCP)
 
 USAGE:
   context-os status
-  context-os auth login --email E --password P
-  context-os auth mint [--ttl MINUTES]
+  context-os auth login --email E --password P [--save]
+  context-os auth mint [--ttl MINUTES] [--save]
+  context-os auth from-desktop [--save]   # read desktop local_session.json
   context-os auth whoami
+  context-os auth path                    # show token file + desktop candidates
   context-os workspace create --name NAME [--description D]
   context-os workspace list
   context-os ingest [--workspace ID] [--no-wait] [--timeout SECS] <file>
@@ -30,6 +32,7 @@ USAGE:
   context-os share enable [--workspace ID] [--role viewer] [--expires-in SECS]
   context-os share status [--workspace ID]
   context-os share configure [--workspace ID] [--access-level link|public|private] …
+  context-os share invite [--workspace ID] --email E [--role viewer]
   context-os share revoke [--workspace ID] --token TOKEN
   context-os share quota
   context-os --help
@@ -38,6 +41,8 @@ ENV:
   CONTEXT_OS_API_BASE / AVRAG_PUBLIC_BASE_URL   (default http://127.0.0.1:18080)
   CONTEXT_OS_API_KEY / CONTEXT_OS_WORKSPACE_API_KEY   (index/query automation)
   CONTEXT_OS_USER_TOKEN / CONTEXT_OS_AGENT_TOKEN      (user JWT; create workspace + share)
+  CONTEXT_OS_USER_TOKEN_FILE                         (default ~/.config/context-os/user.token)
+  CONTEXT_OS_LOAD_DESKTOP_SESSION=0                  (disable auto-load desktop JWT)
   CONTEXT_OS_WORKSPACE_ID
 
 FLAGS (global):
@@ -47,11 +52,11 @@ FLAGS (global):
   --workspace ID      Workspace UUID
 
 Examples:
-  context-os auth login --email you@example.com --password '…'
-  export CONTEXT_OS_USER_TOKEN=$(context-os auth mint --ttl 120 | jq -r .token)
+  context-os auth from-desktop --save     # after desktop client is running/logged in
+  context-os auth mint --ttl 120 --save
   context-os workspace create --name Research
+  context-os share enable --workspace $WS
   context-os ingest --workspace $WS ./notes.pdf
-  context-os ask --workspace $WS \"Summarize the docs\"
 
 stdio MCP: context-os-mcp (same env; prefer CONTEXT_OS_USER_TOKEN for account tools)
 Docs: docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md
@@ -82,12 +87,18 @@ enum Command {
     AuthLogin {
         email: String,
         password: String,
+        save: bool,
     },
     AuthMint {
         ttl_minutes: u32,
+        save: bool,
+    },
+    AuthFromDesktop {
+        save: bool,
     },
     AuthWhoami,
-      WorkspaceCreate {
+    AuthPath,
+    WorkspaceCreate {
         name: String,
         description: String,
     },
@@ -102,7 +113,12 @@ enum Command {
         allow_download: Option<bool>,
         anon_question_limit: Option<i32>,
         member_question_limit: Option<Option<i32>>,
+        #[allow(dead_code)]
         member_question_limit_set: bool,
+    },
+    ShareInvite {
+        email: String,
+        role: String,
     },
     ShareRevoke {
         token: String,
@@ -270,12 +286,13 @@ fn parse_args(args: &[String]) -> Result<(GlobalOpts, Command)> {
 
 fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Command)> {
     if sub.is_empty() {
-        bail!("auth requires a subcommand: login | mint | whoami");
+        bail!("auth requires a subcommand: login | mint | from-desktop | whoami | path");
     }
     match sub[0].as_str() {
         "login" => {
             let mut email = None;
             let mut password = None;
+            let mut save = false;
             let mut j = 1;
             while j < sub.len() {
                 match sub[j].as_str() {
@@ -287,6 +304,7 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                         j += 1;
                         password = Some(sub.get(j).context("--password requires value")?.clone());
                     }
+                    "--save" => save = true,
                     "--base" => {
                         j += 1;
                         opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
@@ -300,11 +318,13 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                 Command::AuthLogin {
                     email: email.context("auth login requires --email")?,
                     password: password.context("auth login requires --password")?,
+                    save,
                 },
             ))
         }
         "mint" | "agent-token" => {
             let mut ttl_minutes = 120u32;
+            let mut save = false;
             let mut j = 1;
             while j < sub.len() {
                 match sub[j].as_str() {
@@ -316,6 +336,7 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                             .parse()
                             .context("--ttl must be an integer")?;
                     }
+                    "--save" => save = true,
                     "--user-token" | "--token" => {
                         j += 1;
                         opts.user_token = Some(
@@ -332,10 +353,29 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                 }
                 j += 1;
             }
-            Ok((opts.clone(), Command::AuthMint { ttl_minutes }))
+            Ok((
+                opts.clone(),
+                Command::AuthMint {
+                    ttl_minutes,
+                    save,
+                },
+            ))
         }
+        "from-desktop" | "desktop" => {
+            let mut save = false;
+            let mut j = 1;
+            while j < sub.len() {
+                match sub[j].as_str() {
+                    "--save" => save = true,
+                    other => bail!("unknown auth from-desktop flag: {other}"),
+                }
+                j += 1;
+            }
+            Ok((opts.clone(), Command::AuthFromDesktop { save }))
+        }
+        "path" | "paths" => Ok((opts.clone(), Command::AuthPath)),
         "whoami" | "me" | "status" => Ok((opts.clone(), Command::AuthWhoami)),
-        other => bail!("unknown auth subcommand `{other}` (login|mint|whoami)"),
+        other => bail!("unknown auth subcommand `{other}` (login|mint|from-desktop|whoami|path)"),
     }
 }
 
@@ -504,6 +544,52 @@ fn parse_share(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Com
                 },
             ))
         }
+        "invite" => {
+            let mut email = None;
+            let mut role = "viewer".to_string();
+            let mut j = 1;
+            while j < sub.len() {
+                match sub[j].as_str() {
+                    "--email" | "-e" => {
+                        j += 1;
+                        email = Some(sub.get(j).context("--email requires value")?.clone());
+                    }
+                    "--role" => {
+                        j += 1;
+                        role = sub.get(j).context("--role requires value")?.clone();
+                    }
+                    "--workspace" | "-w" => {
+                        j += 1;
+                        opts.workspace = Some(
+                            sub.get(j)
+                                .context("share invite --workspace requires UUID")?
+                                .clone(),
+                        );
+                    }
+                    "--user-token" => {
+                        j += 1;
+                        opts.user_token = Some(
+                            sub.get(j)
+                                .context("--user-token requires value")?
+                                .clone(),
+                        );
+                    }
+                    "--base" => {
+                        j += 1;
+                        opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
+                    }
+                    other => bail!("unknown share invite flag: {other}"),
+                }
+                j += 1;
+            }
+            Ok((
+                opts.clone(),
+                Command::ShareInvite {
+                    email: email.context("share invite requires --email")?,
+                    role,
+                },
+            ))
+        }
         "revoke" => {
             let mut token = None;
             let mut j = 1;
@@ -544,7 +630,9 @@ fn parse_share(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Com
                 },
             ))
         }
-        other => bail!("unknown share subcommand `{other}` (enable|status|configure|revoke|quota)"),
+        other => {
+            bail!("unknown share subcommand `{other}` (enable|status|configure|invite|revoke|quota)")
+        }
     }
 }
 
@@ -787,7 +875,15 @@ async fn cmd_sources(client: &McpClient) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_auth_login(cfg: &ClientConfig, email: &str, password: &str) -> Result<()> {
+fn maybe_save_token(token: &str, save: bool) -> Result<Option<String>> {
+    if !save {
+        return Ok(None);
+    }
+    let path = context_os::token_store::save_user_token(token)?;
+    Ok(Some(path.display().to_string()))
+}
+
+async fn cmd_auth_login(cfg: &ClientConfig, email: &str, password: &str, save: bool) -> Result<()> {
     let client = McpClient::new(cfg.clone())?;
     // Login is public — use raw HTTP without require_bearer.
     let url = format!("{}/api/auth/login", cfg.api_base);
@@ -808,19 +904,25 @@ async fn cmd_auth_login(cfg: &ClientConfig, email: &str, password: &str) -> Resu
         .pointer("/data/token")
         .and_then(|v| v.as_str())
         .context("login response missing data.token")?;
+    let saved_to = maybe_save_token(token, save)?;
     println!(
         "{}",
         json!({
             "ok": true,
             "token": token,
             "user": body.pointer("/data/user"),
-            "hint": "export CONTEXT_OS_USER_TOKEN=<token>  (or run auth mint for a shorter agent token)",
+            "saved_to": saved_to,
+            "hint": if save {
+                "token saved; later commands auto-load it"
+            } else {
+                "export CONTEXT_OS_USER_TOKEN=<token> or re-run with --save"
+            },
         })
     );
     Ok(())
 }
 
-async fn cmd_auth_mint(client: &McpClient, ttl_minutes: u32) -> Result<()> {
+async fn cmd_auth_mint(client: &McpClient, ttl_minutes: u32, save: bool) -> Result<()> {
     let (status, body) = client
         .rest_json(
             "POST",
@@ -837,15 +939,74 @@ async fn cmd_auth_mint(client: &McpClient, ttl_minutes: u32) -> Result<()> {
         bail!("auth mint failed HTTP {status} ({err}): {body}");
     }
     let data = body.get("data").cloned().unwrap_or(json!({}));
+    let token = data
+        .get("token")
+        .and_then(|v| v.as_str())
+        .context("mint missing token")?;
+    let saved_to = maybe_save_token(token, save)?;
     println!(
         "{}",
         json!({
             "ok": true,
-            "token": data.get("token"),
+            "token": token,
             "expires_at": data.get("expires_at"),
             "ttl_minutes": data.get("ttl_minutes"),
             "token_kind": data.get("token_kind"),
-            "hint": "export CONTEXT_OS_USER_TOKEN=<token>",
+            "saved_to": saved_to,
+            "hint": if save {
+                "agent token saved for auto-load"
+            } else {
+                "export CONTEXT_OS_USER_TOKEN=<token> or re-run with --save"
+            },
+        })
+    );
+    Ok(())
+}
+
+fn cmd_auth_from_desktop(save: bool) -> Result<()> {
+    let Some(session) = context_os::token_store::load_desktop_session_token()? else {
+        bail!(
+            "no desktop local_session.json found. Start Context-OS Client and complete local login, \
+or set CONTEXT_OS_DESKTOP_SESSION=/path/to/local_session.json. Candidates: {:?}",
+            context_os::token_store::desktop_session_candidates()
+        );
+    };
+    let saved_to = maybe_save_token(&session.token, save)?;
+    println!(
+        "{}",
+        json!({
+            "ok": true,
+            "token": session.token,
+            "email": session.email,
+            "source": session.path.display().to_string(),
+            "saved_to": saved_to,
+            "hint": if save {
+                "desktop session token saved for CLI/MCP auto-load"
+            } else {
+                "re-run with --save to write ~/.config/context-os/user.token"
+            },
+        })
+    );
+    Ok(())
+}
+
+fn cmd_auth_path() -> Result<()> {
+    let default = context_os::token_store::default_token_file();
+    let file_token = context_os::token_store::read_token_file(&default)?.is_some();
+    let desktop = context_os::token_store::load_desktop_session_token()?;
+    println!(
+        "{}",
+        json!({
+            "token_file": default.display().to_string(),
+            "token_file_present": file_token,
+            "desktop_session": desktop.as_ref().map(|d| json!({
+                "path": d.path.display().to_string(),
+                "email": d.email,
+            })),
+            "desktop_candidates": context_os::token_store::desktop_session_candidates()
+                .into_iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
         })
     );
     Ok(())
@@ -973,6 +1134,23 @@ async fn cmd_share_quota(client: &McpClient) -> Result<()> {
     Ok(())
 }
 
+async fn cmd_share_invite(client: &McpClient, email: &str, role: &str) -> Result<()> {
+    let workspace_id = client.config().require_workspace_id()?.to_string();
+    client.config().require_user_token()?;
+    let result = client
+        .tools_call(
+            "workspace.share_invite_member",
+            json!({
+                "workspace_id": workspace_id,
+                "email": email,
+                "role": role,
+            }),
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -1006,13 +1184,17 @@ async fn main() -> ExitCode {
                     .map_err(|code| anyhow::anyhow!("status exit {code}"))?;
                 Ok(())
             }
-            Command::AuthLogin { email, password } => {
-                cmd_auth_login(&cfg, &email, &password).await
-            }
-            Command::AuthMint { ttl_minutes } => {
+            Command::AuthLogin {
+                email,
+                password,
+                save,
+            } => cmd_auth_login(&cfg, &email, &password, save).await,
+            Command::AuthMint { ttl_minutes, save } => {
                 let client = McpClient::new(cfg)?;
-                cmd_auth_mint(&client, ttl_minutes).await
+                cmd_auth_mint(&client, ttl_minutes, save).await
             }
+            Command::AuthFromDesktop { save } => cmd_auth_from_desktop(save),
+            Command::AuthPath => cmd_auth_path(),
             Command::AuthWhoami => {
                 let client = McpClient::new(cfg)?;
                 cmd_auth_whoami(&client).await
@@ -1076,6 +1258,10 @@ async fn main() -> ExitCode {
             Command::ShareQuota => {
                 let client = McpClient::new(cfg)?;
                 cmd_share_quota(&client).await
+            }
+            Command::ShareInvite { email, role } => {
+                let client = McpClient::new(cfg)?;
+                cmd_share_invite(&client, &email, &role).await
             }
             Command::Help => unreachable!(),
         }
@@ -1174,11 +1360,32 @@ mod tests {
 
     #[test]
     fn parse_auth_mint() {
-        let (_, cmd) = parse_args(&["auth".into(), "mint".into(), "--ttl".into(), "30".into()])
-            .unwrap();
+        let (_, cmd) = parse_args(&[
+            "auth".into(),
+            "mint".into(),
+            "--ttl".into(),
+            "30".into(),
+            "--save".into(),
+        ])
+        .unwrap();
         match cmd {
-            Command::AuthMint { ttl_minutes } => assert_eq!(ttl_minutes, 30),
+            Command::AuthMint {
+                ttl_minutes,
+                save,
+            } => {
+                assert_eq!(ttl_minutes, 30);
+                assert!(save);
+            }
             _ => panic!("expected mint"),
+        }
+    }
+
+    #[test]
+    fn parse_auth_from_desktop() {
+        let (_, cmd) = parse_args(&["auth".into(), "from-desktop".into(), "--save".into()]).unwrap();
+        match cmd {
+            Command::AuthFromDesktop { save } => assert!(save),
+            _ => panic!("expected from-desktop"),
         }
     }
 

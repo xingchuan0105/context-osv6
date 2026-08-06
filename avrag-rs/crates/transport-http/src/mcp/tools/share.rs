@@ -197,3 +197,48 @@ pub(crate) async fn share_quota(state: &AppState, _arguments: &Value) -> Result<
         ],
     ))
 }
+
+pub(crate) async fn share_invite_member(
+    state: &AppState,
+    arguments: &Value,
+) -> Result<Value, AppError> {
+    let workspace_uuid = require_workspace_id_arg(arguments)?;
+    let workspace_id = workspace_uuid.to_string();
+    require_share_workspace(state, &workspace_id).await?;
+
+    let email = arguments
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if email.is_empty() {
+        return Err(AppError::validation(
+            "email_required",
+            "workspace.share_invite_member requires arguments.email",
+        ));
+    }
+    let role = arguments
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("viewer")
+        .trim();
+    let access_level = avrag_share::AccessLevel::from_role(role);
+
+    let member = state
+        .share()
+        .invite_share_member(workspace_id.clone(), email.clone(), access_level)
+        .await?;
+
+    Ok(catalog::success_result(
+        "workspace.share_invite_member",
+        Some(&workspace_id),
+        json!({
+            "member_id": member.id,
+            "email": email,
+            "role": role,
+            "invite_status": member.invite_status,
+        }),
+        vec!["workspace.share_get_settings to list members"],
+    ))
+}

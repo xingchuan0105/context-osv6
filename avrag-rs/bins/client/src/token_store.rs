@@ -1,0 +1,232 @@
+//! Persist / discover user tokens for CLI and stdio MCP.
+//!
+//! Resolution order for user token (after explicit env):
+//! 1. `CONTEXT_OS_USER_TOKEN_FILE` path
+//! 2. Default config file (`~/.config/context-os/user.token`)
+//! 3. Desktop client `local_session.json` (optional auto-load)
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, bail};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct DesktopSessionFile {
+    token: String,
+    #[serde(default)]
+    user: Option<DesktopSessionUser>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DesktopSessionUser {
+    #[serde(default)]
+    email: Option<String>,
+}
+
+/// `~/.config/context-os/user.token` (or `$XDG_CONFIG_HOME` / Windows APPDATA).
+pub fn default_token_file() -> PathBuf {
+    if let Ok(p) = std::env::var("CONTEXT_OS_USER_TOKEN_FILE") {
+        let p = p.trim();
+        if !p.is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    config_dir().join("user.token")
+}
+
+pub fn config_dir() -> PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        let p = PathBuf::from(xdg);
+        if !p.as_os_str().is_empty() {
+            return p.join("context-os");
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata).join("context-os");
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".config").join("context-os");
+    }
+    PathBuf::from(".context-os")
+}
+
+/// Candidate paths for Tauri / install-layout `local_session.json`.
+pub fn desktop_session_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(p) = std::env::var("CONTEXT_OS_DESKTOP_SESSION") {
+        let p = p.trim();
+        if !p.is_empty() {
+            out.push(PathBuf::from(p));
+        }
+    }
+    if let Ok(state) = std::env::var("CONTEXT_OS_STATE_HOME") {
+        let state = PathBuf::from(state);
+        out.push(state.join("local_session.json"));
+    }
+
+    #[cfg(windows)]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let local = PathBuf::from(local);
+            out.push(
+                local
+                    .join("com.contextos.desktop")
+                    .join("local_session.json"),
+            );
+            out.push(
+                local
+                    .join("Context-OS Client")
+                    .join("local_session.json"),
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let home = PathBuf::from(home);
+            // Tauri 2 app_data_dir with identifier com.contextos.desktop
+            out.push(
+                home.join(".local/share/com.contextos.desktop/local_session.json"),
+            );
+            out.push(home.join(".local/share/context-os-client/local_session.json"));
+            // Some builds use product name slug
+            out.push(
+                home.join(".local/share/context-os-client/local_session.json"),
+            );
+            out.push(home.join(".local/share/Context-OS Client/local_session.json"));
+            // macOS Application Support
+            out.push(
+                home.join("Library/Application Support/com.contextos.desktop/local_session.json"),
+            );
+            out.push(
+                home.join("Library/Application Support/Context-OS Client/local_session.json"),
+            );
+        }
+    }
+
+    out
+}
+
+pub fn read_token_file(path: &Path) -> Result<Option<String>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("read token file {}", path.display()))?;
+    let token = raw
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with('#'))
+        .unwrap_or("")
+        .to_string();
+    if token.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(token))
+    }
+}
+
+pub fn write_token_file(path: &Path, token: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create {}", parent.display()))?;
+    }
+    let body = format!(
+        "# Context-OS user / agent token — do not commit\n# path: {}\n{}\n",
+        path.display(),
+        token.trim()
+    );
+    fs::write(path, body).with_context(|| format!("write {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+pub fn load_default_token_file() -> Result<Option<String>> {
+    read_token_file(&default_token_file())
+}
+
+#[derive(Debug, Clone)]
+pub struct DesktopSessionToken {
+    pub token: String,
+    pub path: PathBuf,
+    pub email: Option<String>,
+}
+
+pub fn load_desktop_session_token() -> Result<Option<DesktopSessionToken>> {
+    for path in desktop_session_candidates() {
+        if !path.is_file() {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)
+            .with_context(|| format!("read desktop session {}", path.display()))?;
+        let parsed: DesktopSessionFile = serde_json::from_str(&raw)
+            .with_context(|| format!("parse desktop session {}", path.display()))?;
+        let token = parsed.token.trim().to_string();
+        if token.is_empty() {
+            continue;
+        }
+        return Ok(Some(DesktopSessionToken {
+            token,
+            path,
+            email: parsed.user.and_then(|u| u.email),
+        }));
+    }
+    Ok(None)
+}
+
+/// Resolve user token from env file / default file / desktop session.
+/// Does not read CONTEXT_OS_USER_TOKEN itself (caller handles env first).
+pub fn discover_user_token(load_desktop: bool) -> Result<Option<String>> {
+    if let Some(t) = load_default_token_file()? {
+        return Ok(Some(t));
+    }
+    if load_desktop {
+        if let Some(s) = load_desktop_session_token()? {
+            return Ok(Some(s.token));
+        }
+    }
+    Ok(None)
+}
+
+pub fn save_user_token(token: &str) -> Result<PathBuf> {
+    let path = default_token_file();
+    if token.trim().is_empty() {
+        bail!("refusing to write empty token");
+    }
+    write_token_file(&path, token)?;
+    Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn read_token_skips_comments() {
+        let dir = std::env::temp_dir().join(format!("context-os-token-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("user.token");
+        let mut f = fs::File::create(&path).unwrap();
+        writeln!(f, "# comment").unwrap();
+        writeln!(f, "abc.jwt.token").unwrap();
+        let t = read_token_file(&path).unwrap().unwrap();
+        assert_eq!(t, "abc.jwt.token");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn desktop_candidates_nonempty() {
+        assert!(!desktop_session_candidates().is_empty());
+    }
+}

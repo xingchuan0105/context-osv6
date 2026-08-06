@@ -9,3 +9,4 @@ pub mod discover;
 pub mod mcp_client;
 pub mod mime;
 pub mod proxy;
+pub mod token_store;

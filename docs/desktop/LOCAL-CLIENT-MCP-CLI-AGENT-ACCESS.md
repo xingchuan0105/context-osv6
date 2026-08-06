@@ -266,9 +266,11 @@ Content-Type: application/json
 ```bash
 # optional: CONTEXT_OS_API_BASE=http://127.0.0.1:18080
 
-# 用户态（建库）
-context-os auth login --email you@example.com --password '…'
-export CONTEXT_OS_USER_TOKEN=$(context-os auth mint --ttl 120 | jq -r .token)
+# 用户态（建库 / 分享）— 推荐从桌面会话或 mint --save 落盘
+context-os auth from-desktop --save     # 读桌面 local_session.json → ~/.config/context-os/user.token
+# 或: context-os auth login --email … --password … --save
+# 或: context-os auth mint --ttl 120 --save
+context-os auth path                    # 查看 token 文件与桌面候选路径
 context-os workspace create --name Research
 context-os workspace list
 
@@ -285,11 +287,13 @@ context-os share quota
 context-os share enable --workspace $WS --role viewer
 context-os share configure --workspace $WS --access-level link --anon-limit 10
 context-os share status --workspace $WS
+context-os share invite --workspace $WS --email peer@example.com --role viewer
 context-os share revoke --workspace $WS --token <share_token>
 ```
 
-**鉴权优先级：** `CONTEXT_OS_USER_TOKEN` ＞ `CONTEXT_OS_API_KEY`（MCP/CLI Bearer）。  
-**分享：** 仅用户态；workspace API key 调用 share MCP → `api_key_forbidden`。
+**鉴权优先级：** `CONTEXT_OS_USER_TOKEN` ＞ token 文件 ＞ 桌面 `local_session.json` ＞ `CONTEXT_OS_API_KEY`。  
+**分享：** 仅用户态；workspace API key 调用 share MCP → `api_key_forbidden`。  
+**Token 文件：** `~/.config/context-os/user.token`（`CONTEXT_OS_USER_TOKEN_FILE` 可改）；stdio MCP 与 CLI 共用。
 
 构建：`cargo build -p context-os --release` → `target/release/context-os` 与 `context-os-mcp`。  
 Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/context-os`。
@@ -341,3 +345,4 @@ Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/contex
 | 2026-08-06 | P1 切片：`context-os` CLI（status/ingest/ask/sources；share 拒绝）；client 包合并 mcp+cli |
 | 2026-08-06 | P1：`POST /api/auth/agent-token` + `CONTEXT_OS_USER_TOKEN`；CLI auth/workspace create；API Access 签发 UI |
 | 2026-08-06 | P1：MCP `workspace.share_*` + `account.share_quota`；CLI `share enable|status|configure|revoke|quota` |
+| 2026-08-06 | UX：token 文件 / `auth from-desktop` / mint|login `--save`；`share_invite_member` |

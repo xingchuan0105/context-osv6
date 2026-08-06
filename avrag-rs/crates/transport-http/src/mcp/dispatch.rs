@@ -24,6 +24,7 @@ pub(crate) async fn execute_mcp_tool(
         "workspace.share_get_settings" => tools::share_get_settings(state, arguments).await,
         "workspace.share_update_settings" => tools::share_update_settings(state, arguments).await,
         "workspace.share_revoke_link" => tools::share_revoke_link(state, arguments).await,
+        "workspace.share_invite_member" => tools::share_invite_member(state, arguments).await,
         "account.share_quota" => tools::share_quota(state, arguments).await,
         other => Err(AppError::validation(
             "unsupported_tool",

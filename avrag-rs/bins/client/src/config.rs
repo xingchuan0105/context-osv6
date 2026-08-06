@@ -29,11 +29,23 @@ impl ClientConfig {
 
         let api_key =
             first_nonempty_env(&["CONTEXT_OS_API_KEY", "CONTEXT_OS_WORKSPACE_API_KEY"]);
-        let user_token = first_nonempty_env(&[
+        let mut user_token = first_nonempty_env(&[
             "CONTEXT_OS_USER_TOKEN",
             "CONTEXT_OS_AGENT_TOKEN",
             "CONTEXT_OS_JWT",
         ]);
+        // File / desktop discovery when env token absent.
+        if user_token.is_none() {
+            let load_desktop = match std::env::var("CONTEXT_OS_LOAD_DESKTOP_SESSION")
+                .unwrap_or_else(|_| "1".into())
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "0" | "false" | "no" | "off" => false,
+                _ => true,
+            };
+            user_token = crate::token_store::discover_user_token(load_desktop)?;
+        }
         let workspace_id = first_nonempty_env(&["CONTEXT_OS_WORKSPACE_ID", "CONTEXT_OS_NOTEBOOK_ID"]);
 
         Ok(Self {
@@ -123,8 +135,9 @@ impl ClientConfig {
             Some(t) => Ok(t),
             None => bail!(
                 "CONTEXT_OS_USER_TOKEN required (user JWT or short-lived agent token). \
-Login with `context-os auth login`, or mint with `context-os auth mint` while holding a session JWT. \
-Workspace API keys cannot create workspaces or manage share."
+Try: `context-os auth from-desktop` (desktop session), `auth login --save`, or `auth mint --save`. \
+Token file: {}. Workspace API keys cannot create workspaces or manage share.",
+                crate::token_store::default_token_file().display()
             ),
         }
     }
