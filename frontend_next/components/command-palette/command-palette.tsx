@@ -6,10 +6,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth/context";
 import { listWorkspaces, type DashboardWorkspace } from "../../lib/dashboard/client";
 import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
+import {
+  searchProductIndex,
+  type GlobalSearchResponse,
+} from "../../lib/search/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import styles from "./command-palette.module.css";
 
-type PaletteGroup = "workspaces" | "nav" | "billing" | "help";
+type PaletteGroup = "sessions" | "workspaces" | "sources" | "nav" | "billing" | "help";
 
 type PaletteItem = {
   id: string;
@@ -21,7 +25,7 @@ type PaletteItem = {
 
 type StaticCommand = {
   id: string;
-  group: Exclude<PaletteGroup, "workspaces">;
+  group: Exclude<PaletteGroup, "sessions" | "workspaces" | "sources">;
   labelKey: UiMessageKey;
   href: string;
   keywords: string;
@@ -100,10 +104,19 @@ const STATIC_COMMANDS: StaticCommand[] = [
   },
 ];
 
-const GROUP_ORDER: PaletteGroup[] = ["workspaces", "nav", "billing", "help"];
+const GROUP_ORDER: PaletteGroup[] = [
+  "sessions",
+  "workspaces",
+  "sources",
+  "nav",
+  "billing",
+  "help",
+];
 
 const GROUP_LABEL: Record<PaletteGroup, UiMessageKey> = {
+  sessions: "commandPalette.group.sessions",
   workspaces: "commandPalette.group.workspaces",
+  sources: "commandPalette.group.sources",
   nav: "commandPalette.group.nav",
   billing: "commandPalette.group.billing",
   help: "commandPalette.group.help",
@@ -112,6 +125,8 @@ const GROUP_LABEL: Record<PaletteGroup, UiMessageKey> = {
 const RECENT_KEY = "context-os.command-palette.recent-workspaces.v1";
 const RECENT_LIMIT = 8;
 const WORKSPACE_LIST_CAP = 40;
+const SEARCH_MIN_CHARS = 2;
+const SEARCH_DEBOUNCE_MS = 220;
 
 function readRecentIds(): string[] {
   if (typeof window === "undefined") {
@@ -143,7 +158,7 @@ function pushRecentId(workspaceId: string) {
   try {
     window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   } catch {
-    // ignore quota / private mode
+    // ignore
   }
 }
 
@@ -164,7 +179,7 @@ function workspaceTitle(ws: DashboardWorkspace): string {
 }
 
 /**
- * PRODUCT_IA: Cmd/Ctrl+K jump palette — Canonical routes + workspace search / recent.
+ * PRODUCT_IA: Cmd/Ctrl+K — Canonical routes, recent workspaces, global search (sessions/sources).
  */
 export function CommandPaletteHost() {
   const router = useRouter();
@@ -174,7 +189,8 @@ export function CommandPaletteHost() {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [workspaces, setWorkspaces] = useState<DashboardWorkspace[]>([]);
-  const [workspacesLoading, setWorkspacesLoading] = useState(false);
+  const [searchHits, setSearchHits] = useState<GlobalSearchResponse | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -205,6 +221,23 @@ export function CommandPaletteHost() {
         ordered.push(ws);
       }
     }
+
+    // When searching via API, prefer API workspace hits merged with local list titles.
+    if (searchHits?.workspaces?.length) {
+      const fromSearch = searchHits.workspaces.map((ws) => {
+        const id = ws.id;
+        const title = (ws.title || ws.name || id).trim();
+        return {
+          id: `ws-${id}`,
+          group: "workspaces" as const,
+          label: title,
+          href: `/dashboard/${id}`,
+          keywords: `${title} ${id} workspace 工作区`,
+        };
+      });
+      return fromSearch.slice(0, WORKSPACE_LIST_CAP);
+    }
+
     return ordered.slice(0, WORKSPACE_LIST_CAP).map((ws) => {
       const title = workspaceTitle(ws);
       const recent = recentIds.includes(ws.workspace_id);
@@ -218,30 +251,97 @@ export function CommandPaletteHost() {
         keywords: `${title} ${ws.workspace_id} workspace 工作区`,
       };
     });
-  }, [locale, recentIds, workspaces]);
+  }, [locale, recentIds, searchHits, workspaces]);
+
+  const sessionItems: PaletteItem[] = useMemo(() => {
+    if (!searchHits?.sessions?.length) {
+      return [];
+    }
+    return searchHits.sessions.slice(0, 20).map((session) => {
+      const title =
+        session.title?.trim() ||
+        formatUiMessage(locale, "commandPalette.sessionUntitled");
+      return {
+        id: `sess-${session.id}`,
+        group: "sessions" as const,
+        label: formatUiMessage(locale, "commandPalette.sessionLabel", { title }),
+        href: `/dashboard/${session.workspace_id}?session=${encodeURIComponent(session.id)}`,
+        keywords: `${title} ${session.id} ${session.workspace_id} session 会话`,
+      };
+    });
+  }, [locale, searchHits]);
+
+  const sourceItems: PaletteItem[] = useMemo(() => {
+    if (!searchHits?.sources?.length) {
+      return [];
+    }
+    return searchHits.sources.slice(0, 15).map((source) => {
+      const name = (source.file_name || source.title || source.id).trim();
+      const wsName = source.workspace_name?.trim();
+      return {
+        id: `src-${source.id}`,
+        group: "sources" as const,
+        label: wsName
+          ? formatUiMessage(locale, "commandPalette.sourceLabelWithWs", {
+              name,
+              workspace: wsName,
+            })
+          : formatUiMessage(locale, "commandPalette.sourceLabel", { name }),
+        href: `/dashboard/${source.workspace_id}`,
+        keywords: `${name} ${source.id} ${source.workspace_id} source document 文档 来源`,
+      };
+    });
+  }, [locale, searchHits]);
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    // With empty query: show recent workspaces (if any) + static nav (not full workspace dump).
-    const workspacePool = q
-      ? workspaceItems
-      : workspaceItems.filter((item) => item.id.startsWith("ws-") && recentIds.some((id) => item.id === `ws-${id}`));
-    const pool = [...workspacePool, ...staticItems];
-    return pool.filter((item) => matches(item, q));
-  }, [query, recentIds, staticItems, workspaceItems]);
+    // Empty query: recent workspaces + static nav.
+    if (!q) {
+      const recentOnly = workspaceItems.filter((item) =>
+        recentIds.some((id) => item.id === `ws-${id}`),
+      );
+      return [...recentOnly, ...staticItems];
+    }
+    // API search hits are authoritative (FTS may match message body, not title) —
+    // do not re-filter sessions/sources/workspaces from searchHits client-side.
+    if (searchHits) {
+      return [
+        ...sessionItems,
+        ...workspaceItems,
+        ...sourceItems,
+        ...staticItems.filter((item) => matches(item, q)),
+      ];
+    }
+    // Debouncing / no hits yet: local workspace list + static, title/keyword match.
+    return [...workspaceItems, ...staticItems].filter((item) => matches(item, q));
+  }, [
+    query,
+    recentIds,
+    searchHits,
+    sessionItems,
+    sourceItems,
+    staticItems,
+    workspaceItems,
+  ]);
 
   const close = useCallback(() => {
     setOpen(false);
     setQuery("");
     setActiveIndex(0);
+    setSearchHits(null);
   }, []);
 
   const run = useCallback(
     (item: PaletteItem) => {
       if (item.id.startsWith("ws-")) {
-        const workspaceId = item.id.slice(3);
-        pushRecentId(workspaceId);
+        pushRecentId(item.id.slice(3));
         setRecentIds(readRecentIds());
+      } else if (item.id.startsWith("sess-")) {
+        const match = item.href.match(/\/dashboard\/([^?]+)/);
+        if (match?.[1]) {
+          pushRecentId(match[1]);
+          setRecentIds(readRecentIds());
+        }
       }
       close();
       router.push(item.href);
@@ -287,7 +387,6 @@ export function CommandPaletteHost() {
       return;
     }
     let cancelled = false;
-    setWorkspacesLoading(true);
     void listWorkspaces(auth.token)
       .then((response) => {
         if (!cancelled) {
@@ -298,16 +397,48 @@ export function CommandPaletteHost() {
         if (!cancelled) {
           setWorkspaces([]);
         }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setWorkspacesLoading(false);
-        }
       });
     return () => {
       cancelled = true;
     };
   }, [auth.token, open]);
+
+  // Debounced global search for sessions / sources / workspaces.
+  useEffect(() => {
+    if (!open || !auth.token) {
+      return;
+    }
+    const q = query.trim();
+    if (q.length < SEARCH_MIN_CHARS) {
+      setSearchHits(null);
+      setSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void searchProductIndex(auth.token as string, q)
+        .then((hits) => {
+          if (!cancelled) {
+            setSearchHits(hits);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSearchHits(null);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setSearchLoading(false);
+          }
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [auth.token, open, query]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -354,6 +485,8 @@ export function CommandPaletteHost() {
   }
 
   let flatIndex = -1;
+  const showSearching =
+    searchLoading && query.trim().length >= SEARCH_MIN_CHARS && filtered.length === 0;
 
   return (
     <div
@@ -379,12 +512,12 @@ export function CommandPaletteHost() {
           onChange={(event) => setQuery(event.target.value)}
         />
         <div className={styles.list} role="listbox">
-          {filtered.length === 0 ? (
+          {showSearching ? (
             <p className={styles.empty}>
-              {workspacesLoading && query.trim()
-                ? formatUiMessage(locale, "commandPalette.loadingWorkspaces")
-                : formatUiMessage(locale, "commandPalette.empty")}
+              {formatUiMessage(locale, "commandPalette.loadingSearch")}
             </p>
+          ) : filtered.length === 0 ? (
+            <p className={styles.empty}>{formatUiMessage(locale, "commandPalette.empty")}</p>
           ) : (
             GROUP_ORDER.map((group) => {
               const items = filtered.filter((item) => item.group === group);

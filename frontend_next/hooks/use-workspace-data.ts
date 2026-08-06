@@ -33,10 +33,14 @@ function getWorkspaceLoadErrorMessage(error: unknown, locale: string) {
     : "Unable to load this workspace right now.";
 }
 
-export function useWorkspaceData(workspaceId: string) {
+export function useWorkspaceData(
+  workspaceId: string,
+  options?: { preferredSessionId?: string | null },
+) {
   const auth = useAuth();
   const router = useRouter();
   const { locale } = useUiPreferences();
+  const preferredSessionId = options?.preferredSessionId?.trim() || null;
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [workspaceTitleDraft, setWorkspaceTitleDraft] = useState("");
@@ -62,7 +66,12 @@ export function useWorkspaceData(workspaceId: string) {
         setWorkspace(ws.workspace);
         setWorkspaceTitleDraft(ws.workspace.title || ws.workspace.name);
         setSessions(sess.sessions);
-        setActiveSessionId((cur) => cur ?? sess.sessions[0]?.id ?? null);
+        const preferredOk =
+          preferredSessionId &&
+          sess.sessions.some((session) => session.id === preferredSessionId)
+            ? preferredSessionId
+            : null;
+        setActiveSessionId((cur) => preferredOk ?? cur ?? sess.sessions[0]?.id ?? null);
       } catch (error) {
         if (cancelled) return;
         setWorkspace(null);
@@ -75,7 +84,7 @@ export function useWorkspaceData(workspaceId: string) {
 
     void load();
     return () => { cancelled = true; };
-  }, [auth.initialized, auth.token, workspaceId, locale]);
+  }, [auth.initialized, auth.token, workspaceId, locale, preferredSessionId]);
 
   useEffect(() => {
     setRenameSessionTarget(null);

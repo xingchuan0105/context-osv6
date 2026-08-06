@@ -13,7 +13,7 @@ import {
   type SetStateAction,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { useWorkspaceData } from "../../hooks/use-workspace-data";
 import { useAuth } from "../../lib/auth/context";
@@ -135,6 +135,8 @@ function useIsMobile() {
 export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const auth = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionFromUrl = searchParams.get("session");
   const { locale } = useUiPreferences();
   const isMobile = useIsMobile();
   const workspaceUi = useWorkspaceUi(workspaceId);
@@ -145,7 +147,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     reloadSessions, saveWorkspaceTitle, createWorkspaceFlow, startNewThread: rawStartNewThread,
     toggleSessionPin, renameSession, dismissRename, submitRenameSession, removeSession,
     renameSubmitting,
-  } = useWorkspaceData(workspaceId);
+  } = useWorkspaceData(workspaceId, { preferredSessionId: sessionFromUrl });
   const [renameSessionError, setRenameSessionError] = useState("");
 
   function handleDismissRename() {

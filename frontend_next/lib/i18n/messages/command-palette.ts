@@ -6,8 +6,8 @@ export const commandPaletteMessages = {
     en: "Quick jump",
   },
   "commandPalette.placeholder": {
-    zh: "搜索页面与操作…",
-    en: "Search pages and actions…",
+    zh: "搜索会话、工作区、文档与页面…",
+    en: "Search sessions, workspaces, docs, and pages…",
   },
   "commandPalette.empty": {
     zh: "没有匹配项",
@@ -17,9 +17,17 @@ export const commandPaletteMessages = {
     zh: "↑↓ 选择 · Enter 打开 · Esc 关闭",
     en: "↑↓ select · Enter open · Esc close",
   },
+  "commandPalette.group.sessions": {
+    zh: "会话",
+    en: "Sessions",
+  },
   "commandPalette.group.workspaces": {
     zh: "工作区",
     en: "Workspaces",
+  },
+  "commandPalette.group.sources": {
+    zh: "文档",
+    en: "Documents",
   },
   "commandPalette.group.nav": {
     zh: "导航",
@@ -37,9 +45,29 @@ export const commandPaletteMessages = {
     zh: "最近 · {title}",
     en: "Recent · {title}",
   },
+  "commandPalette.sessionLabel": {
+    zh: "会话 · {title}",
+    en: "Session · {title}",
+  },
+  "commandPalette.sessionUntitled": {
+    zh: "未命名会话",
+    en: "Untitled session",
+  },
+  "commandPalette.sourceLabel": {
+    zh: "文档 · {name}",
+    en: "Doc · {name}",
+  },
+  "commandPalette.sourceLabelWithWs": {
+    zh: "文档 · {name}（{workspace}）",
+    en: "Doc · {name} ({workspace})",
+  },
   "commandPalette.loadingWorkspaces": {
     zh: "正在加载工作区…",
     en: "Loading workspaces…",
+  },
+  "commandPalette.loadingSearch": {
+    zh: "正在搜索…",
+    en: "Searching…",
   },
   "commandPalette.item.dashboard": {
     zh: "工作台",
