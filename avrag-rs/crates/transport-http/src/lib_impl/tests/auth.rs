@@ -796,18 +796,53 @@ fn jwt_org_admin_includes_admin_permission() {
 }
 
 #[test]
-fn jwt_reissue_with_ttl_preserves_identity() {
-    use crate::lib_impl::router_core::reissue_user_jwt_with_ttl;
+fn jwt_agent_mint_preserves_identity_and_sets_kind() {
+    use crate::lib_impl::router_core::{TOKEN_KIND_AGENT, reissue_agent_jwt_with_ttl};
 
     let user_id = Uuid::new_v4();
     let owner_user_id = Uuid::new_v4();
     let token = issue_jwt_for_auth_version(&user_id, &owner_user_id, 3, "user");
     let claims = verify_jwt(&token).expect("base token valid");
-    let short = reissue_user_jwt_with_ttl(&claims, chrono::Duration::minutes(30));
+    let (short, _ttl) =
+        reissue_agent_jwt_with_ttl(&claims, chrono::Duration::minutes(30)).expect("mint ok");
     let short_claims = verify_jwt(&short).expect("reissued token valid");
     assert_eq!(short_claims.sub, user_id.to_string());
     assert_eq!(short_claims.owner_user_id, owner_user_id.to_string());
     assert_eq!(short_claims.auth_version, 3);
+    assert_eq!(short_claims.token_kind.as_deref(), Some(TOKEN_KIND_AGENT));
+    assert!(short_claims.exp <= claims.exp);
     assert_ne!(short, token, "reissue must produce a new token string");
+}
+
+#[test]
+fn jwt_agent_cannot_remint_from_agent_token() {
+    use crate::lib_impl::router_core::{AgentMintError, reissue_agent_jwt_with_ttl};
+
+    let user_id = Uuid::new_v4();
+    let owner_user_id = Uuid::new_v4();
+    let session = issue_jwt_for_auth_version(&user_id, &owner_user_id, 1, "user");
+    let session_claims = verify_jwt(&session).unwrap();
+    let (agent, _) =
+        reissue_agent_jwt_with_ttl(&session_claims, chrono::Duration::minutes(10)).unwrap();
+    let agent_claims = verify_jwt(&agent).unwrap();
+    let err = reissue_agent_jwt_with_ttl(&agent_claims, chrono::Duration::hours(24))
+        .expect_err("agent must not remint");
+    assert_eq!(err, AgentMintError::AgentCannotRemint);
+}
+
+#[test]
+fn jwt_agent_mint_capped_by_parent_exp() {
+    use crate::lib_impl::router_core::reissue_agent_jwt_with_ttl;
+
+    let user_id = Uuid::new_v4();
+    let owner_user_id = Uuid::new_v4();
+    // 24h session, request 24h agent — child exp must not exceed parent.
+    let session = issue_jwt_for_auth_version(&user_id, &owner_user_id, 1, "user");
+    let claims = verify_jwt(&session).unwrap();
+    let (agent, ttl) =
+        reissue_agent_jwt_with_ttl(&claims, chrono::Duration::hours(48)).expect("mint");
+    let agent_claims = verify_jwt(&agent).unwrap();
+    assert!(agent_claims.exp <= claims.exp);
+    assert!(ttl <= chrono::Duration::hours(24) + chrono::Duration::minutes(1));
 }
 

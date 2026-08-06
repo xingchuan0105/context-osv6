@@ -266,10 +266,11 @@ Content-Type: application/json
 ```bash
 # optional: CONTEXT_OS_API_BASE=http://127.0.0.1:18080
 
-# 用户态（建库 / 分享）— 推荐从桌面会话或 mint --save 落盘
+# 用户态（建库 / 分享）— 推荐 mint/from-desktop --save（默认不打印完整 JWT）
 context-os auth from-desktop --save     # 读桌面 local_session.json → ~/.config/context-os/user.token
 # 或: context-os auth login --email … --password … --save
 # 或: context-os auth mint --ttl 120 --save
+# 桌面会话自动加载默认关闭；需要时: CONTEXT_OS_LOAD_DESKTOP_SESSION=1
 context-os auth path                    # 查看 token 文件与桌面候选路径
 context-os workspace create --name Research
 context-os workspace list
@@ -291,9 +292,15 @@ context-os share invite --workspace $WS --email peer@example.com --role viewer
 context-os share revoke --workspace $WS --token <share_token>
 ```
 
-**鉴权优先级：** `CONTEXT_OS_USER_TOKEN` ＞ token 文件 ＞ 桌面 `local_session.json` ＞ `CONTEXT_OS_API_KEY`。  
-**分享：** 仅用户态；workspace API key 调用 share MCP → `api_key_forbidden`。  
-**Token 文件：** `~/.config/context-os/user.token`（`CONTEXT_OS_USER_TOKEN_FILE` 可改）；stdio MCP 与 CLI 共用。
+**鉴权优先级（Bearer）：**  
+- 显式 `CONTEXT_OS_USER_TOKEN` ＞ API key  
+- 若仅有 API key + **自动发现**的 user token（文件/桌面）→ **优先 API key**（最小权限，避免静默提权）  
+- 无 API key 时可用 token 文件 / 桌面 JWT  
+- 桌面会话自动加载默认 **关**（`CONTEXT_OS_LOAD_DESKTOP_SESSION=1` 开启）  
+
+**分享 / 建库：** 始终需要 `require_user_token`（用户 JWT）；API key → `api_key_forbidden`。  
+**Agent mint：** `token_kind=agent`，TTL 不超过父会话 `exp`，agent token **不可再 mint**。  
+**Token 文件：** `~/.config/context-os/user.token`（0600 + 目录 0700）；stdio MCP 与 CLI 共用。
 
 构建：`cargo build -p context-os --release` → `target/release/context-os` 与 `context-os-mcp`。  
 Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/context-os`。

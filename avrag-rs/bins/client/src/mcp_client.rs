@@ -84,6 +84,17 @@ impl McpClient {
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("tools/call failed");
+            if matches!(
+                code,
+                "api_key_forbidden"
+                    | "workspace_key_cannot_call_account_tools"
+                    | "workspace_key_cannot_call_org_tools"
+            ) {
+                bail!(
+                    "MCP error `{code}`: {} ({message})",
+                    config::user_session_required_message()
+                );
+            }
             bail!("MCP error `{code}`: {message}");
         }
 
@@ -183,6 +194,7 @@ mod tests {
             api_base: "http://127.0.0.1:18080".into(),
             api_key: None,
             user_token: None,
+            user_token_source: crate::config::UserTokenSource::None,
             workspace_id: None,
             mcp_url: "http://127.0.0.1:18080/api/v1/mcp".into(),
             health_url: "http://127.0.0.1:18080/health".into(),

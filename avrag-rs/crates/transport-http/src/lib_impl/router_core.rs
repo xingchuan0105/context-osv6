@@ -55,9 +55,14 @@ pub(crate) struct JwtClaims {
     jti: String,
     #[serde(default = "default_auth_version")]
     pub(crate) auth_version: i32,
-    exp: usize,
-    iat: usize,
+    /// Optional: `"agent"` for short-lived mint tokens; absent/legacy = full session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) token_kind: Option<String>,
+    pub(crate) exp: usize,
+    pub(crate) iat: usize,
 }
+
+pub(crate) const TOKEN_KIND_AGENT: &str = "agent";
 
 fn default_auth_version() -> i32 {
     1
@@ -145,26 +150,56 @@ pub fn issue_jwt_for_auth_version_ttl(
         permissions: jwt_permissions_for_user_role(user_role),
         jti: Uuid::new_v4().to_string(),
         auth_version,
+        token_kind: None,
         exp: (now + ttl).timestamp() as usize,
         iat: now.timestamp() as usize,
     };
     encode_jwt_claims(&claims)
 }
 
-/// Re-issue a short-lived agent token from an existing verified user JWT claims set.
-/// Keeps `sub` / `owner_user_id` / `permissions` / `auth_version`; new `jti` + `exp`.
-pub(crate) fn reissue_user_jwt_with_ttl(claims: &JwtClaims, ttl: chrono::Duration) -> String {
+/// Errors when minting an agent token from an existing session JWT.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AgentMintError {
+    /// Parent is already an agent token — re-mint is not allowed.
+    AgentCannotRemint,
+    /// Parent JWT is already expired or has no remaining lifetime.
+    ParentExpired,
+}
+
+/// Re-issue a short-lived **agent** token from a full session JWT.
+///
+/// - Refuses parents with `token_kind=agent` (no chain renewal).
+/// - Caps child `exp` at `min(now + ttl, parent.exp)`.
+/// - Sets `token_kind=agent` on the child.
+pub(crate) fn reissue_agent_jwt_with_ttl(
+    parent: &JwtClaims,
+    ttl: chrono::Duration,
+) -> Result<(String, chrono::Duration), AgentMintError> {
+    if parent.token_kind.as_deref() == Some(TOKEN_KIND_AGENT) {
+        return Err(AgentMintError::AgentCannotRemint);
+    }
     let now = chrono::Utc::now();
+    let now_ts = now.timestamp() as usize;
+    if parent.exp <= now_ts {
+        return Err(AgentMintError::ParentExpired);
+    }
+    let requested_exp = (now + ttl).timestamp() as usize;
+    let child_exp = requested_exp.min(parent.exp);
+    if child_exp <= now_ts {
+        return Err(AgentMintError::ParentExpired);
+    }
+    let effective_ttl = chrono::Duration::seconds((child_exp - now_ts) as i64);
     let claims = JwtClaims {
-        sub: claims.sub.clone(),
-        owner_user_id: claims.owner_user_id.clone(),
-        permissions: claims.permissions.clone(),
+        sub: parent.sub.clone(),
+        owner_user_id: parent.owner_user_id.clone(),
+        permissions: parent.permissions.clone(),
         jti: Uuid::new_v4().to_string(),
-        auth_version: claims.auth_version,
-        exp: (now + ttl).timestamp() as usize,
-        iat: now.timestamp() as usize,
+        auth_version: parent.auth_version,
+        token_kind: Some(TOKEN_KIND_AGENT.to_string()),
+        exp: child_exp,
+        iat: now_ts,
     };
-    encode_jwt_claims(&claims)
+    Ok((encode_jwt_claims(&claims), effective_ttl))
 }
 
 fn encode_jwt_claims(claims: &JwtClaims) -> String {

@@ -6,6 +6,19 @@ pub const DEFAULT_API_BASE: &str = "http://127.0.0.1:18080";
 pub const MCP_RPC_PATH: &str = "/api/v1/mcp";
 pub const HEALTH_PATH: &str = "/health";
 
+/// Where a user JWT came from (drives least-privilege bearer selection).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UserTokenSource {
+    #[default]
+    None,
+    /// Explicit env or CLI `--user-token`.
+    Explicit,
+    /// Loaded from `user.token` file (auto).
+    TokenFile,
+    /// Loaded from desktop `local_session.json` (auto).
+    Desktop,
+}
+
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub api_base: String,
@@ -13,6 +26,7 @@ pub struct ClientConfig {
     pub api_key: Option<String>,
     /// User JWT / short-lived agent token (account tools, create workspace).
     pub user_token: Option<String>,
+    pub user_token_source: UserTokenSource,
     pub workspace_id: Option<String>,
     pub mcp_url: String,
     pub health_url: String,
@@ -29,23 +43,39 @@ impl ClientConfig {
 
         let api_key =
             first_nonempty_env(&["CONTEXT_OS_API_KEY", "CONTEXT_OS_WORKSPACE_API_KEY"]);
+
         let mut user_token = first_nonempty_env(&[
             "CONTEXT_OS_USER_TOKEN",
             "CONTEXT_OS_AGENT_TOKEN",
             "CONTEXT_OS_JWT",
         ]);
-        // File / desktop discovery when env token absent.
-        if user_token.is_none() {
-            let load_desktop = match std::env::var("CONTEXT_OS_LOAD_DESKTOP_SESSION")
-                .unwrap_or_else(|_| "1".into())
-                .to_ascii_lowercase()
-                .as_str()
-            {
-                "0" | "false" | "no" | "off" => false,
-                _ => true,
-            };
-            user_token = crate::token_store::discover_user_token(load_desktop)?;
+        let mut user_token_source = UserTokenSource::None;
+        if user_token.is_some() {
+            user_token_source = UserTokenSource::Explicit;
+        } else {
+            // Token file first (intentional --save). Desktop only if explicitly enabled.
+            if let Some(t) = crate::token_store::load_default_token_file()? {
+                user_token = Some(t);
+                user_token_source = UserTokenSource::TokenFile;
+            } else {
+                // Default OFF: avoid elevating API-key-only agents via desktop login JWT.
+                let load_desktop = match std::env::var("CONTEXT_OS_LOAD_DESKTOP_SESSION")
+                    .unwrap_or_else(|_| "0".into())
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
+                    "1" | "true" | "yes" | "on" => true,
+                    _ => false,
+                };
+                if load_desktop {
+                    if let Some(s) = crate::token_store::load_desktop_session_token()? {
+                        user_token = Some(s.token);
+                        user_token_source = UserTokenSource::Desktop;
+                    }
+                }
+            }
         }
+
         let workspace_id = first_nonempty_env(&["CONTEXT_OS_WORKSPACE_ID", "CONTEXT_OS_NOTEBOOK_ID"]);
 
         Ok(Self {
@@ -54,6 +84,7 @@ impl ClientConfig {
             api_base,
             api_key,
             user_token,
+            user_token_source,
             workspace_id,
         })
     }
@@ -78,6 +109,7 @@ impl ClientConfig {
     pub fn with_user_token(mut self, token: Option<String>) -> Self {
         if let Some(token) = token.filter(|t| !t.trim().is_empty()) {
             self.user_token = Some(token);
+            self.user_token_source = UserTokenSource::Explicit;
         }
         self
     }
@@ -101,25 +133,71 @@ impl ClientConfig {
             .is_some_and(|t| !t.trim().is_empty())
     }
 
-    /// Prefer user JWT for MCP/API calls when set (full personal capabilities).
+    /// True when user JWT was auto-discovered (token file or desktop), not env/CLI.
+    pub fn user_token_is_auto_discovered(&self) -> bool {
+        matches!(
+            self.user_token_source,
+            UserTokenSource::TokenFile | UserTokenSource::Desktop
+        )
+    }
+
+    /// Select Bearer for general MCP/REST.
+    ///
+    /// Least privilege: when a workspace API key is set and the user JWT was only
+    /// auto-discovered, prefer the API key so share/account elevation is not silent.
+    /// Explicit `CONTEXT_OS_USER_TOKEN` / `--user-token` still wins over API key.
     pub fn bearer_token(&self) -> Option<&str> {
-        self.user_token
+        let user = self
+            .user_token
             .as_deref()
             .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .or_else(|| {
-                self.api_key
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-            })
+            .filter(|s| !s.is_empty());
+        let key = self
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+
+        match (key, user, self.user_token_source) {
+            (Some(k), Some(_), UserTokenSource::TokenFile | UserTokenSource::Desktop) => Some(k),
+            (_, Some(u), _) => Some(u),
+            (Some(k), None, _) => Some(k),
+            _ => None,
+        }
+    }
+
+    pub fn credential_source_label(&self) -> &'static str {
+        let using = self.bearer_token();
+        let user = self
+            .user_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let key = self
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        match (using, user, key, self.user_token_source) {
+            (Some(u), Some(ut), _, UserTokenSource::Explicit) if u == ut => "user_token(explicit)",
+            (Some(u), Some(ut), _, UserTokenSource::TokenFile) if u == ut => "user_token(file)",
+            (Some(u), Some(ut), _, UserTokenSource::Desktop) if u == ut => "user_token(desktop)",
+            (Some(k), Some(_), Some(ak), UserTokenSource::TokenFile | UserTokenSource::Desktop)
+                if k == ak =>
+            {
+                "workspace_api_key(over auto user)"
+            }
+            (Some(k), _, Some(ak), _) if k == ak => "workspace_api_key",
+            (Some(_), _, _, _) => "credentials",
+            _ => "none",
+        }
     }
 
     pub fn require_bearer(&self) -> Result<&str> {
         self.bearer_token().ok_or_else(|| {
             anyhow::anyhow!(
-                "{} Also set CONTEXT_OS_USER_TOKEN for create_workspace / user-session routes \
-(mint via POST /api/auth/agent-token while signed in).",
+                "{} Or set CONTEXT_OS_USER_TOKEN / run `context-os auth from-desktop --save` \
+or `auth mint --save`.",
                 missing_key_message()
             )
         })
@@ -133,17 +211,11 @@ impl ClientConfig {
             .filter(|s| !s.is_empty())
         {
             Some(t) => Ok(t),
-            None => bail!(
-                "CONTEXT_OS_USER_TOKEN required (user JWT or short-lived agent token). \
-Try: `context-os auth from-desktop` (desktop session), `auth login --save`, or `auth mint --save`. \
-Token file: {}. Workspace API keys cannot create workspaces or manage share.",
-                crate::token_store::default_token_file().display()
-            ),
+            None => bail!("{}", user_session_required_message()),
         }
     }
 
     pub fn require_api_key(&self) -> Result<&str> {
-        // Prefer any bearer for workspace tools (user JWT works too).
         self.require_bearer()
     }
 
@@ -191,9 +263,9 @@ AVRAG_API_ADDR / CONTEXT_OS_API_BASE. Default local base is {DEFAULT_API_BASE}."
 }
 
 pub fn missing_key_message() -> String {
-    "CONTEXT_OS_API_KEY (or CONTEXT_OS_WORKSPACE_API_KEY) is not set. \
-Create a workspace API key in the client UI (API Access), then export it. \
-Workspace keys need `index` and/or `query` permissions."
+    "No credentials: set CONTEXT_OS_API_KEY (workspace index/query) and/or \
+CONTEXT_OS_USER_TOKEN (user session). Create workspace keys under API Access; \
+user tokens via `context-os auth mint --save` or `auth from-desktop --save`."
         .to_string()
 }
 
@@ -201,15 +273,21 @@ pub fn unauthorized_message(status: u16) -> String {
     format!(
         "Local API rejected credentials (HTTP {status}). \
 Check CONTEXT_OS_API_KEY is a workspace API key for the workspace_id you pass, \
-not a user password. Create keys under Workspace → API Access."
+or CONTEXT_OS_USER_TOKEN is a valid user JWT. Create keys under Workspace → API Access."
     )
 }
 
 pub fn share_forbidden_message() -> String {
-    "Share requires CONTEXT_OS_USER_TOKEN (user JWT / agent token), not a workspace API key. \
-Use: context-os auth mint && context-os share enable --workspace <id>. \
-Quotas follow the owner subscription (ADR-0010)."
-        .to_string()
+    user_session_required_message()
+}
+
+pub fn user_session_required_message() -> String {
+    format!(
+        "User session required (CONTEXT_OS_USER_TOKEN / agent token), not a workspace API key. \
+Try: `context-os auth from-desktop --save` (set CONTEXT_OS_LOAD_DESKTOP_SESSION=1 to auto-load), \
+`auth login --save`, or `auth mint --save`. Token file: {}.",
+        crate::token_store::default_token_file().display()
+    )
 }
 
 #[cfg(test)]
@@ -234,16 +312,58 @@ mod tests {
     }
 
     #[test]
-    fn missing_key_mentions_api_access() {
+    fn missing_key_mentions_credentials() {
         let msg = missing_key_message();
-        assert!(msg.contains("CONTEXT_OS_API_KEY"));
-        assert!(msg.contains("API Access"));
+        assert!(msg.contains("CONTEXT_OS_API_KEY") || msg.contains("CONTEXT_OS_USER_TOKEN"));
     }
 
     #[test]
     fn share_message_blocks_api_key_path() {
         let msg = share_forbidden_message();
         assert!(msg.contains("API key") || msg.contains("workspace"));
-        assert!(msg.contains("Share"));
+        assert!(msg.contains("User session") || msg.contains("USER_TOKEN"));
+    }
+
+    #[test]
+    fn bearer_prefers_api_key_over_auto_user_token() {
+        let cfg = ClientConfig {
+            api_base: "http://127.0.0.1:18080".into(),
+            api_key: Some("wk_xxx".into()),
+            user_token: Some("jwt.auto".into()),
+            user_token_source: UserTokenSource::Desktop,
+            workspace_id: None,
+            mcp_url: "http://127.0.0.1:18080/api/v1/mcp".into(),
+            health_url: "http://127.0.0.1:18080/health".into(),
+        };
+        assert_eq!(cfg.bearer_token(), Some("wk_xxx"));
+        assert_eq!(cfg.require_user_token().unwrap(), "jwt.auto");
+    }
+
+    #[test]
+    fn bearer_prefers_explicit_user_token_over_api_key() {
+        let cfg = ClientConfig {
+            api_base: "http://127.0.0.1:18080".into(),
+            api_key: Some("wk_xxx".into()),
+            user_token: Some("jwt.explicit".into()),
+            user_token_source: UserTokenSource::Explicit,
+            workspace_id: None,
+            mcp_url: "http://127.0.0.1:18080/api/v1/mcp".into(),
+            health_url: "http://127.0.0.1:18080/health".into(),
+        };
+        assert_eq!(cfg.bearer_token(), Some("jwt.explicit"));
+    }
+
+    #[test]
+    fn bearer_uses_auto_user_when_no_api_key() {
+        let cfg = ClientConfig {
+            api_base: "http://127.0.0.1:18080".into(),
+            api_key: None,
+            user_token: Some("jwt.file".into()),
+            user_token_source: UserTokenSource::TokenFile,
+            workspace_id: None,
+            mcp_url: "http://127.0.0.1:18080/api/v1/mcp".into(),
+            health_url: "http://127.0.0.1:18080/health".into(),
+        };
+        assert_eq!(cfg.bearer_token(), Some("jwt.file"));
     }
 }

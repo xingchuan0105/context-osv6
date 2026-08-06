@@ -94,10 +94,6 @@ pub fn desktop_session_candidates() -> Vec<PathBuf> {
                 home.join(".local/share/com.contextos.desktop/local_session.json"),
             );
             out.push(home.join(".local/share/context-os-client/local_session.json"));
-            // Some builds use product name slug
-            out.push(
-                home.join(".local/share/context-os-client/local_session.json"),
-            );
             out.push(home.join(".local/share/Context-OS Client/local_session.json"));
             // macOS Application Support
             out.push(
@@ -135,18 +131,53 @@ pub fn write_token_file(path: &Path, token: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("create {}", parent.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).with_context(|| {
+                format!("chmod 0700 config dir {}", parent.display())
+            })?;
+        }
     }
     let body = format!(
         "# Context-OS user / agent token — do not commit\n# path: {}\n{}\n",
         path.display(),
         token.trim()
     );
-    fs::write(path, body).with_context(|| format!("write {}", path.display()))?;
-    #[cfg(unix)]
+    // Atomic-ish: write temp with 0600 then rename (never create world-readable JWT).
+    let tmp = path.with_extension("token.tmp");
     {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+        use std::io::Write;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&tmp)
+                .with_context(|| format!("create temp token {}", tmp.display()))?;
+            f.write_all(body.as_bytes())
+                .with_context(|| format!("write temp token {}", tmp.display()))?;
+            f.sync_all().ok();
+            // Reinforce mode in case umask interacted oddly on some platforms.
+            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
+                .with_context(|| format!("chmod 0600 {}", tmp.display()))?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::write(&tmp, body.as_bytes())
+                .with_context(|| format!("write temp token {}", tmp.display()))?;
+        }
     }
+    fs::rename(&tmp, path).with_context(|| {
+        format!(
+            "rename {} → {}",
+            tmp.display(),
+            path.display()
+        )
+    })?;
     Ok(())
 }
 

@@ -88,13 +88,16 @@ enum Command {
         email: String,
         password: String,
         save: bool,
+        print_token: bool,
     },
     AuthMint {
         ttl_minutes: u32,
         save: bool,
+        print_token: bool,
     },
     AuthFromDesktop {
         save: bool,
+        print_token: bool,
     },
     AuthWhoami,
     AuthPath,
@@ -293,6 +296,7 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
             let mut email = None;
             let mut password = None;
             let mut save = false;
+            let mut print_token = false;
             let mut j = 1;
             while j < sub.len() {
                 match sub[j].as_str() {
@@ -305,6 +309,7 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                         password = Some(sub.get(j).context("--password requires value")?.clone());
                     }
                     "--save" => save = true,
+                    "--print-token" => print_token = true,
                     "--base" => {
                         j += 1;
                         opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
@@ -319,12 +324,14 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                     email: email.context("auth login requires --email")?,
                     password: password.context("auth login requires --password")?,
                     save,
+                    print_token,
                 },
             ))
         }
         "mint" | "agent-token" => {
             let mut ttl_minutes = 120u32;
             let mut save = false;
+            let mut print_token = false;
             let mut j = 1;
             while j < sub.len() {
                 match sub[j].as_str() {
@@ -337,6 +344,7 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                             .context("--ttl must be an integer")?;
                     }
                     "--save" => save = true,
+                    "--print-token" => print_token = true,
                     "--user-token" | "--token" => {
                         j += 1;
                         opts.user_token = Some(
@@ -358,20 +366,26 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
                 Command::AuthMint {
                     ttl_minutes,
                     save,
+                    print_token,
                 },
             ))
         }
         "from-desktop" | "desktop" => {
             let mut save = false;
+            let mut print_token = false;
             let mut j = 1;
             while j < sub.len() {
                 match sub[j].as_str() {
                     "--save" => save = true,
+                    "--print-token" => print_token = true,
                     other => bail!("unknown auth from-desktop flag: {other}"),
                 }
                 j += 1;
             }
-            Ok((opts.clone(), Command::AuthFromDesktop { save }))
+            Ok((
+                opts.clone(),
+                Command::AuthFromDesktop { save, print_token },
+            ))
         }
         "path" | "paths" => Ok((opts.clone(), Command::AuthPath)),
         "whoami" | "me" | "status" => Ok((opts.clone(), Command::AuthWhoami)),
@@ -883,9 +897,27 @@ fn maybe_save_token(token: &str, save: bool) -> Result<Option<String>> {
     Ok(Some(path.display().to_string()))
 }
 
-async fn cmd_auth_login(cfg: &ClientConfig, email: &str, password: &str, save: bool) -> Result<()> {
+fn redact_token(token: &str) -> String {
+    let t = token.trim();
+    if t.len() <= 12 {
+        return "***".into();
+    }
+    format!("{}…{}", &t[..6], &t[t.len() - 4..])
+}
+
+/// Print token only when `--print-token`, or when not saving (operator needs a handoff).
+fn should_emit_token(save: bool, print_token: bool) -> bool {
+    print_token || !save
+}
+
+async fn cmd_auth_login(
+    cfg: &ClientConfig,
+    email: &str,
+    password: &str,
+    save: bool,
+    print_token: bool,
+) -> Result<()> {
     let client = McpClient::new(cfg.clone())?;
-    // Login is public — use raw HTTP without require_bearer.
     let url = format!("{}/api/auth/login", cfg.api_base);
     let resp = client
         .http()
@@ -905,24 +937,33 @@ async fn cmd_auth_login(cfg: &ClientConfig, email: &str, password: &str, save: b
         .and_then(|v| v.as_str())
         .context("login response missing data.token")?;
     let saved_to = maybe_save_token(token, save)?;
+    let emit = should_emit_token(save, print_token);
     println!(
         "{}",
         json!({
             "ok": true,
-            "token": token,
+            "token": if emit { Value::String(token.to_string()) } else { Value::Null },
+            "token_preview": redact_token(token),
             "user": body.pointer("/data/user"),
             "saved_to": saved_to,
-            "hint": if save {
+            "hint": if save && !print_token {
+                "token saved (not printed); pass --print-token to show secret"
+            } else if save {
                 "token saved; later commands auto-load it"
             } else {
-                "export CONTEXT_OS_USER_TOKEN=<token> or re-run with --save"
+                "prefer --save; or export CONTEXT_OS_USER_TOKEN=<token>"
             },
         })
     );
     Ok(())
 }
 
-async fn cmd_auth_mint(client: &McpClient, ttl_minutes: u32, save: bool) -> Result<()> {
+async fn cmd_auth_mint(
+    client: &McpClient,
+    ttl_minutes: u32,
+    save: bool,
+    print_token: bool,
+) -> Result<()> {
     let (status, body) = client
         .rest_json(
             "POST",
@@ -944,46 +985,55 @@ async fn cmd_auth_mint(client: &McpClient, ttl_minutes: u32, save: bool) -> Resu
         .and_then(|v| v.as_str())
         .context("mint missing token")?;
     let saved_to = maybe_save_token(token, save)?;
+    let emit = should_emit_token(save, print_token);
     println!(
         "{}",
         json!({
             "ok": true,
-            "token": token,
+            "token": if emit { Value::String(token.to_string()) } else { Value::Null },
+            "token_preview": redact_token(token),
             "expires_at": data.get("expires_at"),
             "ttl_minutes": data.get("ttl_minutes"),
             "token_kind": data.get("token_kind"),
             "saved_to": saved_to,
-            "hint": if save {
+            "hint": if save && !print_token {
+                "agent token saved (not printed); pass --print-token to show secret"
+            } else if save {
                 "agent token saved for auto-load"
             } else {
-                "export CONTEXT_OS_USER_TOKEN=<token> or re-run with --save"
+                "prefer --save; or export CONTEXT_OS_USER_TOKEN=<token>"
             },
         })
     );
     Ok(())
 }
 
-fn cmd_auth_from_desktop(save: bool) -> Result<()> {
+fn cmd_auth_from_desktop(save: bool, print_token: bool) -> Result<()> {
     let Some(session) = context_os::token_store::load_desktop_session_token()? else {
         bail!(
             "no desktop local_session.json found. Start Context-OS Client and complete local login, \
-or set CONTEXT_OS_DESKTOP_SESSION=/path/to/local_session.json. Candidates: {:?}",
+or set CONTEXT_OS_DESKTOP_SESSION=/path/to/local_session.json. \
+Enable auto-load with CONTEXT_OS_LOAD_DESKTOP_SESSION=1. Candidates: {:?}",
             context_os::token_store::desktop_session_candidates()
         );
     };
     let saved_to = maybe_save_token(&session.token, save)?;
+    let emit = should_emit_token(save, print_token);
     println!(
         "{}",
         json!({
             "ok": true,
-            "token": session.token,
+            "token": if emit { Value::String(session.token.clone()) } else { Value::Null },
+            "token_preview": redact_token(&session.token),
             "email": session.email,
             "source": session.path.display().to_string(),
             "saved_to": saved_to,
-            "hint": if save {
+            "hint": if save && !print_token {
+                "desktop token saved (not printed); pass --print-token to show secret"
+            } else if save {
                 "desktop session token saved for CLI/MCP auto-load"
             } else {
-                "re-run with --save to write ~/.config/context-os/user.token"
+                "re-run with --save to write token file (0600)"
             },
         })
     );
@@ -1024,7 +1074,7 @@ async fn cmd_auth_whoami(client: &McpClient) -> Result<()> {
 }
 
 async fn cmd_workspace_create(client: &McpClient, name: &str, description: &str) -> Result<()> {
-    // Prefer MCP account tool so agent guide is consistent.
+    client.config().require_user_token()?;
     let result = client
         .tools_call(
             "account.create_workspace",
@@ -1037,6 +1087,7 @@ async fn cmd_workspace_create(client: &McpClient, name: &str, description: &str)
 }
 
 async fn cmd_workspace_list(client: &McpClient) -> Result<()> {
+    client.config().require_user_token()?;
     let result = client
         .tools_call("account.list_workspaces", json!({}))
         .await?;
@@ -1188,12 +1239,19 @@ async fn main() -> ExitCode {
                 email,
                 password,
                 save,
-            } => cmd_auth_login(&cfg, &email, &password, save).await,
-            Command::AuthMint { ttl_minutes, save } => {
+                print_token,
+            } => cmd_auth_login(&cfg, &email, &password, save, print_token).await,
+            Command::AuthMint {
+                ttl_minutes,
+                save,
+                print_token,
+            } => {
                 let client = McpClient::new(cfg)?;
-                cmd_auth_mint(&client, ttl_minutes, save).await
+                cmd_auth_mint(&client, ttl_minutes, save, print_token).await
             }
-            Command::AuthFromDesktop { save } => cmd_auth_from_desktop(save),
+            Command::AuthFromDesktop { save, print_token } => {
+                cmd_auth_from_desktop(save, print_token)
+            }
             Command::AuthPath => cmd_auth_path(),
             Command::AuthWhoami => {
                 let client = McpClient::new(cfg)?;
@@ -1372,9 +1430,11 @@ mod tests {
             Command::AuthMint {
                 ttl_minutes,
                 save,
+                print_token,
             } => {
                 assert_eq!(ttl_minutes, 30);
                 assert!(save);
+                assert!(!print_token);
             }
             _ => panic!("expected mint"),
         }
@@ -1382,9 +1442,18 @@ mod tests {
 
     #[test]
     fn parse_auth_from_desktop() {
-        let (_, cmd) = parse_args(&["auth".into(), "from-desktop".into(), "--save".into()]).unwrap();
+        let (_, cmd) = parse_args(&[
+            "auth".into(),
+            "from-desktop".into(),
+            "--save".into(),
+            "--print-token".into(),
+        ])
+        .unwrap();
         match cmd {
-            Command::AuthFromDesktop { save } => assert!(save),
+            Command::AuthFromDesktop { save, print_token } => {
+                assert!(save);
+                assert!(print_token);
+            }
             _ => panic!("expected from-desktop"),
         }
     }

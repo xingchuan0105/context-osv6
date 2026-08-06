@@ -61,8 +61,13 @@ fn extract_id(msg: &Value) -> Option<Value> {
 }
 
 pub async fn run_stdio_proxy(cfg: ClientConfig) -> Result<()> {
-    if !cfg.has_api_key() {
+    if cfg.bearer_token().is_none() {
         eprintln!("context-os-mcp: warning: {}", config::missing_key_message());
+    } else {
+        eprintln!(
+            "context-os-mcp: credentials={}",
+            cfg.credential_source_label()
+        );
     }
 
     let client = reqwest::Client::builder()

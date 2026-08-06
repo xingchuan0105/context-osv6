@@ -24,8 +24,8 @@ use crate::middleware::RequestState;
 use axum::extract::Extension;
 
 use super::router_core::{
-    extract_bearer, issue_jwt_for_auth_version, record_api_product_event_if_available,
-    reissue_user_jwt_with_ttl, verify_jwt,
+    AgentMintError, extract_bearer, issue_jwt_for_auth_version,
+    record_api_product_event_if_available, reissue_agent_jwt_with_ttl, verify_jwt,
 };
 
 pub(crate) async fn auth_register_handler(
@@ -366,10 +366,28 @@ pub(crate) async fn auth_agent_token_handler(
         );
     };
 
-    let ttl_minutes = req.ttl_minutes.unwrap_or(120).clamp(5, 24 * 60);
-    let ttl = chrono::Duration::minutes(i64::from(ttl_minutes));
-    let token = reissue_user_jwt_with_ttl(&claims, ttl);
-    let expires_at = (chrono::Utc::now() + ttl).to_rfc3339();
+    let requested_minutes = req.ttl_minutes.unwrap_or(120).clamp(5, 24 * 60);
+    let requested_ttl = chrono::Duration::minutes(i64::from(requested_minutes));
+    let (token, effective_ttl) = match reissue_agent_jwt_with_ttl(&claims, requested_ttl) {
+        Ok(v) => v,
+        Err(AgentMintError::AgentCannotRemint) => {
+            return handlers::error_response(
+                StatusCode::FORBIDDEN,
+                "agent_token_cannot_remint",
+                "Agent tokens cannot mint further agent tokens. Use a full login session JWT \
+(or `context-os auth login` / desktop session), then call agent-token again.",
+            );
+        }
+        Err(AgentMintError::ParentExpired) => {
+            return handlers::error_response(
+                StatusCode::UNAUTHORIZED,
+                "token_expired",
+                "Session JWT has no remaining lifetime to mint an agent token",
+            );
+        }
+    };
+    let ttl_minutes = effective_ttl.num_minutes().max(1) as u32;
+    let expires_at = (chrono::Utc::now() + effective_ttl).to_rfc3339();
 
     (
         StatusCode::OK,
@@ -383,9 +401,9 @@ pub(crate) async fn auth_agent_token_handler(
             }),
             error: None,
             message: Some(
-                "Short-lived user JWT for coding agents/CLI. Export as CONTEXT_OS_USER_TOKEN. \
-Workspace API keys remain for index/query automation; this token can create workspaces \
-and call user-session routes (share still product-gated)."
+                "Short-lived agent JWT (token_kind=agent). Export as CONTEXT_OS_USER_TOKEN. \
+TTL is capped by the parent session expiry; agent tokens cannot re-mint. \
+Workspace API keys remain for index/query automation."
                     .to_string(),
             ),
         }),
