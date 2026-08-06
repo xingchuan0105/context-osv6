@@ -21,10 +21,12 @@
 
 ## 邮件服务
 
-- 文件：`avrag-rs/crates/app-bootstrap/src/services/password_reset.rs`
-- 函数：`send_reset_email` / `send_workspace_invite_email` / `send_plain_email`
-- 邀请信：主题/正文中文模板（`is_zh` 参数当前常 true）
-- **状态**：另行立项（P7 未纳入本轮）
+- 文案：`avrag-rs/email/*.{zh,en}.txt`（`email/README.md`）
+- 加载：`app-bootstrap` `services/email_copy.rs`（`include_str!` + `{placeholder}`）
+- 发送：`password_reset.rs` → `send_reset_email` / `send_workspace_invite_email` / `send_plain_email`
+- 重置密码：`lang` API 字段 → `MailLocale`（默认 zh）
+- 邀请：`locale_zh`（share handler 仍常 true；可后续接用户偏好）
+- **状态**：P7 邮件切片 **done**；站内通知见下表仍 open
 
 ## 通知 / 系统消息硬编码（英文居多，另行立项）
 

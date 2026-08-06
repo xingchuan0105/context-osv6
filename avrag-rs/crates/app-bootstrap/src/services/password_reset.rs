@@ -183,16 +183,11 @@ impl PasswordResetService {
         to: &str,
         code: &str,
         expires_at: chrono::DateTime<chrono::Utc>,
+        locale: super::email_copy::MailLocale,
     ) -> anyhow::Result<()> {
-        self.send_plain_email(
-            to,
-            "Context OSv6 password reset code",
-            &format!(
-                "Your password reset code is: {code}\n\nThis code expires at {}.\n",
-                expires_at.to_rfc3339()
-            ),
-        )
-        .await
+        let (subject, body) =
+            super::email_copy::password_reset(locale, code, &expires_at.to_rfc3339());
+        self.send_plain_email(to, &subject, &body).await
     }
 
     /// Workspace collaboration invite (ADR-0010 W2 #13).
@@ -204,25 +199,13 @@ impl PasswordResetService {
         accept_url: &str,
         locale_zh: bool,
     ) -> anyhow::Result<()> {
-        let (subject, body) = if locale_zh {
-            (
-                format!("你被邀请协作「{workspace_title}」"),
-                format!(
-                    "{inviter_email} 邀请你协作知识库「{workspace_title}」。\n\n\
-打开链接接受邀请（若尚未注册，请先注册同一邮箱）：\n{accept_url}\n\n\
-— Context OS\n"
-                ),
-            )
-        } else {
-            (
-                format!("You're invited to collaborate on “{workspace_title}”"),
-                format!(
-                    "{inviter_email} invited you to collaborate on “{workspace_title}”.\n\n\
-Open this link to accept (register with the same email first if needed):\n{accept_url}\n\n\
-— Context OS\n"
-                ),
-            )
-        };
+        let locale = super::email_copy::MailLocale::from_zh_flag(locale_zh);
+        let (subject, body) = super::email_copy::workspace_invite(
+            locale,
+            inviter_email,
+            workspace_title,
+            accept_url,
+        );
         self.send_plain_email(to, &subject, &body).await
     }
 
@@ -245,6 +228,7 @@ Open this link to accept (register with the same email first if needed):\n{accep
         &self,
         store: &dyn AuthStorePort,
         email: &str,
+        lang: Option<&str>,
     ) -> Result<Option<SendResetCodeOutcome>, PasswordResetError> {
         let user_row = match store.find_user_by_email_for_reset(email).await {
             Ok(row) => row,
@@ -269,6 +253,7 @@ Open this link to accept (register with the same email first if needed):\n{accep
             chrono::Utc::now() + chrono::Duration::minutes(RESET_CODE_TTL_MINUTES);
         let ticket_expires_at =
             chrono::Utc::now() + chrono::Duration::minutes(RESET_TICKET_TTL_MINUTES);
+        let locale = super::email_copy::MailLocale::from_lang_tag(lang);
 
         if let Err(error) = store
             .create_password_reset_ticket(&CreatePasswordResetTicketInput {
@@ -290,7 +275,7 @@ Open this link to accept (register with the same email first if needed):\n{accep
         let delivery = if self.smtp_ready() { "smtp" } else { "debug" };
         if self.smtp_ready() {
             if let Err(error) = self
-                .send_reset_email(&resolved_email, &code, code_expires_at)
+                .send_reset_email(&resolved_email, &code, code_expires_at, locale)
                 .await
             {
                 warn!(error = %error, "failed to send reset code email");

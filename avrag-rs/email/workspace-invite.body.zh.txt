@@ -1,0 +1,6 @@
+{inviter} 邀请你协作知识库「{workspace_title}」。
+
+打开链接接受邀请（若尚未注册，请先注册同一邮箱）：
+{accept_url}
+
+— Context-OS

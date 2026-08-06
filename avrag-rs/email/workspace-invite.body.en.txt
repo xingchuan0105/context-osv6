@@ -1,0 +1,6 @@
+{inviter} invited you to collaborate on "{workspace_title}".
+
+Open this link to accept (register with the same email first if needed):
+{accept_url}
+
+— Context-OS

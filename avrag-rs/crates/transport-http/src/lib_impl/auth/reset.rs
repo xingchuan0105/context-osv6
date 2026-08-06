@@ -179,7 +179,10 @@ pub(crate) async fn auth_send_reset_code_handler(
         );
     }
 
-    match svc.send_reset_code(store.as_ref(), &email).await {
+    match svc
+        .send_reset_code(store.as_ref(), &email, req.lang.as_deref())
+        .await
+    {
         Ok(None) => (
             StatusCode::ACCEPTED,
             Json(json!({
