@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use app_core::{
-    AnalyticsContext, CostEventRecord as AnalyticsCostRecord, ProviderSecretPurpose,
-    ProviderSecretStorePort, WalletStorePort, util::non_empty_or_unknown,
+    AnalyticsContext, CostEventRecord as AnalyticsCostRecord, ProviderSecretStorePort,
+    WalletStorePort, util::non_empty_or_unknown,
 };
 use avrag_billing::usage_limit::BillableFeature;
 use avrag_llm::{LlmUsage, UsageObserver};
@@ -51,44 +51,32 @@ impl BillingContext {
         self
     }
 
-    /// ADR-0010 §1.1: platform LLM path requires BYOK **or** positive wallet balance.
-    /// Returns Ok when spend is allowed; Err when the call would be free-ride on env keys.
+    /// ADR-0010 §1.1 protective preflight for **platform env keys**.
+    ///
+    /// **Honest interim rule (post-9822a acceptance):** only a **positive wallet
+    /// balance** proves the user can pay for platform models.
+    ///
+    /// Do **not** treat `has_active(BYOK)` as payment capability until chat
+    /// actually `resolve`s the secret and sets per-request `skip_wallet_debit`.
+    /// Otherwise a junk stored key is a free pass while still burning env keys.
+    ///
+    /// When `wallet` port is absent (unit tests / memory bootstrap), allow.
     pub async fn ensure_payer_can_spend(&self, auth: &AuthContext) -> Result<(), AppError> {
-        // Unit tests / minimal bootstraps without wallet+secrets ports: do not block.
-        if self.wallet.is_none() && self.provider_secrets.is_none() {
+        let Some(wallet) = &self.wallet else {
             return Ok(());
-        }
+        };
         let owner = auth.user_id().into_uuid();
         if owner.is_nil() {
             return Err(AppError::unauthorized("payer identity missing"));
         }
-        if let Some(secrets) = &self.provider_secrets {
-            match secrets
-                .has_active(owner, ProviderSecretPurpose::Llm)
-                .await
-            {
-                Ok(true) => return Ok(()),
-                Ok(false) => {}
-                Err(e) => {
-                    tracing::warn!(error = %e, "provider secret list failed during spend preflight");
-                }
-            }
+        match wallet.ensure_wallet(owner).await {
+            Ok(w) if w.balance_fen > 0 => Ok(()),
+            Ok(_) => Err(AppError::validation(
+                "payer_funds_required",
+                "Wallet balance is empty. Top up the wallet (or wait until cloud BYOK is wired into the request path) before using platform models.",
+            )),
+            Err(e) => Err(AppError::internal(format!("wallet preflight failed: {e}"))),
         }
-        if let Some(wallet) = &self.wallet {
-            match wallet.ensure_wallet(owner).await {
-                Ok(w) if w.balance_fen > 0 => return Ok(()),
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(AppError::internal(format!(
-                        "wallet preflight failed: {e}"
-                    )));
-                }
-            }
-        }
-        Err(AppError::validation(
-            "payer_funds_required",
-            "No cloud BYOK key and wallet balance is empty. Configure an API key or top up the wallet before using platform models.",
-        ))
     }
 
     pub fn is_available(&self) -> bool {

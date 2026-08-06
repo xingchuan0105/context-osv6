@@ -248,7 +248,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             r#"
             SELECT feature, COALESCE(SUM(usage_units), 0)::bigint AS total
             FROM llm_usage_events
-            WHERE user_id = $1
+            WHERE owner_user_id = $1
               AND created_at >= $2
               AND billable = true
             GROUP BY feature
@@ -327,7 +327,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             r#"
             SELECT EXISTS(
                 SELECT 1 FROM llm_usage_events
-                WHERE user_id = $1 AND usage_source = 'estimated'
+                WHERE owner_user_id = $1 AND usage_source = 'estimated'
                 LIMIT 1
             ) AS has_estimated
             "#,
