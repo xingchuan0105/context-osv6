@@ -3,19 +3,31 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useAuth } from "../../lib/auth/context";
+import { listWorkspaces, type DashboardWorkspace } from "../../lib/dashboard/client";
 import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import styles from "./command-palette.module.css";
 
-type CommandItem = {
+type PaletteGroup = "workspaces" | "nav" | "billing" | "help";
+
+type PaletteItem = {
   id: string;
-  group: "nav" | "billing" | "help";
+  group: PaletteGroup;
+  label: string;
+  href: string;
+  keywords: string;
+};
+
+type StaticCommand = {
+  id: string;
+  group: Exclude<PaletteGroup, "workspaces">;
   labelKey: UiMessageKey;
   href: string;
   keywords: string;
 };
 
-const COMMANDS: CommandItem[] = [
+const STATIC_COMMANDS: StaticCommand[] = [
   {
     id: "dashboard",
     group: "nav",
@@ -88,42 +100,135 @@ const COMMANDS: CommandItem[] = [
   },
 ];
 
-const GROUP_ORDER: Array<CommandItem["group"]> = ["nav", "billing", "help"];
+const GROUP_ORDER: PaletteGroup[] = ["workspaces", "nav", "billing", "help"];
 
-const GROUP_LABEL: Record<CommandItem["group"], UiMessageKey> = {
+const GROUP_LABEL: Record<PaletteGroup, UiMessageKey> = {
+  workspaces: "commandPalette.group.workspaces",
   nav: "commandPalette.group.nav",
   billing: "commandPalette.group.billing",
   help: "commandPalette.group.help",
 };
 
-function matches(item: CommandItem, query: string, label: string): boolean {
+const RECENT_KEY = "context-os.command-palette.recent-workspaces.v1";
+const RECENT_LIMIT = 8;
+const WORKSPACE_LIST_CAP = 40;
+
+function readRecentIds(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function pushRecentId(workspaceId: string) {
+  if (typeof window === "undefined" || !workspaceId) {
+    return;
+  }
+  const next = [workspaceId, ...readRecentIds().filter((id) => id !== workspaceId)].slice(
+    0,
+    RECENT_LIMIT,
+  );
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function matches(item: PaletteItem, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) {
     return true;
   }
   return (
-    label.toLowerCase().includes(q) ||
+    item.label.toLowerCase().includes(q) ||
     item.keywords.toLowerCase().includes(q) ||
     item.href.toLowerCase().includes(q)
   );
 }
 
+function workspaceTitle(ws: DashboardWorkspace): string {
+  return (ws.title || ws.name || ws.workspace_id).trim();
+}
+
 /**
- * PRODUCT_IA P2-3: Cmd/Ctrl+K jump palette to canonical product routes.
+ * PRODUCT_IA: Cmd/Ctrl+K jump palette — Canonical routes + workspace search / recent.
  */
 export function CommandPaletteHost() {
   const router = useRouter();
+  const auth = useAuth();
   const { locale } = useUiPreferences();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [workspaces, setWorkspaces] = useState<DashboardWorkspace[]>([]);
+  const [workspacesLoading, setWorkspacesLoading] = useState(false);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const staticItems: PaletteItem[] = useMemo(
+    () =>
+      STATIC_COMMANDS.map((cmd) => ({
+        id: cmd.id,
+        group: cmd.group,
+        label: formatUiMessage(locale, cmd.labelKey),
+        href: cmd.href,
+        keywords: cmd.keywords,
+      })),
+    [locale],
+  );
+
+  const workspaceItems: PaletteItem[] = useMemo(() => {
+    const byId = new Map(workspaces.map((ws) => [ws.workspace_id, ws]));
+    const ordered: DashboardWorkspace[] = [];
+    for (const id of recentIds) {
+      const hit = byId.get(id);
+      if (hit) {
+        ordered.push(hit);
+        byId.delete(id);
+      }
+    }
+    for (const ws of workspaces) {
+      if (byId.has(ws.workspace_id)) {
+        ordered.push(ws);
+      }
+    }
+    return ordered.slice(0, WORKSPACE_LIST_CAP).map((ws) => {
+      const title = workspaceTitle(ws);
+      const recent = recentIds.includes(ws.workspace_id);
+      return {
+        id: `ws-${ws.workspace_id}`,
+        group: "workspaces" as const,
+        label: recent
+          ? formatUiMessage(locale, "commandPalette.workspaceRecent", { title })
+          : title,
+        href: `/dashboard/${ws.workspace_id}`,
+        keywords: `${title} ${ws.workspace_id} workspace 工作区`,
+      };
+    });
+  }, [locale, recentIds, workspaces]);
+
   const filtered = useMemo(() => {
-    return COMMANDS.filter((item) =>
-      matches(item, query, formatUiMessage(locale, item.labelKey)),
-    );
-  }, [locale, query]);
+    const q = query.trim();
+    // With empty query: show recent workspaces (if any) + static nav (not full workspace dump).
+    const workspacePool = q
+      ? workspaceItems
+      : workspaceItems.filter((item) => item.id.startsWith("ws-") && recentIds.some((id) => item.id === `ws-${id}`));
+    const pool = [...workspacePool, ...staticItems];
+    return pool.filter((item) => matches(item, q));
+  }, [query, recentIds, staticItems, workspaceItems]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -132,7 +237,12 @@ export function CommandPaletteHost() {
   }, []);
 
   const run = useCallback(
-    (item: CommandItem) => {
+    (item: PaletteItem) => {
+      if (item.id.startsWith("ws-")) {
+        const workspaceId = item.id.slice(3);
+        pushRecentId(workspaceId);
+        setRecentIds(readRecentIds());
+      }
       close();
       router.push(item.href);
     },
@@ -144,7 +254,6 @@ export function CommandPaletteHost() {
       const isToggle =
         (event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey);
       if (isToggle) {
-        // Ignore when typing in editable fields unless palette already open.
         const target = event.target as HTMLElement | null;
         const tag = target?.tagName?.toLowerCase();
         const editing =
@@ -157,7 +266,6 @@ export function CommandPaletteHost() {
         }
         event.preventDefault();
         setOpen((current) => !current);
-        return;
       }
     }
 
@@ -169,13 +277,41 @@ export function CommandPaletteHost() {
     if (!open) {
       return;
     }
+    setRecentIds(readRecentIds());
     const id = window.requestAnimationFrame(() => inputRef.current?.focus());
     return () => window.cancelAnimationFrame(id);
   }, [open]);
 
   useEffect(() => {
+    if (!open || !auth.token) {
+      return;
+    }
+    let cancelled = false;
+    setWorkspacesLoading(true);
+    void listWorkspaces(auth.token)
+      .then((response) => {
+        if (!cancelled) {
+          setWorkspaces(response.workspaces);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkspaces([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkspacesLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.token, open]);
+
+  useEffect(() => {
     setActiveIndex(0);
-  }, [query, open]);
+  }, [query, open, filtered.length]);
 
   useEffect(() => {
     if (!open) {
@@ -244,7 +380,11 @@ export function CommandPaletteHost() {
         />
         <div className={styles.list} role="listbox">
           {filtered.length === 0 ? (
-            <p className={styles.empty}>{formatUiMessage(locale, "commandPalette.empty")}</p>
+            <p className={styles.empty}>
+              {workspacesLoading && query.trim()
+                ? formatUiMessage(locale, "commandPalette.loadingWorkspaces")
+                : formatUiMessage(locale, "commandPalette.empty")}
+            </p>
           ) : (
             GROUP_ORDER.map((group) => {
               const items = filtered.filter((item) => item.group === group);
@@ -271,7 +411,7 @@ export function CommandPaletteHost() {
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => run(item)}
                       >
-                        <span>{formatUiMessage(locale, item.labelKey)}</span>
+                        <span>{item.label}</span>
                         <span className={styles.itemHint}>{item.href}</span>
                       </button>
                     );

@@ -17,6 +17,10 @@ export const commandPaletteMessages = {
     zh: "↑↓ 选择 · Enter 打开 · Esc 关闭",
     en: "↑↓ select · Enter open · Esc close",
   },
+  "commandPalette.group.workspaces": {
+    zh: "工作区",
+    en: "Workspaces",
+  },
   "commandPalette.group.nav": {
     zh: "导航",
     en: "Navigate",
@@ -28,6 +32,14 @@ export const commandPaletteMessages = {
   "commandPalette.group.help": {
     zh: "帮助与客户端",
     en: "Help & client",
+  },
+  "commandPalette.workspaceRecent": {
+    zh: "最近 · {title}",
+    en: "Recent · {title}",
+  },
+  "commandPalette.loadingWorkspaces": {
+    zh: "正在加载工作区…",
+    en: "Loading workspaces…",
   },
   "commandPalette.item.dashboard": {
     zh: "工作台",
