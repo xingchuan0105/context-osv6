@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { getLicenseStatus, type LicenseStatusKind } from "@/lib/desktop/tauri-license";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { useUiPreferences } from "@/lib/ui-preferences";
 
 /**
  * ADR-0010: desktop client is free — activation is not a product gate.
@@ -11,6 +13,7 @@ import { getLicenseStatus, type LicenseStatusKind } from "@/lib/desktop/tauri-li
  * redirect unactivated users to /activate.
  */
 export function ClientLicenseGate({ children }: { children: ReactNode }) {
+  const { locale } = useUiPreferences();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -34,7 +37,9 @@ export function ClientLicenseGate({ children }: { children: ReactNode }) {
     return (
       <main className="app-auth-shell">
         <section className="app-surface-card" style={{ maxWidth: "28rem", textAlign: "center" }}>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>正在启动客户端…</p>
+          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+            {formatUiMessage(locale, "desktop.startingClient")}
+          </p>
         </section>
       </main>
     );

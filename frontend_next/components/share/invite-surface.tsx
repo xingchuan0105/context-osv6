@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { acceptInvite, declineInvite } from "../../lib/share/client";
+import { useUiPreferences } from "../../lib/ui-preferences";
 import { getWorkspace } from "../../lib/workspace/client";
 import styles from "./invite-surface.module.css";
 
@@ -19,6 +21,7 @@ type InviteDecision = "accepted" | "declined" | null;
 export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
   const auth = useAuth();
   const router = useRouter();
+  const { locale } = useUiPreferences();
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +33,9 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
     [memberId, workspaceId],
   );
 
+  const titleOrFallback =
+    workspaceTitle.trim() || formatUiMessage(locale, "sharedPublic.inviteWorkspaceFallback");
+
   useEffect(() => {
     let cancelled = false;
 
@@ -39,7 +45,7 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
       }
 
       if (!workspaceId.trim() || !memberId.trim()) {
-        setError("邀请链接无效。");
+        setError(formatUiMessage(locale, "sharedPublic.inviteInvalidLink"));
         setLoading(false);
         return;
       }
@@ -74,7 +80,7 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
     return () => {
       cancelled = true;
     };
-  }, [auth.initialized, auth.token, memberId, workspaceId]);
+  }, [auth.initialized, auth.token, locale, memberId, workspaceId]);
 
   async function handleAccept() {
     if (!auth.token) {
@@ -89,7 +95,11 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
       await acceptInvite(auth.token, workspaceId, memberId);
       setDecision("accepted");
     } catch (acceptError) {
-      setError(acceptError instanceof Error ? acceptError.message : "接受邀请失败。");
+      setError(
+        acceptError instanceof Error
+          ? acceptError.message
+          : formatUiMessage(locale, "sharedPublic.inviteAcceptFailed"),
+      );
     } finally {
       setActionLoading(false);
     }
@@ -108,7 +118,11 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
       await declineInvite(auth.token, workspaceId, memberId);
       setDecision("declined");
     } catch (declineError) {
-      setError(declineError instanceof Error ? declineError.message : "拒绝邀请失败。");
+      setError(
+        declineError instanceof Error
+          ? declineError.message
+          : formatUiMessage(locale, "sharedPublic.inviteDeclineFailed"),
+      );
     } finally {
       setActionLoading(false);
     }
@@ -118,60 +132,70 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
     <main className="app-auth-shell" data-testid="invite-surface">
       <section className={`app-surface-card ${styles.card}`}>
         {loading ? (
-          <p className={styles.flushText}>正在加载邀请...</p>
+          <p className={styles.flushText}>{formatUiMessage(locale, "sharedPublic.inviteLoading")}</p>
         ) : error ? (
           <>
             <h1 className={`app-page-title ${styles.title}`}>
-              邀请异常
+              {formatUiMessage(locale, "sharedPublic.inviteErrorTitle")}
             </h1>
             <p className="app-notice-banner">{error}</p>
           </>
         ) : decision === "accepted" ? (
           <>
             <h1 className={`app-page-title ${styles.title}`}>
-              已接受邀请
+              {formatUiMessage(locale, "sharedPublic.inviteAcceptedTitle")}
             </h1>
-            <p className="app-page-subtitle">你现在可以访问 {workspaceTitle || "这个 Workspace"}。</p>
+            <p className="app-page-subtitle">
+              {formatUiMessage(locale, "sharedPublic.inviteAcceptedBody", {
+                title: titleOrFallback,
+              })}
+            </p>
             <div className="app-button-row">
               <Link className="app-button-primary" href={`/dashboard/${workspaceId}`}>
-                打开 Workspace
+                {formatUiMessage(locale, "sharedPublic.openWorkspaceAction")}
               </Link>
             </div>
           </>
         ) : decision === "declined" ? (
           <>
             <h1 className={`app-page-title ${styles.title}`}>
-              已拒绝邀请
+              {formatUiMessage(locale, "sharedPublic.inviteDeclinedTitle")}
             </h1>
-            <p className="app-page-subtitle">你已拒绝加入 {workspaceTitle || "这个 Workspace"}。</p>
+            <p className="app-page-subtitle">
+              {formatUiMessage(locale, "sharedPublic.inviteDeclinedBody", {
+                title: titleOrFallback,
+              })}
+            </p>
             <div className="app-button-row">
               <Link className="app-button-secondary" href="/">
-                返回首页
+                {formatUiMessage(locale, "sharedPublic.backHomeAction")}
               </Link>
             </div>
           </>
         ) : (
           <>
             <h1 className={`app-page-title ${styles.title}`}>
-              Workspace 邀请
+              {formatUiMessage(locale, "sharedPublic.inviteTitle")}
             </h1>
             <p className="app-page-subtitle">
               {workspaceTitle
-                ? `你被邀请加入 ${workspaceTitle}。`
-                : "你被邀请加入一个 Workspace。登录后可接受或拒绝邀请。"}
+                ? formatUiMessage(locale, "sharedPublic.inviteNamedBody", {
+                    title: workspaceTitle,
+                  })
+                : formatUiMessage(locale, "sharedPublic.inviteGenericBody")}
             </p>
 
             {!auth.token ? (
               <div className={`app-inline-surface ${styles.authBox}`}>
                 <p className={styles.mutedText}>
-                  需要先登录或注册，才能处理这条邀请。
+                  {formatUiMessage(locale, "sharedPublic.inviteAuthHint")}
                 </p>
                 <div className="app-button-row">
                   <Link className="app-button-primary" href={`/login?next=${nextPath}`}>
-                    登录后继续
+                    {formatUiMessage(locale, "sharedPublic.signInToContinueAction")}
                   </Link>
                   <Link className="app-button-secondary" href={`/register?next=${nextPath}`}>
-                    注册后继续
+                    {formatUiMessage(locale, "sharedPublic.signUpToContinueAction")}
                   </Link>
                 </div>
               </div>
@@ -184,7 +208,9 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
                   type="button"
                   onClick={() => void handleAccept()}
                 >
-                  {actionLoading ? "处理中..." : "接受邀请"}
+                  {actionLoading
+                    ? formatUiMessage(locale, "sharedPublic.inviteProcessing")
+                    : formatUiMessage(locale, "sharedPublic.acceptInviteAction")}
                 </button>
                 <button
                   className="app-button-secondary"
@@ -193,7 +219,7 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
                   type="button"
                   onClick={() => void handleDecline()}
                 >
-                  拒绝邀请
+                  {formatUiMessage(locale, "sharedPublic.declineInviteAction")}
                 </button>
               </div>
             )}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import type { UiLocale } from "../../../lib/i18n/config";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import { formatDayLabel } from "./share-center-utils";
 import styles from "./share-views-bar-chart.module.css";
 
@@ -135,7 +136,9 @@ export function ShareViewsBarChart({
         <div className={styles.tooltip} role="status">
           <strong>{formatDayLabel(locale, hoverPoint.day)}</strong>
           <span>
-            {locale === "zh-CN" ? "访问" : "Views"} {hoverPoint.views}
+            {formatUiMessage(locale, "sharedPublic.chartViews", {
+              n: String(hoverPoint.views),
+            })}
           </span>
         </div>
       ) : null}

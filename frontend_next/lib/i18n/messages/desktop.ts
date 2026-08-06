@@ -149,6 +149,38 @@ export const desktopMessages = {
     zh: "历史授权档位（可选）",
     en: "Legacy license tiers (optional)",
   },
+  "desktop.status.ariaLabel": {
+    zh: "授权状态",
+    en: "License status",
+  },
+  "desktop.status.active": {
+    zh: "已激活",
+    en: "Active",
+  },
+  "desktop.status.trial": {
+    zh: "试用 {days}d",
+    en: "Trial {days}d",
+  },
+  "desktop.status.expired": {
+    zh: "已过期",
+    en: "Expired",
+  },
+  "desktop.status.revoked": {
+    zh: "已吊销",
+    en: "Revoked",
+  },
+  "desktop.status.unactivated": {
+    zh: "未激活",
+    en: "Not activated",
+  },
+  "desktop.status.offlineGrace": {
+    zh: "离线宽限 {days}d",
+    en: "Offline grace {days}d",
+  },
+  "desktop.startingClient": {
+    zh: "正在启动客户端…",
+    en: "Starting client…",
+  },
   "desktop.welcomeTitle": {
     zh: "欢迎使用 Context-OS",
     en: "Welcome to Context-OS",

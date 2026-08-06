@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import LegalDocRenderer from "@/components/legal/LegalDocRenderer";
 
+vi.mock("@/lib/ui-preferences", () => ({
+  useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
+}));
+
 vi.mock("next/link", () => {
   return {
     default: ({
@@ -43,8 +47,8 @@ describe("LegalDocRenderer", () => {
       />,
     );
 
-    expect(screen.getByText(/最后更新: 2025-06-01/)).toBeTruthy();
-    expect(screen.getByText(/版本: v2.0/)).toBeTruthy();
+    expect(screen.getByText(/最后更新：2025-06-01/)).toBeTruthy();
+    expect(screen.getByText(/版本：v2.0/)).toBeTruthy();
   });
 
   it("renders content with dangerouslySetInnerHTML", () => {

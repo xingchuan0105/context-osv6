@@ -122,8 +122,8 @@ export const shareMessages = {
     en: "Citations",
   },
   "sharedPublic.degradedBanner": {
-    zh: "回答已降级。",
-    en: "This answer was served in a degraded mode.",
+    zh: "本回答为简化结果。",
+    en: "This answer was simplified.",
   },
   "sharedPublic.inviteTitle": {
     zh: "工作区邀请",
@@ -132,6 +132,58 @@ export const shareMessages = {
   "sharedPublic.inviteSubtitle": {
     zh: "登录后可接受或拒绝这条工作区邀请。",
     en: "Sign in to accept or decline this workspace invite.",
+  },
+  "sharedPublic.inviteLoading": {
+    zh: "正在加载邀请…",
+    en: "Loading invite…",
+  },
+  "sharedPublic.inviteInvalidLink": {
+    zh: "邀请链接无效。",
+    en: "This invite link is invalid.",
+  },
+  "sharedPublic.inviteErrorTitle": {
+    zh: "邀请异常",
+    en: "Invite problem",
+  },
+  "sharedPublic.inviteAcceptFailed": {
+    zh: "接受邀请失败。",
+    en: "Could not accept the invite.",
+  },
+  "sharedPublic.inviteDeclineFailed": {
+    zh: "拒绝邀请失败。",
+    en: "Could not decline the invite.",
+  },
+  "sharedPublic.inviteNamedBody": {
+    zh: "你被邀请加入「{title}」。",
+    en: "You are invited to join “{title}”.",
+  },
+  "sharedPublic.inviteGenericBody": {
+    zh: "你被邀请加入一个工作区。登录后可接受或拒绝。",
+    en: "You are invited to a workspace. Sign in to accept or decline.",
+  },
+  "sharedPublic.inviteAuthHint": {
+    zh: "需要先登录或注册，才能处理这条邀请。",
+    en: "Sign in or register before handling this invite.",
+  },
+  "sharedPublic.inviteProcessing": {
+    zh: "处理中…",
+    en: "Working…",
+  },
+  "sharedPublic.inviteAcceptedBody": {
+    zh: "你现在可以访问「{title}」。",
+    en: "You can now open “{title}”.",
+  },
+  "sharedPublic.inviteDeclinedBody": {
+    zh: "你已拒绝加入「{title}」。",
+    en: "You declined to join “{title}”.",
+  },
+  "sharedPublic.inviteWorkspaceFallback": {
+    zh: "这个工作区",
+    en: "this workspace",
+  },
+  "sharedPublic.openWorkspaceAction": {
+    zh: "打开工作区",
+    en: "Open workspace",
   },
   "sharedPublic.acceptInviteAction": {
     zh: "接受邀请",
@@ -164,6 +216,10 @@ export const shareMessages = {
   "sharedPublic.inviteDeclinedTitle": {
     zh: "已拒绝邀请",
     en: "Invite declined",
+  },
+  "sharedPublic.chartViews": {
+    zh: "访问 {n}",
+    en: "Views {n}",
   },
   "shareCenter.tabsLabel": {
     zh: "分享中心选项卡",

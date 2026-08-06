@@ -9,6 +9,10 @@ vi.mock("@/lib/desktop/tauri-license", () => ({
   getLicenseStatus: vi.fn(),
 }));
 
+vi.mock("@/lib/ui-preferences", () => ({
+  useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
+}));
+
 import { getLicenseStatus } from "@/lib/desktop/tauri-license";
 import { DesktopStatusBadge } from "@/components/desktop/DesktopStatusBadge";
 

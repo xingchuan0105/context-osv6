@@ -91,11 +91,13 @@
 - [x] P1-4 客户端购买降权  
 - [x] P1-5 light AppPrimaryNav  
 - [x] P2-1 高触达术语（Owner-pays / RAG / 降级原因）  
+- [x] 邀请页 / 同意框 / 法律页脚 / 客户端状态徽章 i18n 收口  
 
 ## 6. 建议下一迭代（非本轮）
 
-1. copy-catalog 剩余层（admin 技术词、内联 106 处、后端通知模板）。  
-2. 可选 Cmd+K 命令面板（P2-3）。
+1. API Access 表面 / settings providers 固定列表等剩余内联文案迁 i18n。  
+2. admin 技术词与后端通知模板（copy-catalog 深层）。  
+3. 可选 Cmd+K 命令面板（P2-3）。
 
 ---
 

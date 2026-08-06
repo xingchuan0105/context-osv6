@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import LicensesSummary from "@/app/(marketing)/legal/licenses/page";
 
+vi.mock("@/lib/ui-preferences", () => ({
+  useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
+}));
+
 vi.mock("next/link", () => {
   return {
     default: ({
