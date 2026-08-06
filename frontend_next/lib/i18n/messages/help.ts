@@ -190,20 +190,20 @@ export const helpMessages = {
     en: "7. Client",
   },
   helpItemDesktop1: {
-    zh: "Windows 客户端安装包可从产品页下载；买断授权与云端账号体系配合使用。",
-    en: "Download the Windows client from the product page; licenses work with your cloud account.",
+    zh: "Windows 客户端完全免费下载使用；数据可留在本机，支持 MCP / CLI 供桌面 Agent 调用。",
+    en: "The Windows client is free. Data can stay local; MCP / CLI work with desktop agents.",
   },
   helpItemDesktop2: {
-    zh: "安装后可用授权码或 deep link 激活；SmartScreen 提示时选择仍要运行。",
-    en: "After install, activate with a license key or deep link; use Run anyway if SmartScreen warns.",
+    zh: "安装后配置 LLM Key 即可本地索引与问答；SmartScreen 提示时选择仍要运行。需要上云分享时再升级云端名额。",
+    en: "Add an LLM key after install for local index and Q&A; use Run anyway if SmartScreen warns. Upgrade cloud share slots only when publishing online.",
   },
   helpItemDesktopDownload: {
-    zh: "下载 / 了解客户端",
-    en: "Download / learn about the client",
+    zh: "下载 / 了解客户端（免费）",
+    en: "Download / learn about the client (free)",
   },
   helpItemDesktopBuy: {
-    zh: "购买客户端授权",
-    en: "Buy a client license",
+    zh: "历史授权记录（非主路径）",
+    en: "Legacy license records (not primary)",
   },
   helpWritePageSubtitle: {
     zh: "根据主题自动撰写长文，内置调研、大纲、分段写作与统计指纹精修。",

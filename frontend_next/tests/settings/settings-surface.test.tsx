@@ -95,10 +95,11 @@ function rerenderWithQuery(ui: ReactElement) {
 
 describe("normalizeSettingsTab", () => {
   it.each([
-    [undefined, "billing"],
-    ["", "billing"],
-    ["missing", "billing"],
+    [undefined, "profile"],
+    ["", "profile"],
+    ["missing", "profile"],
     ["profile", "profile"],
+    ["billing", "billing"],
     [["security"], "security"],
   ])("maps %s to %s", (value, expected) => {
     expect(normalizeSettingsTab(value as string | string[] | undefined)).toBe(expected);
@@ -392,7 +393,7 @@ describe("SettingsSurface", () => {
 
   it("maps legacy appearance/notifications tabs via normalizeSettingsTab", () => {
     expect(normalizeSettingsTab("appearance")).toBe("preferences");
-    expect(normalizeSettingsTab("notifications")).toBe("billing");
+    expect(normalizeSettingsTab("notifications")).toBe("profile");
   });
 
   it("expands change-password only after clicking the action", async () => {

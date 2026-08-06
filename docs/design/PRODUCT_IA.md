@@ -75,7 +75,8 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 /dashboard/:id/share/analytics     → 301/redirect 至 share（兼容旧链）
 /dashboard/:id/analyze             → redirect 至 share（兼容旧链；禁止再实现第二套分析页）
 /dashboard/:id/api-access          工作区 API
-/settings?tab=…                   设置（billing|profile|providers|preferences|security）
+/settings                          默认 tab=profile（账户优先，非付费墙）
+/settings?tab=…                   设置（profile|providers|billing|preferences|security）
 /settings/usage                    用量（深链；非主导航顶级）
 ```
 

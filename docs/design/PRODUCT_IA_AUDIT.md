@@ -36,8 +36,8 @@
 |----|------|------|------|
 | P1-1 | 「数据分析」夹在工作区筛选 tab | 工具栏独立「分享访问」入口 | **done** |
 | P1-2 | 单库 analyze vs share/analytics 双路径 | 均 redirect → share；删独立 analyze surface | **done** |
-| P1-3 | Settings 默认 tab=billing | 新人像先付钱；深链保留，默认可 profile/providers | open |
-| P1-4 | desktop/buy、licenses 与「客户端免费」 | 降权发现；主 CTA 仅 /desktop | open |
+| P1-3 | Settings 默认 tab=billing | 默认 profile；顺序账户→模型→账单 | **done** |
+| P1-4 | desktop/buy、licenses 与「客户端免费」 | help 去掉购买主链；buy 页顶部导向免费下载 | **done** |
 | P1-5 | App shell 不跨 Workspace 稳定 | 阶段 3 再考虑窄业务侧栏 | open |
 | P1-6 | 设置账单仍可能双份 topup UI | 账单只展示余额 + 链 `#topup` 或共享组件 | **done**（2026-08-06：去套餐结账，链 `/pricing#topup`） |
 
@@ -87,12 +87,13 @@
 - [x] AGENTS.md 导航三条  
 - [x] P1-6 设置账单去掉第二套充值结账 → `/pricing#topup`  
 - [x] P1-1/P1-2 分享访问两层：汇总 `/dashboard/analytics` · 单库 `/share`  
+- [x] P1-3 Settings 默认 profile  
+- [x] P1-4 客户端购买降权  
 
 ## 6. 建议下一迭代（非本轮）
 
-1. P1-3 Settings 默认 tab。  
-2. P1-4 desktop/buy、licenses 降权。  
-3. 可选：极窄 App nav「工作台 | 设置」跨页稳定（仍禁止百科主栏）。
+1. 可选：极窄 App nav「工作台 | 设置」跨页稳定（仍禁止百科主栏）。  
+2. P2 文案术语（copy-catalog）。
 
 ---
 

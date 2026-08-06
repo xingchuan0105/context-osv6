@@ -101,8 +101,9 @@ export const SITE_LINKS: SiteLinkDef[] = [
   {
     id: "desktop_buy",
     href: APP_PATHS.desktopBuy,
-    label: { zh: "购买客户端授权", en: "Buy client license" },
-    discovery: ["help"],
+    label: { zh: "历史客户端授权", en: "Legacy client license" },
+    /** Not in primary discovery (PRODUCT_IA P1-4); client is free → /desktop. */
+    discovery: [],
   },
   {
     id: "pricing",

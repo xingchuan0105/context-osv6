@@ -118,9 +118,6 @@ export default function HelpPage() {
             <Link className="app-link app-link-muted" href="/desktop" data-testid="help-desktop-download">
               {formatUiMessage(locale, "helpItemDesktopDownload")}
             </Link>,
-            <Link className="app-link app-link-muted" href="/desktop/buy" data-testid="help-desktop-buy">
-              {formatUiMessage(locale, "helpItemDesktopBuy")}
-            </Link>,
           ]}
         />
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -11,6 +12,7 @@ import {
   fetchMyLicenses,
 } from "@/lib/desktop/license-client";
 import { useAuth } from "@/lib/auth/context";
+import { APP_PATHS } from "@/lib/site-map";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
 
@@ -114,6 +116,24 @@ export default function DesktopBuyPage() {
           ) : null}
         </header>
 
+        <section
+          className={styles.card}
+          data-testid="desktop-buy-free-banner"
+          style={{ marginBottom: "1rem" }}
+        >
+          <p className="app-page-subtitle" style={{ margin: "0 0 0.85rem" }}>
+            {formatUiMessage(locale, "desktop.buyFreeBanner")}
+          </p>
+          <div className={styles.ctaRow}>
+            <Link href={APP_PATHS.desktop} className={`app-button-primary ${styles.ctaPill}`}>
+              {formatUiMessage(locale, "desktop.buyFreeCta")}
+            </Link>
+            <Link href={APP_PATHS.pricing} className={`app-button-secondary ${styles.ctaPill}`}>
+              {formatUiMessage(locale, "desktop.buyPricingCta")}
+            </Link>
+          </div>
+        </section>
+
         {error ? (
           <p className={styles.errorBox} role="alert">
             {error}
@@ -122,6 +142,9 @@ export default function DesktopBuyPage() {
 
         {!purchasedKey ? (
           <>
+            <h2 className={styles.sectionTitle} style={{ marginBottom: "0.75rem" }}>
+              {formatUiMessage(locale, "desktop.buyLegacyTitle")}
+            </h2>
             <div className={styles.buyGrid}>
               {DESKTOP_TIERS.map((tier) => (
                 <article

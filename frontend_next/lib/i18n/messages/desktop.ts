@@ -126,12 +126,28 @@ export const desktopMessages = {
     en: "Activate in Context-OS",
   },
   "desktop.buyTitle": {
-    zh: "Context-OS",
-    en: "Context-OS",
+    zh: "客户端说明",
+    en: "About the client",
   },
   "desktop.buySubtitle": {
-    zh: "本地 AI 知识助手",
-    en: "Local AI knowledge assistant",
+    zh: "客户端本身免费下载使用。本页仅保留历史授权/设备记录入口，不是主购买路径。",
+    en: "The client itself is free to download. This page is only for legacy licenses / devices — not the primary purchase path.",
+  },
+  "desktop.buyFreeBanner": {
+    zh: "需要安装包？请到客户端页免费下载。需要上云分享名额请看云端定价。",
+    en: "Need the installer? Download free on the client page. Cloud share slots are on Pricing.",
+  },
+  "desktop.buyFreeCta": {
+    zh: "免费下载客户端",
+    en: "Free client download",
+  },
+  "desktop.buyPricingCta": {
+    zh: "云端定价（分享名额）",
+    en: "Cloud pricing (share slots)",
+  },
+  "desktop.buyLegacyTitle": {
+    zh: "历史授权档位（可选）",
+    en: "Legacy license tiers (optional)",
   },
   "desktop.welcomeTitle": {
     zh: "欢迎使用 Context-OS",
