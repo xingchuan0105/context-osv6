@@ -92,10 +92,12 @@
 - [x] P1-5 light AppPrimaryNav  
 - [x] P2-1 高触达术语（Owner-pays / RAG / 降级原因）  
 - [x] 邀请页 / 同意框 / 法律页脚 / 客户端状态徽章 i18n 收口  
+- [x] API Access 面 + providers 行标签 i18n  
+- [x] admin 导航/状态术语（检索健康、后台任务、限速策略、护栏文案）  
 
 ## 6. 建议下一迭代（非本轮）
 
-1. admin 技术词与后端通知模板（copy-catalog 深层）。  
+1. 后端通知 / 邮件模板化（copy-catalog P7）。  
 2. 可选 Cmd+K 命令面板（P2-3）。
 
 ---

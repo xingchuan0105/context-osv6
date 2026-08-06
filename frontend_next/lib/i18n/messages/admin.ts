@@ -10,8 +10,8 @@ export const adminMessages = {
     en: "Billing",
   },
   adminNavDegradation: {
-    zh: "降级",
-    en: "Degradation",
+    zh: "限速策略",
+    en: "Throttle policy",
   },
   adminNavFeatureFlags: {
     zh: "功能开关",
@@ -30,8 +30,8 @@ export const adminMessages = {
     en: "Accounts",
   },
   adminNavRagHealth: {
-    zh: "RAG 健康",
-    en: "RAG Health",
+    zh: "检索健康",
+    en: "Retrieval health",
   },
   adminNavUsage: {
     zh: "用量",
@@ -42,8 +42,12 @@ export const adminMessages = {
     en: "Users",
   },
   adminNavWorkers: {
-    zh: "执行器",
-    en: "Workers",
+    zh: "后台任务",
+    en: "Background jobs",
+  },
+  adminNavBroadcast: {
+    zh: "广播",
+    en: "Broadcast",
   },
   adminShellTitle: {
     zh: "后台管理",
@@ -78,24 +82,28 @@ export const adminMessages = {
     en: "Health",
   },
   "admin.nav.ragHealth": {
-    zh: "RAG 健康",
-    en: "RAG Health",
+    zh: "检索健康",
+    en: "Retrieval health",
   },
   "admin.nav.featureFlags": {
     zh: "功能开关",
     en: "Feature flags",
   },
   "admin.nav.workers": {
-    zh: "执行器",
-    en: "Workers",
+    zh: "后台任务",
+    en: "Background jobs",
   },
   "admin.nav.degradation": {
-    zh: "降级",
-    en: "Degradation",
+    zh: "限速策略",
+    en: "Throttle policy",
   },
   "admin.nav.auditLogs": {
     zh: "审计日志",
     en: "Audit logs",
+  },
+  "admin.nav.broadcast": {
+    zh: "广播",
+    en: "Broadcast",
   },
   "admin.pageSubtitle": {
     zh: "查看账户、用量、健康与系统级运营数据。",
@@ -214,8 +222,8 @@ export const adminMessages = {
     en: "System health",
   },
   "admin.health.sectionSubtitle": {
-    zh: "检查服务状态、降级信号和恢复建议。",
-    en: "Check service status, degradation signals, and recovery hints.",
+    zh: "检查服务状态、限速信号和恢复建议。",
+    en: "Check service status, throttle signals, and recovery hints.",
   },
   "admin.billing.sectionTitle": {
     zh: "账单概览",
@@ -242,20 +250,20 @@ export const adminMessages = {
     en: "Trace admin activity by action, resource, and actor.",
   },
   "admin.workers.sectionTitle": {
-    zh: "执行器状态",
-    en: "Worker status",
+    zh: "后台任务状态",
+    en: "Background job status",
   },
   "admin.workers.sectionSubtitle": {
-    zh: "查看执行队列、处理能力和异常节点。",
+    zh: "查看任务队列、处理能力和异常节点。",
     en: "Review queue health, capacity, and failing workers.",
   },
   "admin.degradation.sectionTitle": {
-    zh: "降级状态",
-    en: "Degradation status",
+    zh: "限速策略状态",
+    en: "Throttle policy status",
   },
   "admin.degradation.sectionSubtitle": {
-    zh: "查看当前降级策略、触发原因和影响范围。",
-    en: "Review active degradation policies, triggers, and blast radius.",
+    zh: "查看当前限速策略、触发原因和影响范围。",
+    en: "Review active throttle policies, triggers, and blast radius.",
   },
   "admin.status.active": {
     zh: "正常",
@@ -270,8 +278,8 @@ export const adminMessages = {
     en: "Healthy",
   },
   "admin.status.degraded": {
-    zh: "降级中",
-    en: "Degraded",
+    zh: "限速中",
+    en: "Throttled",
   },
   "admin.status.unhealthy": {
     zh: "异常",

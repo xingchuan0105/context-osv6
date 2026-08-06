@@ -66,11 +66,11 @@ export function healthStatusLabel(locale: UiLocale, status: string) {
     case "ready":
       return adminText(locale, "admin.status.healthy");
     case "degraded":
-      return locale === "zh-CN" ? "降级中" : "Degraded";
+      return adminText(locale, "admin.status.degraded");
     case "error":
     case "failed":
     case "unhealthy":
-      return locale === "zh-CN" ? "异常" : "Unhealthy";
+      return adminText(locale, "admin.status.unhealthy");
     default:
       return status;
   }
@@ -156,7 +156,7 @@ export function workerRuntimeLabel(locale: UiLocale, runtime: string) {
     case "queued":
       return locale === "zh-CN" ? "队列" : "Queued";
     case "worker":
-      return locale === "zh-CN" ? "执行器" : "Worker";
+      return locale === "zh-CN" ? "后台任务" : "Worker";
     default:
       return runtime;
   }
@@ -175,11 +175,11 @@ export function auditActionLabel(locale: UiLocale, action: string) {
     case "state_transition":
       return locale === "zh-CN" ? "状态迁移" : "State transition";
     case "input_guard_block":
-      return locale === "zh-CN" ? "输入被 Guard 拦截" : "Input guard blocked";
+      return locale === "zh-CN" ? "输入被安全护栏拦截" : "Input safety check blocked";
     case "output_guard_block":
-      return locale === "zh-CN" ? "输出被 Guard 拦截" : "Output guard blocked";
+      return locale === "zh-CN" ? "输出被安全护栏拦截" : "Output safety check blocked";
     case "output_guard_redact":
-      return locale === "zh-CN" ? "输出被 Guard 脱敏" : "Output guard redacted";
+      return locale === "zh-CN" ? "输出被安全护栏脱敏" : "Output safety check redacted";
     case "share_access":
       return locale === "zh-CN" ? "分享访问" : "Share access";
     default:
@@ -198,7 +198,7 @@ export function auditResourceTypeLabel(locale: UiLocale, resourceType: string) {
     case "share":
       return locale === "zh-CN" ? "分享" : "Share";
     case "guard":
-      return locale === "zh-CN" ? "护栏" : "Guard";
+      return locale === "zh-CN" ? "安全护栏" : "Safety check";
     default:
       return humanizeIdentifier(resourceType);
   }

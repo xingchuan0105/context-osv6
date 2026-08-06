@@ -12,10 +12,18 @@ import styles from "./admin-shell.module.css";
 
 type AdminNavItem = {
   href: string;
-  label: {
-    zh: string;
-    en: string;
-  };
+  labelKey:
+    | "adminNavAccounts"
+    | "adminNavUsers"
+    | "adminNavUsage"
+    | "adminNavBilling"
+    | "adminNavHealth"
+    | "adminNavRagHealth"
+    | "adminNavFeatureFlags"
+    | "adminNavWorkers"
+    | "adminNavDegradation"
+    | "adminNavAuditLogs"
+    | "adminNavBroadcast";
   prefixes: string[];
 };
 
@@ -23,57 +31,57 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   {
     href: "/admin",
     // Product is B2C personal: account list, not org/tenant admin.
-    label: { zh: "账户", en: "Accounts" },
+    labelKey: "adminNavAccounts",
     prefixes: ["/admin", "/admin/accounts"],
   },
   {
     href: "/admin/users",
-    label: { zh: "用户", en: "Users" },
+    labelKey: "adminNavUsers",
     prefixes: ["/admin/users"],
   },
   {
     href: "/admin/usage",
-    label: { zh: "用量", en: "Usage" },
+    labelKey: "adminNavUsage",
     prefixes: ["/admin/usage"],
   },
   {
     href: "/admin/billing",
-    label: { zh: "账单", en: "Billing" },
+    labelKey: "adminNavBilling",
     prefixes: ["/admin/billing"],
   },
   {
     href: "/admin/health",
-    label: { zh: "健康", en: "Health" },
+    labelKey: "adminNavHealth",
     prefixes: ["/admin/health"],
   },
   {
     href: "/admin/rag-health",
-    label: { zh: "RAG 健康", en: "RAG Health" },
+    labelKey: "adminNavRagHealth",
     prefixes: ["/admin/rag-health"],
   },
   {
     href: "/admin/feature-flags",
-    label: { zh: "功能开关", en: "Feature Flags" },
+    labelKey: "adminNavFeatureFlags",
     prefixes: ["/admin/feature-flags"],
   },
   {
     href: "/admin/system/workers",
-    label: { zh: "执行器", en: "Workers" },
+    labelKey: "adminNavWorkers",
     prefixes: ["/admin/system/workers"],
   },
   {
     href: "/admin/system/degradation",
-    label: { zh: "降级", en: "Degradation" },
+    labelKey: "adminNavDegradation",
     prefixes: ["/admin/system/degradation"],
   },
   {
     href: "/admin/audit-logs",
-    label: { zh: "审计日志", en: "Audit Logs" },
+    labelKey: "adminNavAuditLogs",
     prefixes: ["/admin/audit-logs"],
   },
   {
     href: "/admin/broadcast",
-    label: { zh: "广播", en: "Broadcast" },
+    labelKey: "adminNavBroadcast",
     prefixes: ["/admin/broadcast"],
   },
 ];
@@ -99,7 +107,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <Link className={styles.brandLink} href="/dashboard">
             <ContextOsMark size={28} />
             <div className={styles.brandText}>
-              <strong>Context OS</strong>
+              <strong>Context-OS</strong>
               <span className={styles.brandSubtitle}>
                 {formatUiMessage(locale, "adminShellTitle")}
               </span>
@@ -109,34 +117,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <nav aria-label={formatUiMessage(locale, "adminNavLabel")} className={styles.nav}>
           {ADMIN_NAV_ITEMS.map((item) => {
             const active = isActivePath(pathname, item.prefixes);
-            const labelKey =
-              item.href === "/admin"
-                ? "adminNavAccounts"
-                : item.href === "/admin/users"
-                  ? "adminNavUsers"
-                  : item.href === "/admin/usage"
-                    ? "adminNavUsage"
-                    : item.href === "/admin/billing"
-                      ? "adminNavBilling"
-                      : item.href === "/admin/health"
-                        ? "adminNavHealth"
-                        : item.href === "/admin/rag-health"
-                          ? "adminNavRagHealth"
-                          : item.href === "/admin/feature-flags"
-                            ? "adminNavFeatureFlags"
-                            : item.href === "/admin/system/workers"
-                              ? "adminNavWorkers"
-                              : item.href === "/admin/system/degradation"
-                                ? "adminNavDegradation"
-                                : "adminNavAuditLogs";
-
             return (
               <Link
                 className={active ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
                 href={item.href}
                 key={item.href}
               >
-                {formatUiMessage(locale, labelKey)}
+                {formatUiMessage(locale, item.labelKey)}
               </Link>
             );
           })}

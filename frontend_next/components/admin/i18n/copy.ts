@@ -277,8 +277,8 @@ const INLINE_COPY = {
     en: "Unpaid",
   },
   "degradation.guardEvents24h": {
-    zh: "Guard 事件（24h）",
-    en: "Guard events (24h)",
+    zh: "安全护栏事件（24h）",
+    en: "Safety-check events (24h)",
   },
   "degradation.shareAccessEvents24h": {
     zh: "分享访问事件（24h）",
@@ -573,15 +573,15 @@ const INLINE_COPY = {
     en: "Failed documents",
   },
   "ops.guardEvents": {
-    zh: "Guard 事件",
-    en: "Guard events",
+    zh: "安全护栏事件",
+    en: "Safety-check events",
   },
   "ops.processing": {
     zh: "处理中",
     en: "Processing",
   },
   "rag.subtitle": {
-    zh: "查看失败文档、排队任务和近期 Guard 事件。",
+    zh: "查看失败文档、排队任务和近期安全护栏事件。",
     en: "Review failed documents, queued tasks, and recent guard events.",
   },
   "admin.searchLabel": {
@@ -637,8 +637,8 @@ const INLINE_COPY = {
     en: "Usage",
   },
   "admin.nav.ragHealth": {
-    zh: "RAG 健康",
-    en: "RAG Health",
+    zh: "检索健康",
+    en: "Retrieval health",
   },
   "admin.table.account": {
     zh: "账户",
@@ -685,8 +685,8 @@ const INLINE_COPY = {
     en: "System health",
   },
   "admin.health.sectionSubtitle": {
-    zh: "检查服务状态、降级信号和恢复建议。",
-    en: "Check service status, degradation signals, and recovery hints.",
+    zh: "检查服务状态、限速信号和恢复建议。",
+    en: "Check service status, throttle signals, and recovery hints.",
   },
   "admin.billing.sectionTitle": {
     zh: "账单概览",
@@ -713,20 +713,20 @@ const INLINE_COPY = {
     en: "Trace admin activity by action, resource, and actor.",
   },
   "admin.workers.sectionTitle": {
-    zh: "执行器状态",
-    en: "Worker status",
+    zh: "后台任务状态",
+    en: "Background job status",
   },
   "admin.workers.sectionSubtitle": {
-    zh: "查看执行队列、处理能力和异常节点。",
+    zh: "查看任务队列、处理能力和异常节点。",
     en: "Review queue health, capacity, and failing workers.",
   },
   "admin.degradation.sectionTitle": {
-    zh: "降级状态",
-    en: "Degradation status",
+    zh: "限速策略状态",
+    en: "Throttle policy status",
   },
   "admin.degradation.sectionSubtitle": {
-    zh: "查看当前降级策略、触发原因和影响范围。",
-    en: "Review active degradation policies, triggers, and blast radius.",
+    zh: "查看当前限速策略、触发原因和影响范围。",
+    en: "Review active throttle policies, triggers, and blast radius.",
   },
   "admin.status.active": {
     zh: "正常",
@@ -739,6 +739,14 @@ const INLINE_COPY = {
   "admin.status.healthy": {
     zh: "健康",
     en: "Healthy",
+  },
+  "admin.status.degraded": {
+    zh: "限速中",
+    en: "Throttled",
+  },
+  "admin.status.unhealthy": {
+    zh: "异常",
+    en: "Unhealthy",
   },
 } satisfies Record<string, AdminInlineCopy>;
 
