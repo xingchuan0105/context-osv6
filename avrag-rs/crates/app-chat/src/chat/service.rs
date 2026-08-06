@@ -40,6 +40,19 @@ impl ChatContext {
         // ADR-0010: share chat may be anonymous when owner set workspace visibility
         // to `public`; auth middleware remaps `user_id` to the share owner.
         let is_share_chat = req.source_type.as_deref() == Some("share");
+        // ADR-0010 §9: share input length fuse (anti sponge).
+        if is_share_chat {
+            let max_chars: usize = std::env::var("SHARE_CHAT_MAX_QUERY_CHARS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(4_000);
+            if req.query.chars().count() > max_chars {
+                return Err(AppError::validation(
+                    "share_query_too_long",
+                    format!("Share query exceeds max length of {max_chars} characters."),
+                ));
+            }
+        }
         // ADR 0006 / 0010: rolling is protective, not the main product wall.
         // Skip hard rolling block when the payer account has wallet balance
         // (platform path) — BYOK skip is handled at usage observer later.
@@ -69,6 +82,14 @@ impl ChatContext {
         // ADR-0010 §1.1: no free ride on platform env keys without BYOK or balance.
         // Fail closed **before** LLM (not post-hoc wallet fail-open alone).
         self.billing.ensure_payer_can_spend(&self.auth).await?;
+        // Pre-authorize estimated turn cost (list price) when model is whitelisted.
+        self.billing
+            .ensure_payer_covers_estimate(
+                &self.auth,
+                estimated_input_tokens,
+                1024,
+            )
+            .await?;
         if is_share_chat {
             // ADR-0010 §4/§9: Owner daily fen fuse (platform proxy path only).
             self.billing

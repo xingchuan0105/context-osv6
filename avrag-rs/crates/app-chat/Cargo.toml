@@ -38,6 +38,7 @@ evalexpr.workspace = true
 futures = "0.3"
 regex.workspace = true
 reqwest.workspace = true
+sha2.workspace = true
 rig-core = "0.36.0"
 serde.workspace = true
 serde_json.workspace = true

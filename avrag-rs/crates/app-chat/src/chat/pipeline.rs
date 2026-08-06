@@ -127,6 +127,54 @@ async fn run_pipeline(
     let preflight = state.execute_chat_preflight(&request).await?;
     let session = state.resolve_chat_session(&request).await?;
 
+    // ADR-0010 §9: exact share Q&A cache (skip LLM on repeated scrape queries).
+    if request.source_type.as_deref() == Some("share") {
+        if let Some(token) = request.source_token.as_deref() {
+            if let Some(cached) = crate::share_cache::get(token, &request.query) {
+                let response = contracts::chat::ChatResponse {
+                    answer: cached.clone(),
+                    answer_blocks: vec![],
+                    session_id: session.id.clone(),
+                    agent_type: request.agent_type.clone(),
+                    sources: vec![],
+                    citations: vec![],
+                    trace: contracts::chat::TraceInfo {
+                        mode: "share_cache".to_string(),
+                    },
+                    degrade_trace: vec![],
+                    planner_output: None,
+                    mode_debug: None,
+                    message_id: None,
+                    guard_report: None,
+                    tool_results: vec![],
+                    usage: None,
+                    agent_operation_guide: None,
+                };
+                if let Some(ref config) = stream_config {
+                    let mid = crate::stream_event_message_id(None);
+                    let _ = config.sender.send(contracts::chat::ChatEvent::Start {
+                        request_id: config.request_id.clone(),
+                        session_id: session.id.clone(),
+                    });
+                    for chunk in crate::chunk_text_for_stream(&cached) {
+                        let _ = config.sender.send(contracts::chat::ChatEvent::Token {
+                            request_id: config.request_id.clone(),
+                            message_id: mid,
+                            content: chunk,
+                        });
+                    }
+                    let _ = config.sender.send(contracts::chat::ChatEvent::Done {
+                        request_id: config.request_id.clone(),
+                        session_id: session.id.clone(),
+                        message_id: mid,
+                        payload: crate::chat_done_payload(&response),
+                    });
+                }
+                return Ok(response);
+            }
+        }
+    }
+
     if let Some(ref config) = stream_config {
         let _ = config.sender.send(contracts::chat::ChatEvent::Start {
             request_id: config.request_id.clone(),
@@ -201,6 +249,12 @@ async fn run_pipeline(
     }
 
     crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
+
+    if request.source_type.as_deref() == Some("share") {
+        if let Some(token) = request.source_token.as_deref() {
+            crate::share_cache::put(token, &request.query, &execution.response.answer);
+        }
+    }
 
     if request.source_type.as_deref() != Some("share")
         && let Some(chat_persistence) = state.chat_persistence()

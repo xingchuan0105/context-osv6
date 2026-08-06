@@ -344,15 +344,20 @@ export async function streamSharedChat(
   query: string,
   onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
   authToken?: string | null,
+  turnstileToken?: string | null,
 ) {
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream",
+    "Content-Type": "application/json",
+  };
+  if (turnstileToken?.trim()) {
+    headers["cf-turnstile-response"] = turnstileToken.trim();
+  }
   const response = await fetchResponse(
     "/api/v1/chat",
     {
       method: "POST",
-      headers: {
-        Accept: "text/event-stream",
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         query,
         workspace_id: notebookId,
@@ -363,6 +368,7 @@ export async function streamSharedChat(
         doc_scope: [],
         messages: [],
         stream: true,
+        turnstile_token: turnstileToken?.trim() || undefined,
       }),
     },
     { token: authToken ?? undefined },

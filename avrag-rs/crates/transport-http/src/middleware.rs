@@ -39,28 +39,34 @@ struct FixedWindowCounter {
 #[derive(Clone)]
 pub(crate) struct RequestState(pub AppState);
 
-pub(crate) fn check_rate_limit(key: &str, limit_rpm: u32) -> (bool, u32, u32) {
-    let now_epoch_min = std::time::SystemTime::now()
+/// Fixed-window rate limit. `window_secs=60` ≈ RPM; `86400` ≈ daily.
+pub(crate) fn check_rate_limit_window(key: &str, limit: u32, window_secs: u64) -> (bool, u32, u32) {
+    let window_secs = window_secs.max(1);
+    let now_epoch = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-        / 60;
+        / window_secs;
     let mut table = LOCAL_RATE_LIMITER.lock().unwrap();
     let counter = table.entry(key.to_string()).or_insert(FixedWindowCounter {
-        window_epoch_minute: now_epoch_min,
+        window_epoch_minute: now_epoch,
         count: 0,
     });
-    if counter.window_epoch_minute != now_epoch_min {
-        counter.window_epoch_minute = now_epoch_min;
+    if counter.window_epoch_minute != now_epoch {
+        counter.window_epoch_minute = now_epoch;
         counter.count = 0;
     }
-    let remaining = limit_rpm.saturating_sub(counter.count);
-    if counter.count < limit_rpm {
+    let remaining = limit.saturating_sub(counter.count);
+    if counter.count < limit {
         counter.count += 1;
-        (true, remaining.saturating_sub(1), limit_rpm)
+        (true, remaining.saturating_sub(1), limit)
     } else {
-        (false, 0, limit_rpm)
+        (false, 0, limit)
     }
+}
+
+pub(crate) fn check_rate_limit(key: &str, limit_rpm: u32) -> (bool, u32, u32) {
+    check_rate_limit_window(key, limit_rpm, 60)
 }
 
 pub(crate) fn extract_client_ip(headers: &HeaderMap) -> String {
@@ -212,6 +218,25 @@ pub(crate) async fn request_context_middleware(
                     })),
                 )
                     .into_response();
+            }
+            // ADR-0010 §9: daily question cap per visitor on a share (local fixed day window).
+            let daily_cap: u32 = std::env::var("SHARE_CHAT_DAILY_LIMIT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(200);
+            if daily_cap > 0 {
+                let day_key = format!("{share_key}:day");
+                let (day_ok, _, _) = check_rate_limit_window(&day_key, daily_cap, 86_400);
+                if !day_ok {
+                    return (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        Json(json!({
+                            "error": "share_daily_limit_exceeded",
+                            "message": "Share chat daily question limit exceeded for this visitor.",
+                        })),
+                    )
+                        .into_response();
+                }
             }
 
             let mut auth = AuthContext::new(

@@ -180,6 +180,23 @@ pub(super) async fn current_metric_usage(
         tx.commit().await?;
         return Ok(row.try_get::<i64, _>("quantity")?);
     }
+    // ADR-0010 §2.2: retained index volume proxy (sum of document.chunk_count).
+    if metric_type == "chunk_count" {
+        let mut tx = repo.raw().begin().await?;
+        set_current_user(tx.as_mut(), &user_id.to_string()).await?;
+        let row = sqlx::query(
+            r#"
+            select coalesce(sum(chunk_count), 0)::bigint as quantity
+            from documents
+            where user_id = $1
+            "#,
+        )
+        .bind(user_id.into_uuid())
+        .fetch_one(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+        return Ok(row.try_get::<i64, _>("quantity")?);
+    }
 
     let mut tx = repo.raw().begin().await?;
     set_current_user(tx.as_mut(), &user_id.to_string()).await?;

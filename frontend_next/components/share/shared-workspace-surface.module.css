@@ -282,6 +282,10 @@
   gap: var(--space-4);
 }
 
+.turnstileHost {
+  min-height: 65px;
+}
+
 .signInBox {
   display: grid;
   gap: var(--space-3);

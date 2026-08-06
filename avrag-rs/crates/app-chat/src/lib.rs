@@ -26,6 +26,7 @@ pub mod orchestrator_context;
 pub mod profile_update;
 pub mod rag_execute;
 pub mod sessions;
+pub mod share_cache;
 #[cfg(any(test, feature = "dev-tools"))]
 pub mod token_budget;
 pub mod writer;

@@ -108,6 +108,64 @@ impl BillingContext {
         }
     }
 
+    /// Pre-authorize a turn: balance must cover estimated list price for expected tokens.
+    /// Fail closed **before** LLM when the estimate is known and balance is insufficient.
+    pub async fn ensure_payer_covers_estimate(
+        &self,
+        auth: &AuthContext,
+        estimated_input_tokens: i64,
+        estimated_output_tokens: i64,
+    ) -> Result<(), AppError> {
+        let Some(wallet) = &self.wallet else {
+            return Ok(());
+        };
+        // BYOK LLM path: no wallet pre-auth for chat (embeddings still debit separately).
+        if let Some(secrets) = &self.provider_secrets {
+            let owner = auth.user_id().into_uuid();
+            if secrets
+                .has_active(owner, ProviderSecretPurpose::Llm)
+                .await
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
+        }
+        let provider = std::env::var("AGENT_LLM_PROVIDER")
+            .or_else(|_| std::env::var("LLM_PROVIDER"))
+            .unwrap_or_else(|_| "deepseek".into());
+        let model = std::env::var("AGENT_LLM_MODEL")
+            .or_else(|_| std::env::var("LLM_MODEL"))
+            .unwrap_or_else(|_| "deepseek-v4-flash".into());
+        let Some(need_fen) = avrag_billing::list_price_fen(
+            &provider,
+            &model,
+            estimated_input_tokens.max(0) as u32,
+            estimated_output_tokens.max(0) as u32,
+            0,
+        ) else {
+            // Unknown model: already warned in ensure_payer; do not block on estimate.
+            return Ok(());
+        };
+        if need_fen <= 0 {
+            return Ok(());
+        }
+        let owner = auth.user_id().into_uuid();
+        let w = wallet
+            .ensure_wallet(owner)
+            .await
+            .map_err(|e| AppError::internal(format!("wallet pre-auth failed: {e}")))?;
+        if w.balance_fen < need_fen {
+            return Err(AppError::validation(
+                "payer_funds_required",
+                format!(
+                    "Wallet balance {} fen is below estimated turn cost {} fen. Top up before continuing.",
+                    w.balance_fen, need_fen
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     fn warn_if_platform_model_not_whitelisted() {
         let provider = std::env::var("AGENT_LLM_PROVIDER")
             .or_else(|_| std::env::var("LLM_PROVIDER"))

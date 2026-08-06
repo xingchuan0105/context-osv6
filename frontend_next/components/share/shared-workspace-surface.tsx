@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
 import {
@@ -109,6 +109,28 @@ function loadErrorSemantic(error: string, shareToken: string) {
   return normalized;
 }
 
+const TURNSTILE_SITE_KEY =
+  typeof process !== "undefined"
+    ? (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "").trim()
+    : "";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        el: HTMLElement,
+        opts: {
+          sitekey: string;
+          callback: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+        },
+      ) => string;
+      reset: (widgetId?: string) => void;
+    };
+  }
+}
+
 export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   const { locale } = useUiPreferences();
   const auth = useAuth();
@@ -118,11 +140,53 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   const [chatError, setChatError] = useState("");
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState("");
   const [citations, setCitations] = useState<Citation[]>([]);
   const [sources, setSources] = useState<SourceRef[]>([]);
   const [degradeReasons, setDegradeReasons] = useState<string[]>([]);
   const [answering, setAnswering] = useState(false);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !payload) return;
+    let cancelled = false;
+    const mount = () => {
+      if (cancelled || !turnstileRef.current || !window.turnstile) return;
+      if (turnstileWidgetId.current) return;
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => setTurnstileToken(token),
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileToken(""),
+      });
+    };
+    if (window.turnstile) {
+      mount();
+      return () => {
+        cancelled = true;
+      };
+    }
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src*="challenges.cloudflare.com/turnstile"]',
+    );
+    if (existing) {
+      existing.addEventListener("load", mount);
+      return () => {
+        cancelled = true;
+        existing.removeEventListener("load", mount);
+      };
+    }
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.onload = mount;
+    document.head.appendChild(script);
+    return () => {
+      cancelled = true;
+    };
+  }, [payload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,13 +290,27 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
     setDegradeReasons([]);
 
     try {
+      if (TURNSTILE_SITE_KEY && !turnstileToken.trim() && !auth.token) {
+        setChatError(
+          locale === "zh-CN"
+            ? "请先完成人机验证后再提问。"
+            : "Complete the human verification challenge before asking.",
+        );
+        setAnswering(false);
+        return;
+      }
       await streamSharedChat(
         shareToken,
         payload.knowledge_base.id,
         nextQuery,
         handleStreamEvent,
         auth.token ?? null,
+        turnstileToken || null,
       );
+      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current && window.turnstile) {
+        window.turnstile.reset(turnstileWidgetId.current);
+        setTurnstileToken("");
+      }
     } catch (submitFailure) {
       const msg =
         submitFailure instanceof Error
@@ -409,8 +487,19 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                       value={query}
                     />
                   </div>
+                  {TURNSTILE_SITE_KEY && !auth.token ? (
+                    <div ref={turnstileRef} className={styles.turnstileHost} data-testid="share-turnstile" />
+                  ) : null}
                   <div className="app-button-row">
-                    <button className="app-button-primary" disabled={answering || query.trim().length === 0} type="submit">
+                    <button
+                      className="app-button-primary"
+                      disabled={
+                        answering ||
+                        query.trim().length === 0 ||
+                        (Boolean(TURNSTILE_SITE_KEY) && !auth.token && !turnstileToken.trim())
+                      }
+                      type="submit"
+                    >
                       {answering ? formatUiMessage(locale, "sharedPublic.submitting") : formatUiMessage(locale, "sharedPublic.submitAction")}
                     </button>
                   </div>
