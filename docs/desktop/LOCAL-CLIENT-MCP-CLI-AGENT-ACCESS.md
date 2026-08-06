@@ -310,7 +310,7 @@ Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/contex
 |----|-----|
 | 路径 | `POST /api/auth/agent-token`（需用户 JWT；API key → `403 api_key_forbidden`） |
 | Body | `{ "ttl_minutes": 120 }`（5–1440，默认 120） |
-| 返回 | `{ success, data: { token, expires_at, ttl_minutes, token_kind: "user_agent" } }` |
+| 返回 | `{ success, data: { token, expires_at, ttl_minutes, token_kind: "agent" } }` |
 | 吊销 | 短 TTL；改密等抬高 `auth_version` 使旧 JWT 失效 |
 
 ---

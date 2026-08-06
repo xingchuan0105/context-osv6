@@ -215,10 +215,6 @@ or `auth mint --save`.",
         }
     }
 
-    pub fn require_api_key(&self) -> Result<&str> {
-        self.require_bearer()
-    }
-
     pub fn require_workspace_id(&self) -> Result<&str> {
         match self
             .workspace_id

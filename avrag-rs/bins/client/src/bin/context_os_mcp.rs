@@ -19,10 +19,20 @@ USAGE:
 ENV:
   CONTEXT_OS_API_BASE         API base URL (default http://127.0.0.1:18080)
   AVRAG_PUBLIC_BASE_URL       Fallback base URL (desktop client.env)
-  CONTEXT_OS_API_KEY          Workspace API key (Bearer)
+  CONTEXT_OS_API_KEY          Workspace API key (index/query least privilege)
   CONTEXT_OS_WORKSPACE_API_KEY  Alias for CONTEXT_OS_API_KEY
+  CONTEXT_OS_USER_TOKEN       User/agent JWT (account/share tools via MCP)
+  CONTEXT_OS_AGENT_TOKEN      Alias for CONTEXT_OS_USER_TOKEN
+  CONTEXT_OS_USER_TOKEN_FILE  Default ~/.config/context-os/user.token
+  CONTEXT_OS_LOAD_DESKTOP_SESSION=1  Opt-in: auto-load desktop local_session JWT
 
-CLI companion: context-os status|ingest|ask|sources
+CREDENTIALS:
+  Bearer least-privilege: explicit user env > API key > auto-loaded token file/desktop.
+  With API key + auto user.token, MCP uses the API key (no silent elevation).
+  For account.create_workspace / share tools, set CONTEXT_OS_USER_TOKEN explicitly
+  (or only user.token without API key).
+
+CLI companion: context-os status|ingest|ask|share|auth|workspace
 Docs: docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md
 Wire: /docs/api-access-for-agents.md
 "

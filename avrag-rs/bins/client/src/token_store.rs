@@ -182,13 +182,21 @@ pub fn write_token_file(path: &Path, token: &str) -> Result<()> {
                 .with_context(|| format!("write temp token {}", tmp.display()))?;
         }
     }
-    fs::rename(&tmp, path).with_context(|| {
-        format!(
-            "rename {} → {}",
-            tmp.display(),
-            path.display()
-        )
-    })?;
+    // Windows fails rename if destination exists; remove first on all platforms.
+    if path.exists() {
+        fs::remove_file(path)
+            .with_context(|| format!("remove existing token {}", path.display()))?;
+    }
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| {
+            format!(
+                "rename {} → {}",
+                tmp.display(),
+                path.display()
+            )
+        });
+    }
     Ok(())
 }
 
@@ -270,5 +278,21 @@ mod tests {
     #[test]
     fn desktop_candidates_nonempty() {
         assert!(!desktop_session_candidates().is_empty());
+    }
+
+    #[test]
+    fn write_token_overwrites_existing() {
+        let dir = std::env::temp_dir().join(format!(
+            "context-os-token-ow-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("user.token");
+        write_token_file(&path, "first.jwt").unwrap();
+        write_token_file(&path, "second.jwt").unwrap();
+        let t = read_token_file(&path).unwrap().unwrap();
+        assert_eq!(t, "second.jwt");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

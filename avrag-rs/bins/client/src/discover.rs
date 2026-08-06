@@ -18,11 +18,22 @@ pub async fn run_check(cfg: &ClientConfig) -> Result<(), u8> {
     eprintln!(
         "  user_tok:  {}",
         if cfg.has_user_token() {
-            "set"
+            match cfg.user_token_source {
+                crate::config::UserTokenSource::Explicit => "set (explicit)",
+                crate::config::UserTokenSource::TokenFile => "set (file)",
+                crate::config::UserTokenSource::Desktop => "set (desktop)",
+                crate::config::UserTokenSource::None => "set",
+            }
         } else {
             "missing"
         }
     );
+    eprintln!("  bearer:    {}", cfg.credential_source_label());
+    if cfg.has_api_key() && cfg.has_user_token() && cfg.user_token_is_auto_discovered() {
+        eprintln!(
+            "  note:      dual creds — MCP/ingest use API key; CLI share/workspace use user JWT"
+        );
+    }
     if let Some(ws) = cfg.workspace_id.as_deref() {
         eprintln!("  workspace: {ws}");
     }
