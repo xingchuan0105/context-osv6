@@ -8,6 +8,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: mocks.replaceMock,
   }),
+  usePathname: () => "/settings",
 }));
 
 vi.mock("../../lib/auth/client", () => ({

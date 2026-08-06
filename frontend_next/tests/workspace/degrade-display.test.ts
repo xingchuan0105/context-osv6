@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { userVisibleDegradeReasons } from "../../lib/workspace/degrade-display";
+import {
+  labelDegradeReasons,
+  userVisibleDegradeReasons,
+} from "../../lib/workspace/degrade-display";
 
 describe("userVisibleDegradeReasons", () => {
   it("hides tool_unavailable and dedupes", () => {
@@ -23,5 +26,19 @@ describe("userVisibleDegradeReasons", () => {
         "no_retrieval_evidence",
       ]),
     ).toEqual(["fallback_to_summary", "no_retrieval_evidence"]);
+  });
+});
+
+describe("labelDegradeReasons", () => {
+  it("maps codes to product language and omits unknown raw ids", () => {
+    expect(
+      labelDegradeReasons(
+        ["fallback_to_summary", "tool_unavailable", "mystery_code"],
+        "zh-CN",
+      ),
+    ).toEqual(["改为摘要回答"]);
+    expect(labelDegradeReasons(["no_retrieval_evidence"], "en")).toEqual([
+      "Not enough retrieval evidence",
+    ]);
   });
 });

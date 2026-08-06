@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-
+import { AppPrimaryNav } from "../app-primary-nav";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { SettingsPanel } from "./settings-panel";
@@ -22,13 +21,7 @@ export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
           <h1 className={styles.shellTitle}>
             {formatUiMessage(locale, "settings.pageTitle")}
           </h1>
-          <Link
-            className="app-button-ghost"
-            data-testid="settings-back-dashboard"
-            href="/dashboard"
-          >
-            {formatUiMessage(locale, "dashboardBackToWorkspaces")}
-          </Link>
+          <AppPrimaryNav locale={locale} data-testid="settings-back-dashboard" />
         </header>
         <div className={styles.shellBody}>
           <SettingsTabBar activeTab={activeTab} />

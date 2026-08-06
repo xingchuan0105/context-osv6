@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { AppPrimaryNav } from "../../app-primary-nav";
 import { ContextOsMark } from "../../context-os-mark";
 import { AccountMenu } from "../../account-menu";
 import { NotificationBell } from "../../notifications/notification-bell";
@@ -54,6 +55,7 @@ export function DashboardHeader({
         </div>
       </div>
       <div className="dashboard-header-links">
+        <AppPrimaryNav locale={locale} />
         {onOpenGuide ? (
           <button
             type="button"

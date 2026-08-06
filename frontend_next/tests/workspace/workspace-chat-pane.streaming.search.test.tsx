@@ -215,8 +215,8 @@ describe("WorkspaceChatPane streaming search flow", () => {
 
     expect(onSessionChange).toHaveBeenCalledWith("sess-new");
     await waitFor(() => {
-      expect(screen.getByText("Guardrail 已介入当前回答。")).toBeTruthy();
-      expect(screen.getByText("降级原因：fallback_to_summary")).toBeTruthy();
+      expect(screen.getByText("安全护栏已介入当前回答。")).toBeTruthy();
+      expect(screen.getByText(/回答说明：改为摘要回答/)).toBeTruthy();
     });
     // Internal tool plumbing codes must not surface.
     expect(screen.queryByText(/tool_unavailable/)).toBeNull();

@@ -117,7 +117,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | Shell | 何时 | 内容 |
 |-------|------|------|
 | **Marketing chrome** | pricing / desktop / legal | 定价 · 客户端 · 法律 · 语言 · 进入应用 |
-| **App top bar** | dashboard / workspace / settings（产品内） | 品牌→工作台 · **客户端** · **升级** · 通知 · 账户 |
+| **App top bar** | dashboard / workspace / settings（产品内） | 品牌 · **工作台\|设置**（轻量 wayfinding）· 客户端 · 升级 · 通知 · 账户 |
 | **Dashboard main** | `/dashboard*` | 全宽内容；筛选 tab（全部/我的/收藏）；横切「分享访问」在工具栏；**无**百科主侧栏 |
 | **Workspace chrome** | `/dashboard/:id*` | 标题 · 客户端 · 升级 · 会话/来源等上下文操作 |
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |

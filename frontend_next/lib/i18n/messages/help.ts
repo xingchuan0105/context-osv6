@@ -34,8 +34,8 @@ export const helpMessages = {
     en: "API Access shows scopes, rate limits, and one-time plaintext key reveal.",
   },
   helpItemApi3: {
-    zh: "工作区 API 密钥只用于该工作区的资料上传、URL 导入和 RAG 查询；先在 UI 里创建工作区，再在此页创建密钥。",
-    en: "Workspace API keys only cover uploads, URL imports, and RAG for that workspace. Create the workspace in the UI first, then mint a key here.",
+    zh: "工作区 API 密钥只用于该工作区的资料上传、URL 导入和知识库查询；先在应用里创建工作区，再在此页创建密钥。",
+    en: "Workspace API keys only cover uploads, URL imports, and knowledge-base queries for that workspace. Create the workspace in the app first, then mint a key here.",
   },
   helpApiAccessTitle: {
     zh: "API 访问",
@@ -102,8 +102,8 @@ export const helpMessages = {
     en: "You can upload files and add URL-based sources.",
   },
   helpItemDocs2: {
-    zh: "会话可以按资料勾选形成 doc scope，直接影响 RAG 检索上下文。",
-    en: "Sessions can scope retrieval to selected documents, directly affecting RAG context.",
+    zh: "会话可以按资料勾选限定检索范围，直接影响知识库回答所用的文档。",
+    en: "Sessions can limit retrieval to selected documents, which shapes what the knowledge base can cite.",
   },
   helpItemDocs3: {
     zh: "资料状态异常时可以执行重建索引，并在右侧面板观察状态变化。",

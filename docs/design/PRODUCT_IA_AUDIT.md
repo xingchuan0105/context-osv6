@@ -38,14 +38,14 @@
 | P1-2 | 单库 analyze vs share/analytics 双路径 | 均 redirect → share；删独立 analyze surface | **done** |
 | P1-3 | Settings 默认 tab=billing | 默认 profile；顺序账户→模型→账单 | **done** |
 | P1-4 | desktop/buy、licenses 与「客户端免费」 | help 去掉购买主链；buy 页顶部导向免费下载 | **done** |
-| P1-5 | App shell 不跨 Workspace 稳定 | 阶段 3 再考虑窄业务侧栏 | open |
+| P1-5 | App shell 不跨 Workspace 稳定 | 轻量 `AppPrimaryNav` 工作台\|设置（非百科侧栏） | **done** (light) |
 | P1-6 | 设置账单仍可能双份 topup UI | 账单只展示余额 + 链 `#topup` 或共享组件 | **done**（2026-08-06：去套餐结账，链 `/pricing#topup`） |
 
 ### P2
 
 | ID | 问题 | 状态 |
 |----|------|------|
-| P2-1 | 术语 Owner-pays / RAG 中英（copy-catalog） | open（文案债） |
+| P2-1 | 术语 Owner-pays / RAG 中英（copy-catalog） | **done**（高触达 share/pricing/help/degrade） |
 | P2-2 | 升级弹窗与 pricing 文案重复 | 可接受；保持弹窗短、pricing 全 |
 | P2-3 | 无 Cmd+K 命令面板 | 可选增强，非本轮 |
 
@@ -89,11 +89,13 @@
 - [x] P1-1/P1-2 分享访问两层：汇总 `/dashboard/analytics` · 单库 `/share`  
 - [x] P1-3 Settings 默认 profile  
 - [x] P1-4 客户端购买降权  
+- [x] P1-5 light AppPrimaryNav  
+- [x] P2-1 高触达术语（Owner-pays / RAG / 降级原因）  
 
 ## 6. 建议下一迭代（非本轮）
 
-1. 可选：极窄 App nav「工作台 | 设置」跨页稳定（仍禁止百科主栏）。  
-2. P2 文案术语（copy-catalog）。
+1. copy-catalog 剩余层（admin 技术词、内联 106 处、后端通知模板）。  
+2. 可选 Cmd+K 命令面板（P2-3）。
 
 ---
 

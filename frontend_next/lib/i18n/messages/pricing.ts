@@ -25,8 +25,8 @@ export const pricingMessages = {
     en: "Top-up · model wallet",
   },
   pricingTopupBody: {
-    zh: "余额与会员独立。使用平台模型、向量检索，以及分享页访客问答（Owner-pays）时从余额扣费。已配置自定义 Provider 时，对话可走你自己的额度。",
-    en: "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (Owner-pays) debit the wallet. With a custom provider, chat can use your own quota.",
+    zh: "余额与会员独立。使用平台模型、向量检索，以及分享页访客问答（所有者付费）时从余额扣费。已配置自定义 Provider 时，对话可走你自己的额度。",
+    en: "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (billed to the workspace owner) debit the wallet. With a custom provider, chat can use your own quota.",
   },
   pricingTopupPoint1: {
     zh: "在本页右侧选择套餐包，登录后可直接支付充值",
@@ -121,8 +121,8 @@ export const pricingMessages = {
     en: "Who pays for visitor questions?",
   },
   pricingFaqResetAnswer: {
-    zh: "分享问答的成本由工作区所有者承担（Owner-pays）。可在设置中配置自定义 Provider。",
-    en: "On shared workspaces, the workspace owner pays model costs (Owner-pays). Configure a custom provider in Settings if needed.",
+    zh: "分享问答的成本由工作区所有者承担。可在设置中配置自定义 Provider。",
+    en: "On shared workspaces, the workspace owner pays model costs. Configure a custom provider in Settings if needed.",
   },
   pricingFaqUpgrade: {
     zh: "升级后立即生效吗？",

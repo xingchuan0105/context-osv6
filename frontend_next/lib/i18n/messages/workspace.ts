@@ -95,12 +95,12 @@ export const workspaceMessages = {
     en: "Create workspace",
   },
   workspaceDegradeReasons: {
-    zh: "回答已降级：{reasons}",
-    en: "Answer degraded: {reasons}",
+    zh: "回答说明：{reasons}",
+    en: "About this answer: {reasons}",
   },
   workspaceGuardIntervened: {
     zh: "安全护栏已介入当前回答。",
-    en: "Safety guardrails intervened in this answer.",
+    en: "Safety checks adjusted this answer.",
   },
   workspaceHistoryLabel: {
     zh: "工作区历史",

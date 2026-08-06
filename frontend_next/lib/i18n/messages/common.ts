@@ -87,7 +87,15 @@ export const commonMessages = {
   },
   "productChrome.productHome": {
     zh: "工作台",
-    en: "App home",
+    en: "Dashboard",
+  },
+  "appPrimaryNav.label": {
+    zh: "产品导航",
+    en: "Product navigation",
+  },
+  "appPrimaryNav.settings": {
+    zh: "设置",
+    en: "Settings",
   },
   "productChrome.help": {
     zh: "产品帮助",

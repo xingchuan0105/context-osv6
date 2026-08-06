@@ -23,7 +23,7 @@ import {
   IconThumbDown,
   IconThumbUp,
 } from "./chat-icons";
-import { userVisibleDegradeReasons } from "../../lib/workspace/degrade-display";
+import { labelDegradeReasons } from "../../lib/workspace/degrade-display";
 import { CitationRenderer, collectWebSources } from "./citation-renderer";
 import { ProgressStatusLine } from "./progress-status-line";
 
@@ -534,10 +534,11 @@ export function ChatMessageList({
 
                 {message.role === "assistant" &&
                 (() => {
-                  const visibleDegrade = userVisibleDegradeReasons(
+                  const degradeLabels = labelDegradeReasons(
                     message.degradeTrace.map((entry) => entry.reason),
+                    locale,
                   );
-                  if (!message.guarded && visibleDegrade.length === 0) {
+                  if (!message.guarded && degradeLabels.length === 0) {
                     return null;
                   }
                   return (
@@ -547,10 +548,10 @@ export function ChatMessageList({
                         {formatUiMessage(locale, "workspaceGuardIntervened")}
                       </div>
                     ) : null}
-                    {visibleDegrade.length > 0 ? (
+                    {degradeLabels.length > 0 ? (
                       <div className={styles.messageNoticeBody}>
                         {formatUiMessage(locale, "workspaceDegradeReasons", {
-                          reasons: visibleDegrade.join(" / "),
+                          reasons: degradeLabels.join(" · "),
                         })}
                       </div>
                     ) : null}

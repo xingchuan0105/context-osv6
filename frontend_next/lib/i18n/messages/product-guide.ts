@@ -93,8 +93,8 @@ export const productGuideMessages = {
     en: "Platform models · wallet",
   },
   "productGuide.llm.platformBody": {
-    zh: "使用平台模型时从余额扣费。访客在分享页提问时默认由工作区所有者承担（Owner-pays）。可在定价页直接充值。",
-    en: "Platform models debit your wallet. Guest Q&A on shared pages is Owner-pays. Top up on the pricing page.",
+    zh: "使用平台模型时从余额扣费。访客在分享页提问时默认由工作区所有者承担。可在定价页直接充值。",
+    en: "Platform models debit your wallet. Guest Q&A on shared pages is billed to the workspace owner. Top up on the pricing page.",
   },
   "productGuide.llm.linkProviders": {
     zh: "配置模型服务商",

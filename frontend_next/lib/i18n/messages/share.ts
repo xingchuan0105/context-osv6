@@ -458,12 +458,12 @@ export const shareMessages = {
     en: "Share slots full · upgrade or free a slot",
   },
   "shareConversion.body": {
-    zh: "当前 {plan}：已开分享 {used}/{max}。升级 Plus/Pro 提高可分享工作区数；访客问答若走平台模型，由 Owner 余额支付（自配 Provider 不扣钱包，仍计入用量统计）。",
-    en: "Plan {plan}: {used}/{max} shared workspaces. Upgrade Plus/Pro for more slots. Guest Q&A on platform models bills Owner wallet; BYOK is metered for limits/analytics but not wallet-debited.",
+    zh: "当前 {plan}：已开分享 {used}/{max}。升级 Plus/Pro 可提高可分享工作区数；访客问答若走平台模型，由工作区所有者余额支付（自定义 Provider 不扣钱包，仍计入用量）。",
+    en: "Plan {plan}: {used}/{max} shared workspaces. Upgrade Plus/Pro for more slots. Guest Q&A on platform models bills the workspace owner; a custom provider skips wallet debit but still counts toward usage.",
   },
   "shareConversion.byokHint": {
-    zh: "建议：分享场景可先配自定义 Provider（不扣余额），或为代购路径保持钱包余额。",
-    en: "Tip: configure a custom provider for shared chat (no wallet debit), or keep wallet funded for platform-proxy traffic.",
+    zh: "建议：分享场景可先配自定义 Provider（不扣余额），或保持平台模型所需余额。",
+    en: "Tip: use a custom provider for shared chat (no wallet debit), or keep wallet funded for platform models.",
   },
   "shareConversion.upgradeCta": {
     zh: "升级会员 · 更多分享名额",
@@ -490,8 +490,8 @@ export const shareMessages = {
     en: "Invite / sign-in required",
   },
   "shareCenter.visitorModeHint": {
-    zh: "「匿名链接」：未登录也可提问（按访客限次）；「定向邀请 / 须登录」：仅登录访客可提问。分享问答的费用由工作区所有者的余额或自定义 Provider 承担。",
-    en: "\"Anonymous link\" allows unauthenticated questions (capped per visitor). \"Invite / sign-in\" requires a logged-in visitor. Share chat is Owner-pays (balance or custom provider).",
+    zh: "「匿名链接」：未登录也可提问（按访客限次）。「定向邀请 / 须登录」：仅登录访客可提问。模型费用由工作区所有者的余额或自定义 Provider 承担。",
+    en: "Anonymous link: guests can ask without signing in (capped). Invite / sign-in: only signed-in guests can ask. Model cost is billed to the workspace owner (balance or custom provider).",
   },
   "shareCenter.questionLimitsLabel": {
     zh: "访客提问日上限",
@@ -511,7 +511,7 @@ export const shareMessages = {
   },
   "shareCenter.ownerPaysHint": {
     zh: "分享问答费用由工作区所有者的余额或自定义 Provider 承担。",
-    en: "Share chat is Owner-pays (balance or custom provider) — already in effect.",
+    en: "Share Q&A is billed to the workspace owner (balance or custom provider).",
   },
   "shareCenter.memberLimitWorkspaceNote": {
     zh: "登录访客上限按工作区统一配置（不是按人单独计算）。",

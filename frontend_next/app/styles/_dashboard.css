@@ -108,6 +108,49 @@ a.dashboard-brand-title:hover {
   flex-wrap: wrap;
 }
 
+/* Minimal product nav: 工作台 | 设置 */
+.app-primary-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: hsl(var(--dashboard-surface-muted, var(--surface-muted)));
+  border: 1px solid hsl(var(--dashboard-border, var(--border-whisper)));
+}
+
+.app-primary-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.app-primary-nav-link:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--card) / 0.7);
+}
+
+.app-primary-nav-link.is-active {
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+  font-weight: 600;
+  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.06);
+}
+
+.app-primary-nav-link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
 .dashboard-header-usage {
   display: flex;
   align-items: center;

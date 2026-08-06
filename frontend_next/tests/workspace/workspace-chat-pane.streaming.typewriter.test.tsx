@@ -77,7 +77,7 @@ describe("WorkspaceChatPane streaming typewriter", () => {
 
     expect(mocks.streamWorkspaceChatMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Hello")).toBeNull();
-    expect(screen.queryByText("Guardrail 已介入当前回答。")).toBeNull();
+    expect(screen.queryByText("安全护栏已介入当前回答。")).toBeNull();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(16);
@@ -85,8 +85,8 @@ describe("WorkspaceChatPane streaming typewriter", () => {
 
     expect(screen.getByText("Hello")).toBeTruthy();
     expect(screen.queryByText("Hel")).toBeNull();
-    expect(screen.getByText("Guardrail 已介入当前回答。")).toBeTruthy();
-    expect(screen.getByText("降级原因：fallback_to_summary")).toBeTruthy();
+    expect(screen.getByText("安全护栏已介入当前回答。")).toBeTruthy();
+    expect(screen.getByText(/回答说明：改为摘要回答/)).toBeTruthy();
   });
 
   it("renders streaming tokens immediately when reduced motion is preferred", async () => {

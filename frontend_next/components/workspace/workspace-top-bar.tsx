@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { AppPrimaryNav } from "../app-primary-nav";
 import { DesktopSettingsDrawer } from "../desktop/DesktopSettingsDrawer";
 import { DesktopStatusBadge } from "../desktop/DesktopStatusBadge";
 import { ContextOsMark } from "../context-os-mark";
@@ -162,6 +163,7 @@ export function WorkspaceTopBar({
       </div>
 
       <div className={styles.topBarActions}>
+        <AppPrimaryNav locale={locale} />
         {!desktopRuntime ? (
           <Link
             className={`${styles.topBarClientButton} top-bar-capsule`}
