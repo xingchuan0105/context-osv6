@@ -13,6 +13,14 @@ export const shareMessages = {
     zh: "通过共享链接浏览内容。登录后可提问。",
     en: "Browse shared content by link. Sign in to ask questions.",
   },
+  "sharedPublic.ownerCardLabel": {
+    zh: "工作区所有者",
+    en: "Workspace owner",
+  },
+  "sharedPublic.ownerContactAction": {
+    zh: "联系",
+    en: "Contact",
+  },
   "sharedPublic.readAccessLabel": {
     zh: "访问方式",
     en: "Read access",

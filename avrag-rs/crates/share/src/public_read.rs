@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    PublicShareChatContext, ShareAccessLog, ShareService, SharedKnowledgeBase,
+    PublicShareChatContext, ShareAccessLog, ShareOwnerCard, ShareService, SharedKnowledgeBase,
     SharedWorkspacePayload, SharedShareInfo, SharedSource,
 };
 
@@ -60,6 +60,13 @@ impl ShareService {
                         status: source.status,
                     })
                     .collect(),
+                owner: snapshot.owner.map(|card| ShareOwnerCard {
+                    display_name: card.display_name,
+                    bio: card.bio,
+                    contact_url: card.contact_url,
+                    avatar_url: card.avatar_url,
+                    banner_url: card.banner_url,
+                }),
             }))
     }
 

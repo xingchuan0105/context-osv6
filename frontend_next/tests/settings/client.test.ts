@@ -173,7 +173,7 @@ describe("settings client", () => {
         ),
       );
 
-    await expect(updateProfile("token-123", "Owner Updated")).resolves.toEqual({
+    await expect(updateProfile("token-123", { full_name: "Owner Updated" })).resolves.toEqual({
       success: true,
       data: {
         token: "token-123",

@@ -6,6 +6,14 @@ pub(crate) struct AuthUserDto {
     pub email: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub full_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub banner_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +87,10 @@ pub(crate) struct LoginRequest {
 pub(crate) struct UpdateProfileRequest {
     #[serde(default)]
     pub full_name: Option<String>,
+    #[serde(default)]
+    pub bio: Option<String>,
+    #[serde(default)]
+    pub contact_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

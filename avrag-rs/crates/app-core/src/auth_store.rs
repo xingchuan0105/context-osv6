@@ -66,6 +66,44 @@ pub struct AuthUserProfile {
     pub owner_user_id: Uuid,
     pub email: String,
     pub full_name: Option<String>,
+    /// Public bio for share Owner card.
+    pub bio: Option<String>,
+    /// Public contact / link URL for share Owner card.
+    pub contact_url: Option<String>,
+    /// Object-store path for avatar (not a browser URL).
+    pub avatar_object_path: Option<String>,
+    /// Object-store path for banner (not a browser URL).
+    pub banner_object_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileMediaKind {
+    Avatar,
+    Banner,
+}
+
+impl ProfileMediaKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Avatar => "avatar",
+            Self::Banner => "banner",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "avatar" => Some(Self::Avatar),
+            "banner" => Some(Self::Banner),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateUserProfileInput {
+    pub full_name: String,
+    pub bio: Option<String>,
+    pub contact_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +156,15 @@ pub trait AuthStorePort: Send + Sync {
     async fn update_user_profile(
         &self,
         user_id: Uuid,
-        full_name: &str,
+        input: &UpdateUserProfileInput,
+    ) -> Result<Option<AuthUserProfile>, AppError>;
+
+    /// Set or clear avatar/banner object path after media upload.
+    async fn set_user_profile_media_path(
+        &self,
+        user_id: Uuid,
+        kind: ProfileMediaKind,
+        object_path: Option<&str>,
     ) -> Result<Option<AuthUserProfile>, AppError>;
 
     async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>, AppError>;

@@ -2,6 +2,10 @@ export type AuthUser = {
   id: string;
   email: string;
   full_name: string;
+  bio?: string | null;
+  contact_url?: string | null;
+  avatar_url?: string | null;
+  banner_url?: string | null;
 };
 
 export type AuthPayload = {

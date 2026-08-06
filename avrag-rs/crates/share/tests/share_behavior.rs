@@ -41,6 +41,13 @@ async fn load_shared_workspace_maps_snapshot_fields_to_payload() {
                     file_name: "report.pdf".to_string(),
                     status: "ready".to_string(),
                 }],
+                owner: Some(app_core::ShareOwnerCardSnapshot {
+                    display_name: "Ada".to_string(),
+                    bio: Some("Notes owner".to_string()),
+                    contact_url: Some("https://example.test".to_string()),
+                    avatar_url: Some("/api/public/users/u1/media/avatar".to_string()),
+                    banner_url: None,
+                }),
             },
         )
         .await;
@@ -67,6 +74,14 @@ async fn load_shared_workspace_maps_snapshot_fields_to_payload() {
     assert_eq!(payload.share.scope, "sources");
     assert_eq!(payload.sources.len(), 1);
     assert_eq!(payload.sources[0].file_name, "report.pdf");
+    let owner = payload.owner.expect("owner card");
+    assert_eq!(owner.display_name, "Ada");
+    assert_eq!(owner.bio.as_deref(), Some("Notes owner"));
+    assert_eq!(owner.contact_url.as_deref(), Some("https://example.test"));
+    assert_eq!(
+        owner.avatar_url.as_deref(),
+        Some("/api/public/users/u1/media/avatar")
+    );
     assert_eq!(payload.sources[0].status, "ready");
 }
 

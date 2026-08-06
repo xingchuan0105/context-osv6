@@ -75,6 +75,19 @@ pub struct SharedWorkspaceSnapshot {
     pub knowledge_base: SharedKnowledgeBaseSnapshot,
     pub share: SharedShareInfoSnapshot,
     pub sources: Vec<SharedSourceSnapshot>,
+    /// Owner public card for share page (X-style profile).
+    #[serde(default)]
+    pub owner: Option<ShareOwnerCardSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareOwnerCardSnapshot {
+    pub display_name: String,
+    pub bio: Option<String>,
+    pub contact_url: Option<String>,
+    /// Public media URL path (e.g. /api/public/users/{id}/media/avatar), not object path.
+    pub avatar_url: Option<String>,
+    pub banner_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

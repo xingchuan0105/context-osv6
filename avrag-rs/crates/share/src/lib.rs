@@ -19,6 +19,6 @@ pub use quota::{
 };
 pub use types::{
     AccessLevel, WorkspaceMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics,
-    ShareQuotaSummary, ShareService, ShareSettings, ShareTokenInfo, SharedKnowledgeBase,
-    SharedWorkspacePayload, SharedShareInfo, SharedSource,
+    ShareOwnerCard, ShareQuotaSummary, ShareService, ShareSettings, ShareTokenInfo,
+    SharedKnowledgeBase, SharedWorkspacePayload, SharedShareInfo, SharedSource,
 };

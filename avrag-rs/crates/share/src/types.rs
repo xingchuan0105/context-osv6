@@ -127,6 +127,21 @@ pub struct SharedWorkspacePayload {
     pub knowledge_base: SharedKnowledgeBase,
     pub share: SharedShareInfo,
     pub sources: Vec<SharedSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<ShareOwnerCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareOwnerCard {
+    pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bio: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banner_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

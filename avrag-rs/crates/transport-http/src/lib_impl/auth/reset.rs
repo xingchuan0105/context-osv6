@@ -67,11 +67,7 @@ fn password_reset_error_response(error: PasswordResetError) -> Response {
 }
 
 fn password_reset_user(email: String, user_id: Uuid) -> AuthUserDto {
-    AuthUserDto {
-        id: user_id.to_string(),
-        email,
-        full_name: String::new(),
-    }
+    super::profile::empty_auth_user(user_id.to_string(), email, String::new())
 }
 
 pub(crate) async fn auth_runtime_capabilities_handler(

@@ -331,6 +331,18 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
     ? buildPromptSuggestions(payload, formatUiMessage(locale, "sharedPublic.questionPlaceholder"))
     : [];
 
+  const owner = payload?.owner ?? null;
+  const ownerAvatar = owner?.avatar_url?.trim()
+    ? owner.avatar_url.startsWith("http")
+      ? owner.avatar_url
+      : owner.avatar_url
+    : null;
+  const ownerBanner = owner?.banner_url?.trim()
+    ? owner.banner_url.startsWith("http")
+      ? owner.banner_url
+      : owner.banner_url
+    : null;
+
   return (
     <main className="app-page-shell">
       <div className={`app-page-center ${styles.pageStack}`}>
@@ -363,6 +375,46 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
           </section>
         ) : (
           <>
+            {owner ? (
+              <section
+                aria-label={formatUiMessage(locale, "sharedPublic.ownerCardLabel")}
+                className={`app-surface-card ${styles.ownerCard}`}
+                data-testid="share-owner-card"
+              >
+                <div
+                  className={styles.ownerBanner}
+                  style={ownerBanner ? { backgroundImage: `url(${ownerBanner})` } : undefined}
+                />
+                <div className={styles.ownerBody}>
+                  <div
+                    className={styles.ownerAvatar}
+                    style={ownerAvatar ? { backgroundImage: `url(${ownerAvatar})` } : undefined}
+                    aria-hidden
+                  >
+                    {!ownerAvatar
+                      ? owner.display_name.trim().slice(0, 1).toUpperCase() || "O"
+                      : null}
+                  </div>
+                  <div className={styles.ownerMeta}>
+                    <h2 className={styles.ownerName}>{owner.display_name}</h2>
+                    {owner.bio?.trim() ? (
+                      <p className={styles.ownerBio}>{owner.bio.trim()}</p>
+                    ) : null}
+                    {owner.contact_url?.trim() ? (
+                      <a
+                        className="app-link"
+                        href={owner.contact_url.trim()}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {formatUiMessage(locale, "sharedPublic.ownerContactAction")}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
             <section className={`app-surface-card ${styles.sectionStack}`}>
               <div className={styles.overviewHeader}>
                 <div>

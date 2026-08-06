@@ -68,8 +68,8 @@ pub use rag_execute::{
 };
 pub use share::{
     AccessLogEntry, AccessLogsResponse, MemberRow, MembersResponse, ShareAnalyticsResponse,
-    ShareSettings, ShareTokenResponse, SharedKnowledgeBase, SharedWorkspacePayload, SharedShareInfo,
-    SharedSource,
+    ShareOwnerCard, ShareSettings, ShareTokenResponse, SharedKnowledgeBase, SharedWorkspacePayload,
+    SharedShareInfo, SharedSource,
 };
 pub use tool_call::{
     normalize_doc_id_alias, DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs,

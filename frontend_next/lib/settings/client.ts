@@ -175,12 +175,56 @@ export function defaultNotificationPreferences(): NotificationPreferences {
   };
 }
 
-export async function updateProfile(token: string, full_name: string | null) {
+export type UpdateProfileInput = {
+  full_name?: string | null;
+  bio?: string | null;
+  contact_url?: string | null;
+};
+
+export async function updateProfile(token: string, input: UpdateProfileInput | string | null) {
+  // Accept legacy string full_name for callers mid-migration; prefer object form.
+  const body: UpdateProfileInput =
+    typeof input === "string" || input === null
+      ? { full_name: input }
+      : input;
   return request<AuthEnvelope>(
     "/api/auth/profile",
     {
       method: "PUT",
-      body: JSON.stringify({ full_name }),
+      body: JSON.stringify({
+        full_name: body.full_name ?? null,
+        bio: body.bio ?? null,
+        contact_url: body.contact_url ?? null,
+      }),
+    },
+    token,
+  );
+}
+
+export async function uploadProfileMedia(
+  token: string,
+  kind: "avatar" | "banner",
+  file: Blob,
+  contentType: string,
+) {
+  return request<AuthEnvelope>(
+    `/api/auth/profile/media/${kind}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": contentType,
+      },
+      body: file,
+    },
+    token,
+  );
+}
+
+export async function deleteProfileMedia(token: string, kind: "avatar" | "banner") {
+  return request<AuthEnvelope>(
+    `/api/auth/profile/media/${kind}`,
+    {
+      method: "DELETE",
     },
     token,
   );

@@ -49,10 +49,21 @@ pub struct SharedSource {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareOwnerCard {
+    pub display_name: String,
+    pub bio: Option<String>,
+    pub contact_url: Option<String>,
+    pub avatar_url: Option<String>,
+    pub banner_url: Option<String>,
+}
+
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWorkspacePayload {
     pub knowledge_base: SharedKnowledgeBase,
     pub share: SharedShareInfo,
     pub sources: Vec<SharedSource>,
+    pub owner: Option<ShareOwnerCard>,
 }
 
 #[typeshare]

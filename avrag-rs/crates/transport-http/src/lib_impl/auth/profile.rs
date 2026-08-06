@@ -10,6 +10,8 @@ use bcrypt::verify;
 use serde_json::json;
 use tracing::warn;
 
+use app_core::{AuthUserProfile, ProfileMediaKind, UpdateUserProfileInput};
+
 use crate::auth_types::AuthEnvelope;
 use crate::auth_types::AuthPayload;
 use crate::auth_types::AuthUserDto;
@@ -20,6 +22,67 @@ use crate::auth_types::RecordLegalAcceptanceRequest;
 use crate::auth_types::UpdateProfileRequest;
 use crate::handlers;
 use crate::middleware::RequestState;
+
+pub(crate) fn auth_user_dto_from_profile(profile: &AuthUserProfile) -> AuthUserDto {
+    let user_id = profile.user_id;
+    AuthUserDto {
+        id: user_id.to_string(),
+        email: profile.email.clone(),
+        full_name: profile.full_name.clone().unwrap_or_default(),
+        bio: profile
+            .bio
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        contact_url: profile
+            .contact_url
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        avatar_url: profile
+            .avatar_object_path
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|_| format!("/api/public/users/{user_id}/media/avatar")),
+        banner_url: profile
+            .banner_object_path
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|_| format!("/api/public/users/{user_id}/media/banner")),
+    }
+}
+
+pub(crate) fn empty_auth_user(id: String, email: String, full_name: String) -> AuthUserDto {
+    AuthUserDto {
+        id,
+        email,
+        full_name,
+        bio: None,
+        contact_url: None,
+        avatar_url: None,
+        banner_url: None,
+    }
+}
+
+fn normalize_optional_text(value: Option<String>, max_len: usize) -> Result<Option<String>, String> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > max_len {
+        return Err(format!("field exceeds max length of {max_len}"));
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
+fn is_safe_http_url(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    (lower.starts_with("https://") || lower.starts_with("http://"))
+        && !value.chars().any(|c| c.is_control() || c.is_whitespace())
+}
 
 pub(crate) async fn auth_logout_handler(
     Extension(RequestState(state)): Extension<RequestState>,
@@ -104,11 +167,7 @@ pub(crate) async fn auth_me_handler(
                 success: true,
                 data: Some(AuthPayload {
                     token: String::new(),
-                    user: AuthUserDto {
-                        id: profile.user_id.to_string(),
-                        email: profile.email,
-                        full_name: profile.full_name.unwrap_or_default(),
-                    },
+                    user: auth_user_dto_from_profile(&profile),
                     reset_ticket: None,
                 }),
                 error: None,
@@ -156,24 +215,50 @@ pub(crate) async fn auth_update_profile_handler(
         );
     };
 
-    let full_name = req.full_name.unwrap_or_default();
+    let full_name = req.full_name.unwrap_or_default().trim().to_string();
+    if full_name.chars().count() > 120 {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "full_name exceeds max length of 120",
+        );
+    }
+    let bio = match normalize_optional_text(req.bio, 500) {
+        Ok(value) => value,
+        Err(message) => {
+            return handlers::error_response(StatusCode::BAD_REQUEST, "validation_error", &message);
+        }
+    };
+    let contact_url = match normalize_optional_text(req.contact_url, 500) {
+        Ok(value) => value,
+        Err(message) => {
+            return handlers::error_response(StatusCode::BAD_REQUEST, "validation_error", &message);
+        }
+    };
+    if let Some(ref url) = contact_url {
+        if !is_safe_http_url(url) {
+            return handlers::error_response(
+                StatusCode::BAD_REQUEST,
+                "validation_error",
+                "contact_url must be http(s)",
+            );
+        }
+    }
     let user_uuid = user_id.into_uuid();
+    let input = UpdateUserProfileInput {
+        full_name,
+        bio,
+        contact_url,
+    };
 
-    match store
-        .update_user_profile(user_uuid, &full_name)
-        .await
-    {
+    match store.update_user_profile(user_uuid, &input).await {
         Ok(Some(profile)) => (
             StatusCode::OK,
             Json(AuthEnvelope {
                 success: true,
                 data: Some(AuthPayload {
                     token: String::new(),
-                    user: AuthUserDto {
-                        id: profile.user_id.to_string(),
-                        email: profile.email,
-                        full_name: profile.full_name.unwrap_or_default(),
-                    },
+                    user: auth_user_dto_from_profile(&profile),
                     reset_ticket: None,
                 }),
                 error: None,
@@ -458,4 +543,287 @@ pub(crate) async fn usage_limit_handler(
         )
             .into_response(),
     }
+}
+
+const MAX_AVATAR_BYTES: usize = 2 * 1024 * 1024;
+const MAX_BANNER_BYTES: usize = 5 * 1024 * 1024;
+
+fn media_content_type_ok(content_type: &str) -> Option<&'static str> {
+    match content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/webp" => Some("webp"),
+        "image/gif" => Some("gif"),
+        _ => None,
+    }
+}
+
+/// PUT /api/auth/profile/media/{kind} — raw image body to object store.
+pub(crate) async fn auth_upload_profile_media_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    axum::extract::Path(kind): axum::extract::Path<String>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "profile media updates require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
+    let Some(user_id) = state.auth().actor_id() else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    };
+    let Some(store) = state.auth_store() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+    let Some(kind) = ProfileMediaKind::parse(&kind) else {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "kind must be avatar or banner",
+        );
+    };
+    let max_bytes = match kind {
+        ProfileMediaKind::Avatar => MAX_AVATAR_BYTES,
+        ProfileMediaKind::Banner => MAX_BANNER_BYTES,
+    };
+    if body.is_empty() {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "empty body",
+        );
+    }
+    if body.len() > max_bytes {
+        return handlers::error_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "validation_error",
+            "image too large",
+        );
+    }
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let Some(ext) = media_content_type_ok(content_type) else {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "content-type must be image/jpeg, image/png, image/webp, or image/gif",
+        );
+    };
+    let user_uuid = user_id.into_uuid();
+    let object_path = format!(
+        "user-profile/{}/{}.{}",
+        user_uuid,
+        kind.as_str(),
+        ext
+    );
+    if let Err(error) = state
+        .storage()
+        .objects()
+        .object_store
+        .put(&object_path, body.as_ref())
+        .await
+    {
+        warn!(error = %error, "failed to put profile media");
+        return handlers::error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "Failed to store image",
+        );
+    }
+
+    match store
+        .set_user_profile_media_path(user_uuid, kind, Some(&object_path))
+        .await
+    {
+        Ok(Some(profile)) => (
+            StatusCode::OK,
+            Json(AuthEnvelope {
+                success: true,
+                data: Some(AuthPayload {
+                    token: String::new(),
+                    user: auth_user_dto_from_profile(&profile),
+                    reset_ticket: None,
+                }),
+                error: None,
+            }),
+        )
+            .into_response(),
+        Ok(None) => handlers::error_response(
+            StatusCode::NOT_FOUND,
+            "user_not_found",
+            "User profile not found",
+        ),
+        Err(error) => {
+            warn!(error = %error, "failed to update profile media path");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Profile media update failed",
+            )
+        }
+    }
+}
+
+/// DELETE /api/auth/profile/media/{kind}
+pub(crate) async fn auth_delete_profile_media_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    axum::extract::Path(kind): axum::extract::Path<String>,
+) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "profile media updates require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
+    let Some(user_id) = state.auth().actor_id() else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    };
+    let Some(store) = state.auth_store() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+    let Some(kind) = ProfileMediaKind::parse(&kind) else {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "kind must be avatar or banner",
+        );
+    };
+    let user_uuid = user_id.into_uuid();
+    match store
+        .set_user_profile_media_path(user_uuid, kind, None)
+        .await
+    {
+        Ok(Some(profile)) => (
+            StatusCode::OK,
+            Json(AuthEnvelope {
+                success: true,
+                data: Some(AuthPayload {
+                    token: String::new(),
+                    user: auth_user_dto_from_profile(&profile),
+                    reset_ticket: None,
+                }),
+                error: None,
+            }),
+        )
+            .into_response(),
+        Ok(None) => handlers::error_response(
+            StatusCode::NOT_FOUND,
+            "user_not_found",
+            "User profile not found",
+        ),
+        Err(error) => {
+            warn!(error = %error, "failed to clear profile media path");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Profile media clear failed",
+            )
+        }
+    }
+}
+
+/// GET /api/public/users/{user_id}/media/{kind} — public avatar/banner for share cards.
+pub(crate) async fn public_user_media_handler(
+    axum::extract::State(state): axum::extract::State<app_bootstrap::AppState>,
+    axum::extract::Path((user_id, kind)): axum::extract::Path<(String, String)>,
+) -> Response {
+    let Some(store) = state.auth_store() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+    let Ok(user_uuid) = uuid::Uuid::parse_str(&user_id) else {
+        return handlers::error_response(StatusCode::BAD_REQUEST, "validation_error", "invalid user id");
+    };
+    let Some(kind) = ProfileMediaKind::parse(&kind) else {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "kind must be avatar or banner",
+        );
+    };
+    let profile = match store.get_user_profile(user_uuid).await {
+        Ok(Some(profile)) => profile,
+        Ok(None) => {
+            return handlers::error_response(StatusCode::NOT_FOUND, "not_found", "Not found");
+        }
+        Err(error) => {
+            warn!(error = %error, "failed to load profile for public media");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to load media",
+            );
+        }
+    };
+    let object_path = match kind {
+        ProfileMediaKind::Avatar => profile.avatar_object_path,
+        ProfileMediaKind::Banner => profile.banner_object_path,
+    };
+    let Some(object_path) = object_path.filter(|p| !p.trim().is_empty()) else {
+        return handlers::error_response(StatusCode::NOT_FOUND, "not_found", "Not found");
+    };
+    let bytes = match state
+        .storage()
+        .objects()
+        .object_store
+        .get(&object_path)
+        .await
+    {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            warn!(error = %error, path = %object_path, "failed to read profile media");
+            return handlers::error_response(StatusCode::NOT_FOUND, "not_found", "Not found");
+        }
+    };
+    let content_type = if object_path.ends_with(".png") {
+        "image/png"
+    } else if object_path.ends_with(".webp") {
+        "image/webp"
+    } else if object_path.ends_with(".gif") {
+        "image/gif"
+    } else {
+        "image/jpeg"
+    };
+    (
+        StatusCode::OK,
+        [
+            (axum::http::header::CONTENT_TYPE, content_type),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "public, max-age=3600",
+            ),
+        ],
+        bytes,
+    )
+        .into_response()
 }

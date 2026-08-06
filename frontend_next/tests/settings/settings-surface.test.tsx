@@ -345,7 +345,7 @@ describe("SettingsSurface", () => {
 
     renderWithQuery(<SettingsSurface activeTab="profile" />);
 
-    const input = screen.getByLabelText("Name");
+    const input = screen.getByLabelText("Display name");
     await user.clear(input);
     await user.type(input, "Owner Updated");
     await user.click(screen.getByRole("button", { name: "Save profile" }));
@@ -353,7 +353,7 @@ describe("SettingsSurface", () => {
     await waitFor(() => {
       expect(screen.getByText("Settings saved.")).toBeTruthy();
     });
-    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Owner Updated");
+    expect((screen.getByLabelText("Display name") as HTMLInputElement).value).toBe("Owner Updated");
   });
 
   it("switches theme and locale from the preferences panel dropdowns", async () => {

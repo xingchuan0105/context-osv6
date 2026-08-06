@@ -14,6 +14,8 @@ import {
 
 export type ProfileFormValues = {
   fullName: string;
+  bio: string;
+  contactUrl: string;
 };
 
 export type NotificationFormValues = {

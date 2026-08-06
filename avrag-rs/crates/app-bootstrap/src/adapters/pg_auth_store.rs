@@ -4,8 +4,8 @@ use crate::adapters::pg_session::begin_super_admin_tx_sqlx;
 use crate::pg_error::map_pg_error;
 use app_core::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
-    PasswordResetUser, RecordLegalAcceptanceInput, RegisterUserInput, RegisterUserResult,
-    UserLegalStatus,
+    PasswordResetUser, ProfileMediaKind, RecordLegalAcceptanceInput, RegisterUserInput,
+    RegisterUserResult, UpdateUserProfileInput, UserLegalStatus,
 };
 use async_trait::async_trait;
 use avrag_storage_pg::PgAppRepository;
@@ -32,6 +32,31 @@ fn hash_reset_value(secret: &str, scope: &str, value: &str) -> String {
     hasher.update(b":");
     hasher.update(value.as_bytes());
     hex::encode(hasher.finalize())
+}
+
+type ProfileRow = (
+    Uuid,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+fn map_profile_row(
+    (user_id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path): ProfileRow,
+) -> AuthUserProfile {
+    AuthUserProfile {
+        user_id,
+        owner_user_id: user_id,
+        email,
+        full_name,
+        bio,
+        contact_url,
+        avatar_object_path,
+        banner_object_path,
+    }
 }
 
 #[async_trait]
@@ -244,51 +269,86 @@ impl AuthStorePort for PgAuthStoreAdapter {
         let mut tx = begin_super_admin_tx_sqlx(pool)
             .await
             .map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-            "SELECT id, email, full_name FROM users WHERE id = $1",
+        let row = sqlx::query_as::<_, ProfileRow>(
+            r#"
+            SELECT id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+            FROM users WHERE id = $1
+            "#,
         )
         .bind(user_id)
         .fetch_optional(tx.as_mut())
         .await
         .map_err(map_sqlx_error)?;
         tx.commit().await.map_err(map_sqlx_error)?;
-        Ok(row.map(|(user_id, email, full_name)| AuthUserProfile {
-            user_id,
-            owner_user_id: user_id,
-            email,
-            full_name,
-        }))
+        Ok(row.map(map_profile_row))
     }
 
     async fn update_user_profile(
         &self,
         user_id: Uuid,
-        full_name: &str,
+        input: &UpdateUserProfileInput,
     ) -> Result<Option<AuthUserProfile>, AppError> {
         let pool = self.repo.raw();
         let mut tx = begin_super_admin_tx_sqlx(pool)
             .await
             .map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
+        let row = sqlx::query_as::<_, ProfileRow>(
             r#"
             update users
-            set full_name = $2
+            set full_name = $2,
+                bio = $3,
+                contact_url = $4
             where id = $1
-            returning id, email, full_name
+            returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
             "#,
         )
         .bind(user_id)
-        .bind(full_name)
+        .bind(&input.full_name)
+        .bind(input.bio.as_deref())
+        .bind(input.contact_url.as_deref())
         .fetch_optional(tx.as_mut())
         .await
         .map_err(map_sqlx_error)?;
         tx.commit().await.map_err(map_sqlx_error)?;
-        Ok(row.map(|(user_id, email, full_name)| AuthUserProfile {
-            user_id,
-            owner_user_id: user_id,
-            email,
-            full_name,
-        }))
+        Ok(row.map(map_profile_row))
+    }
+
+    async fn set_user_profile_media_path(
+        &self,
+        user_id: Uuid,
+        kind: ProfileMediaKind,
+        object_path: Option<&str>,
+    ) -> Result<Option<AuthUserProfile>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx_sqlx(pool)
+            .await
+            .map_err(map_sqlx_error)?;
+        let sql = match kind {
+            ProfileMediaKind::Avatar => {
+                r#"
+                update users
+                set avatar_object_path = $2
+                where id = $1
+                returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+                "#
+            }
+            ProfileMediaKind::Banner => {
+                r#"
+                update users
+                set banner_object_path = $2
+                where id = $1
+                returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+                "#
+            }
+        };
+        let row = sqlx::query_as::<_, ProfileRow>(sql)
+            .bind(user_id)
+            .bind(object_path)
+            .fetch_optional(tx.as_mut())
+            .await
+            .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(row.map(map_profile_row))
     }
 
     async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>, AppError> {

@@ -3,6 +3,75 @@
   gap: var(--space-lg);
 }
 
+.ownerCard {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.ownerBanner {
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, hsl(var(--surface-muted)) 65%, hsl(var(--accent)) 35%),
+      hsl(var(--surface-muted))
+    );
+  background-size: cover;
+  background-position: center;
+}
+
+.ownerBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-lg);
+  margin-top: -2rem;
+  padding: 0 var(--space-xl) var(--space-xl);
+}
+
+.ownerAvatar {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 999px;
+  border: 3px solid hsl(var(--card));
+  background: hsl(var(--surface-muted));
+  background-size: cover;
+  background-position: center;
+  color: hsl(var(--foreground));
+  font-size: 1.35rem;
+  font-weight: var(--font-weight-semibold);
+  box-shadow: 0 2px 10px hsl(0 0% 0% / 0.1);
+  flex-shrink: 0;
+}
+
+.ownerMeta {
+  display: grid;
+  gap: var(--space-xs);
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding-bottom: var(--space-xs);
+}
+
+.ownerName {
+  margin: 0;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.ownerBio {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .overviewHeader {
   display: flex;
   flex-wrap: wrap;

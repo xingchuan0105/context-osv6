@@ -138,6 +138,10 @@ export interface AuthUserDto {
 	id: string;
 	email: string;
 	full_name?: string;
+	bio?: string;
+	contact_url?: string;
+	avatar_url?: string;
+	banner_url?: string;
 }
 
 export interface AuthPayload {
@@ -775,10 +779,19 @@ export interface SharedSource {
 	status: string;
 }
 
+export interface ShareOwnerCard {
+	display_name: string;
+	bio?: string;
+	contact_url?: string;
+	avatar_url?: string;
+	banner_url?: string;
+}
+
 export interface SharedWorkspacePayload {
 	knowledge_base: SharedKnowledgeBase;
 	share: SharedShareInfo;
 	sources: SharedSource[];
+	owner?: ShareOwnerCard;
 }
 
 export interface SourceRow {

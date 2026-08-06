@@ -53,8 +53,8 @@ pub use api_key::{
 pub use auth_scope::{current_owner_user_id, current_user_id};
 pub use auth_store::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
-    PasswordResetUser, RecordLegalAcceptanceInput, RegisterLegalAcceptance, RegisterUserInput,
-    RegisterUserResult, UserLegalStatus,
+    PasswordResetUser, ProfileMediaKind, RecordLegalAcceptanceInput, RegisterLegalAcceptance,
+    RegisterUserInput, RegisterUserResult, UpdateUserProfileInput, UserLegalStatus,
 };
 pub use billing_domain::{
     ADMIN_ROLE_SUPER, BillableFeature, BillingConfig, BillingEvent, BillingPlan, BillingPlanQuota,
@@ -117,10 +117,9 @@ pub use legal_versions::{
 };
 pub use share_domain::{
     PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
-    ShareSettingsSnapshot, ShareTokenSnapshot, ShareWorkspaceMember, SharedKnowledgeBaseSnapshot,
-    WorkspaceShareSettingsRow,
-    SharedShareInfoSnapshot, SharedSourceSnapshot, SharedWorkspaceSnapshot,
-    WorkspaceAccessSnapshot,
+    ShareOwnerCardSnapshot, ShareSettingsSnapshot, ShareTokenSnapshot, ShareWorkspaceMember,
+    SharedKnowledgeBaseSnapshot, WorkspaceShareSettingsRow, SharedShareInfoSnapshot,
+    SharedSourceSnapshot, SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
 };
 pub use share_store::ShareStorePort;
 pub use state_types::{MemoryState, RetrievedContext, StoredDocument};

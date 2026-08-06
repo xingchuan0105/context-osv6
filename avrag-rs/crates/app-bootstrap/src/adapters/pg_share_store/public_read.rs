@@ -76,6 +76,63 @@
             .try_get::<String, _>("title")
             .map_err(|error| AppError::internal(error.to_string()))?;
         let description = notebook_row.try_get::<String, _>("description").ok();
+        let owner_row = sqlx::query(
+            r#"
+            select full_name, email, bio, contact_url, avatar_object_path, banner_object_path
+            from users
+            where id = $1
+            "#,
+        )
+        .bind(owner_user_id)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        let owner = owner_row.map(|row| {
+            let full_name = row
+                .try_get::<Option<String>, _>("full_name")
+                .ok()
+                .flatten()
+                .filter(|s| !s.trim().is_empty());
+            let email = row.try_get::<String, _>("email").unwrap_or_default();
+            let display_name = full_name.unwrap_or_else(|| {
+                email
+                    .split('@')
+                    .next()
+                    .unwrap_or("Owner")
+                    .to_string()
+            });
+            let bio = row
+                .try_get::<Option<String>, _>("bio")
+                .ok()
+                .flatten()
+                .filter(|s| !s.trim().is_empty());
+            let contact_url = row
+                .try_get::<Option<String>, _>("contact_url")
+                .ok()
+                .flatten()
+                .filter(|s| !s.trim().is_empty());
+            let avatar_path = row
+                .try_get::<Option<String>, _>("avatar_object_path")
+                .ok()
+                .flatten()
+                .filter(|s| !s.trim().is_empty());
+            let banner_path = row
+                .try_get::<Option<String>, _>("banner_object_path")
+                .ok()
+                .flatten()
+                .filter(|s| !s.trim().is_empty());
+            ShareOwnerCardSnapshot {
+                display_name,
+                bio,
+                contact_url,
+                avatar_url: avatar_path.map(|_| {
+                    format!("/api/public/users/{owner_user_id}/media/avatar")
+                }),
+                banner_url: banner_path.map(|_| {
+                    format!("/api/public/users/{owner_user_id}/media/banner")
+                }),
+            }
+        });
         let sources_rows = sqlx::query(
             r#"
             select id, file_name, status
@@ -117,6 +174,7 @@
                     status: row.try_get("status").unwrap_or_default(),
                 })
                 .collect(),
+            owner,
         }))
     }
 

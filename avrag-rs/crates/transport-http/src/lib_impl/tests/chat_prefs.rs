@@ -75,7 +75,9 @@ async fn profile_update_roundtrip_when_database_available() {
         .method("PUT")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
-        .body(Body::from(r#"{"full_name":"Updated Name"}"#))
+        .body(Body::from(
+            r#"{"full_name":"Updated Name","bio":"Share bio","contact_url":"https://example.test/me"}"#,
+        ))
         .unwrap();
     let update_resp = app.clone().oneshot(update_req).await.unwrap();
     assert_eq!(update_resp.status(), StatusCode::OK);
@@ -93,6 +95,14 @@ async fn profile_update_roundtrip_when_database_available() {
     assert_eq!(
         me_payload["data"]["user"]["full_name"].as_str(),
         Some("Updated Name")
+    );
+    assert_eq!(
+        me_payload["data"]["user"]["bio"].as_str(),
+        Some("Share bio")
+    );
+    assert_eq!(
+        me_payload["data"]["user"]["contact_url"].as_str(),
+        Some("https://example.test/me")
     );
 }
 

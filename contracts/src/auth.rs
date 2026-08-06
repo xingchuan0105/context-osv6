@@ -9,6 +9,18 @@ pub struct AuthUserDto {
     pub email: String,
     #[serde(default)]
     pub full_name: String,
+    pub bio: Option<String>,
+    pub contact_url: Option<String>,
+    pub avatar_url: Option<String>,
+    pub banner_url: Option<String>,
+}
+
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub full_name: Option<String>,
+    pub bio: Option<String>,
+    pub contact_url: Option<String>,
 }
 
 #[typeshare]

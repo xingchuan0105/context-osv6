@@ -89,10 +89,19 @@ export type SharedSource = {
   status: string;
 };
 
+export type ShareOwnerCard = {
+  display_name: string;
+  bio?: string | null;
+  contact_url?: string | null;
+  avatar_url?: string | null;
+  banner_url?: string | null;
+};
+
 export type SharedWorkspacePayload = {
   knowledge_base: SharedKnowledgeBase;
   share: SharedShareInfo;
   sources: SharedSource[];
+  owner?: ShareOwnerCard | null;
 };
 
 type SharedWorkspaceEnvelope = {

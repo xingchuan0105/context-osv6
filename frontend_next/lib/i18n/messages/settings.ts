@@ -42,20 +42,64 @@ export const settingsMessages = {
     en: "Profile",
   },
   "settings.profile.sectionSubtitle": {
-    zh: "更新账户展示信息和默认身份标识。",
-    en: "Update your account details and default identity.",
+    zh: "展示在分享页的 Owner 名片：显示名、简介、头像、封面与联系链接。",
+    en: "Shown on shared pages as your Owner card: name, bio, avatar, banner, and contact link.",
   },
   "settings.profile.emailLabel": {
     zh: "邮箱",
     en: "Email",
   },
   "settings.profile.nameLabel": {
-    zh: "姓名",
-    en: "Name",
+    zh: "显示名称",
+    en: "Display name",
   },
   "settings.profile.namePlaceholder": {
     zh: "输入你的显示名称",
     en: "Enter your display name",
+  },
+  "settings.profile.bioLabel": {
+    zh: "简介",
+    en: "Bio",
+  },
+  "settings.profile.bioPlaceholder": {
+    zh: "一句话介绍你自己（可选）",
+    en: "A short intro about you (optional)",
+  },
+  "settings.profile.contactLabel": {
+    zh: "联系链接",
+    en: "Contact link",
+  },
+  "settings.profile.contactPlaceholder": {
+    zh: "https://…",
+    en: "https://…",
+  },
+  "settings.profile.avatarLabel": {
+    zh: "头像",
+    en: "Avatar",
+  },
+  "settings.profile.bannerLabel": {
+    zh: "封面图",
+    en: "Banner",
+  },
+  "settings.profile.uploadAction": {
+    zh: "上传",
+    en: "Upload",
+  },
+  "settings.profile.removeMediaAction": {
+    zh: "移除",
+    en: "Remove",
+  },
+  "settings.profile.mediaHint": {
+    zh: "支持 JPEG / PNG / WebP / GIF；头像 ≤2MB，封面 ≤5MB。",
+    en: "JPEG / PNG / WebP / GIF; avatar ≤2MB, banner ≤5MB.",
+  },
+  "settings.profile.invalidContactUrl": {
+    zh: "联系链接须为 http(s) URL。",
+    en: "Contact link must be an http(s) URL.",
+  },
+  "settings.profile.bioTooLong": {
+    zh: "简介不能超过 500 个字符。",
+    en: "Bio must be at most 500 characters.",
   },
   "settings.profile.saveAction": {
     zh: "保存资料",

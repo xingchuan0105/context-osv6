@@ -13,7 +13,7 @@ use tracing::warn;
 
 use crate::auth_types::AuthEnvelope;
 use crate::auth_types::AuthPayload;
-use crate::auth_types::AuthUserDto;
+
 use crate::auth_types::LoginRequest;
 use crate::auth_types::RegisterRequest;
 use crate::handlers;
@@ -219,11 +219,11 @@ pub(crate) async fn auth_register_handler(
             success: true,
             data: Some(AuthPayload {
                 token,
-                user: AuthUserDto {
-                    id: result.user_id.to_string(),
-                    email: result.email,
-                    full_name: result.full_name,
-                },
+                user: super::auth::profile::empty_auth_user(
+                    result.user_id.to_string(),
+                    result.email,
+                    result.full_name,
+                ),
                 reset_ticket: None,
             }),
             error: None,
@@ -303,17 +303,22 @@ pub(crate) async fn auth_login_handler(
     )
     .await;
 
+    let user = match store.get_user_profile(credentials.user_id).await {
+        Ok(Some(profile)) => super::auth::profile::auth_user_dto_from_profile(&profile),
+        Ok(None) | Err(_) => super::auth::profile::empty_auth_user(
+            credentials.user_id.to_string(),
+            credentials.email,
+            credentials.full_name.unwrap_or_default(),
+        ),
+    };
+
     (
         StatusCode::OK,
         Json(AuthEnvelope {
             success: true,
             data: Some(AuthPayload {
                 token,
-                user: AuthUserDto {
-                    id: credentials.user_id.to_string(),
-                    email: credentials.email,
-                    full_name: credentials.full_name.unwrap_or_default(),
-                },
+                user,
                 reset_ticket: None,
             }),
             error: None,

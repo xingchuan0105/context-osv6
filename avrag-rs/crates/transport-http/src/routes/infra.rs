@@ -28,4 +28,8 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/shared/kb/{token}",
             get(crate::lib_impl::shared_workspace_handler),
         )
+        .route(
+            "/api/public/users/{user_id}/media/{kind}",
+            get(crate::lib_impl::public_user_media_handler),
+        )
     }

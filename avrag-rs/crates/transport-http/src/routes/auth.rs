@@ -38,6 +38,11 @@ pub(crate) fn protected_router() -> Router<AppState> {
         .route("/me", get(crate::lib_impl::auth_me_handler))
         .route("/profile", put(crate::lib_impl::auth_update_profile_handler))
         .route(
+            "/profile/media/{kind}",
+            put(crate::lib_impl::auth_upload_profile_media_handler)
+                .delete(crate::lib_impl::auth_delete_profile_media_handler),
+        )
+        .route(
             "/preferences",
             get(crate::lib_impl::auth_get_preferences_handler).put(crate::lib_impl::auth_update_preferences_handler),
         )
