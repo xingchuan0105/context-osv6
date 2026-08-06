@@ -18,6 +18,25 @@
 └──────────────────────────────────────────────┘
 ```
 
+## Coding Agent（MCP / CLI）
+
+本机 `avrag-api` 暴露与云端同源的 **HTTP MCP**（`POST /api/v1/mcp`）。  
+**stdio 包装：** `context-os-mcp` — 转发到本机网关；`context-os-mcp --check` 探活。  
+**薄 CLI：** `context-os status|ingest|ask|sources`（同鉴权；`share` 故意拒绝，走 UI）。
+
+```bash
+# 构建（两个 bin：context-os-mcp + context-os）
+cd avrag-rs && cargo build -p context-os --release
+
+# Stage 到 desktop/runtime/bin/（与 api/worker 一起）
+bash scripts/stage-desktop-sidecars.sh   # STAGE_BUILD=1 可自动编译
+```
+
+Claude Code / Codex 配置片段、能力矩阵与 P1 缺口见：
+
+- 仓库：[`docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md`](../docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md)
+- Wire 契约：[`frontend_next/public/docs/api-access-for-agents.md`](../frontend_next/public/docs/api-access-for-agents.md)
+
 ## 开发
 
 ```bash

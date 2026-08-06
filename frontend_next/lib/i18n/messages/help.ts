@@ -54,8 +54,24 @@ export const helpMessages = {
     en: "For automation",
   },
   helpApiAccessAutomationBody: {
-    zh: "如果脚本、代理或批处理系统需要调用 API，请切换到 agent 文档，那里包含面向机器的接入说明。",
-    en: "If a script, agent, or batch system needs to call the API, switch to the agent docs for machine-oriented setup.",
+    zh: "脚本与 coding agent 请用工作区 API 密钥调用 MCP。本机客户端可用 context-os-mcp（stdio）转发到 127.0.0.1:18080；也可用 HTTP POST /api/v1/mcp。配置片段在工作区 API Access「给 Agent 用」。",
+    en: "Scripts and coding agents should use a workspace API key with MCP. On the desktop client, context-os-mcp (stdio) forwards to 127.0.0.1:18080; HTTP POST /api/v1/mcp also works. Copy snippets from workspace API Access → For agents.",
+  },
+  helpApiAccessAutomationStep1: {
+    zh: "在产品 UI 创建 Workspace，打开该工作区的 API Access，创建带 index/query 的密钥。",
+    en: "Create a workspace in the UI, open API Access on that workspace, and mint a key with index/query.",
+  },
+  helpApiAccessAutomationStep2: {
+    zh: "本机客户端：构建或 stage context-os（含 context-os-mcp），设置 CONTEXT_OS_API_KEY 后运行 context-os status。",
+    en: "Desktop: build or stage context-os (includes context-os-mcp), set CONTEXT_OS_API_KEY, then run context-os status.",
+  },
+  helpApiAccessAutomationStep3: {
+    zh: "Agent 用 stdio MCP（command = context-os-mcp）；脚本可用 context-os ingest/ask；工具参数带上 workspace_id。",
+    en: "Agents use stdio MCP (command = context-os-mcp); scripts can use context-os ingest/ask; always pass workspace_id.",
+  },
+  helpApiAccessAutomationStep4: {
+    zh: "分享、成员与密钥管理仍只在用户会话 UI 中完成。",
+    en: "Share, members, and key management stay on the signed-in user UI only.",
   },
   helpApiAccessBackHelp: {
     zh: "返回帮助中心",

@@ -1,0 +1,29 @@
+[package]
+name = "context-os"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Context-OS local agent client: stdio MCP wrapper (context-os-mcp) + thin CLI (context-os)"
+
+[lib]
+name = "context_os"
+path = "src/lib.rs"
+
+[[bin]]
+name = "context-os-mcp"
+path = "src/bin/context_os_mcp.rs"
+
+[[bin]]
+name = "context-os"
+path = "src/bin/context_os.rs"
+
+[dependencies]
+anyhow.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["fs", "io-std", "io-util", "macros", "rt", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -78,7 +78,21 @@ export default function HelpApiAccessPage() {
           <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
             {formatUiMessage(locale, "helpApiAccessAutomationBody")}
           </p>
-          <div>
+          <ol
+            style={{
+              color: "hsl(var(--muted-foreground))",
+              display: "grid",
+              gap: "0.5rem",
+              margin: 0,
+              paddingLeft: "1.2rem",
+            }}
+          >
+            <li>{formatUiMessage(locale, "helpApiAccessAutomationStep1")}</li>
+            <li>{formatUiMessage(locale, "helpApiAccessAutomationStep2")}</li>
+            <li>{formatUiMessage(locale, "helpApiAccessAutomationStep3")}</li>
+            <li>{formatUiMessage(locale, "helpApiAccessAutomationStep4")}</li>
+          </ol>
+          <div className="app-button-row" style={{ flexWrap: "wrap" }}>
             <Link className="app-link app-link-muted" href="/docs/api-access-for-agents.md">
               {formatUiMessage(locale, "helpItemApiAgentDocs")}
             </Link>

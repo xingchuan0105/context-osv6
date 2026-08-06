@@ -198,3 +198,35 @@
   gap: var(--space-xs);
   min-width: 0;
 }
+
+.copyGrid {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.copyRow {
+  align-items: start;
+  display: flex;
+  gap: var(--space-md);
+  justify-content: space-between;
+}
+
+.copyBody {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.copyValue {
+  display: block;
+  font-size: var(--font-size-body-strong);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.copyFeedback {
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-body-strong);
+  margin: 0;
+}
+

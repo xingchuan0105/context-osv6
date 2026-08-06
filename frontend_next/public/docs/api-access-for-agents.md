@@ -15,6 +15,7 @@ Context-OS is a **personal knowledge product**: one signed-in user owns their wo
 - `workspace` maps to `workspace_id`.
 - External agents should prefer the **unified MCP** entry point at `POST /api/v1/mcp`.
 - REST/SSE remains available for UI, streaming, and binary uploads.
+- **Local desktop client:** the same MCP/REST surface can target the on-machine API (default `http://127.0.0.1:18080`) after the client stack is running. Capability matrix, share limits, and MCP/CLI delivery gaps: `docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md` (repo path; not a public marketing URL).
 
 ## Typical personal workflow
 
@@ -38,6 +39,35 @@ Create workspace keys (product path): `POST /api/v1/workspaces/{workspace_id}/ap
 | --- | --- | --- |
 | `POST` | `/api/v1/mcp` | JSON-RPC: `initialize`, `tools/list`, `tools/call` |
 | `GET` | `/api/v1/mcp` | SSE `ready` event with tool catalog summary |
+
+### Local desktop: stdio wrapper (`context-os-mcp`)
+
+When the **Context-OS desktop client** is running (default API `http://127.0.0.1:18080`), coding agents can use a **stdio** MCP process that forwards to the same HTTP gateway (same tools and permissions).
+
+| Item | Value |
+| --- | --- |
+| Binary | `context-os-mcp` (package `context-os` / `avrag-rs/bins/client`; staged under `desktop/runtime/bin/`) |
+| CLI | `context-os status` · `ingest` · `ask` · `sources` (same key; `share` refused — UI only) |
+| Env | `CONTEXT_OS_API_KEY` = workspace API key; optional `CONTEXT_OS_API_BASE` (default `http://127.0.0.1:18080`); CLI also uses `CONTEXT_OS_WORKSPACE_ID` |
+| Probe | `context-os-mcp --check` or `context-os status` |
+
+Example (Claude Code / Cursor style):
+
+```json
+{
+  "mcpServers": {
+    "context-os": {
+      "command": "/path/to/context-os-mcp",
+      "env": {
+        "CONTEXT_OS_API_BASE": "http://127.0.0.1:18080",
+        "CONTEXT_OS_API_KEY": "<workspace_api_key>"
+      }
+    }
+  }
+}
+```
+
+Still pass `workspace_id` in each `tools/call` `arguments`. Full local matrix and non-goals: repo `docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md`.
 
 ### Workspace tools (require `arguments.workspace_id`)
 

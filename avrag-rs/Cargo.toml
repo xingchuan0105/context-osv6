@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "bins/api",
   "bins/worker",
+  "bins/client",
   "crates/analytics",
   "crates/app",
   "crates/app-bootstrap",

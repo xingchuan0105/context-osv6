@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
 import {
@@ -11,8 +11,12 @@ import {
   type ApiKeyRow,
   type CreateApiKeyRequest,
 } from "../../lib/api-access/client";
+import { getApiBaseUrl } from "../../lib/http/request";
+import { isTauri } from "../../lib/runtime/tauri-ipc";
 
 import styles from "./workspace-api-access-surface.module.css";
+
+const LOCAL_DESKTOP_API_BASE = "http://127.0.0.1:18080";
 
 type WorkspaceApiAccessSurfaceProps = {
   workspaceId: string;
@@ -57,6 +61,51 @@ function getWorkspaceIdValidationError(workspaceId: string) {
   return "";
 }
 
+/** Agent-facing public base (HTTP MCP / stdio wrapper). Desktop defaults to local stack. */
+function resolveAgentApiBase(): string {
+  const configured = getApiBaseUrl().trim();
+  if (configured) {
+    return configured.replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined" && isTauri()) {
+    return LOCAL_DESKTOP_API_BASE;
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
+  return LOCAL_DESKTOP_API_BASE;
+}
+
+function buildAgentMcpSnippet(apiBase: string): string {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        "context-os": {
+          command: "context-os-mcp",
+          env: {
+            CONTEXT_OS_API_BASE: apiBase,
+            CONTEXT_OS_API_KEY: "<paste_workspace_api_key>",
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+  return false;
+}
+
 export function WorkspaceApiAccessSurface({
   workspaceId,
   embedded = false,
@@ -75,6 +124,23 @@ export function WorkspaceApiAccessSurface({
   const [rateLimitDraft, setRateLimitDraft] = useState("60");
   const [expiresAtDraft, setExpiresAtDraft] = useState("");
   const [plaintextKey, setPlaintextKey] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState("");
+  // Resolve after mount so desktop (Tauri) base is correct and SSR/hydration stay stable.
+  const [agentApiBase, setAgentApiBase] = useState(LOCAL_DESKTOP_API_BASE);
+  const mcpSnippet = useMemo(() => buildAgentMcpSnippet(agentApiBase), [agentApiBase]);
+  const mcpEndpoint = `${agentApiBase}/api/v1/mcp`;
+  const desktopLocal =
+    agentApiBase.includes("127.0.0.1") || agentApiBase.includes("localhost");
+
+  async function handleCopy(label: string, value: string) {
+    const ok = await copyText(value);
+    setCopyFeedback(ok ? `已复制：${label}` : `复制失败，请手动选择 ${label}`);
+    window.setTimeout(() => setCopyFeedback(""), 2500);
+  }
+
+  useEffect(() => {
+    setAgentApiBase(resolveAgentApiBase());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -365,6 +431,91 @@ export function WorkspaceApiAccessSurface({
               </button>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Agent setup: copy base URL / workspace_id / MCP snippet (P0 local agent access). */}
+      <section className={`app-surface-card ${styles.card}`} data-testid="api-access-agent-setup-card">
+        <div>
+          <h2 className={styles.cardTitle}>给 Agent 用</h2>
+          <p className="app-page-subtitle">
+            把本工作区交给 Claude Code / Codex / Cursor：先创建密钥（上方），再复制下列字段与 MCP 配置。
+            {desktopLocal
+              ? " 本机客户端默认 API 为 127.0.0.1:18080；请先确认客户端栈已启动。"
+              : " 云端与本机使用同一 MCP 工具表，仅 base URL 不同。"}
+          </p>
+        </div>
+
+        {copyFeedback ? <p className={styles.copyFeedback}>{copyFeedback}</p> : null}
+
+        <div className={styles.copyGrid}>
+          <div className={`app-inline-surface ${styles.copyRow}`}>
+            <div className={styles.copyBody}>
+              <span className={styles.overlineSmall}>workspace_id</span>
+              <code className={styles.copyValue}>{workspaceIdValue || "—"}</code>
+            </div>
+            <button
+              className="app-button-secondary"
+              type="button"
+              disabled={!workspaceIdValue}
+              onClick={() => void handleCopy("workspace_id", workspaceIdValue)}
+            >
+              复制
+            </button>
+          </div>
+          <div className={`app-inline-surface ${styles.copyRow}`}>
+            <div className={styles.copyBody}>
+              <span className={styles.overlineSmall}>API base URL</span>
+              <code className={styles.copyValue}>{agentApiBase}</code>
+            </div>
+            <button
+              className="app-button-secondary"
+              type="button"
+              onClick={() => void handleCopy("API base URL", agentApiBase)}
+            >
+              复制
+            </button>
+          </div>
+          <div className={`app-inline-surface ${styles.copyRow}`}>
+            <div className={styles.copyBody}>
+              <span className={styles.overlineSmall}>HTTP MCP</span>
+              <code className={styles.copyValue}>{mcpEndpoint}</code>
+            </div>
+            <button
+              className="app-button-secondary"
+              type="button"
+              onClick={() => void handleCopy("HTTP MCP", mcpEndpoint)}
+            >
+              复制
+            </button>
+          </div>
+        </div>
+
+        <div className={`app-inline-surface ${styles.stack}`}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <strong>stdio MCP 配置片段</strong>
+              <p className={styles.mutedTextSpaced}>
+                粘贴到 Claude Code / Cursor 的 MCP 配置；将 <code>command</code> 换成本机{" "}
+                <code>context-os-mcp</code> 路径，密钥用上方一次性明文替换。
+              </p>
+            </div>
+            <button
+              className="app-button-secondary"
+              type="button"
+              onClick={() => void handleCopy("MCP 配置", mcpSnippet)}
+            >
+              复制配置
+            </button>
+          </div>
+          <pre className={styles.codeBlock} data-testid="agent-mcp-snippet">
+            {mcpSnippet}
+          </pre>
+          <p className={styles.note}>
+            探活：<code>context-os status</code> 或 <code>context-os-mcp --check</code>。脚本可用{" "}
+            <code>context-os ingest</code> / <code>ask</code>（env：<code>CONTEXT_OS_WORKSPACE_ID</code>）。工具调用时{" "}
+            <code>arguments.workspace_id</code> 须与本页一致。分享 / 成员 / 密钥管理仍仅用户会话可用。
+          </p>
         </div>
       </section>
 

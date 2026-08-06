@@ -55,6 +55,8 @@ desktop/runtime/
   run/ logs/ objects/
   docker-compose.client.yml   # optional fallback only
   bin/avrag-api[.exe] …
+  bin/context-os-mcp[.exe]  # stdio MCP for coding agents (forwards to :18080/api/v1/mcp)
+  bin/context-os[.exe]      # thin CLI: status / ingest / ask / sources
   bundled/            # portable PG+Redis stage (see bundled/README.md; binaries gitignored)
     pins.env
     windows-x64/      # after stage-desktop-bundled-runtime.sh fetch|assemble
