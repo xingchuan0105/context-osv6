@@ -22,7 +22,10 @@ import { probePricingRevampUsageWindow } from "../../lib/billing/featureFlag";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
-import { workspaceSessionHref } from "../../lib/workspace/session-url";
+import {
+  workspaceDeepLinkHref,
+  workspaceSessionHref,
+} from "../../lib/workspace/session-url";
 import {
   DEFAULT_WORKSPACE_UI_STATE,
   HISTORY_RAIL_MAX_WIDTH,
@@ -138,9 +141,11 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionFromUrl = searchParams.get("session");
+  const sourceFromUrl = searchParams.get("source")?.trim() || null;
   const { locale } = useUiPreferences();
   const isMobile = useIsMobile();
   const workspaceUi = useWorkspaceUi(workspaceId);
+  const appliedSourceDeepLinkRef = useRef<string | null>(null);
   const {
     workspace, workspaceTitleDraft, setWorkspaceTitleDraft,
     sessions, activeSessionId, setActiveSessionId, workspaceLoadError,
@@ -196,6 +201,35 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const registerComposerInsert = useCallback((handler: ((text: string) => boolean) | null) => {
     composerInsertRef.current = handler;
   }, []);
+
+  // Cmd+K / external `?source=` — open right rail + source viewer once, then
+  // strip the one-shot query (keep `?session=` if present).
+  useEffect(() => {
+    if (!sourceFromUrl) {
+      appliedSourceDeepLinkRef.current = null;
+      return;
+    }
+    if (appliedSourceDeepLinkRef.current === sourceFromUrl) {
+      return;
+    }
+    appliedSourceDeepLinkRef.current = sourceFromUrl;
+    workspaceUi.setFocusedSourceId(sourceFromUrl);
+    workspaceUi.setRightRailOpen(true);
+    setOpenViewerSourceId(sourceFromUrl);
+  }, [sourceFromUrl, workspaceUi]);
+
+  const handleOpenSourceConsumed = useCallback(() => {
+    setOpenViewerSourceId(null);
+    if (!sourceFromUrl) {
+      return;
+    }
+    router.replace(
+      workspaceDeepLinkHref(workspaceId, {
+        sessionId: sessionFromUrl,
+        sourceId: null,
+      }),
+    );
+  }, [router, sessionFromUrl, sourceFromUrl, workspaceId]);
 
   useEffect(() => {
     if (!auth.initialized || !auth.token || !auth.user?.id) {
@@ -295,7 +329,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     <WorkspaceRightRail
       focusedSourceId={workspaceUi.focusedSourceId}
       openSourceId={openViewerSourceId}
-      onOpenSourceConsumed={() => setOpenViewerSourceId(null)}
+      onOpenSourceConsumed={handleOpenSourceConsumed}
       onSelectedSourceIdsChange={workspaceUi.setSelectedSourceIds}
       selectedSourceIds={workspaceUi.selectedSourceIds}
       workspaceId={workspaceId}

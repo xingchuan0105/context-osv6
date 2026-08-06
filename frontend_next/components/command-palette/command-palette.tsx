@@ -11,6 +11,7 @@ import {
   type GlobalSearchResponse,
 } from "../../lib/search/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { workspaceSourceHref } from "../../lib/workspace/session-url";
 import styles from "./command-palette.module.css";
 
 type PaletteGroup = "sessions" | "workspaces" | "sources" | "nav" | "billing" | "help";
@@ -287,7 +288,7 @@ export function CommandPaletteHost() {
               workspace: wsName,
             })
           : formatUiMessage(locale, "commandPalette.sourceLabel", { name }),
-        href: `/dashboard/${source.workspace_id}`,
+        href: workspaceSourceHref(source.workspace_id, source.id),
         keywords: `${name} ${source.id} ${source.workspace_id} source document 文档 来源`,
       };
     });
@@ -336,8 +337,8 @@ export function CommandPaletteHost() {
       if (item.id.startsWith("ws-")) {
         pushRecentId(item.id.slice(3));
         setRecentIds(readRecentIds());
-      } else if (item.id.startsWith("sess-")) {
-        const match = item.href.match(/\/dashboard\/([^?]+)/);
+      } else if (item.id.startsWith("sess-") || item.id.startsWith("src-")) {
+        const match = item.href.match(/\/dashboard\/([^?/]+)/);
         if (match?.[1]) {
           pushRecentId(match[1]);
           setRecentIds(readRecentIds());

@@ -36,6 +36,24 @@ describe("WorkspaceSurface integration", () => {
     expect(mocks.replaceMock).not.toHaveBeenCalled();
   });
 
+  it("honors ?source= deep-link by opening the right rail viewer once", async () => {
+    mocks.searchParams = new URLSearchParams("source=src-2");
+
+    renderWorkspaceSurface("ws-1");
+
+    await screen.findByLabelText("工作区标题");
+
+    await waitFor(() => {
+      expect(workspaceUiStore.getState().workspaces["ws-1"]?.focusedSourceId).toBe("src-2");
+      expect(workspaceUiStore.getState().workspaces["ws-1"]?.rightRailOpen).toBe(true);
+    });
+
+    // One-shot query is stripped after the viewer open is consumed (session kept if any).
+    await waitFor(() => {
+      expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard/ws-1");
+    });
+  });
+
   it("renders real chat and right-rail panes and wires store-backed selection through the DOM", async () => {
     const user = userEvent.setup();
 

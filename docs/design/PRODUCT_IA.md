@@ -72,6 +72,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 /dashboard/analytics               分享访问 · 跨库汇总（横切；工具栏入口，非列表筛选 tab）
 /dashboard/:id                     工作区（对话 / 来源 / …）
 /dashboard/:id?session=:sid        工作区并选中会话（Cmd+K / 外链深链）
+/dashboard/:id?source=:src         工作区并打开文档 viewer（Cmd+K 命中；打开后剥离 query）
 /dashboard/:id/share               分享中心 = 单库分享设置 + 访问趋势 + 访客活动（canonical 对象级）
 /dashboard/:id/share/analytics     → 301/redirect 至 share（兼容旧链）
 /dashboard/:id/analyze             → redirect 至 share（兼容旧链；禁止再实现第二套分析页）
@@ -107,7 +108,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | 分享数据（单库） | `/dashboard/:id/share`（页内 insights / 活动） | 汇总下钻、顶栏「访问」、旧 `/analyze` 与 `/share/analytics` |
 | 上手 / 产品地图 | **弹窗**（Dashboard 入口）或 `/help` 长文 | 顶栏「上手」、空状态、账户→帮助 |
 | 工作台 | `/dashboard` | 品牌标题、footer |
-| 快速跳转 | **Cmd/Ctrl+K** 命令面板 | 登录后 App shell；条目仅链到本节 Canonical；会话命中 → `/dashboard/:id?session=` |
+| 快速跳转 | **Cmd/Ctrl+K** 命令面板 | 登录后 App shell；条目仅链到本节 Canonical；会话 → `?session=`；文档 → `?source=`（打开后剥离） |
 
 **禁止**: 在设置账单再实现第二套充值 checkout（可保留余额展示 + 链到 `#topup`）。  
 **禁止**: 升级弹窗内完成支付（仅营销说明 + 跳转 canonical）。

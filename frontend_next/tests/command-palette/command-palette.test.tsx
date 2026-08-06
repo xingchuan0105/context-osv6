@@ -144,4 +144,34 @@ describe("CommandPaletteHost", () => {
       "ws-2",
     ]);
   });
+
+  it("opens a source deep-link from global search", async () => {
+    searchProductIndexMock.mockResolvedValue({
+      workspaces: [],
+      sessions: [],
+      sources: [
+        {
+          id: "src-7",
+          workspace_id: "ws-3",
+          file_name: "合同.pdf",
+          title: "合同",
+          workspace_name: "法务库",
+        },
+      ],
+    });
+
+    render(<CommandPaletteHost />);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+
+    fireEvent.change(screen.getByTestId("command-palette-input"), {
+      target: { value: "合同" },
+    });
+
+    expect(await screen.findByTestId("command-palette-item-src-src-7")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("command-palette-item-src-src-7"));
+    expect(pushMock).toHaveBeenCalledWith("/dashboard/ws-3?source=src-7");
+    expect(JSON.parse(window.localStorage.getItem("context-os.command-palette.recent-workspaces.v1") ?? "[]")).toEqual([
+      "ws-3",
+    ]);
+  });
 });
