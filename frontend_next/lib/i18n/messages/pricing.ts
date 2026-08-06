@@ -29,8 +29,8 @@ export const pricingMessages = {
     en: "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (Owner-pays) debit the wallet. With a custom provider, chat can use your own quota.",
   },
   pricingTopupPoint1: {
-    zh: "充值入口在「设置 → 账单」，支持套餐包快捷购买",
-    en: "Top up under Settings → Billing with wallet packs",
+    zh: "在本页右侧选择套餐包，登录后可直接支付充值",
+    en: "Pick a pack on the right; top up here after sign-in",
   },
   pricingTopupPoint2: {
     zh: "不想用平台模型：可改配 BYOK，减少对话扣费",
@@ -40,9 +40,29 @@ export const pricingMessages = {
     zh: "只升级会员不充值：分享名额增加，但平台模型仍需余额或 BYOK",
     en: "Upgrade-only adds share slots; platform models still need wallet or BYOK",
   },
-  pricingTopupCta: {
-    zh: "去账单充值",
-    en: "Open billing & top up",
+  pricingTopupPacksLabel: {
+    zh: "选择充值金额",
+    en: "Choose a pack",
+  },
+  pricingTopupPackAction: {
+    zh: "充值 {label}",
+    en: "Top up {label}",
+  },
+  pricingTopupLoading: {
+    zh: "创建订单中…",
+    en: "Creating order…",
+  },
+  pricingTopupFailed: {
+    zh: "充值发起失败：{message}",
+    en: "Top-up failed: {message}",
+  },
+  pricingTopupLoginHint: {
+    zh: "未登录时点击充值会先进入登录，完成后回到本页。",
+    en: "If you are signed out, top-up sends you to log in, then back here.",
+  },
+  pricingWalletBalance: {
+    zh: "当前余额 {balance}",
+    en: "Balance {balance}",
   },
   pricingTopupByokCta: {
     zh: "配置自定义 Provider",
@@ -53,8 +73,8 @@ export const pricingMessages = {
     en: "Top-up vs membership?",
   },
   pricingFaqTopupAnswer: {
-    zh: "会员控制可分享工作区名额；充值是模型调用余额。两者可单独购买。本页上方升级档位，下方说明充值并跳转到账单完成充值。",
-    en: "Membership controls share slots; top-up is the model wallet. Buy either independently. Upgrade tiers above; use the top-up section to open billing.",
+    zh: "会员控制可分享工作区名额；充值是模型调用余额。两者可单独购买。本页上方升级档位，下方可直接选套餐包充值。",
+    en: "Membership controls share slots; top-up is the model wallet. Buy either independently. Upgrade tiers above; top up with packs below on this page.",
   },
   pricingMonthly: {
     zh: "月付",

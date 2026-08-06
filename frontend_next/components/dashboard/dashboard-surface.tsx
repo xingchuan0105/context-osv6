@@ -36,7 +36,7 @@ import {
   mapWorkspace,
 } from "./parts/dashboard-utils";
 import { DashboardCreateTile, WorkspaceListItem } from "./parts/dashboard-workspace-items";
-import { ProductGuideDock, ProductGuideModal } from "./product-guide-modal";
+import { ProductGuideModal, type GuideSection } from "./product-guide-modal";
 
 export function DashboardSurface() {
   const router = useRouter();
@@ -59,6 +59,7 @@ export function DashboardSurface() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [guideSection, setGuideSection] = useState<GuideSection>("overview");
 
   useEffect(() => {
     let cancelled = false;
@@ -292,11 +293,24 @@ export function DashboardSurface() {
     }
   }
 
+  function openGuide(section: GuideSection = "overview") {
+    setGuideSection(section);
+    setGuideOpen(true);
+  }
+
   return (
     <main className="dashboard-shell">
-      <DashboardHeader avatarInitial={avatarInitial} locale={locale} />
-      <ProductGuideDock locale={locale} onOpen={() => setGuideOpen(true)} />
-      <ProductGuideModal open={guideOpen} locale={locale} onClose={() => setGuideOpen(false)} />
+      <DashboardHeader
+        avatarInitial={avatarInitial}
+        locale={locale}
+        onOpenGuide={() => openGuide("overview")}
+      />
+      <ProductGuideModal
+        open={guideOpen}
+        locale={locale}
+        initialSection={guideSection}
+        onClose={() => setGuideOpen(false)}
+      />
 
       <section className="dashboard-main">
         <DashboardToolbar
@@ -339,9 +353,21 @@ export function DashboardSurface() {
           <section className="dashboard-empty-state">
             <h2>{activeTab === "favorites" ? formatUiMessage(locale, "dashboardEmptyFavoritesTitle") : formatUiMessage(locale, "dashboardEmptyAllTitle")}</h2>
             <p>{formatUiMessage(locale, "dashboardEmptyBody")}</p>
-            <button className="app-button-primary" disabled={creatingWorkspace} type="button" onClick={() => void handleCreateWorkspace()}>
-              {formatUiMessage(locale, "dashboardCreateFirst")}
-            </button>
+            <div className="app-button-row" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="app-button-primary" disabled={creatingWorkspace} type="button" onClick={() => void handleCreateWorkspace()}>
+                {formatUiMessage(locale, "dashboardCreateFirst")}
+              </button>
+              {activeTab !== "favorites" ? (
+                <button
+                  className="app-button-secondary"
+                  type="button"
+                  data-testid="dashboard-empty-guide"
+                  onClick={() => openGuide("overview")}
+                >
+                  {formatUiMessage(locale, "productGuide.open")}
+                </button>
+              ) : null}
+            </div>
           </section>
         ) : viewMode === "card" ? (
           <section aria-label={formatUiMessage(locale, "dashboardViewGridLabel")} className="dashboard-grid" data-testid="notebook-list" role="grid">

@@ -13,10 +13,13 @@ import { formatUiMessage } from "../../../lib/i18n/messages";
 export function DashboardHeader({
   avatarInitial: _avatarInitial,
   locale,
+  onOpenGuide,
 }: {
   /** Reserved for optional avatar badge; product keeps account text only. */
   avatarInitial: string;
   locale: DashboardLocale;
+  /** Opens onboarding product map modal (not primary nav). */
+  onOpenGuide?: () => void;
 }) {
   const brandHref = brandHomeHref();
   const brandIsExternal = /^https?:\/\//i.test(brandHref);
@@ -51,6 +54,17 @@ export function DashboardHeader({
         </div>
       </div>
       <div className="dashboard-header-links">
+        {onOpenGuide ? (
+          <button
+            type="button"
+            className="dashboard-header-settings top-bar-capsule"
+            data-testid="dashboard-guide-entry"
+            title={formatUiMessage(locale, "productGuide.openHint")}
+            onClick={onOpenGuide}
+          >
+            {formatUiMessage(locale, "productGuide.open")}
+          </button>
+        ) : null}
         <Link
           className="dashboard-header-client top-bar-capsule"
           data-testid="dashboard-client-entry"

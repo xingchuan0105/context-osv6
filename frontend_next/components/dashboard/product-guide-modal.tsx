@@ -8,7 +8,7 @@ import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
 import { AppModal } from "../ui/app-modal";
 import styles from "./product-guide-modal.module.css";
 
-type GuideSection =
+export type GuideSection =
   | "overview"
   | "llm"
   | "workspace"
@@ -96,28 +96,6 @@ export function ProductGuideModal({
   );
 }
 
-export function ProductGuideDock({
-  locale,
-  onOpen,
-}: {
-  locale: UiLocale;
-  onOpen: () => void;
-}) {
-  return (
-    <div className={styles.dock} data-testid="product-guide-dock">
-      <button
-        type="button"
-        className={styles.dockButton}
-        data-testid="product-guide-open"
-        title={formatUiMessage(locale, "productGuide.openHint")}
-        onClick={onOpen}
-      >
-        {formatUiMessage(locale, "productGuide.open")}
-      </button>
-    </div>
-  );
-}
-
 function renderSection(section: GuideSection, locale: UiLocale, onClose: () => void) {
   switch (section) {
     case "overview":
@@ -163,7 +141,7 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
               <p className={styles.cardBody}>
                 {formatUiMessage(locale, "productGuide.llm.platformBody")}
               </p>
-              <Link className="app-link" href="/settings?tab=billing" onClick={onClose}>
+              <Link className="app-link" href="/pricing#topup" onClick={onClose}>
                 {formatUiMessage(locale, "productGuide.llm.linkBilling")}
               </Link>
             </article>
@@ -243,7 +221,7 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
             <Link className="app-link" href="/pricing" onClick={onClose}>
               {formatUiMessage(locale, "productGuide.billing.linkPricing")}
             </Link>
-            <Link className="app-link" href="/settings?tab=billing" onClick={onClose}>
+            <Link className="app-link" href="/pricing#topup" onClick={onClose}>
               {formatUiMessage(locale, "productGuide.llm.linkBilling")}
             </Link>
           </div>
@@ -290,7 +268,7 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
             <Link className={styles.chip} href="/settings?tab=providers" onClick={onClose}>
               {formatUiMessage(locale, "productGuide.graph.providers")}
             </Link>
-            <Link className={styles.chip} href="/settings?tab=billing" onClick={onClose}>
+            <Link className={styles.chip} href="/pricing#topup" onClick={onClose}>
               {formatUiMessage(locale, "productGuide.graph.billing")}
             </Link>
           </div>

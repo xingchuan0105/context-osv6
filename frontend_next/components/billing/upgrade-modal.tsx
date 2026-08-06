@@ -141,7 +141,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
             </Link>
             <Link
               className="app-button-secondary"
-              href="/settings?tab=billing"
+              href="/pricing#topup"
               data-testid="upgrade-modal-topup-cta"
               onClick={onClose}
             >

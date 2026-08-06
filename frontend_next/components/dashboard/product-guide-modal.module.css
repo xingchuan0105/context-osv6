@@ -131,51 +131,6 @@
   background: hsl(var(--surface-muted));
 }
 
-/* Fixed left dock on dashboard */
-.dock {
-  position: fixed;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.45rem;
-  border-radius: 0 0.85rem 0.85rem 0;
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border-whisper));
-  border-left: 0;
-  box-shadow: 0 4px 18px hsl(0 0% 0% / 0.06);
-}
-
-.dockButton {
-  appearance: none;
-  border: 0;
-  border-radius: 0.65rem;
-  padding: 0.55rem 0.5rem;
-  min-width: 3.25rem;
-  background: hsl(var(--surface-muted));
-  color: hsl(var(--foreground));
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1.2;
-  cursor: pointer;
-  text-align: center;
-  writing-mode: horizontal-tb;
-}
-
-.dockButton:hover {
-  background: hsl(var(--foreground));
-  color: hsl(var(--background));
-}
-
-.dockButton:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
-}
-
 @media (max-width: 720px) {
   .layout {
     grid-template-columns: 1fr;
@@ -191,14 +146,5 @@
 
   .cardGrid {
     grid-template-columns: 1fr;
-  }
-
-  .dock {
-    top: auto;
-    bottom: 5.5rem;
-    transform: none;
-    left: 0.75rem;
-    border-radius: 0.85rem;
-    border-left: 1px solid hsl(var(--border-whisper));
   }
 }

@@ -26,6 +26,14 @@ These replace softer “keep compat / leave dead paths / temporary stopgap” ha
 - Multi-step work: brief plan with verify gates; do not advance past a failing gate. Prefer a thin end-to-end slice that works, then layer — never ship unfinished complexity in place of a working product.
 - **Time-cost consent:** before any compile or script run (`cargo build/test`, `pnpm`, deploy scripts, E2E, …), estimate the time cost and get user approval first; never launch long-running commands unannounced — keep the dev rhythm predictable.
 
+## Product IA & navigation (frontend)
+
+Authoritative map: **`docs/design/PRODUCT_IA.md`**. Audit notes: `docs/design/PRODUCT_IA_AUDIT.md`. Multi-site **discovery** only: `frontend_next/lib/site-map.ts` (do not treat as in-app IA).
+
+1. **IA before pages.** Before adding/changing global nav, top-bar entries, shells, or monetization entry points in `frontend_next`, update `PRODUCT_IA.md` (Jobs / Sitemap / Canonical / Shell). Do not invent a third way to complete the same user task.
+2. **Canonical routes only.** Membership checkout → `/pricing`; wallet top-up → `/pricing#topup`; BYOK → `/settings?tab=providers`; client → `/desktop`. Other CTAs may deep-link; they must not implement a second checkout path. Upgrade modals are marketing explainers, not payment hosts.
+3. **Help ≠ primary nav.** Onboarding / product-map content is a modal or `/help`, opened from weak entries (e.g. top-bar「上手」). Never ship a permanent business sidebar of encyclopedia topics beside the workspace list.
+
 ## Prompts — non-negotiable (`avrag-rs`)
 
 ### Location

@@ -29,6 +29,8 @@
 | `engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` | 旧 token 套餐用量语义（frozen）；**主商品已由 ADR-0010 翻转**，事件/计量可复用为钱包流水 |
 | `adr/0010-share-service-business-model.md` | **现行商业模式**：可分享 Workspace 订阅、代购×1.5、邀请码、本地 Publish 上云 |
 | `design/STYLE_BASELINE.md` | 现行视觉基线（Slate × Indigo，Canonical） |
+| `design/PRODUCT_IA.md` | **登录后产品信息架构 v1**（Jobs / Sitemap / Canonical / Shell；改导航前必读） |
+| `design/PRODUCT_IA_AUDIT.md` | 产品 IA 审计（入口矩阵、P0/P1、本轮关闭项） |
 | `desktop/RELEASE-AND-DOWNLOAD.md` | 桌面端构建/签名/发布 runbook |
 | `desktop/VERSIONING.md` | 桌面 SemVer 与云端 API 兼容矩阵 |
 | `desktop/SUPPORT-AND-SLA.md` | 桌面 vs 云端支持边界 |
@@ -43,6 +45,8 @@
 ## 进行中的计划
 
 - `plans/2026-08-02-architecture-deepening-plan.md` — 架构深化 5 波（C1 doc-scope / C2 profile memory / C3 Alipay / C4 llm / C5 citations 等）
+- `../avrag-rs/docs/plans/2026-08-06-ingestion-window-session-ps-merge.md` — **ingestion 原文均切窗口会话 + PS 合一 + triplet 同链 + SaC 去 doc_profile**（主干已接线；需 migration 0075 + 探针）
+- `../avrag-rs/docs/plans/2026-08-06-rerank-style-sticky-and-querycard-calc.md` — **Rerank style 粘连 + P-calc-ok + 外推/截断/天气/元数据提示**（2026-08-06 **已落地**）
 
 ## ADR 决策记录
 
@@ -99,3 +103,7 @@
 - `../avrag-rs/docs/` — 后端文档，有自己的索引 [`../avrag-rs/docs/README.md`](../avrag-rs/docs/README.md)（2026-08-02 已随本索引同步重写）
 - `../frontend_next/docs/` — 前端零星设计/ops 文档（尚未梳理）
 - `../docs-recovered-from-grok/` — 历史恢复档案（自称非当前决策依据）
+
+## 文案总索引
+
+- [`docs/copy-catalog/`](./copy-catalog/) — 产品 UI i18n 全文 + prompts 清单 + 内联/后端硬编码线索（集中改文案用）

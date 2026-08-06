@@ -42,16 +42,16 @@ export const commonMessages = {
     en: "Wallet pays platform model calls and retrieval. Independent of plan — top up only, upgrade only, or both.",
   },
   "upgradeModal.topupStrip": {
-    zh: "需要立刻支付？请到定价页选档；只需余额？请到账单充值。",
-    en: "Ready to pay for a plan? Use pricing. Need wallet only? Top up in billing.",
+    zh: "需要立刻支付？请到定价页选档或直接充值余额。",
+    en: "Ready to pay? Open pricing for tiers or wallet top-up packs.",
   },
   "upgradeModal.pricingCta": {
     zh: "定价与支付详情",
     en: "Pricing & checkout",
   },
   "upgradeModal.topupCta": {
-    zh: "去充值余额",
-    en: "Top up wallet",
+    zh: "去定价页充值",
+    en: "Top up on pricing",
   },
   "settingsQuickModal.openFullPage": {
     zh: "打开设置页 →",

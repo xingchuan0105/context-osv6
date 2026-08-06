@@ -534,8 +534,8 @@ export const settingsMessages = {
     en: "Balance",
   },
   "settings.billing.walletSubtitle": {
-    zh: "用于支付平台模型调用与向量检索费用。累计充值每满 ¥50 增加 1 次邀请奖励。",
-    en: "Pays platform model calls and embedding/retrieval. Paid top-ups count toward lifetime total (+1 invite per ¥50).",
+    zh: "用于支付平台模型调用与向量检索费用。累计充值每满 ¥50 增加 1 次邀请奖励。充值请到定价页完成。",
+    en: "Pays platform model calls and embedding/retrieval. Paid top-ups count toward lifetime total (+1 invite per ¥50). Complete top-up on the pricing page.",
   },
   "settings.billing.walletBalanceLabel": {
     zh: "可用余额",
@@ -545,21 +545,13 @@ export const settingsMessages = {
     zh: "累计充值",
     en: "Lifetime paid top-ups",
   },
-  "settings.billing.walletTopupTitle": {
-    zh: "充值",
-    en: "Top up",
+  "settings.billing.walletTopupCta": {
+    zh: "去定价页充值",
+    en: "Top up on pricing",
   },
-  "settings.billing.walletTopupAction": {
-    zh: "充值 {label}",
-    en: "Top up {label}",
-  },
-  "settings.billing.walletTopupLoading": {
-    zh: "正在创建结账…",
-    en: "Starting checkout…",
-  },
-  "settings.billing.walletTopupFailed": {
-    zh: "无法开始充值：{message}",
-    en: "Could not start top-up: {message}",
+  "settings.billing.walletTopupHint": {
+    zh: "套餐包与支付在定价页「充值」区完成（唯一结账入口）。",
+    en: "Packs and payment complete under Pricing → Top-up (canonical checkout).",
   },
   "settings.billing.walletLoading": {
     zh: "正在加载余额…",

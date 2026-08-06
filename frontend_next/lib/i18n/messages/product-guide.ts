@@ -5,16 +5,20 @@ import type { UiMessageDescriptor } from "./types";
  */
 export const productGuideMessages = {
   "productGuide.open": {
-    zh: "产品地图",
-    en: "Product map",
+    zh: "上手",
+    en: "Guide",
   },
   "productGuide.openHint": {
-    zh: "上手与模块串联",
-    en: "Onboarding & modules",
+    zh: "产品说明与模块关系（非主导航）",
+    en: "How the product fits together (not primary nav)",
+  },
+  "productGuide.openFull": {
+    zh: "打开总览",
+    en: "Open overview",
   },
   "productGuide.title": {
-    zh: "产品地图 · 如何上手",
-    en: "Product map · get started",
+    zh: "上手 · 产品说明",
+    en: "Guide · product map",
   },
   "productGuide.subtitle": {
     zh: "像知识图谱一样串联各模块：LLM、工作区、分享、客户端与计费。点左侧主题或下方链接即可跳转。",
@@ -89,16 +93,16 @@ export const productGuideMessages = {
     en: "Platform models · wallet",
   },
   "productGuide.llm.platformBody": {
-    zh: "使用平台模型时从余额扣费。访客在分享页提问时默认由工作区所有者承担（Owner-pays）。可在设置 → 账单中充值。",
-    en: "Platform models debit your wallet. Guest Q&A on shared pages is Owner-pays. Top up under Settings → Billing.",
+    zh: "使用平台模型时从余额扣费。访客在分享页提问时默认由工作区所有者承担（Owner-pays）。可在定价页直接充值。",
+    en: "Platform models debit your wallet. Guest Q&A on shared pages is Owner-pays. Top up on the pricing page.",
   },
   "productGuide.llm.linkProviders": {
     zh: "配置模型服务商",
     en: "Configure providers",
   },
   "productGuide.llm.linkBilling": {
-    zh: "账单与充值",
-    en: "Billing & top-up",
+    zh: "定价页充值",
+    en: "Top up on pricing",
   },
   "productGuide.workspace.title": {
     zh: "工作区与文档",
@@ -157,8 +161,8 @@ export const productGuideMessages = {
     en: "Top-up (model wallet)",
   },
   "productGuide.billing.topupBody": {
-    zh: "余额用于平台模型调用与向量检索等计量能力。与会员档位独立：可以只充值不升级，也可以升级后再按需充值。",
-    en: "Wallet pays platform model calls and metered retrieval. Independent of plan tier — top up without upgrading, or both.",
+    zh: "余额用于平台模型调用与向量检索等计量能力。与会员档位独立：在定价页选套餐包即可充值，也可以只升级不充值。",
+    en: "Wallet pays platform model calls and metered retrieval. Independent of plan — top up with packs on the pricing page, or upgrade only.",
   },
   "productGuide.billing.linkPricing": {
     zh: "查看定价与充值说明",
@@ -209,7 +213,7 @@ export const productGuideMessages = {
     en: "Providers",
   },
   "productGuide.graph.billing": {
-    zh: "账单充值",
-    en: "Billing",
+    zh: "充值",
+    en: "Top-up",
   },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { UpgradeModal } from "../../billing/upgrade-modal";
-import { SettingsQuickModal } from "../../settings/settings-quick-modal";
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import type { UiLocale } from "../../../lib/i18n/config";
 import type { ShareQuotaSummary } from "../../../lib/share/client";
@@ -28,7 +27,6 @@ export function ShareConversionBanner({
   forced = false,
 }: ShareConversionBannerProps) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [billingOpen, setBillingOpen] = useState(false);
 
   const used = quota?.used ?? 0;
   const max = quota?.max ?? 0;
@@ -73,14 +71,13 @@ export function ShareConversionBanner({
           >
             {formatUiMessage(locale, "shareConversion.upgradeCta")}
           </button>
-          <button
-            type="button"
+          <Link
             className="app-button-secondary"
             data-testid="share-conversion-topup"
-            onClick={() => setBillingOpen(true)}
+            href="/pricing#topup"
           >
             {formatUiMessage(locale, "shareConversion.topupCta")}
-          </button>
+          </Link>
           <Link className="app-link" href="/pricing">
             {formatUiMessage(locale, "shareConversion.pricingLink")}
           </Link>
@@ -89,14 +86,6 @@ export function ShareConversionBanner({
 
       {upgradeOpen ? (
         <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
-      ) : null}
-      {billingOpen ? (
-        <SettingsQuickModal
-          locale={locale}
-          open={billingOpen}
-          tab="billing"
-          onClose={() => setBillingOpen(false)}
-        />
       ) : null}
     </>
   );
