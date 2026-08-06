@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { useQuery } from "@tanstack/react-query";
+
 import { useAuth } from "../lib/auth/context";
 import { formatUiMessage } from "../lib/i18n/messages";
 import type { UiLocale } from "../lib/i18n/config";
+import { getSubscription } from "../lib/settings/client";
 import { useUiPreferences } from "../lib/ui-preferences";
 import {
   SettingsQuickModal,
@@ -65,6 +68,25 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
     auth.user?.email?.split("@")[0] ||
     formatUiMessage(locale, "dashboardAccountLink");
   const email = auth.user?.email ?? "";
+  const subscriptionQuery = useQuery({
+    queryKey: ["account-menu-subscription", auth.token],
+    enabled: Boolean(auth.token),
+    staleTime: 60_000,
+    queryFn: async () => {
+      try {
+        return await getSubscription(auth.token as string);
+      } catch {
+        return null;
+      }
+    },
+  });
+  const planId = subscriptionQuery.data?.plan_id?.trim().toLowerCase() || "free";
+  const planBadge =
+    planId === "pro" || planId.startsWith("pro")
+      ? "Pro"
+      : planId === "plus" || planId.startsWith("plus")
+        ? "Plus"
+        : "Free";
 
   return (
     <>
@@ -93,7 +115,16 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
                 {(displayName[0] || "U").toUpperCase()}
               </div>
               <div className="dashboard-account-user-meta">
-                <strong className="dashboard-account-user-name">{displayName}</strong>
+                <div className="dashboard-account-user-name-row">
+                  <strong className="dashboard-account-user-name">{displayName}</strong>
+                  <span
+                    className="dashboard-account-plan-badge"
+                    data-plan={planBadge.toLowerCase()}
+                    data-testid="account-plan-badge"
+                  >
+                    {planBadge}
+                  </span>
+                </div>
                 {email ? (
                   <span className="dashboard-account-user-email">{email}</span>
                 ) : null}

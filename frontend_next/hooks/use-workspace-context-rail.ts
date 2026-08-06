@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { useAuth } from "../lib/auth/context";
 import { useUiPreferences } from "../lib/ui-preferences";
@@ -18,6 +18,8 @@ export function useWorkspaceContextRail({
   selectedSourceIds,
   onSelectedSourceIdsChange,
   focusedSourceId = null,
+  openSourceId = null,
+  onOpenSourceConsumed,
 }: WorkspaceContextRailProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
@@ -46,6 +48,15 @@ export function useWorkspaceContextRail({
   });
 
   setViewerSourceIdRef.current = viewerExpansion.setViewerSourceId;
+
+  // Citation modal "open source" one-shot request.
+  useEffect(() => {
+    if (!openSourceId) {
+      return;
+    }
+    viewerExpansion.setViewerSourceId(openSourceId);
+    onOpenSourceConsumed?.();
+  }, [openSourceId, onOpenSourceConsumed, viewerExpansion.setViewerSourceId]);
 
   const selection = useWorkspaceSourceSelection({
     workspaceId,

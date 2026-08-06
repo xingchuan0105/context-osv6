@@ -716,6 +716,24 @@ pub(crate) async fn auth_delete_profile_media_handler(
         );
     };
     let user_uuid = user_id.into_uuid();
+    // Best-effort remove object before clearing path.
+    if let Ok(Some(existing)) = store.get_user_profile(user_uuid).await {
+        let path = match kind {
+            ProfileMediaKind::Avatar => existing.avatar_object_path,
+            ProfileMediaKind::Banner => existing.banner_object_path,
+        };
+        if let Some(path) = path.filter(|p| !p.trim().is_empty()) {
+            if let Err(error) = state
+                .storage()
+                .objects()
+                .object_store
+                .delete(&path)
+                .await
+            {
+                warn!(error = %error, %path, "failed to delete profile media object");
+            }
+        }
+    }
     match store
         .set_user_profile_media_path(user_uuid, kind, None)
         .await

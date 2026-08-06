@@ -158,6 +158,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   }
   const [activeWebSources, setActiveWebSources] =
     useState<WorkspaceWebSourcesRequest | null>(null);
+  const [openViewerSourceId, setOpenViewerSourceId] = useState<string | null>(null);
   const [usageWarning, setUsageWarning] = useState<{
     threshold: 80 | 95;
     percentage: number;
@@ -274,7 +275,9 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     <WorkspaceRightRail
       activeWebSources={activeWebSources}
       focusedSourceId={workspaceUi.focusedSourceId}
+      openSourceId={openViewerSourceId}
       onCloseWebSources={() => setActiveWebSources(null)}
+      onOpenSourceConsumed={() => setOpenViewerSourceId(null)}
       onSelectedSourceIdsChange={workspaceUi.setSelectedSourceIds}
       selectedSourceIds={workspaceUi.selectedSourceIds}
       workspaceId={workspaceId}
@@ -510,6 +513,11 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
             citationRequest={workspaceUi.activeCitation}
             onClose={() => {
               workspaceUi.setActiveCitation(null);
+            }}
+            onOpenSource={(sourceId) => {
+              workspaceUi.setFocusedSourceId(sourceId);
+              workspaceUi.setRightRailOpen(true);
+              setOpenViewerSourceId(sourceId);
             }}
             workspaceId={workspaceId}
           />

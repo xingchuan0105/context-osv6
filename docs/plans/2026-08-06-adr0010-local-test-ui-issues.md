@@ -6,59 +6,59 @@
 
 ## 批次 1(2026-08-06)
 
-### #1 /pricing 页未改 ⬜
+### #1 /pricing 页未改 ✅
 
 - 现象:定价页仍是旧叙事(token 套餐/rolling 限额为主权益)。
 - 位置:`frontend_next/app/(marketing)/pricing/pricing-page-client.tsx`、`frontend_next/components/billing/PricingCards.tsx`。
 - 期望:按 ADR-0010 §2/§3 重写——客户端免费、私有使用免费;主商品 = 可分享 Workspace 名额 Free 3 / Plus 10 / Pro 100;月付+年付(年付约 10 个月价);钱包充值(代购模型调用)作为辅商品;年付 SKU 已存在于后端(plus_annual/pro_annual)。
 
-### #2 /settings?tab=billing 仍展示 5h/7d 限额 ⬜
+### #2 /settings?tab=billing 仍展示 5h/7d 限额 ✅
 
 - 现象:设置页账单 tab 仍把 5h/7d 滚动窗口当作套餐额度展示。
 - 位置:`frontend_next/components/billing/UsageMeter.tsx`(token 计量条)、`frontend_next/lib/i18n/messages/paywall.ts:3-19`(5h/7d 付费墙文案)、`frontend_next/lib/i18n/messages/usage.ts:3+`、`frontend_next/lib/billing/planLimits.ts`。
 - 期望:ADR-0010 §1.1 T4 后,rolling 限额已降级为「无 BYOK 且无余额时的保护性 hard stop」,不再是主权益;页面不应再以「用量额度」心智呈现。用量数据可保留为「消费明细/参考」性质。
 
-### #3 「云端 BYOK(自带 API Key)」说法太专业 ⬜
+### #3 「云端 BYOK(自带 API Key)」说法太专业 ✅
 
 - 位置:`frontend_next/lib/i18n/messages/settings.ts:129-130`(标题)、`:165-170`(payer_funds_required 提示文案)。
 - 期望:大众用户能懂的说法,如「自己的模型 Key」「使用自己的 API Key」等;提示文案同步改。
 
-### #4 BYOK 配置只有 LLM,没有 embedding / rerank ⬜
+### #4 BYOK 配置只有 LLM,没有 embedding / rerank ✅
 
 - 现象:设置页云端 Key 配置只有 LLM provider 一项。
 - 位置:`frontend_next/components/settings/settings-billing-panel.tsx`(purpose 硬编码 "llm")。
 - 背景(代码现实):后端 `ProviderSecretPurpose::Embedding` 仅存在于枚举,**没有任何 resolve 路径**;embedding/rerank 目前恒走平台 key 并计入钱包扣费(db8bdd27 起 embedding 按 usage_kind 拆分计费)。
 - 期望:二选一——(a) 补 embedding/rerank 的 Key 配置(UI + 后端 resolve);(b) 产品上明确「平台托管模型调用含向量」,UI 文案说清哪些走自己的 Key、哪些走平台。需要产品决定。
 
-### #5 「模型代购钱包」说法不对 ⬜
+### #5 「模型代购钱包」说法不对 ✅
 
 - 位置:`frontend_next/lib/i18n/messages/settings.ts:461`(标题)、`:465`(说明)、`:493,497`(加载/标签)。
 - 期望:通俗易懂,如「余额」「调用余额」「充值余额」;说明文案同步(目前「平台代购模型调用」也偏技术)。
 
-### #6 「账单与计划」概念已变 ⬜
+### #6 「账单与计划」概念已变 ✅
 
 - 位置:`frontend_next/lib/i18n/messages/settings.ts:61`。
 - 期望:改为「会员状态」心智——当前档位、分享名额用量(x/3、x/10、x/100)、到期时间、续费/升级,而非「账单与计划」。
 
-### #7 整页概念不应是「订阅与用量」 ⬜
+### #7 整页概念不应是「订阅与用量」 ✅
 
 - 位置:`frontend_next/lib/i18n/messages/settings.ts:13`(tab 标题)、`:65`(描述文案);同样叙事还出现在 `dashboard.ts:133`、`usage.ts:10`。
 - 期望:产品逻辑已从「订阅 token 套餐 + 用量墙」翻转为「会员档位 + 分享名额 + 余额 + 自己的 Key」,页面信息架构应整体对应:会员状态 / 分享名额 / 充值余额 / 自己的模型 Key /(参考性)消费明细。需要一次页面 IA 调整,不只是改词。
 
 ## 批次 2(2026-08-06)
 
-### #8 profile tab:面向分享传播,资料字段太薄 ⬜
+### #8 profile tab:面向分享传播,资料字段太薄 ✅
 
 - 现象:个人资料只有 `fullName` 一个字段(`settings-profile-panel.tsx:17-60`)。
 - 期望:分享给他人时,Owner 资料应支撑社媒传播——**简介、banner、头像、联系方式**等;分享页(/shared/kb/[token])可展示 Owner 名片。
 - 涉及:前端表单 + 后端用户资料 schema 扩展(当前仅 full_name)+ 分享页名片展示。属产品功能,不只是文案。
 
-### #9 appearance tab:内容太薄,不配单独成页 ⬜
+### #9 appearance tab:内容太薄,不配单独成页 ✅
 
 - 现象:外观选项撑不满一页(`settings-appearance-panel.tsx`)。
 - 期望:选项改成**下拉式**紧凑布局;考虑并入其他页,或**不单独成页、只做弹窗**(已有 `settings-quick-modal.tsx` 可承载)。
 
-### #10 security tab:交互层级要收 ⬜
+### #10 security tab:交互层级要收 ✅
 
 - 期望:
   1. 先点「修改密码」按钮,再展开密码输入框(当前直接展示);
@@ -66,7 +66,7 @@
   3. 去掉「当前会话状态」展示。
 - 位置:`settings-security-panel.tsx`、`account-menu.tsx:119,127`(现链接到 settings?tab=security/notifications)。
 
-### #11 notifications tab:通知体系重做(账户级 + 分享 + 官方广播) ⬜
+### #11 notifications tab:通知体系重做(账户级 + 分享 + 官方广播) ✅
 
 - 期望:
   - **不做 Workspace 级**通知;
@@ -75,7 +75,7 @@
   - 「这个接口要打通」——事件产生 → 通知落库 → 前端展示的链路。
 - 现状:通知列表 + 偏好设置已有(`settings-notifications-panel.tsx`,`listNotifications`/`markNotificationRead`);后端已有零星发通知点(如订阅过期,`billing_sql/core_webhooks/maintenance.rs`)。缺:上述业务事件的发射点、余额不足阈值触发、admin 广播 API 与 UI(`pg_admin_store` 有相关基础)。
 
-### #12 api-access 弹窗缺帮助文档入口 ⬜
+### #12 api-access 弹窗缺帮助文档入口 ✅
 
 - 现象:完整页 `workspace-api-access-surface.tsx:375-408` 有帮助入口卡(「先读人类说明」→ `/help/api-access`;「再读稳定 agent 文档」→ `/docs/api-access-for-agents.md`),但顶栏弹窗 `workspace-api-access-modal.tsx`(自 `workspace-top-bar.tsx:217` 打开)里**没有任何文档链接**,只有一句纯文本「完整说明与 agent 文档可在完整页面查看」(surface:238)。
 - 期望:弹窗内同样给出这两个文档入口(链接或内嵌摘要),不要让用户必须跳到完整页。
@@ -134,13 +134,13 @@
 - **对应我们的组件**:`components/share/workspace-share-quick-modal.tsx`(弹层)+ `parts/share-control-bar.tsx`;radio 组 = ADR §4 访客模式(须注册 ↔ 仅有权限的人员;匿名 ↔ 任何拥有链接的人)。
 - **我们比参照多出的(ADR-0010 必有)**:选中「任何拥有链接的人」时展示 **Owner 成本提示**(访客消耗计入你的余额/Key)+ 名额占用提示(x/3);可放在 radio 下方一行小字,不挡主操作。
 
-### #13 邮箱邀请不落邮件,只有手动复制链接 ⬜
+### #13 邮箱邀请不落邮件,只有手动复制链接 ✅
 
 - 现象(用户问:「邮箱邀请要给邀请邮箱发邮件、链接,实现了吗?」):**没有**。`invite_member` 只写 `workspace_members`(`invite_status='pending'`,按邮箱解析已注册用户 id,`pg_share_store/invite.rs:18-64`),**无任何邮件投递**;前端只能手动复制 `/invite/{workspace_id}/{member_id}` 链接(`invite-surface.tsx:29`)再自行发给对方。
 - 现状可用地基:SMTP(lettre,163 邮箱,`.env.example:254-257`)已用于**密码重置**(`app-bootstrap/src/services/password_reset.rs`);分享域/产品层均未接。
 - 期望:邀请时向被邀邮箱发送含邀请链接的邮件(复用 SMTP 通道);保留手动复制链接作为辅助。注意与 #11 通知体系共用同一邮件通道;未注册邮箱的邀请邮件应同时带注册引导(与 #6 邀请码可叠加)。
 
-### #14 分享访客模式改为两档 + 按分享配置提问次数上限(产品规则变更) ⬜
+### #14 分享访客模式改为两档 + 按分享配置提问次数上限(产品规则变更) ✅
 
 - **新规则(用户拍板,2026-08-06)**:
   1. Workspace 分享只分两种:**匿名**(持有链接即可)与**定向邀请**(仅被邀请的人);
@@ -154,7 +154,7 @@
   - **计费归属待核对**:share-token 路径已 Owner-pays;但**成员(被邀人)在工作区内提问目前疑为成员自负**(成员走普通 chat 路径,payer=自己)——若定向邀请也由 Owner 请客,需要把成员路径纳入 Owner-pays 或明确产品口径;
   - UI:分享面板(参照 k.png radio 结构)在「任何拥有链接的人」选项下暴露次数输入(默认 10)+ 成本提示;邀请成员行暴露每人的次数上限(含 ∞)。
 
-### #15 分享 Workspace 要有独立「数据分析」按钮和页面 ⬜
+### #15 分享 Workspace 要有独立「数据分析」按钮和页面 ✅
 
 - **需求(用户拍板,2026-08-06)**:Workspace 要有一个**单独的按钮和数据分析页面**,看**访问、活跃、访问者**信息;**仅限已分享的 Workspace**(未分享不展示/不可点)。
 - **代码现状**:
@@ -167,7 +167,7 @@
   3. 数据口径核对:「活跃」建议含提问次数/提问访客(目前 analytics 偏访问量);「访问者」列表对匿名访客只有 IP/指纹级信息,文案不要说满;
   4. 与 #7 的设置 IA、#14 的限次数据可呼应(分析页可展示限次消耗)。
 
-### #16 对话区 UI 打磨(截图 2026-08-06_133951) ⬜
+### #16 对话区 UI 打磨(截图 2026-08-06_133951) ✅
 
 - **① 中间栏没有自己的滚动条(用户主诉)**。症状:整页在窗口最右缘滚动,中间对话栏无滚动条。代码疑点:
   - `.transcript`(`workspace-chat.module.css:13-22`)本身写了 `overflow-y:auto; min-height:0`,看似正确 → 大概率是**父链高度断裂**(某层没传 `height:100%/min-height:0`,transcript 随内容撑高,页面级滚动接管),沿 `workspace-surface.tsx:452` → `WorkspaceChatPane` 的容器链查;
@@ -175,7 +175,7 @@
 - **② Markdown 标题泄漏**:回答里 `#### 2. ISO新标准发布与更新` 以字面 `####` 显示——渲染器没覆盖 h4(或输出清洗把 `#` 转义/放行了),查 assistant 内容的 markdown 渲染链。
 - **③「回到底部」浮钮压字**:sticky 按钮(`workspace-chat.module.css:33+` `.scrollToBottomButton`)与正文文本重叠,文本在按钮后面被裁/透出;需调偏移、背景不透明度或避开文本流。
 
-### #17 内容源/笔记/citation 一律改中间弹窗(不在原地切换) ⬜
+### #17 内容源/笔记/citation 一律改中间弹窗(不在原地切换) ✅
 
 - **需求(用户拍板,2026-08-06)**:点击**内容源条目**→中间弹窗(不在中栏原地切换);**新建笔记、笔记条目**→弹窗;**citation**→弹窗。
 - **现状锚点**:
@@ -184,13 +184,13 @@
   - 已有可复用的弹窗基建:`settings-quick-modal.tsx`、`workspace-share-quick-modal.tsx`、`workspace-api-access-modal.tsx` 的形态,`modalEnter` 动画(`_app-shared.css:431`)已存在。
 - **要点**:统一一个居中大弹窗组件(尺寸建议参考尺寸分析:内容区可达 ~740-1000px,内部滚动);文档/笔记内容长,弹窗要有关闭(✕/Esc/点遮罩)与返回列表的层级;新建笔记弹窗保存后直接体现在列表。
 
-### #18 对话栏顶部模式指示重复表达,删除 ⬜
+### #18 对话栏顶部模式指示重复表达,删除 ✅
 
 - 现象(截图 2026-08-06_134349 红框):对话栏顶部 header 显示「知识库」标题 + 「rag」模式 chip(`workspace-chat-pane.tsx:225-230`,`activeModeLabel`/`activeModeCode`),与**底部输入框的能力开关**(`chat-composer.tsx:29-30`,知识库/网络搜索 toggle)重复表达同一信息。
 - 期望:删除该 header(整行移除,含标题与 mode chip);当前模式以底部 composer 开关为准。
 - 备注:每条消息气泡上还有**逐条**的 capability chip(`chat-message-list.tsx:363-380`,`mode-indicator`)——那是单条回答的来源标记,与本项无关,保留(若要一并精简再议)。
 
-### #19 顶栏胶囊按钮组样式对齐(截图 2026-08-06_134425) ⬜
+### #19 顶栏胶囊按钮组样式对齐(截图 2026-08-06_134425) ✅
 
 - 现象:顶栏右侧按钮组(升级 / +新建工作区 / 分享 / API / 账户)各胶囊样式不齐——「升级」实心暖橙、「新建工作区」浅底、「分享」「API」无底色幽灵态且带小图标、「账户」白底带边,高度/圆角/底色不统一。
 - 期望(用户拍板):
@@ -200,7 +200,7 @@
   4. **「账户」胶囊底色与整组对齐**。
 - 位置:`workspace-top-bar.tsx:135-205`(`.topBarActions` 组,分享/API 按钮含 `actionIcon` svg + label);样式 `workspace-shell.module.css:131-254`(`.topBarPrimaryButton`/`.topBarActionButton` 基类:min-height ≈36px、padding 8/16、radius `--radius-button`);「升级」= `plan-entry` 组件,「账户」= `account-menu` 触发器,**两处是独立样式,需并轨**。
 
-### #20 Workspace 默认命名太短/出现裸「1」 ⬜
+### #20 Workspace 默认命名太短/出现裸「1」 ✅
 
 - 现象(截图 2026-08-06_134627):顶栏标题只有「1」。用户要求:默认名换长一点、有意义的方法,例如「**新建工作区1**」。
 - 代码现状:默认名由前端生成——`lib/dashboard/default-title.ts:18-22` `formatDefaultWorkspaceTitle` = `工作区{N}`/`Workspace{N}`,N 来自 **localStorage 计数器**(按 locale 分键;清缓存归零→重名,删工作区不回退→跳号);两个创建入口都用它(`dashboard-surface.tsx:156`、`use-workspace-data.ts:125-132`),后端把 name 原样写入 title 列(`storage-pg/src/lib_impl/repository_bootstrap.rs:111-122`)。

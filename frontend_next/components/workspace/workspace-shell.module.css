@@ -396,33 +396,6 @@
   padding: var(--space-lg);
 }
 
-.citationPopoverBackdrop {
-  display: block;
-  background: transparent;
-  padding: 0;
-}
-
-.citationPopoverCard {
-  position: fixed;
-  display: block;
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-card);
-  background: hsl(var(--card));
-  padding: 0;
-  overflow: hidden;
-}
-
-.citationPopoverContent {
-  max-height: inherit;
-  overflow-y: auto;
-  padding: var(--space-lg) var(--space-lg);
-  color: hsl(var(--foreground));
-  font-size: var(--font-size-body-strong);
-  line-height: 1.75;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .body {
   display: flex;
   min-height: 0;

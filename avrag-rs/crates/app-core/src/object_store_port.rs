@@ -35,4 +35,10 @@ pub trait ObjectStorePort: Send + Sync {
     async fn head(&self, path: &str) -> Result<ObjectStoreMetadata, ObjectStoreHeadError>;
 
     async fn presigned_get_url(&self, path: &str, ttl_secs: u64) -> Result<String, AppError>;
+
+    /// Best-effort delete; missing object is not an error.
+    async fn delete(&self, path: &str) -> Result<(), AppError> {
+        let _ = path;
+        Ok(())
+    }
 }

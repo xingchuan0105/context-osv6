@@ -77,4 +77,11 @@ impl ObjectStorePort for ObjectStorePortAdapter {
             .await
             .map_err(|error| AppError::internal(error.to_string()))
     }
+
+    async fn delete(&self, path: &str) -> Result<(), AppError> {
+        self.inner
+            .delete(path)
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))
+    }
 }

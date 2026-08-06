@@ -427,7 +427,6 @@ Total crates: **678**
 - avrag-chatmemory
 - avrag-code-interpreter
 - avrag-guardrails
-- avrag-licensing
 - avrag-llm
 - avrag-rag-core
 - avrag-rag-core-ports

@@ -9,6 +9,8 @@ type WorkspaceRightRailProps = {
   selectedSourceIds: string[];
   onSelectedSourceIdsChange(ids: string[]): void;
   focusedSourceId?: string | null;
+  openSourceId?: string | null;
+  onOpenSourceConsumed?: () => void;
   activeWebSources?: WorkspaceWebSourcesRequest | null;
   onCloseWebSources?: () => void;
 };
@@ -18,6 +20,8 @@ export function WorkspaceRightRail({
   selectedSourceIds,
   onSelectedSourceIdsChange,
   focusedSourceId = null,
+  openSourceId = null,
+  onOpenSourceConsumed,
   activeWebSources = null,
   onCloseWebSources,
 }: WorkspaceRightRailProps) {
@@ -33,6 +37,8 @@ export function WorkspaceRightRail({
   return (
     <WorkspaceContextRail
       focusedSourceId={focusedSourceId}
+      openSourceId={openSourceId}
+      onOpenSourceConsumed={onOpenSourceConsumed}
       onSelectedSourceIdsChange={onSelectedSourceIdsChange}
       selectedSourceIds={selectedSourceIds}
       workspaceId={workspaceId}

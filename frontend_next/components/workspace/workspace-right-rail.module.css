@@ -20,6 +20,26 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border-strong)) transparent;
+}
+
+.contextSection::-webkit-scrollbar,
+.takeoverSection::-webkit-scrollbar,
+.sectionScroller::-webkit-scrollbar {
+  width: 8px;
+}
+
+.contextSection::-webkit-scrollbar-thumb,
+.takeoverSection::-webkit-scrollbar-thumb,
+.sectionScroller::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-strong));
+  border-radius: var(--radius-pill);
+}
+
+.contextSection::-webkit-scrollbar-track,
+.takeoverSection::-webkit-scrollbar-track,
+.sectionScroller::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .contextSectionTop {
@@ -874,14 +894,35 @@
   background: hsl(var(--card));
 }
 
+.viewerBody {
+  display: grid;
+  gap: var(--space-md);
+}
+
 .viewerSummary {
+  display: grid;
+  gap: var(--space-xs);
   padding: var(--space-md) var(--space-3);
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
+}
+
+.viewerSummaryHeading {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-sm, 0.85rem);
+  font-weight: 600;
+  line-height: var(--line-height-control);
+}
+
+.viewerSummaryText {
+  margin: 0;
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .viewerPreview {

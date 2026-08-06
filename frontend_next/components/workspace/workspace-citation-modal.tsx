@@ -14,6 +14,8 @@ type WorkspaceCitationModalProps = {
   citationRequest: WorkspaceCitationRequest | null;
   workspaceId: string;
   onClose: () => void;
+  /** Jump to source in right rail when citation has a workspace doc_id. */
+  onOpenSource?: (sourceId: string) => void;
 };
 
 function mergeCitationDetail(
@@ -51,6 +53,7 @@ export function WorkspaceCitationModal({
   citationRequest,
   workspaceId: _workspaceId,
   onClose,
+  onOpenSource,
 }: WorkspaceCitationModalProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
@@ -133,6 +136,8 @@ export function WorkspaceCitationModal({
           page: String(citation.page),
         })
       : null;
+  const sourceId = citation.doc_id?.trim() || "";
+  const canOpenSource = Boolean(sourceId && onOpenSource);
 
   return (
     <AppModal
@@ -142,6 +147,21 @@ export function WorkspaceCitationModal({
       closeLabel={formatUiMessage(locale, "appModal.close")}
       testId="workspace-citation-modal"
       onClose={onClose}
+      footer={
+        canOpenSource ? (
+          <button
+            className="app-button-secondary"
+            data-testid="workspace-citation-open-source"
+            type="button"
+            onClick={() => {
+              onOpenSource?.(sourceId);
+              onClose();
+            }}
+          >
+            {formatUiMessage(locale, "workspaceCitation.openSource")}
+          </button>
+        ) : null
+      }
     >
       {pageLabel ? (
         <p style={{ margin: "0 0 0.75rem", color: "hsl(var(--muted-foreground))", fontSize: "0.85rem" }}>

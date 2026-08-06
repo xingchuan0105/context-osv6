@@ -233,6 +233,36 @@ a.dashboard-brand-title:hover {
   white-space: nowrap;
 }
 
+.dashboard-account-user-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.dashboard-account-plan-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  padding: 0 0.4rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid hsl(var(--dashboard-border));
+  background: hsl(var(--dashboard-surface));
+  color: hsl(var(--dashboard-muted-foreground));
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.dashboard-account-plan-badge[data-plan="plus"],
+.dashboard-account-plan-badge[data-plan="pro"] {
+  border-color: color-mix(in srgb, hsl(var(--accent)) 40%, hsl(var(--dashboard-border)));
+  color: hsl(var(--accent));
+}
+
 .dashboard-account-flyout-wrap {
   position: relative;
 }

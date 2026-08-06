@@ -141,6 +141,27 @@ export function NotificationBell({ locale }: { locale: UiLocale }) {
                   data-testid="notification-item"
                 >
                   <div className={styles.itemTop}>
+                    <span
+                      aria-hidden="true"
+                      className={styles.itemIcon}
+                      data-kind={
+                        n.event_type.startsWith("security")
+                          ? "security"
+                          : n.event_type.startsWith("billing")
+                            ? "billing"
+                            : n.event_type.startsWith("admin")
+                              ? "admin"
+                              : "product"
+                      }
+                    >
+                      {n.event_type.startsWith("security")
+                        ? "🔒"
+                        : n.event_type.startsWith("billing")
+                          ? "💳"
+                          : n.event_type.startsWith("admin")
+                            ? "📢"
+                            : "✨"}
+                    </span>
                     <div className={styles.itemMeta}>
                       <strong className={styles.itemTitle}>{n.title}</strong>
                       <span className={styles.itemSub}>

@@ -4,6 +4,18 @@
  * _app-shared.css: .plan-entry-default/-compact override min-height/
  * padding/border-radius of .app-button-primary on the same element. */
 
+/* Shared top-bar capsule token (account menu, notification bell, etc.). */
+.top-bar-capsule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  border-radius: 999px;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+}
+
 .plan-entry {
   text-decoration: none;
   white-space: nowrap;

@@ -118,10 +118,35 @@
   gap: var(--space-sm);
 }
 
+.itemIcon {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-control);
+  background: hsl(var(--surface-muted));
+  font-size: 0.85rem;
+  flex: none;
+  line-height: 1;
+}
+
+.itemIcon[data-kind="security"] {
+  background: color-mix(in srgb, hsl(var(--destructive)) 12%, hsl(var(--surface-muted)));
+}
+
+.itemIcon[data-kind="billing"] {
+  background: color-mix(in srgb, hsl(var(--warning, 38 92% 50%)) 14%, hsl(var(--surface-muted)));
+}
+
+.itemIcon[data-kind="admin"] {
+  background: color-mix(in srgb, hsl(var(--accent)) 14%, hsl(var(--surface-muted)));
+}
+
 .itemMeta {
   display: grid;
   gap: 0.1rem;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .itemTitle {

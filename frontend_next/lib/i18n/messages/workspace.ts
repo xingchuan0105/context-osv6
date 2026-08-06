@@ -513,6 +513,10 @@ export const workspaceMessages = {
     zh: "正在加载资料预览...",
     en: "Loading source preview...",
   },
+  "workspaceRightRail.viewerSummaryHeading": {
+    zh: "文档摘要",
+    en: "Document summary",
+  },
   "workspaceRightRail.viewerSectionLabel": {
     zh: "资料预览",
     en: "Source viewer",
@@ -552,6 +556,10 @@ export const workspaceMessages = {
   "workspaceCitation.empty": {
     zh: "当前引用没有可展示的文本内容。",
     en: "This citation does not include displayable text.",
+  },
+  "workspaceCitation.openSource": {
+    zh: "跳转来源",
+    en: "Open source",
   },
   "workspaceCitation.error": {
     zh: "加载引用片段失败。",
