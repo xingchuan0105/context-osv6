@@ -95,12 +95,36 @@ impl BillingContext {
         }
         let _ = avrag_billing::grant_signup_bonus(wallet.clone(), owner).await;
         match wallet.ensure_wallet(owner).await {
-            Ok(w) if w.balance_fen > 0 => Ok(()),
+            Ok(w) if w.balance_fen > 0 => {
+                // Soft check: configured platform model should be on the price whitelist.
+                Self::warn_if_platform_model_not_whitelisted();
+                Ok(())
+            }
             Ok(_) => Err(AppError::validation(
                 "payer_funds_required",
                 "Wallet balance is empty. Top up before using platform models for indexing or chat.",
             )),
             Err(e) => Err(AppError::internal(format!("wallet preflight failed: {e}"))),
+        }
+    }
+
+    fn warn_if_platform_model_not_whitelisted() {
+        let provider = std::env::var("AGENT_LLM_PROVIDER")
+            .or_else(|_| std::env::var("LLM_PROVIDER"))
+            .unwrap_or_default();
+        let model = std::env::var("AGENT_LLM_MODEL")
+            .or_else(|_| std::env::var("LLM_MODEL"))
+            .unwrap_or_default();
+        if provider.is_empty() || model.is_empty() {
+            return;
+        }
+        if avrag_billing::official_rates_for(&provider, &model).is_none() {
+            tracing::error!(
+                provider = %provider,
+                model = %model,
+                error_code = "wallet_model_not_whitelisted",
+                "platform LLM model is not on the wallet price whitelist; usage will fail-open unpaid (configure PLATFORM_OFFICIAL_RATES_JSON or change model)"
+            );
         }
     }
 

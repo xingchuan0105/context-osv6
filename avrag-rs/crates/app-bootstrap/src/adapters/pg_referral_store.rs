@@ -153,6 +153,28 @@ impl ReferralStorePort for PgReferralStoreAdapter {
         Ok(count)
     }
 
+    async fn count_rewarded_by_inviter_since(
+        &self,
+        inviter_id: Uuid,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<i64, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx)?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM referrals \
+             WHERE inviter_id = $1 AND status = $2 \
+               AND COALESCE(rewarded_at, created_at) >= $3",
+        )
+        .bind(inviter_id)
+        .bind(REFERRAL_STATUS_REWARDED)
+        .bind(since)
+        .fetch_one(tx.as_mut())
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        Ok(count)
+    }
+
     async fn get_by_invitee(&self, invitee_id: Uuid) -> Result<Option<Referral>, AppError> {
         let pool = self.repo.raw();
         let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx)?;

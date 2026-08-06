@@ -38,8 +38,7 @@ pub async fn start_trial(app: AppHandle) -> Result<TrialResult, IpcApiError> {
         }
     }
 
-    // Client product: no cloud account. Trial is issued and stored locally on-device.
-    // Paid licenses still use Keygen when not in offline/dev mode.
+    // ADR-0010 free client: optional local trial marker only (not a product gate).
     let expires_at = now_unix() + TRIAL_DURATION_SECS;
     mock_activate(
         &format!("LOCAL-TRIAL-{}", uuid::Uuid::new_v4()),
@@ -65,18 +64,7 @@ pub async fn activate_license(
     let app_data_dir =
         app_data_dir(&app).map_err(|e| LicenseError::new("app_data_dir", e))?;
 
-    if is_dev_mode() {
-        return mock_activate(
-            &license_key,
-            &device_id,
-            &app_data_dir,
-            LicenseKind::Standard,
-            None,
-        )
-        .await
-        .map_err(IpcApiError::from);
-    }
-
+    // ADR-0010: no Keygen — store a local free-active marker if user pastes a legacy key.
     activate_with_keygen(&license_key, &device_id, &app_data_dir)
         .await
         .map_err(IpcApiError::from)
@@ -119,59 +107,16 @@ pub async fn heartbeat_license(app: AppHandle) -> Result<HeartbeatResult, IpcApi
         });
     }
 
-    if is_dev_mode() {
-        file.last_heartbeat = Some(now);
-        save_license_file(&app_data_dir, &file).map_err(IpcApiError::from)?;
-        let status = resolve_license_status(Some(&file), &device_id, now, true);
-        return Ok(HeartbeatResult {
-            success: true,
-            status: status.kind,
-            next_heartbeat_at: Some(now + HEARTBEAT_INTERVAL_SECS),
-            message: Some("Dev mode heartbeat recorded".to_string()),
-        });
-    }
-
-    match keygen_validate_and_activate(&file.key, &device_id).await {
-        Ok((license, machine_id)) => {
-            file.last_heartbeat = Some(now);
-            file.revoked = false;
-            if let Some(machine_id) = machine_id {
-                file.machine_id = Some(machine_id);
-            }
-            if let Some(expiry) = license.expiry {
-                file.expires_at = Some(expiry.timestamp());
-            }
-            save_license_file(&app_data_dir, &file).map_err(IpcApiError::from)?;
-            let status = resolve_license_status(Some(&file), &device_id, now, false);
-            Ok(HeartbeatResult {
-                success: true,
-                status: status.kind,
-                next_heartbeat_at: Some(now + HEARTBEAT_INTERVAL_SECS),
-                message: None,
-            })
-        }
-        Err(err) if err.code.contains("SUSPEND") || err.code.contains("REVOK") => {
-            file.revoked = true;
-            save_license_file(&app_data_dir, &file).ok();
-            Ok(HeartbeatResult {
-                success: false,
-                status: LicenseStatusKind::Revoked,
-                next_heartbeat_at: None,
-                message: Some(err.message),
-            })
-        }
-        Err(err) => {
-            let status = resolve_license_status(Some(&file), &device_id, now, false);
-            Ok(HeartbeatResult {
-                success: false,
-                status: status.kind,
-                next_heartbeat_at: file
-                    .last_heartbeat
-                    .map(|last| last + HEARTBEAT_INTERVAL_SECS),
-                message: Some(err.message),
-            })
-        }
-    }
+    // ADR-0010: local heartbeat only (Keygen remote path removed).
+    file.last_heartbeat = Some(now);
+    save_license_file(&app_data_dir, &file).map_err(IpcApiError::from)?;
+    let status = resolve_license_status(Some(&file), &device_id, now, true);
+    Ok(HeartbeatResult {
+        success: true,
+        status: status.kind,
+        next_heartbeat_at: Some(now + HEARTBEAT_INTERVAL_SECS),
+        message: Some("Local free-client heartbeat recorded".to_string()),
+    })
 }
 
 #[tauri::command]
@@ -182,33 +127,7 @@ pub async fn revoke_this_device(app: AppHandle) -> Result<(), IpcApiError> {
         .map_err(IpcApiError::from)?
         .ok_or_else(|| IpcApiError::not_found("No license file found"))?;
 
-    if !is_dev_mode() {
-        if let Some(machine_id) = &file.machine_id {
-            let config = build_keygen_config(&file.key).map_err(IpcApiError::from)?;
-            let _ = keygen_rs::config::set_config(config.clone());
-            let client = reqwest::Client::new();
-            let url = format!(
-                "{}/machines/{}",
-                config.api_url.trim_end_matches('/'),
-                machine_id
-            );
-            let response = client
-                .delete(url)
-                .header("Authorization", format!("License {}", file.key))
-                .header("Accept", "application/vnd.api+json")
-                .send()
-                .await
-                .map_err(|e| IpcApiError::internal(format!("Failed to revoke device: {e}")))?;
-            if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND
-            {
-                return Err(IpcApiError::internal(format!(
-                    "Failed to revoke device: HTTP {}",
-                    response.status()
-                )));
-            }
-        }
-    }
-
+    // ADR-0010: local revoke only (no Keygen machine API).
     file.revoked = true;
     save_license_file(&app_data_dir, &file).map_err(IpcApiError::from)?;
     let _ = device_id;

@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::{PLAN_FREE, PLAN_PLUS, PLAN_PRO};
+use crate::types::{PLAN_FREE, PLAN_PLUS, PLAN_PLUS_ANNUAL, PLAN_PRO, PLAN_PRO_ANNUAL};
 
 /// Canonical subscription tier — the ubiquitous language for billing and quotas.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -34,8 +34,8 @@ impl BillingTier {
     pub fn from_plan_id(plan_id: &str) -> Self {
         match plan_id.trim().to_lowercase().as_str() {
             PLAN_FREE | "" => Self::Free,
-            PLAN_PLUS | "starter" | "team" | "enterprise" => Self::Plus,
-            PLAN_PRO => Self::Pro,
+            PLAN_PLUS | PLAN_PLUS_ANNUAL | "starter" | "team" | "enterprise" => Self::Plus,
+            PLAN_PRO | PLAN_PRO_ANNUAL => Self::Pro,
             _ => Self::Free,
         }
     }

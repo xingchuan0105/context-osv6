@@ -11,8 +11,8 @@ pub const SHARE_WORKSPACE_QUOTA_EXCEEDED: &str = "share_workspace_quota_exceeded
 /// free=3, plus=10, pro=100. Legacy aliases normalize like billing tiers.
 pub fn max_shared_workspaces_for_plan(plan_id: &str) -> i32 {
     match plan_id.trim().to_lowercase().as_str() {
-        "plus" | "starter" | "team" | "enterprise" => 10,
-        "pro" => 100,
+        "plus" | "plus_annual" | "starter" | "team" | "enterprise" => 10,
+        "pro" | "pro_annual" => 100,
         // free, empty, unknown → free defaults
         _ => 3,
     }
@@ -31,7 +31,9 @@ mod tests {
     fn free_plus_pro_limits() {
         assert_eq!(max_shared_workspaces_for_plan("free"), 3);
         assert_eq!(max_shared_workspaces_for_plan("plus"), 10);
+        assert_eq!(max_shared_workspaces_for_plan("plus_annual"), 10);
         assert_eq!(max_shared_workspaces_for_plan("pro"), 100);
+        assert_eq!(max_shared_workspaces_for_plan("pro_annual"), 100);
     }
 
     #[test]

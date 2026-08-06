@@ -5,6 +5,11 @@ use uuid::Uuid;
 pub const PLAN_FREE: &str = "free";
 pub const PLAN_PRO: &str = "pro";
 pub const PLAN_PLUS: &str = "plus";
+/// ADR-0010 §2.1 / §7.4: annual share-slot SKU (~10 months price).
+pub const PLAN_PLUS_ANNUAL: &str = "plus_annual";
+pub const PLAN_PRO_ANNUAL: &str = "pro_annual";
+/// Annual price months equivalent (default 10).
+pub const ANNUAL_PRICE_MONTHS: f64 = 10.0;
 pub const PLAN_DESKTOP_STANDARD: &str = "desktop-standard";
 pub const PLAN_DESKTOP_PRO: &str = "desktop-pro";
 
@@ -13,6 +18,15 @@ pub fn is_desktop_license_plan(plan_id: &str) -> bool {
         plan_id.trim(),
         PLAN_DESKTOP_STANDARD | PLAN_DESKTOP_PRO | "standard" | "desktop_pro"
     ) || plan_id.trim().starts_with("desktop-")
+}
+
+/// Normalize annual SKUs to monthly share quota base plan.
+pub fn base_plan_for_share_quota(plan_id: &str) -> &str {
+    match plan_id.trim() {
+        PLAN_PLUS_ANNUAL => PLAN_PLUS,
+        PLAN_PRO_ANNUAL => PLAN_PRO,
+        other => other,
+    }
 }
 pub const STATUS_ACTIVE: &str = "active";
 pub const STATUS_CANCELED: &str = "canceled";
@@ -32,8 +46,12 @@ pub struct BillingConfig {
     pub creem_webhook_secret: String,
     pub creem_price_pro: String,
     pub creem_price_plus: String,
+    pub creem_price_pro_annual: String,
+    pub creem_price_plus_annual: String,
     pub creem_product_pro: String,
     pub creem_product_plus: String,
+    pub creem_product_pro_annual: String,
+    pub creem_product_plus_annual: String,
     pub creem_product_desktop_standard: String,
     pub creem_product_desktop_pro: String,
     /// Optional Creem one-time product ids for wallet top-up packs (ADR-0010 PR5).
@@ -49,6 +67,8 @@ pub struct BillingConfig {
     pub alipay_notify_url: Option<String>,
     pub alipay_price_pro: String,
     pub alipay_price_plus: String,
+    pub alipay_price_pro_annual: String,
+    pub alipay_price_plus_annual: String,
     pub alipay_price_desktop_standard: String,
     pub alipay_price_desktop_pro: String,
 }
@@ -85,6 +105,11 @@ impl BillingConfig {
                 .unwrap_or_else(|_| "19.00".to_string()),
             creem_price_plus: std::env::var("CREEM_PRICE_PLUS")
                 .unwrap_or_else(|_| "9.00".to_string()),
+            creem_price_pro_annual: std::env::var("CREEM_PRICE_PRO_ANNUAL").unwrap_or_default(),
+            creem_price_plus_annual: std::env::var("CREEM_PRICE_PLUS_ANNUAL").unwrap_or_default(),
+            creem_product_pro_annual: std::env::var("CREEM_PRODUCT_PRO_ANNUAL").unwrap_or_default(),
+            creem_product_plus_annual: std::env::var("CREEM_PRODUCT_PLUS_ANNUAL")
+                .unwrap_or_default(),
 
             // Alipay Config
             alipay_app_id: std::env::var("ALIPAY_APP_ID").unwrap_or_default(),
@@ -100,10 +125,53 @@ impl BillingConfig {
                 .unwrap_or_else(|_| "129.00".to_string()),
             alipay_price_plus: std::env::var("ALIPAY_PRICE_PLUS")
                 .unwrap_or_else(|_| "49.00".to_string()),
+            alipay_price_pro_annual: std::env::var("ALIPAY_PRICE_PRO_ANNUAL").unwrap_or_default(),
+            alipay_price_plus_annual: std::env::var("ALIPAY_PRICE_PLUS_ANNUAL")
+                .unwrap_or_default(),
             alipay_price_desktop_standard: std::env::var("ALIPAY_PRICE_DESKTOP_STANDARD")
                 .unwrap_or_else(|_| "299.00".to_string()),
             alipay_price_desktop_pro: std::env::var("ALIPAY_PRICE_DESKTOP_PRO")
                 .unwrap_or_else(|_| "699.00".to_string()),
+        }
+    }
+
+    fn annual_from_monthly(monthly: &str) -> String {
+        monthly
+            .trim()
+            .parse::<f64>()
+            .map(|m| format!("{:.2}", m * ANNUAL_PRICE_MONTHS))
+            .unwrap_or_else(|_| monthly.to_string())
+    }
+
+    pub fn alipay_price_plus_annual_effective(&self) -> String {
+        if self.alipay_price_plus_annual.trim().is_empty() {
+            Self::annual_from_monthly(&self.alipay_price_plus)
+        } else {
+            self.alipay_price_plus_annual.trim().to_string()
+        }
+    }
+
+    pub fn alipay_price_pro_annual_effective(&self) -> String {
+        if self.alipay_price_pro_annual.trim().is_empty() {
+            Self::annual_from_monthly(&self.alipay_price_pro)
+        } else {
+            self.alipay_price_pro_annual.trim().to_string()
+        }
+    }
+
+    pub fn creem_price_plus_annual_effective(&self) -> String {
+        if self.creem_price_plus_annual.trim().is_empty() {
+            Self::annual_from_monthly(&self.creem_price_plus)
+        } else {
+            self.creem_price_plus_annual.trim().to_string()
+        }
+    }
+
+    pub fn creem_price_pro_annual_effective(&self) -> String {
+        if self.creem_price_pro_annual.trim().is_empty() {
+            Self::annual_from_monthly(&self.creem_price_pro)
+        } else {
+            self.creem_price_pro_annual.trim().to_string()
         }
     }
 
@@ -124,13 +192,21 @@ impl BillingConfig {
         &self.alipay_price_pro
     }
 
-    pub fn creem_checkout_price_for_plan(&self, plan_id: &str) -> Option<&str> {
+    pub fn creem_checkout_price_for_plan(&self, plan_id: &str) -> Option<String> {
         match plan_id.trim() {
             PLAN_PRO if !self.creem_price_pro.trim().is_empty() => {
-                Some(self.creem_price_pro.as_str())
+                Some(self.creem_price_pro.clone())
             }
             PLAN_PLUS if !self.creem_price_plus.trim().is_empty() => {
-                Some(self.creem_price_plus.as_str())
+                Some(self.creem_price_plus.clone())
+            }
+            PLAN_PRO_ANNUAL => {
+                let p = self.creem_price_pro_annual_effective();
+                if p.is_empty() { None } else { Some(p) }
+            }
+            PLAN_PLUS_ANNUAL => {
+                let p = self.creem_price_plus_annual_effective();
+                if p.is_empty() { None } else { Some(p) }
             }
             _ => None,
         }
@@ -144,12 +220,14 @@ impl BillingConfig {
             PLAN_PLUS if !self.creem_product_plus.trim().is_empty() => {
                 Some(self.creem_product_plus.as_str())
             }
-            PLAN_DESKTOP_STANDARD if !self.creem_product_desktop_standard.trim().is_empty() => {
-                Some(self.creem_product_desktop_standard.as_str())
+            PLAN_PRO_ANNUAL if !self.creem_product_pro_annual.trim().is_empty() => {
+                Some(self.creem_product_pro_annual.as_str())
             }
-            PLAN_DESKTOP_PRO if !self.creem_product_desktop_pro.trim().is_empty() => {
-                Some(self.creem_product_desktop_pro.as_str())
+            PLAN_PLUS_ANNUAL if !self.creem_product_plus_annual.trim().is_empty() => {
+                Some(self.creem_product_plus_annual.as_str())
             }
+            // ADR-0010 B6: desktop license SKUs no longer sold.
+            PLAN_DESKTOP_STANDARD | PLAN_DESKTOP_PRO => None,
             _ => None,
         }
     }
@@ -174,26 +252,24 @@ impl BillingConfig {
         }
     }
 
-    pub fn alipay_checkout_price_for_plan(&self, plan_id: &str) -> Option<&str> {
+    pub fn alipay_checkout_price_for_plan(&self, plan_id: &str) -> Option<String> {
         match plan_id.trim() {
             PLAN_PRO if !self.alipay_price_pro.trim().is_empty() => {
-                Some(self.alipay_price_pro.as_str())
+                Some(self.alipay_price_pro.clone())
             }
             PLAN_PLUS if !self.alipay_price_plus.trim().is_empty() => {
-                Some(self.alipay_price_plus.as_str())
+                Some(self.alipay_price_plus.clone())
             }
-            PLAN_DESKTOP_STANDARD if !self.alipay_price_desktop_standard.trim().is_empty() => {
-                Some(self.alipay_price_desktop_standard.as_str())
-            }
-            PLAN_DESKTOP_PRO if !self.alipay_price_desktop_pro.trim().is_empty() => {
-                Some(self.alipay_price_desktop_pro.as_str())
-            }
+            PLAN_PRO_ANNUAL => Some(self.alipay_price_pro_annual_effective()),
+            PLAN_PLUS_ANNUAL => Some(self.alipay_price_plus_annual_effective()),
+            // ADR-0010 B6: desktop license SKUs no longer sold.
+            PLAN_DESKTOP_STANDARD | PLAN_DESKTOP_PRO => None,
             _ => None,
         }
     }
 
     pub fn checkout_available(&self, plan_id: &str) -> bool {
-        if plan_id.trim() == PLAN_FREE {
+        if plan_id.trim() == PLAN_FREE || is_desktop_license_plan(plan_id) {
             return false;
         }
         (self.creem_enabled() && self.creem_checkout_product_for_plan(plan_id).is_some())
@@ -213,7 +289,7 @@ impl BillingConfig {
     pub fn price_label_for_plan(&self, plan_id: &str) -> String {
         match plan_id.trim() {
             PLAN_FREE => "Free".to_string(),
-            PLAN_PLUS | PLAN_PRO => format!(
+            PLAN_PLUS | PLAN_PRO | PLAN_PLUS_ANNUAL | PLAN_PRO_ANNUAL => format!(
                 "{} · {}",
                 self.price_label_cny_for_plan(plan_id),
                 self.price_label_usd_for_plan(plan_id)
@@ -227,6 +303,8 @@ impl BillingConfig {
         match plan_id.trim() {
             PLAN_PLUS => format!("¥{} / 月", self.alipay_price_plus.trim()),
             PLAN_PRO => format!("¥{} / 月", self.alipay_price_pro.trim()),
+            PLAN_PLUS_ANNUAL => format!("¥{} / 年", self.alipay_price_plus_annual_effective()),
+            PLAN_PRO_ANNUAL => format!("¥{} / 年", self.alipay_price_pro_annual_effective()),
             _ => String::new(),
         }
     }
@@ -236,6 +314,8 @@ impl BillingConfig {
         match plan_id.trim() {
             PLAN_PLUS => format!("${} / 月", self.creem_price_plus.trim()),
             PLAN_PRO => format!("${} / 月", self.creem_price_pro.trim()),
+            PLAN_PLUS_ANNUAL => format!("${} / 年", self.creem_price_plus_annual_effective()),
+            PLAN_PRO_ANNUAL => format!("${} / 年", self.creem_price_pro_annual_effective()),
             _ => String::new(),
         }
     }
@@ -259,6 +339,12 @@ impl BillingConfig {
         }
         if price_id == self.creem_product_plus.trim() || price_id == self.creem_price_plus.trim() {
             return Some(PLAN_PLUS);
+        }
+        if price_id == self.creem_product_pro_annual.trim() {
+            return Some(PLAN_PRO_ANNUAL);
+        }
+        if price_id == self.creem_product_plus_annual.trim() {
+            return Some(PLAN_PLUS_ANNUAL);
         }
         None
     }

@@ -6,8 +6,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::types::{
-    BillingConfig, BillingProvider, PLAN_FREE, PLAN_PLUS, PLAN_PRO, Subscription,
-    UsageForecastResponse, UsageHistoryResponse, UsageWindowResponse, WebhookClaim,
+    BillingConfig, BillingProvider, PLAN_FREE, PLAN_PLUS, PLAN_PLUS_ANNUAL, PLAN_PRO,
+    PLAN_PRO_ANNUAL, Subscription, UsageForecastResponse, UsageHistoryResponse,
+    UsageWindowResponse, WebhookClaim,
 };
 
 pub(crate) fn build_plan_payloads(
@@ -15,11 +16,22 @@ pub(crate) fn build_plan_payloads(
     current_plan_id: &str,
     quotas: &HashMap<String, Vec<serde_json::Value>>,
 ) -> Vec<serde_json::Value> {
+    // Share quotas: annual SKUs reuse monthly plan rows (plus/pro).
+    let plus_quotas = quotas
+        .get(PLAN_PLUS)
+        .cloned()
+        .or_else(|| quotas.get(PLAN_PLUS_ANNUAL).cloned())
+        .unwrap_or_default();
+    let pro_quotas = quotas
+        .get(PLAN_PRO)
+        .cloned()
+        .or_else(|| quotas.get(PLAN_PRO_ANNUAL).cloned())
+        .unwrap_or_default();
     vec![
         serde_json::json!({
             "plan_id": PLAN_FREE,
             "name": "Free",
-            "description": "Starter plan for smaller personal workspaces and trial usage.",
+            "description": "Up to 3 share-enabled workspaces; private use free.",
             "price_label": config.price_label_for_plan(PLAN_FREE),
             "price_label_cny": config.price_label_cny_for_plan(PLAN_FREE),
             "price_label_usd": config.price_label_usd_for_plan(PLAN_FREE),
@@ -27,30 +39,59 @@ pub(crate) fn build_plan_payloads(
             "checkout_available": false,
             "current": current_plan_id == PLAN_FREE,
             "quotas": quotas.get(PLAN_FREE).cloned().unwrap_or_default(),
+            "max_shared_workspaces": 3,
         }),
         serde_json::json!({
             "plan_id": PLAN_PLUS,
             "name": "Plus",
-            "description": "Daily quotas for active document ingestion and chat workflows.",
+            "description": "Up to 10 share-enabled workspaces (monthly).",
             "price_label": config.price_label_for_plan(PLAN_PLUS),
             "price_label_cny": config.price_label_cny_for_plan(PLAN_PLUS),
             "price_label_usd": config.price_label_usd_for_plan(PLAN_PLUS),
             "interval": "month",
             "checkout_available": config.checkout_available(PLAN_PLUS),
             "current": current_plan_id == PLAN_PLUS,
-            "quotas": quotas.get(PLAN_PLUS).cloned().unwrap_or_default(),
+            "quotas": plus_quotas.clone(),
+            "max_shared_workspaces": 10,
+        }),
+        serde_json::json!({
+            "plan_id": PLAN_PLUS_ANNUAL,
+            "name": "Plus (annual)",
+            "description": "Plus share quota, billed yearly (~10 months price).",
+            "price_label": config.price_label_for_plan(PLAN_PLUS_ANNUAL),
+            "price_label_cny": config.price_label_cny_for_plan(PLAN_PLUS_ANNUAL),
+            "price_label_usd": config.price_label_usd_for_plan(PLAN_PLUS_ANNUAL),
+            "interval": "year",
+            "checkout_available": config.checkout_available(PLAN_PLUS_ANNUAL),
+            "current": current_plan_id == PLAN_PLUS_ANNUAL,
+            "quotas": plus_quotas,
+            "max_shared_workspaces": 10,
         }),
         serde_json::json!({
             "plan_id": PLAN_PRO,
             "name": "Pro",
-            "description": "Unlimited quota posture for heavier workloads.",
+            "description": "Up to 100 share-enabled workspaces (monthly).",
             "price_label": config.price_label_for_plan(PLAN_PRO),
             "price_label_cny": config.price_label_cny_for_plan(PLAN_PRO),
             "price_label_usd": config.price_label_usd_for_plan(PLAN_PRO),
             "interval": "month",
             "checkout_available": config.checkout_available(PLAN_PRO),
             "current": current_plan_id == PLAN_PRO,
-            "quotas": quotas.get(PLAN_PRO).cloned().unwrap_or_default(),
+            "quotas": pro_quotas.clone(),
+            "max_shared_workspaces": 100,
+        }),
+        serde_json::json!({
+            "plan_id": PLAN_PRO_ANNUAL,
+            "name": "Pro (annual)",
+            "description": "Pro share quota, billed yearly (~10 months price).",
+            "price_label": config.price_label_for_plan(PLAN_PRO_ANNUAL),
+            "price_label_cny": config.price_label_cny_for_plan(PLAN_PRO_ANNUAL),
+            "price_label_usd": config.price_label_usd_for_plan(PLAN_PRO_ANNUAL),
+            "interval": "year",
+            "checkout_available": config.checkout_available(PLAN_PRO_ANNUAL),
+            "current": current_plan_id == PLAN_PRO_ANNUAL,
+            "quotas": pro_quotas,
+            "max_shared_workspaces": 100,
         }),
     ]
 }

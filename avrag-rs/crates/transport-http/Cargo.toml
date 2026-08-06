@@ -35,6 +35,7 @@ tower = { workspace = true, features = ["util"] }
 tower-http.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+reqwest.workspace = true
 tokio-util.workspace = true
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-native-tls"] }
 

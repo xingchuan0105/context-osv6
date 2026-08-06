@@ -271,7 +271,7 @@ impl BillingService {
                 }
                 let amount_cents = config
                     .alipay_checkout_price_for_plan(requested_plan)
-                    .map(BillingConfig::decimal_price_to_cents)
+                    .map(|p| BillingConfig::decimal_price_to_cents(&p))
                     .unwrap_or(0);
                 if amount_cents <= 0 {
                     return ApiResponse::err(

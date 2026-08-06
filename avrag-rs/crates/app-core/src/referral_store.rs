@@ -1,6 +1,7 @@
 //! Referral persistence boundary — SQL implementations live in bootstrap adapters.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use common::AppError;
 use uuid::Uuid;
 
@@ -23,6 +24,16 @@ pub trait ReferralStorePort: Send + Sync {
 
     /// Count only `status = rewarded` for inviter quota.
     async fn count_rewarded_by_inviter(&self, inviter_id: Uuid) -> Result<i64, AppError>;
+
+    /// Count rewarded invites for inviter since `since` (daily antifraud cap).
+    async fn count_rewarded_by_inviter_since(
+        &self,
+        inviter_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, AppError> {
+        let _ = since;
+        self.count_rewarded_by_inviter(inviter_id).await
+    }
 
     async fn get_by_invitee(&self, invitee_id: Uuid) -> Result<Option<Referral>, AppError>;
 

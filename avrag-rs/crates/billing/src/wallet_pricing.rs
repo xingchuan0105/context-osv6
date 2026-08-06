@@ -7,8 +7,13 @@
 //!
 //! Official rates are fen (分) per 1_000_000 tokens for a small whitelist of
 //! platform-proxy models (DeepSeek flash / Qwen flash / SiliconFlow embed).
-//! v1 keeps rates as code constants — no DB price table.
+//!
+//! Default: code constants. Ops override via `PLATFORM_OFFICIAL_RATES_JSON`:
+//! ```json
+//! [{"provider":"deepseek","model_contains":"flash","input":100,"cache":2,"output":200}]
+//! ```
 
+use std::sync::OnceLock;
 use uuid::Uuid;
 
 /// Explicit list-price multiplier: official × 1.5 (ADR-0010 §3.1 / §7.4).
@@ -50,14 +55,55 @@ const RATES_SILICONFLOW_EMBED: OfficialRates = OfficialRates {
     output_fen_per_mtok: 0.0,
 };
 
+#[derive(Debug, Clone, serde::Deserialize)]
+struct EnvRateRow {
+    provider: Option<String>,
+    model_contains: String,
+    input: f64,
+    #[serde(default)]
+    cache: f64,
+    #[serde(default)]
+    output: f64,
+}
+
+fn env_rate_overrides() -> &'static [EnvRateRow] {
+    static ROWS: OnceLock<Vec<EnvRateRow>> = OnceLock::new();
+    ROWS.get_or_init(|| {
+        let raw = std::env::var("PLATFORM_OFFICIAL_RATES_JSON").unwrap_or_default();
+        if raw.trim().is_empty() {
+            return Vec::new();
+        }
+        serde_json::from_str(&raw).unwrap_or_else(|e| {
+            eprintln!("PLATFORM_OFFICIAL_RATES_JSON parse failed; using code defaults: {e}");
+            Vec::new()
+        })
+    })
+}
+
 /// Resolve official fen/1M rates for a **whitelist** provider+model pair.
 ///
 /// ADR-0010 §3.1: unknown models return `None` (do not silently price as flash).
 /// Match is by stable substrings; marketing names can change — ops should align
 /// env model ids with these patterns or extend this table deliberately.
+/// Optional `PLATFORM_OFFICIAL_RATES_JSON` overrides take precedence.
 pub fn official_rates_for(provider: &str, model: &str) -> Option<OfficialRates> {
     let p = provider.trim().to_ascii_lowercase();
     let m = model.trim().to_ascii_lowercase();
+
+    for row in env_rate_overrides() {
+        let prov_ok = row
+            .provider
+            .as_ref()
+            .map(|x| p.contains(&x.to_ascii_lowercase()))
+            .unwrap_or(true);
+        if prov_ok && m.contains(&row.model_contains.to_ascii_lowercase()) {
+            return Some(OfficialRates {
+                input_fen_per_mtok: row.input,
+                cache_fen_per_mtok: row.cache,
+                output_fen_per_mtok: row.output,
+            });
+        }
+    }
 
     // Embedding whitelist (SiliconFlow / names containing embed/bge).
     if m.contains("embed") || m.contains("bge-m3") || m.contains("bge_m3") {

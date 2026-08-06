@@ -8,6 +8,7 @@ mod mcp;
 mod middleware;
 mod routes;
 mod sse_order;
+mod turnstile;
 
 pub use sse_order::{SseEventOrderTracker, validate_chat_sse_event_order};
 

@@ -1,22 +1,18 @@
-//! License file I/O, verification, status resolution, and Keygen calls.
+//! License file I/O and status resolution (ADR-0010: free client, no Keygen product path).
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use keygen_rs::config::{self, KeygenConfig};
-use keygen_rs::errors::Error as KeygenError;
-use keygen_rs::license::SchemeCode;
 use machineid_rs::{Encryption, HWIDComponent, IdBuilder};
 use tauri::{AppHandle, Emitter, Manager};
 use url::Url;
 
 use super::types::*;
 
+/// ADR-0010: Keygen commercial path retired — always offline/local license mode.
 pub fn is_dev_mode() -> bool {
-    KEYGEN_PUBLIC_KEY
-        .map(str::trim)
-        .is_none_or(str::is_empty)
+    true
 }
 
 pub fn compute_device_id() -> Result<String, String> {
@@ -365,115 +361,20 @@ pub(crate) fn build_dev_certificate(
     format!("{payload_b64}.dev")
 }
 
-fn infer_license_kind(metadata: &std::collections::HashMap<String, serde_json::Value>) -> LicenseKind {
-    metadata
-        .get("tier")
-        .and_then(|value| value.as_str())
-        .map(|tier| match tier.to_ascii_lowercase().as_str() {
-            "pro" => LicenseKind::Pro,
-            "standard" => LicenseKind::Standard,
-            _ => LicenseKind::Standard,
-        })
-        .unwrap_or(LicenseKind::Standard)
-}
-
-pub(crate) fn build_keygen_config(license_key: &str) -> Result<KeygenConfig, LicenseError> {
-    let account = std::env::var("KEYGEN_ACCOUNT_ID").map_err(|_| {
-        LicenseError::new(
-            "keygen_config_missing",
-            "KEYGEN_ACCOUNT_ID environment variable is required",
-        )
-    })?;
-    let product = std::env::var("KEYGEN_PRODUCT_ID").map_err(|_| {
-        LicenseError::new(
-            "keygen_config_missing",
-            "KEYGEN_PRODUCT_ID environment variable is required",
-        )
-    })?;
-    let public_key = KEYGEN_PUBLIC_KEY
-        .ok_or_else(|| {
-            LicenseError::new(
-                "public_key_missing",
-                "KEYGEN_PUBLIC_KEY must be set at compile time",
-            )
-        })?
-        .trim()
-        .to_string();
-
-    let mut config = KeygenConfig::license_key(account, product, license_key.to_string(), public_key);
-    config.api_url = std::env::var("KEYGEN_API_URL")
-        .unwrap_or_else(|_| "https://license.avrag.com/v1".to_string());
-    Ok(config)
-}
-
-pub(crate) async fn keygen_validate_and_activate(
-    license_key: &str,
-    device_id: &str,
-) -> Result<(keygen_rs::license::License, Option<String>), LicenseError> {
-    let config = build_keygen_config(license_key)?;
-    let _ = config::set_config(config.clone());
-
-    match keygen_rs::validate(&[device_id.to_string()], &[]).await {
-        Ok(license) => Ok((license, None)),
-        Err(KeygenError::LicenseNotActivated { license, .. }) => {
-            let machine = license
-                .activate(device_id, &[])
-                .await
-                .map_err(keygen_error_to_license_error)?;
-            Ok((license, Some(machine.id)))
-        }
-        Err(err) => Err(keygen_error_to_license_error(err)),
-    }
-}
-
-fn keygen_error_to_license_error(err: KeygenError) -> LicenseError {
-    let (code, message) = match err {
-        KeygenError::LicenseSuspended { code, detail, .. } => (code, detail),
-        KeygenError::LicenseExpired { code, detail, .. } => (code, detail),
-        KeygenError::LicenseTooManyMachines { code, detail, .. } => (code, detail),
-        KeygenError::HeartbeatDead { code, detail, .. } => (code, detail),
-        KeygenError::LicenseKeyInvalid { code, detail, .. } => (code, detail),
-        other => ("keygen_error".to_string(), other.to_string()),
-    };
-    LicenseError { code, message }
-}
-
+/// ADR-0010: former Keygen activate path — local free bind only (no remote license server).
 pub(crate) async fn activate_with_keygen(
     license_key: &str,
     device_id: &str,
     app_data_dir: &Path,
 ) -> Result<ActivationResult, LicenseError> {
-    let (license, machine_id) = keygen_validate_and_activate(license_key, device_id).await?;
-    let now = now_unix();
-    let expires_at = license.expiry.map(|dt| dt.timestamp());
-    let kind = infer_license_kind(&license.metadata);
-
-    let certificate = if let Ok(data) = keygen_rs::verify(SchemeCode::Ed25519Sign, &license.key) {
-        let payload_b64 = URL_SAFE_NO_PAD.encode(data);
-        format!("{payload_b64}.{}", license.key.rsplit('.').next().unwrap_or("keygen"))
-    } else {
-        build_dev_certificate(device_id, expires_at, app_major_version())
-    };
-
-    let file = LicenseFile {
-        key: license_key.to_string(),
-        license_id: license.id,
-        device_id: device_id.to_string(),
-        machine_id,
-        certificate,
-        kind,
-        issued_at: now,
-        expires_at,
-        last_heartbeat: Some(now),
-        revoked: false,
-    };
-    save_license_file(app_data_dir, &file)?;
-
-    Ok(ActivationResult {
-        license_id: file.license_id.clone(),
-        kind: file.kind,
-        status: LicenseStatusKind::Active,
-    })
+    mock_activate(
+        license_key,
+        device_id,
+        app_data_dir,
+        LicenseKind::Standard,
+        None,
+    )
+    .await
 }
 
 pub(crate) async fn mock_activate(

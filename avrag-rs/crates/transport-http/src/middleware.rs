@@ -166,6 +166,26 @@ pub(crate) async fn request_context_middleware(
                 )
                     .into_response();
             }
+            // ADR-0010 §9: anonymous share chat requires Turnstile when secret is configured.
+            if visitor.is_none() {
+                let body_json = serde_json::json!({});
+                if let Err(e) = crate::turnstile::ensure_turnstile_if_required(
+                    &headers,
+                    &body_json,
+                    Some(edge_ip.as_str()),
+                )
+                .await
+                {
+                    return (
+                        StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::BAD_REQUEST),
+                        Json(json!({
+                            "error": e.code(),
+                            "message": e.message(),
+                        })),
+                    )
+                        .into_response();
+                }
+            }
             // Per-share cost-oriented rate limit (application layer, ADR-0010 §9).
             let share_rpm: u32 = std::env::var("SHARE_CHAT_RATE_LIMIT_RPM")
                 .ok()

@@ -96,11 +96,7 @@ impl PaymentProvider for AlipayAdapter {
         plan_id: &str,
         order_ref: &str,
     ) -> Result<CheckoutSession, ProviderError> {
-        let Some(amount_str) = self
-            .config
-            .alipay_checkout_price_for_plan(plan_id)
-            .map(str::to_string)
-        else {
+        let Some(amount_str) = self.config.alipay_checkout_price_for_plan(plan_id) else {
             return Err(ProviderError::Request(format!(
                 "requested billing plan is not configured for Alipay checkout: {plan_id}"
             )));

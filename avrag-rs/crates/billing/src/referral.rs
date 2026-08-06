@@ -133,6 +133,30 @@ async fn finish_pending(
         });
     }
 
+    // ADR-0010 antifraud: cap rewarded invites per inviter per UTC day.
+    let max_daily: i64 = std::env::var("REFERRAL_MAX_REWARDS_PER_DAY")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    if max_daily > 0 {
+        let day_start = chrono::Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .map(|n| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(n, chrono::Utc))
+            .unwrap_or_else(chrono::Utc::now);
+        let today = referral_store
+            .count_rewarded_by_inviter_since(pending.inviter_id, day_start)
+            .await?;
+        if today >= max_daily {
+            let rejected = referral_store
+                .mark_rejected(pending.id, app_core::REFERRAL_REJECT_DAILY_CAP)
+                .await?;
+            return Ok(ApplyReferralOutcome::RecordedRejected {
+                referral: rejected,
+            });
+        }
+    }
+
     let inviter_grant = wallet
         .apply_ledger_entry(&ApplyLedgerInput {
             user_id: pending.inviter_id,

@@ -14,6 +14,7 @@ pub const REFERRAL_STATUS_REJECTED: &str = "rejected";
 
 pub const REFERRAL_REJECT_SELF_INVITE: &str = "self_invite";
 pub const REFERRAL_REJECT_QUOTA_EXHAUSTED: &str = "quota_exhausted";
+pub const REFERRAL_REJECT_DAILY_CAP: &str = "daily_cap";
 pub const REFERRAL_REJECT_CODE_INVALID: &str = "code_invalid";
 pub const REFERRAL_REJECT_CODE_REVOKED: &str = "code_revoked";
 

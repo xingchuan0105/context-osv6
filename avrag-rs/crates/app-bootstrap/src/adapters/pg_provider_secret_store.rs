@@ -310,12 +310,32 @@ impl ProviderSecretStorePort for PgProviderSecretStoreAdapter {
             AppError::internal("byok decrypted payload is not utf-8")
         })?;
 
+        let secret_id: Uuid = row.try_get("id").map_err(map_sqlx)?;
+        let provider: String = row.try_get("provider").map_err(map_sqlx)?;
+        let ws: Option<Uuid> = row.try_get("workspace_id").map_err(map_sqlx)?;
+        // ADR-0010 §3.2: audit resolve without secret material (best-effort).
+        if let Err(e) = sqlx::query(
+            "INSERT INTO provider_secret_audit \
+             (owner_user_id, secret_id, purpose, provider, action, workspace_id) \
+             VALUES ($1, $2, $3, $4, 'resolve', $5)",
+        )
+        .bind(owner_user_id)
+        .bind(secret_id)
+        .bind(purpose_s)
+        .bind(&provider)
+        .bind(ws)
+        .execute(self.repo.raw())
+        .await
+        {
+            tracing::warn!(error = %e, "provider_secret_audit insert failed");
+        }
+
         Ok(Some(ResolvedProviderSecret {
-            id: row.try_get("id").map_err(map_sqlx)?,
+            id: secret_id,
             owner_user_id: row.try_get("owner_user_id").map_err(map_sqlx)?,
-            workspace_id: row.try_get("workspace_id").map_err(map_sqlx)?,
+            workspace_id: ws,
             purpose,
-            provider: row.try_get("provider").map_err(map_sqlx)?,
+            provider,
             base_url: row.try_get("base_url").map_err(map_sqlx)?,
             model_hint: row.try_get("model_hint").map_err(map_sqlx)?,
             api_key,
