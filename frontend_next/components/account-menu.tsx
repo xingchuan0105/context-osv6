@@ -7,25 +7,28 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth/context";
 import { formatUiMessage } from "../lib/i18n/messages";
 import type { UiLocale } from "../lib/i18n/config";
+import { useUiPreferences } from "../lib/ui-preferences";
 import {
   SettingsQuickModal,
   type SettingsQuickTab,
 } from "./settings/settings-quick-modal";
 
 /**
- * Unified account menu shared by the dashboard header and the workspace top
- * bar. Styles come from globals.css (.dashboard-account-menu* /
- * .dashboard-header-settings) so both surfaces render identically.
+ * Unified account menu (dashboard + workspace top bar).
+ * W3: user card, widen panel, logout stays here; appearance/language flyouts.
  */
 export function AccountMenu({ locale }: { locale: UiLocale }) {
   const auth = useAuth();
   const router = useRouter();
+  const { theme, setTheme, setLocale } = useUiPreferences();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [flyout, setFlyout] = useState<"theme" | "locale" | null>(null);
   const [quickTab, setQuickTab] = useState<SettingsQuickTab | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!menuOpen) {
+      setFlyout(null);
       return;
     }
     function onPointerDown(event: MouseEvent) {
@@ -57,6 +60,12 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
     setQuickTab(tab);
   }
 
+  const displayName =
+    auth.user?.full_name?.trim() ||
+    auth.user?.email?.split("@")[0] ||
+    formatUiMessage(locale, "dashboardAccountLink");
+  const email = auth.user?.email ?? "";
+
   return (
     <>
       <div className="dashboard-account-menu" ref={menuRef}>
@@ -64,25 +73,14 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           aria-label={formatUiMessage(locale, "dashboardAccountLink")}
-          className="dashboard-header-settings"
+          className="dashboard-header-settings top-bar-capsule"
           data-testid="dashboard-account-menu-trigger"
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
         >
-          <svg
-            aria-hidden="true"
-            className="dashboard-header-icon"
-            fill="none"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-            viewBox="0 0 24 24"
-          >
-            <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-            <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" strokeLinecap="round" />
-          </svg>
-          <span>{formatUiMessage(locale, "dashboardAccountLink")}</span>
+          <span className="dashboard-account-trigger-label">
+            {formatUiMessage(locale, "dashboardAccountLink")}
+          </span>
         </button>
         {menuOpen ? (
           <div
@@ -90,14 +88,18 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
             data-testid="dashboard-account-menu"
             role="menu"
           >
-            <button
-              className="dashboard-account-menu-item"
-              role="menuitem"
-              type="button"
-              onClick={() => openQuick("profile")}
-            >
-              {formatUiMessage(locale, "dashboardProfileLink")}
-            </button>
+            <div className="dashboard-account-user-card" data-testid="account-user-card">
+              <div className="dashboard-account-user-avatar" aria-hidden="true">
+                {(displayName[0] || "U").toUpperCase()}
+              </div>
+              <div className="dashboard-account-user-meta">
+                <strong className="dashboard-account-user-name">{displayName}</strong>
+                {email ? (
+                  <span className="dashboard-account-user-email">{email}</span>
+                ) : null}
+              </div>
+            </div>
+
             <button
               className="dashboard-account-menu-item"
               role="menuitem"
@@ -110,10 +112,95 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               className="dashboard-account-menu-item"
               role="menuitem"
               type="button"
-              onClick={() => openQuick("appearance")}
+              onClick={() => openQuick("profile")}
+            >
+              {formatUiMessage(locale, "dashboardProfileLink")}
+            </button>
+            <button
+              className="dashboard-account-menu-item"
+              role="menuitem"
+              type="button"
+              onClick={() => openQuick("preferences")}
             >
               {formatUiMessage(locale, "dashboardAppearanceLink")}
             </button>
+
+            <div className="dashboard-account-flyout-wrap">
+              <button
+                className="dashboard-account-menu-item"
+                role="menuitem"
+                type="button"
+                onClick={() => setFlyout((f) => (f === "theme" ? null : "theme"))}
+              >
+                {formatUiMessage(locale, "settings.appearance.themeLabel")} ▸
+              </button>
+              {flyout === "theme" ? (
+                <div className="dashboard-account-flyout" role="menu">
+                  {(["system", "light", "dark"] as const).map((value) => (
+                    <button
+                      className="dashboard-account-menu-item"
+                      key={value}
+                      role="menuitem"
+                      type="button"
+                      onClick={() => {
+                        setTheme(value);
+                        setFlyout(null);
+                      }}
+                    >
+                      {theme === value ? "✓ " : ""}
+                      {formatUiMessage(
+                        locale,
+                        value === "system"
+                          ? "settings.appearance.theme.system"
+                          : value === "light"
+                            ? "settings.appearance.theme.light"
+                            : "settings.appearance.theme.dark",
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="dashboard-account-flyout-wrap">
+              <button
+                className="dashboard-account-menu-item"
+                role="menuitem"
+                type="button"
+                onClick={() => setFlyout((f) => (f === "locale" ? null : "locale"))}
+              >
+                {formatUiMessage(locale, "settings.appearance.localeLabel")} ▸
+              </button>
+              {flyout === "locale" ? (
+                <div className="dashboard-account-flyout" role="menu">
+                  <button
+                    className="dashboard-account-menu-item"
+                    role="menuitem"
+                    type="button"
+                    onClick={() => {
+                      setLocale("zh-CN");
+                      setFlyout(null);
+                    }}
+                  >
+                    {locale === "zh-CN" ? "✓ " : ""}
+                    {formatUiMessage(locale, "workspaceLanguageChinese")}
+                  </button>
+                  <button
+                    className="dashboard-account-menu-item"
+                    role="menuitem"
+                    type="button"
+                    onClick={() => {
+                      setLocale("en");
+                      setFlyout(null);
+                    }}
+                  >
+                    {locale === "en" ? "✓ " : ""}
+                    {formatUiMessage(locale, "workspaceLanguageEnglish")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
             <Link
               className="dashboard-account-menu-item"
               href="/settings?tab=security"
@@ -124,12 +211,21 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
             </Link>
             <Link
               className="dashboard-account-menu-item"
-              href="/settings?tab=notifications"
+              href="/settings"
               role="menuitem"
               onClick={() => setMenuOpen(false)}
             >
-              {formatUiMessage(locale, "settingsQuickModal.notificationsLink")}
+              {locale === "zh-CN" ? "所有设置" : "All settings"}
             </Link>
+            <Link
+              className="dashboard-account-menu-item"
+              href="/help"
+              role="menuitem"
+              onClick={() => setMenuOpen(false)}
+            >
+              {locale === "zh-CN" ? "帮助" : "Help"}
+            </Link>
+
             <button
               className="dashboard-account-menu-item dashboard-account-menu-danger"
               data-testid="dashboard-logout"

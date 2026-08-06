@@ -1,3 +1,99 @@
+/* Settings shell — centered modal-like frame (token §1.3). */
+
+.shell {
+  width: min(1000px, 92vw);
+  height: min(86vh, 720px);
+  max-height: min(86vh, 720px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-card);
+  background: hsl(var(--card));
+  overflow: hidden;
+}
+
+.shellHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid hsl(var(--border-whisper));
+  flex-shrink: 0;
+}
+
+.shellTitle {
+  margin: 0;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shellBody {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.navRail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-right: 1px solid hsl(var(--border-whisper));
+  background: hsl(var(--surface-muted) / 0.35);
+  overflow: auto;
+}
+
+.searchLabel {
+  display: block;
+}
+
+.searchInput {
+  width: 100%;
+}
+
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.navItem:hover {
+  background: hsl(var(--surface-muted));
+}
+
+.navItemActive {
+  background: hsl(var(--card));
+  box-shadow: inset 0 0 0 1px hsl(var(--border));
+  font-weight: var(--font-weight-semibold);
+}
+
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-lg) var(--space-xl);
+}
+
 .card {
   display: grid;
   gap: var(--space-4);
@@ -6,4 +102,16 @@
 .backRow {
   display: flex;
   justify-content: flex-start;
+}
+
+@media (max-width: 720px) {
+  .shellBody {
+    grid-template-columns: 1fr;
+  }
+
+  .navRail {
+    border-right: 0;
+    border-bottom: 1px solid hsl(var(--border-whisper));
+    max-height: 12rem;
+  }
 }

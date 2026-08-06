@@ -215,16 +215,15 @@ describe("DashboardSurface", () => {
 
     await user.click(screen.getByTestId("dashboard-account-menu-trigger"));
     expect(screen.getByTestId("dashboard-account-menu")).toBeTruthy();
-    // Profile / billing / appearance open in-page modals (buttons); security/notifications stay links.
+    // Profile / billing / preferences open in-page modals; security + all-settings stay links.
     expect(screen.getByRole("menuitem", { name: "个人资料" }).tagName).toBe("BUTTON");
     expect(screen.getByRole("menuitem", { name: "会员状态" }).tagName).toBe("BUTTON");
-    expect(screen.getByRole("menuitem", { name: "外观" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "偏好" }).tagName).toBe("BUTTON");
     expect(screen.getByRole("menuitem", { name: "安全" }).getAttribute("href")).toBe(
       "/settings?tab=security",
     );
-    expect(screen.getByRole("menuitem", { name: "通知" }).getAttribute("href")).toBe(
-      "/settings?tab=notifications",
-    );
+    expect(screen.getByTestId("account-user-card")).toBeTruthy();
+    expect(screen.getByTestId("dashboard-logout")).toBeTruthy();
 
     await user.click(screen.getByTestId("dashboard-logout"));
     await waitFor(() => {

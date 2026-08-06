@@ -119,21 +119,26 @@ a.dashboard-brand-title:hover {
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  min-height: calc(var(--font-size-shell-title) * 2.1);
-  padding: 0 var(--space-lg);
+  min-height: 2.25rem;
+  height: 2.25rem;
+  padding: 0 var(--space-md);
   border: 1px solid hsl(var(--dashboard-border));
-  border-radius: var(--radius-button);
-  background: hsl(var(--dashboard-surface));
-  color: hsl(var(--dashboard-muted-foreground));
+  border-radius: 999px;
+  background: hsl(var(--dashboard-surface-muted, var(--dashboard-surface)));
+  color: hsl(var(--dashboard-foreground));
   font-size: var(--font-size-control);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-control);
+  line-height: 1;
   transition:
     background var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
     box-shadow var(--duration-fast) var(--ease-standard),
     transform var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-account-trigger-label {
+  display: inline-block;
 }
 
 .dashboard-header-settings:hover {
@@ -167,20 +172,87 @@ a.dashboard-brand-title:hover {
   top: calc(100% + 0.4rem);
   right: 0;
   z-index: var(--z-dropdown);
-  min-width: 10.5rem;
+  /* W3 token: 224–240px wide, max 70vh */
+  width: min(240px, 92vw);
+  min-width: 224px;
+  max-height: 70vh;
+  overflow: auto;
   display: grid;
-  gap: var(--space-xxs);
+  gap: 2px;
   padding: var(--space-sm);
   border: 1px solid hsl(var(--dashboard-border));
   border-radius: var(--radius-card);
   background: hsl(var(--dashboard-surface));
+  box-shadow: var(--shadow-elevated, 0 8px 28px hsl(0 0% 0% / 0.12));
+}
+
+.dashboard-account-user-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 4rem;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-xs);
+  border-radius: var(--radius-control);
+  background: hsl(var(--dashboard-surface-muted) / 0.55);
+}
+
+.dashboard-account-user-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: hsl(var(--dashboard-surface));
+  color: hsl(var(--dashboard-foreground));
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: inset 0 0 0 1px hsl(var(--dashboard-border));
+  flex: none;
+}
+
+.dashboard-account-user-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dashboard-account-user-name {
+  font-size: var(--font-size-control);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-account-user-email {
+  font-size: var(--font-size-caption);
+  color: hsl(var(--dashboard-muted-foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-account-flyout-wrap {
+  position: relative;
+}
+
+.dashboard-account-flyout {
+  margin: 0 0 var(--space-xs);
+  padding: var(--space-xxs);
+  border: 1px solid hsl(var(--dashboard-border));
+  border-radius: var(--radius-control);
+  background: hsl(var(--dashboard-surface));
+  /* W3 flyout ~184–200px */
+  min-width: 11.5rem;
 }
 
 .dashboard-account-menu-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: var(--space-sm) var(--space-md);
+  min-height: 2.25rem; /* ~36px row */
+  padding: 0.45rem var(--space-md);
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;

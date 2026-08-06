@@ -10,8 +10,9 @@ import type { UiLocale } from "../../lib/i18n/config";
 import { AppearancePanel } from "./settings-appearance-panel";
 import { BillingPanel } from "./settings-billing-panel";
 import { ProfilePanel } from "./settings-profile-panel";
+import { SecurityPanel } from "./settings-security-panel";
 
-export type SettingsQuickTab = "profile" | "appearance" | "billing";
+export type SettingsQuickTab = "profile" | "preferences" | "billing" | "security";
 
 type SettingsQuickModalProps = {
   open: boolean;
@@ -24,15 +25,23 @@ function titleForTab(locale: UiLocale, tab: SettingsQuickTab): string {
   switch (tab) {
     case "profile":
       return formatUiMessage(locale, "dashboardProfileLink");
-    case "appearance":
+    case "preferences":
       return formatUiMessage(locale, "dashboardAppearanceLink");
     case "billing":
       return formatUiMessage(locale, "dashboardBillingLink");
+    case "security":
+      return formatUiMessage(locale, "settingsQuickModal.securityLink");
   }
 }
 
 function fullPageHref(tab: SettingsQuickTab): string {
-  return `/settings?tab=${tab}`;
+  const map: Record<SettingsQuickTab, string> = {
+    profile: "profile",
+    preferences: "preferences",
+    billing: "billing",
+    security: "security",
+  };
+  return `/settings?tab=${map[tab]}`;
 }
 
 export function SettingsQuickModal({
@@ -75,15 +84,16 @@ export function SettingsQuickModal({
               {formatUiMessage(locale, "settings.billing.managePlanAction")}
             </button>
           ) : (
-            <Link className="app-link app-link-muted" href="/settings?tab=security">
+            <Link className="app-link app-link-muted" href="/settings">
               {formatUiMessage(locale, "settingsQuickModal.moreSettings")}
             </Link>
           )
         }
       >
         {tab === "profile" ? <ProfilePanel /> : null}
-        {tab === "appearance" ? <AppearancePanel /> : null}
+        {tab === "preferences" ? <AppearancePanel /> : null}
         {tab === "billing" ? <BillingPanel hideManagePlan /> : null}
+        {tab === "security" ? <SecurityPanel /> : null}
       </AppModal>
       <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </>

@@ -14,8 +14,12 @@ export const settingsMessages = {
     en: "Membership",
   },
   "settings.tabs.appearance": {
-    zh: "外观",
-    en: "Appearance",
+    zh: "偏好",
+    en: "Preferences",
+  },
+  "settings.tabs.preferences": {
+    zh: "偏好",
+    en: "Preferences",
   },
   "settings.tabs.notifications": {
     zh: "通知",

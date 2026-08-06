@@ -1,15 +1,44 @@
-.choiceGrid {
+.rowCard {
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.rowLabel {
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-semibold);
+  color: hsl(var(--foreground));
+}
+
+.row select {
+  min-width: 11rem;
+  max-width: 100%;
+}
+
+.rowHint {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: hsl(var(--muted-foreground));
+  line-height: 1.45;
+}
+
+/* legacy class kept for any residual CSS refs */
+.choiceGrid {
+  display: none;
 }
 
 .mutedSpan {
-  color: hsl(var(--muted-foreground));
+  display: none;
 }
 
 .summaryCard {
-  display: grid;
-  gap: var(--space-sm);
+  display: none;
 }
-

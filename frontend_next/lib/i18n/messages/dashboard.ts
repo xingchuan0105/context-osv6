@@ -122,8 +122,8 @@ export const dashboardMessages = {
     en: "Account",
   },
   dashboardAppearanceLink: {
-    zh: "外观",
-    en: "Appearance",
+    zh: "偏好",
+    en: "Preferences",
   },
   dashboardProfileLink: {
     zh: "个人资料",

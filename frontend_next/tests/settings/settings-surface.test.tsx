@@ -319,15 +319,14 @@ describe("SettingsSurface", () => {
     expect(screen.getByRole("link", { name: "Profile" }).getAttribute("href")).toBe(
       "/settings?tab=profile",
     );
-    expect(screen.getByRole("link", { name: "Appearance" }).getAttribute("href")).toBe(
-      "/settings?tab=appearance",
+    expect(screen.getByRole("link", { name: "Preferences" }).getAttribute("href")).toBe(
+      "/settings?tab=preferences",
     );
     expect(screen.getByRole("link", { name: "Security" }).getAttribute("href")).toBe(
       "/settings?tab=security",
     );
-    expect(screen.getByRole("link", { name: "Notifications" }).getAttribute("href")).toBe(
-      "/settings?tab=notifications",
-    );
+    expect(screen.queryByRole("link", { name: "Notifications" })).toBeNull();
+    expect(screen.getByTestId("settings-nav-search")).toBeTruthy();
 
     await waitFor(() => {
       // Current plan summary only; manage subscription is a single CTA → /pricing.
@@ -338,7 +337,6 @@ describe("SettingsSurface", () => {
       expect(screen.queryByTestId("settings-change-plan")).toBeNull();
       expect(screen.queryByTestId("settings-plan-picker")).toBeNull();
       expect(screen.getByTestId("settings-back-dashboard")).toBeTruthy();
-      expect(screen.getByTestId("product-chrome-footer")).toBeTruthy();
     });
   });
 
@@ -358,22 +356,39 @@ describe("SettingsSurface", () => {
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Owner Updated");
   });
 
-  it("switches theme and locale from the appearance panel", async () => {
+  it("switches theme and locale from the preferences panel dropdowns", async () => {
     const user = userEvent.setup();
 
-    renderWithQuery(<SettingsSurface activeTab="appearance" />);
+    renderWithQuery(<SettingsSurface activeTab="preferences" />);
 
-    await user.click(screen.getByRole("button", { name: /Dark/i }));
-    await user.click(screen.getByRole("button", { name: /English/i }));
+    await user.selectOptions(screen.getByTestId("settings-theme-select"), "dark");
+    await user.selectOptions(screen.getByTestId("settings-locale-select"), "en");
 
-    expect(screen.getAllByText("Dark").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("English").length).toBeGreaterThan(0);
+    expect(mocks.setThemeMock).toHaveBeenCalledWith("dark");
+    expect(mocks.setLocaleMock).toHaveBeenCalledWith("en");
   });
 
-  it("saves notification preferences and marks a notification as read", async () => {
+  it("maps legacy appearance/notifications tabs via normalizeSettingsTab", () => {
+    expect(normalizeSettingsTab("appearance")).toBe("preferences");
+    expect(normalizeSettingsTab("notifications")).toBe("billing");
+  });
+
+  it("expands change-password only after clicking the action", async () => {
     const user = userEvent.setup();
 
-    renderWithQuery(<SettingsSurface activeTab="notifications" />);
+    renderWithQuery(<SettingsSurface activeTab="security" />);
+
+    expect(screen.queryByLabelText("Current password")).toBeNull();
+    await user.click(screen.getByTestId("settings-change-password-expand"));
+    expect(screen.getByLabelText("Current password")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Sign out|Log out|退出/i })).toBeNull();
+  });
+
+  it.skip("saves notification preferences and marks a notification as read", async () => {
+    // Notifications leave settings in W3 (W4 bell). Kept skipped for history.
+    const user = userEvent.setup();
+
+    renderWithQuery(<SettingsSurface activeTab={"billing" as SettingsTab} />);
 
     await waitFor(() => {
       expect(screen.getByText("Security alert")).toBeTruthy();
@@ -387,7 +402,6 @@ describe("SettingsSurface", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Mark as read" }));
-
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Read" })).toBeTruthy();
     });
@@ -399,6 +413,7 @@ describe("SettingsSurface", () => {
 
     renderWithQuery(<SettingsSurface activeTab="security" />);
 
+    await user.click(screen.getByTestId("settings-change-password-expand"));
     await user.type(screen.getByLabelText("Current password"), "old-pass");
     await user.type(screen.getByLabelText("New password"), "new-pass");
     await user.click(screen.getByRole("button", { name: "Change password" }));
@@ -409,7 +424,15 @@ describe("SettingsSurface", () => {
     expect(screen.getByLabelText("Current password")).toBeTruthy();
   });
 
-  it("logs out and redirects to login", async () => {
+  it("does not show logout on the security panel (moved to account menu)", async () => {
+    renderWithQuery(<SettingsSurface activeTab="security" />);
+
+    expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
+    expect(screen.getByTestId("settings-change-password-expand")).toBeTruthy();
+  });
+
+  it.skip("logs out and redirects to login", async () => {
+    // Logout moved to account menu (W3 #10).
     const user = userEvent.setup();
 
     renderWithQuery(<SettingsSurface activeTab="security" />);

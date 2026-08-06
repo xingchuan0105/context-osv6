@@ -8,13 +8,16 @@ import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
-import styles from "./settings-security-panel.module.css";
 import shared from "./settings-ui-shared.module.css";
 
+/**
+ * Security panel (#10): change-password expands on demand; logout lives in account menu.
+ */
 export function SecurityPanel() {
   const router = useRouter();
-  const { clearAuth, logout, token, user } = useAuth();
-  const { locale, theme } = useUiPreferences();
+  const { clearAuth, token } = useAuth();
+  const { locale } = useUiPreferences();
+  const [expanded, setExpanded] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
@@ -55,13 +58,8 @@ export function SecurityPanel() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    router.replace("/login");
-  }
-
   return (
-    <section className={shared.section}>
+    <section className={shared.section} data-testid="settings-security-panel">
       <section className={`app-inline-surface ${shared.section}`}>
         <div className={shared.headerText}>
           <h2 className={shared.flushTitle}>
@@ -71,78 +69,67 @@ export function SecurityPanel() {
             {formatUiMessage(locale, "settings.security.sectionSubtitle")}
           </p>
         </div>
-        <form className={shared.formGrid} onSubmit={handleSubmit}>
-          <div>
-            <label className="app-form-label" htmlFor="settings-current-password">
-              {formatUiMessage(locale, "settings.security.currentPasswordLabel")}
-            </label>
-            <input
-              autoComplete="current-password"
-              className="app-input"
-              id="settings-current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="app-form-label" htmlFor="settings-new-password">
-              {formatUiMessage(locale, "settings.security.newPasswordLabel")}
-            </label>
-            <input
-              autoComplete="new-password"
-              className="app-input"
-              id="settings-new-password"
-              type="password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </div>
-          {error ? <p className="app-notice-banner">{error}</p> : null}
-          <div className="app-button-row">
-            <button className="app-button-primary" disabled={loading} type="submit">
-              {loading
-                ? formatUiMessage(locale, "settings.security.updating")
-                : formatUiMessage(locale, "settings.security.changePasswordAction")}
-            </button>
-            <button className="app-button-ghost" type="button" onClick={() => void handleLogout()}>
-              {formatUiMessage(locale, "workspaceLogout")}
-            </button>
-          </div>
-        </form>
-      </section>
 
-      <section className={`app-inline-surface ${styles.sessionSection}`}>
-        <h3 className={shared.flushTitle}>
-          {formatUiMessage(locale, "settings.security.currentSessionTitle")}
-        </h3>
-        <div className={`app-inline-row ${shared.summaryRow}`}>
-          <span>{formatUiMessage(locale, "settings.security.signedInAs")}</span>
-          <strong>
-            {user?.email ??
-              formatUiMessage(locale, "settings.security.unknownAccount")}
-          </strong>
-        </div>
-        <div className={`app-inline-row ${shared.summaryRow}`}>
-          <span>{formatUiMessage(locale, "settings.appearance.currentLanguage")}</span>
-          <strong>
-            {locale === "zh-CN"
-              ? formatUiMessage(locale, "workspaceLanguageChinese")
-              : formatUiMessage(locale, "workspaceLanguageEnglish")}
-          </strong>
-        </div>
-        <div className={`app-inline-row ${shared.summaryRow}`}>
-          <span>{formatUiMessage(locale, "settings.appearance.currentTheme")}</span>
-          <strong>
-            {{
-              system: formatUiMessage(locale, "settings.appearance.theme.system"),
-              light: formatUiMessage(locale, "settings.appearance.theme.light"),
-              dark: formatUiMessage(locale, "settings.appearance.theme.dark"),
-            }[theme]}
-          </strong>
-        </div>
+        {!expanded ? (
+          <button
+            className="app-button-secondary"
+            data-testid="settings-change-password-expand"
+            type="button"
+            onClick={() => setExpanded(true)}
+          >
+            {formatUiMessage(locale, "settings.security.changePasswordAction")}
+          </button>
+        ) : (
+          <form className={shared.formGrid} onSubmit={handleSubmit}>
+            <div>
+              <label className="app-form-label" htmlFor="settings-current-password">
+                {formatUiMessage(locale, "settings.security.currentPasswordLabel")}
+              </label>
+              <input
+                autoComplete="current-password"
+                className="app-input"
+                id="settings-current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="app-form-label" htmlFor="settings-new-password">
+                {formatUiMessage(locale, "settings.security.newPasswordLabel")}
+              </label>
+              <input
+                autoComplete="new-password"
+                className="app-input"
+                id="settings-new-password"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </div>
+            {error ? <p className="app-notice-banner">{error}</p> : null}
+            <div className="app-button-row">
+              <button className="app-button-primary" disabled={loading} type="submit">
+                {loading
+                  ? formatUiMessage(locale, "settings.security.updating")
+                  : formatUiMessage(locale, "settings.security.changePasswordAction")}
+              </button>
+              <button
+                className="app-button-ghost"
+                type="button"
+                onClick={() => {
+                  setExpanded(false);
+                  setCurrentPassword("");
+                  setNewPassword("");
+                  setError("");
+                }}
+              >
+                {formatUiMessage(locale, "appModal.close")}
+              </button>
+            </div>
+          </form>
+        )}
       </section>
     </section>
   );
 }
-
