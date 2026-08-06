@@ -277,6 +277,8 @@ pub(super) async fn process_webhook_event(
                     return Ok(());
                 }
 
+                // ADR-0010: annual SKUs get 365 days; monthly default 30 days.
+                let period_days = app_core::alipay_subscription_period_days(&plan_id);
                 sqlx::query(
                     r#"
                     insert into subscriptions (
@@ -289,7 +291,12 @@ pub(super) async fn process_webhook_event(
                         current_period_end,
                         cancel_at_period_end
                     )
-                    values ($1, 'alipay', $2, $3, 'active', now(), now() + interval '30 days', false)
+                    values (
+                        $1, 'alipay', $2, $3, 'active',
+                        now(),
+                        now() + make_interval(days => $4),
+                        false
+                    )
                     on conflict (billing_provider, provider_subscription_id) where provider_subscription_id is not null do update
                     set plan_id = excluded.plan_id,
                         status = excluded.status,
@@ -302,6 +309,7 @@ pub(super) async fn process_webhook_event(
                 .bind(user_id)
                 .bind(out_trade_no)
                 .bind(&plan_id)
+                .bind(period_days)
                 .execute(tx.as_mut())
                 .await?;
 

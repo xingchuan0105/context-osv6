@@ -35,6 +35,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         debug: false,
         language: None,
         format_hint: None,
+            turnstile_token: None,
     };
 
     let terms_for_augment = args.terms.clone();
@@ -188,6 +189,7 @@ async fn per_term_hit_counts(
             debug: false,
             language: None,
             format_hint: None,
+            turnstile_token: None,
         };
         let plan = RagPlan {
             plan_version: "rag-item-v2".to_string(),

@@ -306,6 +306,7 @@ mod tests {
             debug: false,
             language: None,
             format_hint: None,
+            turnstile_token: None,
         }
     }
 

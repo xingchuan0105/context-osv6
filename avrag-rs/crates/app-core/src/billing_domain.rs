@@ -28,6 +28,42 @@ pub fn base_plan_for_share_quota(plan_id: &str) -> &str {
         other => other,
     }
 }
+
+/// Alipay subscription period length in days (ADR-0010 annual = 365).
+pub fn alipay_subscription_period_days(plan_id: &str) -> i32 {
+    let p = plan_id.trim().to_ascii_lowercase();
+    if p.ends_with("_annual") || p.contains("annual") {
+        365
+    } else {
+        30
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alipay_period_annual_is_365() {
+        assert_eq!(alipay_subscription_period_days("plus_annual"), 365);
+        assert_eq!(alipay_subscription_period_days("pro_annual"), 365);
+        assert_eq!(alipay_subscription_period_days("PLUS_ANNUAL"), 365);
+    }
+
+    #[test]
+    fn alipay_period_monthly_is_30() {
+        assert_eq!(alipay_subscription_period_days("plus"), 30);
+        assert_eq!(alipay_subscription_period_days("pro"), 30);
+        assert_eq!(alipay_subscription_period_days("free"), 30);
+    }
+
+    #[test]
+    fn base_plan_maps_annual() {
+        assert_eq!(base_plan_for_share_quota("plus_annual"), "plus");
+        assert_eq!(base_plan_for_share_quota("pro_annual"), "pro");
+        assert_eq!(base_plan_for_share_quota("plus"), "plus");
+    }
+}
 pub const STATUS_ACTIVE: &str = "active";
 pub const STATUS_CANCELED: &str = "canceled";
 pub const STATUS_PAST_DUE: &str = "past_due";

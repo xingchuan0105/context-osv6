@@ -175,6 +175,7 @@ pub(super) async fn load_usage(
         select coalesce(sum(chunk_count), 0)::bigint as chunk_count
         from documents
         where user_id = $1
+          and status not in ('deleting', 'deleted')
         "#,
     )
     .bind(user_id.into_uuid())
@@ -218,6 +219,7 @@ pub(super) async fn current_metric_usage(
             select coalesce(sum(chunk_count), 0)::bigint as quantity
             from documents
             where user_id = $1
+              and status not in ('deleting', 'deleted')
             "#,
         )
         .bind(user_id.into_uuid())

@@ -174,7 +174,11 @@ pub(crate) async fn request_context_middleware(
             }
             // ADR-0010 §9: anonymous share chat requires Turnstile when secret is configured.
             if visitor.is_none() {
-                let body_json = serde_json::json!({});
+                let body_json = req
+                    .extensions()
+                    .get::<ShareTurnstileToken>()
+                    .map(|t| serde_json::json!({ "turnstile_token": t.0 }))
+                    .unwrap_or_else(|| serde_json::json!({}));
                 if let Err(e) = crate::turnstile::ensure_turnstile_if_required(
                     &headers,
                     &body_json,
@@ -197,15 +201,14 @@ pub(crate) async fn request_context_middleware(
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30);
-            let share_key = format!(
-                "share:{}:{}",
-                share.workspace_id,
-                visitor
-                    .as_ref()
-                    .and_then(|a| a.actor_id())
-                    .map(|a| a.into_uuid())
-                    .unwrap_or(Uuid::nil())
-            );
+            // Anonymous visitors are keyed by edge IP so one crawler cannot burn
+            // the whole workspace's shared nil-bucket daily quota (self-DoS).
+            let visitor_part = visitor
+                .as_ref()
+                .and_then(|a| a.actor_id())
+                .map(|a| a.into_uuid().to_string())
+                .unwrap_or_else(|| format!("anon:{edge_ip}"));
+            let share_key = format!("share:{}:{}", share.workspace_id, visitor_part);
             let (share_allowed, _, _) =
                 check_rate_limit_with_fallback(state.rate_limit_backend(), &share_key, share_rpm)
                     .await;
@@ -359,6 +362,10 @@ pub(crate) fn req_path_is_shared(path: &str) -> bool {
     path.contains("/shared/") || path.contains("/api/shared/")
 }
 
+/// Turnstile token parsed from share chat body (optional).
+#[derive(Clone, Debug)]
+struct ShareTurnstileToken(String);
+
 async fn share_chat_context_from_request(
     state: &AppState,
     req: &mut Request,
@@ -381,6 +388,15 @@ async fn share_chat_context_from_request(
     let chat_request = chat_request?;
     if chat_request.source_type.as_deref() != Some("share") {
         return None;
+    }
+    if let Some(tok) = chat_request
+        .turnstile_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        req.extensions_mut()
+            .insert(ShareTurnstileToken(tok.to_string()));
     }
     let token = chat_request.source_token.as_deref()?;
     let ctx = state.share().resolve_public_share_chat_context(token).await?;

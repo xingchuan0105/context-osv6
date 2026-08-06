@@ -58,6 +58,8 @@
         owner_user_id: Uuid,
     ) -> Result<i32, AppError> {
         let plan_id = self.owner_plan_id(auth, owner_user_id).await?;
+        // Annual SKUs share monthly policy rows (plus_annual → plus).
+        let base_plan = app_core::base_plan_for_share_quota(&plan_id).to_string();
 
         let policy_row = sqlx::query(
             r#"
@@ -66,21 +68,14 @@
             where plan_id = $1
             "#,
         )
-        .bind(&plan_id)
+        .bind(&base_plan)
         .fetch_optional(self.repo.raw())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
 
         Ok(policy_row
             .and_then(|row| row.try_get::<i32, _>("max_shared_workspaces").ok())
-            .unwrap_or_else(|| {
-                // Fallback mirrors ADR-0010 defaults when policy row is missing.
-                match plan_id.as_str() {
-                    "plus" | "starter" | "team" | "enterprise" => 10,
-                    "pro" => 100,
-                    _ => 3,
-                }
-            }))
+            .unwrap_or_else(|| avrag_share::max_shared_workspaces_for_plan(&plan_id)))
     }
 
     async fn set_share_enabled(

@@ -81,12 +81,9 @@ impl ChatContext {
 
         // ADR-0010 §1.1: no free ride on platform env keys without BYOK or balance.
         // Fail closed **before** LLM (not post-hoc wallet fail-open alone).
+        // NOTE: usage_hold is placed only after ALL preflight gates pass (in pipeline),
+        // so budget/hard-block rejections never leave a leaked hold.
         self.billing.ensure_payer_can_spend(&self.auth).await?;
-        // Atomic pre-debit hold for estimated list price (released after turn).
-        let usage_hold = self
-            .billing
-            .place_usage_hold_for_estimate(&self.auth, estimated_input_tokens, 1024)
-            .await?;
         if is_share_chat {
             // ADR-0010 §4/§9: Owner daily fen fuse (platform proxy path only).
             self.billing
@@ -287,8 +284,10 @@ impl ChatContext {
             trace_id,
             user_uuid,
             notebook_uuid,
-            usage_hold_id: usage_hold.map(|(id, _)| id),
-            usage_hold_fen: usage_hold.map(|(_, fen)| fen),
+            // Hold placed in pipeline after cache miss + all gates (not here).
+            usage_hold_id: None,
+            usage_hold_fen: None,
+            estimated_input_tokens,
         })
     }
 

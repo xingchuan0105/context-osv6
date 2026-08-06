@@ -72,6 +72,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         debug: false,
         language: None,
         format_hint: None,
+            turnstile_token: None,
     };
 
     let items: Vec<RagPlanItem> = args

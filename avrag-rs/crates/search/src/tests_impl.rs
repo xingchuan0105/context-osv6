@@ -24,6 +24,7 @@ async fn missing_brave_key_is_explicit_error() {
         debug: false,
         language: None,
         format_hint: None,
+            turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(
         contracts::auth_runtime::UserId::from(uuid::Uuid::nil()),
@@ -59,6 +60,7 @@ async fn unsupported_provider_is_explicit_error() {
         debug: false,
         language: None,
         format_hint: None,
+            turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(
         contracts::auth_runtime::UserId::from(uuid::Uuid::nil()),
@@ -122,6 +124,7 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
         debug: false,
         language: None,
         format_hint: None,
+            turnstile_token: None,
     };
     let auth = contracts::auth_runtime::AuthContext::new(
         contracts::auth_runtime::UserId::from(uuid::Uuid::nil()),

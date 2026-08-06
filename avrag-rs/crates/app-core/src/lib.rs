@@ -60,7 +60,8 @@ pub use billing_domain::{
     ADMIN_ROLE_SUPER, BillableFeature, BillingConfig, BillingEvent, BillingPlan, BillingPlanQuota,
     BillingProvider, DailyUsage, LimitHits, MeteringContext, ANNUAL_PRICE_MONTHS, PLAN_FREE,
     PLAN_PLUS, PLAN_PLUS_ANNUAL, PLAN_PRO, PLAN_PRO_ANNUAL, ProviderEvent, STATUS_ACTIVE,
-    STATUS_CANCELED, STATUS_PAST_DUE,
+    STATUS_CANCELED, STATUS_PAST_DUE, alipay_subscription_period_days, base_plan_for_share_quota,
+    is_desktop_license_plan,
     STATUS_UNPAID, Subscription, SubscriptionStatus, UsageForecastResponse,
     UsageHistoryResponse, UsageSource, UsageWindowBucket, UsageWindowResponse, WebhookClaim,
 };

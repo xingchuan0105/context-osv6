@@ -26,6 +26,9 @@ pub(crate) struct ChatPreflight {
     pub usage_hold_id: Option<Uuid>,
     #[serde(default)]
     pub usage_hold_fen: Option<i64>,
+    /// Token estimate used for hold placement after all gates pass.
+    #[serde(default)]
+    pub estimated_input_tokens: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,12 +133,12 @@ async fn run_pipeline(
     }
 
     let preflight = state.execute_chat_preflight(&request).await?;
-    let hold = match (preflight.usage_hold_id, preflight.usage_hold_fen) {
-        (Some(id), Some(fen)) => Some((id, fen)),
-        _ => None,
-    };
-    let outcome = run_pipeline_inner(state.clone(), request, stream_config, lane, preflight).await;
-    if let Some((hold_id, hold_fen)) = hold {
+    // Hold is placed inside after cache miss; always released on return.
+    let mut active_hold: Option<(Uuid, i64)> = None;
+    let outcome =
+        run_pipeline_inner(state.clone(), request, stream_config, lane, preflight, &mut active_hold)
+            .await;
+    if let Some((hold_id, hold_fen)) = active_hold {
         state
             .billing
             .release_usage_hold(&state.auth, hold_id, hold_fen)
@@ -150,12 +153,25 @@ async fn run_pipeline_inner(
     stream_config: Option<StreamConfig>,
     lane: PipelineLane,
     preflight: ChatPreflight,
+    active_hold: &mut Option<(Uuid, i64)>,
 ) -> Result<ChatResponse, AppError> {
     let session = state.resolve_chat_session(&request).await?;
 
-    // ADR-0010 §9: exact + semantic share Q&A cache (skip LLM on scrape/repeat).
+    // ADR-0010 §9: exact first (no embed), then semantic with embed.
     if request.source_type.as_deref() == Some("share") {
         if let Some(token) = request.source_token.as_deref() {
+            // Exact match: no embedding call (no platform embed spend / no hold).
+            if let Some(cached) =
+                crate::share_cache::lookup(token, &request.query, None).await
+            {
+                return emit_share_cache_hit(
+                    &session,
+                    &request,
+                    stream_config.as_ref(),
+                    cached,
+                );
+            }
+            // Semantic: embed only when exact miss and rag runtime available.
             let embed = async {
                 let Some(rag) = state.retrieval_runtime() else {
                     return None;
@@ -176,48 +192,27 @@ async fn run_pipeline_inner(
             if let Some(cached) =
                 crate::share_cache::lookup(token, &request.query, embed.as_deref()).await
             {
-                let response = contracts::chat::ChatResponse {
-                    answer: cached.clone(),
-                    answer_blocks: vec![],
-                    session_id: session.id.clone(),
-                    agent_type: request.agent_type.clone(),
-                    sources: vec![],
-                    citations: vec![],
-                    trace: contracts::chat::TraceInfo {
-                        mode: "share_cache".to_string(),
-                    },
-                    degrade_trace: vec![],
-                    planner_output: None,
-                    mode_debug: None,
-                    message_id: None,
-                    guard_report: None,
-                    tool_results: vec![],
-                    usage: None,
-                    agent_operation_guide: None,
-                };
-                if let Some(ref config) = stream_config {
-                    let mid = crate::stream_event_message_id(None);
-                    let _ = config.sender.send(contracts::chat::ChatEvent::Start {
-                        request_id: config.request_id.clone(),
-                        session_id: session.id.clone(),
-                    });
-                    for chunk in crate::chunk_text_for_stream(&cached) {
-                        let _ = config.sender.send(contracts::chat::ChatEvent::Token {
-                            request_id: config.request_id.clone(),
-                            message_id: mid,
-                            content: chunk,
-                        });
-                    }
-                    let _ = config.sender.send(contracts::chat::ChatEvent::Done {
-                        request_id: config.request_id.clone(),
-                        session_id: session.id.clone(),
-                        message_id: mid,
-                        payload: crate::chat_done_payload(&response),
-                    });
-                }
-                return Ok(response);
+                return emit_share_cache_hit(
+                    &session,
+                    &request,
+                    stream_config.as_ref(),
+                    cached,
+                );
             }
         }
+    }
+
+    // All gates passed and cache miss → atomic hold for estimated platform spend.
+    if let Some((id, fen)) = state
+        .billing
+        .place_usage_hold_for_estimate(
+            &state.auth,
+            preflight.estimated_input_tokens,
+            1024,
+        )
+        .await?
+    {
+        *active_hold = Some((id, fen));
     }
 
     if let Some(ref config) = stream_config {
@@ -345,4 +340,52 @@ async fn run_pipeline_inner(
     Ok(crate::external_agent_guide::attach_operation_guide(
         execution.response,
     ))
+}
+
+fn emit_share_cache_hit(
+    session: &contracts::workspaces::ChatSession,
+    request: &ChatRequest,
+    stream_config: Option<&StreamConfig>,
+    cached: String,
+) -> Result<ChatResponse, AppError> {
+    let response = ChatResponse {
+        answer: cached.clone(),
+        answer_blocks: vec![],
+        session_id: session.id.clone(),
+        agent_type: request.agent_type.clone(),
+        sources: vec![],
+        citations: vec![],
+        trace: contracts::chat::TraceInfo {
+            mode: "share_cache".to_string(),
+        },
+        degrade_trace: vec![],
+        planner_output: None,
+        mode_debug: None,
+        message_id: None,
+        guard_report: None,
+        tool_results: vec![],
+        usage: None,
+        agent_operation_guide: None,
+    };
+    if let Some(config) = stream_config {
+        let mid = crate::stream_event_message_id(None);
+        let _ = config.sender.send(contracts::chat::ChatEvent::Start {
+            request_id: config.request_id.clone(),
+            session_id: session.id.clone(),
+        });
+        for chunk in crate::chunk_text_for_stream(&cached) {
+            let _ = config.sender.send(contracts::chat::ChatEvent::Token {
+                request_id: config.request_id.clone(),
+                message_id: mid,
+                content: chunk,
+            });
+        }
+        let _ = config.sender.send(contracts::chat::ChatEvent::Done {
+            request_id: config.request_id.clone(),
+            session_id: session.id.clone(),
+            message_id: mid,
+            payload: crate::chat_done_payload(&response),
+        });
+    }
+    Ok(response)
 }

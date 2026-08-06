@@ -71,6 +71,7 @@ pub(crate) async fn execute_query_tool(
         debug: false,
         language: None,
         format_hint: None,
+            turnstile_token: None,
     };
     expand_external_workspace_rag_scope(state, &workspace_id_str, &mut req).await?;
     let response = state.conversation().execute(req).await?;

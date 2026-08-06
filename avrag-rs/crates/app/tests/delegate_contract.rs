@@ -113,6 +113,7 @@ async fn execute_chat_empty_query_returns_validation_error() {
             debug: false,
             language: None,
             format_hint: None,
+            turnstile_token: None,
         })
         .await
         .unwrap_err();
@@ -145,6 +146,7 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
             debug: false,
             language: None,
             format_hint: None,
+            turnstile_token: None,
         })
         .await
         .unwrap_err();

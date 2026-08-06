@@ -50,6 +50,9 @@ pub struct ChatRequest {
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format_hint: Option<String>,
+    /// Cloudflare Turnstile token for anonymous share chat (ADR-0010 §9).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turnstile_token: Option<String>,
 }
 
 #[typeshare]
