@@ -120,13 +120,14 @@ describe("WorkspaceSurface integration", () => {
     });
 
     expect(screen.getByText("source-one.pdf").closest("li")?.className).toContain("listItemFocused");
-    const dialog = screen.getByRole("dialog", { name: "引用片段" });
+    const dialog = screen.getByRole("dialog", { name: "Source Two" });
+    expect(screen.getByTestId("workspace-citation-modal")).toBeTruthy();
     expect(screen.getByText("Chunk detail for src-2")).toBeTruthy();
 
     await user.click(dialog.parentElement as HTMLElement);
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "引用片段" })).toBeNull();
+      expect(screen.queryByTestId("workspace-citation-modal")).toBeNull();
     });
     expect(screen.getByText("source-one.pdf").closest("li")?.className).toContain("listItemFocused");
   });
@@ -183,12 +184,13 @@ describe("WorkspaceSurface integration", () => {
     await screen.findByLabelText("工作区标题");
     expect(await screen.findByText("RAG answer")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "引用 1：Source Two" }));
-    expect(await screen.findByRole("dialog", { name: "引用片段" })).toBeTruthy();
+    expect(await screen.findByTestId("workspace-citation-modal")).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "Source Two" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "1 个来源" }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "引用片段" })).toBeNull();
+      expect(screen.queryByTestId("workspace-citation-modal")).toBeNull();
       expect(workspaceUiStore.getState().workspaces["ws-1"]?.rightRailOpen).toBe(true);
       expect(screen.getByRole("link", { name: "Search Result" }).getAttribute("href")).toBe(
         "https://example.test/search",

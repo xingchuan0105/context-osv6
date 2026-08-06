@@ -115,10 +115,12 @@ export function markdownToRichTextHtml(markdown: string | null | undefined) {
       continue;
     }
 
-    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    // Support ATX headings h1–h6 (#### must not leak as literal text).
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
-      const tag = `h${headingMatch[1].length}`;
-      blocks.push(`<${tag}>${renderInlineMarkdown(headingMatch[2])}</${tag}>`);
+      const level = Math.min(6, headingMatch[1].length);
+      const tag = `h${level}`;
+      blocks.push(`<${tag}>${renderInlineMarkdown(headingMatch[2] ?? "")}</${tag}>`);
       index += 1;
       continue;
     }

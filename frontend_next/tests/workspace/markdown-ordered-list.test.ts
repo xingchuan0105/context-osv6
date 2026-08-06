@@ -15,3 +15,18 @@ describe("markdownToRichTextHtml ordered lists", () => {
     expect(html.includes("<ol")).toBe(false);
   });
 });
+
+describe("markdownToRichTextHtml headings (W5 #16②)", () => {
+  it("renders h1–h6 as tags (#### must not leak as literal text)", () => {
+    const html = markdownToRichTextHtml(
+      ["# One", "## Two", "### Three", "#### Four", "##### Five", "###### Six"].join("\n"),
+    );
+    expect(html).toContain("<h1>One</h1>");
+    expect(html).toContain("<h2>Two</h2>");
+    expect(html).toContain("<h3>Three</h3>");
+    expect(html).toContain("<h4>Four</h4>");
+    expect(html).toContain("<h5>Five</h5>");
+    expect(html).toContain("<h6>Six</h6>");
+    expect(html).not.toContain("####");
+  });
+});

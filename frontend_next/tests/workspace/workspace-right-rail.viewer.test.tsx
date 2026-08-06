@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe("WorkspaceRightRail viewer", () => {
-  it("uses contextual source viewer and note editor takeover while keeping source/note linkage stable", async () => {
+  it("opens source viewer and note editor as exclusive centered modals", async () => {
     mocks.listWorkspaceSourcesMock.mockResolvedValue({
       sources: [buildSource({ id: "src-1", file_name: "alpha.pdf", status: "ready", title: "Alpha" })],
     });
@@ -88,6 +88,7 @@ describe("WorkspaceRightRail viewer", () => {
     fireEvent.click(screen.getByRole("button", { name: "alpha.pdf" }));
 
     await waitFor(() => {
+      expect(screen.getByTestId("workspace-source-viewer-modal")).toBeTruthy();
       expect(screen.getByRole("region", { name: "Source viewer" })).toBeTruthy();
       expect(mocks.getWorkspaceSourceParsedPreviewMock).toHaveBeenCalledTimes(1);
     });
@@ -96,8 +97,12 @@ describe("WorkspaceRightRail viewer", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Alpha note Body/i }));
-    expect(screen.queryByRole("region", { name: "Source viewer" })).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-note-editor-modal")).toBeTruthy();
+      expect(screen.queryByTestId("workspace-source-viewer-modal")).toBeNull();
+    });
     const noteContentEditor = screen.getByLabelText("Content");
+    // Title derives from content when present (pre-existing note editor behavior).
     expect(screen.getByRole("heading", { name: "Body" })).toBeTruthy();
     noteContentEditor.textContent = "Body updated";
     fireEvent.input(noteContentEditor);
@@ -114,6 +119,7 @@ describe("WorkspaceRightRail viewer", () => {
     expect(screen.queryByText("Notes synced.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => {
+      expect(screen.getByTestId("workspace-source-viewer-modal")).toBeTruthy();
       expect(screen.getByRole("region", { name: "Source viewer" })).toBeTruthy();
     });
     expect(screen.getByText("Matched excerpt with more context")).toBeTruthy();

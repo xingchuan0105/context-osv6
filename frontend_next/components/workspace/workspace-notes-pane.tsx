@@ -27,6 +27,8 @@ export type WorkspaceNotesPaneProps = {
   onPromoteNote: (noteId: string) => void;
   onSaveActiveNote: () => void;
   onSelectNote: (noteId: string) => void;
+  /** When true, omit editor title/close bar (AppModal owns chrome). */
+  hideChrome?: boolean;
 };
 
 function deriveNoteTitleFromContent(content: string) {
@@ -57,6 +59,7 @@ export function WorkspaceNotesPane({
   onPromoteNote,
   onSaveActiveNote,
   onSelectNote,
+  hideChrome = false,
 }: WorkspaceNotesPaneProps) {
   const { locale } = useUiPreferences();
   const [openMenuNoteId, setOpenMenuNoteId] = useState<string | null>(null);
@@ -111,14 +114,16 @@ export function WorkspaceNotesPane({
         className={`${styles.pane} ${styles.editorPane}`}
         aria-label={formatUiMessage(locale, "workspaceRightRail.notesSectionTitle")}
       >
-        <div className={styles.editorTopBar}>
-          <div className={styles.paneHeading}>
-            <h2 className={styles.paneTitle}>{displayedDraftTitle}</h2>
+        {hideChrome ? null : (
+          <div className={styles.editorTopBar}>
+            <div className={styles.paneHeading}>
+              <h2 className={styles.paneTitle}>{displayedDraftTitle}</h2>
+            </div>
+            <button className={styles.closeButton} onClick={onClearActiveNote} type="button">
+              {formatUiMessage(locale, "workspaceRightRail.closeViewerAction")}
+            </button>
           </div>
-          <button className={styles.closeButton} onClick={onClearActiveNote} type="button">
-            {formatUiMessage(locale, "workspaceRightRail.closeViewerAction")}
-          </button>
-        </div>
+        )}
 
         {error ? <div className={styles.error}>{error}</div> : null}
 

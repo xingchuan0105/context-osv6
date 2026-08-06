@@ -222,14 +222,10 @@ export function WorkspaceChatPane({
       className={styles.shell}
       style={shellStyle}
       aria-label={formatUiMessage(locale, "workspaceChatRegionLabel")}
+      data-testid="workspace-chat-pane"
+      data-active-mode={activeModeCode}
     >
-      <header className={styles.header}>
-        <div className={styles.titleBlock}>
-          <h2 className={styles.title}>{activeModeLabel}</h2>
-        </div>
-        <span className={styles.modeChip}>{activeModeCode}</span>
-      </header>
-
+      {/* W5 #18: mode title/chip header removed — composer capability toggles remain. */}
       {chatSession.error && (
         <p className={styles.error} role="alert">
           {chatSession.error}

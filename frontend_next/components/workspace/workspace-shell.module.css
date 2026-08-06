@@ -545,10 +545,21 @@
 }
 
 .panePanel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   flex: 1 1 auto;
+  height: 100%;
   padding: 0;
   background: hsl(var(--background));
+  overflow: hidden;
+}
+
+/* Chat pane fills the center column so .transcript can own scrolling. */
+.panePanel > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .mobileOverlay {

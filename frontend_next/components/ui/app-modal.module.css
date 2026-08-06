@@ -30,7 +30,8 @@
 }
 
 .cardLg {
-  width: min(100%, 52rem);
+  /* W5 #17 content dialogs: min(1000px, 92vw) per UI token sheet. */
+  width: min(100%, 1000px, 92vw);
 }
 
 .header {

@@ -22,6 +22,8 @@ type WorkspaceSourceViewerProps = {
   summary: string;
   onClose: () => void;
   onLoadMore: () => void;
+  /** When true, omit internal title/close bar (AppModal owns chrome). */
+  hideChrome?: boolean;
 };
 
 export function WorkspaceSourceViewer({
@@ -37,6 +39,7 @@ export function WorkspaceSourceViewer({
   summary,
   onClose,
   onLoadMore,
+  hideChrome = false,
 }: WorkspaceSourceViewerProps) {
   const { locale } = useUiPreferences();
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -55,24 +58,26 @@ export function WorkspaceSourceViewer({
 
   return (
     <section className={styles.viewer} aria-label={formatUiMessage(locale, "workspaceRightRail.viewerSectionLabel")}>
-      <div className={styles.viewerHeader}>
-        <div className={styles.paneHeading}>
-          <h3 className={styles.paneTitle}>
-            {source?.file_name ?? formatUiMessage(locale, "workspaceRightRail.viewerSectionTitle")}
-          </h3>
-          <p className={styles.paneSubtitle}>
-            {source?.title || formatUiMessage(locale, "workspaceRightRail.viewerSectionSubtitle")}
-            {citation?.page !== null && citation?.page !== undefined
-              ? ` - ${formatUiMessage(locale, "workspaceRightRail.viewerPage", {
-                  page: String(citation.page),
-                })}`
-              : ""}
-          </p>
+      {hideChrome ? null : (
+        <div className={styles.viewerHeader}>
+          <div className={styles.paneHeading}>
+            <h3 className={styles.paneTitle}>
+              {source?.file_name ?? formatUiMessage(locale, "workspaceRightRail.viewerSectionTitle")}
+            </h3>
+            <p className={styles.paneSubtitle}>
+              {source?.title || formatUiMessage(locale, "workspaceRightRail.viewerSectionSubtitle")}
+              {citation?.page !== null && citation?.page !== undefined
+                ? ` - ${formatUiMessage(locale, "workspaceRightRail.viewerPage", {
+                    page: String(citation.page),
+                  })}`
+                : ""}
+            </p>
+          </div>
+          <button className={styles.closeButton} onClick={onClose} type="button">
+            {formatUiMessage(locale, "workspaceRightRail.closeViewerAction")}
+          </button>
         </div>
-        <button className={styles.closeButton} onClick={onClose} type="button">
-          {formatUiMessage(locale, "workspaceRightRail.closeViewerAction")}
-        </button>
-      </div>
+      )}
 
       {citation ? (
         <div className={styles.viewerCitationCard}>

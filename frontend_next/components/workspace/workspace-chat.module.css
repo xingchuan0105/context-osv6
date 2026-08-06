@@ -13,12 +13,27 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding:
     var(--space-lg)
     clamp(1.2rem, 4vw, 2.35rem)
     calc(var(--workspace-chat-bottom-clearance) + var(--workspace-chat-bottom-gap));
   scroll-padding-bottom: calc(var(--workspace-chat-bottom-clearance) + var(--workspace-chat-bottom-gap));
   scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border-strong)) transparent;
+}
+
+.transcript::-webkit-scrollbar {
+  width: 8px;
+}
+
+.transcript::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-strong));
+  border-radius: var(--radius-pill);
+}
+
+.transcript::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .transcriptInner {
@@ -30,59 +45,23 @@
 
 .scrollToBottomButton {
   position: sticky;
-  bottom: 0.75rem;
+  /* Sit above composer clearance so it does not cover answer text. */
+  bottom: calc(var(--workspace-chat-bottom-clearance) + 0.5rem);
   display: block;
   width: fit-content;
   margin: var(--space-sm) auto 0;
   padding: var(--space-sm) var(--space-lg);
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-pill);
-  background: hsl(var(--surface-elevated));
+  background: hsl(var(--card));
   color: hsl(var(--foreground));
   font: inherit;
   font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   z-index: var(--z-dropdown);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-md);
-  flex: none;
-  padding: var(--space-md) var(--space-lg) var(--space-md);
-  border-bottom: 1px solid hsl(var(--border-whisper));
-  background: hsl(var(--background));
-}
-
-.titleBlock {
-  display: grid;
-  gap: 0;
-}
-
-.title {
-  margin: 0;
-  color: hsl(var(--foreground));
-  font-size: var(--font-size-section-title);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-section-title);
-  letter-spacing: -0.015em;
-}
-
-.modeChip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.9rem;
-  padding: var(--space-xxs) var(--space-md);
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-pill);
-  background: hsl(var(--surface-muted));
-  color: hsl(var(--muted-foreground));
-  font-size: var(--font-size-meta);
-  font-weight: 400;
-  line-height: var(--line-height-meta);
-  white-space: nowrap;
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.12);
+  opacity: 0.96;
 }
 
 .error {
@@ -201,6 +180,36 @@
 .markdownContent {
   font-size: var(--font-size-body-strong);
   white-space: normal;
+}
+
+.markdownContent h1,
+.markdownContent h2,
+.markdownContent h3,
+.markdownContent h4,
+.markdownContent h5,
+.markdownContent h6 {
+  margin: 0.85em 0 0.35em;
+  color: hsl(var(--foreground));
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.markdownContent h1 {
+  font-size: 1.35em;
+}
+
+.markdownContent h2 {
+  font-size: 1.2em;
+}
+
+.markdownContent h3 {
+  font-size: 1.1em;
+}
+
+.markdownContent h4,
+.markdownContent h5,
+.markdownContent h6 {
+  font-size: 1em;
 }
 
 .streamingPlaintext {
@@ -1284,11 +1293,6 @@
       var(--space-lg)
       var(--space-lg)
       calc(var(--workspace-chat-bottom-clearance) + var(--workspace-chat-bottom-gap));
-  }
-
-  .header {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .composerCard {
