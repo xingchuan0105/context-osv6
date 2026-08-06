@@ -71,13 +71,17 @@ impl ChatContext {
         if funds_notify_throttled(owner) {
             return Ok(());
         }
+        let copy = common::notification_copy::render(
+            common::notification_copy::NotifyKind::FundsRequired,
+            common::notification_copy::NotifyLocale::product_default(),
+        );
         pg.create_notification(
             &self.auth,
             NotificationCreateParams {
                 user_id: owner,
                 event_type: "billing.funds_required".to_string(),
-                title: "Balance needed".to_string(),
-                body: "Your balance is empty and no custom provider is configured. Top up or add a provider to continue.".to_string(),
+                title: copy.title,
+                body: copy.body,
                 data: serde_json::json!({ "code": "payer_funds_required" }),
                 channels: vec!["in_app".to_string()],
             },

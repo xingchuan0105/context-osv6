@@ -358,13 +358,17 @@ pub(crate) async fn auth_change_password_handler(
 
     match store.change_password(user_uuid, &new_hash).await {
         Ok(()) => {
+            let copy = common::notification_copy::render(
+                common::notification_copy::NotifyKind::PasswordChanged,
+                common::notification_copy::NotifyLocale::product_default(),
+            );
             crate::notification_emit::emit_user_notification(
                 &state,
                 state.auth(),
                 user_uuid,
                 "security.password_changed",
-                "Password changed",
-                "Your account password was updated successfully.",
+                &copy.title,
+                &copy.body,
                 serde_json::json!({ "user_id": user_uuid.to_string() }),
             )
             .await;

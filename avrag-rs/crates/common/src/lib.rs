@@ -12,6 +12,7 @@ pub mod errors;
 pub mod guards_access;
 pub mod identity;
 pub mod key_vault;
+pub mod notification_copy;
 pub mod workspace_requests;
 pub mod ssrf;
 pub mod text_segment;

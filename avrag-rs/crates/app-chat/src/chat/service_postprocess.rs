@@ -253,26 +253,20 @@ impl ChatContext {
             return Ok(());
         }
 
-        let (title, body) = match execution.mode.as_str() {
-            mode if crate::profile_update::is_direct_chat_mode(mode) => (
-                "General mode degraded",
-                "General mode used a degraded path for the latest turn.",
-            ),
-            "search" => (
-                "Search mode degraded",
-                "Search mode could not complete a real provider-backed search.",
-            ),
-            _ => (
-                "RAG mode degraded",
-                "RAG mode used a degraded retrieval or synthesis path.",
-            ),
-        };
+        let kind = common::notification_copy::NotifyKind::degrade_for_mode(
+            execution.mode.as_str(),
+            crate::profile_update::is_direct_chat_mode(execution.mode.as_str()),
+        );
+        let copy = common::notification_copy::render(
+            kind,
+            common::notification_copy::NotifyLocale::product_default(),
+        );
 
         let _ = self
             .emit_notification(
                 "system.degrade",
-                title,
-                body,
+                &copy.title,
+                &copy.body,
                 serde_json::json!({
                     "agent_type": execution.mode,
                     "session_id": session.id,

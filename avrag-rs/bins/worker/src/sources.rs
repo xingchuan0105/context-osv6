@@ -231,22 +231,18 @@ impl StateSink for PgStateSink {
                 .as_deref()
                 .and_then(|value| Uuid::parse_str(value).ok())
             {
-                let title = if matches!(
+                let ok = matches!(
                     transition.to,
                     contracts::documents::DocumentStatus::Completed
-                ) {
-                    "Document ingestion completed"
-                } else {
-                    "Document ingestion failed"
-                };
-                let body = if matches!(
-                    transition.to,
-                    contracts::documents::DocumentStatus::Completed
-                ) {
-                    "A document finished ingestion and is ready for retrieval."
-                } else {
-                    "A document failed ingestion and needs attention."
-                };
+                );
+                let copy = common::notification_copy::render(
+                    if ok {
+                        common::notification_copy::NotifyKind::IngestionSuccess
+                    } else {
+                        common::notification_copy::NotifyKind::IngestionFailed
+                    },
+                    common::notification_copy::NotifyLocale::product_default(),
+                );
                 let _ = self
                     .repo
                     .auth()
@@ -254,16 +250,13 @@ impl StateSink for PgStateSink {
                         &context,
                         NotificationCreateParams {
                             user_id,
-                            event_type: if matches!(
-                                transition.to,
-                                contracts::documents::DocumentStatus::Completed
-                            ) {
+                            event_type: if ok {
                                 "ingestion.success".to_string()
                             } else {
                                 "ingestion.failed".to_string()
                             },
-                            title: title.to_string(),
-                            body: body.to_string(),
+                            title: copy.title,
+                            body: copy.body,
                             data: serde_json::json!({
                                 "document_id": task.document_id.clone(),
                                 "task_id": task.task_id.clone(),

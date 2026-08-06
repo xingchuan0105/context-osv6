@@ -262,24 +262,18 @@ pub(super) async fn process_outbox(repo: Arc<PgAppRepository>) -> Result<()> {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        let title = match event_type.as_str() {
-            "subscription.paid" => "Subscription payment successful",
-            "subscription.expired" => "Subscription expired",
-            _ => "Billing update",
-        };
-        let body = match event_type.as_str() {
-            "subscription.paid" => "Your subscription was successfully paid and is now active.",
-            "subscription.expired" => "Your subscription has expired and was downgraded to the free plan.",
-            _ => "Your billing details have been updated.",
-        };
+        let copy = common::notification_copy::render(
+            common::notification_copy::NotifyKind::from_billing_outbox(&event_type),
+            common::notification_copy::NotifyLocale::product_default(),
+        );
 
         let notify_res = if !user_id.is_empty() {
             emit_billing_notification(
                 repo.clone(),
                 user_id,
                 &format!("billing.{}", event_type),
-                title,
-                body,
+                &copy.title,
+                &copy.body,
                 payload.clone(),
             )
             .await

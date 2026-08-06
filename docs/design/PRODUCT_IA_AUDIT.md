@@ -100,11 +100,13 @@
 
 ## 6. 建议下一迭代（非本轮）
 
-1. ~~SMTP 邮件文案外置~~ **done**（`avrag-rs/email/` + `email_copy`；重置/邀请）。站内通知英文硬编码仍 open。  
-2. ~~命令面板文档 `?source=` 深链~~ **done**（命中 → viewer；打开后剥离 one-shot query）。  
-3. ~~打开会话后同步/清理 URL `?session=`~~ **done**（选会话 / 新建 / 流式建会话 / 删活动会话 → `router.replace`；深链 `preferredSessionId` 选中；不默认改写无 query 的落地页）。  
-4. 命令面板：跨页动作（非跳转类，如「新建工作区」）若产品需要再开。  
-5. 邀请邮件接用户 UI locale（目前 share 仍常 `locale_zh=true`）。
+1. ~~SMTP 邮件文案外置~~ **done**（`avrag-rs/email/` + `email_copy`；重置/邀请）。  
+2. ~~站内通知 title/body 外置~~ **done**（`avrag-rs/notifications/` + `common::notification_copy`；默认 zh）。  
+3. ~~命令面板文档 `?source=` 深链~~ **done**（命中 → viewer；打开后剥离 one-shot query）。  
+4. ~~打开会话后同步/清理 URL `?session=`~~ **done**（选会话 / 新建 / 流式建会话 / 删活动会话 → `router.replace`；深链 `preferredSessionId` 选中；不默认改写无 query 的落地页）。  
+5. 命令面板：跨页动作（非跳转类，如「新建工作区」）若产品需要再开。  
+6. 邮件/通知按真实用户 UI locale 选择 en（目前默认 zh）。  
+7. API/管道错误串 i18n（限流、Workspace not found 等）另项。
 
 ---
 

@@ -28,20 +28,23 @@
 - 邀请：`locale_zh`（share handler 仍常 true；可后续接用户偏好）
 - **状态**：P7 邮件切片 **done**；站内通知见下表仍 open
 
-## 通知 / 系统消息硬编码（英文居多，另行立项）
+## 站内通知（bell title/body）
+
+- 文案：`avrag-rs/notifications/*.{zh,en}.txt`（`notifications/README.md`）
+- 加载：`common::notification_copy`（默认 zh）
+- 已接通：入库成功/失败、余额不足、密码变更、开启分享、订阅支付/到期、账单更新、对话降级
+- **状态**：P7 站内通知切片 **done**
+
+## 仍 open：API / 管道错误硬编码（非 bell）
 
 | 文件 | 字符串 |
 |------|--------|
-| `avrag-rs/crates/transport-http/src/middleware.rs` | "Share chat rate limit exceeded for this visitor." |
-| `avrag-rs/crates/transport-http/src/handlers/workspaces/notes.rs` | "Workspace not found"（×6） |
-| `avrag-rs/crates/transport-http/src/handlers/workspaces/analysis.rs` | "Workspace not found" |
-| `avrag-rs/crates/transport-http/src/lib_impl/auth/profile.rs` | "Password update failed" / "Password changed" |
-| `avrag-rs/crates/storage-pg/src/lib_impl/errors_and_mappers.rs` | "Document uploaded but no previewable text was extracted." |
-| `avrag-rs/crates/llm/src/section_index.rs` | "Document title: Title" |
-| `avrag-rs/crates/ingestion/src/chunker.rs` | "Document uploaded but no previewable text was extracted." |
-| `avrag-rs/crates/app-chat/src/chat/service.rs` | "Share query exceeds max length of {max_chars} characters." |
-| `avrag-rs/crates/app-chat/src/chat_private/mod.rs` | "Balance needed" |
-| `avrag-rs/bins/worker/src/sources.rs` | "Document ingestion completed" / "Document ingestion failed" |
+| `transport-http/middleware.rs` | "Share chat rate limit exceeded for this visitor." |
+| `transport-http/.../notes.rs` / `analysis.rs` | "Workspace not found" |
+| `transport-http/.../profile.rs` | "Password update failed"（API 响应，非通知） |
+| `storage-pg` / `ingestion` / `app-documents` | "Document uploaded but no previewable text was extracted." |
+| `app-chat/.../service.rs` | "Share query exceeds max length…" |
+| `llm/section_index.rs` | "Document title: Title" |
 
 ## 其它
 

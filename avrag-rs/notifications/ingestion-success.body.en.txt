@@ -1,0 +1,1 @@
+A document finished ingestion and is ready for retrieval.

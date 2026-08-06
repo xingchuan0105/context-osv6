@@ -119,13 +119,17 @@ pub(crate) async fn create_share_handler(
         .await;
     if result.is_ok() {
         let user_id = state.auth().user_id().into_uuid();
+        let copy = common::notification_copy::render(
+            common::notification_copy::NotifyKind::ShareEnabled,
+            common::notification_copy::NotifyLocale::product_default(),
+        );
         crate::notification_emit::emit_user_notification(
             &state,
             state.auth(),
             user_id,
             "share.enabled",
-            "Share enabled",
-            "Your workspace is shared. Visitor model usage bills your balance or custom provider.",
+            &copy.title,
+            &copy.body,
             serde_json::json!({ "workspace_id": workspace_id }),
         )
         .await;

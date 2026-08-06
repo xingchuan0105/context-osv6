@@ -131,7 +131,7 @@
 | P5 | ✅ | 106 处内联全部迁入 i18n（+60 键）；修复 `\u6765\u6e90` 转义、chat-pane 冗余分支；typecheck 零新增错误 |
 | P6 | ✅ | 01 快照重导出（1106 键）、03 快照重写、README 键数同步 |
 | P6.5 | ⏸ 另立项 | prompts 契约一致性评审 |
-| P7 | 🟡 邮件切片 done | SMTP 文案外置 `avrag-rs/email/`（重置密码 + 工作区邀请）；站内通知英文硬编码仍另项 |
+| P7 | ✅ 邮件 + 站内通知 | SMTP `avrag-rs/email/`；bell `avrag-rs/notifications/` + `common::notification_copy`；API 错误串仍 open |
 
 > 注意：本轮执行期间检测到 settings 组件被**并发进程重构**（providers-panel 405 行重写、settings-surface 布局改动），已基于重构后的新版本完成迁移。
 
