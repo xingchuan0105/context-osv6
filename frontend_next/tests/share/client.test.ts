@@ -60,6 +60,8 @@ describe("share client", () => {
       access_level: "link",
       expires_at: "2026-04-30T18:00:00Z",
       allow_download: true,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
 
     expect(isShareEnabled({
@@ -67,6 +69,8 @@ describe("share client", () => {
       access_level: "link",
       expires_at: null,
       allow_download: false,
+      anon_question_limit: 10,
+      member_question_limit: null,
     })).toBe(true);
 
     expect(buildShareUrl("active-token")).toContain("/shared/kb/active-token");

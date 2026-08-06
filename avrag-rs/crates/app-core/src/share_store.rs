@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::share_domain::{
     PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
     ShareWorkspaceMember, SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
+    WorkspaceShareSettingsRow,
 };
 
 /// Share persistence boundary — SQL implementations live in bootstrap adapters.
@@ -28,7 +29,7 @@ pub trait ShareStorePort: Send + Sync {
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<(String, bool, Vec<crate::share_domain::ShareTokenSnapshot>), AppError>;
+    ) -> Result<WorkspaceShareSettingsRow, AppError>;
 
     async fn list_members(
         &self,
@@ -49,6 +50,8 @@ pub trait ShareStorePort: Send + Sync {
         workspace_id: Uuid,
         access_level: Option<&str>,
         allow_download: Option<bool>,
+        anon_question_limit: Option<i32>,
+        member_question_limit: Option<Option<i32>>,
     ) -> Result<(), AppError>;
 
     async fn create_share_token(

@@ -42,11 +42,10 @@ export function WorkspaceShareCenterSurface({
                 {formatUiMessage(locale, "shareCenter.pageSubtitle")}
               </p>
             </div>
-            <section
-              className={`app-surface-card ${styles.controlCard}`}
-            >
-              <ShareControlBar center={center} />
-            </section>
+            <p className={styles.pageSubtitle} data-testid="share-owner-cost-hint">
+              {formatUiMessage(locale, "shareCenter.pageSubtitle")}
+              {center.quotaLabel ? ` · ${center.quotaLabel}` : ""}
+            </p>
           </div>
         </header>
 
@@ -80,7 +79,11 @@ export function WorkspaceShareCenterSurface({
           </section>
         ) : null}
 
+        {/* k-structure: invite → people → access/link (control bar) → insights */}
         <ShareInvitePanel center={center} />
+        <section className={`app-surface-card ${styles.controlCard}`}>
+          <ShareControlBar center={center} />
+        </section>
         <ShareInsightsPanel center={center} />
         <ShareActivityPanel center={center} />
       </div>

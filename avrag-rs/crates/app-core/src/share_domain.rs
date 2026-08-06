@@ -127,6 +127,20 @@ pub struct PublicShareChatContextSnapshot {
     /// `public` allows anonymous chat; `link` requires a registered visitor.
     pub workspace_visibility: String,
     pub share_enabled: bool,
+    /// Daily question cap for anonymous visitors (edge_ip). `0` = no daily cap.
+    pub anon_question_limit: i32,
+    /// Daily question cap for registered visitors. `None` = unlimited.
+    pub member_question_limit: Option<i32>,
+}
+
+/// Owner-facing share settings row (visibility + download + question caps + tokens).
+#[derive(Debug, Clone)]
+pub struct WorkspaceShareSettingsRow {
+    pub access_level: String,
+    pub allow_download: bool,
+    pub anon_question_limit: i32,
+    pub member_question_limit: Option<i32>,
+    pub tokens: Vec<ShareTokenSnapshot>,
 }
 
 #[derive(Debug, Clone)]

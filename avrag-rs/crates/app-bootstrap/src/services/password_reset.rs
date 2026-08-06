@@ -143,23 +143,24 @@ impl PasswordResetService {
         hex::encode(hasher.finalize())
     }
 
-    async fn send_reset_email(
+    /// Low-level SMTP send (password reset + product invite, etc.).
+    pub async fn send_plain_email(
         &self,
         to: &str,
-        code: &str,
-        expires_at: chrono::DateTime<chrono::Utc>,
+        subject: &str,
+        body: &str,
     ) -> anyhow::Result<()> {
+        if !self.smtp_ready() {
+            anyhow::bail!("smtp_not_configured");
+        }
         let from_address = Address::from_str(self.config.smtp_from.trim())?;
         let to_address = Address::from_str(to.trim())?;
         let from = Mailbox::new(self.config.smtp_from_name.clone(), from_address);
         let email = Message::builder()
             .from(from)
             .to(Mailbox::new(None, to_address))
-            .subject("Context OSv6 password reset code")
-            .body(format!(
-                "Your password reset code is: {code}\n\nThis code expires at {}.\n",
-                expires_at.to_rfc3339()
-            ))?;
+            .subject(subject)
+            .body(body.to_string())?;
 
         let mut transport = if self.config.smtp_tls {
             AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.smtp_host)?
@@ -175,6 +176,54 @@ impl PasswordResetService {
         }
         transport.build().send(email).await?;
         Ok(())
+    }
+
+    async fn send_reset_email(
+        &self,
+        to: &str,
+        code: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<()> {
+        self.send_plain_email(
+            to,
+            "Context OSv6 password reset code",
+            &format!(
+                "Your password reset code is: {code}\n\nThis code expires at {}.\n",
+                expires_at.to_rfc3339()
+            ),
+        )
+        .await
+    }
+
+    /// Workspace collaboration invite (ADR-0010 W2 #13).
+    pub async fn send_workspace_invite_email(
+        &self,
+        to: &str,
+        inviter_email: &str,
+        workspace_title: &str,
+        accept_url: &str,
+        locale_zh: bool,
+    ) -> anyhow::Result<()> {
+        let (subject, body) = if locale_zh {
+            (
+                format!("你被邀请协作「{workspace_title}」"),
+                format!(
+                    "{inviter_email} 邀请你协作知识库「{workspace_title}」。\n\n\
+打开链接接受邀请（若尚未注册，请先注册同一邮箱）：\n{accept_url}\n\n\
+— Context OS\n"
+                ),
+            )
+        } else {
+            (
+                format!("You're invited to collaborate on “{workspace_title}”"),
+                format!(
+                    "{inviter_email} invited you to collaborate on “{workspace_title}”.\n\n\
+Open this link to accept (register with the same email first if needed):\n{accept_url}\n\n\
+— Context OS\n"
+                ),
+            )
+        };
+        self.send_plain_email(to, &subject, &body).await
     }
 
     pub async fn verify_reset_token(

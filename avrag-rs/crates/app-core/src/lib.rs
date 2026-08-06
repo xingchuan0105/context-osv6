@@ -118,6 +118,7 @@ pub use legal_versions::{
 pub use share_domain::{
     PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
     ShareSettingsSnapshot, ShareTokenSnapshot, ShareWorkspaceMember, SharedKnowledgeBaseSnapshot,
+    WorkspaceShareSettingsRow,
     SharedShareInfoSnapshot, SharedSourceSnapshot, SharedWorkspaceSnapshot,
     WorkspaceAccessSnapshot,
 };

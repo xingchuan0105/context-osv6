@@ -1,4 +1,8 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { use } from "react";
+
+import { WorkspaceAnalyzeSurface } from "@/components/share/workspace-analyze-surface";
 
 type WorkspaceAnalyzePageProps = {
   params: Promise<{
@@ -6,11 +10,7 @@ type WorkspaceAnalyzePageProps = {
   }>;
 };
 
-export function generateStaticParams() {
-  return [{ workspace_id: "_placeholder" }];
-}
-
-export default async function WorkspaceAnalyzePage({ params }: WorkspaceAnalyzePageProps) {
-  const { workspace_id } = await params;
-  redirect(`/dashboard/${workspace_id}/share#insights`);
+export default function WorkspaceAnalyzePage({ params }: WorkspaceAnalyzePageProps) {
+  const { workspace_id } = use(params);
+  return <WorkspaceAnalyzeSurface workspaceId={workspace_id} />;
 }

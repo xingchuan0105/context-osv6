@@ -222,12 +222,16 @@ pub(crate) async fn request_context_middleware(
                 )
                     .into_response();
             }
-            // ADR-0010 §9: daily question cap per visitor on a share (local fixed day window).
-            let daily_cap: u32 = std::env::var("SHARE_CHAT_DAILY_LIMIT")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(200);
-            if daily_cap > 0 {
+            // ADR-0010 §4: per-share daily question cap (anon default 10, member unlimited).
+            // Env SHARE_CHAT_DAILY_LIMIT is platform fallback when share fields are absent.
+            let registered = visitor.is_some();
+            let daily_cap = share.daily_question_limit_for(registered).or_else(|| {
+                std::env::var("SHARE_CHAT_DAILY_LIMIT")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|n: &u32| *n > 0)
+            });
+            if let Some(daily_cap) = daily_cap {
                 let day_key = format!("{share_key}:day");
                 let (day_ok, _, _) = check_rate_limit_window(&day_key, daily_cap, 86_400);
                 if !day_ok {
@@ -235,7 +239,7 @@ pub(crate) async fn request_context_middleware(
                         StatusCode::TOO_MANY_REQUESTS,
                         Json(json!({
                             "error": "share_daily_limit_exceeded",
-                            "message": "Share chat daily question limit exceeded for this visitor.",
+                            "message": "This shared workspace has reached the daily question limit for this visitor.",
                         })),
                     )
                         .into_response();

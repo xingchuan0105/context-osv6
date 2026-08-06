@@ -128,7 +128,7 @@ async fn disabling_share_frees_slot() {
     let again = Uuid::new_v4();
     store.seed_workspace_owner(again, owner_id).await;
     service
-        .update_share_settings(&auth, &again.to_string(), Some("link"), None)
+        .update_share_settings(&auth, &again.to_string(), Some("link"), None, None, None)
         .await
         .expect("can enable again after free slot");
     assert!(store.is_share_enabled(again).await);

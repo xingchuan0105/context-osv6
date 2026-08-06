@@ -86,11 +86,20 @@ pub async fn handle_update_share_settings(
     workspace_id: String,
     access_level: Option<String>,
     allow_download: Option<bool>,
+    anon_question_limit: Option<i32>,
+    member_question_limit: Option<Option<i32>>,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<ShareSettings, AppError> {
     let service = ShareService::new(store);
     service
-        .update_share_settings(&ctx, &workspace_id, access_level.as_deref(), allow_download)
+        .update_share_settings(
+            &ctx,
+            &workspace_id,
+            access_level.as_deref(),
+            allow_download,
+            anon_question_limit,
+            member_question_limit,
+        )
         .await
         .map_err(map_anyhow_error)
 }

@@ -720,7 +720,7 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
 
     // Mark workspace public + share_enabled so anonymous chat is allowed (ADR-0010).
     let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false))
+        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false), None, None)
         .await;
 
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
@@ -730,7 +730,7 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
 
     // link mode still requires login
     let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .update_share_settings(&owner_auth, &workspace_id, Some("link"), Some(false))
+        .update_share_settings(&owner_auth, &workspace_id, Some("link"), Some(false), None, None)
         .await;
     let chat_req_link = Request::builder()
         .uri("/api/v1/chat")
@@ -745,7 +745,7 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
 
     // public allows anonymous (may fail later in pipeline for missing LLM; must not be login_required)
     let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false))
+        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false), None, None)
         .await;
     let chat_req = Request::builder()
         .uri("/api/v1/chat")

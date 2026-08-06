@@ -77,6 +77,8 @@ impl ShareService {
                 access_level: snapshot.access_level.into(),
                 workspace_visibility: snapshot.workspace_visibility,
                 share_enabled: snapshot.share_enabled,
+                anon_question_limit: snapshot.anon_question_limit,
+                member_question_limit: snapshot.member_question_limit,
             }))
     }
 }

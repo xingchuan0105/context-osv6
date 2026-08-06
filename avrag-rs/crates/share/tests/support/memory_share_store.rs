@@ -133,7 +133,7 @@ impl ShareStorePort for MemoryShareStore {
         &self,
         _auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<(String, bool, Vec<app_core::ShareTokenSnapshot>), AppError> {
+    ) -> Result<app_core::WorkspaceShareSettingsRow, AppError> {
         let access_level = self
             .workspaces
             .read()
@@ -141,7 +141,13 @@ impl ShareStorePort for MemoryShareStore {
             .get(&workspace_id)
             .map(|s| s.notebook_access_level.clone())
             .unwrap_or_else(|| "private".to_string());
-        Ok((access_level, false, Vec::new()))
+        Ok(app_core::WorkspaceShareSettingsRow {
+            access_level,
+            allow_download: false,
+            anon_question_limit: 10,
+            member_question_limit: None,
+            tokens: Vec::new(),
+        })
     }
 
     async fn list_members(
@@ -170,6 +176,8 @@ impl ShareStorePort for MemoryShareStore {
         workspace_id: Uuid,
         access_level: Option<&str>,
         _allow_download: Option<bool>,
+        _anon_question_limit: Option<i32>,
+        _member_question_limit: Option<Option<i32>>,
     ) -> Result<(), AppError> {
         if let Some(level) = access_level {
             if let Some(snapshot) = self.workspaces.write().await.get_mut(&workspace_id) {

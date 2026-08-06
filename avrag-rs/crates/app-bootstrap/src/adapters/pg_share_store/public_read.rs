@@ -139,7 +139,9 @@
               st.workspace_id,
               st.access_level as token_access_level,
               coalesce(n.access_level, 'private') as workspace_visibility,
-              coalesce(n.share_enabled, false) as share_enabled
+              coalesce(n.share_enabled, false) as share_enabled,
+              coalesce(n.share_anon_question_limit, 10) as share_anon_question_limit,
+              n.share_member_question_limit
             from share_tokens st
             join workspaces n on n.id = st.workspace_id
             where st.token = $1
@@ -178,6 +180,13 @@
         let share_enabled = row
             .try_get::<bool, _>("share_enabled")
             .map_err(|error| AppError::internal(error.to_string()))?;
+        let anon_question_limit = row
+            .try_get::<i32, _>("share_anon_question_limit")
+            .unwrap_or(10);
+        let member_question_limit = row
+            .try_get::<Option<i32>, _>("share_member_question_limit")
+            .ok()
+            .flatten();
         sqlx::query(
             r#"
             insert into share_access_logs (owner_user_id, workspace_id, share_token, action, created_at)
@@ -199,5 +208,7 @@
             access_level: ShareAccessLevel::from_role(&access_level),
             workspace_visibility,
             share_enabled,
+            anon_question_limit,
+            member_question_limit,
         }))
     }

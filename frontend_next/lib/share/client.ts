@@ -12,6 +12,10 @@ export type ShareSettings = {
   access_level: string;
   expires_at: string | null;
   allow_download: boolean;
+  /** Daily anon visitor question cap; 0 = unlimited. */
+  anon_question_limit: number;
+  /** Daily registered visitor cap; null = unlimited. */
+  member_question_limit: number | null;
 };
 
 /** Owner share-slot usage for the current plan. */
@@ -107,6 +111,8 @@ type RawShareTokenInfo = {
 type RawShareSettings = {
   access_level: string;
   allow_download: boolean;
+  anon_question_limit?: number;
+  member_question_limit?: number | null;
   share_tokens?: RawShareTokenInfo[];
 };
 
@@ -135,6 +141,9 @@ function mapShareSettings(raw: RawShareSettings): ShareSettings {
     access_level: raw.access_level,
     expires_at: activeShareToken?.expires_at ?? null,
     allow_download: raw.allow_download,
+    anon_question_limit: raw.anon_question_limit ?? 10,
+    member_question_limit:
+      raw.member_question_limit === undefined ? null : raw.member_question_limit,
   };
 }
 
@@ -177,7 +186,14 @@ export async function getShareQuota(token: string) {
 export async function updateShareSettings(
   token: string,
   workspaceId: string,
-  settings: Pick<ShareSettings, "access_level" | "allow_download">,
+  settings: Partial<
+    Pick<
+      ShareSettings,
+      "access_level" | "allow_download" | "anon_question_limit" | "member_question_limit"
+    >
+  > & {
+    member_question_limit_set?: boolean;
+  },
 ) {
   const raw = await request<RawShareSettings>(
     `/api/v1/workspaces/${workspaceId}/share/settings`,

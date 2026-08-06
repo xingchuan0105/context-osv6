@@ -131,12 +131,14 @@ impl ShareService {
             bail!("insufficient permission to view share settings");
         }
         let notebook_uuid = Uuid::parse_str(workspace_id)?;
-        let (access_level, allow_download, share_tokens) =
-            self.store.get_share_settings(ctx, notebook_uuid).await?;
+        let row = self.store.get_share_settings(ctx, notebook_uuid).await?;
         Ok(ShareSettings {
-            access_level,
-            allow_download,
-            share_tokens: share_tokens
+            access_level: row.access_level,
+            allow_download: row.allow_download,
+            anon_question_limit: row.anon_question_limit,
+            member_question_limit: row.member_question_limit,
+            share_tokens: row
+                .tokens
                 .into_iter()
                 .map(|token| ShareTokenInfo {
                     token: token.token,
@@ -185,6 +187,8 @@ impl ShareService {
         workspace_id: &str,
         access_level: Option<&str>,
         allow_download: Option<bool>,
+        anon_question_limit: Option<i32>,
+        member_question_limit: Option<Option<i32>>,
     ) -> Result<ShareSettings> {
         let access = self.check_access(ctx, workspace_id).await?;
         if !access.allows_share_management() {
@@ -211,6 +215,8 @@ impl ShareService {
                 Uuid::parse_str(workspace_id)?,
                 normalized_access_level.as_deref(),
                 allow_download,
+                anon_question_limit,
+                member_question_limit,
             )
             .await?;
         self.get_share_settings(ctx, workspace_id).await
@@ -277,14 +283,14 @@ impl ShareService {
         let _ = self.store.revoke_token(ctx, token).await?;
         // ADR-0010: free share slot when no live tokens remain (bare API path).
         if let Ok(ws_uuid) = Uuid::parse_str(&workspace_id) {
-            if let Ok((_level, _dl, tokens)) = self.store.get_share_settings(ctx, ws_uuid).await {
-                let has_live = tokens.iter().any(|t| {
+            if let Ok(row) = self.store.get_share_settings(ctx, ws_uuid).await {
+                let has_live = row.tokens.iter().any(|t| {
                     t.revoked_at.is_none() && !t.token.trim().is_empty() && t.token != token
                 });
                 if !has_live {
                     let _ = self
                         .store
-                        .update_share_settings(ctx, ws_uuid, Some("private"), None)
+                        .update_share_settings(ctx, ws_uuid, Some("private"), None, None, None)
                         .await;
                 }
             }

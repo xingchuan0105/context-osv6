@@ -95,6 +95,8 @@ impl<'a> ShareApp<'a> {
         workspace_id: String,
         access_level: Option<String>,
         allow_download: Option<bool>,
+        anon_question_limit: Option<i32>,
+        member_question_limit: Option<Option<i32>>,
     ) -> Result<avrag_share::ShareSettings, common::AppError> {
         let store = self.require_store()?;
         avrag_share::handle_update_share_settings(
@@ -102,6 +104,8 @@ impl<'a> ShareApp<'a> {
             workspace_id,
             access_level,
             allow_download,
+            anon_question_limit,
+            member_question_limit,
             store,
         )
         .await

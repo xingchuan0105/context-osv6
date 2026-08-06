@@ -190,21 +190,27 @@
 
 #### 4.1 目标
 
-- 访客使用 Shared Workspace 的 LLM/embed/rerank：**一律 Owner-pays**（Owner BYOK 或 Owner 储值）。
-- 开启分享 / 复制链接时 **强制确认** 文案。
-- 访客模式 Owner 可选：**匿名** | **须注册**。
-- 默认：Owner 预算熔断 + 日提问上限；匿名更严。
+- 访客 / 定向邀请成员使用 Shared Workspace 的 LLM/embed/rerank：**一律 Owner-pays**（Owner 自定义 Provider 或 Owner 余额）。
+- 开启分享 / 复制链接时 **强制确认** 文案（Owner 成本提示 + 名额 x/N）。
+- 访客模式 Owner 可选两档（`workspaces.access_level`）：
+  - **`public`（匿名链接）**：未登录可提问；限次键 = `anon:{edge_ip}` + Turnstile（secret 配置时）。
+  - **`link`（须注册 / 定向邀请）**：须登录；限次键 = `user_id`；协作成员走 `workspace_members` 邀请。
+- **提问上限（按分享落库，Owner 可改）**：
+  - 匿名档：`share_anon_question_limit` 默认 **10** / 访客身份 / 日（UTC 日窗）；`0` = 不设日上限（仍受 RPM 与 Owner 余额熔断约束）。
+  - 定向邀请档：`share_member_question_limit` 默认 **NULL** = **不限**；正整数 = 每登录访客 / 日上限。
+- 环境变量 `SHARE_CHAT_DAILY_LIMIT` / `SHARE_CHAT_RATE_LIMIT_RPM` 仅作 **平台兜底**（未读到分享级配置时的 fallback），不再作为唯一产品语义。
 
-#### 4.2 现状与翻转范围（非「加一句提示」）
+#### 4.2 实现状态（2026-08-06+）
 
-| 现状 | 目标 |
+| 能力 | 状态 |
 |------|------|
-| quota/usage 记 **caller**（访客） | 记 **Owner**（`owner_user_id` from share context） |
-| 未登录 share chat **硬拒绝** | 匿名模式允许提问；注册模式保持需登录 |
-| 平台 env key + guest 配额 | Owner 钱包或 Owner 托管 key |
-| `owner_user_id` 快照未贯通执行 | 全链路：鉴权上下文、quota、usage_events、wallet debit、LLM client 选 key |
-
-**工作量**：billing/chat 执行上下文翻转 + 匿名路径 + 密钥/钱包接线；应单列为 **B2.5 / B3 并行关键路径**，**不得**塞进「B1 文案提示」。
+| Share chat auth 重映射为 Owner + optional `actor_id` | **已落地**（middleware） |
+| 匿名 `public` / 注册 `link` | **已落地** |
+| Turnstile（匿名） | **已落地**（secret 配置时） |
+| RPM + 按 visitor 键日限 | **已落地**；日限改为 **分享级字段优先** |
+| Owner 钱包 / 自定义 Provider | **已落地** |
+| 定向邀请成员在他人库提问 Owner-pays | **W2**：成员会话 payer = workspace Owner |
+| 邀请 SMTP 邮件 | **W2** |
 
 #### 4.3 访客模式与 Denial-of-Wallet
 
@@ -212,6 +218,7 @@
 
 - 优先 **按预算/token 单位** 限流，而非仅 QPS（见 §9）。
 - **匿名访客：只答库里的（已拍板）**：回答须 grounded 于该分享知识库；闲聊/通用生成默认拒绝或极短降级提示，避免被当免费 ChatGPT 刷 Owner 额度。须注册访客可产品开关放宽，**默认仍建议只答库里**。
+- 超限响应码：`share_daily_limit_exceeded` / `share_rate_limit_exceeded`，产品文案须明确「已达本分享提问上限」。
 
 ### 5. 本地 → 云端 Publish / 更新同步
 

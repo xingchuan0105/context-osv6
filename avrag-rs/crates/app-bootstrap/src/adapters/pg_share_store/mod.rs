@@ -4,6 +4,7 @@ use app_core::{
     ShareStorePort,
     share_domain::{
         PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
+        WorkspaceShareSettingsRow,
         ShareTokenSnapshot, ShareWorkspaceMember, SharedKnowledgeBaseSnapshot,
         SharedShareInfoSnapshot, SharedSourceSnapshot, SharedWorkspaceSnapshot,
         WorkspaceAccessSnapshot,

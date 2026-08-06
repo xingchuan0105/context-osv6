@@ -28,6 +28,16 @@ pub(crate) struct UpdateShareSettingsBody {
     pub access_level: Option<String>,
     #[serde(default)]
     pub allow_download: Option<bool>,
+    /// Daily anon visitor question cap (0 = unlimited). Omitted = no change.
+    #[serde(default)]
+    pub anon_question_limit: Option<i32>,
+    /// Daily registered visitor cap; `null` clears to unlimited; omitted = no change.
+    /// Use `member_question_limit_set` to distinguish omit vs clear.
+    #[serde(default)]
+    pub member_question_limit: Option<i32>,
+    /// When true, apply `member_question_limit` (including null → unlimited).
+    #[serde(default)]
+    pub member_question_limit_set: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -154,10 +164,21 @@ pub(crate) async fn update_share_settings_handler(
     if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
+    let member_limit = if req.member_question_limit_set {
+        Some(req.member_question_limit)
+    } else {
+        None
+    };
     share_ok!(
         state
             .share()
-            .update_share_settings(workspace_id, req.access_level, req.allow_download)
+            .update_share_settings(
+                workspace_id,
+                req.access_level,
+                req.allow_download,
+                req.anon_question_limit,
+                member_limit,
+            )
             .await
     )
 }
@@ -269,12 +290,46 @@ pub(crate) async fn invite_member_handler(
         return response;
     }
     let role = avrag_share::AccessLevel::from_role(&req.role);
-    share_empty_ok!(
-        state
-            .share()
-            .invite_share_member(workspace_id, req.email, role)
+    let email = req.email.clone();
+    let invite_result = state
+        .share()
+        .invite_share_member(workspace_id.clone(), email.clone(), role)
+        .await;
+    if let Err(error) = invite_result {
+        return app_error_response(error);
+    }
+
+    // Best-effort invite email (ADR-0010 W2 #13); UI still shows manual copy on success.
+    let mail = state.password_reset_service();
+    if mail.smtp_ready() {
+        let base = std::env::var("AVRAG_PUBLIC_BASE_URL")
+            .or_else(|_| std::env::var("PUBLIC_BASE_URL"))
+            .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+        let accept_url = format!(
+            "{}/dashboard/{workspace_id}/share?invite=1",
+            base.trim_end_matches('/')
+        );
+        let title = state
+            .workspace()
+            .get_workspace(&workspace_id)
             .await
+            .map(|w| w.title.clone())
+            .unwrap_or_else(|| workspace_id.clone());
+        if let Err(e) = mail
+            .send_workspace_invite_email(&email, "workspace owner", &title, &accept_url, true)
+            .await
+        {
+            tracing::warn!(error = %e, %email, "workspace invite email send failed");
+        }
+    } else {
+        tracing::info!(%email, "smtp not configured; invite created without email");
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true })),
     )
+        .into_response()
 }
 
 pub(crate) async fn accept_member_handler(

@@ -10,7 +10,9 @@ import { AccountMenu } from "../account-menu";
 import { PlanEntry } from "../plan-entry";
 import { WorkspaceApiAccessModal } from "../api-access/workspace-api-access-modal";
 import { WorkspaceShareQuickModal } from "../share/workspace-share-quick-modal";
+import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { getShareSettings, isShareEnabled } from "../../lib/share/client";
 import { isTauri } from "../../lib/runtime/tauri-ipc";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import styles from "./workspace-shell.module.css";
@@ -35,16 +37,42 @@ export function WorkspaceTopBar({
   onCreateWorkspaceSubmit,
 }: WorkspaceTopBarProps) {
   const { locale } = useUiPreferences();
+  const { token } = useAuth();
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [desktopDrawerOpen, setDesktopDrawerOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [apiOpen, setApiOpen] = useState(false);
+  const [shareEnabled, setShareEnabled] = useState(false);
   const desktopRuntime = isTauri();
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const safeWorkspaceTitle = workspaceTitle ?? "";
   const safeWorkspaceDescription = workspaceDescription ?? "";
   const newWorkspaceLabel = formatUiMessage(locale, "workspaceCreateDialogLabel");
   const displayTitle = safeWorkspaceTitle;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token) {
+      setShareEnabled(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void getShareSettings(token, workspaceId)
+      .then((settings) => {
+        if (!cancelled) {
+          setShareEnabled(isShareEnabled(settings));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setShareEnabled(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, workspaceId, shareOpen]);
 
   useEffect(() => {
     if (!isTitleEditing) {
@@ -183,24 +211,25 @@ export function WorkspaceTopBar({
             type="button"
             onClick={() => setShareOpen(true)}
           >
-            <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M8 9.6 10.4 12 8 14.4 5.6 12 8 9.6Z" strokeLinejoin="round" strokeWidth="1.8" />
-              <path d="M17 5.3 19.2 7.5 17 9.7 14.8 7.5 17 5.3Z" strokeLinejoin="round" strokeWidth="1.8" />
-              <path d="M17 14.3 19.2 16.5 17 18.7 14.8 16.5 17 14.3Z" strokeLinejoin="round" strokeWidth="1.8" />
-              <path d="M10 10.95 15.15 8.35M10 13.05l5.15 2.6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-              <path d="M5.95 8.15 4.25 10.1v3.8l1.7 1.95" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-            </svg>
             <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceDistribute")}</span>
           </button>
+          {shareEnabled ? (
+            <Link
+              className={styles.topBarActionButton}
+              data-testid="workspace-topbar-analyze"
+              href={`/dashboard/${workspaceId}/analyze`}
+            >
+              <span className={styles.topBarActionLabel}>
+                {locale === "zh-CN" ? "数据分析" : "Analytics"}
+              </span>
+            </Link>
+          ) : null}
           <button
             className={styles.topBarActionButton}
             data-testid="workspace-topbar-api"
             type="button"
             onClick={() => setApiOpen(true)}
           >
-            <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M8 8.5 4.5 12 8 15.5M16 8.5 19.5 12 16 15.5M13.5 6.5 10.5 17.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-            </svg>
             <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceApi")}</span>
           </button>
         </div>

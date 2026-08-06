@@ -2,7 +2,7 @@
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<(String, bool, Vec<ShareTokenSnapshot>), AppError> {
+    ) -> Result<WorkspaceShareSettingsRow, AppError> {
         let mut tx = self
             .repo
             .raw()
@@ -10,18 +10,31 @@
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
         set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
-        let notebook_row =
-            sqlx::query("select access_level, allow_download from workspaces where id = $1")
-                .bind(workspace_id)
-                .fetch_one(tx.as_mut())
-                .await
-                .map_err(|error| AppError::internal(error.to_string()))?;
+        let notebook_row = sqlx::query(
+            r#"
+            select access_level, allow_download,
+                   coalesce(share_anon_question_limit, 10) as share_anon_question_limit,
+                   share_member_question_limit
+            from workspaces where id = $1
+            "#,
+        )
+        .bind(workspace_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
         let access_level = notebook_row
             .try_get::<String, _>("access_level")
             .unwrap_or_else(|_| "private".to_string());
         let allow_download = notebook_row
             .try_get::<bool, _>("allow_download")
             .unwrap_or(false);
+        let anon_question_limit = notebook_row
+            .try_get::<i32, _>("share_anon_question_limit")
+            .unwrap_or(10);
+        let member_question_limit = notebook_row
+            .try_get::<Option<i32>, _>("share_member_question_limit")
+            .ok()
+            .flatten();
         let share_tokens = sqlx::query(
             r#"
             select token, access_level, expires_at, revoked_at, access_count
@@ -38,10 +51,12 @@
         tx.commit()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        Ok((
+        Ok(WorkspaceShareSettingsRow {
             access_level,
             allow_download,
-            share_tokens
+            anon_question_limit,
+            member_question_limit,
+            tokens: share_tokens
                 .into_iter()
                 .map(|row| ShareTokenSnapshot {
                     token: row.try_get("token").unwrap_or_default(),
@@ -61,7 +76,7 @@
                     ),
                 })
                 .collect(),
-        ))
+        })
     }
 
     async fn update_workspace_access_level(
@@ -95,6 +110,8 @@
         workspace_id: Uuid,
         access_level: Option<&str>,
         allow_download: Option<bool>,
+        anon_question_limit: Option<i32>,
+        member_question_limit: Option<Option<i32>>,
     ) -> Result<(), AppError> {
         let mut tx = self
             .repo
@@ -103,6 +120,7 @@
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
         set_rls_owner(tx.as_mut(), &auth.user_id().to_string()).await?;
+        // access_level / allow_download
         sqlx::query(
             r#"
             update workspaces
@@ -118,6 +136,40 @@
         .execute(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
+        if let Some(anon) = anon_question_limit {
+            if anon < 0 {
+                return Err(AppError::validation(
+                    "invalid_anon_question_limit",
+                    "share_anon_question_limit must be >= 0",
+                ));
+            }
+            sqlx::query(
+                "update workspaces set share_anon_question_limit = $2, updated_at = now() where id = $1",
+            )
+            .bind(workspace_id)
+            .bind(anon)
+            .execute(tx.as_mut())
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        }
+        if let Some(member) = member_question_limit {
+            if let Some(n) = member {
+                if n <= 0 {
+                    return Err(AppError::validation(
+                        "invalid_member_question_limit",
+                        "share_member_question_limit must be positive or null",
+                    ));
+                }
+            }
+            sqlx::query(
+                "update workspaces set share_member_question_limit = $2, updated_at = now() where id = $1",
+            )
+            .bind(workspace_id)
+            .bind(member)
+            .execute(tx.as_mut())
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        }
         tx.commit()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;

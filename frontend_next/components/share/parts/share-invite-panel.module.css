@@ -19,6 +19,11 @@
   justify-content: center;
 }
 
+.emailHint {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+
 .memberList {
   display: grid;
   gap: var(--space-3);

@@ -96,6 +96,8 @@ describe("WorkspaceShareCenterSurface", () => {
       access_level: "link",
       expires_at: "2026-04-30T18:00:00Z",
       allow_download: true,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
     mocks.getShareQuotaMock.mockResolvedValue({
       used: 1,
@@ -119,6 +121,8 @@ describe("WorkspaceShareCenterSurface", () => {
       access_level: "public",
       expires_at: "2026-04-30T18:00:00Z",
       allow_download: true,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
     mocks.createShareLinkMock.mockResolvedValue({ share_token: "share-123" });
     mocks.getShareAnalyticsMock.mockResolvedValue({
@@ -163,12 +167,16 @@ describe("WorkspaceShareCenterSurface", () => {
       access_level: "private",
       expires_at: null,
       allow_download: false,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
     mocks.updateShareSettingsMock.mockResolvedValue({
       share_token: "share-456",
       access_level: "link",
       expires_at: null,
       allow_download: false,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
 
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
@@ -214,6 +222,8 @@ describe("WorkspaceShareCenterSurface", () => {
       access_level: "private",
       expires_at: null,
       allow_download: false,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
     mocks.createShareLinkMock.mockRejectedValue(
       new ApiError(403, "share_workspace_quota_exceeded", "plan allows at most 3"),
@@ -241,12 +251,16 @@ describe("WorkspaceShareCenterSurface", () => {
       access_level: "link",
       expires_at: futureExpiry,
       allow_download: true,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
     mocks.updateShareSettingsMock.mockResolvedValue({
       share_token: "share-123",
       access_level: "public",
       expires_at: futureExpiry,
       allow_download: true,
+      anon_question_limit: 10,
+      member_question_limit: null,
     });
 
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);

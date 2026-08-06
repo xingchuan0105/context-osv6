@@ -91,8 +91,18 @@ impl From<app_core::ShareWorkspaceMember> for WorkspaceMember {
 pub struct ShareSettings {
     pub access_level: String,
     pub allow_download: bool,
+    /// Daily anon visitor question cap; 0 = unlimited.
+    #[serde(default = "default_anon_question_limit")]
+    pub anon_question_limit: i32,
+    /// Daily registered visitor question cap; null = unlimited.
+    #[serde(default)]
+    pub member_question_limit: Option<i32>,
     pub share_tokens: Vec<ShareTokenInfo>,
     pub members: Vec<WorkspaceMember>,
+}
+
+fn default_anon_question_limit() -> i32 {
+    10
 }
 
 /// Owner share-slot usage for the current plan (ADR-0010).
@@ -172,9 +182,26 @@ pub struct PublicShareChatContext {
     /// `private` | `link` | `public` — visitor login requirement.
     pub workspace_visibility: String,
     pub share_enabled: bool,
+    /// Daily question cap for anonymous visitors. `0` = no daily cap.
+    pub anon_question_limit: i32,
+    /// Daily question cap for registered visitors. `None` = unlimited.
+    pub member_question_limit: Option<i32>,
 }
 
 impl PublicShareChatContext {
+    /// Effective daily question cap for this visitor class.
+    pub fn daily_question_limit_for(&self, registered: bool) -> Option<u32> {
+        if registered {
+            self.member_question_limit
+                .filter(|n| *n > 0)
+                .map(|n| n as u32)
+        } else if self.anon_question_limit > 0 {
+            Some(self.anon_question_limit as u32)
+        } else {
+            None
+        }
+    }
+
     /// Anonymous visitors may ask when workspace is marked `public`.
     pub fn allows_anonymous_chat(&self) -> bool {
         self.share_enabled && self.workspace_visibility.eq_ignore_ascii_case("public")

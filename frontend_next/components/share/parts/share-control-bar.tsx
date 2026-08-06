@@ -166,6 +166,24 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
           </p>
         </div>
 
+        {settingsQuery.data ? (
+          <div className={styles.fieldStack} data-testid="share-question-limits">
+            <p className={styles.switchLabel}>
+              {locale === "zh-CN" ? "访客提问日上限" : "Daily question caps"}
+            </p>
+            <p className={`app-form-footnote ${styles.footnote}`}>
+              {locale === "zh-CN"
+                ? `匿名访客：${settingsQuery.data.anon_question_limit === 0 ? "不限" : `${settingsQuery.data.anon_question_limit} 次/日`}；定向邀请：${settingsQuery.data.member_question_limit == null ? "不限" : `${settingsQuery.data.member_question_limit} 次/日`}`
+                : `Anonymous: ${settingsQuery.data.anon_question_limit === 0 ? "unlimited" : `${settingsQuery.data.anon_question_limit}/day`}; Invited: ${settingsQuery.data.member_question_limit == null ? "unlimited" : `${settingsQuery.data.member_question_limit}/day`}`}
+            </p>
+            <p className={`app-form-footnote ${styles.footnote}`}>
+              {locale === "zh-CN"
+                ? "分享场景模型费用由 Owner 余额/自定义 Provider 承担。"
+                : "Share chat is Owner-pays (balance or custom provider)."}
+            </p>
+          </div>
+        ) : null}
+
         <div className={styles.fieldStack}>
           <label className="app-form-label" htmlFor="share-validity">
             {formatUiMessage(locale, "shareCenter.validityLabel")}

@@ -83,6 +83,11 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                   ? "发送邀请"
                   : "Send invite"}
             </button>
+            <p className={`app-form-footnote ${styles.emailHint}`}>
+              {locale === "zh-CN"
+                ? "将尝试发送邀请邮件（需配置 SMTP）；也可手动转发分享页链接。"
+                : "We'll try email (SMTP required); you can also copy the share page link."}
+            </p>
             {inviteError ? <p className="app-notice-banner">{inviteError}</p> : null}
           </div>
 

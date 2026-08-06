@@ -97,6 +97,8 @@ async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
                 access_level: ShareAccessLevel::Read,
                 workspace_visibility: "public".to_string(),
                 share_enabled: true,
+                anon_question_limit: 10,
+                member_question_limit: None,
             },
         )
         .await;
