@@ -85,6 +85,8 @@ async fn unified_mcp_lists_org_and_workspace_tools() {
     assert!(tool_names.contains(&"account.create_workspace"));
     assert!(tool_names.contains(&"workspace.create_upload"));
     assert!(tool_names.contains(&"workspace.rag_query"));
+    assert!(tool_names.contains(&"workspace.share_create_link"));
+    assert!(tool_names.contains(&"account.share_quota"));
 }
 
 

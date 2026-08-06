@@ -42,7 +42,7 @@
 | 问题 | 结论 |
 |------|------|
 | 本机有没有可调的「客户端能力」？ | **有。** 桌面 runtime 起 **本机 `avrag-api`**（默认 `http://127.0.0.1:18080`）+ worker；与云端 **同一套** transport / Product Apps / MCP。 |
-| Agent 今天能否调？ | **上传解析 + 问答：能**（stdio MCP 包装 **或** HTTP MCP + workspace API key）。**建库：半开。分享：对 API key 关闭。** |
+| Agent 今天能否调？ | **上传/问答：能**（workspace API key 或 user token）。**建库/分享：能**（`CONTEXT_OS_USER_TOKEN`；API key 仍关）。 |
 | 装完是否「开箱被 Claude 发现」？ | **半开。** 提供 `context-os-mcp` + 配置片段 + UI 引导；**不会**自动写入 Claude 全局配置。 |
 
 ```text
@@ -60,7 +60,7 @@
      ┌─────┴──────┬────────────┬────────────┐
      ▼            ▼            ▼            ▼
   建 Workspace  上传·解析    问答检索     分享 / 档位
-  半开          已开         已开        API key 关
+  用户 JWT 开   已开         已开        用户 JWT 开 / API key 关
 ```
 
 **原则：** 自动化面 = **HTTP / MCP**；桌面只负责 **起栈、登录/激活、UI、授权与额度真相**。
@@ -123,16 +123,16 @@
 
 执行路径：`state.conversation().execute` / stream（Product Apps），**非** transport 旁路。
 
-### 4.4 分享（含会员档位额度）— **对 Agent / API key 关闭**
+### 4.4 分享（含会员档位额度）— **用户 JWT 开；API key 关**
 
 | 维度 | 状态 |
 |------|------|
 | 产品 UI / 用户 REST | 有分享中心、`share_enabled`、限次、档位可分享名额等（ADR-0010） |
-| MCP 工具 | **无** `workspace.share_*` |
+| MCP 工具 | **有**（用户 JWT）：`workspace.share_create_link` / `share_get_settings` / `share_update_settings` / `share_revoke_link`；`account.share_quota` |
 | API key | share / members / notes / notifications / **API key 管理** → 用户会话 only → **`403 api_key_forbidden`** |
-| 额度 | 配额真相在 **Owner 用户 + 订阅档位**；不能让 workspace key 绕过 |
+| 额度 | 配额真相在 **Owner 用户 + 订阅档位**；`ShareService::ensure_share_enabled`；不能让 workspace key 绕过 |
 
-**结论：** coding agent **不能**在当前契约下「直接开分享并吃档位」；需产品决策后增加 **用户态** MCP/REST（JWT 或桌面 local token），并复用现有 Share 配额逻辑。
+**结论：** coding agent 持 **`CONTEXT_OS_USER_TOKEN`**（短时 agent token）可开分享并受档位约束；**禁止**用 workspace API key。
 
 ---
 
@@ -141,7 +141,8 @@
 | 调用方 | 凭据 | 典型能力 |
 |--------|------|----------|
 | 人 · 产品 UI | 用户 JWT（会话） | 全量：建库、key 管理、分享、设置… |
-| Coding agent（个人主路径） | **Workspace API key** | `workspace.*` 索引/查询；**不能** share / 管 key / account.* |
+| Coding agent · 索引/查询 | **Workspace API key** | `workspace.*` 上传/RAG；**不能** share / 管 key / account.* |
+| Coding agent · 建库/分享 | **User JWT / agent token**（`CONTEXT_OS_USER_TOKEN`） | `account.*`、`workspace.share_*`；受 ADR-0010 名额约束 |
 | 平台级自动化（非个人默认） | 账号向凭据（若启用） | account 类工具；文档不鼓励个人依赖 |
 
 Wire 与错误码细节见：`frontend_next/public/docs/api-access-for-agents.md`。
@@ -245,8 +246,8 @@ Content-Type: application/json
 |--------|------|------|
 | Local user token | **已落地** | `POST /api/auth/agent-token` 签发短时用户 JWT；`CONTEXT_OS_USER_TOKEN`；UI「签发 2h token」；吊销靠短 TTL + `auth_version`（改密） |
 | `create_workspace` 个人路径 | **已落地（CLI/MCP）** | `context-os workspace create` / MCP `account.create_workspace` + 用户 JWT（非 workspace key） |
-| `workspace.share_*`（或 REST 用户态） | 待办 | 开分享、限次等；**强制 Owner + ADR-0010 配额** |
-| CLI（workspace key 路径） | **已落地** | `context-os status|ingest|ask|sources`；`share` exit 4 拒绝 API key 路径 |
+| `workspace.share_*`（用户态 MCP） | **已落地** | `share_create_link` / `get_settings` / `update_settings` / `revoke_link` + `account.share_quota`；API key → `api_key_forbidden`；配额走 ShareService（ADR-0010） |
+| CLI（workspace key 路径） | **已落地** | `status|ingest|ask|sources`；share 子命令需 `CONTEXT_OS_USER_TOKEN` |
 
 **禁止：** 用 workspace API key 实现分享以绕过用户会话与档位。
 
@@ -278,10 +279,17 @@ context-os status
 context-os ingest ./doc.pdf            # create_upload → PUT → complete → poll
 context-os ask "Summarize the indexed docs"
 context-os sources
-context-os share                       # exit 4：须 UI（分享 MCP 仍待办）
+
+# 分享（用户 JWT；消耗档位 share 名额）
+context-os share quota
+context-os share enable --workspace $WS --role viewer
+context-os share configure --workspace $WS --access-level link --anon-limit 10
+context-os share status --workspace $WS
+context-os share revoke --workspace $WS --token <share_token>
 ```
 
-**鉴权优先级：** `CONTEXT_OS_USER_TOKEN` ＞ `CONTEXT_OS_API_KEY`（MCP/CLI Bearer）。
+**鉴权优先级：** `CONTEXT_OS_USER_TOKEN` ＞ `CONTEXT_OS_API_KEY`（MCP/CLI Bearer）。  
+**分享：** 仅用户态；workspace API key 调用 share MCP → `api_key_forbidden`。
 
 构建：`cargo build -p context-os --release` → `target/release/context-os` 与 `context-os-mcp`。  
 Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/context-os`。
@@ -332,3 +340,4 @@ Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/contex
 | 2026-08-06 | P0：`context-os-mcp` stdio 包装、`--check`、配置片段、API Access UI 引导 |
 | 2026-08-06 | P1 切片：`context-os` CLI（status/ingest/ask/sources；share 拒绝）；client 包合并 mcp+cli |
 | 2026-08-06 | P1：`POST /api/auth/agent-token` + `CONTEXT_OS_USER_TOKEN`；CLI auth/workspace create；API Access 签发 UI |
+| 2026-08-06 | P1：MCP `workspace.share_*` + `account.share_quota`；CLI `share enable|status|configure|revoke|quota` |

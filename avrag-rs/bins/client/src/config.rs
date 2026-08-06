@@ -193,9 +193,9 @@ not a user password. Create keys under Workspace → API Access."
 }
 
 pub fn share_forbidden_message() -> String {
-    "Share is not available via workspace API key or this CLI. \
-Open the Context-OS client UI (Share Center) while signed in; quotas follow the owner subscription (ADR-0010). \
-Agent share automation is P1 and requires a user-session credential — not a workspace key."
+    "Share requires CONTEXT_OS_USER_TOKEN (user JWT / agent token), not a workspace API key. \
+Use: context-os auth mint && context-os share enable --workspace <id>. \
+Quotas follow the owner subscription (ADR-0010)."
         .to_string()
 }
 

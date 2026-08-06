@@ -20,6 +20,11 @@ pub(crate) async fn execute_mcp_tool(
         "workspace.rag_query" | "workspace.search_query" | "workspace.chat" => {
             tools::execute_query_tool(state, tool_name, arguments).await
         }
+        "workspace.share_create_link" => tools::share_create_link(state, arguments).await,
+        "workspace.share_get_settings" => tools::share_get_settings(state, arguments).await,
+        "workspace.share_update_settings" => tools::share_update_settings(state, arguments).await,
+        "workspace.share_revoke_link" => tools::share_revoke_link(state, arguments).await,
+        "account.share_quota" => tools::share_quota(state, arguments).await,
         other => Err(AppError::validation(
             "unsupported_tool",
             format!("unsupported MCP tool: {other}"),

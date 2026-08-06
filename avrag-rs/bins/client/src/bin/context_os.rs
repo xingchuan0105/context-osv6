@@ -6,11 +6,11 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use context_os::config::{self, ClientConfig};
+use context_os::config::ClientConfig;
 use context_os::discover;
 use context_os::mcp_client::{McpClient, tool_data};
 use context_os::mime;
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn print_usage() {
     eprintln!(
@@ -27,13 +27,17 @@ USAGE:
   context-os ingest [--workspace ID] [--no-wait] [--timeout SECS] <file>
   context-os ask [--workspace ID] <query...>
   context-os sources [--workspace ID]
-  context-os share …          (refused: needs product share path + user session)
+  context-os share enable [--workspace ID] [--role viewer] [--expires-in SECS]
+  context-os share status [--workspace ID]
+  context-os share configure [--workspace ID] [--access-level link|public|private] …
+  context-os share revoke [--workspace ID] --token TOKEN
+  context-os share quota
   context-os --help
 
 ENV:
   CONTEXT_OS_API_BASE / AVRAG_PUBLIC_BASE_URL   (default http://127.0.0.1:18080)
   CONTEXT_OS_API_KEY / CONTEXT_OS_WORKSPACE_API_KEY   (index/query automation)
-  CONTEXT_OS_USER_TOKEN / CONTEXT_OS_AGENT_TOKEN      (user JWT; create workspace)
+  CONTEXT_OS_USER_TOKEN / CONTEXT_OS_AGENT_TOKEN      (user JWT; create workspace + share)
   CONTEXT_OS_WORKSPACE_ID
 
 FLAGS (global):
@@ -83,12 +87,27 @@ enum Command {
         ttl_minutes: u32,
     },
     AuthWhoami,
-    WorkspaceCreate {
+      WorkspaceCreate {
         name: String,
         description: String,
     },
     WorkspaceList,
-    Share,
+    ShareEnable {
+        role: String,
+        expires_in_secs: Option<i64>,
+    },
+    ShareStatus,
+    ShareConfigure {
+        access_level: Option<String>,
+        allow_download: Option<bool>,
+        anon_question_limit: Option<i32>,
+        member_question_limit: Option<Option<i32>>,
+        member_question_limit_set: bool,
+    },
+    ShareRevoke {
+        token: String,
+    },
+    ShareQuota,
     Help,
 }
 
@@ -139,7 +158,7 @@ fn parse_args(args: &[String]) -> Result<(GlobalOpts, Command)> {
     match cmd {
         "status" | "check" => Ok((opts, Command::Status)),
         "help" => Ok((opts, Command::Help)),
-        "share" => Ok((opts, Command::Share)),
+        "share" => parse_share(&mut opts, sub),
         "sources" | "list-sources" => Ok((opts, Command::Sources)),
         "auth" => parse_auth(&mut opts, sub),
         "workspace" | "ws" => parse_workspace(&mut opts, sub),
@@ -317,6 +336,215 @@ fn parse_auth(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Comm
         }
         "whoami" | "me" | "status" => Ok((opts.clone(), Command::AuthWhoami)),
         other => bail!("unknown auth subcommand `{other}` (login|mint|whoami)"),
+    }
+}
+
+fn parse_share(opts: &mut GlobalOpts, sub: &[String]) -> Result<(GlobalOpts, Command)> {
+    if sub.is_empty() {
+        bail!("share requires a subcommand: enable | status | configure | revoke | quota");
+    }
+    match sub[0].as_str() {
+        "quota" => Ok((opts.clone(), Command::ShareQuota)),
+        "status" | "settings" | "get" => {
+            let mut j = 1;
+            while j < sub.len() {
+                match sub[j].as_str() {
+                    "--workspace" | "-w" => {
+                        j += 1;
+                        opts.workspace = Some(
+                            sub.get(j)
+                                .context("share status --workspace requires UUID")?
+                                .clone(),
+                        );
+                    }
+                    "--user-token" => {
+                        j += 1;
+                        opts.user_token = Some(
+                            sub.get(j)
+                                .context("--user-token requires value")?
+                                .clone(),
+                        );
+                    }
+                    "--base" => {
+                        j += 1;
+                        opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
+                    }
+                    other => bail!("unknown share status flag: {other}"),
+                }
+                j += 1;
+            }
+            Ok((opts.clone(), Command::ShareStatus))
+        }
+        "enable" | "create" | "link" => {
+            let mut role = "viewer".to_string();
+            let mut expires_in_secs = None;
+            let mut j = 1;
+            while j < sub.len() {
+                match sub[j].as_str() {
+                    "--role" => {
+                        j += 1;
+                        role = sub.get(j).context("--role requires value")?.clone();
+                    }
+                    "--expires-in" | "--expires-in-secs" => {
+                        j += 1;
+                        expires_in_secs = Some(
+                            sub.get(j)
+                                .context("--expires-in requires seconds")?
+                                .parse()
+                                .context("--expires-in must be integer")?,
+                        );
+                    }
+                    "--workspace" | "-w" => {
+                        j += 1;
+                        opts.workspace = Some(
+                            sub.get(j)
+                                .context("share enable --workspace requires UUID")?
+                                .clone(),
+                        );
+                    }
+                    "--user-token" => {
+                        j += 1;
+                        opts.user_token = Some(
+                            sub.get(j)
+                                .context("--user-token requires value")?
+                                .clone(),
+                        );
+                    }
+                    "--base" => {
+                        j += 1;
+                        opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
+                    }
+                    other => bail!("unknown share enable flag: {other}"),
+                }
+                j += 1;
+            }
+            Ok((
+                opts.clone(),
+                Command::ShareEnable {
+                    role,
+                    expires_in_secs,
+                },
+            ))
+        }
+        "configure" | "update" | "set" => {
+            let mut access_level = None;
+            let mut allow_download = None;
+            let mut anon_question_limit = None;
+            let mut member_question_limit = None;
+            let mut member_question_limit_set = false;
+            let mut j = 1;
+            while j < sub.len() {
+                match sub[j].as_str() {
+                    "--access-level" | "--level" => {
+                        j += 1;
+                        access_level =
+                            Some(sub.get(j).context("--access-level requires value")?.clone());
+                    }
+                    "--allow-download" => allow_download = Some(true),
+                    "--no-download" => allow_download = Some(false),
+                    "--anon-limit" => {
+                        j += 1;
+                        anon_question_limit = Some(
+                            sub.get(j)
+                                .context("--anon-limit requires integer")?
+                                .parse()
+                                .context("--anon-limit must be integer")?,
+                        );
+                    }
+                    "--member-limit" => {
+                        j += 1;
+                        let raw = sub.get(j).context("--member-limit requires value")?;
+                        member_question_limit_set = true;
+                        if raw == "null" || raw == "unlimited" {
+                            member_question_limit = None;
+                        } else {
+                            member_question_limit = Some(
+                                raw.parse()
+                                    .context("--member-limit must be integer|null|unlimited")?,
+                            );
+                        }
+                    }
+                    "--workspace" | "-w" => {
+                        j += 1;
+                        opts.workspace = Some(
+                            sub.get(j)
+                                .context("share configure --workspace requires UUID")?
+                                .clone(),
+                        );
+                    }
+                    "--user-token" => {
+                        j += 1;
+                        opts.user_token = Some(
+                            sub.get(j)
+                                .context("--user-token requires value")?
+                                .clone(),
+                        );
+                    }
+                    "--base" => {
+                        j += 1;
+                        opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
+                    }
+                    other => bail!("unknown share configure flag: {other}"),
+                }
+                j += 1;
+            }
+            let member = if member_question_limit_set {
+                Some(member_question_limit)
+            } else {
+                None
+            };
+            Ok((
+                opts.clone(),
+                Command::ShareConfigure {
+                    access_level,
+                    allow_download,
+                    anon_question_limit,
+                    member_question_limit: member,
+                    member_question_limit_set,
+                },
+            ))
+        }
+        "revoke" => {
+            let mut token = None;
+            let mut j = 1;
+            while j < sub.len() {
+                match sub[j].as_str() {
+                    "--token" | "--share-token" => {
+                        j += 1;
+                        token = Some(sub.get(j).context("--token requires value")?.clone());
+                    }
+                    "--workspace" | "-w" => {
+                        j += 1;
+                        opts.workspace = Some(
+                            sub.get(j)
+                                .context("share revoke --workspace requires UUID")?
+                                .clone(),
+                        );
+                    }
+                    "--user-token" => {
+                        j += 1;
+                        opts.user_token = Some(
+                            sub.get(j)
+                                .context("--user-token requires value")?
+                                .clone(),
+                        );
+                    }
+                    "--base" => {
+                        j += 1;
+                        opts.base = Some(sub.get(j).context("--base requires URL")?.clone());
+                    }
+                    other => bail!("unknown share revoke flag: {other}"),
+                }
+                j += 1;
+            }
+            Ok((
+                opts.clone(),
+                Command::ShareRevoke {
+                    token: token.context("share revoke requires --token")?,
+                },
+            ))
+        }
+        other => bail!("unknown share subcommand `{other}` (enable|status|configure|revoke|quota)"),
     }
 }
 
@@ -656,6 +884,95 @@ async fn cmd_workspace_list(client: &McpClient) -> Result<()> {
     Ok(())
 }
 
+async fn cmd_share_enable(
+    client: &McpClient,
+    role: &str,
+    expires_in_secs: Option<i64>,
+) -> Result<()> {
+    let workspace_id = client.config().require_workspace_id()?.to_string();
+    client.config().require_user_token()?;
+    let mut args = json!({
+        "workspace_id": workspace_id,
+        "role": role,
+    });
+    if let Some(secs) = expires_in_secs {
+        args.as_object_mut()
+            .unwrap()
+            .insert("expires_in_secs".into(), json!(secs));
+    }
+    let result = client
+        .tools_call("workspace.share_create_link", args)
+        .await?;
+    println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
+    Ok(())
+}
+
+async fn cmd_share_status(client: &McpClient) -> Result<()> {
+    let workspace_id = client.config().require_workspace_id()?.to_string();
+    client.config().require_user_token()?;
+    let result = client
+        .tools_call(
+            "workspace.share_get_settings",
+            json!({ "workspace_id": workspace_id }),
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
+    Ok(())
+}
+
+async fn cmd_share_configure(
+    client: &McpClient,
+    access_level: Option<String>,
+    allow_download: Option<bool>,
+    anon_question_limit: Option<i32>,
+    member_question_limit: Option<Option<i32>>,
+) -> Result<()> {
+    let workspace_id = client.config().require_workspace_id()?.to_string();
+    client.config().require_user_token()?;
+    let mut args = json!({ "workspace_id": workspace_id });
+    let obj = args.as_object_mut().unwrap();
+    if let Some(level) = access_level {
+        obj.insert("access_level".into(), json!(level));
+    }
+    if let Some(v) = allow_download {
+        obj.insert("allow_download".into(), json!(v));
+    }
+    if let Some(v) = anon_question_limit {
+        obj.insert("anon_question_limit".into(), json!(v));
+    }
+    if let Some(inner) = member_question_limit {
+        match inner {
+            Some(n) => obj.insert("member_question_limit".into(), json!(n)),
+            None => obj.insert("member_question_limit".into(), Value::Null),
+        };
+    }
+    let result = client
+        .tools_call("workspace.share_update_settings", args)
+        .await?;
+    println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
+    Ok(())
+}
+
+async fn cmd_share_revoke(client: &McpClient, token: &str) -> Result<()> {
+    let workspace_id = client.config().require_workspace_id()?.to_string();
+    client.config().require_user_token()?;
+    let result = client
+        .tools_call(
+            "workspace.share_revoke_link",
+            json!({ "workspace_id": workspace_id, "token": token }),
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
+    Ok(())
+}
+
+async fn cmd_share_quota(client: &McpClient) -> Result<()> {
+    client.config().require_user_token()?;
+    let result = client.tools_call("account.share_quota", json!({})).await?;
+    println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -671,11 +988,6 @@ async fn main() -> ExitCode {
     if matches!(command, Command::Help) {
         print_usage();
         return ExitCode::SUCCESS;
-    }
-
-    if matches!(command, Command::Share) {
-        eprintln!("context-os: {}", config::share_forbidden_message());
-        return ExitCode::from(4);
     }
 
     let cfg = match build_config(&opts) {
@@ -729,7 +1041,43 @@ async fn main() -> ExitCode {
                 let client = McpClient::new(cfg)?;
                 cmd_sources(&client).await
             }
-            Command::Share | Command::Help => unreachable!(),
+            Command::ShareEnable {
+                role,
+                expires_in_secs,
+            } => {
+                let client = McpClient::new(cfg)?;
+                cmd_share_enable(&client, &role, expires_in_secs).await
+            }
+            Command::ShareStatus => {
+                let client = McpClient::new(cfg)?;
+                cmd_share_status(&client).await
+            }
+            Command::ShareConfigure {
+                access_level,
+                allow_download,
+                anon_question_limit,
+                member_question_limit,
+                member_question_limit_set: _,
+            } => {
+                let client = McpClient::new(cfg)?;
+                cmd_share_configure(
+                    &client,
+                    access_level,
+                    allow_download,
+                    anon_question_limit,
+                    member_question_limit,
+                )
+                .await
+            }
+            Command::ShareRevoke { token } => {
+                let client = McpClient::new(cfg)?;
+                cmd_share_revoke(&client, &token).await
+            }
+            Command::ShareQuota => {
+                let client = McpClient::new(cfg)?;
+                cmd_share_quota(&client).await
+            }
+            Command::Help => unreachable!(),
         }
     };
 
@@ -801,9 +1149,27 @@ mod tests {
     }
 
     #[test]
-    fn parse_share() {
-        let (_, cmd) = parse_args(&["share".into(), "enable".into()]).unwrap();
-        assert!(matches!(cmd, Command::Share));
+    fn parse_share_enable() {
+        let (opts, cmd) = parse_args(&[
+            "share".into(),
+            "enable".into(),
+            "--workspace".into(),
+            "ws".into(),
+            "--role".into(),
+            "viewer".into(),
+        ])
+        .unwrap();
+        assert_eq!(opts.workspace.as_deref(), Some("ws"));
+        match cmd {
+            Command::ShareEnable { role, .. } => assert_eq!(role, "viewer"),
+            _ => panic!("expected share enable"),
+        }
+    }
+
+    #[test]
+    fn parse_share_quota() {
+        let (_, cmd) = parse_args(&["share".into(), "quota".into()]).unwrap();
+        assert!(matches!(cmd, Command::ShareQuota));
     }
 
     #[test]

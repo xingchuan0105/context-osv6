@@ -5,6 +5,7 @@ pub(crate) fn mcp_all_tools() -> Vec<Value> {
     tools.extend(account_tools());
     tools.extend(ingest_tools());
     tools.extend(query_tools());
+    tools.extend(share_tools());
     tools
 }
 
@@ -39,6 +40,85 @@ fn account_tools() -> Vec<Value> {
             "inputSchema": {
                 "type": "object",
                 "properties": {}
+            }
+        }),
+        json!({
+            "name": "account.share_quota",
+            "description": "Owner share-enabled workspace quota (used/max/plan). User session only; not available to workspace API keys.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            }
+        }),
+    ]
+}
+
+fn share_tools() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "workspace.share_create_link",
+            "description": "Create a share link and enable sharing for a workspace (consumes owner plan share slot per ADR-0010). User session only.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workspace_id"],
+                "properties": {
+                    "workspace_id": workspace_id_property(),
+                    "role": {
+                        "type": "string",
+                        "description": "viewer|editor|owner (default viewer)"
+                    },
+                    "expires_in_secs": { "type": "integer", "minimum": 1 },
+                    "expires_at": {
+                        "type": "string",
+                        "description": "RFC3339 expiry; alternative to expires_in_secs"
+                    }
+                }
+            }
+        }),
+        json!({
+            "name": "workspace.share_get_settings",
+            "description": "Get share settings, tokens, and members for a workspace. User session only.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workspace_id"],
+                "properties": {
+                    "workspace_id": workspace_id_property()
+                }
+            }
+        }),
+        json!({
+            "name": "workspace.share_update_settings",
+            "description": "Update access_level (private|link|public), allow_download, and daily question limits. Enabling link/public uses share quota. User session only.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workspace_id"],
+                "properties": {
+                    "workspace_id": workspace_id_property(),
+                    "access_level": {
+                        "type": "string",
+                        "description": "private|link|public"
+                    },
+                    "allow_download": { "type": "boolean" },
+                    "anon_question_limit": {
+                        "type": "integer",
+                        "description": "Daily anon visitor question cap; 0 = unlimited"
+                    },
+                    "member_question_limit": {
+                        "description": "Daily registered visitor cap; null clears to unlimited"
+                    }
+                }
+            }
+        }),
+        json!({
+            "name": "workspace.share_revoke_link",
+            "description": "Revoke a share token. User session only.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workspace_id", "token"],
+                "properties": {
+                    "workspace_id": workspace_id_property(),
+                    "token": { "type": "string" }
+                }
             }
         }),
     ]
@@ -173,6 +253,11 @@ pub(crate) fn operation_guide_mode_for_tool(tool_name: &str) -> Option<&'static 
         | "workspace.add_url_source" => Some("index"),
         "workspace.list_sources" => Some("query"),
         "account.create_workspace" | "account.list_workspaces" => Some("workspace.create"),
+        "workspace.share_create_link"
+        | "workspace.share_get_settings"
+        | "workspace.share_update_settings"
+        | "workspace.share_revoke_link"
+        | "account.share_quota" => Some("workspace.create"),
         _ => None,
     }
 }

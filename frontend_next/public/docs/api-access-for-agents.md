@@ -47,7 +47,7 @@ When the **Context-OS desktop client** is running (default API `http://127.0.0.1
 | Item | Value |
 | --- | --- |
 | Binary | `context-os-mcp` (package `context-os` / `avrag-rs/bins/client`; staged under `desktop/runtime/bin/`) |
-| CLI | `context-os status` · `ingest` · `ask` · `sources` · `auth login|mint` · `workspace create|list` (`share` refused) |
+| CLI | `context-os status` · `ingest` · `ask` · `sources` · `auth login|mint` · `workspace create|list` · `share enable|status|configure|revoke|quota` (share needs user token) |
 | Env | `CONTEXT_OS_API_KEY` (workspace); `CONTEXT_OS_USER_TOKEN` (user JWT / short agent token — preferred Bearer); optional `CONTEXT_OS_API_BASE`; `CONTEXT_OS_WORKSPACE_ID` |
 | User token mint | `POST /api/auth/agent-token` with session JWT → short-lived token (not available to workspace API keys) |
 | Probe | `context-os-mcp --check` or `context-os status` |
@@ -84,6 +84,18 @@ These are the tools personal agents should use after the human shares a workspac
 | `workspace.rag_query` | `query` | RAG (codegen/SDK) |
 | `workspace.search_query` | `query` | Web search (native tools) |
 | `workspace.chat` | `query` | Legacy alias for RAG |
+
+### User-session share tools (require user JWT / agent token — **not** workspace API key)
+
+| Tool | Permission | Purpose |
+| --- | --- | --- |
+| `workspace.share_create_link` | user session | Create share link; enables share slot (ADR-0010 quota) |
+| `workspace.share_get_settings` | user session | Settings, tokens, members |
+| `workspace.share_update_settings` | user session | `access_level` private\|link\|public, download, daily limits |
+| `workspace.share_revoke_link` | user session | Revoke token |
+| `account.share_quota` | user session | Owner used/max/plan share slots |
+
+Workspace API keys receive MCP/JSON-RPC error `api_key_forbidden` on these tools.
 
 Example `tools/call`:
 
