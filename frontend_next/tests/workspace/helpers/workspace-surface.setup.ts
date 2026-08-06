@@ -226,8 +226,8 @@ export function resetWorkspaceSurfaceMocks(
       workspace_id: "ws-2",
       owner_user_id: "owner-1",
       owner_id: "user-1",
-      name: "工作区1",
-      title: "工作区1",
+      name: "新建工作区1",
+      title: "新建工作区1",
       description: "",
       created_at: "2026-04-19T00:00:00Z",
       updated_at: "2026-04-19T00:00:00Z",
@@ -236,7 +236,7 @@ export function resetWorkspaceSurfaceMocks(
       shared: false,
     },
   });
-  mocks.getDefaultWorkspaceTitleMock.mockReturnValue("工作区1");
+  mocks.getDefaultWorkspaceTitleMock.mockReturnValue("新建工作区1");
   mocks.listWorkspaceNotesMock.mockResolvedValue({ notes: [] });
   mocks.listWorkspaceSourcesMock.mockResolvedValue({
     sources: [

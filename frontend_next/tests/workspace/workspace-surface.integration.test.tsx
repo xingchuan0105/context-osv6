@@ -67,7 +67,7 @@ describe("WorkspaceSurface integration", () => {
     await waitFor(() => {
       expect(mocks.markDefaultWorkspaceTitleUsedMock).toHaveBeenCalled();
       expect(mocks.createWorkspaceMock).toHaveBeenCalledWith("token-123", {
-        name: "工作区1",
+        name: "新建工作区1",
         description: "",
       });
     });

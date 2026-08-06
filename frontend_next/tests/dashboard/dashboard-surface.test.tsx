@@ -140,8 +140,8 @@ beforeEach(() => {
     workspace: {
       ...workspaces[0],
       workspace_id: "ws-4",
-      name: "工作区1",
-      title: "工作区1",
+      name: "新建工作区1",
+      title: "新建工作区1",
       created_at: "2026-04-18T08:00:00Z",
       updated_at: "2026-04-18T08:00:00Z",
     },
@@ -319,7 +319,7 @@ describe("DashboardSurface", () => {
     await user.click(screen.getByRole("button", { name: "创建第一个工作区" }));
     await waitFor(() => {
       expect(mocks.createWorkspaceMock).toHaveBeenCalledWith("token-123", {
-        name: "工作区1",
+        name: "新建工作区1",
         description: "",
       });
       expect(mocks.pushMock).toHaveBeenCalledWith("/dashboard/ws-4");
@@ -337,7 +337,7 @@ describe("DashboardSurface", () => {
 
     await waitFor(() => {
       expect(mocks.createWorkspaceMock).toHaveBeenCalledWith("token-123", {
-        name: "工作区1",
+        name: "新建工作区1",
         description: "",
       });
     });

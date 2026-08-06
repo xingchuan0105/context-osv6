@@ -15,13 +15,27 @@ function workspaceCreateCounterKey(locale: DashboardLocale) {
   return workspaceLocaleKey(locale);
 }
 
+/**
+ * Default title for newly created workspaces (W7 / ADR-0010 #20).
+ *
+ * zh: 「新建工作区N」 · en: 「New Workspace N」
+ *
+ * Bare「1」investigation (2026-08-06): product create paths only call this helper
+ * (`dashboard-surface` + `use-workspace-data.createWorkspaceFlow`). Neither path
+ * ever emitted a digit-only title. Screenshot bare「1」is therefore not from the
+ * current generator — likely manual rename, stale DB seed, or a non-web client.
+ * Backend stores the client-supplied name as-is (no second renamer).
+ */
 export function formatDefaultWorkspaceTitle(
   locale: DashboardLocale,
   _date: string,
   duplicateIndex = 0,
 ) {
-  const base = locale === "zh-CN" ? "工作区" : "Workspace";
-  return `${base}${duplicateIndex + 1}`;
+  const n = duplicateIndex + 1;
+  if (locale === "zh-CN") {
+    return `新建工作区${n}`;
+  }
+  return `New Workspace ${n}`;
 }
 
 function readWorkspaceCreateCounters(): WorkspaceCreateCounters {
