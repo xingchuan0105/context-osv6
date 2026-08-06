@@ -209,6 +209,9 @@ describe("WorkspaceShareCenterSurface", () => {
       expect(mocks.updateShareSettingsMock).toHaveBeenCalledWith("token-123", "ws-1", {
         access_level: "link",
         allow_download: false,
+        anon_question_limit: 10,
+        member_question_limit: null,
+        member_question_limit_set: true,
       });
     });
   });

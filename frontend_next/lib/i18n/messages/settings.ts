@@ -605,6 +605,18 @@ export const settingsMessages = {
     zh: "通知历史",
     en: "Notification history",
   },
+  "settings.notifications.bellLabel": {
+    zh: "通知",
+    en: "Notifications",
+  },
+  "settings.notifications.listLabel": {
+    zh: "通知列表",
+    en: "Notification list",
+  },
+  "settings.notifications.unreadCount": {
+    zh: "{count} 条未读",
+    en: "{count} unread",
+  },
   "settings.notifications.loading": {
     zh: "正在加载通知...",
     en: "Loading notifications...",

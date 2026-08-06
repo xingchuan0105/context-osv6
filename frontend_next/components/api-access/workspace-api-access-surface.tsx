@@ -235,7 +235,7 @@ export function WorkspaceApiAccessSurface({
 
       {embedded ? (
         <p className="app-page-subtitle" style={{ marginTop: 0 }}>
-          为这个 Workspace 创建 API 密钥。完整说明与 agent 文档可在完整页面查看。
+          为这个 Workspace 创建 API 密钥。下方提供人类说明与 agent 稳定文档入口。
         </p>
       ) : null}
 
@@ -368,51 +368,50 @@ export function WorkspaceApiAccessSurface({
         </div>
       </section>
 
-      {embedded ? null : (
-        <section className={`app-surface-card ${styles.card}`}>
-          <div>
-            <h2 className={styles.cardTitle}>For LLM Agents</h2>
-            <p className="app-page-subtitle">给要接入这个 Workspace 的 agent 看的入口卡。先理解边界，再读取稳定文档。</p>
+      {/* W2 #12: docs card stays visible in modal (embedded) and full page. */}
+      <section className={`app-surface-card ${styles.card}`} data-testid="api-access-docs-card">
+        <div>
+          <h2 className={styles.cardTitle}>For LLM Agents</h2>
+          <p className="app-page-subtitle">给要接入这个 Workspace 的 agent 看的入口卡。先理解边界，再读取稳定文档。</p>
+        </div>
+        <div className={`app-inline-surface ${styles.agentCard}`}>
+          <div className={styles.agentIntro}>
+            <p className={styles.overlineSmall}>Agent onboarding</p>
+            <div>
+              <strong>推荐顺序</strong>
+              <p className={styles.mutedTextSpaced}>
+                如果你的 agent 要直连这个 Workspace，先读人类说明确认作用域，再读取稳定 agent 文档执行。
+              </p>
+            </div>
           </div>
-          <div className={`app-inline-surface ${styles.agentCard}`}>
-            <div className={styles.agentIntro}>
-              <p className={styles.overlineSmall}>Agent onboarding</p>
-              <div>
-                <strong>推荐顺序</strong>
-                <p className={styles.mutedTextSpaced}>
-                  如果你的 agent 要直连这个 Workspace，先读人类说明确认作用域，再读取稳定 agent 文档执行。
+          <div className={styles.stack}>
+            <div className={styles.step}>
+              <div className={styles.stepBadge}>1</div>
+              <div className={styles.stepBody}>
+                <strong>先读说明页</strong>
+                <p className={styles.mutedText}>
+                  看清支持范围、认证方式，以及 Workspace 与 <code>workspace_id</code> 的映射。
                 </p>
+                <Link className="app-link" href="/help/api-access">
+                  /help/api-access
+                </Link>
               </div>
             </div>
-            <div className={styles.stack}>
-              <div className={styles.step}>
-                <div className={styles.stepBadge}>1</div>
-                <div className={styles.stepBody}>
-                  <strong>先读说明页</strong>
-                  <p className={styles.mutedText}>
-                    看清支持范围、认证方式，以及 Workspace 与 <code>workspace_id</code> 的映射。
-                  </p>
-                  <Link className="app-link" href="/help/api-access">
-                    /help/api-access
-                  </Link>
-                </div>
-              </div>
-              <div className={styles.step}>
-                <div className={styles.stepBadgeMuted}>2</div>
-                <div className={styles.stepBody}>
-                  <strong>再读稳定 agent 文档</strong>
-                  <p className={styles.mutedText}>
-                    这份链接适合 agent 直接抓取，内容更短，也更适合程序化读取。
-                  </p>
-                  <Link className="app-link" href="/docs/api-access-for-agents.md">
-                    /docs/api-access-for-agents.md
-                  </Link>
-                </div>
+            <div className={styles.step}>
+              <div className={styles.stepBadgeMuted}>2</div>
+              <div className={styles.stepBody}>
+                <strong>再读稳定 agent 文档</strong>
+                <p className={styles.mutedText}>
+                  这份链接适合 agent 直接抓取，内容更短，也更适合程序化读取。
+                </p>
+                <Link className="app-link" href="/docs/api-access-for-agents.md">
+                  /docs/api-access-for-agents.md
+                </Link>
               </div>
             </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
     </>
   );
 

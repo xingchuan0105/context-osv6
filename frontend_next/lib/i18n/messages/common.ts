@@ -113,4 +113,20 @@ export const commonMessages = {
     zh: "开源声明",
     en: "Open source",
   },
+  "accountMenu.allSettings": {
+    zh: "所有设置",
+    en: "All settings",
+  },
+  "accountMenu.help": {
+    zh: "帮助",
+    en: "Help",
+  },
+  "settingsTabBar.searchLabel": {
+    zh: "搜索设置",
+    en: "Search settings",
+  },
+  "settingsTabBar.searchPlaceholder": {
+    zh: "搜索设置…",
+    en: "Search settings…",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

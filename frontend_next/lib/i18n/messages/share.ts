@@ -450,16 +450,40 @@ export const shareMessages = {
     en: "Visitor mode",
   },
   "shareCenter.visitorMode.anonymous": {
-    zh: "允许匿名",
-    en: "Allow anonymous",
+    zh: "匿名链接",
+    en: "Anonymous link",
   },
   "shareCenter.visitorMode.requireRegister": {
-    zh: "须注册",
-    en: "Require register",
+    zh: "定向邀请 / 须登录",
+    en: "Invite / sign-in required",
   },
   "shareCenter.visitorModeHint": {
-    zh: "「允许匿名」对应公开链接；「须注册」对应仅链接访问。完整 Owner-pays 与匿名问答将在后续版本生效。",
-    en: "\"Allow anonymous\" maps to a public link; \"Require register\" maps to link-only access. Full owner-pays and anonymous Q&A land in a later release.",
+    zh: "「匿名链接」= 未登录可提问（按访客身份限次）；「定向邀请 / 须登录」= 仅登录访客可提问。分享场景模型费用由 Owner 余额或自定义 Provider 承担（Owner-pays）。",
+    en: "\"Anonymous link\" allows unauthenticated questions (capped per visitor). \"Invite / sign-in\" requires a logged-in visitor. Share chat is Owner-pays (balance or custom provider).",
+  },
+  "shareCenter.questionLimitsLabel": {
+    zh: "访客提问日上限",
+    en: "Daily question caps",
+  },
+  "shareCenter.anonLimitLabel": {
+    zh: "匿名访客（次/日，0=不限）",
+    en: "Anonymous (per day, 0=unlimited)",
+  },
+  "shareCenter.memberLimitLabel": {
+    zh: "登录访客（空=不限）",
+    en: "Signed-in visitors (blank=unlimited)",
+  },
+  "shareCenter.questionLimitsSave": {
+    zh: "保存上限",
+    en: "Save caps",
+  },
+  "shareCenter.ownerPaysHint": {
+    zh: "分享场景模型费用由 Owner 余额/自定义 Provider 承担（Owner-pays 已生效）。",
+    en: "Share chat is Owner-pays (balance or custom provider) — already in effect.",
+  },
+  "shareCenter.memberLimitWorkspaceNote": {
+    zh: "登录访客上限为工作区级统一配置（非按人单独配额）。",
+    en: "Signed-in visitor cap is workspace-wide (not per-person).",
   },
   "shareCenter.validityLabel": {
     zh: "有效期",
@@ -796,5 +820,129 @@ export const shareMessages = {
   "shareQuickModal.loading": {
     zh: "正在加载分享设置...",
     en: "Loading share settings...",
+  },
+  "shareAnalyze.backWorkspace": {
+    zh: "返回工作区",
+    en: "Back to workspace",
+  },
+  "shareAnalyze.title": {
+    zh: "数据分析",
+    en: "Analytics",
+  },
+  "shareAnalyze.subtitle": {
+    zh: "当前工作区的分享状态、访问量、活跃与最近访问记录。",
+    en: "Share status, traffic, activity, and recent access for this workspace.",
+  },
+  "shareAnalyze.goShare": {
+    zh: "前往分享",
+    en: "Open sharing",
+  },
+  "shareAnalyze.loading": {
+    zh: "正在加载分享分析…",
+    en: "Loading share analytics…",
+  },
+  "shareAnalyze.loadSettingsError": {
+    zh: "加载分享设置失败。",
+    en: "Failed to load share settings.",
+  },
+  "shareAnalyze.loadAnalyticsError": {
+    zh: "加载分享分析失败。",
+    en: "Failed to load share analytics.",
+  },
+  "shareAnalyze.loadLogsError": {
+    zh: "加载访问日志失败。",
+    en: "Failed to load access logs.",
+  },
+  "shareAnalyze.emptyTitle": {
+    zh: "还没有可分析的分享数据",
+    en: "No share data yet",
+  },
+  "shareAnalyze.emptySubtitle": {
+    zh: "先在分享页启用分享，再回到这里查看访问趋势和访问日志。",
+    en: "Enable sharing first, then return here for traffic trends and access logs.",
+  },
+  "shareAnalyze.statusTitle": {
+    zh: "分享状态",
+    en: "Share status",
+  },
+  "shareAnalyze.statusSubtitle": {
+    zh: "仅保留分享相关分析，不扩展为搜索页或 token 成本页。",
+    en: "Share-focused analytics only — not a search or token-cost page.",
+  },
+  "shareAnalyze.accessLevel": {
+    zh: "访问级别",
+    en: "Access level",
+  },
+  "shareAnalyze.allowDownload": {
+    zh: "允许下载",
+    en: "Allow download",
+  },
+  "shareAnalyze.expiresAt": {
+    zh: "过期时间",
+    en: "Expires at",
+  },
+  "shareAnalyze.on": {
+    zh: "已开启",
+    en: "On",
+  },
+  "shareAnalyze.off": {
+    zh: "未开启",
+    en: "Off",
+  },
+  "shareAnalyze.notSet": {
+    zh: "未设置",
+    en: "Not set",
+  },
+  "shareAnalyze.metricsTitle": {
+    zh: "访问与活跃",
+    en: "Traffic & activity",
+  },
+  "shareAnalyze.metricsSubtitle": {
+    zh: "活跃≈有访问的天数；总访问量与独立访客来自 share analytics。",
+    en: "Activity ≈ days with visits; totals come from share analytics.",
+  },
+  "shareAnalyze.totalViews": {
+    zh: "总访问量",
+    en: "Total views",
+  },
+  "shareAnalyze.uniqueVisitors": {
+    zh: "独立访客",
+    en: "Unique visitors",
+  },
+  "shareAnalyze.activeDays": {
+    zh: "活跃天数（30 日）",
+    en: "Active days (30d)",
+  },
+  "shareAnalyze.questionsProxy": {
+    zh: "访问动作次数",
+    en: "Access actions",
+  },
+  "shareAnalyze.trendTitle": {
+    zh: "访问趋势",
+    en: "Traffic trend",
+  },
+  "shareAnalyze.trendSubtitle": {
+    zh: "按日汇总的分享访问量（views_by_day）。",
+    en: "Daily share views (views_by_day).",
+  },
+  "shareAnalyze.trendEmpty": {
+    zh: "暂无按日访问数据。",
+    en: "No daily traffic yet.",
+  },
+  "shareAnalyze.logsTitle": {
+    zh: "最近访问日志",
+    en: "Recent access logs",
+  },
+  "shareAnalyze.logsSubtitle": {
+    zh: "展示最近的分享访问动作。",
+    en: "Recent share access actions.",
+  },
+  "shareAnalyze.logsEmpty": {
+    zh: "暂时还没有访问日志。",
+    en: "No access logs yet.",
+  },
+  "shareAnalyze.visitorPrivacyNote": {
+    zh: "访客标识为链接 token 或匿名边缘 IP 级身份，非实名；请勿当作个人身份使用。",
+    en: "Visitor ids are share-token or anonymous edge-IP level — not personal identity.",
   },
 } satisfies Record<string, UiMessageDescriptor>;

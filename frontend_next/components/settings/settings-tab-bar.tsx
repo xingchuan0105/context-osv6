@@ -45,13 +45,13 @@ export function SettingsTabBar({
     <div className={styles.navRail} data-testid="settings-nav-rail">
       <label className={styles.searchLabel} htmlFor="settings-nav-search">
         <span className="dashboard-sr-only">
-          {locale === "zh-CN" ? "搜索设置" : "Search settings"}
+          {formatUiMessage(locale, "settingsTabBar.searchLabel")}
         </span>
         <input
           className={`app-input ${styles.searchInput}`}
           data-testid="settings-nav-search"
           id="settings-nav-search"
-          placeholder={locale === "zh-CN" ? "搜索设置…" : "Search settings…"}
+          placeholder={formatUiMessage(locale, "settingsTabBar.searchPlaceholder")}
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}

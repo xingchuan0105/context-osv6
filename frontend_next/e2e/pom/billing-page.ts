@@ -37,9 +37,10 @@ export class UsagePage {
   }
 
   async expectVisible() {
-    await expect(this.page.getByText(/用量与套餐/)).toBeVisible({ timeout: BILLING_UI_TIMEOUT_MS });
-    await expect(this.page.getByText(/5 小时窗口/)).toBeVisible({ timeout: BILLING_UI_TIMEOUT_MS });
-    await expect(this.page.getByText(/7 天窗口/)).toBeVisible({ timeout: BILLING_UI_TIMEOUT_MS });
+    // ADR-0010: usage page is membership/consumption oriented, not a 5h/7d quota wall.
+    await expect(
+      this.page.getByText(/会员|用量|消费|Membership|Usage|consumption/i).first(),
+    ).toBeVisible({ timeout: BILLING_UI_TIMEOUT_MS });
   }
 }
 

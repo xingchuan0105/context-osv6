@@ -56,6 +56,8 @@ export function useShareCenter(workspaceId: string) {
   const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
   const [inviteError, setInviteError] = useState("");
   const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null);
+  const [anonLimitDraft, setAnonLimitDraft] = useState("10");
+  const [memberLimitDraft, setMemberLimitDraft] = useState("");
   const settingsQuery = useQuery({
     queryKey: shareKeys.settings(workspaceId, auth.token),
     enabled: Boolean(auth.token && workspaceReady),
@@ -114,6 +116,7 @@ export function useShareCenter(workspaceId: string) {
         return updateShareSettings(auth.token, workspaceId, {
           access_level: accessLevelFromVisitorMode(visitorModeDraft),
           allow_download: false,
+          ...questionLimitsPayload(),
         });
       }
 
@@ -154,6 +157,7 @@ export function useShareCenter(workspaceId: string) {
       return updateShareSettings(auth.token, workspaceId, {
         access_level: accessLevelFromVisitorMode(visitorModeDraft),
         allow_download: false,
+        ...questionLimitsPayload(),
       });
     },
     onSuccess: async (settings) => {
@@ -163,6 +167,27 @@ export function useShareCenter(workspaceId: string) {
       });
       await queryClient.invalidateQueries({
         queryKey: shareKeys.quota(auth.token),
+      });
+    },
+  });
+  const questionLimitsMutation = useMutation({
+    mutationFn: async () => {
+      if (!auth.token) {
+        throw new Error(formatUiMessage(locale, "shareCenter.loginRequired"));
+      }
+      if (!workspaceReady) {
+        throw new Error(invalidWorkspaceMessage);
+      }
+      return updateShareSettings(auth.token, workspaceId, {
+        access_level: settingsQuery.data?.access_level,
+        allow_download: settingsQuery.data?.allow_download,
+        ...questionLimitsPayload(),
+      });
+    },
+    onSuccess: async (settings) => {
+      queryClient.setQueryData(shareKeys.settings(workspaceId, auth.token), settings);
+      await queryClient.invalidateQueries({
+        queryKey: shareKeys.settings(workspaceId, auth.token),
       });
     },
   });
@@ -246,7 +271,34 @@ export function useShareCenter(workspaceId: string) {
     if (settingsQuery.data.access_level !== "private") {
       setVisitorModeDraft(visitorModeFromAccessLevel(settingsQuery.data.access_level));
     }
+    setAnonLimitDraft(String(settingsQuery.data.anon_question_limit ?? 10));
+    setMemberLimitDraft(
+      settingsQuery.data.member_question_limit == null
+        ? ""
+        : String(settingsQuery.data.member_question_limit),
+    );
   }, [settingsQuery.data]);
+
+  function questionLimitsPayload() {
+    const anonParsed = Number.parseInt(anonLimitDraft.trim(), 10);
+    const anon_question_limit = Number.isFinite(anonParsed) && anonParsed >= 0 ? anonParsed : 10;
+    const memberTrim = memberLimitDraft.trim();
+    if (!memberTrim) {
+      return {
+        anon_question_limit,
+        member_question_limit: null as number | null,
+        member_question_limit_set: true,
+      };
+    }
+    const memberParsed = Number.parseInt(memberTrim, 10);
+    const member_question_limit =
+      Number.isFinite(memberParsed) && memberParsed > 0 ? memberParsed : null;
+    return {
+      anon_question_limit,
+      member_question_limit,
+      member_question_limit_set: true,
+    };
+  }
 
   const shareUrl = buildShareUrl(settingsQuery.data?.share_token ?? "");
   const shareStatus = resolveShareStatus(settingsQuery.data ?? null);
@@ -377,6 +429,17 @@ export function useShareCenter(workspaceId: string) {
     }
   }
 
+  async function handleSaveQuestionLimits() {
+    setActionError("");
+    setActionMessage("");
+    try {
+      await questionLimitsMutation.mutateAsync();
+      setActionMessage(formatUiMessage(locale, "shareCenter.updateShareSuccess"));
+    } catch (error) {
+      setActionError(mapShareError(error));
+    }
+  }
+
   async function handleInviteMember() {
     setInviteError("");
 
@@ -420,6 +483,7 @@ export function useShareCenter(workspaceId: string) {
     actionError,
     actionMessage,
     analyticsQuery,
+    anonLimitDraft,
     canUseShareLink,
     expiresAtDraft,
     handleCancelEnableConfirm,
@@ -429,6 +493,7 @@ export function useShareCenter(workspaceId: string) {
     handleInviteMember,
     handleOpenSharePage,
     handleRefreshShare,
+    handleSaveQuestionLimits,
     handleToggleShare,
     handleVisitorModeChange,
     inviteEmail,
@@ -436,9 +501,11 @@ export function useShareCenter(workspaceId: string) {
     inviteMemberMutation,
     inviteRole,
     locale,
+    memberLimitDraft,
     membersQuery,
     pendingEnableConfirm,
     pendingRemoveMemberId,
+    questionLimitsMutation,
     quotaLabel,
     quotaQuery,
     quotaSummary,
@@ -446,9 +513,11 @@ export function useShareCenter(workspaceId: string) {
     removeMemberMutation,
     setActionError,
     setActionMessage,
+    setAnonLimitDraft,
     setExpiresAtDraft,
     setInviteEmail,
     setInviteRole,
+    setMemberLimitDraft,
     setPendingRemoveMemberId,
     setTrendWindowDays,
     settingsQuery,

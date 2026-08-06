@@ -215,7 +215,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               role="menuitem"
               onClick={() => setMenuOpen(false)}
             >
-              {locale === "zh-CN" ? "所有设置" : "All settings"}
+              {formatUiMessage(locale, "accountMenu.allSettings")}
             </Link>
             <Link
               className="dashboard-account-menu-item"
@@ -223,7 +223,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               role="menuitem"
               onClick={() => setMenuOpen(false)}
             >
-              {locale === "zh-CN" ? "帮助" : "Help"}
+              {formatUiMessage(locale, "accountMenu.help")}
             </Link>
 
             <button

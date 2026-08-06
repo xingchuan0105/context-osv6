@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
 import { request } from "../../lib/http/request";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import styles from "./admin-shared-ui.module.css";
 
@@ -23,7 +24,7 @@ export function AdminBroadcastSurface() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!token) {
-      setError(locale === "zh-CN" ? "请先登录" : "Sign in required");
+      setError(formatUiMessage(locale, "admin.broadcast.signInRequired"));
       return;
     }
     setBusy(true);
@@ -44,14 +45,18 @@ export function AdminBroadcastSurface() {
         token,
       );
       setMessage(
-        locale === "zh-CN"
-          ? `已发送 ${result.created} 条通知`
-          : `Sent ${result.created} notifications`,
+        formatUiMessage(locale, "admin.broadcast.success", {
+          count: result.created,
+        }),
       );
       setTitle("");
       setBody("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(
+        e instanceof Error
+          ? e.message
+          : formatUiMessage(locale, "admin.broadcast.error"),
+      );
     } finally {
       setBusy(false);
     }
@@ -61,12 +66,10 @@ export function AdminBroadcastSurface() {
     <section className={styles.headingBlock} data-testid="admin-broadcast-surface">
       <div className={styles.headingBlock}>
         <h1 className={styles.headingTitle}>
-          {locale === "zh-CN" ? "官方广播" : "Broadcast"}
+          {formatUiMessage(locale, "admin.broadcast.title")}
         </h1>
         <p className={styles.headingSubtitle}>
-          {locale === "zh-CN"
-            ? "向全部用户推送一条应用内通知（账户级，非 Workspace）。"
-            : "Push one in-app notification to all users (account-level, not workspace)."}
+          {formatUiMessage(locale, "admin.broadcast.subtitle")}
         </p>
       </div>
       <form
@@ -75,7 +78,9 @@ export function AdminBroadcastSurface() {
         onSubmit={(e) => void handleSubmit(e)}
       >
         <label>
-          <span className="app-form-label">{locale === "zh-CN" ? "标题" : "Title"}</span>
+          <span className="app-form-label">
+            {formatUiMessage(locale, "admin.broadcast.titleLabel")}
+          </span>
           <input
             className="app-input"
             data-testid="admin-broadcast-title"
@@ -86,7 +91,9 @@ export function AdminBroadcastSurface() {
           />
         </label>
         <label>
-          <span className="app-form-label">{locale === "zh-CN" ? "正文" : "Body"}</span>
+          <span className="app-form-label">
+            {formatUiMessage(locale, "admin.broadcast.bodyLabel")}
+          </span>
           <textarea
             className="app-input"
             data-testid="admin-broadcast-body"
@@ -110,12 +117,8 @@ export function AdminBroadcastSurface() {
           type="submit"
         >
           {busy
-            ? locale === "zh-CN"
-              ? "发送中…"
-              : "Sending…"
-            : locale === "zh-CN"
-              ? "广播发送"
-              : "Send broadcast"}
+            ? formatUiMessage(locale, "admin.broadcast.sending")
+            : formatUiMessage(locale, "admin.broadcast.submit")}
         </button>
       </form>
     </section>

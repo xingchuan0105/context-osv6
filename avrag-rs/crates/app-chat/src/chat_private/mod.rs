@@ -2,10 +2,32 @@ mod memory;
 mod quota;
 mod visibility;
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use app_core::NotificationCreateParams;
 use common::AppError;
+use uuid::Uuid;
 
 use crate::context::ChatContext;
+
+/// Process-local throttle for balance-empty notices (6 hours per owner).
+fn funds_notify_throttled(owner: Uuid) -> bool {
+    static LAST: OnceLock<Mutex<HashMap<Uuid, Instant>>> = OnceLock::new();
+    let map = LAST.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut guard) = map.lock() else {
+        return false;
+    };
+    const COOLDOWN: Duration = Duration::from_secs(6 * 60 * 60);
+    if let Some(prev) = guard.get(&owner) {
+        if prev.elapsed() < COOLDOWN {
+            return true;
+        }
+    }
+    guard.insert(owner, Instant::now());
+    false
+}
 
 impl ChatContext {
     pub(crate) async fn emit_notification(
@@ -37,13 +59,16 @@ impl ChatContext {
     }
 
     /// ADR-0010 W4: notify the **billable owner** (auth.user_id) when platform funds are empty.
-    /// Frequency control: chat_persistence may create duplicates; UI treats unread stack as ok.
+    /// Throttled: process-local 6h cooldown per owner (avoids one spam row per blocked turn).
     pub(crate) async fn emit_funds_required_notification(&self) -> Result<(), AppError> {
         let Some(pg) = self.storage.chat_persistence() else {
             return Ok(());
         };
         let owner = self.auth.user_id().into_uuid();
         if owner.is_nil() {
+            return Ok(());
+        }
+        if funds_notify_throttled(owner) {
             return Ok(());
         }
         pg.create_notification(

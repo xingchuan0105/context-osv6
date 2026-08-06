@@ -277,4 +277,40 @@ export const adminMessages = {
     zh: "异常",
     en: "Unhealthy",
   },
+  "admin.broadcast.title": {
+    zh: "官方广播",
+    en: "Broadcast",
+  },
+  "admin.broadcast.subtitle": {
+    zh: "向全部用户发送站内通知。仅管理员可用。",
+    en: "Send an in-app notice to all users. Admins only.",
+  },
+  "admin.broadcast.titleLabel": {
+    zh: "标题",
+    en: "Title",
+  },
+  "admin.broadcast.bodyLabel": {
+    zh: "正文",
+    en: "Body",
+  },
+  "admin.broadcast.submit": {
+    zh: "发送广播",
+    en: "Send broadcast",
+  },
+  "admin.broadcast.sending": {
+    zh: "发送中…",
+    en: "Sending…",
+  },
+  "admin.broadcast.signInRequired": {
+    zh: "请先登录",
+    en: "Sign in required",
+  },
+  "admin.broadcast.success": {
+    zh: "已创建 {count} 条通知",
+    en: "Created {count} notifications",
+  },
+  "admin.broadcast.error": {
+    zh: "广播失败",
+    en: "Broadcast failed",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

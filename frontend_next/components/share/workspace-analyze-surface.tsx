@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   getShareAccessLogs,
   getShareAnalytics,
@@ -13,6 +14,13 @@ import {
   type ShareAnalyticsResponse,
   type ShareSettings,
 } from "../../lib/share/client";
+import { useUiPreferences } from "../../lib/ui-preferences";
+import {
+  buildDailyViewsSeries,
+  countActiveDays,
+  formatDayLabel,
+  sumViews,
+} from "./parts/share-center-utils";
 import styles from "./workspace-analyze-surface.module.css";
 
 function AnalyzeSection({
@@ -27,9 +35,7 @@ function AnalyzeSection({
   return (
     <section className={`app-surface-card ${styles.sectionCard}`}>
       <div>
-        <h2 className={`app-page-title ${styles.sectionTitle}`}>
-          {title}
-        </h2>
+        <h2 className={`app-page-title ${styles.sectionTitle}`}>{title}</h2>
         <p className="app-page-subtitle">{subtitle}</p>
       </div>
       {children}
@@ -39,6 +45,7 @@ function AnalyzeSection({
 
 export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }) {
   const auth = useAuth();
+  const { locale } = useUiPreferences();
   const [settings, setSettings] = useState<ShareSettings | null>(null);
   const [analytics, setAnalytics] = useState<ShareAnalyticsResponse | null>(null);
   const [logs, setLogs] = useState<AccessLogsResponse | null>(null);
@@ -70,19 +77,19 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
       if (settingsResult.status === "fulfilled") {
         setSettings(settingsResult.value);
       } else {
-        setError("加载分享设置失败。");
+        setError(formatUiMessage(locale, "shareAnalyze.loadSettingsError"));
       }
 
       if (analyticsResult.status === "fulfilled") {
         setAnalytics(analyticsResult.value);
       } else {
-        setError((current) => current || "加载分享分析失败。");
+        setError((current) => current || formatUiMessage(locale, "shareAnalyze.loadAnalyticsError"));
       }
 
       if (logsResult.status === "fulfilled") {
         setLogs(logsResult.value);
       } else {
-        setError((current) => current || "加载访问日志失败。");
+        setError((current) => current || formatUiMessage(locale, "shareAnalyze.loadLogsError"));
       }
 
       setLoading(false);
@@ -93,22 +100,29 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
     return () => {
       cancelled = true;
     };
-  }, [auth.token, workspaceId]);
+  }, [auth.token, locale, workspaceId]);
+
+  const trendSeries = useMemo(() => buildDailyViewsSeries(analytics, 30), [analytics]);
+  const activeDays = useMemo(() => countActiveDays(trendSeries), [trendSeries]);
+  const accessActions = useMemo(() => sumViews(trendSeries), [trendSeries]);
+  const maxViews = Math.max(...trendSeries.map((entry) => entry.views), 1);
 
   return (
     <main className="app-page-shell">
       <div className={`app-page-center ${styles.pageStack}`}>
         <header className={styles.header}>
           <Link className="app-link app-link-muted" href={`/dashboard/${workspaceId}`}>
-            返回 Workspace
+            {formatUiMessage(locale, "shareAnalyze.backWorkspace")}
           </Link>
           <div className={styles.headerRow}>
             <div>
-              <h1 className="app-page-title">Analyze</h1>
-              <p className="app-page-subtitle">仅展示当前 Workspace 的分享状态、访问量和最近访问记录。</p>
+              <h1 className="app-page-title">{formatUiMessage(locale, "shareAnalyze.title")}</h1>
+              <p className="app-page-subtitle">
+                {formatUiMessage(locale, "shareAnalyze.subtitle")}
+              </p>
             </div>
             <Link className="app-button-secondary" href={`/dashboard/${workspaceId}/share`}>
-              前往 Share
+              {formatUiMessage(locale, "shareAnalyze.goShare")}
             </Link>
           </div>
         </header>
@@ -117,71 +131,149 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
 
         {loading ? (
           <section className="app-surface-card">
-            <p className={styles.flushText}>正在加载分享分析...</p>
+            <p className={styles.flushText}>{formatUiMessage(locale, "shareAnalyze.loading")}</p>
           </section>
         ) : !isShareEnabled(settings) ? (
           <AnalyzeSection
-            subtitle="先在 Share 页面启用分享，再回到这里查看访问趋势和访问日志。"
-            title="还没有可分析的分享数据"
+            subtitle={formatUiMessage(locale, "shareAnalyze.emptySubtitle")}
+            title={formatUiMessage(locale, "shareAnalyze.emptyTitle")}
           >
             <div className="app-button-row">
               <Link className="app-button-primary" href={`/dashboard/${workspaceId}/share`}>
-                前往 Share
+                {formatUiMessage(locale, "shareAnalyze.goShare")}
               </Link>
             </div>
           </AnalyzeSection>
         ) : (
           <>
             <AnalyzeSection
-              subtitle="Analyze 页面只保留分享相关分析，不扩展成搜索页或 token 成本页。"
-              title="分享状态"
+              subtitle={formatUiMessage(locale, "shareAnalyze.statusSubtitle")}
+              title={formatUiMessage(locale, "shareAnalyze.statusTitle")}
             >
               <div className={styles.metricGrid}>
                 <div className="app-inline-surface">
-                  <h3 className={styles.metricTitle}>访问级别</h3>
-                  <p className={styles.flushText}>{settings?.access_level ?? "未设置"}</p>
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.accessLevel")}
+                  </h3>
+                  <p className={styles.flushText}>
+                    {settings?.access_level ?? formatUiMessage(locale, "shareAnalyze.notSet")}
+                  </p>
                 </div>
                 <div className="app-inline-surface">
-                  <h3 className={styles.metricTitle}>允许下载</h3>
-                  <p className={styles.flushText}>{settings?.allow_download ? "已开启" : "未开启"}</p>
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.allowDownload")}
+                  </h3>
+                  <p className={styles.flushText}>
+                    {settings?.allow_download
+                      ? formatUiMessage(locale, "shareAnalyze.on")
+                      : formatUiMessage(locale, "shareAnalyze.off")}
+                  </p>
                 </div>
                 <div className="app-inline-surface">
-                  <h3 className={styles.metricTitle}>过期时间</h3>
-                  <p className={styles.flushText}>{settings?.expires_at ?? "未设置"}</p>
-                </div>
-              </div>
-            </AnalyzeSection>
-
-            <AnalyzeSection subtitle="总访问量和独立访客来自 share analytics。 " title="访问指标">
-              <div className={styles.metricGrid}>
-                <div className="app-inline-surface">
-                  <h3 className={styles.metricTitle}>总访问量</h3>
-                  <p className={styles.metricValue}>{analytics?.total_views ?? 0}</p>
-                </div>
-                <div className="app-inline-surface">
-                  <h3 className={styles.metricTitle}>独立访客</h3>
-                  <p className={styles.metricValue}>
-                    {analytics?.total_unique_visitors ?? 0}
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.expiresAt")}
+                  </h3>
+                  <p className={styles.flushText}>
+                    {settings?.expires_at ?? formatUiMessage(locale, "shareAnalyze.notSet")}
                   </p>
                 </div>
               </div>
             </AnalyzeSection>
 
-            <AnalyzeSection subtitle="展示最近的分享访问动作。 " title="最近访问日志">
+            <AnalyzeSection
+              subtitle={formatUiMessage(locale, "shareAnalyze.metricsSubtitle")}
+              title={formatUiMessage(locale, "shareAnalyze.metricsTitle")}
+            >
+              <div className={styles.metricGrid}>
+                <div className="app-inline-surface">
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.totalViews")}
+                  </h3>
+                  <p className={styles.metricValue}>{analytics?.total_views ?? 0}</p>
+                </div>
+                <div className="app-inline-surface">
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.uniqueVisitors")}
+                  </h3>
+                  <p className={styles.metricValue}>{analytics?.total_unique_visitors ?? 0}</p>
+                </div>
+                <div className="app-inline-surface">
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.activeDays")}
+                  </h3>
+                  <p className={styles.metricValue}>{activeDays}</p>
+                </div>
+                <div className="app-inline-surface">
+                  <h3 className={styles.metricTitle}>
+                    {formatUiMessage(locale, "shareAnalyze.questionsProxy")}
+                  </h3>
+                  <p className={styles.metricValue}>{accessActions}</p>
+                </div>
+              </div>
+            </AnalyzeSection>
+
+            <AnalyzeSection
+              subtitle={formatUiMessage(locale, "shareAnalyze.trendSubtitle")}
+              title={formatUiMessage(locale, "shareAnalyze.trendTitle")}
+            >
+              {trendSeries.some((entry) => entry.views > 0) ? (
+                <div className={`app-inline-surface ${styles.chartPanel}`} data-testid="analyze-chart">
+                  {trendSeries.map((entry) => (
+                    <div className={styles.chartRow} key={entry.day}>
+                      <span>{formatDayLabel(locale, entry.day)}</span>
+                      <div aria-hidden="true" className={styles.chartTrack}>
+                        <div
+                          className={styles.chartFill}
+                          style={{
+                            width: `${Math.max(
+                              entry.views === 0 ? 0 : 8,
+                              (entry.views / maxViews) * 100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <strong>{entry.views}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="app-inline-surface">
+                  <p className={styles.mutedText}>
+                    {formatUiMessage(locale, "shareAnalyze.trendEmpty")}
+                  </p>
+                </div>
+              )}
+            </AnalyzeSection>
+
+            <AnalyzeSection
+              subtitle={formatUiMessage(locale, "shareAnalyze.logsSubtitle")}
+              title={formatUiMessage(locale, "shareAnalyze.logsTitle")}
+            >
+              <p className={`app-form-footnote ${styles.mutedText}`}>
+                {formatUiMessage(locale, "shareAnalyze.visitorPrivacyNote")}
+              </p>
               {logs?.logs.length ? (
                 <ul className={styles.logList}>
                   {logs.logs.slice(0, 10).map((log) => (
                     <li className="app-inline-surface" key={log.id}>
                       <strong>{log.action}</strong>
                       <div className={styles.logMeta}>
-                        {log.visitor_id} · {log.accessed_at}
+                        <span title={log.visitor_id}>
+                          {log.visitor_id.length > 16
+                            ? `${log.visitor_id.slice(0, 8)}…${log.visitor_id.slice(-4)}`
+                            : log.visitor_id}
+                        </span>
+                        {" · "}
+                        {log.accessed_at}
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <div className="app-inline-surface">
-                  <p className={styles.mutedText}>暂时还没有访问日志。</p>
+                  <p className={styles.mutedText}>
+                    {formatUiMessage(locale, "shareAnalyze.logsEmpty")}
+                  </p>
                 </div>
               )}
             </AnalyzeSection>

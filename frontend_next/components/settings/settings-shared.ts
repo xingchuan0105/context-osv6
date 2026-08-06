@@ -146,6 +146,31 @@ export function formatDateTime(value: string, locale: "zh-CN" | "en") {
   }).format(new Date(timestamp));
 }
 
+/** Relative time for notification list (W4/W5 polish). */
+export function formatRelativeTime(value: string, locale: "zh-CN" | "en") {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+  const deltaMs = timestamp - Date.now();
+  const rtf = new Intl.RelativeTimeFormat(locale === "zh-CN" ? "zh-CN" : "en", {
+    numeric: "auto",
+  });
+  const minutes = Math.round(deltaMs / 60_000);
+  if (Math.abs(minutes) < 60) {
+    return rtf.format(minutes, "minute");
+  }
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 48) {
+    return rtf.format(hours, "hour");
+  }
+  const days = Math.round(hours / 24);
+  if (Math.abs(days) < 30) {
+    return rtf.format(days, "day");
+  }
+  return formatDateTime(value, locale);
+}
+
 export function formatCompactNumber(value: number) {
   if (value >= 1_000_000) {
     return `${(value / 1_000_000).toFixed(1)}M`;

@@ -12,7 +12,7 @@ import {
   type NotificationRow,
 } from "../../lib/settings/client";
 import {
-  formatDateTime,
+  formatRelativeTime,
   notificationTypeLabel,
   settingsKeys,
 } from "../settings/settings-shared";
@@ -89,7 +89,7 @@ export function NotificationBell({ locale }: { locale: UiLocale }) {
       <button
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={locale === "zh-CN" ? "通知" : "Notifications"}
+        aria-label={formatUiMessage(locale, "settings.notifications.bellLabel")}
         className={`${styles.trigger} top-bar-capsule`}
         data-testid="notification-bell"
         type="button"
@@ -109,13 +109,15 @@ export function NotificationBell({ locale }: { locale: UiLocale }) {
           className={styles.panel}
           data-testid="notification-bell-panel"
           role="dialog"
-          aria-label={locale === "zh-CN" ? "通知列表" : "Notification list"}
+          aria-label={formatUiMessage(locale, "settings.notifications.listLabel")}
         >
           <header className={styles.panelHeader}>
-            <strong>{locale === "zh-CN" ? "通知" : "Notifications"}</strong>
+            <strong>{formatUiMessage(locale, "settings.notifications.bellLabel")}</strong>
             {unread > 0 ? (
               <span className={styles.unreadHint}>
-                {locale === "zh-CN" ? `${unread} 条未读` : `${unread} unread`}
+                {formatUiMessage(locale, "settings.notifications.unreadCount", {
+                  count: unread,
+                })}
               </span>
             ) : null}
           </header>
@@ -143,7 +145,7 @@ export function NotificationBell({ locale }: { locale: UiLocale }) {
                       <strong className={styles.itemTitle}>{n.title}</strong>
                       <span className={styles.itemSub}>
                         {notificationTypeLabel(locale, n.event_type)} ·{" "}
-                        {formatDateTime(n.created_at, locale)}
+                        {formatRelativeTime(n.created_at, locale)}
                       </span>
                     </div>
                     {!n.read_at ? (

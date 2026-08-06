@@ -19,10 +19,14 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
     handleCopyShareLink,
     handleOpenSharePage,
     handleRefreshShare,
+    handleSaveQuestionLimits,
     handleToggleShare,
     handleVisitorModeChange,
     locale,
+    anonLimitDraft,
+    memberLimitDraft,
     pendingEnableConfirm,
+    questionLimitsMutation,
     quotaLabel,
     refreshShareMutation,
     settingsQuery,
@@ -34,7 +38,9 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
     validityOptions,
     visitorModeDraft,
     visitorModeMutation,
+    setAnonLimitDraft,
     setExpiresAtDraft,
+    setMemberLimitDraft,
   } = center;
 
   return (
@@ -169,18 +175,56 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
         {settingsQuery.data ? (
           <div className={styles.fieldStack} data-testid="share-question-limits">
             <p className={styles.switchLabel}>
-              {locale === "zh-CN" ? "访客提问日上限" : "Daily question caps"}
+              {formatUiMessage(locale, "shareCenter.questionLimitsLabel")}
+            </p>
+            <label className="app-form-label" htmlFor="share-anon-limit">
+              {formatUiMessage(locale, "shareCenter.anonLimitLabel")}
+            </label>
+            <input
+              className="app-input"
+              data-testid="share-anon-limit"
+              id="share-anon-limit"
+              inputMode="numeric"
+              min={0}
+              type="number"
+              value={anonLimitDraft}
+              onChange={(event) => setAnonLimitDraft(event.target.value)}
+            />
+            <label className="app-form-label" htmlFor="share-member-limit">
+              {formatUiMessage(locale, "shareCenter.memberLimitLabel")}
+            </label>
+            <input
+              className="app-input"
+              data-testid="share-member-limit"
+              id="share-member-limit"
+              inputMode="numeric"
+              min={1}
+              placeholder="∞"
+              type="number"
+              value={memberLimitDraft}
+              onChange={(event) => setMemberLimitDraft(event.target.value)}
+            />
+            <p className={`app-form-footnote ${styles.footnote}`}>
+              {formatUiMessage(locale, "shareCenter.memberLimitWorkspaceNote")}
             </p>
             <p className={`app-form-footnote ${styles.footnote}`}>
-              {locale === "zh-CN"
-                ? `匿名访客：${settingsQuery.data.anon_question_limit === 0 ? "不限" : `${settingsQuery.data.anon_question_limit} 次/日`}；定向邀请：${settingsQuery.data.member_question_limit == null ? "不限" : `${settingsQuery.data.member_question_limit} 次/日`}`
-                : `Anonymous: ${settingsQuery.data.anon_question_limit === 0 ? "unlimited" : `${settingsQuery.data.anon_question_limit}/day`}; Invited: ${settingsQuery.data.member_question_limit == null ? "unlimited" : `${settingsQuery.data.member_question_limit}/day`}`}
+              {formatUiMessage(locale, "shareCenter.ownerPaysHint")}
             </p>
-            <p className={`app-form-footnote ${styles.footnote}`}>
-              {locale === "zh-CN"
-                ? "分享场景模型费用由 Owner 余额/自定义 Provider 承担。"
-                : "Share chat is Owner-pays (balance or custom provider)."}
-            </p>
+            <button
+              className="app-button-secondary"
+              data-testid="share-question-limits-save"
+              disabled={
+                questionLimitsMutation.isPending ||
+                toggleShareMutation.isPending ||
+                refreshShareMutation.isPending
+              }
+              type="button"
+              onClick={() => void handleSaveQuestionLimits()}
+            >
+              {questionLimitsMutation.isPending
+                ? formatUiMessage(locale, "shareCenter.saving")
+                : formatUiMessage(locale, "shareCenter.questionLimitsSave")}
+            </button>
           </div>
         ) : null}
 

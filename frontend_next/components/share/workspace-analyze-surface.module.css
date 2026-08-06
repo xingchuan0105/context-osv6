@@ -62,3 +62,30 @@
   margin: 0;
   color: hsl(var(--muted-foreground));
 }
+
+.chartPanel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+}
+
+.chartRow {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 2.5rem;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-meta);
+}
+
+.chartTrack {
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: hsl(var(--muted));
+  overflow: hidden;
+}
+
+.chartFill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: hsl(var(--accent));
+}
