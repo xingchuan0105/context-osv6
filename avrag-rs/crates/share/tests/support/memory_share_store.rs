@@ -129,6 +129,28 @@ impl ShareStorePort for MemoryShareStore {
             .cloned())
     }
 
+    async fn owner_for_accepted_member(
+        &self,
+        workspace_id: Uuid,
+        member_user_id: Uuid,
+    ) -> Result<Option<Uuid>, AppError> {
+        let has_member = self
+            .member_access
+            .read()
+            .await
+            .contains_key(&(workspace_id, member_user_id));
+        if !has_member {
+            return Ok(None);
+        }
+        let owner = self
+            .workspaces
+            .read()
+            .await
+            .get(&workspace_id)
+            .and_then(|s| s.owner_id);
+        Ok(owner.filter(|o| *o != member_user_id))
+    }
+
     async fn get_share_settings(
         &self,
         _auth: &AuthContext,

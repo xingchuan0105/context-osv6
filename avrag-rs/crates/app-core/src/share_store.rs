@@ -25,6 +25,18 @@ pub trait ShareStorePort: Send + Sync {
         user_id: Uuid,
     ) -> Result<Option<String>, AppError>;
 
+    /// When `member_user_id` is an **accepted** member of `workspace_id`, return the
+    /// workspace Owner id for Owner-pays billing (ADR-0010 D2 / §4.2).
+    /// `None` when the caller is not an accepted member (or is the owner).
+    async fn owner_for_accepted_member(
+        &self,
+        workspace_id: Uuid,
+        member_user_id: Uuid,
+    ) -> Result<Option<Uuid>, AppError> {
+        let _ = (workspace_id, member_user_id);
+        Ok(None)
+    }
+
     async fn get_share_settings(
         &self,
         auth: &AuthContext,

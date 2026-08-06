@@ -184,6 +184,7 @@ impl ChatContext {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
+        // Owner-pays remount happens inside execute_chat_pipeline.
         ChatService::new(self.clone()).execute(req).await
     }
 
@@ -192,6 +193,12 @@ impl ChatContext {
         if req.query.trim().is_empty() {
             return Err(AppError::validation("query_required", "query is required"));
         }
-        crate::chat::execute_pipeline(self.clone(), req, crate::chat::PipelineLane::Write).await
+        let workspace_id = req
+            .workspace_id
+            .as_deref()
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .or_else(|| self.auth.workspace_id());
+        let state = self.with_owner_pays_auth(workspace_id).await;
+        crate::chat::execute_pipeline(state, req, crate::chat::PipelineLane::Write).await
     }
 }

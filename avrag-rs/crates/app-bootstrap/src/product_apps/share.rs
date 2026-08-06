@@ -164,11 +164,9 @@ impl<'a> ShareApp<'a> {
         workspace_id: String,
         email: String,
         role: avrag_share::AccessLevel,
-    ) -> Result<(), common::AppError> {
+    ) -> Result<avrag_share::WorkspaceMember, common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_invite_member(self.auth.clone(), workspace_id, email, role, store)
-            .await
-            .map(|_| ())
+        avrag_share::handle_invite_member(self.auth.clone(), workspace_id, email, role, store).await
     }
 
     pub async fn accept_share_invite(

@@ -15,7 +15,8 @@ impl ChatContext {
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id))]
     pub async fn execute_chat_pipeline(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
         let effective_workspace_id = chat_workspace_id_for_request(self, &req);
-        if self.storage.chat_persistence().is_some()
+        let state = self.with_owner_pays_auth(effective_workspace_id).await;
+        if state.storage.chat_persistence().is_some()
             && req.agent_type == "rag"
             && req.doc_scope.is_empty()
             && effective_workspace_id.is_none()
@@ -26,9 +27,9 @@ impl ChatContext {
             ));
         }
         if req.agent_type == "rag" && !req.doc_scope.is_empty() {
-            self.validate_rag_doc_scope(&req.doc_scope).await?;
+            state.validate_rag_doc_scope(&req.doc_scope).await?;
         }
-        execute_pipeline(self.clone(), req, PipelineLane::Agent).await
+        execute_pipeline(state, req, PipelineLane::Agent).await
     }
 
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id, trace_id = tracing::field::Empty))]

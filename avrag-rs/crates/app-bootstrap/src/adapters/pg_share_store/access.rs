@@ -65,3 +65,40 @@
             .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(row.and_then(|row| row.try_get::<String, _>("access_level").ok()))
     }
+
+    async fn owner_for_accepted_member(
+        &self,
+        workspace_id: Uuid,
+        member_user_id: Uuid,
+    ) -> Result<Option<Uuid>, AppError> {
+        // Cross-tenant lookup for Owner-pays: must not rely on caller's RLS owner.
+        let mut tx = self
+            .repo
+            .raw()
+            .begin()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
+        let owner = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            select w.owner_user_id
+            from workspaces w
+            inner join workspace_members m
+              on m.workspace_id = w.id
+             and m.owner_user_id = w.owner_user_id
+            where w.id = $1
+              and m.user_id = $2
+              and m.invite_status = 'accepted'
+            limit 1
+            "#,
+        )
+        .bind(workspace_id)
+        .bind(member_user_id)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(owner.filter(|o| *o != member_user_id))
+    }

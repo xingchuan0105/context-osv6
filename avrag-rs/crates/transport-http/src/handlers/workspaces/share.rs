@@ -303,23 +303,26 @@ pub(crate) async fn invite_member_handler(
     }
     let role = avrag_share::AccessLevel::from_role(&req.role);
     let email = req.email.clone();
-    let invite_result = state
+    let member = match state
         .share()
         .invite_share_member(workspace_id.clone(), email.clone(), role)
-        .await;
-    if let Err(error) = invite_result {
-        return app_error_response(error);
-    }
+        .await
+    {
+        Ok(member) => member,
+        Err(error) => return app_error_response(error),
+    };
 
     // Best-effort invite email (ADR-0010 W2 #13); UI still shows manual copy on success.
+    // Accept URL must match invite-surface route: /invite/{workspace_id}/{member_id}.
     let mail = state.password_reset_service();
     if mail.smtp_ready() {
         let base = std::env::var("AVRAG_PUBLIC_BASE_URL")
             .or_else(|_| std::env::var("PUBLIC_BASE_URL"))
             .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
         let accept_url = format!(
-            "{}/dashboard/{workspace_id}/share?invite=1",
-            base.trim_end_matches('/')
+            "{}/invite/{workspace_id}/{}",
+            base.trim_end_matches('/'),
+            member.id
         );
         let title = state
             .workspace()
@@ -339,7 +342,10 @@ pub(crate) async fn invite_member_handler(
 
     (
         StatusCode::OK,
-        Json(serde_json::json!({ "ok": true })),
+        Json(serde_json::json!({
+            "ok": true,
+            "member_id": member.id,
+        })),
     )
         .into_response()
 }

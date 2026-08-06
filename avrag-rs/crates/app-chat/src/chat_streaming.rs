@@ -1,6 +1,7 @@
 use common::AppError;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::context::ChatContext;
 use agent_loop::events::{AgentEvent, AgentEventSink};
@@ -74,8 +75,14 @@ impl ChatContext {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
+        let workspace_id = req
+            .workspace_id
+            .as_deref()
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .or_else(|| self.auth.workspace_id());
+        let state = self.with_owner_pays_auth(workspace_id).await;
         crate::chat::execute_pipeline_stream(
-            self.clone(),
+            state,
             req,
             request_id,
             sender,
@@ -97,8 +104,14 @@ impl ChatContext {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
+        let workspace_id = req
+            .workspace_id
+            .as_deref()
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .or_else(|| self.auth.workspace_id());
+        let state = self.with_owner_pays_auth(workspace_id).await;
         crate::chat::execute_pipeline_stream(
-            self.clone(),
+            state,
             req,
             request_id,
             sender,

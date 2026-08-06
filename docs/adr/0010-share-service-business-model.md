@@ -204,13 +204,13 @@
 
 | 能力 | 状态 |
 |------|------|
-| Share chat auth 重映射为 Owner + optional `actor_id` | **已落地**（middleware） |
+| Share chat auth 重映射为 Owner + optional `actor_id` | **已落地**（middleware：`user_id`=Owner，`actor_id`=访客） |
 | 匿名 `public` / 注册 `link` | **已落地** |
 | Turnstile（匿名） | **已落地**（secret 配置时） |
 | RPM + 按 visitor 键日限 | **已落地**；日限改为 **分享级字段优先** |
 | Owner 钱包 / 自定义 Provider | **已落地** |
-| 定向邀请成员在他人库提问 Owner-pays | **W2**：成员会话 payer = workspace Owner |
-| 邀请 SMTP 邮件 | **W2** |
+| 定向邀请成员在他人库提问 Owner-pays | **已落地**：share 路径靠 middleware 重映射；成员 JWT 路径在 chat 入口 `with_owner_pays_auth` 将 `user_id` 重挂为 workspace Owner（`actor_id`=成员） |
+| 邀请 SMTP 邮件 | **已落地**（接受链接 `/invite/{workspace_id}/{member_id}`） |
 
 #### 4.3 访客模式与 Denial-of-Wallet
 

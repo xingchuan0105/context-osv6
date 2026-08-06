@@ -104,6 +104,13 @@
         body: &str,
         data: serde_json::Value,
     ) -> Result<usize, AppError> {
+        // Admin role gate (super_admin / ops_admin / finance_admin). Do not fan-out
+        // notifications for ordinary signed-in users (W4 security fix).
+        let mut gate = self.begin_admin_tx(auth).await?;
+        gate.rollback()
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
+
         self.repo
             .auth()
             .create_notifications_for_all_users(

@@ -6,7 +6,7 @@ use app_core::ChatPersistencePort;
 use app_core::{AnalyticsServiceCtx, StorageContext};
 use app_documents::DocumentContext;
 use common::AppError;
-use contracts::auth_runtime::AuthContext;
+use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 use uuid::Uuid;
 
 use crate::llm_context::LlmContext;
@@ -54,6 +54,44 @@ impl ChatContext {
 
     pub fn uses_memory_adapters(&self) -> bool {
         self.storage.uses_memory_adapters()
+    }
+
+    /// ADR-0010 D2 / §4.2 Owner-pays for accepted members in a foreign workspace.
+    ///
+    /// - Share middleware already remounts `user_id` to the Owner (`share_chat` grant).
+    /// - JWT members chatting with a workspace_id must bill the workspace Owner, not
+    ///   the member — remount `user_id` = Owner, `actor_id` = member.
+    pub async fn with_owner_pays_auth(&self, workspace_id: Option<Uuid>) -> Self {
+        if self.auth.has_permission("share_chat") {
+            return self.clone();
+        }
+        let Some(workspace_id) = workspace_id else {
+            return self.clone();
+        };
+        let Some(store) = self.storage.share_store() else {
+            return self.clone();
+        };
+        let caller = self.auth.user_id().into_uuid();
+        let owner = match store.owner_for_accepted_member(workspace_id, caller).await {
+            Ok(owner) => owner,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    %workspace_id,
+                    "owner_for_accepted_member failed; keeping caller as payer"
+                );
+                return self.clone();
+            }
+        };
+        let Some(owner) = owner else {
+            return self.clone();
+        };
+        let mut next = self.clone();
+        next.auth = AuthContext::new(UserId::from(owner), SubjectKind::User)
+            .with_actor_id(ActorId::new(caller))
+            .with_workspace_scope(workspace_id)
+            .grant("workspace_member_chat");
+        next
     }
 
     /// Retrieval is routed through orchestrator `RagRuntime` (see `app_core::RetrievalPort`).
