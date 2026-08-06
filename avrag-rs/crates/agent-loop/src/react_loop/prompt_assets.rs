@@ -349,6 +349,23 @@ pub fn short_judge_skill_body() -> &'static str {
     trim_body(cluster_skill!("answer-judge/SKILL.md"))
 }
 
+/// User turn for one-shot short Judge (`{question}`, `{final_answer}`, `{evidence}`).
+pub fn short_judge_user(question: &str, final_answer: &str, evidence: &str) -> String {
+    subst(
+        trim_body(pipeline_prompt!("short-judge.user.tmpl.md")),
+        &[
+            ("question", question),
+            ("final_answer", final_answer),
+            ("evidence", evidence),
+        ],
+    )
+}
+
+/// Filler when Judge has no tool/retrieval excerpt to show.
+pub fn judge_empty_evidence() -> &'static str {
+    trim_body(loop_prompt!("judge-empty-evidence.md"))
+}
+
 pub fn judge_fail_synthesis_observation(advice: &str) -> String {
     subst(
         trim_body(loop_prompt!("judge-fail-synthesis.tmpl.md")),

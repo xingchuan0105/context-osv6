@@ -50,6 +50,7 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `judge-fail-retrieve.tmpl.md` | 短 Judge 不合格 → 回检索（`{advice}`） |
 | `judge-ceiling-disclosure.md` | Judge 回环到顶时用户可见降级说明 |
 | `judge-empty-advice.md` | Judge fail 但未给出 advice 时的占位观察 |
+| `judge-empty-evidence.md` | Judge 证据摘录为空时的占位（无工具/检索 observation） |
 | `judge-draft-under-revision.tmpl.md` | 回合成时注入上一版稿 `{draft}` |
 
 ## Retired (not product-injected)

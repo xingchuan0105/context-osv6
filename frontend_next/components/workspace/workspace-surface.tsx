@@ -233,6 +233,22 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     setOpenViewerSourceId(sourceFromUrl);
   }, [sourceFromUrl, workspaceUi]);
 
+  // Invalid `?session=` (not in list): rewrite address bar to the real active
+  // selection so deep-links cannot keep a dead id after load fallback.
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+    const urlSession = sessionFromUrl?.trim() || null;
+    if (!urlSession) {
+      return;
+    }
+    if (sessions.some((session) => session.id === urlSession)) {
+      return;
+    }
+    router.replace(workspaceSessionHref(workspaceId, activeSessionId));
+  }, [activeSessionId, router, sessionFromUrl, sessions, workspace, workspaceId]);
+
   const handleOpenSourceConsumed = useCallback(() => {
     setOpenViewerSourceId(null);
     if (!sourceFromUrl) {

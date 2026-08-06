@@ -280,7 +280,7 @@ pub fn evidence_excerpt(tool_results: &[ToolResult], messages: &[ChatMessage]) -
     parts.extend(tool_parts);
 
     if parts.is_empty() {
-        return "(no tool results or retrieval observations)".to_string();
+        return prompt_assets::judge_empty_evidence().to_string();
     }
     let joined = parts.join("\n---\n");
     take_chars(&joined, EVIDENCE_EXCERPT_MAX)
@@ -305,9 +305,7 @@ pub async fn run_short_judge(
         prompt_assets::short_judge_system(),
         prompt_assets::short_judge_skill_body()
     );
-    let user = format!(
-        "题面：\n{question}\n\n合成终稿：\n{final_answer}\n\n证据摘录（只读）：\n{evidence}"
-    );
+    let user = prompt_assets::short_judge_user(question, final_answer, &evidence);
     let messages = vec![ChatMessage::system(system), ChatMessage::user(user)];
     let complete = llm.complete_json_mode(&messages, Some(0.2));
     tokio::pin!(complete);

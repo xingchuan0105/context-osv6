@@ -36,6 +36,18 @@ describe("WorkspaceSurface integration", () => {
     expect(mocks.replaceMock).not.toHaveBeenCalled();
   });
 
+  it("rewrites an invalid ?session= deep-link to the active list-head session", async () => {
+    mocks.searchParams = new URLSearchParams("session=missing-sess");
+
+    renderWorkspaceSurface("ws-1");
+
+    await screen.findByLabelText("工作区标题");
+    // List head is sess-1 (pinned first in fixture); dead deep-link must not stay in the URL.
+    await waitFor(() => {
+      expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard/ws-1?session=sess-1");
+    });
+  });
+
   it("honors ?source= deep-link by opening the right rail viewer once", async () => {
     mocks.searchParams = new URLSearchParams("source=src-2");
 

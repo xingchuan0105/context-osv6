@@ -302,13 +302,16 @@ impl ReActLoop {
                     .await;
             }
 
-            // Token ceiling after synth: no more fail re-entries; deliver draft.
+            // Token ceiling after synth: skip further Judge / re-entry; deliver draft.
+            // When fails already accumulated, append fail-ceiling disclosure; first-synth
+            // ceiling still delivers without an extra billable Judge call (design §6).
             if short_judge::budget_forces_ceiling(
                 total_usage.billable_tokens(),
                 product_max_tokens,
-            ) && judge_fails > 0
-            {
-                final_answer = short_judge::append_judge_ceiling_disclosure(final_answer);
+            ) {
+                if judge_fails > 0 {
+                    final_answer = short_judge::append_judge_ceiling_disclosure(final_answer);
+                }
                 return self
                     .deliver_synthesized(
                         sink,
@@ -491,7 +494,9 @@ impl ReActLoop {
                             messages.push(avrag_llm::ChatMessage::user(
                                 prompt_assets::judge_draft_under_revision(&final_answer),
                             ));
-                            budget_exhaustion = run_retrieval::BudgetExhaustion::default();
+                            // Keep retrieve-era BudgetExhaustion so C5 final-turn + last-Ok
+                            // tool carryover still applies on the next synthesis (produce_synthesis
+                            // injects it locally each call when exhaustion.any()).
                         }
                         short_judge::JudgeFailFollowUp::Reretrieve { observation } => {
                             messages.push(avrag_llm::ChatMessage::user(observation));
@@ -501,7 +506,7 @@ impl ReActLoop {
                             state.total_tool_calls = total_tool_calls;
                             state.reasoning_acc = reasoning_summary_acc;
                             state.query_card = query_card.clone();
-                            let (it2, rounds2, _da, tel2, usage2, be2) = self
+                            let (_it2, rounds2, _da, tel2, usage2, be2) = self
                                 .run_retrieval_loop(
                                     mode,
                                     &request,
@@ -555,7 +560,9 @@ impl ReActLoop {
                             collected_tool_results = state.tool_results;
                             total_tool_calls = state.total_tool_calls;
                             reasoning_summary_acc = state.reasoning_acc;
-                            iteration = it2;
+                            // Product cumulative rounds for finish_run / telemetry — not the
+                            // local re-retrieve loop counter (which restarts at 0).
+                            iteration = product_rounds_used;
                         }
                     }
                 }
