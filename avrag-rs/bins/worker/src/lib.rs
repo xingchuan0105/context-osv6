@@ -84,10 +84,17 @@ pub async fn run() -> Result<()> {
         )) as std::sync::Arc<dyn app_core::UsageLimitStorePort>;
         // Exit metering: long-lived clients share TaskTenantUsageObserver; each task
         // rebinds org/user before LLM/embedding work (see PgTaskProcessor::process).
-        let task_usage_observer = std::sync::Arc::new(app_billing::TaskTenantUsageObserver::new(
-            usage_limit_store.clone(),
-            worker_system_tenant(&config),
-        ));
+        // ADR-0010: billable + wallet so platform index spend debits the owner.
+        let wallet_for_meter = std::sync::Arc::new(app_bootstrap::PgWalletStoreAdapter::new(
+            std::sync::Arc::new(repo.clone()),
+        )) as std::sync::Arc<dyn app_core::WalletStorePort>;
+        let task_usage_observer = std::sync::Arc::new(
+            app_billing::TaskTenantUsageObserver::new(
+                usage_limit_store.clone(),
+                worker_system_tenant(&config),
+            )
+            .with_wallet(wallet_for_meter.clone()),
+        );
         let usage_observer: runtime_support::WorkerUsageObserver = {
             let obs: std::sync::Arc<dyn avrag_llm::UsageObserver> = task_usage_observer.clone();
             Some((obs, worker_system_tenant(&config)))
@@ -212,12 +219,8 @@ pub async fn run() -> Result<()> {
                             usage_limit_store.clone(),
                         )),
                         task_usage_observer: Some(task_usage_observer),
-                        wallet: Some(std::sync::Arc::new(
-                            app_bootstrap::PgWalletStoreAdapter::new(std::sync::Arc::new(
-                                repo.clone(),
-                            )),
-                        )
-                            as std::sync::Arc<dyn app_core::WalletStorePort>),
+                        wallet: Some(wallet_for_meter),
+                        // Secrets kept for ops introspection only — index gate is balance-only.
                         provider_secrets: app_bootstrap::PgProviderSecretStoreAdapter::from_env(
                             std::sync::Arc::new(repo),
                         )

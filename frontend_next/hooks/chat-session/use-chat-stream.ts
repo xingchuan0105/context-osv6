@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { describeProductError } from "../../lib/auth/errors";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   buildClientContext,
@@ -222,9 +223,11 @@ export function useChatStream(
           typewriter.resetStreamingTypewriter();
           assistantUpdates.clearPendingStreamingAssistant();
           setError(
-            submitError instanceof Error
-              ? submitError.message
-              : formatUiMessage(localeRef.current, "workspaceStreamError"),
+            describeProductError(
+              formatUiMessage(localeRef.current, "workspaceStreamError"),
+              submitError,
+              localeRef.current,
+            ),
           );
           setIsStreaming(false);
           setStreamingMessageId(null);

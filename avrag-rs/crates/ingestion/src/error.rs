@@ -76,6 +76,9 @@ pub enum IngestionError {
     },
     #[error("document seed not found")]
     SeedNotFound,
+    /// ADR-0010: owner has no wallet balance for platform indexing (terminal — do not requeue).
+    #[error("payer funds required: {0}")]
+    PayerFundsRequired(String),
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -123,6 +126,7 @@ impl IngestionError {
             Self::DocumentLocked(_) => "document_locked",
             Self::EmptyIndex { .. } => "empty_index",
             Self::SeedNotFound => "seed_not_found",
+            Self::PayerFundsRequired(_) => "payer_funds_required",
             Self::Internal(_) => "internal",
         }
     }
@@ -148,6 +152,7 @@ impl IngestionError {
             Self::Timeout(_) => true,
             Self::EmptyIndex { .. } => false,
             Self::SeedNotFound => false,
+            Self::PayerFundsRequired(_) => false,
             Self::InvalidStateTransition { .. } => false,
             Self::Security {
                 kind: SecurityKind::Malware | SecurityKind::ZipBomb,
@@ -157,6 +162,10 @@ impl IngestionError {
             // Transient infra / parse / index: allow attempt budget.
             _ => true,
         }
+    }
+
+    pub fn payer_funds_required(message: impl ToString) -> Self {
+        Self::PayerFundsRequired(message.to_string())
     }
 
     pub fn storage(error: impl ToString) -> Self {
@@ -331,5 +340,13 @@ mod tests {
         assert!(!err.is_retryable());
         assert_eq!(err.class(), "empty_index");
         assert!(matches!(err, IngestionError::EmptyIndex { .. }));
+    }
+
+    #[test]
+    fn payer_funds_required_is_terminal() {
+        let err = IngestionError::payer_funds_required("empty wallet");
+        assert!(!err.is_retryable());
+        assert_eq!(err.class(), "payer_funds_required");
+        assert!(matches!(err, IngestionError::PayerFundsRequired(_)));
     }
 }

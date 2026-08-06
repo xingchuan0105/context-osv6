@@ -1,10 +1,13 @@
 //! Wallet persistence boundary — SQL implementations live in bootstrap adapters.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use common::AppError;
 use uuid::Uuid;
 
-use crate::wallet_domain::{ApplyLedgerInput, ApplyLedgerResult, Wallet, WalletLedgerEntry};
+use crate::wallet_domain::{
+    ApplyLedgerInput, ApplyLedgerResult, WALLET_KIND_USAGE_DEBIT, Wallet, WalletLedgerEntry,
+};
 
 #[async_trait]
 pub trait WalletStorePort: Send + Sync {
@@ -29,4 +32,21 @@ pub trait WalletStorePort: Send + Sync {
         user_id: Uuid,
         limit: i64,
     ) -> Result<Vec<WalletLedgerEntry>, AppError>;
+
+    /// Sum of absolute fen for `usage_debit` rows since `since` (owner daily budget).
+    /// Default falls back to scanning recent ledger rows.
+    async fn sum_usage_debit_fen_since(
+        &self,
+        user_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, AppError> {
+        let entries = self.list_ledger(user_id, 5_000).await?;
+        Ok(entries
+            .iter()
+            .filter(|e| {
+                e.created_at >= since && e.kind == WALLET_KIND_USAGE_DEBIT && e.amount_fen < 0
+            })
+            .map(|e| -e.amount_fen)
+            .sum())
+    }
 }

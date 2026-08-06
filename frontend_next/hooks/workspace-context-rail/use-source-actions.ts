@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { describeProductError } from "../../lib/auth/errors";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { queryKeys } from "../../lib/query/keys";
 import {
@@ -155,7 +156,13 @@ export function useWorkspaceSourceActions({
 
         setSourceActionError("");
       } catch (error) {
-        setSourceActionError(formatUiMessage(locale, "workspaceRightRail.sourcesError"));
+        setSourceActionError(
+          describeProductError(
+            formatUiMessage(locale, "workspaceRightRail.sourcesError"),
+            error,
+            locale,
+          ),
+        );
         throw error;
       } finally {
         setSourceUploadPending(false);

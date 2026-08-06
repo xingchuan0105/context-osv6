@@ -114,8 +114,10 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
   const [byokProvider, setByokProvider] = useState("deepseek");
   const [byokKey, setByokKey] = useState("");
   const [byokBaseUrl, setByokBaseUrl] = useState("");
+  const [byokModelHint, setByokModelHint] = useState("");
   const [byokBusy, setByokBusy] = useState(false);
   const [byokError, setByokError] = useState("");
+  const [referralCopied, setReferralCopied] = useState(false);
 
   const errorMessage = billingQuery.error
     ? describeAuthError(
@@ -196,17 +198,30 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
         provider: byokProvider.trim() || "deepseek",
         api_key: byokKey.trim(),
         base_url: byokBaseUrl.trim() || undefined,
+        model_hint: byokModelHint.trim() || undefined,
       });
       setByokKey("");
       void queryClient.invalidateQueries({
         queryKey: [...settingsKeys.billing(token), "provider-secrets"],
       });
     } catch (error) {
-      setByokError(describeAuthError("save failed", error));
+      setByokError(describeAuthError("save failed", error, locale));
     } finally {
       setByokBusy(false);
     }
-  }, [byokBaseUrl, byokKey, byokProvider, queryClient, token]);
+  }, [byokBaseUrl, byokKey, byokModelHint, byokProvider, locale, queryClient, token]);
+
+  const copyReferralCode = useCallback(async () => {
+    const code = referralQuery.data?.code;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setReferralCopied(true);
+      window.setTimeout(() => setReferralCopied(false), 1500);
+    } catch {
+      /* ignore clipboard errors */
+    }
+  }, [referralQuery.data?.code]);
 
   return (
     <section className={shared.section}>
@@ -216,23 +231,26 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
         <div className={`app-inline-row ${styles.headerRow}`}>
           <div className={shared.headerText}>
             <h2 className={shared.flushTitle}>
-              {locale === "zh-CN" ? "邀请码" : "Referral"}
+              {formatUiMessage(locale, "settings.billing.referralTitle")}
             </h2>
             <p className={shared.mutedText}>
-              {locale === "zh-CN"
-                ? "好友注册填写你的邀请码，双方各得 ¥5 赠送金。"
-                : "Friends who register with your code earn ¥5 gift credit each."}
+              {formatUiMessage(locale, "settings.billing.referralSubtitle")}
             </p>
           </div>
         </div>
         {referralQuery.data ? (
           <div className={`app-inline-surface ${styles.planCard}`} data-testid="referral-stats">
             <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{locale === "zh-CN" ? "我的邀请码" : "Your code"}</span>
+              <span>{formatUiMessage(locale, "settings.billing.referralCodeLabel")}</span>
               <strong>{referralQuery.data.code}</strong>
+              <button type="button" className="app-link" onClick={() => void copyReferralCode()}>
+                {referralCopied
+                  ? formatUiMessage(locale, "settings.billing.referralCopied")
+                  : formatUiMessage(locale, "settings.billing.referralCopy")}
+              </button>
             </div>
             <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{locale === "zh-CN" ? "已成功邀请" : "Rewarded invites"}</span>
+              <span>{formatUiMessage(locale, "settings.billing.referralRewardedLabel")}</span>
               <strong>
                 {referralQuery.data.rewarded_count} / {referralQuery.data.quota}
               </strong>
@@ -247,19 +265,17 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
         <div className={`app-inline-row ${styles.headerRow}`}>
           <div className={shared.headerText}>
             <h2 className={shared.flushTitle}>
-              {locale === "zh-CN" ? "云端 BYOK（自带 API Key）" : "Cloud BYOK"}
+              {formatUiMessage(locale, "settings.billing.byokTitle")}
             </h2>
             <p className={shared.mutedText}>
-              {locale === "zh-CN"
-                ? "密钥加密存储；有有效 Key 时走你的额度，不扣平台储值。"
-                : "Keys are encrypted at rest. Active keys use your provider quota, not wallet balance."}
+              {formatUiMessage(locale, "settings.billing.byokSubtitle")}
             </p>
           </div>
         </div>
         {byokError ? <p className="app-notice-banner">{byokError}</p> : null}
         <div className={`app-inline-surface ${styles.planCard}`}>
           <label className={shared.mutedText}>
-            Provider
+            {formatUiMessage(locale, "settings.billing.byokProvider")}
             <input
               className="app-input"
               value={byokProvider}
@@ -268,7 +284,7 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
             />
           </label>
           <label className={shared.mutedText}>
-            Base URL (optional)
+            {formatUiMessage(locale, "settings.billing.byokBaseUrl")}
             <input
               className="app-input"
               value={byokBaseUrl}
@@ -277,7 +293,16 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
             />
           </label>
           <label className={shared.mutedText}>
-            API Key
+            {formatUiMessage(locale, "settings.billing.byokModelHint")}
+            <input
+              className="app-input"
+              value={byokModelHint}
+              onChange={(e) => setByokModelHint(e.target.value)}
+              placeholder="deepseek-chat"
+            />
+          </label>
+          <label className={shared.mutedText}>
+            {formatUiMessage(locale, "settings.billing.byokApiKey")}
             <input
               className="app-input"
               type="password"
@@ -293,15 +318,18 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
             disabled={byokBusy || !byokKey.trim()}
             onClick={() => void saveByok()}
           >
-            {byokBusy ? "…" : locale === "zh-CN" ? "保存密钥" : "Save key"}
+            {byokBusy ? "…" : formatUiMessage(locale, "settings.billing.byokSave")}
           </button>
         </div>
         {(secretsQuery.data?.secrets ?? []).length > 0 ? (
           <ul className={shared.mutedText}>
             {secretsQuery.data!.secrets.map((s) => (
-              <li key={s.id}>
-                {s.provider} · {s.purpose} · {s.key_fingerprint}{" "}
-                {!s.revoked_at ? (
+              <li key={s.id} style={s.revoked_at ? { opacity: 0.55 } : undefined}>
+                {s.provider} · {s.purpose}
+                {s.model_hint ? ` · ${s.model_hint}` : ""} · {s.key_fingerprint}{" "}
+                {s.revoked_at ? (
+                  <span>{formatUiMessage(locale, "settings.billing.byokRevoked")}</span>
+                ) : (
                   <button
                     type="button"
                     className="app-link"
@@ -314,9 +342,9 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
                       );
                     }}
                   >
-                    {locale === "zh-CN" ? "吊销" : "Revoke"}
+                    {formatUiMessage(locale, "settings.billing.byokRevoke")}
                   </button>
-                ) : null}
+                )}
               </li>
             ))}
           </ul>

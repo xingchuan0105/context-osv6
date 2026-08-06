@@ -252,7 +252,7 @@ pub(crate) async fn request_context_middleware(
     req.extensions_mut()
         .insert(RequestState(state.with_auth(auth)));
 
-    let request_path = req.uri().path().to_string();
+    let is_share_request = share_chat.is_some();
     let response = next.run(req).await;
 
     if !allowed {
@@ -289,21 +289,28 @@ pub(crate) async fn request_context_middleware(
         HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
         HeaderValue::from(remaining),
     );
-    // ADR-0010 §9: reduce share-token leakage via Referer.
-    if req_path_is_shared(&request_path) {
-        let _ = response_headers.insert(
-            header::REFERRER_POLICY,
-            HeaderValue::from_static("no-referrer"),
-        );
-        let _ = response_headers.insert(
-            HeaderName::from_static("x-robots-tag"),
-            HeaderValue::from_static("noindex, nofollow"),
-        );
+    // ADR-0010 §9: share chat responses must not leak token via Referer / indexing.
+    if is_share_request {
+        apply_share_anti_index_headers(response_headers);
     }
     response
 }
 
-fn req_path_is_shared(path: &str) -> bool {
+/// ADR-0010 §9 headers for any public share surface (path-based or chat).
+pub(crate) fn apply_share_anti_index_headers(headers: &mut axum::http::HeaderMap) {
+    let _ = headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    let _ = headers.insert(
+        HeaderName::from_static("x-robots-tag"),
+        HeaderValue::from_static("noindex, nofollow"),
+    );
+}
+
+/// True for public share HTTP paths (`/api/shared/...`, frontend `/shared/...` proxies).
+#[allow(dead_code)] // used by unit tests + future path-layer middleware
+pub(crate) fn req_path_is_shared(path: &str) -> bool {
     path.contains("/shared/") || path.contains("/api/shared/")
 }
 

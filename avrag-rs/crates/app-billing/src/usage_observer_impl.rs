@@ -175,7 +175,12 @@ impl PgUsageObserver {
         usage_kind: &str,
         request_id: Option<String>,
     ) {
-        if !self.billable || self.skip_wallet_debit || tenant.skip_wallet_debit {
+        if !self.billable || self.skip_wallet_debit {
+            return;
+        }
+        // LLM-only BYOK sets tenant.skip_wallet_debit — skip **chat** debits only.
+        // Embeddings still use platform keys and must debit (ADR-0010 acceptance).
+        if tenant.skip_wallet_debit && usage_kind == "chat" {
             return;
         }
         let Some(wallet) = self.wallet.as_ref() else {
@@ -209,7 +214,8 @@ impl PgUsageObserver {
                 // zero fen — nothing to bill
             }
             Err(e) => {
-                // Fail-open for the LLM path; loud log so ops see free-ride risk.
+                // Fail-open for the LLM path; loud structured log for ops / metrics scrape.
+                let code = e.code();
                 tracing::error!(
                     user_id = %input.user_id,
                     owner_user_id = %tenant.owner_user_id,
@@ -218,8 +224,9 @@ impl PgUsageObserver {
                     model = %model,
                     prompt_tokens,
                     completion_tokens,
+                    error_code = code,
                     error = %e,
-                    "PgUsageObserver wallet debit failed; usage recorded but not charged"
+                    "PgUsageObserver wallet debit failed; usage recorded but not charged (free-ride risk if model not whitelisted or balance empty)"
                 );
             }
         }
@@ -368,13 +375,19 @@ impl std::fmt::Debug for TaskTenantUsageObserver {
 }
 
 impl TaskTenantUsageObserver {
-    /// Worker metering: rebinds task tenant; rows are **non-billable** (ADR 0006 §7).
-    /// Non-billable implies no wallet debit even if a wallet is later attached.
+    /// Worker metering: rebinds task tenant each process(); **billable** so platform
+    /// index/LLM spend debits the owner wallet (ADR-0010 §1.1 / §3).
     pub fn new(store: Arc<dyn UsageLimitStorePort>, initial: TenantContext) -> Self {
         Self {
-            inner: PgUsageObserver::new(store).with_billable(false),
+            inner: PgUsageObserver::new(store).with_billable(true),
             tenant: Arc::new(RwLock::new(initial)),
         }
+    }
+
+    /// Attach wallet so platform-proxy index spend debits the payer.
+    pub fn with_wallet(mut self, wallet: Arc<dyn WalletStorePort>) -> Self {
+        self.inner = self.inner.with_wallet(wallet);
+        self
     }
 
     pub async fn rebind(&self, tenant: TenantContext) {
@@ -692,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn task_tenant_observer_is_non_billable_for_worker_path() {
+    fn task_tenant_observer_is_billable_for_worker_path() {
         let tenant = TenantContext {
             owner_user_id: Uuid::nil(),
             user_id: Uuid::nil(),
@@ -700,8 +713,8 @@ mod tests {
         };
         let observer = TaskTenantUsageObserver::new(Arc::new(StubUsageLimitStore), tenant);
         assert!(
-            !observer.records_billable(),
-            "ADR 0006 §7: worker metering must not count toward user rolling quotas"
+            observer.records_billable(),
+            "ADR-0010: worker platform index path must debit wallet / count usage"
         );
     }
 
@@ -758,6 +771,75 @@ mod tests {
             .collect();
         assert_eq!(debits.len(), 1);
         assert_eq!(debits[0].amount_fen, -150);
+    }
+
+    #[tokio::test]
+    async fn llm_byok_skip_debits_embedding_not_chat() {
+        let wallet = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        wallet
+            .apply_ledger_entry(&ApplyLedgerInput {
+                user_id,
+                kind: app_core::WALLET_KIND_SIGNUP_GRANT.to_string(),
+                amount_fen: app_core::SIGNUP_GRANT_FEN,
+                idempotency_key: format!("signup_grant:{user_id}"),
+                metadata: serde_json::json!({}),
+                counts_as_paid_topup: false,
+            })
+            .await
+            .unwrap();
+
+        let observer =
+            PgUsageObserver::new(Arc::new(StubUsageLimitStore)).with_wallet(wallet.clone());
+        // LLM BYOK: skip chat only; platform embeddings still bill.
+        let tenant = TenantContext {
+            owner_user_id: user_id,
+            user_id,
+            skip_wallet_debit: true,
+        };
+        observer
+            .record_chat_for(
+                &tenant,
+                &ChatUsageRecord {
+                    prompt_tokens: 1_000_000,
+                    completion_tokens: 0,
+                    total_tokens: 1_000_000,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    feature: "chat".into(),
+                    stage: "chat".into(),
+                    session_id: None,
+                    document_id: None,
+                    request_id: None,
+                    trace_id: None,
+                },
+            )
+            .await;
+        assert_eq!(
+            wallet.get_wallet(user_id).await.unwrap().unwrap().balance_fen,
+            app_core::SIGNUP_GRANT_FEN,
+            "chat must not debit under LLM BYOK skip"
+        );
+
+        observer
+            .record_embedding_for(
+                &tenant,
+                &EmbeddingUsageRecord {
+                    estimated_tokens: 1_000_000,
+                    actual_tokens: None,
+                    provider: "siliconflow".into(),
+                    model: "BAAI/bge-m3".into(),
+                    feature: "embedding".into(),
+                },
+            )
+            .await;
+        let after = wallet.get_wallet(user_id).await.unwrap().unwrap().balance_fen;
+        assert!(
+            after < app_core::SIGNUP_GRANT_FEN,
+            "platform embedding must still debit under LLM-only BYOK skip, balance={after}"
+        );
     }
 
     #[tokio::test]

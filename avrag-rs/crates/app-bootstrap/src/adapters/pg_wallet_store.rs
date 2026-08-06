@@ -264,7 +264,7 @@ impl WalletStorePort for PgWalletStoreAdapter {
     ) -> Result<Vec<WalletLedgerEntry>, AppError> {
         let pool = self.repo.raw();
         let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx)?;
-        let limit = limit.clamp(1, 200);
+        let limit = limit.clamp(1, 5_000);
         let rows = sqlx::query(
             "SELECT id, user_id, kind, amount_fen, balance_after_fen, idempotency_key, metadata, created_at \
              FROM wallet_ledger \
@@ -279,5 +279,30 @@ impl WalletStorePort for PgWalletStoreAdapter {
         .map_err(map_sqlx)?;
         tx.commit().await.map_err(map_sqlx)?;
         rows.iter().map(ledger_from_row).collect()
+    }
+
+    async fn sum_usage_debit_fen_since(
+        &self,
+        user_id: Uuid,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<i64, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx)?;
+        let row = sqlx::query(
+            "SELECT COALESCE(SUM(-amount_fen), 0)::bigint AS spent \
+             FROM wallet_ledger \
+             WHERE user_id = $1 \
+               AND kind = $2 \
+               AND amount_fen < 0 \
+               AND created_at >= $3",
+        )
+        .bind(user_id)
+        .bind(app_core::WALLET_KIND_USAGE_DEBIT)
+        .bind(since)
+        .fetch_one(tx.as_mut())
+        .await
+        .map_err(map_sqlx)?;
+        tx.commit().await.map_err(map_sqlx)?;
+        row.try_get::<i64, _>("spent").map_err(map_sqlx)
     }
 }

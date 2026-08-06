@@ -51,11 +51,14 @@ impl BillingContext {
         self
     }
 
-    /// ADR-0010 §1.1: allow platform LLM when **wallet balance > 0** or **active BYOK LLM secret**.
+    /// ADR-0010 §1.1: allow **chat/LLM** when wallet balance > 0 **or** active BYOK LLM secret.
     ///
-    /// BYOK is only a valid pass because chat resolves the secret into the request
-    /// (`UnifiedAgent` + `skip_wallet_debit`). Junk keys fail at the provider, not
-    /// as free env-key rides (env key is not used when BYOK is bound).
+    /// BYOK is only a valid pass because chat/write **resolve** the secret into the request
+    /// (`UnifiedAgent` / writer) and set per-request skip for chat debits. Junk keys fail at
+    /// the provider, not as free env-key rides.
+    ///
+    /// For **indexing/upload** (platform embedding + worker LLM), use
+    /// [`Self::ensure_payer_has_wallet_balance`] — never trust `has_active` alone.
     ///
     /// When wallet port is absent (unit tests / memory bootstrap), allow.
     pub async fn ensure_payer_can_spend(&self, auth: &AuthContext) -> Result<(), AppError> {
@@ -75,28 +78,57 @@ impl BillingContext {
                 return Ok(());
             }
         }
-        if let Some(wallet) = &self.wallet {
-            // Best-effort signup grant compensation if never applied.
-            let _ = avrag_billing::grant_signup_bonus(wallet.clone(), owner).await;
-            match wallet.ensure_wallet(owner).await {
-                Ok(w) if w.balance_fen > 0 => return Ok(()),
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(AppError::internal(format!("wallet preflight failed: {e}")));
-                }
+        self.ensure_payer_has_wallet_balance(auth).await
+    }
+
+    /// Platform-key spend only: positive wallet balance (lazy signup grant). No BYOK shortcut.
+    pub async fn ensure_payer_has_wallet_balance(
+        &self,
+        auth: &AuthContext,
+    ) -> Result<(), AppError> {
+        let Some(wallet) = &self.wallet else {
+            return Ok(());
+        };
+        let owner = auth.user_id().into_uuid();
+        if owner.is_nil() {
+            return Err(AppError::unauthorized("payer identity missing"));
+        }
+        let _ = avrag_billing::grant_signup_bonus(wallet.clone(), owner).await;
+        match wallet.ensure_wallet(owner).await {
+            Ok(w) if w.balance_fen > 0 => Ok(()),
+            Ok(_) => Err(AppError::validation(
+                "payer_funds_required",
+                "Wallet balance is empty. Top up before using platform models for indexing or chat.",
+            )),
+            Err(e) => Err(AppError::internal(format!("wallet preflight failed: {e}"))),
+        }
+    }
+
+    /// Resolve cloud BYOK LLM secret for owner (+ optional workspace scope).
+    pub async fn resolve_llm_secret(
+        &self,
+        owner: uuid::Uuid,
+        workspace_id: Option<uuid::Uuid>,
+    ) -> Option<app_core::ResolvedProviderSecret> {
+        let secrets = self.provider_secrets.as_ref()?;
+        match secrets
+            .resolve(owner, workspace_id, ProviderSecretPurpose::Llm)
+            .await
+        {
+            Ok(Some(s)) => Some(s),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, owner = %owner, "BYOK resolve failed");
+                None
             }
         }
-        Err(AppError::validation(
-            "payer_funds_required",
-            "Wallet balance is empty and no cloud BYOK LLM key is configured. Top up or add an API key.",
-        ))
     }
 
     /// ADR-0010 §4/§9: Owner daily platform-spend fuse for share chat (fen).
     ///
     /// `SHARE_OWNER_DAILY_BUDGET_FEN` — default 5000 (¥50). Set `0` to disable.
-    /// Counts wallet `usage_debit` rows in the last 24h (sample of recent ledger).
-    /// BYOK share path does not debit the wallet, so this fuse only bounds platform proxy spend.
+    /// Sums wallet `usage_debit` fen in the last 24h (SQL aggregate; not ledger page sample).
+    /// Note: includes private platform spend for the same owner (strict fuse).
     pub async fn ensure_share_owner_daily_budget(
         &self,
         auth: &AuthContext,
@@ -115,19 +147,13 @@ impl BillingContext {
         if owner.is_nil() {
             return Ok(());
         }
-        let entries = wallet.list_ledger(owner, 500).await.map_err(|e| {
-            AppError::internal(format!("share daily budget ledger read failed: {e}"))
-        })?;
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(24);
-        let spent_fen: i64 = entries
-            .iter()
-            .filter(|e| {
-                e.created_at >= cutoff
-                    && e.kind == app_core::WALLET_KIND_USAGE_DEBIT
-                    && e.amount_fen < 0
-            })
-            .map(|e| -e.amount_fen)
-            .sum();
+        let spent_fen = wallet
+            .sum_usage_debit_fen_since(owner, cutoff)
+            .await
+            .map_err(|e| {
+                AppError::internal(format!("share daily budget ledger read failed: {e}"))
+            })?;
         if spent_fen >= cap_fen {
             return Err(AppError::rate_limited(
                 "share_owner_daily_budget_exceeded",

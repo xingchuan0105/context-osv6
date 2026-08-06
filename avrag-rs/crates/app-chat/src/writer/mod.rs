@@ -38,7 +38,7 @@ const HEAVYTAIL_PRIMING_SKILL_ID: &str = "heavytail-priming";
 
 /// Build `WriterLlm` from bootstrap agent client + exit metering when available.
 /// Falls back to `AGENT_LLM_*` env for offline / experiment paths.
-fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
+async fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
     use avrag_llm::TenantContext;
     use uuid::Uuid;
 
@@ -50,15 +50,29 @@ fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
         }
     };
 
+    let owner = ctx.auth.user_id().into_uuid();
+    let byok = ctx
+        .billing
+        .resolve_llm_secret(owner, ctx.auth.workspace_id())
+        .await;
+    if let Some(secret) = byok.as_ref() {
+        client = client.with_user_credentials(
+            secret.api_key.clone(),
+            secret.base_url.clone(),
+            secret.model_hint.clone(),
+        );
+    }
+
     if let Some(observer) = ctx.billing.usage_observer() {
         let tenant = TenantContext {
-            owner_user_id: ctx.auth.user_id().into_uuid(),
+            owner_user_id: owner,
             user_id: ctx
                 .auth
                 .actor_id()
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(Uuid::nil),
-            skip_wallet_debit: false,
+            // LLM-only BYOK: chat debits skip; embeddings still bill if used.
+            skip_wallet_debit: byok.is_some(),
         };
         client = client
             .with_observer(observer.clone(), tenant)
@@ -109,7 +123,7 @@ impl<'a> WriterOrchestrator<'a> {
 
         emit_activity(sink, "act:write_outline", "progress.write_outline").await;
 
-        let llm = build_writer_llm(self.ctx)?;
+        let llm = build_writer_llm(self.ctx).await?;
         let skeleton_llm = llm.with_phase("skeleton");
         let target_chars = DEFAULT_TARGET_CHARS;
         let skeleton = skeleton::plan_skeleton(

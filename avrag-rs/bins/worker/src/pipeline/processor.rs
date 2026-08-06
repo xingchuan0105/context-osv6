@@ -299,37 +299,29 @@ impl TaskProcessor for PgTaskProcessor {
         let task_kind = worker_task_kind(task);
         telemetry::prometheus::observe_worker_task_started(task_kind);
         let started_at = std::time::Instant::now();
-        // ADR-0010 §1.1: indexing burns platform tokens — require wallet or BYOK.
+        // ADR-0010 §1.1: indexing burns **platform** keys (LLM + embedding).
+        // Do **not** accept has_active(BYOK) — junk keys would unlock free env-key indexing.
+        // Only a positive wallet balance proves platform spend capacity. Terminal (no requeue).
         {
             let auth = task_context(task);
             let owner = auth.user_id().into_uuid();
-            let mut allowed = self.metering.wallet.is_none() && self.metering.provider_secrets.is_none();
-            if let Some(secrets) = self.metering.provider_secrets.as_ref() {
-                if secrets
-                    .has_active(owner, app_core::ProviderSecretPurpose::Llm)
-                    .await
-                    .unwrap_or(false)
-                {
-                    allowed = true;
-                }
-            }
-            if !allowed {
-                if let Some(wallet) = self.metering.wallet.as_ref() {
-                    let _ = avrag_billing::grant_signup_bonus(wallet.clone(), owner).await;
-                    match wallet.ensure_wallet(owner).await {
-                        Ok(w) if w.balance_fen > 0 => allowed = true,
-                        Ok(_) => {}
-                        Err(e) => {
-                            return Err(IngestionError::internal(format!(
-                                "wallet preflight failed: {e}"
-                            )));
-                        }
+            let mut allowed =
+                self.metering.wallet.is_none() && self.metering.provider_secrets.is_none();
+            if let Some(wallet) = self.metering.wallet.as_ref() {
+                let _ = avrag_billing::grant_signup_bonus(wallet.clone(), owner).await;
+                match wallet.ensure_wallet(owner).await {
+                    Ok(w) if w.balance_fen > 0 => allowed = true,
+                    Ok(_) => allowed = false,
+                    Err(e) => {
+                        return Err(IngestionError::payer_funds_required(format!(
+                            "wallet preflight failed for owner {owner}: {e}"
+                        )));
                     }
                 }
             }
             if !allowed {
-                return Err(IngestionError::internal(format!(
-                    "payer_funds_required: empty wallet and no BYOK for owner {owner}"
+                return Err(IngestionError::payer_funds_required(format!(
+                    "empty wallet for owner {owner}; indexing requires platform wallet balance (BYOK does not unlock env-key index)"
                 )));
             }
         }

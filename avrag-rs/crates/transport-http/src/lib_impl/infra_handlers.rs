@@ -294,37 +294,40 @@ pub(crate) async fn shared_workspace_handler(
     Path(token): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
-    if !state.postgres_configured() {
+    let mut response = if !state.postgres_configured() {
         telemetry::prometheus::record_dependency_failure("postgres");
-        return (
+        (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({
                 "success": false,
                 "error": "Shared notebook service unavailable",
             })),
         )
-            .into_response();
-    }
-
-    match state.share().get_shared_workspace(&token).await {
-        Ok(Some(payload)) => (
-            StatusCode::OK,
-            Json(json!({
-                "success": true,
-                "data": payload,
-            })),
-        )
-            .into_response(),
-        Ok(None) => (
-            StatusCode::OK,
-            Json(json!({
-                "success": false,
-                "error": "Invalid or expired share token",
-            })),
-        )
-            .into_response(),
-        Err(error) => handlers::app_error_response(error),
-    }
+            .into_response()
+    } else {
+        match state.share().get_shared_workspace(&token).await {
+            Ok(Some(payload)) => (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "data": payload,
+                })),
+            )
+                .into_response(),
+            Ok(None) => (
+                StatusCode::OK,
+                Json(json!({
+                    "success": false,
+                    "error": "Invalid or expired share token",
+                })),
+            )
+                .into_response(),
+            Err(error) => handlers::app_error_response(error),
+        }
+    };
+    // ADR-0010 §9: public share API is outside request_context_middleware.
+    crate::middleware::apply_share_anti_index_headers(response.headers_mut());
+    response
 }
 
 // ---------------------------------------------------------------------------

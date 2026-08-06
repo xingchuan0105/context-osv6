@@ -75,8 +75,8 @@ impl DocumentContext {
             ));
         }
 
-        // ADR-0010 §1.1: indexing/triplets burn platform tokens — same paywall as chat.
-        billing.ensure_payer_can_spend(auth).await?;
+        // ADR-0010 §1.1: indexing burns **platform** keys — balance only (no junk-BYOK free pass).
+        billing.ensure_payer_has_wallet_balance(auth).await?;
 
         let store = storage.document_store().ok_or_else(|| {
             AppError::internal("document store is required for document uploads")

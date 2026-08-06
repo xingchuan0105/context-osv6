@@ -208,23 +208,26 @@ pub(crate) async fn validate_share_token_handler(
     State(state): State<AppState>,
     Path(token): Path<String>,
 ) -> Response {
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state.share().validate_share_token(&token).await {
-        Ok(Some(workspace_id)) => (
-            StatusCode::OK,
-            Json(common::ShareTokenResponse {
-                share_token: workspace_id,
-            }),
-        )
-            .into_response(),
-        Ok(None) => app_error_response(common::AppError::validation(
-            "invalid_share_token",
-            "invalid share token",
-        )),
-        Err(error) => app_error_response(error),
-    }
+    let mut response = if !state.postgres_configured() {
+        postgres_unavailable_response()
+    } else {
+        match state.share().validate_share_token(&token).await {
+            Ok(Some(workspace_id)) => (
+                StatusCode::OK,
+                Json(common::ShareTokenResponse {
+                    share_token: workspace_id,
+                }),
+            )
+                .into_response(),
+            Ok(None) => app_error_response(common::AppError::validation(
+                "invalid_share_token",
+                "invalid share token",
+            )),
+            Err(error) => app_error_response(error),
+        }
+    };
+    crate::middleware::apply_share_anti_index_headers(response.headers_mut());
+    response
 }
 
 pub(crate) async fn list_members_handler(

@@ -40,7 +40,26 @@ export function describeAuthError(fallback: string, error: unknown, locale: UiLo
       return formatUiMessage(locale, "authErrorInvalidLegalContext");
     case "consent_required":
       return formatUiMessage(locale, "authErrorConsentRequired");
+    case "payer_funds_required":
+      return formatUiMessage(locale, "settings.billing.payerFundsRequired");
+    case "share_owner_daily_budget_exceeded":
+      return error.message.trim() || fallback;
     default:
       return error.message.trim() || fallback;
   }
+}
+
+/** Product billing / paywall codes with top-up guidance when appropriate. */
+export function describeProductError(
+  fallback: string,
+  error: unknown,
+  locale: UiLocale = DEFAULT_LOCALE,
+): string {
+  if (error instanceof ApiError && error.code === "payer_funds_required") {
+    return `${formatUiMessage(locale, "settings.billing.payerFundsRequired")} ${formatUiMessage(
+      locale,
+      "settings.billing.payerFundsTopUpHint",
+    )}`;
+  }
+  return describeAuthError(fallback, error, locale);
 }

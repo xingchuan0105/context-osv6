@@ -312,5 +312,22 @@ async fn shared_workspace_handler_is_not_implemented_no_longer_returns_501() {
     let response = app.oneshot(req).await.unwrap();
     assert_ne!(response.status(), StatusCode::NOT_IMPLEMENTED);
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    // ADR-0010 §9: public share API must set anti-index headers (not only protected middleware).
+    let headers = response.headers();
+    assert_eq!(
+        headers.get("referrer-policy").and_then(|v| v.to_str().ok()),
+        Some("no-referrer")
+    );
+    assert_eq!(
+        headers.get("x-robots-tag").and_then(|v| v.to_str().ok()),
+        Some("noindex, nofollow")
+    );
+}
+
+#[test]
+fn shared_path_detector_matches_public_share_routes() {
+    assert!(crate::middleware::req_path_is_shared("/api/shared/kb/tok"));
+    assert!(crate::middleware::req_path_is_shared("/shared/kb/tok"));
+    assert!(!crate::middleware::req_path_is_shared("/api/v1/chat"));
 }
 

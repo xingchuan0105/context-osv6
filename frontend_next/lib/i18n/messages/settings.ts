@@ -101,6 +101,74 @@ export const settingsMessages = {
     zh: "打开账单门户",
     en: "Open billing portal",
   },
+  "settings.billing.referralTitle": {
+    zh: "邀请码",
+    en: "Referral",
+  },
+  "settings.billing.referralSubtitle": {
+    zh: "好友注册填写你的邀请码，双方各得 ¥5 赠送金。",
+    en: "Friends who register with your code earn ¥5 gift credit each.",
+  },
+  "settings.billing.referralCodeLabel": {
+    zh: "我的邀请码",
+    en: "Your code",
+  },
+  "settings.billing.referralRewardedLabel": {
+    zh: "已成功邀请",
+    en: "Rewarded invites",
+  },
+  "settings.billing.referralCopy": {
+    zh: "复制",
+    en: "Copy",
+  },
+  "settings.billing.referralCopied": {
+    zh: "已复制",
+    en: "Copied",
+  },
+  "settings.billing.byokTitle": {
+    zh: "云端 BYOK（自带 API Key）",
+    en: "Cloud BYOK",
+  },
+  "settings.billing.byokSubtitle": {
+    zh: "密钥加密存储；有有效 Key 时问答走你的额度，不扣平台储值。索引仍需平台储值。",
+    en: "Keys are encrypted at rest. Active keys use your provider for chat, not wallet. Indexing still needs wallet balance.",
+  },
+  "settings.billing.byokProvider": {
+    zh: "Provider",
+    en: "Provider",
+  },
+  "settings.billing.byokBaseUrl": {
+    zh: "Base URL（可选）",
+    en: "Base URL (optional)",
+  },
+  "settings.billing.byokModelHint": {
+    zh: "模型提示（可选）",
+    en: "Model hint (optional)",
+  },
+  "settings.billing.byokApiKey": {
+    zh: "API Key",
+    en: "API Key",
+  },
+  "settings.billing.byokSave": {
+    zh: "保存密钥",
+    en: "Save key",
+  },
+  "settings.billing.byokRevoke": {
+    zh: "吊销",
+    en: "Revoke",
+  },
+  "settings.billing.byokRevoked": {
+    zh: "已吊销",
+    en: "Revoked",
+  },
+  "settings.billing.payerFundsRequired": {
+    zh: "钱包余额不足，且未配置可用的云端 API Key。请充值或添加 BYOK 密钥后再试。",
+    en: "Wallet balance is empty and no cloud BYOK key is configured. Top up or add an API key.",
+  },
+  "settings.billing.payerFundsTopUpHint": {
+    zh: "前往设置 → 账单充值，或配置云端 BYOK。",
+    en: "Open Settings → Billing to top up, or configure cloud BYOK.",
+  },
   "settings.appearance.sectionTitle": {
     zh: "外观",
     en: "Appearance",
