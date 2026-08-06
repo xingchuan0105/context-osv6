@@ -89,10 +89,10 @@ impl ReActLoop {
 
         // Live-stream retrieve when the client asked for stream:
         // - no tools this round, or
-        // - pure chat / prose_only (orchestrator chat exit): prefer progressive
-        //   tokens over tool-calling this turn — otherwise the model answers via
-        //   non-stream complete_with_tools and the UI freezes for tens of seconds
-        //   (acceptance A4). Memory/user_context can still run on non-stream turns.
+        // - pure chat / prose_only: avoid complete_with_tools freeze (A4).
+        // Streamed retrieve tokens go to the **process panel**
+        // (`ReasoningSummaryDelta`), never the main answer bubble — only the
+        // accepted final DirectAnswer / synthesis phase may emit `MessageDelta`.
         let prefer_prose_stream = request.stream
             && (assembled.tools.is_empty()
                 || mode.id == "chat"
@@ -123,7 +123,7 @@ impl ReActLoop {
         round_messages: &[ChatMessage],
         temperature: f32,
         request: &AgentRequest,
-        state: &mut IterationState,
+        _state: &mut IterationState,
         sink: &dyn AgentEventSink,
     ) -> Result<LlmResponse, AppError> {
         use crate::events::AgentEvent;
@@ -148,7 +148,6 @@ impl ReActLoop {
         );
         tokio::pin!(stream);
 
-        let mut streamed_any = false;
         let response = loop {
             tokio::select! {
                 biased;
@@ -157,8 +156,11 @@ impl ReActLoop {
                 }
                 delta = delta_rx.recv() => {
                     if let Some(delta) = delta {
-                        streamed_any = true;
-                        let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                        // Process panel only — retrieve drafts (codegen, scratch)
+                        // must not paint the main answer bubble.
+                        let _ = sink
+                            .emit(AgentEvent::ReasoningSummaryDelta { text: delta })
+                            .await;
                     }
                 }
                 reasoning = reasoning_rx.recv() => {
@@ -177,8 +179,9 @@ impl ReActLoop {
         };
 
         while let Ok(delta) = delta_rx.try_recv() {
-            streamed_any = true;
-            let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+            let _ = sink
+                .emit(AgentEvent::ReasoningSummaryDelta { text: delta })
+                .await;
         }
         while let Ok(reasoning) = reasoning_rx.try_recv() {
             let _ = sink
@@ -186,9 +189,7 @@ impl ReActLoop {
                 .await;
         }
 
-        if streamed_any {
-            state.answer_deltas_streamed = true;
-        }
+        // Do not set answer_deltas_streamed: retrieve never owns the final bubble.
         Ok(response)
     }
 }

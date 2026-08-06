@@ -113,7 +113,6 @@ fn action_tool_aliases(action: &str) -> &[&'static str] {
         "dense" => &["dense_retrieval", "dense"],
         "lexical" => &["lexical_retrieval", "lexical"],
         "grep" => &["doc_grep", "grep"],
-        "doc_profile" => &["doc_profile"],
         "doc_summary" => &["doc_summary"],
         "struct_catalog" => &["struct_catalog"],
         "struct_query" => &["struct_query"],

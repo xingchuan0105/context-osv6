@@ -540,13 +540,14 @@ async fn content_without_evidence_in_rag_is_model_stop() {
         .await
         .unwrap();
 
+    // Three-loop (forbid_retrieve_direct_answer): prose hands off to synthesis.
     assert!(matches!(
         outcome.control,
-        IterationControl::DirectAnswer { content } if content == "Answer without retrieval."
+        IterationControl::BreakToSynthesis { reason } if reason == "retrieve_handoff_synthesis"
     ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "direct_content"
+        "retrieve_handoff_synthesis"
     );
 }
 
@@ -579,11 +580,11 @@ async fn content_without_evidence_still_direct_with_early_stop_flags() {
 
     assert!(matches!(
         outcome.control,
-        IterationControl::DirectAnswer { .. }
+        IterationControl::BreakToSynthesis { .. }
     ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "direct_content"
+        "retrieve_handoff_synthesis"
     );
 }
 
@@ -663,11 +664,11 @@ async fn evidence_gate_releases_when_ok_chunks_present() {
 
     assert!(matches!(
         outcome.control,
-        IterationControl::DirectAnswer { .. }
+        IterationControl::BreakToSynthesis { .. }
     ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "direct_content"
+        "retrieve_handoff_synthesis"
     );
 }
 
@@ -696,13 +697,14 @@ async fn evidence_gate_releases_on_round_budget_exhaustion() {
         )
         .await
         .unwrap();
+    // Budget release still forbids shipping retrieve prose on three-loop modes.
     assert!(matches!(
         outcome.control,
-        IterationControl::DirectAnswer { .. }
+        IterationControl::BreakToSynthesis { .. }
     ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "direct_content"
+        "retrieve_handoff_synthesis"
     );
 }
 
@@ -745,7 +747,8 @@ async fn required_action_gate_blocks_until_action_satisfied() {
         .iter()
         .any(|m| m.role == "user" && m.content.contains("calculator")));
 
-    // Now the calculator Ok result exists → DirectAnswer accepted.
+    // Now the calculator Ok result exists → structural gate passes; three-loop
+    // hands off to synthesis (not DirectAnswer).
     state.tool_results.push(contracts::ToolResult {
         tool: "calculator".into(),
         version: "1".into(),
@@ -771,11 +774,11 @@ async fn required_action_gate_blocks_until_action_satisfied() {
         .unwrap();
     assert!(matches!(
         outcome.control,
-        IterationControl::DirectAnswer { .. }
+        IterationControl::BreakToSynthesis { .. }
     ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "direct_content"
+        "retrieve_handoff_synthesis"
     );
 }
 
@@ -854,11 +857,11 @@ async fn validated_card_with_unmounted_action_does_not_block() {
         .unwrap();
     assert!(matches!(
         outcome.control,
-        IterationControl::DirectAnswer { .. }
+        IterationControl::BreakToSynthesis { .. }
     ));
     assert_eq!(
         outcome.record.as_ref().unwrap().exit_reason,
-        "direct_content"
+        "retrieve_handoff_synthesis"
     );
 }
 

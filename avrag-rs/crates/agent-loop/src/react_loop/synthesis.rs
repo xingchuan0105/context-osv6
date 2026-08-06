@@ -14,7 +14,7 @@ use super::assembler::AssembledContext;
 use super::config::{AnswerContractKind, ModeConfig};
 use super::reasoning_emit;
 use crate::events::{AgentEvent, AgentEventSink};
-use avrag_llm::{ChatMessage, LlmClient, LlmResponse};
+use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 use common::AppError;
 use contracts::ToolResult;
 use tokio_util::sync::CancellationToken;
@@ -22,6 +22,8 @@ use tokio_util::sync::CancellationToken;
 pub struct SynthesisPhase;
 
 impl SynthesisPhase {
+    /// `deliver_to_user`: when false, accumulate prose without MessageDelta/Done
+    /// (short Judge path — host delivers once after pass/ceiling).
     pub async fn run(
         &self,
         llm: &LlmClient,
@@ -31,7 +33,8 @@ impl SynthesisPhase {
         tool_results: &[ToolResult],
         sink: &dyn AgentEventSink,
         cancel: &CancellationToken,
-    ) -> Result<String, AppError> {
+        deliver_to_user: bool,
+    ) -> Result<(String, LlmUsage), AppError> {
         if cancel.is_cancelled() {
             return Err(super::cancellation::cancellation_error());
         }
@@ -39,7 +42,16 @@ impl SynthesisPhase {
         let contract = mode.synthesis_output.contract;
         if contract == AnswerContractKind::ProseOnly {
             return self
-                .run_prose_stream(llm, assembled, mode, messages, tool_results, sink, cancel)
+                .run_prose_stream(
+                    llm,
+                    assembled,
+                    mode,
+                    messages,
+                    tool_results,
+                    sink,
+                    cancel,
+                    deliver_to_user,
+                )
                 .await;
         }
 
@@ -78,6 +90,7 @@ impl SynthesisPhase {
             .await
             .map_err(|e| AppError::internal(format!("synthesis complete failed: {e}")))?;
         reasoning_emit::emit_reasoning_chunks(sink, first.reasoning_content.as_deref()).await;
+        let mut usage = first.usage.clone();
 
         let mut candidates: Vec<String> = vec![first.content.clone()];
         let mut repair_round = 0usize;
@@ -111,6 +124,7 @@ impl SynthesisPhase {
                 .map_err(|e| AppError::internal(format!("synthesis repair failed: {e}")))?;
             reasoning_emit::emit_reasoning_chunks(sink, repaired.reasoning_content.as_deref())
                 .await;
+            usage.accumulate(&repaired.usage);
             candidates.push(repaired.content);
             repair_round += 1;
         }
@@ -122,33 +136,33 @@ impl SynthesisPhase {
             let prose = ensure_user_facing_prose(render_synthesis_prose(&answer));
             crate::progress::emit_work_fact(sink, crate::progress::WorkFact::compose_answer())
                 .await;
-            // P0 "true stream" for JSON synthesis: chunk prose into MessageDelta
-            // (generation was complete_json; streaming the validated answer still
-            // gives progressive UI without breaking the answer contract).
-            const CHUNK: usize = 24;
-            let chars: Vec<char> = prose.chars().collect();
-            for piece in chars.chunks(CHUNK) {
-                let text: String = piece.iter().collect();
-                let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+            if deliver_to_user {
+                emit_prose_delivery(
+                    sink,
+                    &prose,
+                    Some(crate::events::AgentUsage {
+                        provider: first.usage.provider.clone(),
+                        model: first.model.clone(),
+                        prompt_tokens: first.usage.prompt_tokens as u64,
+                        completion_tokens: first.usage.completion_tokens as u64,
+                        total_tokens: first.usage.total_tokens as u64,
+                        cached_tokens: 0,
+                    }),
+                )
+                .await;
+            } else {
+                let _ = sink
+                    .emit(AgentEvent::Activity {
+                        stage: "synthesis_held_for_judge".to_string(),
+                        message: "synthesis draft ready; short Judge pending".to_string(),
+                        detail: None,
+                        counts: Default::default(),
+                        sources_preview: Vec::new(),
+                    })
+                    .await;
             }
 
-            let usage = crate::events::AgentUsage {
-                provider: first.usage.provider.clone(),
-                model: first.model.clone(),
-                prompt_tokens: first.usage.prompt_tokens as u64,
-                completion_tokens: first.usage.completion_tokens as u64,
-                total_tokens: first.usage.total_tokens as u64,
-                cached_tokens: 0,
-            };
-
-            let _ = sink
-                .emit(AgentEvent::Done {
-                    final_message: Some(prose.clone()),
-                    usage: Some(usage),
-                })
-                .await;
-
-            return Ok(prose);
+            return Ok((prose, usage));
         }
 
         // Safety net: when the model failed to emit parseable synthesis JSON
@@ -168,18 +182,10 @@ impl SynthesisPhase {
                     sources_preview: Vec::new(),
                 })
                 .await;
-            let _ = sink
-                .emit(AgentEvent::MessageDelta {
-                    text: refusal.clone(),
-                })
-                .await;
-            let _ = sink
-                .emit(AgentEvent::Done {
-                    final_message: Some(refusal.clone()),
-                    usage: None,
-                })
-                .await;
-            return Ok(refusal);
+            if deliver_to_user {
+                emit_prose_delivery(sink, &refusal, None).await;
+            }
+            return Ok((refusal, usage));
         }
 
         let candidate_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
@@ -196,18 +202,10 @@ impl SynthesisPhase {
                     sources_preview: Vec::new(),
                 })
                 .await;
-            let _ = sink
-                .emit(AgentEvent::MessageDelta {
-                    text: partial.clone(),
-                })
-                .await;
-            let _ = sink
-                .emit(AgentEvent::Done {
-                    final_message: Some(partial.clone()),
-                    usage: None,
-                })
-                .await;
-            return Ok(partial);
+            if deliver_to_user {
+                emit_prose_delivery(sink, &partial, None).await;
+            }
+            return Ok((partial, usage));
         }
 
         let _ = sink
@@ -237,33 +235,17 @@ impl SynthesisPhase {
                     sources_preview: Vec::new(),
                 })
                 .await;
-            let _ = sink
-                .emit(AgentEvent::MessageDelta {
-                    text: unwrapped.clone(),
-                })
-                .await;
-            let _ = sink
-                .emit(AgentEvent::Done {
-                    final_message: Some(unwrapped.clone()),
-                    usage: None,
-                })
-                .await;
-            return Ok(unwrapped);
+            if deliver_to_user {
+                emit_prose_delivery(sink, &unwrapped, None).await;
+            }
+            return Ok((unwrapped, usage));
         }
 
         let fallback = contract_violation_fallback(&mode.id);
-        let _ = sink
-            .emit(AgentEvent::MessageDelta {
-                text: fallback.clone(),
-            })
-            .await;
-        let _ = sink
-            .emit(AgentEvent::Done {
-                final_message: Some(fallback.clone()),
-                usage: None,
-            })
-            .await;
-        Ok(fallback)
+        if deliver_to_user {
+            emit_prose_delivery(sink, &fallback, None).await;
+        }
+        Ok((fallback, usage))
     }
 
     async fn run_prose_stream(
@@ -275,7 +257,8 @@ impl SynthesisPhase {
         tool_results: &[ToolResult],
         sink: &dyn AgentEventSink,
         cancel: &CancellationToken,
-    ) -> Result<String, AppError> {
+        deliver_to_user: bool,
+    ) -> Result<(String, LlmUsage), AppError> {
         let system_msg = ChatMessage::system(assembled.system_content.clone());
         let mut synthesis_messages = vec![system_msg];
         for msg in messages {
@@ -290,8 +273,16 @@ impl SynthesisPhase {
         let has_evidence =
             super::exit_policy::has_retrieval_observation(messages, tool_results, mode);
 
-        let (mut full_answer, response) =
-            stream_prose_to_sink(llm, &synthesis_messages, temperature, sink, cancel).await?;
+        let (mut full_answer, response) = stream_prose_to_sink(
+            llm,
+            &synthesis_messages,
+            temperature,
+            sink,
+            cancel,
+            deliver_to_user,
+        )
+        .await?;
+        let mut usage = response.usage.clone();
 
         // prose_only contract check (host structural): a code-only answer
         // means the retrieve-phase "output one <code> block" framing leaked
@@ -322,8 +313,16 @@ impl SynthesisPhase {
             repair_messages.push(ChatMessage::user(
                 super::prompt_assets::synthesis_prose_repair_nudge(violation.feedback_hint),
             ));
-            let (repaired, _) =
-                stream_prose_to_sink(llm, &repair_messages, temperature, sink, cancel).await?;
+            let (repaired, repaired_resp) = stream_prose_to_sink(
+                llm,
+                &repair_messages,
+                temperature,
+                sink,
+                cancel,
+                deliver_to_user,
+            )
+            .await?;
+            usage.accumulate(&repaired_resp.usage);
             if let Some(violation) = super::answer_contract::check_final_answer(&repaired) {
                 // L3 salvage (2026-08-03): distinguish "repair failed because
                 // the model mangled the form again" from "there was never any
@@ -351,9 +350,16 @@ impl SynthesisPhase {
                     rerender_messages.push(ChatMessage::user(
                         super::prompt_assets::synthesis_rerender_nudge(),
                     ));
-                    let (rerendered, _) =
-                        stream_prose_to_sink(llm, &rerender_messages, temperature, sink, cancel)
-                            .await?;
+                    let (rerendered, rr) = stream_prose_to_sink(
+                        llm,
+                        &rerender_messages,
+                        temperature,
+                        sink,
+                        cancel,
+                        deliver_to_user,
+                    )
+                    .await?;
+                    usage.accumulate(&rr.usage);
                     if let Some(violation) = super::answer_contract::check_final_answer(&rerendered)
                     {
                         let rule_id = violation.rule_id;
@@ -371,11 +377,13 @@ impl SynthesisPhase {
                             })
                             .await;
                         full_answer = contract_violation_fallback(&mode.id);
-                        let _ = sink
-                            .emit(AgentEvent::MessageDelta {
-                                text: full_answer.clone(),
-                            })
-                            .await;
+                        if deliver_to_user {
+                            let _ = sink
+                                .emit(AgentEvent::MessageDelta {
+                                    text: full_answer.clone(),
+                                })
+                                .await;
+                        }
                     } else {
                         full_answer = rerendered;
                     }
@@ -394,35 +402,69 @@ impl SynthesisPhase {
                         })
                         .await;
                     full_answer = super::prompt_assets::degraded_no_evidence_answer(&mode.id).to_string();
-                    let _ = sink
-                        .emit(AgentEvent::MessageDelta {
-                            text: full_answer.clone(),
-                        })
-                        .await;
+                    if deliver_to_user {
+                        let _ = sink
+                            .emit(AgentEvent::MessageDelta {
+                                text: full_answer.clone(),
+                            })
+                            .await;
+                    }
                 }
             } else {
                 full_answer = repaired;
             }
         }
 
-        let usage = crate::events::AgentUsage {
-            provider: response.usage.provider.clone(),
-            model: response.model.clone(),
-            prompt_tokens: response.usage.prompt_tokens as u64,
-            completion_tokens: response.usage.completion_tokens as u64,
-            total_tokens: response.usage.total_tokens as u64,
-            cached_tokens: 0,
-        };
+        if deliver_to_user {
+            let usage = crate::events::AgentUsage {
+                provider: response.usage.provider.clone(),
+                model: response.model.clone(),
+                prompt_tokens: response.usage.prompt_tokens as u64,
+                completion_tokens: response.usage.completion_tokens as u64,
+                total_tokens: response.usage.total_tokens as u64,
+                cached_tokens: 0,
+            };
+            let _ = sink
+                .emit(AgentEvent::Done {
+                    final_message: Some(full_answer.clone()),
+                    usage: Some(usage),
+                })
+                .await;
+        } else {
+            let _ = sink
+                .emit(AgentEvent::Activity {
+                    stage: "synthesis_held_for_judge".to_string(),
+                    message: "prose draft ready; short Judge pending".to_string(),
+                    detail: None,
+                    counts: Default::default(),
+                    sources_preview: Vec::new(),
+                })
+                .await;
+        }
 
-        let _ = sink
-            .emit(AgentEvent::Done {
-                final_message: Some(full_answer.clone()),
-                usage: Some(usage),
-            })
-            .await;
-
-        Ok(full_answer)
+        Ok((full_answer, usage))
     }
+}
+
+/// Emit final prose to the user bubble (chunked deltas + Done). Used when
+/// short Judge deferred delivery during synthesis.
+pub async fn emit_prose_delivery(
+    sink: &dyn AgentEventSink,
+    prose: &str,
+    usage: Option<crate::events::AgentUsage>,
+) {
+    const CHUNK: usize = 24;
+    let chars: Vec<char> = prose.chars().collect();
+    for piece in chars.chunks(CHUNK) {
+        let text: String = piece.iter().collect();
+        let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+    }
+    let _ = sink
+        .emit(AgentEvent::Done {
+            final_message: Some(prose.to_string()),
+            usage,
+        })
+        .await;
 }
 
 /// Stream one prose completion, forwarding content deltas and reasoning
@@ -435,6 +477,7 @@ async fn stream_prose_to_sink(
     temperature: f32,
     sink: &dyn AgentEventSink,
     cancel: &CancellationToken,
+    emit_answer_deltas: bool,
 ) -> Result<(String, LlmResponse), AppError> {
     let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -466,7 +509,9 @@ async fn stream_prose_to_sink(
             delta = delta_rx.recv() => {
                 if let Some(delta) = delta {
                     full_answer.push_str(&delta);
-                    let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                    if emit_answer_deltas {
+                        let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                    }
                 }
             }
             reasoning = reasoning_rx.recv() => {
@@ -484,7 +529,9 @@ async fn stream_prose_to_sink(
 
     while let Ok(delta) = delta_rx.try_recv() {
         full_answer.push_str(&delta);
-        let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+        if emit_answer_deltas {
+            let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+        }
     }
     while let Ok(reasoning) = reasoning_rx.try_recv() {
         let _ = sink

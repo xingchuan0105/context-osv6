@@ -5,15 +5,14 @@ use super::config::{LoopExitConfig, ModeConfig};
 use super::super::answer_contract::check_final_answer;
 
 /// Tools whose payloads count as **answer-grade chunks** (unlock final answer).
-/// Catalog-only tools (`doc_profile` / `doc_metadata`) are intentionally excluded:
-/// a workspace listing is not retrieval evidence and must not open the answer gate.
+/// Catalog/archive tools (`doc_summary` / `doc_metadata`) are intentionally excluded:
+/// metadata + summary + section tree are not retrieval evidence and must not open the answer gate.
 /// Internal tool ids on bridge-captured `ToolResult`s (not LLM-facing schemas).
 const RAG_ANSWER_CHUNK_TOOLS: &[&str] = &[
     "dense_retrieval",
     "lexical_retrieval",
     "graph_retrieval",
     "index_lookup",
-    "doc_summary",
     "doc_grep",
     "doc_read_lines",
     "struct_query",
@@ -409,6 +408,7 @@ mod tests {
             require_evidence: true,
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
+            ..Default::default()
         };
         assert!(!should_block_content_early_stop(&loop_exit, false));
         assert!(!should_block_content_early_stop(&loop_exit, true));
@@ -416,18 +416,24 @@ mod tests {
             require_evidence: true,
             allow_content_early_stop: true,
             skip_synthesis_on_direct_answer: true,
+            ..Default::default()
         };
         assert!(!should_block_content_early_stop(&loop_exit2, false));
     }
 
     #[test]
-    fn doc_profile_alone_is_not_answer_evidence() {
+    fn doc_summary_alone_is_not_answer_evidence() {
         let mode = rag_mode();
         let results = vec![ToolResult {
-            tool: "doc_profile".to_string(),
-            version: "1.0".to_string(),
+            tool: "doc_summary".to_string(),
+            version: "2.0".to_string(),
             status: ToolStatus::Ok,
-            data: Some(serde_json::json!([{"name": "thesis.txt", "doc_id": "x"}])),
+            data: Some(serde_json::json!([{
+                "doc_id": "x",
+                "metadata": {"name": "thesis.txt"},
+                "summary": "概览",
+                "sections": []
+            }])),
             trace: None,
         }];
         assert!(!has_retrieval_observation(&[], &results, &mode));
@@ -459,6 +465,7 @@ mod tests {
             require_evidence: true,
             allow_content_early_stop: true,
             skip_synthesis_on_direct_answer: true,
+            ..Default::default()
         };
         assert_eq!(
             decide_synthesis_gate(&loop_exit, false, Some("model prose"), &[], "q"),
@@ -472,6 +479,7 @@ mod tests {
             require_evidence: true,
             allow_content_early_stop: true,
             skip_synthesis_on_direct_answer: true,
+            ..Default::default()
         };
         // Code-only and host-observation-shell direct answers must not
         // short-circuit; they route to synthesis (which runs the prose-only

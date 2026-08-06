@@ -121,6 +121,17 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         forbidden_in_final: true,
         emitted_at: "crates/agent-loop/src/react_loop/policy/disclosure_plan.rs::inject_cluster_runtime_context",
     },
+    // --- 短 Judge 回环观察（2026-08-07 三环）---
+    HostMarker {
+        tag: "[judge_feedback]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/judge-fail-synthesis.tmpl.md / judge-fail-retrieve.tmpl.md",
+    },
+    HostMarker {
+        tag: "[draft_under_revision]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/judge-draft-under-revision.tmpl.md",
+    },
 ];
 
 /// 终答中出现即违规（`forbidden_in_final = true`）的标签列表——检测器

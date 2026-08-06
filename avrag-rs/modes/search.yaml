@@ -26,10 +26,13 @@ budget:
 # Unified with chat/rag so capability stack does not change sampling policy.
 temperature: 0.4
 loop_exit:
-  # Skill-owned grounding intent only — host does not hard-block DirectAnswer.
+  # Three-loop (2026-08-07): retrieve finds material; synthesis writes; short Judge.
   require_evidence: false
   allow_content_early_stop: false
-  skip_synthesis_on_direct_answer: true
+  skip_synthesis_on_direct_answer: false
+  forbid_retrieve_direct_answer: true
+  short_judge: true
+  judge_max_fail_rounds: 3
 synthesis_output:
   contract: prose_only
 auto_fallback:

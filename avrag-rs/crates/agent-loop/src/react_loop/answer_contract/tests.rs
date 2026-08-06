@@ -15,6 +15,32 @@ use super::*;
     }
 
     #[test]
+    fn code_only_detector_flags_unfenced_sandbox_draft() {
+        // Production regression: model DirectAnswer was bare sandbox Python
+        // (no markdown fences / no <code> tags). Fence-only detector missed it.
+        let bare = r#"city = None
+if isinstance(ctx, dict):
+  city = ctx.get("city")
+  print("CITY_FIELD:", city)
+
+# note
+if city:
+  weather = await client.weather_query(city=city)
+else:
+  weather = await client.weather_query(city="x")
+print("WEATHER_RESULT:", weather)
+"#;
+        assert!(is_code_only_answer(bare));
+        assert_eq!(
+            check_final_answer(bare).expect("violation").rule_id,
+            "code_only"
+        );
+        // Single strong statement as the entire answer.
+        assert!(is_code_only_answer("await client.foo(x=1)"));
+        assert!(is_code_only_answer("print(1)"));
+    }
+
+    #[test]
     fn code_only_detector_accepts_prose() {
         assert!(!is_code_only_answer("答案是 LPDT-03。"));
         // Prose quoting a fenced query is a valid answer, not a violation.
@@ -26,6 +52,12 @@ use super::*;
         // Empty / whitespace answers are a different classification.
         assert!(!is_code_only_answer(""));
         assert!(!is_code_only_answer("  \n  "));
+        // Grounded weather-style prose must not trip the structural gate.
+        assert!(!is_code_only_answer(
+            "根据回传，上海今天多云，气温约 28°C，东南风 2 级。"
+        ));
+        // Short prose with an inline identifier is still prose.
+        assert!(!is_code_only_answer("入口是 main。"));
     }
 
     #[test]

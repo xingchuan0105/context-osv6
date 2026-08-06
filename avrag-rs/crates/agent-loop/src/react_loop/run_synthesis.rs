@@ -1,4 +1,5 @@
 use avrag_llm::{ChatMessage, LlmUsage};
+// LlmUsage used by produce_synthesis_answer return
 use common::AppError;
 use contracts::ToolResult;
 
@@ -81,49 +82,39 @@ impl ReActLoop {
             retrieval_query,
         ) {
             SynthesisGate::SkipSynthesisUseDirect(answer) => {
-                // Streaming request that did not live-stream retrieve tokens must
-                // not dump a single MessageDelta — fall through to synthesis
-                // (`run_prose_stream`) for true progressive tokens.
-                if request.stream && !answer_deltas_streamed {
-                    tracing::info!(
-                        "stream request: skip direct dump, enter synthesis for live tokens"
-                    );
-                    // Drop the retrieve-phase prose so synthesis is not polluted.
-                    if messages
-                        .last()
-                        .is_some_and(|m| m.role == "assistant" && m.content == answer)
-                    {
-                        messages.pop();
-                    }
-                } else {
-                    let answer = maybe_append_evidence_disclosure(
+                // Accepted DirectAnswer is the final user-facing prose. Retrieve
+                // may have streamed drafts into the process panel only; the main
+                // bubble is filled here (or already was, if synthesis streamed).
+                // Do not force a second synthesis pass just for progressive tokens —
+                // that used to leave retrieve MessageDeltas (codegen) stuck as the
+                // visible answer when the model never rewrote them.
+                let answer = maybe_append_evidence_disclosure(
+                    answer,
+                    mode,
+                    messages,
+                    collected_tool_results,
+                );
+                return Ok(Some(
+                    self.finish_direct_answer_run(
                         answer,
-                        mode,
-                        messages,
+                        request,
+                        disclosed_state,
                         collected_tool_results,
-                    );
-                    return Ok(Some(
-                        self.finish_direct_answer_run(
-                            answer,
-                            request,
-                            disclosed_state,
-                            collected_tool_results,
-                            sink,
-                            iteration,
-                            max_iterations,
-                            total_tool_calls,
-                            telemetry_records,
-                            total_usage,
-                            reasoning_summary_acc,
-                            start_time,
-                            "skip_synthesis_direct",
-                            FinalDecision::DirectAnswer,
-                            answer_deltas_streamed,
-                            query_card,
-                        )
-                        .await?,
-                    ));
-                }
+                        sink,
+                        iteration,
+                        max_iterations,
+                        total_tool_calls,
+                        telemetry_records,
+                        total_usage,
+                        reasoning_summary_acc,
+                        start_time,
+                        "skip_synthesis_direct",
+                        FinalDecision::DirectAnswer,
+                        answer_deltas_streamed,
+                        query_card,
+                    )
+                    .await?,
+                ));
             }
             SynthesisGate::EnterSynthesis => {}
         }
@@ -197,7 +188,10 @@ impl ReActLoop {
         .await
     }
 
-    pub(super) async fn run_synthesis_phase(
+    /// Produce synthesis prose only (no finish_run). Used by three-loop Judge.
+    /// When `deliver_to_user` is false, synthesis does not emit MessageDelta/Done
+    /// (host delivers once after short Judge pass/ceiling).
+    pub(super) async fn produce_synthesis_answer(
         &self,
         mode: &ModeConfig,
         request: &AgentRequest,
@@ -207,15 +201,9 @@ impl ReActLoop {
         sink: &dyn AgentEventSink,
         cancel: &tokio_util::sync::CancellationToken,
         iteration: u8,
-        max_iterations: u8,
         budget_exhaustion: super::run_retrieval::BudgetExhaustion,
-        total_tool_calls: u32,
-        telemetry_records: &[ReActIterationRecord],
-        total_usage: &LlmUsage,
-        reasoning_summary_acc: &str,
-        start_time: std::time::Instant,
-        query_card: Option<&super::query_card::QueryCard>,
-    ) -> Result<AgentRunResult, AppError> {
+        deliver_to_user: bool,
+    ) -> Result<(String, LlmUsage), AppError> {
         let synthesis_ctx = ContextAssembler::assemble_synthesis(
             mode,
             request,
@@ -249,7 +237,7 @@ impl ReActLoop {
         let exhausted =
             budget_exhausted_messages(messages, budget_exhaustion, collected_tool_results);
         let messages = exhausted.as_deref().unwrap_or(messages);
-        let final_answer = synthesis
+        let (final_answer, usage) = synthesis
             .run(
                 &self.llm,
                 &synthesis_ctx,
@@ -258,6 +246,7 @@ impl ReActLoop {
                 collected_tool_results,
                 sink,
                 cancel,
+                deliver_to_user,
             )
             .await?;
 
@@ -277,12 +266,53 @@ impl ReActLoop {
         )
         .await;
 
-        let final_answer = maybe_append_evidence_disclosure(
-            final_answer,
-            mode,
-            messages,
-            collected_tool_results,
-        );
+        Ok((
+            maybe_append_evidence_disclosure(
+                final_answer,
+                mode,
+                messages,
+                collected_tool_results,
+            ),
+            usage,
+        ))
+    }
+
+    /// Convenience: synthesize then finish (no short Judge). Prefer the three-loop
+    /// path in `ReActLoop::run` which calls [`Self::produce_synthesis_answer`].
+    #[allow(dead_code)]
+    pub(super) async fn run_synthesis_phase(
+        &self,
+        mode: &ModeConfig,
+        request: &AgentRequest,
+        disclosed_state: &mut DisclosedState,
+        messages: &[ChatMessage],
+        collected_tool_results: &[ToolResult],
+        sink: &dyn AgentEventSink,
+        cancel: &tokio_util::sync::CancellationToken,
+        iteration: u8,
+        max_iterations: u8,
+        budget_exhaustion: super::run_retrieval::BudgetExhaustion,
+        total_tool_calls: u32,
+        telemetry_records: &[ReActIterationRecord],
+        total_usage: &LlmUsage,
+        reasoning_summary_acc: &str,
+        start_time: std::time::Instant,
+        query_card: Option<&super::query_card::QueryCard>,
+    ) -> Result<AgentRunResult, AppError> {
+        let (final_answer, _usage) = self
+            .produce_synthesis_answer(
+                mode,
+                request,
+                disclosed_state,
+                messages,
+                collected_tool_results,
+                sink,
+                cancel,
+                iteration,
+                budget_exhaustion,
+                true,
+            )
+            .await?;
 
         self.finish_run(
             sink,

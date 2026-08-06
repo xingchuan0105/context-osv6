@@ -69,22 +69,35 @@ Layout map: `avrag-rs/prompts/README.md`. Loop assets: `avrag-rs/prompts/loop/RE
 
 **Scope:** skill bodies, capability manuals, `prompts/loop/*` observations, any other string assembled into the model context as guidance. **Out of scope for this voice rule:** short end-user product copy that is the final answer shown to a human (degraded empty-result lines), pure machine tags, detector keyword lists.
 
-### Stop decision (who may end the retrieve loop)
+### Stop decision & three-loop (retrieve → synthesis → short Judge)
 
-Aligned with single-agent / pi-style **agentLoop**: after tools/codegen, **whether to stop is model + skill**. Host does **not** run semantic “coverage / completeness” heuristics to refuse `DirectAnswer`, but does run **structural evidence gates** (zero Ok returns while rag/web primitives are mounted → DirectAnswer not accepted; budget exhausted → release + host-appended disclosure).
+Product **rag / search** (when `forbid_retrieve_direct_answer` + `short_judge` are on — default in `modes/rag.yaml` / `search.yaml`) use a **three-loop** host orchestration. Design: `avrag-rs/docs/engineering/2026-08-07-retrieve-synthesis-judge-loop-design.md`.
+
+| Loop | Role | Must not |
+|------|------|----------|
+| **Retrieve** | Find material (tools/codegen) | Ship user-facing final prose (`DirectAnswer` → handoff synthesis instead) |
+| **Synthesis** | Write / revise user answer | Act as Judge |
+| **Short Judge** | One-shot: **pass** or **fail** + route (`synthesis` \| `retrieve`) + advice | Retrieve, rewrite final answer, call tools |
 
 | Term (prefer) | Meaning | Owner |
 |---------------|---------|--------|
 | **Continue** | Next retrieve turn (codegen/tools/skill_request) | Model chose tools/code, or host structural gate |
-| **DirectAnswer** / **stop** | Final prose; loop ends (no further tool turn) | **Model + skill** (with evidence present) |
+| **retrieve_handoff_synthesis** | Model stopped retrieve with prose under three-loop → leave retrieve for synthesis | Host orchestration |
+| **DirectAnswer** | Final prose **without** synthesis — **chat / write_refine / worker_handoff** only | Model + skill (those modes) |
+| **Synthesized + Judge pass** | User-facing deliver after short Judge | Host routes; Judge skill adjudicates |
+| **Judge fail → re-entry** | Fail with advice back to synthesis (answer fix) or retrieve (补料); **≤3** fails then force deliver + ceiling disclosure | Host state machine + Judge skill |
 | **observation** | Host-injected user message stating runtime facts (`prompts/loop/*`) | Host reports; model acts |
 | **compile_feedback** | Free correction turn after **structural** handoff compile fail (worker path only) | Host structural only |
-| **require_evidence** | Product/skill **intent** that grounded facts come from observation — **not** a host hard gate | **Skill + model** only |
-| **evidence_missing_continue** | Structural gate: `requires_evidence(mode)` && zero Ok retrieval returns → `DirectAnswer` 不收，注入证据缺失观察 + Continue | Host structural (rounds budget) only |
-| **required_action_missing_continue** | Structural gate: query-card 声明动作无 Ok 回传 → 注入动作缺失观察 + Continue | Host structural (rounds budget) only |
-| **token / round budget** | Primary stop when cost ceiling hit | Host cost policy |
+| **require_evidence** | Product/skill **intent** that grounded facts come from observation — **not** a host semantic “coverage enough” veto | **Skill + model** (prose); host only counts Ok returns |
+| **evidence_missing_continue** | Structural: `requires_evidence(mode)` && zero Ok retrieval → do not leave retrieve for synthesis yet; inject evidence-missing observation + Continue | Host structural (rounds budget) only |
+| **required_action_missing_continue** | Structural: query-card declared action without Ok return → inject + Continue | Host structural (rounds budget) only |
+| **token / round budget** | Primary cost ceiling; exhausted → release + host disclosure as applicable | Host cost policy |
 
-**Do not:** host-side claim checklists, multi-entity scanners, soft-refusal keyword bars, or semantic “no chunk ⇒ no answer” refusal for `require_evidence`. Grounding and multi-claim coverage live in **skill/capability prose** (third-person), not `exit_policy` enforcement. Host-side structural gates count **Ok returns** only (evidence gate on rag/web group mounted + zero Ok retrieval; required-action gate on query-card declared actions) — both release when budget is exhausted and then append a host disclosure line.
+**Short Judge is not a host claim-checklist.** Host does **not** invent multi-entity scanners or soft-refusal keyword bars; Judge skill states third-person tensions (answer × evidence). Host only: call Judge once per draft, parse pass/fail signals, route, cap fails at 3, append ceiling disclosure.
+
+**Bypass short Judge (product):** calculation / chitchat query-card; **Ok `weather_query`** (tool-call success is enough — do not score live weather statements); modes with `short_judge: false` (chat / write_refine).
+
+**Do not:** golden-set leakage in Judge; host semantic “no chunk ⇒ no answer” as a *completeness* veto beyond Ok-count structural gates; long ReAct Judge that retrieves or rewrites the user answer.
 
 ## Product hard rules (`avrag-rs`) — non-negotiable (formerly §8)
 

@@ -27,6 +27,28 @@ impl BudgetExhaustion {
     }
 }
 
+/// Budget already spent before this retrieve invocation (product-run cumulative).
+/// Re-entry from short Judge must pass prior usage so token ceilings are not reset.
+/// `max_additional_rounds` caps this invocation only (Judge re-retrieve uses a small cap).
+#[derive(Debug, Clone)]
+pub(super) struct RetrievalBudgetSeed {
+    pub prior_usage: LlmUsage,
+    /// None → use `max_iterations` from the caller. Some(n) → at most n turns this call.
+    pub max_additional_rounds: Option<u8>,
+}
+
+impl Default for RetrievalBudgetSeed {
+    fn default() -> Self {
+        Self {
+            prior_usage: LlmUsage::zeroed(),
+            max_additional_rounds: None,
+        }
+    }
+}
+
+/// Default max retrieve turns when short Judge routes back to retrieve.
+pub(super) const JUDGE_RERETRIEVE_MAX_ROUNDS: u8 = 2;
+
 impl ReActLoop {
     pub(super) async fn run_retrieval_loop(
         &self,
@@ -40,8 +62,11 @@ impl ReActLoop {
         cancel: &tokio_util::sync::CancellationToken,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,
+        budget_seed: RetrievalBudgetSeed,
     ) -> Result<
         (
+            // iteration index, billable retrieve turns this invocation (shared product round budget)
+            u8,
             u8,
             Option<String>,
             Vec<ReActIterationRecord>,
@@ -51,15 +76,22 @@ impl ReActLoop {
         AppError,
     > {
         let mut iteration: u8 = 0;
+        let mut rounds_completed: u8 = 0;
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
-        let mut total_usage = LlmUsage::zeroed();
+        // Only usage *this* invocation; billable ceiling includes prior_usage.
+        let mut session_usage = LlmUsage::zeroed();
         let mut direct_answer: Option<String> = None;
         let mut budget_exhaustion = BudgetExhaustion::default();
 
         let tier = request.metadata.get("user_tier");
-        // Tokens = primary cost budget; rounds = safety ceiling.
-        let effective_max_iters = max_iterations;
+        // Tokens = primary cost budget; rounds = safety ceiling for *this* call.
+        // `Some(0)` means no further turns (product rounds already exhausted).
+        let effective_max_iters = match budget_seed.max_additional_rounds {
+            Some(cap) => cap.min(max_iterations),
+            None => max_iterations,
+        };
         let effective_max_tokens = mode.budget.resolve_max_tokens(tier);
+        let prior_billable = budget_seed.prior_usage.billable_tokens();
         // require_evidence is skill-owned: no host no-chunk grace / hard continue.
 
         loop {
@@ -69,8 +101,9 @@ impl ReActLoop {
 
             // Billable = uncached tokens only: the re-sent system prefix is
             // provider-cached and must not consume the round budget
-            // (LlmUsage::billable_tokens).
-            let tokens_used = total_usage.billable_tokens();
+            // (LlmUsage::billable_tokens). Include prior_usage so Judge re-retrieve
+            // cannot reset the product-run token ceiling.
+            let tokens_used = prior_billable.saturating_add(session_usage.billable_tokens());
             let rounds_exhausted = iteration >= effective_max_iters;
             let tokens_exhausted = effective_max_tokens > 0 && tokens_used >= effective_max_tokens;
 
@@ -115,7 +148,7 @@ impl ReActLoop {
                     auth,
                     loop_exit,
                     state,
-                    &mut total_usage,
+                    &mut session_usage,
                     sink,
                     hooks,
                     effective_max_tokens,
@@ -131,6 +164,10 @@ impl ReActLoop {
                 IterationControl::DirectAnswer { .. } => "direct",
             };
             hooks.on_turn_end(iteration, control_label);
+
+            if super::iteration::consumes_iteration_budget(&outcome) {
+                rounds_completed = rounds_completed.saturating_add(1);
+            }
 
             match outcome.control {
                 IterationControl::Continue => {
@@ -169,9 +206,10 @@ impl ReActLoop {
 
         Ok((
             iteration,
+            rounds_completed,
             direct_answer,
             telemetry_records,
-            total_usage,
+            session_usage,
             budget_exhaustion,
         ))
     }

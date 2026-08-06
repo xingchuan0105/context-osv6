@@ -319,6 +319,67 @@ pub fn synthesis_rerender_nudge() -> &'static str {
     trim_body(loop_prompt!("synthesis-rerender.tmpl.md"))
 }
 
+// --- short Judge (three-loop, 2026-08-07) ---
+
+macro_rules! pipeline_prompt {
+    ($file:literal) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../prompts/pipeline/",
+            $file
+        ))
+    };
+}
+
+macro_rules! cluster_skill {
+    ($file:literal) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../prompts/clusters/",
+            $file
+        ))
+    };
+}
+
+pub fn short_judge_system() -> &'static str {
+    trim_body(pipeline_prompt!("short-judge.system.md"))
+}
+
+pub fn short_judge_skill_body() -> &'static str {
+    trim_body(cluster_skill!("answer-judge/SKILL.md"))
+}
+
+pub fn judge_fail_synthesis_observation(advice: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("judge-fail-synthesis.tmpl.md")),
+        &[("advice", advice)],
+    )
+}
+
+pub fn judge_fail_retrieve_observation(advice: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("judge-fail-retrieve.tmpl.md")),
+        &[("advice", advice)],
+    )
+}
+
+pub fn judge_ceiling_disclosure() -> &'static str {
+    trim_body(loop_prompt!("judge-ceiling-disclosure.md"))
+}
+
+/// Fallback advice when Judge returns fail without usable `advice` text.
+pub fn judge_empty_advice() -> &'static str {
+    trim_body(loop_prompt!("judge-empty-advice.md"))
+}
+
+/// Prior synthesis draft for resynthesis after Judge fail (revision, not rewrite-from-scratch).
+pub fn judge_draft_under_revision(draft: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("judge-draft-under-revision.tmpl.md")),
+        &[("draft", draft)],
+    )
+}
+
 /// User-visible disclosure line deterministically appended by the host when
 /// a final answer is released without any retrieval evidence (budget
 /// exhaustion or no-evidence synthesis). Not model-authored.

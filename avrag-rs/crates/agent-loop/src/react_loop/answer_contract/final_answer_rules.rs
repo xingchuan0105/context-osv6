@@ -177,18 +177,27 @@ pub fn final_answer_contract_violation(text: &str) -> bool {
     check_final_answer(text).is_some()
 }
 
-/// prose_only-contract detector: true when `text` carries code spans
-/// (`<code>…</code>` or markdown fences) but no prose outside them — the
-/// retrieve-phase "output one code block" framing leaked into the final
-/// answer. Detector only (host structural check); the repair observation
-/// lives in `prompts/loop/synthesis-prose-repair.nudge.md`.
+/// prose_only-contract detector: true when `text` is code-shaped with no
+/// surrounding prose — either fenced / `<code>` spans only, or bare
+/// unfenced retrieve-phase draft (assignments, `if`/`else:`, `await`,
+/// `print(…)`…) shipped as the entire DirectAnswer. Detector only (host
+/// structural check); the repair observation lives in
+/// `prompts/loop/synthesis-prose-repair.nudge.md` /
+/// `final-answer-feedback-code-only.md`.
 ///
 /// Stricter than `parse::parse_llm_output`'s CodeBlocks classification on
 /// purpose: a prose answer that *quotes* one fenced query is a valid answer
 /// and must not trigger a repair round.
 pub fn is_code_only_answer(text: &str) -> bool {
     let (saw_code, prose) = split_code_spans(text);
-    saw_code && prose.trim().is_empty()
+    let residual = prose.trim();
+    if saw_code && residual.is_empty() {
+        return true;
+    }
+    // Fences with residual "prose" that is itself code-shaped, or a fully
+    // unfenced multi-line sandbox draft (no fence markers at all).
+    let candidate = if residual.is_empty() { text } else { residual };
+    is_unfenced_code_shaped(candidate)
 }
 
 /// Split `text` into code spans vs outside prose. Returns `(saw_code, prose)`
@@ -229,4 +238,131 @@ fn split_code_spans(text: &str) -> (bool, String) {
         }
     }
     (saw_code, prose)
+}
+
+/// True when non-empty lines are predominantly code-shaped (unfenced
+/// sandbox / retrieve draft). Pure structural line shapes — no product
+/// tool catalogue, no Chinese confession keywords.
+fn is_unfenced_code_shaped(text: &str) -> bool {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    if lines.is_empty() {
+        return false;
+    }
+    let code_n = lines.iter().filter(|l| line_looks_like_code(l)).count();
+    let all_code = code_n == lines.len();
+    if all_code && lines.len() >= 2 {
+        return true;
+    }
+    // Single strong statement (e.g. sole `await client.foo(...)`) is still
+    // a code-only leak when it is the entire answer.
+    if all_code && lines.len() == 1 && line_is_strong_code(lines[0]) {
+        return true;
+    }
+    // ≥3 lines, ≥75% code-shaped, at least one strong signal — tolerates a
+    // stray non-code fragment without letting real prose through.
+    if lines.len() >= 3
+        && code_n * 4 >= lines.len() * 3
+        && lines.iter().any(|l| line_is_strong_code(l))
+    {
+        return true;
+    }
+    false
+}
+
+fn line_looks_like_code(line: &str) -> bool {
+    let t = line.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.starts_with('#') || t.starts_with("//") || t.starts_with("/*") {
+        return true;
+    }
+    if line_is_strong_code(t) {
+        return true;
+    }
+    // Python / JS block headers and control keywords.
+    const CONTROL_PREFIXES: &[&str] = &[
+        "if ", "elif ", "else:", "else if", "for ", "while ", "try:", "try ", "except",
+        "finally:", "with ", "def ", "class ", "async ", "return ", "raise ", "yield ",
+        "assert ", "pass", "break", "continue", "match ", "case ", "lambda ",
+    ];
+    if CONTROL_PREFIXES.iter().any(|p| t.starts_with(p)) {
+        return true;
+    }
+    // Trailing `:` block header (e.g. `if city:`) — prose rarely ends this way.
+    if t.ends_with(':') && t.len() > 1 && !t.starts_with("http") {
+        return true;
+    }
+    // Simple assignment: `name = …` (not `==` / comparison-only).
+    if looks_like_assignment(t) {
+        return true;
+    }
+    // Statement-shaped call: `foo(...)` or `obj.method(...)` as whole line.
+    if looks_like_call_statement(t) {
+        return true;
+    }
+    false
+}
+
+fn line_is_strong_code(line: &str) -> bool {
+    let t = line.trim();
+    // Prefix / whole-statement shapes only — do not treat mid-prose
+    // `client.foo` mentions as a code line (FE display still strips tokens).
+    t.starts_with("await ")
+        || t.starts_with("import ")
+        || t.starts_with("from ")
+        || t.starts_with("print(")
+        || t.starts_with("def ")
+        || t.starts_with("async def ")
+        || t.starts_with("async ")
+        || t.starts_with("class ")
+        || t.starts_with("function ")
+        || t.starts_with("const ")
+        || t.starts_with("let ")
+        || t.starts_with("var ")
+        || t.contains(" = await ")
+        || t.contains("=await ")
+}
+
+fn looks_like_assignment(line: &str) -> bool {
+    // `ident = value` or `ident: type = value` — reject pure comparisons.
+    let Some(eq) = line.find('=') else {
+        return false;
+    };
+    if line.as_bytes().get(eq + 1) == Some(&b'=') {
+        return false; // `==`
+    }
+    if eq > 0 && matches!(line.as_bytes()[eq - 1], b'!' | b'<' | b'>') {
+        return false; // `!=` `<=` `>=`
+    }
+    let lhs = line[..eq].trim();
+    if lhs.is_empty() {
+        return false;
+    }
+    // LHS is a simple identifier or dotted/attr target (city, ctx["city"], x.y).
+    lhs.chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '[' | ']' | '"' | '\''))
+}
+
+fn looks_like_call_statement(line: &str) -> bool {
+    let t = line.trim();
+    if !(t.ends_with(')') && t.contains('(')) {
+        return false;
+    }
+    // No sentence-ending CJK / Latin period before the call (prose).
+    if t.contains('。') || t.contains(". ") {
+        return false;
+    }
+    let Some(open) = t.find('(') else {
+        return false;
+    };
+    let callee = t[..open].trim();
+    !callee.is_empty()
+        && callee
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.'))
 }

@@ -455,6 +455,7 @@ impl SacHostBridge {
 
     async fn call_weather_query(&self, args: &Value) -> Value {
         // SDK: city= | location= | lat=+lon= → skill location string.
+        // Optional: include / days / hours / units for QWeather multi-section query.
         let coord = |key: &str| {
             args.get(key)
                 .and_then(|v| v.as_str().map(str::to_owned))
@@ -476,9 +477,32 @@ impl SacHostBridge {
                 _ => None,
             })
             .unwrap_or_default();
+        let mut payload = json!({ "location": location });
+        if let Some(obj) = payload.as_object_mut() {
+            if let Some(u) = args.get("units").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+                obj.insert("units".into(), json!(u));
+            }
+            if let Some(inc) = args
+                .get("include")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                obj.insert("include".into(), json!(inc));
+            }
+            if let Some(d) = args.get("days").and_then(|v| v.as_u64()) {
+                obj.insert("days".into(), json!(d));
+            } else if let Some(d) = args.get("days").and_then(|v| v.as_i64()) {
+                obj.insert("days".into(), json!(d.max(0) as u64));
+            }
+            if let Some(h) = args.get("hours").and_then(|v| v.as_u64()) {
+                obj.insert("hours".into(), json!(h));
+            } else if let Some(h) = args.get("hours").and_then(|v| v.as_i64()) {
+                obj.insert("hours".into(), json!(h.max(0) as u64));
+            }
+        }
         let skill = WeatherQuerySkill;
         let ctx = ExecutionContext::new(self.search.as_deref().map(|p| p as _));
-        let result = skill.execute(&json!({ "location": location }), &ctx).await;
+        let result = skill.execute(&payload, &ctx).await;
         self.record_extra("weather_query", None, result)
     }
 

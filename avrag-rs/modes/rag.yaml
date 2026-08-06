@@ -32,12 +32,13 @@ auto_fallback:
   top_k: 10
 temperature: 0.4
 loop_exit:
-  # Skill-owned grounding; host does not hard-block DirectAnswer.
+  # Skill-owned grounding intent (prose); structural gates still count Ok returns.
   require_evidence: false
   allow_content_early_stop: false
-  # DirectAnswer 不再短路：模型停后一律进 synthesis，用不带检索指南的
-  # 干净上下文写终答（2026-08-03：Q67/Q138 假拒答归因——检索指南在场时
-  # 「grep 仲裁覆盖」偏见会带进取证判断与终答）。
+  # Three-loop (2026-08-07): retrieve never ships final prose; always synthesize.
   skip_synthesis_on_direct_answer: false
+  forbid_retrieve_direct_answer: true
+  short_judge: true
+  judge_max_fail_rounds: 3
 synthesis_output:
   contract: prose_only

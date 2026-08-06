@@ -46,6 +46,11 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `required-action-missing.tmpl.md` | L2.5 required-action gate: 题型卡声明动作无 Ok 回传时注入；`{action}` 为动作名 |
 | `synthesis-rerender.tmpl.md` | 证据池重渲染轮（repair 再败且 has_evidence 时注入，保留 SELECTED / `[[web:n]]` 指引） |
 | `evidence-missing-disclosure.md` | 宿主确定性追加的用户可见披露行（预算耗尽放行 / 无证据 synthesis 终答末尾） |
+| `judge-fail-synthesis.tmpl.md` | 短 Judge 不合格 → 回合成（`{advice}`） |
+| `judge-fail-retrieve.tmpl.md` | 短 Judge 不合格 → 回检索（`{advice}`） |
+| `judge-ceiling-disclosure.md` | Judge 回环到顶时用户可见降级说明 |
+| `judge-empty-advice.md` | Judge fail 但未给出 advice 时的占位观察 |
+| `judge-draft-under-revision.tmpl.md` | 回合成时注入上一版稿 `{draft}` |
 
 ## Retired (not product-injected)
 

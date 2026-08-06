@@ -12,8 +12,9 @@ pub struct IterationState {
     pub total_tool_calls: u32,
     pub consecutive_sandbox_errors: u8,
     pub reasoning_acc: String,
-    /// True when retrieve already emitted live `MessageDelta`s (stream path).
-    /// `finish_direct_answer_run` must not re-emit the whole answer as one token.
+    /// True when the **final-answer** channel already emitted live `MessageDelta`s
+    /// (synthesis stream path). Retrieve streams go to the process panel only and
+    /// never set this. `finish_direct_answer_run` re-emits when false.
     pub answer_deltas_streamed: bool,
     /// Output-compiler feedback continuations used this run (S2/E4). A worker
     /// loop (`ModeConfig.worker_handoff`) compiles each candidate final

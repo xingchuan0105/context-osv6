@@ -55,7 +55,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         merge_skill_catalog(&mut config.skill_catalog, &rag.skill_catalog);
         add_budget(&mut config, &rag);
         config.inject_retrieval_query = true;
-        apply_single_agent_loop_exit(&mut config);
+        apply_single_agent_loop_exit(&mut config, &rag);
         config.auto_fallback = rag.auto_fallback.clone();
         if let Some(t) = rag.temperature {
             config.temperature = Some(t);
@@ -69,7 +69,7 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         merge_skill_catalog(&mut config.skill_catalog, &search.skill_catalog);
         add_budget(&mut config, &search);
         config.inject_retrieval_query = true;
-        apply_single_agent_loop_exit(&mut config);
+        apply_single_agent_loop_exit(&mut config, &search);
         if !caps.rag {
             config.auto_fallback = search.auto_fallback.clone();
         }
@@ -128,10 +128,28 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
 ///
 /// Grounding is **skill-owned** (`require_evidence` is not a host hard gate).
 /// `worker_handoff` is **false** — no orchestrator brief / handoff JSON.
-fn apply_single_agent_loop_exit(config: &mut ModeConfig) {
+///
+/// Three-loop switches (`forbid_retrieve_direct_answer`, `short_judge`,
+/// `judge_max_fail_rounds`) are **inherited from capability mode YAML**
+/// (`rag` / `search`) and OR-merged across dual capabilities — they must not
+/// be wiped by this function (acceptance 2026-08-07).
+fn apply_single_agent_loop_exit(config: &mut ModeConfig, capability_yaml: &ModeConfig) {
     config.loop_exit.require_evidence = false;
     config.loop_exit.allow_content_early_stop = false;
-    config.loop_exit.skip_synthesis_on_direct_answer = true;
+    // Inherit / OR-merge three-loop flags from the capability mode being applied.
+    config.loop_exit.forbid_retrieve_direct_answer |=
+        capability_yaml.loop_exit.forbid_retrieve_direct_answer;
+    config.loop_exit.short_judge |= capability_yaml.loop_exit.short_judge;
+    if capability_yaml.loop_exit.judge_max_fail_rounds > 0 {
+        config.loop_exit.judge_max_fail_rounds = config
+            .loop_exit
+            .judge_max_fail_rounds
+            .max(capability_yaml.loop_exit.judge_max_fail_rounds);
+    }
+    // Three-loop: retrieve never ships final prose; always synthesize (+ judge).
+    // Legacy single-path (no three-loop flags) still allows skip-synthesis DirectAnswer.
+    config.loop_exit.skip_synthesis_on_direct_answer =
+        !(config.loop_exit.forbid_retrieve_direct_answer || config.loop_exit.short_judge);
     config.synthesis_output.contract = AnswerContractKind::ProseOnly;
     config.worker_handoff = false;
 }
@@ -326,7 +344,24 @@ mod tests {
             "require_evidence is skill-owned, not host-forced"
         );
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
+        // Three-loop from rag/search YAML (must survive apply_single_agent_loop_exit).
+        assert!(
+            assembled.config.loop_exit.forbid_retrieve_direct_answer,
+            "product dual must forbid retrieve DirectAnswer"
+        );
+        assert!(
+            assembled.config.loop_exit.short_judge,
+            "product dual must enable short_judge"
+        );
+        assert!(
+            assembled.config.loop_exit.judge_max_fail_rounds >= 3,
+            "judge_max_fail_rounds: {}",
+            assembled.config.loop_exit.judge_max_fail_rounds
+        );
+        assert!(
+            !assembled.config.loop_exit.skip_synthesis_on_direct_answer,
+            "three-loop must not skip synthesis"
+        );
         // Budget is sum of rag(12) + search(8) = 20 (not max; chat base not included)
         assert_eq!(assembled.config.budget.max_iterations, 20);
         // Skill catalog union includes knowledge-base (rag) and search cluster.
@@ -411,7 +446,7 @@ mod tests {
         );
         assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
+        assert_three_loop_enabled(&assembled.config);
         assert!(
             assembled
                 .config
@@ -438,6 +473,23 @@ mod tests {
         );
     }
 
+    fn assert_three_loop_enabled(config: &ModeConfig) {
+        assert!(
+            config.loop_exit.forbid_retrieve_direct_answer,
+            "forbid_retrieve_direct_answer"
+        );
+        assert!(config.loop_exit.short_judge, "short_judge");
+        assert!(
+            config.loop_exit.judge_max_fail_rounds >= 3,
+            "judge_max_fail_rounds={}",
+            config.loop_exit.judge_max_fail_rounds
+        );
+        assert!(
+            !config.loop_exit.skip_synthesis_on_direct_answer,
+            "skip_synthesis must be false under three-loop"
+        );
+    }
+
     #[test]
     fn search_only_single_agent_contract_and_fallback() {
         let assembled = assemble_mode(CapabilitySet {
@@ -452,7 +504,7 @@ mod tests {
         );
         assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
+        assert_three_loop_enabled(&assembled.config);
         assert!(
             assembled
                 .config
@@ -469,5 +521,13 @@ mod tests {
             assembled.config.tool_pool
         );
         assert!(assembled.config.sdk_primitives.contains(&"web".into()));
+    }
+
+    #[test]
+    fn pure_chat_does_not_enable_three_loop() {
+        let assembled = assemble_mode(CapabilitySet::default()).expect("chat");
+        assert!(!assembled.config.loop_exit.forbid_retrieve_direct_answer);
+        assert!(!assembled.config.loop_exit.short_judge);
+        assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
     }
 }

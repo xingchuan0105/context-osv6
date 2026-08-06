@@ -166,9 +166,31 @@ impl ReActLoop {
             }
         }
 
-        // Stop decision: model-owned (pi-style). Worker path may still
-        // compile_feedback (structural only). The L2/L2.5 gates above are the
-        // host's structural count gates — no semantic require_evidence bar.
+        // Stop decision: model-owned for chat/write paths. Three-loop modes
+        // (`forbid_retrieve_direct_answer`) never ship retrieve prose as the
+        // user answer — leave retrieve for synthesis (design 2026-08-07).
+        // L2/L2.5 above remain the host structural count gates.
+
+        // Channel workers still ship internal handoff JSON as DirectAnswer;
+        // three-loop only applies to user-facing product modes.
+        if mode.loop_exit.forbid_retrieve_direct_answer && !mode.worker_handoff {
+            let exit_reason = "retrieve_handoff_synthesis".to_string();
+            return Ok(IterationOutcome {
+                control: IterationControl::BreakToSynthesis {
+                    reason: exit_reason.clone(),
+                },
+                record: Some(ReActIterationRecord {
+                    iteration,
+                    disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                    action_type: exit_reason.clone(),
+                    observation_preview: truncate_preview(&content, 200),
+                    llm_usage: Some(llm_usage),
+                    elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                    exit_reason,
+                }),
+                sandbox_break: false,
+            });
+        }
 
         let exit_reason = "direct_content".to_string();
         Ok(IterationOutcome {

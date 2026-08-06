@@ -1080,9 +1080,9 @@ mod tests {
         let seen: std::sync::Mutex<std::collections::HashSet<String>> =
             std::sync::Mutex::new(std::collections::HashSet::new());
         assert!(retrieval_callouts(&[], &seen).is_empty());
-        // A non-retrieval method (doc_profile) produces no summary line.
+        // A non-retrieval method (doc_summary) produces no summary line.
         let calls = vec![bridge_call(
-            "doc_profile",
+            "doc_summary",
             "",
             contracts::ToolStatus::Ok,
             serde_json::json!({"chunks": [{"chunk_id": "c1"}]}),
