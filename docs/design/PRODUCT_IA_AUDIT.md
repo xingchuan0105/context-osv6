@@ -95,9 +95,8 @@
 
 ## 6. 建议下一迭代（非本轮）
 
-1. API Access 表面 / settings providers 固定列表等剩余内联文案迁 i18n。  
-2. admin 技术词与后端通知模板（copy-catalog 深层）。  
-3. 可选 Cmd+K 命令面板（P2-3）。
+1. admin 技术词与后端通知模板（copy-catalog 深层）。  
+2. 可选 Cmd+K 命令面板（P2-3）。
 
 ---
 

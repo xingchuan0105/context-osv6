@@ -33,27 +33,24 @@ const FIXED_ROWS = [
     id: "agent_llm",
     provider: "deepseek",
     baseUrl: "https://api.deepseek.com",
-    typeLabel: { zh: "主 Agent LLM", en: "Main agent LLM" },
-    modelLabel: { zh: "DeepSeek API · DeepSeek V4 Flash", en: "DeepSeek API · DeepSeek V4 Flash" },
+    typeKey: "settingsProvider.type.agentLlm" as const,
+    modelKey: "settingsProvider.model.deepseek" as const,
     targets: [{ purpose: "llm" as Purpose, modelHint: "deepseek-v4-flash" }],
   },
   {
     id: "parse_llm",
     provider: "bailian",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    typeLabel: { zh: "文件解析 LLM", en: "File-parse LLM" },
-    modelLabel: { zh: "百炼 API · Qwen3.7 Flash", en: "Bailian API · Qwen3.7 Flash" },
+    typeKey: "settingsProvider.type.parseLlm" as const,
+    modelKey: "settingsProvider.model.bailian" as const,
     targets: [{ purpose: "llm" as Purpose, modelHint: "qwen3.7-flash" }],
   },
   {
     id: "siliconflow",
     provider: "siliconflow",
     baseUrl: "https://api.siliconflow.cn/v1",
-    typeLabel: { zh: "向量嵌入 / 重排序", en: "Embedding / Rerank" },
-    modelLabel: {
-      zh: "SiliconFlow · BAAI/bge-m3 · BAAI/bge-reranker-v2-m3",
-      en: "SiliconFlow · BAAI/bge-m3 · BAAI/bge-reranker-v2-m3",
-    },
+    typeKey: "settingsProvider.type.embedRerank" as const,
+    modelKey: "settingsProvider.model.siliconflow" as const,
     targets: [
       { purpose: "embedding" as Purpose, modelHint: "BAAI/bge-m3" },
       { purpose: "rerank" as Purpose, modelHint: "BAAI/bge-reranker-v2-m3" },
@@ -101,8 +98,8 @@ function ProviderKeyRow({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const typeLabel = locale === "zh-CN" ? row.typeLabel.zh : row.typeLabel.en;
-  const modelLabel = locale === "zh-CN" ? row.modelLabel.zh : row.modelLabel.en;
+  const typeLabel = formatUiMessage(locale, row.typeKey);
+  const modelLabel = formatUiMessage(locale, row.modelKey);
 
   const save = useCallback(async () => {
     if (!token || !apiKey.trim()) {

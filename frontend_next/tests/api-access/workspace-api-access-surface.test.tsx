@@ -9,6 +9,10 @@ vi.mock("../../lib/auth/context", () => ({
   useAuth: () => mocks.authState,
 }));
 
+vi.mock("../../lib/ui-preferences", () => ({
+  useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
+}));
+
 vi.mock("../../lib/api-access/client", async () => {
   const actual = await vi.importActual("../../lib/api-access/client");
 
@@ -127,7 +131,7 @@ describe("WorkspaceApiAccessSurface", () => {
   it("blocks api calls when the workspace id is obviously invalid", async () => {
     render(<WorkspaceApiAccessSurface workspaceId="not-a-uuid" />);
 
-    expect(await screen.findByText(/Workspace ID 无效/)).toBeTruthy();
+    expect(await screen.findByText(/工作区 ID 无效/)).toBeTruthy();
     expect(mocks.listApiKeysMock).not.toHaveBeenCalled();
   });
 

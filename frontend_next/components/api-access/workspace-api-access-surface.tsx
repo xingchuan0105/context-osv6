@@ -12,7 +12,10 @@ import {
   type CreateApiKeyRequest,
 } from "../../lib/api-access/client";
 import { getApiBaseUrl } from "../../lib/http/request";
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 import { isTauri } from "../../lib/runtime/tauri-ipc";
+import { useUiPreferences } from "../../lib/ui-preferences";
 
 import styles from "./workspace-api-access-surface.module.css";
 
@@ -24,40 +27,42 @@ type WorkspaceApiAccessSurfaceProps = {
   embedded?: boolean;
 };
 
-function apiPermissionLabel(permission: string) {
+function apiPermissionLabel(permission: string, locale: UiLocale) {
   switch (permission) {
     case "index":
-      return "索引";
+      return formatUiMessage(locale, "apiAccess.permShortIndex");
     case "query":
-      return "查询";
+      return formatUiMessage(locale, "apiAccess.permShortQuery");
     default:
       return permission;
   }
 }
 
-function apiKeyStatusLabel(isActive: boolean) {
-  return isActive ? "生效中" : "已撤销";
+function apiKeyStatusLabel(isActive: boolean, locale: UiLocale) {
+  return isActive
+    ? formatUiMessage(locale, "apiAccess.statusActive")
+    : formatUiMessage(locale, "apiAccess.statusRevoked");
 }
 
-function errorMessage(error: unknown, fallback: string) {
+function errorMessage(error: unknown, fallback: string, locale: UiLocale) {
   if (error instanceof Error && error.message.trim()) {
-    return `${fallback}：${error.message}`;
+    return formatUiMessage(locale, "apiAccess.errWithDetail", {
+      fallback,
+      detail: error.message,
+    });
   }
-
   return fallback;
 }
 
 const workspaceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function getWorkspaceIdValidationError(workspaceId: string) {
+function getWorkspaceIdValidationError(workspaceId: string, locale: UiLocale) {
   if (!workspaceId) {
-    return "Workspace ID 缺失，未发起 API 请求。请检查路由参数是否正确。";
+    return formatUiMessage(locale, "apiAccess.errMissingWorkspaceId");
   }
-
   if (!workspaceIdPattern.test(workspaceId)) {
-    return `Workspace ID 无效（${workspaceId} 不是 UUID），未发起 API 请求。请检查路由参数是否正确。`;
+    return formatUiMessage(locale, "apiAccess.errInvalidWorkspaceId", { id: workspaceId });
   }
-
   return "";
 }
 
@@ -111,8 +116,9 @@ export function WorkspaceApiAccessSurface({
   embedded = false,
 }: WorkspaceApiAccessSurfaceProps) {
   const auth = useAuth();
+  const { locale } = useUiPreferences();
   const workspaceIdValue = typeof workspaceId === "string" ? workspaceId.trim() : "";
-  const workspaceIdValidationError = getWorkspaceIdValidationError(workspaceIdValue);
+  const workspaceIdValidationError = getWorkspaceIdValidationError(workspaceIdValue, locale);
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -136,13 +142,17 @@ export function WorkspaceApiAccessSurface({
 
   async function handleCopy(label: string, value: string) {
     const ok = await copyText(value);
-    setCopyFeedback(ok ? `已复制：${label}` : `复制失败，请手动选择 ${label}`);
+    setCopyFeedback(
+      ok
+        ? formatUiMessage(locale, "apiAccess.copied", { label })
+        : formatUiMessage(locale, "apiAccess.copyFailed", { label }),
+    );
     window.setTimeout(() => setCopyFeedback(""), 2500);
   }
 
   async function handleMintAgentToken() {
     if (!auth.token) {
-      setError("登录状态失效，请重新登录后再签发 agent token。");
+      setError(formatUiMessage(locale, "apiAccess.errSessionMint"));
       return;
     }
     setMintingToken(true);
@@ -154,20 +164,31 @@ export function WorkspaceApiAccessSurface({
         data?: { token?: string; expires_at?: string; ttl_minutes?: number };
         error?: string;
         message?: string;
-      }>("/api/auth/agent-token", { method: "POST", body: JSON.stringify({ ttl_minutes: 120 }) }, auth.token);
+      }>(
+        "/api/auth/agent-token",
+        { method: "POST", body: JSON.stringify({ ttl_minutes: 120 }) },
+        auth.token,
+      );
       const token = payload.data?.token?.trim() ?? "";
       if (!token) {
-        throw new Error(payload.message ?? payload.error ?? "未返回 token");
+        throw new Error(
+          payload.message ?? payload.error ?? formatUiMessage(locale, "apiAccess.errNoToken"),
+        );
       }
       setAgentUserToken(token);
       setCopyFeedback(
         payload.data?.expires_at
-          ? `已签发 agent token（约 ${payload.data.ttl_minutes ?? 120} 分钟，至 ${payload.data.expires_at}）`
-          : "已签发 agent token",
+          ? formatUiMessage(locale, "apiAccess.mintedWithExpiry", {
+              minutes: String(payload.data.ttl_minutes ?? 120),
+              expires: payload.data.expires_at,
+            })
+          : formatUiMessage(locale, "apiAccess.minted"),
       );
       window.setTimeout(() => setCopyFeedback(""), 4000);
     } catch (mintError) {
-      setError(errorMessage(mintError, "签发 agent token 失败"));
+      setError(
+        errorMessage(mintError, formatUiMessage(locale, "apiAccess.errMintToken"), locale),
+      );
     } finally {
       setMintingToken(false);
     }
@@ -208,7 +229,9 @@ export function WorkspaceApiAccessSurface({
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(errorMessage(loadError, "加载 API 密钥失败"));
+          setError(
+            errorMessage(loadError, formatUiMessage(locale, "apiAccess.errLoadKeys"), locale),
+          );
         }
       } finally {
         if (!cancelled) {
@@ -222,7 +245,7 @@ export function WorkspaceApiAccessSurface({
     return () => {
       cancelled = true;
     };
-  }, [auth.token, workspaceIdValidationError, workspaceIdValue]);
+  }, [auth.token, locale, workspaceIdValidationError, workspaceIdValue]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -233,21 +256,21 @@ export function WorkspaceApiAccessSurface({
     }
 
     if (!auth.token) {
-      setError("登录状态失效，请重新登录。");
+      setError(formatUiMessage(locale, "apiAccess.errSession"));
       return;
     }
 
     const trimmedName = nameDraft.trim();
 
     if (!trimmedName) {
-      setError("请输入密钥名称。");
+      setError(formatUiMessage(locale, "apiAccess.errNameRequired"));
       return;
     }
 
     const parsedRateLimit = Number.parseInt(rateLimitDraft.trim(), 10);
 
     if (!Number.isFinite(parsedRateLimit) || parsedRateLimit <= 0) {
-      setError("速率限制必须是正整数。");
+      setError(formatUiMessage(locale, "apiAccess.errRateLimit"));
       return;
     }
 
@@ -257,7 +280,7 @@ export function WorkspaceApiAccessSurface({
     ].filter((permission): permission is string => permission !== null);
 
     if (permissions.length === 0) {
-      setError("请至少选择一种权限。");
+      setError(formatUiMessage(locale, "apiAccess.errPermissions"));
       return;
     }
 
@@ -278,11 +301,16 @@ export function WorkspaceApiAccessSurface({
     try {
       const response = await createApiKey(auth.token, workspaceIdValue, requestBody);
       setPlaintextKey(response.plaintext_key);
-      setKeys((current) => [response.api_key, ...current.filter((key) => key.id !== response.api_key.id)]);
+      setKeys((current) => [
+        response.api_key,
+        ...current.filter((key) => key.id !== response.api_key.id),
+      ]);
       setNameDraft("");
       setExpiresAtDraft("");
     } catch (createError) {
-      setError(errorMessage(createError, "创建 API 密钥失败"));
+      setError(
+        errorMessage(createError, formatUiMessage(locale, "apiAccess.errCreateKey"), locale),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +323,7 @@ export function WorkspaceApiAccessSurface({
     }
 
     if (!auth.token) {
-      setError("登录状态失效，请重新登录。");
+      setError(formatUiMessage(locale, "apiAccess.errSession"));
       return;
     }
 
@@ -306,7 +334,9 @@ export function WorkspaceApiAccessSurface({
       await revokeApiKey(auth.token, workspaceIdValue, keyId);
       setKeys((current) => current.filter((key) => key.id !== keyId));
     } catch (revokeError) {
-      setError(errorMessage(revokeError, "撤销 API 密钥失败"));
+      setError(
+        errorMessage(revokeError, formatUiMessage(locale, "apiAccess.errRevokeKey"), locale),
+      );
     } finally {
       setRevokingKeyId(null);
     }
@@ -317,26 +347,22 @@ export function WorkspaceApiAccessSurface({
       {embedded ? null : (
         <header className={styles.header}>
           <Link className="app-link app-link-muted" href={`/dashboard/${workspaceIdValue}`}>
-            返回 Workspace
+            {formatUiMessage(locale, "apiAccess.backWorkspace")}
           </Link>
           <div className={styles.intro}>
-            <p className={styles.overline}>Workspace API</p>
+            <p className={styles.overline}>{formatUiMessage(locale, "apiAccess.overline")}</p>
             <div>
-              <h1 className="app-page-title">API 访问</h1>
-              <p className="app-page-subtitle">
-                为这个 Workspace 创建 API 密钥，并查看面向开发者与 LLM agents 的接入说明。
-              </p>
+              <h1 className="app-page-title">{formatUiMessage(locale, "apiAccess.title")}</h1>
+              <p className="app-page-subtitle">{formatUiMessage(locale, "apiAccess.subtitle")}</p>
             </div>
-            <p className={styles.note}>
-              在 API 路径中，这个 Workspace 对应 <code>workspace_id</code>。
-            </p>
+            <p className={styles.note}>{formatUiMessage(locale, "apiAccess.workspaceIdNote")}</p>
           </div>
         </header>
       )}
 
       {embedded ? (
         <p className="app-page-subtitle" style={{ marginTop: 0 }}>
-          为这个 Workspace 创建 API 密钥。下方提供人类说明与 agent 稳定文档入口。
+          {formatUiMessage(locale, "apiAccess.embeddedLead")}
         </p>
       ) : null}
 
@@ -345,21 +371,25 @@ export function WorkspaceApiAccessSurface({
       <div className={styles.stackLarge}>
         <section className={`app-surface-card ${styles.card}`}>
           <div>
-            <h2 className={styles.cardTitle}>创建 API 密钥</h2>
-            <p className="app-page-subtitle">按 Workspace 粒度创建密钥，控制索引能力和频率限制。</p>
+            <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.createTitle")}</h2>
+            <p className="app-page-subtitle">
+              {formatUiMessage(locale, "apiAccess.createSubtitle")}
+            </p>
           </div>
           <form className={styles.form} onSubmit={handleCreate}>
             <label>
-              <span className="app-form-label">密钥名称</span>
+              <span className="app-form-label">{formatUiMessage(locale, "apiAccess.nameLabel")}</span>
               <input
-                aria-label="密钥名称"
+                aria-label={formatUiMessage(locale, "apiAccess.nameLabel")}
                 className="app-input"
                 value={nameDraft}
                 onChange={(event) => setNameDraft(event.target.value)}
               />
             </label>
             <fieldset className={styles.fieldset}>
-              <legend className="app-form-label">权限</legend>
+              <legend className="app-form-label">
+                {formatUiMessage(locale, "apiAccess.permissionsLabel")}
+              </legend>
               <div className={styles.checkboxGroup}>
                 <label className={styles.checkboxLabel}>
                   <input
@@ -367,7 +397,7 @@ export function WorkspaceApiAccessSurface({
                     type="checkbox"
                     onChange={(event) => setIndexPermissionEnabled(event.target.checked)}
                   />
-                  <span>索引（index）</span>
+                  <span>{formatUiMessage(locale, "apiAccess.permIndex")}</span>
                 </label>
                 <label className={styles.checkboxLabel}>
                   <input
@@ -375,17 +405,17 @@ export function WorkspaceApiAccessSurface({
                     type="checkbox"
                     onChange={(event) => setQueryPermissionEnabled(event.target.checked)}
                   />
-                  <span>查询（query）</span>
+                  <span>{formatUiMessage(locale, "apiAccess.permQuery")}</span>
                 </label>
               </div>
             </fieldset>
-            <p className={styles.note}>
-              API 密钥只支持资料管理与 RAG 查询，聊天和搜索代理默认不可用。
-            </p>
+            <p className={styles.note}>{formatUiMessage(locale, "apiAccess.permNote")}</p>
             <label>
-              <span className="app-form-label">速率限制（RPM）</span>
+              <span className="app-form-label">
+                {formatUiMessage(locale, "apiAccess.rateLimitLabel")}
+              </span>
               <input
-                aria-label="速率限制（RPM）"
+                aria-label={formatUiMessage(locale, "apiAccess.rateLimitLabel")}
                 className="app-input"
                 inputMode="numeric"
                 type="number"
@@ -394,9 +424,11 @@ export function WorkspaceApiAccessSurface({
               />
             </label>
             <label>
-              <span className="app-form-label">过期时间 RFC3339（可选）</span>
+              <span className="app-form-label">
+                {formatUiMessage(locale, "apiAccess.expiresLabel")}
+              </span>
               <input
-                aria-label="过期时间 RFC3339（可选）"
+                aria-label={formatUiMessage(locale, "apiAccess.expiresLabel")}
                 className="app-input"
                 placeholder="2026-03-31T18:00:00Z"
                 value={expiresAtDraft}
@@ -405,7 +437,9 @@ export function WorkspaceApiAccessSurface({
             </label>
             <div className="app-button-row">
               <button className="app-button-primary" disabled={submitting} type="submit">
-                {submitting ? "创建中..." : "创建密钥"}
+                {submitting
+                  ? formatUiMessage(locale, "apiAccess.creating")
+                  : formatUiMessage(locale, "apiAccess.createAction")}
               </button>
             </div>
           </form>
@@ -413,9 +447,9 @@ export function WorkspaceApiAccessSurface({
           {plaintextKey ? (
             <div className={`app-inline-surface ${styles.stack}`}>
               <div>
-                <strong>新密钥</strong>
+                <strong>{formatUiMessage(locale, "apiAccess.newKeyTitle")}</strong>
                 <p className={styles.mutedTextSpaced}>
-                  明文只会返回这一次。
+                  {formatUiMessage(locale, "apiAccess.newKeyOnce")}
                 </p>
               </div>
               <pre className={styles.codeBlock}>{plaintextKey}</pre>
@@ -427,15 +461,19 @@ export function WorkspaceApiAccessSurface({
       <section className={`app-surface-card ${styles.card}`}>
         <div className={styles.sectionHeader}>
           <div>
-            <h2 className={styles.cardTitleCompact}>已创建密钥</h2>
-            <p className="app-page-subtitle">仅展示当前仍处于生效状态的 Workspace API 密钥。</p>
+            <h2 className={styles.cardTitleCompact}>
+              {formatUiMessage(locale, "apiAccess.listTitle")}
+            </h2>
+            <p className="app-page-subtitle">{formatUiMessage(locale, "apiAccess.listSubtitle")}</p>
           </div>
-          {loading ? <span className={styles.muted}>加载中...</span> : null}
+          {loading ? (
+            <span className={styles.muted}>{formatUiMessage(locale, "apiAccess.loading")}</span>
+          ) : null}
         </div>
 
         {!loading && keys.length === 0 ? (
           <div className="app-inline-surface">
-            <p className={styles.mutedText}>还没有 API 密钥。</p>
+            <p className={styles.mutedText}>{formatUiMessage(locale, "apiAccess.empty")}</p>
           </div>
         ) : null}
 
@@ -449,11 +487,19 @@ export function WorkspaceApiAccessSurface({
               <div className={styles.keyItemBody}>
                 <div className={styles.keyName}>{key.name}</div>
                 <div className={styles.keyMeta}>
-                  {key.key_prefix} · {key.permissions.map(apiPermissionLabel).join(" / ")} · {key.rate_limit_rpm} RPM
+                  {key.key_prefix} ·{" "}
+                  {key.permissions.map((p) => apiPermissionLabel(p, locale)).join(" / ")} ·{" "}
+                  {key.rate_limit_rpm} RPM
                 </div>
                 <div className={styles.keyMetaSpaced}>
-                  {apiKeyStatusLabel(key.is_active)} · 过期时间 {key.expires_at ?? "永不"} · 最近使用{" "}
-                  {key.last_used_at ?? "从未"}
+                  {apiKeyStatusLabel(key.is_active, locale)} ·{" "}
+                  {formatUiMessage(locale, "apiAccess.metaExpires", {
+                    value: key.expires_at ?? formatUiMessage(locale, "apiAccess.never"),
+                  })}{" "}
+                  ·{" "}
+                  {formatUiMessage(locale, "apiAccess.metaLastUsed", {
+                    value: key.last_used_at ?? formatUiMessage(locale, "apiAccess.neverUsed"),
+                  })}
                 </div>
               </div>
               <button
@@ -462,22 +508,23 @@ export function WorkspaceApiAccessSurface({
                 type="button"
                 onClick={() => void handleRevoke(key.id)}
               >
-                {revokingKeyId === key.id ? "撤销中..." : "撤销"}
+                {revokingKeyId === key.id
+                  ? formatUiMessage(locale, "apiAccess.revoking")
+                  : formatUiMessage(locale, "apiAccess.revoke")}
               </button>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Agent setup: copy base URL / workspace_id / MCP snippet (P0 local agent access). */}
       <section className={`app-surface-card ${styles.card}`} data-testid="api-access-agent-setup-card">
         <div>
-          <h2 className={styles.cardTitle}>给 Agent 用</h2>
+          <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.agentTitle")}</h2>
           <p className="app-page-subtitle">
-            把本工作区交给 Claude Code / Codex / Cursor：先创建密钥（上方），再复制下列字段与 MCP 配置。
+            {formatUiMessage(locale, "apiAccess.agentSubtitle")}{" "}
             {desktopLocal
-              ? " 本机客户端默认 API 为 127.0.0.1:18080；请先确认客户端栈已启动。"
-              : " 云端与本机使用同一 MCP 工具表，仅 base URL 不同。"}
+              ? formatUiMessage(locale, "apiAccess.agentDesktopHint")
+              : formatUiMessage(locale, "apiAccess.agentCloudHint")}
           </p>
         </div>
 
@@ -495,7 +542,7 @@ export function WorkspaceApiAccessSurface({
               disabled={!workspaceIdValue}
               onClick={() => void handleCopy("workspace_id", workspaceIdValue)}
             >
-              复制
+              {formatUiMessage(locale, "apiAccess.copy")}
             </button>
           </div>
           <div className={`app-inline-surface ${styles.copyRow}`}>
@@ -508,7 +555,7 @@ export function WorkspaceApiAccessSurface({
               type="button"
               onClick={() => void handleCopy("API base URL", agentApiBase)}
             >
-              复制
+              {formatUiMessage(locale, "apiAccess.copy")}
             </button>
           </div>
           <div className={`app-inline-surface ${styles.copyRow}`}>
@@ -521,7 +568,7 @@ export function WorkspaceApiAccessSurface({
               type="button"
               onClick={() => void handleCopy("HTTP MCP", mcpEndpoint)}
             >
-              复制
+              {formatUiMessage(locale, "apiAccess.copy")}
             </button>
           </div>
         </div>
@@ -529,18 +576,19 @@ export function WorkspaceApiAccessSurface({
         <div className={`app-inline-surface ${styles.stack}`}>
           <div className={styles.sectionHeader}>
             <div>
-              <strong>stdio MCP 配置片段</strong>
+              <strong>{formatUiMessage(locale, "apiAccess.mcpSnippetTitle")}</strong>
               <p className={styles.mutedTextSpaced}>
-                粘贴到 Claude Code / Cursor 的 MCP 配置；将 <code>command</code> 换成本机{" "}
-                <code>context-os-mcp</code> 路径，密钥用上方一次性明文替换。
+                {formatUiMessage(locale, "apiAccess.mcpSnippetHint")}
               </p>
             </div>
             <button
               className="app-button-secondary"
               type="button"
-              onClick={() => void handleCopy("MCP 配置", mcpSnippet)}
+              onClick={() =>
+                void handleCopy(formatUiMessage(locale, "apiAccess.mcpSnippetTitle"), mcpSnippet)
+              }
             >
-              复制配置
+              {formatUiMessage(locale, "apiAccess.copyConfig")}
             </button>
           </div>
           <pre className={styles.codeBlock} data-testid="agent-mcp-snippet">
@@ -549,10 +597,9 @@ export function WorkspaceApiAccessSurface({
           <div className={`app-inline-surface ${styles.stack}`}>
             <div className={styles.sectionHeader}>
               <div>
-                <strong>用户态 agent token（建库）</strong>
+                <strong>{formatUiMessage(locale, "apiAccess.agentTokenTitle")}</strong>
                 <p className={styles.mutedTextSpaced}>
-                  短时用户 JWT（默认 120 分钟）。export 为 <code>CONTEXT_OS_USER_TOKEN</code> 后可用{" "}
-                  <code>context-os workspace create</code>；工作区密钥仍不能建库。分享仍走 UI。
+                  {formatUiMessage(locale, "apiAccess.agentTokenHint")}
                 </p>
               </div>
               <button
@@ -561,7 +608,9 @@ export function WorkspaceApiAccessSurface({
                 disabled={mintingToken || !auth.token}
                 onClick={() => void handleMintAgentToken()}
               >
-                {mintingToken ? "签发中..." : "签发 2h token"}
+                {mintingToken
+                  ? formatUiMessage(locale, "apiAccess.minting")
+                  : formatUiMessage(locale, "apiAccess.mintToken")}
               </button>
             </div>
             {agentUserToken ? (
@@ -574,34 +623,28 @@ export function WorkspaceApiAccessSurface({
                   type="button"
                   onClick={() => void handleCopy("agent token", agentUserToken)}
                 >
-                  复制 token
+                  {formatUiMessage(locale, "apiAccess.copyToken")}
                 </button>
               </>
             ) : null}
           </div>
 
-          <p className={styles.note}>
-            探活：<code>context-os status</code>。本机桌面可 <code>context-os auth from-desktop --save</code>{" "}
-            写入 <code>~/.config/context-os/user.token</code>（CLI/MCP 自动加载）。脚本：{" "}
-            <code>context-os ingest</code> / <code>ask</code> / <code>share enable</code>（需 user
-            token）。工具参数 <code>workspace_id</code> 须与本页一致。
-          </p>
+          <p className={styles.note}>{formatUiMessage(locale, "apiAccess.agentProbeNote")}</p>
         </div>
       </section>
 
-      {/* W2 #12: docs card stays visible in modal (embedded) and full page. */}
       <section className={`app-surface-card ${styles.card}`} data-testid="api-access-docs-card">
         <div>
-          <h2 className={styles.cardTitle}>For LLM Agents</h2>
-          <p className="app-page-subtitle">给要接入这个 Workspace 的 agent 看的入口卡。先理解边界，再读取稳定文档。</p>
+          <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.docsTitle")}</h2>
+          <p className="app-page-subtitle">{formatUiMessage(locale, "apiAccess.docsSubtitle")}</p>
         </div>
         <div className={`app-inline-surface ${styles.agentCard}`}>
           <div className={styles.agentIntro}>
             <p className={styles.overlineSmall}>Agent onboarding</p>
             <div>
-              <strong>推荐顺序</strong>
+              <strong>{formatUiMessage(locale, "apiAccess.docsOrderTitle")}</strong>
               <p className={styles.mutedTextSpaced}>
-                如果你的 agent 要直连这个 Workspace，先读人类说明确认作用域，再读取稳定 agent 文档执行。
+                {formatUiMessage(locale, "apiAccess.docsOrderBody")}
               </p>
             </div>
           </div>
@@ -609,9 +652,9 @@ export function WorkspaceApiAccessSurface({
             <div className={styles.step}>
               <div className={styles.stepBadge}>1</div>
               <div className={styles.stepBody}>
-                <strong>先读说明页</strong>
+                <strong>{formatUiMessage(locale, "apiAccess.docsStep1Title")}</strong>
                 <p className={styles.mutedText}>
-                  看清支持范围、认证方式，以及 Workspace 与 <code>workspace_id</code> 的映射。
+                  {formatUiMessage(locale, "apiAccess.docsStep1Body")}
                 </p>
                 <Link className="app-link" href="/help/api-access">
                   /help/api-access
@@ -621,9 +664,9 @@ export function WorkspaceApiAccessSurface({
             <div className={styles.step}>
               <div className={styles.stepBadgeMuted}>2</div>
               <div className={styles.stepBody}>
-                <strong>再读稳定 agent 文档</strong>
+                <strong>{formatUiMessage(locale, "apiAccess.docsStep2Title")}</strong>
                 <p className={styles.mutedText}>
-                  这份链接适合 agent 直接抓取，内容更短，也更适合程序化读取。
+                  {formatUiMessage(locale, "apiAccess.docsStep2Body")}
                 </p>
                 <Link className="app-link" href="/docs/api-access-for-agents.md">
                   /docs/api-access-for-agents.md

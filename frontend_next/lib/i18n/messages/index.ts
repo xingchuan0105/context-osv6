@@ -1,6 +1,7 @@
 import type { UiLocale } from "../config";
 import type { UiMessageDescriptor } from "./types";
 import { adminMessages } from "./admin";
+import { apiAccessMessages } from "./api-access";
 import { authMessages } from "./auth";
 import { commonMessages } from "./common";
 import { dashboardMessages } from "./dashboard";
@@ -22,6 +23,7 @@ export type { UiMessageDescriptor };
 
 export const UI_MESSAGES = {
   ...adminMessages,
+  ...apiAccessMessages,
   ...authMessages,
   ...commonMessages,
   ...dashboardMessages,
