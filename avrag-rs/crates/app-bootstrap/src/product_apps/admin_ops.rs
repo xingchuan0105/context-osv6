@@ -116,6 +116,32 @@ impl<'a> AdminOpsApp<'a> {
         store.list_feature_flags(self.auth).await
     }
 
+    /// Broadcast an in-app notification to all users (ADR-0010 W4).
+    pub async fn broadcast_notification(
+        &self,
+        event_type: &str,
+        title: &str,
+        body: &str,
+        data: serde_json::Value,
+    ) -> Result<usize, AppError> {
+        self.require_actor()?;
+        let store = self.require_store()?;
+        let event = if event_type.trim().is_empty() {
+            "admin.broadcast"
+        } else {
+            event_type.trim()
+        };
+        if title.trim().is_empty() || body.trim().is_empty() {
+            return Err(AppError::validation(
+                "broadcast_empty",
+                "title and body are required",
+            ));
+        }
+        store
+            .broadcast_notification(self.auth, event, title.trim(), body.trim(), data)
+            .await
+    }
+
     pub async fn list_feature_flag_change_requests(
         &self,
         status: Option<&str>,

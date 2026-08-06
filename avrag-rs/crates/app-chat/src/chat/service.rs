@@ -83,7 +83,15 @@ impl ChatContext {
         // Fail closed **before** LLM (not post-hoc wallet fail-open alone).
         // NOTE: usage_hold is placed only after ALL preflight gates pass (in pipeline),
         // so budget/hard-block rejections never leave a leaked hold.
-        self.billing.ensure_payer_can_spend(&self.auth).await?;
+        if let Err(error) = self.billing.ensure_payer_can_spend(&self.auth).await {
+            if error.code() == "payer_funds_required" {
+                // Throttled soft notify: emit for the billable owner (auth.user_id).
+                let _ = self
+                    .emit_funds_required_notification()
+                    .await;
+            }
+            return Err(error);
+        }
         if is_share_chat {
             // ADR-0010 §4/§9: Owner daily fen fuse (platform proxy path only).
             self.billing

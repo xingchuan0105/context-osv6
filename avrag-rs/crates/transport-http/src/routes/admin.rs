@@ -40,6 +40,39 @@ pub(crate) fn router() -> Router<AppState> {
             axum::routing::post(review_feature_flag_change_request),
         )
         .route("/admin/audit-logs", get(audit_logs))
+        .route(
+            "/admin/notifications/broadcast",
+            axum::routing::post(broadcast_notification),
+        )
+}
+
+#[derive(Deserialize)]
+struct BroadcastNotificationBody {
+    #[serde(default)]
+    event_type: Option<String>,
+    title: String,
+    body: String,
+    #[serde(default)]
+    data: Option<serde_json::Value>,
+}
+
+async fn broadcast_notification(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Json(body): Json<BroadcastNotificationBody>,
+) -> Response {
+    ops_json(
+        state
+            .admin_ops()
+            .broadcast_notification(
+                body.event_type.as_deref().unwrap_or("admin.broadcast"),
+                &body.title,
+                &body.body,
+                body.data.unwrap_or_else(|| serde_json::json!({})),
+            )
+            .await
+            .map(|created| serde_json::json!({ "created": created })),
+    )
+    .await
 }
 
 #[derive(Deserialize)]

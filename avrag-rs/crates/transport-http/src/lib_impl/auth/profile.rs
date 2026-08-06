@@ -272,15 +272,27 @@ pub(crate) async fn auth_change_password_handler(
     };
 
     match store.change_password(user_uuid, &new_hash).await {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(AuthEnvelope {
-                success: true,
-                data: None,
-                error: None,
-            }),
-        )
-            .into_response(),
+        Ok(()) => {
+            crate::notification_emit::emit_user_notification(
+                &state,
+                state.auth(),
+                user_uuid,
+                "security.password_changed",
+                "Password changed",
+                "Your account password was updated successfully.",
+                serde_json::json!({ "user_id": user_uuid.to_string() }),
+            )
+            .await;
+            (
+                StatusCode::OK,
+                Json(AuthEnvelope {
+                    success: true,
+                    data: None,
+                    error: None,
+                }),
+            )
+                .into_response()
+        }
         Err(error) => {
             warn!(error = %error, "failed to update password");
             handlers::error_response(

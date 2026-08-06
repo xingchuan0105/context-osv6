@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { ContextOsMark } from "../../context-os-mark";
 import { AccountMenu } from "../../account-menu";
+import { NotificationBell } from "../../notifications/notification-bell";
 import { PlanEntry } from "../../plan-entry";
 import { brandHomeHref } from "../../product-chrome-footer";
 import { type DashboardLocale } from "../../../lib/dashboard/model";
@@ -51,6 +52,7 @@ export function DashboardHeader({
       </div>
       <div className="dashboard-header-links">
         <PlanEntry locale={locale} />
+        <NotificationBell locale={locale} />
         <AccountMenu locale={locale} />
       </div>
     </header>

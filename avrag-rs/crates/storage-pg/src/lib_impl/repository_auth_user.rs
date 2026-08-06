@@ -160,28 +160,40 @@ impl AuthRepository {
         map_notification(row)
     }
 
+    /// Admin broadcast: one in-app row per active user (owner_user_id = user_id for B2C).
     pub async fn create_notifications_for_all_users(
         &self,
-        owner_user_id: UserId,
+        _actor_user_id: UserId,
         event_type: &str,
         title: &str,
         body: &str,
         data: serde_json::Value,
     ) -> Result<usize, PgStorageError> {
-        let context = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::System);
-        let mut tx = self.pool.begin(&context).await?;
-        // Personal B2C: one account owner = one user id.
-        let user_id = owner_user_id.into_uuid();
-        let params = NotificationCreateParams {
-            user_id,
-            event_type: event_type.to_string(),
-            title: title.to_string(),
-            body: body.to_string(),
-            data: data.clone(),
-            channels: vec!["in_app".to_string()],
-        };
-        insert_notification_row(tx.inner(), user_id, params).await?;
-        let created = 1usize;
+        let mut tx = self.pool.raw().begin().await?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
+        let user_ids: Vec<Uuid> = sqlx::query_scalar(
+            r#"
+            select id from users
+            order by created_at asc
+            limit 50000
+            "#,
+        )
+        .fetch_all(tx.as_mut())
+        .await?;
+        let mut created = 0usize;
+        for user_id in user_ids {
+            let params = NotificationCreateParams {
+                user_id,
+                event_type: event_type.to_string(),
+                title: title.to_string(),
+                body: body.to_string(),
+                data: data.clone(),
+                channels: vec!["in_app".to_string()],
+            };
+            // B2C: owner scope == user
+            insert_notification_row(tx.as_mut(), user_id, params).await?;
+            created += 1;
+        }
         tx.commit().await?;
         Ok(created)
     }

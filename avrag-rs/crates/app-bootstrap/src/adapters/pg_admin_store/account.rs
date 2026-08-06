@@ -96,3 +96,24 @@
             .map_err(map_pg_error)
     }
 
+    async fn broadcast_notification(
+        &self,
+        auth: &AuthContext,
+        event_type: &str,
+        title: &str,
+        body: &str,
+        data: serde_json::Value,
+    ) -> Result<usize, AppError> {
+        self.repo
+            .auth()
+            .create_notifications_for_all_users(
+                auth.user_id(),
+                event_type,
+                title,
+                body,
+                data,
+            )
+            .await
+            .map_err(map_pg_error)
+    }
+

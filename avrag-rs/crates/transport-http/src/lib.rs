@@ -6,6 +6,7 @@ mod handlers;
 mod lib_impl;
 mod mcp;
 mod middleware;
+mod notification_emit;
 mod routes;
 mod sse_order;
 mod turnstile;

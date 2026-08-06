@@ -136,6 +136,18 @@ impl AdminStorePort for RecordingAdminStore {
         Ok(false)
     }
 
+    async fn broadcast_notification(
+        &self,
+        _auth: &AuthContext,
+        _event_type: &str,
+        _title: &str,
+        _body: &str,
+        _data: serde_json::Value,
+    ) -> Result<usize, AppError> {
+        Ok(0)
+    }
+
+
     async fn ensure_admin_access(&self, _auth: &AuthContext) -> Result<(), AppError> {
         Ok(())
     }
@@ -545,6 +557,18 @@ impl AdminStorePort for SeededProfileAdminStore {
     ) -> Result<bool, AppError> {
         Ok(false)
     }
+
+    async fn broadcast_notification(
+        &self,
+        _auth: &AuthContext,
+        _event_type: &str,
+        _title: &str,
+        _body: &str,
+        _data: serde_json::Value,
+    ) -> Result<usize, AppError> {
+        Ok(0)
+    }
+
 
     async fn ensure_admin_access(&self, _auth: &AuthContext) -> Result<(), AppError> {
         Ok(())

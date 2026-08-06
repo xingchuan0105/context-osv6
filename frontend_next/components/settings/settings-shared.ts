@@ -193,6 +193,10 @@ export function notificationTypeLabel(locale: "zh-CN" | "en", eventType: string)
     product_update: "settings.notifications.event.product_update",
     security_alert: "settings.notifications.event.security_alert",
     weekly_digest: "settings.notifications.event.weekly_digest",
+    "security.password_changed": "settings.notifications.event.security_alert",
+    "share.enabled": "settings.notifications.event.product_update",
+    "billing.funds_required": "settings.notifications.event.product_update",
+    "admin.broadcast": "settings.notifications.event.product_update",
   };
 
   const key = keyMap[eventType];

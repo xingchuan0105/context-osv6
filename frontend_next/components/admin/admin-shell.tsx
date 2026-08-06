@@ -71,6 +71,11 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     label: { zh: "审计日志", en: "Audit Logs" },
     prefixes: ["/admin/audit-logs"],
   },
+  {
+    href: "/admin/broadcast",
+    label: { zh: "广播", en: "Broadcast" },
+    prefixes: ["/admin/broadcast"],
+  },
 ];
 
 function isActivePath(pathname: string, prefixes: string[]) {

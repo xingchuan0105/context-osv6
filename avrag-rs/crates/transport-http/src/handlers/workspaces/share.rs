@@ -113,12 +113,24 @@ pub(crate) async fn create_share_handler(
     }
     let expires_in_secs = req.expires_at.as_deref().and_then(parse_expires_in_secs);
     let access_level = avrag_share::AccessLevel::from_role(&req.role);
-    share_ok!(
-        state
-            .share()
-            .create_share_link(workspace_id, access_level, expires_in_secs)
-            .await
-    )
+    let result = state
+        .share()
+        .create_share_link(workspace_id.clone(), access_level, expires_in_secs)
+        .await;
+    if result.is_ok() {
+        let user_id = state.auth().user_id().into_uuid();
+        crate::notification_emit::emit_user_notification(
+            &state,
+            state.auth(),
+            user_id,
+            "share.enabled",
+            "Share enabled",
+            "Your workspace is shared. Visitor model usage bills your balance or custom provider.",
+            serde_json::json!({ "workspace_id": workspace_id }),
+        )
+        .await;
+    }
+    share_ok!(result)
 }
 
 pub(crate) async fn revoke_share_handler(

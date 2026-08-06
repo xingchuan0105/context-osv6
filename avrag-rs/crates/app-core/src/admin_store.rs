@@ -105,6 +105,16 @@ pub trait AdminStorePort: Send + Sync {
         notification_id: Uuid,
     ) -> Result<bool, AppError>;
 
+    /// Admin broadcast to all users (in-app). Returns rows created.
+    async fn broadcast_notification(
+        &self,
+        auth: &AuthContext,
+        event_type: &str,
+        title: &str,
+        body: &str,
+        data: serde_json::Value,
+    ) -> Result<usize, AppError>;
+
     async fn list_accounts(
         &self,
         auth: &AuthContext,

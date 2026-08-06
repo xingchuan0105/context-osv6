@@ -7,6 +7,7 @@ import { DesktopSettingsDrawer } from "../desktop/DesktopSettingsDrawer";
 import { DesktopStatusBadge } from "../desktop/DesktopStatusBadge";
 import { ContextOsMark } from "../context-os-mark";
 import { AccountMenu } from "../account-menu";
+import { NotificationBell } from "../notifications/notification-bell";
 import { PlanEntry } from "../plan-entry";
 import { WorkspaceApiAccessModal } from "../api-access/workspace-api-access-modal";
 import { WorkspaceShareQuickModal } from "../share/workspace-share-quick-modal";
@@ -233,6 +234,7 @@ export function WorkspaceTopBar({
             <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceApi")}</span>
           </button>
         </div>
+        <NotificationBell locale={locale} />
         <AccountMenu locale={locale} />
       </div>
       {desktopRuntime ? (

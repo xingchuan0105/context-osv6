@@ -307,6 +307,34 @@ impl AdminStorePort for MemoryAdminStore {
         Ok(false)
     }
 
+    async fn broadcast_notification(
+        &self,
+        auth: &AuthContext,
+        event_type: &str,
+        title: &str,
+        body: &str,
+        data: serde_json::Value,
+    ) -> Result<usize, AppError> {
+        let mut state = self.state.write().await;
+        let row = NotificationRow {
+            id: format!("broadcast-{}", Uuid::new_v4()),
+            owner_user_id: auth.user_id().to_string(),
+            user_id: auth.user_id().to_string(),
+            event_type: event_type.to_string(),
+            title: title.to_string(),
+            body: body.to_string(),
+            data: data
+                .as_object()
+                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default(),
+            read_at: None,
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+        };
+        state.notifications.push(row);
+        Ok(1)
+    }
+
     async fn list_accounts(
         &self,
         _auth: &AuthContext,

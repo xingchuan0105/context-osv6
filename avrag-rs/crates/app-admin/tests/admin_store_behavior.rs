@@ -144,6 +144,18 @@ impl AdminStorePort for OrgBlockingStore {
         Err(AppError::internal("not implemented"))
     }
 
+    async fn broadcast_notification(
+        &self,
+        _auth: &AuthContext,
+        _event_type: &str,
+        _title: &str,
+        _body: &str,
+        _data: serde_json::Value,
+    ) -> Result<usize, AppError> {
+        Ok(0)
+    }
+
+
     async fn list_accounts(
         &self,
         _auth: &AuthContext,
