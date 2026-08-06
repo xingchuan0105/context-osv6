@@ -2,8 +2,7 @@
 
 import styles from "./PricingCards.module.css";
 import type { BillingPlan } from "../../lib/billing/api";
-import { formatCompactToken } from "../../lib/billing/format";
-import { getPlanMarginMultiplier, getPlanRollingLimits } from "../../lib/billing/planLimits";
+import { getPlanShareSlots } from "../../lib/billing/planLimits";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiMessageKey } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
@@ -16,24 +15,37 @@ export type PricingCardsProps = {
   compact?: boolean;
 };
 
-export function PricingCards({ plans, highlightTier, locale, onSelect, compact = false }: PricingCardsProps) {
+function baseTier(planId: string): string {
+  return planId.replace(/_annual$/, "");
+}
+
+export function PricingCards({
+  plans,
+  highlightTier,
+  locale,
+  onSelect,
+  compact = false,
+}: PricingCardsProps) {
   const descriptionKeyByPlan: Record<string, UiMessageKey> = {
     free: "pricingPlanFreeDescription",
     plus: "pricingPlanPlusDescription",
     pro: "pricingPlanProDescription",
+    plus_annual: "pricingPlanPlusDescription",
+    pro_annual: "pricingPlanProDescription",
   };
   return (
     <div className={`${styles.grid} ${compact ? styles.compactGrid : ""}`}>
       {plans.map((plan) => {
-        const isHighlight = plan.plan_id === highlightTier;
+        const tier = baseTier(plan.plan_id);
+        const isHighlight = tier === highlightTier;
         const isCurrent = plan.current;
-        const isPro = plan.plan_id === "pro";
-        const limits = getPlanRollingLimits(plan.plan_id);
-        const margin = getPlanMarginMultiplier(plan.plan_id);
-        const descriptionKey = descriptionKeyByPlan[plan.plan_id];
+        const isPro = tier === "pro";
+        const shareSlots = getPlanShareSlots(plan.plan_id);
+        const descriptionKey = descriptionKeyByPlan[plan.plan_id] ?? descriptionKeyByPlan[tier];
         const description = descriptionKey
           ? formatUiMessage(locale, descriptionKey)
           : plan.description;
+        const isAnnual = plan.plan_id.endsWith("_annual") || plan.interval === "year";
         const buttonLabel = isCurrent
           ? formatUiMessage(locale, "currentPlan")
           : plan.plan_id === "free"
@@ -43,6 +55,7 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
           <div
             key={plan.plan_id}
             className={`${styles.card} ${isHighlight ? styles.highlight : ""} ${isPro && !isHighlight ? styles.pro : ""} ${compact ? styles.compact : ""}`}
+            data-plan-id={plan.plan_id}
           >
             {isHighlight && (
               <div className={`${styles.badge} ${isPro ? styles.badgePro : ""}`}>
@@ -54,24 +67,21 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
               <div className={styles.priceCny}>{plan.price_label_cny}</div>
               <div className={styles.priceUsd}>{plan.price_label_usd}</div>
             </div>
-            {limits && !compact && (
+            {shareSlots != null && !compact && (
               <ul className={styles.limits}>
-                <li>
-                  {formatUiMessage(locale, "pricingLimitApprox5h", {
-                    tokens: formatCompactToken(limits.rolling5h),
-                  })}
+                <li data-testid={`share-slots-${plan.plan_id}`}>
+                  {formatUiMessage(locale, "pricingShareSlots", { n: String(shareSlots) })}
                 </li>
-                <li>
-                  {formatUiMessage(locale, "pricingLimitApprox7d", {
-                    tokens: formatCompactToken(limits.rolling7d),
-                  })}
-                </li>
-                <li>{formatUiMessage(locale, "pricingMarginLabel", { m: String(margin) })}</li>
               </ul>
             )}
             <div className={styles.description}>{description}</div>
             {!compact && (
-              <div className={styles.interval}>{formatUiMessage(locale, "pricingMonthlyInterval")}</div>
+              <div className={styles.interval}>
+                {formatUiMessage(
+                  locale,
+                  isAnnual ? "pricingYearlyInterval" : "pricingMonthlyInterval",
+                )}
+              </div>
             )}
             <button
               type="button"

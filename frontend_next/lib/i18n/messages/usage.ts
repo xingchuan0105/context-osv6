@@ -1,54 +1,54 @@
 import type { UiMessageDescriptor } from "./types";
 
-/** Plus vs Free rolling limits (see lib/billing/planLimits.ts): 5h 6×, 7d 10×. */
+/** Usage / plan entry copy — consumption reference, not quota wall. */
 export const usageMessages = {
   "planEntry.upgrade": {
     zh: "升级",
     en: "Upgrade",
   },
   "planEntry.viewSubscription": {
-    zh: "查看订阅与用量",
-    en: "View subscription & usage",
+    zh: "会员状态",
+    en: "Membership",
   },
   currentPlan: {
-    zh: "当前套餐",
+    zh: "当前方案",
     en: "Current plan",
   },
   usageTitle: {
-    zh: "用量与套餐",
-    en: "Usage & Plan",
+    zh: "消费明细",
+    en: "Usage details",
   },
   usageWindow5h: {
-    zh: "5 小时窗口",
-    en: "5-hour window",
+    zh: "近 5 小时",
+    en: "Last 5 hours",
   },
   usageWindow7d: {
-    zh: "7 天窗口",
-    en: "7-day window",
+    zh: "近 7 天",
+    en: "Last 7 days",
   },
   usageEstimatedReset: {
-    zh: "预计 {time} 后重置",
-    en: "Resets in {time}",
+    zh: "预计 {time} 后缓解",
+    en: "Eases in {time}",
   },
   usageSoftLimitWarning: {
-    zh: "已超过软上限，建议控制节奏",
-    en: "Soft limit reached, consider slowing down",
+    zh: "接近平台保护限速，建议检查余额或自定义 Provider",
+    en: "Approaching protective throttle — check balance or custom provider",
   },
   usageTrendTitle: {
-    zh: "近 7 日用量趋势",
-    en: "Last 7-day trend",
+    zh: "近 7 日消费趋势",
+    en: "Last 7-day usage trend",
   },
   toastUpgradeCta: {
-    zh: "升级 Plus 解锁 {multiplier}× 用量 →",
-    en: "Upgrade to Plus for {multiplier}× usage →",
+    zh: "升级方案或充值余额 →",
+    en: "Upgrade plan or top up balance →",
   },
   toastClose: {
     zh: "关闭",
     en: "Close",
   },
   toastResetsIn: {
-    zh: "还有 {time} 重置",
-    en: "Resets in {time}",
+    zh: "还有 {time}",
+    en: "{time} left",
   },
   toastUsageAt: {
     zh: "{window} 用量已用 {pct}%",
@@ -59,7 +59,7 @@ export const usageMessages = {
     en: "Loading...",
   },
   usageErrorLoad: {
-    zh: "用量数据加载失败，请稍后重试。",
+    zh: "消费数据加载失败，请稍后重试。",
     en: "Failed to load usage data. Please try again later.",
   },
   usageErrorBackDashboard: {
@@ -67,12 +67,12 @@ export const usageMessages = {
     en: "Back to dashboard",
   },
   usageCurrentPlanLabel: {
-    zh: "当前套餐:",
+    zh: "当前方案:",
     en: "Current plan:",
   },
   usageFreeUpgradeHint: {
-    zh: "→ Free 升级 Plus：5h 6× / 7d 10× 用量",
-    en: "→ Upgrade Free to Plus: 6× (5h) / 10× (7d) usage",
+    zh: "→ 升级 Plus/Pro 增加可分享工作区名额",
+    en: "→ Upgrade Plus/Pro for more shareable workspaces",
   },
   usageUnlimited: {
     zh: "无限制",
@@ -83,12 +83,12 @@ export const usageMessages = {
     en: "≈ {used} / {limit} tokens",
   },
   usageMarginNote: {
-    zh: "方案乘数 M={m}；按输入（含缓存命中优惠）与输出折算后计入额度，缓存命中更省",
-    en: "Plan multiplier M={m}; usage is folded from input (cache-hit discounted) and output — cache hits cost less",
+    zh: "参考乘数 M={m}（平台模型计费折算）；有自定义 Provider 时对话可不走平台余额",
+    en: "Reference multiplier M={m} for platform model billing; custom provider chat can skip platform balance",
   },
   usageForecastDetail: {
-    zh: "预计 30 天用量 {projected} / 7d 限额 {limit}",
-    en: "Projected 30-day usage {projected} / 7d limit {limit}",
+    zh: "预计 30 天用量 {projected}（参考）",
+    en: "Projected 30-day usage {projected} (reference)",
   },
   usageTrendEmpty: {
     zh: "暂无用量数据",

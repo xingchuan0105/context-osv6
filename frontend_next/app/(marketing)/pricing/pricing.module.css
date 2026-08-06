@@ -31,13 +31,25 @@
   font-size: var(--font-size-caption-strong);
 }
 
+.subtitle {
+  margin: 0;
+  max-width: 36rem;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+
 .toggleButton {
   background: hsl(var(--secondary));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-button);
   padding: var(--space-sm) var(--space-lg);
-  cursor: not-allowed;
-  opacity: 0.7;
+  cursor: pointer;
+  opacity: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: hsl(var(--foreground));
 }
 
 .toggleActive {
@@ -49,6 +61,27 @@
 .toggleHint {
   color: hsl(var(--subtle-foreground));
   font-size: var(--font-size-caption);
+}
+
+.toggleHintInline {
+  font-size: var(--font-size-caption);
+  opacity: 0.85;
+}
+
+.addon {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-xl);
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-control);
+  background: hsl(var(--card));
+}
+
+.addonBody {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-control);
+  line-height: 1.55;
 }
 
 .faq {

@@ -32,11 +32,19 @@ vi.mock("../../lib/settings/client", () => ({
   getUsage: mocks.getUsageMock,
   getUsageLimit: mocks.getUsageLimitMock,
   getUserPreferences: mocks.getUserPreferencesMock,
+  getWalletBalance: mocks.getWalletBalanceMock,
+  listTopupPacks: mocks.listTopupPacksMock,
+  listProviderSecrets: mocks.listProviderSecretsMock,
+  getReferralStats: mocks.getReferralStatsMock,
   listNotifications: mocks.listNotificationsMock,
   listPlans: mocks.listPlansMock,
   markNotificationRead: mocks.markNotificationReadMock,
   updateProfile: mocks.updateProfileMock,
   updateUserPreferences: mocks.updateUserPreferencesMock,
+}));
+
+vi.mock("../../lib/share/client", () => ({
+  getShareQuota: mocks.getShareQuotaMock,
 }));
 
 vi.mock("../../lib/ui-preferences", () => ({
@@ -109,6 +117,11 @@ describe("SettingsSurface", () => {
     mocks.getUsageMock.mockReset();
     mocks.getUsageLimitMock.mockReset();
     mocks.getUserPreferencesMock.mockReset();
+    mocks.getWalletBalanceMock.mockReset();
+    mocks.listTopupPacksMock.mockReset();
+    mocks.listProviderSecretsMock.mockReset();
+    mocks.getReferralStatsMock.mockReset();
+    mocks.getShareQuotaMock.mockReset();
     mocks.listNotificationsMock.mockReset();
     mocks.listPlansMock.mockReset();
     mocks.markNotificationReadMock.mockReset();
@@ -141,6 +154,22 @@ describe("SettingsSurface", () => {
       plan_id: "pro",
       status: "active",
       current_period_end: "2026-05-01T00:00:00Z",
+    });
+    mocks.getWalletBalanceMock.mockResolvedValue({
+      balance_fen: 1234,
+      lifetime_paid_topup_fen: 5000,
+    });
+    mocks.listTopupPacksMock.mockResolvedValue([]);
+    mocks.listProviderSecretsMock.mockResolvedValue({ secrets: [] });
+    mocks.getReferralStatsMock.mockResolvedValue({
+      code: "REF123",
+      rewarded_count: 0,
+      quota: 5,
+    });
+    mocks.getShareQuotaMock.mockResolvedValue({
+      used: 1,
+      max: 100,
+      plan_id: "pro",
     });
     mocks.getUsageMock.mockResolvedValue({
       used_tokens: 1500,
@@ -284,7 +313,7 @@ describe("SettingsSurface", () => {
   it("renders tab links and loads billing data", async () => {
     renderWithQuery(<SettingsSurface activeTab={"billing" as SettingsTab} />);
 
-    expect(screen.getByRole("link", { name: "Subscription & Usage" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Membership" }).getAttribute("href")).toBe(
       "/settings?tab=billing",
     );
     expect(screen.getByRole("link", { name: "Profile" }).getAttribute("href")).toBe(

@@ -47,7 +47,8 @@ describe("PricingPage", () => {
     render(<PricingPageClient />);
     expect(await screen.findByText(/选择适合你的方案/)).toBeTruthy();
     expect(screen.getByText("Plus")).toBeTruthy();
-    expect(screen.getByText(/token 用量怎么算/)).toBeTruthy();
+    expect(screen.getByText(/主商品是什么/)).toBeTruthy();
+    expect(screen.getByTestId("share-slots-free")).toHaveTextContent(/可分享工作区 3 个/);
   });
 
   it("does not start checkout when payment consent is missing", async () => {

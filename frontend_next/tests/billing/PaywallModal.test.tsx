@@ -68,7 +68,7 @@ describe("PaywallModal", () => {
         onContinueFree={vi.fn()}
       />,
     );
-    expect(screen.getByText(/5h 用量已达上限/)).toBeTruthy();
+    expect(screen.getByText(/平台保护限速已触发/)).toBeTruthy();
   });
 
   it("embeds UsageMeter compact + PricingCards compact", () => {
@@ -86,7 +86,7 @@ describe("PaywallModal", () => {
     expect(screen.getAllByRole("progressbar").length).toBeGreaterThan(0);
   });
 
-  it("calls onContinueFree when 继续 Free clicked", () => {
+  it("calls onContinueFree when 稍后再说 clicked", () => {
     const onContinueFree = vi.fn();
     render(
       <PaywallModal

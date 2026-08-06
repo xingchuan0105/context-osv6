@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AlipayQrDialog } from "@/components/billing/AlipayQrDialog";
 import { PricingCards } from "@/components/billing/PricingCards";
@@ -12,7 +12,7 @@ import { describeAuthError } from "@/lib/auth/errors";
 import { useAuth } from "@/lib/auth/context";
 import type { BillingPlan } from "@/lib/billing/api";
 import { billingApi } from "@/lib/billing/api";
-import { MARKETING_BILLING_PLANS } from "@/lib/billing/publicPlans";
+import { MARKETING_BILLING_PLANS, plansForInterval } from "@/lib/billing/publicPlans";
 import { billingProviderForLocale, planPriceLabel } from "@/lib/billing/provider";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
@@ -24,11 +24,14 @@ type AlipaySession = {
   planId: string;
 };
 
+type BillingInterval = "month" | "year";
+
 export function PricingPageClient() {
   const auth = useAuth();
   const router = useRouter();
   const { locale } = useUiPreferences();
-  const [plans, setPlans] = useState<BillingPlan[]>(MARKETING_BILLING_PLANS);
+  const [allPlans, setAllPlans] = useState<BillingPlan[]>(MARKETING_BILLING_PLANS);
+  const [interval, setInterval] = useState<BillingInterval>("month");
   const [paymentConsented, setPaymentConsented] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutNotice, setCheckoutNotice] = useState("");
@@ -37,9 +40,17 @@ export function PricingPageClient() {
   useEffect(() => {
     void billingApi
       .getPlans()
-      .then((response) => setPlans(response.plans))
-      .catch(() => setPlans(MARKETING_BILLING_PLANS));
+      .then((response) => {
+        const remote = response.plans ?? [];
+        // Merge marketing annual SKUs if API omits them (checkout still accepts plan_id).
+        const ids = new Set(remote.map((p) => p.plan_id));
+        const extras = MARKETING_BILLING_PLANS.filter((p) => !ids.has(p.plan_id));
+        setAllPlans(extras.length ? [...remote, ...extras] : remote);
+      })
+      .catch(() => setAllPlans(MARKETING_BILLING_PLANS));
   }, []);
+
+  const plans = useMemo(() => plansForInterval(allPlans, interval), [allPlans, interval]);
 
   async function handleSelect(planId: string) {
     if (planId === "free" || !auth.token) {
@@ -75,29 +86,47 @@ export function PricingPageClient() {
     setCheckoutNotice(formatUiMessage(locale, "alipayQrPaid"));
     void billingApi
       .getPlans()
-      .then((response) => setPlans(response.plans))
+      .then((response) => setAllPlans(response.plans))
       .catch(() => {});
   }
 
   const alipayPlan = alipaySession
-    ? plans.find((plan) => plan.plan_id === alipaySession.planId)
+    ? allPlans.find((plan) => plan.plan_id === alipaySession.planId)
     : undefined;
 
   return (
     <div className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>{formatUiMessage(locale, "pricingTitle")}</h1>
-        <div className={styles.billingToggle}>
-          <button type="button" className={`${styles.toggleButton} ${styles.toggleActive}`}>
+        <p className={styles.subtitle}>{formatUiMessage(locale, "pricingSubtitle")}</p>
+        <div className={styles.billingToggle} role="group" aria-label="billing interval">
+          <button
+            type="button"
+            className={`${styles.toggleButton} ${interval === "month" ? styles.toggleActive : ""}`}
+            onClick={() => setInterval("month")}
+          >
             {formatUiMessage(locale, "pricingMonthly")}
           </button>
-          <span className={styles.toggleHint} title={formatUiMessage(locale, "pricingYearlySoon")}>
-            {formatUiMessage(locale, "pricingYearlySoon")}
-          </span>
+          <button
+            type="button"
+            className={`${styles.toggleButton} ${interval === "year" ? styles.toggleActive : ""}`}
+            onClick={() => setInterval("year")}
+            data-testid="pricing-interval-yearly"
+          >
+            {formatUiMessage(locale, "pricingYearly")}
+            <span className={styles.toggleHintInline}>
+              {formatUiMessage(locale, "pricingYearlyHint")}
+            </span>
+          </button>
         </div>
       </header>
 
       <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={handleSelect} />
+
+      <section className={styles.addon} data-testid="pricing-wallet-addon">
+        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingWalletAddonTitle")}</h2>
+        <p className={styles.addonBody}>{formatUiMessage(locale, "pricingWalletAddonBody")}</p>
+      </section>
 
       {auth.token ? (
         <div className={styles.consentSection}>

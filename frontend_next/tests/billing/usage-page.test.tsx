@@ -121,11 +121,11 @@ describe("UsagePage", () => {
   it("renders title + 2 UsageMeter cards + trend chart + forecast", async () => {
     renderUsageDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/用量与套餐/)).toBeTruthy();
+      expect(screen.getByText(/消费明细/)).toBeTruthy();
     });
-    expect(screen.getByText(/5 小时窗口/)).toBeTruthy();
-    expect(screen.getByText(/7 天窗口/)).toBeTruthy();
-    expect(screen.getByText(/近 7 日用量趋势/)).toBeTruthy();
+    expect(screen.getByText(/近 5 小时/)).toBeTruthy();
+    expect(screen.getByText(/近 7 天/)).toBeTruthy();
+    expect(screen.getByText(/近 7 日消费趋势/)).toBeTruthy();
     expect(screen.getByText(/本月无需升级/)).toBeTruthy();
   });
 
@@ -141,7 +141,7 @@ describe("UsagePage", () => {
     vi.mocked(billingApi.getUsageWindow).mockRejectedValueOnce(new Error("network"));
     renderUsageDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/用量数据加载失败/)).toBeTruthy();
+      expect(screen.getByText(/消费数据加载失败/)).toBeTruthy();
     });
   });
 });

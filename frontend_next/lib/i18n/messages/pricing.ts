@@ -1,65 +1,77 @@
 import type { UiMessageDescriptor } from "./types";
 
 /**
- * Pricing page copy. Authoritative Plus multipliers vs Free come from
- * lib/billing/planLimits.ts (5h: 600K/100K = 6×, 7d: 4M/400K = 10×).
+ * Pricing page copy — ADR-0010 share-slot primary product.
  */
 export const pricingMessages = {
   pricingTitle: {
     zh: "选择适合你的方案",
     en: "Choose your plan",
   },
+  pricingSubtitle: {
+    zh: "客户端免费 · 私有使用免费。付费解锁更多可分享知识库名额。",
+    en: "Client free · private use free. Paid plans unlock more shareable workspaces.",
+  },
   pricingMonthly: {
     zh: "月付",
     en: "Monthly",
   },
+  pricingYearly: {
+    zh: "年付",
+    en: "Yearly",
+  },
+  pricingYearlyHint: {
+    zh: "约 10 个月价",
+    en: "~10 months price",
+  },
+  /** @deprecated alias — prefer pricingYearly */
   pricingYearlySoon: {
-    zh: "年付暂未开放",
-    en: "Yearly coming soon",
+    zh: "年付",
+    en: "Yearly",
   },
   pricingTierPlusBadge: {
     zh: "推荐",
     en: "Recommended",
   },
   pricingPlanFreeDescription: {
-    zh: "入门方案，适合较小的个人知识库与试用。",
-    en: "Starter plan for smaller personal notebooks and trial usage.",
+    zh: "客户端与私有知识库免费；可分享工作区 3 个。",
+    en: "Client and private workspaces free; 3 shareable workspaces.",
   },
   pricingPlanPlusDescription: {
-    zh: "面向活跃文档摄入与对话工作流的每日额度。",
-    en: "Daily quotas for active document ingestion and chat workflows.",
+    zh: "可分享工作区 10 个，适合团队对外协作。",
+    en: "10 shareable workspaces for team sharing.",
   },
   pricingPlanProDescription: {
-    zh: "不限量额度策略，应对更重的工作负载。",
-    en: "Unlimited quota posture for heavier workloads.",
+    zh: "可分享工作区 100 个，适合规模化知识服务。",
+    en: "100 shareable workspaces for scale.",
+  },
+  pricingShareSlots: {
+    zh: "可分享工作区 {n} 个",
+    en: "{n} shareable workspaces",
+  },
+  pricingWalletAddonTitle: {
+    zh: "模型调用余额（可选）",
+    en: "Model call balance (optional)",
+  },
+  pricingWalletAddonBody: {
+    zh: "使用平台模型时从余额扣费；也可配置自定义 Provider，对话走你自己的额度。向量检索始终走平台并计入余额。",
+    en: "Platform models bill from your balance. With a custom provider, chat uses your own quota. Embedding/retrieval always use the platform and bill the balance.",
   },
   pricingFaqToken: {
-    zh: "token 用量怎么算？",
-    en: "How is token usage counted?",
+    zh: "主商品是什么？",
+    en: "What am I buying?",
   },
   pricingFaqTokenAnswer: {
-    zh: "按 DeepSeek 风格将输入（区分缓存命中/未命中）与输出折成成本单位，再乘方案乘数 M（Free 2.0 / Plus 1.5 / Pro 1.3）。产品展示为「约 tokens」，以全为缓存未命中输入为参照。",
-    en: "Input (cache hit vs miss) and output are folded like DeepSeek cost, then multiplied by plan M (Free 2.0 / Plus 1.5 / Pro 1.3). Limits are shown as ≈ tokens (pure cache-miss input reference).",
-  },
-  pricingLimitApprox5h: {
-    zh: "5 小时约 {tokens} tokens",
-    en: "≈ {tokens} tokens / 5h",
-  },
-  pricingLimitApprox7d: {
-    zh: "7 天约 {tokens} tokens",
-    en: "≈ {tokens} tokens / 7d",
-  },
-  pricingMarginLabel: {
-    zh: "方案乘数 M={m}",
-    en: "Plan multiplier M={m}",
+    zh: "主商品是可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己用的知识库免费。模型调用另用余额或自定义 Provider。",
+    en: "Primary product is shareable workspace slots (Free 3 / Plus 10 / Pro 100). The client and private workspaces are free. Model calls use balance or a custom provider.",
   },
   pricingFaqReset: {
-    zh: "限额会重置吗？",
-    en: "Do limits reset?",
+    zh: "访客提问谁付费？",
+    en: "Who pays for visitor questions?",
   },
   pricingFaqResetAnswer: {
-    zh: "5h 滚动窗口 + 7d 滚动窗口，最旧消耗点过后自动释放",
-    en: "5h rolling + 7d rolling windows",
+    zh: "分享场景由知识库 Owner 承担模型成本（Owner-pays）。请关注余额与自定义 Provider 配置。",
+    en: "On shared workspaces the Owner pays model cost (Owner-pays). Watch balance and custom provider setup.",
   },
   pricingFaqUpgrade: {
     zh: "升级后立即生效吗？",
@@ -70,24 +82,28 @@ export const pricingMessages = {
     en: "Effective immediately after payment. Downgrade at end of billing cycle.",
   },
   pricingFaqTitle: {
-    zh: "❓ 常见问题",
-    en: "❓ FAQ",
+    zh: "常见问题",
+    en: "FAQ",
   },
   pricingUpgradeTo: {
     zh: "升级 {name}",
     en: "Upgrade to {name}",
   },
   pricingMonthlyInterval: {
-    zh: "月付",
-    en: "Monthly billing",
+    zh: "按月计费",
+    en: "Billed monthly",
+  },
+  pricingYearlyInterval: {
+    zh: "按年计费",
+    en: "Billed yearly",
   },
   pricingDesktopCrossTitle: {
-    zh: "需要本地客户端？",
-    en: "Need a local client?",
+    zh: "本地客户端",
+    en: "Desktop client",
   },
   pricingDesktopCrossBody: {
-    zh: "Windows 客户端支持本机文档与自带 LLM Key，买断授权。与上方云端套餐相互独立。",
-    en: "Windows client keeps docs on-device with your own LLM keys (one-time license). Separate from cloud plans above.",
+    zh: "Windows / 桌面客户端免费使用，无需买断许可。需要上云分享时再升级名额。",
+    en: "Desktop clients are free — no license purchase. Upgrade only when you need more share slots.",
   },
   pricingDesktopCrossCta: {
     zh: "下载客户端",

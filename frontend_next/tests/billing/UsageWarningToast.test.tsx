@@ -28,7 +28,7 @@ describe("UsageWarningToast", () => {
       />,
     );
     expect(screen.getByText(/85%/)).toBeTruthy();
-    expect(screen.getByText(/升级 Plus 解锁 6× 用量/)).toBeTruthy();
+    expect(screen.getByText(/升级方案或充值余额/)).toBeTruthy();
   });
 
   it("does not render if already dismissed for this window in localStorage", () => {

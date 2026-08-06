@@ -10,8 +10,8 @@ export const settingsMessages = {
     en: "Profile",
   },
   "settings.tabs.billing": {
-    zh: "订阅与用量",
-    en: "Subscription & Usage",
+    zh: "会员状态",
+    en: "Membership",
   },
   "settings.tabs.appearance": {
     zh: "外观",
@@ -30,8 +30,8 @@ export const settingsMessages = {
     en: "Settings",
   },
   "settings.pageSubtitle": {
-    zh: "管理账单、资料、外观、通知和安全设置。",
-    en: "Manage billing, profile, appearance, notification, and security settings.",
+    zh: "管理会员状态、资料、外观、通知和安全设置。",
+    en: "Manage membership, profile, appearance, notification, and security settings.",
   },
   "settings.profile.sectionTitle": {
     zh: "个人资料",
@@ -58,32 +58,52 @@ export const settingsMessages = {
     en: "Save profile",
   },
   "settings.billing.sectionTitle": {
-    zh: "账单与计划",
-    en: "Billing and plan",
+    zh: "会员状态",
+    en: "Membership",
   },
   "settings.billing.sectionSubtitle": {
-    zh: "查看当前订阅与用量。更换方案请点「管理订阅」前往定价页。",
-    en: "Review your current subscription and usage. Manage plan opens the pricing page.",
+    zh: "档位、分享名额、到期时间与余额一览。更换方案请前往定价页。",
+    en: "Plan tier, share slots, renewal, and balance. Open pricing to change plan.",
   },
   "settings.billing.currentPlanLabel": {
-    zh: "当前计划",
-    en: "Current plan",
+    zh: "当前档位",
+    en: "Current tier",
+  },
+  "settings.billing.shareQuotaLabel": {
+    zh: "分享名额",
+    en: "Share slots",
+  },
+  "settings.billing.shareQuotaValue": {
+    zh: "{used} / {max}",
+    en: "{used} / {max}",
   },
   "settings.billing.managePlanAction": {
-    zh: "管理订阅",
-    en: "Manage subscription",
+    zh: "升级 / 管理方案",
+    en: "Upgrade / manage plan",
   },
   "settings.billing.changePlanAction": {
     zh: "更换方案",
     en: "Change plan",
   },
+  "settings.billing.usageDetailsLink": {
+    zh: "消费明细",
+    en: "Usage details",
+  },
+  "settings.billing.providerSummaryNone": {
+    zh: "未配置自定义 Provider",
+    en: "No custom provider",
+  },
+  "settings.billing.providerSummaryActive": {
+    zh: "已配置 · {provider}",
+    en: "Configured · {provider}",
+  },
   "settings.billing.portalUnavailable": {
-    zh: "自助账单门户暂未开通。请稍后重试，或联系支持处理订阅。",
-    en: "Self-service billing portal is not available. Try again later, or contact support.",
+    zh: "自助支付门户暂未开通。请稍后重试，或联系支持。",
+    en: "Self-service payment portal is not available. Try again later, or contact support.",
   },
   "settings.billing.portalFallbackHint": {
-    zh: "请在下方方案列表中更换计划，或打开定价页完成 Creem/支付宝 支付（产品未使用外部账单门户）。",
-    en: "Change plan below or open pricing for Creem/Alipay checkout (no external billing portal).",
+    zh: "请打开定价页完成 Creem/支付宝 支付。",
+    en: "Open pricing for Creem/Alipay checkout.",
   },
   "settings.billing.planPickerHint": {
     zh: "选择方案后将进入定价/结账页完成变更。",
@@ -98,8 +118,8 @@ export const settingsMessages = {
     en: "Current",
   },
   "settings.billing.portalAction": {
-    zh: "打开账单门户",
-    en: "Open billing portal",
+    zh: "打开支付门户",
+    en: "Open payment portal",
   },
   "settings.billing.referralTitle": {
     zh: "邀请码",
@@ -126,12 +146,12 @@ export const settingsMessages = {
     en: "Copied",
   },
   "settings.billing.byokTitle": {
-    zh: "云端 BYOK（自带 API Key）",
-    en: "Cloud BYOK",
+    zh: "自定义 Provider",
+    en: "Custom provider",
   },
   "settings.billing.byokSubtitle": {
-    zh: "密钥加密存储；有有效 Key 时问答走你的额度，不扣平台储值。索引仍需平台储值。",
-    en: "Keys are encrypted at rest. Active keys use your provider for chat, not wallet. Indexing still needs wallet balance.",
+    zh: "密钥加密存储。自定义 Provider 只用于对话模型；向量与检索始终走平台，并从余额扣费。",
+    en: "Keys are encrypted at rest. A custom provider covers chat models only; embedding and retrieval always use the platform and bill your balance.",
   },
   "settings.billing.byokProvider": {
     zh: "Provider",
@@ -162,12 +182,12 @@ export const settingsMessages = {
     en: "Revoked",
   },
   "settings.billing.payerFundsRequired": {
-    zh: "钱包余额不足，且未配置可用的云端 API Key。请充值或添加 BYOK 密钥后再试。",
-    en: "Wallet balance is empty and no cloud BYOK key is configured. Top up or add an API key.",
+    zh: "余额不足，且未配置可用的自定义 Provider。请充值或添加 Provider 后再试。",
+    en: "Balance is empty and no custom provider is configured. Top up or add a provider.",
   },
   "settings.billing.payerFundsTopUpHint": {
-    zh: "前往设置 → 账单充值，或配置云端 BYOK。",
-    en: "Open Settings → Billing to top up, or configure cloud BYOK.",
+    zh: "前往设置 → 会员状态充值，或配置自定义 Provider。",
+    en: "Open Settings → Membership to top up, or configure a custom provider.",
   },
   "settings.appearance.sectionTitle": {
     zh: "外观",
@@ -282,12 +302,12 @@ export const settingsMessages = {
     en: "Name must be 120 characters or fewer.",
   },
   "settings.usage.sectionTitle": {
-    zh: "个人用量",
-    en: "Personal usage",
+    zh: "平台保护限速（参考）",
+    en: "Platform protective limits (reference)",
   },
   "settings.usage.sectionSubtitle": {
-    zh: "按约 tokens 展示 5 小时 / 7 天滚动额度（Free 约 100K / 400K）。内部按输入（含缓存命中优惠）、输出折算后再乘方案乘数 M（Free 2.0 / Plus 1.5 / Pro 1.3）。达软上限会提示升级。",
-    en: "Shown as ≈ tokens on 5h / 7d rolling windows (Free ≈ 100K / 400K). Internally: input (cache-hit discounted) + output, then plan multiplier M (Free 2.0 / Plus 1.5 / Pro 1.3). Soft limits encourage upgrades.",
+    zh: "仅在无余额且未配置自定义 Provider 时可能触发。有余额或自定义 Provider 后，对话不再受此限制主导。",
+    en: "May apply only when balance is empty and no custom provider is set. With balance or a custom provider, chat is not driven by these windows.",
   },
   "settings.usage.loading": {
     zh: "正在加载用量...",
@@ -386,8 +406,8 @@ export const settingsMessages = {
     en: "Not active",
   },
   "settings.billing.loading": {
-    zh: "正在加载账单信息...",
-    en: "Loading billing information...",
+    zh: "正在加载会员信息...",
+    en: "Loading membership information...",
   },
   "settings.billing.loadingUsage": {
     zh: "正在加载用量...",
@@ -430,8 +450,8 @@ export const settingsMessages = {
     en: "Documents",
   },
   "settings.billing.failedData": {
-    zh: "部分账单信息加载失败：{items}",
-    en: "Some billing data failed to load: {items}",
+    zh: "部分会员信息加载失败：{items}",
+    en: "Some membership data failed to load: {items}",
   },
   "settings.billing.failedItem.subscription": {
     zh: "订阅",
@@ -458,12 +478,12 @@ export const settingsMessages = {
     en: "Canceled",
   },
   "settings.billing.walletTitle": {
-    zh: "模型代购钱包",
-    en: "Model proxy wallet",
+    zh: "余额",
+    en: "Balance",
   },
   "settings.billing.walletSubtitle": {
-    zh: "余额用于平台代购模型调用。充值会计入累计充值（邀请额度每 ¥50 增加 1 次）。",
-    en: "Balance pays platform proxy model usage. Paid top-ups count toward lifetime total (+1 invite per ¥50).",
+    zh: "用于平台模型调用与向量检索。充值会计入累计充值（邀请额度每 ¥50 增加 1 次）。",
+    en: "Pays platform model calls and embedding/retrieval. Paid top-ups count toward lifetime total (+1 invite per ¥50).",
   },
   "settings.billing.walletBalanceLabel": {
     zh: "可用余额",
@@ -490,12 +510,12 @@ export const settingsMessages = {
     en: "Could not start top-up: {message}",
   },
   "settings.billing.walletLoading": {
-    zh: "正在加载钱包…",
-    en: "Loading wallet…",
+    zh: "正在加载余额…",
+    en: "Loading balance…",
   },
   "settings.billing.failedItem.wallet": {
-    zh: "钱包",
-    en: "wallet",
+    zh: "余额",
+    en: "balance",
   },
   "settings.appearance.themeDescription.system": {
     zh: "自动匹配设备当前主题。",

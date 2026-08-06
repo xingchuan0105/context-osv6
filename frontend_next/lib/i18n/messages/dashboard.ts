@@ -130,8 +130,8 @@ export const dashboardMessages = {
     en: "Profile",
   },
   dashboardBillingLink: {
-    zh: "订阅与用量",
-    en: "Subscription & Usage",
+    zh: "会员状态",
+    en: "Membership",
   },
   dashboardLogout: {
     zh: "退出登录",

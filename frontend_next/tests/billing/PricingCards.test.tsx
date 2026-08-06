@@ -59,7 +59,7 @@ describe("PricingCards", () => {
 
   it("marks current plan with disabled button", () => {
     render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
-    const plusButton = screen.getByRole("button", { name: /当前套餐/ }) as HTMLButtonElement;
+    const plusButton = screen.getByRole("button", { name: /当前方案/ }) as HTMLButtonElement;
     expect(plusButton.disabled).toBe(true);
   });
 
@@ -70,12 +70,12 @@ describe("PricingCards", () => {
     expect(onSelect).toHaveBeenCalledWith("pro");
   });
 
-  it("shows 5h/7d approx token limits and plan margin M", () => {
+  it("shows shareable workspace slots instead of 5h/7d token limits", () => {
     render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
-    expect(screen.getByText(/5 小时约 100K tokens/)).toBeTruthy();
-    expect(screen.getByText(/7 天约 400K tokens/)).toBeTruthy();
-    expect(screen.getByText(/5 小时约 600K tokens/)).toBeTruthy();
-    expect(screen.getByText(/7 天约 4\.0M tokens/)).toBeTruthy();
-    expect(screen.getAllByText(/方案乘数 M=/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByTestId("share-slots-free")).toHaveTextContent(/可分享工作区 3 个/);
+    expect(screen.getByTestId("share-slots-plus")).toHaveTextContent(/可分享工作区 10 个/);
+    expect(screen.getByTestId("share-slots-pro")).toHaveTextContent(/可分享工作区 100 个/);
+    expect(screen.queryByText(/5 小时约/)).toBeNull();
+    expect(screen.queryByText(/方案乘数 M=/)).toBeNull();
   });
 });

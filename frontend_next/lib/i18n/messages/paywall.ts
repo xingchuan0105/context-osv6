@@ -1,30 +1,30 @@
 import type { UiMessageDescriptor } from "./types";
 
-/** Plus vs Free rolling limits (see lib/billing/planLimits.ts): 5h 6×, 7d 10×. */
+/** Protective hard-stop / upgrade prompts — not share-slot primary narrative. */
 export const paywallMessages = {
   paywallTitle5h: {
-    zh: "5h 用量已达上限",
-    en: "5h limit reached",
+    zh: "平台保护限速已触发",
+    en: "Platform protective limit reached",
   },
   paywallTitle7d: {
-    zh: "7d 用量已达上限",
-    en: "7d limit reached",
+    zh: "平台保护限速已触发",
+    en: "Platform protective limit reached",
   },
   paywallSubtitle5h: {
-    zh: "Free → Plus，解锁 6× 用量（5h 窗口）",
-    en: "Free → Plus, unlock 6× usage (5h window)",
+    zh: "在无余额且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额后继续。",
+    en: "Without balance or a custom provider, the platform may throttle. Top up balance, add a custom provider, or upgrade share slots.",
   },
   paywallSubtitle7d: {
-    zh: "Free → Plus，解锁 10× 用量（7d 窗口）",
-    en: "Free → Plus, unlock 10× usage (7d window)",
+    zh: "在无余额且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额后继续。",
+    en: "Without balance or a custom provider, the platform may throttle. Top up balance, add a custom provider, or upgrade share slots.",
   },
   paywallContinueFree: {
-    zh: "继续 Free",
-    en: "Continue Free",
+    zh: "稍后再说",
+    en: "Not now",
   },
   paywallResetHint: {
-    zh: "限额自动重置，请关注使用节奏",
-    en: "Limits reset automatically — pace your usage",
+    zh: "也可配置自定义 Provider，对话不再消耗平台余额",
+    en: "Or add a custom provider so chat does not spend platform balance",
   },
   paywallLoading: {
     zh: "加载中...",

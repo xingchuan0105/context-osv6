@@ -30,8 +30,8 @@ describe("UsageMeter", () => {
         hardLimitHit={{ rolling_5h: false, rolling_7d: false }}
       />,
     );
-    expect(screen.getByText(/5 小时窗口/)).toBeTruthy();
-    expect(screen.getByText(/7 天窗口/)).toBeTruthy();
+    expect(screen.getByText(/近 5 小时/)).toBeTruthy();
+    expect(screen.getByText(/近 7 天/)).toBeTruthy();
     expect(screen.getByText((_, el) => el?.textContent?.trim() === "80.0K")).toBeTruthy();
     expect(screen.getByTestId("usage-margin-note").textContent).toMatch(/M=2/);
   });
@@ -62,7 +62,7 @@ describe("UsageMeter", () => {
         hardLimitHit={{ rolling_5h: true, rolling_7d: false }}
       />,
     );
-    expect(screen.queryByText(/5 小时窗口/)).toBeNull();
+    expect(screen.queryByText(/近 5 小时/)).toBeNull();
     expect(screen.getAllByRole("progressbar").length).toBe(2);
   });
 
@@ -93,7 +93,7 @@ describe("UsageMeter", () => {
         hardLimitHit={{ rolling_5h: false, rolling_7d: false }}
       />,
     );
-    expect(screen.getByText(/已超过软上限/)).toBeTruthy();
+    expect(screen.getByText(/接近平台保护限速/)).toBeTruthy();
   });
 
   it("shows unlimited label when limit is zero", () => {

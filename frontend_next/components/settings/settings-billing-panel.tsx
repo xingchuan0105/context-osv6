@@ -9,6 +9,7 @@ import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
 import { billingProviderForLocale } from "../../lib/billing/provider";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { getShareQuota } from "../../lib/share/client";
 import {
   createCheckoutSession,
   getReferralStats,
@@ -38,6 +39,8 @@ function planLabel(planId: string | null | undefined): string | null {
     free: "Free",
     plus: "Plus",
     pro: "Pro",
+    plus_annual: "Plus (annual)",
+    pro_annual: "Pro (annual)",
   };
   return known[planId.toLowerCase()] ?? planId;
 }
@@ -72,7 +75,6 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
     queryKey: settingsKeys.billing(token),
     enabled: Boolean(token),
     queryFn: async () => {
-      // Product metering truth is UsageLimitPanel (5h/7d). Plan catalog lives on /pricing only.
       try {
         const subscription = await getSubscription(token as string);
         return { subscription, partialError: "" };
@@ -85,6 +87,12 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
         };
       }
     },
+  });
+
+  const quotaQuery = useQuery({
+    queryKey: [...settingsKeys.billing(token), "share-quota"],
+    enabled: Boolean(token),
+    queryFn: () => getShareQuota(token as string),
   });
 
   const walletQuery = useQuery({
@@ -136,6 +144,8 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
     : "";
 
   const currentPlanName = planLabel(billingQuery.data?.subscription?.plan_id);
+  const activeSecrets = (secretsQuery.data?.secrets ?? []).filter((s) => !s.revoked_at);
+  const primarySecret = activeSecrets[0];
 
   const refreshWallet = useCallback(() => {
     void queryClient.invalidateQueries({
@@ -225,39 +235,160 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
 
   return (
     <section className={shared.section}>
-      <UsageLimitPanel />
+      {/* Membership summary — ADR-0010 primary surface */}
+      <section className={`app-inline-surface ${styles.planSection}`} data-testid="membership-summary">
+        <div className={`app-inline-row ${styles.headerRow}`}>
+          <div className={shared.headerText}>
+            <h2 className={shared.flushTitle}>
+              {formatUiMessage(locale, "settings.billing.sectionTitle")}
+            </h2>
+            <p className={shared.mutedText}>
+              {formatUiMessage(locale, "settings.billing.sectionSubtitle")}
+            </p>
+          </div>
+          {hideManagePlan ? null : (
+            <Link
+              className="app-button-primary app-button-accent"
+              data-testid="settings-manage-subscription"
+              href="/pricing"
+            >
+              {formatUiMessage(locale, "settings.billing.managePlanAction")}
+            </Link>
+          )}
+        </div>
+        {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
+        {billingQuery.isLoading ? (
+          <p className={shared.mutedText}>
+            {formatUiMessage(locale, "settings.billing.loading")}
+          </p>
+        ) : (
+          <div className={`app-inline-surface ${styles.planCard}`} data-testid="plan-display">
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.currentPlanLabel")}</span>
+              <strong>
+                {currentPlanName ?? formatUiMessage(locale, "settings.billing.notActive")}
+              </strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`} data-testid="share-quota-row">
+              <span>{formatUiMessage(locale, "settings.billing.shareQuotaLabel")}</span>
+              <strong>
+                {quotaQuery.data
+                  ? formatUiMessage(locale, "settings.billing.shareQuotaValue", {
+                      used: String(quotaQuery.data.used),
+                      max: String(quotaQuery.data.max),
+                    })
+                  : quotaQuery.isLoading
+                    ? "…"
+                    : "—"}
+              </strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.statusLabel")}</span>
+              <strong>
+                {billingQuery.data?.subscription
+                  ? subscriptionStatusLabel(locale, billingQuery.data.subscription.status)
+                  : formatUiMessage(locale, "settings.billing.notActive")}
+              </strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.renewsOnLabel")}</span>
+              <strong>
+                {formatDate(
+                  billingQuery.data?.subscription?.current_period_end ?? null,
+                  locale,
+                  formatUiMessage(locale, "settings.usage.notSet"),
+                )}
+              </strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.walletBalanceLabel")}</span>
+              <strong>
+                {walletQuery.data
+                  ? formatFenAsYuan(walletQuery.data.wallet.balance_fen, locale)
+                  : walletQuery.isLoading
+                    ? "…"
+                    : "—"}
+              </strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.byokTitle")}</span>
+              <strong>
+                {primarySecret
+                  ? formatUiMessage(locale, "settings.billing.providerSummaryActive", {
+                      provider: primarySecret.provider,
+                    })
+                  : formatUiMessage(locale, "settings.billing.providerSummaryNone")}
+              </strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <Link className="app-link" href="/settings?tab=billing#usage-details">
+                {formatUiMessage(locale, "settings.billing.usageDetailsLink")}
+              </Link>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className={`app-inline-surface ${styles.planSection}`}>
         <div className={`app-inline-row ${styles.headerRow}`}>
           <div className={shared.headerText}>
             <h2 className={shared.flushTitle}>
-              {formatUiMessage(locale, "settings.billing.referralTitle")}
+              {formatUiMessage(locale, "settings.billing.walletTitle")}
             </h2>
             <p className={shared.mutedText}>
-              {formatUiMessage(locale, "settings.billing.referralSubtitle")}
+              {formatUiMessage(locale, "settings.billing.walletSubtitle")}
             </p>
           </div>
         </div>
-        {referralQuery.data ? (
-          <div className={`app-inline-surface ${styles.planCard}`} data-testid="referral-stats">
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.referralCodeLabel")}</span>
-              <strong>{referralQuery.data.code}</strong>
-              <button type="button" className="app-link" onClick={() => void copyReferralCode()}>
-                {referralCopied
-                  ? formatUiMessage(locale, "settings.billing.referralCopied")
-                  : formatUiMessage(locale, "settings.billing.referralCopy")}
-              </button>
+        {walletError ? <p className="app-notice-banner">{walletError}</p> : null}
+        {topupError ? <p className="app-notice-banner">{topupError}</p> : null}
+        {walletQuery.isLoading ? (
+          <p className={shared.mutedText}>
+            {formatUiMessage(locale, "settings.billing.walletLoading")}
+          </p>
+        ) : walletQuery.data ? (
+          <>
+            <div className={`app-inline-surface ${styles.planCard}`} data-testid="wallet-balance">
+              <div className={`app-inline-row ${shared.summaryRow}`}>
+                <span>{formatUiMessage(locale, "settings.billing.walletBalanceLabel")}</span>
+                <strong>
+                  {formatFenAsYuan(walletQuery.data.wallet.balance_fen, locale)}
+                </strong>
+              </div>
+              <div className={`app-inline-row ${shared.summaryRow}`}>
+                <span>{formatUiMessage(locale, "settings.billing.walletLifetimePaidLabel")}</span>
+                <strong>
+                  {formatFenAsYuan(
+                    walletQuery.data.wallet.lifetime_paid_topup_fen,
+                    locale,
+                  )}
+                </strong>
+              </div>
             </div>
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.referralRewardedLabel")}</span>
-              <strong>
-                {referralQuery.data.rewarded_count} / {referralQuery.data.quota}
-              </strong>
+            <div className={styles.topupRow} data-testid="wallet-topup-packs">
+              <p className={shared.mutedText}>
+                {formatUiMessage(locale, "settings.billing.walletTopupTitle")}
+              </p>
+              <div className={styles.topupButtons}>
+                {walletQuery.data.packs.map((pack) => (
+                  <button
+                    key={pack.pack_id}
+                    type="button"
+                    className="app-button-secondary"
+                    data-testid={`wallet-topup-${pack.pack_id}`}
+                    disabled={topupBusyPack === pack.pack_id}
+                    onClick={() => void startTopup(pack)}
+                  >
+                    {topupBusyPack === pack.pack_id
+                      ? formatUiMessage(locale, "settings.billing.walletTopupLoading")
+                      : formatUiMessage(locale, "settings.billing.walletTopupAction", {
+                          label: pack.label_cny,
+                        })}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : referralQuery.isLoading ? (
-          <p className={shared.mutedText}>…</p>
+          </>
         ) : null}
       </section>
 
@@ -355,125 +486,39 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
         <div className={`app-inline-row ${styles.headerRow}`}>
           <div className={shared.headerText}>
             <h2 className={shared.flushTitle}>
-              {formatUiMessage(locale, "settings.billing.walletTitle")}
+              {formatUiMessage(locale, "settings.billing.referralTitle")}
             </h2>
             <p className={shared.mutedText}>
-              {formatUiMessage(locale, "settings.billing.walletSubtitle")}
+              {formatUiMessage(locale, "settings.billing.referralSubtitle")}
             </p>
           </div>
         </div>
-        {walletError ? <p className="app-notice-banner">{walletError}</p> : null}
-        {topupError ? <p className="app-notice-banner">{topupError}</p> : null}
-        {walletQuery.isLoading ? (
-          <p className={shared.mutedText}>
-            {formatUiMessage(locale, "settings.billing.walletLoading")}
-          </p>
-        ) : walletQuery.data ? (
-          <>
-            <div className={`app-inline-surface ${styles.planCard}`} data-testid="wallet-balance">
-              <div className={`app-inline-row ${shared.summaryRow}`}>
-                <span>{formatUiMessage(locale, "settings.billing.walletBalanceLabel")}</span>
-                <strong>
-                  {formatFenAsYuan(walletQuery.data.wallet.balance_fen, locale)}
-                </strong>
-              </div>
-              <div className={`app-inline-row ${shared.summaryRow}`}>
-                <span>{formatUiMessage(locale, "settings.billing.walletLifetimePaidLabel")}</span>
-                <strong>
-                  {formatFenAsYuan(
-                    walletQuery.data.wallet.lifetime_paid_topup_fen,
-                    locale,
-                  )}
-                </strong>
-              </div>
+        {referralQuery.data ? (
+          <div className={`app-inline-surface ${styles.planCard}`} data-testid="referral-stats">
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.referralCodeLabel")}</span>
+              <strong>{referralQuery.data.code}</strong>
+              <button type="button" className="app-link" onClick={() => void copyReferralCode()}>
+                {referralCopied
+                  ? formatUiMessage(locale, "settings.billing.referralCopied")
+                  : formatUiMessage(locale, "settings.billing.referralCopy")}
+              </button>
             </div>
-            <div className={styles.topupRow} data-testid="wallet-topup-packs">
-              <p className={shared.mutedText}>
-                {formatUiMessage(locale, "settings.billing.walletTopupTitle")}
-              </p>
-              <div className={styles.topupButtons}>
-                {walletQuery.data.packs.map((pack) => (
-                  <button
-                    key={pack.pack_id}
-                    type="button"
-                    className="app-button-secondary"
-                    data-testid={`wallet-topup-${pack.pack_id}`}
-                    disabled={topupBusyPack === pack.pack_id}
-                    onClick={() => void startTopup(pack)}
-                  >
-                    {topupBusyPack === pack.pack_id
-                      ? formatUiMessage(locale, "settings.billing.walletTopupLoading")
-                      : formatUiMessage(locale, "settings.billing.walletTopupAction", {
-                          label: pack.label_cny,
-                        })}
-                  </button>
-                ))}
-              </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{formatUiMessage(locale, "settings.billing.referralRewardedLabel")}</span>
+              <strong>
+                {referralQuery.data.rewarded_count} / {referralQuery.data.quota}
+              </strong>
             </div>
-          </>
+          </div>
+        ) : referralQuery.isLoading ? (
+          <p className={shared.mutedText}>…</p>
         ) : null}
       </section>
 
-      <section className={`app-inline-surface ${styles.planSection}`}>
-        <div className={`app-inline-row ${styles.headerRow}`}>
-          <div className={shared.headerText}>
-            <h2 className={shared.flushTitle}>
-              {formatUiMessage(locale, "settings.billing.sectionTitle")}
-            </h2>
-            <p className={shared.mutedText}>
-              {formatUiMessage(locale, "settings.billing.sectionSubtitle")}
-            </p>
-          </div>
-          {hideManagePlan ? null : (
-            <Link
-              className="app-button-primary app-button-accent"
-              data-testid="settings-manage-subscription"
-              href="/pricing"
-            >
-              {formatUiMessage(locale, "settings.billing.managePlanAction")}
-            </Link>
-          )}
-        </div>
-        {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
-        {billingQuery.isLoading ? (
-          <p className={shared.mutedText}>
-            {formatUiMessage(locale, "settings.billing.loading")}
-          </p>
-        ) : (
-          <div
-            className={`app-inline-surface ${styles.planCard}`}
-            data-testid="plan-display"
-          >
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>
-                {formatUiMessage(locale, "settings.billing.currentPlanLabel")}
-              </span>
-              <strong>
-                {currentPlanName ??
-                  formatUiMessage(locale, "settings.billing.notActive")}
-              </strong>
-            </div>
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.statusLabel")}</span>
-              <strong>
-                {billingQuery.data?.subscription
-                  ? subscriptionStatusLabel(locale, billingQuery.data.subscription.status)
-                  : formatUiMessage(locale, "settings.billing.notActive")}
-              </strong>
-            </div>
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.renewsOnLabel")}</span>
-              <strong>
-                {formatDate(
-                  billingQuery.data?.subscription?.current_period_end ?? null,
-                  locale,
-                  formatUiMessage(locale, "settings.usage.notSet"),
-                )}
-              </strong>
-            </div>
-          </div>
-        )}
-      </section>
+      <div id="usage-details">
+        <UsageLimitPanel />
+      </div>
 
       {alipayQr && token ? (
         <AlipayQrDialog

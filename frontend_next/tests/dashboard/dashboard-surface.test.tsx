@@ -217,7 +217,7 @@ describe("DashboardSurface", () => {
     expect(screen.getByTestId("dashboard-account-menu")).toBeTruthy();
     // Profile / billing / appearance open in-page modals (buttons); security/notifications stay links.
     expect(screen.getByRole("menuitem", { name: "个人资料" }).tagName).toBe("BUTTON");
-    expect(screen.getByRole("menuitem", { name: "订阅与用量" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "会员状态" }).tagName).toBe("BUTTON");
     expect(screen.getByRole("menuitem", { name: "外观" }).tagName).toBe("BUTTON");
     expect(screen.getByRole("menuitem", { name: "安全" }).getAttribute("href")).toBe(
       "/settings?tab=security",
