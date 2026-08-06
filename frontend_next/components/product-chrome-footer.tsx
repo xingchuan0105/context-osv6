@@ -37,16 +37,25 @@ export function ProductChromeFooter({
       style={{
         display: "grid",
         gap: "0.55rem",
-        marginTop: "2rem",
-        paddingTop: "1rem",
+        marginTop: "auto",
+        paddingTop: "2.5rem",
+        paddingBottom: "1.25rem",
         borderTop: "1px solid hsl(var(--border) / 0.8)",
         color: "hsl(var(--muted-foreground))",
         fontSize: "var(--font-size-body)",
+        textAlign: "center",
+        justifyItems: "center",
       }}
     >
       <nav
         aria-label={formatUiMessage(locale, "productChrome.footerNavLabel")}
-        style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem 0.75rem", alignItems: "center" }}
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.35rem 0.75rem",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
         {brandIsExternal ? (
           <a className="app-link app-link-muted" href={brandHref} rel="noopener noreferrer" target="_blank">

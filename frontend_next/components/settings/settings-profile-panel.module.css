@@ -2,6 +2,33 @@
   color: hsl(var(--muted-foreground));
 }
 
+.displayHeader {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.displayMeta {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding-bottom: var(--space-xs);
+}
+
+.displayName {
+  font-size: var(--font-size-title-sm);
+  color: hsl(var(--foreground));
+}
+
+.displayBio {
+  margin: 0.35rem 0 0;
+  color: hsl(var(--foreground));
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .errorText {
   color: hsl(var(--destructive));
 }

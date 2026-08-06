@@ -20,6 +20,12 @@ use uuid::Uuid;
 
 use crate::adapters::pg_session::{begin_tx, db_err, set_current_role, set_rls_owner};
 
+/// Platform admin roles that may call admin store mutations (incl. broadcast).
+/// Ordinary signed-in users fail with `admin_access_denied` (403).
+pub(crate) fn is_platform_admin_role(role: Option<&str>) -> bool {
+    matches!(role, Some("super_admin" | "ops_admin" | "finance_admin"))
+}
+
 pub struct PgAdminStoreAdapter {
     repo: Arc<PgAppRepository>,
 }
@@ -44,10 +50,7 @@ impl PgAdminStoreAdapter {
             .fetch_optional(tx.as_mut())
             .await
             .map_err(db_err)?;
-        if matches!(
-            role.as_deref(),
-            Some("super_admin" | "ops_admin" | "finance_admin")
-        ) {
+        if is_platform_admin_role(role.as_deref()) {
             set_current_role(
                 tx.as_mut(),
                 role.expect("role checked as Some above").as_str(),
@@ -105,5 +108,21 @@ mod tests {
     #[test]
     fn escape_ilike_pattern_treats_underscore_as_literal() {
         assert_eq!(admin_escape_ilike_pattern("a_b"), r"a\_b");
+    }
+
+    #[test]
+    fn platform_admin_roles_allow_broadcast_gate() {
+        assert!(super::is_platform_admin_role(Some("super_admin")));
+        assert!(super::is_platform_admin_role(Some("ops_admin")));
+        assert!(super::is_platform_admin_role(Some("finance_admin")));
+    }
+
+    #[test]
+    fn ordinary_and_unknown_roles_deny_broadcast_gate() {
+        assert!(!super::is_platform_admin_role(None));
+        assert!(!super::is_platform_admin_role(Some("user")));
+        assert!(!super::is_platform_admin_role(Some("member")));
+        assert!(!super::is_platform_admin_role(Some("admin"))); // product role, not platform
+        assert!(!super::is_platform_admin_role(Some("SUPER_ADMIN"))); // exact match only
     }
 }

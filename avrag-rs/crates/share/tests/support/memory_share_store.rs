@@ -50,6 +50,12 @@ impl MemoryShareStore {
         );
     }
 
+    pub async fn set_share_enabled(&self, workspace_id: Uuid, enabled: bool) {
+        if let Some(snap) = self.workspaces.write().await.get_mut(&workspace_id) {
+            snap.share_enabled = enabled;
+        }
+    }
+
     pub async fn seed_member_access(&self, workspace_id: Uuid, user_id: Uuid, role: &str) {
         self.member_access
             .write()
@@ -142,13 +148,14 @@ impl ShareStorePort for MemoryShareStore {
         if !has_member {
             return Ok(None);
         }
-        let owner = self
-            .workspaces
-            .read()
-            .await
-            .get(&workspace_id)
-            .and_then(|s| s.owner_id);
-        Ok(owner.filter(|o| *o != member_user_id))
+        let snap = self.workspaces.read().await.get(&workspace_id).cloned();
+        let Some(snap) = snap else {
+            return Ok(None);
+        };
+        if !snap.share_enabled {
+            return Ok(None);
+        }
+        Ok(snap.owner_id.filter(|o| *o != member_user_id))
     }
 
     async fn get_share_settings(

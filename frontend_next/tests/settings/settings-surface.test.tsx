@@ -342,8 +342,18 @@ describe("SettingsSurface", () => {
 
   it("updates profile and writes the returned user back to auth state", async () => {
     const user = userEvent.setup();
+    mocks.updateUserMock.mockImplementation((nextUser: { full_name?: string | null }) => {
+      mocks.authState.user = {
+        ...mocks.authState.user,
+        ...nextUser,
+      };
+    });
 
-    renderWithQuery(<SettingsSurface activeTab="profile" />);
+    const { rerender } = renderWithQuery(<SettingsSurface activeTab="profile" />);
+
+    // Display-only card → open X-style edit modal.
+    await user.click(screen.getByTestId("settings-profile-edit"));
+    expect(await screen.findByTestId("settings-profile-edit-modal")).toBeTruthy();
 
     const input = screen.getByLabelText("Display name");
     await user.clear(input);
@@ -351,9 +361,21 @@ describe("SettingsSurface", () => {
     await user.click(screen.getByRole("button", { name: "Save profile" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Settings saved.")).toBeTruthy();
+      expect(mocks.updateProfileMock).toHaveBeenCalled();
+      expect(mocks.updateUserMock).toHaveBeenCalledWith(
+        expect.objectContaining({ full_name: "Owner Updated" }),
+      );
     });
-    expect((screen.getByLabelText("Display name") as HTMLInputElement).value).toBe("Owner Updated");
+    // Modal closes after successful save.
+    expect(screen.queryByTestId("settings-profile-edit-modal")).toBeNull();
+
+    // Re-render with updated auth state so the display card reflects the write-back.
+    rerender(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <SettingsSurface activeTab="profile" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("Owner Updated")).toBeTruthy();
   });
 
   it("switches theme and locale from the preferences panel dropdowns", async () => {

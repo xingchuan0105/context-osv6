@@ -2,6 +2,7 @@
 
 import { BillingPanel } from "./settings-billing-panel";
 import { ProfilePanel } from "./settings-profile-panel";
+import { ProvidersPanel } from "./settings-providers-panel";
 import { AppearancePanel } from "./settings-appearance-panel";
 import { SecurityPanel } from "./settings-security-panel";
 import type { SettingsTab } from "./settings-tabs";
@@ -12,6 +13,8 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       return <BillingPanel />;
     case "profile":
       return <ProfilePanel />;
+    case "providers":
+      return <ProvidersPanel />;
     case "preferences":
       return <AppearancePanel />;
     case "security":

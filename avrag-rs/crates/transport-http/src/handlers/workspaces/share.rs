@@ -330,8 +330,31 @@ pub(crate) async fn invite_member_handler(
             .await
             .map(|w| w.title.clone())
             .unwrap_or_else(|| workspace_id.clone());
+        let inviter_name = state
+            .auth()
+            .actor_id()
+            .map(|a| a.into_uuid().to_string())
+            .or_else(|| Some(state.auth().user_id().to_string()))
+            .unwrap_or_else(|| "workspace owner".to_string());
+        // Prefer profile full_name when auth store is available.
+        let inviter_display = if let Some(store) = state.auth_store() {
+            let uid = state
+                .auth()
+                .actor_id()
+                .map(|a| a.into_uuid())
+                .unwrap_or_else(|| state.auth().user_id().into_uuid());
+            match store.get_user_profile(uid).await {
+                Ok(Some(p)) => p
+                    .full_name
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or(inviter_name),
+                _ => inviter_name,
+            }
+        } else {
+            inviter_name
+        };
         if let Err(e) = mail
-            .send_workspace_invite_email(&email, "workspace owner", &title, &accept_url, true)
+            .send_workspace_invite_email(&email, &inviter_display, &title, &accept_url, true)
             .await
         {
             tracing::warn!(error = %e, %email, "workspace invite email send failed");

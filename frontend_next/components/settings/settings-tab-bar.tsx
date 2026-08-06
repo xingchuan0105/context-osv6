@@ -21,6 +21,7 @@ export function SettingsTabBar({
   const tabKeyMap: Record<SettingsTab, Parameters<typeof formatUiMessage>[1]> = {
     billing: "settings.tabs.billing",
     profile: "settings.tabs.profile",
+    providers: "settings.tabs.providers",
     preferences: "settings.tabs.appearance",
     security: "settings.tabs.security",
   };

@@ -113,14 +113,6 @@ describe("WorkspaceChatPane transcript", () => {
         citation_id: 1,
         doc_id: "doc-1",
       }),
-      anchorRect: expect.objectContaining({
-        top: expect.any(Number),
-        left: expect.any(Number),
-        right: expect.any(Number),
-        bottom: expect.any(Number),
-        width: expect.any(Number),
-        height: expect.any(Number),
-      }),
     });
     expect(onSessionActivity).not.toHaveBeenCalled();
   });
@@ -196,14 +188,6 @@ describe("WorkspaceChatPane transcript", () => {
       citation: expect.objectContaining({
         citation_id: 1,
         chunk_id: "chunk-1",
-      }),
-      anchorRect: expect.objectContaining({
-        top: expect.any(Number),
-        left: expect.any(Number),
-        right: expect.any(Number),
-        bottom: expect.any(Number),
-        width: expect.any(Number),
-        height: expect.any(Number),
       }),
     });
   });

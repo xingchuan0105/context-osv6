@@ -147,14 +147,6 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
             >
               {formatUiMessage(locale, "dashboardProfileLink")}
             </button>
-            <button
-              className="dashboard-account-menu-item"
-              role="menuitem"
-              type="button"
-              onClick={() => openQuick("preferences")}
-            >
-              {formatUiMessage(locale, "dashboardAppearanceLink")}
-            </button>
 
             <div className="dashboard-account-flyout-wrap">
               <button

@@ -24,7 +24,7 @@ import {
   IconThumbUp,
 } from "./chat-icons";
 import { userVisibleDegradeReasons } from "../../lib/workspace/degrade-display";
-import { CitationRenderer, collectWebSources, getCitationAnchorRect } from "./citation-renderer";
+import { CitationRenderer, collectWebSources } from "./citation-renderer";
 import { ProgressStatusLine } from "./progress-status-line";
 
 export { ToolResultCard, ToolResultsPanel } from "./tool-result-card";
@@ -236,13 +236,12 @@ export function ChatMessageList({
     });
   }
 
-  function handleCitationSelect(message: UiChatMessage, citation: Citation, target?: HTMLElement | null) {
+  function handleCitationSelect(message: UiChatMessage, citation: Citation) {
     if (message.sessionId && message.messageId !== null) {
       onSelectCitation({
         session_id: message.sessionId,
         message_id: message.messageId,
         citation,
-        anchorRect: target ? getCitationAnchorRect(target) : null,
       });
     }
   }
@@ -411,8 +410,8 @@ export function ChatMessageList({
                         locale={locale}
                         message={message}
                         onOpenWebSources={onOpenWebSources}
-                        onSelectCitation={(citation, target) => {
-                          handleCitationSelect(message, citation, target);
+                        onSelectCitation={(citation) => {
+                          handleCitationSelect(message, citation);
                         }}
                       />
                       {message.pending ? (

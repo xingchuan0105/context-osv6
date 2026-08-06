@@ -41,23 +41,17 @@ export function buildNote(
 }
 
 export function RightRailHarness({
-  activeWebSources = null,
   focusedSourceId,
-  onCloseWebSources,
   selectedSourceIds: initialSelectedSourceIds = [],
 }: {
-  activeWebSources?: Parameters<typeof WorkspaceRightRail>[0]["activeWebSources"];
   focusedSourceId?: string | null;
-  onCloseWebSources?: () => void;
   selectedSourceIds?: string[];
 }) {
   const [selectedSourceIds, setSelectedSourceIds] = React.useState(initialSelectedSourceIds);
 
   return (
     <WorkspaceRightRail
-      activeWebSources={activeWebSources}
       focusedSourceId={focusedSourceId}
-      onCloseWebSources={onCloseWebSources}
       onSelectedSourceIdsChange={setSelectedSourceIds}
       selectedSourceIds={selectedSourceIds}
       workspaceId="ws-1"

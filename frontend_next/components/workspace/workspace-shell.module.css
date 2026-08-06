@@ -42,7 +42,8 @@
 
 .topBarBrandName {
   font-size: var(--font-size-brand);
-  font-weight: var(--font-weight-semibold);
+  /* Brand wordmark stays bold even when global weight tokens are 400. */
+  font-weight: 700;
   letter-spacing: var(--letter-spacing-title);
   line-height: var(--line-height-brand);
   color: hsl(var(--foreground));
@@ -610,6 +611,7 @@
 
 .historyItem,
 .historyItemActive {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
@@ -697,23 +699,28 @@
   transition-delay: 0ms;
 }
 
-.historyExpandedMenuShell {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 var(--space-xxs) var(--space-xxs);
-  margin-top: -0.08rem;
+.historyMenuAnchor {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 2;
+  isolation: isolate;
 }
 
 .historyMenu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: var(--z-dropdown);
   display: grid;
   gap: var(--space-xs);
   width: fit-content;
   min-width: 6.4rem;
-  max-width: 100%;
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-card);
   background: hsl(var(--card));
   padding: var(--space-xs);
+  box-shadow: 0 8px 24px hsl(0 0% 0% / 0.12);
+  pointer-events: auto;
 }
 
 .historyMenuButton {

@@ -75,6 +75,36 @@
   flex-shrink: 0;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.markAllRead {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--primary));
+  font: inherit;
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  border-radius: var(--radius-control);
+}
+
+.markAllRead:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.markAllRead:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .unreadHint {
   font-size: var(--font-size-caption);
   color: hsl(var(--muted-foreground));

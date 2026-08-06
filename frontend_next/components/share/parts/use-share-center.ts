@@ -113,10 +113,10 @@ export function useShareCenter(workspaceId: string) {
           role: "viewer",
           expires_at: buildExpiresAtFromValidity(expiresAtDraft),
         });
+        // Limits only via dedicated save control (do not couple drafts into enable).
         return updateShareSettings(auth.token, workspaceId, {
           access_level: accessLevelFromVisitorMode(visitorModeDraft),
           allow_download: false,
-          ...questionLimitsPayload(),
         });
       }
 
@@ -154,10 +154,10 @@ export function useShareCenter(workspaceId: string) {
         expires_at: nextExpiresAt,
       });
 
+      // Validity refresh only — question caps stay on explicit save.
       return updateShareSettings(auth.token, workspaceId, {
         access_level: accessLevelFromVisitorMode(visitorModeDraft),
         allow_download: false,
-        ...questionLimitsPayload(),
       });
     },
     onSuccess: async (settings) => {

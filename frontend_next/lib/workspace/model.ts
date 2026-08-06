@@ -10,15 +10,6 @@ export type WorkspaceWebSourcesRequest = {
   sources: WebSource[];
 };
 
-export type WorkspaceCitationAnchor = {
-  top: number;
-  left: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
-};
-
 export type WorkspaceSession = {
   id: string;
   workspace_id: string;
@@ -56,7 +47,6 @@ export type WorkspaceCitationRequest = {
   session_id: string;
   message_id: number;
   citation: Citation;
-  anchorRect?: WorkspaceCitationAnchor | null;
 };
 
 export enum WorkspaceNoteSyncState {

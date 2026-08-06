@@ -167,7 +167,9 @@ describe("WorkspaceHistoryPane", () => {
     await user.click(screen.getByRole("button", { name: "General thread actions" }));
     const menu = screen.getByRole("menu", { name: "General thread actions" });
     expect(menu).toBeTruthy();
-    expect(menu.closest("article")).toBeNull();
+    // Overlay menu is anchored inside the session row (does not reflow the list).
+    expect(menu.closest("article")).not.toBeNull();
+    expect(menu.closest('[data-session-id="sess-2"]')).toBeTruthy();
 
     await user.click(document.body);
     expect(screen.queryByRole("menu", { name: "General thread actions" })).toBeNull();

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
@@ -465,17 +465,22 @@ export function WorkspaceHistoryPane({
               .join(" ");
 
             return (
-              <Fragment key={session.id}>
-                <article className={itemClassName} data-testid="history-item" data-session-id={session.id}>
-                  <button className={styles.historySelectButton} type="button" onClick={() => handleSelectSession(session.id)}>
-                    <div className={styles.historyItemHeader}>
-                      <div className={styles.historyItemTitle}>{title}</div>
-                    </div>
-                    {session.pinned ? (
-                      <div className={styles.historyItemMeta}>{formatUiMessage(locale, "workspacePinnedSession")}</div>
-                    ) : null}
-                  </button>
+              <article
+                className={itemClassName}
+                data-testid="history-item"
+                data-session-id={session.id}
+                key={session.id}
+              >
+                <button className={styles.historySelectButton} type="button" onClick={() => handleSelectSession(session.id)}>
+                  <div className={styles.historyItemHeader}>
+                    <div className={styles.historyItemTitle}>{title}</div>
+                  </div>
+                  {session.pinned ? (
+                    <div className={styles.historyItemMeta}>{formatUiMessage(locale, "workspacePinnedSession")}</div>
+                  ) : null}
+                </button>
 
+                <div className={styles.historyMenuAnchor} ref={menuOpen ? openMenuRef : null}>
                   <button
                     aria-expanded={menuOpen}
                     aria-haspopup="menu"
@@ -488,10 +493,8 @@ export function WorkspaceHistoryPane({
                       <path d="M12 6.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 13.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 19.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z" fill="currentColor" stroke="none" />
                     </svg>
                   </button>
-                </article>
 
-                {menuOpen ? (
-                  <div className={styles.historyExpandedMenuShell} ref={openMenuRef}>
+                  {menuOpen ? (
                     <div
                       className={styles.historyMenu}
                       role="menu"
@@ -536,9 +539,9 @@ export function WorkspaceHistoryPane({
                         {formatUiMessage(locale, "workspaceDeleteSessionAction", { title })}
                       </button>
                     </div>
-                  </div>
-                ) : null}
-              </Fragment>
+                  ) : null}
+                </div>
+              </article>
             );
           })
         ) : (

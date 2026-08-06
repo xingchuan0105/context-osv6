@@ -36,6 +36,7 @@ import { WorkspaceCitationModal } from "./workspace-citation-modal";
 import { WorkspaceHistoryPane } from "./workspace-history-pane";
 import { WorkspaceRightRail } from "./workspace-right-rail";
 import { WorkspaceTopBar } from "./workspace-top-bar";
+import { WorkspaceWebSourcesModal } from "./workspace-web-sources-modal";
 import { UsageWarningToast } from "../billing/UsageWarningToast";
 
 function usageWindowPressure(bucket: UsageWindowBucket): number {
@@ -273,10 +274,8 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
 
   const rightRail = (
     <WorkspaceRightRail
-      activeWebSources={activeWebSources}
       focusedSourceId={workspaceUi.focusedSourceId}
       openSourceId={openViewerSourceId}
-      onCloseWebSources={() => setActiveWebSources(null)}
       onOpenSourceConsumed={() => setOpenViewerSourceId(null)}
       onSelectedSourceIdsChange={workspaceUi.setSelectedSourceIds}
       selectedSourceIds={workspaceUi.selectedSourceIds}
@@ -461,7 +460,6 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                 }}
                 onOpenWebSources={(request) => {
                   setActiveWebSources(request);
-                  workspaceUi.setRightRailOpen(true);
                   workspaceUi.setActiveCitation(null);
                 }}
                 onSelectCitation={(request) => {
@@ -520,6 +518,11 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
               setOpenViewerSourceId(sourceId);
             }}
             workspaceId={workspaceId}
+          />
+
+          <WorkspaceWebSourcesModal
+            request={activeWebSources}
+            onClose={() => setActiveWebSources(null)}
           />
 
           {isMobile && workspaceUi.historyRailOpen ? (

@@ -6,6 +6,8 @@
 
 .dashboard-shell {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: hsl(var(--dashboard-shell));
 }
 
@@ -49,9 +51,14 @@
 }
 
 .dashboard-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   margin: 0 auto;
   max-width: 80rem;
   padding: var(--space-2xl) var(--space-2xl) var(--space-4xl);
+  box-sizing: border-box;
 }
 
 .dashboard-brand-link {
@@ -82,7 +89,7 @@ a.dashboard-brand-title:hover {
 
 .dashboard-brand-title {
   font-size: var(--font-size-brand);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: var(--letter-spacing-title);
   color: hsl(var(--dashboard-brand-foreground));
   line-height: var(--line-height-brand);

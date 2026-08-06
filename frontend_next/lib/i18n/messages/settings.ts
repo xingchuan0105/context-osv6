@@ -29,6 +29,10 @@ export const settingsMessages = {
     zh: "安全",
     en: "Security",
   },
+  "settings.tabs.providers": {
+    zh: "自定义 Provider",
+    en: "Providers",
+  },
   "settings.pageTitle": {
     zh: "设置",
     en: "Settings",
@@ -620,6 +624,10 @@ export const settingsMessages = {
   "settings.notifications.loading": {
     zh: "正在加载通知...",
     en: "Loading notifications...",
+  },
+  "settings.notifications.markAllRead": {
+    zh: "全部已读",
+    en: "Mark all read",
   },
   "settings.notifications.markRead": {
     zh: "标记已读",

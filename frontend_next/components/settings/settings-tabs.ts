@@ -1,5 +1,5 @@
 /** Settings IA tabs after ADR-0010 W3 (notifications → account bell in W4). */
-export const SETTINGS_TABS = ["billing", "profile", "preferences", "security"] as const;
+export const SETTINGS_TABS = ["billing", "profile", "providers", "preferences", "security"] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
@@ -15,6 +15,9 @@ export function normalizeSettingsTab(tab: string | string[] | undefined): Settin
   // Notifications leave settings for W4 bell; fall through to membership.
   if (value === "notifications") {
     return "billing";
+  }
+  if (value === "byok" || value === "provider") {
+    return "providers";
   }
   if ((SETTINGS_TABS as readonly string[]).includes(value)) {
     return value as SettingsTab;

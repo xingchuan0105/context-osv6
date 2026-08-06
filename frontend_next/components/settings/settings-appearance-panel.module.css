@@ -30,15 +30,3 @@
   line-height: 1.45;
 }
 
-/* legacy class kept for any residual CSS refs */
-.choiceGrid {
-  display: none;
-}
-
-.mutedSpan {
-  display: none;
-}
-
-.summaryCard {
-  display: none;
-}

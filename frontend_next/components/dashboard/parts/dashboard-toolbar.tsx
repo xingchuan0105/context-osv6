@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -46,6 +47,13 @@ function DashboardTabs({
       >
         {formatUiMessage(locale, "dashboardTabFavorites")}
       </button>
+      <Link
+        className="dashboard-tab-button"
+        data-testid="dashboard-tab-analytics"
+        href="/dashboard/analytics"
+      >
+        {locale === "zh-CN" ? "数据分析" : "Analytics"}
+      </Link>
     </nav>
   );
 }

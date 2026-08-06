@@ -3,7 +3,7 @@ mod support;
 use std::sync::Arc;
 
 use app_core::{
-    PublicShareChatContextSnapshot, ShareAccessLevel, SharedKnowledgeBaseSnapshot,
+    PublicShareChatContextSnapshot, ShareAccessLevel, ShareStorePort, SharedKnowledgeBaseSnapshot,
     SharedWorkspaceSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
 };
 use contracts::auth_runtime::{ActorId, AuthContext, UserId, SubjectKind};
@@ -173,6 +173,57 @@ async fn owner_can_invite_member() {
     let stored = store.invited_members().await;
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0].email.as_deref(), Some("collaborator@example.com"));
+}
+
+#[tokio::test]
+async fn owner_for_accepted_member_requires_share_enabled() {
+    let store = Arc::new(MemoryShareStore::new());
+    let workspace_id = Uuid::new_v4();
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    store.seed_workspace_owner(workspace_id, owner_id).await;
+    store
+        .seed_member_access(workspace_id, member_id, "viewer")
+        .await;
+
+    // Private collab (share off): member self-pay.
+    let none = store
+        .owner_for_accepted_member(workspace_id, member_id)
+        .await
+        .expect("lookup ok");
+    assert_eq!(none, None);
+
+    store.set_share_enabled(workspace_id, true).await;
+    let owner = store
+        .owner_for_accepted_member(workspace_id, member_id)
+        .await
+        .expect("lookup ok");
+    assert_eq!(owner, Some(owner_id));
+
+    // Non-member never remounts.
+    let stranger = store
+        .owner_for_accepted_member(workspace_id, Uuid::new_v4())
+        .await
+        .expect("lookup ok");
+    assert_eq!(stranger, None);
+}
+
+#[tokio::test]
+async fn invite_accept_url_includes_member_id() {
+    // Contract for invite email links (handlers/workspaces/share.rs).
+    let workspace_id = "ws-1111";
+    let member_id = "mem-2222";
+    let base = "https://app.example.test/";
+    let accept_url = format!(
+        "{}/invite/{workspace_id}/{member_id}",
+        base.trim_end_matches('/')
+    );
+    assert_eq!(
+        accept_url,
+        "https://app.example.test/invite/ws-1111/mem-2222"
+    );
+    assert!(accept_url.contains(member_id));
+    assert!(!accept_url.contains("share?invite="));
 }
 
 #[tokio::test]

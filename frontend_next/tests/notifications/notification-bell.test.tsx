@@ -83,4 +83,46 @@ describe("NotificationBell", () => {
       expect(mocks.markNotificationReadMock).toHaveBeenCalledWith("token-123", "n1");
     });
   });
+
+  it("marks all notifications as read", async () => {
+    const user = userEvent.setup();
+    mocks.markNotificationReadMock.mockResolvedValue(undefined);
+    mocks.listNotificationsMock.mockResolvedValue({
+      notifications: [
+        {
+          id: "n1",
+          owner_user_id: "u1",
+          user_id: "u1",
+          event_type: "share.enabled",
+          title: "Share enabled",
+          body: "Your workspace is shared.",
+          data: {},
+          read_at: null,
+          created_at: "2026-08-06T00:00:00Z",
+          updated_at: "2026-08-06T00:00:00Z",
+        },
+        {
+          id: "n2",
+          owner_user_id: "u1",
+          user_id: "u1",
+          event_type: "ingestion.success",
+          title: "Doc ready",
+          body: "Ingestion completed.",
+          data: {},
+          read_at: null,
+          created_at: "2026-08-06T01:00:00Z",
+          updated_at: "2026-08-06T01:00:00Z",
+        },
+      ],
+    });
+    renderBell();
+
+    await user.click(await screen.findByTestId("notification-bell"));
+    await user.click(screen.getByTestId("notification-mark-all-read"));
+
+    await waitFor(() => {
+      expect(mocks.markNotificationReadMock).toHaveBeenCalledWith("token-123", "n1");
+      expect(mocks.markNotificationReadMock).toHaveBeenCalledWith("token-123", "n2");
+    });
+  });
 });

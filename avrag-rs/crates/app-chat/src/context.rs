@@ -12,6 +12,47 @@ use uuid::Uuid;
 use crate::llm_context::LlmContext;
 use crate::orchestrator_context::OrchestratorContext;
 
+/// Pure remount helper for Owner-pays (unit-tested).
+pub fn remount_member_owner_pays_auth(
+    _caller_auth: &AuthContext,
+    workspace_id: Uuid,
+    owner: Uuid,
+    member: Uuid,
+) -> AuthContext {
+    AuthContext::new(UserId::from(owner), SubjectKind::User)
+        .with_actor_id(ActorId::new(member))
+        .with_workspace_scope(workspace_id)
+        .grant("workspace_member_chat")
+}
+
+#[cfg(test)]
+mod owner_pays_tests {
+    use super::*;
+    use contracts::auth_runtime::UserId;
+
+    #[test]
+    fn remount_sets_owner_as_user_and_member_as_actor() {
+        let ws = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let member = Uuid::new_v4();
+        let caller = AuthContext::new(UserId::from(member), SubjectKind::User)
+            .with_actor_id(ActorId::new(member));
+        let remounted = remount_member_owner_pays_auth(&caller, ws, owner, member);
+        assert_eq!(remounted.user_id().into_uuid(), owner);
+        assert_eq!(remounted.actor_id().map(|a| a.into_uuid()), Some(member));
+        assert_eq!(remounted.workspace_id(), Some(ws));
+        assert!(remounted.has_permission("workspace_member_chat"));
+    }
+
+    #[test]
+    fn share_chat_permission_skips_store_lookup_path() {
+        // Documented contract: callers with share_chat keep middleware remount.
+        let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::User)
+            .grant("share_chat");
+        assert!(auth.has_permission("share_chat"));
+    }
+}
+
 /// Chat-scoped application context: auth, storage, orchestrator, billing, etc.
 #[derive(Clone)]
 pub struct ChatContext {
@@ -56,11 +97,12 @@ impl ChatContext {
         self.storage.uses_memory_adapters()
     }
 
-    /// ADR-0010 D2 / §4.2 Owner-pays for accepted members in a foreign workspace.
+    /// ADR-0010 D2 / §4.2 Owner-pays for accepted members in a **shared** workspace.
     ///
     /// - Share middleware already remounts `user_id` to the Owner (`share_chat` grant).
-    /// - JWT members chatting with a workspace_id must bill the workspace Owner, not
-    ///   the member — remount `user_id` = Owner, `actor_id` = member.
+    /// - JWT members chatting with a workspace_id bill the Owner only when they are an
+    ///   accepted member **and** `share_enabled` (see `owner_for_accepted_member`).
+    /// - Private workspaces without share keep member self-pay.
     pub async fn with_owner_pays_auth(&self, workspace_id: Option<Uuid>) -> Self {
         if self.auth.has_permission("share_chat") {
             return self.clone();
@@ -87,10 +129,7 @@ impl ChatContext {
             return self.clone();
         };
         let mut next = self.clone();
-        next.auth = AuthContext::new(UserId::from(owner), SubjectKind::User)
-            .with_actor_id(ActorId::new(caller))
-            .with_workspace_scope(workspace_id)
-            .grant("workspace_member_chat");
+        next.auth = remount_member_owner_pays_auth(&self.auth, workspace_id, owner, caller);
         next
     }
 

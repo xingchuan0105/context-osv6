@@ -2,7 +2,6 @@
 
 import { type MouseEvent, useEffect, useRef } from "react";
 import type {
-  WorkspaceCitationAnchor,
   WorkspaceWebSourcesRequest,
   WebSource,
 } from "../../lib/workspace/model";
@@ -103,18 +102,6 @@ function getAnswerBlockText(blocks: AnswerBlock[]) {
     .filter((block): block is Extract<AnswerBlock, { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join("");
-}
-
-export function getCitationAnchorRect(target: HTMLElement): WorkspaceCitationAnchor {
-  const rect = target.getBoundingClientRect();
-  return {
-    top: rect.top,
-    left: rect.left,
-    right: rect.right,
-    bottom: rect.bottom,
-    width: rect.width,
-    height: rect.height,
-  };
 }
 
 function escapeHtmlAttribute(value: string) {
@@ -430,7 +417,7 @@ type CitationRendererProps = {
   locale: "zh-CN" | "en";
   message: UiChatMessage;
   onOpenWebSources?: (request: WorkspaceWebSourcesRequest) => void;
-  onSelectCitation: (citation: Citation, target: HTMLElement) => void;
+  onSelectCitation: (citation: Citation) => void;
 };
 
 export function CitationRenderer({
@@ -439,7 +426,7 @@ export function CitationRenderer({
   onOpenWebSources,
   onSelectCitation,
 }: CitationRendererProps) {
-  function handleCitationClick(citation: Citation, target: HTMLElement) {
+  function handleCitationClick(citation: Citation) {
     const hasSearch =
       message.capabilities?.includes("search") ||
       message.mode === "search" ||
@@ -449,7 +436,7 @@ export function CitationRenderer({
       onOpenWebSources({ sources: [webSource] });
       return;
     }
-    onSelectCitation(citation, target);
+    onSelectCitation(citation);
   }
 
   function renderCitationButton(citation: Citation, key: string) {
@@ -470,8 +457,8 @@ export function CitationRenderer({
         className={styles.inlineCitationButton}
         data-testid="workspace-citation"
         key={key}
-        onClick={(event) => {
-          handleCitationClick(citation, event.currentTarget);
+        onClick={() => {
+          handleCitationClick(citation);
         }}
         title={hoverTitle.slice(0, 300)}
         type="button"
@@ -498,13 +485,13 @@ export function CitationRenderer({
         className={styles.answerImageCard}
         data-testid="workspace-answer-image"
         key={key}
-        onClick={(event) => {
-          onSelectCitation(citation, event.currentTarget);
+        onClick={() => {
+          onSelectCitation(citation);
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            onSelectCitation(citation, event.currentTarget);
+            onSelectCitation(citation);
           }
         }}
         role="button"

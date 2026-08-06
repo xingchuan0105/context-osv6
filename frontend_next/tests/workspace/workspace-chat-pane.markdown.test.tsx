@@ -290,14 +290,6 @@ describe("WorkspaceChatPane markdown", () => {
         citation_id: 1,
         doc_id: "doc-rag",
       }),
-      anchorRect: expect.objectContaining({
-        top: expect.any(Number),
-        left: expect.any(Number),
-        right: expect.any(Number),
-        bottom: expect.any(Number),
-        width: expect.any(Number),
-        height: expect.any(Number),
-      }),
     });
     expect(onOpenWebSources).toHaveBeenCalledTimes(1);
   });

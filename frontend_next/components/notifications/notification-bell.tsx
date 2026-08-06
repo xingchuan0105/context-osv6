@@ -55,6 +55,27 @@ export function NotificationBell({ locale }: { locale: UiLocale }) {
     },
   });
 
+  const markAllReadMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => markNotificationRead(token as string, id)));
+      return ids;
+    },
+    onSuccess: () => {
+      const now = new Date().toISOString();
+      queryClient.setQueryData(
+        settingsKeys.notifications(token),
+        (current: { notifications: NotificationRow[] } | undefined) =>
+          current
+            ? {
+                notifications: current.notifications.map((n) =>
+                  n.read_at ? n : { ...n, read_at: now },
+                ),
+              }
+            : current,
+      );
+    },
+  });
+
   useEffect(() => {
     if (!open) {
       return;
@@ -113,13 +134,29 @@ export function NotificationBell({ locale }: { locale: UiLocale }) {
         >
           <header className={styles.panelHeader}>
             <strong>{formatUiMessage(locale, "settings.notifications.bellLabel")}</strong>
-            {unread > 0 ? (
-              <span className={styles.unreadHint}>
-                {formatUiMessage(locale, "settings.notifications.unreadCount", {
-                  count: unread,
-                })}
-              </span>
-            ) : null}
+            <div className={styles.headerActions}>
+              {unread > 0 ? (
+                <span className={styles.unreadHint}>
+                  {formatUiMessage(locale, "settings.notifications.unreadCount", {
+                    count: unread,
+                  })}
+                </span>
+              ) : null}
+              {unread > 0 ? (
+                <button
+                  className={styles.markAllRead}
+                  data-testid="notification-mark-all-read"
+                  disabled={markAllReadMutation.isPending}
+                  type="button"
+                  onClick={() => {
+                    const ids = items.filter((n) => !n.read_at).map((n) => n.id);
+                    void markAllReadMutation.mutateAsync(ids);
+                  }}
+                >
+                  {formatUiMessage(locale, "settings.notifications.markAllRead")}
+                </button>
+              ) : null}
+            </div>
           </header>
           <div className={styles.list}>
             {notificationsQuery.isLoading ? (

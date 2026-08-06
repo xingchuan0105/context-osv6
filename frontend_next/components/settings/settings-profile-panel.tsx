@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { AppModal } from "../ui/app-modal";
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
 import { buildApiUrl } from "../../lib/http/request";
@@ -29,11 +30,15 @@ function mediaSrc(path: string | null | undefined) {
   return buildApiUrl(path);
 }
 
+/**
+ * Profile tab: display card + X-style edit modal (not always-on form).
+ */
 export function ProfilePanel() {
   const auth = useAuth();
   const { locale } = useUiPreferences();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const profileForm = useForm<ProfileFormValues>({
     defaultValues: {
       fullName: auth.user?.full_name ?? "",
@@ -66,6 +71,7 @@ export function ProfilePanel() {
     onSuccess: (user) => {
       auth.updateUser(user);
       setBanner(formatUiMessage(locale, "settings.saveSuccess"));
+      setEditOpen(false);
     },
   });
   const mediaMutation = useMutation({
@@ -186,17 +192,40 @@ export function ProfilePanel() {
   const avatarUrl = mediaSrc(auth.user?.avatar_url);
   const bannerUrl = mediaSrc(auth.user?.banner_url);
   const busy = profileMutation.isPending || mediaMutation.isPending;
+  const displayName =
+    auth.user?.full_name?.trim() ||
+    auth.user?.email?.split("@")[0] ||
+    (locale === "zh-CN" ? "未设置名称" : "No display name");
 
   return (
-    <section className={shared.section}>
+    <section className={shared.section} data-testid="settings-profile-panel">
       <section className={`app-inline-surface ${shared.section}`}>
-        <div className={shared.headerText}>
-          <h2 className={shared.flushTitle}>
-            {formatUiMessage(locale, "settings.profile.sectionTitle")}
-          </h2>
-          <p className={shared.mutedText}>
-            {formatUiMessage(locale, "settings.profile.sectionSubtitle")}
-          </p>
+        <div className={`app-inline-row ${styles.displayHeader}`}>
+          <div className={shared.headerText}>
+            <h2 className={shared.flushTitle}>
+              {formatUiMessage(locale, "settings.profile.sectionTitle")}
+            </h2>
+            <p className={shared.mutedText}>
+              {formatUiMessage(locale, "settings.profile.sectionSubtitle")}
+            </p>
+          </div>
+          <button
+            className="app-button-primary"
+            data-testid="settings-profile-edit"
+            type="button"
+            onClick={() => {
+              setActionError("");
+              setBanner("");
+              profileForm.reset({
+                fullName: auth.user?.full_name ?? "",
+                bio: auth.user?.bio ?? "",
+                contactUrl: auth.user?.contact_url ?? "",
+              });
+              setEditOpen(true);
+            }}
+          >
+            {locale === "zh-CN" ? "编辑资料" : "Edit profile"}
+          </button>
         </div>
 
         <div className={styles.mediaPreview} data-testid="settings-profile-card-preview">
@@ -210,9 +239,48 @@ export function ProfilePanel() {
               style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}
               aria-hidden={!avatarUrl}
             >
-              {!avatarUrl
-                ? (auth.user?.full_name?.trim() || auth.user?.email || "U").slice(0, 1).toUpperCase()
-                : null}
+              {!avatarUrl ? displayName.slice(0, 1).toUpperCase() : null}
+            </div>
+            <div className={styles.displayMeta}>
+              <strong className={styles.displayName}>{displayName}</strong>
+              <span className={shared.mutedText}>{auth.user?.email ?? ""}</span>
+              {auth.user?.bio?.trim() ? (
+                <p className={styles.displayBio}>{auth.user.bio}</p>
+              ) : (
+                <p className={shared.mutedText}>
+                  {locale === "zh-CN" ? "还没有简介" : "No bio yet"}
+                </p>
+              )}
+              {auth.user?.contact_url ? (
+                <a className="app-link" href={auth.user.contact_url} rel="noreferrer" target="_blank">
+                  {auth.user.contact_url}
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <AppModal
+        open={editOpen}
+        size="md"
+        title={locale === "zh-CN" ? "编辑个人资料" : "Edit profile"}
+        closeLabel={formatUiMessage(locale, "appModal.close")}
+        testId="settings-profile-edit-modal"
+        onClose={() => setEditOpen(false)}
+      >
+        <div className={styles.mediaPreview} data-testid="settings-profile-edit-media">
+          <div
+            className={styles.bannerPreview}
+            style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : undefined}
+          />
+          <div className={styles.avatarRow}>
+            <div
+              className={styles.avatarPreview}
+              style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}
+              aria-hidden={!avatarUrl}
+            >
+              {!avatarUrl ? displayName.slice(0, 1).toUpperCase() : null}
             </div>
             <div className={styles.mediaActions}>
               <p className={styles.mediaHint}>
@@ -361,18 +429,14 @@ export function ProfilePanel() {
           ) : null}
           {actionError ? <p className="app-notice-banner">{actionError}</p> : null}
           <div className="app-button-row">
-            <button
-              className="app-button-primary"
-              disabled={busy}
-              type="submit"
-            >
+            <button className="app-button-primary" disabled={busy} type="submit">
               {profileMutation.isPending
                 ? formatUiMessage(locale, "shareCenter.saving")
                 : formatUiMessage(locale, "settings.profile.saveAction")}
             </button>
           </div>
         </form>
-      </section>
+      </AppModal>
     </section>
   );
 }

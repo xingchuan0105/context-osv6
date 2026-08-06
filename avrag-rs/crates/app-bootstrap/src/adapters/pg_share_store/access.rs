@@ -79,6 +79,8 @@
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
         set_current_role(tx.as_mut(), "super_admin").await?;
+        // Owner-pays only when sharing is on (abuse boundary: private collab
+        // without share_enabled keeps member self-pay until product says otherwise).
         let owner = sqlx::query_scalar::<_, Uuid>(
             r#"
             select w.owner_user_id
@@ -89,6 +91,7 @@
             where w.id = $1
               and m.user_id = $2
               and m.invite_status = 'accepted'
+              and coalesce(w.share_enabled, false) = true
             limit 1
             "#,
         )
