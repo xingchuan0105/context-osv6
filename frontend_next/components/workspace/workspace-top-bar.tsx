@@ -229,10 +229,10 @@ export function WorkspaceTopBar({
             <Link
               className={styles.topBarActionButton}
               data-testid="workspace-topbar-analyze"
-              href={`/dashboard/${workspaceId}/analyze`}
+              href={`/dashboard/${workspaceId}/share`}
             >
               <span className={styles.topBarActionLabel}>
-                {formatUiMessage(locale, "commonAnalytics")}
+                {formatUiMessage(locale, "workspaceShareTraffic")}
               </span>
             </Link>
           ) : null}

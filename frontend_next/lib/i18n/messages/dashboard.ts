@@ -241,13 +241,17 @@ export const dashboardMessages = {
     zh: "← 工作台",
     en: "← Dashboard",
   },
+  dashboardShareTrafficNav: {
+    zh: "分享访问",
+    en: "Share traffic",
+  },
   dashboardShareAnalyticsTitle: {
     zh: "分享访问",
     en: "Share traffic",
   },
   dashboardShareAnalyticsSubtitle: {
-    zh: "已开启分享的工作区访问汇总与趋势。可按时间与工作区筛选，下钻到单库详情。",
-    en: "Views across shared workspaces. Filter by range or workspace; drill into any one.",
+    zh: "全部已分享工作区的访问汇总。下钻进入该工作区的「分享中心」看单库趋势与访客活动。",
+    en: "Aggregate views across shared workspaces. Drill into Share center for one workspace.",
   },
   dashboardLoading: {
     zh: "加载中…",
@@ -326,8 +330,8 @@ export const dashboardMessages = {
     en: "Share off",
   },
   dashboardDrillDown: {
-    zh: "详情",
-    en: "Details",
+    zh: "分享中心",
+    en: "Share center",
   },
   dashboardSourcesColumn: {
     zh: "来源",

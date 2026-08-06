@@ -47,13 +47,6 @@ function DashboardTabs({
       >
         {formatUiMessage(locale, "dashboardTabFavorites")}
       </button>
-      <Link
-        className="dashboard-tab-button"
-        data-testid="dashboard-tab-analytics"
-        href="/dashboard/analytics"
-      >
-        {formatUiMessage(locale, "commonAnalytics")}
-      </Link>
     </nav>
   );
 }
@@ -176,6 +169,14 @@ export function DashboardToolbar({
     <div className="dashboard-toolbar">
       <DashboardTabs activeTab={activeTab} onChange={onTabChange} />
       <div className="dashboard-toolbar-actions">
+        {/* Cross-cutting share traffic — not a list filter tab (PRODUCT_IA P1-1) */}
+        <Link
+          className="dashboard-tab-button"
+          data-testid="dashboard-tab-analytics"
+          href="/dashboard/analytics"
+        >
+          {formatUiMessage(locale, "dashboardShareTrafficNav")}
+        </Link>
         <button
           aria-label={formatUiMessage(locale, "dashboardToolbarSearch")}
           className="dashboard-icon-button"

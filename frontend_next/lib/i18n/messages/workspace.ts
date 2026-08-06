@@ -5,6 +5,11 @@ export const workspaceMessages = {
     zh: "分享",
     en: "Share",
   },
+  /** Object-level share traffic → Share center (not a separate /analyze page). */
+  workspaceShareTraffic: {
+    zh: "访问",
+    en: "Traffic",
+  },
   workspaceApi: {
     zh: "API",
     en: "API",

@@ -280,7 +280,7 @@ export function DashboardAnalyticsSurface() {
                         <h3 className={styles.wsName}>{name}</h3>
                         <Link
                           className="app-link app-link-muted"
-                          href={`/dashboard/${row.workspace.workspace_id}/analyze`}
+                          href={`/dashboard/${row.workspace.workspace_id}/share`}
                         >
                           {formatUiMessage(locale, "dashboardDrillDown")}
                         </Link>

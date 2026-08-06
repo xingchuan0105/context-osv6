@@ -1,16 +1,20 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { use } from "react";
-
-import { WorkspaceAnalyzeSurface } from "@/components/share/workspace-analyze-surface";
-
+/**
+ * Legacy URL. Object-level share traffic lives on Share center (PRODUCT_IA).
+ * @see docs/design/PRODUCT_IA.md §4
+ */
 type WorkspaceAnalyzePageProps = {
   params: Promise<{
     workspace_id: string;
   }>;
 };
 
-export default function WorkspaceAnalyzePage({ params }: WorkspaceAnalyzePageProps) {
-  const { workspace_id } = use(params);
-  return <WorkspaceAnalyzeSurface workspaceId={workspace_id} />;
+export function generateStaticParams() {
+  return [{ workspace_id: "_placeholder" }];
+}
+
+export default async function WorkspaceAnalyzePage({ params }: WorkspaceAnalyzePageProps) {
+  const { workspace_id } = await params;
+  redirect(`/dashboard/${workspace_id}/share`);
 }

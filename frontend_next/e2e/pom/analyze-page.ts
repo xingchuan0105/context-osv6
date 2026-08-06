@@ -4,8 +4,8 @@ export class AnalyzePage {
   constructor(private page: Page) {}
 
   async goto(workspaceId: string) {
+    // Canonical: Share center; /analyze redirects (PRODUCT_IA).
     await this.page.goto(`/dashboard/${workspaceId}/analyze`);
-    // /analyze 实际会重定向到 /share#insights，等待重定向完成
     await this.page.waitForURL(/\/dashboard\/[^/]+\/share/);
   }
 

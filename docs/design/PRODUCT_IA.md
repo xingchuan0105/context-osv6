@@ -69,11 +69,11 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 
 ```text
 /dashboard                         工作台 · 工作区列表（主路径）
-/dashboard/analytics               分享访问汇总（横切）
+/dashboard/analytics               分享访问 · 跨库汇总（横切；工具栏入口，非列表筛选 tab）
 /dashboard/:id                     工作区（对话 / 来源 / …）
-/dashboard/:id/share               分享中心
-/dashboard/:id/share/analytics     单库分享数据
-/dashboard/:id/analyze             单库分析（与 share analytics 并存时以对象任务区分）
+/dashboard/:id/share               分享中心 = 单库分享设置 + 访问趋势 + 访客活动（canonical 对象级）
+/dashboard/:id/share/analytics     → 301/redirect 至 share（兼容旧链）
+/dashboard/:id/analyze             → redirect 至 share（兼容旧链；禁止再实现第二套分析页）
 /dashboard/:id/api-access          工作区 API
 /settings?tab=…                   设置（billing|profile|providers|preferences|security）
 /settings/usage                    用量（深链；非主导航顶级）
@@ -100,9 +100,9 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | 充值余额 | `/pricing#topup` | 升级弹窗充值 CTA、分享转化充值、产品地图、设置账单可链回 |
 | BYOK | `/settings?tab=providers` | pricing 次要链、产品地图、账单提示 |
 | 下载/了解客户端 | `/desktop` | 顶栏客户端、footer、help、产品地图 |
-| 开分享 | `/dashboard/:id/share` | 工作区内 |
-| 分享数据（汇总） | `/dashboard/analytics` | 工作台 tab |
-| 分享数据（单库） | `/dashboard/:id/analyze` 或 `…/share/analytics` | 汇总下钻 |
+| 开分享 | `/dashboard/:id/share` | 工作区内「分享」、转化条 |
+| 分享数据（汇总） | `/dashboard/analytics` | 工作台工具栏「分享访问」 |
+| 分享数据（单库） | `/dashboard/:id/share`（页内 insights / 活动） | 汇总下钻、顶栏「访问」、旧 `/analyze` 与 `/share/analytics` |
 | 上手 / 产品地图 | **弹窗**（Dashboard 入口）或 `/help` 长文 | 顶栏「上手」、空状态、账户→帮助 |
 | 工作台 | `/dashboard` | 品牌标题、footer |
 
@@ -117,7 +117,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 |-------|------|------|
 | **Marketing chrome** | pricing / desktop / legal | 定价 · 客户端 · 法律 · 语言 · 进入应用 |
 | **App top bar** | dashboard / workspace / settings（产品内） | 品牌→工作台 · **客户端** · **升级** · 通知 · 账户 |
-| **Dashboard main** | `/dashboard*` | 全宽内容；筛选 tab（全部/我的/收藏/数据分析）；**无**百科主侧栏 |
+| **Dashboard main** | `/dashboard*` | 全宽内容；筛选 tab（全部/我的/收藏）；横切「分享访问」在工具栏；**无**百科主侧栏 |
 | **Workspace chrome** | `/dashboard/:id*` | 标题 · 客户端 · 升级 · 会话/来源等上下文操作 |
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |
 | **Onboarding map** | 按需 | 弹窗；入口是次要控件（上手），不占 240px 业务侧栏 |
