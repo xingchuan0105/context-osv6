@@ -17,9 +17,7 @@ export default function HelpWritePage() {
           </Link>
           <h1 className="app-page-title">{formatUiMessage(locale, "helpSectionWriteTitle")}</h1>
           <p className="app-page-subtitle">
-            {locale === "zh-CN"
-              ? "根据主题自动撰写长文，内置调研、大纲、分段写作与统计指纹精修。"
-              : "Automatically writes long-form articles from a topic, with built-in research, outlining, sectioned drafting, and statistical-fingerprint refinement."}
+            {formatUiMessage(locale, "helpWritePageSubtitle")}
           </p>
         </header>
 
@@ -46,30 +44,30 @@ export default function HelpWritePage() {
 
         <section className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
           <h2 style={{ fontSize: "1.2rem", margin: 0 }}>
-            {locale === "zh-CN" ? "用量预期" : "Usage expectations"}
+            {formatUiMessage(locale, "helpWriteUsageTitle")}
           </h2>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={{ textAlign: "left", borderBottom: "1px solid hsl(var(--border))", padding: "0.5rem" }}>
-                  {locale === "zh-CN" ? "指标" : "Metric"}
+                  {formatUiMessage(locale, "helpWriteMetricColumn")}
                 </th>
                 <th style={{ textAlign: "left", borderBottom: "1px solid hsl(var(--border))", padding: "0.5rem" }}>
-                  {locale === "zh-CN" ? "典型范围" : "Typical range"}
+                  {formatUiMessage(locale, "helpWriteRangeColumn")}
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style={{ padding: "0.5rem" }}>{locale === "zh-CN" ? "LLM 调用" : "LLM calls"}</td>
-                <td style={{ padding: "0.5rem" }}>10–20 / {locale === "zh-CN" ? "篇" : "article"}</td>
+                <td style={{ padding: "0.5rem" }}>{formatUiMessage(locale, "helpWriteLlmCalls")}</td>
+                <td style={{ padding: "0.5rem" }}>10–20 / {formatUiMessage(locale, "helpWritePerArticle")}</td>
               </tr>
               <tr>
-                <td style={{ padding: "0.5rem" }}>{locale === "zh-CN" ? "Token（全文）" : "Token (full)"}</td>
-                <td style={{ padding: "0.5rem" }}>~100k–200k / {locale === "zh-CN" ? "篇" : "article"}</td>
+                <td style={{ padding: "0.5rem" }}>{formatUiMessage(locale, "helpWriteTokenFull")}</td>
+                <td style={{ padding: "0.5rem" }}>~100k–200k / {formatUiMessage(locale, "helpWritePerArticle")}</td>
               </tr>
               <tr>
-                <td style={{ padding: "0.5rem" }}>{locale === "zh-CN" ? "墙钟" : "Wall clock"}</td>
+                <td style={{ padding: "0.5rem" }}>{formatUiMessage(locale, "helpWriteWallClock")}</td>
                 <td style={{ padding: "0.5rem" }}>2–5 min</td>
               </tr>
             </tbody>
@@ -78,12 +76,10 @@ export default function HelpWritePage() {
 
         <section className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
           <h2 style={{ fontSize: "1.2rem", margin: 0 }}>
-            {locale === "zh-CN" ? "降级说明" : "Degradation"}
+            {formatUiMessage(locale, "helpWriteDegradeTitle")}
           </h2>
           <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
-            {locale === "zh-CN"
-              ? "当指纹 band 未全部通过时，文章仍会交付（软结束），并附带 validation_warning。单路调研失败时降级为单路。"
-              : "When fingerprint bands are not fully satisfied, the article is still delivered (soft exit) with a validation_warning. If one research path fails, it degrades to single-path."}
+            {formatUiMessage(locale, "helpWriteDegradeBody")}
           </p>
         </section>
       </div>

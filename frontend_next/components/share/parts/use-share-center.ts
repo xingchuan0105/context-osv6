@@ -46,7 +46,7 @@ export function useShareCenter(workspaceId: string) {
   const queryClient = useQueryClient();
   const workspaceReady = hasWorkspaceId(workspaceId);
   const invalidWorkspaceMessage =
-    locale === "zh-CN" ? "当前工作区标识无效。" : "Invalid workspace identifier.";
+    formatUiMessage(locale, "shareInvalidWorkspaceId");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [expiresAtDraft, setExpiresAtDraft] = useState<ShareValidityOption>("30d");

@@ -19,7 +19,7 @@ export const dashboardMessages = {
   },
   dashboardBrandSubtitle: {
     zh: "工作区控制台",
-    en: "Workspace Dashboard",
+    en: "Workspace dashboard",
   },
   dashboardCloseSearch: {
     zh: "关闭搜索",
@@ -34,7 +34,7 @@ export const dashboardMessages = {
     en: "No workspaces yet",
   },
   dashboardEmptyBody: {
-    zh: "先创建一个工作区，然后再进入工作区。",
+    zh: "先创建一个工作区，再进入使用。",
     en: "Create a workspace first, then jump into the workspace shell.",
   },
   dashboardEmptyDescription: {
@@ -66,7 +66,7 @@ export const dashboardMessages = {
     en: "Workspace list",
   },
   dashboardLoadError: {
-    zh: "加载工作区失败",
+    zh: "加载工作区失败。",
     en: "Failed to load workspaces.",
   },
   dashboardActionFailed: {
@@ -82,7 +82,7 @@ export const dashboardMessages = {
     en: "Delete workspace",
   },
   dashboardDeleteDialogBody: {
-    zh: "确定删除 {title} 吗？此操作无法撤销。",
+    zh: "确定删除「{title}」吗？此操作无法撤销。",
     en: "Delete {title}? This cannot be undone.",
   },
   dashboardRenameDialogTitle: {
@@ -94,7 +94,7 @@ export const dashboardMessages = {
     en: "Save",
   },
   dashboardLoginRequired: {
-    zh: "请先登录",
+    zh: "请先登录。",
     en: "Please sign in first.",
   },
   dashboardRoleMember: {
@@ -139,7 +139,7 @@ export const dashboardMessages = {
   },
   dashboardBackToWorkspaces: {
     zh: "返回工作台",
-    en: "Back to workspace",
+    en: "Back to dashboard",
   },
   dashboardSearchEmptyIdle: {
     zh: "输入关键词搜索工作区",
@@ -162,7 +162,7 @@ export const dashboardMessages = {
     en: "Workspace search results",
   },
   dashboardSearchSubtitle: {
-    zh: "输入关键词，点击结果进入工作区",
+    zh: "输入关键词，点击结果进入工作区。",
     en: "Type a keyword and jump directly into the workspace.",
   },
   dashboardSearchTitle: {
@@ -179,15 +179,15 @@ export const dashboardMessages = {
   },
   dashboardStatusFailed: {
     zh: "异常",
-    en: "failed",
+    en: "Failed",
   },
   dashboardStatusProcessing: {
     zh: "处理中",
-    en: "processing",
+    en: "Processing",
   },
   dashboardStatusReady: {
     zh: "就绪",
-    en: "ready",
+    en: "Ready",
   },
   dashboardTabAll: {
     zh: "全部",
@@ -236,5 +236,82 @@ export const dashboardMessages = {
   dashboardUntitledWorkspace: {
     zh: "未命名工作区",
     en: "Untitled workspace",
+  },
+  dashboardBackToDashboard: {
+    zh: "← 工作台",
+    en: "← Dashboard",
+  },
+  dashboardShareAnalyticsTitle: {
+    zh: "分享数据分析",
+    en: "Share analytics",
+  },
+  dashboardShareAnalyticsSubtitle: {
+    zh: "聚合你名下所有已开启分享的工作区访问趋势；可下钻到单个工作区。",
+    en: "Aggregate views across all shared workspaces; drill into any one.",
+  },
+  dashboardLoading: {
+    zh: "加载中…",
+    en: "Loading…",
+  },
+  dashboardTotalsTitle: {
+    zh: "汇总",
+    en: "Totals",
+  },
+  dashboardSharedWorkspaces: {
+    zh: "已分享工作区",
+    en: "Shared workspaces",
+  },
+  dashboardTotalViews: {
+    zh: "总访问",
+    en: "Total views",
+  },
+  dashboardUniqueVisitors: {
+    zh: "独立访客",
+    en: "Unique visitors",
+  },
+  dashboardViews30d: {
+    zh: "近 30 日访问",
+    en: "Last 30d views",
+  },
+  dashboardViewTrend: {
+    zh: "访问趋势",
+    en: "View trend",
+  },
+  dashboardViewTrendSubtitle: {
+    zh: "全部分享工作区的日访问叠加（柱状）。",
+    en: "Stacked daily views across shared workspaces.",
+  },
+  dashboardTrendEmpty: {
+    zh: "暂无访问数据。开启分享并产生访问后这里会出现趋势图。",
+    en: "No view data yet. Enable share and wait for traffic.",
+  },
+  dashboardByWorkspace: {
+    zh: "按工作区",
+    en: "By workspace",
+  },
+  dashboardViewsVisitors: {
+    zh: "访问 {views} · 访客 {visitors}",
+    en: "Views {views} · visitors {visitors}",
+  },
+  dashboardShareOff: {
+    zh: "未开启分享",
+    en: "Share off",
+  },
+  dashboardDrillDown: {
+    zh: "下钻分析",
+    en: "Drill down",
+  },
+  dashboardSourcesColumn: {
+    zh: "来源",
+    en: "Sources",
+  },
+
+  dashboardSourceCountOne: {
+    zh: "1 个来源",
+    en: "1 source",
+  },
+  dashboardSourceCountMany: {
+    zh: "{count} 个来源",
+    en: "{count} sources",
   },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -46,7 +46,7 @@ function getCapabilitiesSummaryLabel(
       ? formatUiMessage(locale, "workspaceChatCapRag")
       : formatUiMessage(locale, "workspaceChatCapSearch"),
   );
-  return parts.join(locale === "zh-CN" ? " · " : " · ");
+  return parts.join(" · ");
 }
 
 function getCapabilitiesCode(capabilities: WorkspaceCapability[]) {

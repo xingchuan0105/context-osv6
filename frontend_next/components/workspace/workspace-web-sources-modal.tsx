@@ -1,6 +1,7 @@
 "use client";
 
 import { AppModal } from "../ui/app-modal";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
 import styles from "./workspace-right-rail.module.css";
@@ -20,16 +21,16 @@ export function WorkspaceWebSourcesModal({
   const open = Boolean(request && request.sources.length > 0);
   const count = request?.sources.length ?? 0;
   const title =
-    locale === "zh-CN"
-      ? `${count} 个来源`
-      : `${count} source${count === 1 ? "" : "s"}`;
+    count === 1
+      ? formatUiMessage(locale, "workspaceSourcesCountOne")
+      : formatUiMessage(locale, "workspaceSourcesCountMany", { count: String(count) });
 
   return (
     <AppModal
       open={open}
       size="md"
       title={title}
-      closeLabel={locale === "zh-CN" ? "关闭" : "Close"}
+      closeLabel={formatUiMessage(locale, "commonCancel")}
       testId="workspace-web-sources-modal"
       onClose={onClose}
     >

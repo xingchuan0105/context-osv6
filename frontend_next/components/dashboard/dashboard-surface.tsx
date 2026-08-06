@@ -137,7 +137,7 @@ export function DashboardSurface() {
   );
 
   const avatarInitial = (auth.user?.full_name?.trim() || auth.user?.email?.trim() || "U").slice(0, 1).toUpperCase();
-  const sourcesColumnLabel = locale === "zh-CN" ? "\u6765\u6e90" : "Sources";
+  const sourcesColumnLabel = formatUiMessage(locale, "dashboardSourcesColumn");
 
   function reportError(actionError: unknown, retry: (() => void) | null) {
     console.error(actionError);

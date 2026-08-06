@@ -94,7 +94,7 @@ function getCitationPageText(locale: "zh-CN" | "en", page: number | null | undef
   if (page === null || page === undefined) {
     return "";
   }
-  return locale === "zh-CN" ? `第 ${page} 页` : `p. ${page}`;
+  return formatUiMessage(locale, "workspaceRightRail.viewerPage", { page: String(page) });
 }
 
 function getAnswerBlockText(blocks: AnswerBlock[]) {
@@ -117,12 +117,14 @@ function getInlineCitationAriaLabel(locale: "zh-CN" | "en", citation: Citation, 
   const displayId = getCitationDisplayId(citation, index);
   const label = getCitationLabel(citation, index);
   const pageLabel = getCitationPageText(locale, citation.page);
-  if (locale === "zh-CN") {
-    return pageLabel ? `引用 ${displayId}：${label}，${pageLabel}` : `引用 ${displayId}：${label}`;
+  if (pageLabel) {
+    return formatUiMessage(locale, "workspaceCitationAriaLabelWithPage", {
+      displayId,
+      label,
+      pageLabel,
+    });
   }
-  return pageLabel
-    ? `Citation ${displayId}: ${label}, ${pageLabel}`
-    : `Citation ${displayId}: ${label}`;
+  return formatUiMessage(locale, "workspaceCitationAriaLabel", { displayId, label });
 }
 
 function findCitationByChunkId(citations: Citation[], chunkId: string) {
@@ -502,7 +504,7 @@ export function CitationRenderer({
           <img alt={caption} className={styles.answerImage} loading="lazy" src={imageSrc} />
         ) : (
           <span className={styles.answerImageFallback}>
-            {locale === "zh-CN" ? "图片暂不可用" : "Image unavailable"}
+            {formatUiMessage(locale, "workspaceCitationImageUnavailable")}
           </span>
         )}
         <figcaption className={styles.answerImageMeta}>

@@ -11,11 +11,11 @@ export const paywallMessages = {
     en: "Platform protective limit reached",
   },
   paywallSubtitle5h: {
-    zh: "在无余额且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额后继续。",
+    zh: "余额不足且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额即可恢复。",
     en: "Without balance or a custom provider, the platform may throttle. Top up balance, add a custom provider, or upgrade share slots.",
   },
   paywallSubtitle7d: {
-    zh: "在无余额且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额后继续。",
+    zh: "余额不足且未配置自定义 Provider 时，平台会暂时限速。充值余额、配置自定义 Provider，或升级分享名额即可恢复。",
     en: "Without balance or a custom provider, the platform may throttle. Top up balance, add a custom provider, or upgrade share slots.",
   },
   paywallContinueFree: {
@@ -23,11 +23,11 @@ export const paywallMessages = {
     en: "Not now",
   },
   paywallResetHint: {
-    zh: "也可配置自定义 Provider，对话不再消耗平台余额",
+    zh: "也可配置自定义 Provider，对话不再消耗平台余额。",
     en: "Or add a custom provider so chat does not spend platform balance",
   },
   paywallLoading: {
-    zh: "加载中...",
+    zh: "加载中…",
     en: "Loading...",
   },
   paywallErrorLoad: {

@@ -2,15 +2,15 @@ import type { UiMessageDescriptor } from "./types";
 
 export const gateMessages = {
   gateCheckingSession: {
-    zh: "正在检查登录状态...",
+    zh: "正在检查登录状态…",
     en: "Checking your session...",
   },
   gateRedirectingDashboard: {
-    zh: "正在跳转到工作台...",
+    zh: "正在跳转到工作台…",
     en: "Redirecting to the dashboard...",
   },
   gateRedirectingLogin: {
-    zh: "正在跳转到登录页...",
+    zh: "正在跳转到登录页…",
     en: "Redirecting to sign in...",
   },
 } satisfies Record<string, UiMessageDescriptor>;

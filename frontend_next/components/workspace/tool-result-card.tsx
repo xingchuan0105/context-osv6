@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { toSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   type ToolResult,
   ToolStatus,
@@ -53,21 +54,13 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
     result.status === ToolStatus.Ok
       ? "OK"
       : result.status === ToolStatus.Error
-        ? locale === "zh-CN"
-          ? "错误"
-          : "Error"
+        ? formatUiMessage(locale, "workspaceToolStatusError")
         : result.status === ToolStatus.Timeout
-          ? locale === "zh-CN"
-            ? "超时"
-            : "Timeout"
+          ? formatUiMessage(locale, "workspaceToolStatusTimeout")
           : result.status === ToolStatus.NotFound
-            ? locale === "zh-CN"
-              ? "未找到"
-              : "Not Found"
+            ? formatUiMessage(locale, "workspaceToolStatusNotFound")
             : result.status === ToolStatus.NotImplemented
-              ? locale === "zh-CN"
-                ? "未实现"
-                : "Not Implemented"
+              ? formatUiMessage(locale, "workspaceToolStatusNotImplemented")
               : result.status;
 
   function renderBody() {
@@ -82,7 +75,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {data.error ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "错误" : "Error"}
+                {formatUiMessage(locale, "workspaceToolStatusError")}
               </div>
               <pre>{String(data.error)}</pre>
             </div>
@@ -90,7 +83,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {execResult !== "" ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "返回值" : "Result"}
+                {formatUiMessage(locale, "workspaceToolResult")}
               </div>
               <pre>{typeof execResult === "string" ? execResult : JSON.stringify(execResult, null, 2)}</pre>
             </div>
@@ -110,7 +103,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {!success && data.exit_code !== undefined ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "退出码" : "Exit Code"}
+                {formatUiMessage(locale, "workspaceToolExitCode")}
               </div>
               <pre>{String(data.exit_code)}</pre>
             </div>
@@ -128,7 +121,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {expression ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "表达式" : "Expression"}
+                {formatUiMessage(locale, "workspaceToolExpression")}
               </div>
               <pre>{expression}</pre>
             </div>
@@ -136,7 +129,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {calcResult ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "结果" : "Result"}
+                {formatUiMessage(locale, "workspaceToolResult")}
               </div>
               <pre>{calcResult}</pre>
             </div>
@@ -144,7 +137,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {data.error ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "错误" : "Error"}
+                {formatUiMessage(locale, "workspaceToolStatusError")}
               </div>
               <pre>{String(data.error)}</pre>
             </div>
@@ -156,11 +149,39 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
     if (renderHint === "weather") {
       const location = typeof data.location === "string" ? data.location : "";
       const description = typeof data.description === "string" ? data.description : "";
-      const temperature = data.temperature !== undefined ? String(data.temperature) : "";
-      const feelsLike = data.feels_like !== undefined ? String(data.feels_like) : "";
-      const humidity = data.humidity !== undefined ? String(data.humidity) : "";
-      const windSpeed = data.wind_speed !== undefined ? String(data.wind_speed) : "";
+      const temperature = data.temperature !== undefined && data.temperature !== null
+        ? String(data.temperature)
+        : "";
+      const feelsLike = data.feels_like !== undefined && data.feels_like !== null
+        ? String(data.feels_like)
+        : "";
+      const humidity = data.humidity !== undefined && data.humidity !== null
+        ? String(data.humidity)
+        : "";
+      const windSpeed = data.wind_speed !== undefined && data.wind_speed !== null
+        ? String(data.wind_speed)
+        : "";
       const units = typeof data.units === "string" ? data.units : "";
+      const windUnit =
+        typeof data.wind_speed_unit === "string"
+          ? data.wind_speed_unit
+          : units === "°F" || units === "imperial"
+            ? "mph"
+            : "km/h";
+      const unitSuffix =
+        units === "°C" || units === "metric"
+          ? "°C"
+          : units === "°F" || units === "imperial"
+            ? "°F"
+            : units;
+      const daily = Array.isArray(data.daily) ? data.daily : [];
+      const air =
+        data.air && typeof data.air === "object"
+          ? (data.air as Record<string, unknown>)
+          : null;
+      const aqi = air && air.aqi !== undefined && air.aqi !== null ? String(air.aqi) : "";
+      const aqiCat =
+        air && typeof air.category === "string" ? air.category : "";
 
       return (
         <div className={styles.toolResultBody}>
@@ -175,29 +196,29 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
             {temperature ? (
               <div className={styles.toolResultWeatherItem}>
                 <span className={styles.toolResultWeatherLabel}>
-                  {locale === "zh-CN" ? "温度" : "Temperature"}
+                  {formatUiMessage(locale, "workspaceToolTemperature")}
                 </span>
                 <span className={styles.toolResultWeatherValue}>
                   {temperature}
-                  {units === "metric" ? "°C" : units === "imperial" ? "°F" : ""}
+                  {unitSuffix}
                 </span>
               </div>
             ) : null}
             {feelsLike ? (
               <div className={styles.toolResultWeatherItem}>
                 <span className={styles.toolResultWeatherLabel}>
-                  {locale === "zh-CN" ? "体感" : "Feels Like"}
+                  {formatUiMessage(locale, "workspaceToolFeelsLike")}
                 </span>
                 <span className={styles.toolResultWeatherValue}>
                   {feelsLike}
-                  {units === "metric" ? "°C" : units === "imperial" ? "°F" : ""}
+                  {unitSuffix}
                 </span>
               </div>
             ) : null}
             {humidity ? (
               <div className={styles.toolResultWeatherItem}>
                 <span className={styles.toolResultWeatherLabel}>
-                  {locale === "zh-CN" ? "湿度" : "Humidity"}
+                  {formatUiMessage(locale, "workspaceToolHumidity")}
                 </span>
                 <span className={styles.toolResultWeatherValue}>{humidity}%</span>
               </div>
@@ -205,19 +226,52 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
             {windSpeed ? (
               <div className={styles.toolResultWeatherItem}>
                 <span className={styles.toolResultWeatherLabel}>
-                  {locale === "zh-CN" ? "风速" : "Wind Speed"}
+                  {formatUiMessage(locale, "workspaceToolWindSpeed")}
                 </span>
                 <span className={styles.toolResultWeatherValue}>
-                  {windSpeed}
-                  {units === "metric" ? " m/s" : units === "imperial" ? " mph" : ""}
+                  {windSpeed} {windUnit}
+                </span>
+              </div>
+            ) : null}
+            {aqi ? (
+              <div className={styles.toolResultWeatherItem}>
+                <span className={styles.toolResultWeatherLabel}>AQI</span>
+                <span className={styles.toolResultWeatherValue}>
+                  {aqi}
+                  {aqiCat ? ` (${aqiCat})` : ""}
                 </span>
               </div>
             ) : null}
           </div>
+          {daily.length > 0 ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {formatUiMessage(locale, "workspaceToolForecast")}
+              </div>
+              <pre>
+                {daily
+                  .slice(0, 7)
+                  .map((row) => {
+                    const d = (row ?? {}) as Record<string, unknown>;
+                    const date = d.date !== undefined ? String(d.date) : "";
+                    const tmin = d.temp_min !== undefined ? String(d.temp_min) : "?";
+                    const tmax = d.temp_max !== undefined ? String(d.temp_max) : "?";
+                    const text =
+                      typeof d.text_day === "string"
+                        ? d.text_day
+                        : typeof d.description === "string"
+                          ? d.description
+                          : "";
+                    return `${date}  ${tmin}~${tmax}${unitSuffix}  ${text}`.trim();
+                  })
+                  .join("\n")}
+              </pre>
+            </div>
+          ) : null}
           {data.error ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "错误" : "Error"}
+                {formatUiMessage(locale, "workspaceToolStatusError")}
               </div>
               <pre>{String(data.error)}</pre>
             </div>
@@ -237,7 +291,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {answer ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "摘要" : "Summary"}
+                {formatUiMessage(locale, "workspaceToolSummary")}
               </div>
               <div className={styles.toolResultAnswer}>{answer}</div>
             </div>
@@ -245,7 +299,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {results.length > 0 ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "搜索结果" : "Search Results"}
+                {formatUiMessage(locale, "workspaceToolSearchResults")}
               </div>
               <div className={styles.toolResultSearchList}>
                 {results.map((r: SearchResultRow, i: number) => {
@@ -278,7 +332,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
           {data.error ? (
             <div className={styles.toolResultSection}>
               <div className={styles.toolResultSectionLabel}>
-                {locale === "zh-CN" ? "错误" : "Error"}
+                {formatUiMessage(locale, "workspaceToolStatusError")}
               </div>
               <pre>{String(data.error)}</pre>
             </div>
@@ -297,21 +351,13 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
 
   const toolLabel =
     renderHint === "code"
-      ? locale === "zh-CN"
-        ? "代码执行"
-        : "Code Execution"
+      ? formatUiMessage(locale, "workspaceToolCodeExecution")
       : renderHint === "calculator"
-        ? locale === "zh-CN"
-          ? "计算器"
-          : "Calculator"
+        ? formatUiMessage(locale, "workspaceToolCalculator")
         : renderHint === "weather"
-          ? locale === "zh-CN"
-            ? "天气查询"
-            : "Weather"
+          ? formatUiMessage(locale, "workspaceToolWeather")
           : renderHint === "search"
-            ? locale === "zh-CN"
-              ? "网页搜索"
-              : "Web Search"
+            ? formatUiMessage(locale, "workspaceToolWebSearch")
             : result.tool;
 
   return (

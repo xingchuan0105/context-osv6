@@ -46,7 +46,7 @@ export const settingsMessages = {
     en: "Profile",
   },
   "settings.profile.sectionSubtitle": {
-    zh: "展示在分享页的 Owner 名片：显示名、简介、头像、封面与联系链接。",
+    zh: "展示在分享页的个人名片：显示名、简介、头像、封面与联系链接。",
     en: "Shown on shared pages as your Owner card: name, bio, avatar, banner, and contact link.",
   },
   "settings.profile.emailLabel": {
@@ -154,7 +154,7 @@ export const settingsMessages = {
     en: "Self-service payment portal is not available. Try again later, or contact support.",
   },
   "settings.billing.portalFallbackHint": {
-    zh: "请打开定价页完成 Creem/支付宝 支付。",
+    zh: "请打开定价页，通过 Creem 或支付宝完成支付。",
     en: "Open pricing for Creem/Alipay checkout.",
   },
   "settings.billing.planPickerHint": {
@@ -202,7 +202,7 @@ export const settingsMessages = {
     en: "Custom provider",
   },
   "settings.billing.byokSubtitle": {
-    zh: "密钥加密存储。自定义 Provider 只用于对话模型；向量与检索始终走平台，并从余额扣费。",
+    zh: "密钥加密存储。自定义 Provider 仅用于对话模型；向量与检索始终由平台处理并从余额扣费。",
     en: "Keys are encrypted at rest. A custom provider covers chat models only; embedding and retrieval always use the platform and bill your balance.",
   },
   "settings.billing.byokProvider": {
@@ -226,7 +226,7 @@ export const settingsMessages = {
     en: "Save key",
   },
   "settings.billing.byokRevoke": {
-    zh: "吊销",
+    zh: "撤销",
     en: "Revoke",
   },
   "settings.billing.byokRevoked": {
@@ -358,11 +358,11 @@ export const settingsMessages = {
     en: "Platform protective limits (reference)",
   },
   "settings.usage.sectionSubtitle": {
-    zh: "仅在无余额且未配置自定义 Provider 时可能触发。有余额或自定义 Provider 后，对话不再受此限制主导。",
-    en: "May apply only when balance is empty and no custom provider is set. With balance or a custom provider, chat is not driven by these windows.",
+    zh: "仅在无余额且未配置自定义 Provider 时可能触发。有余额或自定义 Provider 后，对话不再受此限制影响。",
+    en: "May apply only when balance is empty and no custom provider is set. With balance or a custom provider, chat is no longer subject to these limits.",
   },
   "settings.usage.loading": {
-    zh: "正在加载用量...",
+    zh: "正在加载用量…",
     en: "Loading usage...",
   },
   "settings.usage.empty": {
@@ -419,7 +419,7 @@ export const settingsMessages = {
   },
   "settings.usage.quotaScopePlanDefault": {
     zh: "默认方案 · {planId}",
-    en: "Plan default - {planId}",
+    en: "Plan default · {planId}",
   },
   "settings.usage.quotaScopeUserOverride": {
     zh: "用户覆盖策略",
@@ -458,11 +458,11 @@ export const settingsMessages = {
     en: "Not active",
   },
   "settings.billing.loading": {
-    zh: "正在加载会员信息...",
+    zh: "正在加载会员信息…",
     en: "Loading membership information...",
   },
   "settings.billing.loadingUsage": {
-    zh: "正在加载用量...",
+    zh: "正在加载用量…",
     en: "Loading usage...",
   },
   "settings.billing.noUsageData": {
@@ -470,7 +470,7 @@ export const settingsMessages = {
     en: "No usage data.",
   },
   "settings.billing.loadingPlans": {
-    zh: "正在加载方案...",
+    zh: "正在加载方案…",
     en: "Loading plans...",
   },
   "settings.billing.noPlans": {
@@ -478,7 +478,7 @@ export const settingsMessages = {
     en: "No plans available.",
   },
   "settings.billing.loadingPortal": {
-    zh: "加载中...",
+    zh: "加载中…",
     en: "Loading...",
   },
   "settings.billing.portalEmpty": {
@@ -534,7 +534,7 @@ export const settingsMessages = {
     en: "Balance",
   },
   "settings.billing.walletSubtitle": {
-    zh: "用于平台模型调用与向量检索。充值会计入累计充值（邀请额度每 ¥50 增加 1 次）。",
+    zh: "用于支付平台模型调用与向量检索费用。累计充值每满 ¥50 增加 1 次邀请奖励。",
     en: "Pays platform model calls and embedding/retrieval. Paid top-ups count toward lifetime total (+1 invite per ¥50).",
   },
   "settings.billing.walletBalanceLabel": {
@@ -622,7 +622,7 @@ export const settingsMessages = {
     en: "{count} unread",
   },
   "settings.notifications.loading": {
-    zh: "正在加载通知...",
+    zh: "正在加载通知…",
     en: "Loading notifications...",
   },
   "settings.notifications.markAllRead": {
@@ -634,7 +634,7 @@ export const settingsMessages = {
     en: "Mark as read",
   },
   "settings.notifications.processing": {
-    zh: "处理中...",
+    zh: "处理中…",
     en: "Processing...",
   },
   "settings.notifications.read": {
@@ -674,7 +674,7 @@ export const settingsMessages = {
     en: "Enter the current password and the new password.",
   },
   "settings.security.updating": {
-    zh: "更新中...",
+    zh: "更新中…",
     en: "Updating...",
   },
   "settings.security.failed": {
@@ -696,5 +696,98 @@ export const settingsMessages = {
   "settings.security.unknownAccount": {
     zh: "未知账号",
     en: "Unknown account",
+  },
+  settingsProviderTitle: {
+    zh: "自定义 Provider",
+    en: "Custom providers",
+  },
+  settingsProviderSubtitle: {
+    zh: "型号固定。每行只填一把 API Key（SiliconFlow 嵌入与重排共用同一把）。",
+    en: "Models are fixed. One API key per row (SiliconFlow embedding and rerank share one key).",
+  },
+  settingsProviderLoading: {
+    zh: "加载中…",
+    en: "Loading…",
+  },
+  settingsProviderSaved: {
+    zh: "已保存",
+    en: "Saved",
+  },
+  settingsProviderSaveFailed: {
+    zh: "保存失败",
+    en: "Save failed",
+  },
+  settingsProviderCleared: {
+    zh: "已清除",
+    en: "Cleared",
+  },
+  settingsProviderClearFailed: {
+    zh: "清除失败",
+    en: "Clear failed",
+  },
+  settingsProviderConfiguredFp: {
+    zh: "已配置 · {fp}（填新 key 覆盖）",
+    en: "Set · {fp} (new key overwrites)",
+  },
+  settingsProviderPartialFp: {
+    zh: "部分配置 · {fp}（填 key 补全）",
+    en: "Partial · {fp} (paste key to complete)",
+  },
+  settingsProviderPasteKey: {
+    zh: "粘贴 API Key",
+    en: "Paste API key",
+  },
+  settingsProviderSave: {
+    zh: "保存",
+    en: "Save",
+  },
+  settingsProviderClear: {
+    zh: "清除",
+    en: "Clear",
+  },
+  settingsProviderKeysLabel: {
+    zh: "Provider 密钥",
+    en: "Provider keys",
+  },
+  settingsProviderTypeColumn: {
+    zh: "模型类型",
+    en: "Type",
+  },
+  settingsProviderModelColumn: {
+    zh: "模型名称",
+    en: "Model",
+  },
+  settingsProviderActionsColumn: {
+    zh: "操作",
+    en: "Actions",
+  },
+  settingsBillingManage: {
+    zh: "管理",
+    en: "Manage",
+  },
+  settingsProfileNoName: {
+    zh: "未设置名称",
+    en: "No display name",
+  },
+  settingsProfileEditProfile: {
+    zh: "编辑资料",
+    en: "Edit profile",
+  },
+  settingsProfileNoBio: {
+    zh: "还没有简介",
+    en: "No bio yet",
+  },
+
+  settingsUpgradeSelectedTier: {
+    zh: "已选 {tier} · 选择计费周期后继续支付",
+    en: "Selected {tier} · pick billing cycle, then pay",
+  },
+  settingsUpgradeBillingInterval: {
+    zh: "计费周期",
+    en: "Billing interval",
+  },
+  settingsUpgradeBackToPlans: {
+    zh: "← 返回档位",
+    en: "← Back to plans",
   },
 } satisfies Record<string, UiMessageDescriptor>;

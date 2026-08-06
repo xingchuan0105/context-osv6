@@ -292,9 +292,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
     try {
       if (TURNSTILE_SITE_KEY && !turnstileToken.trim() && !auth.token) {
         setChatError(
-          locale === "zh-CN"
-            ? "请先完成人机验证后再提问。"
-            : "Complete the human verification challenge before asking.",
+          formatUiMessage(locale, "sharedPublicVerifyHint"),
         );
         setAnswering(false);
         return;

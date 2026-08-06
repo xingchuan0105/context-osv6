@@ -439,9 +439,11 @@ export function ChatMessageList({
                             onClick={() => onOpenWebSources({ sources: webSources })}
                             type="button"
                           >
-                            {locale === "zh-CN"
-                              ? `${webSources.length} 个来源`
-                              : `${webSources.length} source${webSources.length > 1 ? "s" : ""}`}
+                            {webSources.length === 1
+                              ? formatUiMessage(locale, "workspaceSourcesCountOne")
+                              : formatUiMessage(locale, "workspaceSourcesCountMany", {
+                                  count: String(webSources.length),
+                                })}
                           </button>
                         );
                       })()

@@ -189,4 +189,44 @@ export const helpMessages = {
     zh: "购买客户端授权",
     en: "Buy a client license",
   },
+  helpWritePageSubtitle: {
+    zh: "根据主题自动撰写长文，内置调研、大纲、分段写作与统计指纹精修。",
+    en: "Automatically writes long-form articles from a topic, with built-in research, outlining, sectioned drafting, and statistical-fingerprint refinement.",
+  },
+  helpWriteUsageTitle: {
+    zh: "用量预期",
+    en: "Usage expectations",
+  },
+  helpWriteMetricColumn: {
+    zh: "指标",
+    en: "Metric",
+  },
+  helpWriteRangeColumn: {
+    zh: "典型范围",
+    en: "Typical range",
+  },
+  helpWriteLlmCalls: {
+    zh: "LLM 调用",
+    en: "LLM calls",
+  },
+  helpWritePerArticle: {
+    zh: "篇",
+    en: "article",
+  },
+  helpWriteTokenFull: {
+    zh: "Token（全文）",
+    en: "Token (full)",
+  },
+  helpWriteWallClock: {
+    zh: "用时",
+    en: "Time taken",
+  },
+  helpWriteDegradeTitle: {
+    zh: "降级说明",
+    en: "Degradation",
+  },
+  helpWriteDegradeBody: {
+    zh: "当质量校验未全部通过时，文章仍会交付（软结束），并附带校验警告。单路调研失败时自动降级为单路。",
+    en: "When quality checks are not fully satisfied, the article is still delivered (soft exit) with a validation warning. If one research path fails, it falls back to single-path.",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

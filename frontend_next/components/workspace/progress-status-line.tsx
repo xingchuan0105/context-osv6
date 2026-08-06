@@ -93,7 +93,7 @@ export function ProgressStatusLine({
   }
   const windowed = deduped.slice(-MAX_VISIBLE);
   const latestIndex = windowed.length - 1;
-  const fallbackTitle = locale === "zh-CN" ? "正在理解问题" : "Understanding the question";
+  const fallbackTitle = formatUiMessage(locale, "progress.understand");
   const rows: Array<{ id: string; title: string; detail: string | null; age: number }> =
     windowed.length > 0
       ? windowed.map((activity, index) => ({

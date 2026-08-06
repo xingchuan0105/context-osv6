@@ -125,17 +125,15 @@ export function DashboardAnalyticsSurface() {
       <div className={`app-page-center ${analyzeStyles.pageStack}`}>
         <header className={analyzeStyles.header}>
           <Link className="app-link app-link-muted" href="/dashboard">
-            {locale === "zh-CN" ? "← 工作台" : "← Dashboard"}
+            {formatUiMessage(locale, "dashboardBackToDashboard")}
           </Link>
           <div className={analyzeStyles.headerRow}>
             <div>
               <h1 className="app-page-title">
-                {locale === "zh-CN" ? "分享数据分析" : "Share analytics"}
+                {formatUiMessage(locale, "dashboardShareAnalyticsTitle")}
               </h1>
               <p className="app-page-subtitle">
-                {locale === "zh-CN"
-                  ? "聚合你名下所有已开启分享的工作区访问趋势；可下钻到单个工作区。"
-                  : "Aggregate views across all shared workspaces; drill into any one."}
+                {formatUiMessage(locale, "dashboardShareAnalyticsSubtitle")}
               </p>
             </div>
           </div>
@@ -146,37 +144,37 @@ export function DashboardAnalyticsSurface() {
         {loading ? (
           <section className="app-surface-card">
             <p className={analyzeStyles.flushText}>
-              {locale === "zh-CN" ? "加载中…" : "Loading…"}
+              {formatUiMessage(locale, "dashboardLoading")}
             </p>
           </section>
         ) : (
           <>
             <section className={`app-surface-card ${analyzeStyles.sectionCard}`}>
               <h2 className={`app-page-title ${analyzeStyles.sectionTitle}`}>
-                {locale === "zh-CN" ? "汇总" : "Totals"}
+                {formatUiMessage(locale, "dashboardTotalsTitle")}
               </h2>
               <div className={analyzeStyles.metricGrid}>
                 <div className="app-inline-surface">
                   <h3 className={analyzeStyles.metricTitle}>
-                    {locale === "zh-CN" ? "已分享工作区" : "Shared workspaces"}
+                    {formatUiMessage(locale, "dashboardSharedWorkspaces")}
                   </h3>
                   <p className={analyzeStyles.metricValue}>{sharedRows.length}</p>
                 </div>
                 <div className="app-inline-surface">
                   <h3 className={analyzeStyles.metricTitle}>
-                    {locale === "zh-CN" ? "总访问" : "Total views"}
+                    {formatUiMessage(locale, "dashboardTotalViews")}
                   </h3>
                   <p className={analyzeStyles.metricValue}>{totals.views}</p>
                 </div>
                 <div className="app-inline-surface">
                   <h3 className={analyzeStyles.metricTitle}>
-                    {locale === "zh-CN" ? "独立访客（代理）" : "Unique visitors (proxy)"}
+                    {formatUiMessage(locale, "dashboardUniqueVisitors")}
                   </h3>
                   <p className={analyzeStyles.metricValue}>{totals.visitors}</p>
                 </div>
                 <div className="app-inline-surface">
                   <h3 className={analyzeStyles.metricTitle}>
-                    {locale === "zh-CN" ? "近 30 日访问" : "Last 30d views"}
+                    {formatUiMessage(locale, "dashboardViews30d")}
                   </h3>
                   <p className={analyzeStyles.metricValue}>{totalTrend}</p>
                 </div>
@@ -185,12 +183,10 @@ export function DashboardAnalyticsSurface() {
 
             <section className={`app-surface-card ${analyzeStyles.sectionCard}`}>
               <h2 className={`app-page-title ${analyzeStyles.sectionTitle}`}>
-                {locale === "zh-CN" ? "访问趋势" : "View trend"}
+                {formatUiMessage(locale, "dashboardViewTrend")}
               </h2>
               <p className="app-page-subtitle">
-                {locale === "zh-CN"
-                  ? "全部分享工作区的日访问叠加（柱状）。"
-                  : "Stacked daily views across shared workspaces."}
+                {formatUiMessage(locale, "dashboardViewTrendSubtitle")}
               </p>
               <div
                 className={`app-inline-surface ${analyzeStyles.chartPanel}`}
@@ -216,9 +212,7 @@ export function DashboardAnalyticsSurface() {
                   ))
                 ) : (
                   <p className={analyzeStyles.mutedText}>
-                    {locale === "zh-CN"
-                      ? "暂无访问数据。开启分享并产生访问后这里会出现趋势图。"
-                      : "No view data yet. Enable share and wait for traffic."}
+                    {formatUiMessage(locale, "dashboardTrendEmpty")}
                   </p>
                 )}
               </div>
@@ -226,7 +220,7 @@ export function DashboardAnalyticsSurface() {
 
             <section className={`app-surface-card ${analyzeStyles.sectionCard}`}>
               <h2 className={`app-page-title ${analyzeStyles.sectionTitle}`}>
-                {locale === "zh-CN" ? "按工作区" : "By workspace"}
+                {formatUiMessage(locale, "dashboardByWorkspace")}
               </h2>
               <div className={analyzeStyles.metricGrid}>
                 {rows.map((row) => (
@@ -236,18 +230,17 @@ export function DashboardAnalyticsSurface() {
                     </h3>
                     <p className={analyzeStyles.flushText}>
                       {row.shareOn
-                        ? locale === "zh-CN"
-                          ? `访问 ${row.analytics?.total_views ?? 0} · 访客 ${row.analytics?.total_unique_visitors ?? 0}`
-                          : `Views ${row.analytics?.total_views ?? 0} · visitors ${row.analytics?.total_unique_visitors ?? 0}`
-                        : locale === "zh-CN"
-                          ? "未开启分享"
-                          : "Share off"}
+                        ? formatUiMessage(locale, "dashboardViewsVisitors", {
+                            views: String(row.analytics?.total_views ?? 0),
+                            visitors: String(row.analytics?.total_unique_visitors ?? 0),
+                          })
+                        : formatUiMessage(locale, "dashboardShareOff")}
                     </p>
                     <Link
                       className="app-link"
                       href={`/dashboard/${row.workspace.workspace_id}/analyze`}
                     >
-                      {locale === "zh-CN" ? "下钻分析" : "Drill down"}
+                      {formatUiMessage(locale, "dashboardDrillDown")}
                     </Link>
                   </div>
                 ))}

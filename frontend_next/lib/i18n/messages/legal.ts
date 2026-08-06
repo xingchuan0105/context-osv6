@@ -10,7 +10,7 @@ export const legalMessages = {
     en: "We updated the Terms of Service or Privacy Policy. Read and accept the latest versions before continuing.",
   },
   legalReacceptanceSubmitting: {
-    zh: "提交中...",
+    zh: "提交中…",
     en: "Submitting...",
   },
   legalReacceptanceConfirm: {
@@ -18,7 +18,7 @@ export const legalMessages = {
     en: "Confirm and continue",
   },
   legalReacceptanceConsentRequired: {
-    zh: "请先阅读并同意最新版用户协议与隐私政策",
+    zh: "请先阅读并同意最新版用户协议与隐私政策。",
     en: "Read and accept the latest Terms of Service and Privacy Policy first",
   },
 } satisfies Record<string, UiMessageDescriptor>;

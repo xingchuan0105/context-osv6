@@ -43,7 +43,7 @@ export const workspaceMessages = {
   },
   workspaceChatComposerPlaceholder: {
     zh: "输入问题，可开启知识库 / 网络搜索…",
-    en: "Ask anything — toggle RAG / Search below…",
+    en: "Ask anything — toggle Knowledge Base / Web Search below…",
   },
   workspaceChatHeroTitle: {
     zh: "有什么想问的？",
@@ -51,7 +51,7 @@ export const workspaceMessages = {
   },
   workspaceChatHeroSubtitle: {
     zh: "直接提问，或开启知识库、网络搜索获取更深入的回答。",
-    en: "Ask directly, or toggle RAG / web search for deeper answers.",
+    en: "Ask directly, or toggle Knowledge Base / Web Search for deeper answers.",
   },
   workspaceChatLoadError: {
     zh: "加载工作区对话记录失败。",
@@ -67,15 +67,15 @@ export const workspaceMessages = {
   },
   workspaceChatCapRag: {
     zh: "知识库",
-    en: "RAG",
+    en: "Knowledge base",
   },
   workspaceChatCapRagNeedsSources: {
-    zh: "先在右侧选择要检索的文档，再使用知识库检索",
-    en: "Select documents in the right rail to enable RAG retrieval",
+    zh: "先在右侧选择要检索的文档，再使用知识库检索。",
+    en: "Select documents in the right rail to enable knowledge retrieval",
   },
   workspaceChatCapSearch: {
     zh: "网络搜索",
-    en: "Search",
+    en: "Web search",
   },
   workspaceChatRegionLabel: {
     zh: "工作区对话",
@@ -90,12 +90,12 @@ export const workspaceMessages = {
     en: "Create workspace",
   },
   workspaceDegradeReasons: {
-    zh: "降级原因：{reasons}",
-    en: "Degrade reasons: {reasons}",
+    zh: "回答已降级：{reasons}",
+    en: "Answer degraded: {reasons}",
   },
   workspaceGuardIntervened: {
-    zh: "Guardrail 已介入当前回答。",
-    en: "Guardrails intervened in this answer.",
+    zh: "安全护栏已介入当前回答。",
+    en: "Safety guardrails intervened in this answer.",
   },
   workspaceHistoryLabel: {
     zh: "工作区历史",
@@ -159,7 +159,7 @@ export const workspaceMessages = {
   },
   workspaceEmptyStateModeHint: {
     zh: "当前：{mode} · 可开启知识库 / 网络搜索",
-    en: "Active: {mode} · toggle RAG / Search below",
+    en: "Active: {mode} · toggle Knowledge / Search below",
   },
   workspaceNoSessionsMatch: {
     zh: "暂无会话。",
@@ -183,7 +183,7 @@ export const workspaceMessages = {
   },
   workspaceUntitledSession: {
     zh: "新对话",
-    en: "Untitled",
+    en: "New chat",
   },
   workspaceChatCodeCopy: {
     zh: "复制",
@@ -270,7 +270,7 @@ export const workspaceMessages = {
     en: "Workspace right rail",
   },
   "workspaceRightRail.sourcesSectionTitle": {
-    zh: "内容源",
+    zh: "资料",
     en: "Sources",
   },
   "workspaceRightRail.sourcesSectionSubtitle": {
@@ -334,7 +334,7 @@ export const workspaceMessages = {
     en: "Notes synced.",
   },
   "workspaceRightRail.notesSavingBanner": {
-    zh: "正在同步笔记...",
+    zh: "正在同步笔记…",
     en: "Syncing notes...",
   },
   "workspaceRightRail.notesErrorBanner": {
@@ -378,11 +378,11 @@ export const workspaceMessages = {
     en: "Failed to load source preview.",
   },
   "workspaceRightRail.loading": {
-    zh: "加载中...",
+    zh: "加载中…",
     en: "Loading...",
   },
   "workspaceRightRail.updating": {
-    zh: "更新中...",
+    zh: "更新中…",
     en: "Updating...",
   },
   "workspaceRightRail.totalCount": {
@@ -434,12 +434,12 @@ export const workspaceMessages = {
     en: "Note editor toolbar",
   },
   "workspaceRightRail.newSourceAction": {
-    zh: "添加内容源",
-    en: "New Source",
+    zh: "添加资料",
+    en: "New source",
   },
   "workspaceRightRail.addSourceTitle": {
     zh: "添加新资料",
-    en: "Add New Source",
+    en: "Add new source",
   },
   "workspaceRightRail.addSourceSubtitle": {
     zh: "选择文件、网页链接或粘贴内容来扩展当前工作区。",
@@ -447,31 +447,31 @@ export const workspaceMessages = {
   },
   "workspaceRightRail.uploadFileTab": {
     zh: "上传文件",
-    en: "Upload File",
+    en: "Upload file",
   },
   "workspaceRightRail.webLinkTab": {
     zh: "网页链接",
-    en: "Web Link",
+    en: "Web link",
   },
   "workspaceRightRail.pasteTextTab": {
     zh: "粘贴文本",
-    en: "Paste Text",
+    en: "Paste text",
   },
   "workspaceRightRail.uploadDropTitle": {
     zh: "拖拽文件到这里",
     en: "Drop files here",
   },
   "workspaceRightRail.uploadDropBody": {
-    zh: "产品支持上传 {formats} 格式。",
+    zh: "支持上传 {formats} 格式。",
     en: "Supported upload formats: {formats}.",
   },
   "workspaceRightRail.browseFilesAction": {
     zh: "浏览文件",
-    en: "Browse Files",
+    en: "Browse files",
   },
   "workspaceRightRail.addLinkAction": {
     zh: "添加链接",
-    en: "Add Link",
+    en: "Add link",
   },
   "workspaceRightRail.pasteTitleLabel": {
     zh: "标题",
@@ -483,7 +483,7 @@ export const workspaceMessages = {
   },
   "workspaceRightRail.saveAsSourceAction": {
     zh: "保存为资料",
-    en: "Save as Source",
+    en: "Save as source",
   },
   "workspaceRightRail.untitledNote": {
     zh: "未命名笔记",
@@ -510,7 +510,7 @@ export const workspaceMessages = {
     en: "Idle",
   },
   "workspaceRightRail.loadingSourcePreview": {
-    zh: "正在加载资料预览...",
+    zh: "正在加载资料预览…",
     en: "Loading source preview...",
   },
   "workspaceRightRail.viewerSummaryHeading": {
@@ -534,8 +534,8 @@ export const workspaceMessages = {
     en: "Score {score}",
   },
   "workspaceRightRail.viewerLocation": {
-    zh: "第 {page} 页 · 游标 {cursor}",
-    en: "Page {page} · Cursor {cursor}",
+    zh: "第 {page} 页 · 位置 {cursor}",
+    en: "Page {page} · Position {cursor}",
   },
   "workspaceRightRail.viewerPage": {
     zh: "第 {page} 页",
@@ -546,11 +546,11 @@ export const workspaceMessages = {
     en: "Citation chunk",
   },
   "workspaceCitation.chunkTitle": {
-    zh: "Chunk 内容",
+    zh: "片段内容",
     en: "Chunk content",
   },
   "workspaceCitation.loading": {
-    zh: "正在加载引用片段...",
+    zh: "正在加载引用片段…",
     en: "Loading citation chunk...",
   },
   "workspaceCitation.empty": {
@@ -571,11 +571,11 @@ export const workspaceMessages = {
   },
   "workspaceProgressHeadingRag": {
     zh: "知识库检索中",
-    en: "Knowledge Retrieval",
+    en: "Knowledge retrieval",
   },
   "workspaceProgressHeadingSearch": {
     zh: "网络搜索中",
-    en: "Web Search",
+    en: "Web search",
   },
   "workspaceProgressToggleExpand": {
     zh: "展开过程",
@@ -607,7 +607,7 @@ export const workspaceMessages = {
   },
   "workspaceProgressCompletedThinking": {
     zh: "思考完成",
-    en: "Thought process",
+    en: "Thinking complete",
   },
   "workspaceProgressCountQueries": {
     zh: "查询",
@@ -633,10 +633,6 @@ export const workspaceMessages = {
   "progress.understand": {
     zh: "正在理解问题",
     en: "Understanding your question",
-  },
-  "progress.reason_preview": {
-    zh: "正在思考",
-    en: "Thinking",
   },
   "progress.compose_answer": {
     zh: "正在整理回答",
@@ -796,38 +792,111 @@ export const workspaceMessages = {
   },
   "workspaceRightRail.sourceStatus.processing": {
     zh: "处理中",
-    en: "processing",
+    en: "Processing",
   },
   "workspaceRightRail.sourceStatus.pending": {
     zh: "等待中",
-    en: "pending",
+    en: "Pending",
   },
   "workspaceRightRail.sourceStatus.enqueueing": {
     zh: "入队中",
-    en: "enqueueing",
+    en: "Enqueueing",
   },
   "workspaceRightRail.sourceStatus.queued": {
     zh: "排队中",
-    en: "queued",
+    en: "Queued",
   },
   "workspaceRightRail.sourceStatus.indexing": {
     zh: "索引中",
-    en: "indexing",
+    en: "Indexing",
   },
   "workspaceRightRail.sourceStatus.completed": {
     zh: "已完成",
-    en: "completed",
+    en: "Completed",
   },
   "workspaceRightRail.sourceStatus.ready": {
     zh: "就绪",
-    en: "ready",
+    en: "Ready",
   },
   "workspaceRightRail.sourceStatus.failed": {
     zh: "失败",
-    en: "failed",
+    en: "Failed",
   },
   "workspaceRightRail.sourceStatus.error": {
     zh: "异常",
-    en: "error",
+    en: "Error",
+  },
+
+  workspaceCitationImageUnavailable: {
+    zh: "图片暂不可用",
+    en: "Image unavailable",
+  },
+  workspaceNotesSaved: {
+    zh: "已保存笔记",
+    en: "Saved notes",
+  },
+  workspaceNotesPlaceholder: {
+    zh: "开始记录笔记…",
+    en: "Start writing notes…",
+  },
+  workspaceUnavailable: {
+    zh: "当前工作区不可用",
+    en: "Workspace unavailable",
+  },
+  workspaceUnavailableBody: {
+    zh: "这个页面的 workspace id 当前不在后端数据库里，继续发送消息只会返回错误。请确认你连接的是正确的 API/数据库，或者重新创建一个工作区。",
+    en: "This workspace id is not present in the current backend database. Sending messages here will only fail. Check that you are connected to the expected API/database, or create a new workspace.",
+  },
+
+  workspaceToolStatusError: { zh: "错误", en: "Error" },
+  workspaceToolStatusTimeout: { zh: "超时", en: "Timeout" },
+  workspaceToolStatusNotFound: { zh: "未找到", en: "Not Found" },
+  workspaceToolStatusNotImplemented: { zh: "未实现", en: "Not Implemented" },
+  workspaceToolResult: { zh: "返回值", en: "Result" },
+  workspaceToolExitCode: { zh: "退出码", en: "Exit Code" },
+  workspaceToolExpression: { zh: "表达式", en: "Expression" },
+  workspaceToolTemperature: { zh: "温度", en: "Temperature" },
+  workspaceToolFeelsLike: { zh: "体感", en: "Feels Like" },
+  workspaceToolHumidity: { zh: "湿度", en: "Humidity" },
+  workspaceToolWindSpeed: { zh: "风速", en: "Wind Speed" },
+  workspaceToolForecast: { zh: "预报", en: "Forecast" },
+  workspaceToolSummary: { zh: "摘要", en: "Summary" },
+  workspaceToolSearchResults: { zh: "搜索结果", en: "Search Results" },
+  workspaceToolCodeExecution: { zh: "代码执行", en: "Code Execution" },
+  workspaceToolCalculator: { zh: "计算器", en: "Calculator" },
+  workspaceToolWeather: { zh: "天气查询", en: "Weather" },
+  workspaceToolWebSearch: { zh: "网页搜索", en: "Web Search" },
+
+  workspaceNoteParagraph: { zh: "正文", en: "Normal" },
+  workspaceNoteHeading1: { zh: "标题 1", en: "Heading 1" },
+  workspaceNoteHeading2: { zh: "标题 2", en: "Heading 2" },
+  workspaceNoteUndo: { zh: "撤销", en: "Undo" },
+  workspaceNoteRedo: { zh: "重做", en: "Redo" },
+  workspaceNoteTextStyle: { zh: "正文样式", en: "Text style" },
+  workspaceNoteBold: { zh: "粗体", en: "Bold" },
+  workspaceNoteItalic: { zh: "斜体", en: "Italic" },
+  workspaceNoteLink: { zh: "链接", en: "Link" },
+  workspaceNoteOrderedList: { zh: "有序列表", en: "Ordered list" },
+  workspaceNoteBulletedList: { zh: "无序列表", en: "Bulleted list" },
+  workspaceNoteClearFormatting: { zh: "清除格式", en: "Clear formatting" },
+  workspaceNoteLinkPlaceholder: { zh: "粘贴或输入链接地址", en: "Paste or enter a link URL" },
+  workspaceNoteApply: { zh: "应用", en: "Apply" },
+  workspaceNoteRemove: { zh: "移除", en: "Remove" },
+
+  workspaceSourcesCountOne: {
+    zh: "1 个来源",
+    en: "1 source",
+  },
+  workspaceSourcesCountMany: {
+    zh: "{count} 个来源",
+    en: "{count} sources",
+  },
+  workspaceCitationAriaLabel: {
+    zh: "引用 {displayId}：{label}",
+    en: "Citation {displayId}: {label}",
+  },
+  workspaceCitationAriaLabelWithPage: {
+    zh: "引用 {displayId}：{label}，{pageLabel}",
+    en: "Citation {displayId}: {label}, {pageLabel}",
   },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -8,6 +8,8 @@ import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 import { sanitizeWorkspaceHtml } from "./workspace-html-sanitize";
 import styles from "./workspace-note-editor.module.css";
 
@@ -37,7 +39,7 @@ const DEFAULT_TOOLBAR_STATE: EditorToolbarState = {
 
 type WorkspaceNoteEditorTiptapProps = {
   contentLabel: string;
-  locale: string;
+  locale: UiLocale;
   onChange: (value: string) => void;
   placeholder: string;
   toolbarLabel: string;
@@ -126,9 +128,9 @@ export function WorkspaceNoteEditorTiptap({
   const linkInputRef = useRef<HTMLInputElement | null>(null);
   const pendingLinkSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const blockStyleOptions: Array<{ label: string; value: EditorBlockStyle }> = [
-    { label: locale === "zh-CN" ? "正文" : "Normal", value: "p" },
-    { label: locale === "zh-CN" ? "标题 1" : "Heading 1", value: "h1" },
-    { label: locale === "zh-CN" ? "标题 2" : "Heading 2", value: "h2" },
+    { label: formatUiMessage(locale, "workspaceNoteParagraph"), value: "p" },
+    { label: formatUiMessage(locale, "workspaceNoteHeading1"), value: "h1" },
+    { label: formatUiMessage(locale, "workspaceNoteHeading2"), value: "h2" },
   ];
 
   function syncToolbarState(nextEditor: EditorInstance | null = editorRef.current) {
@@ -590,7 +592,7 @@ export function WorkspaceNoteEditorTiptap({
     {
       type: "button",
       key: "undo",
-      label: locale === "zh-CN" ? "撤销" : "Undo",
+      label: formatUiMessage(locale, "workspaceNoteUndo"),
       disabled: !toolbarState.canUndo,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -602,7 +604,7 @@ export function WorkspaceNoteEditorTiptap({
     {
       type: "button",
       key: "redo",
-      label: locale === "zh-CN" ? "重做" : "Redo",
+      label: formatUiMessage(locale, "workspaceNoteRedo"),
       disabled: !toolbarState.canRedo,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -614,27 +616,27 @@ export function WorkspaceNoteEditorTiptap({
     {
       type: "select",
       key: "style",
-      label: locale === "zh-CN" ? "正文样式" : "Text style",
+      label: formatUiMessage(locale, "workspaceNoteTextStyle"),
       value: toolbarState.blockStyle,
     },
     {
       type: "button",
       key: "bold",
-      label: locale === "zh-CN" ? "粗体" : "Bold",
+      label: formatUiMessage(locale, "workspaceNoteBold"),
       active: toolbarState.bold,
       icon: <span className={styles.editorToolGlyphStrong}>B</span>,
     },
     {
       type: "button",
       key: "italic",
-      label: locale === "zh-CN" ? "斜体" : "Italic",
+      label: formatUiMessage(locale, "workspaceNoteItalic"),
       active: toolbarState.italic,
       icon: <span className={styles.editorToolGlyphEmphasis}>I</span>,
     },
     {
       type: "button",
       key: "link",
-      label: locale === "zh-CN" ? "链接" : "Link",
+      label: formatUiMessage(locale, "workspaceNoteLink"),
       active: toolbarState.link || linkPanelOpen,
       disabled: !toolbarState.link && (!editor || editor.state.selection.empty),
       icon: (
@@ -648,7 +650,7 @@ export function WorkspaceNoteEditorTiptap({
     {
       type: "button",
       key: "ordered-list",
-      label: locale === "zh-CN" ? "有序列表" : "Ordered list",
+      label: formatUiMessage(locale, "workspaceNoteOrderedList"),
       active: toolbarState.orderedList,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIconWide} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -661,7 +663,7 @@ export function WorkspaceNoteEditorTiptap({
     {
       type: "button",
       key: "unordered-list",
-      label: locale === "zh-CN" ? "无序列表" : "Bulleted list",
+      label: formatUiMessage(locale, "workspaceNoteBulletedList"),
       active: toolbarState.unorderedList,
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIconWide} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -675,7 +677,7 @@ export function WorkspaceNoteEditorTiptap({
     {
       type: "button",
       key: "clear-format",
-      label: locale === "zh-CN" ? "清除格式" : "Clear formatting",
+      label: formatUiMessage(locale, "workspaceNoteClearFormatting"),
       icon: (
         <svg aria-hidden="true" className={styles.editorToolIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path d="M5 5h9l5 5-9 9-5-5 4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -746,7 +748,7 @@ export function WorkspaceNoteEditorTiptap({
               className={styles.editorLinkInput}
               onChange={(event) => setLinkDraft(event.target.value)}
               onKeyDown={handleLinkInputKeyDown}
-              placeholder={locale === "zh-CN" ? "粘贴或输入链接地址" : "Paste or enter a link URL"}
+              placeholder={formatUiMessage(locale, "workspaceNoteLinkPlaceholder")}
               ref={linkInputRef}
               value={linkDraft}
             />
@@ -758,7 +760,7 @@ export function WorkspaceNoteEditorTiptap({
               onClick={applyLinkFromPanel}
               type="button"
             >
-              {locale === "zh-CN" ? "应用" : "Apply"}
+              {formatUiMessage(locale, "workspaceNoteApply")}
             </button>
             {toolbarState.link ? (
               <button
@@ -766,11 +768,11 @@ export function WorkspaceNoteEditorTiptap({
                 onClick={removeLinkFromPanel}
                 type="button"
               >
-                {locale === "zh-CN" ? "移除" : "Remove"}
+                {formatUiMessage(locale, "workspaceNoteRemove")}
               </button>
             ) : null}
             <button className={styles.editorLinkPanelButton} onClick={() => setLinkPanelOpen(false)} type="button">
-              {locale === "zh-CN" ? "取消" : "Cancel"}
+              {formatUiMessage(locale, "commonCancel")}
             </button>
           </div>
         </div>

@@ -45,7 +45,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
           >
             <div className={styles.fieldStack}>
               <label className="app-form-label" htmlFor="invite-email">
-                {locale === "zh-CN" ? "邀请邮箱" : "Invite email"}
+                {formatUiMessage(locale, "shareInviteEmail")}
               </label>
               <input
                 className="app-input"
@@ -58,7 +58,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
             </div>
             <div className={styles.fieldStack}>
               <label className="app-form-label" htmlFor="invite-role">
-                {locale === "zh-CN" ? "邀请角色" : "Invite role"}
+                {formatUiMessage(locale, "shareInviteRole")}
               </label>
               <select
                 className="app-input"
@@ -79,14 +79,10 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
             >
               {inviteMemberMutation.isPending
                 ? formatUiMessage(locale, "shareCenter.inviteSending")
-                : locale === "zh-CN"
-                  ? "发送邀请"
-                  : "Send invite"}
+                : formatUiMessage(locale, "shareInviteSend")}
             </button>
             <p className={`app-form-footnote ${styles.emailHint}`}>
-              {locale === "zh-CN"
-                ? "将尝试发送邀请邮件（需配置 SMTP）；也可手动转发分享页链接。"
-                : "We'll try email (SMTP required); you can also copy the share page link."}
+              {formatUiMessage(locale, "shareInviteSendHint")}
             </p>
             {inviteError ? <p className="app-notice-banner">{inviteError}</p> : null}
           </div>
@@ -139,7 +135,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                           type="button"
                           onClick={() => setPendingRemoveMemberId(null)}
                         >
-                          {locale === "zh-CN" ? "取消" : "Cancel"}
+                          {formatUiMessage(locale, "commonCancel")}
                         </button>
                       </div>
                     ) : (
@@ -157,7 +153,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
             </div>
           ) : (
             <p className={styles.emptyText}>
-              {locale === "zh-CN" ? "暂无成员。" : "No members yet."}
+              {formatUiMessage(locale, "shareInviteNoMembers")}
             </p>
           )}
         </section>

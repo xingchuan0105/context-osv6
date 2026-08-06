@@ -129,4 +129,9 @@ export const commonMessages = {
     zh: "搜索设置…",
     en: "Search settings…",
   },
+
+  commonAnalytics: {
+    zh: "数据分析",
+    en: "Analytics",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

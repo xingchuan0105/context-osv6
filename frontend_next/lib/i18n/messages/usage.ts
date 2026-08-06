@@ -31,7 +31,7 @@ export const usageMessages = {
     en: "Eases in {time}",
   },
   usageSoftLimitWarning: {
-    zh: "接近平台保护限速，建议检查余额或自定义 Provider",
+    zh: "接近平台保护限速，建议检查余额或自定义 Provider。",
     en: "Approaching protective throttle — check balance or custom provider",
   },
   usageTrendTitle: {
@@ -55,7 +55,7 @@ export const usageMessages = {
     en: "{window} usage at {pct}%",
   },
   usageLoading: {
-    zh: "加载中...",
+    zh: "加载中…",
     en: "Loading...",
   },
   usageErrorLoad: {
@@ -83,8 +83,8 @@ export const usageMessages = {
     en: "≈ {used} / {limit} tokens",
   },
   usageMarginNote: {
-    zh: "参考乘数 M={m}（平台模型计费折算）；有自定义 Provider 时对话可不走平台余额",
-    en: "Reference multiplier M={m} for platform model billing; custom provider chat can skip platform balance",
+    zh: "参考计费乘数 M={m}；配置自定义 Provider 后，对话可不消耗平台余额。",
+    en: "Reference multiplier M={m}; with a custom provider, chat can skip platform balance.",
   },
   usageForecastDetail: {
     zh: "预计 30 天用量 {projected}（参考）",
@@ -95,7 +95,7 @@ export const usageMessages = {
     en: "No usage data yet",
   },
   usageTrendAriaLabel: {
-    zh: "近 N 日用量趋势",
+    zh: "近期用量趋势",
     en: "Recent usage trend",
   },
 } satisfies Record<string, UiMessageDescriptor>;

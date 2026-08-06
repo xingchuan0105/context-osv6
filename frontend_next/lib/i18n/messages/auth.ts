@@ -10,7 +10,7 @@ export const authMessages = {
     en: "Create account",
   },
   authCreatingAccount: {
-    zh: "创建中...",
+    zh: "创建中…",
     en: "Creating...",
   },
   authEmailAndCodeRequired: {
@@ -42,7 +42,7 @@ export const authMessages = {
     en: "Continue",
   },
   authLoginSubmitting: {
-    zh: "登录中...",
+    zh: "登录中…",
     en: "Signing in...",
   },
   authLoginSubtitle: {
@@ -94,8 +94,8 @@ export const authMessages = {
     en: "Account creation failed. Try again later.",
   },
   authRegisterSubtitle: {
-    zh: "使用邮箱创建账号，开始使用 Context OS。",
-    en: "Create your account with email to get started with Context OS.",
+    zh: "使用邮箱创建账号，开始使用 Context-OS。",
+    en: "Create your account with email to get started with Context-OS.",
   },
   authReferralCodeLabel: {
     zh: "邀请码",
@@ -138,7 +138,7 @@ export const authMessages = {
     en: "Finish reset",
   },
   authResetConfirmSubmitting: {
-    zh: "提交中...",
+    zh: "提交中…",
     en: "Submitting...",
   },
   authResetConfirmSubtitle: {
@@ -158,7 +158,7 @@ export const authMessages = {
     en: "Enter your email.",
   },
   authResetRequestSubtitle: {
-    zh: "输入邮箱后，我们会发送验证码到你的邮箱。",
+    zh: "输入邮箱后，我们会把验证码发送给你。",
     en: "Enter your email and we'll send a verification code.",
   },
   authResetRequestTitle: {
@@ -174,7 +174,7 @@ export const authMessages = {
     en: "Send code",
   },
   authResetSendSubmitting: {
-    zh: "发送中...",
+    zh: "发送中…",
     en: "Sending...",
   },
   authResetUnavailable: {
@@ -190,11 +190,11 @@ export const authMessages = {
     en: "Continue",
   },
   authResetVerifySubmitting: {
-    zh: "验证中...",
+    zh: "验证中…",
     en: "Verifying...",
   },
   authResetVerifySubtitle: {
-    zh: "输入邮箱和验证码，继续到设置新密码。",
+    zh: "输入邮箱和验证码，继续设置新密码。",
     en: "Enter your email and verification code to continue.",
   },
   authResetVerifyTitle: {
@@ -210,7 +210,7 @@ export const authMessages = {
     en: "Sign up",
   },
   authErrorAccountNotRegistered: {
-    zh: "此账号还未注册，请先注册。",
+    zh: "该账号还未注册，请先注册。",
     en: "This account is not registered yet. Sign up first.",
   },
   authErrorEmailExists: {
@@ -230,8 +230,8 @@ export const authMessages = {
     en: "The reset session is invalid or has expired.",
   },
   authErrorPasswordResetUnavailable: {
-    zh: "当前环境未启用密码找回，请联系管理员。",
-    en: "Password reset is unavailable in this environment. Contact an administrator.",
+    zh: "当前未开放密码找回，请联系管理员。",
+    en: "Password reset is currently unavailable. Contact an administrator.",
   },
   authErrorServiceUnavailable: {
     zh: "服务暂时不可用，请稍后再试。",
@@ -250,7 +250,7 @@ export const authMessages = {
     en: "The Privacy Policy was updated. Refresh the page and try again.",
   },
   authErrorInvalidLegalContext: {
-    zh: "法律同意记录无效，请刷新页面后重试。",
+    zh: "同意确认记录无效，请刷新页面后重试。",
     en: "The legal acceptance request was invalid. Refresh the page and try again.",
   },
 } satisfies Record<string, UiMessageDescriptor>;

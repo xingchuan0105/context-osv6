@@ -38,7 +38,7 @@ export const shareMessages = {
     en: "Sign in to ask questions",
   },
   "sharedPublic.loading": {
-    zh: "正在加载共享内容...",
+    zh: "正在加载共享内容…",
     en: "Loading shared content...",
   },
   "sharedPublic.invalidLinkTitle": {
@@ -110,7 +110,7 @@ export const shareMessages = {
     en: "Ask question",
   },
   "sharedPublic.submitting": {
-    zh: "回答中...",
+    zh: "回答中…",
     en: "Answering...",
   },
   "sharedPublic.answerTitle": {
@@ -122,7 +122,7 @@ export const shareMessages = {
     en: "Citations",
   },
   "sharedPublic.degradedBanner": {
-    zh: "回答经过降级处理。",
+    zh: "回答已降级。",
     en: "This answer was served in a degraded mode.",
   },
   "sharedPublic.inviteTitle": {
@@ -266,7 +266,7 @@ export const shareMessages = {
     en: "Save changes",
   },
   "shareCenter.saving": {
-    zh: "保存中...",
+    zh: "保存中…",
     en: "Saving...",
   },
   "shareCenter.inviteSectionTitle": {
@@ -274,7 +274,7 @@ export const shareMessages = {
     en: "Members & permissions",
   },
   "shareCenter.inviteSectionSubtitle": {
-    zh: "邀请成员参与当前 Workspace，并管理他们的访问权限。",
+    zh: "邀请成员参与当前工作区，并管理他们的访问权限。",
     en: "Invite collaborators to this workspace and manage their access.",
   },
   "shareCenter.inviteEmailLabel": {
@@ -422,7 +422,7 @@ export const shareMessages = {
     en: "Confirm cost before enabling share",
   },
   "shareCenter.ownerCostConfirmBody": {
-    zh: "访客使用本分享产生的模型调用与 API 费用将计入你（工作区所有者）的额度与密钥，而不是访客本人。开启后请留意用量与预算。",
+    zh: "访客使用分享产生的模型与 API 费用，会从你（工作区所有者）的余额与密钥中扣除，而不是由访客承担。开启后请留意用量与预算。",
     en: "Model usage and API costs from visitors on this share are billed to you (the workspace owner)—your credits and keys—not the visitor. Review usage and budget after enabling.",
   },
   "shareCenter.ownerCostConfirmAction": {
@@ -458,7 +458,7 @@ export const shareMessages = {
     en: "Invite / sign-in required",
   },
   "shareCenter.visitorModeHint": {
-    zh: "「匿名链接」= 未登录可提问（按访客身份限次）；「定向邀请 / 须登录」= 仅登录访客可提问。分享场景模型费用由 Owner 余额或自定义 Provider 承担（Owner-pays）。",
+    zh: "「匿名链接」：未登录也可提问（按访客限次）；「定向邀请 / 须登录」：仅登录访客可提问。分享问答的费用由工作区所有者的余额或自定义 Provider 承担。",
     en: "\"Anonymous link\" allows unauthenticated questions (capped per visitor). \"Invite / sign-in\" requires a logged-in visitor. Share chat is Owner-pays (balance or custom provider).",
   },
   "shareCenter.questionLimitsLabel": {
@@ -478,11 +478,11 @@ export const shareMessages = {
     en: "Save caps",
   },
   "shareCenter.ownerPaysHint": {
-    zh: "分享场景模型费用由 Owner 余额/自定义 Provider 承担（Owner-pays 已生效）。",
+    zh: "分享问答费用由工作区所有者的余额或自定义 Provider 承担。",
     en: "Share chat is Owner-pays (balance or custom provider) — already in effect.",
   },
   "shareCenter.memberLimitWorkspaceNote": {
-    zh: "登录访客上限为工作区级统一配置（非按人单独配额）。",
+    zh: "登录访客上限按工作区统一配置（不是按人单独计算）。",
     en: "Signed-in visitor cap is workspace-wide (not per-person).",
   },
   "shareCenter.validityLabel": {
@@ -510,19 +510,19 @@ export const shareMessages = {
     en: "No expiry",
   },
   "shareCenter.backToWorkspace": {
-    zh: "返回 Workspace",
+    zh: "返回工作区",
     en: "Back to workspace",
   },
   "shareCenter.loading": {
-    zh: "正在加载分享数据...",
+    zh: "正在加载分享数据…",
     en: "Loading share data...",
   },
   "shareCenter.analyticsLoading": {
-    zh: "正在加载分享分析...",
+    zh: "正在加载分享分析…",
     en: "Loading share analytics...",
   },
   "shareCenter.accessLogsLoading": {
-    zh: "正在加载访问日志...",
+    zh: "正在加载访问日志…",
     en: "Loading access logs...",
   },
   "shareCenter.settingsLoadError": {
@@ -594,7 +594,7 @@ export const shareMessages = {
     en: "Please sign in first.",
   },
   "shareCenter.inviteSending": {
-    zh: "邀请中...",
+    zh: "邀请中…",
     en: "Sending...",
   },
   "shareCenter.inviteEmailRequired": {
@@ -642,7 +642,7 @@ export const shareMessages = {
     en: "Confirm remove",
   },
   "shareCenter.removePendingHint": {
-    zh: "确认从当前 Workspace 中移除 {name} 吗？",
+    zh: "确认从当前工作区移除 {name} 吗？",
     en: "Remove {name} from this workspace?",
   },
   "shareCenter.removeError": {
@@ -670,7 +670,7 @@ export const shareMessages = {
     en: "Distribution overview",
   },
   "shareCenter.overviewSectionSubtitle": {
-    zh: "用当前已经采集到的数据，判断这份知识是否开始传播、是否仍在传播。",
+    zh: "根据当前数据，判断这份知识是否开始传播、是否仍在传播。",
     en: "Use current telemetry to check whether this knowledge package has started spreading and whether it is still active.",
   },
   "shareCenter.overviewCurrentStatus": {
@@ -750,7 +750,7 @@ export const shareMessages = {
     en: "Translate raw access data into next actions.",
   },
   "shareCenter.diagnosticsLoading": {
-    zh: "正在生成传播诊断...",
+    zh: "正在生成传播诊断…",
     en: "Building diagnostics...",
   },
   "shareCenter.diagnosticsDisabledTitle": {
@@ -766,7 +766,7 @@ export const shareMessages = {
     en: "Distribution not started",
   },
   "shareCenter.diagnosticsNotStartedBody": {
-    zh: "这份知识已经可以被访问，但还没有产生访问。你可能还没有分发出去，或者入口不够明确。",
+    zh: "这份知识已经可以访问，但还没有产生访问。可能你还没分发出去，或者入口不够明显。",
     en: "This knowledge package is available, but nobody has accessed it yet. You may need to distribute it or make the entry point clearer.",
   },
   "shareCenter.diagnosticsStalledTitle": {
@@ -818,7 +818,7 @@ export const shareMessages = {
     en: "View share analytics →",
   },
   "shareQuickModal.loading": {
-    zh: "正在加载分享设置...",
+    zh: "正在加载分享设置…",
     en: "Loading share settings...",
   },
   "shareAnalyze.backWorkspace": {
@@ -898,7 +898,7 @@ export const shareMessages = {
     en: "Traffic & activity",
   },
   "shareAnalyze.metricsSubtitle": {
-    zh: "活跃≈有访问的天数；总访问量与独立访客来自 share analytics。",
+    zh: "活跃天数≈有访问的天数；总访问量与独立访客来自分享分析。",
     en: "Activity ≈ days with visits; totals come from share analytics.",
   },
   "shareAnalyze.totalViews": {
@@ -922,8 +922,8 @@ export const shareMessages = {
     en: "Traffic trend",
   },
   "shareAnalyze.trendSubtitle": {
-    zh: "按日汇总的分享访问量（views_by_day）。",
-    en: "Daily share views (views_by_day).",
+    zh: "按日汇总的分享访问量。",
+    en: "Daily share views.",
   },
   "shareAnalyze.trendEmpty": {
     zh: "暂无按日访问数据。",
@@ -942,7 +942,37 @@ export const shareMessages = {
     en: "No access logs yet.",
   },
   "shareAnalyze.visitorPrivacyNote": {
-    zh: "访客标识为链接 token 或匿名边缘 IP 级身份，非实名；请勿当作个人身份使用。",
-    en: "Visitor ids are share-token or anonymous edge-IP level — not personal identity.",
+    zh: "访客身份来自分享链接或匿名网络信息，并非实名，请勿当作个人身份使用。",
+    en: "Visitor identity is link-based or anonymous network-level — not personal identity.",
+  },
+
+  "shareInviteEmail": {
+    zh: "邀请邮箱",
+    en: "Invite email",
+  },
+  "shareInviteRole": {
+    zh: "邀请角色",
+    en: "Invite role",
+  },
+  "shareInviteSend": {
+    zh: "发送邀请",
+    en: "Send invite",
+  },
+  "shareInviteSendHint": {
+    zh: "将尝试发送邀请邮件（需配置 SMTP）；也可手动转发分享页链接。",
+    en: "We'll try email (SMTP required); you can also copy the share page link.",
+  },
+  "shareInviteNoMembers": {
+    zh: "暂无成员。",
+    en: "No members yet.",
+  },
+  "sharedPublicVerifyHint": {
+    zh: "请先完成人机验证后再提问。",
+    en: "Complete the human verification challenge before asking.",
+  },
+
+  "shareInvalidWorkspaceId": {
+    zh: "当前工作区标识无效。",
+    en: "Invalid workspace identifier.",
   },
 } satisfies Record<string, UiMessageDescriptor>;

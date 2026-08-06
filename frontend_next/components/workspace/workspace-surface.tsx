@@ -396,12 +396,8 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     "--workspace-right-rail-width": `${workspaceUi.rightRailWidth}px`,
   } as CSSProperties;
 
-  const workspaceUnavailableTitle =
-    locale === "zh-CN" ? "当前工作区不可用" : "Workspace unavailable";
-  const workspaceUnavailableHint =
-    locale === "zh-CN"
-      ? "这个页面的 workspace id 当前不在后端数据库里，继续发送消息只会返回错误。请确认你连接的是正确的 API/数据库，或者重新创建一个工作区。"
-      : "This workspace id is not present in the current backend database. Sending messages here will only fail. Check that you are connected to the expected API/database, or create a new workspace.";
+  const workspaceUnavailableTitle = formatUiMessage(locale, "workspaceUnavailable");
+  const workspaceUnavailableHint = formatUiMessage(locale, "workspaceUnavailableBody");
 
   return (
     <main className={styles.shell}>
@@ -423,7 +419,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
             <p className={styles.workspaceUnavailableHint}>{workspaceUnavailableHint}</p>
             <div className={styles.workspaceUnavailableActions}>
               <button className={styles.primaryButton} type="button" onClick={() => void createWorkspaceFlow()}>
-                {locale === "zh-CN" ? "新建工作区" : "Create workspace"}
+                {formatUiMessage(locale, "dashboardNewWorkspace")}
               </button>
             </div>
           </div>

@@ -69,9 +69,9 @@ export function getWorkspaceTone(title: string) {
 }
 
 export function formatWorkspaceSourceCount(locale: DashboardLocale, documentCount: number) {
-  if (locale === "zh-CN") {
-    return `${documentCount} \u4e2a\u6765\u6e90`;
+  if (documentCount === 1) {
+    return formatUiMessage(locale, "dashboardSourceCountOne");
   }
 
-  return `${documentCount} source${documentCount === 1 ? "" : "s"}`;
+  return formatUiMessage(locale, "dashboardSourceCountMany", { count: String(documentCount) });
 }

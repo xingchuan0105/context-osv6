@@ -221,7 +221,7 @@ export function WorkspaceTopBar({
               href={`/dashboard/${workspaceId}/analyze`}
             >
               <span className={styles.topBarActionLabel}>
-                {locale === "zh-CN" ? "数据分析" : "Analytics"}
+                {formatUiMessage(locale, "commonAnalytics")}
               </span>
             </Link>
           ) : null}

@@ -289,7 +289,7 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
                   : formatUiMessage(locale, "settings.billing.providerSummaryNone")}
               </strong>
               <Link className="app-link" href="/settings?tab=providers">
-                {locale === "zh-CN" ? "管理" : "Manage"}
+                {formatUiMessage(locale, "settingsBillingManage")}
               </Link>
             </div>
             <div className={`app-inline-row ${shared.summaryRow}`}>

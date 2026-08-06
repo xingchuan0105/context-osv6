@@ -99,7 +99,7 @@ export const desktopMessages = {
   },
   "desktop.backToHub": {
     zh: "返回官网",
-    en: "Brand site",
+    en: "Back to brand site",
   },
   "desktop.openSaaS": {
     zh: "打开云端应用",

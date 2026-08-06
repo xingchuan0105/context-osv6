@@ -150,9 +150,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
           <p className="app-page-subtitle" style={{ margin: 0 }}>
             {step === "tiers"
               ? formatUiMessage(locale, "upgradeModal.subtitle")
-              : locale === "zh-CN"
-                ? `已选 ${selectedTier === "pro" ? "Pro" : "Plus"} · 选择计费周期后继续支付`
-                : `Selected ${selectedTier === "pro" ? "Pro" : "Plus"} · pick billing cycle, then pay`}
+              : formatUiMessage(locale, "settingsUpgradeSelectedTier", { tier: selectedTier === "pro" ? "Pro" : "Plus" })}
           </p>
 
           {step === "tiers" ? (
@@ -167,7 +165,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
             <>
               <div
                 role="group"
-                aria-label={locale === "zh-CN" ? "计费周期" : "Billing interval"}
+                aria-label={formatUiMessage(locale, "settingsUpgradeBillingInterval")}
                 style={{
                   display: "flex",
                   gap: "0.5rem",
@@ -212,7 +210,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
                     setSelectedTier(null);
                   }}
                 >
-                  {locale === "zh-CN" ? "← 返回档位" : "← Back to plans"}
+                  {formatUiMessage(locale, "settingsUpgradeBackToPlans")}
                 </button>
               </div>
 

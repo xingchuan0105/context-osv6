@@ -52,7 +52,7 @@ function DashboardTabs({
         data-testid="dashboard-tab-analytics"
         href="/dashboard/analytics"
       >
-        {locale === "zh-CN" ? "数据分析" : "Analytics"}
+        {formatUiMessage(locale, "commonAnalytics")}
       </Link>
     </nav>
   );

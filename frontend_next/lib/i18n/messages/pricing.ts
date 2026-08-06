@@ -9,7 +9,7 @@ export const pricingMessages = {
     en: "Choose your plan",
   },
   pricingSubtitle: {
-    zh: "客户端免费 · 私有使用免费。付费解锁更多可分享知识库名额。",
+    zh: "客户端免费 · 私有使用免费。付费解锁更多可分享工作区名额。",
     en: "Client free · private use free. Paid plans unlock more shareable workspaces.",
   },
   pricingMonthly: {
@@ -24,17 +24,12 @@ export const pricingMessages = {
     zh: "约 10 个月价",
     en: "~10 months price",
   },
-  /** @deprecated alias — prefer pricingYearly */
-  pricingYearlySoon: {
-    zh: "年付",
-    en: "Yearly",
-  },
   pricingTierPlusBadge: {
     zh: "推荐",
     en: "Recommended",
   },
   pricingPlanFreeDescription: {
-    zh: "客户端与私有知识库免费；可分享工作区 3 个。",
+    zh: "客户端与私有工作区免费；可分享工作区 3 个。",
     en: "Client and private workspaces free; 3 shareable workspaces.",
   },
   pricingPlanPlusDescription: {
@@ -62,7 +57,7 @@ export const pricingMessages = {
     en: "What am I buying?",
   },
   pricingFaqTokenAnswer: {
-    zh: "主商品是可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己用的知识库免费。模型调用另用余额或自定义 Provider。",
+    zh: "主商品是可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己使用的工作区免费。模型调用另用余额或自定义 Provider。",
     en: "Primary product is shareable workspace slots (Free 3 / Plus 10 / Pro 100). The client and private workspaces are free. Model calls use balance or a custom provider.",
   },
   pricingFaqReset: {
@@ -70,8 +65,8 @@ export const pricingMessages = {
     en: "Who pays for visitor questions?",
   },
   pricingFaqResetAnswer: {
-    zh: "分享场景由知识库 Owner 承担模型成本（Owner-pays）。请关注余额与自定义 Provider 配置。",
-    en: "On shared workspaces the Owner pays model cost (Owner-pays). Watch balance and custom provider setup.",
+    zh: "分享问答的成本由工作区所有者承担（Owner-pays）。请留意余额与自定义 Provider 配置。",
+    en: "On shared workspaces, the workspace owner pays model costs (Owner-pays). Keep an eye on balance and custom provider setup.",
   },
   pricingFaqUpgrade: {
     zh: "升级后立即生效吗？",

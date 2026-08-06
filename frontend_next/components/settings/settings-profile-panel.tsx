@@ -195,7 +195,7 @@ export function ProfilePanel() {
   const displayName =
     auth.user?.full_name?.trim() ||
     auth.user?.email?.split("@")[0] ||
-    (locale === "zh-CN" ? "未设置名称" : "No display name");
+    (formatUiMessage(locale, "settingsProfileNoName"));
 
   return (
     <section className={shared.section} data-testid="settings-profile-panel">
@@ -224,7 +224,7 @@ export function ProfilePanel() {
               setEditOpen(true);
             }}
           >
-            {locale === "zh-CN" ? "编辑资料" : "Edit profile"}
+            {formatUiMessage(locale, "settingsProfileEditProfile")}
           </button>
         </div>
 
@@ -248,7 +248,7 @@ export function ProfilePanel() {
                 <p className={styles.displayBio}>{auth.user.bio}</p>
               ) : (
                 <p className={shared.mutedText}>
-                  {locale === "zh-CN" ? "还没有简介" : "No bio yet"}
+                  {formatUiMessage(locale, "settingsProfileNoBio")}
                 </p>
               )}
               {auth.user?.contact_url ? (
@@ -264,7 +264,7 @@ export function ProfilePanel() {
       <AppModal
         open={editOpen}
         size="md"
-        title={locale === "zh-CN" ? "编辑个人资料" : "Edit profile"}
+        title={formatUiMessage(locale, "settingsProfileEditProfile")}
         closeLabel={formatUiMessage(locale, "appModal.close")}
         testId="settings-profile-edit-modal"
         onClose={() => setEditOpen(false)}

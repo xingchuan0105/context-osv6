@@ -98,7 +98,7 @@ export const adminMessages = {
     en: "Audit logs",
   },
   "admin.pageSubtitle": {
-    zh: "查看账户、用量、健康状态和系统级运营数据。",
+    zh: "查看账户、用量、健康与系统级运营数据。",
     en: "Review accounts, usage, health, and system-wide operational signals.",
   },
   "admin.searchLabel": {
@@ -106,7 +106,7 @@ export const adminMessages = {
     en: "Search",
   },
   "admin.searchPlaceholder": {
-    zh: "按名称、邮箱或资源 ID 筛选",
+    zh: "按名称、邮箱或资源编号筛选",
     en: "Filter by name, email, or resource ID",
   },
   "admin.filter.statusLabel": {
@@ -214,7 +214,7 @@ export const adminMessages = {
     en: "System health",
   },
   "admin.health.sectionSubtitle": {
-    zh: "检查服务状态、退化信号和恢复建议。",
+    zh: "检查服务状态、降级信号和恢复建议。",
     en: "Check service status, degradation signals, and recovery hints.",
   },
   "admin.billing.sectionTitle": {
@@ -302,7 +302,7 @@ export const adminMessages = {
     en: "Sending…",
   },
   "admin.broadcast.signInRequired": {
-    zh: "请先登录",
+    zh: "请先登录。",
     en: "Sign in required",
   },
   "admin.broadcast.success": {

@@ -64,7 +64,7 @@ export function WorkspaceNotesPane({
   const { locale } = useUiPreferences();
   const [openMenuNoteId, setOpenMenuNoteId] = useState<string | null>(null);
   const openMenuRef = useRef<HTMLDivElement | null>(null);
-  const savedNotesLabel = locale === "zh-CN" ? "已保存笔记" : "Saved notes";
+  const savedNotesLabel = formatUiMessage(locale, "workspaceNotesSaved");
   const derivedDraftTitle = deriveNoteTitleFromContent(draftContent);
   const displayedDraftTitle = derivedDraftTitle || draftTitle || formatUiMessage(locale, "workspaceRightRail.untitledNote");
 
@@ -132,7 +132,7 @@ export function WorkspaceNotesPane({
             contentLabel={formatUiMessage(locale, "workspaceRightRail.noteContentLabel")}
             locale={locale}
             onChange={onDraftContentChange}
-            placeholder={locale === "zh-CN" ? "开始记录笔记…" : "Start writing notes…"}
+            placeholder={formatUiMessage(locale, "workspaceNotesPlaceholder")}
             toolbarLabel={formatUiMessage(locale, "workspaceRightRail.noteEditorToolbar")}
             value={draftContent}
           />
