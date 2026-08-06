@@ -324,7 +324,6 @@ dependencies = [
  "avrag-cache-redis",
  "avrag-chatmemory",
  "avrag-guardrails",
- "avrag-licensing",
  "avrag-llm",
  "avrag-rag-core",
  "avrag-rag-core-ports",
@@ -389,6 +388,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2 0.10.9",
  "telemetry",
  "thiserror 2.0.18",
  "tokio",
@@ -821,20 +821,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tracing",
- "uuid",
-]
-
-[[package]]
-name = "avrag-licensing"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "common",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tokio",
- "urlencoding",
  "uuid",
 ]
 
@@ -6721,7 +6707,6 @@ dependencies = [
  "async-stream",
  "async-trait",
  "avrag-billing",
- "avrag-licensing",
  "avrag-rag-core",
  "avrag-retrieval-data-plane",
  "avrag-share",

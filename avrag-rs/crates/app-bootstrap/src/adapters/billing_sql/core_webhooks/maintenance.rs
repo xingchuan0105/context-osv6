@@ -80,6 +80,163 @@ pub(super) async fn expire_subscriptions(repo: Arc<PgAppRepository>) -> Result<(
     }
 
     tx.commit().await?;
+
+    // ADR-0010: release stale usage_hold rows left by crashes / failed release.
+    release_stale_usage_holds(repo.clone()).await?;
+    Ok(())
+}
+
+/// Default: holds older than 15 minutes without a matching release are returned.
+///
+/// Invoked from [`expire_subscriptions`] (worker maintenance tick). Each hold is
+/// released in its own transaction so one bad row / concurrent reaper cannot
+/// roll back the batch; release is idempotent on `usage_hold_release:{hold_id}`.
+pub(super) async fn release_stale_usage_holds(repo: Arc<PgAppRepository>) -> Result<()> {
+    let max_age_secs: i64 = std::env::var("WALLET_HOLD_MAX_AGE_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(900);
+
+    // Holds whose release row is missing and older than max age.
+    // `usage_hold:` is 11 chars; substring from 12 is the hold uuid suffix.
+    let stale = {
+        let mut tx = repo.raw().begin().await?;
+        set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
+        let rows = sqlx::query(
+            r#"
+            select h.user_id, h.amount_fen, h.idempotency_key
+            from wallet_ledger h
+            where h.kind = 'usage_hold'
+              and h.created_at < now() - make_interval(secs => $1)
+              and not exists (
+                select 1 from wallet_ledger r
+                where r.kind = 'usage_hold_release'
+                  and r.idempotency_key = 'usage_hold_release:' || substring(h.idempotency_key from 12)
+              )
+            limit 200
+            "#,
+        )
+        .bind(max_age_secs as f64)
+        .fetch_all(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+        rows
+    };
+
+    for row in stale {
+        let user_id = match row.try_get::<Uuid, _>("user_id") {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "stale hold row missing user_id; skip");
+                continue;
+            }
+        };
+        let amount_fen = match row.try_get::<i64, _>("amount_fen") {
+            Ok(v) => v, // negative
+            Err(e) => {
+                tracing::warn!(error = %e, "stale hold row missing amount_fen; skip");
+                continue;
+            }
+        };
+        let hold_fen = -amount_fen;
+        if hold_fen <= 0 {
+            continue;
+        }
+        let idem = match row.try_get::<String, _>("idempotency_key") {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "stale hold row missing idempotency_key; skip");
+                continue;
+            }
+        };
+        let hold_id_str = idem.strip_prefix("usage_hold:").unwrap_or("");
+        let Ok(hold_id) = Uuid::parse_str(hold_id_str) else {
+            tracing::warn!(%idem, "stale hold with unparseable id; skip");
+            continue;
+        };
+        let release_key = format!("usage_hold_release:{hold_id}");
+
+        let release_res: Result<()> = async {
+            let mut tx = repo.raw().begin().await?;
+            set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
+
+            let existing = sqlx::query("select id from wallet_ledger where idempotency_key = $1")
+                .bind(&release_key)
+                .fetch_optional(tx.as_mut())
+                .await?;
+            if existing.is_some() {
+                tx.commit().await?;
+                return Ok(());
+            }
+
+            sqlx::query(
+                "INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+            )
+            .bind(user_id)
+            .execute(tx.as_mut())
+            .await?;
+            let wallet_row = sqlx::query(
+                "SELECT balance_fen FROM wallets WHERE user_id = $1 FOR UPDATE",
+            )
+            .bind(user_id)
+            .fetch_one(tx.as_mut())
+            .await?;
+            let balance: i64 = wallet_row.try_get("balance_fen")?;
+            let new_balance = balance + hold_fen;
+            sqlx::query(
+                "UPDATE wallets SET balance_fen = $2, updated_at = now() WHERE user_id = $1",
+            )
+            .bind(user_id)
+            .bind(new_balance)
+            .execute(tx.as_mut())
+            .await?;
+            // ON CONFLICT: concurrent reaper / late normal release already wrote this key.
+            let inserted = sqlx::query(
+                r#"
+                INSERT INTO wallet_ledger
+                  (id, user_id, kind, amount_fen, balance_after_fen, idempotency_key, metadata)
+                VALUES ($1, $2, 'usage_hold_release', $3, $4, $5, $6)
+                ON CONFLICT (idempotency_key) DO NOTHING
+                "#,
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(hold_fen)
+            .bind(new_balance)
+            .bind(&release_key)
+            .bind(serde_json::json!({
+                "hold_id": hold_id,
+                "reaper": true,
+                "max_age_secs": max_age_secs,
+            }))
+            .execute(tx.as_mut())
+            .await?;
+            if inserted.rows_affected() == 0 {
+                // Lost race — do not keep the balance credit from this attempt.
+                tx.rollback().await?;
+                return Ok(());
+            }
+            tx.commit().await?;
+            tracing::info!(
+                %user_id,
+                %hold_id,
+                hold_fen,
+                "released stale wallet usage_hold"
+            );
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = release_res {
+            tracing::warn!(
+                %user_id,
+                %hold_id,
+                error = %e,
+                "failed to release stale wallet usage_hold"
+            );
+        }
+    }
+
     Ok(())
 }
 

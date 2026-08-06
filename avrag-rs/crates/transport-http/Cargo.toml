@@ -9,7 +9,6 @@ version.workspace = true
 anyhow.workspace = true
 analytics = { path = "../analytics" }
 avrag-billing = { path = "../billing" }
-avrag-licensing = { path = "../licensing" }
 avrag-share = { path = "../share" }
 app-bootstrap = { path = "../app-bootstrap" }
 app-chat = { path = "../app-chat" }
