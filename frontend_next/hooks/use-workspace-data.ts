@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "../lib/auth/client";
 import { useAuth } from "../lib/auth/context";
@@ -33,6 +33,32 @@ function getWorkspaceLoadErrorMessage(error: unknown, locale: string) {
     : "Unable to load this workspace right now.";
 }
 
+function pickActiveSessionId(args: {
+  preferredOk: string | null;
+  current: string | null;
+  sessions: WorkspaceSession[];
+  bootstrapped: boolean;
+}): { next: string | null; bootstrapped: boolean } {
+  const { preferredOk, current, sessions, bootstrapped } = args;
+  // URL / Cmd+K deep-link always wins when the id is still in the list.
+  if (preferredOk) {
+    return { next: preferredOk, bootstrapped: true };
+  }
+  // First successful load for this workspace: default to newest list head.
+  if (!bootstrapped) {
+    return { next: sessions[0]?.id ?? null, bootstrapped: true };
+  }
+  // After bootstrap: keep intentional new-thread (null) and valid selection.
+  // Clearing `?session=` must not snap back to sessions[0].
+  if (current === null) {
+    return { next: null, bootstrapped: true };
+  }
+  if (sessions.some((session) => session.id === current)) {
+    return { next: current, bootstrapped: true };
+  }
+  return { next: sessions[0]?.id ?? null, bootstrapped: true };
+}
+
 export function useWorkspaceData(
   workspaceId: string,
   options?: { preferredSessionId?: string | null },
@@ -41,6 +67,7 @@ export function useWorkspaceData(
   const router = useRouter();
   const { locale } = useUiPreferences();
   const preferredSessionId = options?.preferredSessionId?.trim() || null;
+  const sessionBootstrapRef = useRef(false);
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [workspaceTitleDraft, setWorkspaceTitleDraft] = useState("");
@@ -50,6 +77,14 @@ export function useWorkspaceData(
   const [renameSessionTarget, setRenameSessionTarget] = useState<WorkspaceSession | null>(null);
   const [renameSessionTitle, setRenameSessionTitle] = useState("");
   const [renameSubmitting, setRenameSubmitting] = useState(false);
+
+  useEffect(() => {
+    sessionBootstrapRef.current = false;
+    setActiveSessionId(null);
+    setWorkspace(null);
+    setSessions([]);
+    setWorkspaceLoadError("");
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!auth.initialized || !auth.token) return;
@@ -66,25 +101,50 @@ export function useWorkspaceData(
         setWorkspace(ws.workspace);
         setWorkspaceTitleDraft(ws.workspace.title || ws.workspace.name);
         setSessions(sess.sessions);
+        // preferredSessionId is applied in a separate effect so writing
+        // `?session=` after selection does not re-fetch the workspace.
         const preferredOk =
           preferredSessionId &&
           sess.sessions.some((session) => session.id === preferredSessionId)
             ? preferredSessionId
             : null;
-        setActiveSessionId((cur) => preferredOk ?? cur ?? sess.sessions[0]?.id ?? null);
+        setActiveSessionId((cur) => {
+          const picked = pickActiveSessionId({
+            preferredOk,
+            current: cur,
+            sessions: sess.sessions,
+            bootstrapped: sessionBootstrapRef.current,
+          });
+          sessionBootstrapRef.current = picked.bootstrapped;
+          return picked.next;
+        });
       } catch (error) {
         if (cancelled) return;
         setWorkspace(null);
         setWorkspaceTitleDraft("");
         setSessions([]);
         setActiveSessionId(null);
+        sessionBootstrapRef.current = false;
         setWorkspaceLoadError(getWorkspaceLoadErrorMessage(error, locale));
       }
     }
 
     void load();
     return () => { cancelled = true; };
-  }, [auth.initialized, auth.token, workspaceId, locale, preferredSessionId]);
+    // preferredSessionId intentionally omitted — see effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link applied separately
+  }, [auth.initialized, auth.token, workspaceId, locale]);
+
+  // Cmd+K / external deep-link: switch thread when `?session=` changes without reload.
+  useEffect(() => {
+    if (!preferredSessionId || sessions.length === 0) {
+      return;
+    }
+    if (!sessions.some((session) => session.id === preferredSessionId)) {
+      return;
+    }
+    setActiveSessionId((cur) => (cur === preferredSessionId ? cur : preferredSessionId));
+  }, [preferredSessionId, sessions]);
 
   useEffect(() => {
     setRenameSessionTarget(null);

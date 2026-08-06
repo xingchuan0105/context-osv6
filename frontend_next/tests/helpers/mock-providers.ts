@@ -95,6 +95,8 @@ export function createWorkspaceSurfaceMocks() {
   return {
     pushMock,
     replaceMock,
+    /** Mutable URLSearchParams for WorkspaceSurface `?session=` deep-link tests. */
+    searchParams: new URLSearchParams(),
     ...createDashboardMocks(),
     setLocaleMock,
     setThemeMock,

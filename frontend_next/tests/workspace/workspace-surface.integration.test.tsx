@@ -24,6 +24,18 @@ afterEach(() => {
 });
 
 describe("WorkspaceSurface integration", () => {
+  it("honors ?session= deep-link when present on load", async () => {
+    mocks.searchParams = new URLSearchParams("session=sess-2");
+
+    renderWorkspaceSurface("ws-1");
+
+    await waitFor(() => {
+      expect(mocks.listWorkspaceSessionMessagesMock).toHaveBeenCalledWith("token-123", "sess-2");
+    });
+    // Already on the deep-linked session — no replace needed.
+    expect(mocks.replaceMock).not.toHaveBeenCalled();
+  });
+
   it("renders real chat and right-rail panes and wires store-backed selection through the DOM", async () => {
     const user = userEvent.setup();
 
@@ -43,14 +55,21 @@ describe("WorkspaceSurface integration", () => {
     expect(within(sourceTwoItem!).getByRole("button", { pressed: true })).toBeTruthy();
     expect(within(sourcesList).getAllByRole("listitem")).toHaveLength(2);
 
+    mocks.replaceMock.mockClear();
+
     await user.click(screen.getByRole("button", { name: "新建会话" }));
     expect(mocks.createWorkspaceSessionMock).not.toHaveBeenCalled();
+    expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard/ws-1");
 
     const history = screen.getByRole("region", { name: "工作区历史" });
     await user.click(within(history).getByText("General thread"));
 
     await waitFor(() => {
       expect(mocks.listWorkspaceSessionMessagesMock).toHaveBeenCalledWith("token-123", "sess-2");
+    });
+
+    await waitFor(() => {
+      expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard/ws-1?session=sess-2");
     });
 
     await user.click(screen.getByRole("button", { name: "全选" }));
@@ -191,7 +210,8 @@ describe("WorkspaceSurface integration", () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId("workspace-citation-modal")).toBeNull();
-      expect(workspaceUiStore.getState().workspaces["ws-1"]?.rightRailOpen).toBe(true);
+      // Web sources open as a centered modal (not the sources right-rail).
+      expect(screen.getByTestId("workspace-web-sources-modal")).toBeTruthy();
       expect(screen.getByRole("link", { name: "Search Result" }).getAttribute("href")).toBe(
         "https://example.test/search",
       );

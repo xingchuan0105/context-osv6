@@ -22,6 +22,7 @@ import { probePricingRevampUsageWindow } from "../../lib/billing/featureFlag";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
+import { workspaceSessionHref } from "../../lib/workspace/session-url";
 import {
   DEFAULT_WORKSPACE_UI_STATE,
   HISTORY_RAIL_MAX_WIDTH,
@@ -155,8 +156,23 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     setRenameSessionError("");
   }
 
+  const syncSessionUrl = useCallback(
+    (sessionId: string | null) => {
+      // Always replace: comparing against a stale searchParams closure is
+      // easy to get wrong after programmatic query updates; replace is cheap.
+      router.replace(workspaceSessionHref(workspaceId, sessionId));
+    },
+    [router, workspaceId],
+  );
+
+  function selectSession(sessionId: string) {
+    setActiveSessionId(sessionId);
+    syncSessionUrl(sessionId);
+  }
+
   function startNewThread() {
     rawStartNewThread();
+    syncSessionUrl(null);
     workspaceUi.setActiveCitation(null);
     workspaceUi.setFocusedSourceId(null);
   }
@@ -268,7 +284,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
         renameSession(session);
       }}
       onRequestClose={() => workspaceUi.setHistoryRailOpen(false)}
-      onSelectSession={setActiveSessionId}
+      onSelectSession={selectSession}
       onTogglePinSession={(session) => void toggleSessionPin(session)}
       sessions={sessions}
       workspaceId={workspaceId}
@@ -472,6 +488,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                 }}
                 onSessionChange={(sessionId) => {
                   setActiveSessionId(sessionId);
+                  syncSessionUrl(sessionId);
                   workspaceUi.setActiveCitation(null);
                   void reloadSessions(sessionId);
                 }}

@@ -15,15 +15,23 @@ export function installWorkspaceSurfaceMocks() {
 
 export const workspaceSurfaceMocks = globalThis.__workspaceSurfaceHarnessMocks;
 
+// Stable router object — a fresh `{}` every render would re-fire effects that
+// list `router` in their dependency arrays and can hang the suite.
+const workspaceSurfaceRouter = {
+  push: (...args: unknown[]) =>
+    globalThis.__workspaceSurfaceHarnessMocks.pushMock(...args),
+  replace: (...args: unknown[]) =>
+    globalThis.__workspaceSurfaceHarnessMocks.replaceMock(...args),
+  prefetch: vi.fn(),
+  refresh: vi.fn(),
+  back: vi.fn(),
+  forward: vi.fn(),
+};
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: globalThis.__workspaceSurfaceHarnessMocks.pushMock,
-    replace: globalThis.__workspaceSurfaceHarnessMocks.replaceMock,
-    prefetch: vi.fn(),
-    refresh: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-  }),
+  useRouter: () => workspaceSurfaceRouter,
+  usePathname: () => "/dashboard/ws-1",
+  useSearchParams: () => globalThis.__workspaceSurfaceHarnessMocks.searchParams,
 }));
 
 vi.mock("../../../lib/auth/context", () => ({

@@ -63,6 +63,17 @@ export function resetWorkspaceSurfaceMocks(
 
   mocks.pushMock.mockReset();
   mocks.replaceMock.mockReset();
+  // Fresh query string each test so `?session=` deep-link state does not leak.
+  mocks.searchParams = new URLSearchParams();
+  // Mirror App Router: router.replace updates the query the surface reads.
+  mocks.replaceMock.mockImplementation((href: string) => {
+    try {
+      const url = new URL(href, "http://localhost");
+      mocks.searchParams = new URLSearchParams(url.search);
+    } catch {
+      mocks.searchParams = new URLSearchParams();
+    }
+  });
   mocks.createWorkspaceMock.mockReset();
   mocks.getDefaultWorkspaceTitleMock.mockReset();
   mocks.markDefaultWorkspaceTitleUsedMock.mockReset();
