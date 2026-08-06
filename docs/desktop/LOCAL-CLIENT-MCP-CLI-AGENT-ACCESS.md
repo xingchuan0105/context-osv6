@@ -292,15 +292,14 @@ context-os share invite --workspace $WS --email peer@example.com --role viewer
 context-os share revoke --workspace $WS --token <share_token>
 ```
 
-**鉴权优先级（Bearer）：**  
-- 显式 `CONTEXT_OS_USER_TOKEN` ＞ API key  
-- 若仅有 API key + **自动发现**的 user token（文件/桌面）→ **优先 API key**（最小权限，避免静默提权）  
-- 无 API key 时可用 token 文件 / 桌面 JWT  
+**鉴权优先级：**  
+- **stdio MCP / ingest / ask：** least-privilege `bearer_token()` — 显式 user env ＞ API key ＞ 仅 auto user JWT  
+  - 若 API key + **自动发现**的 `user.token` → 优先 API key（避免静默提权）  
+- **CLI share / workspace create|list：** 固定 `tools_call_as_user`（始终带 user JWT），双凭据下不误用 API key  
 - 桌面会话自动加载默认 **关**（`CONTEXT_OS_LOAD_DESKTOP_SESSION=1` 开启）  
 
-**分享 / 建库：** 始终需要 `require_user_token`（用户 JWT）；API key → `api_key_forbidden`。  
-**Agent mint：** `token_kind=agent`，TTL 不超过父会话 `exp`，agent token **不可再 mint**。  
-**Token 文件：** `~/.config/context-os/user.token`（0600 + 目录 0700）；stdio MCP 与 CLI 共用。
+**Agent mint：** JWT `token_kind=agent`（与响应字段一致），TTL ≤ 父会话 `exp`，不可 remint。  
+**Token 文件：** `~/.config/context-os/user.token`（文件 0600；仅自有 `context-os` 目录 0700）。
 
 构建：`cargo build -p context-os --release` → `target/release/context-os` 与 `context-os-mcp`。  
 Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/context-os`。

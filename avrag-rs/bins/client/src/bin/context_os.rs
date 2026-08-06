@@ -42,7 +42,7 @@ ENV:
   CONTEXT_OS_API_KEY / CONTEXT_OS_WORKSPACE_API_KEY   (index/query automation)
   CONTEXT_OS_USER_TOKEN / CONTEXT_OS_AGENT_TOKEN      (user JWT; create workspace + share)
   CONTEXT_OS_USER_TOKEN_FILE                         (default ~/.config/context-os/user.token)
-  CONTEXT_OS_LOAD_DESKTOP_SESSION=0                  (disable auto-load desktop JWT)
+  CONTEXT_OS_LOAD_DESKTOP_SESSION=1                  (opt-in: auto-load desktop local_session JWT)
   CONTEXT_OS_WORKSPACE_ID
 
 FLAGS (global):
@@ -1074,9 +1074,8 @@ async fn cmd_auth_whoami(client: &McpClient) -> Result<()> {
 }
 
 async fn cmd_workspace_create(client: &McpClient, name: &str, description: &str) -> Result<()> {
-    client.config().require_user_token()?;
     let result = client
-        .tools_call(
+        .tools_call_as_user(
             "account.create_workspace",
             json!({ "name": name, "description": description }),
         )
@@ -1087,9 +1086,8 @@ async fn cmd_workspace_create(client: &McpClient, name: &str, description: &str)
 }
 
 async fn cmd_workspace_list(client: &McpClient) -> Result<()> {
-    client.config().require_user_token()?;
     let result = client
-        .tools_call("account.list_workspaces", json!({}))
+        .tools_call_as_user("account.list_workspaces", json!({}))
         .await?;
     let data = tool_data(&result);
     println!("{}", serde_json::to_string_pretty(data)?);
@@ -1102,7 +1100,6 @@ async fn cmd_share_enable(
     expires_in_secs: Option<i64>,
 ) -> Result<()> {
     let workspace_id = client.config().require_workspace_id()?.to_string();
-    client.config().require_user_token()?;
     let mut args = json!({
         "workspace_id": workspace_id,
         "role": role,
@@ -1113,7 +1110,7 @@ async fn cmd_share_enable(
             .insert("expires_in_secs".into(), json!(secs));
     }
     let result = client
-        .tools_call("workspace.share_create_link", args)
+        .tools_call_as_user("workspace.share_create_link", args)
         .await?;
     println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
     Ok(())
@@ -1121,9 +1118,8 @@ async fn cmd_share_enable(
 
 async fn cmd_share_status(client: &McpClient) -> Result<()> {
     let workspace_id = client.config().require_workspace_id()?.to_string();
-    client.config().require_user_token()?;
     let result = client
-        .tools_call(
+        .tools_call_as_user(
             "workspace.share_get_settings",
             json!({ "workspace_id": workspace_id }),
         )
@@ -1140,7 +1136,6 @@ async fn cmd_share_configure(
     member_question_limit: Option<Option<i32>>,
 ) -> Result<()> {
     let workspace_id = client.config().require_workspace_id()?.to_string();
-    client.config().require_user_token()?;
     let mut args = json!({ "workspace_id": workspace_id });
     let obj = args.as_object_mut().unwrap();
     if let Some(level) = access_level {
@@ -1159,7 +1154,7 @@ async fn cmd_share_configure(
         };
     }
     let result = client
-        .tools_call("workspace.share_update_settings", args)
+        .tools_call_as_user("workspace.share_update_settings", args)
         .await?;
     println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
     Ok(())
@@ -1167,9 +1162,8 @@ async fn cmd_share_configure(
 
 async fn cmd_share_revoke(client: &McpClient, token: &str) -> Result<()> {
     let workspace_id = client.config().require_workspace_id()?.to_string();
-    client.config().require_user_token()?;
     let result = client
-        .tools_call(
+        .tools_call_as_user(
             "workspace.share_revoke_link",
             json!({ "workspace_id": workspace_id, "token": token }),
         )
@@ -1179,17 +1173,17 @@ async fn cmd_share_revoke(client: &McpClient, token: &str) -> Result<()> {
 }
 
 async fn cmd_share_quota(client: &McpClient) -> Result<()> {
-    client.config().require_user_token()?;
-    let result = client.tools_call("account.share_quota", json!({})).await?;
+    let result = client
+        .tools_call_as_user("account.share_quota", json!({}))
+        .await?;
     println!("{}", serde_json::to_string_pretty(tool_data(&result))?);
     Ok(())
 }
 
 async fn cmd_share_invite(client: &McpClient, email: &str, role: &str) -> Result<()> {
     let workspace_id = client.config().require_workspace_id()?.to_string();
-    client.config().require_user_token()?;
     let result = client
-        .tools_call(
+        .tools_call_as_user(
             "workspace.share_invite_member",
             json!({
                 "workspace_id": workspace_id,

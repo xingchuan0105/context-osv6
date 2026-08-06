@@ -28,9 +28,28 @@ impl McpClient {
         &self.http
     }
 
-    /// Call MCP tool; returns `structuredContent` on success.
+    /// Call MCP tool with least-privilege bearer (API key preferred when user JWT is auto-loaded).
+    /// Use for index/query automation.
     pub async fn tools_call(&self, tool: &str, arguments: Value) -> Result<Value> {
         let bearer = self.cfg.require_bearer()?;
+        self.tools_call_with_bearer(tool, arguments, bearer).await
+    }
+
+    /// Call MCP tool with an explicit **user** JWT (account / share tools).
+    ///
+    /// Required when both a workspace API key and an auto-loaded `user.token` are present:
+    /// least-privilege `bearer_token()` would send the API key and hit `api_key_forbidden`.
+    pub async fn tools_call_as_user(&self, tool: &str, arguments: Value) -> Result<Value> {
+        let bearer = self.cfg.require_user_token()?;
+        self.tools_call_with_bearer(tool, arguments, bearer).await
+    }
+
+    async fn tools_call_with_bearer(
+        &self,
+        tool: &str,
+        arguments: Value,
+        bearer: &str,
+    ) -> Result<Value> {
         let body = json!({
             "jsonrpc": "2.0",
             "id": "1",
@@ -211,5 +230,23 @@ mod tests {
             c.resolve_url("https://cdn.example/u"),
             "https://cdn.example/u"
         );
+    }
+
+    #[test]
+    fn dual_cred_bearer_vs_user_selection() {
+        use crate::config::UserTokenSource;
+        let cfg = ClientConfig {
+            api_base: "http://127.0.0.1:18080".into(),
+            api_key: Some("wk_key".into()),
+            user_token: Some("jwt.file".into()),
+            user_token_source: UserTokenSource::TokenFile,
+            workspace_id: None,
+            mcp_url: "http://127.0.0.1:18080/api/v1/mcp".into(),
+            health_url: "http://127.0.0.1:18080/health".into(),
+        };
+        // Least privilege for tools_call path.
+        assert_eq!(cfg.bearer_token(), Some("wk_key"));
+        // User session path still has the JWT.
+        assert_eq!(cfg.require_user_token().unwrap(), "jwt.file");
     }
 }

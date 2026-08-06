@@ -397,7 +397,7 @@ pub(crate) async fn auth_agent_token_handler(
                 token,
                 expires_at,
                 ttl_minutes,
-                token_kind: "user_agent".to_string(),
+                token_kind: super::router_core::TOKEN_KIND_AGENT.to_string(),
             }),
             error: None,
             message: Some(

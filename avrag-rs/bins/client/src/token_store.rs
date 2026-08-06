@@ -129,14 +129,25 @@ pub fn read_token_file(path: &Path) -> Result<Option<String>> {
 
 pub fn write_token_file(path: &Path, token: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
+        let parent_existed = parent.is_dir();
         fs::create_dir_all(parent)
             .with_context(|| format!("create {}", parent.display()))?;
+        // Only tighten mode on our owned config leaf (`…/context-os`), never
+        // shared parents (e.g. CONTEXT_OS_USER_TOKEN_FILE under /tmp).
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).with_context(|| {
-                format!("chmod 0700 config dir {}", parent.display())
-            })?;
+            let owned_config = config_dir();
+            let is_owned_leaf = parent == owned_config.as_path()
+                || parent.file_name().and_then(|n| n.to_str()) == Some("context-os");
+            if is_owned_leaf && !parent_existed {
+                fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).with_context(
+                    || format!("chmod 0700 config dir {}", parent.display()),
+                )?;
+            } else if is_owned_leaf {
+                // Best-effort tighten existing owned dir; ignore failures (e.g. not owner).
+                let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+            }
         }
     }
     let body = format!(
