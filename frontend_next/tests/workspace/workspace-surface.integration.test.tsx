@@ -54,6 +54,32 @@ describe("WorkspaceSurface integration", () => {
     });
   });
 
+  it("updates ?session= when the active thread is deleted", async () => {
+    const user = userEvent.setup();
+    mocks.searchParams = new URLSearchParams("session=sess-1");
+
+    renderWorkspaceSurface("ws-1");
+
+    await screen.findByLabelText("工作区标题");
+    mocks.replaceMock.mockClear();
+
+    const history = screen.getByRole("region", { name: "工作区历史" });
+    await user.click(within(history).getByRole("button", { name: "Pinned thread 操作" }));
+    await user.click(
+      within(screen.getByRole("menu", { name: "Pinned thread 操作" })).getByRole("menuitem", {
+        name: "删除",
+      }),
+    );
+    const deleteDialog = await screen.findByRole("dialog", { name: "删除会话" });
+    await user.click(within(deleteDialog).getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(mocks.deleteWorkspaceSessionMock).toHaveBeenCalledWith("token-123", "sess-1");
+      // Remaining list head is sess-2 after filter preserves order.
+      expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard/ws-1?session=sess-2");
+    });
+  });
+
   it("renders real chat and right-rail panes and wires store-backed selection through the DOM", async () => {
     const user = userEvent.setup();
 

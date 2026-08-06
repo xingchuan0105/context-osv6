@@ -175,6 +175,21 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     syncSessionUrl(sessionId);
   }
 
+  async function handleDeleteSession(session: (typeof sessions)[number]): Promise<boolean> {
+    // Mirror removeSession's next-active rule so the address bar stays truthful.
+    const remaining = sessions.filter((s) => s.id !== session.id);
+    const nextActive =
+      activeSessionId === session.id ? (remaining[0]?.id ?? null) : activeSessionId;
+    const ok = await removeSession(session);
+    if (!ok) {
+      return false;
+    }
+    if (activeSessionId === session.id) {
+      syncSessionUrl(nextActive);
+    }
+    return true;
+  }
+
   function startNewThread() {
     rawStartNewThread();
     syncSessionUrl(null);
@@ -311,7 +326,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const historyPane = (
     <WorkspaceHistoryPane
       activeSessionId={activeSessionId}
-      onDeleteSession={(session) => removeSession(session)}
+      onDeleteSession={handleDeleteSession}
       onNewThread={() => void startNewThread()}
       onRenameSession={(session) => {
         setRenameSessionError("");

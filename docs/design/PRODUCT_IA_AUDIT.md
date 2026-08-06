@@ -102,7 +102,7 @@
 
 1. 后端通知 / 邮件模板化（copy-catalog P7）。  
 2. ~~命令面板文档 `?source=` 深链~~ **done**（命中 → viewer；打开后剥离 one-shot query）。  
-3. ~~打开会话后同步/清理 URL `?session=`~~ **done**（选会话 / 新建 / 流式建会话 → `router.replace`；深链 `preferredSessionId` 选中；不默认改写无 query 的落地页）。  
+3. ~~打开会话后同步/清理 URL `?session=`~~ **done**（选会话 / 新建 / 流式建会话 / 删活动会话 → `router.replace`；深链 `preferredSessionId` 选中；不默认改写无 query 的落地页）。  
 4. 命令面板：跨页动作（非跳转类，如「新建工作区」）若产品需要再开。
 
 ---
