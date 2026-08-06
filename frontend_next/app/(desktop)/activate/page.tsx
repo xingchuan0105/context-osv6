@@ -14,7 +14,6 @@ import {
   licenseTypeLabel,
   listenDeepLinkActivate,
   openInBrowser,
-  startTrial,
   type ActivationResult,
 } from "@/lib/desktop/tauri-license";
 import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
@@ -69,21 +68,6 @@ export default function ActivatePage() {
     };
   }, []);
 
-  async function handleStartTrial() {
-    setLoading(true);
-    setError("");
-
-    try {
-      await startTrial();
-      router.push("/setup");
-    } catch (trialError) {
-      setError(formatLicenseError(trialError));
-      setView("error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleActivate() {
     setLoading(true);
     setError("");
@@ -100,13 +84,12 @@ export default function ActivatePage() {
     }
   }
 
-  async function handleOpenBuyPage() {
-    const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : "";
-    await openInBrowser(`${appAbsoluteUrl(APP_PATHS.desktopBuy)}${query}`);
-  }
-
   async function handleOpenHelp() {
-    await openInBrowser(appAbsoluteUrl(APP_PATHS.help));
+    try {
+      await openInBrowser(appAbsoluteUrl(APP_PATHS.help));
+    } catch (e) {
+      setError(formatLicenseError(e));
+    }
   }
 
   return (
@@ -117,7 +100,7 @@ export default function ActivatePage() {
             <ContextOsMark size={64} style={{ margin: "0 auto" }} />
             <h1 className={styles.title}>欢迎使用 Context-OS 客户端</h1>
             <p className={styles.subtitle}>
-              无需云端账号。数据与向量库在本机；先试用或激活后再进入工作区。
+              客户端免费。数据与向量库可在本机；分享与云端模型按需登录云账号。
             </p>
           </header>
 
@@ -125,11 +108,11 @@ export default function ActivatePage() {
             <button
               type="button"
               className={styles.choiceCard}
-              onClick={() => void handleStartTrial()}
+              onClick={() => router.push("/setup")}
               disabled={loading}
             >
-              <p className={styles.choiceTitle}>开始 21 天试用</p>
-              <p className={styles.choiceHint}>本机许可，全功能体验，无需注册云账号</p>
+              <p className={styles.choiceTitle}>直接进入</p>
+              <p className={styles.choiceHint}>无需激活码，本地使用免费</p>
             </button>
             <button
               type="button"
@@ -137,15 +120,12 @@ export default function ActivatePage() {
               onClick={() => setView("input")}
               disabled={loading}
             >
-              <p className={styles.choiceTitle}>我已有授权码</p>
-              <p className={styles.choiceHint}>输入购买后获得的授权码</p>
+              <p className={styles.choiceTitle}>输入历史授权码</p>
+              <p className={styles.choiceHint}>旧版 Keygen 用户可选（非必须）</p>
             </button>
           </div>
 
           <div className={styles.footerLinks}>
-            <button type="button" className={styles.footerLink} onClick={() => void handleOpenBuyPage()}>
-              购买授权
-            </button>
             <button type="button" className={styles.footerLink} onClick={() => void handleOpenHelp()}>
               查看帮助
             </button>

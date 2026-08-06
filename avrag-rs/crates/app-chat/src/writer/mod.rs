@@ -58,6 +58,7 @@ fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
                 .actor_id()
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(Uuid::nil),
+            skip_wallet_debit: false,
         };
         client = client
             .with_observer(observer.clone(), tenant)

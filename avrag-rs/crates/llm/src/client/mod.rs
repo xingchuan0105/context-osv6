@@ -132,6 +132,31 @@ impl LlmClient {
         self
     }
 
+    /// ADR-0010 BYOK: rebuild the single-route client with user credentials.
+    /// Drops multi-provider pool (user key is one endpoint). Preserves metering tags.
+    pub fn with_user_credentials(
+        self,
+        api_key: String,
+        base_url: Option<String>,
+        model: Option<String>,
+    ) -> Self {
+        let mut config = self.config.clone();
+        config.api_key = api_key;
+        if let Some(url) = base_url.filter(|s| !s.trim().is_empty()) {
+            config.base_url = url;
+        }
+        if let Some(m) = model.filter(|s| !s.trim().is_empty()) {
+            config.model = m;
+        }
+        let mut rebuilt = Self::new(config);
+        rebuilt.feature = self.feature;
+        rebuilt.stage = self.stage;
+        rebuilt.observer = self.observer;
+        rebuilt.session_id = self.session_id;
+        rebuilt.request_id = self.request_id;
+        rebuilt
+    }
+
     fn prepare_completion(&self, messages: &[ChatMessage]) -> anyhow::Result<CompletionCall> {
         let started_at = std::time::Instant::now();
         let provider = self.config.provider_name();

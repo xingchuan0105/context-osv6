@@ -20,12 +20,34 @@ pub fn is_dev_mode() -> bool {
 }
 
 pub fn compute_device_id() -> Result<String, String> {
-    let mut builder = IdBuilder::new(Encryption::SHA256);
-    builder
-        .add_component(HWIDComponent::SystemID)
-        .add_component(HWIDComponent::CPUCores)
-        .add_component(HWIDComponent::DriveSerial);
-    builder.build(DEVICE_SALT).map_err(|e| e.to_string())
+    // Do **not** use HWIDComponent::DriveSerial / MacAddress.
+    // machineid-rs initializes a thread-local COM library with
+    // `COMLibrary::without_security().unwrap()` for those components. After
+    // WebView2 has already initialized COM (STA), that unwrap panics with
+    // RPC_E_CHANGED_MODE (0x80010106) and aborts the process inside a
+    // WebView2 callback (exit 0xc0000409).
+    //
+    // SystemID (registry MachineGuid) + CPUCores + MachineName are COM-free.
+    let build = || {
+        let mut builder = IdBuilder::new(Encryption::SHA256);
+        builder
+            .add_component(HWIDComponent::SystemID)
+            .add_component(HWIDComponent::CPUCores)
+            .add_component(HWIDComponent::MachineName);
+        builder.build(DEVICE_SALT)
+    };
+
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(build)) {
+        Ok(Ok(id)) => Ok(id),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => {
+            let host = std::env::var("COMPUTERNAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .unwrap_or_else(|_| "host".into());
+            // Deterministic enough for local trial binding when HWID fails.
+            Ok(format!("cos-fallback-{DEVICE_SALT}-{host}"))
+        }
+    }
 }
 
 pub fn now_unix() -> i64 {
@@ -192,8 +214,9 @@ pub fn resolve_license_status(
     dev_mode: bool,
 ) -> LicenseStatus {
     let Some(file) = file else {
+        // ADR-0010: desktop client is free — no Keygen activation required.
         return LicenseStatus {
-            kind: LicenseStatusKind::Unactivated,
+            kind: LicenseStatusKind::Active,
             days_remaining: None,
             offline_grace_days: None,
             license_kind: None,

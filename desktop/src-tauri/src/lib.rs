@@ -1,10 +1,10 @@
 mod commands;
 mod registry;
 
-use tauri::Manager;
 use std::sync::Arc;
 
 use storage_local::{LocalCache, LocalContentStore};
+use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
 pub struct AppLocalState {
@@ -15,6 +15,7 @@ pub struct AppLocalState {
 use commands::api::api_call;
 use commands::cache::{get_cache_value, set_cache_value};
 use commands::chat_stream::{chat_cancel, chat_stream};
+use commands::docker_status::get_docker_status;
 use commands::license::{
     activate_license, get_device_id, get_license_status, heartbeat_license, open_in_browser,
     revoke_this_device, start_trial,
@@ -23,7 +24,6 @@ use commands::llm_config::{
     diagnose_llm, get_llm_config, list_available_models, set_llm_config, test_llm_connection,
 };
 use commands::local::{get_backend_status, init_local_backend, list_local_documents};
-use commands::docker_status::get_docker_status;
 use commands::local_product::{
     ensure_local_product, get_local_product_status, stop_local_product,
 };
@@ -33,6 +33,56 @@ use commands::local_stack::{
 };
 use commands::system::{get_app_data_dir, get_app_version, is_tauri_environment};
 use registry::ChatStreamRegistry;
+
+/// Prevent WebView2 `window.open` / `target=_blank` from raising NewWindowRequested.
+/// Under mingw-w64 COM callbacks that path has aborted the process (0xc0000409).
+const DESKTOP_EXTERNAL_LINK_GUARD_JS: &str = r#"
+(function () {
+  if (window.__cosExternalLinkGuard) return;
+  window.__cosExternalLinkGuard = true;
+  function openExternal(url) {
+    if (!url) return;
+    var u = String(url);
+    if (!/^https?:/i.test(u) && !/^mailto:/i.test(u)) return;
+    try {
+      if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === "function") {
+        window.__TAURI_INTERNALS__.invoke("open_in_browser", { url: u });
+        return;
+      }
+    } catch (_e) {}
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === "function") {
+        window.__TAURI__.core.invoke("open_in_browser", { url: u });
+      }
+    } catch (_e2) {}
+  }
+  try {
+    window.open = function (url) {
+      openExternal(url);
+      return null;
+    };
+  } catch (_e3) {}
+  document.addEventListener(
+    "click",
+    function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var a = t.closest("a");
+      if (!a) return;
+      var href = a.href || a.getAttribute("href") || "";
+      var target = (a.getAttribute("target") || "").toLowerCase();
+      if (target === "_blank" || /^https?:/i.test(href)) {
+        if (/^https?:/i.test(href) || /^mailto:/i.test(href)) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          openExternal(href);
+        }
+      }
+    },
+    true
+  );
+})();
+"#;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -75,10 +125,16 @@ pub fn run() {
             get_local_session,
             ensure_local_session
         ])
+        .on_page_load(|webview, _payload| {
+            let _ = webview.eval(DESKTOP_EXTERNAL_LINK_GUARD_JS);
+        })
         .setup(|app| {
+            // Protocol registration can fail without admin; never abort startup.
             #[cfg(any(windows, target_os = "linux"))]
             {
-                app.deep_link().register_all()?;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("deep_link register_all failed (non-fatal): {e}");
+                }
             }
 
             let handle = app.handle().clone();
@@ -88,10 +144,15 @@ pub fn run() {
                 }
             });
 
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.eval(DESKTOP_EXTERNAL_LINK_GUARD_JS);
+            }
+
             #[cfg(debug_assertions)]
             {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
             }
             Ok(())
         })

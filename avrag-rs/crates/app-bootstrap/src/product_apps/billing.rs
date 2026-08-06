@@ -272,14 +272,15 @@ impl<'a> BillingApp<'a> {
         &self,
         body: avrag_billing::UpsertProviderSecretRequest,
     ) -> ApiResponse<avrag_billing::ProviderSecretResponse> {
-        let Some(actor_id) = self.auth.actor_id() else {
+        let owner = self.auth.user_id().into_uuid();
+        if owner.is_nil() {
             return Self::auth_required();
-        };
+        }
         let store = match self.provider_secret_store() {
             Ok(s) => s,
             Err(e) => return ApiResponse::err(e.code(), e.message()),
         };
-        avrag_billing::handle_upsert_provider_secret(store, actor_id.into_uuid(), body).await
+        avrag_billing::handle_upsert_provider_secret(store, owner, body).await
     }
 
     /// List cloud BYOK secrets (fingerprints only).
@@ -287,15 +288,15 @@ impl<'a> BillingApp<'a> {
         &self,
         include_revoked: bool,
     ) -> ApiResponse<avrag_billing::ProviderSecretListResponse> {
-        let Some(actor_id) = self.auth.actor_id() else {
+        let owner = self.auth.user_id().into_uuid();
+        if owner.is_nil() {
             return Self::auth_required();
-        };
+        }
         let store = match self.provider_secret_store() {
             Ok(s) => s,
             Err(e) => return ApiResponse::err(e.code(), e.message()),
         };
-        avrag_billing::handle_list_provider_secrets(store, actor_id.into_uuid(), include_revoked)
-            .await
+        avrag_billing::handle_list_provider_secrets(store, owner, include_revoked).await
     }
 
     /// Revoke a cloud BYOK secret (soft). Resolve will stop returning it.
@@ -303,13 +304,14 @@ impl<'a> BillingApp<'a> {
         &self,
         id: Uuid,
     ) -> ApiResponse<avrag_billing::ProviderSecretResponse> {
-        let Some(actor_id) = self.auth.actor_id() else {
+        let owner = self.auth.user_id().into_uuid();
+        if owner.is_nil() {
             return Self::auth_required();
-        };
+        }
         let store = match self.provider_secret_store() {
             Ok(s) => s,
             Err(e) => return ApiResponse::err(e.code(), e.message()),
         };
-        avrag_billing::handle_revoke_provider_secret(store, actor_id.into_uuid(), id).await
+        avrag_billing::handle_revoke_provider_secret(store, owner, id).await
     }
 }

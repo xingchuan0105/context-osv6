@@ -47,7 +47,7 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        _billing: &BillingContext,
+        billing: &BillingContext,
         analytics: &AnalyticsServiceCtx,
         workspace_id: &str,
         req: CreateDocumentRequest,
@@ -75,21 +75,8 @@ impl DocumentContext {
             ));
         }
 
-        // ADR-0010 §2.2 soft/hard guardrails (retained md+index, not original files).
-        // Ops can tighten via env; defaults match free-tier product expectations.
-        let hard_bytes: i64 = std::env::var("PRIVATE_STORAGE_HARD_BYTES")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(15_i64 * 1024 * 1024 * 1024);
-        if (req.file_size as i64) > hard_bytes {
-            return Err(AppError::validation(
-                "private_storage_hard_cap",
-                format!(
-                    "file size {} exceeds private storage hard cap of {} bytes (retained content; originals are deleted after parse)",
-                    req.file_size, hard_bytes
-                ),
-            ));
-        }
+        // ADR-0010 §1.1: indexing/triplets burn platform tokens — same paywall as chat.
+        billing.ensure_payer_can_spend(auth).await?;
 
         let store = storage.document_store().ok_or_else(|| {
             AppError::internal("document store is required for document uploads")
@@ -97,6 +84,23 @@ impl DocumentContext {
         let quota = storage.billing_quota().ok_or_else(|| {
             AppError::internal("billing quota port is required for document uploads")
         })?;
+        // ADR-0010 §2.2: aggregate retained storage (sum of document sizes for user)
+        // via plan `quota_limits.storage_bytes` hard limit — free/plus/pro set in migrations.
+        // Optional ops override: when PRIVATE_STORAGE_HARD_BYTES is set, treat as absolute
+        // max *additional* check against the single upload only if larger than plan path.
+        if let Ok(hard) = std::env::var("PRIVATE_STORAGE_HARD_BYTES") {
+            if let Ok(hard_bytes) = hard.parse::<i64>() {
+                if (req.file_size as i64) > hard_bytes {
+                    return Err(AppError::validation(
+                        "private_storage_hard_cap",
+                        format!(
+                            "file size {} exceeds PRIVATE_STORAGE_HARD_BYTES={}",
+                            req.file_size, hard_bytes
+                        ),
+                    ));
+                }
+            }
+        }
         quota
             .ensure_storage_bytes_quota(auth, req.file_size as i64)
             .await?;

@@ -351,3 +351,66 @@ export async function getBillingOrderStatus(token: string, orderId: string) {
   );
 }
 
+export type ReferralStats = {
+  code: string;
+  rewarded_count: number;
+  quota: number;
+  remaining: number;
+};
+
+export async function getReferralStats(token: string) {
+  return requestEnvelope<ReferralStats>(
+    "/api/v1/billing/referral",
+    { method: "GET" },
+    token,
+    "Failed to load referral stats",
+  );
+}
+
+export type ProviderSecretRow = {
+  id: string;
+  purpose: string;
+  provider: string;
+  base_url?: string | null;
+  model_hint?: string | null;
+  key_fingerprint: string;
+  revoked_at?: string | null;
+};
+
+export async function listProviderSecrets(token: string) {
+  return requestEnvelope<{ secrets: ProviderSecretRow[] }>(
+    "/api/v1/settings/provider-secrets",
+    { method: "GET" },
+    token,
+    "Failed to load provider secrets",
+  );
+}
+
+export async function upsertProviderSecret(
+  token: string,
+  body: {
+    purpose: "llm" | "embedding" | "rerank";
+    provider: string;
+    api_key: string;
+    base_url?: string;
+    model_hint?: string;
+    workspace_id?: string | null;
+  },
+) {
+  return requestEnvelope<ProviderSecretRow>(
+    "/api/v1/settings/provider-secrets",
+    { method: "PUT", body: JSON.stringify(body) },
+    token,
+    "Failed to save provider secret",
+  );
+}
+
+export async function revokeProviderSecret(token: string, id: string) {
+  return requestEnvelope<ProviderSecretRow>(
+    `/api/v1/settings/provider-secrets/${id}`,
+    { method: "DELETE" },
+    token,
+    "Failed to revoke provider secret",
+  );
+}
+

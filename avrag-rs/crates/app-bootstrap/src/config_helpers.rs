@@ -37,13 +37,34 @@ pub fn build_unified_agent_service(
     usage_observer: Option<Arc<dyn UsageObserver>>,
     _prompts_dir: &str,
 ) -> Arc<UnifiedAgentService> {
+    build_unified_agent_service_with_secrets(
+        llm_client,
+        search_executor,
+        rag_runtime,
+        chat_persistence,
+        usage_observer,
+        None,
+        _prompts_dir,
+    )
+}
+
+pub fn build_unified_agent_service_with_secrets(
+    llm_client: Option<LlmClient>,
+    search_executor: Option<Arc<SearchExecutor>>,
+    rag_runtime: Option<Arc<RagRuntime>>,
+    chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
+    usage_observer: Option<Arc<dyn UsageObserver>>,
+    provider_secrets: Option<Arc<dyn app_core::ProviderSecretStorePort>>,
+    _prompts_dir: &str,
+) -> Arc<UnifiedAgentService> {
     let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> =
         search_executor.map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
     let mut agent = app_chat::agents::unified::UnifiedAgent::new(llm_client.clone(), None, None)
         .with_rag_runtime(rag_runtime)
         .with_search_executor(search_provider)
-        .with_chat_persistence(chat_persistence);
+        .with_chat_persistence(chat_persistence)
+        .with_provider_secrets(provider_secrets);
     if let Some(observer) = usage_observer {
         agent = agent.with_usage_observer(observer);
     }

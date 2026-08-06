@@ -11,9 +11,13 @@ import { billingProviderForLocale } from "../../lib/billing/provider";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   createCheckoutSession,
+  getReferralStats,
   getSubscription,
   getWalletBalance,
+  listProviderSecrets,
   listTopupPacks,
+  revokeProviderSecret,
+  upsertProviderSecret,
   type TopupPack,
 } from "../../lib/settings/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
@@ -95,6 +99,24 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
     },
   });
 
+  const referralQuery = useQuery({
+    queryKey: [...settingsKeys.billing(token), "referral"],
+    enabled: Boolean(token),
+    queryFn: () => getReferralStats(token as string),
+  });
+
+  const secretsQuery = useQuery({
+    queryKey: [...settingsKeys.billing(token), "provider-secrets"],
+    enabled: Boolean(token),
+    queryFn: () => listProviderSecrets(token as string),
+  });
+
+  const [byokProvider, setByokProvider] = useState("deepseek");
+  const [byokKey, setByokKey] = useState("");
+  const [byokBaseUrl, setByokBaseUrl] = useState("");
+  const [byokBusy, setByokBusy] = useState(false);
+  const [byokError, setByokError] = useState("");
+
   const errorMessage = billingQuery.error
     ? describeAuthError(
         formatUiMessage(locale, "settings.loadError"),
@@ -164,9 +186,142 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
     [locale, token],
   );
 
+  const saveByok = useCallback(async () => {
+    if (!token || !byokKey.trim()) return;
+    setByokBusy(true);
+    setByokError("");
+    try {
+      await upsertProviderSecret(token, {
+        purpose: "llm",
+        provider: byokProvider.trim() || "deepseek",
+        api_key: byokKey.trim(),
+        base_url: byokBaseUrl.trim() || undefined,
+      });
+      setByokKey("");
+      void queryClient.invalidateQueries({
+        queryKey: [...settingsKeys.billing(token), "provider-secrets"],
+      });
+    } catch (error) {
+      setByokError(describeAuthError("save failed", error));
+    } finally {
+      setByokBusy(false);
+    }
+  }, [byokBaseUrl, byokKey, byokProvider, queryClient, token]);
+
   return (
     <section className={shared.section}>
       <UsageLimitPanel />
+
+      <section className={`app-inline-surface ${styles.planSection}`}>
+        <div className={`app-inline-row ${styles.headerRow}`}>
+          <div className={shared.headerText}>
+            <h2 className={shared.flushTitle}>
+              {locale === "zh-CN" ? "邀请码" : "Referral"}
+            </h2>
+            <p className={shared.mutedText}>
+              {locale === "zh-CN"
+                ? "好友注册填写你的邀请码，双方各得 ¥5 赠送金。"
+                : "Friends who register with your code earn ¥5 gift credit each."}
+            </p>
+          </div>
+        </div>
+        {referralQuery.data ? (
+          <div className={`app-inline-surface ${styles.planCard}`} data-testid="referral-stats">
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{locale === "zh-CN" ? "我的邀请码" : "Your code"}</span>
+              <strong>{referralQuery.data.code}</strong>
+            </div>
+            <div className={`app-inline-row ${shared.summaryRow}`}>
+              <span>{locale === "zh-CN" ? "已成功邀请" : "Rewarded invites"}</span>
+              <strong>
+                {referralQuery.data.rewarded_count} / {referralQuery.data.quota}
+              </strong>
+            </div>
+          </div>
+        ) : referralQuery.isLoading ? (
+          <p className={shared.mutedText}>…</p>
+        ) : null}
+      </section>
+
+      <section className={`app-inline-surface ${styles.planSection}`}>
+        <div className={`app-inline-row ${styles.headerRow}`}>
+          <div className={shared.headerText}>
+            <h2 className={shared.flushTitle}>
+              {locale === "zh-CN" ? "云端 BYOK（自带 API Key）" : "Cloud BYOK"}
+            </h2>
+            <p className={shared.mutedText}>
+              {locale === "zh-CN"
+                ? "密钥加密存储；有有效 Key 时走你的额度，不扣平台储值。"
+                : "Keys are encrypted at rest. Active keys use your provider quota, not wallet balance."}
+            </p>
+          </div>
+        </div>
+        {byokError ? <p className="app-notice-banner">{byokError}</p> : null}
+        <div className={`app-inline-surface ${styles.planCard}`}>
+          <label className={shared.mutedText}>
+            Provider
+            <input
+              className="app-input"
+              value={byokProvider}
+              onChange={(e) => setByokProvider(e.target.value)}
+              placeholder="deepseek"
+            />
+          </label>
+          <label className={shared.mutedText}>
+            Base URL (optional)
+            <input
+              className="app-input"
+              value={byokBaseUrl}
+              onChange={(e) => setByokBaseUrl(e.target.value)}
+              placeholder="https://api.deepseek.com"
+            />
+          </label>
+          <label className={shared.mutedText}>
+            API Key
+            <input
+              className="app-input"
+              type="password"
+              value={byokKey}
+              onChange={(e) => setByokKey(e.target.value)}
+              placeholder="sk-…"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            className="app-button-primary"
+            disabled={byokBusy || !byokKey.trim()}
+            onClick={() => void saveByok()}
+          >
+            {byokBusy ? "…" : locale === "zh-CN" ? "保存密钥" : "Save key"}
+          </button>
+        </div>
+        {(secretsQuery.data?.secrets ?? []).length > 0 ? (
+          <ul className={shared.mutedText}>
+            {secretsQuery.data!.secrets.map((s) => (
+              <li key={s.id}>
+                {s.provider} · {s.purpose} · {s.key_fingerprint}{" "}
+                {!s.revoked_at ? (
+                  <button
+                    type="button"
+                    className="app-link"
+                    onClick={() => {
+                      if (!token) return;
+                      void revokeProviderSecret(token, s.id).then(() =>
+                        queryClient.invalidateQueries({
+                          queryKey: [...settingsKeys.billing(token), "provider-secrets"],
+                        }),
+                      );
+                    }}
+                  >
+                    {locale === "zh-CN" ? "吊销" : "Revoke"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
       <section className={`app-inline-surface ${styles.planSection}`}>
         <div className={`app-inline-row ${styles.headerRow}`}>

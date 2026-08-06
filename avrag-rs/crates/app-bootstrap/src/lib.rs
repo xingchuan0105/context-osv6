@@ -51,7 +51,8 @@ use tokio::sync::RwLock;
 
 pub use config_helpers::{
     auth_context_from_config, build_object_store, build_unified_agent_service,
-    make_embedding_client, make_llm_client, make_planner, make_reranker,
+    build_unified_agent_service_with_secrets, make_embedding_client, make_llm_client, make_planner,
+    make_reranker,
 };
 
 pub use services::{
@@ -356,6 +357,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 .actor_id()
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(uuid::Uuid::nil),
+            skip_wallet_debit: false,
         }
     };
     let embedding_observer = usage_observer
@@ -465,19 +467,21 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     if let Some(wallet) = wallet_store.clone() {
         billing = billing.with_wallet(wallet);
     }
-    if let Some(repository) = pg.as_ref() {
-        match PgProviderSecretStoreAdapter::from_env(repository.clone()) {
-            Ok(adapter) => {
-                let secrets: Arc<dyn app_core::ProviderSecretStorePort> = Arc::new(adapter);
-                billing = billing.with_provider_secrets(secrets);
+    let provider_secrets: Option<Arc<dyn app_core::ProviderSecretStorePort>> =
+        pg.as_ref().and_then(|repository| {
+            match PgProviderSecretStoreAdapter::from_env(repository.clone()) {
+                Ok(adapter) => Some(Arc::new(adapter) as Arc<dyn app_core::ProviderSecretStorePort>),
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "BYOK_MASTER_KEY not configured; cloud BYOK resolve disabled"
+                    );
+                    None
+                }
             }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "BYOK_MASTER_KEY not configured; spend preflight will not count cloud BYOK"
-                );
-            }
-        }
+        });
+    if let Some(secrets) = provider_secrets.clone() {
+        billing = billing.with_provider_secrets(secrets);
     }
     let analytics = AnalyticsServiceCtx::new(
         pg.as_ref()
@@ -526,12 +530,13 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             }
             _ => None,
         };
-    let agent_service = Some(build_unified_agent_service(
+    let agent_service = Some(build_unified_agent_service_with_secrets(
         llm_ctx.agent_client().cloned(),
         search_executor.clone(),
         rag_runtime.clone(),
         chat_persistence.clone(),
         usage_observer.clone(),
+        provider_secrets.clone(),
         &config.prompts.dir,
     ));
     let storage = StorageContext::from_parts(StorageContextParts {

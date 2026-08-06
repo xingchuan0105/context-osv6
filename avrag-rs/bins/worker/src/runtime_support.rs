@@ -192,6 +192,7 @@ pub(crate) fn worker_system_tenant(config: &AppConfig) -> avrag_llm::TenantConte
     avrag_llm::TenantContext {
         owner_user_id,
         user_id,
+        skip_wallet_debit: false,
     }
 }
 

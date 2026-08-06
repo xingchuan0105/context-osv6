@@ -215,12 +215,71 @@ pub async fn revoke_this_device(app: AppHandle) -> Result<(), IpcApiError> {
     Ok(())
 }
 
+/// Open URL in the OS default browser.
+///
+/// Prefer a direct OS launch on Windows so a missing shell ACL / plugin path
+/// cannot leave the UI to fall back to `window.open` (which triggers WebView2
+/// NewWindowRequested and has been observed to abort the process under
+/// `x86_64-pc-windows-gnu` COM callbacks).
 #[tauri::command]
 pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), IpcApiError> {
-    // tauri-plugin-shell::open is deprecated in favor of tauri-plugin-opener;
-    // keep shell until opener is wired in this package.
+    if !(url.starts_with("https://")
+        || url.starts_with("http://")
+        || url.starts_with("mailto:"))
+    {
+        return Err(IpcApiError::internal(format!(
+            "Refusing to open non-http(s) URL: {url}"
+        )));
+    }
+
+    // 1) Direct OS open (no plugin ACL dependency).
+    if open_url_os(&url).is_ok() {
+        return Ok(());
+    }
+
+    // 2) Shell plugin fallback.
     #[allow(deprecated)]
-    app.shell()
-        .open(url, None)
-        .map_err(|e| IpcApiError::internal(format!("Failed to open browser: {e}")))
+    {
+        if app.shell().open(&url, None).is_ok() {
+            return Ok(());
+        }
+    }
+
+    Err(IpcApiError::internal(format!(
+        "Failed to open browser for {url}"
+    )))
+}
+
+fn open_url_os(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        // `cmd /C start "" <url>` — empty title avoids swallowing the URL when it
+        // is quoted. Avoid `explorer.exe <url>` which sometimes reuses a shell tab.
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+    {
+        let _ = url;
+        Err("open_url_os unsupported on this OS".into())
+    }
 }

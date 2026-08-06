@@ -11,6 +11,24 @@ use uuid::Uuid;
 pub struct TenantContext {
     pub owner_user_id: Uuid,
     pub user_id: Uuid,
+    /// When true, platform wallet is not debited (cloud BYOK used for this request).
+    /// Default false: platform proxy path bills the owner wallet.
+    pub skip_wallet_debit: bool,
+}
+
+impl TenantContext {
+    pub fn new(owner_user_id: Uuid, user_id: Uuid) -> Self {
+        Self {
+            owner_user_id,
+            user_id,
+            skip_wallet_debit: false,
+        }
+    }
+
+    pub fn with_skip_wallet_debit(mut self, skip: bool) -> Self {
+        self.skip_wallet_debit = skip;
+        self
+    }
 }
 
 /// Actual chat-completion usage returned by a provider.
@@ -84,6 +102,7 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: Uuid::from_u128(1),
             user_id: Uuid::from_u128(2),
+            skip_wallet_debit: false,
         };
         let record = ChatUsageRecord {
             prompt_tokens: 10,

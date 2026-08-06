@@ -24,7 +24,7 @@ use agent_loop::events::{AgentEvent, AgentEventSink};
 
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 
-use app_core::ChatPersistencePort;
+use app_core::{ChatPersistencePort, ProviderSecretPurpose, ProviderSecretStorePort};
 use avrag_llm::{LlmClient, TenantContext, UsageObserver};
 use avrag_search::SearchProvider;
 use common::AppError;
@@ -40,6 +40,8 @@ pub struct UnifiedAgent {
     search_executor: Option<Arc<dyn SearchProvider>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
     usage_observer: Option<Arc<dyn UsageObserver>>,
+    /// Cloud BYOK secrets (ADR-0010). When set, chat may resolve user keys.
+    provider_secrets: Option<Arc<dyn ProviderSecretStorePort>>,
 }
 
 impl UnifiedAgent {
@@ -56,6 +58,7 @@ impl UnifiedAgent {
             search_executor: None,
             chat_persistence: None,
             usage_observer: None,
+            provider_secrets: None,
         }
     }
 
@@ -80,6 +83,49 @@ impl UnifiedAgent {
     pub fn with_usage_observer(mut self, observer: Arc<dyn UsageObserver>) -> Self {
         self.usage_observer = Some(observer);
         self
+    }
+
+    pub fn with_provider_secrets(
+        mut self,
+        secrets: Option<Arc<dyn ProviderSecretStorePort>>,
+    ) -> Self {
+        self.provider_secrets = secrets;
+        self
+    }
+
+    /// Resolve cloud BYOK LLM secret for this request.
+    async fn resolve_byok_llm(
+        &self,
+        request: &AgentRequest,
+    ) -> Option<app_core::ResolvedProviderSecret> {
+        let secrets = self.provider_secrets.as_ref()?;
+        let owner = request.auth.user_id().into_uuid();
+        let workspace = request.auth.workspace_id();
+        match secrets
+            .resolve(owner, workspace, ProviderSecretPurpose::Llm)
+            .await
+        {
+            Ok(Some(secret)) => Some(secret),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, owner = %owner, "BYOK resolve failed; using platform key");
+                None
+            }
+        }
+    }
+
+    fn bind_byok_client(
+        client: Option<LlmClient>,
+        byok: Option<&app_core::ResolvedProviderSecret>,
+    ) -> Option<LlmClient> {
+        match (client, byok) {
+            (Some(c), Some(secret)) => Some(c.with_user_credentials(
+                secret.api_key.clone(),
+                secret.base_url.clone(),
+                secret.model_hint.clone(),
+            )),
+            (c, _) => c,
+        }
     }
 }
 
@@ -125,14 +171,19 @@ impl Agent for UnifiedAgent {
             })
             .await;
 
-        let tenant = TenantContext {
+        let byok = self.resolve_byok_llm(&request).await;
+        let mut tenant = TenantContext {
             owner_user_id: request.auth.user_id().into_uuid(),
             user_id: request
                 .auth
                 .actor_id()
                 .map(|id| id.into_uuid())
                 .unwrap_or_else(Uuid::nil),
+            skip_wallet_debit: false,
         };
+        if byok.is_some() {
+            tenant.skip_wallet_debit = true;
+        }
 
         match request.kind {
             crate::agents::AgentKind::Chat => {
@@ -141,17 +192,14 @@ impl Agent for UnifiedAgent {
                     agent_loop::progress::WorkFact::understand(&request.query),
                 )
                 .await;
-                self.run_react_mode(
-                    "chat",
+                let llm = Self::bind_byok_client(
                     self.chat_llm_client
                         .clone()
                         .or_else(|| self.llm_client.clone()),
-                    |lp| lp,
-                    request,
-                    sink,
-                    &tenant,
-                )
-                .await
+                    byok.as_ref(),
+                );
+                self.run_react_mode("chat", llm, |lp| lp, request, sink, &tenant)
+                    .await
             }
             crate::agents::AgentKind::Rag => {
                 if request.doc_scope.is_empty() {
@@ -213,9 +261,10 @@ impl Agent for UnifiedAgent {
                     agent_loop::progress::WorkFact::understand(&request.query),
                 )
                 .await;
+                let llm = Self::bind_byok_client(self.llm_client.clone(), byok.as_ref());
                 self.run_react_mode(
                     "rag",
-                    self.llm_client.clone(),
+                    llm,
                     |lp| {
                         let mut lp = lp.with_rag_runtime(Some(rag));
                         if let Some(search) = search_executor {
@@ -254,11 +303,15 @@ impl Agent for UnifiedAgent {
                     agent_loop::progress::WorkFact::understand(&request.query),
                 )
                 .await;
-                self.run_react_mode(
-                    "search",
+                let llm = Self::bind_byok_client(
                     self.search_llm_client
                         .clone()
                         .or_else(|| self.llm_client.clone()),
+                    byok.as_ref(),
+                );
+                self.run_react_mode(
+                    "search",
+                    llm,
                     |lp| {
                         let mut lp = lp.with_search_executor(Some(search_executor));
                         if let Some(rag) = rag_for_dense {

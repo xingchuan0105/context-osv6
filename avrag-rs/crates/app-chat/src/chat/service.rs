@@ -69,6 +69,12 @@ impl ChatContext {
         // ADR-0010 §1.1: no free ride on platform env keys without BYOK or balance.
         // Fail closed **before** LLM (not post-hoc wallet fail-open alone).
         self.billing.ensure_payer_can_spend(&self.auth).await?;
+        if is_share_chat {
+            // ADR-0010 §4/§9: Owner daily fen fuse (platform proxy path only).
+            self.billing
+                .ensure_share_owner_daily_budget(&self.auth)
+                .await?;
+        }
 
         // Rolling windows: DoW protection for share + optional hard enforce kill-switch.
         // Private use with wallet/BYOK already passed ensure_payer_can_spend; rolling

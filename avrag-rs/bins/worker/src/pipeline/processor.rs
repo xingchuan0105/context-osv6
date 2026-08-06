@@ -128,6 +128,10 @@ pub(crate) struct MeteringDeps {
     pub(crate) usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
     /// Rebound to task org/user at the start of each `process`.
     pub(crate) task_usage_observer: Option<Arc<app_billing::TaskTenantUsageObserver>>,
+    /// ADR-0010: gate indexing spend when present (platform path).
+    pub(crate) wallet: Option<Arc<dyn app_core::WalletStorePort>>,
+    /// ADR-0010: allow indexing when owner has cloud BYOK LLM key.
+    pub(crate) provider_secrets: Option<Arc<dyn app_core::ProviderSecretStorePort>>,
 }
 
 /// Storage / lock / retrieval infrastructure for a worker task.
@@ -295,6 +299,40 @@ impl TaskProcessor for PgTaskProcessor {
         let task_kind = worker_task_kind(task);
         telemetry::prometheus::observe_worker_task_started(task_kind);
         let started_at = std::time::Instant::now();
+        // ADR-0010 §1.1: indexing burns platform tokens — require wallet or BYOK.
+        {
+            let auth = task_context(task);
+            let owner = auth.user_id().into_uuid();
+            let mut allowed = self.metering.wallet.is_none() && self.metering.provider_secrets.is_none();
+            if let Some(secrets) = self.metering.provider_secrets.as_ref() {
+                if secrets
+                    .has_active(owner, app_core::ProviderSecretPurpose::Llm)
+                    .await
+                    .unwrap_or(false)
+                {
+                    allowed = true;
+                }
+            }
+            if !allowed {
+                if let Some(wallet) = self.metering.wallet.as_ref() {
+                    let _ = avrag_billing::grant_signup_bonus(wallet.clone(), owner).await;
+                    match wallet.ensure_wallet(owner).await {
+                        Ok(w) if w.balance_fen > 0 => allowed = true,
+                        Ok(_) => {}
+                        Err(e) => {
+                            return Err(IngestionError::internal(format!(
+                                "wallet preflight failed: {e}"
+                            )));
+                        }
+                    }
+                }
+            }
+            if !allowed {
+                return Err(IngestionError::internal(format!(
+                    "payer_funds_required: empty wallet and no BYOK for owner {owner}"
+                )));
+            }
+        }
         // Attribute exit-metered LLM/embedding spend to the task org/actor.
         if let Some(obs) = self.metering.task_usage_observer.as_ref() {
             let auth = task_context(task);
@@ -304,6 +342,7 @@ impl TaskProcessor for PgTaskProcessor {
                     .actor_id()
                     .map(|a| a.into_uuid())
                     .unwrap_or_else(Uuid::nil),
+                skip_wallet_debit: false,
             };
             obs.rebind(tenant).await;
         }

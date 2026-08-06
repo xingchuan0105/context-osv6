@@ -175,7 +175,7 @@ impl PgUsageObserver {
         usage_kind: &str,
         request_id: Option<String>,
     ) {
-        if !self.billable || self.skip_wallet_debit {
+        if !self.billable || self.skip_wallet_debit || tenant.skip_wallet_debit {
             return;
         }
         let Some(wallet) = self.wallet.as_ref() else {
@@ -696,6 +696,7 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: Uuid::nil(),
             user_id: Uuid::nil(),
+            skip_wallet_debit: false,
         };
         let observer = TaskTenantUsageObserver::new(Arc::new(StubUsageLimitStore), tenant);
         assert!(
@@ -727,6 +728,7 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
+            skip_wallet_debit: false,
         };
         let record = ChatUsageRecord {
             prompt_tokens: 1_000_000,
@@ -781,6 +783,7 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
+            skip_wallet_debit: false,
         };
         observer
             .record_chat_for(
@@ -840,6 +843,7 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
+            skip_wallet_debit: false,
         };
         observer
             .record_chat_for(

@@ -37,9 +37,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_status_unactivated_without_file() {
+    fn resolve_status_free_without_file() {
+        // ADR-0010 free client: missing license file is Active, not a product gate.
         let status = resolve_license_status(None, "device-a", 1_700_000_000, true);
-        assert_eq!(status.kind, LicenseStatusKind::Unactivated);
+        assert_eq!(status.kind, LicenseStatusKind::Active);
     }
 
     #[test]

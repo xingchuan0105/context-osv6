@@ -176,7 +176,7 @@ pub async fn run() -> Result<()> {
                 };
                 PgTaskProcessor {
                     storage: StorageDeps {
-                        repo,
+                        repo: repo.clone(),
                         object_store: worker_object_store,
                         retrieval_data_plane,
                         asset_url_ttl_secs: config.object_storage.download_url_expire_sec,
@@ -212,6 +212,20 @@ pub async fn run() -> Result<()> {
                             usage_limit_store.clone(),
                         )),
                         task_usage_observer: Some(task_usage_observer),
+                        wallet: Some(std::sync::Arc::new(
+                            app_bootstrap::PgWalletStoreAdapter::new(std::sync::Arc::new(
+                                repo.clone(),
+                            )),
+                        )
+                            as std::sync::Arc<dyn app_core::WalletStorePort>),
+                        provider_secrets: app_bootstrap::PgProviderSecretStoreAdapter::from_env(
+                            std::sync::Arc::new(repo),
+                        )
+                        .ok()
+                        .map(|a| {
+                            std::sync::Arc::new(a)
+                                as std::sync::Arc<dyn app_core::ProviderSecretStorePort>
+                        }),
                     },
                     task_timeout_secs,
                 }

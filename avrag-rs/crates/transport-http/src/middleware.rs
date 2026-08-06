@@ -252,6 +252,7 @@ pub(crate) async fn request_context_middleware(
     req.extensions_mut()
         .insert(RequestState(state.with_auth(auth)));
 
+    let request_path = req.uri().path().to_string();
     let response = next.run(req).await;
 
     if !allowed {
@@ -288,7 +289,22 @@ pub(crate) async fn request_context_middleware(
         HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
         HeaderValue::from(remaining),
     );
+    // ADR-0010 §9: reduce share-token leakage via Referer.
+    if req_path_is_shared(&request_path) {
+        let _ = response_headers.insert(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("no-referrer"),
+        );
+        let _ = response_headers.insert(
+            HeaderName::from_static("x-robots-tag"),
+            HeaderValue::from_static("noindex, nofollow"),
+        );
+    }
     response
+}
+
+fn req_path_is_shared(path: &str) -> bool {
+    path.contains("/shared/") || path.contains("/api/shared/")
 }
 
 async fn share_chat_context_from_request(
