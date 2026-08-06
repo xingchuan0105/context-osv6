@@ -795,3 +795,19 @@ fn jwt_org_admin_includes_admin_permission() {
     assert!(claims.permissions.iter().any(|perm| perm == "admin"));
 }
 
+#[test]
+fn jwt_reissue_with_ttl_preserves_identity() {
+    use crate::lib_impl::router_core::reissue_user_jwt_with_ttl;
+
+    let user_id = Uuid::new_v4();
+    let owner_user_id = Uuid::new_v4();
+    let token = issue_jwt_for_auth_version(&user_id, &owner_user_id, 3, "user");
+    let claims = verify_jwt(&token).expect("base token valid");
+    let short = reissue_user_jwt_with_ttl(&claims, chrono::Duration::minutes(30));
+    let short_claims = verify_jwt(&short).expect("reissued token valid");
+    assert_eq!(short_claims.sub, user_id.to_string());
+    assert_eq!(short_claims.owner_user_id, owner_user_id.to_string());
+    assert_eq!(short_claims.auth_version, 3);
+    assert_ne!(short, token, "reissue must produce a new token string");
+}
+

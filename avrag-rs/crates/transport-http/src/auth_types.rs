@@ -240,3 +240,30 @@ pub(crate) struct ConfirmResetPasswordRequest {
 fn bool_true() -> bool {
     true
 }
+
+/// Mint a short-lived user JWT for coding agents / CLI (session-only; not API keys).
+#[derive(Debug, Deserialize)]
+pub(crate) struct AgentTokenRequest {
+    /// Lifetime in minutes (default 120, min 5, max 1440).
+    #[serde(default)]
+    pub ttl_minutes: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AgentTokenPayload {
+    pub token: String,
+    pub expires_at: String,
+    pub ttl_minutes: u32,
+    pub token_kind: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AgentTokenEnvelope {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<AgentTokenPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}

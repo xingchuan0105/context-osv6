@@ -13,7 +13,7 @@ mod tests;
 pub use router_core::build_router;
 pub(crate) use router_core::{extract_bearer, verify_jwt};
 pub use router_core::{issue_jwt, issue_jwt_for_auth_version};
-pub(crate) use auth_primary::{auth_login_handler, auth_register_handler};
+pub(crate) use auth_primary::{auth_agent_token_handler, auth_login_handler, auth_register_handler};
 pub(crate) use auth::preferences::{
     auth_delete_agent_preference_handler, auth_get_agent_preferences_handler,
     auth_get_preferences_handler, auth_update_agent_preferences_handler,

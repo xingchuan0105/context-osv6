@@ -47,8 +47,9 @@ When the **Context-OS desktop client** is running (default API `http://127.0.0.1
 | Item | Value |
 | --- | --- |
 | Binary | `context-os-mcp` (package `context-os` / `avrag-rs/bins/client`; staged under `desktop/runtime/bin/`) |
-| CLI | `context-os status` · `ingest` · `ask` · `sources` (same key; `share` refused — UI only) |
-| Env | `CONTEXT_OS_API_KEY` = workspace API key; optional `CONTEXT_OS_API_BASE` (default `http://127.0.0.1:18080`); CLI also uses `CONTEXT_OS_WORKSPACE_ID` |
+| CLI | `context-os status` · `ingest` · `ask` · `sources` · `auth login|mint` · `workspace create|list` (`share` refused) |
+| Env | `CONTEXT_OS_API_KEY` (workspace); `CONTEXT_OS_USER_TOKEN` (user JWT / short agent token — preferred Bearer); optional `CONTEXT_OS_API_BASE`; `CONTEXT_OS_WORKSPACE_ID` |
+| User token mint | `POST /api/auth/agent-token` with session JWT → short-lived token (not available to workspace API keys) |
 | Probe | `context-os-mcp --check` or `context-os status` |
 
 Example (Claude Code / Cursor style):

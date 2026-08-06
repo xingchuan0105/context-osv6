@@ -206,8 +206,8 @@ async fn forward_rpc(
         .post(&cfg.mcp_url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json");
-    if let Some(key) = cfg.api_key.as_ref().filter(|k| !k.trim().is_empty()) {
-        req = req.bearer_auth(key);
+    if let Some(bearer) = cfg.bearer_token() {
+        req = req.bearer_auth(bearer);
     }
 
     let resp = req.json(msg).send().await.map_err(|e| {

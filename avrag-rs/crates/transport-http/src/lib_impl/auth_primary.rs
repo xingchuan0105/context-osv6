@@ -11,14 +11,22 @@ use bcrypt::hash;
 use bcrypt::verify;
 use tracing::warn;
 
+use crate::auth_types::AgentTokenEnvelope;
+use crate::auth_types::AgentTokenPayload;
+use crate::auth_types::AgentTokenRequest;
 use crate::auth_types::AuthEnvelope;
 use crate::auth_types::AuthPayload;
 
 use crate::auth_types::LoginRequest;
 use crate::auth_types::RegisterRequest;
 use crate::handlers;
+use crate::middleware::RequestState;
+use axum::extract::Extension;
 
-use super::router_core::{issue_jwt_for_auth_version, record_api_product_event_if_available};
+use super::router_core::{
+    extract_bearer, issue_jwt_for_auth_version, record_api_product_event_if_available,
+    reissue_user_jwt_with_ttl, verify_jwt,
+};
 
 pub(crate) async fn auth_register_handler(
     State(state): State<AppState>,
@@ -322,6 +330,64 @@ pub(crate) async fn auth_login_handler(
                 reset_ticket: None,
             }),
             error: None,
+        }),
+    )
+        .into_response()
+}
+
+/// POST /api/auth/agent-token — mint a short-lived user JWT for MCP/CLI agents.
+///
+/// Requires a signed-in **user** session (workspace API keys → `api_key_forbidden`).
+/// Revocation: password change bumps `auth_version`; short TTL limits leak window.
+pub(crate) async fn auth_agent_token_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    headers: HeaderMap,
+    Json(req): Json<AgentTokenRequest>,
+) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "agent tokens require a signed-in user session, not a workspace API key",
+    ) {
+        return handlers::app_error_response(error);
+    }
+
+    let Some(bearer) = extract_bearer(&headers) else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Bearer user JWT required",
+        );
+    };
+    let Some(claims) = verify_jwt(bearer) else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Invalid or expired user JWT",
+        );
+    };
+
+    let ttl_minutes = req.ttl_minutes.unwrap_or(120).clamp(5, 24 * 60);
+    let ttl = chrono::Duration::minutes(i64::from(ttl_minutes));
+    let token = reissue_user_jwt_with_ttl(&claims, ttl);
+    let expires_at = (chrono::Utc::now() + ttl).to_rfc3339();
+
+    (
+        StatusCode::OK,
+        Json(AgentTokenEnvelope {
+            success: true,
+            data: Some(AgentTokenPayload {
+                token,
+                expires_at,
+                ttl_minutes,
+                token_kind: "user_agent".to_string(),
+            }),
+            error: None,
+            message: Some(
+                "Short-lived user JWT for coding agents/CLI. Export as CONTEXT_OS_USER_TOKEN. \
+Workspace API keys remain for index/query automation; this token can create workspaces \
+and call user-session routes (share still product-gated)."
+                    .to_string(),
+            ),
         }),
     )
         .into_response()

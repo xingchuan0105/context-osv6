@@ -9,7 +9,10 @@ pub const HEALTH_PATH: &str = "/health";
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub api_base: String,
+    /// Workspace API key (index/query automation).
     pub api_key: Option<String>,
+    /// User JWT / short-lived agent token (account tools, create workspace).
+    pub user_token: Option<String>,
     pub workspace_id: Option<String>,
     pub mcp_url: String,
     pub health_url: String,
@@ -26,6 +29,11 @@ impl ClientConfig {
 
         let api_key =
             first_nonempty_env(&["CONTEXT_OS_API_KEY", "CONTEXT_OS_WORKSPACE_API_KEY"]);
+        let user_token = first_nonempty_env(&[
+            "CONTEXT_OS_USER_TOKEN",
+            "CONTEXT_OS_AGENT_TOKEN",
+            "CONTEXT_OS_JWT",
+        ]);
         let workspace_id = first_nonempty_env(&["CONTEXT_OS_WORKSPACE_ID", "CONTEXT_OS_NOTEBOOK_ID"]);
 
         Ok(Self {
@@ -33,6 +41,7 @@ impl ClientConfig {
             health_url: format!("{api_base}{HEALTH_PATH}"),
             api_base,
             api_key,
+            user_token,
             workspace_id,
         })
     }
@@ -54,6 +63,13 @@ impl ClientConfig {
         self
     }
 
+    pub fn with_user_token(mut self, token: Option<String>) -> Self {
+        if let Some(token) = token.filter(|t| !t.trim().is_empty()) {
+            self.user_token = Some(token);
+        }
+        self
+    }
+
     pub fn with_workspace_id(mut self, id: Option<String>) -> Self {
         if let Some(id) = id.filter(|s| !s.trim().is_empty()) {
             self.workspace_id = Some(id);
@@ -67,11 +83,55 @@ impl ClientConfig {
             .is_some_and(|k| !k.trim().is_empty())
     }
 
-    pub fn require_api_key(&self) -> Result<&str> {
-        match self.api_key.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-            Some(k) => Ok(k),
-            None => bail!("{}", missing_key_message()),
+    pub fn has_user_token(&self) -> bool {
+        self.user_token
+            .as_ref()
+            .is_some_and(|t| !t.trim().is_empty())
+    }
+
+    /// Prefer user JWT for MCP/API calls when set (full personal capabilities).
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.user_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                self.api_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            })
+    }
+
+    pub fn require_bearer(&self) -> Result<&str> {
+        self.bearer_token().ok_or_else(|| {
+            anyhow::anyhow!(
+                "{} Also set CONTEXT_OS_USER_TOKEN for create_workspace / user-session routes \
+(mint via POST /api/auth/agent-token while signed in).",
+                missing_key_message()
+            )
+        })
+    }
+
+    pub fn require_user_token(&self) -> Result<&str> {
+        match self
+            .user_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(t) => Ok(t),
+            None => bail!(
+                "CONTEXT_OS_USER_TOKEN required (user JWT or short-lived agent token). \
+Login with `context-os auth login`, or mint with `context-os auth mint` while holding a session JWT. \
+Workspace API keys cannot create workspaces or manage share."
+            ),
         }
+    }
+
+    pub fn require_api_key(&self) -> Result<&str> {
+        // Prefer any bearer for workspace tools (user JWT works too).
+        self.require_bearer()
     }
 
     pub fn require_workspace_id(&self) -> Result<&str> {

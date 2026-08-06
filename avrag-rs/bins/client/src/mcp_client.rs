@@ -30,7 +30,7 @@ impl McpClient {
 
     /// Call MCP tool; returns `structuredContent` on success.
     pub async fn tools_call(&self, tool: &str, arguments: Value) -> Result<Value> {
-        let key = self.cfg.require_api_key()?;
+        let bearer = self.cfg.require_bearer()?;
         let body = json!({
             "jsonrpc": "2.0",
             "id": "1",
@@ -46,7 +46,7 @@ impl McpClient {
             .post(&self.cfg.mcp_url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .bearer_auth(key)
+            .bearer_auth(bearer)
             .json(&body)
             .send()
             .await
@@ -124,6 +124,48 @@ impl McpClient {
         }
         Ok(())
     }
+
+    /// REST JSON with preferred bearer (user token > api key).
+    pub async fn rest_json(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+        require_user: bool,
+    ) -> Result<(u16, Value)> {
+        let bearer = if require_user {
+            self.cfg.require_user_token()?
+        } else {
+            self.cfg.require_bearer()?
+        };
+        let url = if path.starts_with("http://") || path.starts_with("https://") {
+            path.to_string()
+        } else if path.starts_with('/') {
+            format!("{}{path}", self.cfg.api_base)
+        } else {
+            format!("{}/{}", self.cfg.api_base, path)
+        };
+
+        let mut req = match method.to_uppercase().as_str() {
+            "GET" => self.http.get(&url),
+            "POST" => self.http.post(&url),
+            "PUT" => self.http.put(&url),
+            "DELETE" => self.http.delete(&url),
+            other => bail!("unsupported method {other}"),
+        };
+        req = req
+            .header("Accept", "application/json")
+            .bearer_auth(bearer);
+        if let Some(b) = body {
+            req = req.header("Content-Type", "application/json").json(&b);
+        }
+
+        let resp = req.send().await.with_context(|| format!("{method} {url}"))?;
+        let status = resp.status().as_u16();
+        let text = resp.text().await.unwrap_or_default();
+        let value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
+        Ok((status, value))
+    }
 }
 
 /// Prefer structured `data` field when present.
@@ -140,6 +182,7 @@ mod tests {
         let cfg = ClientConfig {
             api_base: "http://127.0.0.1:18080".into(),
             api_key: None,
+            user_token: None,
             workspace_id: None,
             mcp_url: "http://127.0.0.1:18080/api/v1/mcp".into(),
             health_url: "http://127.0.0.1:18080/health".into(),

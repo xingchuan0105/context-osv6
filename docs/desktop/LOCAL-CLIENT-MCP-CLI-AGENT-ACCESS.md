@@ -243,8 +243,8 @@ Content-Type: application/json
 
 | 工作项 | 状态 | 说明 |
 |--------|------|------|
-| Local user token | 待办 | 桌面在用户已登录时签发短时/可吊销 token 给 MCP/CLI |
-| `create_workspace` 个人路径 | 待办 | 明确权限与速率限制；与 UI 建库一致 |
+| Local user token | **已落地** | `POST /api/auth/agent-token` 签发短时用户 JWT；`CONTEXT_OS_USER_TOKEN`；UI「签发 2h token」；吊销靠短 TTL + `auth_version`（改密） |
+| `create_workspace` 个人路径 | **已落地（CLI/MCP）** | `context-os workspace create` / MCP `account.create_workspace` + 用户 JWT（非 workspace key） |
 | `workspace.share_*`（或 REST 用户态） | 待办 | 开分享、限次等；**强制 Owner + ADR-0010 配额** |
 | CLI（workspace key 路径） | **已落地** | `context-os status|ingest|ask|sources`；`share` exit 4 拒绝 API key 路径 |
 
@@ -263,20 +263,37 @@ Content-Type: application/json
 ### 8.1 `context-os` 子命令
 
 ```bash
-export CONTEXT_OS_API_KEY=...
-export CONTEXT_OS_WORKSPACE_ID=...
 # optional: CONTEXT_OS_API_BASE=http://127.0.0.1:18080
 
+# 用户态（建库）
+context-os auth login --email you@example.com --password '…'
+export CONTEXT_OS_USER_TOKEN=$(context-os auth mint --ttl 120 | jq -r .token)
+context-os workspace create --name Research
+context-os workspace list
+
+# 工作区自动化（API key 或 user token 均可）
+export CONTEXT_OS_API_KEY=...          # 或继续用 USER_TOKEN
+export CONTEXT_OS_WORKSPACE_ID=...
 context-os status
-context-os ingest ./doc.pdf                 # create_upload → PUT → complete → poll
-context-os ingest --no-wait ./doc.pdf       # 提交后立即返回 document_id
+context-os ingest ./doc.pdf            # create_upload → PUT → complete → poll
 context-os ask "Summarize the indexed docs"
 context-os sources
-context-os share                            # exit 4：须 UI / 用户会话（非 API key）
+context-os share                       # exit 4：须 UI（分享 MCP 仍待办）
 ```
+
+**鉴权优先级：** `CONTEXT_OS_USER_TOKEN` ＞ `CONTEXT_OS_API_KEY`（MCP/CLI Bearer）。
 
 构建：`cargo build -p context-os --release` → `target/release/context-os` 与 `context-os-mcp`。  
 Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/context-os`。
+
+### 8.2 Agent user token（API）
+
+| 项 | 值 |
+|----|-----|
+| 路径 | `POST /api/auth/agent-token`（需用户 JWT；API key → `403 api_key_forbidden`） |
+| Body | `{ "ttl_minutes": 120 }`（5–1440，默认 120） |
+| 返回 | `{ success, data: { token, expires_at, ttl_minutes, token_kind: "user_agent" } }` |
+| 吊销 | 短 TTL；改密等抬高 `auth_version` 使旧 JWT 失效 |
 
 ---
 
@@ -314,3 +331,4 @@ Stage：`bash scripts/stage-desktop-sidecars.sh` → `desktop/runtime/bin/contex
 | 2026-08-06 | 初版：对齐「本机客户端被 coding agent 以 MCP/CLI 调用」意图；矩阵 + P0/P1 + 非目标 |
 | 2026-08-06 | P0：`context-os-mcp` stdio 包装、`--check`、配置片段、API Access UI 引导 |
 | 2026-08-06 | P1 切片：`context-os` CLI（status/ingest/ask/sources；share 拒绝）；client 包合并 mcp+cli |
+| 2026-08-06 | P1：`POST /api/auth/agent-token` + `CONTEXT_OS_USER_TOKEN`；CLI auth/workspace create；API Access 签发 UI |

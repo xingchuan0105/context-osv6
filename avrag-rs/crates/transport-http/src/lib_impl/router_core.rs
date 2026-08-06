@@ -120,6 +120,24 @@ pub fn issue_jwt_for_auth_version(
     auth_version: i32,
     user_role: &str,
 ) -> String {
+    issue_jwt_for_auth_version_ttl(
+        user_id,
+        owner_user_id,
+        auth_version,
+        user_role,
+        chrono::Duration::hours(24),
+    )
+}
+
+/// Issue a user JWT with an explicit TTL (used by login and agent-token mint).
+#[doc(hidden)]
+pub fn issue_jwt_for_auth_version_ttl(
+    user_id: &Uuid,
+    owner_user_id: &Uuid,
+    auth_version: i32,
+    user_role: &str,
+    ttl: chrono::Duration,
+) -> String {
     let now = chrono::Utc::now();
     let claims = JwtClaims {
         sub: user_id.to_string(),
@@ -127,12 +145,32 @@ pub fn issue_jwt_for_auth_version(
         permissions: jwt_permissions_for_user_role(user_role),
         jti: Uuid::new_v4().to_string(),
         auth_version,
-        exp: (now + chrono::Duration::hours(24)).timestamp() as usize,
+        exp: (now + ttl).timestamp() as usize,
         iat: now.timestamp() as usize,
     };
+    encode_jwt_claims(&claims)
+}
+
+/// Re-issue a short-lived agent token from an existing verified user JWT claims set.
+/// Keeps `sub` / `owner_user_id` / `permissions` / `auth_version`; new `jti` + `exp`.
+pub(crate) fn reissue_user_jwt_with_ttl(claims: &JwtClaims, ttl: chrono::Duration) -> String {
+    let now = chrono::Utc::now();
+    let claims = JwtClaims {
+        sub: claims.sub.clone(),
+        owner_user_id: claims.owner_user_id.clone(),
+        permissions: claims.permissions.clone(),
+        jti: Uuid::new_v4().to_string(),
+        auth_version: claims.auth_version,
+        exp: (now + ttl).timestamp() as usize,
+        iat: now.timestamp() as usize,
+    };
+    encode_jwt_claims(&claims)
+}
+
+fn encode_jwt_claims(claims: &JwtClaims) -> String {
     encode(
         &Header::default(),
-        &claims,
+        claims,
         &EncodingKey::from_secret(jwt_secret().as_bytes()),
     )
     .expect("JWT encoding should not fail")

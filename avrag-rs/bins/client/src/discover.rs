@@ -15,6 +15,14 @@ pub async fn run_check(cfg: &ClientConfig) -> Result<(), u8> {
             "missing"
         }
     );
+    eprintln!(
+        "  user_tok:  {}",
+        if cfg.has_user_token() {
+            "set"
+        } else {
+            "missing"
+        }
+    );
     if let Some(ws) = cfg.workspace_id.as_deref() {
         eprintln!("  workspace: {ws}");
     }
@@ -59,7 +67,7 @@ pub async fn run_check(cfg: &ClientConfig) -> Result<(), u8> {
         }
     }
 
-    if !cfg.has_api_key() {
+    if cfg.bearer_token().is_none() {
         eprintln!("  auth:      WARN — {}", config::missing_key_message());
         return Err(3);
     }
@@ -79,8 +87,8 @@ pub async fn run_check(cfg: &ClientConfig) -> Result<(), u8> {
         .post(&cfg.mcp_url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json");
-    if let Some(key) = cfg.api_key.as_ref() {
-        req = req.bearer_auth(key);
+    if let Some(bearer) = cfg.bearer_token() {
+        req = req.bearer_auth(bearer);
     }
 
     match req.json(&init_body).send().await {

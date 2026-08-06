@@ -125,6 +125,8 @@ export function WorkspaceApiAccessSurface({
   const [expiresAtDraft, setExpiresAtDraft] = useState("");
   const [plaintextKey, setPlaintextKey] = useState("");
   const [copyFeedback, setCopyFeedback] = useState("");
+  const [agentUserToken, setAgentUserToken] = useState("");
+  const [mintingToken, setMintingToken] = useState(false);
   // Resolve after mount so desktop (Tauri) base is correct and SSR/hydration stay stable.
   const [agentApiBase, setAgentApiBase] = useState(LOCAL_DESKTOP_API_BASE);
   const mcpSnippet = useMemo(() => buildAgentMcpSnippet(agentApiBase), [agentApiBase]);
@@ -136,6 +138,39 @@ export function WorkspaceApiAccessSurface({
     const ok = await copyText(value);
     setCopyFeedback(ok ? `已复制：${label}` : `复制失败，请手动选择 ${label}`);
     window.setTimeout(() => setCopyFeedback(""), 2500);
+  }
+
+  async function handleMintAgentToken() {
+    if (!auth.token) {
+      setError("登录状态失效，请重新登录后再签发 agent token。");
+      return;
+    }
+    setMintingToken(true);
+    setError("");
+    try {
+      const { request } = await import("../../lib/http/request");
+      const payload = await request<{
+        success?: boolean;
+        data?: { token?: string; expires_at?: string; ttl_minutes?: number };
+        error?: string;
+        message?: string;
+      }>("/api/auth/agent-token", { method: "POST", body: JSON.stringify({ ttl_minutes: 120 }) }, auth.token);
+      const token = payload.data?.token?.trim() ?? "";
+      if (!token) {
+        throw new Error(payload.message ?? payload.error ?? "未返回 token");
+      }
+      setAgentUserToken(token);
+      setCopyFeedback(
+        payload.data?.expires_at
+          ? `已签发 agent token（约 ${payload.data.ttl_minutes ?? 120} 分钟，至 ${payload.data.expires_at}）`
+          : "已签发 agent token",
+      );
+      window.setTimeout(() => setCopyFeedback(""), 4000);
+    } catch (mintError) {
+      setError(errorMessage(mintError, "签发 agent token 失败"));
+    } finally {
+      setMintingToken(false);
+    }
   }
 
   useEffect(() => {
@@ -511,6 +546,40 @@ export function WorkspaceApiAccessSurface({
           <pre className={styles.codeBlock} data-testid="agent-mcp-snippet">
             {mcpSnippet}
           </pre>
+          <div className={`app-inline-surface ${styles.stack}`}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <strong>用户态 agent token（建库）</strong>
+                <p className={styles.mutedTextSpaced}>
+                  短时用户 JWT（默认 120 分钟）。export 为 <code>CONTEXT_OS_USER_TOKEN</code> 后可用{" "}
+                  <code>context-os workspace create</code>；工作区密钥仍不能建库。分享仍走 UI。
+                </p>
+              </div>
+              <button
+                className="app-button-secondary"
+                type="button"
+                disabled={mintingToken || !auth.token}
+                onClick={() => void handleMintAgentToken()}
+              >
+                {mintingToken ? "签发中..." : "签发 2h token"}
+              </button>
+            </div>
+            {agentUserToken ? (
+              <>
+                <pre className={styles.codeBlock} data-testid="agent-user-token">
+                  {agentUserToken}
+                </pre>
+                <button
+                  className="app-button-secondary"
+                  type="button"
+                  onClick={() => void handleCopy("agent token", agentUserToken)}
+                >
+                  复制 token
+                </button>
+              </>
+            ) : null}
+          </div>
+
           <p className={styles.note}>
             探活：<code>context-os status</code> 或 <code>context-os-mcp --check</code>。脚本可用{" "}
             <code>context-os ingest</code> / <code>ask</code>（env：<code>CONTEXT_OS_WORKSPACE_ID</code>）。工具调用时{" "}

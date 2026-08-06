@@ -36,6 +36,10 @@ pub(crate) fn protected_router() -> Router<AppState> {
     Router::new()
         .route("/logout", post(crate::lib_impl::auth_logout_handler))
         .route("/me", get(crate::lib_impl::auth_me_handler))
+        .route(
+            "/agent-token",
+            post(crate::lib_impl::auth_agent_token_handler),
+        )
         .route("/profile", put(crate::lib_impl::auth_update_profile_handler))
         .route(
             "/profile/media/{kind}",
