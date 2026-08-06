@@ -15,6 +15,16 @@ import {
   SettingsQuickModal,
   type SettingsQuickTab,
 } from "./settings/settings-quick-modal";
+import {
+  IconHelp,
+  IconLanguage,
+  IconLogout,
+  IconMembership,
+  IconPreferences,
+  IconProfile,
+  IconSecurity,
+  IconSettings,
+} from "./settings/settings-nav-icons";
 
 /**
  * Unified account menu (dashboard + workspace top bar).
@@ -137,6 +147,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               type="button"
               onClick={() => openQuick("billing")}
             >
+              <IconMembership className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "dashboardBillingLink")}
             </button>
             <button
@@ -145,6 +156,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               type="button"
               onClick={() => openQuick("profile")}
             >
+              <IconProfile className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "dashboardProfileLink")}
             </button>
 
@@ -155,6 +167,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
                 type="button"
                 onClick={() => setFlyout((f) => (f === "theme" ? null : "theme"))}
               >
+                <IconPreferences className="dashboard-account-menu-icon" />
                 {formatUiMessage(locale, "settings.appearance.themeLabel")} ▸
               </button>
               {flyout === "theme" ? (
@@ -192,6 +205,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
                 type="button"
                 onClick={() => setFlyout((f) => (f === "locale" ? null : "locale"))}
               >
+                <IconLanguage className="dashboard-account-menu-icon" />
                 {formatUiMessage(locale, "settings.appearance.localeLabel")} ▸
               </button>
               {flyout === "locale" ? (
@@ -230,6 +244,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               role="menuitem"
               onClick={() => setMenuOpen(false)}
             >
+              <IconSecurity className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "settingsQuickModal.securityLink")}
             </Link>
             <Link
@@ -238,6 +253,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               role="menuitem"
               onClick={() => setMenuOpen(false)}
             >
+              <IconSettings className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "accountMenu.allSettings")}
             </Link>
             <Link
@@ -246,6 +262,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               role="menuitem"
               onClick={() => setMenuOpen(false)}
             >
+              <IconHelp className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "accountMenu.help")}
             </Link>
 
@@ -256,6 +273,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               type="button"
               onClick={() => void handleLogout()}
             >
+              <IconLogout className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "dashboardLogout")}
             </button>
           </div>

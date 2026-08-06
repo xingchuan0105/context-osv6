@@ -33,4 +33,25 @@ describe("sanitizeAssistantDisplayContent", () => {
   it("blanks whole-message tool-shaped JSON by keys", () => {
     expect(sanitizeAssistantDisplayContent(JSON.stringify({ tool: "x", chunks: [] }))).toBe("");
   });
+
+  it("blanks unfenced multi-line code drafts (no fences)", () => {
+    // Synthetic shapes only — mirrors host is_unfenced_code_shaped.
+    const raw = [
+      "city = None",
+      "if isinstance(ctx, dict):",
+      '  city = ctx.get("city")',
+      '  print("CITY_FIELD:", city)',
+      "if city:",
+      "  weather = await client.foo(city=city)",
+      "else:",
+      '  weather = await client.foo(city="x")',
+      'print("WEATHER_RESULT:", weather)',
+    ].join("\n");
+    expect(sanitizeAssistantDisplayContent(raw)).toBe("");
+  });
+
+  it("keeps grounded prose that is not code-shaped", () => {
+    const raw = "根据回传，上海今天多云，气温约 28°C。";
+    expect(sanitizeAssistantDisplayContent(raw)).toBe(raw);
+  });
 });

@@ -13,6 +13,8 @@ export type PricingCardsProps = {
   locale: UiLocale;
   onSelect: (planId: string) => void;
   compact?: boolean;
+  /** Marketing dialog: CTA opens formal pricing page instead of in-place checkout. */
+  actionMode?: "checkout" | "details";
 };
 
 function baseTier(planId: string): string {
@@ -25,7 +27,9 @@ export function PricingCards({
   locale,
   onSelect,
   compact = false,
+  actionMode = "checkout",
 }: PricingCardsProps) {
+  const detailsMode = actionMode === "details";
   const descriptionKeyByPlan: Record<string, UiMessageKey> = {
     free: "pricingPlanFreeDescription",
     plus: "pricingPlanPlusDescription",
@@ -46,11 +50,13 @@ export function PricingCards({
           ? formatUiMessage(locale, descriptionKey)
           : plan.description;
         const isAnnual = plan.plan_id.endsWith("_annual") || plan.interval === "year";
-        const buttonLabel = isCurrent
-          ? formatUiMessage(locale, "currentPlan")
-          : plan.plan_id === "free"
-            ? formatUiMessage(locale, "upgradeContinueFree")
-            : formatUiMessage(locale, "pricingUpgradeTo", { name: plan.name });
+        const buttonLabel = detailsMode
+          ? formatUiMessage(locale, "pricingViewDetails", { name: plan.name })
+          : isCurrent
+            ? formatUiMessage(locale, "currentPlan")
+            : plan.plan_id === "free"
+              ? formatUiMessage(locale, "upgradeContinueFree")
+              : formatUiMessage(locale, "pricingUpgradeTo", { name: plan.name });
         return (
           <div
             key={plan.plan_id}
@@ -87,7 +93,7 @@ export function PricingCards({
               type="button"
               className={isHighlight ? styles.primaryButton : styles.secondaryButton}
               onClick={() => onSelect(plan.plan_id)}
-              disabled={isCurrent || !plan.checkout_available}
+              disabled={!detailsMode && (isCurrent || !plan.checkout_available)}
             >
               {buttonLabel}
             </button>

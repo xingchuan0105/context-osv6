@@ -24,6 +24,7 @@ import {
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { ProductChromeFooter } from "../product-chrome-footer";
+import { ReferralInviteSurface } from "../referral/referral-invite-surface";
 import { DashboardHeader } from "./parts/dashboard-header";
 import { DashboardSearchDialog } from "./parts/dashboard-search-dialog";
 import { DashboardSkeleton } from "./dashboard-skeleton";
@@ -35,6 +36,7 @@ import {
   mapWorkspace,
 } from "./parts/dashboard-utils";
 import { DashboardCreateTile, WorkspaceListItem } from "./parts/dashboard-workspace-items";
+import { ProductGuideDock, ProductGuideModal } from "./product-guide-modal";
 
 export function DashboardSurface() {
   const router = useRouter();
@@ -56,6 +58,7 @@ export function DashboardSurface() {
   const [renameSubmitting, setRenameSubmitting] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,6 +295,8 @@ export function DashboardSurface() {
   return (
     <main className="dashboard-shell">
       <DashboardHeader avatarInitial={avatarInitial} locale={locale} />
+      <ProductGuideDock locale={locale} onOpen={() => setGuideOpen(true)} />
+      <ProductGuideModal open={guideOpen} locale={locale} onClose={() => setGuideOpen(false)} />
 
       <section className="dashboard-main">
         <DashboardToolbar
@@ -482,6 +487,8 @@ export function DashboardSurface() {
       <div className="dashboard-main" style={{ paddingTop: 0 }}>
         <ProductChromeFooter />
       </div>
+
+      <ReferralInviteSurface />
     </main>
   );
 }

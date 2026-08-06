@@ -61,7 +61,7 @@ const INLINE_COPY = {
     en: "Failed docs",
   },
   "common.loading": {
-    zh: "正在加载...",
+    zh: "正在加载…",
     en: "Loading...",
   },
   "common.missing": {
@@ -81,7 +81,7 @@ const INLINE_COPY = {
     en: "Never active",
   },
   "common.workspaces": {
-    zh: "知识库",
+    zh: "工作区",
     en: "Workspaces",
   },
   "common.owners": {
@@ -121,7 +121,7 @@ const INLINE_COPY = {
     en: "Platform statistics",
   },
   "common.processing": {
-    zh: "处理中...",
+    zh: "处理中…",
     en: "Processing...",
   },
   "common.queued": {
@@ -145,7 +145,7 @@ const INLINE_COPY = {
     en: "Resource",
   },
   "common.resourceId": {
-    zh: "资源 ID",
+    zh: "资源编号",
     en: "Resource ID",
   },
   "common.reviewedBy": {
@@ -177,7 +177,7 @@ const INLINE_COPY = {
     en: "Status",
   },
   "common.submitting": {
-    zh: "提交中...",
+    zh: "提交中…",
     en: "Submitting...",
   },
   "common.time": {
@@ -254,7 +254,7 @@ const INLINE_COPY = {
   },
   "audit.ownerUserId": {
     zh: "账户 ID",
-    en: "Org ID",
+    en: "Account ID",
   },
   "audit.previous": {
     zh: "上一页",
@@ -397,7 +397,7 @@ const INLINE_COPY = {
     en: "Filter by name, ID, or plan",
   },
   "accounts.loading": {
-    zh: "正在加载账户...",
+    zh: "正在加载账户…",
     en: "Loading accounts...",
   },
   "accounts.matching": {
@@ -413,7 +413,7 @@ const INLINE_COPY = {
     en: "Name A-Z",
   },
   "accounts.sort.workspacesDesc": {
-    zh: "知识库数优先",
+    zh: "工作区数优先",
     en: "Workspaces desc",
   },
   "accounts.sort.queriesDesc": {
@@ -429,12 +429,12 @@ const INLINE_COPY = {
     en: "Account status",
   },
   "accounts.subtitle": {
-    zh: "查看账户、团队规模、知识库数量和访问状态。",
-    en: "Review accounts, team size, notebooks, and access status.",
+    zh: "查看账户、团队规模、工作区数量和访问状态。",
+    en: "Review accounts, team size, workspaces, and access status.",
   },
   "accounts.totalWorkspaces": {
-    zh: "知识库总数",
-    en: "Total notebooks",
+    zh: "工作区总数",
+    en: "Total workspaces",
   },
   "accounts.unblockAccount": {
     zh: "解除封禁账户",
@@ -445,11 +445,11 @@ const INLINE_COPY = {
     en: "Users covered",
   },
   "accountDetail.loading": {
-    zh: "正在加载账户...",
+    zh: "正在加载账户…",
     en: "Loading account...",
   },
   "accountDetail.loadingInsights": {
-    zh: "正在加载账户洞察...",
+    zh: "正在加载账户洞察…",
     en: "Loading account insights...",
   },
   "accountDetail.notFound": {
@@ -461,7 +461,7 @@ const INLINE_COPY = {
     en: "Operational efficiency",
   },
   "accountDetail.workspacesPerUser": {
-    zh: "人均知识库",
+    zh: "人均工作区",
     en: "Workspaces per user",
   },
   "accountDetail.subtitle": {
@@ -489,7 +489,7 @@ const INLINE_COPY = {
     en: "All accounts (aggregate)",
   },
   "usage.loading": {
-    zh: "正在加载用量数据...",
+    zh: "正在加载用量数据…",
     en: "Loading usage...",
   },
   "usage.noData": {
@@ -521,7 +521,7 @@ const INLINE_COPY = {
     en: "Latest active",
   },
   "users.loading": {
-    zh: "正在加载用户...",
+    zh: "正在加载用户…",
     en: "Loading users...",
   },
   "users.memberRoles": {
@@ -589,7 +589,7 @@ const INLINE_COPY = {
     en: "Search",
   },
   "admin.searchPlaceholder": {
-    zh: "按名称、邮箱或资源 ID 筛选",
+    zh: "按名称、邮箱或资源编号筛选",
     en: "Filter by name, email, or resource ID",
   },
   "admin.filter.statusLabel": {
@@ -685,7 +685,7 @@ const INLINE_COPY = {
     en: "System health",
   },
   "admin.health.sectionSubtitle": {
-    zh: "检查服务状态、退化信号和恢复建议。",
+    zh: "检查服务状态、降级信号和恢复建议。",
     en: "Check service status, degradation signals, and recovery hints.",
   },
   "admin.billing.sectionTitle": {

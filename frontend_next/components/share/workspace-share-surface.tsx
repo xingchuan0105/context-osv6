@@ -6,6 +6,7 @@ import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { ShareActivityPanel } from "./parts/share-activity-panel";
 import { ShareControlBar } from "./parts/share-control-bar";
+import { ShareConversionBanner } from "./parts/share-conversion-banner";
 import { ShareInsightsPanel } from "./parts/share-insights-panel";
 import { ShareInvitePanel } from "./parts/share-invite-panel";
 import { useShareCenter } from "./parts/use-share-center";
@@ -20,7 +21,13 @@ export function WorkspaceShareCenterSurface({
 }: WorkspaceShareCenterSurfaceProps) {
   const { locale } = useUiPreferences();
   const center = useShareCenter(workspaceId);
-  const { actionError, actionMessage, settingsQuery } = center;
+  const { actionError, actionMessage, settingsQuery, quotaSummary } = center;
+  const quotaForced =
+    typeof actionError === "string" &&
+    (actionError.includes("share_workspace_quota") ||
+      actionError.includes("可分享") ||
+      actionError.toLowerCase().includes("shareable") ||
+      actionError.toLowerCase().includes("quota"));
 
   return (
     <main className="app-page-shell">
@@ -48,6 +55,12 @@ export function WorkspaceShareCenterSurface({
             </p>
           </div>
         </header>
+
+        <ShareConversionBanner
+          locale={locale}
+          quota={quotaSummary}
+          forced={quotaForced}
+        />
 
         {actionError ? (
           <p className="app-notice-banner">{actionError}</p>

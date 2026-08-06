@@ -189,6 +189,9 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
     progressSnapshot?: UiProgressSnapshot | null,
   ) {
     const payload = event.payload as ChatResponse;
+    // Done is authoritative for the main bubble. Never fall back to
+    // `current?.content` (live token buffer) — that used to keep retrieve-phase
+    // drafts (sandbox code) on screen when the final answer was empty/stripped.
     const answer = getAnswerText(payload.answer ?? "", payload.answer_blocks ?? []);
     const resolvedMessageId = normalizeStreamMessageId(event.message_id);
     const fallbackAssistantId = getAssistantMessageKey(event.message_id);
@@ -212,20 +215,15 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
               ? deriveAgentTypeLabel(capabilities)
               : deps.effectiveChatModeRef.current),
           capabilities,
-          content: sanitizeAssistantDisplayContent(
-            getAnswerText(
-              answer || current?.content || "",
-              payload.answer_blocks ?? current?.answerBlocks ?? [],
-            ),
-          ),
+          content: answer,
           answerBlocks:
             payload.answer_blocks && payload.answer_blocks.length > 0
               ? payload.answer_blocks
-              : current?.answerBlocks ?? [],
+              : [],
           citations:
             payload.citations && payload.citations.length > 0
               ? payload.citations
-              : current?.citations ?? [],
+              : [],
           degradeTrace: payload.degrade_trace ?? [],
           guarded: hasGuardrailIntervention(payload.guard_report),
           messageId: resolvedMessageId ?? current?.messageId ?? null,

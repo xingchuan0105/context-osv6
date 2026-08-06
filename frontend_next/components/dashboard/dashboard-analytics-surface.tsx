@@ -15,10 +15,10 @@ import {
 import { useUiPreferences } from "../../lib/ui-preferences";
 import {
   buildDailyViewsSeries,
-  formatDayLabel,
   sumViews,
 } from "../share/parts/share-center-utils";
-import analyzeStyles from "../share/workspace-analyze-surface.module.css";
+import { ShareViewsBarChart } from "../share/parts/share-views-bar-chart";
+import styles from "./dashboard-analytics-surface.module.css";
 
 type WorkspaceAnalyticsRow = {
   workspace: DashboardWorkspace;
@@ -27,9 +27,11 @@ type WorkspaceAnalyticsRow = {
   error?: string;
 };
 
+type RangeDays = 7 | 30;
+
 /**
- * Dashboard-level analytics: aggregate share metrics across all workspaces
- * the owner has shared (or attempted to load analytics for).
+ * Dashboard share analytics — product language + DeepSeek-style usage layout:
+ * summary metric cards, range filter, primary chart, per-workspace panels.
  */
 export function DashboardAnalyticsSurface() {
   const auth = useAuth();
@@ -37,6 +39,8 @@ export function DashboardAnalyticsSurface() {
   const [rows, setRows] = useState<WorkspaceAnalyticsRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [rangeDays, setRangeDays] = useState<RangeDays>(30);
+  const [filterWs, setFilterWs] = useState<string>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -97,11 +101,18 @@ export function DashboardAnalyticsSurface() {
 
   const sharedRows = useMemo(() => rows.filter((r) => r.shareOn && r.analytics), [rows]);
 
+  const visibleShared = useMemo(() => {
+    if (filterWs === "all") {
+      return sharedRows;
+    }
+    return sharedRows.filter((r) => r.workspace.workspace_id === filterWs);
+  }, [filterWs, sharedRows]);
+
   const totals = useMemo(() => {
     let views = 0;
     let visitors = 0;
     const byDay: Record<string, number> = {};
-    for (const row of sharedRows) {
+    for (const row of visibleShared) {
       const a = row.analytics;
       if (!a) continue;
       views += a.total_views;
@@ -111,28 +122,35 @@ export function DashboardAnalyticsSurface() {
       }
     }
     return { views, visitors, byDay };
-  }, [sharedRows]);
+  }, [visibleShared]);
 
   const trendSeries = useMemo(
-    () => buildDailyViewsSeries({ views_by_day: totals.byDay, total_views: totals.views, total_unique_visitors: totals.visitors }, 30),
-    [totals],
+    () =>
+      buildDailyViewsSeries(
+        {
+          views_by_day: totals.byDay,
+          total_views: totals.views,
+          total_unique_visitors: totals.visitors,
+        },
+        rangeDays,
+      ),
+    [totals, rangeDays],
   );
-  const maxViews = Math.max(...trendSeries.map((e) => e.views), 1);
-  const totalTrend = sumViews(trendSeries);
+  const rangeViews = sumViews(trendSeries);
 
   return (
-    <main className="app-page-shell" data-testid="dashboard-analytics-surface">
-      <div className={`app-page-center ${analyzeStyles.pageStack}`}>
-        <header className={analyzeStyles.header}>
+    <main className={styles.page} data-testid="dashboard-analytics-surface">
+      <div className={styles.inner}>
+        <header className={styles.header}>
           <Link className="app-link app-link-muted" href="/dashboard">
             {formatUiMessage(locale, "dashboardBackToDashboard")}
           </Link>
-          <div className={analyzeStyles.headerRow}>
+          <div className={styles.headerRow}>
             <div>
-              <h1 className="app-page-title">
+              <h1 className={styles.title}>
                 {formatUiMessage(locale, "dashboardShareAnalyticsTitle")}
               </h1>
-              <p className="app-page-subtitle">
+              <p className={styles.subtitle}>
                 {formatUiMessage(locale, "dashboardShareAnalyticsSubtitle")}
               </p>
             </div>
@@ -142,108 +160,154 @@ export function DashboardAnalyticsSurface() {
         {error ? <p className="app-notice-banner">{error}</p> : null}
 
         {loading ? (
-          <section className="app-surface-card">
-            <p className={analyzeStyles.flushText}>
-              {formatUiMessage(locale, "dashboardLoading")}
-            </p>
+          <section className={styles.card}>
+            <p className={styles.muted}>{formatUiMessage(locale, "dashboardLoading")}</p>
           </section>
         ) : (
           <>
-            <section className={`app-surface-card ${analyzeStyles.sectionCard}`}>
-              <h2 className={`app-page-title ${analyzeStyles.sectionTitle}`}>
-                {formatUiMessage(locale, "dashboardTotalsTitle")}
-              </h2>
-              <div className={analyzeStyles.metricGrid}>
-                <div className="app-inline-surface">
-                  <h3 className={analyzeStyles.metricTitle}>
-                    {formatUiMessage(locale, "dashboardSharedWorkspaces")}
-                  </h3>
-                  <p className={analyzeStyles.metricValue}>{sharedRows.length}</p>
-                </div>
-                <div className="app-inline-surface">
-                  <h3 className={analyzeStyles.metricTitle}>
-                    {formatUiMessage(locale, "dashboardTotalViews")}
-                  </h3>
-                  <p className={analyzeStyles.metricValue}>{totals.views}</p>
-                </div>
-                <div className="app-inline-surface">
-                  <h3 className={analyzeStyles.metricTitle}>
-                    {formatUiMessage(locale, "dashboardUniqueVisitors")}
-                  </h3>
-                  <p className={analyzeStyles.metricValue}>{totals.visitors}</p>
-                </div>
-                <div className="app-inline-surface">
-                  <h3 className={analyzeStyles.metricTitle}>
-                    {formatUiMessage(locale, "dashboardViews30d")}
-                  </h3>
-                  <p className={analyzeStyles.metricValue}>{totalTrend}</p>
+            {/* Filters first — DeepSeek 时间维度 / 维度筛选 */}
+            <div className={styles.toolbar}>
+              <div className={styles.chip} role="group" aria-label="range">
+                <span className={styles.chipLabel}>
+                  {formatUiMessage(locale, "dashboardTimeDimension")}
+                </span>
+                <div className={styles.pills}>
+                  <button
+                    type="button"
+                    className={rangeDays === 7 ? styles.pillActive : styles.pill}
+                    onClick={() => setRangeDays(7)}
+                  >
+                    {formatUiMessage(locale, "dashboardRange7")}
+                  </button>
+                  <button
+                    type="button"
+                    className={rangeDays === 30 ? styles.pillActive : styles.pill}
+                    onClick={() => setRangeDays(30)}
+                  >
+                    {formatUiMessage(locale, "dashboardRange30")}
+                  </button>
                 </div>
               </div>
-            </section>
+              <label className={styles.chip}>
+                <span className={styles.chipLabel}>
+                  {formatUiMessage(locale, "dashboardFilterWorkspace")}
+                </span>
+                <select
+                  className={styles.chipSelect}
+                  value={filterWs}
+                  onChange={(e) => setFilterWs(e.target.value)}
+                  data-testid="analytics-workspace-filter"
+                >
+                  <option value="all">{formatUiMessage(locale, "dashboardFilterAll")}</option>
+                  {sharedRows.map((r) => (
+                    <option key={r.workspace.workspace_id} value={r.workspace.workspace_id}>
+                      {r.workspace.title || r.workspace.name || r.workspace.workspace_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-            <section className={`app-surface-card ${analyzeStyles.sectionCard}`}>
-              <h2 className={`app-page-title ${analyzeStyles.sectionTitle}`}>
-                {formatUiMessage(locale, "dashboardViewTrend")}
-              </h2>
-              <p className="app-page-subtitle">
-                {formatUiMessage(locale, "dashboardViewTrendSubtitle")}
-              </p>
-              <div
-                className={`app-inline-surface ${analyzeStyles.chartPanel}`}
-                data-testid="dashboard-analytics-chart"
-              >
-                {trendSeries.some((e) => e.views > 0) ? (
-                  trendSeries.map((entry) => (
-                    <div className={analyzeStyles.chartRow} key={entry.day}>
-                      <span>{formatDayLabel(locale, entry.day)}</span>
-                      <div aria-hidden="true" className={analyzeStyles.chartTrack}>
-                        <div
-                          className={analyzeStyles.chartFill}
-                          style={{
-                            width: `${Math.max(
-                              entry.views === 0 ? 0 : 8,
-                              (entry.views / maxViews) * 100,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <strong>{entry.views}</strong>
-                    </div>
-                  ))
-                ) : (
-                  <p className={analyzeStyles.mutedText}>
-                    {formatUiMessage(locale, "dashboardTrendEmpty")}
+            <div className={styles.metricRow}>
+              <div className={styles.metricCard}>
+                <span className={styles.metricLabel}>
+                  {formatUiMessage(locale, "dashboardSharedWorkspaces")}
+                </span>
+                <strong className={styles.metricValue}>{sharedRows.length}</strong>
+              </div>
+              <div className={styles.metricCard}>
+                <span className={styles.metricLabel}>
+                  {formatUiMessage(locale, "dashboardTotalViews")}
+                </span>
+                <strong className={styles.metricValue}>{totals.views.toLocaleString()}</strong>
+              </div>
+              <div className={styles.metricCard}>
+                <span className={styles.metricLabel}>
+                  {formatUiMessage(locale, "dashboardUniqueVisitors")}
+                </span>
+                <strong className={styles.metricValue}>{totals.visitors.toLocaleString()}</strong>
+              </div>
+              <div className={styles.metricCard}>
+                <span className={styles.metricLabel}>
+                  {rangeDays === 7
+                    ? formatUiMessage(locale, "dashboardViews7d")
+                    : formatUiMessage(locale, "dashboardViews30d")}
+                </span>
+                <strong className={styles.metricValue}>{rangeViews.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            <section className={styles.chartCard} data-testid="dashboard-analytics-chart">
+              <div className={styles.chartHead}>
+                <div>
+                  <h2 className={styles.chartTitle}>
+                    {formatUiMessage(locale, "dashboardViewTrend")}
+                  </h2>
+                  <p className={styles.chartSub}>
+                    {formatUiMessage(locale, "dashboardViewTrendSubtitle")}
                   </p>
-                )}
+                </div>
+                <strong className={styles.chartTotal}>
+                  {formatUiMessage(locale, "dashboardChartTotal", {
+                    n: rangeViews.toLocaleString(),
+                  })}
+                </strong>
               </div>
+              <ShareViewsBarChart
+                series={trendSeries}
+                locale={locale}
+                height={280}
+                emptyLabel={formatUiMessage(locale, "dashboardTrendEmpty")}
+              />
             </section>
 
-            <section className={`app-surface-card ${analyzeStyles.sectionCard}`}>
-              <h2 className={`app-page-title ${analyzeStyles.sectionTitle}`}>
+            <section className={styles.breakdown}>
+              <h2 className={styles.breakdownTitle}>
                 {formatUiMessage(locale, "dashboardByWorkspace")}
               </h2>
-              <div className={analyzeStyles.metricGrid}>
-                {rows.map((row) => (
-                  <div className="app-inline-surface" key={row.workspace.workspace_id}>
-                    <h3 className={analyzeStyles.metricTitle}>
-                      {row.workspace.title || row.workspace.name || row.workspace.workspace_id}
-                    </h3>
-                    <p className={analyzeStyles.flushText}>
-                      {row.shareOn
-                        ? formatUiMessage(locale, "dashboardViewsVisitors", {
-                            views: String(row.analytics?.total_views ?? 0),
-                            visitors: String(row.analytics?.total_unique_visitors ?? 0),
-                          })
-                        : formatUiMessage(locale, "dashboardShareOff")}
-                    </p>
-                    <Link
-                      className="app-link"
-                      href={`/dashboard/${row.workspace.workspace_id}/analyze`}
-                    >
-                      {formatUiMessage(locale, "dashboardDrillDown")}
-                    </Link>
-                  </div>
-                ))}
+              <div className={styles.wsGrid}>
+                {rows.map((row) => {
+                  const series = row.analytics
+                    ? buildDailyViewsSeries(row.analytics, rangeDays)
+                    : [];
+                  const views = row.analytics?.total_views ?? 0;
+                  const visitors = row.analytics?.total_unique_visitors ?? 0;
+                  const name =
+                    row.workspace.title || row.workspace.name || row.workspace.workspace_id;
+                  return (
+                    <article className={styles.wsCard} key={row.workspace.workspace_id}>
+                      <div className={styles.wsCardHead}>
+                        <h3 className={styles.wsName}>{name}</h3>
+                        <Link
+                          className="app-link app-link-muted"
+                          href={`/dashboard/${row.workspace.workspace_id}/analyze`}
+                        >
+                          {formatUiMessage(locale, "dashboardDrillDown")}
+                        </Link>
+                      </div>
+                      {/* Inline totals like DeepSeek "API 请求次数 35,881" */}
+                      <p className={styles.wsMetricInline}>
+                        {formatUiMessage(locale, "dashboardTotalViews")}
+                        <strong>{views.toLocaleString()}</strong>
+                        <span aria-hidden="true"> · </span>
+                        {formatUiMessage(locale, "dashboardUniqueVisitors")}
+                        <strong>{visitors.toLocaleString()}</strong>
+                      </p>
+                      {row.shareOn ? (
+                        <ShareViewsBarChart
+                          series={series}
+                          locale={locale}
+                          height={140}
+                          emptyLabel={formatUiMessage(locale, "dashboardTrendEmpty")}
+                        />
+                      ) : (
+                        <p className={styles.muted}>
+                          {formatUiMessage(locale, "dashboardShareOff")}
+                        </p>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           </>

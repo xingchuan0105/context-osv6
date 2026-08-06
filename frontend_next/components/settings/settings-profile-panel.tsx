@@ -197,64 +197,73 @@ export function ProfilePanel() {
     auth.user?.email?.split("@")[0] ||
     (formatUiMessage(locale, "settingsProfileNoName"));
 
+  function openEdit() {
+    setActionError("");
+    setBanner("");
+    profileForm.reset({
+      fullName: auth.user?.full_name ?? "",
+      bio: auth.user?.bio ?? "",
+      contactUrl: auth.user?.contact_url ?? "",
+    });
+    setEditOpen(true);
+  }
+
   return (
     <section className={shared.section} data-testid="settings-profile-panel">
-      <section className={`app-inline-surface ${shared.section}`}>
-        <div className={`app-inline-row ${styles.displayHeader}`}>
-          <div className={shared.headerText}>
-            <h2 className={shared.flushTitle}>
-              {formatUiMessage(locale, "settings.profile.sectionTitle")}
-            </h2>
-            <p className={shared.mutedText}>
-              {formatUiMessage(locale, "settings.profile.sectionSubtitle")}
-            </p>
-          </div>
-          <button
-            className="app-button-primary"
-            data-testid="settings-profile-edit"
-            type="button"
-            onClick={() => {
-              setActionError("");
-              setBanner("");
-              profileForm.reset({
-                fullName: auth.user?.full_name ?? "",
-                bio: auth.user?.bio ?? "",
-                contactUrl: auth.user?.contact_url ?? "",
-              });
-              setEditOpen(true);
-            }}
-          >
-            {formatUiMessage(locale, "settingsProfileEditProfile")}
-          </button>
-        </div>
+      <div className={shared.headerText} style={{ marginBottom: "1rem" }}>
+        <h2 className={shared.flushTitle}>
+          {formatUiMessage(locale, "settings.profile.sectionTitle")}
+        </h2>
+        <p className={shared.mutedText}>
+          {formatUiMessage(locale, "settings.profile.sectionSubtitle")}
+        </p>
+      </div>
 
+      <section className={`app-inline-surface ${styles.profileCard}`}>
         <div className={styles.mediaPreview} data-testid="settings-profile-card-preview">
           <div
             className={styles.bannerPreview}
             style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : undefined}
           />
-          <div className={styles.avatarRow}>
-            <div
-              className={styles.avatarPreview}
-              style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}
-              aria-hidden={!avatarUrl}
-            >
-              {!avatarUrl ? displayName.slice(0, 1).toUpperCase() : null}
+          <div className={styles.profileBody}>
+            <div className={styles.avatarRow}>
+              <div
+                className={styles.avatarPreview}
+                style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}
+                aria-hidden={!avatarUrl}
+              >
+                {!avatarUrl ? displayName.slice(0, 1).toUpperCase() : null}
+              </div>
+              <button
+                className={`app-button-secondary ${styles.editButton}`}
+                data-testid="settings-profile-edit"
+                type="button"
+                onClick={openEdit}
+              >
+                {formatUiMessage(locale, "settingsProfileEditProfile")}
+              </button>
             </div>
             <div className={styles.displayMeta}>
               <strong className={styles.displayName}>{displayName}</strong>
-              <span className={shared.mutedText}>{auth.user?.email ?? ""}</span>
+              <span className={styles.displayHandle}>{auth.user?.email ?? ""}</span>
               {auth.user?.bio?.trim() ? (
                 <p className={styles.displayBio}>{auth.user.bio}</p>
               ) : (
-                <p className={shared.mutedText}>
+                <p className={styles.displayBio} style={{ color: "hsl(var(--muted-foreground))" }}>
                   {formatUiMessage(locale, "settingsProfileNoBio")}
                 </p>
               )}
               {auth.user?.contact_url ? (
-                <a className="app-link" href={auth.user.contact_url} rel="noreferrer" target="_blank">
-                  {auth.user.contact_url}
-                </a>
+                <div className={styles.displayLinks}>
+                  <a
+                    className="app-link"
+                    href={auth.user.contact_url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {auth.user.contact_url.replace(/^https?:\/\//, "")}
+                  </a>
+                </div>
               ) : null}
             </div>
           </div>
@@ -269,7 +278,7 @@ export function ProfilePanel() {
         testId="settings-profile-edit-modal"
         onClose={() => setEditOpen(false)}
       >
-        <div className={styles.mediaPreview} data-testid="settings-profile-edit-media">
+        <div className={styles.mediaPreviewModal} data-testid="settings-profile-edit-media">
           <div
             className={styles.bannerPreview}
             style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : undefined}

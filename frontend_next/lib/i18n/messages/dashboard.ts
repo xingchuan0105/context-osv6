@@ -242,12 +242,12 @@ export const dashboardMessages = {
     en: "← Dashboard",
   },
   dashboardShareAnalyticsTitle: {
-    zh: "分享数据分析",
-    en: "Share analytics",
+    zh: "分享访问",
+    en: "Share traffic",
   },
   dashboardShareAnalyticsSubtitle: {
-    zh: "聚合你名下所有已开启分享的工作区访问趋势；可下钻到单个工作区。",
-    en: "Aggregate views across all shared workspaces; drill into any one.",
+    zh: "已开启分享的工作区访问汇总与趋势。可按时间与工作区筛选，下钻到单库详情。",
+    en: "Views across shared workspaces. Filter by range or workspace; drill into any one.",
   },
   dashboardLoading: {
     zh: "加载中…",
@@ -257,12 +257,16 @@ export const dashboardMessages = {
     zh: "汇总",
     en: "Totals",
   },
+  dashboardTimeDimension: {
+    zh: "时间维度",
+    en: "Time range",
+  },
   dashboardSharedWorkspaces: {
     zh: "已分享工作区",
     en: "Shared workspaces",
   },
   dashboardTotalViews: {
-    zh: "总访问",
+    zh: "总访问次数",
     en: "Total views",
   },
   dashboardUniqueVisitors: {
@@ -273,16 +277,40 @@ export const dashboardMessages = {
     zh: "近 30 日访问",
     en: "Last 30d views",
   },
+  dashboardViews7d: {
+    zh: "近 7 日访问",
+    en: "Last 7d views",
+  },
+  dashboardRange7: {
+    zh: "近 7 天",
+    en: "7 days",
+  },
+  dashboardRange30: {
+    zh: "近 30 天",
+    en: "30 days",
+  },
+  dashboardFilterWorkspace: {
+    zh: "工作区",
+    en: "Workspace",
+  },
+  dashboardFilterAll: {
+    zh: "全部",
+    en: "All",
+  },
+  dashboardChartTotal: {
+    zh: "区间合计 {n}",
+    en: "Range total {n}",
+  },
   dashboardViewTrend: {
     zh: "访问趋势",
     en: "View trend",
   },
   dashboardViewTrendSubtitle: {
-    zh: "全部分享工作区的日访问叠加（柱状）。",
-    en: "Stacked daily views across shared workspaces.",
+    zh: "按日访问量（柱状）。切换时间维度或工作区可刷新下方汇总。",
+    en: "Daily views (bars). Change range or workspace to refresh totals.",
   },
   dashboardTrendEmpty: {
-    zh: "暂无访问数据。开启分享并产生访问后这里会出现趋势图。",
+    zh: "暂无访问数据。开启分享并产生访问后，这里会出现趋势图。",
     en: "No view data yet. Enable share and wait for traffic.",
   },
   dashboardByWorkspace: {
@@ -298,8 +326,8 @@ export const dashboardMessages = {
     en: "Share off",
   },
   dashboardDrillDown: {
-    zh: "下钻分析",
-    en: "Drill down",
+    zh: "详情",
+    en: "Details",
   },
   dashboardSourcesColumn: {
     zh: "来源",

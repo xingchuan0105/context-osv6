@@ -144,6 +144,44 @@ a.dashboard-brand-title:hover {
     transform var(--duration-fast) var(--ease-standard);
 }
 
+/* Client marketing entry — slightly stronger than settings capsule */
+.dashboard-header-client {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  min-height: 2.25rem;
+  height: 2.25rem;
+  padding: 0 var(--space-lg);
+  border: 1px solid hsl(var(--foreground) / 0.18);
+  border-radius: 999px;
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-semibold, 600);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-header-client:hover {
+  opacity: 0.92;
+  box-shadow: 0 2px 8px hsl(0 0% 0% / 0.12);
+}
+
+.dashboard-header-client:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.dashboard-header-client:active {
+  transform: translateY(1px);
+}
+
 .dashboard-account-trigger-label {
   display: inline-block;
 }
@@ -285,7 +323,9 @@ a.dashboard-brand-title:hover {
 }
 
 .dashboard-account-menu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   width: 100%;
   text-align: left;
   min-height: 2.25rem; /* ~36px row */
@@ -299,6 +339,19 @@ a.dashboard-brand-title:hover {
   font-weight: var(--font-weight-medium);
   text-decoration: none;
   cursor: pointer;
+}
+
+.dashboard-account-menu-icon {
+  flex: 0 0 auto;
+  color: hsl(var(--dashboard-muted-foreground));
+}
+
+.dashboard-account-menu-item:hover .dashboard-account-menu-icon {
+  color: hsl(var(--dashboard-foreground));
+}
+
+.dashboard-account-menu-danger .dashboard-account-menu-icon {
+  color: hsl(var(--destructive));
 }
 
 .dashboard-account-menu-item:hover {

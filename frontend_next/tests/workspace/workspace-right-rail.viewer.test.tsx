@@ -93,8 +93,13 @@ describe("WorkspaceRightRail viewer", () => {
       expect(mocks.getWorkspaceSourceParsedPreviewMock).toHaveBeenCalledTimes(1);
     });
     await waitFor(() => {
+      expect(screen.getByTestId("workspace-source-summary")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: /Document summary|文档摘要/i })).toBeTruthy();
       expect(screen.getByText("Summary for Alpha")).toBeTruthy();
     });
+    // Summary is the lead block of the body stack, before chunk preview text.
+    const bodyStack = screen.getByTestId("workspace-source-summary").parentElement;
+    expect(bodyStack?.textContent ?? "").toMatch(/Summary for Alpha[\s\S]*Matched excerpt/);
 
     fireEvent.click(screen.getByRole("button", { name: /Alpha note Body/i }));
     await waitFor(() => {

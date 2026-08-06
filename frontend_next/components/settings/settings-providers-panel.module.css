@@ -1,0 +1,91 @@
+.panel {
+  display: grid;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: none;
+}
+
+.header {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.table {
+  display: grid;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.tableHead {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.9fr) minmax(12rem, 1.4fr) minmax(12rem, 1.6fr) auto;
+  gap: var(--space-md);
+  align-items: center;
+  padding: 0 var(--space-sm);
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.9fr) minmax(12rem, 1.4fr) minmax(12rem, 1.6fr) auto;
+  gap: var(--space-md);
+  align-items: center;
+  padding: var(--space-md);
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-card);
+  background: hsl(var(--surface-muted) / 0.35);
+}
+
+.typeCell {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  line-height: 1.35;
+}
+
+.modelCell {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-control);
+  line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keyCell {
+  min-width: 0;
+}
+
+.keyInput {
+  width: 100%;
+}
+
+.actionsCell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+}
+
+.rowMsg {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--font-size-caption);
+}
+
+@media (max-width: 900px) {
+  .tableHead {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+
+  .actionsCell {
+    justify-content: flex-start;
+  }
+}

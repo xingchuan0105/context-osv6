@@ -10,13 +10,13 @@ import type { SettingsTab } from "./settings-tabs";
 import styles from "./settings-surface.module.css";
 
 /**
- * Full-page settings as a centered modal shell (W3 IA): left nav 224 + search + content.
+ * Full-viewport settings: left nav + content fills the page (not a centered modal card).
  */
 export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
   const { locale } = useUiPreferences();
 
   return (
-    <main className="app-page-shell" data-testid="settings-surface">
+    <main className={styles.page} data-testid="settings-surface">
       <div className={styles.shell}>
         <header className={styles.shellHeader}>
           <h1 className={styles.shellTitle}>

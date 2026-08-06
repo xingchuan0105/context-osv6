@@ -460,6 +460,16 @@
 .downloadWrap {
   display: grid;
   gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* When nested in .ctaRow, collapse to single aligned control */
+.ctaRow .downloadWrap {
+  display: contents;
+}
+
+.ctaRow .downloadWrap > .downloadHint {
+  display: none;
 }
 
 .justifyStart {
@@ -473,6 +483,87 @@
 .downloadHint {
   margin: 0;
   font-size: 0.85rem;
+}
+
+/* —— Marketing /desktop product page —— */
+.marketingPage {
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 var(--space-lg) var(--space-3xl);
+  box-sizing: border-box;
+}
+
+.marketingHeader {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.marketingGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.marketingAside {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.sectionTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.ctaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.ctaPill {
+  min-height: 2.5rem;
+  height: 2.5rem;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.installList {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: hsl(var(--muted-foreground));
+  display: grid;
+  gap: 0.4rem;
+}
+
+.smartScreenHint {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: hsl(var(--subtle-foreground));
+}
+
+.marketingFooter {
+  margin-top: 1.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 840px) {
+  .marketingGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .downloadMetaCompact {

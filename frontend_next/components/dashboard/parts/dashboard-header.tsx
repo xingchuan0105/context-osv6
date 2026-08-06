@@ -51,6 +51,13 @@ export function DashboardHeader({
         </div>
       </div>
       <div className="dashboard-header-links">
+        <Link
+          className="dashboard-header-client top-bar-capsule"
+          data-testid="dashboard-client-entry"
+          href="/desktop"
+        >
+          {formatUiMessage(locale, "productChrome.client")}
+        </Link>
         <PlanEntry locale={locale} />
         <NotificationBell locale={locale} />
         <AccountMenu locale={locale} />

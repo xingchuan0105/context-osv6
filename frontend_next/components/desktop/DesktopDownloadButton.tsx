@@ -64,7 +64,7 @@ export function DesktopDownloadButton({
 
   if (state.status === "missing" || state.status === "error") {
     return (
-      <div className={styles.downloadWrap}>
+      <div className={styles.downloadWrap} data-compact={compact ? "true" : "false"}>
         <button type="button" className={className} disabled>
           {formatUiMessage(locale, "desktop.downloadUnavailable")}
         </button>

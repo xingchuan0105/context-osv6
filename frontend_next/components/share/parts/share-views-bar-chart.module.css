@@ -1,0 +1,60 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  min-height: 12rem;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 12rem;
+}
+
+.grid {
+  stroke: hsl(var(--border-whisper));
+  stroke-width: 1;
+}
+
+.yLabel,
+.xLabel {
+  fill: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+
+/* DeepSeek-like saturated blue bars */
+.bar {
+  fill: #3b82f6;
+  opacity: 0.92;
+  cursor: default;
+}
+
+.barActive {
+  fill: #2563eb;
+  opacity: 1;
+  cursor: default;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-control);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 6px 18px hsl(0 0% 0% / 0.1);
+  font-size: var(--font-size-caption);
+  color: hsl(var(--foreground));
+  pointer-events: none;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-xl);
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  font-size: var(--font-size-meta);
+}

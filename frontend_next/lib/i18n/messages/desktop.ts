@@ -2,28 +2,36 @@ import type { UiMessageDescriptor } from "./types";
 
 export const desktopMessages = {
   "desktop.productTitle": {
-    zh: "Context-OS",
-    en: "Context-OS",
+    zh: "本地客户端 · 完全免费",
+    en: "Desktop client · free",
   },
   "desktop.productSubtitle": {
-    zh: "本地 AI 知识助手。自带 LLM API Key，离线优先，数据留在本机。",
-    en: "Local AI knowledge assistant. Bring your own LLM key; data stays on this machine.",
+    zh: "数据私有、可被 Claude / Codex 等桌面 Agent 以 MCP / CLI 调用。下载即用，无需买断许可。",
+    en: "Private data, callable by Claude / Codex and other desktop agents via MCP / CLI. Free to download — no license fee.",
   },
   "desktop.feature1": {
-    zh: "16+ LLM 服务商预设，含智谱 Coding Plan 一键配置",
-    en: "16+ LLM provider presets, including Zhipu Coding Plan one-click setup",
+    zh: "数据私有：文档与索引默认留在本机，不上云也能工作",
+    en: "Private by default: docs and index stay on this machine",
   },
   "desktop.feature2": {
-    zh: "本地文档索引与 RAG 检索，支持 PDF / Markdown",
-    en: "Local document index and RAG for PDF / Markdown",
+    zh: "MCP / CLI：本机 API 可被 coding agent 调用（建库、解析、问答）",
+    en: "MCP / CLI: local API for coding agents (workspaces, ingest, Q&A)",
   },
   "desktop.feature3": {
-    zh: "买断制授权，v1.x 终身免费升级",
-    en: "One-time license with free upgrades through v1.x",
+    zh: "桌面 Agent 友好：Claude Code、Codex 等可接本机知识库",
+    en: "Desktop-agent ready: Claude Code, Codex, and more can use your local KB",
   },
   "desktop.feature4": {
-    zh: "与云端工作区数据互通（可选同步）",
-    en: "Optional sync with cloud workspaces",
+    zh: "完全免费使用客户端；需要上云分享时再升级云端名额",
+    en: "Client is free; upgrade cloud share slots only when you publish online",
+  },
+  "desktop.feature5": {
+    zh: "自带 LLM Key（BYOK），本地栈一键启动",
+    en: "Bring your own LLM key; one-click local stack",
+  },
+  "desktop.feature6": {
+    zh: "可选与云端工作区互通，分享仍走云端档位规则",
+    en: "Optional cloud workspace sync; sharing still follows cloud plan limits",
   },
   "desktop.downloadWindows": {
     zh: "下载 Windows 客户端",
@@ -66,12 +74,20 @@ export const desktopMessages = {
     en: "Installer is not yet signed with a commercial code-signing certificate; SmartScreen may warn.",
   },
   "desktop.buyCta": {
-    zh: "购买授权",
-    en: "Buy license",
+    zh: "云端定价（分享名额）",
+    en: "Cloud pricing (share slots)",
   },
   "desktop.learnMore": {
-    zh: "了解更多",
-    en: "Learn more",
+    zh: "Agent 接入说明",
+    en: "Agent access guide",
+  },
+  "desktop.benefitsTitle": {
+    zh: "为什么下载客户端？",
+    en: "Why download the client?",
+  },
+  "desktop.ctaTitle": {
+    zh: "下载与相关入口",
+    en: "Download & related",
   },
   "desktop.installTitle": {
     zh: "安装步骤",
@@ -86,8 +102,8 @@ export const desktopMessages = {
     en: "Run the installer (Windows 10+ with WebView2)",
   },
   "desktop.installStep3": {
-    zh: "购买授权后，在客户端粘贴密钥，或点击「在 Context-OS 中激活」",
-    en: "After purchase, paste the license key in the client or open Activate in Context-OS",
+    zh: "启动后配置 LLM Key，即可本地索引与问答；需要 MCP 时指向本机 API",
+    en: "Add your LLM key, then index and chat locally; point MCP clients at the local API when needed",
   },
   "desktop.smartScreenHint": {
     zh: "若 SmartScreen 提示未知应用，选择「仍要运行」（正式签名信誉积累前属正常现象）。",

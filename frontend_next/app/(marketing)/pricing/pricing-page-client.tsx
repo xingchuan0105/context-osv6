@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -121,11 +122,12 @@ export function PricingPageClient() {
         </div>
       </header>
 
-      <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={handleSelect} />
-
-      <section className={styles.addon} data-testid="pricing-wallet-addon">
-        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingWalletAddonTitle")}</h2>
-        <p className={styles.addonBody}>{formatUiMessage(locale, "pricingWalletAddonBody")}</p>
+      <section aria-labelledby="pricing-membership-heading">
+        <h2 id="pricing-membership-heading" className={styles.sectionTitle}>
+          {formatUiMessage(locale, "pricingMembershipTitle")}
+        </h2>
+        <p className={styles.sectionLead}>{formatUiMessage(locale, "pricingMembershipLead")}</p>
+        <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={handleSelect} />
       </section>
 
       {auth.token ? (
@@ -157,34 +159,53 @@ export function PricingPageClient() {
         />
       ) : null}
 
-      <section className={styles.faq}>
-        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingFaqTitle")}</h2>
-        <details className={styles.faqItem}>
-          <summary>{formatUiMessage(locale, "pricingFaqToken")}</summary>
-          <p>{formatUiMessage(locale, "pricingFaqTokenAnswer")}</p>
-        </details>
-        <details className={styles.faqItem}>
-          <summary>{formatUiMessage(locale, "pricingFaqReset")}</summary>
-          <p>{formatUiMessage(locale, "pricingFaqResetAnswer")}</p>
-        </details>
-        <details className={styles.faqItem}>
-          <summary>{formatUiMessage(locale, "pricingFaqUpgrade")}</summary>
-          <p>{formatUiMessage(locale, "pricingFaqUpgradeAnswer")}</p>
-        </details>
+      <section
+        id="topup"
+        className={styles.topupSection}
+        data-testid="pricing-topup-section"
+        aria-labelledby="pricing-topup-heading"
+      >
+        <div className={styles.topupCopy}>
+          <h2 id="pricing-topup-heading" className={styles.sectionTitle}>
+            {formatUiMessage(locale, "pricingTopupTitle")}
+          </h2>
+          <p className={styles.sectionLead}>{formatUiMessage(locale, "pricingTopupBody")}</p>
+          <ul className={styles.topupList}>
+            <li>{formatUiMessage(locale, "pricingTopupPoint1")}</li>
+            <li>{formatUiMessage(locale, "pricingTopupPoint2")}</li>
+            <li>{formatUiMessage(locale, "pricingTopupPoint3")}</li>
+          </ul>
+        </div>
+        <div className={styles.topupActions}>
+          <Link className="app-button-primary" href="/settings?tab=billing">
+            {formatUiMessage(locale, "pricingTopupCta")}
+          </Link>
+          <Link className="app-button-secondary" href="/settings?tab=providers">
+            {formatUiMessage(locale, "pricingTopupByokCta")}
+          </Link>
+        </div>
       </section>
 
-      <section
-        className={styles.faq}
-        style={{ marginTop: "1.5rem" }}
-        data-testid="pricing-desktop-crosslink"
-      >
-        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingDesktopCrossTitle")}</h2>
-        <p style={{ color: "hsl(var(--muted-foreground))", marginBottom: "0.75rem" }}>
-          {formatUiMessage(locale, "pricingDesktopCrossBody")}
-        </p>
-        <a className="app-button-secondary" href="/desktop">
-          {formatUiMessage(locale, "pricingDesktopCrossCta")}
-        </a>
+      <section className={styles.faq}>
+        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingFaqTitle")}</h2>
+        <div className={styles.faqGrid}>
+          <details className={styles.faqItem}>
+            <summary>{formatUiMessage(locale, "pricingFaqToken")}</summary>
+            <p>{formatUiMessage(locale, "pricingFaqTokenAnswer")}</p>
+          </details>
+          <details className={styles.faqItem}>
+            <summary>{formatUiMessage(locale, "pricingFaqTopup")}</summary>
+            <p>{formatUiMessage(locale, "pricingFaqTopupAnswer")}</p>
+          </details>
+          <details className={styles.faqItem}>
+            <summary>{formatUiMessage(locale, "pricingFaqReset")}</summary>
+            <p>{formatUiMessage(locale, "pricingFaqResetAnswer")}</p>
+          </details>
+          <details className={styles.faqItem}>
+            <summary>{formatUiMessage(locale, "pricingFaqUpgrade")}</summary>
+            <p>{formatUiMessage(locale, "pricingFaqUpgradeAnswer")}</p>
+          </details>
+        </div>
       </section>
     </div>
   );

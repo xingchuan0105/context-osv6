@@ -100,45 +100,61 @@ export function WorkspaceSourceViewer({
         </div>
       ) : null}
 
-      {summary ? <div className={styles.viewerSummary}>{summary}</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}
 
       {loading ? (
         <div className={styles.emptyState}>{formatUiMessage(locale, "workspaceRightRail.loadingSourcePreview")}</div>
-      ) : parsedPreview.length > 0 ? (
-        <div className={styles.viewerPreview} ref={previewRef}>
-          {parsedPreview.map((item, index) => (
-            <article
-              className={`${styles.viewerPreviewItem}${activePreviewIndex === index ? ` ${styles.viewerPreviewItemActive}` : ""}`}
-              data-preview-index={index}
-              key={`${item.page}-${item.cursor}-${index}`}
-            >
-              <div className={styles.viewerPreviewMeta}>
-                {formatUiMessage(locale, "workspaceRightRail.viewerLocation", {
-                  page: String(item.page),
-                  cursor: String(item.cursor),
-                })}
-              </div>
-              <div>{item.text}</div>
-            </article>
-          ))}
-
-          {hasMore ? (
-            <div className={styles.buttonRow}>
-              <button className={styles.button} disabled={loadingMore} onClick={onLoadMore} type="button">
-                {loadingMore
-                  ? formatUiMessage(locale, "workspaceRightRail.loading")
-                  : formatUiMessage(locale, "workspaceRightRail.viewerLoadMoreAction")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : rawContent ? (
-        <pre className={styles.viewerRawContent}>{rawContent}</pre>
       ) : (
-        <div className={styles.emptyStateBlock}>
-          <div className={styles.emptyStateTitle}>{formatUiMessage(locale, "workspaceRightRail.viewerEmptyTitle")}</div>
-          <div className={styles.emptyState}>{formatUiMessage(locale, "workspaceRightRail.viewerEmptyBody")}</div>
+        <div className={styles.viewerBody}>
+          {summary.trim() ? (
+            <section
+              aria-label={formatUiMessage(locale, "workspaceRightRail.viewerSummaryHeading")}
+              className={styles.viewerSummary}
+              data-testid="workspace-source-summary"
+            >
+              <h4 className={styles.viewerSummaryHeading}>
+                {formatUiMessage(locale, "workspaceRightRail.viewerSummaryHeading")}
+              </h4>
+              <div className={styles.viewerSummaryText}>{summary.trim()}</div>
+            </section>
+          ) : null}
+
+          {parsedPreview.length > 0 ? (
+            <div className={styles.viewerPreview} ref={previewRef}>
+              {parsedPreview.map((item, index) => (
+                <article
+                  className={`${styles.viewerPreviewItem}${activePreviewIndex === index ? ` ${styles.viewerPreviewItemActive}` : ""}`}
+                  data-preview-index={index}
+                  key={`${item.page}-${item.cursor}-${index}`}
+                >
+                  <div className={styles.viewerPreviewMeta}>
+                    {formatUiMessage(locale, "workspaceRightRail.viewerLocation", {
+                      page: String(item.page),
+                      cursor: String(item.cursor),
+                    })}
+                  </div>
+                  <div>{item.text}</div>
+                </article>
+              ))}
+
+              {hasMore ? (
+                <div className={styles.buttonRow}>
+                  <button className={styles.button} disabled={loadingMore} onClick={onLoadMore} type="button">
+                    {loadingMore
+                      ? formatUiMessage(locale, "workspaceRightRail.loading")
+                      : formatUiMessage(locale, "workspaceRightRail.viewerLoadMoreAction")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : rawContent ? (
+            <pre className={styles.viewerRawContent}>{rawContent}</pre>
+          ) : summary.trim() ? null : (
+            <div className={styles.emptyStateBlock}>
+              <div className={styles.emptyStateTitle}>{formatUiMessage(locale, "workspaceRightRail.viewerEmptyTitle")}</div>
+              <div className={styles.emptyState}>{formatUiMessage(locale, "workspaceRightRail.viewerEmptyBody")}</div>
+            </div>
+          )}
         </div>
       )}
     </section>

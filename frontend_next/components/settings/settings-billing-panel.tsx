@@ -25,7 +25,6 @@ import {
   settingsKeys,
   subscriptionStatusLabel,
 } from "./settings-shared";
-import { UsageLimitPanel } from "./settings-usage-limit-panel";
 import styles from "./settings-billing-panel.module.css";
 import shared from "./settings-ui-shared.module.css";
 
@@ -293,7 +292,7 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
               </Link>
             </div>
             <div className={`app-inline-row ${shared.summaryRow}`}>
-              <Link className="app-link" href="/settings?tab=billing#usage-details">
+              <Link className="app-link" href="/settings/usage" data-testid="settings-usage-details-link">
                 {formatUiMessage(locale, "settings.billing.usageDetailsLink")}
               </Link>
             </div>
@@ -397,10 +396,6 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
           <p className={shared.mutedText}>…</p>
         ) : null}
       </section>
-
-      <div id="usage-details">
-        <UsageLimitPanel />
-      </div>
 
       {alipayQr && token ? (
         <AlipayQrDialog

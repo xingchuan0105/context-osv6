@@ -1,0 +1,276 @@
+/* DeepSeek-style usage layout: soft metric tiles, chip filters, roomy charts. */
+
+.page {
+  width: 100%;
+  min-height: 100dvh;
+  padding: var(--space-xl) var(--space-lg) var(--space-3xl);
+  box-sizing: border-box;
+  background: hsl(var(--background));
+}
+
+.inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--space-xl);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.title {
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin: 0.35rem 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  line-height: 1.45;
+  max-width: 42rem;
+}
+
+/* Top filter row — DeepSeek: chips left, optional actions right */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: hsl(var(--surface-muted));
+  border: 1px solid transparent;
+  font-size: var(--font-size-control);
+  color: hsl(var(--foreground));
+}
+
+.chipLabel {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+}
+
+.chipSelect {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  padding: 0.15rem 1.1rem 0.15rem 0;
+  cursor: pointer;
+  min-width: 5.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2.2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+}
+
+.pills {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: hsl(var(--surface-muted));
+}
+
+.pill,
+.pillActive {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font: inherit;
+  font-size: var(--font-size-control);
+  cursor: pointer;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.pillActive {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.07);
+}
+
+/* Soft metric tiles */
+.metricRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.metricCard {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: 1rem;
+  border: 0;
+  background: hsl(var(--surface-muted));
+}
+
+.metricLabel {
+  font-size: var(--font-size-caption);
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+}
+
+.metricValue {
+  font-size: clamp(1.45rem, 2.2vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: hsl(var(--foreground));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+/* Primary chart panel */
+.chartCard {
+  padding: 1.25rem 1.35rem 1.1rem;
+  border-radius: 1rem;
+  border: 0;
+  background: hsl(var(--surface-muted));
+  display: grid;
+  gap: var(--space-md);
+}
+
+.chartHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.chartTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.chartSub {
+  margin: 0.3rem 0 0;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.chartTotal {
+  font-size: var(--font-size-control);
+  color: hsl(var(--foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+/* Per-workspace breakdown — dual soft panels like DeepSeek model rows */
+.breakdown {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.breakdownTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.wsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.wsCard {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem 1.1rem 0.9rem;
+  border-radius: 1rem;
+  border: 0;
+  background: hsl(var(--surface-muted));
+}
+
+.wsCardHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  align-items: baseline;
+}
+
+.wsName {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.wsMetricInline {
+  margin: 0;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+.wsMetricInline strong {
+  color: hsl(var(--foreground));
+  font-weight: 700;
+  margin-left: 0.2rem;
+}
+
+.wsMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.15rem;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+.wsMetrics strong {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.muted {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+}
+
+.card {
+  padding: var(--space-lg);
+  border-radius: 1rem;
+  border: 0;
+  background: hsl(var(--surface-muted));
+}
+
+@media (max-width: 900px) {
+  .metricRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .metricRow {
+    grid-template-columns: 1fr;
+  }
+}

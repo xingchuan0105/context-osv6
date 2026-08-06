@@ -3,7 +3,7 @@
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import { InsightMetricCard, SectionHeader } from "./share-center-ui";
 import styles from "./share-insights-panel.module.css";
-import { formatDayLabel } from "./share-center-utils";
+import { ShareViewsBarChart } from "./share-views-bar-chart";
 import type { useShareCenter } from "./use-share-center";
 
 type ShareCenter = ReturnType<typeof useShareCenter>;
@@ -117,45 +117,13 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
               </div>
             </div>
 
-            {trendSeries.some((entry) => entry.views > 0) ? (
-              <div
-                className={`app-inline-surface ${styles.chartPanel}`}
-                data-testid="analyze-chart"
-              >
-                {trendSeries.map((entry) => (
-                  <div
-                    className={styles.chartRow}
-                    key={entry.day}
-                  >
-                    <span>{formatDayLabel(locale, entry.day)}</span>
-                    <div
-                      aria-hidden="true"
-                      className={styles.chartTrack}
-                    >
-                      <div
-                        className={styles.chartFill}
-                        style={{
-                          width: `${Math.max(
-                            entry.views === 0 ? 0 : 8,
-                            (entry.views /
-                              Math.max(...trendSeries.map((seriesEntry) => seriesEntry.views), 1)) *
-                              100,
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                    <strong>{entry.views}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={`app-inline-surface ${styles.emptyPanel}`}>
-                <strong>{formatUiMessage(locale, "shareCenter.trendEmptyTitle")}</strong>
-                <p className={styles.mutedText}>
-                  {formatUiMessage(locale, "shareCenter.trendEmptyBody")}
-                </p>
-              </div>
-            )}
+            <div className={`app-inline-surface ${styles.chartPanel}`} data-testid="analyze-chart">
+              <ShareViewsBarChart
+                series={trendSeries}
+                locale={locale}
+                emptyLabel={formatUiMessage(locale, "shareCenter.trendEmptyBody")}
+              />
+            </div>
           </section>
         )}
     </>

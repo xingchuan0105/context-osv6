@@ -38,6 +38,7 @@ import { WorkspaceRightRail } from "./workspace-right-rail";
 import { WorkspaceTopBar } from "./workspace-top-bar";
 import { WorkspaceWebSourcesModal } from "./workspace-web-sources-modal";
 import { UsageWarningToast } from "../billing/UsageWarningToast";
+import { ReferralInviteSurface } from "../referral/referral-invite-surface";
 
 function usageWindowPressure(bucket: UsageWindowBucket): number {
   if (bucket.limit <= 0) {
@@ -648,6 +649,8 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
           onUpgradeClick={() => router.push("/pricing")}
         />
       ) : null}
+
+      <ReferralInviteSurface />
     </main>
   );
 }

@@ -9,8 +9,52 @@ export const pricingMessages = {
     en: "Choose your plan",
   },
   pricingSubtitle: {
-    zh: "客户端免费 · 私有使用免费。付费解锁更多可分享工作区名额。",
-    en: "Client free · private use free. Paid plans unlock more shareable workspaces.",
+    zh: "客户端免费 · 私有使用免费。会员解锁可分享名额；平台模型调用另用余额充值。",
+    en: "Client free · private use free. Membership unlocks share slots; platform models use wallet top-up.",
+  },
+  pricingMembershipTitle: {
+    zh: "会员档位 · 可分享工作区",
+    en: "Membership · shareable workspaces",
+  },
+  pricingMembershipLead: {
+    zh: "选择档位后在本页完成支付。主商品是可同时开启分享的工作区数量。",
+    en: "Pick a tier and check out here. You are buying concurrent shareable workspace slots.",
+  },
+  pricingTopupTitle: {
+    zh: "充值 · 模型调用余额",
+    en: "Top-up · model wallet",
+  },
+  pricingTopupBody: {
+    zh: "余额与会员独立。使用平台模型、向量检索，以及分享页访客问答（Owner-pays）时从余额扣费。已配置自定义 Provider 时，对话可走你自己的额度。",
+    en: "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (Owner-pays) debit the wallet. With a custom provider, chat can use your own quota.",
+  },
+  pricingTopupPoint1: {
+    zh: "充值入口在「设置 → 账单」，支持套餐包快捷购买",
+    en: "Top up under Settings → Billing with wallet packs",
+  },
+  pricingTopupPoint2: {
+    zh: "不想用平台模型：可改配 BYOK，减少对话扣费",
+    en: "Prefer BYOK: configure providers to reduce chat billing",
+  },
+  pricingTopupPoint3: {
+    zh: "只升级会员不充值：分享名额增加，但平台模型仍需余额或 BYOK",
+    en: "Upgrade-only adds share slots; platform models still need wallet or BYOK",
+  },
+  pricingTopupCta: {
+    zh: "去账单充值",
+    en: "Open billing & top up",
+  },
+  pricingTopupByokCta: {
+    zh: "配置自定义 Provider",
+    en: "Configure providers",
+  },
+  pricingFaqTopup: {
+    zh: "充值和会员有什么区别？",
+    en: "Top-up vs membership?",
+  },
+  pricingFaqTopupAnswer: {
+    zh: "会员控制可分享工作区名额；充值是模型调用余额。两者可单独购买。本页上方升级档位，下方说明充值并跳转到账单完成充值。",
+    en: "Membership controls share slots; top-up is the model wallet. Buy either independently. Upgrade tiers above; use the top-up section to open billing.",
   },
   pricingMonthly: {
     zh: "月付",
@@ -44,29 +88,21 @@ export const pricingMessages = {
     zh: "可分享工作区 {n} 个",
     en: "{n} shareable workspaces",
   },
-  pricingWalletAddonTitle: {
-    zh: "模型调用余额（可选）",
-    en: "Model call balance (optional)",
-  },
-  pricingWalletAddonBody: {
-    zh: "使用平台模型时从余额扣费；也可配置自定义 Provider，对话走你自己的额度。向量检索始终走平台并计入余额。",
-    en: "Platform models bill from your balance. With a custom provider, chat uses your own quota. Embedding/retrieval always use the platform and bill the balance.",
-  },
   pricingFaqToken: {
     zh: "主商品是什么？",
     en: "What am I buying?",
   },
   pricingFaqTokenAnswer: {
-    zh: "主商品是可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己使用的工作区免费。模型调用另用余额或自定义 Provider。",
-    en: "Primary product is shareable workspace slots (Free 3 / Plus 10 / Pro 100). The client and private workspaces are free. Model calls use balance or a custom provider.",
+    zh: "主商品是可分享工作区名额（Free 3 / Plus 10 / Pro 100）。客户端与仅自己使用的工作区免费。",
+    en: "Primary product is shareable workspace slots (Free 3 / Plus 10 / Pro 100). The client and private workspaces are free.",
   },
   pricingFaqReset: {
     zh: "访客提问谁付费？",
     en: "Who pays for visitor questions?",
   },
   pricingFaqResetAnswer: {
-    zh: "分享问答的成本由工作区所有者承担（Owner-pays）。请留意余额与自定义 Provider 配置。",
-    en: "On shared workspaces, the workspace owner pays model costs (Owner-pays). Keep an eye on balance and custom provider setup.",
+    zh: "分享问答的成本由工作区所有者承担（Owner-pays）。可在设置中配置自定义 Provider。",
+    en: "On shared workspaces, the workspace owner pays model costs (Owner-pays). Configure a custom provider in Settings if needed.",
   },
   pricingFaqUpgrade: {
     zh: "升级后立即生效吗？",
@@ -84,6 +120,10 @@ export const pricingMessages = {
     zh: "升级 {name}",
     en: "Upgrade to {name}",
   },
+  pricingViewDetails: {
+    zh: "查看 {name} 详情",
+    en: "View {name} details",
+  },
   pricingMonthlyInterval: {
     zh: "按月计费",
     en: "Billed monthly",
@@ -91,18 +131,6 @@ export const pricingMessages = {
   pricingYearlyInterval: {
     zh: "按年计费",
     en: "Billed yearly",
-  },
-  pricingDesktopCrossTitle: {
-    zh: "本地客户端",
-    en: "Desktop client",
-  },
-  pricingDesktopCrossBody: {
-    zh: "Windows / 桌面客户端免费使用，无需买断许可。需要上云分享时再升级名额。",
-    en: "Desktop clients are free — no license purchase. Upgrade only when you need more share slots.",
-  },
-  pricingDesktopCrossCta: {
-    zh: "下载客户端",
-    en: "Download client",
   },
   alipayQrTitle: {
     zh: "支付宝扫码支付",

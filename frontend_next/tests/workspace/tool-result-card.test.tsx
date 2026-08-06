@@ -123,7 +123,17 @@ describe("ToolResultCard — weather_query", () => {
           feels_like: 23,
           humidity: 60,
           wind_speed: 3.5,
-          units: "metric",
+          wind_speed_unit: "km/h",
+          units: "°C",
+          daily: [
+            {
+              date: "2026-08-06",
+              temp_min: 24,
+              temp_max: 32,
+              text_day: "晴",
+            },
+          ],
+          air: { aqi: "45", category: "优" },
         })}
       />,
     );
@@ -136,7 +146,11 @@ describe("ToolResultCard — weather_query", () => {
     expect(screen.getByText("Humidity")).toBeTruthy();
     expect(screen.getByText("60%")).toBeTruthy();
     expect(screen.getByText("Wind Speed")).toBeTruthy();
-    expect(screen.getByText("3.5 m/s")).toBeTruthy();
+    expect(screen.getByText("3.5 km/h")).toBeTruthy();
+    expect(screen.getByText("AQI")).toBeTruthy();
+    expect(screen.getByText(/45.*优/)).toBeTruthy();
+    expect(screen.getByText("Forecast")).toBeTruthy();
+    expect(screen.getByText(/2026-08-06.*24~32°C.*晴/)).toBeTruthy();
   });
 
   it("renders imperial units", () => {

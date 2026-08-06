@@ -18,9 +18,9 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import {
   buildDailyViewsSeries,
   countActiveDays,
-  formatDayLabel,
   sumViews,
 } from "./parts/share-center-utils";
+import { ShareViewsBarChart } from "./parts/share-views-bar-chart";
 import styles from "./workspace-analyze-surface.module.css";
 
 function AnalyzeSection({
@@ -105,7 +105,6 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
   const trendSeries = useMemo(() => buildDailyViewsSeries(analytics, 30), [analytics]);
   const activeDays = useMemo(() => countActiveDays(trendSeries), [trendSeries]);
   const accessActions = useMemo(() => sumViews(trendSeries), [trendSeries]);
-  const maxViews = Math.max(...trendSeries.map((entry) => entry.views), 1);
 
   return (
     <main className="app-page-shell">
@@ -216,33 +215,13 @@ export function WorkspaceAnalyzeSurface({ workspaceId }: { workspaceId: string }
               subtitle={formatUiMessage(locale, "shareAnalyze.trendSubtitle")}
               title={formatUiMessage(locale, "shareAnalyze.trendTitle")}
             >
-              {trendSeries.some((entry) => entry.views > 0) ? (
-                <div className={`app-inline-surface ${styles.chartPanel}`} data-testid="analyze-chart">
-                  {trendSeries.map((entry) => (
-                    <div className={styles.chartRow} key={entry.day}>
-                      <span>{formatDayLabel(locale, entry.day)}</span>
-                      <div aria-hidden="true" className={styles.chartTrack}>
-                        <div
-                          className={styles.chartFill}
-                          style={{
-                            width: `${Math.max(
-                              entry.views === 0 ? 0 : 8,
-                              (entry.views / maxViews) * 100,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <strong>{entry.views}</strong>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="app-inline-surface">
-                  <p className={styles.mutedText}>
-                    {formatUiMessage(locale, "shareAnalyze.trendEmpty")}
-                  </p>
-                </div>
-              )}
+              <div className={`app-inline-surface ${styles.chartPanel}`} data-testid="analyze-chart">
+                <ShareViewsBarChart
+                  series={trendSeries}
+                  locale={locale}
+                  emptyLabel={formatUiMessage(locale, "shareAnalyze.trendEmpty")}
+                />
+              </div>
             </AnalyzeSection>
 
             <AnalyzeSection

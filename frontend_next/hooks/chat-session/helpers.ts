@@ -39,12 +39,17 @@ export function normalizeMessageCapabilities(
  * Structural cleanup of assistant `content` for display only.
  *
  * Strips **shapes** (code fences, host observation tags, bare `client.*` tokens,
- * whole-message tool JSON). Does **not** encode product policy, Chinese
- * confession heuristics, or named tool catalogues — those live in prompts.
+ * whole-message unfenced code drafts, tool JSON). Does **not** encode product
+ * policy, Chinese confession heuristics, or named tool catalogues — those live
+ * in prompts / host final-answer rules.
  */
 export function sanitizeAssistantDisplayContent(content: string): string {
   if (!content) {
     return content;
+  }
+  // Whole-message bare code (no fences) — blank rather than half-strip debris.
+  if (isUnfencedCodeShaped(content)) {
+    return "";
   }
   let s = content
     // Fenced blocks: 2–3 backticks (models sometimes omit the third)
@@ -57,15 +62,20 @@ export function sanitizeAssistantDisplayContent(content: string): string {
     .replace(/<loop_budget\b[^>]*>[\s\S]*?<\/loop_budget>/gi, "")
     .replace(/<\/?tool_call\b[^>]*>/gi, "")
     .replace(/<\/?function_call\b[^>]*>/gi, "")
-    // Structural sandbox line shapes
-    .replace(/^import\s+\w+\s*$/gim, "")
-    .replace(/^.*\bawait\s+client\.\w+\s*\([^)]*\)\s*$/gim, "")
-    .replace(/^print\s*\(.*\)\s*$/gim, "")
+    // Structural sandbox line shapes (mixed prose+code leftovers)
+    .replace(/^[ \t]*import\s+\w+[ \t]*$/gim, "")
+    .replace(/^[ \t]*from\s+\S+[ \t]+import\b.*$/gim, "")
+    .replace(/^[ \t]*.*\bawait\s+client\.\w+\s*\([^)]*\)[ \t]*$/gim, "")
+    .replace(/^[ \t]*print\s*\(.*\)[ \t]*$/gim, "")
     // Inline SDK surface tokens (any method id, not a fixed product list)
     .replace(/`client\.\w+\([^`]*\)`/g, "")
     .replace(/\bclient\.\w+\b/g, "");
 
   s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  // After strip, residual may still be code-shaped (assignments / if: left behind).
+  if (isUnfencedCodeShaped(s)) {
+    return "";
+  }
   const trimmed = s.trim();
   if (!trimmed) {
     return "";
@@ -96,6 +106,109 @@ export function sanitizeAssistantDisplayContent(content: string): string {
     return s;
   }
   return s;
+}
+
+/** Line-shape classifier mirrored by host `is_unfenced_code_shaped` (structure only). */
+function isUnfencedCodeShaped(text: string): boolean {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) {
+    return false;
+  }
+  const codeN = lines.filter((l) => lineLooksLikeCode(l)).length;
+  const allCode = codeN === lines.length;
+  if (allCode && lines.length >= 2) {
+    return true;
+  }
+  if (allCode && lines.length === 1 && lineIsStrongCode(lines[0])) {
+    return true;
+  }
+  if (lines.length >= 3 && codeN * 4 >= lines.length * 3 && lines.some(lineIsStrongCode)) {
+    return true;
+  }
+  return false;
+}
+
+function lineIsStrongCode(line: string): boolean {
+  const t = line.trim();
+  // Prefix / whole-statement shapes only — mid-prose `client.foo` is not a code line.
+  return (
+    t.startsWith("await ") ||
+    t.startsWith("import ") ||
+    t.startsWith("from ") ||
+    t.startsWith("print(") ||
+    t.startsWith("def ") ||
+    t.startsWith("async def ") ||
+    t.startsWith("async ") ||
+    t.startsWith("class ") ||
+    t.startsWith("function ") ||
+    t.startsWith("const ") ||
+    t.startsWith("let ") ||
+    t.startsWith("var ") ||
+    t.includes(" = await ") ||
+    t.includes("=await ")
+  );
+}
+
+function lineLooksLikeCode(line: string): boolean {
+  const t = line.trim();
+  if (!t) {
+    return false;
+  }
+  if (t.startsWith("#") || t.startsWith("//") || t.startsWith("/*")) {
+    return true;
+  }
+  if (lineIsStrongCode(t)) {
+    return true;
+  }
+  const control =
+    /^(if\s|elif\s|else:|else\s+if|for\s|while\s|try:|try\s|except|finally:|with\s|def\s|class\s|async\s|return\s|raise\s|yield\s|assert\s|pass\b|break\b|continue\b|match\s|case\s|lambda\s)/;
+  if (control.test(t)) {
+    return true;
+  }
+  if (t.endsWith(":") && t.length > 1 && !t.startsWith("http")) {
+    return true;
+  }
+  if (looksLikeAssignment(t)) {
+    return true;
+  }
+  if (looksLikeCallStatement(t)) {
+    return true;
+  }
+  return false;
+}
+
+function looksLikeAssignment(line: string): boolean {
+  const eq = line.indexOf("=");
+  if (eq < 0) {
+    return false;
+  }
+  if (line[eq + 1] === "=") {
+    return false;
+  }
+  if (eq > 0 && ["!", "<", ">"].includes(line[eq - 1]!)) {
+    return false;
+  }
+  const lhs = line.slice(0, eq).trim();
+  if (!lhs) {
+    return false;
+  }
+  return /^[A-Za-z0-9_[\]"'./]+$/.test(lhs);
+}
+
+function looksLikeCallStatement(line: string): boolean {
+  const t = line.trim();
+  if (!t.endsWith(")") || !t.includes("(")) {
+    return false;
+  }
+  if (t.includes("。") || t.includes(". ")) {
+    return false;
+  }
+  const open = t.indexOf("(");
+  const callee = t.slice(0, open).trim();
+  return callee.length > 0 && /^[A-Za-z0-9_.]+$/.test(callee);
 }
 
 export function mapTranscriptMessage(

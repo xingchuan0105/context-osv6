@@ -162,6 +162,17 @@ export function WorkspaceTopBar({
       </div>
 
       <div className={styles.topBarActions}>
+        {!desktopRuntime ? (
+          <Link
+            className={`${styles.topBarClientButton} top-bar-capsule`}
+            data-testid="workspace-client-entry"
+            href="/desktop"
+          >
+            <span className={styles.topBarActionLabel}>
+              {formatUiMessage(locale, "productChrome.client")}
+            </span>
+          </Link>
+        ) : null}
         <PlanEntry locale={locale} size="compact" />
         {desktopRuntime ? (
           <>

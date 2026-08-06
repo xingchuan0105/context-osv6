@@ -445,6 +445,38 @@ export const shareMessages = {
     zh: "可分享工作区名额已用尽。请关闭其他工作区的分享，或升级套餐后再试。",
     en: "You have reached the shareable workspace limit. Disable sharing on another workspace or upgrade your plan.",
   },
+  "shareConversion.titleDefault": {
+    zh: "多分享一个库，需要更高档位",
+    en: "More share slots unlock with higher plans",
+  },
+  "shareConversion.titleNearCap": {
+    zh: "分享名额快用完了",
+    en: "Share slots almost full",
+  },
+  "shareConversion.titleAtCap": {
+    zh: "分享名额已满 · 升级或腾出名额",
+    en: "Share slots full · upgrade or free a slot",
+  },
+  "shareConversion.body": {
+    zh: "当前 {plan}：已开分享 {used}/{max}。升级 Plus/Pro 提高可分享工作区数；访客问答若走平台模型，由 Owner 余额支付（自配 Provider 不扣钱包，仍计入用量统计）。",
+    en: "Plan {plan}: {used}/{max} shared workspaces. Upgrade Plus/Pro for more slots. Guest Q&A on platform models bills Owner wallet; BYOK is metered for limits/analytics but not wallet-debited.",
+  },
+  "shareConversion.byokHint": {
+    zh: "建议：分享场景可先配自定义 Provider（不扣余额），或为代购路径保持钱包余额。",
+    en: "Tip: configure a custom provider for shared chat (no wallet debit), or keep wallet funded for platform-proxy traffic.",
+  },
+  "shareConversion.upgradeCta": {
+    zh: "升级会员 · 更多分享名额",
+    en: "Upgrade · more share slots",
+  },
+  "shareConversion.topupCta": {
+    zh: "充值余额",
+    en: "Top up wallet",
+  },
+  "shareConversion.pricingLink": {
+    zh: "查看完整定价",
+    en: "Full pricing",
+  },
   "shareCenter.visitorModeLabel": {
     zh: "访客模式",
     en: "Visitor mode",

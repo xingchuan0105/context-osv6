@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { settingsTabIcon } from "./settings-nav-icons";
 import { SETTINGS_TABS, type SettingsTab } from "./settings-tabs";
 import styles from "./settings-surface.module.css";
 
@@ -71,7 +72,8 @@ export function SettingsTabBar({
               type="button"
               onClick={() => onSelect(tab)}
             >
-              {label}
+              <span className={styles.navItemIcon}>{settingsTabIcon(tab)}</span>
+              <span>{label}</span>
             </button>
           ) : (
             <Link
@@ -80,7 +82,8 @@ export function SettingsTabBar({
               href={`/settings?tab=${tab}`}
               key={tab}
             >
-              {label}
+              <span className={styles.navItemIcon}>{settingsTabIcon(tab)}</span>
+              <span>{label}</span>
             </Link>
           ),
         )}

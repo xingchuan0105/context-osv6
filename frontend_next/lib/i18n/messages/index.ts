@@ -11,6 +11,7 @@ import { homeMessages } from "./home";
 import { legalMessages } from "./legal";
 import { paywallMessages } from "./paywall";
 import { pricingMessages } from "./pricing";
+import { productGuideMessages } from "./product-guide";
 import { settingsMessages } from "./settings";
 import { shareMessages } from "./share";
 import { upgradeMessages } from "./upgrade";
@@ -31,6 +32,7 @@ export const UI_MESSAGES = {
   ...legalMessages,
   ...paywallMessages,
   ...pricingMessages,
+  ...productGuideMessages,
   ...settingsMessages,
   ...shareMessages,
   ...upgradeMessages,

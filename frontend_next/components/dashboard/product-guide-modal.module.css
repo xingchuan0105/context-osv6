@@ -1,0 +1,204 @@
+/* Product map modal — left topic rail + wiki body (Obsidian / LLM-wiki style). */
+
+.layout {
+  display: grid;
+  grid-template-columns: 11.5rem minmax(0, 1fr);
+  gap: 0;
+  min-height: min(28rem, 70vh);
+  margin: calc(var(--space-lg) * -1) calc(var(--space-xl) * -1);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: var(--space-md);
+  border-right: 1px solid hsl(var(--border-whisper));
+  background: hsl(var(--surface-muted) / 0.55);
+  overflow-y: auto;
+}
+
+.navButton,
+.navButtonActive {
+  appearance: none;
+  border: 0;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  font: inherit;
+  font-size: var(--font-size-control);
+  cursor: pointer;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.navButton:hover {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.navButtonActive {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.06);
+}
+
+.body {
+  padding: var(--space-lg) var(--space-xl);
+  overflow-y: auto;
+  display: grid;
+  gap: var(--space-md);
+  align-content: start;
+}
+
+.lead {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  line-height: 1.55;
+}
+
+.heading {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: hsl(var(--muted-foreground));
+  display: grid;
+  gap: 0.4rem;
+  line-height: 1.45;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  background: hsl(var(--surface-muted));
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.cardBody {
+  margin: 0;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+  line-height: 1.5;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.graph {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border-whisper));
+  background: hsl(var(--card));
+  font-size: var(--font-size-control);
+  color: hsl(var(--foreground));
+  text-decoration: none;
+}
+
+.chip:hover {
+  border-color: hsl(var(--border-strong, var(--border)));
+  background: hsl(var(--surface-muted));
+}
+
+/* Fixed left dock on dashboard */
+.dock {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  border-radius: 0 0.85rem 0.85rem 0;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border-whisper));
+  border-left: 0;
+  box-shadow: 0 4px 18px hsl(0 0% 0% / 0.06);
+}
+
+.dockButton {
+  appearance: none;
+  border: 0;
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.5rem;
+  min-width: 3.25rem;
+  background: hsl(var(--surface-muted));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: center;
+  writing-mode: horizontal-tb;
+}
+
+.dockButton:hover {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+.dockButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid hsl(var(--border-whisper));
+  }
+
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .dock {
+    top: auto;
+    bottom: 5.5rem;
+    transform: none;
+    left: 0.75rem;
+    border-radius: 0.85rem;
+    border-left: 1px solid hsl(var(--border-whisper));
+  }
+}

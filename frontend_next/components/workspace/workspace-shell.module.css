@@ -260,6 +260,49 @@
   gap: 0;
 }
 
+/* Client marketing entry — solid capsule, first among secondary actions */
+.topBarClientButton {
+  min-height: 2.25rem;
+  height: 2.25rem;
+  padding: 0 var(--space-lg);
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: var(--font-size-control);
+  font-weight: 600;
+  line-height: 1;
+  border: 1px solid hsl(var(--foreground) / 0.18);
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.topBarClientButton:hover {
+  opacity: 0.92;
+  box-shadow: 0 2px 8px hsl(0 0% 0% / 0.12);
+  color: hsl(var(--background));
+}
+
+.topBarClientButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.topBarClientButton:active {
+  transform: translateY(1px);
+}
+
+.topBarClientButton .topBarActionLabel {
+  color: inherit;
+  font-weight: 600;
+}
+
 .topBarPrimaryButton,
 .topBarActionButton {
   border: 1px solid hsl(var(--border));
