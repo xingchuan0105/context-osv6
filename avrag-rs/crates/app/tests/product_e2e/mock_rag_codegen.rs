@@ -57,13 +57,13 @@ pub fn format_mock_rag_codegen_response(_chunk_id: &str) -> String {
 }
 
 /// Round0 multiround codegen: fetch document profile (sections + metadata).
-pub fn format_mock_rag_doc_profile_codegen(doc_id: &str) -> String {
+pub fn format_mock_rag_doc_summary_codegen(doc_id: &str) -> String {
     let doc_id_json = serde_json::to_string(doc_id).unwrap_or_else(|_| "\"doc\"".to_string());
     format!(
         r#"<code language="python">
-profile = await client.doc_profile(doc_ids=[{doc_id_json}])
+archive = await client.doc_summary(doc_ids=[{doc_id_json}])
 import json
-print(json.dumps(profile))
+print(json.dumps(archive))
 </code>"#
     )
 }
@@ -143,7 +143,7 @@ pub(super) fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) 
                         .clone()
                         .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string())
                 });
-                format_mock_rag_doc_profile_codegen(&doc_id)
+                format_mock_rag_doc_summary_codegen(&doc_id)
             }
             1 => {
                 let chunk_id = read_mock_rag_state(|state| {

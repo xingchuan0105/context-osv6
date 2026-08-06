@@ -9,7 +9,7 @@ description: >-
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "4.7"
+version: "4.8"
 ---
 
 ## 证据与权威源
@@ -18,6 +18,7 @@ version: "4.7"
 
 - 回传未覆盖的断言处于 **未知** 状态：可写「当前回传未覆盖」，不等于「语料中一定不存在」。
 - 覆盖判定以**回传正文**为准：`dense` / `lexical` 取回的 chunk 正文里实际出现的表述与数字，证据地位与 `grep` 命中行相同；`grep` 同词 0 命中只说明该 pattern 未命中行（词面差异、跨文档噪声是已知局限），不否决已在回传中的 chunk 内容。
+- 题干并置「文档内概念」与「业界/公开框架」时，两侧各算一个主张槽；框架侧无回传字面则该侧未覆盖（已挂联网时可另走 web），训练记忆中的对照表不是证据。
 - 高 `score` 的片段仍可能只覆盖概念、不覆盖数字/表行；**行级/计数类结论**（共几行、第几行）需要行级回传（常见于 `grep` 的 hits / `total_hits`）。
 - 大段原文 `print` 会占满回传窗口；短列表与关键字段更利于后续轮次使用。
 
@@ -30,7 +31,7 @@ version: "4.7"
 
 ### 并行扇出
 
-相互独立的检索调用在**同一个块**内并行发出是默认工作方式：一轮一块把多次独立调用一次回传，比一轮一个调用节省整轮 LLM 往返。同块内各方法的空/非空彼此独立；存在依赖的调用（后一调用的参数来自前一调用的返回值，如 doc_profile 的 doc_id 来自 docscope 清单）按顺序 await。
+相互独立的检索调用在**同一个块**内并行发出是默认工作方式：一轮一块把多次独立调用一次回传，比一轮一个调用节省整轮 LLM 往返。同块内各方法的空/非空彼此独立；存在依赖的调用（后一调用的参数来自前一调用的返回值，如 doc_summary 的 doc_id 来自 docscope 清单）按顺序 await。
 
 ## 可用方法
 
@@ -41,8 +42,7 @@ version: "4.7"
 | 按行查找 | `await client.grep(pattern, doc_ids=None, regex=False, context=0, max_hits=50)` | 行计数、表记录、精确字面、顺序邻域 | pattern 与库内空白/管道格式不对齐时假 0；`total_hits` 是**命中行数** |
 | 表结构目录 | `await client.struct_catalog(doc_ids=None)` | 查看表格存储里的表：表名、列名、行数、样例行、置信度 | `relations` 为空 = 当前 scope 无表格存储，不是检索失败；多 doc 同名表时响应含 `ambiguous_relations` 表名列表，同名表查询静默归属首个出现的 doc |
 | 表格查询 | `await client.struct_query(sql, doc_ids=None)` | 表内 COUNT / 过滤 / 排序 / 分组（单条 SELECT） | 仅单条 SELECT；禁 DDL/DML/文件函数；表名与列名以 catalog 为准；多 doc 同名表查询静默归属首个 doc——用 `doc_ids` 收窄范围后再查 |
-| 文档画像与章节 | `await client.doc_profile(doc_ids=None)` | 单篇画像（标题/作者/文体/年代/语言）+ 章节结构；fields 为空时全量返回 | 画像与章节不是证据正文 |
-| 摘要 | `await client.doc_summary(level="doc", doc_ids=None)` | 整篇/章节概览 | 摘要不是逐字证据 |
+| 文档档案 | `await client.doc_summary(doc_ids=None)` | 一次返回 `metadata`（含 `name`/language/domain/genre 等）+ `summary` + `sections`（含章节简介 overview）；无独立 profile 方法 | 档案不是逐字证据正文；domain/genre 为 unknown 时该画像槽未标注；`name` 后缀（如 `.docx`）是容器/扩展名层事实，与画像 domain 分列 |
 | 跨块存储 | `await client.save(path, data)` / `await client.load(path)` | 中间结果 | 仅相对路径 |
 
 没有 `top_k`；没有 `client.graph` / `graph_search`、`read_lines`。图关系扩邻**不是**独立沙箱 API：由 `client.dense` 的 query（及召回命中）触发宿主侧扩邻，关系向片段出现在 **dense 回传的同一 chunk 列表**里，与普通 dense 行同一 alias 命名空间。LLM 侧可控的是 query 粒度与并行次数；entity-first / 双端种子细则见 **strategies**「图扩邻种子策略」。
@@ -86,8 +86,9 @@ print("side_a n=", len(side_a), "| side_b n=", len(side_b))
 | `grep`：`total_hits=0` | 该 pattern 无行命中；pattern 形态（如 `\| 值 \|`）常影响结果 |
 | `struct_catalog`：`relations=[]` | 当前 scope 无表格存储；grep/dense 仍可用，非回归 |
 | `struct_query`：`ok=false, code=unknown_relation` | 所查表名不在 catalog；catalog 中有当前可见表名列表 |
-| `truncated=true` 或 hits 达 `max_hits` | 回传是样本，不是全库枚举；计数结论以 `total_hits` 为准，正文以已见 hits 为准 |
+| `truncated=true` 或 hits 达 `max_hits` | 回传是样本，不是全库枚举；计数结论以 `total_hits` 为准，**已见** hits/content 仍是有效证据，不是「整段不可用」 |
 | list 非空但无目标字段 | 主题相关 ≠ 主张已覆盖 |
+| content 已含条目，却称「被截断无法作答」 | 与 observation 不一致：已见正文覆盖状态仍为已覆盖；截断只限未列入样本的部分 |
 | `stderr` 非空 | 执行失败；下一轮可给修正后的同一形式代码块 |
 | 未调用某方法 | 该方法下的证据状态仍为未知，不是 0 命中 |
 | 连续轮次新 alias = 0 | 同一查询形态下检索面已饱和：同义重扫返回同一批命中，覆盖状态不再改变；收窄（doc_ids / 结构下钻）或定稿是此时的典型下一步。饱和判断仅限已试过的查询形态——实体名、英文面、结构面等未试角度不受此推断 |

@@ -119,6 +119,8 @@ pub struct TocEntry {
     pub page: Option<i32>,
     pub chunk_id: Option<Uuid>,
     pub rank: i32,
+    /// Short section blurb from joint profile+summary extraction (may be empty).
+    pub overview: Option<String>,
 }
 
 #[cfg(test)]

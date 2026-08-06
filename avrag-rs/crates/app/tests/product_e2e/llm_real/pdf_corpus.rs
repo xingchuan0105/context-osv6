@@ -26,8 +26,7 @@ use crate::product_e2e::{
 const RETRIEVAL_TOOLS: &[&str] = &[
     "dense_retrieval",
     "index_lookup",
-    "doc_profile",
-    "doc_summary",
+        "doc_summary",
 ];
 const BUNDLED_INGEST_TIMEOUT: Duration = Duration::from_secs(300);
 const STAGING_INGEST_TIMEOUT: Duration = Duration::from_secs(1200);

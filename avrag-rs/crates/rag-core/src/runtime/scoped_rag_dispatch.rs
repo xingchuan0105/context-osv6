@@ -8,14 +8,14 @@ use serde_json::Value;
 ///
 /// Retrieval tools (`dense_retrieval`/`lexical_retrieval`/`graph_retrieval`) use an
 /// array field named `doc_scope`. Doc-centric tools (`doc_summary`/`doc_metadata`/
-/// `doc_profile`/`doc_scan`) use an array field named `doc_ids`. All of these arg
+/// `doc_scan`) use an array field named `doc_ids`. All of these arg
 /// structs use `#[serde(deny_unknown_fields)]`, so the scope must be injected under
 /// the exact field the downstream tool expects. `index_lookup` carries a single
 /// `doc_id` string and is handled by the codegen bridge instead.
 fn scope_field_for_tool(tool: &str) -> Option<&'static str> {
     match tool {
         "dense_retrieval" | "lexical_retrieval" | "graph_retrieval" => Some("doc_scope"),
-        "doc_summary" | "doc_metadata" | "doc_profile" | "doc_scan" => Some("doc_ids"),
+        "doc_summary" | "doc_metadata" | "doc_scan" => Some("doc_ids"),
         _ => None,
     }
 }
@@ -110,7 +110,7 @@ fn empty_scope_result(tool: &str) -> ToolResult {
         "dense_retrieval" | "lexical_retrieval" | "graph_retrieval" => {
             serde_json::json!({ "chunks": [] })
         }
-        "doc_summary" | "doc_metadata" | "doc_profile" => {
+        "doc_summary" | "doc_metadata" => {
             serde_json::json!([])
         }
         _ => serde_json::json!({}),
@@ -210,10 +210,10 @@ mod tests {
     #[test]
     fn force_doc_scope_preserves_in_scope_caller() {
         // LLM-supplied id that *is* in scope survives the intersection.
-        let mut c = call("doc_profile", serde_json::json!(["d2", "d3"]));
+        let mut c = call("doc_summary", serde_json::json!(["d2", "d3"]));
         let scope = vec!["d1".to_string(), "d2".to_string()];
         force_doc_scope(&mut c, &scope);
-        assert_eq!(doc_scope_of(&c, "doc_profile"), vec!["d2".to_string()]);
+        assert_eq!(doc_scope_of(&c, "doc_summary"), vec!["d2".to_string()]);
     }
 
     #[test]
@@ -226,8 +226,7 @@ mod tests {
             "graph_retrieval",
             "doc_summary",
             "doc_metadata",
-            "doc_profile",
-            "doc_scan",
+                        "doc_scan",
         ];
         let scope = vec!["enforced-1".to_string()];
         for tool in tools {

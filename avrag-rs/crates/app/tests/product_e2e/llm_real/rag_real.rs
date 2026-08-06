@@ -21,8 +21,7 @@ use crate::product_e2e::{
 const RETRIEVAL_TOOLS: &[&str] = &[
     "dense_retrieval",
     "index_lookup",
-    "doc_profile",
-    "doc_summary",
+        "doc_summary",
 ];
 
 /// P0: Basic RAG document Q&A returns a substantive answer with at least

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use avrag_code_interpreter::HostBridge;
 use contracts::auth_runtime::AuthContext;
 use contracts::{
-    DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
+    DenseRetrievalArgs, DenseRetrievalModality, DocSummaryArgs,
     LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
 };
 use serde_json::{Value, json};
@@ -202,50 +202,10 @@ impl RuntimeBridge {
                         "doc_ids is required when doc_scope is empty",
                     ));
                 }
-                let level = match args.get("level").and_then(|v| v.as_str()).unwrap_or("doc") {
-                    "section" => DocSummaryLevel::Section,
-                    _ => DocSummaryLevel::Doc,
-                };
                 Ok(ToolCall {
                     tool: "doc_summary".to_string(),
-                    version: "1.0".to_string(),
-                    args: serde_json::to_value(DocSummaryArgs { doc_ids, level })
-                        .unwrap_or_default(),
-                })
-            }
-            "doc_profile" => {
-                let caller_doc_ids = args
-                    .get("doc_ids")
-                    .and_then(|v| v.as_array())
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(|v| v.as_str().map(str::to_owned))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                let doc_ids = self.resolve_doc_ids(&caller_doc_ids);
-                if doc_ids.is_empty() {
-                    return Err(Self::bridge_error(
-                        "invalid_args",
-                        "doc_ids is required when doc_scope is empty",
-                    ));
-                }
-                let fields = args
-                    .get("fields")
-                    .and_then(|v| v.as_array())
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(|v| v.as_str().map(str::to_owned))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                Ok(ToolCall {
-                    tool: "doc_profile".to_string(),
-                    version: "1.0".to_string(),
-                    args: serde_json::to_value(DocProfileArgs { doc_ids, fields })
-                        .unwrap_or_default(),
+                    version: "2.0".to_string(),
+                    args: serde_json::to_value(DocSummaryArgs { doc_ids }).unwrap_or_default(),
                 })
             }
             // grep: line-level locate + exact total_hits (A4: sole line primitive).
@@ -407,7 +367,7 @@ impl RuntimeBridge {
                 }
                 json!({ "chunks": chunks_with_content_field(data) })
             }
-            "doc_summary" | "doc_profile" => json!({ "chunks": data }),
+            "doc_summary" => json!({ "chunks": data }),
             "web_search" | "web_fetch" | "conversation_history_load" | "user_profile_load" => {
                 data.clone()
             }

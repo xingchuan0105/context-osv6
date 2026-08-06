@@ -105,17 +105,19 @@ impl ProviderSecretStorePort for PgProviderSecretStoreAdapter {
         let pool = self.repo.raw();
         let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx)?;
 
-        // Soft-revoke any active secret for the same scope so the unique index allows insert.
+        // Soft-revoke the same (purpose, provider) scope so the unique index allows insert.
+        // Distinct providers under the same purpose (e.g. agent deepseek vs parse bailian) coexist.
         if let Some(ws) = input.workspace_id {
             sqlx::query(
                 "UPDATE user_provider_secrets \
                  SET revoked_at = NOW(), updated_at = NOW() \
-                 WHERE owner_user_id = $1 AND workspace_id = $2 AND purpose = $3 \
+                 WHERE owner_user_id = $1 AND workspace_id = $2 AND purpose = $3 AND provider = $4 \
                    AND revoked_at IS NULL",
             )
             .bind(input.owner_user_id)
             .bind(ws)
             .bind(purpose)
+            .bind(&provider)
             .execute(tx.as_mut())
             .await
             .map_err(map_sqlx)?;
@@ -123,11 +125,12 @@ impl ProviderSecretStorePort for PgProviderSecretStoreAdapter {
             sqlx::query(
                 "UPDATE user_provider_secrets \
                  SET revoked_at = NOW(), updated_at = NOW() \
-                 WHERE owner_user_id = $1 AND workspace_id IS NULL AND purpose = $2 \
+                 WHERE owner_user_id = $1 AND workspace_id IS NULL AND purpose = $2 AND provider = $3 \
                    AND revoked_at IS NULL",
             )
             .bind(input.owner_user_id)
             .bind(purpose)
+            .bind(&provider)
             .execute(tx.as_mut())
             .await
             .map_err(map_sqlx)?;

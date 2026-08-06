@@ -156,7 +156,7 @@ const TOOL_OUTPUT_MAX_CHARS: usize = 2000;
 /// non-RAG turns (q125 class): every Ok tool result whose tool is NOT in the
 /// retrieval set, as `"tool: <json payload (trimmed)>"`. Retrieval chunks
 /// already flow through `retrieved`/`cited`; this is the weather_query /
-/// calculator / doc_profile / user_context evidence that otherwise never
+/// calculator / doc_summary / user_context evidence that otherwise never
 /// reached the judge.
 fn builtin_tool_outputs(tool_results: &[contracts::ToolResult]) -> Vec<String> {
     tool_results
@@ -573,6 +573,7 @@ impl V2RunCtx {
             true,
             None,
             context_source,
+            false,
         );
         self.write_json(
             &format!("q{qnum:03}.artifact.json"),
@@ -613,6 +614,13 @@ impl V2RunCtx {
             avrag_llm::ChatMessage::user(eval_v2::build_user_prompt(&judge_input)),
         ];
         let attempt = self.judge_with_retry(&messages, &judge_input).await;
+        // P-calc-ok (2026-08-06): query-card calculation ⇒ no retrieval
+        // evidence required for labeling (see plans/2026-08-06-rerank-style-
+        // sticky-and-querycard-calc.md §D.2).
+        let calculation_card = obs
+            .query_card
+            .as_ref()
+            .is_some_and(|c| c.question_type.eq_ignore_ascii_case("calculation"));
         let score = self.finish_score(
             example,
             subset,
@@ -623,6 +631,7 @@ impl V2RunCtx {
             false,
             Some(answer),
             judge_input.context_source,
+            calculation_card,
         );
         // The judge's raw refusal boolean is advisory; flag when it disagrees
         // with the derived value (the q009-class judge mislabel).
@@ -723,13 +732,17 @@ impl V2RunCtx {
         has_infra_error: bool,
         answer: Option<&str>,
         context_source: eval_v2::ContextSource,
+        // Runtime query-card `question_type=calculation` (P-calc-ok).
+        calculation_card: bool,
     ) -> eval_v2::ScoreV2 {
+        // Calculation cards: correctness only; faith/retrieval hard labels off.
+        let expect_no_retrieval = example.expect_no_retrieval || calculation_card;
         let label = eval_v2::label_for(&eval_v2::LabelInput {
             has_infra_error,
             judge_status,
             gold_exists: !example.source_chunks.is_empty(),
             no_context: context_source == eval_v2::ContextSource::NoContext,
-            expect_no_retrieval: example.expect_no_retrieval,
+            expect_no_retrieval,
             expected_should_answer: example.expected_should_answer,
             retrieval_recall: retrieval.recall,
             cited_gold_hits: selection.golden_matched_in_cited,
@@ -748,7 +761,7 @@ impl V2RunCtx {
             reference_answer: Some(example.reference_answer().to_string()),
             model_answer: answer.map(str::to_string),
             context_source,
-            expect_no_retrieval: example.expect_no_retrieval,
+            expect_no_retrieval,
             eval_gate: example.eval_gate,
         }
     }
@@ -1453,14 +1466,27 @@ async fn run_single_question(
     {
         let raw = serde_json::to_string_pretty(&resp_body)
             .unwrap_or_else(|_| "<serialize failed>".to_string());
+        // Prefer business fields — agent_operation_guide is multi-KB skill prose and
+        // previously dominated the 400-char preview, hiding the real error.
+        let err_code = resp_body
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        let err_msg = resp_body
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let msg = format!(
-            "error_envelope (status={}); do not treat agent_operation_guide as answer",
+            "error_envelope (status={}) code={err_code} message={err_msg}",
             resp_status
         );
         mark_failure(&mut outcome, msg.clone());
         eprintln!("  FAIL: {msg}");
-        let preview: String = raw.chars().take(400).collect();
-        eprintln!("  raw: {preview}");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/e2e_output/realistic_corpus_full_eval");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            let _ = std::fs::write(dir.join(format!("q{:03}.raw.json", idx + 1)), &raw);
+        }
         if let Some(v2) = v2 {
             v2.record_infra(idx + 1, example, subset_name, "error_envelope");
         }

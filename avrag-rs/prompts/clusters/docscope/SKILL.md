@@ -1,6 +1,6 @@
 ---
 name: docscope
-description: "Load when the user asks which documents exist in the workspace, authors/types overview, or when you need document ids for doc_profile/doc_summary without a prior content search. Skip if one dense search already surfaces the needed docs."
+description: "Load when the user asks which documents exist in the workspace, authors/types overview, or when you need document ids for doc_summary without a prior content search. Skip if one dense search already surfaces the needed docs."
 disclose_at: retrieve
 atomic: false
 applicable_modes: [rag]
@@ -18,7 +18,7 @@ applicable_modes: [rag]
 
 - 用户问知识库有哪些文档、作者、类型
 - 需要全局概览（多文档对比、统计）
-- 需要 `doc_id` 再调 `doc_profile` / `doc_summary`，又不想先做内容检索
+- 需要 `doc_id` 再调 `doc_summary`，又不想先做内容检索
 - 内容检索回传为空，想先看清单再换查询词
 
 单文档内的具体内容：直接用 `client.dense` / `client.lexical` / `client.grep` 通常更合适。
@@ -51,7 +51,7 @@ applicable_modes: [rag]
 }
 ```
 
-- `documents[]`：每篇一条；`doc_id` 用于后续 `doc_profile` / `doc_summary`。
+- `documents[]`：每篇一条；`doc_id` 用于后续 `doc_summary`。
 - `profile`：语言/领域/体裁等聚合列表，便于看知识库整体特征。
 - `domain` / `genre` / `era` 可能为 `"unknown"`：表示系统未识别，不要当成有效标签。
 - `author` / `publication_date` 为 `null`：只表示未识别，不能当成「文档一定没有作者/日期」。
@@ -61,16 +61,14 @@ applicable_modes: [rag]
 文档侧的信息按粒度分三层，按需取用：
 
 1. **docscope**（本文）：整个工作区有哪些文档 + 每篇的画像概览（拿 `doc_id`）。
-2. **doc_profile**：单篇画像（标题/作者/文体/年代/语言）+ 章节结构——回答「某文档讲了什么结构、作者是谁」。
-3. **doc_summary**：单篇摘要（`level="doc"` 整篇，或章节级）——回答「某文档内容概览」。
+2. **doc_summary**：单篇档案（metadata + summary + sections/overview）——回答「某文档结构、作者、概览」。
 
 三层互为入口：问题落在哪层，就从哪层开始；粗粒度信息不足时向细粒度下钻。
 
 ## 拿到 doc_id 之后
 
 ```python
-profile = await client.doc_profile(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"])
-summary = await client.doc_summary(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"], level="doc")
+archive = await client.doc_summary(doc_ids=["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"])
 ```
 
 `doc_ids` 可省略：省略时按当前知识库默认范围解析；只有要**收窄**到某几篇时才显式传入（用 `doc_id` 字符串，不是文件名）。

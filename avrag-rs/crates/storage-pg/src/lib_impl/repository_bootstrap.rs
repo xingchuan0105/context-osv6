@@ -341,8 +341,11 @@ impl BootstrapRepository {
         for entry in entries {
             sqlx::query(
                 r#"
-                insert into document_toc (id, owner_user_id, document_id, workspace_id, parent_id, title, heading_level, page, chunk_id, rank)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                insert into document_toc (
+                    id, owner_user_id, document_id, workspace_id, parent_id,
+                    title, heading_level, page, chunk_id, rank, overview
+                )
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 "#,
             )
             .bind(entry.id)
@@ -355,6 +358,7 @@ impl BootstrapRepository {
             .bind(entry.page)
             .bind(entry.chunk_id)
             .bind(entry.rank)
+            .bind(entry.overview.as_deref())
             .execute(tx.inner())
             .await?;
         }
@@ -374,7 +378,7 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select document_id, id, parent_id, title, heading_level, page, chunk_id, rank
+            select document_id, id, parent_id, title, heading_level, page, chunk_id, rank, overview
             from document_toc
             where document_id = any($1)
             order by document_id, rank
@@ -396,6 +400,7 @@ impl BootstrapRepository {
                 let page: Option<i32> = row.try_get("page").ok().flatten();
                 let chunk_id: Option<Uuid> = row.try_get("chunk_id").ok().flatten();
                 let rank: i32 = row.try_get("rank").ok()?;
+                let overview: Option<String> = row.try_get("overview").ok().flatten();
                 Some((
                     doc_id,
                     TocEntry {
@@ -406,6 +411,7 @@ impl BootstrapRepository {
                         page,
                         chunk_id,
                         rank,
+                        overview,
                     },
                 ))
             })

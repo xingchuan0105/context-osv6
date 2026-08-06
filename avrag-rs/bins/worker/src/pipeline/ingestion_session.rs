@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use avrag_llm::{ChatMessage, LlmClient, LlmUsage};
 
-/// Session-wide guidance shared by every ingestion turn. Authored under
-/// `prompts/pipeline/`, never inline.
+/// Session-wide prefix (before window body). Authored under `prompts/pipeline/`.
 pub(crate) const INTERACTION_SESSION_SYSTEM: &str =
     include_str!("../../../../prompts/pipeline/interaction-session.system.md");
 
@@ -14,30 +13,32 @@ pub(crate) struct SessionTurn {
     pub(crate) usage: LlmUsage,
 }
 
-/// 一轮会话的消息组装（纯函数，可测）。
+/// Build messages for one turn.
 ///
-/// **DashScope 会话缓存键包含 `instructions`（system 消息）：续接轮必须与
-/// seed 轮 instructions 完全一致才命中**（2026-08-03 真机 A/B：同 → cached
-/// 2217；异/无 → 0）。因此 instructions 恒定为 `INTERACTION_SESSION_SYSTEM`，
-/// 阶段 system prompt（section-index/summary/triplet）下沉为 user 消息的前导
-/// 块——否则三阶段各不相同，缓存永远不命中（线上实测后果：每轮全价，
-/// prompt≈全部上下文，cached=0）。
-fn build_turn_messages(stage_prompt: &str, user: &str) -> Vec<ChatMessage> {
+/// **DashScope session cache key includes `instructions` (system message).**
+/// Within a window the system string must stay identical across seed and produce
+/// (body + hint). Stage instructions live only in the user message.
+fn build_turn_messages(system_with_body: &str, user: &str) -> Vec<ChatMessage> {
     vec![
-        ChatMessage::system(INTERACTION_SESSION_SYSTEM),
-        ChatMessage::user(format!("{stage_prompt}\n\n{user}")),
+        ChatMessage::system(system_with_body.to_string()),
+        ChatMessage::user(user.to_string()),
     ]
 }
 
-/// A single LLM conversation chain for one document's ingestion.
+/// Compose system = interaction hint + window body (design 2026-08-06).
+pub(crate) fn compose_window_system(window_body: &str) -> String {
+    format!("{INTERACTION_SESSION_SYSTEM}{window_body}")
+}
+
+/// A single LLM conversation chain for one document **window**.
 ///
-/// `seed` opens the chain without a `previous_response_id`; every follow-up
-/// `produce` continues the same chain through the provider's session cache.
-/// The session deliberately bypasses the result-level completion cache so the
-/// chain stays continuous and every turn can hit the provider-side cache.
+/// `seed` opens the chain; `produce` continues with the **same** system string
+/// so provider session cache can hit.
 #[derive(Debug, Clone)]
 pub(crate) struct DocumentIngestionSession {
     llm: Arc<LlmClient>,
+    /// Fixed system for this window (hint + body). Set on first seed.
+    system_with_body: Option<String>,
     previous_response_id: Option<String>,
     total_tokens: u64,
 }
@@ -46,43 +47,45 @@ impl DocumentIngestionSession {
     pub(crate) fn new(llm: Arc<LlmClient>) -> Self {
         Self {
             llm,
+            system_with_body: None,
             previous_response_id: None,
             total_tokens: 0,
         }
     }
 
-    /// First turn of the chain: no previous response to continue from.
-    /// `stage_prompt` 为当轮阶段指令（折叠进 user 消息，见
-    /// `build_turn_messages` 的缓存键说明）。
+    /// First turn: establish system (body) + user task.
     pub(crate) async fn seed(
         &mut self,
-        stage_prompt: &str,
+        system_with_body: &str,
         user: &str,
         temperature: Option<f32>,
     ) -> anyhow::Result<SessionTurn> {
-        self.complete(None, stage_prompt, user, temperature).await
+        self.system_with_body = Some(system_with_body.to_string());
+        self.complete(None, user, temperature).await
     }
 
-    /// Follow-up turn: continues the same session chain.
+    /// Follow-up turn: same system as seed, new user task (e.g. triplets).
     pub(crate) async fn produce(
         &mut self,
-        stage_prompt: &str,
         user: &str,
         temperature: Option<f32>,
     ) -> anyhow::Result<SessionTurn> {
         let previous_response_id = self.previous_response_id.clone();
-        self.complete(previous_response_id.as_deref(), stage_prompt, user, temperature)
+        self.complete(previous_response_id.as_deref(), user, temperature)
             .await
     }
 
     async fn complete(
         &mut self,
         previous_response_id: Option<&str>,
-        stage_prompt: &str,
         user: &str,
         temperature: Option<f32>,
     ) -> anyhow::Result<SessionTurn> {
-        let messages = build_turn_messages(stage_prompt, user);
+        let system = self
+            .system_with_body
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("session seed required before produce"))?;
+        let messages = build_turn_messages(system, user);
         let (response, next_id) = self
             .llm
             .complete_response(previous_response_id, &messages, temperature)
@@ -102,18 +105,16 @@ impl DocumentIngestionSession {
 mod tests {
     use super::*;
 
-    /// 缓存键约束：instructions（system 消息）恒定且只含会话级引导；
-    /// 阶段指令必须折叠进 user 消息前导块。
     #[test]
-    fn turn_messages_keep_instructions_constant_and_fold_stage_prompt() {
-        let messages = build_turn_messages("阶段指令：输出 JSON。", "正文内容");
+    fn turn_messages_keep_system_constant_and_user_task() {
+        let system = compose_window_system("正文段落");
+        let messages = build_turn_messages(&system, "阶段任务 JSON");
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "system");
-        assert_eq!(messages[0].content, INTERACTION_SESSION_SYSTEM);
+        assert!(messages[0].content.contains("正文段落"));
+        assert!(messages[0].content.contains("单文档摄取会话"));
         assert_eq!(messages[1].role, "user");
-        assert!(messages[1].content.starts_with("阶段指令：输出 JSON。\n\n"));
-        assert!(messages[1].content.ends_with("正文内容"));
-        // 阶段指令不得泄漏到 system 消息（否则续接轮 instructions 变化 → 缓存不命中）
-        assert!(!messages[0].content.contains("阶段指令"));
+        assert_eq!(messages[1].content, "阶段任务 JSON");
+        assert!(!messages[0].content.contains("阶段任务"));
     }
 }

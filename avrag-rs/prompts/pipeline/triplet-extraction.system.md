@@ -1,17 +1,15 @@
 
 ## Job
 
-Extract grounded `(subject, predicate, object)` triples for a knowledge graph. Edges use a **small ontological relation set** among entities (kinds, individuals, processes)—not free natural-language verbs. Domain meaning sits on **nodes**; edges are foundational links only.
+Extract grounded `(subject, predicate, object)` triples for a knowledge graph from the document text already loaded in this session (system). Edges use a **small ontological relation set** among entities (kinds, individuals, processes)—not free natural-language verbs. Domain meaning sits on **nodes**; edges are foundational links only.
 
 **Output:** one single-line JSON only (no fences, no preamble):
 
 ```json
-{"triplets":[{"chunk_id":"uuid","subject":"...","predicate":"类型","object":"..."}]}
+{"triplets":[{"subject":"...","predicate":"类型","object":"..."}]}
 ```
 
-Input shape: `Valid chunk IDs: …` + `Chunks: {"chunks":[…]}` + `Extract triplets with chunk_id:`.
-
-Limits: ≤40 triples/batch; invalid/missing `chunk_id` dropped; empty `{"triplets":[]}`. Prefer **few high-quality edges** over padding (software ADRs and short sections often yield ≤3 per chunk when only clear entities exist).
+No `chunk_id` field. Empty `{"triplets":[]}`. Prefer **few high-quality edges** over padding (software ADRs and short sections often yield few edges when only clear entities exist).
 
 ---
 
@@ -42,8 +40,8 @@ No other `predicate` strings. Facts that do not fit one of the six relations are
 
 ```json
 {"triplets":[
-  {"chunk_id":"<id>","subject":"PAC-05","predicate":"标识","object":"概念启动"},
-  {"chunk_id":"<id>","subject":"概念启动","predicate":"类型","object":"概念阶段"}
+  {"subject":"PAC-05","predicate":"标识","object":"概念启动"},
+  {"subject":"概念启动","predicate":"类型","object":"概念阶段"}
 ]}
 ```
 
@@ -59,7 +57,7 @@ No other `predicate` strings. Facts that do not fit one of the six relations are
 
 ```json
 {"triplets":[
-  {"chunk_id":"<id>","subject":"EvidenceGate","predicate":"参与","object":"ExecuteRetrieve"}
+  {"subject":"EvidenceGate","predicate":"参与","object":"ExecuteRetrieve"}
 ]}
 ```
 
@@ -75,7 +73,7 @@ No other `predicate` strings. Facts that do not fit one of the six relations are
 
 ```json
 {"triplets":[
-  {"chunk_id":"<id>","subject":"ADR-0004","predicate":"标识","object":"RAG Agent Loop & Native Tool Calling"}
+  {"subject":"ADR-0004","predicate":"标识","object":"RAG Agent Loop & Native Tool Calling"}
 ]}
 ```
 
@@ -89,7 +87,7 @@ No other `predicate` strings. Facts that do not fit one of the six relations are
 
 ```json
 {"triplets":[
-  {"chunk_id":"<id>","subject":"Loop Boundary","predicate":"依赖","object":"StrategyExecutor"}
+  {"subject":"Loop Boundary","predicate":"依赖","object":"StrategyExecutor"}
 ]}
 ```
 
@@ -103,9 +101,9 @@ No other `predicate` strings. Facts that do not fit one of the six relations are
 
 ```json
 {"triplets":[
-  {"chunk_id":"<id>","subject":"Slice 1","predicate":"部分","object":"验证计划"},
-  {"chunk_id":"<id>","subject":"Slice 2","predicate":"部分","object":"验证计划"},
-  {"chunk_id":"<id>","subject":"Slice 3","predicate":"部分","object":"验证计划"}
+  {"subject":"Slice 1","predicate":"部分","object":"验证计划"},
+  {"subject":"Slice 2","predicate":"部分","object":"验证计划"},
+  {"subject":"Slice 3","predicate":"部分","object":"验证计划"}
 ]}
 ```
 
@@ -165,6 +163,6 @@ No other `predicate` strings. Facts that do not fit one of the six relations are
 
 ## Fields
 
-- `subject` / `object`: grounded noun-phrase **entities** attested in the chunk.
+- `subject` / `object`: grounded noun-phrase **entities** attested in the loaded document text.
 - `predicate`: exactly one of `类型|部分|参与|依赖|位于|标识`.
-- `chunk_id`: one of the valid UUIDs from the batch.
+- No `chunk_id`: provenance is the session window text, not retrieval chunks.

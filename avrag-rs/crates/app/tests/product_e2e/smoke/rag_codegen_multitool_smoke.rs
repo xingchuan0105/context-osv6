@@ -1,11 +1,11 @@
-//! S1: Multiround RAG codegen — doc_profile (archive) → chunk_fetch (body) → synthesis.
+//! S1: Multiround RAG codegen — doc_summary (archive) → chunk_fetch (body) → synthesis.
 
 use crate::product_e2e::{
     ChatResponse, HttpResponse, assertions::*, fixtures::shared_ready_rag_context,
 };
 
 #[tokio::test]
-async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
+async fn rag_multiround_summary_codegen_doc_summary_then_chunk_fetch() {
     super::require_smoke_suite();
     let fixture = crate::product_e2e::fixtures::shared_rag_fixture().await;
     let upload = &fixture.upload;
@@ -44,14 +44,14 @@ async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
         "multiround codegen happy path should not hard-degrade: {:?}",
         resp.degrade_trace
     );
-    assert_tool_result_ok(&resp, "doc_profile");
+    assert_tool_result_ok(&resp, "doc_summary");
     assert_tool_result_ok(&resp, "index_lookup");
 
     let profile_idx = resp
         .tool_results
         .iter()
-        .position(|r| r.tool == "doc_profile")
-        .expect("doc_profile in tool_results");
+        .position(|r| r.tool == "doc_summary")
+        .expect("doc_summary in tool_results");
     let lookup_idx = resp
         .tool_results
         .iter()
@@ -59,7 +59,7 @@ async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
         .expect("index_lookup (chunk_fetch bridge) in tool_results");
     assert!(
         profile_idx < lookup_idx,
-        "doc_profile should precede index_lookup, got order: {:?}",
+        "doc_summary should precede index_lookup, got order: {:?}",
         resp.tool_results
             .iter()
             .map(|r| &r.tool)

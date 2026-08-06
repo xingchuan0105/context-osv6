@@ -1,5 +1,9 @@
 # Ingestion 提速改造：Qwen Responses 合一会话 + struct_tables 纯代码化 + Pandoc docx 源头控制
 
+> **2026-08-06 局部取代**：会话链上 **seed chunks / profile→summary→多批 chunk triplet** 的输入与轮次形态，以及查询侧独立 `doc_profile`，以  
+> [`2026-08-06-ingestion-window-session-ps-merge.md`](./2026-08-06-ingestion-window-session-ps-merge.md)  
+> 为准。本文仍有效的部分：DashScope Responses、`previous_response_id`、session-cache 键含 instructions、struct 纯代码、Pandoc/docx 结论。
+
 | 项目 | 内容 |
 |---|---|
 | 类型 | 设计决策（ingestion LLM 阶段提速） |

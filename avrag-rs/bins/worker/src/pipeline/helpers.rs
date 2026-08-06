@@ -7,7 +7,7 @@ pub(crate) use super::index_dispatch::build_text_index_records;
 pub(crate) use super::parse_route::{execute_external_parse, execute_local_parse};
 pub(crate) use super::pg_side_effects::{
     build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
-    collect_document_text, generate_document_profile_with_llm,
+    collect_document_text,
 };
 use anyhow::{Result, anyhow};
 use avrag_storage_pg::ObjectStoreHandle;

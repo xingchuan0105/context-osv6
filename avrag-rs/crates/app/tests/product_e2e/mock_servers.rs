@@ -10,7 +10,7 @@ pub(crate) use super::mock_weather_server::start_mock_weather_server;
 
 pub(crate) use super::mock_rag_codegen::{
     format_mock_rag_chunk_fetch_codegen, format_mock_rag_codegen_response,
-    format_mock_rag_doc_profile_codegen,
+    format_mock_rag_doc_summary_codegen,
 };
 
 pub(crate) use super::mock_rag_state::{

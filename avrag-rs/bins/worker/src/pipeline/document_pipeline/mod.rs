@@ -13,8 +13,8 @@ pub(crate) struct ParseRunState {
     pub(crate) outputs: ParseRunOutputs,
     /// markitdown 产出的 markdown 原文（表格阶段消费；图片等非 markitdown 路径为 None）。
     pub(crate) markdown: Option<String>,
-    /// 单文档 LLM 摄取会话链（profile→summary→triplet 续接；本材料化阶段建立）。
-    pub(crate) session: Option<super::ingestion_session::DocumentIngestionSession>,
+    /// Windowed PS+triplet result held for the index stage (design 2026-08-06).
+    pub(crate) pending_triplets: Option<super::triplet_extraction::TripletExtractionOutput>,
 }
 
 pub(crate) struct IngestionPipelineMetrics {
@@ -192,10 +192,10 @@ pub(crate) async fn run_document_pipeline(
         );
     }
 
-    // Stage 4 — summary (best-effort, non-fatal)
+    // Stage 4 — windowed profile+summary+triplet (best-effort, non-fatal)
     let stage_started = std::time::Instant::now();
     info!(
-        stage = "summary",
+        stage = "windowed_ingestion_llm",
         document_id = %document_id,
         filename = %filename,
         attempt_count = task.attempt_count,
@@ -206,13 +206,15 @@ pub(crate) async fn run_document_pipeline(
         context,
         task,
         document_id,
+        workspace_id,
         filename,
         &document_ir.title,
+        &materialize.content,
         parse_run_state,
     )
     .await;
     info!(
-        stage = "summary",
+        stage = "windowed_ingestion_llm",
         filename = %filename,
         document_id = %document_id,
         attempt_count = task.attempt_count,

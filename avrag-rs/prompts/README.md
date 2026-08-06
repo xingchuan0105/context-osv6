@@ -76,7 +76,7 @@ Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_par
 
 | Id | Role |
 |----|------|
-| `docscope` | Document inventory (scope-level aggregate from the profile stage) + teaching chain `docscope` → `doc_profile` → `doc_summary`. Injected via `<docscope_metadata>` when requested with `skill_request ["docscope"]` |
+| `docscope` | Document inventory (scope-level aggregate) + teaching chain `docscope` → `doc_summary` (joint archive: metadata + summary + sections). Injected via `<docscope_metadata>` when requested with `skill_request ["docscope"]` |
 | `memory` | History / user profile; **mandatory base disclosure every round** (`derive_mandatory_retrieve`) |
 | `writing` / `format` | Answer style / shape (also on retrieve when request has writing/format hints — SaC ProseOnly path) |
 | `heavytail-*` | Write-refine metrics |

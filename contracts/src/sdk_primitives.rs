@@ -112,10 +112,13 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     SdkPrimitive {
         id: "weather_query",
         capability: SdkCapability::BASE,
-        docstring: "Current weather (QWeather). Pass city='北京' or lat= & lon=. Only this method name exists.",
+        docstring: "Weather via QWeather (now + multi-day daily forecast by default; also air/warnings/indices). \
+            Pass city='北京' or lat= & lon=. Optional include='now,daily,hourly,warning,air,indices,minutely' or 'all'; \
+            days=7; hours=24. Return fields: temperature/description (now), daily[{date,temp_max,temp_min,text_day,...}], \
+            air, warnings, indices. Only this method name exists.",
         handler: "base_weather_query",
-        py_sig: "self, city=None, location=None, lat=None, lon=None",
-        py_payload: "{\"city\": city, \"location\": location, \"lat\": lat, \"lon\": lon}",
+        py_sig: "self, city=None, location=None, lat=None, lon=None, include=None, days=None, hours=None, units=None",
+        py_payload: "{\"city\": city, \"location\": location, \"lat\": lat, \"lon\": lon, \"include\": include, \"days\": days, \"hours\": hours, \"units\": units}",
         py_return: "",
     },
     // ── Rag(知识库检索)─────────────────────────────────────────────────
@@ -150,21 +153,13 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
         py_return: "",
     },
     SdkPrimitive {
-        id: "doc_profile",
-        capability: SdkCapability::RAG,
-        docstring: "Document profile (title/author/genre/era/language) + section structure.",
-        handler: "retrieval_doc_profile",
-        py_sig: "self, doc_ids=None, fields=None",
-        py_payload: "{**({\"doc_ids\": doc_ids} if doc_ids is not None else {}), **({\"fields\": fields} if fields else {})}",
-        py_return: "[\"chunks\"]",
-    },
-    SdkPrimitive {
         id: "doc_summary",
         capability: SdkCapability::RAG,
-        docstring: "Whole-document or per-section overview (not verbatim evidence).",
+        docstring: "Document archive: metadata + summary + section tree with overviews \
+            (not verbatim evidence). Replaces the former doc_profile + doc_summary split.",
         handler: "retrieval_doc_summary",
-        py_sig: "self, level=\"doc\", doc_ids=None",
-        py_payload: "{\"level\": level, **({\"doc_ids\": doc_ids} if doc_ids is not None else {})}",
+        py_sig: "self, doc_ids=None",
+        py_payload: "{**({\"doc_ids\": doc_ids} if doc_ids is not None else {})}",
         py_return: "[\"chunks\"]",
     },
     SdkPrimitive {

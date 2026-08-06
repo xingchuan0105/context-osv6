@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::super::helpers::{
     build_asset_object_key, build_document_chunk_rows, collect_document_text,
-    enrich_multimodal_source_locator, generate_document_profile_with_llm, mirror_document_asset,
+    enrich_multimodal_source_locator, mirror_document_asset,
 };
 use super::super::processor::PgTaskProcessor;
 use crate::indexing::{
@@ -189,81 +189,22 @@ async fn persist_body_chunks(
         .map_err(from_storage_error)
 }
 
+/// TOC / summary / triplets run in the windowed LLM stage (after materialize).
 async fn persist_profile_and_toc(
-    processor: &PgTaskProcessor,
-    task: &IngestionTask,
-    context: &AuthContext,
-    workspace_id: Uuid,
+    _processor: &PgTaskProcessor,
+    _task: &IngestionTask,
+    _context: &AuthContext,
+    _workspace_id: Uuid,
     document_id: Uuid,
-    document_ir: &DocumentIr,
-    filename: &str,
-    chunks: &[avrag_storage_pg::IndexedChunk],
-    parse_run_state: &mut ParseRunState,
+    _document_ir: &DocumentIr,
+    _filename: &str,
+    _chunks: &[avrag_storage_pg::IndexedChunk],
+    _parse_run_state: &mut ParseRunState,
 ) -> Result<(), IngestionError> {
-    let profile_result = generate_document_profile_with_llm(
-        processor,
-        document_id,
-        document_ir,
-        chunks,
-        filename,
-        parse_run_state,
-    )
-    .await;
-    if !profile_result.toc_entries.is_empty() {
-        ensure_ingestion_side_effects_allowed(
-            &processor.storage.repo,
-            context,
-            task,
-            document_id,
-            "toc writes",
-        )
-        .await?;
-        if let Err(error) = processor
-            .storage
-            .repo
-            .bootstrap()
-            .replace_document_toc(
-                context,
-                workspace_id,
-                document_id,
-                &profile_result.toc_entries,
-            )
-            .await
-        {
-            info!(document_id = %document_id, error = %error, "failed to write document toc");
-        } else {
-            info!(
-                document_id = %document_id,
-                toc_count = profile_result.toc_entries.len(),
-                "document toc written"
-            );
-        }
-    }
-    if let Some(profile_metadata) = profile_result.profile_metadata {
-        ensure_ingestion_side_effects_allowed(
-            &processor.storage.repo,
-            context,
-            task,
-            document_id,
-            "profile metadata write",
-        )
-        .await?;
-        if let Err(error) = processor
-            .storage
-            .repo
-            .documents()
-            .update_document_profile(
-                context,
-                document_id,
-                &profile_metadata,
-                Some(&task.task_id),
-                task.lock_token.as_deref(),
-            )
-            .await
-        {
-            info!(document_id = %document_id, error = %error, "failed to write document profile metadata");
-        }
-    }
+    info!(
+        document_id = %document_id,
+        "deferring profile/summary/toc to windowed ingestion llm stage"
+    );
     Ok(())
 }
 

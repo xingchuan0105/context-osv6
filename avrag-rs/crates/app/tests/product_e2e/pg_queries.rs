@@ -268,7 +268,9 @@ impl TestContext {
 
     /// Grant the fixed realistic-corpus identity the internal **`e2e` plan**:
     /// rolling 5h/7d limits = 0 (unlimited in `UsageLimitService`), active
-    /// subscription `plan_id=e2e`, and a user override belt-and-suspenders.
+    /// subscription `plan_id=e2e`, a user override belt-and-suspenders, and a
+    /// large **wallet** balance so platform-key chat preflight
+    /// (`payer_funds_required`) does not abort mid full-149.
     ///
     /// Product checkout never lists `e2e` (only free/plus/pro). Monthly
     /// `quota_limits` has no `e2e` rows → `hard_limit=None` → monthly check
@@ -276,6 +278,7 @@ impl TestContext {
     /// (quota_boundary tests still use free + unique users).
     ///
     /// Idempotent; safe to call every `realistic_corpus_full_eval` start.
+    /// Wallet is set to at least [`Self::E2E_WALLET_BALANCE_FEN`] (¥10_000_000).
     pub async fn grant_e2e_unlimited_quota(&self, user_id: &str) -> anyhow::Result<()> {
         use sqlx::Connection;
         let uid = Uuid::parse_str(user_id)?;
@@ -361,9 +364,44 @@ impl TestContext {
             .await?;
         }
 
+        // ADR-0010 platform-key path requires positive wallet balance (or BYOK).
+        // Full-149 + concurrent holds burns signup ¥20 quickly → payer_funds_required.
+        // Floor at ¥10_000_000 so re-runs never starve mid-slate.
+        let balance_fen = Self::E2E_WALLET_BALANCE_FEN;
+        sqlx::query(
+            r#"
+            INSERT INTO wallets (user_id, balance_fen, lifetime_paid_topup_fen)
+            VALUES ($1, $2, 0)
+            ON CONFLICT (user_id) DO UPDATE
+            SET balance_fen = GREATEST(wallets.balance_fen, EXCLUDED.balance_fen),
+                updated_at = now()
+            "#,
+        )
+        .bind(uid)
+        .bind(balance_fen)
+        .execute(&mut conn)
+        .await?;
+
+        // Clear stale usage holds so concurrent e2e restarts do not leave
+        // reserved fen stuck from a killed prior run.
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM wallet_ledger
+            WHERE user_id = $1 AND kind = 'usage_hold'
+            "#,
+        )
+        .bind(uid)
+        .execute(&mut conn)
+        .await;
+
         eprintln!(
-            "[e2e-quota] granted plan=e2e + override 0/0 (unlimited rolling) to user={user_id}"
+            "[e2e-quota] granted plan=e2e + override 0/0 (unlimited rolling) + wallet>={} fen (¥{}) to user={user_id}",
+            balance_fen,
+            balance_fen / 100
         );
         Ok(())
     }
+
+    /// E2E wallet floor: ¥10_000_000 = 1_000_000_000 fen (100 fen = ¥1).
+    pub const E2E_WALLET_BALANCE_FEN: i64 = 10_000_000 * 100;
 }

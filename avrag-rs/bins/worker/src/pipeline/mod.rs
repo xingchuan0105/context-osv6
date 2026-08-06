@@ -8,6 +8,8 @@ mod pg_side_effects;
 mod processor;
 mod predicate_normalize;
 mod triplet_extraction;
+mod window_split;
+mod windowed_llm;
 pub(crate) mod triplet_semantic_lint;
 
 pub(crate) use document_pipeline::remove_struct_store_files;

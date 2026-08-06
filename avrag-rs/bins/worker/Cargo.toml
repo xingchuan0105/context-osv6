@@ -26,6 +26,7 @@ contracts = { path = "../../../contracts" }
 dotenvy = "0.15"
 ingestion = { path = "../../crates/ingestion" }
 reqwest.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
 hex.workspace = true

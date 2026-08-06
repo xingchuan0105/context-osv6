@@ -73,8 +73,8 @@ pub use share::{
 };
 pub use tool_call::{
     normalize_doc_id_alias, DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs,
-    DocGrepArgs, DocMetadataArgs, DocProfileArgs, DocReadLinesArgs, DocSummaryArgs,
-    DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, MergeConfig,
+    DocGrepArgs, DocMetadataArgs, DocReadLinesArgs, DocSummaryArgs,
+    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, MergeConfig,
     NextStep, RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse,
     StructCatalogArgs, StructQueryArgs, ToolCall, ToolSpec,
 };

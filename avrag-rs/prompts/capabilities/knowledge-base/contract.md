@@ -1,7 +1,7 @@
 ---
 name: capability-knowledge-base
 description: "Knowledge-base capability — short task contract when KB retrieval is mounted"
-version: "1.3"
+version: "1.4"
 category: "system-prompt"
 applicable_strategies: [rag]
 ---
@@ -12,7 +12,7 @@ applicable_strategies: [rag]
 
 ### 本能力能做什么
 
-知识库覆盖产品工作区里已灌入的文档。**docscope**（文档清单）是 skill_request 注入的清单机制，不含 client 方法：它给出一轮可见文档的清单与画像概览，用于拿 `doc_id` 并判断命中落在哪篇文档。检索方法在沙箱中以 `client.*` 调用：按语义（`client.dense`）、词面（`client.lexical` / `client.grep`）或结构化查询（`client.struct_query`，先 `client.struct_catalog` 取表结构）取回可引用的正文片段；单篇文档的画像、章节与摘要经 `client.doc_profile` / `client.doc_summary` 拿到。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。`client.dense` 的 query 文本同时作为关系图扩邻的种子来源；多实体/关系型问题在轨迹中常见形态是按实体拆 subquery 并行调用，而非以整句作为单一种子。
+知识库覆盖产品工作区里已灌入的文档。**docscope**（文档清单）是 skill_request 注入的清单机制，不含 client 方法：它给出一轮可见文档的清单与画像概览，用于拿 `doc_id` 并判断命中落在哪篇文档。检索方法在沙箱中以 `client.*` 调用：按语义（`client.dense`）、词面（`client.lexical` / `client.grep`）或结构化查询（`client.struct_query`，先 `client.struct_catalog` 取表结构）取回可引用的正文片段；单篇文档的元数据、摘要与章节树经 `client.doc_summary` 一次拿到。方法签名与返回字段以已加载的 knowledge-base skill 为准，本段不重复签名。`client.dense` 的 query 文本同时作为关系图扩邻的种子来源；多实体/关系型问题在轨迹中常见形态是按实体拆 subquery 并行调用，而非以整句作为单一种子。
 
 ### 证据
 
@@ -42,10 +42,13 @@ applicable_strategies: [rag]
 
 背景性补充（行业背景、市场规模、常识性常识等铺垫叙述）与主张同受回传约束：回传中未出现的背景数字与事实，同样只能以未知/未覆盖处理，不得作为确定事实写进终答。
 
+题干把「知识库内概念/流程」与「业界通用框架 / 公开模型」并置时，两侧是两个主张槽：文档侧以回传为准；框架侧仅在回传（或已挂联网时的网页回传）出现后方为已覆盖。回传未出现的对照表、门编号、阶段别名，处于未覆盖，不是可用训练记忆补全的「背景铺垫」。
+
 ### 与联网同时挂载时
 
 - 知识库侧事实挂 `SELECTED: #n`；网页侧事实挂 `[[web:n]]`。
 - 两侧分开陈述后再综合；冲突并陈；一侧未覆盖不写成「该论断不存在」；引用编号不混挂。
+- 题干要「公开资料 / 业界模型」而知识库无字面时，联网侧可单独成槽；未调用 web 或 web 无命中时，该槽仍为未覆盖。
 
 ### 对照示例（虚构）
 
@@ -57,6 +60,10 @@ applicable_strategies: [rag]
 问：知识库与联网对某日期的说法是否一致？
 回传：知识库 #2 → 2020；联网 [[web:1]] → 2021
 读出：冲突并陈；#2 与 [[web:1]] 分源，不混挂。
+
+问：手册六阶段与某业界门径模型如何对应？
+回传：仅有手册六阶段与评审点；无门径模型阶段名字面
+读出：手册侧已覆盖；门径模型侧未覆盖。终答不写满未出现的门编号对照表。
 
 问：（模型输出一段未回传的 python 或假 tool 标记）
 读出：尚无执行观察；文档事实仍为未知，不能当作已检索。

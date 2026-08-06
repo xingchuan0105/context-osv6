@@ -284,8 +284,7 @@ pub fn bridge_method_progress(method: &str) -> Option<(ProgressKind, &'static st
         "grep" => Some((ProgressKind::RetrieveDoc, "行级检索")),
         "web" => Some((ProgressKind::SearchWeb, "网页搜索")),
         "fetch" => Some((ProgressKind::FetchUrl, "读取网页")),
-        "doc_summary" => Some((ProgressKind::RetrieveDoc, "阅读文档摘要")),
-        "doc_profile" => Some((ProgressKind::RetrieveDoc, "查看文档结构")),
+        "doc_summary" => Some((ProgressKind::RetrieveDoc, "查看文档档案")),
         "history" | "user_profile" => Some((ProgressKind::Memory, "回忆相关上下文")),
         // Removed SaC methods — keep labels only if old telemetry still streams.
         "graph_search" => Some((ProgressKind::RetrieveGraph, "关系检索")),

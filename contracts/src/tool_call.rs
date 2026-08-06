@@ -159,29 +159,11 @@ pub struct IndexLookupArgs {
 #[serde(deny_unknown_fields)]
 pub struct DocSummaryArgs {
     pub doc_ids: Vec<String>,
-    #[serde(default)]
-    pub level: DocSummaryLevel,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DocSummaryLevel {
-    #[default]
-    Doc,
-    Section,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DocMetadataArgs {
-    pub doc_ids: Vec<String>,
-    #[serde(default)]
-    pub fields: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DocProfileArgs {
     pub doc_ids: Vec<String>,
     #[serde(default)]
     pub fields: Vec<String>,

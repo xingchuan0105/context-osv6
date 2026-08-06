@@ -4,26 +4,27 @@ use tracing::info;
 use uuid::Uuid;
 
 use super::super::processor::PgTaskProcessor;
+use super::super::windowed_llm::run_windowed_ps_and_triplets;
 use super::ParseRunState;
-use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
 
-const SUMMARY_SESSION_USER_TEMPLATE: &str =
-    include_str!("../../../../../prompts/templates/summary-session-user.tmpl");
-
+/// Joint profile+summary+triplet windowed extraction (design 2026-08-06).
+/// Writes TOC + summary; stores triplets on `parse_run_state` for the index stage.
 pub(crate) async fn generate_document_summary(
     processor: &PgTaskProcessor,
     context: &AuthContext,
     task: &IngestionTask,
     document_id: Uuid,
+    workspace_id: Uuid,
     filename: &str,
     title: &str,
+    raw_text: &str,
     parse_run_state: &mut ParseRunState,
 ) {
     let user_uuid = task
         .requested_by
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
-    let mut skip_llm_summary = false;
+    let mut skip_llm = false;
 
     if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
         match svc
@@ -32,88 +33,72 @@ pub(crate) async fn generate_document_summary(
         {
             Ok(quota) => {
                 if quota.blocked_5h || quota.blocked_7d {
-                    info!(document_id = %document_id, user_id = %user_id, "skipping LLM summary — quota exhausted");
-                    skip_llm_summary = true;
+                    info!(document_id = %document_id, user_id = %user_id, "skipping windowed ingestion llm — quota exhausted");
+                    skip_llm = true;
                 }
             }
             Err(error) => {
-                info!(document_id = %document_id, error = %error, "quota check failed; skipping LLM summary (fail-closed)");
-                skip_llm_summary = true;
+                info!(document_id = %document_id, error = %error, "quota check failed; skipping windowed ingestion llm");
+                skip_llm = true;
             }
         }
     }
 
-    if skip_llm_summary {
+    if skip_llm {
         return;
     }
 
-    let Some(session) = parse_run_state.session.as_mut() else {
-        info!(document_id = %document_id, "ingestion session not available; skipping LLM summary");
-        return;
-    };
-
-    let user_message = SUMMARY_SESSION_USER_TEMPLATE
-        .replace("{title}", title)
-        .replace("{filename}", filename);
-    let turn = match session
-        .produce(
-            avrag_llm::summary_system_prompt(),
-            &user_message,
-            Some(super::super::helpers::SUMMARY_TEMPERATURE),
-        )
-        .await
-    {
-        Ok(turn) => turn,
-        Err(error) => {
-            info!(document_id = %document_id, error = %error, "Summary generation failed, keeping naive fallback");
-            return;
-        }
-    };
-
-    let summary = common::SummaryOutput {
-        summary_text: avrag_llm::parse_summary_text(&turn.content),
-        summary_metadata: avrag_llm::build_profile_metadata(
-            &document_id.to_string(),
-            title,
-            filename,
-            &avrag_llm::DocumentProfileMetadata::default(),
-        ),
-    };
-    let llm_usage = turn.usage;
-
-    if ensure_ingestion_side_effects_allowed(
-        &processor.storage.repo,
+    let result = run_windowed_ps_and_triplets(
+        processor,
         context,
         task,
         document_id,
-        "summary update",
+        workspace_id,
+        filename,
+        title,
+        raw_text,
+        parse_run_state,
     )
-    .await
-    .is_ok()
+    .await;
+
+    info!(
+        document_id = %document_id,
+        summary_chars = result.summary_text.len(),
+        toc = result.toc_entries.len(),
+        triplets = result.triplets.triplets.len(),
+        prompt_tokens = result.prompt_tokens,
+        completion_tokens = result.completion_tokens,
+        total_tokens = result.triplets.total_tokens,
+        "windowed profile+summary+triplet done"
+    );
+
+    if result.prompt_tokens == 0 && result.completion_tokens == 0 && result.triplets.total_tokens == 0
     {
-        if let Err(error) = processor
-            .storage
-            .repo
-            .documents()
-            .update_document_summary(
-                context,
-                document_id,
-                &summary,
-                Some(&task.task_id),
-                task.lock_token.as_deref(),
-            )
-            .await
-        {
-            info!(document_id = %document_id, error = %error, "failed to update document summary");
-        }
+        return;
     }
+
+    let prompt_tokens = if result.prompt_tokens > 0 {
+        result.prompt_tokens
+    } else {
+        // Fallback if provider omitted split: treat total as prompt-side.
+        result.triplets.total_tokens
+    };
+    let completion_tokens = result.completion_tokens;
+    let total_tokens = prompt_tokens.saturating_add(completion_tokens).max(result.triplets.total_tokens);
+
+    let (provider, model) = processor
+        .llm
+        .ingestion_llm
+        .as_ref()
+        .map(|c| (c.config.provider_name(), c.config.model.clone()))
+        .unwrap_or_else(|| ("unknown".into(), "unknown".into()));
 
     if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
         let ctx = avrag_billing::usage_limit::MeteringContext {
             user_id,
             owner_user_id: context.user_id().into_uuid(),
             feature: avrag_billing::usage_limit::BillableFeature::Summary,
-            stage: "worker_summary".to_string(),
+            stage: "worker_windowed_ingestion".to_string(),
             session_id: None,
             document_id: Some(document_id),
             request_id: None,
@@ -123,17 +108,17 @@ pub(crate) async fn generate_document_summary(
             .record_usage(
                 &ctx,
                 avrag_billing::usage_limit::UsageRecord {
-                    provider: &llm_usage.provider,
-                    model: &llm_usage.model,
-                    prompt_tokens: llm_usage.prompt_tokens,
-                    completion_tokens: llm_usage.completion_tokens,
-                    total_tokens: llm_usage.total_tokens,
+                    provider: &provider,
+                    model: &model,
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
                     usage_source: avrag_billing::usage_limit::UsageSource::Actual,
                 },
             )
             .await
         {
-            info!(document_id = %document_id, error = %error, "failed to record summary usage");
+            info!(document_id = %document_id, error = %error, "failed to record windowed ingestion usage");
         }
     }
 
@@ -145,25 +130,25 @@ pub(crate) async fn generate_document_summary(
             session_id: None,
             workspace_id: None,
             event_name: analytics::CostEventName::SummaryUsageMetered,
-            feature: "summary".to_string(),
-            provider: if llm_usage.provider.trim().is_empty() {
+            feature: "windowed_ingestion".to_string(),
+            provider: if provider.trim().is_empty() {
                 "unknown".to_string()
             } else {
-                llm_usage.provider.clone()
+                provider.clone()
             },
-            model: if llm_usage.model.trim().is_empty() {
+            model: if model.trim().is_empty() {
                 "unknown".to_string()
             } else {
-                llm_usage.model.clone()
+                model.clone()
             },
-            prompt_tokens: i64::from(llm_usage.prompt_tokens),
-            completion_tokens: i64::from(llm_usage.completion_tokens),
+            prompt_tokens: i64::from(prompt_tokens),
+            completion_tokens: i64::from(completion_tokens),
             embedding_tokens: 0,
             usage_units: avrag_billing::usage_limit::compute_usage_units(
-                &llm_usage.provider,
-                &llm_usage.model,
-                llm_usage.prompt_tokens,
-                llm_usage.completion_tokens,
+                &provider,
+                &model,
+                prompt_tokens,
+                completion_tokens,
             ),
             storage_bytes_delta: 0,
             external_call_count: 0,
@@ -172,10 +157,11 @@ pub(crate) async fn generate_document_summary(
                 "task_id": task.task_id,
                 "document_id": document_id,
                 "filename": filename,
+                "stage": "worker_windowed_ingestion",
             }),
         };
         if let Err(error) = analytics.record_cost_event(&event).await {
-            info!(document_id = %document_id, error = %error, "failed to record summary analytics event");
+            info!(document_id = %document_id, error = %error, "failed to record windowed ingestion analytics event");
         }
     }
 }

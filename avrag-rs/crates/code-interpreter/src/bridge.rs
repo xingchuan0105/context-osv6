@@ -225,7 +225,7 @@ mod unix_impl {
     fn bridge_pump_runtime() -> &'static tokio::runtime::Runtime {
         static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
         RUNTIME.get_or_init(|| {
-            // Multi-thread: doc_profile/doc_metadata use tokio::join! for parallel PG
+            // Multi-thread: doc_summary/doc_metadata use tokio::join! for parallel PG
             // reads; a current-thread runtime can stall when the shared pool is busy.
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
@@ -535,7 +535,6 @@ mod bridge_shim_tests {
                 "dense",
                 "lexical",
                 "grep",
-                "doc_profile",
                 "doc_summary",
                 "struct_catalog",
                 "struct_query",
