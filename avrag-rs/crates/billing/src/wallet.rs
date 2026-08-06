@@ -28,8 +28,9 @@ use std::sync::Arc;
 
 use app_core::{
     ApplyLedgerInput, ApplyLedgerResult, DEFAULT_TOPUP_PACKS, SIGNUP_GRANT_FEN, TopupPack,
-    WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, Wallet, WalletStorePort,
-    signup_grant_idempotency_key, topup_idempotency_key, topup_pack_by_id,
+    WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, WALLET_KIND_USAGE_HOLD,
+    WALLET_KIND_USAGE_HOLD_RELEASE, Wallet, WalletStorePort, signup_grant_idempotency_key,
+    topup_idempotency_key, topup_pack_by_id,
 };
 use common::{ApiResponse, AppError};
 use serde::{Deserialize, Serialize};
@@ -250,6 +251,71 @@ pub async fn debit_platform_usage(
         counts_as_paid_topup: false,
     };
     store.apply_ledger_entry(&ledger).await.map(Some)
+}
+
+/// Stable idempotency key for a usage hold (pre-debit).
+pub fn usage_hold_idempotency_key(hold_id: Uuid) -> String {
+    format!("usage_hold:{hold_id}")
+}
+
+/// Stable idempotency key for releasing a usage hold.
+pub fn usage_hold_release_idempotency_key(hold_id: Uuid) -> String {
+    format!("usage_hold_release:{hold_id}")
+}
+
+/// Atomically reserve `hold_fen` from the wallet (negative ledger).
+///
+/// Spendable balance drops immediately; call [`release_usage_hold`] after the turn
+/// (success or failure) so unused reserve is returned. Actual usage is still
+/// recorded via [`debit_platform_usage`].
+pub async fn place_usage_hold(
+    store: Arc<dyn WalletStorePort>,
+    user_id: Uuid,
+    hold_id: Uuid,
+    hold_fen: i64,
+    metadata: serde_json::Value,
+) -> Result<ApplyLedgerResult, AppError> {
+    if hold_fen <= 0 {
+        return Err(AppError::validation(
+            "wallet_hold_zero",
+            "hold_fen must be positive",
+        ));
+    }
+    store
+        .apply_ledger_entry(&ApplyLedgerInput {
+            user_id,
+            kind: WALLET_KIND_USAGE_HOLD.to_string(),
+            amount_fen: -hold_fen,
+            idempotency_key: usage_hold_idempotency_key(hold_id),
+            metadata,
+            counts_as_paid_topup: false,
+        })
+        .await
+}
+
+/// Release a prior hold (credit back `hold_fen`). Idempotent per hold_id.
+pub async fn release_usage_hold(
+    store: Arc<dyn WalletStorePort>,
+    user_id: Uuid,
+    hold_id: Uuid,
+    hold_fen: i64,
+) -> Result<ApplyLedgerResult, AppError> {
+    if hold_fen <= 0 {
+        return Err(AppError::validation(
+            "wallet_hold_zero",
+            "hold_fen must be positive",
+        ));
+    }
+    store
+        .apply_ledger_entry(&ApplyLedgerInput {
+            user_id,
+            kind: WALLET_KIND_USAGE_HOLD_RELEASE.to_string(),
+            amount_fen: hold_fen,
+            idempotency_key: usage_hold_release_idempotency_key(hold_id),
+            metadata: serde_json::json!({ "hold_id": hold_id }),
+            counts_as_paid_topup: false,
+        })
+        .await
 }
 
 #[cfg(test)]
@@ -608,6 +674,39 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn usage_hold_then_release_restores_balance() {
+        let store: Arc<dyn WalletStorePort> = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        grant_signup_bonus(store.clone(), user_id).await.unwrap();
+        let hold_id = Uuid::new_v4();
+        let hold = place_usage_hold(
+            store.clone(),
+            user_id,
+            hold_id,
+            100,
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+        assert!(hold.applied);
+        assert_eq!(
+            hold.wallet.balance_fen,
+            SIGNUP_GRANT_FEN - 100
+        );
+        let released = release_usage_hold(store.clone(), user_id, hold_id, 100)
+            .await
+            .unwrap();
+        assert!(released.applied);
+        assert_eq!(released.wallet.balance_fen, SIGNUP_GRANT_FEN);
+        // Idempotent release.
+        let again = release_usage_hold(store.clone(), user_id, hold_id, 100)
+            .await
+            .unwrap();
+        assert!(!again.applied);
+        assert_eq!(again.wallet.balance_fen, SIGNUP_GRANT_FEN);
     }
 
     #[tokio::test]

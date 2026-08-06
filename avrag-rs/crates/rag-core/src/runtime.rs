@@ -44,6 +44,11 @@ impl RagRuntime {
         self
     }
 
+    /// Dense embedding client (share Q&A semantic cache, etc.).
+    pub fn embedding_client(&self) -> Arc<dyn avrag_rag_core_ports::EmbeddingPort> {
+        self.config.embedding_client.clone()
+    }
+
     /// Access the cache store if configured.
     pub fn cache(&self) -> Option<&dyn avrag_rag_core_ports::CachePort> {
         self.config.cache.as_deref()

@@ -50,7 +50,8 @@ pub use core::{expire_subscriptions, process_outbox};
 pub use wallet::{
     PaidTopupInput, TopupPackResponse, UsageDebitInput, WalletBalanceResponse, credit_paid_topup,
     debit_platform_usage, get_wallet_balance, grant_signup_bonus, handle_get_wallet,
-    handle_list_topup_packs, list_topup_packs,
+    handle_list_topup_packs, list_topup_packs, place_usage_hold, release_usage_hold,
+    usage_hold_idempotency_key, usage_hold_release_idempotency_key,
 };
 pub use wallet_pricing::{
     LIST_PRICE_MULTIPLIER, OfficialRates, list_price_fen, official_rates_for,
@@ -71,6 +72,7 @@ pub use app_core::{
     PRODUCT_KIND_SUBSCRIPTION, PRODUCT_KIND_WALLET_TOPUP, REFERRAL_BASE_QUOTA, REFERRAL_BONUS_FEN,
     REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN, TOPUP_PACK_50, TOPUP_PACK_100, TOPUP_PACK_200,
     TopupPack, WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT, WALLET_KIND_TOPUP,
-    WALLET_KIND_USAGE_DEBIT, fen_to_decimal_amount, referral_quota, signup_grant_idempotency_key,
+    WALLET_KIND_USAGE_DEBIT, WALLET_KIND_USAGE_HOLD, WALLET_KIND_USAGE_HOLD_RELEASE,
+    fen_to_decimal_amount, referral_quota, signup_grant_idempotency_key,
     topup_idempotency_key, topup_pack_by_id,
 };

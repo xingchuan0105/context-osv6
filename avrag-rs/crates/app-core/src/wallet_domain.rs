@@ -25,6 +25,10 @@ pub const WALLET_KIND_REFERRAL_BONUS: &str = "referral_bonus";
 pub const WALLET_KIND_TOPUP: &str = "topup";
 /// Platform-proxy usage debits (PR6).
 pub const WALLET_KIND_USAGE_DEBIT: &str = "usage_debit";
+/// Pre-authorize platform spend (negative fen); released on settle/cancel.
+pub const WALLET_KIND_USAGE_HOLD: &str = "usage_hold";
+/// Release a prior `usage_hold` (positive fen, same hold id).
+pub const WALLET_KIND_USAGE_HOLD_RELEASE: &str = "usage_hold_release";
 
 /// Checkout / order product kind: share-slot subscription (existing rails).
 pub const PRODUCT_KIND_SUBSCRIPTION: &str = "subscription";

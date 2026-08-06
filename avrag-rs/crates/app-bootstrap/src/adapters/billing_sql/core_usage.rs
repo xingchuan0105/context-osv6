@@ -136,6 +136,8 @@ pub(super) async fn load_usage(
         ("llm_input_tokens".to_string(), 0),
         ("llm_output_tokens".to_string(), 0),
         ("storage_bytes".to_string(), 0),
+        ("retained_content_bytes".to_string(), 0),
+        ("chunk_count".to_string(), 0),
     ]);
     for row in rows {
         usage.insert(
@@ -154,8 +156,35 @@ pub(super) async fn load_usage(
     .fetch_one(tx.as_mut())
     .await?
     .try_get::<i64, _>("storage_bytes")?;
+    let retained = sqlx::query(
+        r#"
+        select coalesce(sum(octet_length(c.content)), 0)::bigint as retained_content_bytes
+        from chunks c
+        join documents d on d.id = c.document_id
+        where d.user_id = $1
+          and d.status not in ('deleting', 'deleted')
+          and c.chunk_type = 'body'
+        "#,
+    )
+    .bind(user_id.into_uuid())
+    .fetch_one(tx.as_mut())
+    .await?
+    .try_get::<i64, _>("retained_content_bytes")?;
+    let chunks = sqlx::query(
+        r#"
+        select coalesce(sum(chunk_count), 0)::bigint as chunk_count
+        from documents
+        where user_id = $1
+        "#,
+    )
+    .bind(user_id.into_uuid())
+    .fetch_one(tx.as_mut())
+    .await?
+    .try_get::<i64, _>("chunk_count")?;
     tx.commit().await?;
     usage.insert("storage_bytes".to_string(), storage_bytes);
+    usage.insert("retained_content_bytes".to_string(), retained);
+    usage.insert("chunk_count".to_string(), chunks);
     Ok(usage)
 }
 
@@ -189,6 +218,26 @@ pub(super) async fn current_metric_usage(
             select coalesce(sum(chunk_count), 0)::bigint as quantity
             from documents
             where user_id = $1
+            "#,
+        )
+        .bind(user_id.into_uuid())
+        .fetch_one(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+        return Ok(row.try_get::<i64, _>("quantity")?);
+    }
+    // ADR-0010 §2.2: retained markdown/text volume = sum of stored chunk body bytes.
+    if metric_type == "retained_content_bytes" {
+        let mut tx = repo.raw().begin().await?;
+        set_current_user(tx.as_mut(), &user_id.to_string()).await?;
+        let row = sqlx::query(
+            r#"
+            select coalesce(sum(octet_length(c.content)), 0)::bigint as quantity
+            from chunks c
+            join documents d on d.id = c.document_id
+            where d.user_id = $1
+              and d.status not in ('deleting', 'deleted')
+              and c.chunk_type = 'body'
             "#,
         )
         .bind(user_id.into_uuid())

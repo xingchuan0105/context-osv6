@@ -104,17 +104,29 @@ impl DocumentContext {
         quota
             .ensure_storage_bytes_quota(auth, req.file_size as i64)
             .await?;
-        // ADR-0010 §2.2: chunk_count aggregate (proxy for retained index volume).
-        // Upload reserves +1 estimated chunk unit so empty libraries can still ingest.
-        if let Err(e) = billing
-            .ensure_metric_quota(auth, "chunk_count", 1)
-            .await
-        {
-            // Surface as hard stop for free-tier abuse; soft limits only warn.
+        // ADR-0010 §2.2: chunk_count aggregate (index volume proxy).
+        if let Err(e) = billing.ensure_metric_quota(auth, "chunk_count", 1).await {
             if e.code() == "quota_exceeded" {
                 return Err(e);
             }
             tracing::warn!(error = %e, "chunk_count quota check soft-failed; continuing");
+        }
+        // Retained markdown/text volume (sum of stored chunk body bytes).
+        // Upload projects +file_size as worst-case new retained bytes until parse shrinks it.
+        if let Err(e) = billing
+            .ensure_metric_quota(auth, "retained_content_bytes", req.file_size as i64)
+            .await
+        {
+            if e.code() == "quota_exceeded" {
+                return Err(AppError::validation(
+                    "retained_content_hard_cap",
+                    format!(
+                        "retained content (markdown/index text) would exceed plan hard cap; file_size projection={}",
+                        req.file_size
+                    ),
+                ));
+            }
+            tracing::warn!(error = %e, "retained_content_bytes quota check soft-failed; continuing");
         }
         let workspace_id =
             parse_uuid_or_app_error(workspace_id, "workspace_not_found", "workspace not found")?;

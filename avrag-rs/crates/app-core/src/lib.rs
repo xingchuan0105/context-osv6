@@ -82,7 +82,8 @@ pub use wallet_domain::{
     DEFAULT_TOPUP_PACKS, PRODUCT_KIND_SUBSCRIPTION, PRODUCT_KIND_WALLET_TOPUP, REFERRAL_BASE_QUOTA,
     REFERRAL_BONUS_FEN, REFERRAL_TOPUP_STEP_FEN, SIGNUP_GRANT_FEN, TOPUP_PACK_50, TOPUP_PACK_100,
     TOPUP_PACK_200, TopupPack, WALLET_KIND_REFERRAL_BONUS, WALLET_KIND_SIGNUP_GRANT,
-    WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, Wallet, WalletLedgerEntry, fen_to_decimal_amount,
+    WALLET_KIND_TOPUP, WALLET_KIND_USAGE_DEBIT, WALLET_KIND_USAGE_HOLD,
+    WALLET_KIND_USAGE_HOLD_RELEASE, Wallet, WalletLedgerEntry, fen_to_decimal_amount,
     referral_bonus_invitee_idempotency_key, referral_bonus_inviter_idempotency_key, referral_quota,
     signup_grant_idempotency_key, topup_idempotency_key, topup_pack_by_id,
 };

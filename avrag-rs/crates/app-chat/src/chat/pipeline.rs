@@ -21,6 +21,11 @@ pub(crate) struct ChatPreflight {
     pub trace_id: String,
     pub user_uuid: Uuid,
     pub notebook_uuid: Option<Uuid>,
+    /// Wallet hold placed for estimated platform spend (released after turn).
+    #[serde(default)]
+    pub usage_hold_id: Option<Uuid>,
+    #[serde(default)]
+    pub usage_hold_fen: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,12 +130,52 @@ async fn run_pipeline(
     }
 
     let preflight = state.execute_chat_preflight(&request).await?;
+    let hold = match (preflight.usage_hold_id, preflight.usage_hold_fen) {
+        (Some(id), Some(fen)) => Some((id, fen)),
+        _ => None,
+    };
+    let outcome = run_pipeline_inner(state.clone(), request, stream_config, lane, preflight).await;
+    if let Some((hold_id, hold_fen)) = hold {
+        state
+            .billing
+            .release_usage_hold(&state.auth, hold_id, hold_fen)
+            .await;
+    }
+    outcome
+}
+
+async fn run_pipeline_inner(
+    state: ChatContext,
+    request: ChatRequest,
+    stream_config: Option<StreamConfig>,
+    lane: PipelineLane,
+    preflight: ChatPreflight,
+) -> Result<ChatResponse, AppError> {
     let session = state.resolve_chat_session(&request).await?;
 
-    // ADR-0010 §9: exact share Q&A cache (skip LLM on repeated scrape queries).
+    // ADR-0010 §9: exact + semantic share Q&A cache (skip LLM on scrape/repeat).
     if request.source_type.as_deref() == Some("share") {
         if let Some(token) = request.source_token.as_deref() {
-            if let Some(cached) = crate::share_cache::get(token, &request.query) {
+            let embed = async {
+                let Some(rag) = state.retrieval_runtime() else {
+                    return None;
+                };
+                match rag
+                    .embedding_client()
+                    .embed(&[request.query.as_str()])
+                    .await
+                {
+                    Ok(mut v) => v.pop(),
+                    Err(e) => {
+                        tracing::debug!(error = %e, "share cache embed failed; exact-only");
+                        None
+                    }
+                }
+            }
+            .await;
+            if let Some(cached) =
+                crate::share_cache::lookup(token, &request.query, embed.as_deref()).await
+            {
                 let response = contracts::chat::ChatResponse {
                     answer: cached.clone(),
                     answer_blocks: vec![],
@@ -252,7 +297,27 @@ async fn run_pipeline(
 
     if request.source_type.as_deref() == Some("share") {
         if let Some(token) = request.source_token.as_deref() {
-            crate::share_cache::put(token, &request.query, &execution.response.answer);
+            let embed = async {
+                let Some(rag) = state.retrieval_runtime() else {
+                    return None;
+                };
+                match rag
+                    .embedding_client()
+                    .embed(&[request.query.as_str()])
+                    .await
+                {
+                    Ok(mut v) => v.pop(),
+                    Err(_) => None,
+                }
+            }
+            .await;
+            crate::share_cache::store(
+                token,
+                &request.query,
+                &execution.response.answer,
+                embed,
+            )
+            .await;
         }
     }
 

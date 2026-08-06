@@ -108,18 +108,22 @@ impl BillingContext {
         }
     }
 
-    /// Pre-authorize a turn: balance must cover estimated list price for expected tokens.
-    /// Fail closed **before** LLM when the estimate is known and balance is insufficient.
-    pub async fn ensure_payer_covers_estimate(
+    /// Atomic pre-debit: place a wallet **hold** for estimated list price.
+    ///
+    /// Returns `(hold_id, hold_fen)` when a hold was applied. Caller **must**
+    /// [`Self::release_usage_hold`] after the turn (success or failure); actual
+    /// usage is still charged via the usage observer's `usage_debit`.
+    ///
+    /// BYOK LLM path: no hold (returns `None`).
+    pub async fn place_usage_hold_for_estimate(
         &self,
         auth: &AuthContext,
         estimated_input_tokens: i64,
         estimated_output_tokens: i64,
-    ) -> Result<(), AppError> {
+    ) -> Result<Option<(Uuid, i64)>, AppError> {
         let Some(wallet) = &self.wallet else {
-            return Ok(());
+            return Ok(None);
         };
-        // BYOK LLM path: no wallet pre-auth for chat (embeddings still debit separately).
         if let Some(secrets) = &self.provider_secrets {
             let owner = auth.user_id().into_uuid();
             if secrets
@@ -127,7 +131,7 @@ impl BillingContext {
                 .await
                 .unwrap_or(false)
             {
-                return Ok(());
+                return Ok(None);
             }
         }
         let provider = std::env::var("AGENT_LLM_PROVIDER")
@@ -143,27 +147,63 @@ impl BillingContext {
             estimated_output_tokens.max(0) as u32,
             0,
         ) else {
-            // Unknown model: already warned in ensure_payer; do not block on estimate.
-            return Ok(());
+            return Ok(None);
         };
         if need_fen <= 0 {
-            return Ok(());
+            return Ok(None);
         }
         let owner = auth.user_id().into_uuid();
-        let w = wallet
-            .ensure_wallet(owner)
-            .await
-            .map_err(|e| AppError::internal(format!("wallet pre-auth failed: {e}")))?;
-        if w.balance_fen < need_fen {
-            return Err(AppError::validation(
-                "payer_funds_required",
-                format!(
-                    "Wallet balance {} fen is below estimated turn cost {} fen. Top up before continuing.",
-                    w.balance_fen, need_fen
-                ),
-            ));
+        let hold_id = Uuid::new_v4();
+        avrag_billing::place_usage_hold(
+            wallet.clone(),
+            owner,
+            hold_id,
+            need_fen,
+            serde_json::json!({
+                "provider": provider,
+                "model": model,
+                "estimated_input_tokens": estimated_input_tokens,
+                "estimated_output_tokens": estimated_output_tokens,
+                "list_fen": need_fen,
+            }),
+        )
+        .await
+        .map_err(|e| {
+            if e.code() == "wallet_insufficient_balance" {
+                AppError::validation(
+                    "payer_funds_required",
+                    format!(
+                        "Wallet balance is below estimated turn cost {need_fen} fen. Top up before continuing."
+                    ),
+                )
+            } else {
+                e
+            }
+        })?;
+        Ok(Some((hold_id, need_fen)))
+    }
+
+    /// Release a prior usage hold (idempotent). Best-effort on failure (logged).
+    pub async fn release_usage_hold(
+        &self,
+        auth: &AuthContext,
+        hold_id: Uuid,
+        hold_fen: i64,
+    ) {
+        let Some(wallet) = &self.wallet else {
+            return;
+        };
+        let owner = auth.user_id().into_uuid();
+        if let Err(e) =
+            avrag_billing::release_usage_hold(wallet.clone(), owner, hold_id, hold_fen).await
+        {
+            tracing::error!(
+                error = %e,
+                hold_id = %hold_id,
+                hold_fen,
+                "failed to release wallet usage hold"
+            );
         }
-        Ok(())
     }
 
     fn warn_if_platform_model_not_whitelisted() {

@@ -1,7 +1,10 @@
-//! Exact-match share Q&A cache (ADR-0010 §9) — process-local, TTL, no semantic match.
+//! Share Q&A cache (ADR-0010 §9): exact match + embedding cosine semantic match.
 //!
-//! When a visitor repeats the **same** query on the same share token within TTL,
-//! platform LLM spend is skipped (near-zero marginal cost for scrape bots).
+//! - **Exact:** normalized whitespace/case query hash (always).
+//! - **Semantic:** cosine similarity on dense query embeddings when provided
+//!   (from RagRuntime embedding client). Threshold default 0.90.
+//!
+//! Process-local, TTL. Near-zero platform cost on cache hit.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -12,10 +15,14 @@ use sha2::{Digest, Sha256};
 #[derive(Clone)]
 struct Entry {
     answer: String,
+    embedding: Option<Vec<f32>>,
     expires_at: Instant,
 }
 
-static CACHE: LazyLock<Mutex<HashMap<String, Entry>>> =
+/// Per share_token → list of recent answers (exact map is global by key).
+static EXACT: LazyLock<Mutex<HashMap<String, Entry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static BY_TOKEN: LazyLock<Mutex<HashMap<String, Vec<String>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn ttl_secs() -> u64 {
@@ -32,54 +39,150 @@ fn enabled() -> bool {
     )
 }
 
-fn cache_key(share_token: &str, query: &str) -> String {
-    let normalized = query.split_whitespace().collect::<Vec<_>>().join(" ");
+fn semantic_threshold() -> f32 {
+    std::env::var("SHARE_QA_SEMANTIC_THRESHOLD")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.90)
+}
+
+fn semantic_enabled() -> bool {
+    !matches!(
+        std::env::var("SHARE_QA_SEMANTIC_DISABLED").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
+fn normalize_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn exact_key(share_token: &str, query_norm: &str) -> String {
     let mut h = Sha256::new();
     h.update(share_token.trim().as_bytes());
     h.update(b"\0");
-    h.update(normalized.to_lowercase().as_bytes());
+    h.update(query_norm.as_bytes());
     format!("{:x}", h.finalize())
 }
 
-/// Lookup cached answer for share exact query match.
-pub fn get(share_token: &str, query: &str) -> Option<String> {
+fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    if a.is_empty() || b.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for i in 0..a.len() {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    if na <= 0.0 || nb <= 0.0 {
+        return 0.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
+/// Lookup: exact first, then semantic cosine against same share_token entries.
+pub async fn lookup(
+    share_token: &str,
+    query: &str,
+    query_embedding: Option<&[f32]>,
+) -> Option<String> {
     if !enabled() || share_token.trim().is_empty() || query.trim().is_empty() {
         return None;
     }
-    let key = cache_key(share_token, query);
-    let mut guard = CACHE.lock().ok()?;
+    let qn = normalize_query(query);
+    let key = exact_key(share_token, &qn);
     let now = Instant::now();
-    if let Some(entry) = guard.get(&key) {
-        if entry.expires_at > now {
-            return Some(entry.answer.clone());
+    let thr = semantic_threshold();
+
+    {
+        let mut exact = EXACT.lock().ok()?;
+        if let Some(entry) = exact.get(&key) {
+            if entry.expires_at > now {
+                return Some(entry.answer.clone());
+            }
+            exact.remove(&key);
         }
-        guard.remove(&key);
+        if exact.len() > 10_000 {
+            exact.retain(|_, e| e.expires_at > now);
+        }
     }
-    // Opportunistic prune of a few expired keys.
-    if guard.len() > 10_000 {
-        guard.retain(|_, e| e.expires_at > now);
+
+    if !semantic_enabled() {
+        return None;
     }
-    None
+    let Some(q_emb) = query_embedding.filter(|e| !e.is_empty()) else {
+        return None;
+    };
+
+    let keys: Vec<String> = {
+        let by = BY_TOKEN.lock().ok()?;
+        by.get(share_token.trim()).cloned().unwrap_or_default()
+    };
+    let mut best: Option<(f32, String)> = None;
+    {
+        let exact = EXACT.lock().ok()?;
+        for k in keys {
+            let Some(entry) = exact.get(&k) else {
+                continue;
+            };
+            if entry.expires_at <= now {
+                continue;
+            }
+            let Some(ref emb) = entry.embedding else {
+                continue;
+            };
+            let sim = cosine(q_emb, emb);
+            if sim >= thr {
+                if best.as_ref().map(|(s, _)| sim > *s).unwrap_or(true) {
+                    best = Some((sim, entry.answer.clone()));
+                }
+            }
+        }
+    }
+    best.map(|(_, a)| a)
 }
 
-/// Store share answer for exact reuse within TTL.
-pub fn put(share_token: &str, query: &str, answer: &str) {
+/// Store answer with optional embedding for semantic reuse.
+pub async fn store(
+    share_token: &str,
+    query: &str,
+    answer: &str,
+    embedding: Option<Vec<f32>>,
+) {
     if !enabled() || share_token.trim().is_empty() || query.trim().is_empty() {
         return;
     }
     if answer.trim().is_empty() {
         return;
     }
-    let key = cache_key(share_token, query);
+    let qn = normalize_query(query);
+    let key = exact_key(share_token, &qn);
     let ttl = Duration::from_secs(ttl_secs().max(30));
-    if let Ok(mut guard) = CACHE.lock() {
-        guard.insert(
-            key,
-            Entry {
-                answer: answer.to_string(),
-                expires_at: Instant::now() + ttl,
-            },
-        );
+    let entry = Entry {
+        answer: answer.to_string(),
+        embedding,
+        expires_at: Instant::now() + ttl,
+    };
+    if let Ok(mut exact) = EXACT.lock() {
+        exact.insert(key.clone(), entry);
+    }
+    if let Ok(mut by) = BY_TOKEN.lock() {
+        let list = by.entry(share_token.trim().to_string()).or_default();
+        if !list.iter().any(|k| k == &key) {
+            list.push(key);
+        }
+        // Cap per-token list.
+        if list.len() > 256 {
+            let drain = list.len() - 256;
+            list.drain(0..drain);
+        }
     }
 }
 
@@ -87,11 +190,32 @@ pub fn put(share_token: &str, query: &str, answer: &str) {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn exact_roundtrip() {
+        store("tok-a", "What is X?", "answer-x", None).await;
+        assert_eq!(
+            lookup("tok-a", "What is X?", None).await.as_deref(),
+            Some("answer-x")
+        );
+        assert_eq!(
+            lookup("tok-a", "what  is   x?", None).await.as_deref(),
+            Some("answer-x")
+        );
+        assert!(lookup("tok-b", "What is X?", None).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn semantic_cosine_hit() {
+        let emb_a = vec![1.0, 0.0, 0.0];
+        let emb_b = vec![0.99, 0.1, 0.0]; // high cosine with emb_a
+        store("tok-s", "how tall is the tower?", "Eiffel is 330m", Some(emb_a)).await;
+        let hit = lookup("tok-s", "tower height?", Some(&emb_b)).await;
+        assert_eq!(hit.as_deref(), Some("Eiffel is 330m"));
+    }
+
     #[test]
-    fn roundtrip_exact_query() {
-        put("tok-a", "What is X?", "answer-x");
-        assert_eq!(get("tok-a", "What is X?").as_deref(), Some("answer-x"));
-        assert_eq!(get("tok-a", "what  is   x?").as_deref(), Some("answer-x"));
-        assert!(get("tok-b", "What is X?").is_none());
+    fn cosine_identical_is_one() {
+        let v = vec![0.5, 0.5, 0.0];
+        assert!((cosine(&v, &v) - 1.0).abs() < 1e-5);
     }
 }
