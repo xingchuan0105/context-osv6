@@ -36,6 +36,7 @@
 | `desktop/SUPPORT-AND-SLA.md` | 桌面 vs 云端支持边界 |
 | `desktop/SMOKE_CHECKLIST.md` | 客户端安装与本机栈冒烟清单（无激活墙） |
 | `desktop/2026-08-10-v0.2.0-free-client-release.md` | **v0.2.0 免费客户端打包设计**（ADR-0010 对齐） |
+| `desktop/2026-08-10-workspace-publish-b3b-design.md` | **Publish B3b 设计门禁**（本地→云；未全量实现） |
 | `desktop/2026-08-04-portable-runtime-design.md` | **便携 PG+pgvector+Redis 捆绑设计**（装进 NSIS，无 Docker） |
 | `desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md` | **本机客户端 × Coding Agent**：MCP/CLI 能力矩阵、鉴权边界、P0/P1（建库/解析/问答/分享） |
 | `release/desktop/2026-08-10-v0.2.0.md` | Desktop v0.2.0 release notes |

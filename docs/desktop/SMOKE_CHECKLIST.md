@@ -52,7 +52,7 @@ SIGN_WINDOWS=0 bash scripts/package-desktop-release.sh
 | L1 | 冷启动 | **不**跳转云 Login | ☐ |
 | L2 | 无激活墙 | **不**被强制带到 `/activate` 才能用主路径 | ☐ |
 | L3 | 进入产品 | 可到工作台 / 本机 setup（数据栈） | ☐ |
-| L4 | 遗留入口 | 若仍见 activate/buy：**可选**、不阻断（记录为债） | ☐ |
+| L4 | 遗留入口 | `/activate`、`/desktop/buy` **重定向到 `/desktop`**，无结账 | ☐ |
 
 > v0.1.x 的「试用 21 天 / 购买 / 输码」**不再**作为通过标准。
 

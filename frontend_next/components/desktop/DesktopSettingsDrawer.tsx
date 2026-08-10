@@ -328,7 +328,7 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     { id: "llm", label: "LLM" },
     { id: "embedding", label: "Embedding" },
     { id: "stack", label: "本机数据栈" },
-    { id: "license", label: "授权" },
+    { id: "license", label: "关于" },
     { id: "diagnostic", label: "诊断" },
   ];
 
@@ -689,19 +689,26 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
         {tab === "license" ? (
           <div className={styles.drawerSection}>
             <p>
-              <strong>{licenseLabel}</strong>
+              <strong>客户端免费</strong>
             </p>
-            {licenseDetail ? <p className={styles.subtitle}>{licenseDetail}</p> : null}
+            <p className={styles.subtitle}>
+              无需激活码。本机使用自备模型 Key；云端分享名额与钱包见定价页。
+              {licenseLabel ? `（本机状态：${licenseLabel}${licenseDetail ? ` · ${licenseDetail}` : ""}）` : ""}
+            </p>
             <div className="app-button-row">
-              <Link href="/activate" className="app-button-secondary" onClick={onClose}>
-                欢迎 / 激活页
-              </Link>
               <button
                 type="button"
                 className="app-button-secondary"
-                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.desktopBuy))}
+                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.desktop))}
               >
-                购买授权
+                下载 / 客户端页
+              </button>
+              <button
+                type="button"
+                className="app-button-secondary"
+                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.pricing))}
+              >
+                云端定价
               </button>
             </div>
           </div>

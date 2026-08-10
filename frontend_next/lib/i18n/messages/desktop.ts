@@ -125,17 +125,21 @@ export const desktopMessages = {
     zh: "在 Context-OS 中激活",
     en: "Activate in Context-OS",
   },
+  "desktop.activateRedirect": {
+    zh: "客户端免费，无需激活。正在前往下载页…",
+    en: "The client is free — no activation. Redirecting to the download page…",
+  },
   "desktop.buyTitle": {
-    zh: "客户端说明",
-    en: "About the client",
+    zh: "客户端免费",
+    en: "Client is free",
   },
   "desktop.buySubtitle": {
-    zh: "客户端本身免费下载使用。本页仅保留历史授权/设备记录入口，不是主购买路径。",
-    en: "The client itself is free to download. This page is only for legacy licenses / devices — not the primary purchase path.",
+    zh: "客户端本身免费下载使用。云端分享名额与钱包见定价页。",
+    en: "The client is free to download. Cloud share slots and wallet are on Pricing.",
   },
   "desktop.buyFreeBanner": {
-    zh: "需要安装包？请到客户端页免费下载。需要上云分享名额请看云端定价。",
-    en: "Need the installer? Download free on the client page. Cloud share slots are on Pricing.",
+    zh: "客户端买断已退役。请免费下载安装包；上云经营请看分享名额定价。",
+    en: "Desktop buyout is retired. Download the free installer; cloud share slots are on Pricing.",
   },
   "desktop.buyFreeCta": {
     zh: "免费下载客户端",
