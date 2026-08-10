@@ -10,6 +10,7 @@ import {
   addWorkspaceSourceUrl,
   completeWorkspaceDocumentUpload,
   createWorkspaceDocumentUpload,
+  resolveUploadMimeType,
   uploadWorkspaceDocumentFile,
 } from "../../lib/workspace/client";
 import {
@@ -114,13 +115,14 @@ export function useWorkspaceSourceActions({
         const uploadedSourceIds: string[] = [];
 
         for (const file of files) {
+          const mime_type = resolveUploadMimeType(file);
           const upload = await createWorkspaceDocumentUpload(token, workspaceId, {
             filename: file.name,
             file_size: file.size,
-            mime_type: file.type || "application/octet-stream",
+            mime_type,
           });
 
-          await uploadWorkspaceDocumentFile(upload.upload_url, file);
+          await uploadWorkspaceDocumentFile(upload.upload_url, file, mime_type);
           await completeWorkspaceDocumentUpload(token, upload.document_id);
           uploadedSourceIds.push(upload.document_id);
         }

@@ -111,18 +111,17 @@ impl ParseRouter {
                 "file {filename} is missing a supported extension"
             ))
         })?;
-        let normalized_mime = normalize_mime_type(mime_type);
-
-        if normalized_mime.is_empty() {
-            return Err(ParseRouteError::unsupported(format!(
-                "file {filename} is missing a supported MIME type"
-            )));
-        }
-
         if !is_supported_extension(&extension) {
             return Err(ParseRouteError::unsupported(format!(
                 "file {filename} uses unsupported extension .{extension}"
             )));
+        }
+
+        let normalized_mime = normalize_mime_type(mime_type);
+        // Empty / application/octet-stream: browsers often omit real MIME for .md and
+        // other text files. Extension is already validated — accept and route by ext.
+        if normalized_mime.is_empty() || normalized_mime == "application/octet-stream" {
+            return Ok(());
         }
 
         if !mime_matches_extension(&extension, &normalized_mime) {

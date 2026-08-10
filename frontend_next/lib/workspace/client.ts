@@ -293,12 +293,80 @@ export async function createWorkspaceDocumentUpload(
   return resp;
 }
 
+/**
+ * Prefer browser File.type; when empty or generic octet-stream, guess from extension
+ * so create-upload + ParseRouter get a useful MIME (esp. .md on Chrome/Windows).
+ */
+export function resolveUploadMimeType(file: File): string {
+  const reported = (file.type || "").trim().toLowerCase();
+  if (reported && reported !== "application/octet-stream") {
+    return reported;
+  }
+  const name = file.name || "";
+  const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+  switch (ext) {
+    case "md":
+    case "markdown":
+      return "text/markdown";
+    case "txt":
+    case "rst":
+      return "text/plain";
+    case "html":
+    case "htm":
+      return "text/html";
+    case "json":
+      return "application/json";
+    case "csv":
+      return "text/csv";
+    case "tsv":
+      return "text/tab-separated-values";
+    case "pdf":
+      return "application/pdf";
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "ppt":
+    case "pps":
+    case "pot":
+      return "application/vnd.ms-powerpoint";
+    case "pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case "yaml":
+    case "yml":
+      return "application/yaml";
+    case "toml":
+      return "application/toml";
+    default:
+      return reported || "application/octet-stream";
+  }
+}
+
 export async function uploadWorkspaceDocumentFile(
   upload_url: string,
   file: Blob,
+  contentType?: string,
 ): Promise<void> {
   const headers = new Headers();
-  headers.set("Content-Type", file.type || "application/octet-stream");
+  const type =
+    contentType?.trim() ||
+    (file instanceof File ? resolveUploadMimeType(file) : "") ||
+    file.type ||
+    "application/octet-stream";
+  headers.set("Content-Type", type);
 
   await fetchResponse(upload_url, {
     method: "PUT",

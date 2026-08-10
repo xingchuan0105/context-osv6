@@ -174,10 +174,19 @@ fn route_rejects_missing_extension() {
 }
 
 #[test]
-fn route_rejects_unknown_mime_type() {
-    let error = ParseRouter::route(b"hello", "notes.txt", "application/octet-stream")
-        .expect_err("should fail");
-    assert_eq!(error.code(), "unsupported_file_type");
+fn route_accepts_octet_stream_when_extension_is_supported() {
+    // Browsers often send application/octet-stream for .md / .txt.
+    let decision =
+        ParseRouter::route(b"# hi", "CLAUDE-FABLE-5.md", "application/octet-stream").unwrap();
+    assert_markitdown(&decision);
+    let decision = ParseRouter::route(b"hello", "notes.txt", "application/octet-stream").unwrap();
+    assert_markitdown(&decision);
+}
+
+#[test]
+fn route_accepts_empty_mime_when_extension_is_supported() {
+    let decision = ParseRouter::route(b"# hi", "notes.md", "").unwrap();
+    assert_markitdown(&decision);
 }
 
 #[test]

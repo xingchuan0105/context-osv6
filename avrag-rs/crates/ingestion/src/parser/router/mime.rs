@@ -108,6 +108,11 @@ pub(super) fn is_code_extension(extension: &str) -> bool {
 }
 
 pub(super) fn mime_matches_extension(extension: &str, mime_type: &str) -> bool {
+    // Browsers (and some OS pickers) often report application/octet-stream for
+    // .md / .txt / Office when they do not know a type. Trust validated extension.
+    if mime_type.is_empty() || mime_type == "application/octet-stream" {
+        return is_supported_extension(extension);
+    }
     match extension {
         "pdf" => mime_type == "application/pdf",
         "png" => mime_type == "image/png",
@@ -177,7 +182,11 @@ pub(super) fn mime_matches_extension(extension: &str, mime_type: &str) -> bool {
             mime_type == "text/csv" || mime_type == "application/csv" || mime_type == "text/plain"
         }
         "tsv" => mime_type == "text/tab-separated-values" || mime_type == "text/plain",
-        "md" => mime_type == "text/markdown" || mime_type == "text/plain",
+        "md" => {
+            mime_type == "text/markdown"
+                || mime_type == "text/x-markdown"
+                || mime_type == "text/plain"
+        }
         "toml" => mime_type == "application/toml" || mime_type == "text/plain",
         "yaml" | "yml" => matches!(
             mime_type,
