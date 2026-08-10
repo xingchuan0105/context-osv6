@@ -25,10 +25,12 @@ The available action ids are:
 - `weather_query` — weather lookup
 - `web` — web search
 - `fetch` — fetch a web page
-- `dense`, `lexical`, `grep` — retrieval / search over documents (`dense` may include host-side relation expansion in its chunk list)
-- `doc_profile`, `doc_summary`, `struct_catalog`, `struct_query` — document and structure reads
+- `dense`, `lexical`, `grep` — retrieval over the **workspace knowledge base** only when that capability is mounted (`dense` may include host-side VGRAG / relation expansion). Do not list these for pure web questions when only internet is relevant.
+- `doc_summary`, `struct_catalog`, `struct_query` — document and structure reads (knowledge base only)
 - `history`, `user_profile`, `user_context` — user state reads
 - `save`, `load` — session storage
+
+When both knowledge base and web are available, list only the actions the question truly needs (corpus and/or web). Unmounted action ids are dropped by the runtime.
 
 ## Output
 

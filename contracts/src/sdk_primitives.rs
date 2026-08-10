@@ -17,9 +17,9 @@ impl SdkCapability {
     pub const BASE: Self = Self(1);
     /// 知识库检索(rag capability)。
     pub const RAG: Self = Self(2);
-    /// 联网(search capability;`dense` 允许混合检索)。
+    /// 联网(search capability; only web/fetch — no corpus dense).
     pub const SEARCH: Self = Self(4);
-    /// 混合检索(dense 在 rag 与 search 都开放)。
+    /// Historical alias for RAG|SEARCH bit-union (prefer RAG / SEARCH separately).
     pub const RAG_SEARCH: Self = Self(2 | 4);
 
     pub fn contains(self, other: Self) -> bool {
@@ -124,9 +124,11 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     // ── Rag(知识库检索)─────────────────────────────────────────────────
     SdkPrimitive {
         id: "dense",
-        capability: SdkCapability::RAG_SEARCH,
-        docstring: "Semantic retrieval (host may expand via entity graph and return a fused chunk list). \
-            topk is fixed by the host — only pass query.",
+        // RAG only: VGRAG graph expand is host-side inside this method.
+        // Search-only must not see dense (no mixed search/corpus surface).
+        capability: SdkCapability::RAG,
+        docstring: "Semantic retrieval over the workspace knowledge base (host may expand via entity graph / VGRAG and return a fused chunk list). \
+            topk is fixed by the host — only pass query. Not available in search-only capability.",
         handler: "retrieval_dense",
         py_sig: "self, query",
         py_payload: "{\"query\": query}",
@@ -208,7 +210,8 @@ pub fn primitive(id: &str) -> Option<&'static SdkPrimitive> {
     SDK_PRIMITIVES.iter().find(|p| p.id == id)
 }
 
-/// 按 capability 收集 id(包含匹配:如 Rag 会同时拿到 dense(RAG|SEARCH))。
+/// 按 capability 收集 id（原语 `capability` 位包含查询 cap）。
+/// 例：`ids_for(RAG)` 含 dense；`ids_for(SEARCH)` 仅 web/fetch。
 pub fn ids_for(cap: SdkCapability) -> Vec<&'static str> {
     SDK_PRIMITIVES
         .iter()
@@ -239,8 +242,10 @@ mod tests {
         let search = ids_for(SdkCapability::SEARCH);
         assert!(base.contains(&"save") && base.contains(&"user_context"));
         assert!(rag.contains(&"dense") && rag.contains(&"struct_query"));
-        assert!(search.contains(&"web") && search.contains(&"dense"));
-        // Base 原语不进入检索面;rag 检索原语不进入 search 面(除 dense 混合)
+        assert!(search.contains(&"web") && search.contains(&"fetch"));
+        // dense is RAG-only (VGRAG fused inside dense); search must not mount it.
+        assert!(!search.contains(&"dense"));
+        // Base 原语不进入检索面;rag 检索原语不进入 search 面
         for b in &base {
             assert!(!rag.contains(b) && !search.contains(b), "{b} 不应属于检索面");
         }

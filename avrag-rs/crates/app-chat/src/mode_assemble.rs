@@ -413,14 +413,18 @@ mod tests {
         assert_eq!(assembled.config.temperature, Some(0.4));
         assert!(assembled.config.sdk_primitives.contains(&"web".into()));
         assert!(assembled.config.sdk_primitives.contains(&"fetch".into()));
-        assert!(assembled.config.sdk_primitives.contains(&"dense".into()));
+        assert!(
+            !assembled.config.sdk_primitives.contains(&"dense".into()),
+            "search-only must not mount dense: {:?}",
+            assembled.config.sdk_primitives
+        );
         assert!(!assembled.config.sdk_primitives.contains(&"grep".into()));
     }
 
     #[test]
     fn pure_chat_keeps_chat_budget_and_unified_temp() {
         let assembled = assemble_mode(CapabilitySet::default()).expect("pure chat");
-        assert_eq!(assembled.config.budget.max_iterations, 4);
+        assert_eq!(assembled.config.budget.max_iterations, 2);
         assert_eq!(assembled.config.budget.max_tokens, Some(8_000));
         assert_eq!(assembled.config.temperature, Some(0.4));
     }

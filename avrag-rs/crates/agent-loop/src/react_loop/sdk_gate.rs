@@ -75,11 +75,11 @@ mod tests {
     }
 
     #[test]
-    fn search_has_web_and_dense() {
+    fn search_has_web_not_dense() {
         let p = sdk_primitives_for_caps(false, true);
         assert!(p.contains(&"web"));
         assert!(p.contains(&"fetch"));
-        assert!(p.contains(&"dense"));
+        assert!(!p.contains(&"dense"), "search-only must not mount dense");
         assert!(!p.contains(&"grep"));
     }
 
@@ -88,6 +88,7 @@ mod tests {
         let p = sdk_primitives_for_caps(true, true);
         assert!(p.contains(&"grep"));
         assert!(p.contains(&"web"));
+        // dense comes from RAG only (VGRAG inside dense); dual still has it via rag.
         assert!(p.contains(&"dense"));
     }
 

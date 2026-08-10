@@ -12,7 +12,7 @@ applicable_strategies: [search]
 
 ### 本能力能做什么
 
-联网检索覆盖互联网上的公开信息：`client.web(query)` 并行扇出多语种 query 取回搜索摘要，摘要不足以支撑主张时 `client.fetch(url)` 拉取页面全文；若同时挂载知识库，`client.dense` 等检索方法可用以对照本地文档。网页事实与知识库事实分源引用（`[[web:n]]` 与 `SELECTED: #n`）。方法签名与返回字段以已加载的 search skill 为准，本段不重复签名。
+联网检索覆盖互联网上的公开信息：`client.web(query)` 并行扇出多语种 query 取回搜索摘要，摘要不足以支撑主张时 `client.fetch(url)` 拉取页面全文。**仅挂载联网时**没有工作区 `client.dense` 面。若**同时**挂载知识库，工作区侧用已披露的知识库方法（语义检索等，宿主侧可含图扩展）对照本地文档；网页与知识库分源引用（`[[web:n]]` 与 `SELECTED: #n`）。方法签名与返回字段以已加载 skill 为准，本段不重复签名。
 
 ### 证据
 

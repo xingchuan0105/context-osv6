@@ -144,14 +144,20 @@ impl ReActLoop {
         let (request, base_message_count, max_iterations, auth, loop_user_query) =
             self.prepare_run_request(mode, request, sink).await?;
 
-        // L0 题型卡（2026-08-03）：pre-loop 一次 json_mode 调用做结构化分类 +
-        // 必做动作声明。失败 → None（卡缺省 = 埋点不激活，通用证据闸仍在）。
+        // L0 题型卡：按挂载能力选 profile（纯 chat 跳过；search 极简；rag/dual 全量）。
         // 该调用不占迭代预算（budget 在 run_retrieval_loop 内计）。
-        // validate：声明了未知/未挂载动作的卡必须清洗——否则 L2.5 闸对一个
-        // 沙箱里根本不可达的动作永远弹回，烧满轮次预算（2026-08-03 评审 P1）。
+        // validate：未知/未挂载动作清洗，避免 L2.5 闸对不可达动作烧满轮次。
+        let card_profile = query_card::query_card_profile(mode);
         let query_card = query_card::fetch_query_card(&self.llm, mode, &request.query)
             .await
             .map(|card| card.validate(mode));
+
+        // Pure-chat L0：无题卡 LLM + 轮次封顶，避免简单问题多轮沙箱空转。
+        let max_iterations = if card_profile == query_card::QueryCardProfile::Off {
+            max_iterations.min(2)
+        } else {
+            max_iterations
+        };
 
         // W1 (2026-07-28, channel-persistent worker): a resumed worker session
         // passes its alias cursor so retrieval-log aliases stay unique across

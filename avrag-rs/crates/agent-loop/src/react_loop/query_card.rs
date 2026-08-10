@@ -147,13 +147,47 @@ pub fn required_action_attempted(action: &str, tool_results: &[ToolResult]) -> b
 const QUERY_CARD_SYSTEM_PROMPT: &str =
     include_str!("../../../../prompts/pipeline/query-card.system.md");
 
+/// 联网-only 极简题卡（无知识库面；禁止 dense/rag_fact）。
+const QUERY_CARD_SEARCH_SYSTEM_PROMPT: &str =
+    include_str!("../../../../prompts/pipeline/query-card-search.system.md");
+
 /// Parse-error 回贴修复提示（prompts/pipeline/query-card-repair.md，`{parse_error}` 占位）。
 const QUERY_CARD_REPAIR_PROMPT: &str =
     include_str!("../../../../prompts/pipeline/query-card-repair.md");
 
+/// Which pre-loop query-card profile to use for this mode's mounted SDK surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryCardProfile {
+    /// Pure chat (BASE only): no pre-loop card.
+    Off,
+    /// Search capability only: minimal card (web/fetch + base tools).
+    SearchMinimal,
+    /// RAG only or dual: full card (corpus + optional web when dual).
+    Full,
+}
+
+/// Derive profile from mounted `mode.sdk_primitives` (capability-facing truth).
+pub fn query_card_profile(mode: &ModeConfig) -> QueryCardProfile {
+    let has_web = mode.sdk_primitives.iter().any(|p| p == "web");
+    let has_kb = mode.sdk_primitives.iter().any(|p| {
+        matches!(
+            p.as_str(),
+            "dense" | "lexical" | "grep" | "doc_summary" | "struct_catalog" | "struct_query"
+        )
+    });
+    match (has_kb, has_web) {
+        (false, false) => QueryCardProfile::Off,
+        (false, true) => QueryCardProfile::SearchMinimal,
+        _ => QueryCardProfile::Full,
+    }
+}
+
 /// Pre-loop 题型卡调用：一次 `json_mode`（deepseek 真下发 json_object），
 /// 失败做一次「parse error 回贴」免费重试（heavytail/src/llm.rs:66-103 范式），
 /// 再失败 → `None`（卡缺省 = 埋点不激活，优雅降级）。
+///
+/// **Profile**: pure chat → always `None` (no LLM call). Search-only → minimal
+/// prompt. RAG/dual → full prompt. Actions are still `validate`d against mounts.
 ///
 /// 该调用不占迭代预算；usage 计入调用方 telemetry（ReActIterationRecord 通道）。
 pub async fn fetch_query_card(
@@ -161,9 +195,15 @@ pub async fn fetch_query_card(
     mode: &ModeConfig,
     query: &str,
 ) -> Option<QueryCard> {
+    let profile = query_card_profile(mode);
+    let system = match profile {
+        QueryCardProfile::Off => return None,
+        QueryCardProfile::SearchMinimal => QUERY_CARD_SEARCH_SYSTEM_PROMPT,
+        QueryCardProfile::Full => QUERY_CARD_SYSTEM_PROMPT,
+    };
     let temperature = mode.temperature.unwrap_or(0.4);
     let messages = vec![
-        ChatMessage::system(QUERY_CARD_SYSTEM_PROMPT),
+        ChatMessage::system(system),
         ChatMessage::user(query),
     ];
     let response = llm
@@ -182,7 +222,7 @@ pub async fn fetch_query_card(
             .unwrap_or_else(|| "response was not valid JSON".to_string());
             let repair_user = QUERY_CARD_REPAIR_PROMPT.replace("{parse_error}", &first_err);
             let repair_messages = vec![
-                ChatMessage::system(QUERY_CARD_SYSTEM_PROMPT),
+                ChatMessage::system(system),
                 ChatMessage::assistant(&response.content),
                 ChatMessage::user(repair_user),
             ];
@@ -295,5 +335,45 @@ mod tests {
         assert!(!required_action_satisfied("calculator", &[ok_web]));
         assert!(!required_action_satisfied("calculator", &[err_calculator]));
         assert!(!required_action_satisfied("calculator", &[]));
+    }
+
+    #[test]
+    fn profile_off_for_pure_base_primitives() {
+        let mut mode = base_mode();
+        mode.sdk_primitives = super::super::sdk_primitives_for_caps(false, false)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(query_card_profile(&mode), QueryCardProfile::Off);
+    }
+
+    #[test]
+    fn profile_search_minimal_when_only_web() {
+        let mut mode = base_mode();
+        mode.sdk_primitives = super::super::sdk_primitives_for_caps(false, true)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(query_card_profile(&mode), QueryCardProfile::SearchMinimal);
+        assert!(!mode.sdk_primitives.iter().any(|p| p == "dense"));
+    }
+
+    #[test]
+    fn profile_full_when_rag_or_dual() {
+        let mut rag = base_mode();
+        rag.sdk_primitives = super::super::sdk_primitives_for_caps(true, false)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(query_card_profile(&rag), QueryCardProfile::Full);
+
+        let mut dual = base_mode();
+        dual.sdk_primitives = super::super::sdk_primitives_for_caps(true, true)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(query_card_profile(&dual), QueryCardProfile::Full);
+        assert!(dual.sdk_primitives.iter().any(|p| p == "dense"));
+        assert!(dual.sdk_primitives.iter().any(|p| p == "web"));
     }
 }
