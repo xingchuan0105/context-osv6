@@ -127,7 +127,12 @@ log "tauri build --target $TARGET --bundles nsis (+ sidecars + bundled runtime)"
 # Locate setup.exe — prefer Context-OS-Client_* (current product name), then legacy Context-OS_*
 NSIS_DIR="$DESKTOP/src-tauri/target/${TARGET}/release/bundle/nsis"
 SETUP=""
-VER="${VERSION:-0.1.0}"
+# Prefer package.json version (single source of truth with tauri.conf / Cargo.toml).
+VER="${VERSION:-}"
+if [[ -z "$VER" ]]; then
+  VER="$(node -p "require('$DESKTOP/package.json').version" 2>/dev/null || true)"
+fi
+VER="${VER:-0.2.0}"
 if [[ -f "$NSIS_DIR/Context-OS Client_${VER}_x64-setup.exe" ]]; then
   SETUP="$NSIS_DIR/Context-OS Client_${VER}_x64-setup.exe"
 elif [[ -f "$NSIS_DIR/Context-OS-Client_${VER}_x64-setup.exe" ]]; then
@@ -136,14 +141,14 @@ elif [[ -f "$NSIS_DIR/Context-OS_${VER}_x64-setup.exe" ]]; then
   SETUP="$NSIS_DIR/Context-OS_${VER}_x64-setup.exe"
 fi
 if [[ -z "$SETUP" || ! -f "$SETUP" ]]; then
-  SETUP="$(find "$NSIS_DIR" -type f -name 'Context-OS*-setup.exe' 2>/dev/null | head -1 || true)"
+  # Prefer newest Context-OS* setup by mtime (avoid stale 0.1.x head -1 lexical order)
+  SETUP="$(find "$NSIS_DIR" -type f \( -name 'Context-OS Client*-setup.exe' -o -name 'Context-OS*-setup.exe' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2- || true)"
 fi
 if [[ -z "$SETUP" || ! -f "$SETUP" ]]; then
-  # newest setup by mtime
   SETUP="$(find "$NSIS_DIR" -type f -name '*-setup.exe' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2- || true)"
 fi
 if [[ -z "$SETUP" || ! -f "$SETUP" ]]; then
-  SETUP="$(find "$DESKTOP/src-tauri/target" -type f -name 'Context-OS*-setup.exe' 2>/dev/null | head -1 || true)"
+  SETUP="$(find "$DESKTOP/src-tauri/target" -type f -name 'Context-OS*-setup.exe' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2- || true)"
 fi
 
 [[ -n "$SETUP" && -f "$SETUP" ]] || die "NSIS setup.exe not produced under $NSIS_DIR (check tauri build logs)"
