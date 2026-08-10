@@ -33,6 +33,8 @@ const FIXED_ROWS = [
     id: "agent_llm",
     provider: "deepseek",
     baseUrl: "https://api.deepseek.com",
+    /** Platform console for API keys (not the API base URL). */
+    websiteUrl: "https://platform.deepseek.com/api_keys",
     typeKey: "settingsProvider.type.agentLlm" as const,
     modelKey: "settingsProvider.model.deepseek" as const,
     targets: [{ purpose: "llm" as Purpose, modelHint: "deepseek-v4-flash" }],
@@ -41,6 +43,7 @@ const FIXED_ROWS = [
     id: "parse_llm",
     provider: "bailian",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    websiteUrl: "https://bailian.console.aliyun.com/",
     typeKey: "settingsProvider.type.parseLlm" as const,
     modelKey: "settingsProvider.model.bailian" as const,
     targets: [{ purpose: "llm" as Purpose, modelHint: "qwen3.7-flash" }],
@@ -49,6 +52,7 @@ const FIXED_ROWS = [
     id: "siliconflow",
     provider: "siliconflow",
     baseUrl: "https://api.siliconflow.cn/v1",
+    websiteUrl: "https://cloud.siliconflow.cn/account/ak",
     typeKey: "settingsProvider.type.embedRerank" as const,
     modelKey: "settingsProvider.model.siliconflow" as const,
     targets: [
@@ -160,13 +164,27 @@ function ProviderKeyRow({
     return formatUiMessage(locale, "settingsProviderPasteKey");
   })();
 
+  const openSiteLabel = formatUiMessage(locale, "settingsProviderOpenSite", {
+    name: modelLabel,
+  });
+
   return (
     <div className={styles.row} data-testid={`provider-row-${row.id}`}>
       <div className={styles.typeCell} title={typeLabel}>
         {typeLabel}
       </div>
-      <div className={styles.modelCell} title={modelLabel}>
-        {modelLabel}
+      <div className={styles.modelCell}>
+        <a
+          className={`app-link ${styles.modelLink}`}
+          href={row.websiteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={openSiteLabel}
+          aria-label={openSiteLabel}
+          data-testid={`provider-site-${row.id}`}
+        >
+          {modelLabel}
+        </a>
       </div>
       <div className={styles.keyCell}>
         <input

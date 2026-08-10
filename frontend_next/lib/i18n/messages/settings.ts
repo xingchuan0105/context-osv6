@@ -745,6 +745,10 @@ export const settingsMessages = {
     zh: "操作",
     en: "Actions",
   },
+  settingsProviderOpenSite: {
+    zh: "打开 {name} 官网 / 控制台（新标签）",
+    en: "Open {name} console (new tab)",
+  },
   settingsBillingManage: {
     zh: "管理",
     en: "Manage",

@@ -43,9 +43,13 @@
 }
 
 .modelCell {
-  color: hsl(var(--muted-foreground));
+  min-width: 0;
   font-size: var(--font-size-control);
   line-height: 1.35;
+}
+
+.modelLink {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
