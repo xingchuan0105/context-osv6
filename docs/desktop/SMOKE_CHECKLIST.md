@@ -5,6 +5,15 @@
 **用途**: 真机 / 本机验证；失败项记入文末表格  
 **设计**: `docs/desktop/2026-08-10-v0.2.0-free-client-release.md`
 
+### 远程下载校验（WSL，2026-08-10）
+
+| 检查 | 结果 |
+|------|------|
+| `GET …/v0.2.0/Context-OS-Client_0.2.0_x64-setup.exe` | HTTP 200，71372781 B |
+| SHA256 | `7b27933c…` **匹配** `latest.json` |
+| 文件类型 | PE32 NSIS self-extractor |
+| 干净 Win 安装/冷启动/BYOK | ☐ 仍需真机 |
+
 ---
 
 ## 0. 构建产物（A）
