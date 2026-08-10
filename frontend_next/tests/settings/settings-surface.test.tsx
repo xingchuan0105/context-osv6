@@ -315,7 +315,7 @@ describe("SettingsSurface", () => {
   it("renders tab links and loads billing data", async () => {
     renderWithQuery(<SettingsSurface activeTab={"billing" as SettingsTab} />);
 
-    expect(screen.getByRole("link", { name: "Membership" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Usage" }).getAttribute("href")).toBe(
       "/settings?tab=billing",
     );
     expect(screen.getByRole("link", { name: "Profile" }).getAttribute("href")).toBe(
@@ -345,9 +345,14 @@ describe("SettingsSurface", () => {
   it("updates profile and writes the returned user back to auth state", async () => {
     const user = userEvent.setup();
     mocks.updateUserMock.mockImplementation((nextUser: { full_name?: string | null }) => {
+      const current = mocks.authState.user;
+      if (!current) {
+        return;
+      }
       mocks.authState.user = {
-        ...mocks.authState.user,
+        ...current,
         ...nextUser,
+        full_name: nextUser.full_name ?? current.full_name,
       };
     });
 

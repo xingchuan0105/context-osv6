@@ -6,9 +6,9 @@ system_prompt_base: prompts/system/agent-base.md
 tool_pool: [user_context]
 skill_catalog:
   retrieve: [memory]
-  synthesis: [writing, format]
+  synthesis: [writing, format, brainstorming]
   # agent-base is the pure-chat voice; no mandatory synthesis.
-  # writing/format remain optional clusters via DisclosurePlanner.
+  # writing/format/brainstorming remain optional clusters via DisclosurePlanner.
 budget:
   max_iterations: 4
   by_user_tier:

@@ -177,6 +177,10 @@ export const helpMessages = {
     zh: "查看 Write 模式文档",
     en: "Read Write mode documentation",
   },
+  helpItemWriteMore: {
+    zh: "了解 Write 模式（长文自动写作）",
+    en: "Learn about Write mode (long-form auto-writing)",
+  },
   helpSubtitle: {
     zh: "按 Wiki 方式整理 Context-OS 的核心工作流、API 能力边界，以及出现问题时的优先排查路径。",
     en: "A wiki-style guide to Context-OS core workflows, API boundaries, and the first troubleshooting path to check.",

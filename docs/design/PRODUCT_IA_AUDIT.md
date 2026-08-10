@@ -111,3 +111,27 @@
 ---
 
 *审计作者: Path A 落地会话 · 2026-08-06 · 续 2026-08-07*
+
+---
+
+## 7. 增补审计 — 2026-08-07（对照 SaaS IA 最佳实践 + Cursor DESIGN.md 基线漂移）
+
+### 已关闭（本轮）
+
+- [x] 孤儿路由 `/licenses` + `/licenses/[id]`：删除（后端 license API 已全量 retired）
+- [x] 孤儿路由 `/help/write`：从 `/help` 增加 Write 模式小节入口
+- [x] 图表裸 hex（`share-views-bar-chart` `#3b82f6/#2563eb`）→ `--accent` token；tooltip 投影 → hairline
+- [x] 分享页新组件字重/投影违例（hero displayName 700、avatar 投影、扩展名徽章 700）→ 回归基线
+- [x] A2-1 导航单一数据源：`lib/navigation/nav-config.ts`（canonical 目的地 + label + palette 关键词集中）；command-palette / app-primary-nav / product-chrome-footer / product-guide-modal 四方改为从目录渲染；合并 13 个重复 i18n label 键；新增 `tests/navigation/nav-config.test.ts`（href→路由存在性机械校验）
+- [x] A2-2 深层页统一 App bar：`DashboardHeader` 迁移为 `components/app-top-bar.tsx`（`AppTopBar`，去掉未用的 avatarInitial prop）；挂载到 analytics / share center / api-access（仅非嵌入态）/ usage / help×3，通栏 fragment 布局与 dashboard 一致；页内对象返回链保留为 breadcrumb；PRODUCT_IA §5 新增「深层工具页」shell 行
+- [x] A2-3 字重回撤：37 处 CSS + 2 处 inline TSX 数字字重（500–700）全部删除（token 体系 `--font-weight-*` 恒 400，层级靠字号/间距）
+- [x] A2-4 双 checkout：`/upgrade/paywall` 剥离内置 checkout（删 createCheckoutSession / AlipayQrDialog / ConsentCheckbox / plans 加载），PaywallModal 改为限速说明 + `paywall-view-plans` CTA → canonical `/pricing`（§7-2 第三完成页消除）
+- [x] A2-5 非浮层投影：删除 10 处 drop shadow（导航 active 态、头像×3、referral 卡片、guide navButton、analytics pill、scroll-to-bottom pill；command-palette 面板与下拉菜单属浮层保留）
+- [x] A2-6 accent 稀缺性：5 处非 CTA 用途改中性 token（presetCard / drawerTabActive / inlineCitation hover / progress 最新点 / share tab 下划线）；保留：文字链接（--accent-text）、表单控件（checkbox/accent-color）、buyCardHighlight（转化 CTA 区）、focus-visible 环、图表系列色、公开分享页 banner 品牌渐变
+- [x] A2-7 workspace 顶栏：对象操作（分享/访问/API）收进「更多」overflow 菜单（复用 historyMenu 样式 + 外点/Esc 关闭），顶栏动作收敛到 客户端·升级·通知·账户 + 新建 + 更多；`_dashboard.css` 新增 ≤767px 规则（header wrap、隐藏次级入口胶囊）
+- [x] A2-8 admin 入口：AccountMenu 新增条件项「管理后台」（`probeAdminAccess` 探 `/admin/accounts` 403，react-query 缓存 5min；后端 role=super/ops/finance_admin 才显示）
+- [x] A2-9 规则硬强制：`tests/style/design-baseline.test.ts` 4 条守卫（数字字重 / inline fontWeight / 裸 hex / 非浮层投影），进 `pnpm test` 默认门禁；AGENTS.md Verify defaults 登记
+
+### Open
+
+（本轮 9 项全部关闭。后续触发新审计时重建本节。）

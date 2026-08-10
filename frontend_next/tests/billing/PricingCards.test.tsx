@@ -78,4 +78,32 @@ describe("PricingCards", () => {
     expect(screen.queryByText(/5 小时约/)).toBeNull();
     expect(screen.queryByText(/方案乘数 M=/)).toBeNull();
   });
+
+  it("shows only the CNY label when priceProvider is alipay", () => {
+    render(
+      <PricingCards
+        plans={plans}
+        highlightTier="plus"
+        locale="zh-CN"
+        onSelect={vi.fn()}
+        priceProvider="alipay"
+      />,
+    );
+    expect(screen.getByTestId("price-plus")).toHaveTextContent("¥49 / 月");
+    expect(screen.queryByText("$9 / 月")).toBeNull();
+  });
+
+  it("shows only the USD label when priceProvider is creem", () => {
+    render(
+      <PricingCards
+        plans={plans}
+        highlightTier="plus"
+        locale="en"
+        onSelect={vi.fn()}
+        priceProvider="creem"
+      />,
+    );
+    expect(screen.getByTestId("price-plus")).toHaveTextContent("$9 / 月");
+    expect(screen.queryByText("¥49 / 月")).toBeNull();
+  });
 });

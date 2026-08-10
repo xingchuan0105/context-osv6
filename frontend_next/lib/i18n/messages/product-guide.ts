@@ -188,32 +188,12 @@ export const productGuideMessages = {
     zh: "模块之间互相引用；从任一入口继续深入。",
     en: "Modules cross-link; continue from any entry.",
   },
-  "productGuide.graph.help": {
-    zh: "产品帮助",
-    en: "Product help",
-  },
   "productGuide.graph.api": {
     zh: "API / Agent 接入",
     en: "API / agent access",
   },
-  "productGuide.graph.pricing": {
-    zh: "定价",
-    en: "Pricing",
-  },
-  "productGuide.graph.desktop": {
-    zh: "客户端",
-    en: "Client",
-  },
-  "productGuide.graph.analytics": {
-    zh: "数据分析",
-    en: "Analytics",
-  },
   "productGuide.graph.providers": {
     zh: "模型服务商",
     en: "Providers",
-  },
-  "productGuide.graph.billing": {
-    zh: "充值",
-    en: "Top-up",
   },
 } satisfies Record<string, UiMessageDescriptor>;

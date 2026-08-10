@@ -69,7 +69,7 @@ Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_par
 | `agent-base` | Identity, language, final-answer shape, unconditional sandbox base (first-block rule, parallel fan-out, base primitives `history`/`user_profile`/`save`/`load`), memory protocol, pointer to injected modules |
 | `capabilities/<id>/contract.md` | Short evidence / coverage / cite contracts when mounted |
 | `capabilities/<id>/SKILL.md` | Sandbox method semantics, truncation, tables, method risk |
-| `clusters/{docscope, memory, writing, format, index, workspace-create, heavytail-*}` | Thick world models (history / document inventory, answer style, write-refine metrics, MCP helpers) |
+| `clusters/{docscope, memory, writing, format, brainstorming, verify, index, workspace-create, heavytail-*}` | Thick world models (history / document inventory, answer style, clarify protocol, write-refine metrics, MCP helpers) |
 | `loop/*` | What happened this round (budget, sandbox, retrieval_summary) |
 
 ## Clusters
@@ -77,8 +77,11 @@ Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_par
 | Id | Role |
 |----|------|
 | `docscope` | Document inventory (scope-level aggregate) + teaching chain `docscope` → `doc_summary` (joint archive: metadata + summary + sections). Injected via `<docscope_metadata>` when requested with `skill_request ["docscope"]` |
-| `memory` | History / user profile; **mandatory base disclosure every round** (`derive_mandatory_retrieve`) |
-| `writing` / `format` | Answer style / shape (also on retrieve when request has writing/format hints — SaC ProseOnly path) |
+| `memory` | History / user profile; on-demand via skill_request (agent-base pointer) |
+| `writing` | Answer style layer (v3.1): invariants + max-1 style spoke (`concise` / `professional` / `academic` / `storytelling`) |
+| `brainstorming` | Clarify/explore **behavior** protocol (not a writing style spoke) |
+| `format` | Output shape (html / slides / outline / teaching) |
+| `verify` | Post-synthesis adjudicate skill |
 | `heavytail-*` | Write-refine metrics |
 | `index` / `workspace-create` | MCP / automation helpers |
 

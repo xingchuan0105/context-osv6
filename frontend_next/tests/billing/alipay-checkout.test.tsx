@@ -84,6 +84,7 @@ describe("Alipay QR checkout (pricing page)", () => {
       });
     });
     expect(await screen.findByText("支付宝扫码支付")).toBeTruthy();
+    expect(screen.queryByTestId("topup-channel-hint")).toBeNull();
     expect(screen.getByRole("img", { name: "支付宝扫码支付" }).getAttribute("src")).toContain(
       "data:image",
     );
@@ -141,6 +142,62 @@ describe("Alipay QR checkout (pricing page)", () => {
       provider: "creem",
     });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("lets a zh-CN user switch to creem and redirects to the checkout url", async () => {
+    vi.mocked(createCheckoutSession).mockResolvedValue({
+      url: "https://checkout.example/session-2",
+      session_id: "session-2",
+    });
+
+    render(<PricingPageClient />);
+    // Default stays alipay under zh-CN; the user switches channels explicitly.
+    expect(screen.getByTestId("pay-method-alipay").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("price-plus")).toHaveTextContent("¥49 / 月");
+    fireEvent.click(screen.getByTestId("pay-method-creem"));
+    // Cards follow the selected channel's currency; top-up shows the USD-settlement hint.
+    expect(screen.getByTestId("price-plus")).toHaveTextContent("$9 / 月");
+    expect(screen.queryByText("¥49 / 月")).toBeNull();
+    expect(screen.getByTestId("topup-channel-hint")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /升级 Plus/ }));
+
+    await waitFor(() => {
+      expect(harness.pushMock).toHaveBeenCalledWith("https://checkout.example/session-2");
+    });
+    expect(createCheckoutSession).toHaveBeenCalledWith("token-1", {
+      plan_id: "plus",
+      provider: "creem",
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("lets an en user switch to alipay and renders the QR dialog", async () => {
+    harness.locale = "en";
+    vi.mocked(createCheckoutSession).mockResolvedValue({
+      url: "",
+      session_id: "session-3",
+      qr_code: "alipay-qr-string",
+      order_id: "order-3",
+    });
+    vi.mocked(getBillingOrderStatus).mockResolvedValue({
+      order_id: "order-3",
+      status: "pending",
+      plan_id: "plus",
+    });
+
+    render(<PricingPageClient />);
+    expect(screen.getByTestId("pay-method-creem").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByTestId("pay-method-alipay"));
+    fireEvent.click(screen.getByRole("button", { name: /Upgrade to Plus/ }));
+
+    await waitFor(() => {
+      expect(createCheckoutSession).toHaveBeenCalledWith("token-1", {
+        plan_id: "plus",
+        provider: "alipay",
+      });
+    });
+    expect(await screen.findByText("Pay with Alipay")).toBeTruthy();
+    expect(harness.pushMock).not.toHaveBeenCalled();
   });
 });
 

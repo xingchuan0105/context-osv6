@@ -5,11 +5,6 @@ export const workspaceMessages = {
     zh: "分享",
     en: "Share",
   },
-  /** Object-level share traffic → Share center (not a separate /analyze page). */
-  workspaceShareTraffic: {
-    zh: "访问",
-    en: "Traffic",
-  },
   workspaceApi: {
     zh: "API",
     en: "API",
@@ -113,14 +108,6 @@ export const workspaceMessages = {
   workspaceSearchDialogLabel: {
     zh: "搜索会话",
     en: "Search sessions",
-  },
-  workspaceSearchTitle: {
-    zh: "搜索会话",
-    en: "Search sessions",
-  },
-  workspaceSearchSubtitle: {
-    zh: "按关键词搜索会话标题、摘要和聊天正文。",
-    en: "Search session titles, summaries, and chat content by keyword.",
   },
   workspaceSearchPlaceholder: {
     zh: "输入关键词搜索聊天正文",
@@ -758,6 +745,26 @@ export const workspaceMessages = {
   "progress.fallback_unavailable": {
     zh: "补充检索不可用",
     en: "Fallback retrieval unavailable",
+  },
+  "progress.final_check_repair": {
+    zh: "正在整理答复格式",
+    en: "Fixing answer format",
+  },
+  "progress.final_check_rerender": {
+    zh: "正在依据材料重写答复",
+    en: "Rewriting answer from evidence",
+  },
+  "progress.final_check_fallback": {
+    zh: "答复格式仍不完整，使用简短说明",
+    en: "Answer format incomplete; using a short notice",
+  },
+  "progress.final_check_degraded": {
+    zh: "材料不足，使用简短说明",
+    en: "Insufficient material; using a short notice",
+  },
+  "progress.synthesis_held_for_verify": {
+    zh: "草稿已就绪，正在核对",
+    en: "Draft ready; verifying",
   },
   "progress.detail.query": {
     zh: "「{query}」",

@@ -140,6 +140,10 @@ print("WEATHER_RESULT:", weather)
         assert!(final_answer_contract_violation(
             "先看看命中。\n<code language=\"python\">\npass\n</code>"
         ));
+        // Provider protocol substring (any pipe glyph around DSML).
+        assert!(final_answer_contract_violation(
+            "<｜｜DSML｜｜tool_calls>\ninvoke\n</｜｜DSML｜｜tool_calls>"
+        ));
         assert!(!final_answer_contract_violation(
             "根据回传，概念阶段第一个活动是接受任务书（LPDT-03）。\n\nSELECTED: #2"
         ));
@@ -152,6 +156,10 @@ print("WEATHER_RESULT:", weather)
             ("code_only", "```python\nprint(1)\n```"),
             ("host_shell", "<retrieval_summary>"),
             ("template_artifact", "</response>"),
+            (
+                "provider_protocol",
+                "<｜｜DSML｜｜tool_calls>\ninvoke\n</｜｜DSML｜｜tool_calls>",
+            ),
             ("executable_code", "先看看命中。\n<code language=\"python\">\npass\n</code>"),
             ("trailing_code_fence", "先确认字段形态。\n```python\npass\n```"),
         ];

@@ -23,7 +23,7 @@ pub(crate) use auth::profile::{
     auth_change_password_handler, auth_delete_profile_media_handler, auth_legal_status_handler,
     auth_logout_handler, auth_me_handler, auth_record_legal_acceptance_handler,
     auth_update_profile_handler, auth_upload_profile_media_handler, public_user_media_handler,
-    usage_limit_handler,
+    public_user_shares_handler, usage_limit_handler,
 };
 pub(crate) use auth::reset::{
     auth_confirm_reset_password_handler, auth_reset_password_handler, auth_reset_request_handler,

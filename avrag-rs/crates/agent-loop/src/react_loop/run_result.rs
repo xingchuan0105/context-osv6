@@ -107,5 +107,8 @@ pub fn build_run_result(
         total_elapsed_ms: Some(total_elapsed_ms),
         routing_decision: None,
         query_card: ctx.query_card.cloned(),
+        verify: None,
+        knockout: None,
+        ews: None,
     }
 }

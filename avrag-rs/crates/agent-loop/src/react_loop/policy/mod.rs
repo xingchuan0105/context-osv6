@@ -44,6 +44,7 @@ impl LoopPolicy {
         skill_request: Option<&[String]>,
         already_disclosed: &std::collections::HashSet<String>,
         request: Option<&crate::runtime::AgentRequest>,
+        reexpose_kb_api_detail: bool,
     ) -> DisclosurePlan {
         DisclosurePlanner::plan_retrieve(
             mode,
@@ -51,17 +52,21 @@ impl LoopPolicy {
             skill_request,
             already_disclosed,
             request,
+            reexpose_kb_api_detail,
         )
     }
 }
 
 /// D9: derive the mandatory retrieve skill list straight from capability flags.
 ///
-/// The mode YAML `skill_catalog.mandatory` indirect layer is gone; `memory`
-/// is the always-on base disclosure in every mode (D8), `knowledge-base` and
-/// `search` are mandatory only when the matching capability is mounted.
+/// The mode YAML `skill_catalog.mandatory` indirect layer is gone.
+/// `knowledge-base` / `search` are mandatory only when the matching capability
+/// is mounted. **Memory is not mandatory full-body** (2026-08-10): agent-base
+/// already points at `client.history` / `user_profile` and
+/// `{"skill_request":["memory"]}` for the thick body — avoids per-round tax
+/// on pure fact questions.
 pub fn derive_mandatory_retrieve(rag: bool, search: bool) -> Vec<String> {
-    let mut ids = vec!["memory".to_string()];
+    let mut ids = Vec::new();
     if rag {
         ids.push("knowledge-base".to_string());
     }

@@ -62,7 +62,7 @@ impl ReActLoop {
             // Observability only — PolicyEnforcer remains the allow/deny truth
             // inside dispatch_tool. Hooks must not grow parallel allowlists.
             let pre = hooks.before_tool_call(&call.tool, &call.args);
-            let result = if pre.block {
+            let mut result = if pre.block {
                 tracing::info!(
                     tool = %call.tool,
                     iteration,
@@ -90,6 +90,16 @@ impl ReActLoop {
                 )
                 .await
             };
+            // Evidence knockout: same counters as SaC bridge — filter Ok
+            // retrieval payloads before they enter tool messages / tool_results.
+            let mut native_reexposed = Vec::new();
+            if result.status == contracts::ToolStatus::Ok {
+                if let Ok(mut ko) = state.knockout.lock() {
+                    if let Some(data) = result.data.as_mut() {
+                        native_reexposed = ko.apply_to_bridge_data(data);
+                    }
+                }
+            }
             hooks.after_tool_call(
                 &call.tool,
                 match result.status {
@@ -137,10 +147,23 @@ impl ReActLoop {
                 .await;
 
             tool_messages.push(build_tool_message(call_id, &call.tool, &result));
+            if !native_reexposed.is_empty() {
+                let list =
+                    crate::helpers::KnockoutState::format_reexpose_list(&native_reexposed);
+                tool_messages.push(ChatMessage::user(
+                    super::prompt_assets::knockout_reexposed_observation(&list),
+                ));
+                // Drain pending so codegen path does not double-emit.
+                if let Ok(mut ko) = state.knockout.lock() {
+                    let _ = ko.take_reexposed();
+                }
+            }
             state.tool_results.push(result);
         }
 
         self.update_state_after_tool_calls(state, &calls, &call_ids, llm_response, tool_messages);
+        // Re-apply KEEP after new tool_results (same-turn alias resolution).
+        Self::apply_ews_from_model_text(state, &llm_response.content);
 
         // Search 空转早收敛: ≥2 consecutive empty web_search/web_fetch with no
         // hits in the turn → leave retrieve early (handoff / synthesis) instead

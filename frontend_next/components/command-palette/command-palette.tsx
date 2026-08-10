@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth/context";
 import { listWorkspaces, type DashboardWorkspace } from "../../lib/dashboard/client";
 import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
+import { paletteNavEntries } from "../../lib/navigation/nav-config";
 import {
   searchProductIndex,
   type GlobalSearchResponse,
@@ -23,87 +24,6 @@ type PaletteItem = {
   href: string;
   keywords: string;
 };
-
-type StaticCommand = {
-  id: string;
-  group: Exclude<PaletteGroup, "sessions" | "workspaces" | "sources">;
-  labelKey: UiMessageKey;
-  href: string;
-  keywords: string;
-};
-
-const STATIC_COMMANDS: StaticCommand[] = [
-  {
-    id: "dashboard",
-    group: "nav",
-    labelKey: "commandPalette.item.dashboard",
-    href: "/dashboard",
-    keywords: "dashboard workspaces home 工作台",
-  },
-  {
-    id: "share-traffic",
-    group: "nav",
-    labelKey: "commandPalette.item.shareTraffic",
-    href: "/dashboard/analytics",
-    keywords: "share analytics traffic views 分享 访问",
-  },
-  {
-    id: "settings",
-    group: "nav",
-    labelKey: "commandPalette.item.settings",
-    href: "/settings",
-    keywords: "settings profile preferences 设置",
-  },
-  {
-    id: "providers",
-    group: "nav",
-    labelKey: "commandPalette.item.providers",
-    href: "/settings?tab=providers",
-    keywords: "providers byok llm key 模型 密钥",
-  },
-  {
-    id: "billing",
-    group: "billing",
-    labelKey: "commandPalette.item.billing",
-    href: "/settings?tab=billing",
-    keywords: "billing wallet balance 账单 余额",
-  },
-  {
-    id: "pricing",
-    group: "billing",
-    labelKey: "commandPalette.item.pricing",
-    href: "/pricing",
-    keywords: "pricing plan membership upgrade 定价 会员 升级",
-  },
-  {
-    id: "topup",
-    group: "billing",
-    labelKey: "commandPalette.item.topup",
-    href: "/pricing#topup",
-    keywords: "topup recharge wallet 充值 余额",
-  },
-  {
-    id: "desktop",
-    group: "help",
-    labelKey: "commandPalette.item.desktop",
-    href: "/desktop",
-    keywords: "desktop client download mcp 客户端 下载",
-  },
-  {
-    id: "help",
-    group: "help",
-    labelKey: "commandPalette.item.help",
-    href: "/help",
-    keywords: "help guide docs 帮助 上手",
-  },
-  {
-    id: "api-access",
-    group: "help",
-    labelKey: "commandPalette.item.apiAccess",
-    href: "/help/api-access",
-    keywords: "api agent mcp cli access 接入",
-  },
-];
 
 const GROUP_ORDER: PaletteGroup[] = [
   "sessions",
@@ -195,14 +115,15 @@ export function CommandPaletteHost() {
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Static commands come from the canonical nav catalog (PRODUCT_IA §4).
   const staticItems: PaletteItem[] = useMemo(
     () =>
-      STATIC_COMMANDS.map((cmd) => ({
-        id: cmd.id,
-        group: cmd.group,
-        label: formatUiMessage(locale, cmd.labelKey),
-        href: cmd.href,
-        keywords: cmd.keywords,
+      paletteNavEntries().map((entry) => ({
+        id: entry.id,
+        group: entry.paletteGroup as PaletteGroup,
+        label: formatUiMessage(locale, entry.labelKey),
+        href: entry.href,
+        keywords: entry.paletteKeywords ?? "",
       })),
     [locale],
   );

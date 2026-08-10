@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import { useUiPreferences } from "../../../lib/ui-preferences";
+import { AppTopBar } from "../../../components/app-top-bar";
 
 function HelpSection({
   title,
@@ -29,9 +30,16 @@ export default function HelpPage() {
   const { locale } = useUiPreferences();
 
   return (
-    <main className="app-page-shell">
+    <>
+      <AppTopBar locale={locale} />
+      <main className="app-page-shell">
       <div className="app-page-center" style={{ display: "grid", gap: "1rem", maxWidth: "72rem" }}>
         <header style={{ display: "grid", gap: "0.75rem" }}>
+          <div>
+            <Link className="app-link app-link-muted" href="/dashboard">
+              {formatUiMessage(locale, "helpBackDashboard")}
+            </Link>
+          </div>
           <div style={{ alignItems: "start", display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between" }}>
             <div>
               <h1 className="app-page-title">{formatUiMessage(locale, "helpTitle")}</h1>
@@ -40,9 +48,6 @@ export default function HelpPage() {
               </p>
             </div>
             <div className="app-button-row">
-              <Link className="app-button-secondary" href="/dashboard">
-                {formatUiMessage(locale, "helpBackDashboard")}
-              </Link>
               <Link className="app-button-secondary" href="/settings?tab=profile">
                 {formatUiMessage(locale, "helpAccountSettings")}
               </Link>
@@ -65,6 +70,15 @@ export default function HelpPage() {
             formatUiMessage(locale, "helpItemWorkspace1"),
             formatUiMessage(locale, "helpItemWorkspace2"),
             formatUiMessage(locale, "helpItemWorkspace3"),
+          ]}
+        />
+
+        <HelpSection
+          title={formatUiMessage(locale, "helpSectionWriteTitle")}
+          items={[
+            <Link className="app-link app-link-muted" href="/help/write">
+              {formatUiMessage(locale, "helpItemWriteMore")}
+            </Link>,
           ]}
         />
 
@@ -121,6 +135,7 @@ export default function HelpPage() {
           ]}
         />
       </div>
-    </main>
+      </main>
+    </>
   );
 }

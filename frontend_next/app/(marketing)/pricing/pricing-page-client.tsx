@@ -19,7 +19,7 @@ import { useAuth } from "@/lib/auth/context";
 import type { BillingPlan } from "@/lib/billing/api";
 import { billingApi } from "@/lib/billing/api";
 import { MARKETING_BILLING_PLANS, plansForInterval } from "@/lib/billing/publicPlans";
-import { billingProviderForLocale, planPriceLabel } from "@/lib/billing/provider";
+import { billingProviderForLocale, planPriceLabelForProvider, type ActiveBillingProvider } from "@/lib/billing/provider";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./pricing.module.css";
@@ -65,6 +65,15 @@ export function PricingPageClient() {
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutNotice, setCheckoutNotice] = useState("");
   const [alipaySession, setAlipaySession] = useState<AlipaySession | null>(null);
+  // Payment channel is decoupled from locale: locale only sets the default
+  // (zh-CN → alipay, en → creem); both channels stay selectable.
+  const [payProvider, setPayProvider] = useState<ActiveBillingProvider>(() =>
+    billingProviderForLocale(locale),
+  );
+
+  useEffect(() => {
+    setPayProvider(billingProviderForLocale(locale));
+  }, [locale]);
 
   const [packs, setPacks] = useState<TopupPack[]>(DEFAULT_TOPUP_PACKS);
   const [balanceFen, setBalanceFen] = useState<number | null>(null);
@@ -120,7 +129,7 @@ export function PricingPageClient() {
       await recordPaymentLegalAcceptance(auth.token, paymentConsented);
       const checkout = await createCheckoutSession(auth.token, {
         plan_id: planId,
-        provider: billingProviderForLocale(locale),
+        provider: payProvider,
       });
       if (checkout.qr_code && checkout.order_id) {
         const plan = allPlans.find((p) => p.plan_id === planId);
@@ -128,7 +137,8 @@ export function PricingPageClient() {
           qrCode: checkout.qr_code,
           orderId: checkout.order_id,
           planName: plan?.name ?? planId,
-          priceLabel: plan ? planPriceLabel(plan, locale) : "",
+          // Alipay bills CNY — show the CNY label even under en locale.
+          priceLabel: plan ? planPriceLabelForProvider(plan, "alipay") : "",
           kind: "subscription",
         });
       } else if (checkout.url) {
@@ -159,7 +169,7 @@ export function PricingPageClient() {
       const checkout = await createCheckoutSession(auth.token, {
         kind: "wallet_topup",
         topup_pack_id: pack.pack_id,
-        provider: billingProviderForLocale(locale),
+        provider: payProvider,
       });
       if (checkout.qr_code && checkout.order_id) {
         setAlipaySession({
@@ -227,6 +237,45 @@ export function PricingPageClient() {
             </span>
           </button>
         </div>
+        <div
+          className={styles.billingToggle}
+          role="group"
+          aria-label={formatUiMessage(locale, "pricingPayMethodLabel")}
+          data-testid="pay-method-selector"
+        >
+          <span className={styles.payMethodLabel}>
+            {formatUiMessage(locale, "pricingPayMethodLabel")}
+          </span>
+          {(["alipay", "creem"] as const).map((channel) => {
+            const isActive = payProvider === channel;
+            const isRecommended = billingProviderForLocale(locale) === channel;
+            return (
+              <button
+                key={channel}
+                type="button"
+                className={`${styles.toggleButton} ${isActive ? styles.toggleActive : ""}`}
+                aria-pressed={isActive}
+                data-testid={`pay-method-${channel}`}
+                onClick={() => setPayProvider(channel)}
+              >
+                {channel === "alipay"
+                  ? formatUiMessage(locale, "pricingPayMethodAlipay")
+                  : "Creem"}
+                <span className={styles.toggleHintInline}>
+                  {formatUiMessage(
+                    locale,
+                    channel === "alipay" ? "pricingPayMethodAlipayHint" : "pricingPayMethodCreemHint",
+                  )}
+                </span>
+                {isRecommended ? (
+                  <span className={styles.recoBadge}>
+                    {formatUiMessage(locale, "pricingPayMethodRecommended")}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <section aria-labelledby="pricing-membership-heading">
@@ -234,7 +283,13 @@ export function PricingPageClient() {
           {formatUiMessage(locale, "pricingMembershipTitle")}
         </h2>
         <p className={styles.sectionLead}>{formatUiMessage(locale, "pricingMembershipLead")}</p>
-        <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={handleSelect} />
+        <PricingCards
+          plans={plans}
+          highlightTier="plus"
+          locale={locale}
+          onSelect={handleSelect}
+          priceProvider={payProvider}
+        />
       </section>
 
       {auth.token ? (
@@ -298,6 +353,11 @@ export function PricingPageClient() {
 
         <div className={styles.topupActions}>
           <p className={styles.packLabel}>{formatUiMessage(locale, "pricingTopupPacksLabel")}</p>
+          {payProvider === "creem" ? (
+            <p className={styles.topupChannelHint} data-testid="topup-channel-hint">
+              {formatUiMessage(locale, "pricingTopupCreemHint")}
+            </p>
+          ) : null}
           <div className={styles.packGrid} data-testid="pricing-topup-packs">
             {packs.map((pack) => (
               <button

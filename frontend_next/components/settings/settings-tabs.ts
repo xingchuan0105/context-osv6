@@ -12,6 +12,22 @@ export const SETTINGS_TABS = [
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
+/** i18n label key per tab — single source for page rail + quick-modal rail. */
+export function settingsTabLabelKey(tab: SettingsTab) {
+  switch (tab) {
+    case "billing":
+      return "settings.tabs.billing" as const;
+    case "profile":
+      return "settings.tabs.profile" as const;
+    case "providers":
+      return "settings.tabs.providers" as const;
+    case "preferences":
+      return "settings.tabs.appearance" as const;
+    case "security":
+      return "settings.tabs.security" as const;
+  }
+}
+
 /** Default when /settings has no ?tab= (account, not paywall). */
 export const DEFAULT_SETTINGS_TAB: SettingsTab = "profile";
 

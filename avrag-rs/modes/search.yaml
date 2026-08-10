@@ -8,9 +8,9 @@ tool_pool: []
 inject_retrieval_query: true
 skill_catalog:
   retrieve: [search, memory]
-  synthesis: [writing, format]
-  # D9: no `mandatory` here — assemble_mode derives it from the capability
-  # set (memory base + search when the capability is mounted).
+  synthesis: [writing, format, brainstorming]
+  # D9: no `mandatory` here — assemble_mode derives search when web is mounted
+  # (memory is on-demand via skill_request; agent-base keeps the pointer).
 budget:
   max_iterations: 8
   by_user_tier:
@@ -31,8 +31,8 @@ loop_exit:
   allow_content_early_stop: false
   skip_synthesis_on_direct_answer: false
   forbid_retrieve_direct_answer: true
-  short_judge: true
-  judge_max_fail_rounds: 3
+  verify: true
+  verify_max_fail_rounds: 3
 synthesis_output:
   contract: prose_only
 auto_fallback:

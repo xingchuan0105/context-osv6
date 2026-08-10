@@ -378,23 +378,25 @@ export async function streamWorkspaceChat(
   token: string,
   request: ChatRequest,
   onEvent: (event: ChatEvent) => void | Promise<void>,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; extraHeaders?: Record<string, string> },
 ): Promise<void> {
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream",
+    "Content-Type": "application/json",
+    ...(options?.extraHeaders ?? {}),
+  };
   const response = await fetchResponse(
     "/api/v1/chat",
     {
       method: "POST",
       signal: options?.signal,
-      headers: {
-        Accept: "text/event-stream",
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         ...request,
         stream: true,
       }),
     },
-    { token },
+    { token: token.trim() || undefined },
   );
 
   await parseWorkspaceChatEventStream(response.body, onEvent);

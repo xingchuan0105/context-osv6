@@ -58,6 +58,9 @@
 
 ## 进行中的工作流
 
+- [`engineering/2026-08-07-kb-skill-hardening-and-evidence-working-set-design.md`](engineering/2026-08-07-kb-skill-hardening-and-evidence-working-set-design.md) — **KB skill 硬化 + 强制留存/宿主驱逐（v2 综合稿）**：skill 去重/contract 定位；KNOCKOUT 激励倒挂；台账/KEEP + 近 K 轮折叠 + 终答复读；W0–W5
+- [`engineering/2026-08-07-evidence-knockout-design.md`](engineering/2026-08-07-evidence-knockout-design.md) — 证据敲除 KNOCKOUT（**V1 硬抑制已落地**；V2 改向见上篇 §4）
+- [`engineering/2026-08-07-retrieve-synthesis-verify-loop-design.md`](engineering/2026-08-07-retrieve-synthesis-verify-loop-design.md) — 三环 retrieve→synthesis→verify
 - [`plans/2026-08-02-skillopt-layered-training-impl.md`](plans/2026-08-02-skillopt-layered-training-impl.md) + `…-landing.md` — SkillOpt 分层训练（进行中）
 - [`plans/2026-08-02-final-answer-checkpoint-impl.md`](plans/2026-08-02-final-answer-checkpoint-impl.md) + `…-acceptance.md` — 终答检查点
 - [`engineering/2026-08-02-golden149-llm-behavior-report.md`](engineering/2026-08-02-golden149-llm-behavior-report.md) / `…-regression-report.md` — 最新 golden149 行为/回归报告

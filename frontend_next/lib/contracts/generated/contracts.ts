@@ -142,6 +142,7 @@ export interface AuthUserDto {
 	contact_url?: string;
 	avatar_url?: string;
 	banner_url?: string;
+	public_profile_enabled?: boolean;
 }
 
 export interface AuthPayload {
@@ -432,6 +433,8 @@ export interface ChatRequest {
 	debug?: boolean;
 	language?: string;
 	format_hint?: string;
+	/** Cloudflare Turnstile token for anonymous share chat (ADR-0010 §9). */
+	turnstile_token?: string;
 }
 
 export interface ChatSession {
@@ -749,6 +752,16 @@ export interface ShareAnalyticsResponse {
 	views_by_day: Record<string, number>;
 }
 
+export interface ShareOwnerCard {
+	user_id?: string;
+	display_name: string;
+	bio?: string;
+	contact_url?: string;
+	avatar_url?: string;
+	banner_url?: string;
+	profile_enabled?: boolean;
+}
+
 export interface ShareSettings {
 	share_token: string;
 	access_level: string;
@@ -779,14 +792,6 @@ export interface SharedSource {
 	status: string;
 }
 
-export interface ShareOwnerCard {
-	display_name: string;
-	bio?: string;
-	contact_url?: string;
-	avatar_url?: string;
-	banner_url?: string;
-}
-
 export interface SharedWorkspacePayload {
 	knowledge_base: SharedKnowledgeBase;
 	share: SharedShareInfo;
@@ -810,6 +815,13 @@ export interface SourcesResponse {
 export interface UpdateChatSessionRequest {
 	title?: string;
 	pinned?: boolean;
+}
+
+export interface UpdateProfileRequest {
+	full_name?: string;
+	bio?: string;
+	contact_url?: string;
+	public_profile_enabled?: boolean;
 }
 
 export interface UpdateWorkspaceNoteRequest {

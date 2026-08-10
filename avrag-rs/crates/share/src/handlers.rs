@@ -5,8 +5,8 @@ use common::{AppError, ShareTokenResponse};
 use std::sync::Arc;
 
 use crate::{
-    AccessLevel, WorkspaceMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics,
-    ShareQuotaSummary, ShareService, ShareSettings, SharedWorkspacePayload,
+    AccessLevel, WorkspaceMember, PublicOwnerShareItem, PublicShareChatContext, ShareAccessLog,
+    ShareAnalytics, ShareQuotaSummary, ShareService, ShareSettings, SharedWorkspacePayload,
 };
 
 pub async fn handle_create_share_link(
@@ -54,6 +54,17 @@ pub async fn handle_resolve_public_share_chat_context(
     let service = ShareService::new(store);
     service
         .resolve_public_share_chat_context(token)
+        .await
+        .map_err(map_anyhow_error)
+}
+
+pub async fn handle_list_public_shares_for_owner(
+    user_id: uuid::Uuid,
+    store: Arc<dyn ShareStorePort>,
+) -> Result<Vec<PublicOwnerShareItem>, AppError> {
+    let service = ShareService::new(store);
+    service
+        .list_public_shares_for_owner(user_id)
         .await
         .map_err(map_anyhow_error)
 }

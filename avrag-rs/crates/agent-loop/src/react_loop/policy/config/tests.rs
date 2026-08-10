@@ -98,21 +98,17 @@ fn rag_mode_has_mandatory_retrieve_codegen() {
     );
     assert_eq!(
         super::super::derive_mandatory_retrieve(true, false),
-        vec!["memory".to_string(), "knowledge-base".to_string()]
+        vec!["knowledge-base".to_string()]
     );
     assert_eq!(
         super::super::derive_mandatory_retrieve(false, true),
-        vec!["memory".to_string(), "search".to_string()]
+        vec!["search".to_string()]
     );
     assert_eq!(
         super::super::derive_mandatory_retrieve(true, true),
-        vec![
-            "memory".to_string(),
-            "knowledge-base".to_string(),
-            "search".to_string()
-        ]
+        vec!["knowledge-base".to_string(), "search".to_string()]
     );
-    assert_eq!(super::super::derive_mandatory_retrieve(false, false), vec!["memory".to_string()]);
+    assert!(super::super::derive_mandatory_retrieve(false, false).is_empty());
 }
 
 #[test]

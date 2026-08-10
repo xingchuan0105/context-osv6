@@ -14,26 +14,6 @@
   gap: var(--space-md);
 }
 
-.header {
-  display: grid;
-  gap: var(--space-md);
-}
-
-.intro {
-  display: grid;
-  gap: var(--space-sm);
-  max-width: 42rem;
-}
-
-.overline {
-  color: hsl(var(--muted-foreground));
-  font-size: var(--font-size-control);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.08em;
-  margin: 0;
-  text-transform: uppercase;
-}
-
 .overlineSmall {
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-meta);

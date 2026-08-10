@@ -24,7 +24,6 @@
   padding: 0 var(--space-sm);
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-caption);
-  font-weight: 600;
 }
 
 .row {
@@ -39,7 +38,6 @@
 }
 
 .typeCell {
-  font-weight: 600;
   color: hsl(var(--foreground));
   line-height: 1.35;
 }

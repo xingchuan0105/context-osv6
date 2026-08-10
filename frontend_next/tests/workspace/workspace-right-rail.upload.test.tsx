@@ -78,11 +78,11 @@ describe("WorkspaceRightRail upload", () => {
       expect(mocks.listWorkspaceSourcesMock).toHaveBeenCalledTimes(1);
     });
 
-    await user.click(screen.getByRole("button", { name: "New Source" }));
+    await user.click(screen.getByRole("button", { name: "New source" }));
 
-    expect(screen.getByRole("tab", { name: "Upload File" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Upload file" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByLabelText("Source URLs")).toBeNull();
-    expect((screen.getByRole("button", { name: "Browse Files" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Browse files" }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText(/Supported upload formats:/)).toBeTruthy();
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement | null;
@@ -106,7 +106,7 @@ describe("WorkspaceRightRail upload", () => {
     expect(within(screen.getByText("notes.md").closest("li")!).getByRole("button", { pressed: true })).toBeTruthy();
     expect(getWorkspaceUiState("ws-1").chatMode).toBe("rag");
     expect(getWorkspaceUiState("ws-1").chatModePreference).toBe("auto");
-    expect(screen.queryByRole("dialog", { name: "Add New Source" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Add new source" })).toBeNull();
   });
 
   it("keeps chat mode off rag for queued uploads without ready sources", async () => {
@@ -132,7 +132,7 @@ describe("WorkspaceRightRail upload", () => {
       expect(mocks.listWorkspaceSourcesMock).toHaveBeenCalledTimes(1);
     });
 
-    await user.click(screen.getByRole("button", { name: "New Source" }));
+    await user.click(screen.getByRole("button", { name: "New source" }));
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(fileInput).not.toBeNull();
@@ -177,12 +177,12 @@ describe("WorkspaceRightRail upload", () => {
       expect(mocks.listWorkspaceSourcesMock).toHaveBeenCalledTimes(1);
     });
 
-    await user.click(screen.getByRole("button", { name: "New Source" }));
-    await user.click(screen.getByRole("tab", { name: "Paste Text" }));
+    await user.click(screen.getByRole("button", { name: "New source" }));
+    await user.click(screen.getByRole("tab", { name: "Paste text" }));
 
     expect(screen.queryByLabelText("Title")).toBeNull();
 
-    const saveButton = screen.getByRole("button", { name: "Save as Source" }) as HTMLButtonElement;
+    const saveButton = screen.getByRole("button", { name: "Save as source" }) as HTMLButtonElement;
     expect(saveButton.disabled).toBe(true);
 
     await user.type(screen.getByLabelText("Text"), "Line 1{enter}Line 2");
@@ -208,6 +208,6 @@ describe("WorkspaceRightRail upload", () => {
     await waitFor(() => {
       expect(mocks.listWorkspaceSourcesMock).toHaveBeenCalledTimes(2);
     });
-    expect(screen.queryByRole("dialog", { name: "Add New Source" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Add new source" })).toBeNull();
   });
 });

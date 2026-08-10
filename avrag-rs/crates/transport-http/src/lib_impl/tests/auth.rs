@@ -769,6 +769,178 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
 }
 
 
+#[tokio::test]
+async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_database_available() {
+    let Some(state) = pg_test_app_state().await else {
+        return;
+    };
+    let app = build_router(state.clone());
+    let email = format!("public-shares-{}@example.test", Uuid::new_v4());
+
+    let register_req = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(register_body(&email, "Public Shares User")))
+        .unwrap();
+    let register_resp = app.clone().oneshot(register_req).await.unwrap();
+    assert_eq!(register_resp.status(), StatusCode::CREATED);
+    let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
+    let token = register_payload["data"]["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let claims = verify_jwt(&token).expect("jwt should decode");
+    let user_id = Uuid::parse_str(&claims.sub).unwrap();
+    let owner_user_id = Uuid::parse_str(&claims.owner_user_id).unwrap();
+
+    // Flag defaults to off → 404 envelope, no auth required.
+    let shares_req = Request::builder()
+        .uri(format!("/api/public/users/{user_id}/shares"))
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let shares_resp = app.clone().oneshot(shares_req).await.unwrap();
+    assert_eq!(shares_resp.status(), StatusCode::NOT_FOUND);
+    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let shares_payload: serde_json::Value = serde_json::from_slice(&shares_body).unwrap();
+    assert_eq!(shares_payload["success"].as_bool(), Some(false));
+    assert!(shares_payload["error"].is_string());
+
+    // Unknown user → 404 as well.
+    let missing_req = Request::builder()
+        .uri(format!("/api/public/users/{}/shares", Uuid::new_v4()))
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let missing_resp = app.clone().oneshot(missing_req).await.unwrap();
+    assert_eq!(missing_resp.status(), StatusCode::NOT_FOUND);
+
+    // Opt in via profile update; the DTO exposes the flag.
+    let update_req = Request::builder()
+        .uri("/api/auth/profile")
+        .method("PUT")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::from(
+            r#"{"full_name":"Public Shares User","public_profile_enabled":true}"#,
+        ))
+        .unwrap();
+    let update_resp = app.clone().oneshot(update_req).await.unwrap();
+    assert_eq!(update_resp.status(), StatusCode::OK);
+    let update_body = to_bytes(update_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let update_payload: serde_json::Value = serde_json::from_slice(&update_body).unwrap();
+    assert_eq!(
+        update_payload["data"]["user"]["public_profile_enabled"].as_bool(),
+        Some(true)
+    );
+
+    // Flag on → 200 with owner card + (initially empty) share list.
+    let shares_req = Request::builder()
+        .uri(format!("/api/public/users/{user_id}/shares"))
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let shares_resp = app.clone().oneshot(shares_req).await.unwrap();
+    assert_eq!(shares_resp.status(), StatusCode::OK);
+    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let shares_payload: serde_json::Value = serde_json::from_slice(&shares_body).unwrap();
+    assert_eq!(shares_payload["success"].as_bool(), Some(true));
+    assert_eq!(
+        shares_payload["data"]["owner"]["display_name"].as_str(),
+        Some("Public Shares User")
+    );
+    assert_eq!(
+        shares_payload["data"]["owner"]["profile_enabled"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        shares_payload["data"]["shares"].as_array().map(Vec::len),
+        Some(0)
+    );
+
+    // Seed one active share (plus a revoked one and a second token on the same
+    // workspace) directly through the share store.
+    let workspace_req = Request::builder()
+        .uri("/api/v1/workspaces")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::from(
+            r#"{"name":"Public Shares Workspace","description":""}"#,
+        ))
+        .unwrap();
+    let workspace_resp = app.clone().oneshot(workspace_req).await.unwrap();
+    assert_eq!(workspace_resp.status(), StatusCode::CREATED);
+    let workspace_body = to_bytes(workspace_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let workspace: serde_json::Value = serde_json::from_slice(&workspace_body).unwrap();
+    let workspace_id = workspace["workspace"]["id"].as_str().unwrap().to_string();
+
+    let owner_auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::UserId::from(owner_user_id),
+        contracts::auth_runtime::SubjectKind::User,
+    )
+    .with_actor_id(contracts::auth_runtime::ActorId::new(user_id));
+    let service = avrag_share::ShareService::new(state.share_store().expect("pg expected"));
+    let share_token = service
+        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .await
+        .expect("share token should create");
+    let second_token = service
+        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .await
+        .expect("second token should create");
+    let revoked_token = service
+        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .await
+        .expect("third token should create");
+    service
+        .revoke_token(&owner_auth, &revoked_token)
+        .await
+        .expect("revoke should succeed");
+
+    // One row per workspace: revoked token excluded, duplicate tokens deduped.
+    let shares_req = Request::builder()
+        .uri(format!("/api/public/users/{user_id}/shares"))
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let shares_resp = app.clone().oneshot(shares_req).await.unwrap();
+    assert_eq!(shares_resp.status(), StatusCode::OK);
+    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let shares_payload: serde_json::Value = serde_json::from_slice(&shares_body).unwrap();
+    let shares = shares_payload["data"]["shares"]
+        .as_array()
+        .expect("shares array");
+    assert_eq!(shares.len(), 1, "expected one row per workspace: {shares_payload}");
+    let item = &shares[0];
+    assert_eq!(item["workspace_id"].as_str(), Some(workspace_id.as_str()));
+    assert_eq!(item["title"].as_str(), Some("Public Shares Workspace"));
+    assert_eq!(item["access_level"].as_str(), Some("partial"));
+    assert_eq!(item["allow_download"].as_bool(), Some(false));
+    assert_eq!(item["source_count"].as_i64(), Some(0));
+    let listed_token = item["share_token"].as_str().expect("share_token present");
+    assert!(
+        listed_token == share_token || listed_token == second_token,
+        "listed token must be one of the active tokens"
+    );
+    assert_ne!(listed_token, revoked_token, "revoked token must not be listed");
+}
+
+
 #[test]
 fn jwt_roundtrip() {
     let user_id = Uuid::new_v4();

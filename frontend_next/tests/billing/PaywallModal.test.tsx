@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { PaywallModal } from "../../components/billing/PaywallModal";
-import type { BillingPlan } from "../../lib/billing/api";
 
 const window5h = {
   used: 100000,
@@ -16,74 +15,33 @@ const window7d = {
   reset_at: "2099-12-31T00:00:00Z",
 };
 
-const plans: BillingPlan[] = [
-  {
-    plan_id: "free",
-    name: "Free",
-    description: "",
-    price_label: "¥0",
-    price_label_cny: "¥0",
-    price_label_usd: "$0",
-    interval: "month",
-    checkout_available: false,
-    current: false,
-    quotas: [],
-  },
-  {
-    plan_id: "plus",
-    name: "Plus",
-    description: "",
-    price_label: "¥49 / 月 · $9 / 月",
-    price_label_cny: "¥49 / 月",
-    price_label_usd: "$9 / 月",
-    interval: "month",
-    checkout_available: true,
-    current: false,
-    quotas: [],
-  },
-  {
-    plan_id: "pro",
-    name: "Pro",
-    description: "",
-    price_label: "¥129 / 月 · $19 / 月",
-    price_label_cny: "¥129 / 月",
-    price_label_usd: "$19 / 月",
-    interval: "month",
-    checkout_available: true,
-    current: false,
-    quotas: [],
-  },
-];
-
 describe("PaywallModal", () => {
   it("renders title based on reason prop", () => {
     render(
       <PaywallModal
         reason="5h"
         locale="zh-CN"
-        plans={plans}
         rolling5h={window5h}
         rolling7d={window7d}
-        onSelect={vi.fn()}
         onContinueFree={vi.fn()}
       />,
     );
     expect(screen.getByText(/平台保护限速已触发/)).toBeTruthy();
   });
 
-  it("embeds UsageMeter compact + PricingCards compact", () => {
+  it("embeds UsageMeter compact and routes upgrades to the canonical /pricing checkout", () => {
     render(
       <PaywallModal
         reason="5h"
         locale="zh-CN"
-        plans={plans}
         rolling5h={window5h}
         rolling7d={window7d}
-        onSelect={vi.fn()}
         onContinueFree={vi.fn()}
       />,
     );
     expect(screen.getAllByRole("progressbar").length).toBeGreaterThan(0);
+    // PRODUCT_IA §4: paywall explains and links out; no second checkout here.
+    expect(screen.getByTestId("paywall-view-plans").getAttribute("href")).toBe("/pricing");
   });
 
   it("calls onContinueFree when 稍后再说 clicked", () => {
@@ -92,10 +50,8 @@ describe("PaywallModal", () => {
       <PaywallModal
         reason="5h"
         locale="zh-CN"
-        plans={plans}
         rolling5h={window5h}
         rolling7d={window7d}
-        onSelect={vi.fn()}
         onContinueFree={onContinueFree}
       />,
     );

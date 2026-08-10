@@ -42,10 +42,11 @@ type ProfileRow = (
     Option<String>,
     Option<String>,
     Option<String>,
+    bool,
 );
 
 fn map_profile_row(
-    (user_id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path): ProfileRow,
+    (user_id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path, public_profile_enabled): ProfileRow,
 ) -> AuthUserProfile {
     AuthUserProfile {
         user_id,
@@ -56,6 +57,7 @@ fn map_profile_row(
         contact_url,
         avatar_object_path,
         banner_object_path,
+        public_profile_enabled,
     }
 }
 
@@ -271,7 +273,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
             .map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, ProfileRow>(
             r#"
-            SELECT id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+            SELECT id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path, public_profile_enabled
             FROM users WHERE id = $1
             "#,
         )
@@ -297,15 +299,17 @@ impl AuthStorePort for PgAuthStoreAdapter {
             update users
             set full_name = $2,
                 bio = $3,
-                contact_url = $4
+                contact_url = $4,
+                public_profile_enabled = coalesce($5, public_profile_enabled)
             where id = $1
-            returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+            returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path, public_profile_enabled
             "#,
         )
         .bind(user_id)
         .bind(&input.full_name)
         .bind(input.bio.as_deref())
         .bind(input.contact_url.as_deref())
+        .bind(input.public_profile_enabled)
         .fetch_optional(tx.as_mut())
         .await
         .map_err(map_sqlx_error)?;
@@ -329,7 +333,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
                 update users
                 set avatar_object_path = $2
                 where id = $1
-                returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+                returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path, public_profile_enabled
                 "#
             }
             ProfileMediaKind::Banner => {
@@ -337,7 +341,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
                 update users
                 set banner_object_path = $2
                 where id = $1
-                returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path
+                returning id, email, full_name, bio, contact_url, avatar_object_path, banner_object_path, public_profile_enabled
                 "#
             }
         };

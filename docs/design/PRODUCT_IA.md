@@ -2,7 +2,7 @@
 
 **状态**: 现行权威（Path A，2026-08-06）  
 **范围**: SaaS 登录后产品、营销转化页、客户端发现；不含 Admin 后台细部。  
-**关联**: ADR-0010 商业模式 · `frontend_next/lib/site-map.ts`（**仅**多站点发现图）· T7 workspace 唯一产品真相  
+**关联**: ADR-0010 商业模式 · `frontend_next/lib/navigation/nav-config.ts`（**登录后 + 营销 canonical 目的地单一数据源**，footer / 主导航 / Cmd+K / 产品地图从此渲染）· `frontend_next/lib/site-map.ts`（**仅**多站点发现图）· T7 workspace 唯一产品真相  
 
 **规则**: 改 `frontend_next` 主导航 / 全局入口 / 计费完成页前，**必须先改本文**再改代码。禁止新增「第三完成页」。
 
@@ -73,10 +73,9 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 /dashboard/:id                     工作区（对话 / 来源 / …）
 /dashboard/:id?session=:sid        工作区并选中会话（Cmd+K / 外链深链）
 /dashboard/:id?source=:src         工作区并打开文档 viewer（Cmd+K 命中；打开后剥离 query）
-/dashboard/:id/share               分享中心 = 单库分享设置 + 访问趋势 + 访客活动（canonical 对象级）
+/dashboard/:id/share               分享中心 = 单库分享设置（链接/邀请 + API 密钥——API 视为一种分享方法）+ 访问趋势 + 访客活动（canonical 对象级）+「分享者主页」全局开关（owner 级，控制 /shared/u/:userId 与分享页入口）
 /dashboard/:id/share/analytics     → 301/redirect 至 share（兼容旧链）
 /dashboard/:id/analyze             → redirect 至 share（兼容旧链；禁止再实现第二套分析页）
-/dashboard/:id/api-access          工作区 API
 /settings                          默认 tab=profile（账户优先，非付费墙）
 /settings?tab=…                   设置（profile|providers|billing|preferences|security）
 /settings/usage                    用量（深链；非主导航顶级）
@@ -90,8 +89,8 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | 设置快开弹窗 | 短路径编辑；完整页 `/settings` |
 | **产品地图弹窗** | **上手 / 模块关系（onboarding）**，**不是** primary nav |
 | 分享公开页 `/shared/kb/:token` | 访客 |
+| 分享者公开主页 `/shared/u/:userId` | 访客；仅当所有者在分享中心开启「分享者主页」开关后可访问，否则 404 |
 | Paywall `/upgrade/*` | 限速恢复路径 → 链回 pricing/settings |
-| `/licenses` | 客户端授权管理（账户旁路） |
 
 ---
 
@@ -99,16 +98,17 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 
 | 任务 | Canonical | 允许的入口（只 deep-link） |
 |------|-----------|---------------------------|
-| 升级会员 | `/pricing`（档位区） | 顶栏升级、升级弹窗「详情」、paywall、分享转化「升级」 |
+| 升级会员 | `/pricing`（档位区） | 顶栏分享组「升级」、升级弹窗「详情」、paywall、分享转化「升级」 |
 | 充值余额 | `/pricing#topup` | 升级弹窗充值 CTA、分享转化充值、产品地图、设置账单可链回 |
 | BYOK | `/settings?tab=providers` | pricing 次要链、产品地图、账单提示 |
-| 下载/了解客户端 | `/desktop` | 顶栏客户端、footer、help、产品地图 |
+| 下载/了解客户端 | `/desktop` | Dashboard 工具栏「客户端」、footer、help、产品地图 |
 | 开分享 | `/dashboard/:id/share` | 工作区内「分享」、转化条 |
-| 分享数据（汇总） | `/dashboard/analytics` | 工作台工具栏「分享访问」 |
-| 分享数据（单库） | `/dashboard/:id/share`（页内 insights / 活动） | 汇总下钻、顶栏「访问」、旧 `/analyze` 与 `/share/analytics` |
+| 分享数据（汇总） | `/dashboard/analytics` | 顶栏分享组「访问」 |
+| 分享数据（单库） | `/dashboard/:id/share`（页内 insights / 活动） | 汇总下钻、顶栏分享组「访问」、旧 `/analyze` 与 `/share/analytics` |
+| API 密钥管理 | `/dashboard/:id/share`（API 区块；一种分享方法） | 分享弹窗内同一区块 |
 | 上手 / 产品地图 | **弹窗**（Dashboard 入口）或 `/help` 长文 | 顶栏「上手」、空状态、账户→帮助 |
 | 工作台 | `/dashboard` | 品牌标题、footer |
-| 快速跳转 | **Cmd/Ctrl+K** 命令面板 | 登录后 App shell；条目仅链到本节 Canonical；会话 → `?session=`；文档 → `?source=`（打开后剥离） |
+| 快速跳转 | **Cmd/Ctrl+K** 命令面板 | 登录后 App shell；条目仅链到本节 Canonical；会话 → `?session=`；文档 → `?source=`（打开后剥离）。Dashboard 工具栏「全局搜索」弹窗走同一 `/search` 索引（会话/工作区/资料分组） |
 
 **禁止**: 在设置账单再实现第二套充值 checkout（可保留余额展示 + 链到 `#topup`）。  
 **禁止**: 升级弹窗内完成支付（仅营销说明 + 跳转 canonical）。
@@ -120,11 +120,14 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | Shell | 何时 | 内容 |
 |-------|------|------|
 | **Marketing chrome** | pricing / desktop / legal | 定价 · 客户端 · 法律 · 语言 · 进入应用 |
-| **App top bar** | dashboard / workspace / settings（产品内） | 品牌 · **工作台\|设置**（轻量 wayfinding）· 客户端 · 升级 · 通知 · 账户 |
-| **Dashboard main** | `/dashboard*` | 全宽内容；筛选 tab（全部/我的/收藏）；横切「分享访问」在工具栏；**无**百科主侧栏 |
-| **Workspace chrome** | `/dashboard/:id*` | 标题 · 客户端 · 升级 · 会话/来源等上下文操作 |
+| **App top bar** | dashboard / workspace / settings（产品内） | 品牌 · **分享组**（T0；含 访问/API/升级）· 通知 · 账户；**不设**工作台/设置 wayfinding（品牌即回工作台，设置在账户菜单），**不设**客户端/升级胶囊 |
+| **Dashboard main** | `/dashboard*` | 全宽内容；筛选 tab（全部/我的/收藏）；横切「分享访问」与「客户端」入口在工具栏；**无**百科主侧栏 |
+| **Workspace chrome** | `/dashboard/:id*` | 标题 · 新建 · **分享**（T0 单胶囊单行为，直开分享弹窗；访问=弹窗完整页入口，API 作为分享方法区块合入弹窗/分享中心）· 通知 · 账户 |
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |
+| **深层工具页** | `/dashboard/analytics`、`/dashboard/:id/share`、`/settings/usage`、`/help/*` | **统一 App top bar**（同上行 App top bar，经 `AppTopBar` 组件）；页内保留对象级返回链（如 share → 所属工作区）作 breadcrumb，**禁止裸返回链作为唯一出口** |
 | **Onboarding map** | 按需 | 弹窗；入口是次要控件（上手），不占 240px 业务侧栏 |
+
+**Rail pattern（Grok 式）**：多分区的设置/功能 surface 统一「左导航 + 右内容」——设置页、设置快开弹窗、分享弹窗、分享中心共用 `components/ui/nav-rail.tsx`（`NavRail`）+ AppModal `size="xl" bodyVariant="rail"`；单用途页（usage/analytics/help 长文）不强制。分享中心深链 `/share#api` 选中对应分区。
 
 **Wayfinding**
 
@@ -132,7 +135,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 - 设置用 tab active；营销用 nav active。  
 - 深度页优先对象内 sub-nav，不把设置项塞进业务 tab。
 
-**顶级全局动作建议 ≤5 可见**: 客户端 · 升级 · 通知 · 账户（+ 可选「上手」弱样式）。
+**顶级全局动作建议 ≤5 可见**: 分享 · 通知 · 账户（+ 可选「上手」弱样式）。客户端/升级不占顶栏——分别在 Dashboard 工具栏与分享组菜单。
 
 ---
 

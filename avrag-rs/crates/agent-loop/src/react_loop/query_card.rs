@@ -132,6 +132,17 @@ pub fn required_action_satisfied(action: &str, tool_results: &[ToolResult]) -> b
         .any(|r| r.status == contracts::ToolStatus::Ok && aliases.contains(&r.tool.as_str()))
 }
 
+/// Whether any tool_result row matches the action's tool aliases (any status).
+pub fn required_action_attempted(action: &str, tool_results: &[ToolResult]) -> bool {
+    let aliases = action_tool_aliases(action);
+    if aliases.is_empty() {
+        return false;
+    }
+    tool_results
+        .iter()
+        .any(|r| aliases.contains(&r.tool.as_str()))
+}
+
 /// 系统提示（prompts/pipeline/query-card.system.md，第三人称事实化题型定义）。
 const QUERY_CARD_SYSTEM_PROMPT: &str =
     include_str!("../../../../prompts/pipeline/query-card.system.md");

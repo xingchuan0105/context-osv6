@@ -1,4 +1,5 @@
 import { ApiError, fetchResponse, request, type ApiEnvelope } from "../http/request";
+import type { UiMessageKey } from "../i18n/messages";
 import {
   parseWorkspaceChatEventStream,
   type WorkspaceChatStreamEvent,
@@ -90,11 +91,28 @@ export type SharedSource = {
 };
 
 export type ShareOwnerCard = {
+  user_id?: string | null;
   display_name: string;
   bio?: string | null;
   contact_url?: string | null;
   avatar_url?: string | null;
   banner_url?: string | null;
+  profile_enabled?: boolean;
+};
+
+export type PublicOwnerShareItem = {
+  workspace_id: string;
+  title: string;
+  description?: string | null;
+  share_token: string;
+  access_level: string;
+  allow_download: boolean;
+  source_count: number;
+};
+
+export type PublicOwnerProfile = {
+  owner: ShareOwnerCard;
+  shares: PublicOwnerShareItem[];
 };
 
 export type SharedWorkspacePayload = {
@@ -220,8 +238,8 @@ export async function updateShareSettings(
 export function shareActionErrorMessage(
   error: unknown,
   locale: "zh-CN" | "en",
-  fallbackKey: string,
-  formatMessage: (locale: "zh-CN" | "en", key: string) => string,
+  fallbackKey: UiMessageKey,
+  formatMessage: (locale: "zh-CN" | "en", key: UiMessageKey) => string,
 ): string {
   if (error instanceof ApiError && error.code === SHARE_WORKSPACE_QUOTA_EXCEEDED) {
     return formatMessage(locale, "shareCenter.quotaExceeded");
@@ -358,6 +376,26 @@ export async function getSharedWorkspace(shareToken: string) {
 
   if (!envelope.success || !envelope.data) {
     throw new Error(envelope.error ?? "共享链接无效或已过期。");
+  }
+
+  return envelope.data;
+}
+
+type PublicOwnerProfileEnvelope = {
+  success?: boolean;
+  data?: PublicOwnerProfile | null;
+  error?: string | null;
+};
+
+/** Public owner profile + list of active share links (no auth). */
+export async function getPublicOwnerProfile(userId: string) {
+  const envelope = await request<PublicOwnerProfileEnvelope>(
+    `/api/public/users/${encodeURIComponent(userId)}/shares`,
+    { method: "GET" },
+  );
+
+  if (!envelope.success || !envelope.data) {
+    throw new Error(envelope.error ?? "用户主页不可用。");
   }
 
   return envelope.data;

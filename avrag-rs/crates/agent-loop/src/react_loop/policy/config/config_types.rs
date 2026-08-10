@@ -54,17 +54,17 @@ pub struct LoopExitConfig {
     /// always authors the final draft (chat / write_refine keep this false).
     #[serde(default)]
     pub forbid_retrieve_direct_answer: bool,
-    /// After synthesis, run short Judge (adjudicate + advice only). Failures
-    /// route back to synthesis or retrieve up to [`Self::judge_max_fail_rounds`].
+    /// After synthesis, run verify (adjudicate + advice only). Failures
+    /// route back to synthesis or retrieve up to [`Self::verify_max_fail_rounds`].
     #[serde(default)]
-    pub short_judge: bool,
-    /// Max short-Judge **fail** signals before force-deliver + ceiling disclosure.
-    /// Default 3. `0` disables the fail budget (treat as 3 when short_judge on).
-    #[serde(default = "default_judge_max_fail_rounds")]
-    pub judge_max_fail_rounds: u8,
+    pub verify: bool,
+    /// Max verify **fail** signals before force-deliver + ceiling disclosure.
+    /// Default 3. `0` disables the fail budget (treat as 3 when verify on).
+    #[serde(default = "default_verify_max_fail_rounds")]
+    pub verify_max_fail_rounds: u8,
 }
 
-fn default_judge_max_fail_rounds() -> u8 {
+fn default_verify_max_fail_rounds() -> u8 {
     3
 }
 
@@ -76,8 +76,8 @@ impl Default for LoopExitConfig {
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
             forbid_retrieve_direct_answer: false,
-            short_judge: false,
-            judge_max_fail_rounds: default_judge_max_fail_rounds(),
+            verify: false,
+            verify_max_fail_rounds: default_verify_max_fail_rounds(),
         }
     }
 }

@@ -87,6 +87,8 @@ fn empty_state() -> IterationState {
         compile_continuations: 0,
         retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
         evidence: crate::react_loop::evidence_pool::EvidencePool::new(),
+        knockout: crate::helpers::shared_knockout(),
+        ews: crate::helpers::EwsState::new(),
         session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
         sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
         query_card: None,
@@ -629,11 +631,79 @@ async fn evidence_gate_blocks_direct_answer_with_zero_ok_returns() {
         outcome.record.as_ref().unwrap().exit_reason,
         "evidence_missing_continue"
     );
-    // The third-person observation is pushed as a user message for the next round.
-    assert!(state
+    // Zero tool_results → no-client variant (not "已调用且命中为零").
+    let obs = state
         .messages
         .iter()
-        .any(|m| m.role == "user" && m.content.contains("回传")));
+        .find(|m| m.role == "user" && m.content.contains("[evidence_missing]"))
+        .expect("evidence-missing observation");
+    assert!(
+        obs.content.contains("尚未出现任何沙箱检索侧调用")
+            || obs.content.contains("检索调用尚未发生"),
+        "expected no-client copy, got: {}",
+        obs.content
+    );
+    assert!(
+        !obs.content.contains("已有检索侧调用回传"),
+        "must not use zero-hit copy when no tools: {}",
+        obs.content
+    );
+}
+
+#[tokio::test]
+async fn evidence_gate_zero_hit_after_empty_dense_uses_attempted_copy() {
+    let loop_ = test_loop();
+    let mode = rag_mode_with_primitives();
+    let mut state = empty_state();
+    // Ok dense with empty payload = call attempted, zero answer-grade hits.
+    state.tool_results = vec![contracts::ToolResult {
+        tool: "dense_retrieval".into(),
+        version: "1".into(),
+        status: contracts::ToolStatus::Ok,
+        data: Some(serde_json::json!([])),
+        trace: None,
+    }];
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let response = fake_llm_response("Answer without usable hits.");
+
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &response,
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "evidence_missing_continue"
+    );
+    let obs = state
+        .messages
+        .iter()
+        .find(|m| m.role == "user" && m.content.contains("[evidence_missing]"))
+        .expect("evidence-missing observation");
+    assert!(
+        obs.content.contains("已有检索侧调用回传")
+            || obs.content.contains("已调用、未见可用命中"),
+        "expected zero-hit-after-call copy, got: {}",
+        obs.content
+    );
+    assert!(
+        !obs.content.contains("检索调用尚未发生"),
+        "must not use no-client copy when dense was attempted: {}",
+        obs.content
+    );
 }
 
 #[tokio::test]

@@ -58,8 +58,16 @@ vi.mock("../../lib/billing/featureFlag", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings/usage",
   useRouter: () => ({ push: mocks.pushMock, replace: mocks.replaceMock }),
 }));
+
+// AppTopBar heavy leaves are covered by dashboard-surface tests; stub them here.
+vi.mock("../../components/account-menu", () => ({ AccountMenu: () => null }));
+vi.mock("../../components/notifications/notification-bell", () => ({
+  NotificationBell: () => null,
+}));
+vi.mock("../../components/plan-entry", () => ({ PlanEntry: () => null }));
 
 vi.mock("../../lib/ui-preferences", () => ({
   useUiPreferences: () => ({ locale: "zh-CN" as const }),

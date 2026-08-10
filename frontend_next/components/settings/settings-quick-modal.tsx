@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { AppModal } from "../ui/app-modal";
+import { NavRail } from "../ui/nav-rail";
 import { UpgradeModal } from "../billing/upgrade-modal";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
@@ -11,8 +12,12 @@ import { AppearancePanel } from "./settings-appearance-panel";
 import { BillingPanel } from "./settings-billing-panel";
 import { ProfilePanel } from "./settings-profile-panel";
 import { SecurityPanel } from "./settings-security-panel";
+import { settingsTabIcon } from "./settings-nav-icons";
+import { settingsTabLabelKey } from "./settings-tabs";
 
 export type SettingsQuickTab = "profile" | "preferences" | "billing" | "security";
+
+const QUICK_TABS: SettingsQuickTab[] = ["profile", "preferences", "billing", "security"];
 
 type SettingsQuickModalProps = {
   open: boolean;
@@ -21,29 +26,6 @@ type SettingsQuickModalProps = {
   onClose: () => void;
 };
 
-function titleForTab(locale: UiLocale, tab: SettingsQuickTab): string {
-  switch (tab) {
-    case "profile":
-      return formatUiMessage(locale, "dashboardProfileLink");
-    case "preferences":
-      return formatUiMessage(locale, "dashboardAppearanceLink");
-    case "billing":
-      return formatUiMessage(locale, "dashboardBillingLink");
-    case "security":
-      return formatUiMessage(locale, "settingsQuickModal.securityLink");
-  }
-}
-
-function fullPageHref(tab: SettingsQuickTab): string {
-  const map: Record<SettingsQuickTab, string> = {
-    profile: "profile",
-    preferences: "preferences",
-    billing: "billing",
-    security: "security",
-  };
-  return `/settings?tab=${map[tab]}`;
-}
-
 export function SettingsQuickModal({
   open,
   tab,
@@ -51,12 +33,17 @@ export function SettingsQuickModal({
   onClose,
 }: SettingsQuickModalProps) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsQuickTab>(tab ?? "profile");
 
   useEffect(() => {
     if (!open) {
       setUpgradeOpen(false);
+      return;
     }
-  }, [open]);
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [open, tab]);
 
   if (!tab || (!open && !upgradeOpen)) {
     return null;
@@ -66,15 +53,16 @@ export function SettingsQuickModal({
     <>
       <AppModal
         open={open && !upgradeOpen}
-        size={tab === "billing" ? "lg" : "md"}
-        title={titleForTab(locale, tab)}
+        size="xl"
+        bodyVariant="rail"
+        title={formatUiMessage(locale, "settings.pageTitle")}
         closeLabel={formatUiMessage(locale, "appModal.close")}
-        fullPageHref={fullPageHref(tab)}
+        fullPageHref={`/settings?tab=${activeTab}`}
         fullPageLabel={formatUiMessage(locale, "settingsQuickModal.openFullPage")}
         testId={`settings-quick-modal-${tab}`}
         onClose={onClose}
         footer={
-          tab === "billing" ? (
+          activeTab === "billing" ? (
             <button
               className="app-button-primary app-button-accent"
               data-testid="settings-quick-upgrade"
@@ -90,10 +78,32 @@ export function SettingsQuickModal({
           )
         }
       >
-        {tab === "profile" ? <ProfilePanel /> : null}
-        {tab === "preferences" ? <AppearancePanel /> : null}
-        {tab === "billing" ? <BillingPanel hideManagePlan /> : null}
-        {tab === "security" ? <SecurityPanel /> : null}
+        {/* Grok 式：左导航 + 右设置面板，与 /settings 页同一模式 */}
+        <NavRail
+          activeId={activeTab}
+          ariaLabel={formatUiMessage(locale, "settings.tabsLabel")}
+          items={QUICK_TABS.map((quickTab) => ({
+            id: quickTab as string,
+            label: formatUiMessage(locale, settingsTabLabelKey(quickTab)),
+            icon: settingsTabIcon(quickTab),
+          }))}
+          testId="settings-quick-nav-rail"
+          onSelect={(id) => setActiveTab(id as SettingsQuickTab)}
+        />
+        <div
+          style={{
+            display: "grid",
+            gap: "1rem",
+            alignContent: "start",
+            minWidth: 0,
+            padding: "var(--space-lg)",
+          }}
+        >
+          {activeTab === "profile" ? <ProfilePanel /> : null}
+          {activeTab === "preferences" ? <AppearancePanel /> : null}
+          {activeTab === "billing" ? <BillingPanel hideManagePlan /> : null}
+          {activeTab === "security" ? <SecurityPanel /> : null}
+        </div>
       </AppModal>
       <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </>

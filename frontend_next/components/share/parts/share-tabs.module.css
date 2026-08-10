@@ -1,0 +1,284 @@
+/* X-style underline tab bar + single-column tab panes for the shared KB page. */
+
+.tabBar {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.tab {
+  appearance: none;
+  flex: 1 1 0;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 var(--space-sm);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.tab:hover {
+  background: hsl(var(--app-history-hover));
+}
+
+.tabLabel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.7rem 0.15rem 0.65rem;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+
+.tabLabel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.tabActive .tabLabel {
+  color: hsl(var(--foreground));
+  font-weight: var(--font-weight-semibold);
+}
+
+.tabActive .tabLabel::after {
+  background: hsl(var(--foreground));
+}
+
+.tabCount {
+  display: inline-flex;
+  align-items: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  justify-content: center;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: hsl(var(--surface-muted));
+  font-size: 0.66rem;
+  font-weight: var(--font-weight-medium);
+  color: hsl(var(--muted-foreground));
+}
+
+/* Scrollable single-column pane (X main column ~ 40rem). */
+.tabPane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-lg) var(--space-2xl);
+}
+
+.tabPane > * {
+  max-width: 40rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.emptyState {
+  padding: var(--space-xl) var(--space-lg);
+  border: 1px dashed hsl(var(--border-strong));
+  border-radius: var(--radius-card);
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  text-align: center;
+}
+
+/* --- Sources tab --- */
+
+.sourceCards {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceCard {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-card);
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.sourceCard:hover:not(:disabled) {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-soft));
+}
+
+.sourceCard:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.sourceCardDisabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.sourceExt {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: none;
+  border-radius: var(--radius-control);
+  background: hsl(var(--surface-muted));
+  border: 1px solid hsl(var(--border) / 0.75);
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  color: hsl(var(--muted-foreground));
+}
+
+.sourceName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.sourceStatus {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.4rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border-whisper));
+  background: hsl(var(--badge-background));
+  font-size: 0.68rem;
+  color: hsl(var(--badge-foreground));
+}
+
+.sourceStatus[data-status="ready"],
+.sourceStatus[data-status="completed"] {
+  background: hsl(var(--success) / 0.12);
+  border-color: hsl(var(--success) / 0.25);
+  color: hsl(var(--success));
+}
+
+.sourceStatus[data-status="processing"],
+.sourceStatus[data-status="pending"],
+.sourceStatus[data-status="indexing"],
+.sourceStatus[data-status="queued"],
+.sourceStatus[data-status="enqueueing"] {
+  background: hsl(var(--info) / 0.12);
+  border-color: hsl(var(--info) / 0.25);
+  color: hsl(var(--info));
+}
+
+.sourceStatus[data-status="failed"],
+.sourceStatus[data-status="error"] {
+  background: hsl(var(--destructive) / 0.12);
+  border-color: hsl(var(--destructive) / 0.25);
+  color: hsl(var(--destructive));
+}
+
+/* --- More-shares tab --- */
+
+.shareCards {
+  display: grid;
+  gap: var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shareCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-card);
+  background: hsl(var(--card));
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.shareCard:hover {
+  border-color: hsl(var(--border-strong));
+}
+
+.shareCardMain {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shareCardTitle {
+  margin: 0;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  color: hsl(var(--foreground));
+  overflow-wrap: anywhere;
+}
+
+.shareCardDesc {
+  margin: 0;
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shareCardMeta {
+  font-size: var(--font-size-caption);
+  color: hsl(var(--subtle-foreground));
+}
+
+.shareCardOpen {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  padding: 0 var(--space-lg);
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.shareCardOpen:hover {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-muted));
+}
+
+@media (max-width: 767px) {
+  .tabPane {
+    padding: var(--space-md) var(--space-md) var(--space-xl);
+  }
+
+  .shareCard {
+    flex-wrap: wrap;
+  }
+}

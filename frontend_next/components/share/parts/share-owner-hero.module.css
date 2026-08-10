@@ -1,0 +1,241 @@
+/* X-style profile hero: slim banner, avatar overlapping, name/bio/meta below. */
+
+.hero {
+  display: grid;
+  gap: 0;
+  flex: none;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.navRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 2rem;
+  padding: 0.3rem var(--space-lg);
+  border-bottom: 1px solid hsl(var(--border) / 0.65);
+  background: color-mix(in srgb, hsl(var(--background)) 94%, hsl(var(--surface-muted)));
+}
+
+.backLink {
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: hsl(var(--foreground));
+}
+
+.navDot {
+  color: hsl(var(--subtle-foreground));
+  font-size: var(--font-size-meta);
+}
+
+.navKbLabel {
+  font-size: var(--font-size-meta);
+  color: hsl(var(--subtle-foreground));
+}
+
+/* Slim banner — compact height keeps the chat area dominant. */
+.banner {
+  width: 100%;
+  height: clamp(3rem, 7vw, 4.5rem);
+  background:
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, hsl(var(--surface-muted)) 78%, hsl(var(--accent)) 22%),
+      hsl(var(--surface-muted))
+    );
+  background-size: cover;
+  background-position: center;
+}
+
+.profileBody {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 var(--space-lg) var(--space-sm);
+}
+
+.avatarRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 1.75rem;
+}
+
+.avatarLink {
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-top: -1.9rem;
+  border-radius: 999px;
+  text-decoration: none;
+  outline-offset: 2px;
+}
+
+.avatarLink:focus-visible {
+  outline: 2px solid hsl(var(--accent));
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 3.75rem;
+  height: 3.75rem;
+  border-radius: 999px;
+  border: 3px solid hsl(var(--background));
+  background: hsl(var(--surface-muted));
+  background-size: cover;
+  background-position: center;
+  color: hsl(var(--foreground));
+  font-size: 1.15rem;
+  font-weight: var(--font-weight-semibold);
+  flex-shrink: 0;
+}
+
+/* X-style action slot at the right of the avatar row. */
+.contactButton {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-lg);
+  border-radius: 999px;
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  flex: none;
+}
+
+.contactButton:hover {
+  opacity: 0.9;
+}
+
+.identity {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.nameRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  min-width: 0;
+}
+
+.displayName {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: hsl(var(--foreground));
+}
+
+.nameLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.nameLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rolePill {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--surface-muted) / 0.55);
+  font-size: 0.68rem;
+  font-weight: var(--font-weight-medium);
+  color: hsl(var(--muted-foreground));
+  flex: none;
+}
+
+.bio {
+  margin: 0;
+  max-width: 44rem;
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  color: hsl(var(--foreground));
+  white-space: pre-wrap;
+}
+
+.workspaceLine {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.45rem;
+  font-size: var(--font-size-meta);
+  line-height: 1.35;
+  color: hsl(var(--muted-foreground));
+  min-width: 0;
+}
+
+.workspaceLabel {
+  color: hsl(var(--subtle-foreground));
+  flex: none;
+}
+
+.workspaceTitle {
+  font-weight: var(--font-weight-semibold);
+  color: hsl(var(--foreground));
+  overflow-wrap: anywhere;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  margin-top: 0.2rem;
+}
+
+.metaChip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.35rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  background: hsl(var(--surface-muted) / 0.7);
+  border: 1px solid hsl(var(--border) / 0.75);
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-medium);
+  color: hsl(var(--muted-foreground));
+}
+
+@media (max-width: 767px) {
+  .banner {
+    height: 2.75rem;
+  }
+
+  .avatarLink {
+    margin-top: -1.55rem;
+  }
+
+  .avatar {
+    width: 3.1rem;
+    height: 3.1rem;
+    font-size: 1rem;
+  }
+
+  .displayName {
+    font-size: 1.05rem;
+  }
+
+  .profileBody {
+    padding: 0 var(--space-md) var(--space-sm);
+  }
+}

@@ -21,10 +21,6 @@ export const dashboardMessages = {
     zh: "工作区控制台",
     en: "Workspace dashboard",
   },
-  dashboardCloseSearch: {
-    zh: "关闭搜索",
-    en: "Close search",
-  },
   dashboardCreateFirst: {
     zh: "创建第一个工作区",
     en: "Create the first workspace",
@@ -106,8 +102,8 @@ export const dashboardMessages = {
     en: "Owner",
   },
   dashboardSearchDialogLabel: {
-    zh: "快速打开工作区",
-    en: "Quick open workspace",
+    zh: "全局搜索",
+    en: "Global search",
   },
   dashboardCreatedAtColumn: {
     zh: "创建时间",
@@ -130,8 +126,8 @@ export const dashboardMessages = {
     en: "Profile",
   },
   dashboardBillingLink: {
-    zh: "会员状态",
-    en: "Membership",
+    zh: "用量信息",
+    en: "Usage",
   },
   dashboardLogout: {
     zh: "退出登录",
@@ -142,32 +138,20 @@ export const dashboardMessages = {
     en: "Back to dashboard",
   },
   dashboardSearchEmptyIdle: {
-    zh: "输入关键词搜索工作区",
-    en: "Type to search workspaces",
+    zh: "输入关键词，全局搜索会话、工作区和资料。",
+    en: "Type to search sessions, workspaces, and sources.",
   },
   dashboardSearchEmptyNoMatch: {
-    zh: "没有匹配的工作区",
-    en: "No matching workspaces",
+    zh: "没有匹配的内容",
+    en: "No matching results",
   },
   dashboardSearchLabel: {
-    zh: "搜索工作区",
-    en: "Search workspaces",
+    zh: "全局搜索",
+    en: "Global search",
   },
   dashboardSearchPlaceholder: {
-    zh: "搜索工作区标题或描述",
-    en: "Search workspace titles or descriptions",
-  },
-  dashboardSearchResultsLabel: {
-    zh: "工作区搜索结果",
-    en: "Workspace search results",
-  },
-  dashboardSearchSubtitle: {
-    zh: "输入关键词，点击结果进入工作区。",
-    en: "Type a keyword and jump directly into the workspace.",
-  },
-  dashboardSearchTitle: {
-    zh: "快速打开工作区",
-    en: "Quick open workspace",
+    zh: "搜索会话、工作区、资料…",
+    en: "Search sessions, workspaces, sources…",
   },
   dashboardSortRecent: {
     zh: "创建时间",
@@ -206,8 +190,8 @@ export const dashboardMessages = {
     en: "Workspace tabs",
   },
   dashboardToolbarSearch: {
-    zh: "搜索工作区",
-    en: "Search workspaces",
+    zh: "全局搜索",
+    en: "Global search",
   },
   dashboardViewCard: {
     zh: "卡片",

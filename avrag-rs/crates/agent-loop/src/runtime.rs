@@ -225,6 +225,17 @@ pub struct AgentRunResult {
     /// inactive for this run (white-box observability).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_card: Option<crate::react_loop::query_card::QueryCard>,
+    /// Post-synthesis verify summary (three-loop; host module `verify`).
+    /// Surfaced as `mode_debug.general.verify`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify: Option<crate::react_loop::verify::VerifyObservability>,
+    /// Evidence knockout ledger snapshot (SaC). Surfaced as
+    /// `mode_debug.general.knockout`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knockout: Option<crate::helpers::KnockoutObservability>,
+    /// Evidence Working Set (KEEP) snapshot. Surfaced as `mode_debug.general.ews`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ews: Option<crate::helpers::EwsObservability>,
 }
 
 /// Budget consumption at a point in time.

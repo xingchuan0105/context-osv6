@@ -1,13 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { NavRail } from "../ui/nav-rail";
 import { settingsTabIcon } from "./settings-nav-icons";
-import { SETTINGS_TABS, type SettingsTab } from "./settings-tabs";
-import styles from "./settings-surface.module.css";
+import { SETTINGS_TABS, settingsTabLabelKey, type SettingsTab } from "./settings-tabs";
 
 export function SettingsTabBar({
   activeTab,
@@ -18,76 +15,23 @@ export function SettingsTabBar({
   onSelect?: (tab: SettingsTab) => void;
 }) {
   const { locale } = useUiPreferences();
-  const [query, setQuery] = useState("");
-  const tabKeyMap: Record<SettingsTab, Parameters<typeof formatUiMessage>[1]> = {
-    billing: "settings.tabs.billing",
-    profile: "settings.tabs.profile",
-    providers: "settings.tabs.providers",
-    preferences: "settings.tabs.appearance",
-    security: "settings.tabs.security",
-  };
-
-  const labels = useMemo(
-    () =>
-      SETTINGS_TABS.map((tab) => ({
-        tab,
-        label: formatUiMessage(locale, tabKeyMap[tab]),
-      })),
-    [locale],
-  );
-
-  const filtered = labels.filter((item) => {
-    if (!query.trim()) {
-      return true;
-    }
-    return item.label.toLowerCase().includes(query.trim().toLowerCase());
-  });
+  const items = SETTINGS_TABS.map((tab) => ({
+    id: tab as string,
+    label: formatUiMessage(locale, settingsTabLabelKey(tab)),
+    icon: settingsTabIcon(tab),
+    href: onSelect ? undefined : `/settings?tab=${tab}`,
+  }));
 
   return (
-    <div className={styles.navRail} data-testid="settings-nav-rail">
-      <label className={styles.searchLabel} htmlFor="settings-nav-search">
-        <span className="dashboard-sr-only">
-          {formatUiMessage(locale, "settingsTabBar.searchLabel")}
-        </span>
-        <input
-          className={`app-input ${styles.searchInput}`}
-          data-testid="settings-nav-search"
-          id="settings-nav-search"
-          placeholder={formatUiMessage(locale, "settingsTabBar.searchPlaceholder")}
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-      <nav
-        aria-label={formatUiMessage(locale, "settings.tabsLabel")}
-        className={styles.navList}
-      >
-        {filtered.map(({ tab, label }) =>
-          onSelect ? (
-            <button
-              aria-current={tab === activeTab ? "page" : undefined}
-              className={`${styles.navItem}${tab === activeTab ? ` ${styles.navItemActive}` : ""}`}
-              key={tab}
-              type="button"
-              onClick={() => onSelect(tab)}
-            >
-              <span className={styles.navItemIcon}>{settingsTabIcon(tab)}</span>
-              <span>{label}</span>
-            </button>
-          ) : (
-            <Link
-              aria-current={tab === activeTab ? "page" : undefined}
-              className={`${styles.navItem}${tab === activeTab ? ` ${styles.navItemActive}` : ""}`}
-              href={`/settings?tab=${tab}`}
-              key={tab}
-            >
-              <span className={styles.navItemIcon}>{settingsTabIcon(tab)}</span>
-              <span>{label}</span>
-            </Link>
-          ),
-        )}
-      </nav>
-    </div>
+    <NavRail
+      activeId={activeTab}
+      ariaLabel={formatUiMessage(locale, "settings.tabsLabel")}
+      items={items}
+      searchAriaLabel={formatUiMessage(locale, "settingsTabBar.searchLabel")}
+      searchPlaceholder={formatUiMessage(locale, "settingsTabBar.searchPlaceholder")}
+      searchTestId="settings-nav-search"
+      testId="settings-nav-rail"
+      onSelect={onSelect ? (id) => onSelect(id as SettingsTab) : undefined}
+    />
   );
 }

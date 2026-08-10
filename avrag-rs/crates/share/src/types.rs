@@ -133,6 +133,8 @@ pub struct SharedWorkspacePayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareOwnerCard {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
     pub display_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bio: Option<String>,
@@ -142,6 +144,65 @@ pub struct ShareOwnerCard {
     pub avatar_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub banner_url: Option<String>,
+    pub profile_enabled: bool,
+}
+
+impl ShareOwnerCard {
+    /// Public owner card from an auth profile; display name falls back to the
+    /// email local part, media object paths become public media URLs.
+    pub fn from_profile(profile: &app_core::AuthUserProfile) -> Self {
+        let user_id = profile.user_id;
+        let display_name = profile
+            .full_name
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                profile
+                    .email
+                    .split('@')
+                    .next()
+                    .unwrap_or("Owner")
+                    .to_string()
+            });
+        Self {
+            user_id: Some(user_id.to_string()),
+            display_name,
+            bio: profile
+                .bio
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            contact_url: profile
+                .contact_url
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            avatar_url: profile
+                .avatar_object_path
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+                .map(|_| format!("/api/public/users/{user_id}/media/avatar")),
+            banner_url: profile
+                .banner_object_path
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+                .map(|_| format!("/api/public/users/{user_id}/media/banner")),
+            profile_enabled: profile.public_profile_enabled,
+        }
+    }
+}
+
+/// One row of the public sharer profile share list (one per workspace).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicOwnerShareItem {
+    pub workspace_id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub share_token: String,
+    pub access_level: String,
+    pub allow_download: bool,
+    pub source_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

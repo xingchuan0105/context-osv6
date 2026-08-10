@@ -197,6 +197,10 @@ export function createWorkspaceShareSurfaceMocks() {
   return {
     authState: {
       token: "token-123",
+    } as {
+      token: string | null;
+      user?: unknown;
+      updateUser?: (user: never) => void;
     },
     uiPreferencesState: {
       locale: "en" as "zh-CN" | "en",
@@ -212,6 +216,7 @@ export function createWorkspaceShareSurfaceMocks() {
     getShareAnalyticsMock: vi.fn(),
     getShareAccessLogsMock: vi.fn(),
     removeMemberMock: vi.fn(),
+    updateProfileMock: vi.fn(),
   };
 }
 
@@ -223,6 +228,7 @@ export function createSharedWorkspaceSurfaceMocks() {
     },
     getSharedWorkspaceMock: vi.fn(),
     streamSharedChatMock: vi.fn(),
+    getPublicOwnerProfileMock: vi.fn(),
   };
 }
 

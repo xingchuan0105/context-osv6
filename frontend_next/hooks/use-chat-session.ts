@@ -24,7 +24,7 @@ export type {
 };
 
 export function useChatSession(options: UseChatSessionOptions): UseChatSessionResult {
-  const { token, locale, sessionId } = options;
+  const { token, locale, sessionId, shareToken, initialMessages } = options;
 
   const [error, setError] = useState("");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId);
@@ -71,6 +71,16 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     chatStream.streamingSessionIdRef.current = sessionId;
     chatStream.streamingMessageIdRef.current = null;
 
+    // Share local sessions: hydrate from parent-provided transcript (no PG list).
+    if (shareToken) {
+      if (initialMessages && initialMessages.length > 0) {
+        messageHistory.setMessages(initialMessages);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!sessionId || !token) {
       return () => {
         cancelled = true;
@@ -103,8 +113,11 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     // chatStream/messageHistory/progressTracker expose stable refs and useCallback
     // handlers; including the objects themselves would re-run this effect on every
     // render (new object identities) and trigger an infinite reset/render loop.
+    // initialMessages is applied when sessionId/shareToken changes (parent remounts
+    // or keys the pane). Do not list initialMessages as a dep — it updates after every
+    // local transcript write and would wipe streaming state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, locale, sessionId]);
+  }, [token, locale, sessionId, shareToken]);
 
   const toggleProgressCollapsed = progressTracker.toggleCollapsed;
 

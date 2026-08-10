@@ -1,0 +1,258 @@
+/* Owner profile page — same banner/avatar geometry as settings upload preview. */
+
+.page {
+  min-height: 100dvh;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.navRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem var(--space-xl);
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: var(--font-size-meta);
+}
+
+.backLink {
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+}
+
+.backLink:hover {
+  color: hsl(var(--foreground));
+}
+
+.navMuted {
+  color: hsl(var(--subtle-foreground));
+}
+
+.hero {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* === match settings-profile-panel .bannerPreview === */
+.banner {
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  min-height: 10rem;
+  max-height: 14rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, hsl(var(--surface-muted)) 55%, hsl(var(--accent)) 45%),
+      hsl(var(--surface-muted))
+    );
+  background-size: cover;
+  background-position: center;
+}
+
+/* === match settings-profile-panel .profileBody + .avatarRow === */
+.heroBody {
+  position: relative;
+  padding: 0 var(--space-xl) var(--space-lg);
+}
+
+.avatarRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-md);
+  margin-top: -3.25rem;
+  margin-bottom: var(--space-md);
+}
+
+/* === match settings-profile-panel .avatarPreview === */
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  border-radius: 999px;
+  border: 4px solid hsl(var(--background));
+  background: hsl(var(--surface-muted));
+  background-size: cover;
+  background-position: center;
+  font-size: 2rem;
+  font-weight: var(--font-weight-semibold);
+  flex: none;
+}
+
+.identity {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding-bottom: 0.25rem;
+  flex: 1 1 auto;
+}
+
+.displayName {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.bio {
+  margin: 0;
+  max-width: 40rem;
+  font-size: var(--font-size-body);
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+  white-space: pre-wrap;
+}
+
+.contact {
+  justify-self: start;
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-semibold);
+  color: hsl(var(--foreground));
+}
+
+.sharesSection {
+  padding: var(--space-xl);
+  display: grid;
+  gap: var(--space-md);
+  max-width: 48rem;
+}
+
+.sharesTitle {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+}
+
+.sharesCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.25rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: hsl(var(--surface-muted));
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.empty {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+}
+
+.shareList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.shareCard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-card);
+  background: hsl(var(--card, var(--background)));
+}
+
+.shareMain {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.shareTitle {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.shareDesc {
+  margin: 0;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shareMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.72rem;
+  color: hsl(var(--subtle-foreground));
+}
+
+.openButton {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  font-size: 0.8rem;
+  text-decoration: none;
+  flex: none;
+}
+
+.openButton:hover {
+  opacity: 0.92;
+}
+
+.status {
+  padding: var(--space-xl);
+  color: hsl(var(--muted-foreground));
+}
+
+.card {
+  margin: var(--space-2xl) auto;
+  max-width: 28rem;
+  padding: var(--space-xl);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: var(--space-md);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 767px) {
+  .navRow,
+  .heroBody,
+  .sharesSection {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
+
+  .banner {
+    min-height: 7.5rem;
+    max-height: 10rem;
+  }
+
+  .avatarRow {
+    margin-top: -2.5rem;
+  }
+
+  .avatar {
+    width: 5.5rem;
+    height: 5.5rem;
+    font-size: 1.5rem;
+    border-width: 3px;
+  }
+}

@@ -74,6 +74,8 @@ pub struct AuthUserProfile {
     pub avatar_object_path: Option<String>,
     /// Object-store path for banner (not a browser URL).
     pub banner_object_path: Option<String>,
+    /// Owner opt-in: expose public sharer profile + active shares.
+    pub public_profile_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +106,8 @@ pub struct UpdateUserProfileInput {
     pub full_name: String,
     pub bio: Option<String>,
     pub contact_url: Option<String>,
+    /// `None` leaves the current flag untouched.
+    pub public_profile_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone)]

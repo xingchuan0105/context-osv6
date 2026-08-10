@@ -32,4 +32,8 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/public/users/{user_id}/media/{kind}",
             get(crate::lib_impl::public_user_media_handler),
         )
+        .route(
+            "/api/public/users/{user_id}/shares",
+            get(crate::lib_impl::public_user_shares_handler),
+        )
     }

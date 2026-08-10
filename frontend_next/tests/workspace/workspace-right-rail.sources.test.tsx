@@ -173,10 +173,10 @@ describe("WorkspaceRightRail sources", () => {
       ).toBe(true);
     });
 
-    await user.click(screen.getByRole("button", { name: "New Source" }));
-    await user.click(screen.getByRole("tab", { name: "Web Link" }));
+    await user.click(screen.getByRole("button", { name: "New source" }));
+    await user.click(screen.getByRole("tab", { name: "Web link" }));
     await user.type(screen.getByLabelText("Source URLs"), "https://example.test/doc{enter}https://example.test/news");
-    await user.click(screen.getByRole("button", { name: "Add Link" }));
+    await user.click(screen.getByRole("button", { name: "Add link" }));
     await waitFor(() => {
       expect(mocks.addWorkspaceSourceUrlMock).toHaveBeenNthCalledWith(1, "token-123", "ws-1", "https://example.test/doc");
     });

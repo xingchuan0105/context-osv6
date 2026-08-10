@@ -19,6 +19,8 @@ pub struct RetrieveViewInputs<'a> {
     pub budget_hint: &'a str,
     pub query_card: Option<&'a QueryCard>,
     pub claim_notes: &'a [ClaimNoteLine],
+    /// Active EWS items (KEEP); injected before folded history.
+    pub ews_items: &'a [crate::helpers::EwsItem],
     pub keep_recent: usize,
     pub char_budget: usize,
 }
@@ -35,6 +37,7 @@ impl<'a> RetrieveViewInputs<'a> {
             budget_hint,
             query_card,
             claim_notes,
+            ews_items: &[],
             keep_recent: HISTORY_FULL_RETRIEVAL_ROUNDS,
             char_budget: WORKING_SET_CHAR_BUDGET,
         }
@@ -43,13 +46,21 @@ impl<'a> RetrieveViewInputs<'a> {
 
 /// Build non-system messages for one retrieve LLM call.
 ///
-/// Order (fixed): history view → budget_hint → query_card → claim_notes.
+/// Order (fixed): **ews_active** → history view (near-K full + older folded) →
+/// budget_hint → query_card → claim_notes.
 pub fn build_retrieve_model_visible(inputs: RetrieveViewInputs<'_>) -> Vec<ChatMessage> {
-    let mut out = build_retrieve_history_view_with_budget(
+    let mut out = Vec::new();
+    if !inputs.ews_items.is_empty() {
+        let block = crate::helpers::format_ews_active_block(inputs.ews_items);
+        if !block.is_empty() {
+            out.push(ChatMessage::user(block));
+        }
+    }
+    out.extend(build_retrieve_history_view_with_budget(
         inputs.durable_messages,
         inputs.keep_recent,
         inputs.char_budget,
-    );
+    ));
     if !inputs.budget_hint.is_empty() {
         out.push(ChatMessage::user(inputs.budget_hint.to_string()));
     }

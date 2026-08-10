@@ -3,6 +3,10 @@
 import styles from "./PricingCards.module.css";
 import type { BillingPlan } from "../../lib/billing/api";
 import { getPlanShareSlots } from "../../lib/billing/planLimits";
+import {
+  planPriceLabelForProvider,
+  type ActiveBillingProvider,
+} from "../../lib/billing/provider";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiMessageKey } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
@@ -15,6 +19,11 @@ export type PricingCardsProps = {
   compact?: boolean;
   /** Marketing dialog: CTA opens formal pricing page instead of in-place checkout. */
   actionMode?: "checkout" | "details";
+  /**
+   * When set (checkout surfaces), cards show only the selected channel's
+   * currency. Unset = marketing dual CNY+USD display.
+   */
+  priceProvider?: ActiveBillingProvider;
 };
 
 function baseTier(planId: string): string {
@@ -28,6 +37,7 @@ export function PricingCards({
   onSelect,
   compact = false,
   actionMode = "checkout",
+  priceProvider,
 }: PricingCardsProps) {
   const detailsMode = actionMode === "details";
   const descriptionKeyByPlan: Record<string, UiMessageKey> = {
@@ -70,8 +80,16 @@ export function PricingCards({
             )}
             <h3 className={styles.name}>{plan.name}</h3>
             <div className={styles.prices}>
-              <div className={styles.priceCny}>{plan.price_label_cny}</div>
-              <div className={styles.priceUsd}>{plan.price_label_usd}</div>
+              {priceProvider ? (
+                <div className={styles.priceCny} data-testid={`price-${plan.plan_id}`}>
+                  {planPriceLabelForProvider(plan, priceProvider)}
+                </div>
+              ) : (
+                <>
+                  <div className={styles.priceCny}>{plan.price_label_cny}</div>
+                  <div className={styles.priceUsd}>{plan.price_label_usd}</div>
+                </>
+              )}
             </div>
             {shareSlots != null && !compact && (
               <ul className={styles.limits}>

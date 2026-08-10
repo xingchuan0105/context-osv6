@@ -1,11 +1,21 @@
-# Loop runtime messages (model-visible observations)
+# Loop runtime messages
 
-Injected into the agent message list (or used as fixed user-facing fallback lines).
+**Primary role:** model-visible **observations** injected into the agent message list.  
 **Not** cluster skills; **not** in `PromptRegistry`. Loaded by `agent-loop` via `include_str!`.
+
+## Channels (2026-08-10)
+
+| Channel | Path | Audience |
+|---------|------|----------|
+| **Model** | `prompts/loop/*.md` observations / repair / C5 | LLM only |
+| **Disaster user prose** | `prompts/loop/disaster/*` | User bubble **only** when format gate or token ceiling leaves no legal model draft — full replacement, **never** a host footnote on a draft |
+| **Forbidden** | ~~evidence-missing-disclosure~~ / ~~verify-ceiling-disclosure~~ | Removed: host must not append diagnostics to `answer` |
+
+See root `AGENTS.md` §「User channel」and `docs/engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` §17.
 
 ## Voice
 
-Third-person **what happened / what is true**. No “please / you must”. Hard gates (if any) live in code; these files report facts. See root `AGENTS.md`.
+Third-person **what happened / what is true** for model observations. No “please / you must”. Hard gates live in code. Disaster lines are short **human** product copy (librarian tone), not run diagnostics.
 
 ## Naming: `codegen-*` files
 
@@ -16,47 +26,60 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `knowledge-base` skill + KB capability | `codegen-*.md` sandbox observations |
 | `search` skill + 联网 capability | same sandbox family when `client.web` / `fetch` runs |
 
-## Files (live)
+## Files (live) — model channel
 
 | File | When used |
 |------|-----------|
 | `blocks-skipped.nudge.md` | Extra code blocks in one turn (`{n_blocks}`, `{n_skipped}`) |
-| `budget-exhausted-final.nudge.md` | Budget exhausted final turn (SaC prose + SELECTED / `[[web:n]]`) |
-| `budget-exhausted-final-tokens.nudge.md` | Same closing turn, token-ceiling variant (states token fact) |
-| `budget-exhausted-carryover.tmpl.md` | Last successful tool payload (`{tool}`, `{body}`) |
+| `budget-exhausted-final.nudge.md` | C5 rounds exhausted + had retrieval attempt (prose + SELECTED / `[[web:n]]`) |
+| `budget-exhausted-final-tokens.nudge.md` | C5 token ceiling + had retrieval attempt |
+| `budget-exhausted-final-no-attempt.nudge.md` | C5 rounds exhausted + **no** retrieval tool attempt |
+| `budget-exhausted-final-tokens-no-attempt.nudge.md` | C5 token ceiling + **no** retrieval tool attempt |
+| `budget-exhausted-carryover.tmpl.md` | Last successful tool payload (`{tool}`, `{body}`) — only when attempt exists |
 | `codegen-no-output.nudge.md` | Empty sandbox round |
 | `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts (`{n_fail}`, `{n_max}` consecutive threshold) |
-| `evidence-index.tmpl.md` | Per-round expand/card/stub counts (`{expanded}`, `{cards}`, `{stubs}`, `{expand_chars}`, `{pool_aliases}`) |
-| `claim-notes.tmpl.md` | P1″ cumulative claim board (`{lines}`, `{n}`, `{max}`) — host excerpts from expanded hits |
+| `evidence-index.tmpl.md` | Per-round expand/card/stub counts |
+| `claim-notes.tmpl.md` | P1″ cumulative claim board |
 | `working-set-trimmed.nudge.md` | Near-round expanded bodies demoted under char budget |
 | `history-cleared.nudge.md` | Older retrieval observation bodies stubbed |
+| `evidence-reread.tmpl.md` | Synthesis-time EWS recency reread (`{items}`) |
 | `codegen-untrusted-prefix.nudge.md` | Untrusted tool-output prefix |
-| `native-tools-closed.tmpl.md` | Single fixed rejection for the closed native model surface (SDK method or superseded native tool name issued as a native tool call; error code `native_tools_closed`) |
+| `native-tools-closed.tmpl.md` | Closed native model surface rejection |
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + `{detail}` |
-| `retrieval-summary-detail-*.tmpl.md` / `*-nudge.md` | `{detail}` fragments: aliases / saturation / truncated / grep0 / selected / wrap |
+| `retrieval-summary-detail-*.tmpl.md` / `*-nudge.md` | `{detail}` fragments |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON (non–prose_only paths) |
-| `synthesis-prose-repair.tmpl.md` | prose_only final-form repair (one round): code-only / host-observation shell / template artifact / executable-code or trailing-fence working draft; `{violation_detail}` names the matched form/tag |
-| `final-answer-feedback-*.md` | Per-rule `{violation_detail}` bodies for the final-answer quality gate (code-only / host-shell / template-artifact / executable-code / trailing-code-fence); substituted into `synthesis-prose-repair.tmpl.md` (P2-2) |
-| `contract-violation-*.md` | User-facing format failure fallbacks |
-| `degraded-no-evidence-*.md` | User-facing empty-evidence fallbacks |
-| `partial-evidence-insufficient.md` | Short partial-evidence line |
-| `retrieval-failed-final.nudge.md` | Degraded final turn when host uses empty-evidence path |
-| `evidence-missing.nudge.md` | L2 structural evidence gate: DirectAnswer 不收时注入（零 Ok 回传 + rag/web 挂载） |
-| `required-action-missing.tmpl.md` | L2.5 required-action gate: 题型卡声明动作无 Ok 回传时注入；`{action}` 为动作名 |
-| `synthesis-rerender.tmpl.md` | 证据池重渲染轮（repair 再败且 has_evidence 时注入，保留 SELECTED / `[[web:n]]` 指引） |
-| `evidence-missing-disclosure.md` | 宿主确定性追加的用户可见披露行（预算耗尽放行 / 无证据 synthesis 终答末尾） |
-| `judge-fail-synthesis.tmpl.md` | 短 Judge 不合格 → 回合成（`{advice}`） |
-| `judge-fail-retrieve.tmpl.md` | 短 Judge 不合格 → 回检索（`{advice}`） |
-| `judge-ceiling-disclosure.md` | Judge 回环到顶时用户可见降级说明 |
-| `judge-empty-advice.md` | Judge fail 但未给出 advice 时的占位观察 |
-| `judge-empty-evidence.md` | Judge 证据摘录为空时的占位（无工具/检索 observation） |
-| `judge-draft-under-revision.tmpl.md` | 回合成时注入上一版稿 `{draft}` |
+| `synthesis-prose-repair.tmpl.md` | prose_only final-form repair; `{violation_detail}` |
+| `final-answer-feedback-*.md` | Per-rule `{violation_detail}` (incl. `provider-protocol` for DSML) |
+| `partial-evidence-insufficient.md` | Short partial-evidence line (salvage path) |
+| `retrieval-failed-final.nudge.md` | Empty-evidence final-turn observation (model) |
+| `evidence-missing.nudge.md` | L2 证据闸：已调用、无 answer-grade |
+| `evidence-missing-no-client.nudge.md` | L2：尚未有检索侧调用 |
+| `required-action-missing-*.tmpl.md` | L2.5 必做动作 |
+| `selected-protocol.nudge.md` | 合成前 SELECTED 形态说明 |
+| `user-facing-closeout.nudge.md` | verify fail 到顶且仍有 token：模型收束轮观察 |
+| `synthesis-rerender.tmpl.md` | 证据池重渲染轮 |
+| `verify-fail-synthesis.tmpl.md` / `verify-fail-retrieve.tmpl.md` | verify 回环 |
+| `verify-empty-advice.md` / `verify-empty-evidence.md` | verify 占位 |
+| `verify-draft-under-revision.tmpl.md` | 回合成时注入 `{draft}` |
 
-## Retired (not product-injected)
+## Files (live) — disaster user prose only
+
+| File | When used |
+|------|-----------|
+| `disaster/format-exhausted.md` | Format gate exhausted (draft+repair+rerender) or illegal out-bound after closeout/token ceiling |
+| `disaster/no-evidence.md` | No-evidence path disaster (rag / dual) |
+| `disaster/search-no-evidence.md` | No-evidence path disaster (search) |
+| `disaster/default.md` | Generic disaster |
+
+## Retired (deleted 2026-08-10)
+
+- `evidence-missing-disclosure.md` / `evidence-missing-disclosure-no-attempt.md` — host footers on answers  
+- `verify-ceiling-disclosure.md` — host ceiling footer  
+- `contract-violation-*.md` / `degraded-no-evidence-*.md` — superseded by `disaster/*`
+
+## Retired (legacy tests)
 
 `../deprecated/loop-legacy/no-chunk-*.md` — host no-chunk continue/grace. Kept for unit tests via `prompt_assets` only.
 
-Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`, `{violation_detail}`, `{action}`, `{n_fail}`, `{n_max}`, `{expanded}`, `{cards}`, `{stubs}`, `{expand_chars}`, `{pool_aliases}`, `{lines}`, `{n}`, `{max}`, `{aliases}`, `{n_aliases}`, `{new_aliases}`, `{seen_aliases}`, `{parts}`.
-
-`pipeline/table-supervision/obs-*.md` observations (`{sql}`, `{rows}`, `{table_id}`, …) are **not** loaded here: they are rendered by the `avrag-struct-supervision` `prompts.rs` mini engine (`include_str!` + key/block/pick substitution).
+Placeholders (loop): `{n_blocks}`, `{n_skipped}`, `{call_count}`, `{total_chunks}`, `{detail}`, `{tool}`, `{body}`, `{violation_detail}`, `{action}`, `{n_fail}`, `{n_max}`, `{expanded}`, `{cards}`, `{stubs}`, `{expand_chars}`, `{pool_aliases}`, `{lines}`, `{n}`, `{max}`, `{aliases}`, `{n_aliases}`, `{new_aliases}`, `{seen_aliases}`, `{parts}`, `{draft}`, `{advice}`.

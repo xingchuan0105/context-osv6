@@ -57,6 +57,10 @@ const nextConfig: NextConfig = {
               destination: `${apiProxyTarget}/api/shared/:path*`,
             },
             {
+              source: "/api/public/:path*",
+              destination: `${apiProxyTarget}/api/public/:path*`,
+            },
+            {
               source: "/api/e2e/:path*",
               destination: `${apiProxyTarget}/api/e2e/:path*`,
             },

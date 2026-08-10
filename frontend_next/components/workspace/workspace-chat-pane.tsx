@@ -1,6 +1,14 @@
 "use client";
 
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
@@ -32,6 +40,18 @@ type WorkspaceChatPaneProps = {
   onSelectCitation?: (request: WorkspaceCitationRequest) => void;
   onOpenWebSources?: (request: WorkspaceWebSourcesRequest) => void;
   registerComposerInsert?: (handler: ((text: string) => boolean) | null) => void;
+  /**
+   * Shared KB visitor surface: source_type=share, default RAG locked (no chat mode, no search).
+   */
+  shareToken?: string | null;
+  turnstileToken?: string | null;
+  /** Local transcript seed for share sessions (not loaded from PG). */
+  initialMessages?: import("../../hooks/chat-session/types").UiChatMessage[] | null;
+  onTranscriptChange?: (
+    messages: import("../../hooks/chat-session/types").UiChatMessage[],
+  ) => void;
+  /** Fixed capabilities; omit to use normal per-workspace toggles. */
+  lockedCapabilities?: WorkspaceCapability[];
 };
 
 function getCapabilitiesSummaryLabel(
@@ -63,39 +83,66 @@ export function WorkspaceChatPane({
   onSelectCitation,
   onOpenWebSources,
   registerComposerInsert,
+  shareToken = null,
+  turnstileToken = null,
+  initialMessages = null,
+  onTranscriptChange,
+  lockedCapabilities,
 }: WorkspaceChatPaneProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
   const [draft, setDraft] = useState("");
   const [composerClearance, setComposerClearance] = useState<number | null>(null);
+  const isShareMode = Boolean(shareToken?.trim());
+  const fixedCaps = useMemo<WorkspaceCapability[] | null>(() => {
+    if (lockedCapabilities && lockedCapabilities.length > 0) {
+      return [...lockedCapabilities];
+    }
+    if (isShareMode) {
+      return ["rag"];
+    }
+    return null;
+  }, [isShareMode, lockedCapabilities]);
+  const fixedCapsKey = fixedCaps?.join(",") ?? "";
   const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>(() =>
-    loadStoredCapabilities(workspaceId),
+    fixedCaps ? [...fixedCaps] : loadStoredCapabilities(workspaceId),
   );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingCursorRef = useRef<number | null>(null);
 
   // Restore per-workspace capability toggles after refresh / workspace switch.
   useEffect(() => {
+    if (fixedCapsKey) {
+      setCapabilities(fixedCapsKey.split(",") as WorkspaceCapability[]);
+      return;
+    }
     setCapabilities(loadStoredCapabilities(workspaceId));
-  }, [workspaceId]);
+  }, [workspaceId, fixedCapsKey]);
 
   // RAG requires an explicit source selection: strip it when the selection
   // becomes empty (product rule 2026-07-18 — no implicit whole-workspace scope).
+  // Shared KB uses whole-workspace RAG by default — never strip.
   useEffect(() => {
+    if (fixedCaps || isShareMode) {
+      return;
+    }
     if (selectedSourceIds.length > 0 || !capabilities.includes("rag")) {
       return;
     }
     const next = capabilities.filter((cap) => cap !== "rag");
     setCapabilities(next);
     storeCapabilities(workspaceId, next);
-  }, [selectedSourceIds, capabilities, workspaceId]);
+  }, [selectedSourceIds, capabilities, workspaceId, fixedCaps, isShareMode]);
 
   const handleCapabilitiesChange = useCallback(
     (next: WorkspaceCapability[]) => {
+      if (fixedCaps) {
+        return;
+      }
       setCapabilities(next);
       storeCapabilities(workspaceId, next);
     },
-    [workspaceId],
+    [workspaceId, fixedCaps],
   );
 
   const activeModeLabel = getCapabilitiesSummaryLabel(locale, capabilities);
@@ -110,7 +157,19 @@ export function WorkspaceChatPane({
     locale,
     onSessionChange,
     onSessionActivity,
+    shareToken,
+    turnstileToken,
+    initialMessages,
+    onTranscriptChange,
   });
+
+  // Keep local share transcripts in sync after stream settles.
+  useEffect(() => {
+    if (!isShareMode || chatSession.isStreaming) {
+      return;
+    }
+    onTranscriptChange?.(chatSession.messages);
+  }, [isShareMode, chatSession.isStreaming, chatSession.messages, onTranscriptChange]);
 
   const shellStyle: CSSProperties | undefined =
     composerClearance !== null
@@ -232,19 +291,23 @@ export function WorkspaceChatPane({
         </p>
       )}
 
-      <ChatMessageList
-        key={sessionId ?? "new-thread"}
-        messages={chatSession.messages}
-        progress={chatSession.progress}
-        isStreaming={chatSession.isStreaming}
-        locale={locale}
-        onSelectCitation={onSelectCitation ?? (() => {})}
-        onOpenWebSources={onOpenWebSources ?? (() => {})}
-        onCopyMessage={handleCopyMessage}
-        onEditMessage={handleEditMessage}
-        onSubmitFeedback={handleSubmitFeedback}
-        onToggleProgressCollapsed={chatSession.toggleProgressCollapsed}
-      />
+      {/* Empty thread: hero composer fills the pane — skip the empty transcript
+          so its flex share doesn't push the hero down. */}
+      {!showComposerHero && (
+        <ChatMessageList
+          key={sessionId ?? "new-thread"}
+          messages={chatSession.messages}
+          progress={chatSession.progress}
+          isStreaming={chatSession.isStreaming}
+          locale={locale}
+          onSelectCitation={onSelectCitation ?? (() => {})}
+          onOpenWebSources={onOpenWebSources ?? (() => {})}
+          onCopyMessage={handleCopyMessage}
+          onEditMessage={handleEditMessage}
+          onSubmitFeedback={handleSubmitFeedback}
+          onToggleProgressCollapsed={chatSession.toggleProgressCollapsed}
+        />
+      )}
 
       <ChatComposer
         draft={draft}
@@ -253,13 +316,15 @@ export function WorkspaceChatPane({
         capabilities={capabilities}
         locale={locale}
         workspaceId={workspaceId}
-        ragDisabled={selectedSourceIds.length === 0}
+        ragDisabled={!isShareMode && selectedSourceIds.length === 0}
         onSubmit={handleSend}
         onStop={chatSession.stop}
         onCapabilitiesChange={handleCapabilitiesChange}
         textareaRef={textareaRef}
         onHeightChange={setComposerClearance}
         hero={composerHero}
+        availableCapabilities={fixedCaps ?? undefined}
+        lockCapabilities={Boolean(fixedCaps)}
       />
     </section>
   );

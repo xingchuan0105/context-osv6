@@ -21,6 +21,22 @@ const RAG_ANSWER_CHUNK_TOOLS: &[&str] = &[
 /// Web evidence from SaC host (still tagged `web_search` / `web_fetch` on capture).
 const SEARCH_EVIDENCE_TOOLS: &[&str] = &["web_search", "web_fetch"];
 
+/// Any host-captured retrieval-side tool id counts as a **call attempt**
+/// (including empty Ok / Error). Broader than answer-grade so archive/catalog
+/// and zero-hit dense still mark "client was invoked".
+const RAG_RETRIEVAL_ATTEMPT_TOOLS: &[&str] = &[
+    "dense_retrieval",
+    "lexical_retrieval",
+    "graph_retrieval",
+    "index_lookup",
+    "doc_grep",
+    "doc_read_lines",
+    "struct_query",
+    "struct_catalog",
+    "doc_summary",
+    "doc_metadata",
+];
+
 // LLM-facing observation bodies live in `prompts/loop/*.md` (see `prompt_assets`).
 // Re-export loaders so call sites stay under exit_policy without inlined prose.
 //
@@ -280,6 +296,15 @@ pub fn has_retrieval_observation(
     true
 }
 
+/// Whether any retrieval-layer tool entry exists (Ok/Error/empty). Used to split
+/// L2 evidence-missing copy: no client.* capture yet vs called with zero hits.
+pub fn has_retrieval_attempt(collected_tool_results: &[ToolResult]) -> bool {
+    collected_tool_results.iter().any(|r| {
+        let t = r.tool.as_str();
+        RAG_RETRIEVAL_ATTEMPT_TOOLS.contains(&t) || SEARCH_EVIDENCE_TOOLS.contains(&t)
+    })
+}
+
 /// L2 (2026-08-03): whether the mode requires retrieval evidence structurally.
 /// True when the mounted SDK primitives include any rag-group or search-group
 /// id (grouping per `contracts::sdk_primitives::ids_for`). This is a
@@ -307,6 +332,19 @@ mod tests {
 
     fn rag_mode() -> ModeConfig {
         super::super::config::load_mode_config("rag").unwrap()
+    }
+
+    #[test]
+    fn has_retrieval_attempt_true_for_empty_dense_ok() {
+        let empty = ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1".into(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!([])),
+            trace: None,
+        };
+        assert!(has_retrieval_attempt(&[empty]));
+        assert!(!has_retrieval_attempt(&[]));
     }
 
     #[test]

@@ -88,7 +88,9 @@ impl SynthesisPhase {
         let first = llm
             .complete_json_mode(&synthesis_messages, Some(temperature))
             .await
-            .map_err(|e| AppError::internal(format!("synthesis complete failed: {e}")))?;
+            .map_err(|e| {
+                crate::helpers::map_llm_error_to_app_error("synthesis complete failed", e)
+            })?;
         reasoning_emit::emit_reasoning_chunks(sink, first.reasoning_content.as_deref()).await;
         let mut usage = first.usage.clone();
 
@@ -290,9 +292,8 @@ impl SynthesisPhase {
         // same class covers a final answer that pastes a host observation
         // shell (`<retrieval_summary>`, `<loop_budget>`, …) — the model
         // reproduced host-emitted format instead of writing grounded prose.
-        // One repair round; if the repair still comes back violating, use the
-        // degraded fallback copy — never surface a raw code block or a host
-        // observation shell as the final prose answer.
+        // Repair → optional rerender; third failure → disaster prose (no 4th
+        // full synthesis by default). Never surface protocol shells as the answer.
         if let Some(violation) = super::answer_contract::check_final_answer(&full_answer) {
             let rule_id = violation.rule_id;
             let mut repair_counts = std::collections::BTreeMap::new();
@@ -300,9 +301,7 @@ impl SynthesisPhase {
             let _ = sink
                 .emit(AgentEvent::Activity {
                     stage: format!("final_check:{rule_id}:repair"),
-                    message:
-                        "final_answer quality gate fired ({rule_id}); one repair round follows"
-                            .to_string(),
+                    message: "progress.final_check_repair".to_string(),
                     detail: Some(violation.matched.to_string()),
                     counts: repair_counts,
                     sources_preview: Vec::new(),
@@ -336,9 +335,7 @@ impl SynthesisPhase {
                     let _ = sink
                         .emit(AgentEvent::Activity {
                             stage: format!("final_check:{rule_id}:rerender"),
-                            message:
-                                "final_answer quality gate fired after repair; evidence-pool rerender follows"
-                                    .to_string(),
+                            message: "progress.final_check_rerender".to_string(),
                             detail: Some(violation.matched.to_string()),
                             counts: rerender_counts,
                             sources_preview: Vec::new(),
@@ -368,15 +365,15 @@ impl SynthesisPhase {
                         let _ = sink
                             .emit(AgentEvent::Activity {
                                 stage: format!("final_check:{rule_id}:fallback"),
-                                message:
-                                    "final_answer quality gate fired after rerender; contract fallback used"
-                                        .to_string(),
+                                message: "progress.final_check_fallback".to_string(),
                                 detail: Some(violation.matched.to_string()),
                                 counts: violation_counts,
                                 sources_preview: Vec::new(),
                             })
                             .await;
-                        full_answer = contract_violation_fallback(&mode.id);
+                        // §17.3: after draft+repair+rerender, disaster prose (no 4th LLM).
+                        full_answer =
+                            super::prompt_assets::disaster_format_exhausted().to_string();
                         if deliver_to_user {
                             let _ = sink
                                 .emit(AgentEvent::MessageDelta {
@@ -393,15 +390,14 @@ impl SynthesisPhase {
                     let _ = sink
                         .emit(AgentEvent::Activity {
                             stage: format!("final_check:{rule_id}:degraded"),
-                            message:
-                                "final_answer quality gate fired after repair; no evidence → degraded answer"
-                                    .to_string(),
+                            message: "progress.final_check_degraded".to_string(),
                             detail: Some(violation.matched.to_string()),
                             counts: degraded_counts,
                             sources_preview: Vec::new(),
                         })
                         .await;
-                    full_answer = super::prompt_assets::degraded_no_evidence_answer(&mode.id).to_string();
+                    full_answer =
+                        super::prompt_assets::disaster_no_evidence_answer(&mode.id).to_string();
                     if deliver_to_user {
                         let _ = sink
                             .emit(AgentEvent::MessageDelta {
@@ -416,25 +412,25 @@ impl SynthesisPhase {
         }
 
         if deliver_to_user {
-            let usage = crate::events::AgentUsage {
-                provider: response.usage.provider.clone(),
+            let done_usage = crate::events::AgentUsage {
+                provider: usage.provider.clone(),
                 model: response.model.clone(),
-                prompt_tokens: response.usage.prompt_tokens as u64,
-                completion_tokens: response.usage.completion_tokens as u64,
-                total_tokens: response.usage.total_tokens as u64,
-                cached_tokens: 0,
+                prompt_tokens: usage.prompt_tokens as u64,
+                completion_tokens: usage.completion_tokens as u64,
+                total_tokens: usage.total_tokens as u64,
+                cached_tokens: usage.cached_tokens as u64,
             };
             let _ = sink
                 .emit(AgentEvent::Done {
                     final_message: Some(full_answer.clone()),
-                    usage: Some(usage),
+                    usage: Some(done_usage),
                 })
                 .await;
         } else {
             let _ = sink
                 .emit(AgentEvent::Activity {
-                    stage: "synthesis_held_for_judge".to_string(),
-                    message: "prose draft ready; short Judge pending".to_string(),
+                    stage: "synthesis_held_for_verify".to_string(),
+                    message: "progress.synthesis_held_for_verify".to_string(),
                     detail: None,
                     counts: Default::default(),
                     sources_preview: Vec::new(),
@@ -467,10 +463,17 @@ pub async fn emit_prose_delivery(
         .await;
 }
 
-/// Stream one prose completion, forwarding content deltas and reasoning
-/// summaries to the sink as they arrive; returns the accumulated prose and
-/// the final response (usage/model). Shared by the first prose pass and the
-/// code-only repair round.
+/// Max non-stream recovery attempts after a failed stream (stream + non-stream×N).
+const SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS: u8 = 2;
+
+/// One prose completion with **delivery-idempotent** resilience:
+///
+/// 1. Stream once (buffer tokens; do not paint the answer bubble until success).
+/// 2. On retryable stream failure → up to **two** non-stream `complete` fallbacks
+///    (1s backoff between them).
+/// 3. Only the winning attempt's text is returned / optionally flushed as deltas.
+///
+/// Shared by the first prose pass and the code-only repair / rerender rounds.
 async fn stream_prose_to_sink(
     llm: &LlmClient,
     messages: &[ChatMessage],
@@ -479,6 +482,135 @@ async fn stream_prose_to_sink(
     cancel: &CancellationToken,
     emit_answer_deltas: bool,
 ) -> Result<(String, LlmResponse), AppError> {
+    match stream_prose_buffered(llm, messages, temperature, sink, cancel).await {
+        Ok((text, response)) => {
+            telemetry::prometheus::observe_synthesis_stream_outcome("ok");
+            if emit_answer_deltas {
+                flush_answer_deltas(sink, &text).await;
+            }
+            return Ok((text, response));
+        }
+        Err(e) if crate::helpers::is_cancellation_error(&e) || cancel.is_cancelled() => {
+            return Err(super::cancellation::cancellation_error());
+        }
+        Err(e) if !crate::helpers::is_retryable_upstream_error(&e) => {
+            telemetry::prometheus::observe_synthesis_stream_outcome("exhausted");
+            return Err(crate::helpers::map_llm_error_to_app_error(
+                "synthesis stream failed",
+                e,
+            ));
+        }
+        Err(e) => {
+            telemetry::prometheus::observe_synthesis_stream_outcome("stream_fail");
+            tracing::warn!(
+                error = %e,
+                "synthesis stream failed (retryable); trying non-stream fallbacks (max {SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS})"
+            );
+            let mut counts = std::collections::BTreeMap::new();
+            counts.insert("synthesis_stream_fail".to_string(), 1usize);
+            let _ = sink
+                .emit(AgentEvent::Activity {
+                    stage: "synthesis_stream_fail".to_string(),
+                    message: format!(
+                        "synthesis stream interrupted; up to {SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS} non-stream fallback(s) follow"
+                    ),
+                    detail: Some(format!("{e:#}")),
+                    counts,
+                    sources_preview: Vec::new(),
+                })
+                .await;
+        }
+    }
+
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS {
+        if cancel.is_cancelled() {
+            return Err(super::cancellation::cancellation_error());
+        }
+        if attempt > 1 {
+            // Brief backoff between non-stream retries (1s).
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if cancel.is_cancelled() {
+                return Err(super::cancellation::cancellation_error());
+            }
+        }
+
+        match llm.complete(messages, Some(temperature)).await {
+            Ok(response) => {
+                telemetry::prometheus::observe_synthesis_stream_outcome("nonstream_fallback_ok");
+                let mut counts = std::collections::BTreeMap::new();
+                counts.insert("synthesis_nonstream_fallback".to_string(), 1usize);
+                counts.insert(
+                    format!("synthesis_nonstream_fallback_attempt_{attempt}"),
+                    1usize,
+                );
+                let _ = sink
+                    .emit(AgentEvent::Activity {
+                        stage: "synthesis_nonstream_fallback".to_string(),
+                        message: format!(
+                            "synthesis recovered via non-stream completion (attempt {attempt}/{SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS})"
+                        ),
+                        detail: None,
+                        counts,
+                        sources_preview: Vec::new(),
+                    })
+                    .await;
+                let text = response.content.clone();
+                if emit_answer_deltas {
+                    flush_answer_deltas(sink, &text).await;
+                }
+                return Ok((text, response));
+            }
+            Err(e) => {
+                let retryable = crate::helpers::is_retryable_upstream_error(&e);
+                tracing::warn!(
+                    attempt,
+                    max = SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS,
+                    retryable,
+                    error = %e,
+                    "synthesis non-stream fallback failed"
+                );
+                last_err = Some(e);
+                if !retryable {
+                    break;
+                }
+            }
+        }
+    }
+
+    telemetry::prometheus::observe_synthesis_stream_outcome("exhausted");
+    let detail = last_err
+        .as_ref()
+        .map(|e| format!("{e:#}"))
+        .unwrap_or_else(|| "unknown".to_string());
+    let mut counts = std::collections::BTreeMap::new();
+    counts.insert("synthesis_upstream_exhausted".to_string(), 1usize);
+    let _ = sink
+        .emit(AgentEvent::Activity {
+            stage: "synthesis_upstream_exhausted".to_string(),
+            message: format!(
+                "synthesis stream + {SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS} non-stream fallback(s) all failed"
+            ),
+            detail: Some(detail.clone()),
+            counts,
+            sources_preview: Vec::new(),
+        })
+        .await;
+    Err(crate::helpers::map_llm_error_to_app_error(
+        "synthesis complete failed after stream + non-stream fallbacks",
+        last_err.unwrap_or_else(|| anyhow::anyhow!("synthesis fallback exhausted")),
+    ))
+}
+
+/// Stream once, buffering answer text until the stream finishes successfully.
+/// Reasoning deltas may still go to the process panel (non-final).
+async fn stream_prose_buffered(
+    llm: &LlmClient,
+    messages: &[ChatMessage],
+    temperature: f32,
+    sink: &dyn AgentEventSink,
+    cancel: &CancellationToken,
+) -> Result<(String, LlmResponse), anyhow::Error> {
     let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let stream = llm.complete_stream(
@@ -504,14 +636,12 @@ async fn stream_prose_to_sink(
         tokio::select! {
             biased;
             _ = cancel.cancelled() => {
-                return Err(super::cancellation::cancellation_error());
+                return Err(anyhow::anyhow!("request cancelled during synthesis stream"));
             }
             delta = delta_rx.recv() => {
                 if let Some(delta) = delta {
+                    // Buffer only — delivery-idempotent: failed streams never paint the bubble.
                     full_answer.push_str(&delta);
-                    if emit_answer_deltas {
-                        let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
-                    }
                 }
             }
             reasoning = reasoning_rx.recv() => {
@@ -522,16 +652,13 @@ async fn stream_prose_to_sink(
                 }
             }
             result = &mut stream => {
-                break result.map_err(|e| AppError::internal(format!("synthesis stream failed: {e}")))?;
+                break result?;
             }
         }
     };
 
     while let Ok(delta) = delta_rx.try_recv() {
         full_answer.push_str(&delta);
-        if emit_answer_deltas {
-            let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
-        }
     }
     while let Ok(reasoning) = reasoning_rx.try_recv() {
         let _ = sink
@@ -539,7 +666,21 @@ async fn stream_prose_to_sink(
             .await;
     }
 
+    // Prefer stream-assembled text; fall back to response.content if deltas were empty.
+    if full_answer.is_empty() && !response.content.is_empty() {
+        full_answer = response.content.clone();
+    }
+
     Ok((full_answer, response))
+}
+
+async fn flush_answer_deltas(sink: &dyn AgentEventSink, prose: &str) {
+    const CHUNK: usize = 24;
+    let chars: Vec<char> = prose.chars().collect();
+    for piece in chars.chunks(CHUNK) {
+        let text: String = piece.iter().collect();
+        let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
+    }
 }
 
 fn append_tool_results_observation(out: &mut Vec<ChatMessage>, tool_results: &[ToolResult]) {

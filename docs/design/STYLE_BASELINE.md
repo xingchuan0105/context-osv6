@@ -304,7 +304,7 @@ Chrome（顶栏 / 页脚 / 全局按钮）必须用本基准 token。
 | `--font-size-meta` | 0.75rem (12) | 1.5 | 元信息、进度行 |
 | `--font-size-label` | 0.75rem (12) | 1.5 | 表单 label |
 | `--font-size-control` | 0.8125rem (13) | 1.48 | 按钮、输入、会话列表 |
-| `--font-size-body` | 0.875rem (14) | 1.65 | 正文默认、助手回答 |
+| `--font-size-body` | 0.875rem (14) | 1.5 | 正文默认、助手回答 |
 | `--font-size-body-lg` | 1rem (16) | 1.55 | 强调正文 / lead |
 | `--font-size-title` | 1.5rem (24) | 1.18（字距 `-0.01em`） | 页题 H1（产品内） |
 

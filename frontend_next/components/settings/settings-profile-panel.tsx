@@ -8,7 +8,7 @@ import { z } from "zod";
 import { AppModal } from "../ui/app-modal";
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
-import { buildApiUrl } from "../../lib/http/request";
+import { mediaSrc } from "../../lib/http/request";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   deleteProfileMedia,
@@ -19,16 +19,6 @@ import { useUiPreferences } from "../../lib/ui-preferences";
 import { applyZodErrors, bannerStyle, type ProfileFormValues } from "./settings-shared";
 import styles from "./settings-profile-panel.module.css";
 import shared from "./settings-ui-shared.module.css";
-
-function mediaSrc(path: string | null | undefined) {
-  if (!path?.trim()) {
-    return null;
-  }
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
-  }
-  return buildApiUrl(path);
-}
 
 /**
  * Profile tab: display card + X-style edit modal (not always-on form).

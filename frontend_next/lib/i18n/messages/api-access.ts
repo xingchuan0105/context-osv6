@@ -4,29 +4,9 @@ import type { UiMessageDescriptor } from "./types";
  * Workspace API access surface + related developer-facing strings.
  */
 export const apiAccessMessages = {
-  "apiAccess.backWorkspace": {
-    zh: "返回工作区",
-    en: "Back to workspace",
-  },
-  "apiAccess.overline": {
-    zh: "工作区 API",
-    en: "Workspace API",
-  },
   "apiAccess.title": {
     zh: "API 访问",
     en: "API access",
-  },
-  "apiAccess.subtitle": {
-    zh: "为这个工作区创建 API 密钥，并查看面向开发者与 LLM agents 的接入说明。",
-    en: "Create API keys for this workspace and view developer / agent setup docs.",
-  },
-  "apiAccess.workspaceIdNote": {
-    zh: "在 API 路径中，这个工作区对应 workspace_id。",
-    en: "In API paths this workspace is identified by workspace_id.",
-  },
-  "apiAccess.embeddedLead": {
-    zh: "为这个工作区创建 API 密钥。下方提供人类说明与 agent 稳定文档入口。",
-    en: "Create API keys for this workspace. Human docs and a stable agent doc are below.",
   },
   "apiAccess.createTitle": {
     zh: "创建 API 密钥",

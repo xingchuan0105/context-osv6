@@ -1,10 +1,4 @@
-/* Billing / plan entry (.plan-entry*) — extracted from app/globals.css (mechanical split, rules unchanged).
- * globals.css L638-684. Originally between two .dashboard-header-settings
- * rules; those selectors are disjoint, order-independent. Must stay AFTER
- * _app-shared.css: .plan-entry-default/-compact override min-height/
- * padding/border-radius of .app-button-primary on the same element. */
-
-/* Shared top-bar capsule token (account menu, notification bell, etc.). */
+/* Shared top-bar capsule token (account menu, notification bell, share menu, etc.). */
 .top-bar-capsule {
   display: inline-flex;
   align-items: center;
@@ -14,65 +8,5 @@
   font-size: var(--font-size-control);
   font-weight: var(--font-weight-medium);
   line-height: 1;
-}
-
-.plan-entry {
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-/* W3 D3: upgrade capsule = warm orange accent; same height as top-bar pills */
-.plan-entry.plan-entry-default,
-.plan-entry.plan-entry-compact,
-button.plan-entry {
-  min-height: 2.25rem;
-  height: 2.25rem;
-  padding: 0 var(--space-md);
-  border-radius: 999px;
-  font-size: var(--font-size-control);
-  font-weight: var(--font-weight-medium);
-  line-height: 1;
-}
-
-.plan-entry-default {
-  min-height: 2.25rem;
-  padding: 0 var(--space-md);
-  border-radius: 999px;
-}
-
-.plan-entry-compact {
-  min-height: 2.25rem;
-  padding: 0 var(--space-md);
-  border-radius: 999px;
-  font-size: var(--font-size-control);
-}
-
-.plan-entry-badge {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid hsl(var(--border));
-  border-radius: 999px;
-  background: hsl(var(--surface-muted));
-  color: hsl(var(--foreground));
-  font: inherit;
-  font-size: var(--font-size-control);
-  font-weight: var(--font-weight-medium);
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.plan-entry-badge.plan-entry-default,
-.plan-entry-badge.plan-entry-compact {
-  min-height: 2.25rem;
-  height: 2.25rem;
-  padding: 0 var(--space-md);
-}
-
-.plan-entry-badge:hover {
-  border-color: hsl(var(--accent) / 0.35);
 }
 

@@ -76,7 +76,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
               background: "hsl(var(--surface-muted))",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 650 }}>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>
               {formatUiMessage(locale, "upgradeModal.memberTitle")}
             </h3>
             <p className="app-page-subtitle" style={{ margin: 0, fontSize: "0.88rem" }}>
@@ -92,7 +92,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
               background: "hsl(var(--surface-muted))",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 650 }}>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>
               {formatUiMessage(locale, "upgradeModal.topupTitle")}
             </h3>
             <p className="app-page-subtitle" style={{ margin: 0, fontSize: "0.88rem" }}>

@@ -26,6 +26,11 @@ export type WorkspaceSourcesPaneProps = {
   onUploadFiles: (files: File[]) => Promise<void> | void;
   onUrlSourceChange: (value: string) => void;
   error: string;
+  /**
+   * Shared/public browse mode: list + open only.
+   * Hides add/upload, multi-select, reindex, and delete.
+   */
+  readOnly?: boolean;
 };
 
 const SUPPORTED_UPLOAD_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.csv,.json,.toml,.yaml,.yml,.rst";
@@ -82,6 +87,7 @@ export function WorkspaceSourcesPane({
   onUploadFiles,
   onUrlSourceChange,
   error,
+  readOnly = false,
 }: WorkspaceSourcesPaneProps) {
   const { locale } = useUiPreferences();
   const [showNewSourceDialog, setShowNewSourceDialog] = useState(false);
@@ -170,44 +176,52 @@ export function WorkspaceSourcesPane({
         </div>
       </div>
 
-      <div className={styles.sectionControls}>
-        <button
-          className={`${styles.sectionActionButton} ${styles.sectionActionButtonLight} app-button-create-soft`}
-          type="button"
-          onClick={() => {
-            setActiveDialogTab("upload");
-            setShowNewSourceDialog(true);
-          }}
-        >
-          <svg aria-hidden="true" className={styles.sectionActionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
-          </svg>
-          <span>{formatUiMessage(locale, "workspaceRightRail.newSourceAction")}</span>
-        </button>
-
-        <div className={styles.selectionRow}>
-          <span className={styles.selectionLabel}>{formatUiMessage(locale, "workspaceRightRail.selectAllAction")}</span>
+      {readOnly ? (
+        error ? (
+          <div className={styles.sectionControls}>
+            <div className={styles.error}>{error}</div>
+          </div>
+        ) : null
+      ) : (
+        <div className={styles.sectionControls}>
           <button
-            aria-label={
-              allSelected
-                ? formatUiMessage(locale, "workspaceRightRail.clearSelectionAction")
-                : formatUiMessage(locale, "workspaceRightRail.selectAllAction")
-            }
-            aria-pressed={allSelected}
-            className={`${styles.selectionCheckbox}${allSelected ? ` ${styles.selectionCheckboxChecked}` : ""}`}
-            onClick={onSelectAll}
+            className={`${styles.sectionActionButton} ${styles.sectionActionButtonLight} app-button-create-soft`}
             type="button"
+            onClick={() => {
+              setActiveDialogTab("upload");
+              setShowNewSourceDialog(true);
+            }}
           >
-            {allSelected ? (
-              <svg aria-hidden="true" className={styles.selectionCheckboxIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="m6 12.75 4 4 8-9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
-            ) : null}
+            <svg aria-hidden="true" className={styles.sectionActionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
+            </svg>
+            <span>{formatUiMessage(locale, "workspaceRightRail.newSourceAction")}</span>
           </button>
-        </div>
 
-        {error ? <div className={styles.error}>{error}</div> : null}
-      </div>
+          <div className={styles.selectionRow}>
+            <span className={styles.selectionLabel}>{formatUiMessage(locale, "workspaceRightRail.selectAllAction")}</span>
+            <button
+              aria-label={
+                allSelected
+                  ? formatUiMessage(locale, "workspaceRightRail.clearSelectionAction")
+                  : formatUiMessage(locale, "workspaceRightRail.selectAllAction")
+              }
+              aria-pressed={allSelected}
+              className={`${styles.selectionCheckbox}${allSelected ? ` ${styles.selectionCheckboxChecked}` : ""}`}
+              onClick={onSelectAll}
+              type="button"
+            >
+              {allSelected ? (
+                <svg aria-hidden="true" className={styles.selectionCheckboxIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="m6 12.75 4 4 8-9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+              ) : null}
+            </button>
+          </div>
+
+          {error ? <div className={styles.error}>{error}</div> : null}
+        </div>
+      )}
 
       <div className={styles.sectionScroller}>
         {sources.length === 0 ? (
@@ -259,19 +273,9 @@ export function WorkspaceSourcesPane({
                   title={rowTitle}
                 >
                   <div className={styles.listItemTopRow}>
-                    <button
-                      aria-pressed={selected}
-                      className={styles.sourceToggleButton}
-                      disabled={!selectable}
-                      onClick={() => {
-                        if (selectable) {
-                          onSelectedSourceToggle(source.id);
-                        }
-                      }}
-                      type="button"
-                    >
+                    {readOnly ? (
                       <span
-                        className={`${styles.selectionMark}${selected ? ` ${styles.selectionMarkChecked}` : ""}`}
+                        className={styles.selectionMark}
                         aria-hidden="true"
                       >
                         {processing ? (
@@ -280,13 +284,38 @@ export function WorkspaceSourcesPane({
                           <svg className={styles.sourceStatusErrorIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path d="M7 7l10 10M17 7 7 17" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
                           </svg>
-                        ) : selected ? (
-                          <svg className={styles.selectionMarkIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="m6 12.75 4 4 8-9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                          </svg>
                         ) : null}
                       </span>
-                    </button>
+                    ) : (
+                      <button
+                        aria-pressed={selected}
+                        className={styles.sourceToggleButton}
+                        disabled={!selectable}
+                        onClick={() => {
+                          if (selectable) {
+                            onSelectedSourceToggle(source.id);
+                          }
+                        }}
+                        type="button"
+                      >
+                        <span
+                          className={`${styles.selectionMark}${selected ? ` ${styles.selectionMarkChecked}` : ""}`}
+                          aria-hidden="true"
+                        >
+                          {processing ? (
+                            <span className={styles.sourceStatusSpinner} />
+                          ) : failed ? (
+                            <svg className={styles.sourceStatusErrorIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path d="M7 7l10 10M17 7 7 17" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                            </svg>
+                          ) : selected ? (
+                            <svg className={styles.selectionMarkIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path d="m6 12.75 4 4 8-9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                            </svg>
+                          ) : null}
+                        </span>
+                      </button>
+                    )}
 
                     <button
                       className={styles.sourceOpenButton}
@@ -297,60 +326,62 @@ export function WorkspaceSourcesPane({
                       <span className={styles.listItemTitleText}>{source.file_name}</span>
                     </button>
 
-                    <div className={styles.itemMenuAnchor} ref={menuOpen ? openMenuRef : null}>
-                      <button
-                        aria-expanded={menuOpen}
-                        aria-haspopup="menu"
-                        aria-label={formatUiMessage(locale, "workspaceRightRail.sourceActionsLabel")}
-                        className={styles.itemMenuTrigger}
-                        type="button"
-                        onClick={() => setOpenMenuSourceId((current) => (current === source.id ? null : source.id))}
-                      >
-                        <svg aria-hidden="true" className={styles.itemMenuIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 6.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 13.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 19.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z" fill="currentColor" stroke="none" />
-                        </svg>
-                      </button>
+                    {readOnly ? null : (
+                      <div className={styles.itemMenuAnchor} ref={menuOpen ? openMenuRef : null}>
+                        <button
+                          aria-expanded={menuOpen}
+                          aria-haspopup="menu"
+                          aria-label={formatUiMessage(locale, "workspaceRightRail.sourceActionsLabel")}
+                          className={styles.itemMenuTrigger}
+                          type="button"
+                          onClick={() => setOpenMenuSourceId((current) => (current === source.id ? null : source.id))}
+                        >
+                          <svg aria-hidden="true" className={styles.itemMenuIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 6.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 13.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 19.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z" fill="currentColor" stroke="none" />
+                          </svg>
+                        </button>
 
-                      {menuOpen ? (
-                        <div className={styles.itemMenu} role="menu">
-                          <button
-                            className={styles.itemMenuButton}
-                            role="menuitem"
-                            type="button"
-                            onClick={() => {
-                              setOpenMenuSourceId(null);
-                              onOpenSource(source.id);
-                            }}
-                          >
-                            {viewerOpen
-                              ? formatUiMessage(locale, "workspaceRightRail.hidePreviewAction")
-                              : formatUiMessage(locale, "workspaceRightRail.openSourceAction")}
-                          </button>
-                          <button
-                            className={styles.itemMenuButton}
-                            role="menuitem"
-                            type="button"
-                            onClick={() => {
-                              setOpenMenuSourceId(null);
-                              onReindexSource(source.id);
-                            }}
-                          >
-                            {formatUiMessage(locale, "workspaceRightRail.reindexAction")}
-                          </button>
-                          <button
-                            className={`${styles.itemMenuButton} ${styles.itemMenuButtonDanger}`}
-                            role="menuitem"
-                            type="button"
-                            onClick={() => {
-                              setOpenMenuSourceId(null);
-                              onDeleteSource(source.id);
-                            }}
-                          >
-                            {formatUiMessage(locale, "workspaceRightRail.deleteSourceAction")}
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                        {menuOpen ? (
+                          <div className={styles.itemMenu} role="menu">
+                            <button
+                              className={styles.itemMenuButton}
+                              role="menuitem"
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuSourceId(null);
+                                onOpenSource(source.id);
+                              }}
+                            >
+                              {viewerOpen
+                                ? formatUiMessage(locale, "workspaceRightRail.hidePreviewAction")
+                                : formatUiMessage(locale, "workspaceRightRail.openSourceAction")}
+                            </button>
+                            <button
+                              className={styles.itemMenuButton}
+                              role="menuitem"
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuSourceId(null);
+                                onReindexSource(source.id);
+                              }}
+                            >
+                              {formatUiMessage(locale, "workspaceRightRail.reindexAction")}
+                            </button>
+                            <button
+                              className={`${styles.itemMenuButton} ${styles.itemMenuButtonDanger}`}
+                              role="menuitem"
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuSourceId(null);
+                                onDeleteSource(source.id);
+                              }}
+                            >
+                              {formatUiMessage(locale, "workspaceRightRail.deleteSourceAction")}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
 
                   {showStatusText || viewerOpen || errorDetail ? (

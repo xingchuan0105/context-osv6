@@ -116,10 +116,11 @@ pub use legal_versions::{
     PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION, validate_published_legal_versions,
 };
 pub use share_domain::{
-    PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
-    ShareOwnerCardSnapshot, ShareSettingsSnapshot, ShareTokenSnapshot, ShareWorkspaceMember,
-    SharedKnowledgeBaseSnapshot, WorkspaceShareSettingsRow, SharedShareInfoSnapshot,
-    SharedSourceSnapshot, SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
+    PublicOwnerShareItemSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
+    ShareAccessLogEntry, ShareAnalyticsEntry, ShareOwnerCardSnapshot, ShareSettingsSnapshot,
+    ShareTokenSnapshot, ShareWorkspaceMember, SharedKnowledgeBaseSnapshot,
+    WorkspaceShareSettingsRow, SharedShareInfoSnapshot, SharedSourceSnapshot,
+    SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
 };
 pub use share_store::ShareStorePort;
 pub use state_types::{MemoryState, RetrievedContext, StoredDocument};

@@ -47,7 +47,7 @@ impl Default for RetrievalBudgetSeed {
 }
 
 /// Default max retrieve turns when short Judge routes back to retrieve.
-pub(super) const JUDGE_RERETRIEVE_MAX_ROUNDS: u8 = 2;
+pub(super) const VERIFY_RERETRIEVE_MAX_ROUNDS: u8 = 2;
 
 impl ReActLoop {
     pub(super) async fn run_retrieval_loop(

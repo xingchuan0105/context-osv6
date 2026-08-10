@@ -3,10 +3,11 @@ use std::sync::Arc;
 use app_core::{
     ShareStorePort,
     share_domain::{
-        PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
-        ShareOwnerCardSnapshot, WorkspaceShareSettingsRow, ShareTokenSnapshot,
-        ShareWorkspaceMember, SharedKnowledgeBaseSnapshot, SharedShareInfoSnapshot,
-        SharedSourceSnapshot, SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
+        PublicOwnerShareItemSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
+        ShareAccessLogEntry, ShareAnalyticsEntry, ShareOwnerCardSnapshot,
+        WorkspaceShareSettingsRow, ShareTokenSnapshot, ShareWorkspaceMember,
+        SharedKnowledgeBaseSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
+        SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
     },
 };
 use async_trait::async_trait;

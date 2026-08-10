@@ -121,16 +121,52 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         forbidden_in_final: true,
         emitted_at: "crates/agent-loop/src/react_loop/policy/disclosure_plan.rs::inject_cluster_runtime_context",
     },
-    // --- 短 Judge 回环观察（2026-08-07 三环）---
+    // --- verify 回环观察（2026-08-07 三环）---
     HostMarker {
-        tag: "[judge_feedback]",
+        tag: "[verify_feedback]",
         forbidden_in_final: true,
-        emitted_at: "prompts/loop/judge-fail-synthesis.tmpl.md / judge-fail-retrieve.tmpl.md",
+        emitted_at: "prompts/loop/verify-fail-synthesis.tmpl.md / verify-fail-retrieve.tmpl.md",
     },
     HostMarker {
         tag: "[draft_under_revision]",
         forbidden_in_final: true,
-        emitted_at: "prompts/loop/judge-draft-under-revision.tmpl.md",
+        emitted_at: "prompts/loop/verify-draft-under-revision.tmpl.md",
+    },
+    // --- evidence knockout reexposure (2026-08-07) ---
+    HostMarker {
+        tag: "[knockout_reexposed]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/knockout-reexposed.tmpl.md",
+    },
+    // --- Evidence Working Set (KEEP) priority injection (2026-08-07 W1) ---
+    HostMarker {
+        tag: "[ews_active]",
+        forbidden_in_final: true,
+        emitted_at: "crates/agent-loop/src/helpers/ews.rs::format_ews_active_block",
+    },
+    // --- Synthesis-time EWS recency reread (2026-08-07 W2) ---
+    HostMarker {
+        tag: "[evidence_reread]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/evidence-reread.tmpl.md::prompt_assets::evidence_reread_block",
+    },
+    // --- L2 evidence-missing structural gate (2026-08-10 scene split) ---
+    HostMarker {
+        tag: "[evidence_missing]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/evidence-missing.nudge.md / evidence-missing-no-client.nudge.md",
+    },
+    // --- SELECTED protocol fact at synthesis (2026-08-10) ---
+    HostMarker {
+        tag: "[selected_protocol]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/selected-protocol.nudge.md",
+    },
+    // --- verify fail ceiling → user-facing closeout (2026-08-10 channel philosophy) ---
+    HostMarker {
+        tag: "[user_facing_closeout]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/user-facing-closeout.nudge.md",
     },
 ];
 

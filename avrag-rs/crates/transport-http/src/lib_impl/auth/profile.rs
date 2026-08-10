@@ -49,6 +49,7 @@ pub(crate) fn auth_user_dto_from_profile(profile: &AuthUserProfile) -> AuthUserD
             .as_ref()
             .filter(|s| !s.trim().is_empty())
             .map(|_| format!("/api/public/users/{user_id}/media/banner")),
+        public_profile_enabled: profile.public_profile_enabled,
     }
 }
 
@@ -61,6 +62,7 @@ pub(crate) fn empty_auth_user(id: String, email: String, full_name: String) -> A
         contact_url: None,
         avatar_url: None,
         banner_url: None,
+        public_profile_enabled: false,
     }
 }
 
@@ -249,6 +251,7 @@ pub(crate) async fn auth_update_profile_handler(
         full_name,
         bio,
         contact_url,
+        public_profile_enabled: req.public_profile_enabled,
     };
 
     match store.update_user_profile(user_uuid, &input).await {
@@ -846,6 +849,86 @@ pub(crate) async fn public_user_media_handler(
             ),
         ],
         bytes,
+    )
+        .into_response()
+}
+
+/// GET /api/public/users/{user_id}/shares — opt-in public sharer profile:
+/// owner card + the owner's active public shares. 404 when the user is missing
+/// or has not enabled `public_profile_enabled`.
+pub(crate) async fn public_user_shares_handler(
+    axum::extract::State(state): axum::extract::State<app_bootstrap::AppState>,
+    axum::extract::Path(user_id): axum::extract::Path<uuid::Uuid>,
+) -> Response {
+    let mut response = public_user_shares_inner(state, user_id).await;
+    // ADR-0010 §9: public owner profile API is outside request_context_middleware.
+    crate::middleware::apply_share_anti_index_headers(response.headers_mut());
+    response
+}
+
+async fn public_user_shares_inner(
+    state: app_bootstrap::AppState,
+    user_id: uuid::Uuid,
+) -> Response {
+    let Some(store) = state.auth_store() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+    let profile = match store.get_user_profile(user_id).await {
+        Ok(Some(profile)) => profile,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "error": "Not found",
+                })),
+            )
+                .into_response();
+        }
+        Err(error) => {
+            warn!(error = %error, "failed to load profile for public shares");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to load profile",
+            );
+        }
+    };
+    if !profile.public_profile_enabled {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "success": false,
+                "error": "Not found",
+            })),
+        )
+            .into_response();
+    }
+    let shares = match state.share().list_public_shares_for_owner(user_id).await {
+        Ok(shares) => shares,
+        Err(error) => {
+            warn!(error = %error, "failed to list public shares for owner");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to load shares",
+            );
+        }
+    };
+    let owner = avrag_share::ShareOwnerCard::from_profile(&profile);
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "data": {
+                "owner": owner,
+                "shares": shares,
+            },
+        })),
     )
         .into_response()
 }

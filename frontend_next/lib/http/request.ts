@@ -40,6 +40,21 @@ export function buildApiUrl(path: string) {
   return new URL(normalizedPath, window.location.origin).toString();
 }
 
+/** Resolve a stored media path (avatar/banner/...) to a loadable URL. */
+export function mediaSrc(path: string | null | undefined) {
+  if (!path?.trim()) {
+    return null;
+  }
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("data:")
+  ) {
+    return path;
+  }
+  return buildApiUrl(path);
+}
+
 export async function decodeApiError(response: Response) {
   const raw = await response.text();
 

@@ -7,8 +7,8 @@ export const usageMessages = {
     en: "Upgrade",
   },
   "planEntry.viewSubscription": {
-    zh: "会员状态",
-    en: "Membership",
+    zh: "用量信息",
+    en: "Usage",
   },
   currentPlan: {
     zh: "当前方案",

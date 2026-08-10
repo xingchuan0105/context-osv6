@@ -151,7 +151,7 @@
 
 .presetCard:hover,
 .presetCardActive {
-  border-color: hsl(var(--accent));
+  border-color: hsl(var(--border-strong));
 }
 
 .presetLabel {
@@ -374,9 +374,9 @@
 }
 
 .drawerTabActive {
-  border-color: hsl(var(--accent));
-  background: hsl(var(--accent-soft));
-  color: hsl(var(--accent-text));
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-muted));
+  color: hsl(var(--foreground));
 }
 
 .drawerSection {
@@ -516,7 +516,6 @@
 .sectionTitle {
   margin: 0 0 0.75rem;
   font-size: 1.05rem;
-  font-weight: 700;
 }
 
 .ctaRow {

@@ -78,7 +78,7 @@
         let description = notebook_row.try_get::<String, _>("description").ok();
         let owner_row = sqlx::query(
             r#"
-            select full_name, email, bio, contact_url, avatar_object_path, banner_object_path
+            select full_name, email, bio, contact_url, avatar_object_path, banner_object_path, public_profile_enabled
             from users
             where id = $1
             "#,
@@ -121,7 +121,11 @@
                 .ok()
                 .flatten()
                 .filter(|s| !s.trim().is_empty());
+            let profile_enabled = row
+                .try_get::<bool, _>("public_profile_enabled")
+                .unwrap_or(false);
             ShareOwnerCardSnapshot {
+                user_id: Some(owner_user_id.to_string()),
                 display_name,
                 bio,
                 contact_url,
@@ -131,6 +135,7 @@
                 banner_url: banner_path.map(|_| {
                     format!("/api/public/users/{owner_user_id}/media/banner")
                 }),
+                profile_enabled,
             }
         });
         let sources_rows = sqlx::query(
@@ -269,4 +274,72 @@
             anon_question_limit,
             member_question_limit,
         }))
+    }
+
+    async fn list_public_shares_for_owner(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<PublicOwnerShareItemSnapshot>, AppError> {
+        let mut tx = self
+            .repo
+            .raw()
+            .begin()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        set_current_role(tx.as_mut(), "super_admin").await?;
+        set_rls_owner(tx.as_mut(), &user_id.to_string()).await?;
+        let rows = sqlx::query(
+            r#"
+            select
+              st.workspace_id,
+              st.token,
+              st.access_level,
+              w.title,
+              w.description,
+              w.allow_download,
+              (select count(*) from documents d
+               where d.workspace_id = st.workspace_id
+                 and d.status not in ('deleting', 'deleted')) as source_count
+            from share_tokens st
+            join workspaces w on w.id = st.workspace_id
+            where (st.owner_user_id = $1 or w.owner_id = $1)
+              and st.revoked_at is null
+              and (st.expires_at is null or st.expires_at > now())
+            order by st.created_at desc
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        // One row per workspace: an owner may hold several active tokens on the
+        // same workspace; the latest (first after `order by created_at desc`) wins.
+        let mut seen = std::collections::HashSet::new();
+        let items = rows
+            .into_iter()
+            .filter_map(|row| {
+                let workspace_id = row.try_get::<Uuid, _>("workspace_id").ok()?;
+                if !seen.insert(workspace_id) {
+                    return None;
+                }
+                let access_level = row
+                    .try_get::<String, _>("access_level")
+                    .unwrap_or_default();
+                Some(PublicOwnerShareItemSnapshot {
+                    workspace_id: workspace_id.to_string(),
+                    title: row.try_get("title").unwrap_or_default(),
+                    description: row.try_get("description").ok(),
+                    share_token: row.try_get("token").unwrap_or_default(),
+                    access_level: ShareAccessLevel::from_role(&access_level)
+                        .as_permission_label()
+                        .to_string(),
+                    allow_download: row.try_get("allow_download").unwrap_or(false),
+                    source_count: row.try_get("source_count").unwrap_or(0),
+                })
+            })
+            .collect();
+        Ok(items)
     }

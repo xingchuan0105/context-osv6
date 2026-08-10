@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "../lib/auth/context";
+import { probeAdminAccess } from "../lib/admin/client";
 import { formatUiMessage } from "../lib/i18n/messages";
 import type { UiLocale } from "../lib/i18n/config";
 import { getSubscription } from "../lib/settings/client";
@@ -89,6 +90,14 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
         return null;
       }
     },
+  });
+  // Platform-admin entry: backend roles (super/ops/finance_admin) → 403 probe.
+  const adminProbe = useQuery({
+    queryKey: ["account-menu-admin-access", auth.token],
+    enabled: Boolean(auth.token),
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: () => probeAdminAccess(auth.token as string),
   });
   const planId = subscriptionQuery.data?.plan_id?.trim().toLowerCase() || "free";
   const planBadge =
@@ -256,6 +265,18 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               <IconSettings className="dashboard-account-menu-icon" />
               {formatUiMessage(locale, "accountMenu.allSettings")}
             </Link>
+            {adminProbe.data === true ? (
+              <Link
+                className="dashboard-account-menu-item"
+                data-testid="account-menu-admin"
+                href="/admin"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+              >
+                <IconSecurity className="dashboard-account-menu-icon" />
+                {formatUiMessage(locale, "accountMenu.adminConsole")}
+              </Link>
+            ) : null}
             <Link
               className="dashboard-account-menu-item"
               href="/help"

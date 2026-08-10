@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { formatUiMessage } from "../../../../lib/i18n/messages";
 import { useUiPreferences } from "../../../../lib/ui-preferences";
+import { AppTopBar } from "../../../../components/app-top-bar";
 
 function DocSection({
   title,
@@ -37,7 +38,9 @@ export default function HelpApiAccessPage() {
   const { locale } = useUiPreferences();
 
   return (
-    <main className="app-page-shell">
+    <>
+      <AppTopBar locale={locale} />
+      <main className="app-page-shell">
       <div className="app-page-center" style={{ display: "grid", gap: "1rem", maxWidth: "72rem" }}>
         <header style={{ display: "grid", gap: "0.75rem" }}>
           <div
@@ -99,6 +102,7 @@ export default function HelpApiAccessPage() {
           </div>
         </section>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

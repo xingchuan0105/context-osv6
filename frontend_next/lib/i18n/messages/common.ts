@@ -5,14 +5,6 @@ export const commonMessages = {
     zh: "关闭",
     en: "Close",
   },
-  "apiAccessModal.title": {
-    zh: "API 访问",
-    en: "API access",
-  },
-  "apiAccessModal.openFullPage": {
-    zh: "打开完整页面 →",
-    en: "Open full page →",
-  },
   "upgradeModal.title": {
     zh: "会员与充值",
     en: "Membership & top-up",
@@ -89,10 +81,6 @@ export const commonMessages = {
     zh: "工作台",
     en: "Dashboard",
   },
-  "appPrimaryNav.label": {
-    zh: "产品导航",
-    en: "Product navigation",
-  },
   "appPrimaryNav.settings": {
     zh: "设置",
     en: "Settings",
@@ -104,10 +92,6 @@ export const commonMessages = {
   "productChrome.pricing": {
     zh: "定价",
     en: "Pricing",
-  },
-  "productChrome.desktop": {
-    zh: "客户端",
-    en: "Client",
   },
   "productChrome.client": {
     zh: "客户端",
@@ -152,6 +136,10 @@ export const commonMessages = {
   "accountMenu.allSettings": {
     zh: "所有设置",
     en: "All settings",
+  },
+  "accountMenu.adminConsole": {
+    zh: "管理后台",
+    en: "Admin console",
   },
   "accountMenu.help": {
     zh: "帮助",

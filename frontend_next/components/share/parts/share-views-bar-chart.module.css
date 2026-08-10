@@ -22,15 +22,15 @@
   font-size: 10px;
 }
 
-/* DeepSeek-like saturated blue bars */
+/* Brand accent bars (token-only, no raw hex) */
 .bar {
-  fill: #3b82f6;
-  opacity: 0.92;
+  fill: hsl(var(--accent));
+  opacity: 0.88;
   cursor: default;
 }
 
 .barActive {
-  fill: #2563eb;
+  fill: hsl(var(--accent-strong));
   opacity: 1;
   cursor: default;
 }
@@ -44,8 +44,7 @@
   padding: 0.45rem 0.65rem;
   border-radius: var(--radius-control);
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  box-shadow: 0 6px 18px hsl(0 0% 0% / 0.1);
+  border: 1px solid hsl(var(--border-strong));
   font-size: var(--font-size-caption);
   color: hsl(var(--foreground));
   pointer-events: none;

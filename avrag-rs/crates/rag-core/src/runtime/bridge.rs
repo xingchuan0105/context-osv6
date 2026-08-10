@@ -41,6 +41,9 @@ pub struct RuntimeBridge {
     seen_chunk_aliases: Arc<Mutex<std::collections::HashMap<String, String>>>,
     /// Durable full body text keyed by chunk_id (for card/expand plan).
     seen_chunk_bodies: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    /// Optional evidence knockout (e.g. agent-loop `KnockoutState`).
+    /// Runs after alias/visibility; strips suppressed chunks before Python print.
+    knockout_apply: Option<Arc<dyn Fn(&mut Value) + Send + Sync>>,
 }
 
 impl RuntimeBridge {
@@ -54,6 +57,7 @@ impl RuntimeBridge {
             alias_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             seen_chunk_aliases: Arc::new(Mutex::new(std::collections::HashMap::new())),
             seen_chunk_bodies: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            knockout_apply: None,
         }
     }
 
@@ -78,6 +82,15 @@ impl RuntimeBridge {
         map: Arc<Mutex<std::collections::HashMap<String, String>>>,
     ) -> Self {
         self.seen_chunk_bodies = map;
+        self
+    }
+
+    /// Install evidence knockout filter (runs after alias/visibility; used for SaC print path).
+    pub fn with_knockout_apply(
+        mut self,
+        f: Arc<dyn Fn(&mut Value) + Send + Sync>,
+    ) -> Self {
+        self.knockout_apply = Some(f);
         self
     }
 
@@ -511,6 +524,12 @@ impl HostBridge for RuntimeBridge {
             }
             0
         };
+        // Evidence knockout (optional): strip suppressed chunks before Python print.
+        // Counters live in the agent-loop ledger; do not re-count when aligning captures.
+        if let Some(apply) = &self.knockout_apply {
+            apply(&mut data);
+        }
+
         let chunk_count = data
             .get("chunks")
             .and_then(|c| c.as_array())

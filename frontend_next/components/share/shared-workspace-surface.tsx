@@ -1,118 +1,95 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { useAuth } from "../../lib/auth/context";
+import { getSharedWorkspace, type SharedWorkspacePayload } from "../../lib/share/client";
 import {
-  getSharedWorkspace,
-  streamSharedChat,
-  type SharedWorkspacePayload,
-} from "../../lib/share/client";
+  createLocalShareSession,
+  deriveSessionTitle,
+  loadLocalShareSessions,
+  saveLocalShareSessions,
+  toWorkspaceSessions,
+  type LocalShareSession,
+} from "../../lib/share/local-sessions";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
-import type { ChatResponse } from "../../lib/contracts";
-import { userVisibleDegradeReasons } from "../../lib/workspace/degrade-display";
+import type { UiChatMessage } from "../../hooks/chat-session/types";
+import type { WorkspaceSession, WorkspaceSource } from "../../lib/workspace/model";
 import {
-  type AnswerBlock,
-  type Citation,
-  parseStreamCitations,
-  type SourceRef,
-  type WorkspaceChatStreamEvent,
-} from "../../lib/workspace/stream";
+  HISTORY_RAIL_MAX_WIDTH,
+  HISTORY_RAIL_MIN_WIDTH,
+  RIGHT_RAIL_MAX_WIDTH,
+  RIGHT_RAIL_MIN_WIDTH,
+} from "../../lib/workspace/ui-store";
+import { AppModal } from "../ui/app-modal";
+import { WorkspaceChatPane } from "../workspace/workspace-chat-pane";
+import { WorkspaceHistoryPane } from "../workspace/workspace-history-pane";
+import { WorkspaceSourcesPane } from "../workspace/workspace-sources-pane";
+import shellStyles from "../workspace/workspace-shell.module.css";
+import { ShareMoreSharesTab } from "./parts/share-more-shares-tab";
+import { ShareOwnerHero } from "./parts/share-owner-hero";
+import { ShareSourcesTab, isSourceOpenable, sourceStatusLabel } from "./parts/share-sources-tab";
+import { ShareTabBar, type ShareTabId } from "./parts/share-tab-bar";
 import styles from "./shared-workspace-surface.module.css";
-
-function getAnswerBlockText(blocks: AnswerBlock[]) {
-  return blocks
-    .filter((block): block is Extract<AnswerBlock, { type: "text" }> => block.type === "text")
-    .map((block) => block.text)
-    .join("");
-}
-
-function getAnswerText(content: string, blocks: AnswerBlock[]) {
-  const blockText = getAnswerBlockText(blocks);
-
-  return content.trim().length > 0 ? content : blockText;
-}
-
-function getCitationLabel(citation: Citation, index: number) {
-  return citation.doc_name.trim().length > 0 ? citation.doc_name : `citation-${index + 1}`;
-}
 
 function normalizeSemanticValue(value: string | null | undefined) {
   const normalized = value?.trim().toLowerCase();
-
   return normalized && normalized.length > 0 ? normalized : "unknown";
-}
-
-function dedupeSources(sources: SourceRef[]) {
-  const seen = new Set<string>();
-
-  return sources.filter((source) => {
-    const key = source.id.trim() || `${source.doc_id ?? ""}:${source.page ?? ""}:${source.title.trim()}`;
-
-    if (!key || seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
-}
-
-function sourcesFromCitations(citations: Citation[]) {
-  return dedupeSources(
-    citations.map((citation, index) => ({
-      id: citation.chunk_id?.trim() || citation.doc_id.trim() || `citation-source-${index}`,
-      title: getCitationLabel(citation, index),
-      snippet: citation.preview?.trim() || citation.content?.trim() || undefined,
-      doc_id: citation.doc_id,
-      page: citation.page ?? undefined,
-    })),
-  );
-}
-
-function buildPromptSuggestions(payload: SharedWorkspacePayload, fallback: string) {
-  const title = payload.knowledge_base.title.trim();
-  const sourceNames = payload.sources
-    .map((source) => source.file_name.trim())
-    .filter((value) => value.length > 0);
-
-  const suggestions = [title ? `${title}?` : "", sourceNames[0] ? `${sourceNames[0]}?` : "", [title, sourceNames[0]].filter(Boolean).join(" / ")]
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-
-  const uniqueSuggestions = [...new Set(suggestions)];
-
-  return uniqueSuggestions.length > 0 ? uniqueSuggestions.slice(0, 3) : [fallback];
 }
 
 function loadErrorSemantic(error: string, shareToken: string) {
   if (!shareToken.trim()) {
     return "invalid";
   }
-
   const normalized = error.trim().toLowerCase();
-
   if (!normalized) {
     return "invalid";
   }
-
   if (normalized.includes("expired")) {
     return "expired";
   }
-
   if (normalized.includes("invalid")) {
     return "invalid";
   }
-
   return normalized;
 }
 
+function toWorkspaceSources(payload: SharedWorkspacePayload | null): WorkspaceSource[] {
+  if (!payload) {
+    return [];
+  }
+  const workspaceId = payload.knowledge_base.id;
+  const workspaceName = payload.knowledge_base.title;
+  return payload.sources.map((source) => ({
+    id: source.id,
+    workspace_id: workspaceId,
+    workspace_name: workspaceName,
+    title: source.file_name,
+    file_name: source.file_name,
+    status: source.status,
+  }));
+}
+
+function readySourceIds(sources: WorkspaceSource[]) {
+  return sources
+    .filter((s) => {
+      const st = normalizeSemanticValue(s.status);
+      return st === "ready" || st === "completed";
+    })
+    .map((s) => s.id);
+}
+
 const TURNSTILE_SITE_KEY =
-  typeof process !== "undefined"
-    ? (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "").trim()
-    : "";
+  typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "").trim() : "";
 
 declare global {
   interface Window {
@@ -131,30 +108,81 @@ declare global {
   }
 }
 
+/**
+ * Public share page — workspace-like shell:
+ * sessions + RAG chat + read-only sources.
+ * No add sources, no notes, no web search, no plain chat mode (RAG locked).
+ */
 export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   const { locale } = useUiPreferences();
   const auth = useAuth();
   const [payload, setPayload] = useState<SharedWorkspacePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [chatError, setChatError] = useState("");
-  const [query, setQuery] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [viewerSourceId, setViewerSourceId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ShareTabId>("chat");
+  const composerInsertRef = useRef<((text: string) => boolean) | null>(null);
+  const [localSessions, setLocalSessions] = useState<LocalShareSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [historyWidth, setHistoryWidth] = useState(20 * 16);
+  const [rightWidth, setRightWidth] = useState(24.5 * 16);
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstileRef = useRef<HTMLDivElement | null>(null);
   const turnstileWidgetId = useRef<string | null>(null);
-  const [streamingAnswer, setStreamingAnswer] = useState("");
-  const [citations, setCitations] = useState<Citation[]>([]);
-  const [sources, setSources] = useState<SourceRef[]>([]);
-  const [degradeReasons, setDegradeReasons] = useState<string[]>([]);
-  const [answering, setAnswering] = useState(false);
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!TURNSTILE_SITE_KEY || !payload) return;
+    let cancelled = false;
+
+    async function loadSharedWorkspace() {
+      if (!shareToken.trim()) {
+        setLoadError("invalid");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const response = await getSharedWorkspace(shareToken);
+        if (!cancelled) {
+          setPayload(response);
+          const stored = loadLocalShareSessions(shareToken);
+          setLocalSessions(stored);
+          setActiveSessionId(stored[0]?.id ?? null);
+        }
+      } catch (loadFailure) {
+        if (!cancelled) {
+          setLoadError(loadFailure instanceof Error ? loadFailure.message : "invalid");
+          setPayload(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadSharedWorkspace();
+    return () => {
+      cancelled = true;
+    };
+  }, [shareToken]);
+
+  // Turnstile for anonymous visitors
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !payload || auth.token) {
+      return;
+    }
     let cancelled = false;
     const mount = () => {
-      if (cancelled || !turnstileRef.current || !window.turnstile) return;
-      if (turnstileWidgetId.current) return;
+      if (cancelled || !turnstileRef.current || !window.turnstile) {
+        return;
+      }
+      if (turnstileWidgetId.current) {
+        return;
+      }
       turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
         sitekey: TURNSTILE_SITE_KEY,
         callback: (token) => setTurnstileToken(token),
@@ -186,466 +214,425 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
     return () => {
       cancelled = true;
     };
-  }, [payload]);
+  }, [payload, auth.token]);
 
   useEffect(() => {
-    let cancelled = false;
+    return () => {
+      activeResizeCleanupRef.current?.();
+    };
+  }, []);
 
-    async function loadSharedWorkspace() {
-      if (!shareToken.trim()) {
-        setLoadError("invalid");
-        setLoading(false);
+  const sources = useMemo(() => toWorkspaceSources(payload), [payload]);
+  const selectedSourceIds = useMemo(() => readySourceIds(sources), [sources]);
+  const workspaceId = payload?.knowledge_base.id ?? "";
+  const sessionsAsWorkspace: WorkspaceSession[] = useMemo(
+    () => toWorkspaceSessions(localSessions, workspaceId || "shared"),
+    [localSessions, workspaceId],
+  );
+
+  const activeLocal = localSessions.find((s) => s.id === activeSessionId) ?? null;
+  const initialMessages = activeLocal?.messages ?? null;
+
+  const persistSessions = useCallback(
+    (next: LocalShareSession[]) => {
+      setLocalSessions(next);
+      if (shareToken.trim()) {
+        saveLocalShareSessions(shareToken, next);
+      }
+    },
+    [shareToken],
+  );
+
+  const handleTranscriptChange = useCallback(
+    (messages: UiChatMessage[]) => {
+      const sid =
+        messages.find((m) => m.sessionId)?.sessionId ?? activeSessionId;
+      if (!sid) {
         return;
       }
-
-      setLoading(true);
-      setLoadError("");
-
-      try {
-        const response = await getSharedWorkspace(shareToken);
-
-        if (!cancelled) {
-          setPayload(response);
+      setLocalSessions((current) => {
+        const exists = current.some((s) => s.id === sid);
+        const next = exists
+          ? current.map((session) => {
+              if (session.id !== sid) {
+                return session;
+              }
+              return {
+                ...session,
+                messages,
+                title: session.title ?? deriveSessionTitle(messages),
+                updated_at: new Date().toISOString(),
+              };
+            })
+          : [
+              {
+                id: sid,
+                title: deriveSessionTitle(messages),
+                pinned: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                messages,
+              },
+              ...current,
+            ];
+        if (shareToken.trim()) {
+          saveLocalShareSessions(shareToken, next);
         }
-      } catch (loadFailure) {
-        if (!cancelled) {
-          setLoadError(loadFailure instanceof Error ? loadFailure.message : "invalid");
-          setPayload(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        return next;
+      });
+      setActiveSessionId((current) => current ?? sid);
+    },
+    [activeSessionId, shareToken],
+  );
+
+  const handleSessionChange = useCallback(
+    (sessionId: string | null) => {
+      setActiveSessionId(sessionId);
+      if (!sessionId) {
+        return;
       }
-    }
-
-    void loadSharedWorkspace();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shareToken]);
-
-  function handleStreamEvent(event: WorkspaceChatStreamEvent) {
-    switch (event.event) {
-      case "token":
-        setStreamingAnswer((current) => `${current}${event.content}`);
-        break;
-      case "citations": {
-        const parsedCitations = parseStreamCitations(event.citations);
-        setCitations(parsedCitations);
-        setSources(sourcesFromCitations(parsedCitations));
-        break;
+      // Ensure session exists in local store when stream allocates a new id.
+      if (!localSessions.some((s) => s.id === sessionId)) {
+        const created: LocalShareSession = {
+          id: sessionId,
+          title: null,
+          pinned: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          messages: [],
+        };
+        persistSessions([created, ...localSessions]);
       }
-      case "done": {
-        const payload = event.payload as unknown as ChatResponse;
-        const nextCitations = payload.citations ?? [];
-        const nextSources =
-          payload.sources && payload.sources.length > 0
-            ? dedupeSources(payload.sources)
-            : sourcesFromCitations(nextCitations);
+    },
+    [localSessions, persistSessions],
+  );
 
-        setAnswer(getAnswerText(payload.answer ?? "", payload.answer_blocks ?? []));
-        setStreamingAnswer("");
-        setCitations(nextCitations);
-        setSources(nextSources);
-        setDegradeReasons(
-          userVisibleDegradeReasons(
-            (payload.degrade_trace ?? []).map((item) => item.reason).filter(Boolean),
-          ),
-        );
-        setAnswering(false);
-        break;
-      }
-      case "error":
-        setChatError(event.message);
-        setStreamingAnswer("");
-        setAnswering(false);
-        break;
-      case "activity":
-      case "answer_start":
-      case "start":
-      case "trace":
-        break;
-    }
+  function startNewThread() {
+    const created = createLocalShareSession();
+    persistSessions([created, ...localSessions]);
+    setActiveSessionId(created.id);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function selectSession(sessionId: string) {
+    setActiveSessionId(sessionId);
+  }
 
-    const nextQuery = query.trim();
+  async function handleDeleteSession(session: WorkspaceSession): Promise<boolean> {
+    const next = localSessions.filter((s) => s.id !== session.id);
+    persistSessions(next);
+    if (activeSessionId === session.id) {
+      setActiveSessionId(next[0]?.id ?? null);
+    }
+    return true;
+  }
 
-    if (!payload || !nextQuery || answering) {
+  function handleTogglePin(session: WorkspaceSession) {
+    persistSessions(
+      localSessions.map((s) =>
+        s.id === session.id ? { ...s, pinned: !s.pinned, updated_at: new Date().toISOString() } : s,
+      ),
+    );
+  }
+
+  function handleRename(session: WorkspaceSession) {
+    const nextTitle =
+      typeof window !== "undefined"
+        ? window.prompt(
+            formatUiMessage(locale, "workspaceRenameSessionDialogLabel"),
+            session.title ?? "",
+          )
+        : null;
+    if (nextTitle == null) {
       return;
     }
-
-    // ADR-0010: do not require auth.token client-side. Backend allows anonymous
-    // when workspace visibility is `public`; otherwise returns login_required.
-    setAnswering(true);
-    setChatError("");
-    setAnswer("");
-    setStreamingAnswer("");
-    setCitations([]);
-    setSources([]);
-    setDegradeReasons([]);
-
-    try {
-      if (TURNSTILE_SITE_KEY && !turnstileToken.trim() && !auth.token) {
-        setChatError(
-          formatUiMessage(locale, "sharedPublicVerifyHint"),
-        );
-        setAnswering(false);
-        return;
-      }
-      await streamSharedChat(
-        shareToken,
-        payload.knowledge_base.id,
-        nextQuery,
-        handleStreamEvent,
-        auth.token ?? null,
-        turnstileToken || null,
-      );
-      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current && window.turnstile) {
-        window.turnstile.reset(turnstileWidgetId.current);
-        setTurnstileToken("");
-      }
-    } catch (submitFailure) {
-      const msg =
-        submitFailure instanceof Error
-          ? submitFailure.message
-          : formatUiMessage(locale, "sharedPublic.signInRequiredBody");
-      setChatError(msg);
-      setAnswering(false);
-    }
+    const trimmed = nextTitle.trim();
+    persistSessions(
+      localSessions.map((s) =>
+        s.id === session.id
+          ? { ...s, title: trimmed || null, updated_at: new Date().toISOString() }
+          : s,
+      ),
+    );
   }
 
-  const answerText = streamingAnswer || answer;
-  const readySourceCount = payload?.sources.filter((source) => matches(source.status)).length ?? 0;
-  const pendingSourceCount = payload ? payload.sources.length - readySourceCount : 0;
-  // Loaded shared page can chat; login only if backend rejects (link mode).
-  const canInteract = Boolean(payload);
-  const nextPath = `/shared/kb/${shareToken}`;
-  const promptSuggestions = payload
-    ? buildPromptSuggestions(payload, formatUiMessage(locale, "sharedPublic.questionPlaceholder"))
-    : [];
+  function beginResize(side: "history" | "right", startX: number) {
+    if (activeResizeCleanupRef.current) {
+      return;
+    }
+    const startWidth = side === "history" ? historyWidth : rightWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function onMove(event: MouseEvent) {
+      const delta = event.clientX - startX;
+      if (side === "history") {
+        setHistoryWidth(
+          Math.min(HISTORY_RAIL_MAX_WIDTH, Math.max(HISTORY_RAIL_MIN_WIDTH, startWidth + delta)),
+        );
+      } else {
+        setRightWidth(
+          Math.min(RIGHT_RAIL_MAX_WIDTH, Math.max(RIGHT_RAIL_MIN_WIDTH, startWidth - delta)),
+        );
+      }
+    }
+
+    function finish() {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", finish);
+      activeResizeCleanupRef.current = null;
+    }
+
+    activeResizeCleanupRef.current = finish;
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", finish);
+  }
+
+  const bodyStyle = {
+    "--workspace-history-rail-width": `${historyWidth}px`,
+    "--workspace-right-rail-width": `${rightWidth}px`,
+  } as CSSProperties;
+
+  const registerComposerInsert = useCallback(
+    (handler: ((text: string) => boolean) | null) => {
+      composerInsertRef.current = handler;
+    },
+    [],
+  );
+
+  /** Source-detail CTA: prefill a question and jump back to the chat tab. */
+  function handleAskAboutSource(source: WorkspaceSource) {
+    const text = formatUiMessage(locale, "sharedPublic.sourceAskTemplate", {
+      name: source.file_name,
+    });
+    setViewerSourceId(null);
+    setActiveTab("chat");
+    // Chat pane stays mounted across tabs; insert on the next frame.
+    requestAnimationFrame(() => {
+      composerInsertRef.current?.(text);
+    });
+  }
 
   const owner = payload?.owner ?? null;
-  const ownerAvatar = owner?.avatar_url?.trim()
-    ? owner.avatar_url.startsWith("http")
-      ? owner.avatar_url
-      : owner.avatar_url
-    : null;
-  const ownerBanner = owner?.banner_url?.trim()
-    ? owner.banner_url.startsWith("http")
-      ? owner.banner_url
-      : owner.banner_url
-    : null;
+  // Owner profile entry points (hero link, "more shares" tab) require the
+  // owner's opt-in; an explicit profile_enabled=false hides them.
+  const ownerProfileVisible =
+    Boolean(owner?.user_id?.trim()) && owner?.profile_enabled !== false;
+  const title =
+    payload?.knowledge_base.title?.trim() ||
+    formatUiMessage(locale, "sharedPublic.pageTitle");
+  const description = payload?.knowledge_base.description?.trim() || "";
+  const viewerSource = sources.find((s) => s.id === viewerSourceId) ?? null;
 
-  return (
-    <main className="app-page-shell">
-      <div className={`app-page-center ${styles.pageStack}`}>
-        <header className={styles.header}>
-          <Link className="app-link app-link-muted" href="/">
-            {formatUiMessage(locale, "sharedPublic.backHomeAction")}
-          </Link>
-          <div>
-            <h1 className="app-page-title">{payload?.knowledge_base.title ?? formatUiMessage(locale, "sharedPublic.pageTitle")}</h1>
-            <p className="app-page-subtitle">
-              {payload?.knowledge_base.description?.trim() || formatUiMessage(locale, "sharedPublic.pageSubtitle")}
-            </p>
+  const needsTurnstile = Boolean(TURNSTILE_SITE_KEY && !auth.token);
+  const turnstileReady = !needsTurnstile || Boolean(turnstileToken.trim());
+
+  if (loading) {
+    return (
+      <main className={shellStyles.shell} data-testid="shared-workspace-shell">
+        <header className={shellStyles.topBar}>
+          <div className={shellStyles.topBarBrand}>
+            <Link className="app-link app-link-muted" href="/">
+              {formatUiMessage(locale, "sharedPublic.backHomeAction")}
+            </Link>
           </div>
         </header>
+        <section className={styles.centerPane} role="status">
+          <p className={styles.flushText}>{formatUiMessage(locale, "sharedPublic.loading")}</p>
+        </section>
+      </main>
+    );
+  }
 
-        {loading ? (
-          <section className="app-surface-card" role="status">
-            <p className={styles.flushText}>{formatUiMessage(locale, "sharedPublic.loading")}</p>
-          </section>
-        ) : loadError || !payload ? (
-          <section className={`app-surface-card ${styles.errorCard}`}>
+  if (loadError || !payload) {
+    return (
+      <main className={shellStyles.shell} data-testid="shared-workspace-shell">
+        <header className={shellStyles.topBar}>
+          <div className={shellStyles.topBarBrand}>
+            <Link className="app-link app-link-muted" href="/">
+              {formatUiMessage(locale, "sharedPublic.backHomeAction")}
+            </Link>
+          </div>
+        </header>
+        <section className={styles.centerPane}>
+          <div className={`app-surface-card ${styles.errorCard}`}>
             <h2 className={`app-page-title ${styles.errorTitle}`}>
               {formatUiMessage(locale, "sharedPublic.invalidLinkTitle")}
             </h2>
-            <p className="app-page-subtitle">{formatUiMessage(locale, "sharedPublic.invalidLinkBody")}</p>
-            <code className={styles.semanticCode}>{loadErrorSemantic(loadError, shareToken)}</code>
-            {loadError && loadErrorSemantic(loadError, shareToken) !== loadError.trim().toLowerCase() ? (
-              <code className={styles.semanticCode}>{loadError}</code>
-            ) : null}
-          </section>
-        ) : (
-          <>
-            {owner ? (
-              <section
-                aria-label={formatUiMessage(locale, "sharedPublic.ownerCardLabel")}
-                className={`app-surface-card ${styles.ownerCard}`}
-                data-testid="share-owner-card"
-              >
-                <div
-                  className={styles.ownerBanner}
-                  style={ownerBanner ? { backgroundImage: `url(${ownerBanner})` } : undefined}
-                />
-                <div className={styles.ownerBody}>
-                  <div
-                    className={styles.ownerAvatar}
-                    style={ownerAvatar ? { backgroundImage: `url(${ownerAvatar})` } : undefined}
-                    aria-hidden
-                  >
-                    {!ownerAvatar
-                      ? owner.display_name.trim().slice(0, 1).toUpperCase() || "O"
-                      : null}
-                  </div>
-                  <div className={styles.ownerMeta}>
-                    <h2 className={styles.ownerName}>{owner.display_name}</h2>
-                    {owner.bio?.trim() ? (
-                      <p className={styles.ownerBio}>{owner.bio.trim()}</p>
-                    ) : null}
-                    {owner.contact_url?.trim() ? (
-                      <a
-                        className="app-link"
-                        href={owner.contact_url.trim()}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {formatUiMessage(locale, "sharedPublic.ownerContactAction")}
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-            ) : null}
+            <p className="app-page-subtitle">
+              {formatUiMessage(locale, "sharedPublic.invalidLinkBody")}
+            </p>
+            <code className={styles.semanticCode}>
+              {loadErrorSemantic(loadError, shareToken)}
+            </code>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
-            <section className={`app-surface-card ${styles.sectionStack}`}>
-              <div className={styles.overviewHeader}>
-                <div>
-                  <h2 className={`app-page-title ${styles.sectionTitle}`}>
-                    {payload.knowledge_base.title}
-                  </h2>
-                  <p className="app-page-subtitle">{payload.knowledge_base.description?.trim() || formatUiMessage(locale, "sharedPublic.pageSubtitle")}</p>
-                </div>
-                <div className={styles.overviewMeta}>
-                  <span className={styles.metaPair}>
-                    <span className={styles.metaLabel}>{formatUiMessage(locale, "sharedPublic.expiresAtLabel")}</span>
-                    <span className={styles.metaValue}>{String(payload.share.expires_at ?? "null")}</span>
-                  </span>
-                  <span className={styles.metaPair}>
-                    <span className={styles.metaLabel}>{formatUiMessage(locale, "sharedPublic.sourcesSectionTitle")}</span>
-                    <span className={styles.metaValue}>{payload.sources.length}</span>
-                  </span>
-                </div>
-              </div>
+  const historyPane = (
+    <WorkspaceHistoryPane
+      activeSessionId={activeSessionId}
+      onDeleteSession={handleDeleteSession}
+      onNewThread={startNewThread}
+      onRenameSession={handleRename}
+      onSelectSession={selectSession}
+      onTogglePinSession={handleTogglePin}
+      sessions={sessionsAsWorkspace}
+      workspaceId={workspaceId}
+    />
+  );
 
-              <div className={styles.metricSplit}>
-                <code className={styles.semanticCode}>{`permission=${normalizeSemanticValue(payload.share.permission)}`}</code>
-                <code className={styles.semanticCode}>{`scope=${normalizeSemanticValue(payload.share.scope)}`}</code>
-                <code className={styles.semanticCode}>{`allow_download=${String(payload.share.allow_download)}`}</code>
-              </div>
+  return (
+    <main className={shellStyles.shell} data-testid="shared-workspace-shell">
+      <ShareOwnerHero
+        allowDownload={payload.share.allow_download}
+        owner={owner}
+        sourceCount={payload.sources.length}
+        workspaceDescription={description}
+        workspaceTitle={title}
+      />
 
-              <div className={styles.metricGrid}>
-                <article className={styles.metricCard}>
-                  <div className={styles.metricLabel}>{formatUiMessage(locale, "sharedPublic.readAccessLabel")}</div>
-                  <div className={styles.metricValueCompact}>
-                    {formatUiMessage(locale, "sharedPublic.readAccessValue")}
-                  </div>
-                </article>
-                <article className={styles.metricCard}>
-                  <div className={styles.metricLabel}>{formatUiMessage(locale, "sharedPublic.interactionAccessLabel")}</div>
-                  <div className={styles.metricValueCompact}>
-                    {formatUiMessage(locale, "sharedPublic.interactionAccessValue")}
-                  </div>
-                </article>
-                <article className={styles.metricCard}>
-                  <div className={styles.metricLabel}>{formatUiMessage(locale, "sharedPublic.downloadPolicyLabel")}</div>
-                  <div className={styles.metricValueCompact}>
-                    {payload.share.allow_download
-                      ? formatUiMessage(locale, "sharedPublic.downloadAllowed")
-                      : formatUiMessage(locale, "sharedPublic.downloadOnlineOnly")}
-                  </div>
-                </article>
-                <article className={styles.metricCard}>
-                  <div className={styles.metricLabel}>{formatUiMessage(locale, "sharedPublic.sourcesSectionTitle")}</div>
-                  <div className={styles.metricValue}>{payload.sources.length}</div>
-                  <div className={styles.metricValueCompact}>{`${readySourceCount} / ${pendingSourceCount}`}</div>
-                </article>
-              </div>
-            </section>
+      <ShareTabBar
+        activeTab={activeTab}
+        showShares={ownerProfileVisible}
+        sourceCount={sources.length}
+        onChange={setActiveTab}
+      />
 
-            <section className={`app-surface-card ${styles.sectionStack}`}>
-              <div>
-                <h2 className={`app-page-title ${styles.sectionTitle}`}>
-                  {formatUiMessage(locale, "sharedPublic.sourcesSectionTitle")}
-                </h2>
-                <p className="app-page-subtitle">{formatUiMessage(locale, "sharedPublic.sourcesSectionSubtitle")}</p>
-              </div>
+      <div
+        className={shellStyles.body}
+        style={{ ...bodyStyle, display: activeTab === "chat" ? undefined : "none" }}
+      >
+        <aside className={shellStyles.desktopHistoryRail} data-testid="shared-history-rail">
+          {historyPane}
+        </aside>
 
-              {payload.sources.length === 0 ? (
-                <div className={styles.emptyState}>
-                  <strong>{formatUiMessage(locale, "sharedPublic.sourcesEmptyTitle")}</strong>
-                  <p className={styles.flushText}>{formatUiMessage(locale, "sharedPublic.sourcesEmptyBody")}</p>
-                </div>
-              ) : (
-                <div className={styles.sourceList}>
-                  {payload.sources.map((source) => (
-                    <article className={styles.sourceCard} key={source.id}>
-                      <div className={styles.sourceTitleRow}>
-                        <strong>{source.file_name}</strong>
-                        <code className={styles.semanticCode} data-status={normalizeSemanticValue(source.status)}>
-                          {normalizeSemanticValue(source.status)}
-                        </code>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
+        <div
+          aria-orientation="vertical"
+          className={shellStyles.desktopRailResizer}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            beginResize("history", event.clientX);
+          }}
+          role="separator"
+        />
 
-            <section className={`app-surface-card ${styles.sectionStack}`}>
-              <div>
-                <h2 className={`app-page-title ${styles.sectionTitle}`}>
-                  {formatUiMessage(locale, "sharedPublic.chatSectionTitle")}
-                </h2>
-                <p className="app-page-subtitle">{formatUiMessage(locale, "sharedPublic.chatSectionSubtitle")}</p>
-              </div>
+        <section className={shellStyles.panePanel} data-testid="shared-chat-pane">
+          {needsTurnstile ? (
+            <div className={styles.turnstileHost} ref={turnstileRef} data-testid="share-turnstile" />
+          ) : null}
 
-              {canInteract && promptSuggestions.length > 0 ? (
-                <div className={styles.suggestionRow}>
-                  {promptSuggestions.map((suggestion) => (
-                    <button
-                      className={styles.suggestionChip}
-                      key={suggestion}
-                      onClick={() => setQuery(suggestion)}
-                      type="button"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+          {!turnstileReady ? (
+            <p className={styles.mutedText} role="status">
+              {formatUiMessage(locale, "sharedPublic.turnstileRequired")}
+            </p>
+          ) : null}
 
-              {chatError ? <p className="app-notice-banner">{chatError}</p> : null}
+          <WorkspaceChatPane
+            key={activeSessionId ?? "new-thread"}
+            initialMessages={initialMessages}
+            lockedCapabilities={["rag"]}
+            onSessionChange={handleSessionChange}
+            onTranscriptChange={handleTranscriptChange}
+            registerComposerInsert={registerComposerInsert}
+            selectedSourceIds={selectedSourceIds}
+            sessionId={activeSessionId}
+            shareToken={shareToken}
+            turnstileToken={turnstileToken || null}
+            workspaceId={workspaceId}
+          />
+        </section>
 
-              {canInteract ? (
-                <form className={styles.chatForm} onSubmit={handleSubmit}>
-                  <div>
-                    <label className="app-form-label" htmlFor="shared-query">
-                      {formatUiMessage(locale, "sharedPublic.questionLabel")}
-                    </label>
-                    <textarea
-                      className="app-input"
-                      id="shared-query"
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder={formatUiMessage(locale, "sharedPublic.questionPlaceholder")}
-                      rows={4}
-                      value={query}
-                    />
-                  </div>
-                  {TURNSTILE_SITE_KEY && !auth.token ? (
-                    <div ref={turnstileRef} className={styles.turnstileHost} data-testid="share-turnstile" />
-                  ) : null}
-                  <div className="app-button-row">
-                    <button
-                      className="app-button-primary"
-                      disabled={
-                        answering ||
-                        query.trim().length === 0 ||
-                        (Boolean(TURNSTILE_SITE_KEY) && !auth.token && !turnstileToken.trim())
-                      }
-                      type="submit"
-                    >
-                      {answering ? formatUiMessage(locale, "sharedPublic.submitting") : formatUiMessage(locale, "sharedPublic.submitAction")}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className={`app-inline-surface ${styles.signInBox}`}>
-                  <strong>{formatUiMessage(locale, "sharedPublic.signInRequiredTitle")}</strong>
-                  <p className={styles.mutedText}>
-                    {formatUiMessage(locale, "sharedPublic.signInRequiredBody")}
-                  </p>
-                  <div className="app-button-row">
-                    <Link className="app-button-primary" href={`/login?next=${encodeURIComponent(nextPath)}`}>
-                      {formatUiMessage(locale, "sharedPublic.signInToContinueAction")}
-                    </Link>
-                    <Link className="app-button-secondary" href={`/register?next=${encodeURIComponent(nextPath)}`}>
-                      {formatUiMessage(locale, "sharedPublic.signUpToContinueAction")}
-                    </Link>
-                  </div>
-                </div>
-              )}
+        <div
+          aria-orientation="vertical"
+          className={shellStyles.desktopRailResizer}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            beginResize("right", event.clientX);
+          }}
+          role="separator"
+        />
 
-              {degradeReasons.length > 0 ? (
-                <div className={styles.degradedBanner} role="alert">
-                  <strong>{formatUiMessage(locale, "sharedPublic.degradedBanner")}</strong>
-                  <div className={styles.metricSplit}>
-                    {degradeReasons.map((reason) => (
-                      <code className={styles.semanticCode} key={reason}>
-                        {reason}
-                      </code>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {answerText || citations.length > 0 || sources.length > 0 ? (
-                <div className={styles.resultStack}>
-                  {answerText ? (
-                    <section className={styles.resultCard}>
-                      <div className={styles.resultHeader}>
-                        <h3 className={styles.resultTitle}>{formatUiMessage(locale, "sharedPublic.answerTitle")}</h3>
-                      </div>
-                      <p className={styles.answerCopy}>{answerText}</p>
-                    </section>
-                  ) : null}
-
-                  {citations.length > 0 ? (
-                    <section className={styles.resultCard}>
-                      <div className={styles.resultHeader}>
-                        <h3 className={styles.resultTitle}>{formatUiMessage(locale, "sharedPublic.citationsTitle")}</h3>
-                        <span className={styles.resultCount}>{citations.length}</span>
-                      </div>
-                      <div className={styles.resultList}>
-                        {citations.map((citation, index) => (
-                          <article className={styles.resultItem} key={`${citation.doc_id}-${citation.citation_id || index}`}>
-                            <div className={styles.sourceTitleRow}>
-                              <strong>{getCitationLabel(citation, index)}</strong>
-                              {citation.page ? <code className={styles.semanticCode}>page={citation.page}</code> : null}
-                            </div>
-                            {citation.preview?.trim() ? <p className={styles.previewCopy}>{citation.preview}</p> : null}
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-
-                  {sources.length > 0 ? (
-                    <section className={styles.resultCard}>
-                      <div className={styles.resultHeader}>
-                        <h3 className={styles.resultTitle}>{formatUiMessage(locale, "workspaceRightRail.sourcesSectionTitle")}</h3>
-                        <span className={styles.resultCount}>{sources.length}</span>
-                      </div>
-                      <div className={styles.resultList}>
-                        {sources.map((source) => (
-                          <article className={styles.resultItem} key={source.id}>
-                            <div className={styles.sourceTitleRow}>
-                              <strong>{source.title}</strong>
-                              {source.page ? <code className={styles.semanticCode}>page={source.page}</code> : null}
-                            </div>
-                            {source.snippet?.trim() ? <p className={styles.previewCopy}>{source.snippet}</p> : null}
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-          </>
-        )}
+        <aside
+          className={shellStyles.desktopRightRail}
+          aria-label={formatUiMessage(locale, "workspaceRightRail.label")}
+          data-testid="shared-desktop-right-rail"
+        >
+          <WorkspaceSourcesPane
+            activeViewerSourceId={viewerSourceId}
+            error=""
+            focusedSourceId={viewerSourceId}
+            loading={false}
+            onAddUrlSource={() => false}
+            onDeleteSource={() => undefined}
+            onOpenSource={(sourceId) => setViewerSourceId(sourceId)}
+            onReindexSource={() => undefined}
+            onSelectAll={() => undefined}
+            onSelectedSourceToggle={() => undefined}
+            onUploadFiles={() => undefined}
+            onUrlSourceChange={() => undefined}
+            polling={false}
+            readOnly
+            selectedSourceIds={selectedSourceIds}
+            sources={sources}
+            urlSource=""
+          />
+        </aside>
       </div>
+
+      {activeTab === "sources" ? (
+        <ShareSourcesTab sources={sources} onOpenSource={(sourceId) => setViewerSourceId(sourceId)} />
+      ) : null}
+
+      {activeTab === "shares" && ownerProfileVisible && owner?.user_id?.trim() ? (
+        <ShareMoreSharesTab currentShareToken={shareToken} userId={owner.user_id.trim()} />
+      ) : null}
+
+      <AppModal
+        open={Boolean(viewerSource)}
+        size="lg"
+        title={
+          viewerSource?.file_name ??
+          formatUiMessage(locale, "sharedPublic.sourceDetailTitle")
+        }
+        closeLabel={formatUiMessage(locale, "workspaceRightRail.closeViewerAction")}
+        testId="shared-source-detail-modal"
+        onClose={() => setViewerSourceId(null)}
+        footer={
+          viewerSource && isSourceOpenable(viewerSource.status) ? (
+            <button
+              type="button"
+              className="app-button-primary"
+              data-testid="shared-source-ask-action"
+              onClick={() => handleAskAboutSource(viewerSource)}
+            >
+              {formatUiMessage(locale, "sharedPublic.sourceAskAction")}
+            </button>
+          ) : undefined
+        }
+      >
+        {viewerSource ? (
+          <div className={styles.sourceDetail}>
+            <div className={styles.metaPair}>
+              <span className={styles.metaLabel}>
+                {formatUiMessage(locale, "sharedPublic.sourceDetailStatus")}
+              </span>
+              <code
+                className={styles.semanticCode}
+                data-status={normalizeSemanticValue(viewerSource.status)}
+              >
+                {sourceStatusLabel(locale, viewerSource.status)}
+              </code>
+            </div>
+            <p className={styles.mutedText}>
+              {formatUiMessage(locale, "sharedPublic.sourceDetailBody")}
+            </p>
+          </div>
+        ) : null}
+      </AppModal>
     </main>
   );
-}
-
-function matches(status: string) {
-  const normalized = normalizeSemanticValue(status);
-
-  return normalized === "ready" || normalized === "completed";
 }

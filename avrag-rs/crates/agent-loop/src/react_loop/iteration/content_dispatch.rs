@@ -108,10 +108,12 @@ impl ReActLoop {
         let budget_exhausted = iteration.saturating_add(1) >= state.max_iterations;
 
         if !budget_exhausted {
-            // L2 evidence gate: mode requires retrieval evidence (rag/search
-            // primitives mounted) but zero Ok retrieval returns so far. The
-            // third-person observation states the runtime fact; the model
-            // decides the next action (AGENTS.md stop-decision).
+            // L2 + L2.5 structural gates (same round): may inject **both**
+            // observations so required_actions are not shadowed by evidence_missing
+            // (q047: dense/lexical never recorded while only L2 fired).
+            let mut obs_parts: Vec<String> = Vec::new();
+            let mut exit_reason = String::new();
+
             let evidence_required = super::super::policy::exit_policy::requires_evidence(mode);
             if evidence_required
                 && !super::super::policy::exit_policy::has_retrieval_observation(
@@ -120,9 +122,38 @@ impl ReActLoop {
                     mode,
                 )
             {
-                let observation = super::super::prompt_assets::evidence_missing_nudge();
-                state.messages.push(ChatMessage::user(observation.to_string()));
-                let exit_reason = "evidence_missing_continue".to_string();
+                let had_attempt = super::super::policy::exit_policy::has_retrieval_attempt(
+                    &state.tool_results,
+                );
+                obs_parts.push(
+                    super::super::prompt_assets::evidence_missing_nudge_for(had_attempt)
+                        .to_string(),
+                );
+                exit_reason = "evidence_missing_continue".to_string();
+            }
+
+            if let Some(card) = state.query_card.as_ref() {
+                if let Some(missing) = card.required_actions.iter().find(|action| {
+                    !super::super::query_card::required_action_satisfied(action, &state.tool_results)
+                }) {
+                    let attempted = super::super::query_card::required_action_attempted(
+                        missing,
+                        &state.tool_results,
+                    );
+                    obs_parts.push(super::super::prompt_assets::required_action_missing(
+                        missing, attempted,
+                    ));
+                    if exit_reason.is_empty() {
+                        exit_reason = "required_action_missing_continue".to_string();
+                    }
+                    // when both fire, keep evidence_missing_continue as primary
+                    // exit_reason for telemetry compat; body still contains both.
+                }
+            }
+
+            if !obs_parts.is_empty() {
+                let observation = obs_parts.join("\n\n");
+                state.messages.push(ChatMessage::user(observation.clone()));
                 return Ok(IterationOutcome {
                     control: IterationControl::Continue,
                     record: Some(ReActIterationRecord {
@@ -136,33 +167,6 @@ impl ReActLoop {
                     }),
                     sandbox_break: false,
                 });
-            }
-
-            // L2.5 required-action gate: query card declared actions; any
-            // required action without an Ok ToolResult blocks the DirectAnswer
-            // once per round (same budget mechanics as above).
-            if let Some(card) = state.query_card.as_ref() {
-                if let Some(missing) = card.required_actions.iter().find(|action| {
-                    !super::super::query_card::required_action_satisfied(action, &state.tool_results)
-                }) {
-                    let observation =
-                        super::super::prompt_assets::required_action_missing(missing);
-                    state.messages.push(ChatMessage::user(observation.clone()));
-                    let exit_reason = "required_action_missing_continue".to_string();
-                    return Ok(IterationOutcome {
-                        control: IterationControl::Continue,
-                        record: Some(ReActIterationRecord {
-                            iteration,
-                            disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                            action_type: exit_reason.clone(),
-                            observation_preview: truncate_preview(&observation, 200),
-                            llm_usage: Some(llm_usage),
-                            elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                            exit_reason,
-                        }),
-                        sandbox_break: false,
-                    });
-                }
             }
         }
 

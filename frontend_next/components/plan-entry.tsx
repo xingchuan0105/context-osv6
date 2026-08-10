@@ -21,16 +21,18 @@ function planLabel(planId: string): string {
 }
 
 /**
- * First-class subscription entry for product top bars.
- * Free → accent "Upgrade" CTA opens in-page upgrade modal; paid → plan badge opens billing panel modal.
+ * Subscription entry rendered as a menu row inside the top-bar share group
+ * (PRODUCT_IA §5: 升级折叠进分享组).
+ * Free → "Upgrade" opens in-page upgrade modal; paid → plan label opens billing panel modal.
  * Silent while loading or on request failure (no flash, no error surface).
  */
 export function PlanEntry({
   locale,
-  size = "default",
+  className,
 }: {
   locale: UiLocale;
-  size?: "default" | "compact";
+  /** Menu row class supplied by the containing menu. */
+  className?: string;
 }) {
   const { token } = useAuth();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -55,35 +57,25 @@ export function PlanEntry({
     return null;
   }
 
-  if (planId === "free") {
-    return (
-      <>
-        <button
-          className={`app-button-primary app-button-accent plan-entry plan-entry-${size}`}
-          data-testid="plan-entry-upgrade"
-          type="button"
-          onClick={() => setUpgradeOpen(true)}
-        >
-          {formatUiMessage(locale, "planEntry.upgrade")}
-        </button>
-        {upgradeOpen ? (
-          <UpgradeModal open onClose={() => setUpgradeOpen(false)} />
-        ) : null}
-      </>
-    );
-  }
+  const isFree = planId === "free";
 
   return (
     <>
       <button
-        aria-label={formatUiMessage(locale, "planEntry.viewSubscription")}
-        className={`plan-entry-badge plan-entry-${size}`}
-        data-testid="plan-entry-badge"
+        aria-label={
+          isFree ? undefined : formatUiMessage(locale, "planEntry.viewSubscription")
+        }
+        className={className}
+        data-testid="plan-entry-menuitem"
+        role="menuitem"
         type="button"
-        onClick={() => setBillingOpen(true)}
+        onClick={() => (isFree ? setUpgradeOpen(true) : setBillingOpen(true))}
       >
-        {planLabel(planId)}
+        {isFree ? formatUiMessage(locale, "planEntry.upgrade") : planLabel(planId)}
       </button>
+      {upgradeOpen ? (
+        <UpgradeModal open onClose={() => setUpgradeOpen(false)} />
+      ) : null}
       {billingOpen ? (
         <SettingsQuickModal
           locale={locale}

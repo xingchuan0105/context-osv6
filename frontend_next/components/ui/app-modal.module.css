@@ -13,7 +13,7 @@
   display: flex;
   flex-direction: column;
   width: min(100%, 40rem);
-  max-height: min(90vh, 52rem);
+  max-height: min(88vh, 46rem);
   border: 1px solid hsl(var(--dashboard-border, var(--border)));
   border-radius: var(--radius-card);
   background: hsl(var(--dashboard-surface, var(--card)));
@@ -23,15 +23,25 @@
 
 .cardSm {
   width: min(100%, 28rem);
+  /* Fixed height per size — dialogs never grow/shrink with content. */
+  height: min(80vh, 20rem);
 }
 
 .cardMd {
   width: min(100%, 40rem);
+  height: min(85vh, 32rem);
 }
 
 .cardLg {
-  /* W5 #17 content dialogs: min(1000px, 92vw) per UI token sheet. */
-  width: min(100%, 1000px, 92vw);
+  /* Compact density pass: content dialogs cap at 736px (was 1000px). */
+  width: min(100%, 46rem, 92vw);
+  height: min(88vh, 42rem);
+}
+
+.cardXl {
+  /* Two-column rail dialogs (settings/share): rail 13rem + content. */
+  width: min(100%, 56rem, 94vw);
+  height: min(88vh, 46rem);
 }
 
 .header {
@@ -39,7 +49,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-lg);
-  padding: var(--space-lg) var(--space-xl) var(--space-md);
+  padding: var(--space-md) var(--space-lg) var(--space-sm);
   border-bottom: 1px solid hsl(var(--border-whisper));
   flex-shrink: 0;
 }
@@ -83,7 +93,22 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-md) var(--space-lg);
+}
+
+/* rail 模式：无内边距的两列网格，左轨(NavRail) + 右内容 */
+.bodyRail {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .bodyRail {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .footer {
@@ -92,7 +117,7 @@
   justify-content: space-between;
   gap: var(--space-md);
   flex-wrap: wrap;
-  padding: var(--space-md) var(--space-xl) var(--space-lg);
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
   border-top: 1px solid hsl(var(--border-whisper));
   flex-shrink: 0;
 }

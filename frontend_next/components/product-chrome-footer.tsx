@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { Fragment } from "react";
 
 import { formatUiMessage } from "../lib/i18n/messages";
+import {
+  appNavEntriesByIds,
+  type AppNavId,
+} from "../lib/navigation/nav-config";
 import { useUiPreferences } from "../lib/ui-preferences";
 
 /** Marketing / brand site; product app “home” remains `/dashboard`. */
@@ -13,6 +18,18 @@ export function brandHomeHref(): string {
   // Public marketing site (see docs/engineering visual multi-site plan).
   return "https://www.contextlm.top";
 }
+
+/** Footer link order (surface-specific; hrefs/labels from nav-config). */
+const FOOTER_NAV_IDS: readonly AppNavId[] = [
+  "dashboard",
+  "help",
+  "pricing",
+  "desktop",
+  "legal",
+  "legal-terms",
+  "legal-privacy",
+  "legal-licenses",
+];
 
 /**
  * Persistent product chrome footer: brand, help/docs, legal, open-source.
@@ -66,38 +83,18 @@ export function ProductChromeFooter({
             {formatUiMessage(locale, "productChrome.brandHome")}
           </Link>
         )}
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/dashboard">
-          {formatUiMessage(locale, "productChrome.productHome")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/help">
-          {formatUiMessage(locale, "productChrome.help")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/pricing">
-          {formatUiMessage(locale, "productChrome.pricing")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/desktop" data-testid="product-chrome-desktop">
-          {formatUiMessage(locale, "productChrome.client")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/legal">
-          {formatUiMessage(locale, "productChrome.legalCenter")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/legal/terms">
-          {formatUiMessage(locale, "productChrome.terms")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/legal/privacy">
-          {formatUiMessage(locale, "productChrome.privacy")}
-        </Link>
-        <span aria-hidden="true">·</span>
-        <Link className="app-link app-link-muted" href="/legal/licenses">
-          {formatUiMessage(locale, "productChrome.licenses")}
-        </Link>
+        {appNavEntriesByIds(FOOTER_NAV_IDS).map((entry) => (
+          <Fragment key={entry.id}>
+            <span aria-hidden="true">·</span>
+            <Link
+              className="app-link app-link-muted"
+              href={entry.href}
+              data-testid={entry.id === "desktop" ? "product-chrome-desktop" : undefined}
+            >
+              {formatUiMessage(locale, entry.labelKey)}
+            </Link>
+          </Fragment>
+        ))}
       </nav>
       <div>
         © {year} Context-OS

@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    PublicShareChatContext, ShareAccessLog, ShareOwnerCard, ShareService, SharedKnowledgeBase,
-    SharedWorkspacePayload, SharedShareInfo, SharedSource,
+    PublicOwnerShareItem, PublicShareChatContext, ShareAccessLog, ShareOwnerCard, ShareService,
+    SharedKnowledgeBase, SharedWorkspacePayload, SharedShareInfo, SharedSource,
 };
 
 impl ShareService {
@@ -61,11 +61,13 @@ impl ShareService {
                     })
                     .collect(),
                 owner: snapshot.owner.map(|card| ShareOwnerCard {
+                    user_id: card.user_id,
                     display_name: card.display_name,
                     bio: card.bio,
                     contact_url: card.contact_url,
                     avatar_url: card.avatar_url,
                     banner_url: card.banner_url,
+                    profile_enabled: card.profile_enabled,
                 }),
             }))
     }
@@ -87,5 +89,26 @@ impl ShareService {
                 anon_question_limit: snapshot.anon_question_limit,
                 member_question_limit: snapshot.member_question_limit,
             }))
+    }
+
+    pub async fn list_public_shares_for_owner(
+        &self,
+        user_id: uuid::Uuid,
+    ) -> Result<Vec<PublicOwnerShareItem>> {
+        Ok(self
+            .store
+            .list_public_shares_for_owner(user_id)
+            .await?
+            .into_iter()
+            .map(|item| PublicOwnerShareItem {
+                workspace_id: item.workspace_id,
+                title: item.title,
+                description: item.description,
+                share_token: item.share_token,
+                access_level: item.access_level,
+                allow_download: item.allow_download,
+                source_count: item.source_count,
+            })
+            .collect())
     }
 }

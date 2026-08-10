@@ -13,14 +13,31 @@
   gap: var(--space-2);
 }
 
-.topupRow {
+/* DeepSeek-style usage stat cards: big numbers lead the 用量信息 panel. */
+.statRow {
   display: grid;
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-3);
 }
 
-.topupButtons {
-  display: flex;
-  flex-wrap: wrap;
+.statCard {
+  display: grid;
   gap: var(--space-2);
+  align-content: start;
+  justify-items: start;
+  padding: var(--space-4);
+}
+
+.statLabel {
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.statValue {
+  font-size: 1.6rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: hsl(var(--foreground));
 }
 

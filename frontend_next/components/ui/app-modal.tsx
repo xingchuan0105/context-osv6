@@ -5,7 +5,7 @@ import { useEffect, type ReactNode } from "react";
 
 import styles from "./app-modal.module.css";
 
-export type AppModalSize = "sm" | "md" | "lg";
+export type AppModalSize = "sm" | "md" | "lg" | "xl";
 
 export type AppModalProps = {
   open: boolean;
@@ -13,6 +13,11 @@ export type AppModalProps = {
   onClose: () => void;
   children: ReactNode;
   size?: AppModalSize;
+  /**
+   * "rail": body becomes a two-column grid (NavRail | content) with no body
+   * padding — Grok-style settings modal. Children should be [NavRail, content].
+   */
+  bodyVariant?: "default" | "rail";
   /** Optional full-page deep link shown in the footer. */
   fullPageHref?: string;
   fullPageLabel?: string;
@@ -25,6 +30,7 @@ const sizeClass: Record<AppModalSize, string> = {
   sm: styles.cardSm,
   md: styles.cardMd,
   lg: styles.cardLg,
+  xl: styles.cardXl,
 };
 
 export function AppModal({
@@ -33,6 +39,7 @@ export function AppModal({
   onClose,
   children,
   size = "md",
+  bodyVariant = "default",
   fullPageHref,
   fullPageLabel,
   footer,
@@ -100,7 +107,9 @@ export function AppModal({
             </svg>
           </button>
         </header>
-        <div className={styles.body}>{children}</div>
+        <div className={`${styles.body}${bodyVariant === "rail" ? ` ${styles.bodyRail}` : ""}`}>
+          {children}
+        </div>
         {showFooter ? (
           <footer className={styles.footer}>
             {fullPageHref && fullPageLabel ? (

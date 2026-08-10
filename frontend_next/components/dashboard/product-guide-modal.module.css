@@ -40,8 +40,6 @@
 .navButtonActive {
   background: hsl(var(--card));
   color: hsl(var(--foreground));
-  font-weight: 600;
-  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.06);
 }
 
 .body {
@@ -62,7 +60,6 @@
 .heading {
   margin: 0;
   font-size: 1.05rem;
-  font-weight: 700;
 }
 
 .steps {
@@ -91,7 +88,6 @@
 .cardTitle {
   margin: 0;
   font-size: 0.95rem;
-  font-weight: 650;
 }
 
 .cardBody {

@@ -199,6 +199,20 @@ export async function listAdminAccounts(token: string) {
   return rows.map(mapAccountRow);
 }
 
+/**
+ * Probe platform-admin access for the signed-in user (role on the user row:
+ * super_admin / ops_admin / finance_admin; others get 403 admin_access_denied).
+ * Used to conditionally reveal the /admin entry in the account menu.
+ */
+export async function probeAdminAccess(token: string): Promise<boolean> {
+  try {
+    await listAdminAccounts(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function getAdminAccount(token: string, ownerUserId: string) {
   const row = await requestEnvelope<RawAccountRow>(`/api/v1/admin/accounts/${ownerUserId}`, { method: "GET" }, token, "Failed to load account");
 

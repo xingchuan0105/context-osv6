@@ -17,6 +17,10 @@ vi.mock("../../lib/auth/context", () => ({
   useAuth: () => mocks.authState,
 }));
 
+vi.mock("../../lib/ui-preferences", () => ({
+  useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
+}));
+
 vi.mock("../../lib/workspace/client", () => ({
   getWorkspace: mocks.getWorkspaceMock,
 }));
@@ -90,6 +94,6 @@ describe("InviteSurface", () => {
       expect(mocks.acceptInviteMock).toHaveBeenCalledWith("token-123", "ws-1", "member-1");
     });
 
-    expect(screen.getByRole("link", { name: "打开 Workspace" }).getAttribute("href")).toBe("/dashboard/ws-1");
+    expect(screen.getByRole("link", { name: "打开工作区" }).getAttribute("href")).toBe("/dashboard/ws-1");
   });
 });

@@ -135,7 +135,7 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
 
   return (
     <section className={shared.section}>
-      {/* Membership summary — ADR-0010 primary surface */}
+      {/* 用量信息 summary — ADR-0010 primary surface; DeepSeek-style stat cards lead */}
       <section className={`app-inline-surface ${styles.planSection}`} data-testid="membership-summary">
         <div className={`app-inline-row ${styles.headerRow}`}>
           <div className={shared.headerText}>
@@ -157,6 +157,52 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
           )}
         </div>
         {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
+        {/* DeepSeek-style stat cards lead: balance (with top-up CTA) + lifetime top-ups. */}
+        {walletError ? <p className="app-notice-banner">{walletError}</p> : null}
+        <div className={styles.statRow} data-testid="usage-stat-cards">
+          <div className={`app-inline-surface ${styles.statCard}`} data-testid="wallet-balance">
+            <span className={styles.statLabel}>
+              {formatUiMessage(locale, "settings.billing.walletBalanceLabel")}
+            </span>
+            {walletQuery.isLoading ? (
+              <span className={shared.mutedText}>
+                {formatUiMessage(locale, "settings.billing.walletLoading")}
+              </span>
+            ) : walletQuery.data ? (
+              <strong className={styles.statValue}>
+                {formatFenAsYuan(walletQuery.data.balance_fen, locale)}
+              </strong>
+            ) : (
+              <strong className={styles.statValue}>—</strong>
+            )}
+            <Link
+              className="app-button-secondary"
+              data-testid="settings-wallet-topup-link"
+              href="/pricing#topup"
+            >
+              {formatUiMessage(locale, "settings.billing.walletTopupCta")}
+            </Link>
+          </div>
+          <div className={`app-inline-surface ${styles.statCard}`} data-testid="wallet-lifetime-topup">
+            <span className={styles.statLabel}>
+              {formatUiMessage(locale, "settings.billing.walletLifetimePaidLabel")}
+            </span>
+            {walletQuery.isLoading ? (
+              <span className={shared.mutedText}>
+                {formatUiMessage(locale, "settings.billing.walletLoading")}
+              </span>
+            ) : walletQuery.data ? (
+              <strong className={styles.statValue}>
+                {formatFenAsYuan(walletQuery.data.lifetime_paid_topup_fen, locale)}
+              </strong>
+            ) : (
+              <strong className={styles.statValue}>—</strong>
+            )}
+          </div>
+        </div>
+        <p className={shared.mutedText} data-testid="wallet-topup-canonical-hint">
+          {formatUiMessage(locale, "settings.billing.walletTopupHint")}
+        </p>
         {billingQuery.isLoading ? (
           <p className={shared.mutedText}>
             {formatUiMessage(locale, "settings.billing.loading")}
@@ -201,16 +247,6 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
               </strong>
             </div>
             <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.walletBalanceLabel")}</span>
-              <strong>
-                {walletQuery.data
-                  ? formatFenAsYuan(walletQuery.data.balance_fen, locale)
-                  : walletQuery.isLoading
-                    ? "…"
-                    : "—"}
-              </strong>
-            </div>
-            <div className={`app-inline-row ${shared.summaryRow}`}>
               <span>{formatUiMessage(locale, "settings.billing.byokTitle")}</span>
               <strong>
                 {primarySecret
@@ -230,50 +266,6 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
             </div>
           </div>
         )}
-      </section>
-
-      <section className={`app-inline-surface ${styles.planSection}`}>
-        <div className={`app-inline-row ${styles.headerRow}`}>
-          <div className={shared.headerText}>
-            <h2 className={shared.flushTitle}>
-              {formatUiMessage(locale, "settings.billing.walletTitle")}
-            </h2>
-            <p className={shared.mutedText}>
-              {formatUiMessage(locale, "settings.billing.walletSubtitle")}
-            </p>
-          </div>
-          <Link
-            className="app-button-secondary"
-            data-testid="settings-wallet-topup-link"
-            href="/pricing#topup"
-          >
-            {formatUiMessage(locale, "settings.billing.walletTopupCta")}
-          </Link>
-        </div>
-        {walletError ? <p className="app-notice-banner">{walletError}</p> : null}
-        {walletQuery.isLoading ? (
-          <p className={shared.mutedText}>
-            {formatUiMessage(locale, "settings.billing.walletLoading")}
-          </p>
-        ) : walletQuery.data ? (
-          <div className={`app-inline-surface ${styles.planCard}`} data-testid="wallet-balance">
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.walletBalanceLabel")}</span>
-              <strong>
-                {formatFenAsYuan(walletQuery.data.balance_fen, locale)}
-              </strong>
-            </div>
-            <div className={`app-inline-row ${shared.summaryRow}`}>
-              <span>{formatUiMessage(locale, "settings.billing.walletLifetimePaidLabel")}</span>
-              <strong>
-                {formatFenAsYuan(walletQuery.data.lifetime_paid_topup_fen, locale)}
-              </strong>
-            </div>
-            <p className={shared.mutedText} data-testid="wallet-topup-canonical-hint">
-              {formatUiMessage(locale, "settings.billing.walletTopupHint")}
-            </p>
-          </div>
-        ) : null}
       </section>
 
       <section className={`app-inline-surface ${styles.planSection}`}>

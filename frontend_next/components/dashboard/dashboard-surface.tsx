@@ -25,7 +25,7 @@ import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { ProductChromeFooter } from "../product-chrome-footer";
 import { ReferralInviteSurface } from "../referral/referral-invite-surface";
-import { DashboardHeader } from "./parts/dashboard-header";
+import { AppTopBar } from "../app-top-bar";
 import { DashboardSearchDialog } from "./parts/dashboard-search-dialog";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 import { DashboardToolbar } from "./parts/dashboard-toolbar";
@@ -53,7 +53,6 @@ export function DashboardSurface() {
   const [sortMode, setSortMode] = useState<DashboardSortMode>("recent");
   const [viewMode, setViewMode] = useState<DashboardViewMode>("card");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [renameSubmitting, setRenameSubmitting] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
@@ -140,7 +139,6 @@ export function DashboardSurface() {
     [activeTab, currentUserId, favoriteIds, locale, sortMode, workspaceDocumentCountById, workspaceInputs],
   );
 
-  const avatarInitial = (auth.user?.full_name?.trim() || auth.user?.email?.trim() || "U").slice(0, 1).toUpperCase();
   const sourcesColumnLabel = formatUiMessage(locale, "dashboardSourcesColumn");
 
   function reportError(actionError: unknown, retry: (() => void) | null) {
@@ -300,8 +298,7 @@ export function DashboardSurface() {
 
   return (
     <main className="dashboard-shell">
-      <DashboardHeader
-        avatarInitial={avatarInitial}
+      <AppTopBar
         locale={locale}
         onOpenGuide={() => openGuide("overview")}
       />
@@ -496,18 +493,7 @@ export function DashboardSurface() {
       ) : null}
 
       {searchOpen ? (
-        <DashboardSearchDialog
-          currentUserId={currentUserId}
-          favoriteIds={favoriteIds}
-          onClose={() => setSearchOpen(false)}
-          onNavigate={(workspaceId) => {
-            setSearchOpen(false);
-            router.push(`/dashboard/${workspaceId}`);
-          }}
-          query={searchQuery}
-          setQuery={setSearchQuery}
-          workspaces={workspaces}
-        />
+        <DashboardSearchDialog onClose={() => setSearchOpen(false)} />
       ) : null}
 
       <div className="dashboard-main" style={{ paddingTop: 0 }}>

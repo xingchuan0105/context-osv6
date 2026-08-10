@@ -12,6 +12,18 @@ vi.mock("../../lib/ui-preferences", () => ({
   useUiPreferences: () => mocks.uiPreferencesState,
 }));
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard/ws-1/share",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
+// AppTopBar heavy leaves are covered by dashboard-surface tests; stub them here.
+vi.mock("../../components/account-menu", () => ({ AccountMenu: () => null }));
+vi.mock("../../components/notifications/notification-bell", () => ({
+  NotificationBell: () => null,
+}));
+vi.mock("../../components/plan-entry", () => ({ PlanEntry: () => null }));
+
 vi.mock("../../lib/share/client", async () => {
   const actual = await vi.importActual("../../lib/share/client");
 
@@ -28,6 +40,25 @@ vi.mock("../../lib/share/client", async () => {
     getShareAnalytics: mocks.getShareAnalyticsMock,
     getShareAccessLogs: mocks.getShareAccessLogsMock,
     removeMember: mocks.removeMemberMock,
+  };
+});
+
+vi.mock("../../lib/settings/client", async () => {
+  const actual = await vi.importActual("../../lib/settings/client");
+
+  return {
+    ...actual,
+    updateProfile: mocks.updateProfileMock,
+  };
+});
+
+// API 访问区块已并入分享中心；密钥列表在这里不打真实请求。
+vi.mock("../../lib/api-access/client", async () => {
+  const actual = await vi.importActual("../../lib/api-access/client");
+
+  return {
+    ...actual,
+    listApiKeys: vi.fn().mockResolvedValue({ api_keys: [] }),
   };
 });
 
@@ -140,17 +171,24 @@ describe("WorkspaceShareCenterSurface", () => {
         },
       ],
     });
+    mocks.updateProfileMock.mockReset();
   });
 
   it("loads share settings, members, and analytics through react-query", async () => {
+    const user = userEvent.setup();
+
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
     expect(
       await screen.findByText("https://app.example.test/shared/kb/share-123"),
     ).toBeTruthy();
-    expect(screen.getByText("member@example.com")).toBeTruthy();
     expect(screen.getByLabelText("Validity")).toBeTruthy();
-    expect(screen.getByText("Distribution overview")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Members & permissions" }));
+    expect(await screen.findByText("member@example.com")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Traffic" }));
+    expect(await screen.findByText("Distribution overview")).toBeTruthy();
 
     await waitFor(() => {
       expect(mocks.getShareSettingsMock).toHaveBeenCalledWith("token-123", "ws-1");
@@ -281,7 +319,7 @@ describe("WorkspaceShareCenterSurface", () => {
 
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
-    await screen.findByText("Members & permissions");
+    await user.click(screen.getByRole("button", { name: "Members & permissions" }));
     await user.type(await screen.findByLabelText("Invite email"), "invalid-email");
     await user.click(screen.getByRole("button", { name: "Send invite" }));
 
@@ -327,6 +365,7 @@ describe("WorkspaceShareCenterSurface", () => {
 
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
+    await user.click(screen.getByRole("button", { name: "Members & permissions" }));
     await screen.findByText("member@example.com");
     await user.click(screen.getByRole("button", { name: "Remove" }));
 
@@ -345,8 +384,11 @@ describe("WorkspaceShareCenterSurface", () => {
   });
 
   it("loads analytics in the overview section", async () => {
+    const user = userEvent.setup();
+
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
+    await user.click(screen.getByRole("button", { name: "Traffic" }));
     const overviewHeading = await screen.findByText("Distribution overview");
     const overviewSection = overviewHeading.closest("section");
 
@@ -362,5 +404,97 @@ describe("WorkspaceShareCenterSurface", () => {
     await waitFor(() => {
       expect(mocks.getShareAnalyticsMock).toHaveBeenCalledWith("token-123", "ws-1");
     });
+  });
+
+  it("hides the owner profile card when there is no signed-in user", async () => {
+    const user = userEvent.setup();
+
+    renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
+
+    await screen.findByText("https://app.example.test/shared/kb/share-123");
+    await user.click(screen.getByRole("button", { name: "Sharer profile" }));
+    expect(screen.queryByTestId("owner-profile-card")).toBeNull();
+  });
+
+  it("toggles the public sharer profile via updateProfile with the full profile", async () => {
+    const user = userEvent.setup();
+    const updateUser = vi.fn();
+    const authUser = {
+      id: "user-1",
+      email: "owner@example.com",
+      full_name: "Owner Name",
+      bio: "hello",
+      contact_url: "https://example.com",
+      public_profile_enabled: false,
+    };
+    mocks.authState = {
+      token: "token-123",
+      user: authUser,
+      updateUser,
+    };
+    mocks.updateProfileMock.mockResolvedValue({
+      success: true,
+      data: {
+        token: "",
+        user: { ...authUser, public_profile_enabled: true },
+        reset_ticket: null,
+      },
+      error: null,
+    });
+
+    renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Sharer profile" }));
+    const card = await screen.findByTestId("owner-profile-card");
+    const toggle = within(card).getByTestId("owner-profile-switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(within(card).queryByTestId("owner-profile-public-link")).toBeNull();
+
+    await user.click(toggle);
+
+    await waitFor(() => {
+      expect(mocks.updateProfileMock).toHaveBeenCalledWith("token-123", {
+        full_name: "Owner Name",
+        bio: "hello",
+        contact_url: "https://example.com",
+        public_profile_enabled: true,
+      });
+    });
+    await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith(
+        expect.objectContaining({ public_profile_enabled: true }),
+      );
+    });
+  });
+
+  it("surfaces an error when the owner profile toggle fails", async () => {
+    const user = userEvent.setup();
+    mocks.authState = {
+      token: "token-123",
+      user: {
+        id: "user-1",
+        email: "owner@example.com",
+        full_name: "Owner Name",
+        public_profile_enabled: true,
+      },
+      updateUser: vi.fn(),
+    };
+    mocks.updateProfileMock.mockResolvedValue({
+      success: false,
+      data: null,
+      error: "boom",
+    });
+
+    renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Sharer profile" }));
+    const card = await screen.findByTestId("owner-profile-card");
+    expect(
+      within(card).getByTestId("owner-profile-public-link").getAttribute("href"),
+    ).toBe("/shared/u/user-1");
+
+    await user.click(within(card).getByTestId("owner-profile-switch"));
+
+    expect(await within(card).findByText("boom")).toBeTruthy();
   });
 });

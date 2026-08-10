@@ -9,9 +9,9 @@ tool_pool: []
 inject_retrieval_query: true
 skill_catalog:
   retrieve: [knowledge-base, memory, docscope]
-  synthesis: [writing, format]
-  # D9: no `mandatory` here — assemble_mode derives it from the capability
-  # set (memory base + knowledge-base when the capability is mounted).
+  synthesis: [writing, format, brainstorming]
+  # D9: no `mandatory` here — assemble_mode derives knowledge-base when KB is
+  # mounted (memory is on-demand via skill_request; agent-base keeps the pointer).
   # Optional cluster list above stays as-is (progressive disclosure catalog).
 budget:
   # Rounds = safety ceiling. Tokens = primary cost budget.
@@ -38,7 +38,7 @@ loop_exit:
   # Three-loop (2026-08-07): retrieve never ships final prose; always synthesize.
   skip_synthesis_on_direct_answer: false
   forbid_retrieve_direct_answer: true
-  short_judge: true
-  judge_max_fail_rounds: 3
+  verify: true
+  verify_max_fail_rounds: 3
 synthesis_output:
   contract: prose_only

@@ -9,140 +9,52 @@ description: >-
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "4.8"
+version: "6.0"
 ---
 
-## 证据与权威源
+## 证据（硬句）
 
-**知识库**（knowledge base）中的文档是本任务里**文档侧事实的权威来源**。可引用证据 = 本轮及历史轮次 **代码执行回传**（`<code_execution_result>`）中实际出现的内容。
+知识库文档侧事实的权威来源 = 本轮及历史轮次 **宿主执行回传**（`<code_execution_result>` 等）中实际出现的内容。回传未覆盖的断言处于 **未知 / 未覆盖**（≠ 语料一定不存在）。覆盖以回传正文为准：`dense` / `lexical` 的 chunk 正文与 `grep` 命中行同权。题干并置「文档内概念」与「业界框架」时两侧各一主张槽。行级/计数结论需要行级回传（常见于 `grep` 的 `total_hits`）。大段 `print` 会占满回传窗口。
 
-- 回传未覆盖的断言处于 **未知** 状态：可写「当前回传未覆盖」，不等于「语料中一定不存在」。
-- 覆盖判定以**回传正文**为准：`dense` / `lexical` 取回的 chunk 正文里实际出现的表述与数字，证据地位与 `grep` 命中行相同；`grep` 同词 0 命中只说明该 pattern 未命中行（词面差异、跨文档噪声是已知局限），不否决已在回传中的 chunk 内容。
-- 题干并置「文档内概念」与「业界/公开框架」时，两侧各算一个主张槽；框架侧无回传字面则该侧未覆盖（已挂联网时可另走 web），训练记忆中的对照表不是证据。
-- 高 `score` 的片段仍可能只覆盖概念、不覆盖数字/表行；**行级/计数类结论**（共几行、第几行）需要行级回传（常见于 `grep` 的 hits / `total_hits`）。
-- 大段原文 `print` 会占满回传窗口；短列表与关键字段更利于后续轮次使用。
+沙箱入口、首块执行、并行 `gather`、基础原语见 **agent-base「沙箱基座」**（不在此复述）。本 skill 检索入口是 **`client.方法名(...)`**；同名点选式原生工具不在此沙箱契约内。
 
-## 沙箱
+**docscope** 是 skill_request 注入的文档清单/画像（拿 `doc_id`），不是沙箱方法。
 
-检索在 **Python 沙箱**完成；沙箱基座（唯一执行入口 `<code language="python">`、每轮仅首块执行、每块新进程、`save` / `load` 跨块）见 agent-base「沙箱基座」。结果以 `<code_execution_result>` 回传。
+## 可用方法（签名卡）
 
-- 本 skill 下的检索入口是 **`client.方法名(...)`**。同名点选式原生工具不在此沙箱契约内。
-- 不允许 `import os, subprocess, socket, sys, ctypes, shutil` 等。
+| 作用 | 调用 | 适用 / 局限 |
+|------|------|-------------|
+| 语义 | `await client.dense(query)` | 概念/换说法；宿主以 query 为种子扩邻。多实体宜拆多次并行 dense，勿整句单一种子 |
+| 词面 | `await client.lexical(query)` | 编号/日期/金额/表内字面；同义改写可能 0 命中 |
+| 行级 | `await client.grep(pattern, doc_ids=None, regex=False, context=0, max_hits=50)` | 行计数/精确字面；`total_hits`=命中**行**数 |
+| 表目录 | `await client.struct_catalog(doc_ids=None)` | 表名/列/行数/样例；`relations=[]`=无表存储，非失败 |
+| 表查询 | `await client.struct_query(sql, doc_ids=None)` | 单条 SELECT；答案在 `rows`；`row_count` 是结果集行数 |
+| 档案 | `await client.doc_summary(doc_ids=None)` | metadata+summary+sections；非逐字证据正文 |
+| 跨块 | `await client.save(path, data)` / `await client.load(path)` | 仅相对路径 |
 
-### 并行扇出
+无 `top_k`；无独立 `client.graph`。图扩邻由 `dense` 触发，命中与 dense 同 alias 空间。entity-first / 双端种子见 **strategies**。
 
-相互独立的检索调用在**同一个块**内并行发出是默认工作方式：一轮一块把多次独立调用一次回传，比一轮一个调用节省整轮 LLM 往返。同块内各方法的空/非空彼此独立；存在依赖的调用（后一调用的参数来自前一调用的返回值，如 doc_summary 的 doc_id 来自 docscope 清单）按顺序 await。
+**返回形状：** `dense`/`lexical`/`doc_*` → list[dict]（`chunk_id`/`content`/`doc_id`/`score`/`alias`）；`grep` → `{total_hits, hits[], truncated}`；`struct_catalog` → `{relations[]}`（描述表，不含答案单元格）；`struct_query` → `{ok, columns, rows, row_count, …}`；`fts: true` 时可用 `match_bm25`（细节见 **api-detail**）。
 
-## 可用方法
+空结果 / 截断 / 失败对照表、最小成功代码形态、回传块格式：见 **api-detail**（首轮或沙箱错误后披露；也可 `{"skill_request":["knowledge-base/api-detail"]}`）。
 
-| 作用 | 调用 | 适用 | 局限 / 风险 |
-|------|------|------|-------------|
-| 语义相近 | `await client.dense(query)` | 概念、定义、换说法；宿主在向量召回上**以 query 文本为种子**扩邻关系，再融合为同一 chunk 列表。`query` 越贴近**可独立核验的实体/专名短语**（可选最短属性槽），扩邻方向通常越稳；多实体/关系型问题常见形态是**按实体拆多次** `dense` 并行，而非一次整句 | 易偏主题叙述；金额/编号/表内字面可能漏；**多实体长句作单一种子时扩邻方向散**；关系型问句整句「A 与 B」作唯一种子时两端邻域不易同时打开 |
-| 关键词 | `await client.lexical(query)` | 编号、日期、金额、表内字面 | 同义改写、简称可能 0 命中 |
-| 按行查找 | `await client.grep(pattern, doc_ids=None, regex=False, context=0, max_hits=50)` | 行计数、表记录、精确字面、顺序邻域 | pattern 与库内空白/管道格式不对齐时假 0；`total_hits` 是**命中行数** |
-| 表结构目录 | `await client.struct_catalog(doc_ids=None)` | 查看表格存储里的表：表名、列名、行数、样例行、置信度 | `relations` 为空 = 当前 scope 无表格存储，不是检索失败；多 doc 同名表时响应含 `ambiguous_relations` 表名列表，同名表查询静默归属首个出现的 doc |
-| 表格查询 | `await client.struct_query(sql, doc_ids=None)` | 表内 COUNT / 过滤 / 排序 / 分组（单条 SELECT） | 仅单条 SELECT；禁 DDL/DML/文件函数；表名与列名以 catalog 为准；多 doc 同名表查询静默归属首个 doc——用 `doc_ids` 收窄范围后再查 |
-| 文档档案 | `await client.doc_summary(doc_ids=None)` | 一次返回 `metadata`（含 `name`/language/domain/genre 等）+ `summary` + `sections`（含章节简介 overview）；无独立 profile 方法 | 档案不是逐字证据正文；domain/genre 为 unknown 时该画像槽未标注；`name` 后缀（如 `.docx`）是容器/扩展名层事实，与画像 domain 分列 |
-| 跨块存储 | `await client.save(path, data)` / `await client.load(path)` | 中间结果 | 仅相对路径 |
+## SELECTED / KEEP（线协议）
 
-没有 `top_k`；没有 `client.graph` / `graph_search`、`read_lines`。图关系扩邻**不是**独立沙箱 API：由 `client.dense` 的 query（及召回命中）触发宿主侧扩邻，关系向片段出现在 **dense 回传的同一 chunk 列表**里，与普通 dense 行同一 alias 命名空间。LLM 侧可控的是 query 粒度与并行次数；entity-first / 双端种子细则见 **strategies**「图扩邻种子策略」。
+终答采用了文档侧命中时，**全文末行**：
 
-**返回形状**
-
-- `dense` / `lexical` / `doc_*` → **list[dict]**（常见字段 `chunk_id`、`content`、`doc_id`、`score`、`alias`）。
-- `grep` → **dict**：`total_hits`（命中行数）、`hits[]`、`truncated`（是否因上限截断）。
-- `struct_catalog` → **dict**：`relations[]`（`name`、`headers`、`n_rows`、`sample_rows`、`caption`、`unit`、`confidence`、`fts`）。**catalog 只描述表**（表名/列名/行数/样例行/置信度）；表内数值与答案只出现在 `struct_query` 的 `rows` 单元格里，catalog 本身不返回答案。
-- `struct_query` → **dict**：`ok`、`columns`、`rows`、`row_count`、`truncated`、`evidence`；`ok=false` 时含 `error.code`（`forbidden` / `unknown_relation` / `no_relations` 等）。`row_count` 是 SQL **结果集**的行数，不是表总行数；COUNT/SUM 的数值在 `rows` 单元格内。
-- `fts: true` = 该表建有全文索引，`WHERE fts_main_<表名>.match_bm25(row_ord, '关键词') IS NOT NULL` 是表内值检索谓词（空格分隔 token 有效；整串中文是单 token，子串发现归 grep）。`fts: false` = 无索引，此情形 match_bm25 会报 schema 不存在。
-
-```python
-import asyncio
-
-# 方法组合扇出（语义 + 词面 + 行级）
-chunks, hits, g = await asyncio.gather(
-    client.dense("概念定义"),
-    client.lexical("保修年限"),
-    client.grep(r"\|\s*概念阶段\s*\|", regex=True, context=2),
-)
-print("dense n=", len(chunks), "| lexical n=", len(hits),
-      "| grep total_hits=", g["total_hits"], "| truncated=", g.get("truncated"))
-for h in g["hits"][:5]:
-    print(h["line"], h["text"][:100], h.get("before"), h.get("after"))
-await client.save("cands.json", chunks)
-
-# 关系型 / 双实体：两端各一次 dense（种子分开），同块并行
-side_a, side_b = await asyncio.gather(
-    client.dense("实体甲"),
-    client.dense("实体乙"),
-)
-print("side_a n=", len(side_a), "| side_b n=", len(side_b))
+```text
+SELECTED: #1, #3
 ```
 
-## 空结果、截断与失败
+多轮工作集：
 
-| 观察 | 含义 |
-|------|------|
-| `dense`/`lexical` 返回 `[]` | 该 query 下无片段入选；换说法/换方法后可能仍有结果 |
-| `grep`：`total_hits=0` | 该 pattern 无行命中；pattern 形态（如 `\| 值 \|`）常影响结果 |
-| `struct_catalog`：`relations=[]` | 当前 scope 无表格存储；grep/dense 仍可用，非回归 |
-| `struct_query`：`ok=false, code=unknown_relation` | 所查表名不在 catalog；catalog 中有当前可见表名列表 |
-| `truncated=true` 或 hits 达 `max_hits` | 回传是样本，不是全库枚举；计数结论以 `total_hits` 为准，**已见** hits/content 仍是有效证据，不是「整段不可用」 |
-| list 非空但无目标字段 | 主题相关 ≠ 主张已覆盖 |
-| content 已含条目，却称「被截断无法作答」 | 与 observation 不一致：已见正文覆盖状态仍为已覆盖；截断只限未列入样本的部分 |
-| `stderr` 非空 | 执行失败；下一轮可给修正后的同一形式代码块 |
-| 未调用某方法 | 该方法下的证据状态仍为未知，不是 0 命中 |
-| 连续轮次新 alias = 0 | 同一查询形态下检索面已饱和：同义重扫返回同一批命中，覆盖状态不再改变；收窄（doc_ids / 结构下钻）或定稿是此时的典型下一步。饱和判断仅限已试过的查询形态——实体名、英文面、结构面等未试角度不受此推断 |
+```text
+KEEP: #3, #7
+```
 
-同块并行多种方法时，各方法的空/非空彼此独立。
+（可选 `KEEP_DROP: #5`。）无 KEEP 时宿主 sticky 上一工作集。`SELECTED` 宜 ⊆ 本 run 曾 KEEP 的 alias。细则、空集、双源与 cite 标记见 **api-detail**。
 
-## 表格（管道行）
+## 表格 / 策略
 
-知识库文档中的表格转文本后多为 `| 列1 | 列2 | … |`：
-
-- **一行 = 一条记录**；表头给列命名；完整事实是「表头/邻列含义 + 该格」。
-- **`total_hits` = 命中行数**；某一列值重复不改变行数含义。
-- 表内「第一个」= **`row_ord`（表出现序）升序第一行**，或显式序号列，不是编码标签的字典序。
-- 单元格两侧常有 `|`；`grep(..., regex=True, context=…)` 的 before/after 提供邻行邻列。
-
-管道表完整 ontology 与误读对照见 **how-to-read-tables**（按需：`{"skill_request": ["knowledge-base/how-to-read-tables"]}`，非首轮默认全开）。
-
-## 策略层（渐进披露）
-
-首轮默认只披露薄层 **knowledge-base/strategies**（覆盖清单、entity-first 原则、spoke 目录、通用短 gotcha）。  
-场景 few-shot / 长 gotcha **不**默认塞入上下文，环境中可按需加载：
-
-| 需要时 | skill_request |
-|--------|----------------|
-| 图扩邻种子、双端 dense、图向 gotcha | `knowledge-base/strategies-graph` |
-| 表路径、行数/去重、struct vs grep | `knowledge-base/strategies-tables` |
-| 结构人数≠访谈、跨文档联系、未覆盖边界 | `knowledge-base/strategies-grounding` |
-| 沙箱方法名/`top_k`/await 噪声 | `knowledge-base/strategies-codegen` |
-| 管道表 ontology | `knowledge-base/how-to-read-tables` |
-| 重载薄层 | `knowledge-base/strategies` |
-
-## 采用了哪些命中
-
-命中常带编号字段 **`alias`**（如 `#1`）。最终答复若采用其中几条，**末行**写：
-
-`SELECTED: #1, #3`
-
-编号来自回传中的 alias。历史轮次回传里已出现的 alias 仍有效。
-
-终答采用的**每个主张**都应能指向回传中的 alias：只圈部分命中时，未圈的主张在证据面仍处于无引用状态（judge 按引用圈定的命中核对支撑）。
-
-与联网同时挂载时，doc 侧结论同样以 `SELECTED: #n` 末行圈定（联网侧 `[[web:n]]`）；doc 侧只陈述不圈 alias，其主张即处于无引用状态。
-
-## 引用标记与代码执行回传格式
-
-下列线格式由单一 grammar（`rag-core/runtime/markers`）统一解析/产出，各处含义一致：
-
-- `[[cite:<chunk_id>]]` —— 终答文本中的**文档块引用**标记；渲染时替换为 citation 编号。只圈 `[[cite:]]` 不圈 alias 的块，其引用状态与 SELECTED 无关。
-- `[[image:<chunk_id>]]` —— **内联图片块引用**标记，与 `[[cite:]]` 同为块引用（不因是图片而被丢弃）；渲染时替换为 `[[image:<编号>]]`。
-- `[[web:n]]` —— 联网引用索引（挂载联网侧时使用；旧式裸 `[[n]]` 按 web 索引兼容）。
-
-代码执行回传 `<code_execution_result>` 内部为**逐块观察行**，每块一行：
-
-`[block N] stdout: <stdout 内容>\nstderr: <stderr 内容>`
-
-- 成功块格式固定为 `stdout:` / `stderr:` 两个字段；失败块为 `[block N] Execution failed: <错误>`。
-- 多个块按 `[block 0]`、`[block 1]`… 递增编号；回传证据判定按块内 stdout 是否携带 chunk 载体（uuid 形 id）识别，占位性输出不算证据。
+管道表一行一条记录；读法见 **how-to-read-tables**；表路径 few-shot 见 **strategies-tables**。  
+首轮默认薄层 **strategies**（覆盖清单、entity-first、spoke 目录）。长 spoke 按需：`{"skill_request":["knowledge-base/strategies-…"]}`。

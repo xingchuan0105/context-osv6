@@ -316,10 +316,9 @@ pub(crate) fn attach_activity_counts_from_sink(
 }
 
 /// Mirror dynamic-QC loop observability (query-card, terminal exit reason,
-/// compact rounds summary) into `mode_debug.general` so non-streaming
-/// harnesses (rag_eval_v2) can attribute gate behavior per question. All keys
-/// are optional: no card → no `query_card`; no iteration records → no
-/// `exit_reason` / `loop_rounds`.
+/// compact rounds summary, verify, knockout) into `mode_debug.general` so
+/// non-streaming harnesses (rag_eval_v2) can attribute gate behavior per
+/// question. All keys optional for older runs / paths.
 fn insert_loop_observability(
     general_debug: &mut BTreeMap<String, serde_json::Value>,
     agent_result: &agent_loop::runtime::AgentRunResult,
@@ -328,6 +327,21 @@ fn insert_loop_observability(
         && let Ok(v) = serde_json::to_value(card)
     {
         general_debug.insert("query_card".to_string(), v);
+    }
+    if let Some(v) = agent_result.verify.as_ref()
+        && let Ok(val) = serde_json::to_value(v)
+    {
+        general_debug.insert("verify".to_string(), val);
+    }
+    if let Some(k) = agent_result.knockout.as_ref()
+        && let Ok(val) = serde_json::to_value(k)
+    {
+        general_debug.insert("knockout".to_string(), val);
+    }
+    if let Some(e) = agent_result.ews.as_ref()
+        && let Ok(val) = serde_json::to_value(e)
+    {
+        general_debug.insert("ews".to_string(), val);
     }
     if agent_result.iterations.is_empty() {
         return;

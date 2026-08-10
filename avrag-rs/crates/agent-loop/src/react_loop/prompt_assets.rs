@@ -78,6 +78,30 @@ pub fn budget_exhausted_final_turn_tokens() -> &'static str {
     trim_body(loop_prompt!("budget-exhausted-final-tokens.nudge.md"))
 }
 
+/// C5 when rounds exhausted and no retrieval-side tool attempt this run.
+pub fn budget_exhausted_final_turn_no_attempt() -> &'static str {
+    trim_body(loop_prompt!("budget-exhausted-final-no-attempt.nudge.md"))
+}
+
+/// C5 token ceiling + no retrieval-side tool attempt.
+pub fn budget_exhausted_final_turn_tokens_no_attempt() -> &'static str {
+    trim_body(loop_prompt!("budget-exhausted-final-tokens-no-attempt.nudge.md"))
+}
+
+/// C5 body: budget kind × whether any retrieval tool was attempted.
+pub fn budget_exhausted_final_turn_for(
+    exhaustion: super::run_retrieval::BudgetExhaustion,
+    had_retrieval_attempt: bool,
+) -> &'static str {
+    let token_only = exhaustion.tokens && !exhaustion.rounds;
+    match (token_only, had_retrieval_attempt) {
+        (true, false) => budget_exhausted_final_turn_tokens_no_attempt(),
+        (true, true) => budget_exhausted_final_turn_tokens(),
+        (false, false) => budget_exhausted_final_turn_no_attempt(),
+        (false, true) => budget_exhausted_final_turn(),
+    }
+}
+
 /// Shared-workspace visitor mode: answer only from shared KB observations.
 pub fn share_grounded_only_nudge() -> &'static str {
     trim_body(loop_prompt!("share-grounded-only.nudge.md"))
@@ -166,20 +190,55 @@ pub fn codegen_untrusted_prefix() -> &'static str {
 
 // --- L2 evidence / L2.5 required-action structural gates (2026-08-03) ---
 
-/// Structural evidence gate observation: zero Ok retrieval returns so far,
-/// yet the mode requires evidence. Third-person statement of the runtime
-/// fact; the model decides the next action (AGENTS.md stop-decision).
+/// Structural evidence gate: zero answer-grade hits, but retrieval tools **were**
+/// attempted (empty Ok / 0 hits). Third-person runtime fact.
 pub fn evidence_missing_nudge() -> &'static str {
     trim_body(loop_prompt!("evidence-missing.nudge.md"))
 }
 
-/// Required-action gate observation: the query card declared `{action}` but
-/// no Ok ToolResult for it has been collected yet.
-pub fn required_action_missing(action: &str) -> String {
+/// Structural evidence gate: **no** sandbox retrieval-side tool entries yet
+/// (model has not produced a client.* capture). Distinct from zero-hit after call.
+pub fn evidence_missing_no_client_nudge() -> &'static str {
+    trim_body(loop_prompt!("evidence-missing-no-client.nudge.md"))
+}
+
+/// Pick L2 observation by whether any retrieval-layer tool result exists.
+pub fn evidence_missing_nudge_for(had_retrieval_attempt: bool) -> &'static str {
+    if had_retrieval_attempt {
+        evidence_missing_nudge()
+    } else {
+        evidence_missing_no_client_nudge()
+    }
+}
+
+/// Required-action: action never appeared in tool_results at all.
+pub fn required_action_missing_never(action: &str) -> String {
     subst(
-        trim_body(loop_prompt!("required-action-missing.tmpl.md")),
+        trim_body(loop_prompt!("required-action-missing-never.tmpl.md")),
         &[("action", action)],
     )
+}
+
+/// Required-action: matching tool name seen but no Ok status.
+pub fn required_action_missing_error(action: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("required-action-missing-error.tmpl.md")),
+        &[("action", action)],
+    )
+}
+
+/// Required-action gate: pick never-attempted vs attempted-non-Ok.
+pub fn required_action_missing(action: &str, attempted_non_ok: bool) -> String {
+    if attempted_non_ok {
+        required_action_missing_error(action)
+    } else {
+        required_action_missing_never(action)
+    }
+}
+
+/// Synthesis hint when answer-grade aliases exist (SELECTED protocol recency).
+pub fn selected_protocol_nudge() -> &'static str {
+    trim_body(loop_prompt!("selected-protocol.nudge.md"))
 }
 
 pub fn format_hint_no_space_pipe() -> &'static str {
@@ -341,18 +400,18 @@ macro_rules! cluster_skill {
     };
 }
 
-pub fn short_judge_system() -> &'static str {
-    trim_body(pipeline_prompt!("short-judge.system.md"))
+pub fn verify_system() -> &'static str {
+    trim_body(pipeline_prompt!("verify.system.md"))
 }
 
-pub fn short_judge_skill_body() -> &'static str {
-    trim_body(cluster_skill!("answer-judge/SKILL.md"))
+pub fn verify_skill_body() -> &'static str {
+    trim_body(cluster_skill!("verify/SKILL.md"))
 }
 
-/// User turn for one-shot short Judge (`{question}`, `{final_answer}`, `{evidence}`).
-pub fn short_judge_user(question: &str, final_answer: &str, evidence: &str) -> String {
+/// User turn for one-shot verify (`{question}`, `{final_answer}`, `{evidence}`).
+pub fn verify_user(question: &str, final_answer: &str, evidence: &str) -> String {
     subst(
-        trim_body(pipeline_prompt!("short-judge.user.tmpl.md")),
+        trim_body(pipeline_prompt!("verify.user.tmpl.md")),
         &[
             ("question", question),
             ("final_answer", final_answer),
@@ -361,68 +420,94 @@ pub fn short_judge_user(question: &str, final_answer: &str, evidence: &str) -> S
     )
 }
 
-/// Filler when Judge has no tool/retrieval excerpt to show.
-pub fn judge_empty_evidence() -> &'static str {
-    trim_body(loop_prompt!("judge-empty-evidence.md"))
+/// Filler when verify has no tool/retrieval excerpt to show.
+pub fn verify_empty_evidence() -> &'static str {
+    trim_body(loop_prompt!("verify-empty-evidence.md"))
 }
 
-pub fn judge_fail_synthesis_observation(advice: &str) -> String {
+pub fn verify_fail_synthesis_observation(advice: &str) -> String {
     subst(
-        trim_body(loop_prompt!("judge-fail-synthesis.tmpl.md")),
+        trim_body(loop_prompt!("verify-fail-synthesis.tmpl.md")),
         &[("advice", advice)],
     )
 }
 
-pub fn judge_fail_retrieve_observation(advice: &str) -> String {
+pub fn verify_fail_retrieve_observation(advice: &str) -> String {
     subst(
-        trim_body(loop_prompt!("judge-fail-retrieve.tmpl.md")),
+        trim_body(loop_prompt!("verify-fail-retrieve.tmpl.md")),
         &[("advice", advice)],
     )
 }
 
-pub fn judge_ceiling_disclosure() -> &'static str {
-    trim_body(loop_prompt!("judge-ceiling-disclosure.md"))
+/// Model-only observation when verify fail rounds are exhausted but product
+/// token budget remains: one user-facing closeout synthesis turn.
+pub fn user_facing_closeout_observation() -> &'static str {
+    trim_body(loop_prompt!("user-facing-closeout.nudge.md"))
 }
 
-/// Fallback advice when Judge returns fail without usable `advice` text.
-pub fn judge_empty_advice() -> &'static str {
-    trim_body(loop_prompt!("judge-empty-advice.md"))
+/// Fallback advice when verify returns fail without usable `advice` text.
+pub fn verify_empty_advice() -> &'static str {
+    trim_body(loop_prompt!("verify-empty-advice.md"))
 }
 
-/// Prior synthesis draft for resynthesis after Judge fail (revision, not rewrite-from-scratch).
-pub fn judge_draft_under_revision(draft: &str) -> String {
+/// Prior synthesis draft for resynthesis after verify fail (revision, not rewrite-from-scratch).
+pub fn verify_draft_under_revision(draft: &str) -> String {
     subst(
-        trim_body(loop_prompt!("judge-draft-under-revision.tmpl.md")),
+        trim_body(loop_prompt!("verify-draft-under-revision.tmpl.md")),
         &[("draft", draft)],
     )
 }
 
-/// User-visible disclosure line deterministically appended by the host when
-/// a final answer is released without any retrieval evidence (budget
-/// exhaustion or no-evidence synthesis). Not model-authored.
-pub fn evidence_missing_disclosure() -> &'static str {
-    trim_body(loop_prompt!("evidence-missing-disclosure.md"))
+/// Knockout reexpose observation (`{chunk_ids}`).
+pub fn knockout_reexposed_observation(chunk_ids: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("knockout-reexposed.tmpl.md")),
+        &[("chunk_ids", chunk_ids)],
+    )
+}
+
+/// Synthesis-time EWS recency reread (`{items}` = host-formatted item lines).
+pub fn evidence_reread_block(items: &str) -> String {
+    if items.trim().is_empty() {
+        return String::new();
+    }
+    subst(
+        trim_body(loop_prompt!("evidence-reread.tmpl.md")),
+        &[("items", items.trim_end())],
+    )
 }
 
 pub fn partial_evidence_insufficient() -> &'static str {
     trim_body(loop_prompt!("partial-evidence-insufficient.md"))
 }
 
-pub fn contract_violation_fallback(mode_id: &str) -> &'static str {
+/// Disaster-only user prose when format gate is exhausted (has evidence path).
+/// Not a host footnote on a model draft — full replacement of illegal out-bound text.
+pub fn disaster_format_exhausted() -> &'static str {
+    trim_body(loop_prompt!("disaster/format-exhausted.md"))
+}
+
+/// Disaster-only user prose when there is no retrieval evidence to write from.
+pub fn disaster_no_evidence_answer(mode_id: &str) -> &'static str {
     match mode_id {
-        "rag" => trim_body(loop_prompt!("contract-violation-rag.md")),
-        "search" => trim_body(loop_prompt!("contract-violation-search.md")),
-        "rag+search" => trim_body(loop_prompt!("contract-violation-dual.md")),
-        _ => trim_body(loop_prompt!("contract-violation-default.md")),
+        "search" => trim_body(loop_prompt!("disaster/search-no-evidence.md")),
+        "rag" | "rag+search" => trim_body(loop_prompt!("disaster/no-evidence.md")),
+        _ => trim_body(loop_prompt!("disaster/default.md")),
     }
 }
 
+/// @deprecated name — use [`disaster_format_exhausted`] / mode-aware helpers.
+pub fn contract_violation_fallback(_mode_id: &str) -> &'static str {
+    disaster_format_exhausted()
+}
+
+/// @deprecated name — use [`disaster_no_evidence_answer`].
 pub fn degraded_no_evidence_answer(mode_id: &str) -> &'static str {
-    match mode_id {
-        "rag" => trim_body(loop_prompt!("degraded-no-evidence-rag.md")),
-        "search" => trim_body(loop_prompt!("degraded-no-evidence-search.md")),
-        _ => trim_body(loop_prompt!("degraded-no-evidence-default.md")),
-    }
+    disaster_no_evidence_answer(mode_id)
+}
+
+pub fn final_answer_feedback_provider_protocol() -> &'static str {
+    trim_body(loop_prompt!("final-answer-feedback-provider-protocol.md"))
 }
 
 #[cfg(test)]
@@ -442,7 +527,34 @@ mod tests {
         assert!(r.contains("代码块形态"));
         assert!(!r.contains("{violation_detail}"));
         assert!(!partial_evidence_insufficient().is_empty());
+        assert!(!evidence_missing_nudge().is_empty());
+        assert!(!evidence_missing_no_client_nudge().is_empty());
+        assert!(evidence_missing_nudge().contains("[evidence_missing]"));
+        assert!(evidence_missing_no_client_nudge().contains("[evidence_missing]"));
+        assert!(evidence_missing_nudge().contains("已有检索侧调用") || evidence_missing_nudge().contains("已调用"));
+        assert!(
+            evidence_missing_no_client_nudge().contains("尚未")
+                || evidence_missing_no_client_nudge().contains("尚未发生")
+        );
+        assert_eq!(
+            evidence_missing_nudge_for(true),
+            evidence_missing_nudge()
+        );
+        assert_eq!(
+            evidence_missing_nudge_for(false),
+            evidence_missing_no_client_nudge()
+        );
+        assert!(!budget_exhausted_final_turn_no_attempt().is_empty());
+        assert!(!budget_exhausted_final_turn_tokens_no_attempt().is_empty());
+        assert!(required_action_missing("dense", false).contains("尚未出现"));
+        assert!(required_action_missing("dense", true).contains("Status=Ok") || required_action_missing("dense", true).contains("成功回传"));
+        assert!(selected_protocol_nudge().contains("[selected_protocol]"));
+        assert!(user_facing_closeout_observation().contains("[user_facing_closeout]"));
+        assert!(!disaster_format_exhausted().is_empty());
+        assert!(!disaster_no_evidence_answer("rag").is_empty());
+        assert!(!disaster_no_evidence_answer("search").is_empty());
         assert!(!codegen_no_output_nudge().is_empty());
+        assert!(!final_answer_feedback_provider_protocol().is_empty());
         let se = codegen_sandbox_error_nudge(2, 4);
         assert!(!se.is_empty());
         assert!(se.contains("2/4") && !se.contains("{n_fail}"));
@@ -464,5 +576,10 @@ mod tests {
         assert!(!final_answer_feedback_template_artifact().is_empty());
         assert!(final_answer_feedback_executable_code().contains("<code language="));
         assert!(final_answer_feedback_trailing_code_fence().contains("代码围栏"));
+        let rr = evidence_reread_block("- #1 chunk_id=c1 | snip");
+        assert!(rr.contains("[evidence_reread]"));
+        assert!(rr.contains("#1"));
+        assert!(!rr.contains("{items}"));
+        assert!(evidence_reread_block("").is_empty());
     }
 }

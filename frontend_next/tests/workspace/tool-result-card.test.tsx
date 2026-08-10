@@ -70,7 +70,7 @@ describe("ToolResultCard — calculator", () => {
     );
     expect(screen.getByText("计算器")).toBeTruthy();
     expect(screen.getByText("表达式")).toBeTruthy();
-    expect(screen.getByText("结果")).toBeTruthy();
+    expect(screen.getByText("返回值")).toBeTruthy();
   });
 });
 

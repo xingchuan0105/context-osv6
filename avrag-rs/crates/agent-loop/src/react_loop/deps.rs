@@ -154,6 +154,7 @@ impl LoopRuntimeDeps {
         client_local_time: Option<String>,
         client_timezone: Option<String>,
         sdk_allowed: Arc<HashSet<String>>,
+        knockout: Option<crate::helpers::SharedKnockout>,
     ) -> BridgedCodegenExec {
         // 纯 chat(base 原语开放)或带检索(search/rag)都走 bridged 路径;
         // 仅当 base 原语一个都不开放且无检索时,沙箱无任何可用 client.*,拒绝执行。
@@ -168,14 +169,22 @@ impl LoopRuntimeDeps {
         }
 
         let rag = self.rag_runtime.as_ref().map(|runtime| {
-            avrag_rag_core::runtime::bridge::RuntimeBridge::new(
+            let mut bridge = avrag_rag_core::runtime::bridge::RuntimeBridge::new(
                 Arc::clone(runtime),
                 auth.clone(),
                 doc_scope.to_vec(),
             )
             .with_alias_counter(Arc::clone(&alias_counter))
             .with_seen_chunk_aliases(Arc::clone(&seen_chunk_aliases))
-            .with_seen_chunk_bodies(Arc::clone(&seen_chunk_bodies))
+            .with_seen_chunk_bodies(Arc::clone(&seen_chunk_bodies));
+            if let Some(ko) = knockout.clone() {
+                bridge = bridge.with_knockout_apply(Arc::new(move |data: &mut serde_json::Value| {
+                    if let Ok(mut g) = ko.lock() {
+                        g.apply_to_bridge_data(data);
+                    }
+                }));
+            }
+            bridge
         });
 
         let bridge = Arc::new(SacHostBridge {

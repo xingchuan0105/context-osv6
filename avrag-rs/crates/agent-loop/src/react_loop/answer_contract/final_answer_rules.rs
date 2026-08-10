@@ -56,6 +56,14 @@ pub(crate) fn template_artifact_matched(text: &str) -> Option<&'static str> {
         .copied()
 }
 
+/// Provider wire-format tool protocol leaked into assistant content (e.g. DeepSeek
+/// V4 DSML). Match the stable substring `DSML` — do not bind a single pipe glyph
+/// shape. Outbound gate only; root fix is provider adapter not emitting protocol
+/// into content.
+pub(crate) fn provider_protocol_matched(text: &str) -> Option<&'static str> {
+    text.contains("DSML").then_some("DSML provider protocol fragment")
+}
+
 /// Executable-form code span (`<code language="…">`) anywhere in the closing
 /// message. Markdown fences are the legitimate way to quote code in prose;
 /// the `<code language=…>` shape is the retrieve-phase execution protocol, so
@@ -133,6 +141,11 @@ pub static FINAL_ANSWER_RULES: std::sync::LazyLock<Vec<FinalAnswerRule>> =
                 id: "template_artifact",
                 check: template_artifact_matched,
                 feedback_hint: super::super::prompt_assets::final_answer_feedback_template_artifact(),
+            },
+            FinalAnswerRule {
+                id: "provider_protocol",
+                check: provider_protocol_matched,
+                feedback_hint: super::super::prompt_assets::final_answer_feedback_provider_protocol(),
             },
             FinalAnswerRule {
                 id: "executable_code",

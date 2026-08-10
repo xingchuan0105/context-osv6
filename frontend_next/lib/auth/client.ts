@@ -6,6 +6,7 @@ export type AuthUser = {
   contact_url?: string | null;
   avatar_url?: string | null;
   banner_url?: string | null;
+  public_profile_enabled?: boolean;
 };
 
 export type AuthPayload = {

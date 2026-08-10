@@ -30,7 +30,6 @@
 .title {
   margin: 0.25rem 0 0;
   font-size: clamp(1.35rem, 2vw, 1.75rem);
-  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
@@ -73,7 +72,6 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-weight: 600;
   color: hsl(var(--foreground));
   padding: 0.15rem 1.1rem 0.15rem 0;
   cursor: pointer;
@@ -107,8 +105,6 @@
 .pillActive {
   background: hsl(var(--card));
   color: hsl(var(--foreground));
-  font-weight: 600;
-  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.07);
 }
 
 /* Soft metric tiles */
@@ -130,12 +126,10 @@
 .metricLabel {
   font-size: var(--font-size-caption);
   color: hsl(var(--muted-foreground));
-  font-weight: 500;
 }
 
 .metricValue {
   font-size: clamp(1.45rem, 2.2vw, 1.9rem);
-  font-weight: 700;
   letter-spacing: -0.025em;
   color: hsl(var(--foreground));
   font-variant-numeric: tabular-nums;
@@ -163,7 +157,6 @@
 .chartTitle {
   margin: 0;
   font-size: 1rem;
-  font-weight: 700;
 }
 
 .chartSub {
@@ -187,7 +180,6 @@
 .breakdownTitle {
   margin: 0;
   font-size: 1rem;
-  font-weight: 700;
 }
 
 .wsGrid {
@@ -215,7 +207,6 @@
 .wsName {
   margin: 0;
   font-size: 0.95rem;
-  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
@@ -228,7 +219,6 @@
 
 .wsMetricInline strong {
   color: hsl(var(--foreground));
-  font-weight: 700;
   margin-left: 0.2rem;
 }
 
@@ -243,7 +233,6 @@
 
 .wsMetrics strong {
   color: hsl(var(--foreground));
-  font-weight: 600;
 }
 
 .muted {

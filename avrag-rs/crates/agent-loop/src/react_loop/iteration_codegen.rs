@@ -57,8 +57,8 @@ impl ReActLoop {
                 block_status,
                 block_text,
                 is_err,
-                block_bridge_results,
-                bridge_calls,
+                mut block_bridge_results,
+                mut bridge_calls,
                 block_had_output,
             ) = self
                 .execute_codegen_block(
@@ -72,8 +72,19 @@ impl ReActLoop {
                     &state.evidence.seen_chunk_bodies,
                     &state.session_fs,
                     &state.sdk_allowed,
+                    &state.knockout,
                 )
                 .await;
+            // Align captures with bridge filter (no double-count): tool_results +
+            // BridgeCallObs used by evidence intake / progress / callouts.
+            if let Ok(ko) = state.knockout.lock() {
+                ko.align_tool_results_no_count(&mut block_bridge_results);
+                for call in &mut bridge_calls {
+                    if let Some(data) = call.result.data.as_mut() {
+                        ko.align_value_no_count(data);
+                    }
+                }
+            }
             // User-facing progress: one step per bridge client.* call (not codegen itself).
             // B3: same after_tool_call observation surface as native tools.
             for call in &bridge_calls {
@@ -139,14 +150,31 @@ impl ReActLoop {
         // can report n_fail/n_max as environment facts (not after the fact).
         let n_fail = if any_error {
             state.consecutive_sandbox_errors = state.consecutive_sandbox_errors.saturating_add(1);
+            // Re-inject KB L2 api-detail next retrieve round (method recovery).
+            state.disclosed.reexpose_kb_api_detail = true;
             state.consecutive_sandbox_errors
         } else {
             0
         };
         // Evidence Intake at Ok-retrieval boundary (durable; not observation format).
         state.evidence.intake_from_bridge_calls(&all_bridge_calls);
+        // Knockout reexpose observation (3rd post-knock hit).
+        let reexposed = if let Ok(mut ko) = state.knockout.lock() {
+            ko.take_reexposed()
+        } else {
+            Vec::new()
+        };
+        let knockout_obs = if reexposed.is_empty() {
+            String::new()
+        } else {
+            let list = crate::helpers::KnockoutState::format_reexpose_list(&reexposed);
+            format!(
+                "\n{}",
+                super::prompt_assets::knockout_reexposed_observation(&list)
+            )
+        };
         let observation = format!(
-            "{}{}{}",
+            "{}{}{}{}",
             format_codegen_observation(
                 &combined_result,
                 any_error,
@@ -159,6 +187,7 @@ impl ReActLoop {
                 &state.evidence.seen_retrieval_aliases,
             ),
             markitdown_format_hints(&codes),
+            knockout_obs,
         );
         self.append_codegen_messages(state, llm_response, &observation);
 
@@ -168,6 +197,8 @@ impl ReActLoop {
             // errored round. Error-status items are filtered downstream
             // (EvidenceStore::insert_from_tool_results skips non-Ok results).
             Self::record_bridge_evidence(state, &combined_result, bridge_tool_results);
+            // Re-apply KEEP after new aliases land (same-turn KEEP wiring fix).
+            Self::apply_ews_from_model_text(state, &llm_response.content);
             if let Some(outcome) = self
                 .handle_codegen_error(iteration, state, sink, &llm_usage, elapsed_ms)
                 .await
@@ -176,6 +207,7 @@ impl ReActLoop {
             }
         } else {
             self.record_codegen_success(state, &combined_result, bridge_tool_results);
+            Self::apply_ews_from_model_text(state, &llm_response.content);
         }
 
         // E6: count executed blocks only (skipped blocks never ran).
@@ -344,6 +376,7 @@ impl ReActLoop {
         >,
         session_fs: &Arc<super::session_fs::SessionFs>,
         sdk_allowed: &Arc<std::collections::HashSet<String>>,
+        knockout: &crate::helpers::SharedKnockout,
     ) -> (
         contracts::ToolStatus,
         String,
@@ -390,6 +423,7 @@ impl ReActLoop {
                     meta_str("client_local_time"),
                     meta_str("client_timezone"),
                     Arc::clone(sdk_allowed),
+                    Some(Arc::clone(knockout)),
                 )
                 .await;
             block_bridge_results = bridged.bridge_results;
@@ -940,6 +974,8 @@ mod tests {
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             evidence: crate::react_loop::evidence_pool::EvidencePool::new(),
+            knockout: crate::helpers::shared_knockout(),
+            ews: crate::helpers::EwsState::new(),
             session_fs: std::sync::Arc::new(crate::react_loop::session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(std::collections::HashSet::new()),
             query_card: None,

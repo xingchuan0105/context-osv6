@@ -169,13 +169,14 @@ export function DashboardToolbar({
     <div className="dashboard-toolbar">
       <DashboardTabs activeTab={activeTab} onChange={onTabChange} />
       <div className="dashboard-toolbar-actions">
-        {/* Cross-cutting share traffic — not a list filter tab (PRODUCT_IA P1-1) */}
+        {/* 分享访问 lives in the top-bar share menu (ShareAccessMenu) — no second entry here. */}
+        {/* Client discovery lives on the dashboard (PRODUCT_IA §5), not the workspace top bar. */}
         <Link
           className="dashboard-tab-button"
-          data-testid="dashboard-tab-analytics"
-          href="/dashboard/analytics"
+          data-testid="dashboard-client-entry"
+          href="/desktop"
         >
-          {formatUiMessage(locale, "dashboardShareTrafficNav")}
+          {formatUiMessage(locale, "productChrome.client")}
         </Link>
         <button
           aria-label={formatUiMessage(locale, "dashboardToolbarSearch")}

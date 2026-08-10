@@ -62,7 +62,6 @@
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   z-index: var(--z-dropdown);
-  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.12);
   opacity: 0.96;
 }
 
@@ -298,9 +297,9 @@
 }
 
 .inlineCitationButton:hover {
-  border-color: hsl(var(--accent));
-  background: hsl(var(--surface-accent-soft));
-  color: hsl(var(--accent-text));
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-muted));
+  color: hsl(var(--foreground));
   transform: translateY(-0.08rem);
 }
 
@@ -789,8 +788,8 @@
 }
 
 .progressItemLatest .progressItemDot {
-  background: hsl(var(--accent));
-  border: 1px solid hsl(var(--accent-strong));
+  background: hsl(var(--foreground));
+  border: 1px solid hsl(var(--foreground));
 }
 
 .progressHeader {
@@ -1026,11 +1025,11 @@
   z-index: 1;
 }
 
-/* Empty-thread hero: composer (with hero heading) centered in the remaining pane. */
+/* Empty-thread hero: composer (with hero heading) sits high in the remaining pane. */
 .composerCardHero {
   flex: 1 1 auto;
-  align-content: center;
-  padding-bottom: 8vh;
+  align-content: start;
+  padding-top: clamp(4rem, 16vh, 11rem);
   border-top: 0;
   background: none;
 }
@@ -1056,7 +1055,7 @@
 
 .heroTitle {
   color: hsl(var(--foreground));
-  font-size: clamp(1.5rem, 1.15rem + 1.4vw, 1.9rem);
+  font-size: clamp(1.25rem, 1.05rem + 0.8vw, 1.5rem);
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -1298,7 +1297,7 @@
   }
 
   .composerCardHero {
-    padding-bottom: 6vh;
+    padding-top: 8vh;
   }
 
   .heroBlock {
@@ -1306,7 +1305,7 @@
   }
 
   .heroTitle {
-    font-size: 1.35rem;
+    font-size: 1.25rem;
   }
 
   .composerResizeHandle {
@@ -1630,7 +1629,6 @@
 }
 
 .statusLineSummaryTitle {
-  font-weight: 500;
   color: hsl(var(--foreground) / 0.8);
 }
 

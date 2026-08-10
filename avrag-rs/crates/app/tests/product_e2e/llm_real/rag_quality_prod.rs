@@ -239,6 +239,10 @@ struct LoopObservability {
     query_card: Option<QueryCardObservability>,
     /// Compact rounds summary: iteration count, tool calls, per-round exits.
     loop_rounds: Option<LoopRoundsObservability>,
+    /// Post-synthesis verify (verify host) summary.
+    verify: Option<serde_json::Value>,
+    /// Evidence knockout ledger snapshot.
+    knockout: Option<serde_json::Value>,
 }
 
 /// Typed view of the query-card mirrored into `mode_debug.general`
@@ -279,6 +283,8 @@ fn extract_loop_observability(chat: &ChatResponse) -> LoopObservability {
         loop_rounds: general
             .get("loop_rounds")
             .and_then(|v| serde_json::from_value(v.clone()).ok()),
+        verify: general.get("verify").cloned(),
+        knockout: general.get("knockout").cloned(),
     }
 }
 
@@ -417,6 +423,21 @@ mod loop_observability_tests {
                 "total_tool_calls": 3,
                 "exit_reasons": ["evidence_missing_continue", "code_gen"],
             },
+            "verify": {
+                "ran": true,
+                "fail_count": 1,
+                "ceiling": false,
+                "parse_error_count": 0,
+                "calls": [{ "verdict": "pass", "parse_error": false }],
+                "rereretrieve_iters": 0,
+                "product_rounds_used": 3
+            },
+            "knockout": {
+                "registered_count": 0,
+                "seen_count": 12,
+                "suppress_events": 0,
+                "reexpose_events": 0
+            },
         });
         let chat = chat_with_general(
             general
@@ -441,6 +462,12 @@ mod loop_observability_tests {
                 "code_gen".to_string()
             ]
         );
+        let v = obs.verify.expect("verify");
+        assert_eq!(v["ran"], true);
+        assert_eq!(v["fail_count"], 1);
+        let k = obs.knockout.expect("knockout");
+        assert_eq!(k["seen_count"], 12);
+        assert_eq!(k["registered_count"], 0);
     }
 
     #[test]
@@ -450,12 +477,16 @@ mod loop_observability_tests {
         assert!(obs.exit_reason.is_none());
         assert!(obs.query_card.is_none());
         assert!(obs.loop_rounds.is_none());
+        assert!(obs.verify.is_none());
+        assert!(obs.knockout.is_none());
         // No mode_debug at all (older server builds) → same absence.
         chat.mode_debug = None;
         let obs = extract_loop_observability(&chat);
         assert!(obs.exit_reason.is_none());
         assert!(obs.query_card.is_none());
         assert!(obs.loop_rounds.is_none());
+        assert!(obs.verify.is_none());
+        assert!(obs.knockout.is_none());
     }
 
     #[test]
@@ -502,6 +533,17 @@ mod loop_observability_tests {
 /// (design §4.4, shared across run ids), and the per-question `ScoreV2` sink
 /// aggregated at end of run (design §9 runner integration). Phase 0:
 /// everything here is report-only — no assertion reads these numbers.
+/// Rolling agent-token totals for suite summary (cached vs uncached split).
+#[derive(Debug, Clone, Default)]
+struct UsageRollup {
+    n_with_usage: u64,
+    prompt_tokens: u64,
+    completion_tokens: u64,
+    total_tokens: u64,
+    cached_tokens: u64,
+    uncached_prompt_tokens: u64,
+}
+
 struct V2RunCtx {
     judge: eval_v2::JudgeClient,
     run_id: String,
@@ -511,6 +553,8 @@ struct V2RunCtx {
     /// questions in parallel (buffer_unordered), so this is an
     /// `Arc<Mutex<Vec<_>>>`; aggregated serially at end of run.
     scores: std::sync::Arc<std::sync::Mutex<Vec<eval_v2::ScoreV2>>>,
+    /// Agent-side token rollup (prompt / cached / uncached) for end-of-run report.
+    usage_rollup: std::sync::Arc<std::sync::Mutex<UsageRollup>>,
     /// `E2E_ABORT_AFTER_CONSECUTIVE_FAILS` breaker (default 8, 0 disables):
     /// trips on a trailing run of consecutive non-PASS v2 labels so a systemic
     /// break stops scheduling new questions instead of burning the full run.
@@ -605,6 +649,7 @@ impl V2RunCtx {
         tool_outputs: &[String],
         obs: &LoopObservability,
         tool_trace: &[serde_json::Value],
+        usage: Option<&contracts::chat::ChatTokenUsage>,
     ) {
         let retrieval = eval_v2::score_retrieval(retrieved, example, RETRIEVAL_K);
         let selection = eval_v2::score_selection(cited, example);
@@ -686,9 +731,9 @@ impl V2RunCtx {
                 "parsed": score.judge,
             }),
         );
-        // Dynamic-QC observability (exit_reason / query_card / loop_rounds) is
-        // optional — keys are skipped when the run predates the mode_debug
-        // mirror so old artifacts stay comparable.
+        // Dynamic-QC observability (exit_reason / query_card / loop_rounds /
+        // verify / knockout) is optional — keys are skipped when the run
+        // predates the mode_debug mirror so old artifacts stay comparable.
         let mut artifact = serde_json::json!({
             "question": example.query,
             "subset": subset,
@@ -708,10 +753,40 @@ impl V2RunCtx {
         if let Some(loop_rounds) = obs.loop_rounds.as_ref() {
             artifact["loop_rounds"] = serde_json::json!(loop_rounds);
         }
+        if let Some(verify) = obs.verify.as_ref() {
+            artifact["verify"] = verify.clone();
+        }
+        if let Some(knockout) = obs.knockout.as_ref() {
+            artifact["knockout"] = knockout.clone();
+        }
         // P1-c: same compact tool_trace as realistic_corpus_full_eval/qNNN.json
         // so behavior diagnosis does not need a second directory.
         if !tool_trace.is_empty() {
             artifact["tool_trace"] = serde_json::json!(tool_trace);
+        }
+        // Agent-side token usage with cached vs uncached prompt split so
+        // skill/system re-sends are not mistaken for full billable cost.
+        if let Some(u) = usage {
+            let uncached = u.prompt_tokens.saturating_sub(u.cached_tokens);
+            artifact["usage"] = serde_json::json!({
+                "prompt_tokens": u.prompt_tokens,
+                "completion_tokens": u.completion_tokens,
+                "total_tokens": u.total_tokens,
+                "cached_tokens": u.cached_tokens,
+                "uncached_prompt_tokens": uncached,
+                "provider": u.provider,
+                "model": u.model,
+            });
+            if let Ok(mut roll) = self.usage_rollup.lock() {
+                roll.n_with_usage = roll.n_with_usage.saturating_add(1);
+                roll.prompt_tokens = roll.prompt_tokens.saturating_add(u.prompt_tokens);
+                roll.completion_tokens =
+                    roll.completion_tokens.saturating_add(u.completion_tokens);
+                roll.total_tokens = roll.total_tokens.saturating_add(u.total_tokens);
+                roll.cached_tokens = roll.cached_tokens.saturating_add(u.cached_tokens);
+                roll.uncached_prompt_tokens =
+                    roll.uncached_prompt_tokens.saturating_add(uncached);
+            }
         }
         self.write_json(&format!("q{qnum:03}.artifact.json"), &artifact);
         self.note_label(qnum, score.label);
@@ -902,6 +977,34 @@ impl V2RunCtx {
             .expect("scores mutex")
             .clone();
         let summary = eval_v2::SuiteSummaryV2::from_scores(&scores);
+        let usage = self
+            .usage_rollup
+            .lock()
+            .expect("usage_rollup mutex")
+            .clone();
+        let usage_json = if usage.n_with_usage > 0 {
+            let n = usage.n_with_usage as f64;
+            serde_json::json!({
+                "n_questions_with_usage": usage.n_with_usage,
+                "sum_prompt_tokens": usage.prompt_tokens,
+                "sum_completion_tokens": usage.completion_tokens,
+                "sum_total_tokens": usage.total_tokens,
+                "sum_cached_tokens": usage.cached_tokens,
+                "sum_uncached_prompt_tokens": usage.uncached_prompt_tokens,
+                "mean_total_tokens": (usage.total_tokens as f64 / n).round() as u64,
+                "mean_prompt_tokens": (usage.prompt_tokens as f64 / n).round() as u64,
+                "mean_completion_tokens": (usage.completion_tokens as f64 / n).round() as u64,
+                "mean_cached_tokens": (usage.cached_tokens as f64 / n).round() as u64,
+                "mean_uncached_prompt_tokens": (usage.uncached_prompt_tokens as f64 / n).round() as u64,
+                "cached_share_of_prompt": if usage.prompt_tokens > 0 {
+                    usage.cached_tokens as f64 / usage.prompt_tokens as f64
+                } else {
+                    0.0
+                },
+            })
+        } else {
+            serde_json::Value::Null
+        };
         self.write_json(
             "summary.json",
             &serde_json::json!({
@@ -909,6 +1012,7 @@ impl V2RunCtx {
                 "schema_version": eval_v2::SCHEMA_VERSION,
                 "thresholds": eval_v2::JudgeThresholds::default(),
                 "summary": summary,
+                "agent_usage": usage_json,
             }),
         );
         self.write_text(
@@ -963,6 +1067,24 @@ impl V2RunCtx {
             .collect::<Vec<_>>()
             .join(", ");
         eprintln!("  labels: {labels}");
+        if usage.n_with_usage > 0 {
+            let n = usage.n_with_usage as f64;
+            let cache_pct = if usage.prompt_tokens > 0 {
+                100.0 * usage.cached_tokens as f64 / usage.prompt_tokens as f64
+            } else {
+                0.0
+            };
+            eprintln!(
+                "  agent_usage (n={}): mean total={:.0} prompt={:.0} (cached={:.0} uncached={:.0}, cache_share={:.1}%) completion={:.0}",
+                usage.n_with_usage,
+                usage.total_tokens as f64 / n,
+                usage.prompt_tokens as f64 / n,
+                usage.cached_tokens as f64 / n,
+                usage.uncached_prompt_tokens as f64 / n,
+                cache_pct,
+                usage.completion_tokens as f64 / n,
+            );
+        }
         eprintln!("  artifacts: {}", self.run_dir.display());
     }
 
@@ -1442,16 +1564,30 @@ async fn run_single_question(
     let resp_status = resp.status;
     let resp_body = resp.body_json.clone();
     if resp_status >= 500 {
-        let raw = serde_json::to_string_pretty(&resp_body)
-            .unwrap_or_else(|_| "<serialize failed>".to_string());
+        let err_code = resp_body
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        let err_msg = resp_body
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let msg = format!(
-            "http_error status={} (internal_error envelope; ignore agent_operation_guide if present)",
-            resp_status
+            "http_error status={resp_status} code={err_code} message={err_msg}"
         );
         mark_failure(&mut outcome, msg.clone());
         eprintln!("  FAIL: {msg}");
-        let preview: String = raw.chars().take(4000).collect();
-        eprintln!("  raw response: {preview}");
+        // Prefer business fields; guide prose is huge and used to hide the real error.
+        let preview = serde_json::json!({
+            "error": err_code,
+            "message": err_msg,
+            "retry_after_secs": resp_body.get("retry_after_secs"),
+            "has_agent_operation_guide": resp_body.get("agent_operation_guide").is_some(),
+        });
+        eprintln!(
+            "  error envelope: {}",
+            serde_json::to_string(&preview).unwrap_or_default()
+        );
         if let Some(v2) = v2 {
             v2.record_infra(idx + 1, example, subset_name, "http_5xx");
         }
@@ -1532,6 +1668,18 @@ async fn run_single_question(
     }
     let retrieved = extract_retrieved_chunks(&chat.tool_results);
     let cited = extract_cited_chunks(&chat.citations);
+    let usage_json = chat.usage.as_ref().map(|u| {
+        let uncached = u.prompt_tokens.saturating_sub(u.cached_tokens);
+        serde_json::json!({
+            "prompt_tokens": u.prompt_tokens,
+            "completion_tokens": u.completion_tokens,
+            "total_tokens": u.total_tokens,
+            "cached_tokens": u.cached_tokens,
+            "uncached_prompt_tokens": uncached,
+            "provider": u.provider,
+            "model": u.model,
+        })
+    });
     if let Ok(json) = serde_json::to_string_pretty(&serde_json::json!({
         "subset": subset_name,
         "query": example.query,
@@ -1543,6 +1691,7 @@ async fn run_single_question(
         "tool_results_count": chat.tool_results.len(),
         "tool_trace": compact_tool_trace(&chat.tool_results),
         "mode_debug": chat.mode_debug,
+        "usage": usage_json,
     })) {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/e2e_output/realistic_corpus_full_eval");
@@ -1591,6 +1740,7 @@ async fn run_single_question(
             &tool_outputs,
             &loop_obs,
             &tool_trace,
+            chat.usage.as_ref(),
         )
         .await;
     }
@@ -1728,6 +1878,7 @@ async fn realistic_corpus_full_eval() {
             run_dir,
             cache,
             scores: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            usage_rollup: std::sync::Arc::new(std::sync::Mutex::new(UsageRollup::default())),
             breaker: std::sync::Arc::new(std::sync::Mutex::new(
                 ConsecutiveNonPassBreaker::new(breaker_threshold),
             )),

@@ -19,7 +19,7 @@ export async function streamChat(
   token: string,
   request: ChatRequest,
   onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; extraHeaders?: Record<string, string> },
 ): Promise<void> {
   const { isTauri } = await import("./tauri-ipc");
   if (isTauri()) {

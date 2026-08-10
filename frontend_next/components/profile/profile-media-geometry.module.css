@@ -1,0 +1,73 @@
+/**
+ * Shared profile media geometry — must match settings profile upload preview
+ * (`settings-profile-panel.module.css` bannerPreview / avatarPreview).
+ *
+ * Banner: ~3:1 like X cover (1500×500), cover-cropped.
+ * Avatar: 7.5rem circle, overlaps banner by ~3.25rem.
+ */
+
+.banner {
+  width: 100%;
+  /* ~3:1 hero like X cover (1500×500) */
+  aspect-ratio: 3 / 1;
+  min-height: 10rem;
+  max-height: 14rem;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, hsl(var(--surface-muted)) 55%, hsl(var(--accent)) 45%),
+      hsl(var(--surface-muted))
+    );
+  background-size: cover;
+  background-position: center;
+}
+
+.profileBody {
+  position: relative;
+  padding: 0 var(--space-lg) var(--space-lg);
+}
+
+.avatarRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-top: -3.25rem;
+  margin-bottom: var(--space-md);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  border-radius: 999px;
+  border: 4px solid hsl(var(--background));
+  background: hsl(var(--surface-muted));
+  background-size: cover;
+  background-position: center;
+  color: hsl(var(--foreground));
+  font-size: 2rem;
+  font-weight: var(--font-weight-semibold);
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .banner {
+    min-height: 7.5rem;
+    max-height: 10rem;
+  }
+
+  .avatarRow {
+    margin-top: -2.5rem;
+  }
+
+  .avatar {
+    width: 5.5rem;
+    height: 5.5rem;
+    font-size: 1.5rem;
+    border-width: 3px;
+  }
+}

@@ -64,6 +64,10 @@ export const pricingMessages = {
     zh: "当前余额 {balance}",
     en: "Balance {balance}",
   },
+  pricingTopupCreemHint: {
+    zh: "充值额度以人民币计价；Creem 渠道按美元结算，金额以收银台显示为准。",
+    en: "Credit is CNY-denominated; Creem charges in USD — exact amount shown at checkout.",
+  },
   pricingTopupByokCta: {
     zh: "配置自定义 Provider",
     en: "Configure providers",
@@ -89,6 +93,26 @@ export const pricingMessages = {
     en: "~10 months price",
   },
   pricingTierPlusBadge: {
+    zh: "推荐",
+    en: "Recommended",
+  },
+  pricingPayMethodLabel: {
+    zh: "支付方式",
+    en: "Payment method",
+  },
+  pricingPayMethodAlipay: {
+    zh: "支付宝",
+    en: "Alipay",
+  },
+  pricingPayMethodAlipayHint: {
+    zh: "人民币扫码",
+    en: "CNY QR code",
+  },
+  pricingPayMethodCreemHint: {
+    zh: "美元 · 国际卡",
+    en: "USD · intl cards",
+  },
+  pricingPayMethodRecommended: {
     zh: "推荐",
     en: "Recommended",
   },

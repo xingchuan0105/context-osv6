@@ -59,6 +59,20 @@ export type UseChatSessionOptions = {
   locale: "zh-CN" | "en";
   onSessionChange?: (sessionId: string | null) => void;
   onSessionActivity?: () => void;
+  /**
+   * Shared KB visitor mode: chat via `source_type=share` + `source_token`.
+   * Multi-turn history is client-supplied (`messages`) because share chats are not PG-persisted.
+   */
+  shareToken?: string | null;
+  /** Cloudflare Turnstile token for anonymous share (optional). */
+  turnstileToken?: string | null;
+  /**
+   * Seed / restore transcript without hitting `/chat/sessions/.../messages`
+   * (used for local share sessions).
+   */
+  initialMessages?: UiChatMessage[] | null;
+  /** Called after each successful stream turn with the full local transcript. */
+  onTranscriptChange?: (messages: UiChatMessage[]) => void;
 };
 
 export type UseChatSessionResult = {

@@ -85,6 +85,15 @@ impl ReActLoop {
             state.disclosed.last_skill_request = Some(validated);
         }
 
+        // SaC knockout: note seen chunks + register KNOCKOUT lines on every retrieve turn.
+        if let Ok(mut ko) = state.knockout.lock() {
+            ko.note_seen_from_tool_results(&state.tool_results);
+            ko.register_from_model_text(&llm_response.content);
+        }
+        // EWS: KEEP / KEEP_DROP from model text (sticky when no KEEP line).
+        // Applied again after tools so same-turn KEEP can resolve new aliases.
+        Self::apply_ews_from_model_text(state, &llm_response.content);
+
         let parsed = parse_llm_output(llm_response);
 
         match parsed {
@@ -133,6 +142,18 @@ impl ReActLoop {
                 .await
             }
         }
+    }
+
+    /// Parse KEEP/KEEP_DROP against current `tool_results` + evidence bodies.
+    pub(crate) fn apply_ews_from_model_text(state: &mut IterationState, text: &str) {
+        let bodies = state.evidence.seen_chunk_bodies.clone();
+        state.ews.apply_from_model_text(text, &state.tool_results, |cid| {
+            bodies
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(cid)
+                .cloned()
+        });
     }
 }
 

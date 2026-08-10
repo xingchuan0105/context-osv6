@@ -42,6 +42,10 @@
 | `../avrag-rs/prompts/README.md` | prompt CDS 布局与撰写规则 |
 | `../avrag-rs/prompts/loop/README.md` | loop 观察消息加载路径与规则 |
 
+## 近期审计快照（时间点；未吸收进 AGENTS 前非强制）
+
+- `engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` — **Harness / LLM / 用户三角信道** vs 现网出站；主审复核通过；**§17 方案补丁**（verify 面 / ceiling 分叉 / 次数阈值）闭合后可开 P0
+
 ## 进行中的计划
 
 - `plans/2026-08-02-architecture-deepening-plan.md` — 架构深化 5 波（C1 doc-scope / C2 profile memory / C3 Alipay / C4 llm / C5 citations 等）

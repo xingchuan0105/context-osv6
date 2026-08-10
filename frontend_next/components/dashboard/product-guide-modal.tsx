@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 
 import type { UiLocale } from "../../lib/i18n/config";
 import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
+import {
+  appNavEntriesByIds,
+  appNavHref,
+  type AppNavId,
+} from "../../lib/navigation/nav-config";
 import { AppModal } from "../ui/app-modal";
 import styles from "./product-guide-modal.module.css";
 
@@ -40,6 +45,17 @@ const NAV_KEY: Record<GuideSection, UiMessageKey> = {
   graph: "productGuide.nav.graph",
 };
 
+/** Graph chip order (surface-specific; hrefs/labels from nav-config). */
+const GRAPH_LINK_IDS: readonly AppNavId[] = [
+  "help",
+  "api-access",
+  "pricing",
+  "desktop",
+  "share-traffic",
+  "providers",
+  "topup",
+];
+
 type ProductGuideModalProps = {
   open: boolean;
   onClose: () => void;
@@ -71,7 +87,7 @@ export function ProductGuideModal({
       size="lg"
       title={formatUiMessage(locale, "productGuide.title")}
       closeLabel={formatUiMessage(locale, "appModal.close")}
-      fullPageHref="/help"
+      fullPageHref={appNavHref("help")}
       fullPageLabel={formatUiMessage(locale, "productGuide.fullHelp")}
       testId="product-guide-modal"
       onClose={onClose}
@@ -109,10 +125,10 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
             <li>{formatUiMessage(locale, "productGuide.overview.step3")}</li>
           </ol>
           <div className={styles.links}>
-            <Link className="app-link" href="/settings?tab=providers" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("providers")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.llm.linkProviders")}
             </Link>
-            <Link className="app-link" href="/desktop" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("desktop")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.client.link")}
             </Link>
           </div>
@@ -130,7 +146,7 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
               <p className={styles.cardBody}>
                 {formatUiMessage(locale, "productGuide.llm.byokBody")}
               </p>
-              <Link className="app-link" href="/settings?tab=providers" onClick={onClose}>
+              <Link className="app-link" href={appNavHref("providers")} onClick={onClose}>
                 {formatUiMessage(locale, "productGuide.llm.linkProviders")}
               </Link>
             </article>
@@ -141,7 +157,7 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
               <p className={styles.cardBody}>
                 {formatUiMessage(locale, "productGuide.llm.platformBody")}
               </p>
-              <Link className="app-link" href="/pricing#topup" onClick={onClose}>
+              <Link className="app-link" href={appNavHref("topup")} onClick={onClose}>
                 {formatUiMessage(locale, "productGuide.llm.linkBilling")}
               </Link>
             </article>
@@ -156,7 +172,7 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
           </h3>
           <p className={styles.lead}>{formatUiMessage(locale, "productGuide.workspace.body")}</p>
           <div className={styles.links}>
-            <Link className="app-link" href="/dashboard" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("dashboard")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.workspace.link")}
             </Link>
           </div>
@@ -169,10 +185,10 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
           <p className={styles.lead}>{formatUiMessage(locale, "productGuide.share.body")}</p>
           <p className={styles.lead}>{formatUiMessage(locale, "productGuide.share.useCases")}</p>
           <div className={styles.links}>
-            <Link className="app-link" href="/dashboard/analytics" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("share-traffic")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.share.linkAnalytics")}
             </Link>
-            <Link className="app-link" href="/pricing" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("pricing")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.billing.linkPricing")}
             </Link>
           </div>
@@ -184,10 +200,10 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
           <h3 className={styles.heading}>{formatUiMessage(locale, "productGuide.client.title")}</h3>
           <p className={styles.lead}>{formatUiMessage(locale, "productGuide.client.body")}</p>
           <div className={styles.links}>
-            <Link className="app-link" href="/desktop" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("desktop")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.client.link")}
             </Link>
-            <Link className="app-link" href="/help/api-access" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("api-access")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.graph.api")}
             </Link>
           </div>
@@ -218,10 +234,10 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
             </article>
           </div>
           <div className={styles.links}>
-            <Link className="app-link" href="/pricing" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("pricing")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.billing.linkPricing")}
             </Link>
-            <Link className="app-link" href="/pricing#topup" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("topup")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.llm.linkBilling")}
             </Link>
           </div>
@@ -235,10 +251,10 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
           </h3>
           <p className={styles.lead}>{formatUiMessage(locale, "productGuide.settings.body")}</p>
           <div className={styles.links}>
-            <Link className="app-link" href="/settings" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("settings")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.settings.link")}
             </Link>
-            <Link className="app-link" href="/settings?tab=providers" onClick={onClose}>
+            <Link className="app-link" href={appNavHref("providers")} onClick={onClose}>
               {formatUiMessage(locale, "productGuide.graph.providers")}
             </Link>
           </div>
@@ -250,27 +266,16 @@ function renderSection(section: GuideSection, locale: UiLocale, onClose: () => v
           <h3 className={styles.heading}>{formatUiMessage(locale, "productGuide.graph.title")}</h3>
           <p className={styles.lead}>{formatUiMessage(locale, "productGuide.graph.hint")}</p>
           <div className={styles.graph}>
-            <Link className={styles.chip} href="/help" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.help")}
-            </Link>
-            <Link className={styles.chip} href="/help/api-access" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.api")}
-            </Link>
-            <Link className={styles.chip} href="/pricing" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.pricing")}
-            </Link>
-            <Link className={styles.chip} href="/desktop" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.desktop")}
-            </Link>
-            <Link className={styles.chip} href="/dashboard/analytics" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.analytics")}
-            </Link>
-            <Link className={styles.chip} href="/settings?tab=providers" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.providers")}
-            </Link>
-            <Link className={styles.chip} href="/pricing#topup" onClick={onClose}>
-              {formatUiMessage(locale, "productGuide.graph.billing")}
-            </Link>
+            {appNavEntriesByIds(GRAPH_LINK_IDS).map((entry) => (
+              <Link
+                key={entry.id}
+                className={styles.chip}
+                href={entry.href}
+                onClick={onClose}
+              >
+                {formatUiMessage(locale, entry.labelKey)}
+              </Link>
+            ))}
           </div>
         </>
       );

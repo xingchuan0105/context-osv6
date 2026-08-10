@@ -10,8 +10,8 @@ export const shareMessages = {
     en: "Shared workspace",
   },
   "sharedPublic.pageSubtitle": {
-    zh: "通过共享链接浏览内容。登录后可提问。",
-    en: "Browse shared content by link. Sign in to ask questions.",
+    zh: "共享知识库：可对话（默认 RAG）、可管理会话。不可添加资料、笔记或联网检索。",
+    en: "Shared knowledge base: chat in RAG mode with sessions. No adding sources, notes, or web search.",
   },
   "sharedPublic.ownerCardLabel": {
     zh: "工作区所有者",
@@ -20,6 +20,70 @@ export const shareMessages = {
   "sharedPublic.ownerContactAction": {
     zh: "联系",
     en: "Contact",
+  },
+  "sharedPublic.ownerFallbackName": {
+    zh: "分享者",
+    en: "Sharer",
+  },
+  "sharedPublic.ownerBannerLabel": {
+    zh: "分享者封面",
+    en: "Sharer cover image",
+  },
+  "sharedPublic.ownerRolePill": {
+    zh: "所有者",
+    en: "Owner",
+  },
+  "sharedPublic.sharingWorkspaceLabel": {
+    zh: "正在分享",
+    en: "Sharing",
+  },
+  "sharedPublic.sourcesCountChip": {
+    zh: "{count} 份资料",
+    en: "{count} sources",
+  },
+  "sharedPublic.modeRagChip": {
+    zh: "知识库对话",
+    en: "Knowledge chat",
+  },
+  "sharedPublic.openOwnerProfile": {
+    zh: "查看分享者主页与全部共享库",
+    en: "View sharer profile and all shared workspaces",
+  },
+  "sharedPublic.profileHint": {
+    zh: "点击头像查看全部共享",
+    en: "Tap avatar for all shares",
+  },
+  "sharedPublic.profilePageTitle": {
+    zh: "分享者主页",
+    en: "Sharer profile",
+  },
+  "sharedPublic.profileSharesTitle": {
+    zh: "公开共享的工作区",
+    en: "Public shared workspaces",
+  },
+  "sharedPublic.profileSharesEmpty": {
+    zh: "暂时没有可打开的共享工作区。",
+    en: "No open shared workspaces yet.",
+  },
+  "sharedPublic.profileOpenWorkspace": {
+    zh: "打开",
+    en: "Open",
+  },
+  "sharedPublic.profileLoading": {
+    zh: "正在加载主页…",
+    en: "Loading profile...",
+  },
+  "sharedPublic.profileNotFound": {
+    zh: "找不到该分享者主页。",
+    en: "This sharer profile was not found.",
+  },
+  "sharedPublic.profileBackToHome": {
+    zh: "返回首页",
+    en: "Back home",
+  },
+  "sharedPublic.profileSourcesMeta": {
+    zh: "{count} 份资料",
+    en: "{count} sources",
   },
   "sharedPublic.readAccessLabel": {
     zh: "访问方式",
@@ -34,8 +98,36 @@ export const shareMessages = {
     en: "Interaction",
   },
   "sharedPublic.interactionAccessValue": {
-    zh: "登录后可提问",
-    en: "Sign in to ask questions",
+    zh: "可对话（RAG）",
+    en: "Chat enabled (RAG)",
+  },
+  "sharedPublic.browseOnlyTitle": {
+    zh: "共享知识库",
+    en: "Shared knowledge base",
+  },
+  "sharedPublic.browseOnlyBody": {
+    zh: "布局与工作区一致：左侧会话、中间对话、右侧资料。能力固定为 RAG（无 chat 模式、无联网检索）；不可添加内容源与笔记。",
+    en: "Workspace-like layout: sessions, chat, and sources. Capabilities locked to RAG (no plain chat mode, no web search). Sources and notes cannot be added.",
+  },
+  "sharedPublic.ragLockedHint": {
+    zh: "分享页固定为知识库 RAG，不可切换到 chat 或联网检索。",
+    en: "Share page is locked to knowledge-base RAG — no plain chat or web search.",
+  },
+  "sharedPublic.turnstileRequired": {
+    zh: "请先完成人机验证再提问。",
+    en: "Complete the human verification before asking.",
+  },
+  "sharedPublic.sourceDetailTitle": {
+    zh: "资料详情",
+    en: "Source detail",
+  },
+  "sharedPublic.sourceDetailStatus": {
+    zh: "状态",
+    en: "Status",
+  },
+  "sharedPublic.sourceDetailBody": {
+    zh: "访客分享页仅展示资料清单与状态。正文预览与下载仍受分享策略与所有者配置限制。",
+    en: "Visitor share pages list sources and status. Full body preview and download still follow the share policy set by the owner.",
   },
   "sharedPublic.loading": {
     zh: "正在加载共享内容…",
@@ -52,6 +144,14 @@ export const shareMessages = {
   "sharedPublic.permissionLabel": {
     zh: "权限",
     en: "Permission",
+  },
+  "sharedPublic.accessLevel.partial": {
+    zh: "只读",
+    en: "Read-only",
+  },
+  "sharedPublic.accessLevel.full": {
+    zh: "可编辑",
+    en: "Full access",
   },
   "sharedPublic.scopeLabel": {
     zh: "范围",
@@ -221,6 +321,42 @@ export const shareMessages = {
     zh: "访问 {n}",
     en: "Views {n}",
   },
+  "sharedPublic.tabBarLabel": {
+    zh: "共享工作区内容",
+    en: "Shared workspace content",
+  },
+  "sharedPublic.tabChat": {
+    zh: "对话",
+    en: "Chat",
+  },
+  "sharedPublic.tabSources": {
+    zh: "资料",
+    en: "Sources",
+  },
+  "sharedPublic.tabMoreShares": {
+    zh: "更多分享",
+    en: "More shares",
+  },
+  "sharedPublic.sourcesTabEmpty": {
+    zh: "这个共享工作区暂时没有资料。",
+    en: "This shared workspace has no sources yet.",
+  },
+  "sharedPublic.sourceAskAction": {
+    zh: "就这份资料提问",
+    en: "Ask about this source",
+  },
+  "sharedPublic.sourceAskTemplate": {
+    zh: "请总结一下《{name}》的主要内容。",
+    en: "Summarize the key points of \"{name}\".",
+  },
+  "sharedPublic.moreSharesLoading": {
+    zh: "正在加载分享者的其他共享…",
+    en: "Loading the sharer's other workspaces...",
+  },
+  "sharedPublic.moreSharesEmpty": {
+    zh: "这位分享者暂时没有其他公开共享的工作区。",
+    en: "This sharer has no other public shared workspaces yet.",
+  },
   "shareCenter.tabsLabel": {
     zh: "分享中心选项卡",
     en: "Share center tabs",
@@ -244,6 +380,18 @@ export const shareMessages = {
   "shareCenter.pageSubtitle": {
     zh: "发布当前工作区的知识组合，并追踪它的传播情况。",
     en: "Publish this workspace as a knowledge package and track how it spreads.",
+  },
+  "shareCenter.apiMethodHint": {
+    zh: "API 是另一种分享方法：密钥即入口，把这个工作区的资料查询能力开放给脚本与 agent。",
+    en: "API is another way to share: a key is an entry point that opens this workspace's source querying to scripts and agents.",
+  },
+  "shareCenter.navTraffic": {
+    zh: "访问数据",
+    en: "Traffic",
+  },
+  "shareCenter.navAriaLabel": {
+    zh: "分享设置导航",
+    en: "Share settings navigation",
   },
   "shareCenter.settingsSectionTitle": {
     zh: "分享设置",
@@ -536,6 +684,18 @@ export const shareMessages = {
   "shareCenter.visitorModeLabel": {
     zh: "访客模式",
     en: "Visitor mode",
+  },
+  "shareCenter.ownerProfileTitle": {
+    zh: "分享者主页",
+    en: "Sharer profile",
+  },
+  "shareCenter.ownerProfileHint": {
+    zh: "开启后，访客可以在分享页点击你的头像查看账号信息，并浏览你所有公开分享的工作区；关闭后这些入口会隐藏。",
+    en: "When on, visitors can tap your avatar on share pages to see your account info and browse all your publicly shared workspaces; when off, these entry points are hidden.",
+  },
+  "shareCenter.ownerProfileView": {
+    zh: "查看我的公开主页",
+    en: "View my public profile",
   },
   "shareCenter.visitorMode.anonymous": {
     zh: "匿名链接",

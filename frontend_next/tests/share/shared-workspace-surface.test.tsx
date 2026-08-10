@@ -1,8 +1,6 @@
 import type { AnchorHTMLAttributes } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 
 vi.mock("next/link", () => ({
   default: ({
@@ -23,24 +21,44 @@ vi.mock("../../lib/ui-preferences", () => ({
 }));
 
 vi.mock("../../lib/auth/context", () => ({
-  useAuth: () => mocks.authState,
+  useAuth: () => ({
+    initialized: true,
+    token: "token-123",
+    user: { id: "u1" },
+  }),
 }));
 
 vi.mock("../../lib/share/client", async () => {
   const actual = await vi.importActual("../../lib/share/client");
-
   return {
     ...actual,
     getSharedWorkspace: mocks.getSharedWorkspaceMock,
     streamSharedChat: mocks.streamSharedChatMock,
+    getPublicOwnerProfile: mocks.getPublicOwnerProfileMock,
   };
 });
+
+vi.mock("../../hooks/use-chat-session", () => ({
+  useChatSession: () => ({
+    messages: [],
+    isStreaming: false,
+    progress: {
+      activities: [],
+      mode: null,
+      collapsed: false,
+      startedAtMs: null,
+      endedAtMs: null,
+    },
+    error: null,
+    send: vi.fn(),
+    stop: vi.fn(),
+    toggleProgressCollapsed: vi.fn(),
+  }),
+}));
 
 import { SharedWorkspaceSurface } from "../../components/share/shared-workspace-surface";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createSharedWorkspaceSurfaceMocks());
-
-
 
 function buildPayload(overrides?: Partial<Awaited<ReturnType<typeof mocks.getSharedWorkspaceMock>>>) {
   return {
@@ -73,12 +91,10 @@ function buildPayload(overrides?: Partial<Awaited<ReturnType<typeof mocks.getSha
 
 describe("SharedWorkspaceSurface", () => {
   beforeEach(() => {
-    mocks.authState = {
-      initialized: true,
-      token: "token-123",
-    };
     mocks.getSharedWorkspaceMock.mockReset();
     mocks.streamSharedChatMock.mockReset();
+    mocks.getPublicOwnerProfileMock.mockReset();
+    window.localStorage.clear();
   });
 
   it("shows the loading state while the shared payload is pending", () => {
@@ -86,37 +102,63 @@ describe("SharedWorkspaceSurface", () => {
 
     render(<SharedWorkspaceSurface shareToken="share-loading" />);
 
-    expect(screen.getByText("正在加载共享内容...")).toBeTruthy();
+    expect(screen.getByText(/正在加载共享内容/)).toBeTruthy();
   });
 
   it("renders the invalid link state without calling the share client for an empty token", async () => {
     render(<SharedWorkspaceSurface shareToken="" />);
 
     expect(await screen.findByText("共享链接不可用")).toBeTruthy();
-    expect(screen.getByText("这个共享链接无效、已撤销，或已经过期。")).toBeTruthy();
-    expect(screen.getByText("invalid")).toBeTruthy();
     expect(mocks.getSharedWorkspaceMock).not.toHaveBeenCalled();
   });
 
-  it("renders partial semantics, download policy, and prompt suggestions", async () => {
-    const user = userEvent.setup();
-    mocks.getSharedWorkspaceMock.mockResolvedValue(buildPayload());
+  it("renders workspace-like shell with social owner hero, chat, sessions, sources", async () => {
+    mocks.getSharedWorkspaceMock.mockResolvedValue(
+      buildPayload({
+        owner: {
+          user_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          display_name: "Ada Owner",
+          bio: "Building second brains",
+          contact_url: "https://example.com/ada",
+          avatar_url: "/api/public/users/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/media/avatar",
+          banner_url: "/api/public/users/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/media/banner",
+        },
+      }),
+    );
 
     render(<SharedWorkspaceSurface shareToken="share-partial" />);
 
-    expect(await screen.findByText("permission=partial")).toBeTruthy();
-    expect(screen.getByText("scope=partial")).toBeTruthy();
-    expect(screen.getByText("仅在线查看")).toBeTruthy();
-    expect(screen.getByText("allow_download=false")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Shared KB?" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Plan.pdf?" })).toBeTruthy();
+    expect(await screen.findByTestId("shared-workspace-shell")).toBeTruthy();
+    expect(screen.getByTestId("share-owner-card")).toBeTruthy();
+    expect(screen.getByTestId("share-owner-banner")).toBeTruthy();
+    expect(screen.getByTestId("share-owner-avatar")).toBeTruthy();
+    expect(screen.getByText("Ada Owner")).toBeTruthy();
+    // X-style hero shows the owner bio inline.
+    expect(screen.getByText("Building second brains")).toBeTruthy();
+    const profileHref = "/shared/u/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    expect(screen.getByTestId("share-owner-avatar").closest("a")).toHaveAttribute(
+      "href",
+      profileHref,
+    );
+    expect(screen.getByRole("link", { name: "Ada Owner" })).toHaveAttribute("href", profileHref);
+    expect(screen.getByRole("link", { name: "联系" })).toHaveAttribute(
+      "href",
+      "https://example.com/ada",
+    );
+    expect(screen.getByText("Shared KB")).toBeTruthy();
+    expect(screen.getByTestId("shared-history-rail")).toBeTruthy();
+    expect(screen.getByTestId("shared-chat-pane")).toBeTruthy();
+    expect(screen.getByTestId("shared-desktop-right-rail")).toBeTruthy();
+    expect(screen.getAllByText("Plan.pdf").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: "Plan.pdf?" }));
-
-    expect((screen.getByLabelText("提问") as HTMLTextAreaElement).value).toBe("Plan.pdf?");
+    // No add-source control
+    expect(screen.queryByRole("button", { name: /新建资料|New source/i })).toBeNull();
+    // RAG chip present; search chip absent
+    expect(screen.getByTestId("workspace-chat-cap-rag")).toBeTruthy();
+    expect(screen.queryByTestId("workspace-chat-cap-search")).toBeNull();
   });
 
-  it("renders full semantics and allow_download when the share has full access", async () => {
+  it("renders hero without owner media using workspace title fallback", async () => {
     mocks.getSharedWorkspaceMock.mockResolvedValue(
       buildPayload({
         share: {
@@ -130,145 +172,111 @@ describe("SharedWorkspaceSurface", () => {
 
     render(<SharedWorkspaceSurface shareToken="share-full" />);
 
-    expect(await screen.findByText("permission=full")).toBeTruthy();
-    expect(screen.getByText("permission=full")).toBeTruthy();
-    expect(screen.getByText("scope=full")).toBeTruthy();
+    expect(await screen.findByTestId("share-owner-card")).toBeTruthy();
+    expect(screen.getByText("Shared KB")).toBeTruthy();
     expect(screen.getByText("允许下载")).toBeTruthy();
-    expect(screen.getByText("allow_download=true")).toBeTruthy();
   });
 
-  it("renders SSE token, citations, done payload, source blocks, and degraded banner", async () => {
-    const user = userEvent.setup();
-    let releaseDone: () => void = () => {
-      throw new Error("Expected the streaming done handler to be registered.");
-    };
-
+  it("switches to the sources tab and opens detail only for ready sources", async () => {
     mocks.getSharedWorkspaceMock.mockResolvedValue(buildPayload());
-    mocks.streamSharedChatMock.mockImplementation(
-      async (
-        shareToken: string,
-        notebookId: string,
-        query: string,
-        onEvent: (event: any) => void,
-      ) => {
-        expect(shareToken).toBe("share-stream");
-        expect(notebookId).toBe("kb-1");
-        expect(query).toBe("What changed?");
 
-        onEvent({
-          event: "token",
-          request_id: "req-1",
-          message_id: 1,
-          content: "Draft answer",
-        });
-        onEvent({
-          event: "citations",
-          request_id: "req-1",
-          message_id: 1,
-          citations: [
-            {
-              citation_id: 1,
-              doc_id: "doc-1",
-              chunk_id: "chunk-1",
-              page: 3,
-              doc_name: "Plan.pdf",
-              preview: "Key excerpt",
-              score: 0.9,
-            },
-          ],
-        });
+    render(<SharedWorkspaceSurface shareToken="share-tabs" />);
 
-        await new Promise<void>((resolve) => {
-          releaseDone = () => {
-            onEvent({
-              event: "done",
-              request_id: "req-1",
-              session_id: "session-1",
-              message_id: 1,
-              payload: {
-                answer: "Final answer",
-                answer_blocks: [],
-                session_id: "session-1",
-                agent_type: "rag",
-                sources: [
-                  {
-                    id: "source-1",
-                    title: "Plan.pdf",
-                    snippet: "Retrieved source snippet",
-                    doc_id: "doc-1",
-                    page: 3,
-                  },
-                ],
-                citations: [
-                  {
-                    citation_id: 1,
-                    doc_id: "doc-1",
-                    chunk_id: "chunk-1",
-                    page: 3,
-                    doc_name: "Plan.pdf",
-                    preview: "Key excerpt",
-                    score: 0.9,
-                  },
-                ],
-                trace: {
-                  mode: "rag",
-                },
-                degrade_trace: [
-                  {
-                    stage: "retrieval",
-                    reason: "partial_index",
-                    impact: "lower_recall",
-                  },
-                ],
-              },
-            });
-            resolve();
-          };
-        });
-      },
+    expect(await screen.findByTestId("share-tab-chat")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("share-tab-sources"));
+
+    const sourcesTab = await screen.findByTestId("shared-sources-tab");
+    expect(sourcesTab).toBeTruthy();
+
+    const readyCard = screen.getByTestId("share-source-card-src-1");
+    const processingCard = screen.getByTestId("share-source-card-src-2");
+    expect(processingCard).toHaveProperty("disabled", true);
+
+    // Ready source opens the detail modal with the ask CTA.
+    fireEvent.click(readyCard);
+    expect(await screen.findByTestId("shared-source-detail-modal")).toBeTruthy();
+    expect(screen.getByTestId("shared-source-ask-action")).toBeTruthy();
+
+    // Ask CTA prefills the composer and returns to the chat tab.
+    fireEvent.click(screen.getByTestId("shared-source-ask-action"));
+    expect(await screen.findByTestId("share-tab-chat")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("lists the owner's other public shares in the more-shares tab", async () => {
+    mocks.getSharedWorkspaceMock.mockResolvedValue(
+      buildPayload({
+        owner: {
+          user_id: "owner-1",
+          display_name: "Ada Owner",
+        },
+      }),
+    );
+    mocks.getPublicOwnerProfileMock.mockResolvedValue({
+      owner: { user_id: "owner-1", display_name: "Ada Owner" },
+      shares: [
+        {
+          workspace_id: "kb-1",
+          title: "Current KB",
+          share_token: "share-tabs",
+          access_level: "public",
+          allow_download: false,
+          source_count: 2,
+        },
+        {
+          workspace_id: "kb-2",
+          title: "Second Brain",
+          description: "Notes and papers",
+          share_token: "token-2",
+          access_level: "public",
+          allow_download: true,
+          source_count: 7,
+        },
+      ],
+    });
+
+    render(<SharedWorkspaceSurface shareToken="share-tabs" />);
+
+    fireEvent.click(await screen.findByTestId("share-tab-shares"));
+
+    expect(await screen.findByTestId("shared-more-shares-tab")).toBeTruthy();
+    // Current share is filtered out; the other one links to its share page.
+    expect(screen.queryByText("Current KB")).toBeNull();
+    expect(await screen.findByText("Second Brain")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "打开" })).toHaveAttribute(
+      "href",
+      "/shared/kb/token-2",
+    );
+  });
+
+  it("hides the more-shares tab when the owner has no public profile id", async () => {
+    mocks.getSharedWorkspaceMock.mockResolvedValue(buildPayload());
+
+    render(<SharedWorkspaceSurface shareToken="share-no-owner" />);
+
+    expect(await screen.findByTestId("share-tab-chat")).toBeTruthy();
+    expect(screen.queryByTestId("share-tab-shares")).toBeNull();
+  });
+
+  it("hides owner profile entry points when profile_enabled is false", async () => {
+    mocks.getSharedWorkspaceMock.mockResolvedValue(
+      buildPayload({
+        owner: {
+          user_id: "owner-1",
+          display_name: "Ada Owner",
+          profile_enabled: false,
+        },
+      }),
     );
 
-    render(<SharedWorkspaceSurface shareToken="share-stream" />);
+    const { container } = render(<SharedWorkspaceSurface shareToken="share-private-owner" />);
 
-    await screen.findByText("permission=partial");
-    await user.type(screen.getByLabelText("提问"), "What changed?");
-    await user.click(screen.getByRole("button", { name: "开始提问" }));
-
-    expect(await screen.findByText("Draft answer")).toBeTruthy();
-    expect(screen.getByText("引用资料")).toBeTruthy();
-    expect(screen.getAllByText("Key excerpt").length).toBeGreaterThan(0);
-
-    releaseDone();
-
-    await waitFor(() => {
-      expect(screen.getByText("Final answer")).toBeTruthy();
-    });
-
-    expect(screen.getByText("回答经过降级处理。")).toBeTruthy();
-    expect(screen.getByText("partial_index")).toBeTruthy();
-    expect(screen.getByText("Retrieved source snippet")).toBeTruthy();
-  });
-
-  it("renders SSE error messages without dropping the loaded share overview", async () => {
-    const user = userEvent.setup();
-
-    mocks.getSharedWorkspaceMock.mockResolvedValue(buildPayload());
-    mocks.streamSharedChatMock.mockImplementation(async (_shareToken, _notebookId, _query, onEvent) => {
-      onEvent({
-        event: "error",
-        request_id: "req-2",
-        code: "stream_failed",
-        message: "share stream failed",
-      });
-    });
-
-    render(<SharedWorkspaceSurface shareToken="share-error" />);
-
-    await screen.findByText("permission=partial");
-    await user.type(screen.getByLabelText("提问"), "Need error");
-    await user.click(screen.getByRole("button", { name: "开始提问" }));
-
-    expect(await screen.findByText("share stream failed")).toBeTruthy();
-    expect(screen.getByText("permission=partial")).toBeTruthy();
+    expect(await screen.findByTestId("share-tab-chat")).toBeTruthy();
+    expect(screen.queryByTestId("share-tab-shares")).toBeNull();
+    expect(container.querySelector('a[href="/shared/u/owner-1"]')).toBeNull();
+    // Owner card itself still renders (name is share-page context, not the profile link).
+    expect(screen.getByTestId("share-owner-card")).toBeTruthy();
   });
 });

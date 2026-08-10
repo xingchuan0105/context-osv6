@@ -18,6 +18,7 @@ import { isPricingRevampFeatureDisabledError } from "@/lib/billing/featureFlag";
 import { usePricingRevampGateResult } from "@/components/billing/PricingRevampGate";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
+import { AppTopBar } from "@/components/app-top-bar";
 import styles from "./usage.module.css";
 
 type DashboardState =
@@ -102,7 +103,9 @@ export function UsageDashboardClient() {
   const { window, history, forecast } = state;
 
   return (
-    <div className={styles.page}>
+    <>
+      <AppTopBar locale={locale} />
+      <div className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>{formatUiMessage(locale, "usageTitle")}</h1>
         {forecast.current_plan === "free" && (
@@ -152,6 +155,7 @@ export function UsageDashboardClient() {
         projected_30d_tokens={forecast.projected_30d_tokens}
         current_limit_7d={forecast.current_limit_7d}
       />
-    </div>
+      </div>
+    </>
   );
 }

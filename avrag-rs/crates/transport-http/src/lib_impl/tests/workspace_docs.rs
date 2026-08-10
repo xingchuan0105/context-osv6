@@ -331,3 +331,20 @@ fn shared_path_detector_matches_public_share_routes() {
     assert!(!crate::middleware::req_path_is_shared("/api/v1/chat"));
 }
 
+#[tokio::test]
+async fn public_user_shares_route_is_registered_and_public() {
+    let state = test_app_state();
+    let app = build_router(state);
+    let req = Request::builder()
+        .uri(format!(
+            "/api/public/users/{}/shares",
+            Uuid::new_v4()
+        ))
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    // Route exists and does not require auth; without postgres the store is absent.
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+

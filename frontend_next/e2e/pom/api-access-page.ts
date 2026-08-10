@@ -4,7 +4,8 @@ export class ApiAccessPage {
   constructor(private page: Page) {}
 
   async goto(workspaceId: string) {
-    await this.page.goto(`/dashboard/${workspaceId}/api-access`);
+    // API 设置已合并进分享中心（API = 一种分享方法）。
+    await this.page.goto(`/dashboard/${workspaceId}/share`);
     await this.page.waitForLoadState("networkidle");
   }
 

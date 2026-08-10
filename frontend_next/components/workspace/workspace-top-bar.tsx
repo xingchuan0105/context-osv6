@@ -3,18 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { AppPrimaryNav } from "../app-primary-nav";
 import { DesktopSettingsDrawer } from "../desktop/DesktopSettingsDrawer";
 import { DesktopStatusBadge } from "../desktop/DesktopStatusBadge";
 import { ContextOsMark } from "../context-os-mark";
 import { AccountMenu } from "../account-menu";
 import { NotificationBell } from "../notifications/notification-bell";
-import { PlanEntry } from "../plan-entry";
-import { WorkspaceApiAccessModal } from "../api-access/workspace-api-access-modal";
 import { WorkspaceShareQuickModal } from "../share/workspace-share-quick-modal";
-import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
-import { getShareSettings, isShareEnabled } from "../../lib/share/client";
 import { isTauri } from "../../lib/runtime/tauri-ipc";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import styles from "./workspace-shell.module.css";
@@ -39,42 +34,15 @@ export function WorkspaceTopBar({
   onCreateWorkspaceSubmit,
 }: WorkspaceTopBarProps) {
   const { locale } = useUiPreferences();
-  const { token } = useAuth();
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [desktopDrawerOpen, setDesktopDrawerOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [apiOpen, setApiOpen] = useState(false);
-  const [shareEnabled, setShareEnabled] = useState(false);
   const desktopRuntime = isTauri();
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const safeWorkspaceTitle = workspaceTitle ?? "";
   const safeWorkspaceDescription = workspaceDescription ?? "";
   const newWorkspaceLabel = formatUiMessage(locale, "workspaceCreateDialogLabel");
   const displayTitle = safeWorkspaceTitle;
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!token) {
-      setShareEnabled(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-    void getShareSettings(token, workspaceId)
-      .then((settings) => {
-        if (!cancelled) {
-          setShareEnabled(isShareEnabled(settings));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setShareEnabled(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, workspaceId, shareOpen]);
 
   useEffect(() => {
     if (!isTitleEditing) {
@@ -99,9 +67,10 @@ export function WorkspaceTopBar({
     onWorkspaceTitleDraftChange(workspaceTitle);
   }
 
-  // IA: primary top-bar actions stay product-only (workspace, share, API).
-  // No marketing chrome (pricing / blog / family dump). Desktop discoverability
-  // for web users is secondary: avatar menu + ProductChromeFooter + /help.
+  // IA (PRODUCT_IA §5): 分享 is the T0 top-bar action — one capsule, one
+  // behavior: opens the share modal directly; 访问/API fold into the modal.
+  // No 工作台|设置 wayfinding (brand returns home, settings lives in the
+  // account menu), no 客户端 capsule (dashboard toolbar hosts client discovery).
   return (
     <header className={styles.topBar} data-testid="workspace-top-bar" data-marketing-chrome="false">
       <div className={styles.topBarBrand}>
@@ -163,19 +132,6 @@ export function WorkspaceTopBar({
       </div>
 
       <div className={styles.topBarActions}>
-        <AppPrimaryNav locale={locale} />
-        {!desktopRuntime ? (
-          <Link
-            className={`${styles.topBarClientButton} top-bar-capsule`}
-            data-testid="workspace-client-entry"
-            href="/desktop"
-          >
-            <span className={styles.topBarActionLabel}>
-              {formatUiMessage(locale, "productChrome.client")}
-            </span>
-          </Link>
-        ) : null}
-        <PlanEntry locale={locale} size="compact" />
         {desktopRuntime ? (
           <>
             <DesktopStatusBadge onClick={() => setDesktopDrawerOpen(true)} />
@@ -219,32 +175,15 @@ export function WorkspaceTopBar({
             </svg>
             <span className={styles.topBarActionLabel}>{newWorkspaceLabel}</span>
           </button>
+          {/* 分享 is T0: one capsule, one behavior — opens the share modal
+              directly. 访问/API fold into the share modal (PRODUCT_IA §5). */}
           <button
-            className={styles.topBarActionButton}
+            className={styles.shareButton}
             data-testid="workspace-topbar-share"
             type="button"
             onClick={() => setShareOpen(true)}
           >
-            <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceDistribute")}</span>
-          </button>
-          {shareEnabled ? (
-            <Link
-              className={styles.topBarActionButton}
-              data-testid="workspace-topbar-analyze"
-              href={`/dashboard/${workspaceId}/share`}
-            >
-              <span className={styles.topBarActionLabel}>
-                {formatUiMessage(locale, "workspaceShareTraffic")}
-              </span>
-            </Link>
-          ) : null}
-          <button
-            className={styles.topBarActionButton}
-            data-testid="workspace-topbar-api"
-            type="button"
-            onClick={() => setApiOpen(true)}
-          >
-            <span className={styles.topBarActionLabel}>{formatUiMessage(locale, "workspaceApi")}</span>
+            {formatUiMessage(locale, "workspaceDistribute")}
           </button>
         </div>
         <NotificationBell locale={locale} />
@@ -257,11 +196,6 @@ export function WorkspaceTopBar({
         open={shareOpen}
         workspaceId={workspaceId}
         onClose={() => setShareOpen(false)}
-      />
-      <WorkspaceApiAccessModal
-        open={apiOpen}
-        workspaceId={workspaceId}
-        onClose={() => setApiOpen(false)}
       />
     </header>
   );

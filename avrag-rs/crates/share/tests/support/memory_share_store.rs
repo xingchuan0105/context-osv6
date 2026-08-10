@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use app_core::{
-    WorkspaceAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
-    ShareAnalyticsEntry, ShareWorkspaceMember, ShareStorePort, SharedWorkspaceSnapshot,
+    WorkspaceAccessSnapshot, PublicOwnerShareItemSnapshot, PublicShareChatContextSnapshot,
+    ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry, ShareWorkspaceMember,
+    ShareStorePort, SharedWorkspaceSnapshot,
 };
 use async_trait::async_trait;
 use avrag_share::max_shared_workspaces_for_plan;
@@ -21,6 +22,15 @@ struct TokenRecord {
     revoked_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Clone)]
+struct PublicOwnerWorkspaceRecord {
+    owner_user_id: Uuid,
+    title: String,
+    description: Option<String>,
+    allow_download: bool,
+    source_count: i64,
+}
+
 #[derive(Clone, Default)]
 pub struct MemoryShareStore {
     workspaces: Arc<RwLock<HashMap<Uuid, WorkspaceAccessSnapshot>>>,
@@ -28,6 +38,7 @@ pub struct MemoryShareStore {
     tokens: Arc<RwLock<HashMap<String, TokenRecord>>>,
     shared_workspaces: Arc<RwLock<HashMap<String, SharedWorkspaceSnapshot>>>,
     public_chat_contexts: Arc<RwLock<HashMap<String, PublicShareChatContextSnapshot>>>,
+    public_owner_workspaces: Arc<RwLock<HashMap<Uuid, PublicOwnerWorkspaceRecord>>>,
     invites: Arc<RwLock<Vec<ShareWorkspaceMember>>>,
     /// owner_user_id → plan_id for quota tests (default free).
     owner_plans: Arc<RwLock<HashMap<Uuid, String>>>,
@@ -86,6 +97,27 @@ impl MemoryShareStore {
             .write()
             .await
             .insert(token.to_string(), snapshot);
+    }
+
+    /// Workspace metadata backing `list_public_shares_for_owner`; pair with
+    /// `create_share_token` / `revoke_token` to model active/revoked/expired shares.
+    pub async fn seed_public_owner_workspace(
+        &self,
+        workspace_id: Uuid,
+        owner_user_id: Uuid,
+        title: &str,
+        source_count: i64,
+    ) {
+        self.public_owner_workspaces.write().await.insert(
+            workspace_id,
+            PublicOwnerWorkspaceRecord {
+                owner_user_id,
+                title: title.to_string(),
+                description: None,
+                allow_download: false,
+                source_count,
+            },
+        );
     }
 
     pub async fn invited_members(&self) -> Vec<ShareWorkspaceMember> {
@@ -297,6 +329,45 @@ impl ShareStorePort for MemoryShareStore {
         token: &str,
     ) -> Result<Option<PublicShareChatContextSnapshot>, AppError> {
         Ok(self.public_chat_contexts.read().await.get(token).cloned())
+    }
+
+    async fn list_public_shares_for_owner(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<PublicOwnerShareItemSnapshot>, AppError> {
+        let workspaces = self.public_owner_workspaces.read().await;
+        let tokens = self.tokens.read().await;
+        let mut seen = std::collections::HashSet::new();
+        let mut items = Vec::new();
+        for (token, record) in tokens.iter() {
+            let Some(meta) = workspaces.get(&record.workspace_id) else {
+                continue;
+            };
+            if meta.owner_user_id != user_id {
+                continue;
+            }
+            if record.revoked_at.is_some() {
+                continue;
+            }
+            if let Some(expires_at) = record.expires_at {
+                if expires_at <= Utc::now() {
+                    continue;
+                }
+            }
+            if !seen.insert(record.workspace_id) {
+                continue;
+            }
+            items.push(PublicOwnerShareItemSnapshot {
+                workspace_id: record.workspace_id.to_string(),
+                title: meta.title.clone(),
+                description: meta.description.clone(),
+                share_token: token.clone(),
+                access_level: record.access_level.as_permission_label().to_string(),
+                allow_download: meta.allow_download,
+                source_count: meta.source_count,
+            });
+        }
+        Ok(items)
     }
 
     async fn invite_member(

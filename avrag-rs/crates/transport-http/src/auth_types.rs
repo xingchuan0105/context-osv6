@@ -14,6 +14,7 @@ pub(crate) struct AuthUserDto {
     pub avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub banner_url: Option<String>,
+    pub public_profile_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -91,6 +92,8 @@ pub(crate) struct UpdateProfileRequest {
     pub bio: Option<String>,
     #[serde(default)]
     pub contact_url: Option<String>,
+    #[serde(default)]
+    pub public_profile_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

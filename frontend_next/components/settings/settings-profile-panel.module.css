@@ -16,7 +16,7 @@
 
 .bannerPreview {
   width: 100%;
-  /* ~3:1 hero like X cover (1500×500) */
+  /* ~3:1 hero like X cover (1500×500) — keep in sync with profile-media-geometry */
   aspect-ratio: 3 / 1;
   min-height: 10rem;
   max-height: 14rem;
@@ -59,7 +59,6 @@
   color: hsl(var(--foreground));
   font-size: 2rem;
   font-weight: var(--font-weight-semibold);
-  box-shadow: 0 2px 12px hsl(0 0% 0% / 0.1);
   flex-shrink: 0;
 }
 
@@ -76,7 +75,6 @@
 
 .displayName {
   font-size: 1.35rem;
-  font-weight: 700;
   line-height: 1.2;
   color: hsl(var(--foreground));
 }

@@ -912,7 +912,6 @@
   margin: 0;
   color: hsl(var(--foreground));
   font-size: var(--font-size-sm, 0.85rem);
-  font-weight: 600;
   line-height: var(--line-height-control);
 }
 

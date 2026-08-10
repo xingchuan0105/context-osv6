@@ -22,6 +22,10 @@ export const paywallMessages = {
     zh: "稍后再说",
     en: "Not now",
   },
+  paywallViewPlans: {
+    zh: "查看会员档位",
+    en: "View membership plans",
+  },
   paywallResetHint: {
     zh: "也可配置自定义 Provider，对话不再消耗平台余额。",
     en: "Or add a custom provider so chat does not spend platform balance",

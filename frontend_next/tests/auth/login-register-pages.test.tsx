@@ -158,6 +158,7 @@ describe("login and register pages", () => {
         full_name: "New User",
         terms_version: PUBLISHED_TERMS_VERSION,
         privacy_version: PUBLISHED_PRIVACY_VERSION,
+        referral_code: null,
       });
     });
 

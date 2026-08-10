@@ -564,15 +564,6 @@ export function WorkspaceHistoryPane({
               }
             }}
           >
-            <div className="dashboard-search-header">
-              <div>
-                <h2 className="dashboard-modal-title">{formatUiMessage(locale, "workspaceSearchTitle")}</h2>
-                <p className="dashboard-search-subtitle">{formatUiMessage(locale, "workspaceSearchSubtitle")}</p>
-              </div>
-              <button className="dashboard-action-button" type="button" onClick={closeSearch}>
-                {formatUiMessage(locale, "dashboardCloseSearch")}
-              </button>
-            </div>
             <form className="dashboard-search-form" onSubmit={handleSearchSubmit}>
               <input
                 aria-label={formatUiMessage(locale, "workspaceHistorySearch")}

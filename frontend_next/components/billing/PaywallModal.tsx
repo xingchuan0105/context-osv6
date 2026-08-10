@@ -1,29 +1,32 @@
 "use client";
 
+import Link from "next/link";
+
 import styles from "./PaywallModal.module.css";
 import { UsageMeter } from "./UsageMeter";
-import { PricingCards } from "./PricingCards";
-import type { BillingPlan, UsageWindowBucket } from "../../lib/billing/api";
+import type { UsageWindowBucket } from "../../lib/billing/api";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
+import { appNavHref } from "../../lib/navigation/nav-config";
 
 export type PaywallModalProps = {
   reason: "5h" | "7d";
   locale: UiLocale;
-  plans: BillingPlan[];
   rolling5h: UsageWindowBucket;
   rolling7d: UsageWindowBucket;
-  onSelect: (planId: string) => void;
   onContinueFree: () => void;
 };
 
+/**
+ * Rate-limit recovery explainer (PRODUCT_IA §4): shows the usage window and
+ * routes upgrades to the canonical checkout at /pricing — never hosts its own
+ * checkout (anti-pattern §7-2: 第三完成页).
+ */
 export function PaywallModal({
   reason,
   locale,
-  plans,
   rolling5h,
   rolling7d,
-  onSelect,
   onContinueFree,
 }: PaywallModalProps) {
   return (
@@ -44,7 +47,13 @@ export function PaywallModal({
         <p className={styles.subtitle}>
           {formatUiMessage(locale, reason === "5h" ? "paywallSubtitle5h" : "paywallSubtitle7d")}
         </p>
-        <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={onSelect} compact />
+        <Link
+          className="app-button-primary"
+          data-testid="paywall-view-plans"
+          href={appNavHref("pricing")}
+        >
+          {formatUiMessage(locale, "paywallViewPlans")}
+        </Link>
         <div className={styles.footer}>
           <button
             type="button"

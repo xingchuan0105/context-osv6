@@ -23,8 +23,6 @@ const LOCAL_DESKTOP_API_BASE = "http://127.0.0.1:18080";
 
 type WorkspaceApiAccessSurfaceProps = {
   workspaceId: string;
-  /** When true, drop page chrome so the surface can sit inside a modal. */
-  embedded?: boolean;
 };
 
 function apiPermissionLabel(permission: string, locale: UiLocale) {
@@ -113,7 +111,6 @@ async function copyText(text: string): Promise<boolean> {
 
 export function WorkspaceApiAccessSurface({
   workspaceId,
-  embedded = false,
 }: WorkspaceApiAccessSurfaceProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
@@ -344,28 +341,6 @@ export function WorkspaceApiAccessSurface({
 
   const body = (
     <>
-      {embedded ? null : (
-        <header className={styles.header}>
-          <Link className="app-link app-link-muted" href={`/dashboard/${workspaceIdValue}`}>
-            {formatUiMessage(locale, "apiAccess.backWorkspace")}
-          </Link>
-          <div className={styles.intro}>
-            <p className={styles.overline}>{formatUiMessage(locale, "apiAccess.overline")}</p>
-            <div>
-              <h1 className="app-page-title">{formatUiMessage(locale, "apiAccess.title")}</h1>
-              <p className="app-page-subtitle">{formatUiMessage(locale, "apiAccess.subtitle")}</p>
-            </div>
-            <p className={styles.note}>{formatUiMessage(locale, "apiAccess.workspaceIdNote")}</p>
-          </div>
-        </header>
-      )}
-
-      {embedded ? (
-        <p className="app-page-subtitle" style={{ marginTop: 0 }}>
-          {formatUiMessage(locale, "apiAccess.embeddedLead")}
-        </p>
-      ) : null}
-
       {error ? <p className="app-notice-banner">{error}</p> : null}
 
       <div className={styles.stackLarge}>
@@ -679,13 +654,5 @@ export function WorkspaceApiAccessSurface({
     </>
   );
 
-  if (embedded) {
-    return <div className={styles.container}>{body}</div>;
-  }
-
-  return (
-    <main className="app-page-shell">
-      <div className={`app-page-center ${styles.container}`}>{body}</div>
-    </main>
-  );
+  return <div className={styles.container}>{body}</div>;
 }

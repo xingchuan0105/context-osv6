@@ -24,6 +24,10 @@ pub struct DisclosedState {
     /// Snapshot for `<loop_budget … tokens_* />` (set each retrieve assemble).
     pub tokens_used_hint: Option<u32>,
     pub tokens_max_hint: Option<u32>,
+    /// When true, next retrieve assemble re-discloses knowledge-base/api-detail
+    /// (L2 empty-result tables + success shapes). Set on sandbox error; consumed
+    /// by [`ContextAssembler::assemble_retrieve`].
+    pub reexpose_kb_api_detail: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +42,9 @@ pub struct AssembledContext {
 }
 
 pub struct ContextAssembler;
+
+/// Path of the thin always-on system voice (sandbox base + session rules).
+const AGENT_BASE_PATH: &str = "prompts/system/agent-base.md";
 
 /// Load system prompt base: if `request.metadata.system_prompt_parts` is a non-empty
 /// array of path strings, load each and join with `\n\n---\n\n`; otherwise use
@@ -77,6 +84,15 @@ impl ContextAssembler {
         let base = load_assembled_system_base(mode, request);
         let first_round = iteration == 0;
 
+        // Consume one-shot L2 reexpose (sandbox error recovery).
+        let reexpose_kb_api_detail = disclosed.reexpose_kb_api_detail;
+        if reexpose_kb_api_detail {
+            disclosed
+                .disclosed_skill_ids
+                .remove("knowledge-base:api-detail");
+            disclosed.reexpose_kb_api_detail = false;
+        }
+
         let skill_request = disclosed.last_skill_request.as_deref();
         let plan = DisclosurePlanner::plan_retrieve(
             mode,
@@ -84,6 +100,7 @@ impl ContextAssembler {
             skill_request,
             &disclosed.disclosed_skill_ids,
             Some(request),
+            reexpose_kb_api_detail,
         );
         let renderer = DisclosureRenderer::new(registry);
         let rendered = renderer.render(&plan, mode, request, disclosed);
@@ -128,7 +145,11 @@ impl ContextAssembler {
         registry: &CapabilityRegistry,
         disclosed: &mut DisclosedState,
     ) -> AssembledContext {
-        let base = load_assembled_system_base(mode, request);
+        // Thin base: agent-base only. Retrieve method tables / KB contract stay
+        // on the retrieve phase so synthesis does not re-pay always-on API docs.
+        let base = super::config::load_system_prompt(AGENT_BASE_PATH).unwrap_or_else(|_| {
+            load_assembled_system_base(mode, request)
+        });
         let mut hint_parts = Vec::new();
 
         if let Some(hint) = request.format_hint.as_deref() {
@@ -244,8 +265,7 @@ pub fn build_query_card_block(card: &super::query_card::QueryCard) -> Option<Str
 mod tests {
     use super::*;
 
-    // D9: mandatory retrieve is derived at assembly time (memory base +
-    // capability skill); YAML no longer carries it.
+    // D9: mandatory retrieve = capability skills only (no memory full-body).
     fn rag_mode() -> super::super::config::ModeConfig {
         let mut mode = super::super::config::load_mode_config("rag").unwrap();
         mode.skill_catalog.mandatory.retrieve = super::super::derive_mandatory_retrieve(true, false);
@@ -453,10 +473,63 @@ mod tests {
             &mut disclosed,
             None,
         );
-        assert!(ctx.system_content.contains("memory"));
+        assert!(
+            ctx.system_content.contains("memory")
+                || ctx.system_content.contains("client.history")
+                || ctx.system_content.contains("user_profile"),
+            "memory skill_request should inject memory body: {}",
+            &ctx.system_content[..ctx.system_content.len().min(500)]
+        );
         assert!(
             ctx.tools.is_empty(),
             "memory access is via client.history/user_profile in the sandbox, not native tools"
+        );
+    }
+
+    #[test]
+    fn synthesis_uses_thin_agent_base_without_kb_method_table() {
+        let mode = rag_mode();
+        let registry = CapabilityRegistry::standard_cached();
+        let mut disclosed = DisclosedState::default();
+        // Pretend retrieve already disclosed knowledge-base.
+        disclosed
+            .disclosed_skill_ids
+            .insert("knowledge-base".to_string());
+        let ctx = ContextAssembler::assemble_synthesis(
+            &mode,
+            &crate::runtime::AgentRequest {
+                kind: crate::AgentKind::Rag,
+                query: "test".to_string(),
+                workspace_id: None,
+                session_id: None,
+                doc_scope: vec![],
+                messages: vec![],
+                user_preferences: None,
+                debug: false,
+                stream: false,
+                language: None,
+                auth: crate::runtime::stub_agent_auth(),
+                docscope_metadata: None,
+                metadata: Default::default(),
+                cancellation_token: None,
+                guard_pipeline: None,
+                preferred_tools: vec![],
+                format_hint: None,
+                max_iterations: None,
+            },
+            &registry,
+            &mut disclosed,
+        );
+        assert!(
+            ctx.system_content.contains("沙箱基座") || ctx.system_content.contains("code language"),
+            "synthesis keeps agent-base"
+        );
+        // L0 method table should not be re-injected on synthesis assembly.
+        assert!(
+            !ctx.system_content.contains("await client.dense")
+                && !ctx.system_content.contains("struct_catalog"),
+            "synthesis must not carry full KB method table: {}",
+            &ctx.system_content[..ctx.system_content.len().min(600)]
         );
     }
 

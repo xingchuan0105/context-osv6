@@ -1,6 +1,8 @@
 use avrag_llm::ChatMessage;
 use contracts::ToolResult;
 
+use crate::helpers::{EwsState, SharedKnockout};
+
 use super::super::assembler::DisclosedState;
 use super::super::evidence_pool::EvidencePool;
 use super::super::telemetry::ReActIterationRecord;
@@ -34,6 +36,10 @@ pub struct IterationState {
     pub retrieval_aliases: std::sync::Arc<std::sync::atomic::AtomicU64>,
     /// Run-scoped durable evidence (aliases, bodies, claim board, surfaced set).
     pub evidence: EvidencePool,
+    /// Evidence knockout ledger (SaC `KNOCKOUT:` line protocol).
+    pub knockout: SharedKnockout,
+    /// Evidence Working Set (KEEP line protocol; priority injection next round).
+    pub ews: EwsState,
     /// A7: cross-block `save`/`load` workspace for this agent run.
     pub session_fs: std::sync::Arc<super::super::session_fs::SessionFs>,
     /// A3: allowed SaC methods for this run (empty = open).

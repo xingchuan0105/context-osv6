@@ -1,7 +1,7 @@
 # 检索策略层（knowledge-base/strategies）
 
-首轮随 knowledge-base 披露的**薄层**：覆盖清单、entity-first 原则、场景 spoke 目录。  
-Few-shot 与长 gotcha 表在场景 spoke 中，按需 `skill_request` 加载（见下）。
+首轮随 knowledge-base 披露的**薄层**：覆盖清单、entity-first 原则、**唯一** spoke 目录（含加载触发）、默认路径、终止观察、短 gotcha。  
+Few-shot 与长 gotcha 只在场景 spoke 中，按需 `skill_request` 加载。
 
 ## 多主张覆盖（轻量清单）
 
@@ -34,37 +34,54 @@ Claim checklist (copy and tick against returns):
 - 同实体整句同义改写饱和时，换实体角度通常比再改写更有效。
 - 细则与 few-shot：**knowledge-base/strategies-graph**。
 
-## 场景 spoke 目录（按需加载）
+## 场景 spoke 目录（按需加载 · 本包唯一全表）
 
-| spoke | 内容 | 典型时机 |
-|-------|------|----------|
-| `knowledge-base/strategies-graph` | 图扩邻种子、entity-first FS、图向 gotcha | 关系/多实体 dense、扩邻方向散、饱和换端 |
-| `knowledge-base/strategies-tables` | 表路径「摸范围→收窄→下钻」、行数/去重、grep vs struct | 表内计数/过滤/排序、管道行、struct 可用 |
-| `knowledge-base/strategies-grounding` | 结构人数≠访谈、跨文档联系、未覆盖边界 FS | 调研人数、跨文档「有何联系」、半截覆盖 |
-| `knowledge-base/how-to-read-tables` | 管道表 ontology 与误读对照 | 读 `| … |` 行、row_ord、total_hits |
+| spoke | 内容 | 加载触发（题干或本轮计划中出现） | skill_request 例 |
+|-------|------|----------------------------------|------------------|
+| `knowledge-base/strategies-graph` | 图扩邻种子、entity-first FS、图向 gotcha | 关系 / A 与 B / 两端 / 「联系」「对应」/ 扩邻方向 | `["knowledge-base/strategies-graph"]` |
+| `knowledge-base/strategies-tables` | 表路径、行数/去重、grep vs struct | 表格 / 多少行 / COUNT / 去重 / 管道行 / struct | `["knowledge-base/strategies-tables"]` |
+| `knowledge-base/how-to-read-tables` | 管道表通用读法（薄） | 读 `\| … \|` 行、第一个/表序、total_hits | `["knowledge-base/how-to-read-tables"]` |
+| `knowledge-base/strategies-grounding` | 结构人数≠访谈、跨文档、未覆盖边界 | 调研人数、跨文档联系、半截覆盖、业界对照槽 | `["knowledge-base/strategies-grounding"]` |
+| `knowledge-base/strategies-codegen` | 沙箱方法名 / top_k / await 噪声 | 沙箱报错、错误 API 名、大段 print 占窗 | `["knowledge-base/strategies-codegen"]` |
+| `knowledge-base/strategies` | 重载本薄层 | 需重新置顶薄层清单时 | `["knowledge-base/strategies"]` |
 
-加载形态（环境事实）：`{"skill_request": ["knowledge-base/strategies-graph"]}` 等；本层可 `["knowledge-base/strategies"]` 重载。
+表类题常 **tables + how-to-read-tables** 一并请求。一次可并请求多个 spoke；环境不默认塞入全部 few-shot。
 
 ## 默认路径（一屏）
 
-- **表类**（计数/过滤/表序/聚合）→ 优先 struct 两段式（catalog→query）；`grep` 的 `total_hits` 数**命中行**；同名多行展开时行数与去重项数是**可并列的两种口径**（分述并标明，而非只裁决一个整数）。细项：**strategies-tables** + **how-to-read-tables**。
+- **表类**（计数/过滤/表序/聚合）→ 优先 struct 两段式（catalog→query）；行级字面用 `grep`。`total_hits` / row_ord / 多口径计数的**权威说明**见 **how-to-read-tables** 与 **strategies-tables**（本层不重复展开）。
 - **金额/编号/表内字面** → `lexical` / `grep`；`dense` 作定位线索。
 - **元数据 Date/Status** → 中英双词并行探测。
-- **证据** → 终答主张指向回传 alias；`SELECTED: #n`。
+- **同一主张上** dense 叙述与 lexical/grep 精确数字并存时，精确数字侧通常是更硬的回传支撑（叙述侧仍可保留主题定位）。
+- **证据** → 终答主张指向回传 alias；末行 `SELECTED: #n`（协议见 skill）。
+- **多轮工作集** → 检索后输出 `KEEP: #n,#m`（支撑当前主张的命中）；宿主优先注入工作集并折叠更早轮正文（协议见 skill「KEEP」）。
+- **多口径 / 干扰** → 并陈或只 KEEP 支撑主张的 alias；不依赖 chunk 可见面敲除。
 
-## 通用 gotcha（短表）
+## 离开检索前的观察条件（终止 checklist）
+
+下列在回传与答复形态上**同时可读出**时，用散文写终答（或交合成）是环境中的常见收束点——不是第二套 host 硬闸：
+
+1. 题干拆出的**每个独立主张**均已有覆盖状态：回传已支撑 / 答复中已写明「当前回传未覆盖」/ 冲突已并陈。
+2. **且** 下列之一成立：
+   - 最近 1–2 次**已换方法或换种子**的检索，未再出现新的高价值 alias；或
+   - 未覆盖侧已在拟写答复中显式落边界（不把未知写成「语料不存在」）。
+3. 若采用了带 alias 的文档命中：拟写终稿**末行**可见 `SELECTED: #…`（编号来自回传）；若无任何可用 alias，正文已表明未覆盖或未采用命中。
+
+仍有未试过的实体面 / 英文面 / 结构面时，「新 alias≈0」只描述**已试查询形态**的饱和，不自动等于全库穷尽。
+
+## 通用 gotcha（最短提醒）
 
 | 现象 | 回传实际含义 | 常见误读 |
 |------|--------------|----------|
 | `dense` 高分只有概念叙述 | 主题相关；目标数字可能仍未知 | 从叙述「推」出未出现数字 |
 | 多数字题只见一个数 | 其余主张仍未知 | 只答一半即结束 |
-| 回传已并列多项（编号点/具名原则），终答只写其中几条 | 未写项仍在回传中 | 以「够完整」收束而漏写；细项见 **strategies-grounding** |
 | 连续轮次新 alias≈0 | 该查询形态饱和 | 同义重扫却期待新覆盖 |
 | 零轮 `client.*` 即终答意图 | 文档侧均未覆盖 | 常识当库内已检索 |
-| `dense` 有 alias 终答无 `SELECTED` | 主张无引用圈定 | 有 hit 仍不圈 alias |
-| 执行失败 / stderr 非空 | 检索面未更新 | 读成「语料不存在」 |
+| 有 alias 终答无 `SELECTED` 末行 | 主张无引用圈定 | 有 hit 仍不圈 alias；或 SELECTED 夹在正文中间而非末行 |
+| 终答 SELECTED 与 KEEP 全集脱节 | 工作集外 alias 亦可圈，但早期 KEEP 证据更易在复读位 | 只圈最新一轮、丢掉中段已 KEEP 的关键 alias |
+| `stderr` 非空 | 检索面未更新 | 读成「语料不存在」 |
 
-表/图/拒答类长对照见对应 spoke；沙箱写码噪声见 **strategies-codegen**（若已加载）或本 skill 方法表。
+表通用读法 → **how-to-read-tables**；表路径/多口径 FS → **strategies-tables**；拒答与跨文档边界 → **strategies-grounding**；沙箱写码噪声 → **strategies-codegen** 或 skill 方法表。
 
 ## 沙箱 Python 噪声（短）
 
@@ -76,4 +93,4 @@ Claim checklist (copy and tick against returns):
 | `import os` 等 | 沙箱禁止 |
 | 只 `print` 大段正文 | 回传窗口被占满 |
 
-更全的 codegen 对照：`{"skill_request": ["knowledge-base/strategies-codegen"]}`。
+更全：`{"skill_request": ["knowledge-base/strategies-codegen"]}`。

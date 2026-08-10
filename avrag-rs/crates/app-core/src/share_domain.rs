@@ -82,12 +82,28 @@ pub struct SharedWorkspaceSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareOwnerCardSnapshot {
+    pub user_id: Option<String>,
     pub display_name: String,
     pub bio: Option<String>,
     pub contact_url: Option<String>,
     /// Public media URL path (e.g. /api/public/users/{id}/media/avatar), not object path.
     pub avatar_url: Option<String>,
     pub banner_url: Option<String>,
+    /// Owner opt-in for the public sharer profile endpoint.
+    pub profile_enabled: bool,
+}
+
+/// One row of the public sharer profile share list (one per workspace).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicOwnerShareItemSnapshot {
+    pub workspace_id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub share_token: String,
+    /// Permission label (`partial` | `full`), same surface as shared-workspace payloads.
+    pub access_level: String,
+    pub allow_download: bool,
+    pub source_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -69,44 +69,16 @@ export const commandPaletteMessages = {
     zh: "正在搜索…",
     en: "Searching…",
   },
-  "commandPalette.item.dashboard": {
-    zh: "工作台",
-    en: "Dashboard",
-  },
   "commandPalette.item.shareTraffic": {
     zh: "分享访问（汇总）",
     en: "Share traffic (all)",
-  },
-  "commandPalette.item.settings": {
-    zh: "设置",
-    en: "Settings",
-  },
-  "commandPalette.item.providers": {
-    zh: "设置 · 模型服务商",
-    en: "Settings · providers",
   },
   "commandPalette.item.billing": {
     zh: "设置 · 账单",
     en: "Settings · billing",
   },
-  "commandPalette.item.pricing": {
-    zh: "定价（会员）",
-    en: "Pricing (membership)",
-  },
   "commandPalette.item.topup": {
     zh: "充值余额",
     en: "Top up wallet",
-  },
-  "commandPalette.item.desktop": {
-    zh: "客户端",
-    en: "Desktop client",
-  },
-  "commandPalette.item.help": {
-    zh: "产品帮助",
-    en: "Help",
-  },
-  "commandPalette.item.apiAccess": {
-    zh: "API / Agent 接入说明",
-    en: "API / agent access guide",
   },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -68,7 +68,7 @@ describe("dashboard model helpers", () => {
         queued: 3,
         error: 4,
       }),
-    ).toBe("3 ready · 3 processing · 4 failed");
+    ).toBe("3 Ready · 3 Processing · 4 Failed");
 
     expect(
       formatDashboardWorkspaceStatusSummary("zh-CN", {
@@ -96,7 +96,7 @@ describe("dashboard model helpers", () => {
       description: "First workspace",
       dateLabel: "2026-04-17",
       roleLabel: "Owner",
-      statusSummaryLabel: "1 ready · 2 processing",
+      statusSummaryLabel: "1 Ready · 2 Processing",
       isFavorite: true,
     });
     expect(allRecent[2]).toMatchObject({
@@ -104,7 +104,7 @@ describe("dashboard model helpers", () => {
       description: "Contains the second project",
       dateLabel: "2026-04-16",
       roleLabel: "Member",
-      statusSummaryLabel: "2 ready · 3 processing · 1 failed",
+      statusSummaryLabel: "2 Ready · 3 Processing · 1 Failed",
       isFavorite: false,
     });
 

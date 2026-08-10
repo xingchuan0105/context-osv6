@@ -44,6 +44,9 @@ export function useChatStream(
   const localeRef = useRef(options.locale);
   const onSessionChangeRef = useRef(options.onSessionChange);
   const onSessionActivityRef = useRef(options.onSessionActivity);
+  const shareTokenRef = useRef(options.shareToken ?? null);
+  const turnstileTokenRef = useRef(options.turnstileToken ?? null);
+  const onTranscriptChangeRef = useRef(options.onTranscriptChange);
   const activeSessionIdRef = useRef(activeSessionId);
 
   useEffect(() => {
@@ -57,8 +60,24 @@ export function useChatStream(
     localeRef.current = options.locale;
     onSessionChangeRef.current = options.onSessionChange;
     onSessionActivityRef.current = options.onSessionActivity;
+    shareTokenRef.current = options.shareToken ?? null;
+    turnstileTokenRef.current = options.turnstileToken ?? null;
+    onTranscriptChangeRef.current = options.onTranscriptChange;
     activeSessionIdRef.current = activeSessionId;
-  }, [options.token, options.workspaceId, options.sessionId, options.selectedSourceIds, options.capabilities, options.locale, options.onSessionChange, options.onSessionActivity, activeSessionId]);
+  }, [
+    options.token,
+    options.workspaceId,
+    options.sessionId,
+    options.selectedSourceIds,
+    options.capabilities,
+    options.locale,
+    options.onSessionChange,
+    options.onSessionActivity,
+    options.shareToken,
+    options.turnstileToken,
+    options.onTranscriptChange,
+    activeSessionId,
+  ]);
 
   const [isStreaming, setIsStreamingState] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -147,12 +166,20 @@ export function useChatStream(
     (query: string) => {
       const trimmedQuery = query.trim();
 
-      if (!trimmedQuery || isStreaming || !tokenRef.current) {
+      const shareToken = shareTokenRef.current?.trim() || "";
+      const authToken = tokenRef.current?.trim() || "";
+      if (!trimmedQuery || isStreaming || (!authToken && !shareToken)) {
         return;
       }
 
       const nextAssistantId = `assistant-${Date.now()}`;
-      const requestSessionId = activeSessionIdRef.current ?? sessionIdRef.current;
+      let requestSessionId = activeSessionIdRef.current ?? sessionIdRef.current;
+      // Share chats are not PG-sessioned; allocate a stable client session id for multi-turn.
+      if (shareToken && !requestSessionId) {
+        requestSessionId = crypto.randomUUID();
+        setActiveSessionId(requestSessionId);
+        onSessionChangeRef.current?.(requestSessionId);
+      }
 
       setError("");
       setIsStreaming(true);
@@ -170,8 +197,15 @@ export function useChatStream(
       const agentType = deriveAgentTypeLabel(turnCapabilities);
       effectiveChatModeRef.current = agentType;
 
+      // Prior turns for share multi-turn (server skips PG persistence for source_type=share).
+      const priorMessages = shareToken
+        ? messageHistory.messages
+            .filter((m) => !m.pending && m.content.trim().length > 0)
+            .map((m) => ({ role: m.role, content: m.content }))
+        : [];
+
       messageHistory.setMessages((current) => {
-        const base = requestSessionId == null ? [] : current;
+        const base = requestSessionId == null && !shareToken ? [] : current;
         return [
           ...base,
           {
@@ -199,8 +233,13 @@ export function useChatStream(
 
       void (async () => {
         try {
+          const turnstile = turnstileTokenRef.current?.trim() || "";
+          const extraHeaders: Record<string, string> = {};
+          if (turnstile) {
+            extraHeaders["cf-turnstile-response"] = turnstile;
+          }
           await streamChat(
-            tokenRef.current,
+            authToken,
             {
               query: trimmedQuery,
               workspace_id: workspaceIdRef.current,
@@ -209,11 +248,18 @@ export function useChatStream(
               capabilities: turnCapabilities,
               client_context: buildClientContext(),
               doc_scope: selectedSourceIdsRef.current,
-              messages: [],
+              messages: priorMessages,
               stream: true,
+              ...(shareToken
+                ? {
+                    source_type: "share",
+                    source_token: shareToken,
+                    turnstile_token: turnstile || undefined,
+                  }
+                : {}),
             } as ChatRequest,
             handleStreamEvent,
-            { signal: controller.signal },
+            { signal: controller.signal, extraHeaders },
           );
         } catch (submitError) {
           if (submitError instanceof Error && submitError.name === "AbortError") {

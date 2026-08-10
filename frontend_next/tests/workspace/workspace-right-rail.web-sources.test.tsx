@@ -39,7 +39,7 @@ describe("WorkspaceWebSourcesModal", () => {
     expect(primaryLink.getAttribute("href")).toBe("https://example.test/primary");
     expect(screen.getByText("Primary snippet")).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();
   });
 });

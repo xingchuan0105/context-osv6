@@ -562,7 +562,7 @@ export function CitationRenderer({
             // Per-segment token indices (0..n-1) for this MarkdownContent only.
             const citation = richMarkdown.citationTokens[localIndex]?.citation ?? null;
             if (citation) {
-              handleCitationClick(citation, button);
+              handleCitationClick(citation);
             }
           }}
         />

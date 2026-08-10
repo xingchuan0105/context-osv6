@@ -37,7 +37,7 @@ mod run_prepare;
 mod run_result;
 mod run_retrieval;
 mod run_synthesis;
-pub mod short_judge;
+pub mod verify;
 pub mod skill_request;
 pub mod skills;
 pub mod synthesis;
@@ -172,6 +172,8 @@ impl ReActLoop {
             compile_continuations: 0,
             retrieval_aliases: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(alias_start)),
             evidence: evidence_pool::EvidencePool::new(),
+            knockout: crate::helpers::shared_knockout(),
+            ews: crate::helpers::EwsState::new(),
             session_fs: std::sync::Arc::new(session_fs::SessionFs::new()),
             sdk_allowed: std::sync::Arc::new(mode.sdk_primitives.iter().cloned().collect()),
             query_card,
@@ -240,12 +242,14 @@ impl ReActLoop {
             return Ok(result);
         }
 
-        // --- synthesis (+ optional short Judge re-entry) ---
-        let configured_max_fails = short_judge::judge_max_fail_rounds(&loop_exit);
-        let mut judge_fails: u8 = 0;
-        let mut judge_rereretrieve_iters: u8 = 0;
-        // Hold user-bubble while short_judge may re-run (P0-2).
-        let hold_for_judge = loop_exit.short_judge;
+        // --- synthesis (+ optional verify re-entry) ---
+        let configured_max_fails = verify::verify_max_fail_rounds(&loop_exit);
+        let mut verify_fails: u8 = 0;
+        let mut verify_rereretrieve_iters: u8 = 0;
+        let mut verify_obs = verify::VerifyObservability::default();
+        let knockout_ledger = std::sync::Arc::clone(&state.knockout);
+        // Hold user-bubble while verify may re-run (P0-2).
+        let hold_for_verify = loop_exit.verify;
         let tier = request.metadata.get("user_tier");
         let product_max_tokens = mode.budget.resolve_max_tokens(tier);
 
@@ -254,13 +258,13 @@ impl ReActLoop {
                 return Err(cancellation_error());
             }
 
-            let run_judge = short_judge::should_run_short_judge(
+            let run_verify = verify::should_run_verify(
                 &loop_exit,
                 query_card.as_ref(),
                 &collected_tool_results,
             );
-            let deliver_now = !hold_for_judge || !run_judge;
-            let eff_max_fails = short_judge::effective_max_judge_fails(
+            let deliver_now = !hold_for_verify || !run_verify;
+            let eff_max_fails = verify::effective_max_verify_fails(
                 configured_max_fails,
                 total_usage.billable_tokens(),
                 product_max_tokens,
@@ -273,6 +277,7 @@ impl ReActLoop {
                     &mut disclosed_state,
                     &messages,
                     &collected_tool_results,
+                    &mut state.ews,
                     sink,
                     &cancel,
                     iteration,
@@ -282,7 +287,16 @@ impl ReActLoop {
                 .await?;
             total_usage.accumulate(&synth_usage);
 
-            if !run_judge {
+            if !run_verify {
+                if verify_obs.bypass_reason.is_none() {
+                    verify_obs.bypass_reason = verify::verify_bypass_reason(
+                        &loop_exit,
+                        query_card.as_ref(),
+                        &collected_tool_results,
+                    )
+                    .map(str::to_string);
+                }
+                verify_obs.product_rounds_used = product_rounds_used;
                 return self
                     .deliver_synthesized(
                         sink,
@@ -298,40 +312,20 @@ impl ReActLoop {
                         total_tool_calls,
                         start_time,
                         query_card.as_ref(),
+                        Some(verify_obs),
+                        Some(crate::helpers::knockout_observability(&knockout_ledger)),
+                        Some(state.ews.observability_snapshot()),
                     )
                     .await;
             }
 
-            // Token ceiling after synth: skip further Judge / re-entry; deliver draft.
-            // When fails already accumulated, append fail-ceiling disclosure; first-synth
-            // ceiling still delivers without an extra billable Judge call (design §6).
-            if short_judge::budget_forces_ceiling(
-                total_usage.billable_tokens(),
-                product_max_tokens,
-            ) {
-                if judge_fails > 0 {
-                    final_answer = short_judge::append_judge_ceiling_disclosure(final_answer);
-                }
-                return self
-                    .deliver_synthesized(
-                        sink,
-                        final_answer,
-                        false,
-                        &request,
-                        &collected_tool_results,
-                        &telemetry_records,
-                        &total_usage,
-                        &reasoning_summary_acc,
-                        iteration,
-                        max_iterations,
-                        total_tool_calls,
-                        start_time,
-                        query_card.as_ref(),
-                    )
-                    .await;
-            }
+            // Always run verify when product policy requires it — even if the
+            // first synthesis already sits on the token ceiling. Skipping verify
+            // here left ran=false / bypass=None on long rag_fact runs (full149).
+            // After a fail, budget_forces_ceiling still forces DeliverCeiling
+            // (no re-entry) further below.
 
-            let judge_outcome = short_judge::run_short_judge(
+            let verify_outcome = verify::run_verify(
                 &self.llm,
                 &request.query,
                 &final_answer,
@@ -341,7 +335,7 @@ impl ReActLoop {
             )
             .await;
 
-            let (verdict, parse_error) = match judge_outcome {
+            let (verdict, parse_error) = match verify_outcome {
                 Ok((o, ju)) => {
                     total_usage.accumulate(&ju);
                     (o.verdict, o.parse_error)
@@ -350,16 +344,26 @@ impl ReActLoop {
                     if cancel.is_cancelled() {
                         return Err(e);
                     }
-                    tracing::warn!(error = %e, "short_judge LLM failed → deliver draft");
+                    tracing::warn!(error = %e, "verify LLM failed → deliver draft");
                     let _ = sink
                         .emit(crate::events::AgentEvent::Activity {
-                            stage: "short_judge_error".to_string(),
-                            message: format!("short Judge call failed: {e}"),
+                            stage: "verify_error".to_string(),
+                            message: format!("verify call failed: {e}"),
                             detail: None,
                             counts: Default::default(),
                             sources_preview: Vec::new(),
                         })
                         .await;
+                    verify_obs.ran = true;
+                    verify_obs.calls.push(verify::VerifyCallObs {
+                        verdict: "error".to_string(),
+                        route: None,
+                        parse_error: false,
+                        advice_summary: verify::advice_summary(&e.to_string(), 160),
+                    });
+                    verify_obs.fail_count = verify_fails;
+                    verify_obs.rereretrieve_iters = verify_rereretrieve_iters;
+                    verify_obs.product_rounds_used = product_rounds_used;
                     return self
                         .deliver_synthesized(
                             sink,
@@ -375,16 +379,21 @@ impl ReActLoop {
                             total_tool_calls,
                             start_time,
                             query_card.as_ref(),
+                            Some(verify_obs),
+                            Some(crate::helpers::knockout_observability(&knockout_ledger)),
+                            Some(state.ews.observability_snapshot()),
                         )
                         .await;
                 }
             };
 
+            verify_obs.ran = true;
             if parse_error {
+                verify_obs.parse_error_count = verify_obs.parse_error_count.saturating_add(1);
                 let _ = sink
                     .emit(crate::events::AgentEvent::Activity {
-                        stage: "short_judge_parse_error".to_string(),
-                        message: "short Judge JSON unparseable; treating as pass".to_string(),
+                        stage: "verify_parse_error".to_string(),
+                        message: "verify JSON unparseable; treating as pass".to_string(),
                         detail: None,
                         counts: Default::default(),
                         sources_preview: Vec::new(),
@@ -393,17 +402,26 @@ impl ReActLoop {
             }
 
             match verdict {
-                short_judge::JudgeVerdict::Pass => {
-                    emit_judge_report(
+                verify::VerifyVerdict::Pass => {
+                    verify_obs.calls.push(verify::VerifyCallObs {
+                        verdict: "pass".to_string(),
+                        route: None,
+                        parse_error,
+                        advice_summary: String::new(),
+                    });
+                    verify_obs.fail_count = verify_fails;
+                    verify_obs.rereretrieve_iters = verify_rereretrieve_iters;
+                    verify_obs.product_rounds_used = product_rounds_used;
+                    emit_verify_report(
                         sink,
                         "pass",
                         None,
                         "",
-                        judge_fails,
+                        verify_fails,
                         false,
                         parse_error,
                         product_rounds_used,
-                        judge_rereretrieve_iters,
+                        verify_rereretrieve_iters,
                     )
                     .await;
                     return self
@@ -421,56 +439,105 @@ impl ReActLoop {
                             total_tool_calls,
                             start_time,
                             query_card.as_ref(),
+                            Some(verify_obs),
+                            Some(crate::helpers::knockout_observability(&knockout_ledger)),
+                            Some(state.ews.observability_snapshot()),
                         )
                         .await;
                 }
-                short_judge::JudgeVerdict::Fail { route, advice } => {
-                    judge_fails = judge_fails.saturating_add(1);
-                    let force_ceiling = short_judge::budget_forces_ceiling(
+                verify::VerifyVerdict::Fail { route, advice } => {
+                    verify_fails = verify_fails.saturating_add(1);
+                    let force_ceiling = verify::budget_forces_ceiling(
                         total_usage.billable_tokens(),
                         product_max_tokens,
                     );
                     let remaining_rounds =
                         max_iterations.saturating_sub(product_rounds_used);
                     let rereretrieve_cap = remaining_rounds
-                        .min(run_retrieval::JUDGE_RERETRIEVE_MAX_ROUNDS);
+                        .min(run_retrieval::VERIFY_RERETRIEVE_MAX_ROUNDS);
                     let follow = if force_ceiling {
-                        short_judge::JudgeFailFollowUp::DeliverCeiling
+                        verify::VerifyFailFollowUp::DeliverCeiling
                     } else {
-                        let mut f = short_judge::follow_up_after_judge_fail(
+                        let mut f = verify::follow_up_after_verify_fail(
                             route,
                             &advice,
-                            judge_fails,
+                            verify_fails,
                             eff_max_fails,
                         );
-                        if matches!(f, short_judge::JudgeFailFollowUp::Reretrieve { .. })
+                        if matches!(f, verify::VerifyFailFollowUp::Reretrieve { .. })
                             && rereretrieve_cap == 0
                         {
-                            f = short_judge::JudgeFailFollowUp::DeliverCeiling;
+                            f = verify::VerifyFailFollowUp::DeliverCeiling;
                         }
                         f
                     };
                     let (route_label, ceiling) = match &follow {
-                        short_judge::JudgeFailFollowUp::DeliverCeiling => ("ceiling", true),
-                        short_judge::JudgeFailFollowUp::Resynthesis { .. } => ("synthesis", false),
-                        short_judge::JudgeFailFollowUp::Reretrieve { .. } => ("retrieve", false),
+                        verify::VerifyFailFollowUp::DeliverCeiling => ("ceiling", true),
+                        verify::VerifyFailFollowUp::Resynthesis { .. } => ("synthesis", false),
+                        verify::VerifyFailFollowUp::Reretrieve { .. } => ("retrieve", false),
                     };
-                    emit_judge_report(
+                    verify_obs.calls.push(verify::VerifyCallObs {
+                        verdict: "fail".to_string(),
+                        route: Some(route_label.to_string()),
+                        parse_error,
+                        advice_summary: verify::advice_summary(&advice, 240),
+                    });
+                    if ceiling {
+                        verify_obs.ceiling = true;
+                    }
+                    verify_obs.fail_count = verify_fails;
+                    emit_verify_report(
                         sink,
                         "fail",
                         Some(route_label),
                         &advice,
-                        judge_fails,
+                        verify_fails,
                         ceiling,
                         parse_error,
                         product_rounds_used,
-                        judge_rereretrieve_iters,
+                        verify_rereretrieve_iters,
                     )
                     .await;
                     match follow {
-                        short_judge::JudgeFailFollowUp::DeliverCeiling => {
-                            final_answer =
-                                short_judge::append_judge_ceiling_disclosure(final_answer);
+                        verify::VerifyFailFollowUp::DeliverCeiling => {
+                            // Channel philosophy (2026-08-10): no host footnote.
+                            // Token exhausted → sanitize draft / disaster prose.
+                            // Rounds/fail ceiling with token left → one LLM closeout.
+                            if force_ceiling {
+                                final_answer = verify::finalize_delivery_without_llm(
+                                    final_answer,
+                                    &mode.id,
+                                );
+                            } else {
+                                messages.push(avrag_llm::ChatMessage::user(
+                                    prompt_assets::user_facing_closeout_observation(),
+                                ));
+                                messages.push(avrag_llm::ChatMessage::user(
+                                    prompt_assets::verify_draft_under_revision(&final_answer),
+                                ));
+                                let (closeout, close_u) = self
+                                    .produce_synthesis_answer(
+                                        mode,
+                                        &request,
+                                        &mut disclosed_state,
+                                        &messages,
+                                        &collected_tool_results,
+                                        &mut state.ews,
+                                        sink,
+                                        &cancel,
+                                        iteration,
+                                        budget_exhaustion,
+                                        false,
+                                    )
+                                    .await?;
+                                total_usage.accumulate(&close_u);
+                                final_answer = verify::finalize_delivery_without_llm(
+                                    closeout,
+                                    &mode.id,
+                                );
+                            }
+                            verify_obs.rereretrieve_iters = verify_rereretrieve_iters;
+                            verify_obs.product_rounds_used = product_rounds_used;
                             return self
                                 .deliver_synthesized(
                                     sink,
@@ -486,19 +553,22 @@ impl ReActLoop {
                                     total_tool_calls,
                                     start_time,
                                     query_card.as_ref(),
+                                    Some(verify_obs),
+                                    Some(crate::helpers::knockout_observability(&knockout_ledger)),
+                                    Some(state.ews.observability_snapshot()),
                                 )
                                 .await;
                         }
-                        short_judge::JudgeFailFollowUp::Resynthesis { observation } => {
+                        verify::VerifyFailFollowUp::Resynthesis { observation } => {
                             messages.push(avrag_llm::ChatMessage::user(observation));
                             messages.push(avrag_llm::ChatMessage::user(
-                                prompt_assets::judge_draft_under_revision(&final_answer),
+                                prompt_assets::verify_draft_under_revision(&final_answer),
                             ));
                             // Keep retrieve-era BudgetExhaustion so C5 final-turn + last-Ok
                             // tool carryover still applies on the next synthesis (produce_synthesis
                             // injects it locally each call when exhaustion.any()).
                         }
-                        short_judge::JudgeFailFollowUp::Reretrieve { observation } => {
+                        verify::VerifyFailFollowUp::Reretrieve { observation } => {
                             messages.push(avrag_llm::ChatMessage::user(observation));
                             state.messages = messages;
                             state.disclosed = disclosed_state;
@@ -526,8 +596,8 @@ impl ReActLoop {
                                 .await?;
                             product_rounds_used =
                                 product_rounds_used.saturating_add(rounds2);
-                            judge_rereretrieve_iters =
-                                judge_rereretrieve_iters.saturating_add(rounds2);
+                            verify_rereretrieve_iters =
+                                verify_rereretrieve_iters.saturating_add(rounds2);
                             let mut counts = std::collections::BTreeMap::new();
                             counts.insert(
                                 "product_rounds_used".to_string(),
@@ -543,7 +613,7 @@ impl ReActLoop {
                             );
                             let _ = sink
                                 .emit(crate::events::AgentEvent::Activity {
-                                    stage: "judge_rereretrieve".to_string(),
+                                    stage: "verify_rereretrieve".to_string(),
                                     message: format!(
                                         "re-retrieve +{rounds2} rounds (product {product_rounds_used}/{max_iterations}, cap {rereretrieve_cap})"
                                     ),
@@ -586,31 +656,39 @@ impl ReActLoop {
         total_tool_calls: u32,
         start_time: std::time::Instant,
         query_card: Option<&query_card::QueryCard>,
+        verify_obs: Option<verify::VerifyObservability>,
+        knockout_obs: Option<crate::helpers::KnockoutObservability>,
+        ews_obs: Option<crate::helpers::EwsObservability>,
     ) -> Result<crate::runtime::AgentRunResult, common::AppError> {
         if !already_streamed {
             synthesis::emit_prose_delivery(sink, &final_answer, None).await;
         }
-        self.finish_run(
-            sink,
-            final_answer,
-            request,
-            collected_tool_results,
-            telemetry_records,
-            total_usage,
-            reasoning_summary_acc,
-            iteration,
-            max_iterations,
-            total_tool_calls,
-            start_time,
-            Some(crate::runtime::FinalDecision::Synthesized),
-            query_card,
-        )
-        .await
+        let mut result = self
+            .finish_run(
+                sink,
+                final_answer,
+                request,
+                collected_tool_results,
+                telemetry_records,
+                total_usage,
+                reasoning_summary_acc,
+                iteration,
+                max_iterations,
+                total_tool_calls,
+                start_time,
+                Some(crate::runtime::FinalDecision::Synthesized),
+                query_card,
+            )
+            .await?;
+        result.verify = verify_obs;
+        result.knockout = knockout_obs;
+        result.ews = ews_obs;
+        Ok(result)
     }
 }
 
 /// Design §8: route, advice summary, fail count, ceiling, rounds.
-async fn emit_judge_report(
+async fn emit_verify_report(
     sink: &dyn crate::events::AgentEventSink,
     verdict: &str,
     route: Option<&str>,
@@ -619,27 +697,27 @@ async fn emit_judge_report(
     ceiling: bool,
     parse_error: bool,
     product_rounds_used: u8,
-    judge_rereretrieve_iters: u8,
+    verify_rereretrieve_iters: u8,
 ) {
     let mut counts = std::collections::BTreeMap::new();
-    counts.insert("judge_fail_count".to_string(), fail_count as usize);
+    counts.insert("verify_fail_count".to_string(), fail_count as usize);
     counts.insert(
         "product_rounds_used".to_string(),
         product_rounds_used as usize,
     );
     counts.insert(
-        "judge_rereretrieve_iters".to_string(),
-        judge_rereretrieve_iters as usize,
+        "verify_rereretrieve_iters".to_string(),
+        verify_rereretrieve_iters as usize,
     );
     counts.insert("ceiling".to_string(), usize::from(ceiling));
     counts.insert("parse_error".to_string(), usize::from(parse_error));
-    let summary = short_judge::advice_summary(advice, 240);
+    let summary = verify::advice_summary(advice, 240);
     let route_s = route.unwrap_or("-");
     let _ = sink
         .emit(crate::events::AgentEvent::Activity {
-            stage: "short_judge_report".to_string(),
+            stage: "verify_report".to_string(),
             message: format!(
-                "short Judge verdict={verdict} route={route_s} fails={fail_count} ceiling={ceiling}"
+                "verify verdict={verdict} route={route_s} fails={fail_count} ceiling={ceiling}"
             ),
             detail: Some(format!(
                 "advice_summary={summary}; parse_error={parse_error}; product_rounds={product_rounds_used}"

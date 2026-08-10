@@ -13,6 +13,8 @@ pub struct AuthUserDto {
     pub contact_url: Option<String>,
     pub avatar_url: Option<String>,
     pub banner_url: Option<String>,
+    #[serde(default)]
+    pub public_profile_enabled: bool,
 }
 
 #[typeshare]
@@ -21,6 +23,7 @@ pub struct UpdateProfileRequest {
     pub full_name: Option<String>,
     pub bio: Option<String>,
     pub contact_url: Option<String>,
+    pub public_profile_enabled: Option<bool>,
 }
 
 #[typeshare]

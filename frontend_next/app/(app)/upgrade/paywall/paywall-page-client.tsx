@@ -3,43 +3,32 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { AlipayQrDialog } from "@/components/billing/AlipayQrDialog";
 import { PaywallModal } from "@/components/billing/PaywallModal";
-import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { billingApi } from "@/lib/billing/api";
-import type { BillingPlan, UsageWindowResponse } from "@/lib/billing/api";
+import type { UsageWindowResponse } from "@/lib/billing/api";
 import { ApiError } from "@/lib/auth/client";
 import { isPricingRevampFeatureDisabledError } from "@/lib/billing/featureFlag";
 import { usePricingRevampGateResult } from "@/components/billing/PricingRevampGate";
-import { createCheckoutSession } from "@/lib/settings/client";
-import { recordPaymentLegalAcceptance } from "@/lib/legal/client";
-import { describeAuthError } from "@/lib/auth/errors";
 import { useAuth } from "@/lib/auth/context";
-import { billingProviderForLocale, planPriceLabel } from "@/lib/billing/provider";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./paywall-page.module.css";
 
 type PaywallLoadState =
   | { kind: "loading" }
-  | { kind: "ready"; window: UsageWindowResponse; plans: BillingPlan[] }
+  | { kind: "ready"; window: UsageWindowResponse }
   | { kind: "error" };
 
-type AlipaySession = {
-  qrCode: string;
-  orderId: string;
-  planId: string;
-};
-
+/**
+ * Rate-limit recovery surface (PRODUCT_IA §4): explainer + usage meter, routes
+ * upgrades to the canonical /pricing checkout. No payment UI lives here.
+ */
 export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const auth = useAuth();
   const router = useRouter();
   const { locale } = useUiPreferences();
   const { ssrEnabled, enabled, ready } = usePricingRevampGateResult();
   const [state, setState] = useState<PaywallLoadState>({ kind: "loading" });
-  const [paymentConsented, setPaymentConsented] = useState(false);
-  const [checkoutError, setCheckoutError] = useState("");
-  const [alipaySession, setAlipaySession] = useState<AlipaySession | null>(null);
 
   useEffect(() => {
     if (!ready || !enabled || !auth.token) {
@@ -50,14 +39,11 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
 
     async function loadPaywall() {
       try {
-        const [windowData, plansData] = await Promise.all([
-          billingApi.getUsageWindow(auth.token),
-          billingApi.getPlans(auth.token),
-        ]);
+        const windowData = await billingApi.getUsageWindow(auth.token);
         if (cancelled) {
           return;
         }
-        setState({ kind: "ready", window: windowData, plans: plansData.plans });
+        setState({ kind: "ready", window: windowData });
       } catch (error) {
         if (cancelled) {
           return;
@@ -103,75 +89,19 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     );
   }
 
-  const { window, plans } = state;
-
-  async function handleSelect(planId: string) {
-    if (planId === "free" || !auth.token) {
-      return;
-    }
-    setCheckoutError("");
-    try {
-      await recordPaymentLegalAcceptance(auth.token, paymentConsented);
-      const checkout = await createCheckoutSession(auth.token, {
-        plan_id: planId,
-        provider: billingProviderForLocale(locale),
-      });
-      if (checkout.qr_code && checkout.order_id) {
-        setAlipaySession({ qrCode: checkout.qr_code, orderId: checkout.order_id, planId });
-      } else if (checkout.url) {
-        router.push(checkout.url);
-      }
-    } catch (error) {
-      setCheckoutError(
-        describeAuthError(
-          formatUiMessage(locale, "authErrorConsentRequired"),
-          error,
-          locale,
-        ),
-      );
-    }
-  }
-
-  function handleAlipayPaid() {
-    setAlipaySession(null);
-    router.push("/dashboard");
-  }
+  const { window } = state;
 
   function handleContinueFree() {
     router.push("/dashboard");
   }
 
-  const alipayPlan = alipaySession
-    ? plans.find((plan) => plan.plan_id === alipaySession.planId)
-    : undefined;
-
   return (
-    <>
-      <PaywallModal
-        reason={reason}
-        locale={locale}
-        plans={plans}
-        rolling5h={window.rolling_5h}
-        rolling7d={window.rolling_7d}
-        onSelect={handleSelect}
-        onContinueFree={handleContinueFree}
-      />
-      <div className={styles.statePage} style={{ marginTop: "1rem" }}>
-        <ConsentCheckbox onConsentChange={setPaymentConsented} />
-        {checkoutError ? <p className={styles.errorText}>{checkoutError}</p> : null}
-      </div>
-      {alipaySession && auth.token ? (
-        <AlipayQrDialog
-          token={auth.token}
-          qrCode={alipaySession.qrCode}
-          orderId={alipaySession.orderId}
-          planName={alipayPlan?.name ?? alipaySession.planId}
-          priceLabel={alipayPlan ? planPriceLabel(alipayPlan, locale) : ""}
-          locale={locale}
-          onPaid={handleAlipayPaid}
-          onCancel={() => setAlipaySession(null)}
-        />
-      ) : null}
-    </>
+    <PaywallModal
+      reason={reason}
+      locale={locale}
+      rolling5h={window.rolling_5h}
+      rolling7d={window.rolling_7d}
+      onContinueFree={handleContinueFree}
+    />
   );
 }

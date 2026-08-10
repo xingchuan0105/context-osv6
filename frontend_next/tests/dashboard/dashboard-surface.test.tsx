@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => globalThis.__mockProviders.createDashboardSurface
 const replaceMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard",
   useRouter: () => ({
     push: mocks.pushMock,
     replace: replaceMock,
@@ -47,6 +48,12 @@ vi.mock("../../lib/dashboard/preferences", () => ({
 
 vi.mock("../../lib/settings/client", () => ({
   getUsageLimit: mocks.getUsageLimitMock,
+}));
+
+const searchProductIndexMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../lib/search/client", () => ({
+  searchProductIndex: searchProductIndexMock,
 }));
 
 import { DashboardSurface } from "../../components/dashboard/dashboard-surface";
@@ -135,6 +142,23 @@ beforeEach(() => {
   mocks.listWorkspacesMock.mockResolvedValue({
     workspaces: [...workspaces],
   });
+  searchProductIndexMock.mockReset();
+  searchProductIndexMock.mockResolvedValue({
+    workspaces: [
+      { id: "ws-3", title: "Gamma", description: "" },
+    ],
+    sessions: [
+      { id: "sess-9", workspace_id: "ws-3", title: "Gamma 调研会话" },
+    ],
+    sources: [
+      {
+        id: "src-9",
+        workspace_id: "ws-3",
+        file_name: "gamma-report.pdf",
+        workspace_name: "Gamma",
+      },
+    ],
+  });
   mocks.getFavoriteWorkspaceIdsMock.mockResolvedValue(["ws-2"]);
   mocks.createWorkspaceMock.mockResolvedValue({
     workspace: {
@@ -215,10 +239,11 @@ describe("DashboardSurface", () => {
 
     await user.click(screen.getByTestId("dashboard-account-menu-trigger"));
     expect(screen.getByTestId("dashboard-account-menu")).toBeTruthy();
-    // Profile / billing / preferences open in-page modals; security + all-settings stay links.
+    // Profile / billing open in-page modals; theme / locale are flyouts; security stays a link.
     expect(screen.getByRole("menuitem", { name: "个人资料" }).tagName).toBe("BUTTON");
-    expect(screen.getByRole("menuitem", { name: "会员状态" }).tagName).toBe("BUTTON");
-    expect(screen.getByRole("menuitem", { name: "偏好" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "用量信息" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "主题 ▸" }).tagName).toBe("BUTTON");
+    expect(screen.getByRole("menuitem", { name: "界面语言 ▸" }).tagName).toBe("BUTTON");
     expect(screen.getByRole("menuitem", { name: "安全" }).getAttribute("href")).toBe(
       "/settings?tab=security",
     );
@@ -249,7 +274,7 @@ describe("DashboardSurface", () => {
     expect(screen.getByRole("button", { name: "我的收藏" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "卡片" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "列表" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "搜索工作区" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "全局搜索" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "新建工作区" })).toHaveLength(2);
 
     expect(screen.getByRole("link", { name: "Beta" }).getAttribute("href")).toBe("/dashboard/ws-2");
@@ -343,14 +368,25 @@ describe("DashboardSurface", () => {
     });
     expect(mocks.pushMock).toHaveBeenCalledWith("/dashboard/ws-4");
 
-    await user.click(screen.getByRole("button", { name: "搜索工作区" }));
-    const searchDialog = screen.getByRole("dialog", { name: "快速打开工作区" });
-    await user.type(within(searchDialog).getByLabelText("搜索工作区"), "gamma");
-    expect(within(searchDialog).getByRole("link", { name: "Gamma" }).getAttribute("href")).toBe(
-      "/dashboard/ws-3",
-    );
+    await user.click(screen.getByRole("button", { name: "全局搜索" }));
+    const searchDialog = screen.getByRole("dialog", { name: "全局搜索" });
+    await user.type(within(searchDialog).getByLabelText("全局搜索"), "gamma");
+    // Global search hits sessions / workspaces / sources via the product index.
+    const gammaLink = await within(searchDialog).findByRole("link", { name: "Gamma" });
+    expect(gammaLink.getAttribute("href")).toBe("/dashboard/ws-3");
+    expect(
+      within(searchDialog).getByRole("link", { name: "Gamma 调研会话" }).getAttribute("href"),
+    ).toBe("/dashboard/ws-3?session=sess-9");
+    expect(
+      within(searchDialog).getByRole("link", { name: "gamma-report.pdf" }).getAttribute("href"),
+    ).toContain("/dashboard/ws-3");
+    expect(searchProductIndexMock).toHaveBeenCalledWith("token-123", "gamma");
 
-    await user.click(screen.getByRole("button", { name: "关闭搜索" }));
+    // Grok-style search modal: no close button — Esc closes it.
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "全局搜索" })).toBeNull();
+    });
     const renameMenu = await openWorkspaceMenu(user, "Gamma");
     await user.click(within(renameMenu).getByRole("menuitem", { name: "重命名" }));
     const renameDialog = await screen.findByRole("dialog", { name: "重命名工作区" });

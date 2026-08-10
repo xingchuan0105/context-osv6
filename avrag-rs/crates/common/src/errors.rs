@@ -94,6 +94,27 @@ impl AppError {
         }
     }
 
+    /// Upstream LLM / gateway unavailable or interrupted mid-stream.
+    /// Distinct from `internal_error` so clients/eval can retry without treating
+    /// it as an application bug.
+    pub fn upstream_unavailable(message: impl Into<String>) -> Self {
+        Self::Internal {
+            code: "upstream_unavailable",
+            message: message.into(),
+            // 503 Service Unavailable — retriable at the edge / client.
+            http_status: 503,
+        }
+    }
+
+    /// Internal variant with an explicit stable code (still 5xx).
+    pub fn internal_code(code: &'static str, message: impl Into<String>) -> Self {
+        Self::Internal {
+            code,
+            message: message.into(),
+            http_status: 500,
+        }
+    }
+
     pub fn rate_limited(
         code: &'static str,
         message: impl Into<String>,
@@ -143,6 +164,20 @@ impl AppError {
                 retry_after_secs, ..
             } => Some(*retry_after_secs),
             _ => None,
+        }
+    }
+
+    /// True when a client or edge may reasonably retry the whole turn.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::RateLimited { .. } => true,
+            Self::Internal { code, .. } => {
+                matches!(
+                    *code,
+                    "upstream_unavailable" | "upstream_timeout" | "llm_stream_interrupted"
+                )
+            }
+            Self::Validation { .. } | Self::NotFound { .. } | Self::Conflict { .. } => false,
         }
     }
 }

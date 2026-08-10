@@ -5,9 +5,7 @@ use contracts::ToolResult;
 
 use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
-use super::exit_policy::{
-    SynthesisGate, decide_synthesis_gate, has_retrieval_observation, requires_evidence,
-};
+use super::exit_policy::{SynthesisGate, decide_synthesis_gate, has_retrieval_observation};
 use super::reasoning_emit;
 use super::run_result::{RunContext, build_run_result};
 use super::synthesis::SynthesisPhase;
@@ -15,37 +13,6 @@ use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, truncate_preview};
 use crate::events::{AgentEvent, AgentEventSink};
 use crate::runtime::{AgentRequest, AgentRunResult, FinalDecision};
-
-/// Host-determined disclosure line (plan decision ④): when the mode requires
-/// evidence and none was collected, deterministically append a short
-/// user-visible note at the end of the final answer. Covers both routes:
-/// budget-exhausted released DirectAnswer and no-evidence synthesis. The
-/// copy lives in `prompts/loop/evidence-missing-disclosure.md`; it is never
-/// model-authored so it cannot be dropped.
-fn maybe_append_evidence_disclosure(
-    answer: String,
-    mode: &ModeConfig,
-    messages: &[ChatMessage],
-    collected_tool_results: &[ToolResult],
-) -> String {
-    if requires_evidence(mode)
-        && !has_retrieval_observation(messages, collected_tool_results, mode)
-    {
-        // The degraded no-evidence fallback already states the same fact —
-        // appending the disclosure on top would double the message.
-        if answer.trim() == super::prompt_assets::degraded_no_evidence_answer(&mode.id).trim() {
-            return answer;
-        }
-        let mut out = answer;
-        if !out.is_empty() && !out.ends_with('\n') {
-            out.push('\n');
-        }
-        out.push_str(super::prompt_assets::evidence_missing_disclosure());
-        out
-    } else {
-        answer
-    }
-}
 
 impl ReActLoop {
     pub(super) async fn resolve_synthesis_gate(
@@ -88,12 +55,8 @@ impl ReActLoop {
                 // Do not force a second synthesis pass just for progressive tokens —
                 // that used to leave retrieve MessageDeltas (codegen) stuck as the
                 // visible answer when the model never rewrote them.
-                let answer = maybe_append_evidence_disclosure(
-                    answer,
-                    mode,
-                    messages,
-                    collected_tool_results,
-                );
+                // No host evidence-disclosure footer (channel philosophy 2026-08-10).
+                let answer = super::verify::finalize_delivery_without_llm(answer, &mode.id);
                 return Ok(Some(
                     self.finish_direct_answer_run(
                         answer,
@@ -191,6 +154,9 @@ impl ReActLoop {
     /// Produce synthesis prose only (no finish_run). Used by three-loop Judge.
     /// When `deliver_to_user` is false, synthesis does not emit MessageDelta/Done
     /// (host delivers once after short Judge pass/ceiling).
+    ///
+    /// When `ews` has active KEEP items, host appends `[evidence_reread]` at the
+    /// **end** of the synthesis message list (recency; design W2).
     pub(super) async fn produce_synthesis_answer(
         &self,
         mode: &ModeConfig,
@@ -198,6 +164,7 @@ impl ReActLoop {
         disclosed_state: &mut DisclosedState,
         messages: &[ChatMessage],
         collected_tool_results: &[ToolResult],
+        ews: &mut crate::helpers::EwsState,
         sink: &dyn AgentEventSink,
         cancel: &tokio_util::sync::CancellationToken,
         iteration: u8,
@@ -236,7 +203,14 @@ impl ReActLoop {
         // framing still dominant and emit raw code or fabrications.
         let exhausted =
             budget_exhausted_messages(messages, budget_exhaustion, collected_tool_results);
-        let messages = exhausted.as_deref().unwrap_or(messages);
+        let base_messages = exhausted.as_deref().unwrap_or(messages);
+        // SELECTED protocol fact when aliases exist (third-person; model decides).
+        let selected_owned =
+            append_selected_protocol_hint(base_messages, collected_tool_results);
+        let after_selected = selected_owned.as_deref().unwrap_or(base_messages);
+        // W2: append EWS snippets at recency position for synthesis / resynthesis.
+        let reread_owned = append_evidence_reread(after_selected, ews);
+        let messages = reread_owned.as_deref().unwrap_or(after_selected);
         let (final_answer, usage) = synthesis
             .run(
                 &self.llm,
@@ -266,15 +240,8 @@ impl ReActLoop {
         )
         .await;
 
-        Ok((
-            maybe_append_evidence_disclosure(
-                final_answer,
-                mode,
-                messages,
-                collected_tool_results,
-            ),
-            usage,
-        ))
+        // Model prose only — no host evidence-disclosure footer.
+        Ok((final_answer, usage))
     }
 
     /// Convenience: synthesize then finish (no short Judge). Prefer the three-loop
@@ -287,6 +254,7 @@ impl ReActLoop {
         disclosed_state: &mut DisclosedState,
         messages: &[ChatMessage],
         collected_tool_results: &[ToolResult],
+        ews: &mut crate::helpers::EwsState,
         sink: &dyn AgentEventSink,
         cancel: &tokio_util::sync::CancellationToken,
         iteration: u8,
@@ -306,6 +274,7 @@ impl ReActLoop {
                 disclosed_state,
                 messages,
                 collected_tool_results,
+                ews,
                 sink,
                 cancel,
                 iteration,
@@ -390,16 +359,13 @@ impl ReActLoop {
 /// the worker brief (app-chat) requires the internal_worker_handoff_v1 JSON,
 /// chat modes require prose; this turn re-asserts "wrap up per brief" either
 /// way.
-/// Body: `prompts/loop/budget-exhausted-final.nudge.md` (rounds exhausted) or
-/// `prompts/loop/budget-exhausted-final-tokens.nudge.md` (token-only).
+/// Body: C5 variants in `prompts/loop/budget-exhausted-final*.md`
+/// (rounds vs tokens × had retrieval attempt vs not).
 pub(crate) fn budget_exhausted_final_turn(
     exhaustion: super::run_retrieval::BudgetExhaustion,
+    had_retrieval_attempt: bool,
 ) -> &'static str {
-    if exhaustion.tokens && !exhaustion.rounds {
-        super::prompt_assets::budget_exhausted_final_turn_tokens()
-    } else {
-        super::prompt_assets::budget_exhausted_final_turn()
-    }
+    super::prompt_assets::budget_exhausted_final_turn_for(exhaustion, had_retrieval_attempt)
 }
 
 /// Char budget for the last-tool-result carryover appended to the C5 turn —
@@ -414,6 +380,7 @@ const C5_CARRYOVER_MAX_CHARS: usize = 2000;
 ///
 /// 2026-07-29：强制交接会丢掉收官轮刚算出的关键数字——把最后一次成功工具
 /// 调用的原始结果确定性地拼进 C5 提示，要求原样带入最终输出。
+/// 2026-08-10：无检索 attempt 时用 no-attempt 文案，避免与 L2「未调用」冲突。
 fn budget_exhausted_messages(
     messages: &[ChatMessage],
     exhaustion: super::run_retrieval::BudgetExhaustion,
@@ -423,22 +390,62 @@ fn budget_exhausted_messages(
         return None;
     }
     let mut out = messages.to_vec();
-    let mut turn = budget_exhausted_final_turn(exhaustion).to_string();
-    if let Some(last) = tool_results
-        .iter()
-        .rev()
-        .find(|r| r.status == contracts::ToolStatus::Ok && r.data.is_some())
-    {
-        let body = match last.data.as_ref().expect("data checked above") {
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        };
-        let truncated = super::truncate_observation(&body, C5_CARRYOVER_MAX_CHARS);
-        turn.push_str(&super::prompt_assets::budget_exhausted_carryover(
-            &last.tool, &truncated,
-        ));
+    let had_attempt = super::exit_policy::has_retrieval_attempt(tool_results);
+    let mut turn = budget_exhausted_final_turn(exhaustion, had_attempt).to_string();
+    if had_attempt {
+        if let Some(last) = tool_results
+            .iter()
+            .rev()
+            .find(|r| r.status == contracts::ToolStatus::Ok && r.data.is_some())
+        {
+            let body = match last.data.as_ref().expect("data checked above") {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            let truncated = super::truncate_observation(&body, C5_CARRYOVER_MAX_CHARS);
+            turn.push_str(&super::prompt_assets::budget_exhausted_carryover(
+                &last.tool, &truncated,
+            ));
+        }
     }
     out.push(ChatMessage::user(turn));
+    Some(out)
+}
+
+/// When answer-grade aliases exist, remind SELECTED protocol before synthesis.
+fn append_selected_protocol_hint(
+    messages: &[ChatMessage],
+    tool_results: &[ToolResult],
+) -> Option<Vec<ChatMessage>> {
+    let aliases = crate::helpers::alias_chunk_ids_in_order(tool_results);
+    if aliases.is_empty() {
+        return None;
+    }
+    let mut out = messages.to_vec();
+    out.push(ChatMessage::user(
+        super::prompt_assets::selected_protocol_nudge().to_string(),
+    ));
+    Some(out)
+}
+
+/// Append `[evidence_reread]` when EWS is non-empty. Returns `Some(owned)` when
+/// a new message list was built; `None` means caller may use `messages` as-is.
+fn append_evidence_reread(
+    messages: &[ChatMessage],
+    ews: &mut crate::helpers::EwsState,
+) -> Option<Vec<ChatMessage>> {
+    let items = ews.active();
+    if items.is_empty() {
+        return None;
+    }
+    let lines = crate::helpers::format_ews_item_lines(items);
+    let block = super::prompt_assets::evidence_reread_block(&lines);
+    if block.is_empty() {
+        return None;
+    }
+    ews.note_reread_injected();
+    let mut out = messages.to_vec();
+    out.push(ChatMessage::user(block));
     Some(out)
 }
 
@@ -477,10 +484,12 @@ mod tests {
             last.content.contains("不再产生新的代码块")
                 || last.content.contains("不再发起新的检索")
         );
+        // No tool_results → no-attempt C5 copy (not SELECTED-oriented wrap-up alone).
         assert!(
-            last.content.contains("summary")
-                || last.content.contains("coverage")
-                || last.content.contains("结论散文")
+            last.content.contains("未见检索侧调用")
+                || last.content.contains("未覆盖"),
+            "{}",
+            last.content
         );
     }
 
@@ -491,12 +500,48 @@ mod tests {
         // closing observation at all.
         let history = vec![ChatMessage::user("question")];
         let out = budget_exhausted_messages(&history, tokens_exhausted(), &[])
-            .expect("token-exhausted  appended");
+            .expect("token-exhausted appended");
         let last = &out.last().unwrap().content;
         assert!(last.contains("token"), "{last}");
         assert!(last.contains("不再产生新的代码块"), "{last}");
         // Token-only exhaustion states the token fact, not the rounds fact.
         assert!(!last.contains("迭代额度已用尽"), "{last}");
+        assert!(
+            last.contains("未见检索侧调用") || last.contains("未覆盖"),
+            "{last}"
+        );
+    }
+
+    #[test]
+    fn budget_exhaustion_with_retrieval_attempt_uses_standard_c5() {
+        let history = vec![ChatMessage::user("question")];
+        let results = vec![ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1".into(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!([{"chunk_id": "c1", "text": "body"}])),
+            trace: None,
+        }];
+        let out = budget_exhausted_messages(&history, rounds_exhausted(), &results)
+            .expect("appended");
+        let last = &out.last().unwrap().content;
+        assert!(last.contains("结论散文") || last.contains("SELECTED"), "{last}");
+        assert!(!last.contains("未见检索侧调用"), "{last}");
+    }
+
+    #[test]
+    fn selected_protocol_appends_when_aliases_exist() {
+        let results = vec![ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1".into(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!([{"chunk_id": "c1", "content": "x"}])),
+            trace: None,
+        }];
+        let msgs = vec![ChatMessage::user("q")];
+        let out = append_selected_protocol_hint(&msgs, &results).expect("hint");
+        assert!(out.last().unwrap().content.contains("[selected_protocol]"));
+        assert!(append_selected_protocol_hint(&msgs, &[]).is_none());
     }
 
     #[test]
@@ -580,6 +625,42 @@ mod tests {
         // Walks back to the most recent Ok-with-data result.
         assert!(last.contains("答案 42"), "{last}");
         assert!(!last.contains("boom"), "{last}");
+    }
+
+    #[test]
+    fn evidence_reread_appends_when_ews_active() {
+        let mut ews = crate::helpers::EwsState::new();
+        let tr = vec![ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1".into(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!([{
+                "chunk_id": "c1",
+                "alias": "#1",
+                "content": "warranty two years in corpus",
+            }])),
+            trace: None,
+        }];
+        ews.apply_from_model_text("KEEP: #1\n", &tr, |_| None);
+        let msgs = vec![ChatMessage::user("q")];
+        let out = append_evidence_reread(&msgs, &mut ews).expect("reread");
+        assert_eq!(out.len(), 2);
+        let last = &out[1].content;
+        assert!(last.contains("[evidence_reread]"), "{last}");
+        assert!(last.contains("#1") && last.contains("warranty"), "{last}");
+        assert_eq!(ews.observability_snapshot().reread_injections, 1);
+    }
+
+    #[test]
+    fn evidence_reread_skips_empty_ews() {
+        let mut ews = crate::helpers::EwsState::new();
+        let msgs = vec![ChatMessage::user("q")];
+        assert!(append_evidence_reread(&msgs, &mut ews).is_none());
+    }
+
+    #[test]
+    fn c5_plain_turn_without_tool_carryover() {
+        let history = vec![ChatMessage::user("question")];
         // No tool results at all → plain C5 turn, no carryover block.
         let plain = budget_exhausted_messages(&history, rounds_exhausted(), &[]).expect("appended");
         assert!(!plain.last().unwrap().content.contains("原始结果如下"));

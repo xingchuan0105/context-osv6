@@ -4,9 +4,9 @@ use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 use crate::share_domain::{
-    PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry, ShareAnalyticsEntry,
-    ShareWorkspaceMember, SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
-    WorkspaceShareSettingsRow,
+    PublicOwnerShareItemSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
+    ShareAccessLogEntry, ShareAnalyticsEntry, ShareWorkspaceMember, SharedWorkspaceSnapshot,
+    WorkspaceAccessSnapshot, WorkspaceShareSettingsRow,
 };
 
 /// Share persistence boundary — SQL implementations live in bootstrap adapters.
@@ -104,6 +104,14 @@ pub trait ShareStorePort: Send + Sync {
         &self,
         token: &str,
     ) -> Result<Option<PublicShareChatContextSnapshot>, AppError>;
+
+    /// Active public shares owned by `user_id`, one row per workspace, for the
+    /// opt-in public sharer profile endpoint (no auth — same trust level as
+    /// `load_shared_workspace`).
+    async fn list_public_shares_for_owner(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<PublicOwnerShareItemSnapshot>, AppError>;
 
     async fn invite_member(
         &self,

@@ -113,6 +113,13 @@ pub struct AgentErrorLabels {
     pub error_kind: String,
 }
 
+/// Labels for synthesis stream resilience outcomes.
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct SynthesisStreamLabels {
+    /// `ok` | `stream_fail` | `nonstream_fallback_ok` | `exhausted`
+    pub result: String,
+}
+
 struct MetricsState {
     registry: Registry,
     http_requests_total: Family<HttpLabels, Counter>,
@@ -134,6 +141,7 @@ struct MetricsState {
     usage_limit_blocks_total: Family<SingleLabel, Counter>,
     dependency_failures_total: Family<SingleLabel, Counter>,
     degrades_total: Family<DegradeLabels, Counter>,
+    synthesis_stream_outcome_total: Family<SynthesisStreamLabels, Counter>,
     // v5 agent metrics
     agent_run_total: Family<AgentRunLabels, Counter>,
     agent_run_duration_ms: Family<AgentRunLabels, Histogram>,
@@ -175,6 +183,7 @@ impl MetricsState {
         let usage_limit_blocks_total = Family::<SingleLabel, Counter>::default();
         let dependency_failures_total = Family::<SingleLabel, Counter>::default();
         let degrades_total = Family::<DegradeLabels, Counter>::default();
+        let synthesis_stream_outcome_total = Family::<SynthesisStreamLabels, Counter>::default();
         let agent_run_total = Family::<AgentRunLabels, Counter>::default();
         let agent_run_duration_ms =
             Family::<AgentRunLabels, Histogram>::new_with_constructor(|| {
@@ -288,6 +297,11 @@ impl MetricsState {
             degrades_total.clone(),
         );
         registry.register(
+            "synthesis_stream_outcome_total",
+            "Synthesis prose stream outcomes: ok, stream_fail, nonstream_fallback_ok, exhausted.",
+            synthesis_stream_outcome_total.clone(),
+        );
+        registry.register(
             "agent_run_total",
             "Total agent runs by strategy.",
             agent_run_total.clone(),
@@ -344,6 +358,7 @@ impl MetricsState {
             usage_limit_blocks_total,
             dependency_failures_total,
             degrades_total,
+            synthesis_stream_outcome_total,
             agent_run_total,
             agent_run_duration_ms,
             agent_state_duration_ms,
@@ -595,6 +610,19 @@ pub fn observe_degrade(agent_type: &str, reason: &str) {
         .get_or_create(&DegradeLabels {
             agent_type: non_empty(agent_type),
             reason: non_empty(reason),
+        })
+        .inc();
+}
+
+/// Record synthesis stream resilience outcome.
+///
+/// `result`: `ok` | `stream_fail` | `nonstream_fallback_ok` | `exhausted`
+/// (`nonstream_fallback_ok` = any of up to 2 non-stream recoveries after stream fail)
+pub fn observe_synthesis_stream_outcome(result: &str) {
+    METRICS
+        .synthesis_stream_outcome_total
+        .get_or_create(&SynthesisStreamLabels {
+            result: non_empty(result),
         })
         .inc();
 }

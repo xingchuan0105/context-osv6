@@ -42,11 +42,13 @@ async fn load_shared_workspace_maps_snapshot_fields_to_payload() {
                     status: "ready".to_string(),
                 }],
                 owner: Some(app_core::ShareOwnerCardSnapshot {
+                    user_id: Some("u1".to_string()),
                     display_name: "Ada".to_string(),
                     bio: Some("Notes owner".to_string()),
                     contact_url: Some("https://example.test".to_string()),
                     avatar_url: Some("/api/public/users/u1/media/avatar".to_string()),
                     banner_url: None,
+                    profile_enabled: true,
                 }),
             },
         )
@@ -82,6 +84,7 @@ async fn load_shared_workspace_maps_snapshot_fields_to_payload() {
         owner.avatar_url.as_deref(),
         Some("/api/public/users/u1/media/avatar")
     );
+    assert!(owner.profile_enabled);
     assert_eq!(payload.sources[0].status, "ready");
 }
 
@@ -258,4 +261,182 @@ async fn non_owner_invite_is_rejected_before_store() {
         store.invited_members().await.is_empty(),
         "store invite_member should not run for unauthorized callers"
     );
+}
+
+#[tokio::test]
+async fn list_public_shares_for_owner_returns_active_share_with_contract_fields() {
+    let store = Arc::new(MemoryShareStore::new());
+    let owner_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
+    store
+        .seed_public_owner_workspace(workspace_id, owner_id, "Quarterly Review", 3)
+        .await;
+    let token = store
+        .create_share_token(&user_auth(owner_id), workspace_id, ShareAccessLevel::Read, None)
+        .await
+        .expect("token minted");
+
+    let service = ShareService::new(store);
+    let items = service
+        .list_public_shares_for_owner(owner_id)
+        .await
+        .expect("list should succeed");
+
+    assert_eq!(items.len(), 1);
+    let item = &items[0];
+    assert_eq!(item.workspace_id, workspace_id.to_string());
+    assert_eq!(item.title, "Quarterly Review");
+    assert_eq!(item.share_token, token);
+    assert_eq!(item.access_level, "partial");
+    assert!(!item.allow_download);
+    assert_eq!(item.source_count, 3);
+}
+
+#[tokio::test]
+async fn list_public_shares_for_owner_excludes_revoked_and_expired_tokens() {
+    let store = Arc::new(MemoryShareStore::new());
+    let owner_id = Uuid::new_v4();
+    let active_ws = Uuid::new_v4();
+    let revoked_ws = Uuid::new_v4();
+    let expired_ws = Uuid::new_v4();
+    for (workspace_id, title) in [
+        (active_ws, "Active"),
+        (revoked_ws, "Revoked"),
+        (expired_ws, "Expired"),
+    ] {
+        store
+            .seed_public_owner_workspace(workspace_id, owner_id, title, 1)
+            .await;
+    }
+    let auth = user_auth(owner_id);
+    store
+        .create_share_token(&auth, active_ws, ShareAccessLevel::Read, None)
+        .await
+        .expect("token minted");
+    let revoked_token = store
+        .create_share_token(&auth, revoked_ws, ShareAccessLevel::Read, None)
+        .await
+        .expect("token minted");
+    store
+        .revoke_token(&auth, &revoked_token)
+        .await
+        .expect("revoke should succeed");
+    store
+        .create_share_token(
+            &auth,
+            expired_ws,
+            ShareAccessLevel::Read,
+            Some(chrono::Utc::now() - chrono::Duration::hours(1)),
+        )
+        .await
+        .expect("token minted");
+
+    let service = ShareService::new(store);
+    let items = service
+        .list_public_shares_for_owner(owner_id)
+        .await
+        .expect("list should succeed");
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].workspace_id, active_ws.to_string());
+}
+
+#[tokio::test]
+async fn list_public_shares_for_owner_dedupes_multiple_tokens_per_workspace() {
+    let store = Arc::new(MemoryShareStore::new());
+    let owner_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
+    store
+        .seed_public_owner_workspace(workspace_id, owner_id, "Shared KB", 2)
+        .await;
+    let auth = user_auth(owner_id);
+    store
+        .create_share_token(&auth, workspace_id, ShareAccessLevel::Read, None)
+        .await
+        .expect("token minted");
+    store
+        .create_share_token(&auth, workspace_id, ShareAccessLevel::Write, None)
+        .await
+        .expect("token minted");
+
+    let service = ShareService::new(store);
+    let items = service
+        .list_public_shares_for_owner(owner_id)
+        .await
+        .expect("list should succeed");
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].workspace_id, workspace_id.to_string());
+}
+
+#[tokio::test]
+async fn list_public_shares_for_owner_excludes_other_owners() {
+    let store = Arc::new(MemoryShareStore::new());
+    let owner_id = Uuid::new_v4();
+    let other_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
+    store
+        .seed_public_owner_workspace(workspace_id, other_id, "Not Yours", 1)
+        .await;
+    store
+        .create_share_token(&user_auth(other_id), workspace_id, ShareAccessLevel::Read, None)
+        .await
+        .expect("token minted");
+
+    let service = ShareService::new(store);
+    let items = service
+        .list_public_shares_for_owner(owner_id)
+        .await
+        .expect("list should succeed");
+
+    assert!(items.is_empty());
+}
+
+#[test]
+fn share_owner_card_from_profile_maps_public_fields() {
+    let user_id = Uuid::new_v4();
+    let profile = app_core::AuthUserProfile {
+        user_id,
+        owner_user_id: user_id,
+        email: "ada@example.test".to_string(),
+        full_name: Some("  Ada Lovelace  ".to_string()),
+        bio: Some("  Notes owner  ".to_string()),
+        contact_url: None,
+        avatar_object_path: Some("avatars/ada.png".to_string()),
+        banner_object_path: Some("banners/ada.png".to_string()),
+        public_profile_enabled: true,
+    };
+
+    let card = avrag_share::ShareOwnerCard::from_profile(&profile);
+
+    let expected_avatar = format!("/api/public/users/{user_id}/media/avatar");
+    let expected_banner = format!("/api/public/users/{user_id}/media/banner");
+    assert_eq!(card.display_name, "Ada Lovelace");
+    assert_eq!(card.bio.as_deref(), Some("Notes owner"));
+    assert_eq!(card.contact_url, None);
+    assert_eq!(card.avatar_url.as_deref(), Some(expected_avatar.as_str()));
+    assert_eq!(card.banner_url.as_deref(), Some(expected_banner.as_str()));
+    assert!(card.profile_enabled);
+}
+
+#[test]
+fn share_owner_card_from_profile_falls_back_to_email_local_part() {
+    let user_id = Uuid::new_v4();
+    let profile = app_core::AuthUserProfile {
+        user_id,
+        owner_user_id: user_id,
+        email: "ada@example.test".to_string(),
+        full_name: Some("   ".to_string()),
+        bio: None,
+        contact_url: None,
+        avatar_object_path: None,
+        banner_object_path: None,
+        public_profile_enabled: false,
+    };
+
+    let card = avrag_share::ShareOwnerCard::from_profile(&profile);
+
+    assert_eq!(card.display_name, "ada");
+    assert_eq!(card.avatar_url, None);
+    assert!(!card.profile_enabled);
 }

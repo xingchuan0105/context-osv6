@@ -67,37 +67,52 @@ Layout map: `avrag-rs/prompts/README.md`. Loop assets: `avrag-rs/prompts/loop/RE
 
 **Goal:** maximize model agency. The runtime **reports state** (budget, empty evidence, mechanism facts); the model **decides** the next action. Do not smuggle a second policy layer of “you must / must not” into prose when a hard gate already exists in code.
 
-**Scope:** skill bodies, capability manuals, `prompts/loop/*` observations, any other string assembled into the model context as guidance. **Out of scope for this voice rule:** short end-user product copy that is the final answer shown to a human (degraded empty-result lines), pure machine tags, detector keyword lists.
+**Scope:** skill bodies, capability manuals, `prompts/loop/*` observations, any other string assembled into the model context as guidance. **Out of scope for this voice rule:** pure machine tags, detector keyword lists. User-facing disaster fallbacks (if any) live under `prompts/loop/disaster/` and are **not** host footnotes on a model draft.
 
-### Stop decision & three-loop (retrieve → synthesis → short Judge)
+### User channel: LLM front stage; harness never speaks as the answer
 
-Product **rag / search** (when `forbid_retrieve_direct_answer` + `short_judge` are on — default in `modes/rag.yaml` / `search.yaml`) use a **three-loop** host orchestration. Design: `avrag-rs/docs/engineering/2026-08-07-retrieve-synthesis-judge-loop-design.md`.
+**三角关系：** 用户与 LLM 在前台；harness 是环境（工具执行、第三人称 observation、内部状态机、telemetry）。LLM 可与 harness 多轮交互，中间产物可存；**不得**把协议残片、host observation 外壳、运行时诊断句拼进用户主气泡。
+
+| Do | Don't |
+|----|--------|
+| 用户主气泡 = 模型自然语言（说明 / 澄清 / 追问均可，措辞由模型自主） | Host 在 answer 字符串后拼接 disclosure / ceiling /「本 run…」类脚注 |
+| 失败在环内消化；到顶后 **LLM 收束轮**（仍有 token）或 **极窄灾难兜底句**（token 尽 / 格式闸耗尽） | 「审不过仍强制交坏稿 + 挂系统脚注」 |
+| 证据空 / verify fail / ceiling → **telemetry 与 eval 标签** | 把评测可观测原文镜像进主答复 |
+| 出站格式闸拦协议泄漏（如 `DSML`）→ repair / 灾难口 | 解析 provider 私有 tool 协议当产品能力 |
+
+设计与诊断：`docs/engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md`（§17 方案补丁）。
+
+### Stop decision & three-loop (retrieve → synthesis → verify)
+
+Product **rag / search** (when `forbid_retrieve_direct_answer` + `verify` are on — default in `modes/rag.yaml` / `search.yaml`) use a **three-loop** host orchestration. Design: `avrag-rs/docs/engineering/2026-08-07-retrieve-synthesis-verify-loop-design.md`.
 
 | Loop | Role | Must not |
 |------|------|----------|
 | **Retrieve** | Find material (tools/codegen) | Ship user-facing final prose (`DirectAnswer` → handoff synthesis instead) |
-| **Synthesis** | Write / revise user answer | Act as Judge |
-| **Short Judge** | One-shot: **pass** or **fail** + route (`synthesis` \| `retrieve`) + advice | Retrieve, rewrite final answer, call tools |
+| **Synthesis** | Write / revise user answer | Act as verify |
+| **Verify** | One-shot: **pass** or **fail** + route (`synthesis` \| `retrieve`) + advice | Retrieve, rewrite final answer, call tools |
 
 | Term (prefer) | Meaning | Owner |
 |---------------|---------|--------|
 | **Continue** | Next retrieve turn (codegen/tools/skill_request) | Model chose tools/code, or host structural gate |
 | **retrieve_handoff_synthesis** | Model stopped retrieve with prose under three-loop → leave retrieve for synthesis | Host orchestration |
 | **DirectAnswer** | Final prose **without** synthesis — **chat / write_refine / worker_handoff** only | Model + skill (those modes) |
-| **Synthesized + Judge pass** | User-facing deliver after short Judge | Host routes; Judge skill adjudicates |
-| **Judge fail → re-entry** | Fail with advice back to synthesis (answer fix) or retrieve (补料); **≤3** fails then force deliver + ceiling disclosure | Host state machine + Judge skill |
-| **observation** | Host-injected user message stating runtime facts (`prompts/loop/*`) | Host reports; model acts |
+| **Synthesized + verify pass** | User-facing deliver after verify | Host routes; verify skill adjudicates |
+| **verify fail → re-entry** | Fail with advice back to synthesis (answer fix) or retrieve (补料); **≤3** fails then **user-facing closeout** (LLM 人话，仍有 token) 或 **灾难兜底**（token 尽）— **不**拼 ceiling 脚注 | Host state machine + verify skill |
+| **observation** | Host-injected user message stating runtime facts (`prompts/loop/*`) — **model channel only** | Host reports; model acts |
 | **compile_feedback** | Free correction turn after **structural** handoff compile fail (worker path only) | Host structural only |
 | **require_evidence** | Product/skill **intent** that grounded facts come from observation — **not** a host semantic “coverage enough” veto | **Skill + model** (prose); host only counts Ok returns |
 | **evidence_missing_continue** | Structural: `requires_evidence(mode)` && zero Ok retrieval → do not leave retrieve for synthesis yet; inject evidence-missing observation + Continue | Host structural (rounds budget) only |
 | **required_action_missing_continue** | Structural: query-card declared action without Ok return → inject + Continue | Host structural (rounds budget) only |
-| **token / round budget** | Primary cost ceiling; exhausted → release + host disclosure as applicable | Host cost policy |
+| **token / round budget** | Primary cost ceiling; exhausted → release for synthesis/closeout per policy; **no** user-visible host disclosure footer | Host cost policy |
 
-**Short Judge is not a host claim-checklist.** Host does **not** invent multi-entity scanners or soft-refusal keyword bars; Judge skill states third-person tensions (answer × evidence). Host only: call Judge once per draft, parse pass/fail signals, route, cap fails at 3, append ceiling disclosure.
+**Verify is not a host claim-checklist.** Host does **not** invent multi-entity scanners or soft-refusal keyword bars; verify skill states third-person tensions (answer × evidence), including failure-shape tensions (see `prompts/clusters/verify/`). Host only: call verify once per draft, parse pass/fail signals, route, cap fails at 3, then **closeout or disaster** — never append system footnotes to the user answer.
 
-**Bypass short Judge (product):** calculation / chitchat query-card; **Ok `weather_query`** (tool-call success is enough — do not score live weather statements); modes with `short_judge: false` (chat / write_refine).
+**Bypass verify (product):** calculation / chitchat query-card; **Ok `weather_query`** (tool-call success is enough — do not score live weather statements); modes with `verify: false` (chat / write_refine).
 
-**Do not:** golden-set leakage in Judge; host semantic “no chunk ⇒ no answer” as a *completeness* veto beyond Ok-count structural gates; long ReAct Judge that retrieves or rewrites the user answer.
+**Naming:** product post-synthesis check is **verify** (`loop_exit.verify`, `prompts/clusters/verify/`). Do **not** call it “short judge”. Eval LLM-as-Judge (`rag_quality` / eval_v2) is a separate concept.
+
+**Do not:** golden-set leakage in verify; host semantic “no chunk ⇒ no answer” as a *completeness* veto beyond Ok-count structural gates; long ReAct verify that retrieves or rewrites the user answer.
 
 ## Product hard rules (`avrag-rs`) — non-negotiable (formerly §8)
 
@@ -133,6 +148,7 @@ Product **rag / search** (when `forbid_retrieve_direct_answer` + `short_judge` a
 
 - Touched Rust: `cargo test -p <pkg> --lib` as relevant (`app-bootstrap`, `app-chat`, `agent-tools`, …); wave end or on request → `bash scripts/test-l1.sh`.
 - Frontend (`frontend_next`): `pnpm test` / typecheck.
+- Frontend style baseline is mechanically enforced by `frontend_next/tests/style/design-baseline.test.ts`: no numeric font-weight ≥ 500 (tokens are all 400), no bare hex outside token files, no drop shadows except allowlisted floating overlays. Nav destinations live only in `frontend_next/lib/navigation/nav-config.ts` (PRODUCT_IA §4); route existence guarded by `tests/navigation/nav-config.test.ts`.
 - WSL: respect `jobs=2`; never stack concurrent full `cargo test` runs. Details: `docs/agent/rust-resources.md`.
 - Real LLM / full Playwright: not required mid-wave (E2E semantics: `avrag-rs/docs/e2e-gates.md`).
 - Long E2E runs (full-149, staging ingest, DR2/L3): never block on one global timeout — background + log file + poll progress; use `scripts/with-watchdog.sh` (silence kill) and `scripts/test-full149.sh` (canonical full-149, circuit breaker `E2E_ABORT_AFTER_CONSECUTIVE_FAILS=8`). Full conventions: `avrag-rs/docs/e2e-gates.md` §Agent run conventions.

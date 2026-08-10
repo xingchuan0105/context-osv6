@@ -13,6 +13,7 @@ import {
   type ShareAnalyticsResponse,
 } from "../../lib/share/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { AppTopBar } from "../app-top-bar";
 import {
   buildDailyViewsSeries,
   sumViews,
@@ -139,7 +140,9 @@ export function DashboardAnalyticsSurface() {
   const rangeViews = sumViews(trendSeries);
 
   return (
-    <main className={styles.page} data-testid="dashboard-analytics-surface">
+    <>
+      <AppTopBar locale={locale} />
+      <main className={styles.page} data-testid="dashboard-analytics-surface">
       <div className={styles.inner}>
         <header className={styles.header}>
           <Link className="app-link app-link-muted" href="/dashboard">
@@ -313,6 +316,7 @@ export function DashboardAnalyticsSurface() {
           </>
         )}
       </div>
-    </main>
+      </main>
+    </>
   );
 }

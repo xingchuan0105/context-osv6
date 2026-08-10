@@ -179,6 +179,7 @@ export type UpdateProfileInput = {
   full_name?: string | null;
   bio?: string | null;
   contact_url?: string | null;
+  public_profile_enabled?: boolean;
 };
 
 export async function updateProfile(token: string, input: UpdateProfileInput | string | null) {
@@ -195,6 +196,7 @@ export async function updateProfile(token: string, input: UpdateProfileInput | s
         full_name: body.full_name ?? null,
         bio: body.bio ?? null,
         contact_url: body.contact_url ?? null,
+        public_profile_enabled: body.public_profile_enabled ?? null,
       }),
     },
     token,

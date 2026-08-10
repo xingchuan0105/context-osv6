@@ -1,3 +1,103 @@
+.centerPane {
+  display: grid;
+  gap: var(--space-lg);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--space-xl);
+  align-content: start;
+}
+
+.inlineOwnerStrip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--surface-muted) / 0.35);
+  flex: none;
+}
+
+.inlineOwnerAvatar {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: hsl(var(--surface-muted));
+  background-size: cover;
+  background-position: center;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-semibold);
+  flex: none;
+}
+
+.inlineOwnerMeta {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  font-size: var(--font-size-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.inlineOwnerMeta strong {
+  color: hsl(var(--foreground));
+  font-weight: var(--font-weight-semibold);
+}
+
+.turnstileHost {
+  padding: var(--space-sm) var(--space-lg);
+  flex: none;
+}
+
+.topTitle {
+  font-size: var(--font-size-shell-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  color: hsl(var(--foreground));
+}
+
+.topSubtitle {
+  margin-top: 0.15rem;
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+  color: hsl(var(--muted-foreground));
+  max-width: 42rem;
+}
+
+.topMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+  flex: none;
+}
+
+.mobileSourcesCard {
+  display: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sourceDetail {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.mutedText {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+
+@media (max-width: 767px) {
+  .topMeta {
+    display: none;
+  }
+}
+
 .sectionStack {
   display: grid;
   gap: var(--space-lg);
@@ -45,7 +145,6 @@
   color: hsl(var(--foreground));
   font-size: 1.35rem;
   font-weight: var(--font-weight-semibold);
-  box-shadow: 0 2px 10px hsl(0 0% 0% / 0.1);
   flex-shrink: 0;
 }
 

@@ -46,6 +46,13 @@ type ChatComposerProps = {
   onHeightChange?: (height: number) => void;
   /** Empty-thread hero content rendered above the composer (centered layout). */
   hero?: ReactNode;
+  /**
+   * Which capability chips to show. Default both rag + search.
+   * Shared KB: `["rag"]` only (no chat mode, no web search).
+   */
+  availableCapabilities?: WorkspaceCapability[];
+  /** When true, chips are display-only (cannot toggle off locked RAG). */
+  lockCapabilities?: boolean;
 };
 
 export function ChatComposer({
@@ -62,7 +69,12 @@ export function ChatComposer({
   textareaRef: externalTextareaRef,
   onHeightChange,
   hero,
+  availableCapabilities,
+  lockCapabilities = false,
 }: ChatComposerProps) {
+  const capabilityToggles = CAPABILITY_TOGGLES.filter((toggle) =>
+    availableCapabilities ? availableCapabilities.includes(toggle.id) : true,
+  );
   const internalTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const composerCardRef = useRef<HTMLDivElement | null>(null);
@@ -133,13 +145,16 @@ export function ChatComposer({
 
   const handleToggleCapability = useCallback(
     (cap: WorkspaceCapability) => {
+      if (lockCapabilities) {
+        return;
+      }
       if (cap === "rag" && ragDisabled) {
         return;
       }
       onCapabilitiesChange(toggleCapability(capabilities, cap));
       textareaRef.current?.focus();
     },
-    [capabilities, onCapabilitiesChange, ragDisabled, textareaRef],
+    [capabilities, lockCapabilities, onCapabilitiesChange, ragDisabled, textareaRef],
   );
 
   function handleComposerResizeStart(event: ReactMouseEvent<HTMLButtonElement>) {
@@ -281,9 +296,10 @@ export function ChatComposer({
               role="group"
               aria-label={formatUiMessage(locale, "workspaceChatCapabilityLabel")}
             >
-              {CAPABILITY_TOGGLES.map((cap) => {
+              {capabilityToggles.map((cap) => {
                 const pressed = capabilities.includes(cap.id);
-                const disabled = cap.id === "rag" && ragDisabled;
+                const disabled =
+                  lockCapabilities || (cap.id === "rag" && ragDisabled);
                 return (
                   <button
                     key={cap.id}
@@ -293,9 +309,11 @@ export function ChatComposer({
                     aria-pressed={pressed}
                     disabled={disabled}
                     title={
-                      disabled
-                        ? formatUiMessage(locale, "workspaceChatCapRagNeedsSources")
-                        : undefined
+                      lockCapabilities
+                        ? formatUiMessage(locale, "sharedPublic.ragLockedHint")
+                        : disabled
+                          ? formatUiMessage(locale, "workspaceChatCapRagNeedsSources")
+                          : undefined
                     }
                     onClick={() => handleToggleCapability(cap.id)}
                   >
@@ -305,7 +323,7 @@ export function ChatComposer({
               })}
             </div>
 
-            {ragDisabled ? (
+            {ragDisabled && !lockCapabilities ? (
               <p className={styles.hint} data-testid="workspace-chat-rag-needs-sources">
                 {formatUiMessage(locale, "workspaceChatCapRagNeedsSources")}
               </p>

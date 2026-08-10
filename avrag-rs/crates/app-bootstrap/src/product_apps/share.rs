@@ -3,6 +3,7 @@
 use app_core::{ShareStorePort, StorageContext};
 use contracts::auth_runtime::AuthContext;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct ShareApp<'a> {
     pub(crate) auth: &'a AuthContext,
@@ -240,5 +241,15 @@ impl<'a> ShareApp<'a> {
             .await
             .ok()
             .flatten()
+    }
+
+    /// Public sharer profile: active public shares for an owner (opt-in endpoint;
+    /// the profile-enabled gate lives in the HTTP handler).
+    pub async fn list_public_shares_for_owner(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<avrag_share::PublicOwnerShareItem>, common::AppError> {
+        let store = self.require_store()?;
+        avrag_share::handle_list_public_shares_for_owner(user_id, store).await
     }
 }

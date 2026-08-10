@@ -106,9 +106,9 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         .cloned()
         .unwrap_or_else(|| AGENT_BASE.to_string());
 
-    // D9: mandatory retrieve skills derived straight from the capability set
-    // (memory base + capability skills); the YAML `skill_catalog.mandatory`
-    // indirect layer is retired for SaC modes.
+    // D9: mandatory retrieve skills from capability set only (knowledge-base /
+    // search). Memory is on-demand via skill_request (agent-base pointer).
+    // YAML `skill_catalog.mandatory` indirect layer is retired for SaC modes.
     config.skill_catalog.mandatory.retrieve =
         agent_loop::r#loop::derive_mandatory_retrieve(caps.rag, caps.search);
 
@@ -129,8 +129,8 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
 /// Grounding is **skill-owned** (`require_evidence` is not a host hard gate).
 /// `worker_handoff` is **false** — no orchestrator brief / handoff JSON.
 ///
-/// Three-loop switches (`forbid_retrieve_direct_answer`, `short_judge`,
-/// `judge_max_fail_rounds`) are **inherited from capability mode YAML**
+/// Three-loop switches (`forbid_retrieve_direct_answer`, `verify`,
+/// `verify_max_fail_rounds`) are **inherited from capability mode YAML**
 /// (`rag` / `search`) and OR-merged across dual capabilities — they must not
 /// be wiped by this function (acceptance 2026-08-07).
 fn apply_single_agent_loop_exit(config: &mut ModeConfig, capability_yaml: &ModeConfig) {
@@ -139,17 +139,17 @@ fn apply_single_agent_loop_exit(config: &mut ModeConfig, capability_yaml: &ModeC
     // Inherit / OR-merge three-loop flags from the capability mode being applied.
     config.loop_exit.forbid_retrieve_direct_answer |=
         capability_yaml.loop_exit.forbid_retrieve_direct_answer;
-    config.loop_exit.short_judge |= capability_yaml.loop_exit.short_judge;
-    if capability_yaml.loop_exit.judge_max_fail_rounds > 0 {
-        config.loop_exit.judge_max_fail_rounds = config
+    config.loop_exit.verify |= capability_yaml.loop_exit.verify;
+    if capability_yaml.loop_exit.verify_max_fail_rounds > 0 {
+        config.loop_exit.verify_max_fail_rounds = config
             .loop_exit
-            .judge_max_fail_rounds
-            .max(capability_yaml.loop_exit.judge_max_fail_rounds);
+            .verify_max_fail_rounds
+            .max(capability_yaml.loop_exit.verify_max_fail_rounds);
     }
     // Three-loop: retrieve never ships final prose; always synthesize (+ judge).
     // Legacy single-path (no three-loop flags) still allows skip-synthesis DirectAnswer.
     config.loop_exit.skip_synthesis_on_direct_answer =
-        !(config.loop_exit.forbid_retrieve_direct_answer || config.loop_exit.short_judge);
+        !(config.loop_exit.forbid_retrieve_direct_answer || config.loop_exit.verify);
     config.synthesis_output.contract = AnswerContractKind::ProseOnly;
     config.worker_handoff = false;
 }
@@ -350,13 +350,13 @@ mod tests {
             "product dual must forbid retrieve DirectAnswer"
         );
         assert!(
-            assembled.config.loop_exit.short_judge,
-            "product dual must enable short_judge"
+            assembled.config.loop_exit.verify,
+            "product dual must enable verify"
         );
         assert!(
-            assembled.config.loop_exit.judge_max_fail_rounds >= 3,
-            "judge_max_fail_rounds: {}",
-            assembled.config.loop_exit.judge_max_fail_rounds
+            assembled.config.loop_exit.verify_max_fail_rounds >= 3,
+            "verify_max_fail_rounds: {}",
+            assembled.config.loop_exit.verify_max_fail_rounds
         );
         assert!(
             !assembled.config.loop_exit.skip_synthesis_on_direct_answer,
@@ -478,11 +478,11 @@ mod tests {
             config.loop_exit.forbid_retrieve_direct_answer,
             "forbid_retrieve_direct_answer"
         );
-        assert!(config.loop_exit.short_judge, "short_judge");
+        assert!(config.loop_exit.verify, "verify");
         assert!(
-            config.loop_exit.judge_max_fail_rounds >= 3,
-            "judge_max_fail_rounds={}",
-            config.loop_exit.judge_max_fail_rounds
+            config.loop_exit.verify_max_fail_rounds >= 3,
+            "verify_max_fail_rounds={}",
+            config.loop_exit.verify_max_fail_rounds
         );
         assert!(
             !config.loop_exit.skip_synthesis_on_direct_answer,
@@ -527,7 +527,7 @@ mod tests {
     fn pure_chat_does_not_enable_three_loop() {
         let assembled = assemble_mode(CapabilitySet::default()).expect("chat");
         assert!(!assembled.config.loop_exit.forbid_retrieve_direct_answer);
-        assert!(!assembled.config.loop_exit.short_judge);
+        assert!(!assembled.config.loop_exit.verify);
         assert!(assembled.config.loop_exit.skip_synthesis_on_direct_answer);
     }
 }

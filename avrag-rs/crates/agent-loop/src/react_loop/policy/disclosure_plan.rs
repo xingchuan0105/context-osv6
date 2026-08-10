@@ -44,6 +44,8 @@ impl DisclosurePlanner {
         skill_request: Option<&[String]>,
         already_disclosed: &HashSet<String>,
         request: Option<&AgentRequest>,
+        // Re-disclose knowledge-base/api-detail (L2) after sandbox error.
+        reexpose_kb_api_detail: bool,
     ) -> DisclosurePlan {
         let mut slices = Vec::new();
 
@@ -51,11 +53,30 @@ impl DisclosurePlanner {
             slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve));
         }
 
-        // Mandatory retrieve clusters (e.g. knowledge-base skill) must stay in the system
-        // prompt every round — not only iteration 0 — so the model can recover
-        // from sandbox errors with method signatures in context.
+        // Mandatory retrieve clusters: L0 skill body (method signatures + hard
+        // evidence line) every round so the model can recover from sandbox errors
+        // with signatures in context. Thick empty-result tables / few-shot shapes
+        // live in knowledge-base/api-detail (first round or sandbox reexpose).
         for cluster_id in &mode.skill_catalog.mandatory.retrieve {
             push_cluster_body(&mut slices, cluster_id, None, already_disclosed, true);
+        }
+
+        let kb_mandatory = mode
+            .skill_catalog
+            .mandatory
+            .retrieve
+            .iter()
+            .any(|id| id == "knowledge-base");
+
+        // L2 api-detail: first retrieve round, or one-shot after sandbox error.
+        if kb_mandatory && (first_round || reexpose_kb_api_detail) {
+            push_cluster_body(
+                &mut slices,
+                "knowledge-base",
+                Some("api-detail"),
+                already_disclosed,
+                false,
+            );
         }
 
         // Thin strategy layer only on first retrieve round (coverage checklist +
@@ -63,20 +84,13 @@ impl DisclosurePlanner {
         // and how-to-read-tables load on demand via skill_request
         // (`knowledge-base/strategies-graph|tables|grounding|codegen`,
         // `knowledge-base/how-to-read-tables`). SKILL body stays every-round
-        // mandatory (methods + return shapes).
+        // mandatory (L0 methods + return shapes).
         //
         // SkillOpt: when training a spoke, set E2E_SKILLOPT_FORCE_KB_REFS to a
         // comma-separated list of reference slugs (e.g. `strategies-graph`) so
         // the file under edit is actually in context (otherwise progressive
         // disclosure would hide the trainable few-shot/gotcha body).
-        if first_round
-            && mode
-                .skill_catalog
-                .mandatory
-                .retrieve
-                .iter()
-                .any(|id| id == "knowledge-base")
-        {
+        if first_round && kb_mandatory {
             push_cluster_body(
                 &mut slices,
                 "knowledge-base",
@@ -86,7 +100,7 @@ impl DisclosurePlanner {
             );
             if let Ok(forced) = std::env::var("E2E_SKILLOPT_FORCE_KB_REFS") {
                 for slug in forced.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-                    if slug == "strategies" {
+                    if slug == "strategies" || slug == "api-detail" {
                         continue; // already pushed
                     }
                     push_cluster_body(
@@ -150,13 +164,7 @@ impl DisclosurePlanner {
             // Prefer explicit synthesis choices, else same hint mapping as retrieve.
             if choices.writing_ref.is_some() || choices.format_ref.is_some() {
                 if let Some(writing_ref) = choices.writing_ref.as_deref() {
-                    push_cluster_body(
-                        &mut slices,
-                        "writing",
-                        Some(writing_ref),
-                        already_disclosed,
-                        false,
-                    );
+                    push_writing_style_choice(&mut slices, writing_ref, already_disclosed);
                 }
                 if let Some(format_ref) = choices.format_ref.as_deref() {
                     push_cluster_body(
@@ -180,7 +188,7 @@ impl DisclosurePlanner {
     }
 }
 
-/// Disclose at most one writing + one format reference from request hints.
+/// Disclose at most one writing style (or brainstorming behavior) + one format ref.
 fn push_writing_format_slices(
     slices: &mut Vec<DisclosureSlice>,
     request: &AgentRequest,
@@ -188,20 +196,14 @@ fn push_writing_format_slices(
 ) {
     let choices = parse_synthesis_choices(request);
     if let Some(writing_ref) = choices.writing_ref.as_deref() {
-        push_cluster_body(
-            slices,
-            "writing",
-            Some(writing_ref),
-            already_disclosed,
-            false,
-        );
+        push_writing_style_choice(slices, writing_ref, already_disclosed);
     } else if let Some(hint) = request
         .metadata
         .get("writing_hint")
         .and_then(|v| v.as_str())
     {
         if let Some(ref_slug) = map_writing_hint(hint) {
-            push_cluster_body(slices, "writing", Some(&ref_slug), already_disclosed, false);
+            push_writing_style_choice(slices, &ref_slug, already_disclosed);
         }
     }
 
@@ -210,6 +212,30 @@ fn push_writing_format_slices(
     } else if let Some(hint) = request.format_hint.as_deref() {
         if let Some(ref_slug) = map_format_hint(hint) {
             push_cluster_body(slices, "format", Some(&ref_slug), already_disclosed, false);
+        }
+    }
+}
+
+/// Route writing slug: style spokes under `writing`, behavior under `brainstorming`,
+/// `tone` → writing SKILL body only (meta rules live in writing/SKILL.md).
+fn push_writing_style_choice(
+    slices: &mut Vec<DisclosureSlice>,
+    slug: &str,
+    already_disclosed: &HashSet<String>,
+) {
+    let slug = slug.trim();
+    if slug.is_empty() {
+        return;
+    }
+    match slug {
+        "brainstorming" => {
+            push_cluster_body(slices, "brainstorming", None, already_disclosed, false);
+        }
+        "tone" | "tone-guidance" => {
+            push_cluster_body(slices, "writing", None, already_disclosed, false);
+        }
+        other => {
+            push_cluster_body(slices, "writing", Some(other), already_disclosed, false);
         }
     }
 }
@@ -490,11 +516,13 @@ fn map_writing_hint(hint: &str) -> Option<String> {
         .or_else(|| hint.strip_prefix("writing/"))
         .unwrap_or(hint);
     match slug {
+        // tone: no style spoke; push_writing_style_choice loads writing body only
         "tone-guidance" | "tone" => Some("tone".to_string()),
         "concise-writing" | "concise" => Some("concise".to_string()),
         "professional-writing" | "professional" => Some("professional".to_string()),
         "academic-writing" | "academic" => Some("academic".to_string()),
         "storytelling" => Some("storytelling".to_string()),
+        // behavior mode cluster (not writing/reference/*)
         "brainstorming" => Some("brainstorming".to_string()),
         _ if !slug.is_empty() => Some(slug.to_string()),
         _ => None,
@@ -528,7 +556,8 @@ mod tests {
     #[test]
     fn retrieve_first_round_includes_index_mandatory_and_query() {
         let mode = rag_mode();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
+        let plan =
+            DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None, false);
         assert!(
             plan.slices
                 .contains(&DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve))
@@ -538,12 +567,26 @@ mod tests {
             .iter()
             .any(|s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "knowledge-base")));
         assert!(plan.slices.contains(&DisclosureSlice::RetrievalQuery));
+        // Memory is on-demand (skill_request), not mandatory every round.
+        assert!(
+            !plan.slices.iter().any(|s| {
+                matches!(
+                    s,
+                    DisclosureSlice::ClusterBody {
+                        cluster_id,
+                        reference: None
+                    } if cluster_id == "memory"
+                )
+            }),
+            "memory must not be mandatory full-body: {plan:?}"
+        );
     }
 
     #[test]
     fn retrieve_later_round_includes_mandatory_codegen() {
         let mode = rag_mode();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, false, None, &HashSet::new(), None);
+        let plan =
+            DisclosurePlanner::plan_retrieve(&mode, false, None, &HashSet::new(), None, false);
         assert!(
             !plan
                 .slices
@@ -551,9 +594,37 @@ mod tests {
                 .any(|s| matches!(s, DisclosureSlice::ClusterIndex(_)))
         );
         assert!(plan.slices.iter().any(
-            |s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "knowledge-base")
+            |s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, reference: None, .. } if cluster_id == "knowledge-base")
         ));
+        // L2 api-detail not every later round unless reexpose flag.
+        assert!(
+            !plan.slices.iter().any(|s| matches!(
+                s,
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference: Some(r)
+                } if cluster_id == "knowledge-base" && r == "api-detail"
+            )),
+            "api-detail should not re-inject every later round: {plan:?}"
+        );
         assert!(!plan.slices.contains(&DisclosureSlice::RetrievalQuery));
+    }
+
+    #[test]
+    fn retrieve_sandbox_reexpose_loads_api_detail() {
+        let mode = rag_mode();
+        let plan =
+            DisclosurePlanner::plan_retrieve(&mode, false, None, &HashSet::new(), None, true);
+        assert!(
+            plan.slices.iter().any(|s| matches!(
+                s,
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference: Some(r)
+                } if cluster_id == "knowledge-base" && r == "api-detail"
+            )),
+            "sandbox reexpose must load api-detail: {plan:?}"
+        );
     }
 
     #[test]
@@ -567,6 +638,7 @@ mod tests {
             Some(&["memory".to_string()]),
             &disclosed,
             None,
+            false,
         );
         assert!(plan.slices.iter().any(|s| {
             matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "memory")
@@ -579,14 +651,16 @@ mod tests {
     #[test]
     fn chat_mode_no_retrieval_query_by_default() {
         let mode = super::super::config::load_mode_config("chat").unwrap();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
+        let plan =
+            DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None, false);
         assert!(!plan.slices.contains(&DisclosureSlice::RetrievalQuery));
     }
 
     #[test]
     fn retrieve_first_round_discloses_thin_strategies_not_table_or_graph_spokes() {
         let mode = rag_mode();
-        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
+        let plan =
+            DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None, false);
         let refs: Vec<Option<&str>> = plan
             .slices
             .iter()
@@ -601,6 +675,10 @@ mod tests {
         assert!(
             refs.iter().any(|r| *r == Some("strategies")),
             "expected thin strategies spoke, got {refs:?}"
+        );
+        assert!(
+            refs.iter().any(|r| *r == Some("api-detail")),
+            "expected L2 api-detail on first round, got {refs:?}"
         );
         assert!(
             !refs.iter().any(|r| *r == Some("how-to-read-tables")),
@@ -632,6 +710,7 @@ mod tests {
             Some(&["knowledge-base/strategies-graph".to_string()]),
             &disclosed,
             None,
+            false,
         );
         assert!(plan.slices.iter().any(|s| matches!(
             s,
@@ -642,6 +721,102 @@ mod tests {
         )));
     }
 
+    fn request_with_writing_hint(hint: &str) -> crate::runtime::AgentRequest {
+        let mut req = crate::runtime::AgentRequest {
+            kind: crate::AgentKind::Rag,
+            query: "test".to_string(),
+            workspace_id: None,
+            session_id: None,
+            doc_scope: vec![],
+            messages: vec![],
+            user_preferences: None,
+            debug: false,
+            stream: false,
+            language: None,
+            auth: crate::runtime::stub_agent_auth(),
+            docscope_metadata: None,
+            metadata: Default::default(),
+            cancellation_token: None,
+            guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
+        };
+        req.metadata.insert(
+            "writing_hint".into(),
+            serde_json::Value::String(hint.into()),
+        );
+        req
+    }
+
+    #[test]
+    fn writing_hint_brainstorming_routes_to_behavior_cluster() {
+        let req = request_with_writing_hint("brainstorming");
+        let mut slices = Vec::new();
+        push_writing_format_slices(&mut slices, &req, &HashSet::new());
+        assert!(
+            slices.iter().any(|s| matches!(
+                s,
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference: None,
+                } if cluster_id == "brainstorming"
+            )),
+            "expected brainstorming cluster body, got {slices:?}"
+        );
+        assert!(
+            !slices.iter().any(|s| matches!(
+                s,
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference: Some(r),
+                } if cluster_id == "writing" && r == "brainstorming"
+            )),
+            "brainstorming must not load writing/reference spoke"
+        );
+    }
+
+    #[test]
+    fn writing_hint_tone_loads_writing_body_only() {
+        let req = request_with_writing_hint("tone");
+        let mut slices = Vec::new();
+        push_writing_format_slices(&mut slices, &req, &HashSet::new());
+        assert!(
+            slices.iter().any(|s| matches!(
+                s,
+                DisclosureSlice::ClusterBody {
+                    cluster_id,
+                    reference: None,
+                } if cluster_id == "writing"
+            )),
+            "tone maps to writing SKILL body only, got {slices:?}"
+        );
+        assert!(
+            !slices.iter().any(|s| matches!(
+                s,
+                DisclosureSlice::ClusterBody {
+                    reference: Some(r),
+                    ..
+                } if r == "tone"
+            )),
+            "tone spoke removed"
+        );
+    }
+
+    #[test]
+    fn writing_hint_concise_loads_writing_spoke() {
+        let req = request_with_writing_hint("concise");
+        let mut slices = Vec::new();
+        push_writing_format_slices(&mut slices, &req, &HashSet::new());
+        assert!(slices.iter().any(|s| matches!(
+            s,
+            DisclosureSlice::ClusterBody {
+                cluster_id,
+                reference: Some(r),
+            } if cluster_id == "writing" && r == "concise"
+        )));
+    }
+
     #[test]
     fn skillopt_force_kb_refs_discloses_spoke_on_first_round() {
         let mode = rag_mode();
@@ -649,7 +824,8 @@ mod tests {
         unsafe {
             std::env::set_var("E2E_SKILLOPT_FORCE_KB_REFS", "strategies-graph,strategies-tables");
         }
-        let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None);
+        let plan =
+            DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new(), None, false);
         unsafe {
             std::env::remove_var("E2E_SKILLOPT_FORCE_KB_REFS");
         }

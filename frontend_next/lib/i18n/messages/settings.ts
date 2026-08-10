@@ -10,8 +10,8 @@ export const settingsMessages = {
     en: "Profile",
   },
   "settings.tabs.billing": {
-    zh: "会员状态",
-    en: "Membership",
+    zh: "用量信息",
+    en: "Usage",
   },
   "settings.tabs.appearance": {
     zh: "偏好",
@@ -38,8 +38,8 @@ export const settingsMessages = {
     en: "Settings",
   },
   "settings.pageSubtitle": {
-    zh: "管理会员状态、资料、外观、通知和安全设置。",
-    en: "Manage membership, profile, appearance, notification, and security settings.",
+    zh: "管理用量信息、资料、外观、通知和安全设置。",
+    en: "Manage usage, profile, appearance, notification, and security settings.",
   },
   "settings.profile.sectionTitle": {
     zh: "个人资料",
@@ -110,8 +110,8 @@ export const settingsMessages = {
     en: "Save profile",
   },
   "settings.billing.sectionTitle": {
-    zh: "会员状态",
-    en: "Membership",
+    zh: "用量信息",
+    en: "Usage",
   },
   "settings.billing.sectionSubtitle": {
     zh: "档位、分享名额、到期时间与余额一览。更换方案请前往定价页。",
@@ -238,8 +238,8 @@ export const settingsMessages = {
     en: "Balance is empty and no custom provider is configured. Top up or add a provider.",
   },
   "settings.billing.payerFundsTopUpHint": {
-    zh: "前往设置 → 会员状态充值，或配置自定义 Provider。",
-    en: "Open Settings → Membership to top up, or configure a custom provider.",
+    zh: "前往设置 → 用量信息充值，或配置自定义 Provider。",
+    en: "Open Settings → Usage to top up, or configure a custom provider.",
   },
   "settings.appearance.sectionTitle": {
     zh: "外观",
@@ -528,14 +528,6 @@ export const settingsMessages = {
   "settings.billing.status.canceled": {
     zh: "已取消",
     en: "Canceled",
-  },
-  "settings.billing.walletTitle": {
-    zh: "余额",
-    en: "Balance",
-  },
-  "settings.billing.walletSubtitle": {
-    zh: "用于支付平台模型调用与向量检索费用。累计充值每满 ¥50 增加 1 次邀请奖励。充值请到定价页完成。",
-    en: "Pays platform model calls and embedding/retrieval. Paid top-ups count toward lifetime total (+1 invite per ¥50). Complete top-up on the pricing page.",
   },
   "settings.billing.walletBalanceLabel": {
     zh: "可用余额",

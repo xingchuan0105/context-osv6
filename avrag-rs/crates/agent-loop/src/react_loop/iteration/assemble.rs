@@ -74,12 +74,15 @@ impl ReActLoop {
         // Model-visible View (retrieve): history + budget + query_card + claims.
         // Order fixed for prefix-cache; system stays outside the View.
         let visible = super::super::model_visible::build_retrieve_model_visible(
-            super::super::model_visible::RetrieveViewInputs::defaults(
-                &state.messages,
-                &assembled.budget_hint,
-                state.query_card.as_ref(),
-                &state.evidence.claim_notes,
-            ),
+            super::super::model_visible::RetrieveViewInputs {
+                durable_messages: &state.messages,
+                budget_hint: &assembled.budget_hint,
+                query_card: state.query_card.as_ref(),
+                claim_notes: &state.evidence.claim_notes,
+                ews_items: state.ews.active(),
+                keep_recent: super::super::context_visibility::HISTORY_FULL_RETRIEVAL_ROUNDS,
+                char_budget: super::super::context_visibility::WORKING_SET_CHAR_BUDGET,
+            },
         );
         round_messages.extend(visible);
         // B5: LLM boundary transform (default: identity).
@@ -172,7 +175,7 @@ impl ReActLoop {
                 }
                 result = &mut stream => {
                     break result.map_err(|e| {
-                        AppError::internal(format!("retrieve stream failed: {e}"))
+                        crate::helpers::map_llm_error_to_app_error("retrieve stream failed", e)
                     })?;
                 }
             }
