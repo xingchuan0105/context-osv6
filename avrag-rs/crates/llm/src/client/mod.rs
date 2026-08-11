@@ -38,6 +38,10 @@ pub struct LlmClient {
     observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
     session_id: Option<uuid::Uuid>,
     request_id: Option<String>,
+    /// When set, forces `enable_thinking` on every request — including pool
+    /// picks that carry their own member config. Used by ReActLoop phase split
+    /// (retrieve off / synthesis on).
+    thinking_override: Option<bool>,
 }
 
 impl std::fmt::Debug for LlmClient {
@@ -46,6 +50,7 @@ impl std::fmt::Debug for LlmClient {
             .field("config", &self.config)
             .field("feature", &self.feature)
             .field("stage", &self.stage)
+            .field("thinking_override", &self.thinking_override)
             .field("has_observer", &self.observer.is_some())
             .finish_non_exhaustive()
     }
@@ -97,6 +102,7 @@ impl LlmClient {
             observer: None,
             session_id: None,
             request_id: None,
+            thinking_override: None,
         }
     }
 
@@ -107,6 +113,17 @@ impl LlmClient {
 
     pub fn with_stage(mut self, stage: impl std::fmt::Display) -> Self {
         self.stage = stage.to_string();
+        self
+    }
+
+    /// Force thinking on/off for all completions on this client.
+    ///
+    /// Sets both `config.enable_thinking` and an override applied when building
+    /// pool-pick requests (member configs keep their own credentials/models).
+    /// DeepSeek maps `true` → `thinking.reasoning_effort = "max"`.
+    pub fn with_enable_thinking(mut self, enable: bool) -> Self {
+        self.config.enable_thinking = Some(enable);
+        self.thinking_override = Some(enable);
         self
     }
 
@@ -154,6 +171,10 @@ impl LlmClient {
         rebuilt.observer = self.observer;
         rebuilt.session_id = self.session_id;
         rebuilt.request_id = self.request_id;
+        rebuilt.thinking_override = self.thinking_override;
+        if let Some(enable) = rebuilt.thinking_override {
+            rebuilt.config.enable_thinking = Some(enable);
+        }
         rebuilt
     }
 
@@ -211,7 +232,12 @@ impl LlmClient {
             .map(|tools| tools.iter().map(ToolDefinition::from).collect())
             .unwrap_or_default();
 
-        LlmRequest::new(messages.to_vec(), config.clone())
+        let mut effective = config.clone();
+        if let Some(enable) = self.thinking_override {
+            effective.enable_thinking = Some(enable);
+        }
+
+        LlmRequest::new(messages.to_vec(), effective)
             .with_options(GenerationOptions {
                 temperature,
                 max_tokens,
@@ -929,6 +955,51 @@ mod tests {
             rpm_limit: None,
             tpm_limit: None,
         }
+    }
+
+    #[test]
+    fn with_enable_thinking_sets_config_and_override() {
+        let on = LlmClient::new(provider_config("https://api.deepseek.com")).with_enable_thinking(true);
+        assert_eq!(on.config.enable_thinking, Some(true));
+        assert_eq!(on.thinking_override, Some(true));
+
+        let off = on.clone().with_enable_thinking(false);
+        assert_eq!(off.config.enable_thinking, Some(false));
+        assert_eq!(off.thinking_override, Some(false));
+
+        // Override wins over pool pick config (pick has thinking unset).
+        let pick_cfg = provider_config("https://api.deepseek.com");
+        let req = off.build_llm_request_with(
+            &pick_cfg,
+            &[ChatMessage::user("hi")],
+            None,
+            false,
+            None,
+            false,
+            None,
+        );
+        assert_eq!(req.config.enable_thinking, Some(false));
+
+        let req_on = on.build_llm_request_with(
+            &pick_cfg,
+            &[ChatMessage::user("hi")],
+            None,
+            false,
+            None,
+            false,
+            None,
+        );
+        assert_eq!(req_on.config.enable_thinking, Some(true));
+    }
+
+    #[test]
+    fn with_user_credentials_preserves_thinking_override() {
+        let client = LlmClient::new(provider_config("https://api.deepseek.com"))
+            .with_enable_thinking(false)
+            .with_user_credentials("new-key".into(), None, None);
+        assert_eq!(client.config.api_key, "new-key");
+        assert_eq!(client.config.enable_thinking, Some(false));
+        assert_eq!(client.thinking_override, Some(false));
     }
 
     fn member(base_url: &str) -> PoolMemberConfig {

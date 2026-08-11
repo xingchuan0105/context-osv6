@@ -1,0 +1,170 @@
+{
+  "id": "bf0e437e-4e3e-499f-9e11-41d32fb6767f",
+  "object": "response",
+  "created_at": 1786388991,
+  "status": "completed",
+  "background": false,
+  "completed_at": 1786389013,
+  "content_filters": null,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": null,
+  "max_output_tokens": 1024,
+  "max_tool_calls": null,
+  "model": "deepseek-v4-flash",
+  "moderation": null,
+  "output": [
+    {
+      "type": "web_search_call",
+      "id": "call_00_RIkLCQbgUfAHM3HeaBiB3078",
+      "status": "completed",
+      "action": {
+        "type": "search",
+        "queries": [
+          "capital of France river through it",
+          "ws_call_id=call_00_RIkLCQbgUfAHM3HeaBiB3078"
+        ]
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_01_HzfLZgVCSUjM5HD2InWp8636",
+      "status": "completed",
+      "action": {
+        "type": "open_page",
+        "url": "https://www.britannica.com/place/Seine-River#ws_call_id=call_01_HzfLZgVCSUjM5HD2InWp8636"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_02_np2oY4ShndxTtzdMAY1A2622",
+      "status": "failed",
+      "action": {
+        "type": "open_page",
+        "url": "https://www.mappr.co/capital-cities/france/#ws_call_id=call_02_np2oY4ShndxTtzdMAY1A2622"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_03_livWdWeUbgnjHGnHlev16993",
+      "status": "failed",
+      "action": {
+        "type": "open_page",
+        "url": "https://en.wikipedia.org/wiki/Paris#ws_call_id=call_03_livWdWeUbgnjHGnHlev16993"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_04_FcYBTKPp2Uq22cD8lvN32329",
+      "status": "completed",
+      "action": {
+        "type": "open_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_04_FcYBTKPp2Uq22cD8lvN32329"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_05_oyioFJOz3Cgj0q5Jx6xC8922",
+      "status": "failed",
+      "action": {
+        "type": "find_in_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_05_oyioFJOz3Cgj0q5Jx6xC8922",
+        "pattern": "capital of France"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_06_vNTYCSZGKfaOrfHbWoKn6841",
+      "status": "completed",
+      "action": {
+        "type": "open_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_06_vNTYCSZGKfaOrfHbWoKn6841"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_07_lfrqOCSzygFcw9ae12R93063",
+      "status": "completed",
+      "action": {
+        "type": "find_in_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_07_lfrqOCSzygFcw9ae12R93063",
+        "pattern": "Seine"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_08_0QlBaMkh7pMdSNpp4q1A0342",
+      "status": "failed",
+      "action": {
+        "type": "find_in_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_08_0QlBaMkh7pMdSNpp4q1A0342",
+        "pattern": "capital of France"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_09_ixhr1b9jyMwW2GH485aj4468",
+      "status": "completed",
+      "action": {
+        "type": "open_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_09_ixhr1b9jyMwW2GH485aj4468"
+      }
+    },
+    {
+      "type": "web_search_call",
+      "id": "call_10_IraqMHAFffZAVDbiZEMW5275",
+      "status": "completed",
+      "action": {
+        "type": "find_in_page",
+        "url": "https://www.britannica.com/place/Paris#ws_call_id=call_10_IraqMHAFffZAVDbiZEMW5275",
+        "pattern": "Seine"
+      }
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": "none",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": false,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": null
+  },
+  "tool_choice": {
+    "type": "web_search"
+  },
+  "tools": [
+    {
+      "type": "web_search",
+      "search_context_size": null,
+      "user_location": null
+    }
+  ],
+  "top_logprobs": 0,
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 72089,
+    "input_tokens_details": {
+      "cached_tokens": 60032
+    },
+    "output_tokens": 580,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 72669
+  },
+  "user": null,
+  "metadata": {}
+}

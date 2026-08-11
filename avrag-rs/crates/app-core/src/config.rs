@@ -119,9 +119,16 @@ pub struct SearchConfig {
     pub mode: String,
     pub enable_thinking: bool,
     pub tools: Vec<String>,
+    /// `deepseek_web_brave` | `deepseek_web` | `brave_llm_context`
     pub provider: String,
+    /// Brave Search API base.
     pub base_url: String,
+    /// Brave API key (`SEARCH_API_KEY`).
     pub api_key: String,
+    /// DeepSeek API root for Anthropic server web_search (`SEARCH_DEEPSEEK_*` or `AGENT_LLM_*`).
+    pub deepseek_base_url: String,
+    pub deepseek_api_key: String,
+    pub deepseek_model: String,
     pub max_results: usize,
     pub max_sub_queries: usize,
     pub timeout_ms: u64,
@@ -131,6 +138,15 @@ pub struct SearchConfig {
     pub search_lang: Option<String>,
     pub country: Option<String>,
     pub freshness: Option<String>,
+    /// Host auto-scrape top-K URLs via CRW after web search (no LLM fetch turn).
+    pub auto_scrape_enabled: bool,
+    pub crw_base_url: String,
+    pub crw_api_key: String,
+    pub auto_scrape_top_k: usize,
+    pub auto_scrape_max_chars: usize,
+    pub auto_scrape_min_snippet: usize,
+    pub auto_scrape_timeout_ms: u64,
+    pub auto_scrape_concurrency: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -302,9 +318,13 @@ impl Default for AppConfig {
                     "web_extractor".to_string(),
                     "code_interpreter".to_string(),
                 ],
-                provider: "brave_llm_context".to_string(),
+                // B2: DeepSeek Anthropic server web_search primary; Brave fallback.
+                provider: "deepseek_web_brave".to_string(),
                 base_url: "https://api.search.brave.com".to_string(),
                 api_key: String::new(),
+                deepseek_base_url: "https://api.deepseek.com".to_string(),
+                deepseek_api_key: String::new(),
+                deepseek_model: "deepseek-v4-flash".to_string(),
                 max_results: 10,
                 max_sub_queries: 3,
                 timeout_ms: 30000,
@@ -314,6 +334,14 @@ impl Default for AppConfig {
                 search_lang: None,
                 country: None,
                 freshness: None,
+                auto_scrape_enabled: true,
+                crw_base_url: "http://127.0.0.1:3100".to_string(),
+                crw_api_key: String::new(),
+                auto_scrape_top_k: 4,
+                auto_scrape_max_chars: 4_000,
+                auto_scrape_min_snippet: 80,
+                auto_scrape_timeout_ms: 12_000,
+                auto_scrape_concurrency: 4,
             },
             redis: RedisConfig {
                 url: "redis://127.0.0.1:6379".to_string(),
@@ -413,6 +441,19 @@ impl AppConfig {
         config.search.provider = env_string("SEARCH_PROVIDER", &config.search.provider);
         config.search.base_url = env_string("SEARCH_BASE_URL", &config.search.base_url);
         config.search.api_key = env_string("SEARCH_API_KEY", &config.search.api_key);
+        // DeepSeek Anthropic server web_search: SEARCH_DEEPSEEK_* overrides, else AGENT_LLM_*.
+        config.search.deepseek_base_url = env_string(
+            "SEARCH_DEEPSEEK_BASE_URL",
+            &env_string("AGENT_LLM_BASE_URL", &config.search.deepseek_base_url),
+        );
+        config.search.deepseek_api_key = env_string(
+            "SEARCH_DEEPSEEK_API_KEY",
+            &env_string("AGENT_LLM_API_KEY", &config.search.deepseek_api_key),
+        );
+        config.search.deepseek_model = env_string(
+            "SEARCH_DEEPSEEK_MODEL",
+            &env_string("AGENT_LLM_MODEL", &config.search.deepseek_model),
+        );
         config.search.max_results = env_usize("SEARCH_MAX_RESULTS", config.search.max_results);
         config.search.max_sub_queries =
             env_usize("SEARCH_MAX_SUB_QUERIES", config.search.max_sub_queries);
@@ -428,6 +469,29 @@ impl AppConfig {
         config.search.search_lang = env_optional_string("SEARCH_LANG");
         config.search.country = env_optional_string("SEARCH_COUNTRY");
         config.search.freshness = env_optional_string("SEARCH_FRESHNESS");
+        // CRW auto-scrape (Docker/local binary): enrich thin DeepSeek snippets without LLM fetch.
+        config.search.auto_scrape_enabled =
+            env_bool("WEB_AUTO_SCRAPE", config.search.auto_scrape_enabled);
+        config.search.crw_base_url = env_string("CRW_BASE_URL", &config.search.crw_base_url);
+        config.search.crw_api_key = env_string("CRW_API_KEY", &config.search.crw_api_key);
+        config.search.auto_scrape_top_k =
+            env_usize("WEB_AUTO_SCRAPE_TOP_K", config.search.auto_scrape_top_k);
+        config.search.auto_scrape_max_chars = env_usize(
+            "WEB_AUTO_SCRAPE_MAX_CHARS",
+            config.search.auto_scrape_max_chars,
+        );
+        config.search.auto_scrape_min_snippet = env_usize(
+            "WEB_AUTO_SCRAPE_MIN_SNIPPET",
+            config.search.auto_scrape_min_snippet,
+        );
+        config.search.auto_scrape_timeout_ms = env_u64(
+            "WEB_AUTO_SCRAPE_TIMEOUT_MS",
+            config.search.auto_scrape_timeout_ms,
+        );
+        config.search.auto_scrape_concurrency = env_usize(
+            "WEB_AUTO_SCRAPE_CONCURRENCY",
+            config.search.auto_scrape_concurrency,
+        );
         config.redis.addr = env_string("REDIS_ADDR", &config.redis.addr);
         config.redis.password = env_string("REDIS_PASSWORD", &config.redis.password);
         config.redis.db = env_i64("REDIS_DB", config.redis.db);

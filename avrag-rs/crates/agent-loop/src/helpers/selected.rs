@@ -16,7 +16,7 @@ use contracts::{ToolResult, ToolStatus};
 /// plus index/grep/read_lines. `graph_retrieval` is intentionally **not**
 /// listed: force-augment telemetry side-cars use that tool id and must not
 /// enter the SELECTED alias stream (see `codegen_bridge` / citations).
-const ALIASED_TOOLS: &[&str] = &[
+pub(crate) const ALIASED_TOOLS: &[&str] = &[
     "dense_retrieval",
     "lexical_retrieval",
     "index_lookup",

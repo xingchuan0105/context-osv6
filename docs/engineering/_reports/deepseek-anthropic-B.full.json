@@ -1,0 +1,208 @@
+{
+  "id": "bf4b9623-b212-4585-a33a-14c299436459",
+  "type": "message",
+  "role": "assistant",
+  "model": "deepseek-v4-flash",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "The user wants me to search the web and list sources with titles and URLs for: \"What is the capital of France and which river runs through it?\" Let me do a web search.",
+      "signature": "bf4b9623-b212-4585-a33a-14c299436459"
+    },
+    {
+      "type": "server_tool_use",
+      "id": "call_00_zxEMzs9hqGjIRILNa4T80729",
+      "name": "web_search",
+      "input": {
+        "query": "capital of France river runs through it"
+      },
+      "caller": {
+        "type": "direct"
+      }
+    },
+    {
+      "type": "server_tool_use",
+      "id": "call_01_LXBLbppL91nMKLnq2apw9833",
+      "name": "web_search",
+      "input": {
+        "query": "Paris capital France Seine river"
+      },
+      "caller": {
+        "type": "direct"
+      }
+    },
+    {
+      "type": "web_search_tool_result",
+      "tool_use_id": "call_00_zxEMzs9hqGjIRILNa4T80729",
+      "content": [
+        {
+          "type": "web_search_result",
+          "title": "The ___ River Runs Through The Capital Of France.A.) DanubeB.) RhineC.) SeineD.) Thames",
+          "url": "https://enma.unsch.edu.pe/question/the-river-runs-through-the-capital-of-francebr-br-a-danubebr-36mg",
+          "encrypted_content": "IsotxCf1v3tIDt+TVRfzPyV0AilMek3bCbGYyooNmCP/0zCdSTJG62uUVe9nkC0kqtI0F/B1ZxrU0ZMRyoJJprDnXC8F4hcjpXtr69p/J5PckNj2QJbVMJoo4hbktYLCZurV8rJE4pYfcXzZpTT1IVoCBiNDtcAgZtkZLuP1MD1e4srhEQT0Glay4NxkGD+0u6S+7WxJpuwiVw46ma7WJF5U46uQahmwoD31lW7opXC0nrH2Zxt4NAlLbdnNcAXNaJnK63kXBM0fDuRoWw3x3SwsEpAn9rWLq9gXLa3cSk/e6N9VBGqwevl1PzdX0tmAX7K7Cy7cmCNADwHX3G422LSluG6AA98R4h0qwT9GE+3qUvwhjWMUPVsZXLF5cpfcARyxK+3X6q8AS9NV7ChzUmbnz/pIShe2FWSXPq0x0DT8",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Paris the capital of France is located on this river? - Answers",
+          "url": "https://www.answers.com/travel-destinations/Paris_the_capital_of_France_is_located_on_this_river",
+          "encrypted_content": "/EZIvku4LhNtVy9NqUrzrPIehz0YQvkMDkmPaGgpePx6O4903BaXPb9c9Bm0qik/9DpkfXyJchoQsCQRY8XqdrynGGHawdpqsOg4USwyCwBL+DY05N1sGKR9ODg1H7XkPscQLS13nLXjDOYW8teLIUogNiJEV2M2PcnxFBvUQY3oDs+4nvUmEHZnpzLEOnytT9TPIU529pM2fpZWrWOpH1zdAotNG1K5IgBiwvNqaoIFO2/XMLOSYIDJ/9QCbq1NzjVTm/wqSOe8jjvrsaBkznRIjztKl4mn5cbs6IsMB+9Rzb9FMmo72IKpKwm2+4W6VIyso2jbHIihbDR+LnJ4Ucz+Z+AVGFtWa8w3rVQ0OeR9LqRbWK3YyS3Vam0hQaIy1M1IniCzeHD7WaRDe8bkJOEtNdst3sP73R9vSJtjYjOJ5Tq6LQCApDb3z/T1LZz/zRvqcdUg6T66jmG52sGp6RfzZzawc2Yz+ILIrgXUvYdHTy7rV9lYfL+xKv/VQSOGgBLL6Z+fdPKSGkH1uvczQi8yTmOA0fdcYuDDZIwbmwaTvdLytndWKlnJee9TfdgllXaUHrnL2HHcJHyY+2pdrh2v0KZRvxirT5/1rIqZGYSRasHH6XoRxAlbo8yK4snfpNaJevT1jsjJYT+ZXKESqWSXzjdbn029+kbncspMR70IWVElG1RlxHHgHalS8f5S6Zm84H+r65qMi2DgTOu5dnWlozFXLFX43YbbxepadjtnPSl5PhkQsAcZfStVus3lUZT587dSD2FespZKAfNqGfeZk95jhl6/DhkM7IY05ukCjHm2WIizeJ5Cxl0aujbaQfZStIIs4dQvX6tgxMBiDFG8EjeCqSHhSi7CuuCrFV0CUUGf9gukfmyzdahYMoOHQKuIe62QH/GsHf4dAyKPBlrdSZhSXs8sUG/WNtBNQ4/8Dkxf36v3Fk5GyPMG7nhOaL2TMbk5NkEiZU7Jmfy5Xwb6kNs87+48J0aTtPCMMUhd1zvCnXXf1akdBAPMfGxkIbsqt5pjcnCKGZ8HxtF8k1LcdFSbTLUSv4bLVY+Uc//RUKOZJX3pn2VyHv+jjMo=",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Seine River flows through which European capital city?",
+          "url": "https://snippets.com/the-seine-river-flows-through-which-european-capital-city.htm",
+          "encrypted_content": "j/nkNYF2ervTTvQOs5oAly4eZQWfFA70LmergjGtZ3uEx2t6wkK4hVn8Rt3gTg9MfUUmN9phQN6V44U+OYLhwWYqvqlUdWzXY1pDIzG3vaytezWjxhIw/G0IbuIAk6Bs7YhoJIWoTOPfDUTHNfu+TCjMvKeUr0735n5eEtjIkHfBwEaAhSy6+L15e9LtK6GlSi/zGXlIHyWGDIEjvtB7bx1DVS7aKVlJy7yX3/xi7Pfl6cGxNvPSX0Rm/iR0XrZkZJlkjQkVw68ZjV/IIc8WC4O8eGrKFS/xDtyveZ6TVrpsChHr8TLrfF3JO0mfjkNw4U7L/OrNr7siPxVgJlgXZ0P+8qm+dyx49gjZUMlYPItA/V1iNTrMuYxMGKtUvViSp2mV/YvH5lTVA76w3UQ39/g5+d5zLHqI7K+B64hdXNGrOpMvW3bWxbTsm2A3DwzqCNwIi+vd3qFuQfdWEWOY19QDuc4/Z6fMdXN41uCGRPzQyy0Utme3YD7rhUe5K2PCbsG9me63ZbVc7keBaXUD0vgKxb484n4/yAYnHuVF6//cqDgrVlOuAkWvNJjIMhihvnln6RYRastTTXOSCfiUyuCNoEKZqaxTI7zZz6qysU85+BipI8noUL31cGd+a0TYGISflZQhR1s6xHeU7m9OH7y4l9INXCXlrPQ75hZoZCTapmrzT/uceCDsZ5aWsA048eLKTDw5I7k+Ae/e4C9XH1E=",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Seine River | Paris, France, History & Facts | Britannica",
+          "url": "https://www.britannica.com/place/Seine-River",
+          "encrypted_content": "PLbgnLtXZ9P2FiZxihbpJ7u9m6+KPs6erpverzJbpe/uySUIMKXsKF7ZDR/ptwQp6O712HuHkmhJuq1vRgck0ozVwKuWbTq5vvBEIRJtqO5SR9bmYUCGO4+aYx2fWdvoe4qr7Nq6V8vE/UC9kD8f1U6DB8lly7lDSCKVYGxxvpb30CZRhDpBl+gBioXU4+hPcPbi3RZU2lpCcMOKTFEhXsetQJSw9CzF/spuHjN+tcbVMYr5iz6NVB2ch36oMo4B8FsAAMm01TMgxgv/vZtTwasKa2lrZUf1Jky+hxijIyrqwFGckQx4E9dYZEf41uonGsj9j+4lpoPQ3uVNhC6c1QqMSLe2XvqzlK+9evsf5kNnZnEd5UHSiUh9vSwugAbIvlqHxG2cO4FO2svSWcZ2jjA/ZnXarxe6zZ4p6Upkn5hDhFGl1fNhkI8GHCJvnaT486Yx3231RgPO3Z77PXRH0tcZgO4A/zo+tQDy8AFC3yPf+VGv0V+7SmZ99C75iMbjVmtLVhvBGAjd/xOer7WYeVPtwP3jQ8pkF3O92CeCnEBBYHs1bXcJ2DLs9JLR0/mx3vjjgpBQd1jYABKnJgTBcX7ju4FnWlc6EFEPjS7ZS22k0yqEImy+BMzwaYUCE/0rzg5Dzj9ifBy52VDxG/1laYiSB0jLazGe3RmvUhhAiyeoQuqJfHZJVxYAl3cfQtj2akKj7X27RXoOjhvHofjAjwf0L+5IWHB1Wl2LnYUfZl2h5I1vjYoAvG+DHfmllppGRO8wchiRaR26cMylW1gC7Y7rX6deLL/Af2QdQI9gO1OqvlwvjHGqRqhgG9aThwf5AU2YKIB+WPkZC1wrCKSpE8x/Yvis1mYmzuyxCqoYIl6wGOKt+Cv9ukaXh8Z2lIBpcCMHnvpwiEZdnvANySijcVB4407c6XXgmL+K1S8wX9IKm0D7ERDx/rH10QVX36Ypg3zBmF6DZ8quf8WRnf+G4+8ptnGx6Rq2VK8ieoF630q+bbNMKof1BqI6ga2F+Piq30u65NfXawrmt9VRs5yBqTGnLhyrlgtGjID0uIhP2Bnu9Q==",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "As Anne Hidalgo swims in the Seine, an explainer on why it has so often been the ‘River of France’",
+          "url": "https://www.downtoearth.org.in/rivers/as-anne-hidalgo-swims-in-the-seine-an-explainer-on-why-it-has-so-often-been-the-river-of-france",
+          "encrypted_content": "iEwanQCsY7A5lMIYgfbNhyq8GHnUlyDBHlnb6n7BqIQHxM9sKVKHTi8m9/DlmftV0lNMJctZg2YnNP+E2Ty0Foxbpc8O1RHXcJDRdqqCBfrUnlJmytu76PRO1pcETq/IiB9o8rcrv5kIQoufIy4iLUEjnmOlw49Cv5V4E5miOmJDaOp3Z6ApA3yu7uoKgSYIVgFn3+GbGX9auxqgMs/DW14yGh++Te8ACqRiTQwbJ3hnmzSCe9E8ys0hqRYwl8XXwcdnkW5WFHmrVWD0QZvVlKnfRA2fq1uw7HuQ/CtAkkaA6e2zXRO6mNM7GpHkJ6anq4EXVOzim/NWnQd0wPNbza1AgNwi3fvVDoHO7XlpEWPxqSjjeJQLq+4MVsk0y7OM23hdVHo8aZ4oQtAZJ/wMkh3pLoprDtX1Fajg5DuCjPnaf0eMjA1LWMYWpumnahFAyJx1Wsngvf+kVnefxSp8w7CgPqBGeBeJm6Rd5Rtpa306klqXy0o+H2R5hfDUQr1DVxsEsY6plNNGlCLkXwaKqsY7rdyGmi8NpjcWDDrEQhd7R4BnIl4Rfaxeho/lP/kNWHAkMKExJMYLM6hf+mPJKfFvLLo679xunX/TruWflres/MkBEDSSxWlRKh71TLQ/yZhwBwLwMjSZBzE1x377ipxwyW/6yboiPnOVp0EB089x8KVTLlGQGqBGhrqZYh4KZrMLkzHEisYTxWPL7LDa0bI47tnxy1/aATQS5A8Vq0p0WD1HgVYbREQV2Bz1yN9dWHYv3WBc7Y4/Fm0s6tudGqPsukMp5dFhXsWQb2doxdhxibKHw8cIFWd1TIxEW5TBIoLzvrYVjjEGpij85eJWp41oohiGM11QBXBQO9f+OWG9m/UEJcfW9PdeJxJZV6eTr90aUsxG0ElwrEVD8DDBWWnRO5jlwxdkt97S+m2f0qOWhh2wTchY9BnSeVd1iOxSO5YOgIJ0Cqs3MWLM22KfCLmAatOjdPUOBw==",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "What is the Capital of France? Paris",
+          "url": "https://www.countryaah.com/france-faqs/",
+          "encrypted_content": "AAgqWhKx1jlZNHpa8EvsEWFqhkGhUEm+3p59u/a2Bh4w1rZvPosgbX99huxRYWee42mC5ZAgTxVMBqXpy07Rm4PtgS9VMDlezjXr9eQydEymAWp/qh6g6j90Ln1jpqPS0dNxdpKOFQJFIwdoJpIG1rR+0bOO4RLtRAL+Tg8nILO/zkC7LgWC5eybzDxSKL2ywrOchIKaD/ACoNLwRq91jn7EdDzQs6mq9eAG6Qt15Fmrpq2DmhBOFTBc8Y5tLl+a/O9SMv39SRmt2+sVZluwF25hNmLY4nOrnF3qW0JwZDsJQ/u1bJoa45ss9t4ngCWCcLjiwTK6P1m/bsJGngjWISsJ092EFU0Sq89SuMq6DHGGpSH5V15C4Cyc0Ao4sXlP1Y8aRoycD0diNC7bd2/oj+Fl3u0iESRJC4kI46s0p2k4KbxJ1bxPe4bB0XCxo1HXi7NiX1UGfb6WCqwZoY/NPrvQkSY9ji/iD6w9k8RSBfj0fY6GTb/pV+OjXFJm4qBbhrus2bFSCAW60A/4MD0Q2qfHAqOlSFO2LIa+ZXJ8j6hP6fV8o+K4ffDLuWA2EHEd0MlNI4iRC38BvN1WLzBoDjVBIQ/0IfY51ROPlNX1yn7muds3LWdjwzxo4ADix0Sn",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "What is the Capital of France? | Mappr",
+          "url": "https://www.mappr.co/capital-cities/france/",
+          "encrypted_content": "VnAKe70G9i02ZBx1JeRJ/Pp6b/4X1WHVyhpqdKgcGXjR6hKaZI23QQl+b2x7WtHjjJfEryT8Ot+rrWWKdaxYjKiZV/mXAa80HzHaDKnwsIRaseIS/xbMafpnWXZhdT+NZkjzC8zrvHQi9xAlP0Wy4rqFWrdvsGqSkdBVjGcA+nL3dw/1t840tG4o151y1l8VuWxuy8FdCeohzJKol6Md6w7k4PyabBsGpsmPPEjh7+gCoIJdHP8DxjCVKJGaiDRyU2jZ1XNmz2G0YY4UorJeHswU9tp5RaLFNK8cyskGOtPXkTuKwlUTV4rypqgW3Fj8iL7hVP66cCwqsoDUqFX2/I1E6E8/hTj3XN7wHN5CzmNvrV50QG6gtPZVXqObpCh+liJzDv0u/6iJqCYrkABynRtAa710qb6wLxEj",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Paris",
+          "url": "https://readlittle.com/en/article/paris",
+          "encrypted_content": "0jIfTzGLwABrY+7+bJed3zfmRZHrTx7PnkX2w+DxE5xP/k1LOh7DRnNPbWxz4/BHO3u2kPIMLTPTyQvRcbKMbPy3G7pdqKGU4shOe+ZLN9LDlvW9urogyp5HMr8RQzhsPjPf7VLO8lTgOtfVehTWcwZnLHbyrB+ThvgDlvwmfRjSme6Wt0lTWsEAfdf/lrBMFwoPihIAJhvZE6fRdVezZ22809Ay+geXxYUniqTDbeOkfRLYWcdLI0HoMXgyLTaFuvx4cC4tbZRmoe1vVFfyoE54BzLejTfG/fyYK81Ud5HXfU8R4u1UCqFcEIMlqag/4WCAYNMDip1BuZvci2FFXMOM0f9jzGA3WAhDDhIdFi1D72hM37TJuOwlh9XTVh75z5b0ECn8MJzBhyRRMzpuW0kP/wHUhWBsH1kVjvvdLQ+RQxhHLgeTx9CO4aPNLENrI+ajc30jl70k8ZbUKSZ+PhsDom8MjdTzi0oYe9o2WZ8j31P1IaYEjg9Znr2u1gatr91lyVJPG0538Q==",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Which River Runs Through Paris?",
+          "url": "https://www.worldatlas.com/articles/which-river-runs-through-paris.html",
+          "encrypted_content": "Yh5I5BP4ez+vM+zhLvKkggChVJ/2WRDeImhClEVySgSVabmVI1faOJZqb+oNmAv0p9eN9eHvcMhUcPaYICH7rE9DaoZ6fV1jhOTbN5XOFQ622IFA9bovhsBFvwFqtLx7V6zD5/ADfs4dTc4Yk4gNnnnp6RM6BDu8IeTRHW2Rvk26gtwbZznR0IZ0tG0z3k97BG+ImvwH6RtCqDEGql0X2bXyXXWdTTKbo1XfGRhOiPQd+iaWu+LHCaKnxfGAvFfJ2DQ/ubs16rpJ/brN0kwr/L9WJAhMRtHw33jbRwKcbUUOctL6lGcRm6Qgr1cdNG3r+jsBne9tz8cXKwMoM1hrwEbPMEnUDp4n1pWb+2neaRzji5VaM7IriY9dWbkFTArfQrfVJpx9X5W+4f9kdiNjWCIXUNZvWsZlrafxy7D+nFRoT8BUpS6UwVCqAshq4Uvw4bUFn3Xp4fWfvaj1o9NcRQ8ZQeIof33aThgbgnQhsSOf0Z5ltrQSdFoHdpvIrqRxmXZ9dGuHhYIPnkW8/r8RJ1ar+PztJiaUz2Fa5XrQdKQT281lATHUGNZyssDEI+fJ94y7akRCG5C0SlUCUKvKaPaeb7z57t06wzSJT/j6CetbInbUEWmY2QdOHV+GhIp0GqjwgfaZxdI0nKLn3uK0kozf5JoaspPdEBAHJFkrNJRbOVAm+G6OdakSv781yn7GeRhmR15sN9AQwLER27jPL4DpARq0Qg==",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Seine River",
+          "url": "https://editors.eol.org/eoearth/wiki/Seine_River_(Forests)",
+          "encrypted_content": "kAv2c+Ktwxp2uD2Ik1L8KssIkbtNMZkWGKHKMNEuCVG1h9ZuP0ap0RXtD7pNn1H2YbqAScUCpGl5O50ERM5btUSWVBo8mvxn5/1R/yvsig2VCaeuKgyeFMEQ7Eyevp5gJ2dz3F2KSsS2JOpWf/ELMi38lfXW/GF+ct85zuNsxPvSnVYybk8O5b3GIFKSp07A4RDtlmxgKuOCj2Pv4h3+I4MDOCxDPDEyrQDijXeFqtwzZz1OgWCq69Es+XHMOwb5li9w/dijlFAPCJUgU3l63Bi/jT6h2p9Hs4ATb9IodbrGVBxwMlXLvAakwTvzBS2Vr/h777U6QLlXR6Ty3OjowRctrd29AQ2CcPbhB53BG9QwhxE4uLrdvH5jqEg4cbUpx2YmqEyFHf+J",
+          "page_age": null
+        }
+      ]
+    },
+    {
+      "type": "web_search_tool_result",
+      "tool_use_id": "call_01_LXBLbppL91nMKLnq2apw9833",
+      "content": [
+        {
+          "type": "web_search_result",
+          "title": "Epinay-sur-Seine | History, Geography, & Points of Interest | Britannica",
+          "url": "https://www.britannica.com/place/Epinay-sur-Seine",
+          "encrypted_content": "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",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Seine River",
+          "url": "https://editors.eol.org/eoearth/wiki/Seine_River_(Forests)",
+          "encrypted_content": "2l9LCAWU/q2XHQYIp+/9Isd6z+W9iP22pu6L15WUuSG2Z8y0My6z3sjMwHMu0ZJllSxckqYwgzHV6pmdMXXkeEVfMv+rFrd2RK3we3ROE24XA+WOuFsqZxzkWbFc6RaHB7GVx/aH/7YywGGYrrIFRCYUuZCoM1DC9ANPDbRG3pMb12Euo4TdtqOq+frrn8cwkTVF6aBSvyDu9P8oUTUbt905WYxs8BEUKq24wZeLCzoZiF+aHr2lzGi6QOTiyvxMnJRuuyVSn3CaKaeU5VQlGytmw2TVUzVswdbkCDRTU+Q8yYakIFHIplrq8ZtbhzDvK6hJ+QE55jUI9n2RFA7zzRCfHEr6x6JpEfHBD04pifDqyWvwcp/PI2GhmkefYeFvc6BM+u7eDGQjg7P7L5c5G77LhaEyV0fvLEumS+ZPxtvuTUIMKSTFke+AD+ULQi/C7PXpvXk7+xuXqTr6ecsVgb+7M/wqSILX+324etME3GSol3bX0vzZ6mBS7J8AmdgX33bRDU3M4aMuz0Jc2KtUmwhjPVjcIL+F2S3UfNUt3PL0uEAtsRtFfdDCl8y+PX5hswvlkUUmjCojZ2cg+gQwmZ3RXzaQx+AtgJzgq1/BKRu0dMXFqRsxgwtfIIfRAYDpyA++aSiRdJOfKs9cCRrk/EGMZMQEM+5S/VZp2YBdINmz92U5rACgviVbursiBcAsAYSD0iijZanGJ8DSevs3XltdqaSxkpsd2ArauNZDWBNF43BbP0GDoOH0qmv5xplNwLwroEZXkwaahIB3nEQqlHF5y6rHFZkZSc1VW4b1uc7NSenidX/PSqpr8A==",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Seine River | Paris, France, History & Facts | Britannica",
+          "url": "https://www.britannica.com/place/Seine-River",
+          "encrypted_content": "S62tItKXsZqr0tXf5awKjGQNAyjBTfrk+34BHQCTjw6OJXiRX5YEzpkDUUKL2AtCCQmWcmDiL1SVUugWZF/Orh2gLL6RBsGjQlojnZOqK4BfjJUkwudOPYZSFa3Jzesqz+92IWEvutrswNRNyKu7DpoP3bDu5poJDzWNuzujuNUY5EhjsQjiOJOkupaIa3n+LK9fxTcx5CdnYJgpvBJmGeX3JybmZ8ZBOy36W4e0iYVbBzqd54Ah9JabgDYLg+YCtgxVNCLAS4L4DTj+tTXDvGq1eRnkwGbbUilpzbxSI+ru+pFIj5dtWBQhbghb+wJ9Cu77+yy3Ydnw9lYBTHYdKsionv7ArDy03Qr8yVOArh3+Aj9asz5zy5kYEGXtEflChs9E1V9EQ/o546ZxEBb6d9rVuLtN49AF8JDjptegUTm8oiwV+WUymIfRS8P54dunHCLucCzdHNBDFPNW6VcQ5QofFmvAgGm1HJu1h3e9STF2pp0byLdImOEh1iFyL6Vg5U/xEMgaYfBwo2zrQsvKxNDxvFJbmoxNlsdep8FRwdxbPmByzuVb/ZXRuqSnukX6cDR4zpStfxAlpRlbVmqqh8sXFeAFFumrxGVRta4wISbp7rOwXsarPQnO31zWWLBiWK5PCfeTGSoJCz5rPqbQGkKRGa4yqEn1CvmgfQ9xl2YGzjdcBDaijPT7qK/UaU8C7YNJm+hHcp0Vbu25R6OmGDpLyg9J0TT8MgFxuQjvSck0RRb0o7HkIfcU3R/7fhPi+fiNDscoyx61xroI17drDovgTFp2iInBqQqxdRgz4Si/8PkZTibAI0Lh98+IhcfgBEFCaox31QekTcApYx//EqEJeDN7OnKhg+V9uZe4fSC2+L37g1/l1ktMgkdedc31/GfGYyvENFmKZ0NqGQ+6ztePJnJdg8Xi7UmAWB+dFQ8tRtdAGhds9GjGZv2Dm+JXfbrsyOeuhE2FRA2jATqvmHqVa9cRWZXIStgRLcc+L2DDeu5Qmx2/YeXVtUwtVISxNZrmiv9T2gl4Of9L+Kxa7ekr1yptjCsHMx4CsZRn9NnBT0O/dEbVorwqDI6DOBmv+FDbajYv2PEEKDjsnt4RgJj66eMkoygi0Jd+PYJpNt5PQ6L8TK8SQXoABXAR9BzBsMCFzYsp0M5MuowUmF+egoIY+sPyC/F7uZxtALbLsa7qm82odbbYiD9vmdQaLE0K0Rzr6EJRkWzDq+7rIgtcl81tT+CHqDD9Rty6PTuDKR3K7f+DLVr295JxD/LhKPkddPMqZYx9GVlM5/4eOaASnvR9+DnhIRsU4RUYrSuKYmkr6n47En2uwSB6VWi0yWUjfj25MeNrUnXzwh9O5y9dUv6QiRjFOJd4Awi1WVyM05SO8VvREk0tya65xKaZKtvHn4o2TfX1eZaDFvO7YZ3VqfWwLix2FNVy3aSOi9dndsyJ8YC0rG3jqaAIhUaA3JjkyJkFRZvpayCynBsVWL3yqxT3/F2QFFAaHDPdX+XctF476f/YZkG3C5lYnDKknSzIkstgzHA7RvfWgFpgXyG69t4KiwA6qxnBv8FC7hjEZ8k3romrwlV8VImOVP5pSJTG2zL7mf1lC/vrVYM/cYMcaM+/0r0RolywdSoa1M7JN3VxbAtLp9p5wY1oFmARNhQE2ojdYutpXrGPJ+wJo1brndxsV7KMDNSFRyjBE7BxJDhdkRkx7QK/zX/xFthOO5ggx/eaDbFcMUDOeWRjiRMv92qN3vRothBqS9qR6Q3WOBDSNZcgDith0GptgyeV3LlMenTnieAkTb0OEPOpWy4xzeK4OlTiWqq2JXeb7YAe0eoVu5WOeLiBCpTUBDXRkA1x2LnxSFRwkCA9R0CbBqx/uEMVQQ5YqFYk0bhbgdGn0n83z6DqhOgCbMkgv95PAa7c8Or5Ds2h2ZWoquxJ+kA/LfYRpAkYCN+OxOzamn928NzmQ1pol+Aq3sRWZOmPgQPHHM6ANqwOQwGSdVXaRTMjR1wNy2qKUa0EXYynHtPrFRHQK57JCEsL5HmX+iSYVHWIs/J2iqcFS5vIrfwOI41njISSt53KtR2WB0a3fQXa0oFi6b1VMkTRZ0wd8jDUvzM7WHSI216ZvWft5iKef1sTEuqCcWP2X7FLZQM4bAExXe/iWsLDVtMm1qDLEypIpr8pG39g2xPMarU6DwdDaqwrFyCXJJMNNvzlRzFnXFd2RKZnU1Yiu0dwLclzeLcjrSpoec8wQkARVOky4nQKije5+cilYqcGFvHqkHqwZcQ4N/r6pzlRgT0nY7sV2s4YcZ304xXAMX10PyGntMMgNLHazXSMf6laFpwZ3+hg5AKoK9NXMw5luKVMntet4MDuL2oBwfSSOnD4p9HuAi/8koozAOyKOKhbMs1qM/j3DIWbFzCkVz6gSIC1252QRkJq21ykQd2RfBO7ojnVdYgQIgm74O/xJ4oBzFqejP9SU5dK8aI9BtWCXpVFms6ae0Iddeto1gYB2QUCuHQcsd5Kuhicd4SlNmSV6HaEp6Cyyp9BCEuKOidB/tGM92E4kH4WkkIy6OK4woOtIbmOnfS/3KW556b8jULvrUujleBs6cAVuUd9xBXQrfHE8dcFQDbpAC1jNRW2ucn3RUPQwg1UJbhTQeAUOufVAy10P/7oJw15zP+uiNtVwNq/VWyLJ6tTr8vis8Mecmf4HZLxaRo1O+a/1f5S5MbjaPmCDMIe28WOgotos67H7S4f4UnvuKAZH/06YY80cN6hWdrFC2Xmk4323o/zhQyBo6mhppMtAVVfoO82mHVJqtikiXP/kNc7YQkrd4UDHv4Z5O+PToQ99LIfU3gH73Ulq+5tCgh6C8sTyeF7BFPAAuXGe6wewacaKzEK7VR8ucntyPn9DVFwR/JPBErdpYFO5MN7FYtutipjBt6F+eZ072p115ZgA1KfnxSrlCeu578AJNZZXMJOZh4xlZ3bP7BHxmdUnqveIb1O/BilNDS86mlLSGKeYSfE8YGkisOf5NwNLlNAzRvGIj6MbbzdCFYJKzQSKrrg7aNWYhnzfLq1dcDmz4CFVqH5EsulMj8y/molU4ORNQWsUtw4dvluBV3QB+jqZRNsBm2aVl2s7AfOYBEMFKAiHX+ob3g4P3fQvC4+wFrMKpbNFrs8koKPWnw1BrlBUpBXGvEEIi1i5/KYuKj2JSQ7ONkh/ekWFVHLVexRg2F1sxEEUIWxCokKlzSnz0SqgNuyhRdoG+8FMUQyoah3TG7oRR71tbBgdOS7OamLbKZYcpqDX+bhRxJ9BCLrQQ95LvPpBevfVnSNzn8lSBXJSCsYliWq3yPhF/ojzCKGTqnaETK6f8o9riqXffEO5gvNVw9yu9Q8Q5ndR2Iz8uJ97y/2lAz/2kQOaAuc2X9VJ739funNxuKBsRRrh2tAG5LN9BgaBCeG2tjuGmvyUSFQhbEJPl/2uzVVtNRw7KEYS4spTZ89CZrRuzTUyVITKfYq8piGX07LFGMB8VPmcWANLsTd5DGcxIaQgwh6QYkNUrtqz/YpsU+KtIxyiD4aMMh0WwxQP5uY1M/u8mXjoss9fuWA21WFnnocMxW1bnFuZPfX69PBOyawZejMZ57FrKrq9oUsCMzu1iGbfDOyUiPLCt/9bvhfgoniWvr5ANTCQD2Wej4W6atw/and4xOlcZwAQ0nlQQ0KfymU2QcZX5xaWkXu55M/Kkj9C5OGghwDyzO9bvKHQhVNHsVF94sA1UJKoyff3j/q0c/P+IiNxPZlfDw3uv/3lXV8s0wnAV8bByjBjKOoSIbrNms0DI3L0soZzdz/+LkrA2ct87fgxJK8/6tBN9MXIopqJ+LDnUhXP2NUEyhVPoXaVCgauPz7XGkLKdgVEWa+JE+MZ+lVE4pODeR5TfM4Df5ct0arfJ7nhG/RgQhSl5rqNvRu3g+qE17022S7sUFpAlkZPyULIG42e416MkPaRpo+DWxkdWJBDHK76b2zBG4uUy9EDsQ9apArbwf6lgzRA8X9QC+4G77SwMDIBH4qklvy6cVIM8pUheL/NfkYRpWAWjhmJejyk2uzm0WGYNmjNKEo4c6dN2mB8C2btSeXKzXfhvg34OyjiJlTqUMHQPxlXf4jfoxz/sQEihMkK+Pwr1fHP43MwiYdbrpHOYADCnwOdjxboqX//6yBGhrfxAVKeRGJ6tFfxwUfCbEWPeVcTKjkUIroV4O6sy+acc2B66vhT2RvT8PtzDjXzitf1rredXiixGfuz6gbDLWl9vLzyVGL6NjJex32Yk30BVIFumuBD+UXcYSJ+6ag20C/vloHCqYXnCuzRHWuYTeeCkZxge/C4YCS1jPpjx9eWghaNe33Us5n0kWgXQSyjAIA9VEqqLxKU1qMos2MdTdw8GqleBCszcf8LJzLXfQ0jCXcCjgCdQk75VSV1cQeys8di7Ac9MwIYyzK0FzOqnGw8W8v1+zhLoXsxhuyJxnGTrUMTX7gI6XX32OXtf4Lay+5Gu+06obYuGG4vOscNTRURcVe3adDIFSmyaqQUSOfzdLpKR3im4hlnwheHzF2qC0jkSlG2vom2R4lf24Rkzvn+0k1AKCukSBAOiXh1WYZTazVqH92yIrqBU+F042pr1UgDIc1voDRTWfs4l+T4jv0FK+0mqvCSejzaaHyUDnkRQO2BnxqQCJ8bX/7j38wwnbc2/TkCnR0TYYZMzHwcKnSNPCGYULMhoh2/Cv5SYCgkmuSY20yIuyN1tyoInQ8ezsRmR3OFoBIiKqaF8w7/1YGjHAUUSmK080U3lpqixXpir2pXEnbUV3i+msA0ny86/UXrwbVyRySZw7g0mXuvvbYeD5R3A8OBqxoxGVIbNROKqZFrG+XNMnYyQ+z08B6KZ/3Ia0AYYI7KO/JYwn5+gzQh1lcibMAtOWaMWqF7SBSzpc+y1uKFJlX8RuY5ypPVXuzdb0Ia9wjunZZ8Qes18/+",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Development of Paris and significant historical sites | Britannica",
+          "url": "https://www.britannica.com/summary/Paris#:~:text=By%20the%20early%204th%20century,count%20of%20Paris%2C%20became%20king.",
+          "encrypted_content": "I5S7eGQgblOcpF1phk1bu+KYoJ233lZSlj4TQMI5FeBrJ2DblBanGBOy3KCZyWAzHnAC9ZGbiNb6q9Fh54TcfezVLvkDde6yBryqYxqKrxUEAPmha2wtrsTcz2a7YGf2wVySthhtKw2y88xYG4oervKBknE5t/kI6zUrE29f5Ow6TRACK9NK1qc/N2hNrVQjPknVfDx7NyalRAWj2BXcFVc0RyrurEOuHqe/FUcgAdM=",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Seine is at the center of the 2024 Olympics. Here's how the iconic river shaped Paris.",
+          "url": "https://www.nationalgeographic.com/premium/article/seine-river-paris-history?linkId=523919709",
+          "encrypted_content": "3yz33bE7e32DSXoihdEC/VDrZTjyK1BIavfgmdlsH9jQIaRgHj5mlCUAIFZEOY/PKY13ALKYs19SqoIVw4Ni8ksAUKgwhVjtJbqrNRI28lvNhsHRFnLtozPqGede6yYubbRctnEDRkPXl+5GlQCtmMpB5iyIsK+MGRsBlclxqufV2dmtD4iv6jZYNakIpnrsyfCFi7TN+Sl3Qsyf8TkKTPmTgoRIFgHU7s5saeRMQNtTfp7IHGYIjJ9PNMe3r8r1mnzCIlECVIdzTmyAjFKOb7VrStVnhQyDEPYFti1e/H/bz8VmPjmlii3ZeUPUrru7gfWtvNN32RbVPkJC+fTF0vzxfo5i0CV/MXz2hommCsQe6oK0w1I0jbH9xXIgvDgMWWbuAJoKl60kIT3OieK1k4RcD2kOR/HuH2sn2dykxGojb3Ty9BtW7hN+eoI7qkTYw43wyOyDrUnyPo3aPFuvscCa3r86NbT4hQxriWHGzraVedOBk9wNj/6f8pXFUyqEHt5IszSqX9+FqgH2fRoTKjssKPSg/ILXdRV1Cvs9Xcc1vExaylOSyDKzhxOO4my4sdqvtTMjLvjh5bB9MKZjyiJSLMaAsG7Ee1+kp2hRpz5cEq0hvg2Pp9P3KFXOtI3j8NwSteyGqw8y8i5q6hN1vLMLjUvP0aMjm6hkdwTVdf7KiVQVH8VurvlgLS8FUq8a7BYFI+4N7tAYDpyJv9QnXYvb2OF9w3x/Fr74i895udetkNlzD4hnUXy+b/e/loFUtYoLMfLOjTidPbVrO9Kt8dFgJILvNroorB7+6FO2APY6An1uVOVgn6hcIxsm0m2mN4iaQzobupUJgfACW5I+BX0=",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Paris | Definition, Map, Population, Facts, & History | Britannica",
+          "url": "https://www.britannica.com/print/article/443621",
+          "encrypted_content": "xzYlBjlq9uBBoTrIiIPSLznpsTpk1XlmE+2TMPzMA/k2aPZ/g9+pjN4SdJMJfqOQUveZY6KQXEzi5EP2k/aNI0rnqFOh6FcEY11UTl3yKbAYYc2qxvoEv4X26yx7A/CdulGQhsE3wU51kGX/I1pYUuNNlodTdxcsiw4gFxVal3T1p/WGjeQzwI7uM7qu7RPRr00uqfKPQnp52JMREcPvjv99B4beHsAdWPJ16ZZ2qUWUsIN+Wn9suq4j2t/LjGJ+Cg3A8q4ILOgmL0hq2eK/AdpQU45ijL30T2asOvJ4//FO/hgk8WJi09UzRBW1+U3tfJpBuTWcEvLWqq7eDBg2n3TMeOQwd1G3pGCwh1LM7scsGWumExv87NpdGArKRyO5WCgGeDS+/33FJLS6/TsOkHg0NDuillx0XH6O01BTI3wZpuR0jQXtpyCR9rxKPIFRUQpN+/DS0z79H6KTw97rPZ53ufOonQm53NM9V8ZS5ftDEgfN3grOSLTP4QLuar3ZP8mErAFElV/VcFCD+T+KsHhTj+dvP2h85j8l4wrp6+s2eNJXZgrrjeVGwg==",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Paris, France - Site. Climate. Boundaries.",
+          "url": "https://www.1902encyclopedia.com/P/PAR/paris-01.html",
+          "encrypted_content": "2ZVDow45QAG0oHDVnO9o0vnAZK28WBuzBKLDj9U6kYBZ4jhG9GikpOgqn7qCQMGvtkENUUmIZTjOwDBBrWAAa4Btp4lNepZ0Dpe9jnul8Is949r5xvlkXQDymueP4M7yJiOSeAEbIcPkJT+IBVbe6AB7bpxCYcH8AlR7qo0BomQUuw1yGRf5UqCg2hSbzcRED+P1BRZHphrXVcEwqP3CXbhCKW2K0OBWLkgoiQGcUrRnPVZNwg11bvbjijP3ViDkJzdG/S2OL8R5RUqK+xOvmPpO/bSOYFLB0loAU2Znh6wL+JkcdUyar4yam7V8R50Rik7pl68Fxy0kbUSCuA3hr0wqi6eJpie8ncYNqPK0mTB509+5RmK/lxovOHTbgnjT07f5xQAbrJadMZSXTBfcxT/bVGeuCrojNi8c03vhVyqZScfmceA3DlkMAeRuJqwQMevIytaQV7MZfHKvqTaxomYfizFmDyNXPZ6ePewrUk6wOuiOV0dkcAP1MpM0uS2qfnRmqF89T6rR5HLxzCl9D8eblVaPM6Mf671bi9WXGOcr2Hs14I3AEyb59jEH7l6cuSziWu3tfOzCcFENL+iucRETleVYvA1+q6J4uNqkXan37Kc8zPoguhw2zHcftLydCxIuyR1g7/Cvu8SDExix2jrciag1LZE+l1AJoYleuV8BBFbiBrBum82perYFWSZ2IRnVSp5yeqfh7CZUFpYrMgjHaUxbc2rVyk+Y55UQaOxcC10btdN0KIvdg1tbnD+eL6rQ+WRT5Fvgp1yLFq+g9eMXNub1QTcriNrXPiMUzJs8yrca7d1UT0fPBo6HaOCwo8EDvG6KhSuItnhkmhxHoD8f4h+nSj9418O46kMNp+pHrEUIh093RtBpPw8+SM2a1K8DOTG+9Da6awUptTvOxlmsYtiVBvXTsjCjXsRE+Gu/OBIIy29BwgMUMLUsgaKppEuljH6jeYJOg7cEjnls8ix7xeub+bYTKhcyiVgWMVOsauCMleIEmpFQSurT/FI=",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Seine River summary | Britannica",
+          "url": "https://www.britannica.com/summary/Seine-River",
+          "encrypted_content": "7OMNrkYsiCntMHBcemmZIZj/HHvns07Rp5sf6XIVIdc+HkivnfV/Ql9CvDa1B7Z3AMPqeQ1PoiSfsgRUR8fSccCWJLcsxR8rFUHzR1cv3Ne3gi0tObDV6uBTrsxMeo969riM/B+Jij7qjxnTegHj1EJ7LyMcQPPrCVmI0Na08vCiEyyL3d9uedad2qS8KiZxCSyIEF7Mdi5fgyj/Atdaz0+WwOZ4VKTrYM48cItVJRw7nbzfKFmWSg8JRkbVEpjtZBbAEEBSqzMQjJkhkP5buf7F0BxwG5adUxA2kyO/V89YMt9k2Uz/DFJYnOaElbNZpJW4N3IzpwS5s0jwhgH1ORL+0sh8/KoEHiJFb8Rz1UQxPwPgLFIrIjQSNxeTKDeHnG5t0pP2xUbXqnx7VxBhy+N3uaruj8FVVmo3ctQ+sip2USILtqPOf8IEhWH1/y7rGfF0wasfc82ZmLR7GCC4H4NGxHxnw/QTvW+YTYnSsGyYIw1JPr86VA4M4U9Q+Tp33pIELqK6BAKHiBrEkmzEW/XW0hdznrEmzFkPri3KvXHc9ylqm9/M6QysDX46EVbcSvby/y/bpCR9SMcPW0DJwKyJhf/5ucRAIfL+adbsVhYIj1dyRcU5R8+5cBvd2qCGm2i5teTKKQnU/znVYhB8rAVXh9bHuIOYd1lG25pJoymzNvm++vATue7wMdU6p8t0IEVV/XveAzy+23AaA6I/RPjb2ccQ1fJhtlrtV411yumrfNjEWStDbzmNVzwbdpx4TjSCmpfrSgSHlU8TgOhxx8ojTI0rdqWilvq/VXqy74nW9gwiwD+OpJBRd4rXcWijvdwHgXAUlQFbL7IohIFE1kg44g5Y9DhvBkR6I/VtQFpYiSrzPrqWnpLSFPqEqUCxWUSZRTx+AU3To9EAls8mpBWQ5YS9wazYSmBMc7DdHfA8riKdgvk=",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "1911 Encyclopædia Britannica/Paris - Wikisource, the free online library",
+          "url": "https://en.wikisource.org/wiki/1911_Encyclop%C3%A6dia_Britannica/Paris",
+          "encrypted_content": "+37inDqMMxD2qsMyMeLu4ujWVefAF5G7C8B8YV+R3uwlmy25dLc/MirLv2rczI8jebhHRegrLy+Pz8wc0WxNDW25KuRe4xSht732mmBF4FTfYD2QxXxw4AWya4XW3fQjxGkoGzjYRRfFFq9OrOgjbX5BCqBwa0YribaPdzJw+xh97WJL62hfRfl8S2+ZognPznbR8kGYaNT+pfrU3HALre6UcmDCUOTViLp5j2SAVWEvf4Z2CkjHvBVjsjBnJVy9IyCDFMniulNlnyUV2ZZM",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "Paris the capital of France is located on this river? - Answers",
+          "url": "https://www.answers.com/travel-destinations/Paris_the_capital_of_France_is_located_on_this_river",
+          "encrypted_content": "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",
+          "page_age": null
+        }
+      ]
+    },
+    {
+      "type": "thinking",
+      "thinking": "The user asked me to search the web and list sources with titles and URLs for the question \"What is the capital of France and which river runs through it?\" I have good search results. Let me compile a list of sources with titles and URLs. The answer is Paris and the Seine River. Let me list the relevant sources.",
+      "signature": "bf4b9623-b212-4585-a33a-14c299436459"
+    },
+    {
+      "type": "text",
+      "text": "Here are the search results with sources answering the question: **The capital of France is Paris, and the river that runs through it is the Seine River.**\n\n## Answer Summary\n- **Capital of France:** Paris\n- **River running through it:** The Seine River (flows ~8 miles/13 km through the center of the city)\n\n## Sources\n\n**Encyclopedias & Reference**\n\n1. **Seine River | Paris, France, History & Facts — Britannica**\n   https://www.britannica.com/place/Seine-River\n   *\"Paris, city and capital of France, situated in the north-central part of the country... located along the Seine River...\"*\n\n2. **Paris | Definition, Map, Population, Facts, & History — Britannica**\n   https://www.britannica.com/print/article/443621\n\n3. **Development of Paris and significant historical sites — Britannica**\n   https://www.britannica.com/summary/Paris\n   *\"Paris, City... river port, capital of France. It is now located on both banks of the Seine River.\"*\n\n4. **Seine River summary — Britannica**\n   https://www.britannica.com/summary/Seine-River\n\n5. **1911 Encyclopædia Britannica/Paris — Wikisource**\n   https://en.wikisource.org/wiki/1911_Encyclop%C3%A6dia_Britannica/Paris\n\n**Articles & Travel Sites**\n\n6. **Which River Runs Through Paris? — WorldAtlas**\n   https://www.worldatlas.com/articles/which-river-runs-through-paris.html\n   *\"Paris is the largest city and the capital city of France. Paris is on the River Seine...\"*\n\n7. **What is the Capital of France? Paris — Countryaah**\n   https://www.countryaah.com/france-faqs/\n   *\"Paris, the capital city of France... Located in the northern part of the country along the Seine River...\"*\n\n8. **What is the Capital of France? — Mappr**\n   https://www.mappr.co/capital-cities/france/\n\n9. **Paris — ReadLittle**\n   https://readlittle.com/en/article/paris\n   *\"Paris is the capital city of France. It is located in northern France, along the Seine River.\"*\n\n10. **Seine River — Encyclopedia of Earth**\n    https://editors.eol.org/eoearth/wiki/Seine_River_(Forests)\n    *\"It flows through the capital city of Paris.\"*\n\n11. **The Seine River flows through which European capital city? — Snippets**\n    https://snippets.com/the-seine-river-flows-through-which-european-capital-city.htm\n\n12. **Paris the capital of France is located on this river? — Answers**\n    https://www.answers.com/travel-destinations/Paris_the_capital_of_France_is_located_on_this_river\n\n**News & In-Depth Features**\n\n13. **How the Seine River shaped the city of Paris — National Geographic**\n    https://www.nationalgeographic.com/premium/article/seine-river-paris-history\n\n14. **As Anne Hidalgo swims in the Seine, an explainer on why it has so often been the 'River of France' — Down To Earth**\n    https://www.downtoearth.org.in/rivers/as-anne-hidalgo-swims-in-the-seine-an-explainer-on-why-it-has-so-often-been-the-river-of-france\n\n15. **Epinay-sur-Seine | History, Geography, & Points of Interest — Britannica**\n    https://www.britannica.com/place/Epinay-sur-Seine\n\n**Note:** Most sources consistently confirm that **Paris** is the capital of France and that the **Seine River** runs through it. Britannica is generally the most authoritative of these sources."
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 5953,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 640,
+    "output_tokens": 1012,
+    "service_tier": "standard",
+    "server_tool_use": {
+      "web_search_requests": 2
+    }
+  }
+}

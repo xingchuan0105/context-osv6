@@ -927,6 +927,7 @@ dependencies = [
  "avrag-rag-core-ports",
  "common",
  "contracts",
+ "futures",
  "rayon",
  "regex",
  "reqwest 0.12.28",

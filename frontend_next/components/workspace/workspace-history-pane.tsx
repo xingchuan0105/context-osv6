@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
@@ -9,6 +9,7 @@ import { updateWorkspaceSession } from "../../lib/workspace/client";
 import type { WorkspaceSession } from "../../lib/workspace/model";
 import { useSessionMessages } from "../../hooks/use-session-messages";
 import { sortWorkspaceSessions } from "../../lib/workspace/model";
+import { workspaceSessionHref } from "../../lib/workspace/session-url";
 import {
   buildSearchSnippet,
   extractMessageSearchText,
@@ -64,6 +65,28 @@ export function WorkspaceHistoryPane({
   const titleSyncAttemptedSessionIdsRef = useRef<Set<string>>(new Set());
   const sortedSessions = useMemo(() => sortWorkspaceSessions(sessions), [sessions]);
   const visibleSessions = sortedSessions;
+  const sessionGroups = useMemo(() => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const pinned: WorkspaceSession[] = [];
+    const today: WorkspaceSession[] = [];
+    const earlier: WorkspaceSession[] = [];
+    for (const session of visibleSessions) {
+      if (session.pinned) {
+        pinned.push(session);
+      } else if (new Date(session.updated_at).getTime() >= startOfToday.getTime()) {
+        today.push(session);
+      } else {
+        earlier.push(session);
+      }
+    }
+    const groups: { key: string; labelKey: Parameters<typeof formatUiMessage>[1]; items: WorkspaceSession[] }[] = [
+      { key: "pinned", labelKey: "workspacePinnedSession", items: pinned },
+      { key: "today", labelKey: "workspaceHistoryGroupToday", items: today },
+      { key: "earlier", labelKey: "workspaceHistoryGroupEarlier", items: earlier },
+    ];
+    return groups.filter((group) => group.items.length > 0);
+  }, [visibleSessions]);
   const searchResults = useMemo<SessionSearchResult[]>(() => {
     const normalizedQuery = normalizeSearchText(searchQuery);
 
@@ -450,100 +473,115 @@ export function WorkspaceHistoryPane({
       </div>
 
       <div className={styles.historyList}>
-        {visibleSessions.length > 0 ? (
-          visibleSessions.map((session) => {
-            const title =
-              session.title?.trim() ||
-              derivedSessionTitles[session.id] ||
-              formatUiMessage(locale, "workspaceUntitledSession");
-            const menuOpen = session.id === openMenuSessionId;
-            const itemClassName = [
-              session.id === activeSessionId ? styles.historyItemActive : styles.historyItem,
-              menuOpen ? styles.historyItemMenuOpen : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
+        {sessionGroups.length > 0 ? (
+          sessionGroups.map((group) => (
+            <Fragment key={group.key}>
+              <div className={styles.historyGroupLabel}>{formatUiMessage(locale, group.labelKey)}</div>
+              {group.items.map((session) => {
+                const title =
+                  session.title?.trim() ||
+                  derivedSessionTitles[session.id] ||
+                  formatUiMessage(locale, "workspaceUntitledSession");
+                const menuOpen = session.id === openMenuSessionId;
+                const itemClassName = [
+                  session.id === activeSessionId ? styles.historyItemActive : styles.historyItem,
+                  menuOpen ? styles.historyItemMenuOpen : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
 
-            return (
-              <article
-                className={itemClassName}
-                data-testid="history-item"
-                data-session-id={session.id}
-                key={session.id}
-              >
-                <button className={styles.historySelectButton} type="button" onClick={() => handleSelectSession(session.id)}>
-                  <div className={styles.historyItemHeader}>
-                    <div className={styles.historyItemTitle}>{title}</div>
-                  </div>
-                  {session.pinned ? (
-                    <div className={styles.historyItemMeta}>{formatUiMessage(locale, "workspacePinnedSession")}</div>
-                  ) : null}
-                </button>
-
-                <div className={styles.historyMenuAnchor} ref={menuOpen ? openMenuRef : null}>
-                  <button
-                    aria-expanded={menuOpen}
-                    aria-haspopup="menu"
-                    aria-label={formatUiMessage(locale, "workspaceRightRail.sessionActionsLabel", { title })}
-                    className={styles.historyMenuTrigger}
-                    type="button"
-                    onClick={() => setOpenMenuSessionId((current) => (current === session.id ? null : session.id))}
+                return (
+                  <article
+                    className={itemClassName}
+                    data-testid="history-item"
+                    data-session-id={session.id}
+                    key={session.id}
                   >
-                    <svg aria-hidden="true" className={styles.historyMenuTriggerIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 6.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 13.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 19.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z" fill="currentColor" stroke="none" />
-                    </svg>
-                  </button>
+                    <button className={styles.historySelectButton} type="button" onClick={() => handleSelectSession(session.id)}>
+                      <div className={styles.historyItemHeader}>
+                        <div className={styles.historyItemTitle}>{title}</div>
+                      </div>
+                      {session.pinned ? (
+                        <div className={styles.historyItemMeta}>{formatUiMessage(locale, "workspacePinnedSession")}</div>
+                      ) : null}
+                    </button>
 
-                  {menuOpen ? (
-                    <div
-                      className={styles.historyMenu}
-                      role="menu"
-                      aria-label={formatUiMessage(locale, "workspaceRightRail.sessionActionsLabel", { title })}
-                    >
+                    <div className={styles.historyMenuAnchor} ref={menuOpen ? openMenuRef : null}>
                       <button
-                        className={styles.historyMenuButton}
-                        role="menuitem"
+                        aria-expanded={menuOpen}
+                        aria-haspopup="menu"
+                        aria-label={formatUiMessage(locale, "workspaceRightRail.sessionActionsLabel", { title })}
+                        className={styles.historyMenuTrigger}
                         type="button"
-                        onClick={() => {
-                          closeMenu();
-                          onTogglePinSession(session);
-                        }}
+                        onClick={() => setOpenMenuSessionId((current) => (current === session.id ? null : session.id))}
                       >
-                        {formatUiMessage(
-                          locale,
-                          session.pinned ? "workspaceUnpinSessionAction" : "workspacePinSessionAction",
-                          { title },
-                        )}
+                        <svg aria-hidden="true" className={styles.historyMenuTriggerIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 6.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 13.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5ZM12 19.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z" fill="currentColor" stroke="none" />
+                        </svg>
                       </button>
-                      <button
-                        className={styles.historyMenuButton}
-                        role="menuitem"
-                        type="button"
-                        onClick={() => {
-                          closeMenu();
-                          onRenameSession(session);
-                        }}
-                      >
-                        {formatUiMessage(locale, "workspaceRenameSessionAction", { title })}
-                      </button>
-                      <button
-                        className={styles.historyMenuButton}
-                        role="menuitem"
-                        type="button"
-                        onClick={() => {
-                          closeMenu();
-                          setDeleteError("");
-                          setDeleteSessionTarget(session);
-                        }}
-                      >
-                        {formatUiMessage(locale, "workspaceDeleteSessionAction", { title })}
-                      </button>
+
+                      {menuOpen ? (
+                        <div
+                          className={styles.historyMenu}
+                          role="menu"
+                          aria-label={formatUiMessage(locale, "workspaceRightRail.sessionActionsLabel", { title })}
+                        >
+                          <a
+                            className={styles.historyMenuButton}
+                            role="menuitem"
+                            href={workspaceSessionHref(workspaceId, session.id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={closeMenu}
+                          >
+                            {formatUiMessage(locale, "workspaceOpenSessionInNewTabAction", { title })}
+                          </a>
+                          <button
+                            className={styles.historyMenuButton}
+                            role="menuitem"
+                            type="button"
+                            onClick={() => {
+                              closeMenu();
+                              onRenameSession(session);
+                            }}
+                          >
+                            {formatUiMessage(locale, "workspaceRenameSessionAction", { title })}
+                          </button>
+                          <button
+                            className={styles.historyMenuButton}
+                            role="menuitem"
+                            type="button"
+                            onClick={() => {
+                              closeMenu();
+                              onTogglePinSession(session);
+                            }}
+                          >
+                            {formatUiMessage(
+                              locale,
+                              session.pinned ? "workspaceUnpinSessionAction" : "workspacePinSessionAction",
+                              { title },
+                            )}
+                          </button>
+                          <button
+                            className={styles.historyMenuButton}
+                            role="menuitem"
+                            type="button"
+                            onClick={() => {
+                              closeMenu();
+                              setDeleteError("");
+                              setDeleteSessionTarget(session);
+                            }}
+                          >
+                            {formatUiMessage(locale, "workspaceDeleteSessionAction", { title })}
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })
+                  </article>
+                );
+              })}
+            </Fragment>
+          ))
         ) : (
           <p className={styles.emptyState}>{formatUiMessage(locale, "workspaceNoSessionsMatch")}</p>
         )}

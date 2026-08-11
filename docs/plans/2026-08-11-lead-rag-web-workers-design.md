@@ -346,7 +346,7 @@ Web Worker host 叶子对 Brief.`queries[]` 1–N（建议 ≤4–5）做 **`joi
 | 资产 | 路径建议 |
 |------|----------|
 | Lead | `prompts/clusters/lead/` 或 `prompts/system/lead-*.md` |
-| RAG/Web Worker | `prompts/workers/{rag,web}/` + 现 capability manuals |
+| RAG Worker | `prompts/workers/rag/` + 现 capability manuals（Web 为 host 叶子、无 LLM 挂载，无 Worker prompt 资产） |
 | 门失败观察 | `prompts/loop/*` + **host_markers** |
 | few-shot | 禁止 golden 实体 |
 
@@ -513,6 +513,8 @@ Host：结构门、rebrief 计数、格式闸、telemetry、**进度 Delegate**�
 | 2026-08-11 | **后续序**：Lead `fetch_lead_briefs`；RAG `run_rag_worker_short_sac`（Box::pin 嵌套）；删除 `HostWeb`/`run_host_web_retrieve`；pipeline prompts lead-plan |
 | 2026-08-11 | **审查 P0–P1 修复**：BASE-only plan→空检索列表；prompts 单源；第三人称 plan/sac；PackGate 空证→insufficient；dual/web 真并行；rebrief 不强制未派通道；plan 注入对话史；嵌套 usage 累计 |
 | 2026-08-11 | **再审查收尾**：lead/worker 系统提示与 SKILL 回写第三人称；PlanGate **每通道 1 Brief**；撤 SaC host dense 再接线；正文对齐 re-brief=host 结构、pack=host 装配、HostWeb 命名退役 |
+| 2026-08-11 | **外部提示词审核采纳**：注入防线（检索正文=数据）入 lead-base / worker-sandbox；lead-base 补「引用交付」SELECTED 末行规格；删孤儿 `workers/web/SKILL.md`；§13.4 记 alias 命名空间核查 |
+| 2026-08-11 | **alias 修复**：web payload SearchResponse 化（[[web:n]] 交付修复）；rag pack alias 与交付重放对齐（id-less 不耗号、跨波连续）；§13.4 收口 |
 
 ---
 
@@ -557,3 +559,11 @@ LeadPlan 的 model 可见输入 **至少**包括：
 | pack grounding flag | 无自报；host tool_ok_count |
 | BASE 工具 | Lead |
 | Progress | DelegateRag/Search 复用 |
+
+### 13.4 已知问题：引用 alias 命名空间（2026-08-11 核查）
+
+`#n` 在当前链路存在**四个命名空间**：sandbox bridge 注入（A，仅模型可见副本，`rag-core/runtime/bridge.rs:473-478`，不回写 captured ToolResult）、pack 装配自铸计数（B，Lead 所见 `evidence[].alias`，`run_lead_workers.rs:1307-1355`，其 `c.get("alias")` 读取为死代码）、交付侧位置重放（C，`helpers/selected.rs alias_chunk_ids_in_order`）、web 合并序号（D，`web_merge.rs:105`）。B↔C 仅靠「单波 + 顺序一致」偶合对齐：
+
+- **web 引用全掉**：`run_lead_workers.rs:753-759` 合成的 `web_search` ToolResult payload 缺 `SearchResponse` 必填字段（`query_type` / `sub_queries` / `synthesized_answer`），`helpers/citations.rs:99-102` 反序列化失败即跳过 → 引用池为空 → 终答 `[[web:n]]` **全部静默丢弃**。
+- **rag 可能错块**：B 计数含「有文本无 chunk_id」的 chunk 而 C 跳过之 → 后续 alias 整体偏移；re-brief 波与首波各自从 `#1` 起铸（`bridge.rs` 测试自证 per-worker namespace），Lead 引 rebrief 包的 `#1` 会解析到首波首块。
+- **已修复（2026-08-11）**：web payload 以真 `SearchResponse` 序列化（`query_type` / `sub_queries` / `synthesized_answer` 补齐，`web_search_tool_result` 单一出口）→ `[[web:n]]` 交付恢复；pack alias 编号与交付重放同规则（仅非空 `chunk_id` 耗号、空文本耗号但不出证据、跨波 `start_alias` 连续，`evidence_from_tool_results` 复用 `ALIASED_TOOLS` + bare array/`chunks` 双形态）。回归测试两个：`evidence_alias_numbering_matches_delivery_replay`、`web_leaf_payload_deserializes_and_builds_citations`（`run_lead_workers.rs` tests）。

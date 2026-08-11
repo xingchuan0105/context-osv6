@@ -1,9 +1,9 @@
-/** Platform protective rolling limits (hard-stop when no balance & no custom provider).
- * Not product primary entitlements under ADR-0010. */
+/** Residual rolling token display map only. ADR-0010: 0 = unlimited (not product rights).
+ * Spend gates are wallet / BYOK, not free-plan unit caps. */
 export const PLAN_ROLLING_LIMITS: Record<string, { rolling5h: number; rolling7d: number }> = {
-  free: { rolling5h: 100_000, rolling7d: 400_000 },
-  plus: { rolling5h: 600_000, rolling7d: 4_000_000 },
-  pro: { rolling5h: 2_500_000, rolling7d: 15_000_000 },
+  free: { rolling5h: 0, rolling7d: 0 },
+  plus: { rolling5h: 0, rolling7d: 0 },
+  pro: { rolling5h: 0, rolling7d: 0 },
 };
 
 /** Plan margin multiplier M (wallet spend transparency; not a “tier benefit”). */

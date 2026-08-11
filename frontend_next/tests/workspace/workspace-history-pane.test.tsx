@@ -205,6 +205,70 @@ describe("WorkspaceHistoryPane", () => {
     expect(onDeleteSession).toHaveBeenCalledWith(expect.objectContaining({ id: "sess-2" }));
   });
 
+  it("offers open-in-new-tab as the first session menu action", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <WorkspaceHistoryPane
+        activeSessionId="sess-1"
+        onDeleteSession={vi.fn()}
+        onNewThread={vi.fn()}
+        onRenameSession={vi.fn()}
+        onSelectSession={vi.fn()}
+        onTogglePinSession={vi.fn()}
+        sessions={sessions}
+        workspaceId="ws-test"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "General thread actions" }));
+    const menu = screen.getByRole("menu", { name: "General thread actions" });
+    const items = within(menu).getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Open in new tab", "Rename", "Pin", "Delete"]);
+
+    const link = items[0];
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe("/dashboard/ws-test?session=sess-2");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noreferrer");
+  });
+
+  it("groups sessions into pinned, today, and earlier buckets", () => {
+    const groupedSessions = [
+      sessions[0],
+      { ...sessions[1], id: "sess-today", title: "Today thread", updated_at: new Date().toISOString() },
+      sessions[1],
+    ];
+
+    render(
+      <WorkspaceHistoryPane
+        activeSessionId={null}
+        onDeleteSession={vi.fn()}
+        onNewThread={vi.fn()}
+        onRenameSession={vi.fn()}
+        onSelectSession={vi.fn()}
+        onTogglePinSession={vi.fn()}
+        sessions={groupedSessions}
+        workspaceId="ws-test"
+      />,
+    );
+
+    const before = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const pinnedLabels = screen.getAllByText("Pinned");
+    const todayLabel = screen.getByText("Today");
+    const earlierLabel = screen.getByText("Earlier");
+    const pinnedTitle = screen.getByText("Pinned thread");
+    const todayTitle = screen.getByText("Today thread");
+    const earlierTitle = screen.getByText("General thread");
+
+    // First "Pinned" text is the group label; the second is the per-item badge.
+    expect(before(pinnedLabels[0], pinnedTitle)).toBe(true);
+    expect(before(pinnedTitle, todayLabel)).toBe(true);
+    expect(before(todayLabel, todayTitle)).toBe(true);
+    expect(before(todayTitle, earlierLabel)).toBe(true);
+    expect(before(earlierLabel, earlierTitle)).toBe(true);
+  });
+
   it("opens the search dialog and finds sessions by chat body text", async () => {
     const user = userEvent.setup();
     const onSelectSession = vi.fn();

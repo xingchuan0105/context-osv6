@@ -1,0 +1,10 @@
+/bin/
+*.exe
+*.test
+.mcp.json
+.env
+.env.*
+
+# keep latest reports only if desired
+# docs/_reports/*
+# !docs/_reports/*-latest.json

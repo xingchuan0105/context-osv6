@@ -6,19 +6,14 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type SetStateAction,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { useWorkspaceData } from "../../hooks/use-workspace-data";
-import { useAuth } from "../../lib/auth/context";
-import type { UsageWindowBucket, UsageWindowResponse } from "../../lib/billing/api";
-import { probePricingRevampUsageWindow } from "../../lib/billing/featureFlag";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
@@ -41,69 +36,11 @@ import { WorkspaceHistoryPane } from "./workspace-history-pane";
 import { WorkspaceRightRail } from "./workspace-right-rail";
 import { WorkspaceTopBar } from "./workspace-top-bar";
 import { WorkspaceWebSourcesModal } from "./workspace-web-sources-modal";
-import { UsageWarningToast } from "../billing/UsageWarningToast";
 import { ReferralInviteSurface } from "../referral/referral-invite-surface";
 
-function usageWindowPressure(bucket: UsageWindowBucket): number {
-  if (bucket.limit <= 0) {
-    return 0;
-  }
-  return bucket.used / bucket.limit;
-}
-
-const USAGE_POLL_INTERVAL_MS = 5 * 60 * 1000;
-
-function pickLimitWindowType(
-  hits: { rolling_5h: boolean; rolling_7d: boolean },
-  rolling5h: UsageWindowBucket,
-  rolling7d: UsageWindowBucket,
-): "5h" | "7d" {
-  if (hits.rolling_5h && hits.rolling_7d) {
-    return usageWindowPressure(rolling5h) >= usageWindowPressure(rolling7d) ? "5h" : "7d";
-  }
-  return hits.rolling_5h ? "5h" : "7d";
-}
-
-function applyUsageWindowLimits(
-  usageWindow: UsageWindowResponse,
-  router: ReturnType<typeof useRouter>,
-  setUsageWarning: Dispatch<
-    SetStateAction<{
-      threshold: 80 | 95;
-      percentage: number;
-      windowType: "5h" | "7d";
-      data: UsageWindowResponse;
-    } | null>
-  >,
-) {
-  if (usageWindow.hard_limit_hit.rolling_5h || usageWindow.hard_limit_hit.rolling_7d) {
-    const reason = pickLimitWindowType(
-      usageWindow.hard_limit_hit,
-      usageWindow.rolling_5h,
-      usageWindow.rolling_7d,
-    );
-    router.push(`/upgrade/paywall?reason=${reason}`);
-    return;
-  }
-
-  if (usageWindow.soft_limit_hit.rolling_5h || usageWindow.soft_limit_hit.rolling_7d) {
-    const windowType = pickLimitWindowType(
-      usageWindow.soft_limit_hit,
-      usageWindow.rolling_5h,
-      usageWindow.rolling_7d,
-    );
-    const bucket = windowType === "5h" ? usageWindow.rolling_5h : usageWindow.rolling_7d;
-    setUsageWarning({
-      threshold: bucket.percentage >= 95 ? 95 : 80,
-      percentage: bucket.percentage,
-      windowType,
-      data: usageWindow,
-    });
-    return;
-  }
-
-  setUsageWarning(null);
-}
+// ADR-0010: private workspace is not gated by residual 5h/7d token walls.
+// Spend path is wallet / BYOK (API `payer_funds_required`); do not redirect to
+// `/upgrade/paywall` or toast soft rolling limits from the workspace shell.
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -137,7 +74,6 @@ function useIsMobile() {
 }
 
 export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
-  const auth = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionFromUrl = searchParams.get("session");
@@ -199,14 +135,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const [activeWebSources, setActiveWebSources] =
     useState<WorkspaceWebSourcesRequest | null>(null);
   const [openViewerSourceId, setOpenViewerSourceId] = useState<string | null>(null);
-  const [usageWarning, setUsageWarning] = useState<{
-    threshold: 80 | 95;
-    percentage: number;
-    windowType: "5h" | "7d";
-    data: UsageWindowResponse;
-  } | null>(null);
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
-  const recheckUsageRef = useRef<(() => void) | null>(null);
   const composerInsertRef = useRef<((text: string) => boolean) | null>(null);
 
   const handleInsertIntoComposer = useCallback((text: string): boolean => {
@@ -261,41 +190,6 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
       }),
     );
   }, [router, sessionFromUrl, sourceFromUrl, workspaceId]);
-
-  useEffect(() => {
-    if (!auth.initialized || !auth.token || !auth.user?.id) {
-      return;
-    }
-
-    let cancelled = false;
-    let intervalId: ReturnType<typeof setInterval> | undefined;
-
-    async function checkUsage() {
-      const probe = await probePricingRevampUsageWindow();
-      if (cancelled || !probe.enabled || !probe.usageWindow) {
-        return;
-      }
-
-      applyUsageWindowLimits(probe.usageWindow, router, setUsageWarning);
-    }
-
-    recheckUsageRef.current = () => {
-      void checkUsage();
-    };
-
-    void checkUsage();
-    intervalId = setInterval(() => {
-      void checkUsage();
-    }, USAGE_POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      recheckUsageRef.current = null;
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [auth.initialized, auth.token, auth.user?.id, router]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -546,7 +440,6 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                   workspaceUi.setActiveCitation(request);
                 }}
                 onSessionActivity={() => {
-                  recheckUsageRef.current?.();
                   // Pass current selection explicitly so a new thread (null) does not
                   // fall back to sessions[0] and wipe the live progress card.
                   void reloadSessions(activeSessionId);
@@ -701,37 +594,6 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
             </form>
           </div>
         </div>
-      ) : null}
-
-      {usageWarning && auth.user?.id ? (
-        <UsageWarningToast
-          threshold={usageWarning.threshold}
-          percentage={usageWarning.percentage}
-          windowType={usageWarning.windowType}
-          locale={locale}
-          userId={auth.user.id}
-          used={
-            usageWarning.windowType === "5h"
-              ? (usageWarning.data.rolling_5h.used_tokens_approx ??
-                usageWarning.data.rolling_5h.used)
-              : (usageWarning.data.rolling_7d.used_tokens_approx ??
-                usageWarning.data.rolling_7d.used)
-          }
-          limit={
-            usageWarning.windowType === "5h"
-              ? (usageWarning.data.rolling_5h.limit_tokens_approx ??
-                usageWarning.data.rolling_5h.limit)
-              : (usageWarning.data.rolling_7d.limit_tokens_approx ??
-                usageWarning.data.rolling_7d.limit)
-          }
-          resetAt={
-            usageWarning.windowType === "5h"
-              ? usageWarning.data.rolling_5h.reset_at
-              : usageWarning.data.rolling_7d.reset_at
-          }
-          onDismiss={() => setUsageWarning(null)}
-          onUpgradeClick={() => router.push("/pricing")}
-        />
       ) : null}
 
       <ReferralInviteSurface />

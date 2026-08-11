@@ -124,6 +124,10 @@ impl ReActLoop {
         let mut brief_rejects: Vec<String> = Vec::new();
 
         // Wave 0 (RAG ∥ Web when both present; panic-isolated)
+        // Pack alias numbering continues the delivery replay stream
+        // (helpers::selected::alias_chunk_ids_in_order over state.tool_results).
+        let alias_offset =
+            crate::helpers::selected::alias_chunk_ids_in_order(&state.tool_results).len();
         let (wave0, u0, rejects0, gates0) = self
             .dispatch_worker_wave(
                 mode,
@@ -135,6 +139,7 @@ impl ReActLoop {
                 cancel,
                 sink,
                 /*rebrief*/ false,
+                alias_offset,
             )
             .await;
         session_usage.accumulate(&u0);
@@ -161,6 +166,8 @@ impl ReActLoop {
                             .join(","),
                     ),
                 ));
+                let alias_offset =
+                    crate::helpers::selected::alias_chunk_ids_in_order(&state.tool_results).len();
                 let (wave1, u1, rejects1, gates1) = self
                     .dispatch_worker_wave(
                         mode,
@@ -172,6 +179,7 @@ impl ReActLoop {
                         cancel,
                         sink,
                         /*rebrief*/ true,
+                        alias_offset,
                     )
                     .await;
                 session_usage.accumulate(&u1);
@@ -339,6 +347,7 @@ impl ReActLoop {
         cancel: &CancellationToken,
         sink: &dyn AgentEventSink,
         is_rebrief: bool,
+        alias_offset: usize,
     ) -> (
         Vec<WorkerOutcome>,
         LlmUsage,
@@ -424,13 +433,19 @@ impl ReActLoop {
                 let rag_fut = async {
                     if is_rebrief {
                         (
-                            self.run_rag_worker_host(auth, request, rb, "lexical_retrieval")
-                                .await,
+                            self.run_rag_worker_host(
+                                auth,
+                                request,
+                                rb,
+                                "lexical_retrieval",
+                                alias_offset,
+                            )
+                            .await,
                             LlmUsage::zeroed(),
                         )
                     } else {
                         self.run_rag_worker_short_sac(
-                            mode, auth, request, rb, hooks, cancel, sink,
+                            mode, auth, request, rb, hooks, cancel, sink, alias_offset,
                         )
                         .await
                     }
@@ -471,13 +486,21 @@ impl ReActLoop {
                 let fut = async {
                     if is_rebrief {
                         (
-                            self.run_rag_worker_host(auth, request, rb, "lexical_retrieval")
-                                .await,
+                            self.run_rag_worker_host(
+                                auth,
+                                request,
+                                rb,
+                                "lexical_retrieval",
+                                alias_offset,
+                            )
+                            .await,
                             LlmUsage::zeroed(),
                         )
                     } else {
-                        self.run_rag_worker_short_sac(mode, auth, request, rb, hooks, cancel, sink)
-                            .await
+                        self.run_rag_worker_short_sac(
+                            mode, auth, request, rb, hooks, cancel, sink, alias_offset,
+                        )
+                        .await
                     }
                 };
                 let r = match AssertUnwindSafe(fut).catch_unwind().await {
@@ -542,6 +565,7 @@ impl ReActLoop {
         hooks: &dyn LoopHooks,
         cancel: &CancellationToken,
         sink: &dyn AgentEventSink,
+        alias_offset: usize,
     ) -> (WorkerOutcome, LlmUsage) {
         let started = Instant::now();
         let max_steps = brief.sub_task.max_steps.clamp(1, 5);
@@ -633,7 +657,7 @@ impl ReActLoop {
         };
 
         let mut tool_results = worker_state.tool_results;
-        let (evidence, key_facts) = evidence_from_tool_results(&tool_results);
+        let (evidence, key_facts) = evidence_from_tool_results(&tool_results, alias_offset);
         let n = evidence.len();
         let tool_ok = count_tool_ok(&tool_results);
         let pack = EvidencePack {
@@ -747,29 +771,7 @@ impl ReActLoop {
         let n = evidence.len();
 
         let tool_result = if any_ok && n > 0 {
-            let results_json: Vec<_> = merged
-                .hits
-                .iter()
-                .map(|h| {
-                    json!({
-                        "title": h.title,
-                        "url": h.url,
-                        "snippet": truncate_preview(&h.snippet, 800),
-                        "citation_index": h.web_index,
-                    })
-                })
-                .collect();
-            ToolResult {
-                tool: "web_search".into(),
-                version: "1.0".into(),
-                status: ToolStatus::Ok,
-                data: Some(json!({
-                    "results": results_json,
-                    "queries": merged.queries,
-                    "lead_workers": true,
-                })),
-                trace: None,
-            }
+            web_search_tool_result(&merged)
         } else {
             ToolResult {
                 tool: "web_search".into(),
@@ -836,6 +838,7 @@ impl ReActLoop {
         request: &AgentRequest,
         brief: &TaskBrief,
         tool_id: &str,
+        alias_offset: usize,
     ) -> WorkerOutcome {
         let started = Instant::now();
         let query = brief.original_query.trim();
@@ -880,7 +883,7 @@ impl ReActLoop {
             },
         };
 
-        let (evidence, key_facts) = evidence_from_dense_tool(&tool_result);
+        let (evidence, key_facts) = evidence_from_dense_tool(&tool_result, alias_offset);
         let n = evidence.len();
         let tool_ok = count_tool_ok(std::slice::from_ref(&tool_result));
 
@@ -1304,23 +1307,43 @@ fn lexical_terms_from_query(query: &str) -> Vec<String> {
     }
 }
 
-fn evidence_from_tool_results(trs: &[ToolResult]) -> (Vec<EvidenceItem>, Vec<String>) {
+fn evidence_from_tool_results(
+    trs: &[ToolResult],
+    start_alias: usize,
+) -> (Vec<EvidenceItem>, Vec<String>) {
     let mut evidence = Vec::new();
     let mut key_facts = Vec::new();
-    let mut alias_i = 0usize;
+    // Alias numbering mirrors helpers::selected::alias_chunk_ids_in_order exactly:
+    // every Ok, aliased-tool item with a non-empty chunk_id consumes one number
+    // (even when its text is empty and yields no evidence item), so pack aliases
+    // resolve to the same chunks at delivery. start_alias keeps waves continuous.
+    let mut alias_i = start_alias;
     for tr in trs {
-        if tr.status != ToolStatus::Ok {
+        if tr.status != ToolStatus::Ok
+            || !crate::helpers::selected::ALIASED_TOOLS.contains(&tr.tool.as_str())
+        {
             continue;
         }
         let Some(data) = tr.data.as_ref() else {
             continue;
         };
         let chunks = data
-            .get("chunks")
-            .and_then(|c| c.as_array())
+            .as_array()
+            .or_else(|| data.get("chunks").and_then(|c| c.as_array()))
             .cloned()
             .unwrap_or_default();
         for c in chunks {
+            let chunk_id = c
+                .get("chunk_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let alias = if chunk_id.is_empty() {
+                String::new()
+            } else {
+                alias_i += 1;
+                format!("#{alias_i}")
+            };
             let text = c
                 .get("text")
                 .or_else(|| c.get("content"))
@@ -1328,14 +1351,8 @@ fn evidence_from_tool_results(trs: &[ToolResult]) -> (Vec<EvidenceItem>, Vec<Str
                 .unwrap_or("")
                 .to_string();
             if text.trim().is_empty() {
-                continue;
+                continue; // number already consumed above; empty text yields no evidence
             }
-            alias_i += 1;
-            let chunk_id = c
-                .get("chunk_id")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
             let doc_id = c
                 .get("doc_id")
                 .and_then(|t| t.as_str())
@@ -1346,13 +1363,8 @@ fn evidence_from_tool_results(trs: &[ToolResult]) -> (Vec<EvidenceItem>, Vec<Str
             } else if !chunk_id.is_empty() {
                 chunk_id.clone()
             } else {
-                format!("chunk-{alias_i}")
+                format!("chunk-{}", evidence.len() + 1)
             };
-            let alias = c
-                .get("alias")
-                .and_then(|t| t.as_str())
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("#{alias_i}"));
             let score = c.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
             if key_facts.len() < 5 {
                 key_facts.push(text.chars().take(160).collect());
@@ -1369,8 +1381,39 @@ fn evidence_from_tool_results(trs: &[ToolResult]) -> (Vec<EvidenceItem>, Vec<Str
     (evidence, key_facts)
 }
 
-fn evidence_from_dense_tool(tr: &ToolResult) -> (Vec<EvidenceItem>, Vec<String>) {
-    evidence_from_tool_results(std::slice::from_ref(tr))
+fn evidence_from_dense_tool(tr: &ToolResult, start_alias: usize) -> (Vec<EvidenceItem>, Vec<String>) {
+    evidence_from_tool_results(std::slice::from_ref(tr), start_alias)
+}
+
+/// Web worker host leaf payload: a real [`avrag_search::SearchResponse`] so
+/// `helpers::citations::build_search_citations_from_tool_results` deserializes
+/// and `[[web:n]]` citations resolve at delivery (`lead_workers` tag kept).
+fn web_search_tool_result(merged: &crate::lead_workers::MergedWebHits) -> ToolResult {
+    let response = avrag_search::SearchResponse {
+        query_type: "web".to_string(),
+        sub_queries: merged.queries.clone(),
+        results: merged
+            .hits
+            .iter()
+            .map(|h| avrag_search::SearchResult {
+                title: h.title.clone(),
+                url: h.url.clone(),
+                snippet: truncate_preview(&h.snippet, 800),
+                citation_index: Some(h.web_index),
+            })
+            .collect(),
+        synthesized_answer: String::new(),
+        llm_usage: None,
+    };
+    let mut data = serde_json::to_value(&response).unwrap_or_else(|_| json!({}));
+    data["lead_workers"] = json!(true);
+    ToolResult {
+        tool: "web_search".into(),
+        version: "1.0".into(),
+        status: ToolStatus::Ok,
+        data: Some(data),
+        trace: None,
+    }
 }
 
 #[cfg(test)]
@@ -1518,5 +1561,78 @@ mod tests {
     fn lexical_terms_split() {
         assert_eq!(lexical_terms_from_query("foo bar"), vec!["foo", "bar"]);
         assert_eq!(lexical_terms_from_query("中文查询"), vec!["中文查询"]);
+    }
+
+    #[test]
+    fn evidence_alias_numbering_matches_delivery_replay() {
+        let tr = ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(json!({"chunks": [
+                {"chunk_id": "c1", "text": "alpha"},
+                {"text": "orphan"},
+                {"chunk_id": "c2", "text": ""},
+                {"chunk_id": "c3", "text": "gamma"},
+            ]})),
+            trace: None,
+        };
+        let (evidence, _) = evidence_from_tool_results(std::slice::from_ref(&tr), 0);
+        // orphan has text but no chunk_id → uncitable (no alias, no number consumed);
+        // c2 consumes #2 but empty text yields no evidence item.
+        let aliases: Vec<&str> = evidence.iter().map(|e| e.alias.as_str()).collect();
+        assert_eq!(aliases, vec!["#1", "", "#3"]);
+        assert_eq!(
+            crate::helpers::selected::alias_chunk_ids_in_order(std::slice::from_ref(&tr)),
+            vec!["c1", "c2", "c3"]
+        );
+        // Wave continuity: a re-brief wave starts after the 3 consumed numbers.
+        let tr2 = ToolResult {
+            tool: "dense_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(json!({"chunks": [{"chunk_id": "c4", "text": "delta"}]})),
+            trace: None,
+        };
+        let (evidence2, _) = evidence_from_tool_results(std::slice::from_ref(&tr2), 3);
+        assert_eq!(evidence2[0].alias, "#4");
+    }
+
+    #[test]
+    fn web_leaf_payload_deserializes_and_builds_citations() {
+        let resp = |q: &str, title: &str, url: &str, snippet: &str| {
+            (
+                q.to_string(),
+                avrag_search::SearchResponse {
+                    query_type: "web".into(),
+                    sub_queries: vec![q.into()],
+                    results: vec![avrag_search::SearchResult {
+                        title: title.into(),
+                        url: url.into(),
+                        snippet: snippet.into(),
+                        citation_index: None,
+                    }],
+                    synthesized_answer: String::new(),
+                    llm_usage: None,
+                },
+            )
+        };
+        let merged = merge_search_responses(
+            &[
+                resp("q1", "T1", "https://a.example/1", "snippet one"),
+                resp("q2", "T2", "https://b.example/2", "snippet two"),
+            ],
+            80,
+        );
+        let tr = web_search_tool_result(&merged);
+        assert!(
+            serde_json::from_value::<avrag_search::SearchResponse>(tr.data.clone().unwrap()).is_ok()
+        );
+        let citations = crate::helpers::build_search_citations_from_tool_results(
+            std::slice::from_ref(&tr),
+        );
+        assert_eq!(citations.len(), 2);
+        assert_eq!(citations[0].citation_id, 1);
+        assert_eq!(citations[1].citation_id, 2);
     }
 }

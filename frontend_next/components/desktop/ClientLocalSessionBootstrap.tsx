@@ -3,12 +3,44 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/lib/auth/context";
-import { ensureLocalSession } from "@/lib/desktop/tauri-llm";
+import {
+  ensureLocalProduct,
+  ensureLocalSession,
+  ensureLocalStack,
+} from "@/lib/desktop/tauri-llm";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 
+function formatBootstrapError(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  if (typeof err === "string" && err.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(err);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "message" in parsed &&
+        typeof (parsed as { message: unknown }).message === "string"
+      ) {
+        return (parsed as { message: string }).message;
+      }
+    } catch {
+      return err;
+    }
+    return err;
+  }
+  if (err && typeof err === "object") {
+    const rec = err as Record<string, unknown>;
+    if (typeof rec.message === "string" && rec.message.trim()) {
+      return rec.message;
+    }
+  }
+  return fallback;
+}
+
 /**
- * After license allows workspace, ensure a local B2C personal session against
- * the on-machine product API (register/login local@context-os.client).
+ * Desktop cold start: data stack → product API/worker → local B2C session.
  * Never redirects to cloud /login.
  */
 export function ClientLocalSessionBootstrap({ children }: { children: ReactNode }) {
@@ -27,10 +59,23 @@ export function ClientLocalSessionBootstrap({ children }: { children: ReactNode 
 
     attempted.current = true;
     setPhase("working");
-    setDetail("正在准备本机账户…");
 
-    void ensureLocalSession()
-      .then((session) => {
+    void (async () => {
+      try {
+        setDetail("正在启动本机数据面（PostgreSQL / Redis）…");
+        const stack = await ensureLocalStack();
+        if (!stack.ok) {
+          throw new Error(stack.message || "本机数据面启动失败");
+        }
+
+        setDetail("正在启动本机产品进程（API / Worker）…");
+        const product = await ensureLocalProduct();
+        if (!product.ok) {
+          throw new Error(product.message || "本机产品进程启动失败");
+        }
+
+        setDetail("正在准备本机账户…");
+        const session = await ensureLocalSession();
         if (session.ready && session.token && session.user) {
           completeAuth({
             token: session.token,
@@ -45,21 +90,23 @@ export function ClientLocalSessionBootstrap({ children }: { children: ReactNode 
           setPhase("done");
           return;
         }
-        setDetail(session.message || "本机会话未就绪（可稍后在设置中启动产品进程）");
+        setDetail(session.message || "本机会话未就绪（可稍后在设置中重试）");
         setPhase("error");
-      })
-      .catch((err: unknown) => {
-        setDetail(err instanceof Error ? err.message : "本机会话初始化失败");
+      } catch (err: unknown) {
+        setDetail(formatBootstrapError(err, "本机会话初始化失败"));
         setPhase("error");
-      });
+      }
+    })();
   }, [completeAuth, initialized, isAuthenticated]);
 
-  // Soft fail: still render children so BYOK chat / license UI works without API.
+  // Block shell until cold-start finishes (or soft-fails with banner).
   if (isTauri() && phase === "working" && !isAuthenticated) {
     return (
       <main className="app-auth-shell">
         <section className="app-surface-card" style={{ maxWidth: "28rem", textAlign: "center" }}>
-          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>{detail || "准备本机账户…"}</p>
+          <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
+            {detail || "正在准备本机环境…"}
+          </p>
         </section>
       </main>
     );

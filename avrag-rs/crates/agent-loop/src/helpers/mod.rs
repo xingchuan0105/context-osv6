@@ -4,7 +4,7 @@ mod ews;
 mod knockout;
 mod llm_retry;
 mod retrieval;
-mod selected;
+pub(crate) mod selected;
 mod usage;
 
 pub use citations::{

@@ -326,7 +326,42 @@ pub async fn get_local_session(app: tauri::AppHandle) -> Result<LocalSessionStat
     })
 }
 
+/// Bring up data plane + product if the local API is not healthy.
+async fn ensure_local_environment() -> Result<(), IpcApiError> {
+    let base = product_api_base_url();
+    let health_url = format!("{base}/health");
+    if http_json("GET", &health_url, None, None).await.is_ok() {
+        return Ok(());
+    }
+
+    // Stack first (PG + Redis + client.env), then product (api + worker).
+    let stack = super::local_stack::ensure_local_stack().await?;
+    if !stack.ok {
+        return Err(IpcApiError::service_unavailable(format!(
+            "本机数据面未就绪：{}",
+            stack.message
+        )));
+    }
+
+    let product = super::local_product::ensure_local_product().await?;
+    if !product.ok {
+        return Err(IpcApiError::service_unavailable(format!(
+            "本机产品进程未就绪：{}",
+            product.message
+        )));
+    }
+
+    // Re-check health after ensure.
+    if http_json("GET", &health_url, None, None).await.is_err() {
+        return Err(IpcApiError::service_unavailable(format!(
+            "本机产品 API 仍不可达（{base}/health）。请查看设置中的产品日志。"
+        )));
+    }
+    Ok(())
+}
+
 /// Ensure a personal B2C user exists on the local product API and return a JWT.
+/// On cold start, automatically brings up local stack + product when the API is down.
 #[tauri::command]
 pub async fn ensure_local_session(app: tauri::AppHandle) -> Result<LocalSessionStatus, IpcApiError> {
     let base = product_api_base_url();
@@ -344,12 +379,9 @@ pub async fn ensure_local_session(app: tauri::AppHandle) -> Result<LocalSessionS
         }
     }
 
-    // Probe health; if down, try bring product up once (monorepo/dev).
-    let health_url = format!("{base}/health");
-    if http_json("GET", &health_url, None, None).await.is_err() {
-        let _ = super::local_product::ensure_local_product().await;
-    }
+    ensure_local_environment().await?;
 
+    let base = product_api_base_url();
     let creds = load_or_create_credentials(&app)?;
     let session = login_or_register(&base, &creds).await?;
     save_session(&app, &session)?;

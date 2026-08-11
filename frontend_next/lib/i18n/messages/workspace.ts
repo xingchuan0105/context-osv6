@@ -161,6 +161,18 @@ export const workspaceMessages = {
     zh: "重命名",
     en: "Rename",
   },
+  workspaceOpenSessionInNewTabAction: {
+    zh: "在新标签页打开",
+    en: "Open in new tab",
+  },
+  workspaceHistoryGroupToday: {
+    zh: "今天",
+    en: "Today",
+  },
+  workspaceHistoryGroupEarlier: {
+    zh: "更早",
+    en: "Earlier",
+  },
   workspaceDeleteSessionAction: {
     zh: "删除",
     en: "Delete",

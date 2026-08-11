@@ -635,6 +635,13 @@
   border-radius: var(--radius-pill);
 }
 
+.historyGroupLabel {
+  padding: var(--space-xs) var(--space-xxs) 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+}
+
 .historyItem,
 .historyItemActive {
   position: relative;

@@ -1,10 +1,15 @@
 //! Local product process control (avrag-api + avrag-worker on client data plane).
+//!
+//! Cold start prefers a pure-Rust path (spawn sidecars + client.env) so installed
+//! clients do not need monorepo bash. Bash script remains a monorepo fallback.
 
 use serde::Serialize;
+use std::fs::{self, File, OpenOptions};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::Duration;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use super::api::IpcApiError;
 
@@ -71,6 +76,11 @@ fn product_script(root: &Path) -> PathBuf {
     root.join("scripts/desktop-local-product.sh")
 }
 
+/// State dir for client.env / run / logs (install AppData or monorepo desktop/runtime).
+fn state_runtime_dir() -> Option<PathBuf> {
+    super::native_stack::runtime_home()
+}
+
 /// Sidecars bundled via Tauri externalBin land next to the main executable.
 fn sidecar_next_to_exe(name: &str) -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
@@ -78,7 +88,6 @@ fn sidecar_next_to_exe(name: &str) -> Option<PathBuf> {
     let candidates = [
         dir.join(name),
         dir.join(format!("{name}.exe")),
-        // Some layouts keep resources/bin
         dir.join("bin").join(name),
         dir.join("bin").join(format!("{name}.exe")),
         dir.join("resources").join("bin").join(name),
@@ -87,45 +96,68 @@ fn sidecar_next_to_exe(name: &str) -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.is_file())
 }
 
-/// Prefer installed sidecar, then monorepo staged bin.
+fn bin_candidate(dir: &Path, name: &str) -> Option<PathBuf> {
+    let unix = dir.join(name);
+    if unix.is_file() {
+        return Some(unix);
+    }
+    let win = dir.join(format!("{name}.exe"));
+    if win.is_file() {
+        return Some(win);
+    }
+    None
+}
+
+/// Prefer installed sidecar, then runtime/bin, monorepo staged bin, cargo targets.
 pub fn resolve_product_bin(name: &str) -> Option<PathBuf> {
     if let Some(p) = sidecar_next_to_exe(name) {
         return Some(p);
     }
     if let Ok(home) = std::env::var("CONTEXT_OS_CLIENT_HOME") {
-        let p = PathBuf::from(&home).join("bin").join(name);
-        if p.is_file() {
+        if let Some(p) = bin_candidate(&PathBuf::from(home).join("bin"), name) {
             return Some(p);
         }
-        let pexe = PathBuf::from(&home).join("bin").join(format!("{name}.exe"));
-        if pexe.is_file() {
-            return Some(pexe);
+    }
+    if let Some(rt) = state_runtime_dir() {
+        if let Some(p) = bin_candidate(&rt.join("bin"), name) {
+            return Some(p);
         }
     }
     if let Some(root) = monorepo_root() {
-        let p = root.join("desktop/runtime/bin").join(name);
-        if p.is_file() {
+        if let Some(p) = bin_candidate(&root.join("desktop/runtime/bin"), name) {
             return Some(p);
         }
-        let pexe = root
-            .join("desktop/runtime/bin")
-            .join(format!("{name}.exe"));
-        if pexe.is_file() {
-            return Some(pexe);
+        for rel in [
+            "avrag-rs/target/release",
+            "avrag-rs/target/debug",
+        ] {
+            if let Some(p) = bin_candidate(&root.join(rel), name) {
+                return Some(p);
+            }
         }
     }
     None
 }
 
+fn client_env_path() -> Option<PathBuf> {
+    if let Some(rt) = state_runtime_dir() {
+        let p = rt.join("client.env");
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Ok(home) = std::env::var("CONTEXT_OS_CLIENT_HOME") {
+        let p = PathBuf::from(home).join("client.env");
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    monorepo_root().map(|r| r.join("desktop/runtime/client.env"))
+}
+
 fn read_env_file_value(key: &str) -> Option<String> {
-    let path = monorepo_root()
-        .map(|r| r.join("desktop/runtime/client.env"))
-        .or_else(|| {
-            std::env::var("CONTEXT_OS_CLIENT_HOME")
-                .ok()
-                .map(|h| PathBuf::from(h).join("client.env"))
-        })?;
-    let raw = std::fs::read_to_string(path).ok()?;
+    let path = client_env_path()?;
+    let raw = fs::read_to_string(path).ok()?;
     for line in raw.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -138,6 +170,30 @@ fn read_env_file_value(key: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn parse_env_file(path: &Path) -> Vec<(String, String)> {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            let key = k.trim();
+            if key.is_empty() {
+                continue;
+            }
+            out.push((
+                key.to_string(),
+                v.trim().trim_matches('"').to_string(),
+            ));
+        }
+    }
+    out
 }
 
 fn client_api_base() -> String {
@@ -158,8 +214,14 @@ fn client_api_base() -> String {
 }
 
 fn client_api_host_port() -> (String, u16) {
-    let host = env_or("CLIENT_API_HOST", "127.0.0.1");
-    let port: u16 = env_or("CLIENT_API_PORT", "18080").parse().unwrap_or(18080);
+    let host = read_env_file_value("CLIENT_API_HOST")
+        .or_else(|| std::env::var("CLIENT_API_HOST").ok())
+        .unwrap_or_else(|| "127.0.0.1".into());
+    let port: u16 = read_env_file_value("CLIENT_API_PORT")
+        .or_else(|| std::env::var("CLIENT_API_PORT").ok())
+        .unwrap_or_else(|| env_or("CLIENT_API_PORT", "18080"))
+        .parse()
+        .unwrap_or(18080);
     (host, port)
 }
 
@@ -176,25 +238,82 @@ fn probe_tcp(host: &str, port: u16) -> bool {
 }
 
 fn pid_alive(pidfile: &Path) -> bool {
-    let Ok(raw) = std::fs::read_to_string(pidfile) else {
+    let Ok(raw) = fs::read_to_string(pidfile) else {
         return false;
     };
     let pid = raw.trim();
     if pid.is_empty() {
         return false;
     }
-    // Prefer /proc on Linux (no extra deps).
     if Path::new(&format!("/proc/{pid}")).exists() {
         return true;
     }
-    // Fallback: kill -0 via shell on other Unix-like systems.
-    Command::new("kill")
-        .args(["-0", pid])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    #[cfg(unix)]
+    {
+        return Command::new("kill")
+            .args(["-0", pid])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+    }
+    #[cfg(windows)]
+    {
+        // Best-effort: tasklist is heavy; treat non-empty pid file as maybe alive.
+        // Health probe is authoritative for API.
+        let _ = pid;
+        return true;
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        false
+    }
+}
+
+fn stop_pidfile(pidfile: &Path) {
+    if let Ok(raw) = fs::read_to_string(pidfile) {
+        let pid = raw.trim();
+        if !pid.is_empty() {
+            #[cfg(unix)]
+            {
+                let _ = Command::new("kill")
+                    .arg(pid)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+                thread::sleep(Duration::from_millis(200));
+                let _ = Command::new("kill")
+                    .args(["-9", pid])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
+            #[cfg(windows)]
+            {
+                let _ = Command::new("taskkill")
+                    .args(["/PID", pid, "/F"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
+        }
+    }
+    let _ = fs::remove_file(pidfile);
+}
+
+fn run_log_dir() -> (PathBuf, PathBuf) {
+    if let Some(rt) = state_runtime_dir() {
+        return (rt.join("run"), rt.join("logs"));
+    }
+    if let Some(root) = monorepo_root() {
+        let rt = root.join("desktop/runtime");
+        return (rt.join("run"), rt.join("logs"));
+    }
+    (
+        PathBuf::from("desktop/runtime/run"),
+        PathBuf::from("desktop/runtime/logs"),
+    )
 }
 
 fn build_status() -> LocalProductStatus {
@@ -202,18 +321,14 @@ fn build_status() -> LocalProductStatus {
     let base = client_api_base();
     let root = monorepo_root();
     let script = root.as_ref().map(|r| product_script(r).display().to_string());
-    let log_dir = root
-        .as_ref()
-        .map(|r| r.join("desktop/runtime/logs").display().to_string());
-    let worker_pid = root
-        .as_ref()
-        .map(|r| r.join("desktop/runtime/run/worker.pid"));
-    let api_pid = root.as_ref().map(|r| r.join("desktop/runtime/run/api.pid"));
+    let (run_dir, log_dir) = run_log_dir();
+    let worker_pid = run_dir.join("worker.pid");
+    let api_pid = run_dir.join("api.pid");
 
     let port_ok = probe_tcp(&host, port);
     let health_url = format!("{base}/health");
     let (api_ok, health_detail) = if port_ok {
-        match ureq_get_health(&health_url) {
+        match probe_health(&health_url) {
             Ok(body) => (true, body),
             Err(e) => (false, format!("port open but /health failed: {e}")),
         }
@@ -221,16 +336,11 @@ fn build_status() -> LocalProductStatus {
         (false, "API port closed".into())
     };
 
-    let worker_ok = worker_pid
-        .as_ref()
-        .map(|p| pid_alive(p))
-        .unwrap_or(false);
+    let worker_ok = pid_alive(&worker_pid);
     let worker_detail = if worker_ok {
-        let pid = worker_pid
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .unwrap_or_default();
+        let pid = fs::read_to_string(&worker_pid).unwrap_or_default();
         format!("running pid {}", pid.trim())
-    } else if api_pid.as_ref().map(|p| pid_alive(p)).unwrap_or(false) && !worker_ok {
+    } else if pid_alive(&api_pid) && !worker_ok {
         "worker pid not alive".into()
     } else {
         "not running".into()
@@ -247,29 +357,244 @@ fn build_status() -> LocalProductStatus {
         api_endpoint: format!("{host}:{port}"),
         health_detail,
         worker_detail,
-        compose_hint: "bash scripts/desktop-local-product.sh ensure".into(),
+        compose_hint: "ensure_local_product IPC (Rust native, bash fallback)".into(),
         script_path: script,
-        log_dir,
+        log_dir: Some(log_dir.display().to_string()),
         api_bin_path: api_bin,
         worker_bin_path: worker_bin,
     }
 }
 
-/// Health probe via curl (always available on our WSL/Linux target; Windows later).
-fn ureq_get_health(url: &str) -> Result<String, String> {
+fn probe_health(url: &str) -> Result<String, String> {
+    // Prefer curl when present (WSL/Linux installers); fall back to TCP-only is not enough.
     let output = Command::new("curl")
         .args(["-fsS", "--max-time", "2", url])
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        return Err(if err.trim().is_empty() {
-            format!("curl exit {}", output.status)
-        } else {
-            err.trim().to_string()
-        });
+        .output();
+    match output {
+        Ok(o) if o.status.success() => {
+            Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
+        }
+        Ok(o) => {
+            let err = String::from_utf8_lossy(&o.stderr);
+            // Windows installs may lack curl — try reqwest-less TCP is already known open.
+            // Use a tiny blocking HTTP via std is hard; leave detail.
+            Err(if err.trim().is_empty() {
+                format!("curl exit {}", o.status)
+            } else {
+                err.trim().to_string()
+            })
+        }
+        Err(e) => {
+            // No curl: treat open port + /health path as soft-ok via raw GET with std::net is insufficient.
+            // Use reqwest in spawn path wait; for status, report curl missing.
+            Err(format!("curl unavailable: {e}"))
+        }
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn api_healthy() -> bool {
+    let base = client_api_base();
+    let url = format!("{base}/health");
+    if probe_health(&url).is_ok() {
+        return true;
+    }
+    // Without curl, accept open API port as provisional healthy.
+    let (host, port) = client_api_host_port();
+    probe_tcp(&host, port) && which_exists("curl").is_none()
+}
+
+fn which_exists(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        for cand in [dir.join(name), dir.join(format!("{name}.exe"))] {
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+fn open_append_log(path: &Path) -> Result<File, String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| format!("open log {}: {e}", path.display()))
+}
+
+fn spawn_with_env(
+    bin: &Path,
+    env_pairs: &[(String, String)],
+    log_path: &Path,
+    pid_path: &Path,
+    cwd: Option<&Path>,
+) -> Result<(), String> {
+    let log = open_append_log(log_path)?;
+    let log_err = open_append_log(log_path)?;
+    let mut cmd = Command::new(bin);
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
+    }
+    for (k, v) in env_pairs {
+        cmd.env(k, v);
+    }
+    // Desktop isolation defaults (client.env should already set these).
+    if !env_pairs.iter().any(|(k, _)| k == "RETRIEVAL_BACKEND") {
+        cmd.env("RETRIEVAL_BACKEND", "pgvector");
+    }
+    // Migrations applied by stack ensure; avoid double work every API boot.
+    cmd.env(
+        "AVRAG_RUN_MIGRATIONS",
+        env_pairs
+            .iter()
+            .find(|(k, _)| k == "AVRAG_RUN_MIGRATIONS_PRODUCT")
+            .map(|(_, v)| v.as_str())
+            .unwrap_or("false"),
+    );
+    cmd.stdout(Stdio::from(log));
+    cmd.stderr(Stdio::from(log_err));
+    cmd.stdin(Stdio::null());
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn {}: {e}", bin.display()))?;
+    if let Some(parent) = pid_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    fs::write(pid_path, format!("{}\n", child.id())).map_err(|e| e.to_string())?;
+    // Detach: drop Child without wait so process keeps running.
+    std::mem::forget(child);
+    Ok(())
+}
+
+fn wait_api_healthy(secs: u64, log: &mut String) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(secs);
+    let base = client_api_base();
+    let url = format!("{base}/health");
+    while Instant::now() < deadline {
+        if probe_health(&url).is_ok() {
+            log.push_str("API healthy\n");
+            return true;
+        }
+        let (host, port) = client_api_host_port();
+        if which_exists("curl").is_none() && probe_tcp(&host, port) {
+            log.push_str("API port open (curl missing; treating as ready)\n");
+            return true;
+        }
+        thread::sleep(Duration::from_millis(500));
+    }
+    log.push_str("timeout waiting for API health\n");
+    false
+}
+
+/// Pure-Rust product bring-up for install + monorepo (no bash required).
+fn ensure_product_native() -> Result<String, String> {
+    let mut log = String::new();
+    if api_healthy() {
+        return Ok("product API already healthy".into());
+    }
+
+    let state = state_runtime_dir().ok_or_else(|| {
+        "runtime state dir not found (install layout or CONTEXT_OS_CLIENT_HOME / monorepo desktop/runtime)"
+            .to_string()
+    })?;
+    let env_path = state.join("client.env");
+    if !env_path.is_file() {
+        return Err(format!(
+            "missing {} — start data stack first (ensure_local_stack)",
+            env_path.display()
+        ));
+    }
+
+    let pg_host = read_env_file_value("CLIENT_PG_HOST").unwrap_or_else(|| "127.0.0.1".into());
+    let pg_port: u16 = read_env_file_value("CLIENT_PG_PORT")
+        .unwrap_or_else(|| "5433".into())
+        .parse()
+        .unwrap_or(5433);
+    let redis_host = read_env_file_value("CLIENT_REDIS_HOST").unwrap_or_else(|| "127.0.0.1".into());
+    let redis_port: u16 = read_env_file_value("CLIENT_REDIS_PORT")
+        .unwrap_or_else(|| "6380".into())
+        .parse()
+        .unwrap_or(6380);
+    if !probe_tcp(&pg_host, pg_port) {
+        return Err(format!(
+            "Postgres not up on {pg_host}:{pg_port} — ensure_local_stack first"
+        ));
+    }
+    if !probe_tcp(&redis_host, redis_port) {
+        return Err(format!(
+            "Redis not up on {redis_host}:{redis_port} — ensure_local_stack first"
+        ));
+    }
+
+    let api_bin = resolve_product_bin("avrag-api").ok_or_else(|| {
+        "avrag-api binary not found (expected next to app, or desktop/runtime/bin, or cargo target)"
+            .to_string()
+    })?;
+    let worker_bin = resolve_product_bin("avrag-worker").ok_or_else(|| {
+        "avrag-worker binary not found (expected next to app, or desktop/runtime/bin, or cargo target)"
+            .to_string()
+    })?;
+    log.push_str(&format!("api_bin={}\n", api_bin.display()));
+    log.push_str(&format!("worker_bin={}\n", worker_bin.display()));
+
+    let env_pairs = parse_env_file(&env_path);
+    if env_pairs.is_empty() {
+        return Err(format!("empty or unreadable env file {}", env_path.display()));
+    }
+
+    let (run_dir, log_dir) = run_log_dir();
+    fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&log_dir).map_err(|e| e.to_string())?;
+
+    let api_pid = run_dir.join("api.pid");
+    let worker_pid = run_dir.join("worker.pid");
+    let api_log = log_dir.join("api.log");
+    let worker_log = log_dir.join("worker.log");
+
+    // Restart if not healthy.
+    if !api_healthy() {
+        stop_pidfile(&api_pid);
+        log.push_str("starting avrag-api\n");
+        spawn_with_env(&api_bin, &env_pairs, &api_log, &api_pid, None)?;
+    }
+    if !pid_alive(&worker_pid) {
+        stop_pidfile(&worker_pid);
+        log.push_str("starting avrag-worker\n");
+        spawn_with_env(&worker_bin, &env_pairs, &worker_log, &worker_pid, None)?;
+    }
+
+    if wait_api_healthy(120, &mut log) {
+        Ok(format!(
+            "product API ready at {} (native spawn)\n{log}",
+            client_api_base()
+        ))
+    } else {
+        Err(format!(
+            "API health timeout after spawn — see {}\n{log}",
+            api_log.display()
+        ))
+    }
+}
+
+fn stop_product_native() -> String {
+    let mut log = String::new();
+    let (run_dir, _) = run_log_dir();
+    stop_pidfile(&run_dir.join("api.pid"));
+    stop_pidfile(&run_dir.join("worker.pid"));
+    log.push_str("stopped api/worker pidfiles (native)\n");
+    log
 }
 
 fn run_product_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
@@ -311,59 +636,151 @@ pub fn get_local_product_status() -> LocalProductStatus {
 
 #[tauri::command]
 pub async fn ensure_local_product() -> Result<EnsureLocalProductResult, IpcApiError> {
-    let (code, stdout, stderr) =
-        tokio::task::spawn_blocking(|| run_product_script("ensure"))
+    // Fast path.
+    let early = build_status();
+    if early.api_ok {
+        return Ok(EnsureLocalProductResult {
+            ok: true,
+            message: format!("Local product API already ready at {}.", early.api_base_url),
+            stdout: String::new(),
+            stderr: String::new(),
+            status: early,
+        });
+    }
+
+    // 1) Pure-Rust native spawn (install + monorepo).
+    let native = tokio::task::spawn_blocking(ensure_product_native)
+        .await
+        .map_err(|e| IpcApiError::internal(format!("ensure product native join: {e}")))?;
+
+    match native {
+        Ok(msg) => {
+            let status = build_status();
+            if status.api_ok {
+                return Ok(EnsureLocalProductResult {
+                    ok: true,
+                    message: msg.lines().next().unwrap_or("product ready").to_string(),
+                    stdout: msg,
+                    stderr: String::new(),
+                    status,
+                });
+            }
+        }
+        Err(native_err) => {
+            // 2) Bash monorepo fallback.
+            if monorepo_root().is_some() {
+                let script_result = tokio::task::spawn_blocking(|| run_product_script("ensure"))
+                    .await
+                    .map_err(|e| IpcApiError::internal(format!("ensure product join: {e}")))?;
+                if let Ok((code, stdout, stderr)) = script_result {
+                    let status = build_status();
+                    let ok = code == 0 && status.api_ok;
+                    let message = if ok {
+                        format!(
+                            "Local product API ready at {} (bash; native first: {native_err}).",
+                            status.api_base_url
+                        )
+                    } else {
+                        format!(
+                            "native: {native_err}; bash ensure exit {code}: {}",
+                            stderr.lines().last().unwrap_or("see stderr")
+                        )
+                    };
+                    return Ok(EnsureLocalProductResult {
+                        ok,
+                        message,
+                        stdout: format!("--- native err ---\n{native_err}\n--- bash ---\n{stdout}"),
+                        stderr,
+                        status,
+                    });
+                }
+            }
+
+            let status = build_status();
+            return Ok(EnsureLocalProductResult {
+                ok: false,
+                message: format!(
+                    "本机产品进程启动失败：{native_err}。请确认 avrag-api/worker 已打包，且数据栈已就绪。"
+                ),
+                stdout: String::new(),
+                stderr: native_err,
+                status,
+            });
+        }
+    }
+
+    // Native returned Ok message but health still false — try bash if available.
+    if monorepo_root().is_some() {
+        if let Ok((code, stdout, stderr)) = tokio::task::spawn_blocking(|| run_product_script("ensure"))
             .await
-            .map_err(|e| IpcApiError::internal(format!("ensure product join: {e}")))??;
+            .map_err(|e| IpcApiError::internal(format!("ensure product join: {e}")))?
+        {
+            let status = build_status();
+            let ok = code == 0 && status.api_ok;
+            return Ok(EnsureLocalProductResult {
+                ok,
+                message: if ok {
+                    format!("Local product API ready at {}.", status.api_base_url)
+                } else {
+                    format!(
+                        "product ensure incomplete (exit {code}). {}",
+                        stderr.lines().last().unwrap_or("see logs")
+                    )
+                },
+                stdout,
+                stderr,
+                status,
+            });
+        }
+    }
 
     let status = build_status();
-    let ok = code == 0 && status.api_ok;
-    let message = if code == 0 {
-        if status.api_ok {
-            format!(
-                "Local product API ready at {} (worker: {}).",
-                status.api_base_url,
-                if status.worker_ok { "up" } else { "check logs" }
-            )
-        } else {
-            "Script finished but API health not ready — check desktop/runtime/logs/api.log".into()
-        }
-    } else {
-        format!(
-            "desktop-local-product.sh ensure failed (exit {code}). {}",
-            stderr.lines().last().unwrap_or("see stderr")
-        )
-    };
-
     Ok(EnsureLocalProductResult {
-        ok,
-        message,
-        stdout,
-        stderr,
+        ok: status.api_ok,
+        message: if status.api_ok {
+            format!("Local product API ready at {}.", status.api_base_url)
+        } else {
+            format!(
+                "产品进程未就绪：{}。日志目录：{}",
+                status.health_detail,
+                status.log_dir.as_deref().unwrap_or("(unknown)")
+            )
+        },
+        stdout: String::new(),
+        stderr: String::new(),
         status,
     })
 }
 
 #[tauri::command]
 pub async fn stop_local_product() -> Result<EnsureLocalProductResult, IpcApiError> {
-    let (code, stdout, stderr) = tokio::task::spawn_blocking(|| run_product_script("stop"))
+    let native_log = tokio::task::spawn_blocking(stop_product_native)
         .await
-        .map_err(|e| IpcApiError::internal(format!("stop product join: {e}")))??;
+        .map_err(|e| IpcApiError::internal(format!("stop product join: {e}")))?;
+
+    let mut stdout = format!("--- native ---\n{native_log}\n");
+    let mut stderr = String::new();
+    if monorepo_root().is_some() {
+        if let Ok((code, out, err)) = tokio::task::spawn_blocking(|| run_product_script("stop"))
+            .await
+            .map_err(|e| IpcApiError::internal(format!("stop product script join: {e}")))?
+        {
+            stdout.push_str("--- bash ---\n");
+            stdout.push_str(&out);
+            stderr = err;
+            let _ = code;
+        }
+    }
 
     let status = build_status();
-    let ok = code == 0 && !status.api_ok;
-    let message = if code == 0 {
-        "Local product API/worker stopped.".into()
-    } else {
-        format!(
-            "desktop-local-product.sh stop failed (exit {code}). {}",
-            stderr.lines().last().unwrap_or("see stderr")
-        )
-    };
-
+    let ok = !status.api_ok;
     Ok(EnsureLocalProductResult {
         ok,
-        message,
+        message: if ok {
+            "Local product API/worker stopped.".into()
+        } else {
+            "stop 已调用，但 API 端口仍在监听。".into()
+        },
         stdout,
         stderr,
         status,
@@ -385,5 +802,20 @@ mod tests {
         assert_eq!(host, "127.0.0.1");
         assert_eq!(port, 18080);
         assert!(client_api_base().contains("18080"));
+    }
+
+    #[test]
+    fn parse_env_skips_comments() {
+        let dir = std::env::temp_dir().join(format!("cos-env-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("client.env");
+        fs::write(
+            &path,
+            "# comment\nJWT_SECRET=abc\nAVRAG_PUBLIC_BASE_URL=http://127.0.0.1:18080\n",
+        )
+        .unwrap();
+        let pairs = parse_env_file(&path);
+        assert!(pairs.iter().any(|(k, v)| k == "JWT_SECRET" && v == "abc"));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

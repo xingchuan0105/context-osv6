@@ -1,0 +1,89 @@
+{
+  "id": "1fae3991-53d6-4ca7-8ce0-b6b5d9d05b44",
+  "object": "response",
+  "created_at": 1786388948,
+  "status": "completed",
+  "background": false,
+  "completed_at": 1786388951,
+  "content_filters": null,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": null,
+  "max_output_tokens": 1024,
+  "max_tool_calls": null,
+  "model": "deepseek-v4-flash",
+  "moderation": null,
+  "output": [
+    {
+      "type": "web_search_call",
+      "id": "call_00_UY4vx0jk3Bt5sW14ozdk2265",
+      "status": "completed",
+      "action": {
+        "type": "search",
+        "queries": [
+          "capital of France river runs through it",
+          "ws_call_id=call_00_UY4vx0jk3Bt5sW14ozdk2265"
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "9f4333a5-d4f5-4d6f-9422-a6e881dbc90a",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "Based on the search results, I can answer your question directly:\n\nThe capital of France is **Paris**, and the river that runs through it is the **Seine River** (La Seine in French).\n\nThe Seine flows through the center of Paris from east to west, passing by many of the city's most famous landmarks, including the Eiffel Tower, Notre-Dame Cathedral, and the Louvre. It winds through about 8 miles (13 km) of the city center before continuing on to the English Channel."
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": "none",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": false,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": null
+  },
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "type": "web_search",
+      "search_context_size": null,
+      "user_location": null
+    }
+  ],
+  "top_logprobs": 0,
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 2310,
+    "input_tokens_details": {
+      "cached_tokens": 512
+    },
+    "output_tokens": 155,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 2465
+  },
+  "user": null,
+  "metadata": {}
+}

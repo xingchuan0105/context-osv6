@@ -23,7 +23,7 @@ Product and code use different short names for the **same** concepts. This is in
 | （无） | agent base | `system/agent-base.md` | pure chat + session identity | often first system part |
 | Lead | lead | `system/lead-base.md` · `clusters/lead/SKILL.md` | rag/search/dual plan+synth | assembly when caps mounted |
 | RAG Worker | rag worker | `system/worker-sandbox.md` · `workers/rag/SKILL.md` | nested short SaC | Worker system parts only |
-| Web Worker | web worker | `workers/web/SKILL.md` | host multi-query leaf | skill + host pack |
+| Web Worker | web worker | —（host 多 query 叶子，无 LLM 挂载） | host multi-query leaf | host pack |
 | 写精修 | write refine | `deprecated/.../write-refine-system.md` | `mode: write_refine` | separate product; not SaC chat tree |
 
 **Loop observation files** named `codegen-*.md` mean “sandbox execution observations”, not the retired skill id `codegen`. Product skill for KB retrieve is **`knowledge-base`**.

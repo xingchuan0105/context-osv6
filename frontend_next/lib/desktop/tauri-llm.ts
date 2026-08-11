@@ -109,9 +109,43 @@ export type EnsureLocalStackResult = {
   config: ClientRuntimeConfig;
 };
 
+function mapIpcError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  if (typeof error === "string") {
+    try {
+      const parsed: unknown = JSON.parse(error);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "message" in parsed &&
+        typeof (parsed as { message: unknown }).message === "string"
+      ) {
+        const rec = parsed as { status?: number; code?: string; message: string };
+        return new Error(rec.message);
+      }
+    } catch {
+      return new Error(error);
+    }
+    return new Error(error);
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return new Error(message);
+    }
+  }
+  return new Error(String(error));
+}
+
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-  return tauriInvoke<T>(command, args);
+  try {
+    return await tauriInvoke<T>(command, args);
+  } catch (error) {
+    throw mapIpcError(error);
+  }
 }
 
 export async function getLlmConfig(): Promise<LocalLlmConfig | null> {

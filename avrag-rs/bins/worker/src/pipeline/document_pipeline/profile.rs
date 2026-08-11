@@ -24,29 +24,8 @@ pub(crate) async fn generate_document_summary(
         .requested_by
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
-    let mut skip_llm = false;
-
-    if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
-        match svc
-            .check_quota(context.user_id().into_uuid(), user_id)
-            .await
-        {
-            Ok(quota) => {
-                if quota.blocked_5h || quota.blocked_7d {
-                    info!(document_id = %document_id, user_id = %user_id, "skipping windowed ingestion llm — quota exhausted");
-                    skip_llm = true;
-                }
-            }
-            Err(error) => {
-                info!(document_id = %document_id, error = %error, "quota check failed; skipping windowed ingestion llm");
-                skip_llm = true;
-            }
-        }
-    }
-
-    if skip_llm {
-        return;
-    }
+    // ADR-0010: private indexing is gated by wallet at task start, not residual 5h/7d
+    // plan unit walls. Do not skip windowed profile/summary LLM on rolling soft/hard.
 
     let result = run_windowed_ps_and_triplets(
         processor,

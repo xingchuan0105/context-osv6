@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hello-retrieval": {
+      "command": "/absolute/path/to/osv7/bin/hello-retrieval-mcp",
+      "args": []
+    }
+  }
+}

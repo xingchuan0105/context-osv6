@@ -161,16 +161,9 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         make_llm_client(&config.memory_llm, None),
     );
     let chatmemory = None;
-    let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
-        provider: config.search.provider.clone(),
-        base_url: config.search.base_url.clone(),
-        api_key: config.search.api_key.clone(),
-        max_results: config.search.max_results,
-        timeout_ms: config.search.timeout_ms,
-        search_lang: config.search.search_lang.clone(),
-        country: config.search.country.clone(),
-        freshness: config.search.freshness.clone(),
-    })));
+    let search_executor = Some(Arc::new(SearchExecutor::new(map_avrag_search_config(
+        &config,
+    ))));
     let object_store: Arc<dyn app_core::ObjectStorePort> =
         Arc::new(ObjectStorePortAdapter::new(Arc::new(
             ObjectStoreHandle::local(PathBuf::from(config.object_root.clone())),
@@ -308,16 +301,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 .map(|store| Arc::new(store) as Arc<dyn avrag_rag_core_ports::CachePort>)
         };
     let search_executor = Some(Arc::new({
-        let mut executor = SearchExecutor::new(avrag_search::SearchConfig {
-            provider: config.search.provider.clone(),
-            base_url: config.search.base_url.clone(),
-            api_key: config.search.api_key.clone(),
-            max_results: config.search.max_results,
-            timeout_ms: config.search.timeout_ms,
-            search_lang: config.search.search_lang.clone(),
-            country: config.search.country.clone(),
-            freshness: config.search.freshness.clone(),
-        });
+        let mut executor = SearchExecutor::new(map_avrag_search_config(&config));
         if let Some(cache) = cache_store.clone() {
             executor = executor.with_cache(cache);
         }
@@ -602,6 +586,31 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         redis_url: config.redis.url.clone(),
         rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     })
+}
+
+/// Map product `AppConfig.search` (+ DeepSeek keys + CRW auto-scrape) → `avrag_search::SearchConfig`.
+fn map_avrag_search_config(config: &AppConfig) -> avrag_search::SearchConfig {
+    avrag_search::SearchConfig {
+        provider: config.search.provider.clone(),
+        base_url: config.search.base_url.clone(),
+        api_key: config.search.api_key.clone(),
+        deepseek_base_url: config.search.deepseek_base_url.clone(),
+        deepseek_api_key: config.search.deepseek_api_key.clone(),
+        deepseek_model: config.search.deepseek_model.clone(),
+        max_results: config.search.max_results,
+        timeout_ms: config.search.timeout_ms,
+        search_lang: config.search.search_lang.clone(),
+        country: config.search.country.clone(),
+        freshness: config.search.freshness.clone(),
+        auto_scrape_enabled: config.search.auto_scrape_enabled,
+        crw_base_url: config.search.crw_base_url.clone(),
+        crw_api_key: config.search.crw_api_key.clone(),
+        auto_scrape_top_k: config.search.auto_scrape_top_k,
+        auto_scrape_max_chars: config.search.auto_scrape_max_chars,
+        auto_scrape_min_snippet: config.search.auto_scrape_min_snippet,
+        auto_scrape_timeout_ms: config.search.auto_scrape_timeout_ms,
+        auto_scrape_concurrency: config.search.auto_scrape_concurrency,
+    }
 }
 
 #[cfg(feature = "test-support")]

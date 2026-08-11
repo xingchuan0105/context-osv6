@@ -186,7 +186,8 @@ impl UsageLimitService {
                     row.enabled,
                 )
             })
-            .unwrap_or((100, 1000, true));
+            // ADR-0010: missing plan row → unlimited (0/0), not legacy free caps.
+            .unwrap_or((0, 0, true));
 
         if let Some(row) = override_row {
             return Ok(UsageLimitPolicy {
