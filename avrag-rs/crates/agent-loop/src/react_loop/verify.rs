@@ -200,6 +200,9 @@ pub fn follow_up_after_verify_fail(
 /// Outbound sanitizer when no further LLM turn is available (token ceiling) or
 /// after a closeout draft: illegal format → disaster prose; legal prose ships
 /// as-is **without** host footnotes.
+///
+/// **Not** for verify-fail + token ceiling: that path must use
+/// [`finalize_verify_failed_ceiling`] so a fail-adjudicated draft never ships.
 pub fn finalize_delivery_without_llm(answer: String, mode_id: &str) -> String {
     if super::answer_contract::check_final_answer(&answer).is_some() {
         prompt_assets::disaster_format_exhausted().to_string()
@@ -208,6 +211,13 @@ pub fn finalize_delivery_without_llm(answer: String, mode_id: &str) -> String {
     } else {
         answer
     }
+}
+
+/// Token budget already exhausted after verify **fail**: no closeout LLM.
+/// Always replace the fail draft with mode-aware disaster prose — never ship
+/// protocol-meta or off-topic "合法散文" that verify already rejected.
+pub fn finalize_verify_failed_ceiling(mode_id: &str) -> String {
+    prompt_assets::disaster_no_evidence_answer(mode_id).to_string()
 }
 
 pub fn verify_max_fail_rounds(loop_exit: &LoopExitConfig) -> u8 {
@@ -544,6 +554,24 @@ mod tests {
         let out = finalize_delivery_without_llm(dirty.into(), "rag");
         assert!(!out.contains("DSML"));
         assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn verify_fail_token_ceiling_ships_disaster_not_fail_draft() {
+        let fail_draft = "已收到。上一轮答复已按该规范处理：末行已附 SELECTED: #n 列表。无需检索或重述。";
+        // Plain sanitizer would keep this "legal" prose — that was the P0 hole.
+        let as_sanitize = finalize_delivery_without_llm(fail_draft.into(), "rag+search");
+        assert!(as_sanitize.contains("SELECTED") || as_sanitize.contains("无需检索"));
+
+        let ceiling = finalize_verify_failed_ceiling("rag+search");
+        assert!(!ceiling.contains("SELECTED"));
+        assert!(!ceiling.contains("无需检索"));
+        assert!(!ceiling.is_empty());
+        // Mode-aware disaster (no-evidence family for rag+search).
+        assert!(
+            ceiling.contains("知识库") || ceiling.contains("依据") || ceiling.contains("结论"),
+            "disaster body: {ceiling}"
+        );
     }
 
     #[test]

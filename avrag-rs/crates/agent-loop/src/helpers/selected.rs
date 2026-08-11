@@ -149,6 +149,84 @@ pub fn answer_with_selected_cite_markers(answer: &str, tool_results: &[ToolResul
     out
 }
 
+/// User-facing answer rewrite for the product UI:
+/// 1. Map bridge aliases `(#n)` / `（#n）` → `[[cite:chunk_id]]` (frontend chips).
+/// 2. Strip protocol lines `SELECTED: #n…` / `选择: …` (not user prose).
+/// 3. If SELECTED listed aliases with no inline markers, append missing `[[cite:…]]`
+///    so filter + trailing chips still work.
+///
+/// Call this for the **persisted / streamed** answer string; filtering may use
+/// the same result (already contains `[[cite:]]`).
+pub fn materialize_alias_citations_for_user(
+    answer: &str,
+    tool_results: &[ToolResult],
+) -> String {
+    let stream = alias_chunk_ids_in_order(tool_results);
+    let selected_ids = resolve_selected_chunk_ids(answer, tool_results);
+
+    // Drop SELECTED / 选择 protocol lines (keep other content).
+    let mut body = String::new();
+    for line in answer.lines() {
+        let trimmed = line.trim();
+        let line_for_sel = trimmed
+            .trim_start_matches(|c: char| c == '>' || c == '-' || c == '*' || c == '`' || c == '|')
+            .trim_start();
+        let line_for_sel = line_for_sel.trim_end_matches('`').trim_end();
+        if selected_line_body(line_for_sel).is_some() {
+            continue;
+        }
+        body.push_str(line);
+        body.push('\n');
+    }
+    // Preserve no trailing newline if original had none.
+    if !answer.ends_with('\n') && body.ends_with('\n') {
+        body.pop();
+    }
+
+    if stream.is_empty() {
+        return body;
+    }
+
+    // （#n） / (#n) → [[cite:id]] when alias resolves in the bridge stream.
+    // Do not rewrite bare #n (too noisy in headings / markdown anchors).
+    let re = regex::Regex::new(r"[（(]#(\d+)[）)]").expect("alias paren regex");
+    let rewritten = re.replace_all(&body, |caps: &regex::Captures| {
+        let Ok(n) = caps[1].parse::<u64>() else {
+            return caps[0].to_string();
+        };
+        let Some(id) = (n as usize)
+            .checked_sub(1)
+            .and_then(|idx| stream.get(idx))
+        else {
+            return caps[0].to_string();
+        };
+        format!("[[cite:{id}]]")
+    });
+    let mut out = rewritten.into_owned();
+
+    // SELECTED-only (or partial inline): ensure every selected chunk is cited.
+    if !selected_ids.is_empty() {
+        let existing = crate::cite_extract::extract_referenced_chunk_ids(&out);
+        let mut appended = false;
+        for id in selected_ids {
+            if existing.contains(&id) {
+                continue;
+            }
+            if !appended {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                appended = true;
+            }
+            out.push_str("[[cite:");
+            out.push_str(&id);
+            out.push_str("]]");
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +314,29 @@ mod tests {
         let already = "x [[cite:c1]]\nSELECTED: #1";
         let with2 = answer_with_selected_cite_markers(already, &results);
         assert_eq!(with2.matches("[[cite:c1]]").count(), 1);
+    }
+
+    #[test]
+    fn materialize_rewrites_paren_aliases_and_strips_selected() {
+        let results = vec![tr(
+            "dense_retrieval",
+            serde_json::json!({"chunks": [
+                {"chunk_id": "c1", "text": "a"},
+                {"chunk_id": "c2", "text": "b"},
+                {"chunk_id": "c3", "text": "c"},
+            ]}),
+        )];
+        let ans = "战略定位之一（#1）。\n痛点（#3）。\n\nSELECTED: #1, #3\n";
+        let out = materialize_alias_citations_for_user(ans, &results);
+        assert!(out.contains("[[cite:c1]]"), "{out}");
+        assert!(out.contains("[[cite:c3]]"), "{out}");
+        assert!(!out.contains("SELECTED"), "{out}");
+        assert!(!out.contains("（#1）"), "{out}");
+        assert!(!out.contains("(#3)"), "{out}");
+        // halfwidth parens
+        let ans2 = "x (#2)\nSELECTED: #2";
+        let out2 = materialize_alias_citations_for_user(ans2, &results);
+        assert!(out2.contains("[[cite:c2]]"));
+        assert!(!out2.contains("SELECTED"));
     }
 }

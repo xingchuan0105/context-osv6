@@ -43,8 +43,10 @@ pub struct AssembledContext {
 
 pub struct ContextAssembler;
 
-/// Path of the thin always-on system voice (sandbox base + session rules).
+/// Path of the session base (identity, user channel, BASE tools).
 const AGENT_BASE_PATH: &str = "prompts/system/agent-base.md";
+/// Lead grounded-synthesis voice (Lead+Workers product modes).
+const LEAD_BASE_PATH: &str = "prompts/system/lead-base.md";
 
 /// Load system prompt base: if `request.metadata.system_prompt_parts` is a non-empty
 /// array of path strings, load each and join with `\n\n---\n\n`; otherwise use
@@ -118,8 +120,13 @@ impl ContextAssembler {
 
         let tokens_used = disclosed.tokens_used_hint.unwrap_or(0);
         let tokens_max = disclosed.tokens_max_hint.unwrap_or(0);
-        let budget_hint =
-            build_loop_budget_hint(iteration, max_iterations, tokens_used, tokens_max);
+        let budget_hint = build_loop_budget_hint(
+            iteration,
+            max_iterations,
+            tokens_used,
+            tokens_max,
+            mode.budget.baseline_iterations,
+        );
         // P0 (2026-07-30): budget_hint moved OUT of system_content into
         // AssembledContext.budget_hint; the caller injects it as a trailing
         // user message so the system + history prefix stays stable across
@@ -145,11 +152,23 @@ impl ContextAssembler {
         registry: &CapabilityRegistry,
         disclosed: &mut DisclosedState,
     ) -> AssembledContext {
-        // Thin base: agent-base only. Retrieve method tables / KB contract stay
-        // on the retrieve phase so synthesis does not re-pay always-on API docs.
-        let base = super::config::load_system_prompt(AGENT_BASE_PATH).unwrap_or_else(|_| {
-            load_assembled_system_base(mode, request)
-        });
+        // Lead+Workers: session base + lead-base (grounded synthesis). Pure chat:
+        // agent-base only. Worker method tables stay off synthesis.
+        let base = if super::config::is_lead_workers_path(mode) {
+            let session = super::config::load_system_prompt(AGENT_BASE_PATH).unwrap_or_default();
+            let lead = super::config::load_system_prompt(LEAD_BASE_PATH).unwrap_or_default();
+            if lead.is_empty() {
+                session
+            } else if session.is_empty() {
+                lead
+            } else {
+                format!("{session}\n\n{lead}")
+            }
+        } else {
+            super::config::load_system_prompt(AGENT_BASE_PATH).unwrap_or_else(|_| {
+                load_assembled_system_base(mode, request)
+            })
+        };
         let mut hint_parts = Vec::new();
 
         if let Some(hint) = request.format_hint.as_deref() {
@@ -193,25 +212,37 @@ impl ContextAssembler {
     }
 }
 
+/// Soft pace observation when retrieve round exceeds `baseline_rounds`
+/// (prompts/loop/budget-pace-over-baseline.tmpl.md). Third-person; not a hard stop.
+const BUDGET_PACE_OVER_BASELINE: &str =
+    include_str!("../../../../prompts/loop/budget-pace-over-baseline.tmpl.md");
+
+/// Soft near-hard-ceiling observation when remaining rounds ≤ 1.
+const BUDGET_PACE_NEAR_CEILING: &str =
+    include_str!("../../../../prompts/loop/budget-pace-near-ceiling.tmpl.md");
+
 /// Build the per-round loop budget hint injected into every retrieve-phase
 /// system prompt. `iteration` is 0-indexed.
 ///
 /// Tokens are the primary cost signal; rounds are a safety ceiling.
+/// `baseline_rounds` is a soft pace (default 2) — not a hard stop.
 ///
 /// Format:
-/// `<loop_budget round="1" max_rounds="12" remaining_rounds="11" tokens_used="0" tokens_max="28000" tokens_remaining="28000" />`
+/// `<loop_budget round="1" baseline_rounds="2" max_rounds="12" remaining_rounds="11" tokens_used="0" tokens_max="28000" tokens_remaining="28000" />`
 pub fn build_iteration_budget_hint(iteration: u8, max_iterations: u8) -> String {
-    build_loop_budget_hint(iteration, max_iterations, 0, 0)
+    build_loop_budget_hint(iteration, max_iterations, 0, 0, 2)
 }
 
 /// Full budget hint with cumulative LLM token usage.
 ///
 /// `tokens_max == 0` means no token cap (rounds-only).
+/// `baseline_rounds == 0` omits soft-pace fields and over-baseline prose.
 pub fn build_loop_budget_hint(
     iteration: u8,
     max_iterations: u8,
     tokens_used: u32,
     tokens_max: u32,
+    baseline_rounds: u8,
 ) -> String {
     let round = iteration + 1;
     let remaining_rounds = max_iterations.saturating_sub(round);
@@ -225,10 +256,87 @@ pub fn build_loop_budget_hint(
         .find(|m| m.tag == "<loop_budget")
         .expect("loop_budget marker registered")
         .tag;
-    format!(
-        "{open} round=\"{round}\" max_rounds=\"{max_iterations}\" remaining_rounds=\"{remaining_rounds}\" \
+    let baseline_attr = if baseline_rounds == 0 {
+        String::new()
+    } else {
+        format!(" baseline_rounds=\"{baseline_rounds}\"")
+    };
+    let mut hint = format!(
+        "{open} round=\"{round}\"{baseline_attr} max_rounds=\"{max_iterations}\" remaining_rounds=\"{remaining_rounds}\" \
          tokens_used=\"{tokens_used}\" tokens_max=\"{tokens_max}\" tokens_remaining=\"{tokens_remaining}\" />"
-    )
+    );
+    // Soft urgency: past usual pace baseline (still under hard max).
+    if baseline_rounds > 0 && round > baseline_rounds {
+        let pace = BUDGET_PACE_OVER_BASELINE
+            .replace("{round}", &round.to_string())
+            .replace("{baseline}", &baseline_rounds.to_string())
+            .replace("{max_rounds}", &max_iterations.to_string())
+            .replace("{remaining_rounds}", &remaining_rounds.to_string());
+        let pace = pace.trim();
+        if !pace.is_empty() {
+            hint.push_str("\n\n");
+            hint.push_str(pace);
+        }
+    }
+    // Soft near-ceiling: last hard round remaining (or already on last).
+    if max_iterations > 0 && remaining_rounds <= 1 {
+        let near = BUDGET_PACE_NEAR_CEILING
+            .replace("{round}", &round.to_string())
+            .replace("{baseline}", &baseline_rounds.to_string())
+            .replace("{max_rounds}", &max_iterations.to_string())
+            .replace("{remaining_rounds}", &remaining_rounds.to_string());
+        let near = near.trim();
+        if !near.is_empty() {
+            hint.push_str("\n\n");
+            hint.push_str(near);
+        }
+    }
+    hint
+}
+
+#[cfg(test)]
+mod budget_hint_tests {
+    use super::build_loop_budget_hint;
+
+    #[test]
+    fn budget_hint_includes_soft_baseline() {
+        let h = build_loop_budget_hint(0, 8, 100, 16000, 2);
+        assert!(h.contains("round=\"1\""));
+        assert!(h.contains("baseline_rounds=\"2\""));
+        assert!(h.contains("max_rounds=\"8\""));
+        assert!(!h.contains("3/2"), "round 1 must not inject over-baseline prose: {h}");
+    }
+
+    #[test]
+    fn budget_hint_over_baseline_injects_pace_prose() {
+        let h = build_loop_budget_hint(2, 8, 1000, 16000, 2);
+        // iteration 2 → round 3 > baseline 2
+        assert!(h.contains("round=\"3\""));
+        assert!(h.contains("baseline_rounds=\"2\""));
+        assert!(
+            h.contains("3/2") || h.contains("**3/2**"),
+            "expected soft pace 3/2 observation: {h}"
+        );
+        assert!(h.contains("硬顶仍为 8") || h.contains("max_rounds"));
+    }
+
+    #[test]
+    fn budget_hint_baseline_zero_skips_soft_fields() {
+        let h = build_loop_budget_hint(3, 8, 0, 0, 0);
+        assert!(!h.contains("baseline_rounds"));
+        assert!(!h.contains("3/2"));
+    }
+
+    #[test]
+    fn budget_hint_near_ceiling_injects_pace() {
+        // iteration 7 → round 8, max 8, remaining 0
+        let h = build_loop_budget_hint(7, 8, 0, 0, 2);
+        assert!(h.contains("round=\"8\""));
+        assert!(
+            h.contains("8/8") || h.contains("剩余硬顶"),
+            "expected near-ceiling observation: {h}"
+        );
+    }
 }
 
 /// Render the per-run query card as a trailing user-message host observation
@@ -332,10 +440,16 @@ mod tests {
         );
         assert!(!ctx.system_content.contains("rag-codegen-guide"));
         assert!(ctx.system_content.contains("Retrieval query: test"));
-        assert!(ctx.budget_hint.contains(
-            "<loop_budget round=\"1\" max_rounds=\"4\" remaining_rounds=\"3\" \
-                     tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />",
-        ));
+        assert!(
+            ctx.budget_hint.contains(
+                "<loop_budget round=\"1\" baseline_rounds=\"2\" max_rounds=\"4\" remaining_rounds=\"3\" \
+                     tokens_used=\"0\" tokens_max=\"0\" tokens_remaining=\"0\" />"
+            ) || ctx.budget_hint.contains("baseline_rounds=\"2\"")
+                && ctx.budget_hint.contains("round=\"1\"")
+                && ctx.budget_hint.contains("max_rounds=\"4\""),
+            "budget_hint missing soft baseline: {}",
+            ctx.budget_hint
+        );
         // D8: memory is prose-only disclosure (client.history / client.user_profile
         // in the sandbox); no native tools are exposed — retrieval stays SDK-only.
         assert!(

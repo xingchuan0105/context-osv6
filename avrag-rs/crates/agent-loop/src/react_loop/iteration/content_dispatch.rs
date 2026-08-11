@@ -96,40 +96,45 @@ impl ReActLoop {
             }
         }
 
-        // L2 / L2.5 structural gates (2026-08-03, runtime QC). Both fire ONLY
-        // when the numbered-iteration budget is not about to be exhausted —
-        // on exhaustion both gates release (the loop breaks at the next
-        // top-of-loop budget check anyway, then C5 synthesis / disclosure
-        // handles the final turn). Each rejection is a `Continue` that eats a
-        // normal numbered iteration (`consumes_iteration_budget`), so the
-        // rounds ceiling guarantees termination.
+        // L2 / L2.5 structural gates (2026-08-03, runtime QC).
+        //
+        // Evidence-missing (L2) fires ONLY when the numbered-iteration budget
+        // is not about to be exhausted — on rounds exhaustion it releases so
+        // the loop can hand off to synthesis (C5 / top-of-loop break).
+        //
+        // Required-actions (L2.5) always fire while unsatisfied — including
+        // dual-mandated `web`. Releasing L2.5 on last round let dual skip web
+        // entirely; token budget at the retrieve loop top still guarantees
+        // termination if the model never produces an Ok web call.
         // Budget-exhaustion check uses the run's resolved iteration budget
         // (same value the loop's top-of-loop check uses), not a re-resolution.
         let budget_exhausted = iteration.saturating_add(1) >= state.max_iterations;
 
-        if !budget_exhausted {
+        {
             // L2 + L2.5 structural gates (same round): may inject **both**
             // observations so required_actions are not shadowed by evidence_missing
             // (q047: dense/lexical never recorded while only L2 fired).
             let mut obs_parts: Vec<String> = Vec::new();
             let mut exit_reason = String::new();
 
-            let evidence_required = super::super::policy::exit_policy::requires_evidence(mode);
-            if evidence_required
-                && !super::super::policy::exit_policy::has_retrieval_observation(
-                    &state.messages,
-                    &state.tool_results,
-                    mode,
-                )
-            {
-                let had_attempt = super::super::policy::exit_policy::has_retrieval_attempt(
-                    &state.tool_results,
-                );
-                obs_parts.push(
-                    super::super::prompt_assets::evidence_missing_nudge_for(had_attempt)
-                        .to_string(),
-                );
-                exit_reason = "evidence_missing_continue".to_string();
+            if !budget_exhausted {
+                let evidence_required = super::super::policy::exit_policy::requires_evidence(mode);
+                if evidence_required
+                    && !super::super::policy::exit_policy::has_retrieval_observation(
+                        &state.messages,
+                        &state.tool_results,
+                        mode,
+                    )
+                {
+                    let had_attempt = super::super::policy::exit_policy::has_retrieval_attempt(
+                        &state.tool_results,
+                    );
+                    obs_parts.push(
+                        super::super::prompt_assets::evidence_missing_nudge_for(had_attempt)
+                            .to_string(),
+                    );
+                    exit_reason = "evidence_missing_continue".to_string();
+                }
             }
 
             if let Some(card) = state.query_card.as_ref() {

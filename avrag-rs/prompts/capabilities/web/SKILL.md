@@ -1,28 +1,32 @@
 ---
 name: search
-description: "Web search — fan-out queries and fetch pages in a Python sandbox"
+description: "Web search — Lead+Workers host leaf (all modes with web); EvidencePack then synthesis"
 disclose_at: retrieve
 atomic: true
 applicable_modes: [search]
-version: "3.0"
+version: "3.3"
 ---
 
 ## 环境
 
-在 **Python 沙箱**调网页检索（与知识库检索同一套多轮：写代码 → 看回传 → 再写）。每轮只执行**第一个** `<code language="python">` 块；独立调用在**同一个块**内并行发出是默认工作方式（一轮一块一次回传全部结果，比一轮一个调用节省整轮 LLM 往返）。
+### 联网已挂载（search-only 与 dual）
 
-可引用网页事实 = 回传中实际出现的搜索摘要或 `fetch` 正文。URL 与序号以回传为准。
+网页检索由 **Web Worker / 宿主检索叶子**完成（可多 query 并行；常带 auto-scrape/CRW 厚 snippet）。证据以宿主注入的 **`[evidence_pack]`**（及 tool 回传）为准，**不是**把上游搜索引擎全文当用户气泡。
 
-## 可用方法（本能力开通）
+用户可见终答由 **Lead 合成**写成自然语言；网页引用 `[[web:n]]`。
+
+本路径**不**依赖沙箱多轮 `client.web` fan-out 作为常态。若运行时仍暴露 `client.web` / `fetch`（历史 dual SaC 面），仅作补充；主证据仍以 pack 为准。
+
+**宿主 auto-scrape（环境事实）**：检索返回后，宿主可对排序靠前、snippet 过短的若干 URL **自动**拉页（CRW），正文写入对应 `results[].snippet`。
+
+## 可用方法（沙箱仍挂载时）
 
 | 作用 | 调用 | 说明 | 局限 |
 |------|------|------|------|
-| 网页搜索 | `await client.web(query)` | 事实/新闻；可并行多条 query | 单语 query 易漏另一语种索引；摘要可能过短 |
-| 打开页面 | `await client.fetch(url)` | 摘要不够时拉全文 | 未 fetch 的页面全文未知；print 宜截取要点 |
-| 知识库（若开通） | `await client.dense(query)` 等 | 对照本地文档；完整方法见 **knowledge-base** | 与网页证据分源引用 |
+| 网页搜索 | `await client.web(query)` | 事实/新闻；可并行多条 query | 单语 query 易漏另一语种 |
+| 打开页面 | `await client.fetch(url)` | 自动读页未覆盖时 | 未 fetch 且 snippet 空则全文未知 |
+| 知识库（若开通） | `await client.dense(query)` 等 | 对照本地文档 | 与网页证据分源引用 |
 | 跨块存储 | `await client.save` / `load` | 相对路径 | 新进程不保留变量 |
-
-未列入上表的方法（如 `grep`）在本能力单独开通时不可用。
 
 ```python
 import asyncio
@@ -32,20 +36,18 @@ zh, en = await asyncio.gather(
 )
 print(zh)
 print(en)
-page = await client.fetch(zh["results"][0]["url"])  # 字段以回传为准
 ```
 
 ## 查询与覆盖（环境事实）
 
 | 因素 | 对回传的影响 |
 |------|----------------|
-| 中 / 英 query | 两侧索引不同；双语并行通常扩大覆盖 |
-| 多实体 / 对比两侧 | 各侧独立 query 时，覆盖状态按侧分别判断 |
+| 中 / 英 query | 两侧索引不同；dual 双语并行通常扩大覆盖 |
 | 时效词（年份、latest） | 影响新闻/行情类命中是否贴近年份 |
-| 来源类型 | 官方/标准可信度较高；媒体/维基居中；论坛/营销较低，冲突时并陈 |
-| 摘要 vs `fetch` | 摘要够支撑主张则不必 fetch；需要原文句子或数字时 fetch 后以正文为准 |
-| 空结果 | 该 query 未命中；更换表述或语言后状态可改变 |
+| 来源类型 | 官方/标准可信度较高；媒体/维基居中；论坛/营销较低 |
+| snippet 已含正文 | 宿主 auto-scrape 后常见 |
+| 空结果 | 该 query 未命中 |
 
 ## 引用
 
-最终答复中网页序号写作 `[[web:n]]`，与回传结果序号一致。若同时有知识库命中，文档侧用末行 `SELECTED: #n`，与 `[[web:n]]` 分源，不混挂。
+最终答复中网页序号写作 `[[web:n]]`，与 results 顺序一致。若同时有知识库命中，文档侧用末行 `SELECTED: #n`，与 `[[web:n]]` 分源，不混挂。

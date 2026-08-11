@@ -1,38 +1,33 @@
 mode: search
-# SaC: assemble_mode always loads system/agent-base, then
-# capabilities/web when 联网 is mounted.
-# Internal mode id `search`. Model-facing: 联网 / web. Skill id for thick world model: `search`.
+# Search-only: Lead + Web Worker (host multi-query leaf + CRW) → Lead synthesis.
+# No DeepSeek/host direct user bubble (D3 / W3).
+# Dual shares LeadWorkers via assemble_mode when KB is also mounted.
 system_prompt_base: prompts/capabilities/web/contract.md
-# Empty tool_pool: LLM uses client.web / client.fetch in sandbox. auto_fallback is host-side only.
 tool_pool: []
 inject_retrieval_query: true
+retrieve_strategy: lead_workers
 skill_catalog:
   retrieve: [search, memory]
   synthesis: [writing, format, brainstorming]
-  # D9: no `mandatory` here — assemble_mode derives search when web is mounted
-  # (memory is on-demand via skill_request; agent-base keeps the pointer).
 budget:
-  max_iterations: 8
+  # Host web retrieve does not burn product rounds; headroom for synthesis.
+  # Dual takes max(rag, search) — see mode_assemble.
+  # No token wall (omit max_tokens → unlimited).
+  max_iterations: 2
+  baseline_iterations: 0
   by_user_tier:
-    free: 6
-    pro: 8
-    enterprise: 12
-  max_tokens: 16000
-  max_tokens_by_user_tier:
-    free: 12000
-    pro: 16000
-    enterprise: 24000
-  # continue boost default +50% baseline max_tokens (omit no_chunk_grace_tokens absolute)
-# Unified with chat/rag so capability stack does not change sampling policy.
+    free: 2
+    pro: 2
+    enterprise: 2
 temperature: 0.4
 loop_exit:
-  # Three-loop (2026-08-07): retrieve finds material; synthesis writes; short Judge.
   require_evidence: false
   allow_content_early_stop: false
+  # Pack → synthesis; never ship retrieve prose / host DeepSeek text as user bubble.
   skip_synthesis_on_direct_answer: false
   forbid_retrieve_direct_answer: true
-  verify: true
-  verify_max_fail_rounds: 3
+  verify: false
+  verify_max_fail_rounds: 1
 synthesis_output:
   contract: prose_only
 auto_fallback:

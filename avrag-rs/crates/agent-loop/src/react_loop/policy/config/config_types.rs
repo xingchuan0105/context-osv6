@@ -2,6 +2,18 @@ use std::collections::HashMap;
 
 use super::skill_catalog::SkillCatalogConfig;
 
+/// How the retrieve phase obtains evidence.
+///
+/// - [`SacCodegen`]: model writes Python (`client.*`) multi-round — used **inside** RAG Worker short SaC.
+/// - [`LeadWorkers`]: Lead plan + channel Workers → packs → Lead synthesis (product rag/search/dual).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RetrieveStrategy {
+    #[default]
+    SacCodegen,
+    LeadWorkers,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ModeConfig {
     #[serde(alias = "mode")]
@@ -36,6 +48,30 @@ pub struct ModeConfig {
     /// Product `assemble_mode` always fills this from capability flags.
     #[serde(default)]
     pub sdk_primitives: Vec<String>,
+    /// Retrieve acquisition strategy. Product rag/search/dual: `lead_workers`.
+    /// Nested RAG Worker short SaC uses `sac_codegen` on a cloned mode.
+    #[serde(default)]
+    pub retrieve_strategy: RetrieveStrategy,
+}
+
+/// Lead + Workers retrieve path (product rag / search / dual).
+pub fn is_lead_workers_path(mode: &ModeConfig) -> bool {
+    mode.retrieve_strategy == RetrieveStrategy::LeadWorkers
+}
+
+/// Whether mode mounts KB retrieval primitives.
+pub fn mode_has_rag_primitives(mode: &ModeConfig) -> bool {
+    mode.sdk_primitives.iter().any(|p| {
+        matches!(
+            p.as_str(),
+            "dense" | "lexical" | "grep" | "struct_query" | "struct_catalog"
+        )
+    })
+}
+
+/// Whether mode mounts web primitives.
+pub fn mode_has_web_primitives(mode: &ModeConfig) -> bool {
+    mode.sdk_primitives.iter().any(|p| p == "web" || p == "fetch")
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -116,11 +152,16 @@ impl Default for SynthesisOutputConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BudgetConfig {
-    /// Safety ceiling on retrieve completes (prevents infinite loops when
-    /// usage is missing). Prefer `max_tokens` as the primary cost control.
+    /// Primary retrieve cost ceiling: numbered retrieve turns that
+    /// `consumes_iteration_budget` (compile-feedback free). Product rag/dual: 5.
     pub max_iterations: u8,
     #[serde(default)]
     pub by_user_tier: Option<HashMap<String, u8>>,
+    /// Soft retrieve-round **pace** baseline (not a hard stop). Exposed on
+    /// `<loop_budget baseline_rounds="…">` so the model sees progress like
+    /// `round/baseline` (e.g. 3/2) when it exceeds the usual path. `0` disables.
+    #[serde(default = "default_baseline_iterations")]
+    pub baseline_iterations: u8,
     /// Primary retrieve budget: cumulative LLM `total_tokens` (prompt+completion).
     /// `None` / omitted → rounds-only (legacy).
     #[serde(default)]
@@ -134,6 +175,10 @@ pub struct BudgetConfig {
     pub no_chunk_grace_tokens: Option<u32>,
 }
 
+fn default_baseline_iterations() -> u8 {
+    2
+}
+
 /// Continue / no-chunk grace: fraction of **baseline** token budget added once.
 pub const CONTINUE_TOKEN_BUDGET_RATIO_NUM: u32 = 1;
 pub const CONTINUE_TOKEN_BUDGET_RATIO_DEN: u32 = 2; // 50%
@@ -143,6 +188,7 @@ impl Default for BudgetConfig {
         Self {
             max_iterations: 4,
             by_user_tier: None,
+            baseline_iterations: default_baseline_iterations(),
             max_tokens: None,
             max_tokens_by_user_tier: None,
             // Prefer ratio-based grace (50% baseline); absolute is ops override only.

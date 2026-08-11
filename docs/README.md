@@ -3,9 +3,10 @@
 本索引是文档体系的入口：告诉你哪些文档是**当前权威**、哪些是**历史记录**。
 维护规则：新增现行参考文档时登记到「当前权威」；带日期戳的计划/审计/复盘属于时间点快照，无需登记，也无需随架构演进更新内容；文档被取代时在文首加 SUPERSEDED 横幅并在「已被取代」一节登记。（索引建立于 2026-08-02 文档体系梳理）
 
-## 现行架构基线（2026-08-02）
+## 现行架构基线（2026-08-11 更新）
 
-- **单 agent SaC**（Search as Code）：一条 ReAct 循环从指令到答案，检索全部走沙箱 SDK；orchestrator 多 agent 架构已物理删除。设计：`plans/2026-07-30-sac-sdk-single-agent-design.md`
+- **Agent-lane 目标形态：Lead + RAG/Web Workers**（显式 `capabilities[]`；Workers 只回 EvidencePack；Lead 合成与覆盖度裁决；无独立 verify 环）。设计：`plans/2026-08-11-lead-rag-web-workers-design.md`（W0 契约已进 `agent-loop::lead_workers`；W1+ 接线中）
+- **SaC SDK** 下沉为 **RAG Worker** 执行引擎（dense/lexical/grep 等仍走沙箱）；2026-07-30 单 agent A2「无 worker」在 agent-lane **被本设计取代**（见该文横幅待补 / 本索引为准）
 - **Product Apps + AppState 组合根**：T1–T8 法则生效。见根 `../AGENTS.md` + `agent/product-apps.md`
 - **workspace 唯一产品真相**，无 org（T7/T8）
 - **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；**现行商业模式见 ADR-0010**（可分享 Workspace 名额 + 代购储值）；旧 token 滚动套餐 / 桌面买断见已取代 ADR-0004
@@ -44,6 +45,7 @@
 | `../avrag-rs/docs/e2e-gates.md` | L1/L2/L3 E2E 门径语义（本目录外，生效中） |
 | `../avrag-rs/prompts/README.md` | prompt CDS 布局与撰写规则 |
 | `../avrag-rs/prompts/loop/README.md` | loop 观察消息加载路径与规则 |
+| `plans/2026-08-11-lead-rag-web-workers-design.md` | **Lead + Workers 定稿**（agent-lane 编排权威） |
 
 ## 近期审计快照（时间点；未吸收进 AGENTS 前非强制）
 

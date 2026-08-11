@@ -162,6 +162,11 @@ struct FetchResult {
 }
 
 async fn fetch_and_extract(url: &str, max_length: usize) -> anyhow::Result<FetchResult> {
+    // Prefer CRW (Docker/local binary) when configured — same reader as web auto-scrape.
+    if let Some(result) = try_crw_scrape(url, max_length).await {
+        return result;
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("Context-OS-Agent/1.0")
@@ -190,6 +195,45 @@ async fn fetch_and_extract(url: &str, max_length: usize) -> anyhow::Result<Fetch
         truncated,
         length,
     })
+}
+
+/// Returns `None` when CRW is not configured; `Some(Err)` when CRW was tried and failed.
+async fn try_crw_scrape(url: &str, max_length: usize) -> Option<anyhow::Result<FetchResult>> {
+    let base = std::env::var("CRW_BASE_URL").unwrap_or_default();
+    let base = base.trim();
+    if base.is_empty() {
+        return None;
+    }
+    let key = std::env::var("CRW_API_KEY").unwrap_or_default();
+    let timeout_ms = std::env::var("WEB_AUTO_SCRAPE_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(12_000_u64);
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return Some(Err(e.into())),
+    };
+    match avrag_search::scrape_url(&client, base, &key, url, timeout_ms, max_length).await {
+        Ok(md) => {
+            let title = md
+                .lines()
+                .find(|l| l.starts_with('#') || !l.trim().is_empty())
+                .map(|l| l.trim_start_matches('#').trim().to_string())
+                .unwrap_or_default();
+            let length = md.len();
+            let truncated = length > max_length;
+            Some(Ok(FetchResult {
+                title,
+                content: md,
+                truncated,
+                length,
+            }))
+        }
+        Err(e) => Some(Err(e)),
+    }
 }
 
 fn validate_url(url: &str) -> anyhow::Result<()> {

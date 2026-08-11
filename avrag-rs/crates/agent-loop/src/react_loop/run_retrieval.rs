@@ -3,7 +3,7 @@ use common::AppError;
 
 use super::ReActLoop;
 use super::assembler::LoopPhase;
-use super::config::{LoopExitConfig, ModeConfig};
+use super::config::{is_lead_workers_path, LoopExitConfig, ModeConfig};
 use super::exit_policy::has_retrieval_observation;
 use super::hooks::{LoopContext, LoopHooks};
 use super::iteration::{IterationControl, IterationOutcome, IterationState};
@@ -93,6 +93,22 @@ impl ReActLoop {
         let effective_max_tokens = mode.budget.resolve_max_tokens(tier);
         let prior_billable = budget_seed.prior_usage.billable_tokens();
         // require_evidence is skill-owned: no host no-chunk grace / hard continue.
+
+        // Product retrieve: Lead + Workers (rag / search / dual).
+        // Box::pin breaks async recursion (LeadWorkers → short SaC → this fn).
+        if is_lead_workers_path(mode) {
+            return Box::pin(self.run_lead_workers_retrieve(
+                mode,
+                request,
+                auth,
+                loop_exit,
+                hooks,
+                cancel,
+                state,
+                sink,
+            ))
+            .await;
+        }
 
         loop {
             if cancel.is_cancelled() {

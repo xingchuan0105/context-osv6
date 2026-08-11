@@ -213,7 +213,7 @@ impl ReActLoop {
         let messages = reread_owned.as_deref().unwrap_or(after_selected);
         let (final_answer, usage) = synthesis
             .run(
-                &self.llm,
+                &self.synthesis_llm,
                 &synthesis_ctx,
                 mode,
                 messages,

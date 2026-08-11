@@ -201,7 +201,12 @@ impl LoopRuntimeDeps {
             extra_results: Mutex::new(Vec::new()),
             extra_calls: Mutex::new(Vec::new()),
         });
-        let interpreter = CodeInterpreter::new();
+        // Default CodeInterpreter wall is 30s (fine for pure Python). SaC blocks
+        // call client.web → DeepSeek Responses often 15–60s per query; asyncio.gather
+        // of 3–4 webs + optional CRW scrape routinely exceeds 30s and the host then
+        // kills the sandbox with "timeout after 30s" while search threads still finish
+        // ("search ok" in logs, empty UI). Align with bridge RPC wait (300s).
+        let interpreter = CodeInterpreter::new().with_timeout(300);
         match interpreter
             .execute_with_bridge(code, Arc::clone(&bridge))
             .await
@@ -235,7 +240,7 @@ impl LoopRuntimeDeps {
         Some(avrag_rag_core::runtime::tools::dispatch(runtime, auth, &call).await)
     }
 
-    /// Web search auto-fallback via SearchProvider.
+    /// Web search via SearchProvider (includes CRW enrich when configured).
     pub async fn execute_search_fallback(
         &self,
         query: &str,

@@ -33,22 +33,23 @@ pub fn build_run_result(
 ) -> AgentRunResult {
     let total_elapsed_ms = ctx.start_time.elapsed().as_millis() as u64;
     let citations = crate::helpers::build_all_citations_from_tool_results(collected_tool_results);
-    // Single-agent path: models circle evidence with `SELECTED: #n` (bridge
-    // aliases). ADR-0008 filter only keeps `[[cite:chunk_id]]` / `[[web:n]]`.
-    // Hydrate SELECTED → synthetic cite markers for filtering only; user-
-    // facing `answer` stays as written.
-    let filter_answer =
-        crate::helpers::answer_with_selected_cite_markers(&final_answer, collected_tool_results);
+    // Models write bridge aliases `(#n)` + `SELECTED: #n`. Frontend only
+    // renders `[[cite:chunk_id]]` / `[[web:n]]`. Materialize aliases into
+    // user-visible cite markers and strip the SELECTED protocol line.
+    let user_answer = crate::helpers::materialize_alias_citations_for_user(
+        &final_answer,
+        collected_tool_results,
+    );
     let citations = crate::helpers::filter_citations_for_mode(
         &request.kind.as_canonical_str(),
-        &filter_answer,
+        &user_answer,
         citations,
     );
     let sources = crate::helpers::build_sources_from_tool_results(collected_tool_results);
     let degrade_trace = crate::helpers::degrade_trace_from_tool_results(collected_tool_results);
 
     AgentRunResult {
-        answer: final_answer,
+        answer: user_answer,
         answer_blocks: Vec::new(),
         citations,
         sources,

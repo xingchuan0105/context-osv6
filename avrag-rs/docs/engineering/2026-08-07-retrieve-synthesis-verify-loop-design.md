@@ -1,9 +1,11 @@
 # 检索 → 合成 → verify 三环编排
 
+> **Hospice（2026-08-11）** — 产品 `modes/*.yaml` 已 `verify: false`（product cost）。Agent-lane 权威编排改为 **Lead + Workers**（无独立 verify 环，裁决归 Lead）：`docs/plans/2026-08-11-lead-rag-web-workers-design.md` D6。本文保留作历史与 dormant 代码对照；新路径不复活本三环。
+
 | 项目 | 内容 |
 |------|------|
 | 日期 | 2026-08-07 |
-| 状态 | **V1.4 产品路径已接通**：`assemble_mode` / `apply_single_agent_loop_exit` 继承 YAML 三环开关；见修订记录 |
+| 状态 | **产品 off / 代码休眠**；被 Lead+Workers 取代（见横幅） |
 | 动机 | 现状检索轮可 `DirectAnswer` 交卷、合成可选、无答案×证据裁决与回环；口径错选/漏点等残差缺少「写完再判、按错因退回」路径 |
 | 非目标 | verify 内检索或代写终答；host 对照 golden；无限回环；每题长 ReAct critic |
 | 相关 | 现行 `ReActLoop`（retrieve → optional synthesis）；`query_card` / 结构证据门；`check_final_answer` 格式闸；`AGENTS.md` stop-decision（落地时需与本编排对齐，见 §7） |

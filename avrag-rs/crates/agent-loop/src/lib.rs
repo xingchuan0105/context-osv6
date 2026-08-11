@@ -81,6 +81,7 @@ pub mod react_loop;
 pub mod runtime;
 pub mod sse_sink;
 pub mod untrusted_input;
+pub mod lead_workers;
 pub mod worker_contract;
 
 #[cfg(feature = "eval")]
@@ -92,6 +93,12 @@ pub mod redteam;
 pub use react_loop as r#loop;
 
 pub use events::{AgentEvent, AgentEventSink, AgentUsage, CollectingSink, NoopSink};
+pub use lead_workers::{
+    ActivatedCaps, Coverage, DocScopeSummary, EvidenceItem, EvidencePack, LeadPlanContext,
+    MergedWebHit, MergedWebHits, PackGateOutcome, PreferredSource, SubTask, TaskBrief,
+    TaskBriefGateError, apply_pack_gate, count_tool_ok, effective_web_queries, host_partial_pack,
+    hits_to_evidence_items, merge_search_responses, parse_evidence_pack, validate_task_brief,
+};
 pub use react_loop::config::{ModeConfig, load_mode_config, load_system_prompt};
 pub use react_loop::{
     BeforeToolCallOutcome, BridgeCallObs, DegradeReason, LoopContext, LoopHooks, LoopPolicy,

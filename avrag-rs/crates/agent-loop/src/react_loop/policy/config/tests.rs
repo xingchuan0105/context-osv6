@@ -28,10 +28,45 @@ fn search_mode_config_has_search_cluster() {
     let config = load_mode_config("search").expect("search mode should load");
     assert!(
         config.tool_pool.is_empty(),
-        "search uses SaC client.web; native tool_pool empty: {:?}",
+        "search uses host web / SaC surface off; native tool_pool empty: {:?}",
         config.tool_pool
     );
     assert!(config.skill_catalog.cluster_by_id("search").is_some());
+    assert_eq!(
+        config.retrieve_strategy,
+        super::RetrieveStrategy::LeadWorkers,
+        "search-only YAML uses lead_workers (W3)"
+    );
+    assert!(
+        !config.loop_exit.verify,
+        "search-only: verify off"
+    );
+    assert!(
+        !config.loop_exit.skip_synthesis_on_direct_answer,
+        "search-only: synthesis required"
+    );
+    assert!(
+        config.loop_exit.forbid_retrieve_direct_answer,
+        "search-only: no host direct user bubble"
+    );
+}
+
+#[test]
+fn is_lead_workers_path_true_when_strategy_set() {
+    use super::{RetrieveStrategy, is_lead_workers_path};
+    let mut config = load_mode_config("rag").expect("rag");
+    config.retrieve_strategy = RetrieveStrategy::LeadWorkers;
+    assert!(is_lead_workers_path(&config));
+    config.retrieve_strategy = RetrieveStrategy::SacCodegen;
+    assert!(!is_lead_workers_path(&config));
+}
+
+#[test]
+fn search_yaml_is_lead_workers() {
+    use super::{RetrieveStrategy, is_lead_workers_path};
+    let config = load_mode_config("search").expect("search");
+    assert_eq!(config.retrieve_strategy, RetrieveStrategy::LeadWorkers);
+    assert!(is_lead_workers_path(&config));
 }
 
 #[test]
@@ -186,6 +221,7 @@ fn budget_config_resolves_token_tier() {
     let cfg = BudgetConfig {
         max_iterations: 12,
         by_user_tier: None,
+        baseline_iterations: 2,
         max_tokens: Some(28_000),
         max_tokens_by_user_tier: Some(tiers),
         no_chunk_grace_tokens: None,

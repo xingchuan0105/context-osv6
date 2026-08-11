@@ -31,7 +31,7 @@ pub use retrieval::{
     broaden_query, build_sources_from_tool_results, extract_chunks_with_scores, has_evidence,
 };
 pub use selected::{
-    alias_chunk_ids_in_order, answer_with_selected_cite_markers, parse_selected_aliases,
-    resolve_selected_chunk_ids,
+    alias_chunk_ids_in_order, answer_with_selected_cite_markers,
+    materialize_alias_citations_for_user, parse_selected_aliases, resolve_selected_chunk_ids,
 };
 pub use usage::{build_run_usage, emit_usage, merge_usage, run_usage_to_agent_usage};

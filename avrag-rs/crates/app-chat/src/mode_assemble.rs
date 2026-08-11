@@ -9,8 +9,10 @@ use agent_loop::r#loop::config::{
 };
 use common::AppError;
 
-/// Always-on single-agent main system voice.
+/// Session base: identity, user channel, BASE tools (all product turns).
 const AGENT_BASE: &str = "prompts/system/agent-base.md";
+/// Lead voice when any retrieval capability is mounted (Lead+Workers).
+const LEAD_BASE: &str = "prompts/system/lead-base.md";
 /// Mounted when product knowledge-base retrieval is enabled (internal mode id may still be `rag`).
 const CAPABILITY_KNOWLEDGE_BASE: &str = "prompts/capabilities/knowledge-base/contract.md";
 /// Mounted when product web retrieval is enabled.
@@ -19,39 +21,40 @@ const CAPABILITY_WEB: &str = "prompts/capabilities/web/contract.md";
 #[derive(Debug, Clone)]
 pub struct AssembledMode {
     pub config: ModeConfig,
-    /// Prompt paths joined for system: always `agent-base`, then optional
-    /// `capabilities/knowledge-base` and/or `capabilities/web` when mounted.
+    /// Prompt paths joined for system: session `agent-base`, then optional
+    /// `lead-base` (retrieval modes), then capability contracts when mounted.
     pub system_prompt_parts: Vec<String>,
 }
 
 /// Build a `ModeConfig` by unioning capability mode YAML on top of chat defaults.
 ///
-/// **System prompts:** `agent-base` is always first. Knowledge-base / web
-/// capability contracts are appended only when the corresponding product capability is on.
+/// **System prompts:** `agent-base` always first. With rag/search: `lead-base`,
+/// then knowledge-base / web contracts when the corresponding capability is on.
 ///
-/// Budget: pure chat keeps `chat` YAML; with capabilities, **sum** selected
-/// capability modes' `max_iterations` / tier maps (not max, not +chat base).
-/// Temperature: chat/rag/search YAML are unified; last applied value is fine.
+/// Budget: pure chat keeps `chat` YAML; with capabilities, **max** of selected
+/// modes' `max_iterations` / tier maps (not sum, not +chat base). Tokens optional
+/// (omit = unlimited). Temperature: chat/rag/search YAML are unified.
 pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
     let mut config = load_mode_config("chat")?;
-    // SaC: main voice always present; capability modules only when mounted.
+    // Session base always; Lead+Workers adds lead-base + capability contracts.
     let mut system_prompt_parts = vec![AGENT_BASE.to_string()];
 
     config.tool_pool.clear();
     config.system_prompt_base = AGENT_BASE.to_string();
 
-    // Capability path: budget = sum of selected modes only (exclude chat base).
+    // Capability path: budget from selected modes only (exclude chat base).
     if caps.rag || caps.search {
         config.budget.max_iterations = 0;
         config.budget.by_user_tier = None;
         config.budget.max_tokens = None;
         config.budget.max_tokens_by_user_tier = None;
         config.budget.no_chunk_grace_tokens = None;
+        system_prompt_parts.push(LEAD_BASE.to_string());
     }
 
     if caps.rag {
         let rag = load_mode_config("rag")?;
-        // A1: do not merge native retrieval tool_pool — SaC SDK only.
+        // A1: do not merge native retrieval tool_pool — Worker SaC / host leaf.
         merge_skill_catalog(&mut config.skill_catalog, &rag.skill_catalog);
         add_budget(&mut config, &rag);
         config.inject_retrieval_query = true;
@@ -80,8 +83,10 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         system_prompt_parts.push(CAPABILITY_WEB.to_string());
     }
 
+    // Any retrieval capability: Lead + Workers.
     if caps.rag || caps.search {
-        // Single agent answers in-loop (A2); no monomode answer skill mandatory.
+        config.retrieve_strategy = agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers;
+        // No monomode answer skill mandatory; Lead synthesizes.
         config.skill_catalog.mandatory.synthesis.clear();
         config.tool_pool.clear();
     }
@@ -174,19 +179,22 @@ fn union_strings(dst: &mut Vec<String>, src: &[String]) {
     }
 }
 
-/// Sum iteration **and token** budgets from a selected capability mode into `dst`.
-/// Used for multi-select: dual = rag.budget + search.budget (not max).
+/// Merge capability budgets into `dst`.
+///
+/// **Rounds (primary):** dual takes **max** of selected modes (not sum) so
+/// product hard cap stays e.g. rag 5, not rag+search=6.
+/// **Tokens:** optional; omit/`None` → unlimited. When both set, sum (legacy).
 fn add_budget(dst: &mut ModeConfig, src: &ModeConfig) {
     dst.budget.max_iterations = dst
         .budget
         .max_iterations
-        .saturating_add(src.budget.max_iterations);
+        .max(src.budget.max_iterations);
     match (&mut dst.budget.by_user_tier, &src.budget.by_user_tier) {
         (Some(dst_map), Some(src_map)) => {
             for (k, v) in src_map {
                 dst_map
                     .entry(k.clone())
-                    .and_modify(|cur| *cur = (*cur).saturating_add(*v))
+                    .and_modify(|cur| *cur = (*cur).max(*v))
                     .or_insert(*v);
             }
         }
@@ -198,6 +206,11 @@ fn add_budget(dst: &mut ModeConfig, src: &ModeConfig) {
         }
         (None, None) => {}
     }
+    // Soft pace baseline: take max so dual keeps rag baseline when search is 0.
+    dst.budget.baseline_iterations = dst
+        .budget
+        .baseline_iterations
+        .max(src.budget.baseline_iterations);
     // Token caps: sum Options (None treated as 0 for addend; keep None if both None).
     match (dst.budget.max_tokens, src.budget.max_tokens) {
         (None, None) => {}
@@ -296,6 +309,7 @@ mod tests {
             assembled.system_prompt_parts,
             vec![
                 "prompts/system/agent-base.md".to_string(),
+                "prompts/system/lead-base.md".to_string(),
                 "prompts/capabilities/knowledge-base/contract.md".to_string(),
                 "prompts/capabilities/web/contract.md".to_string(),
             ]
@@ -344,26 +358,24 @@ mod tests {
             "require_evidence is skill-owned, not host-forced"
         );
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        // Three-loop from rag/search YAML (must survive apply_single_agent_loop_exit).
-        assert!(
-            assembled.config.loop_exit.forbid_retrieve_direct_answer,
-            "product dual must forbid retrieve DirectAnswer"
+        // Retrieve→synthesis from rag YAML (must survive apply_single_agent_loop_exit).
+        assert_retrieve_synthesis_enabled(&assembled.config);
+        // Budget is max(rag 5, search 1) = 5 (rounds-only; chat base not included)
+        assert_eq!(assembled.config.budget.max_iterations, 5);
+        assert_eq!(
+            assembled.config.budget.max_tokens, None,
+            "dual: no token wall"
+        );
+        // Dual: Lead+Workers (not host_web, not single-brain SacCodegen).
+        assert_eq!(
+            assembled.config.retrieve_strategy,
+            agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers
         );
         assert!(
-            assembled.config.loop_exit.verify,
-            "product dual must enable verify"
+            agent_loop::r#loop::config::is_lead_workers_path(&assembled.config),
+            "dual must take lead_workers path"
         );
-        assert!(
-            assembled.config.loop_exit.verify_max_fail_rounds >= 3,
-            "verify_max_fail_rounds: {}",
-            assembled.config.loop_exit.verify_max_fail_rounds
-        );
-        assert!(
-            !assembled.config.loop_exit.skip_synthesis_on_direct_answer,
-            "three-loop must not skip synthesis"
-        );
-        // Budget is sum of rag(12) + search(8) = 20 (not max; chat base not included)
-        assert_eq!(assembled.config.budget.max_iterations, 20);
+
         // Skill catalog union includes knowledge-base (rag) and search cluster.
         assert!(
             assembled
@@ -393,12 +405,23 @@ mod tests {
             search: false,
         })
         .expect("assemble rag");
-        assert_eq!(assembled.config.budget.max_iterations, 12);
-        assert_eq!(assembled.config.budget.max_tokens, Some(28_000));
+        assert_eq!(assembled.config.budget.max_iterations, 5);
+        assert_eq!(
+            assembled.config.budget.max_tokens, None,
+            "rag: rounds-only, no token wall"
+        );
         assert_eq!(assembled.config.temperature, Some(0.4));
         assert!(assembled.config.sdk_primitives.contains(&"dense".into()));
         assert!(assembled.config.sdk_primitives.contains(&"grep".into()));
         assert!(!assembled.config.sdk_primitives.contains(&"web".into()));
+        assert_eq!(
+            assembled.config.retrieve_strategy,
+            agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers
+        );
+        assert!(agent_loop::r#loop::config::is_lead_workers_path(
+            &assembled.config
+        ));
+
     }
 
     #[test]
@@ -408,8 +431,11 @@ mod tests {
             search: true,
         })
         .expect("assemble search");
-        assert_eq!(assembled.config.budget.max_iterations, 8);
-        assert_eq!(assembled.config.budget.max_tokens, Some(16_000));
+        assert_eq!(assembled.config.budget.max_iterations, 2);
+        assert_eq!(
+            assembled.config.budget.max_tokens, None,
+            "search: no token wall"
+        );
         assert_eq!(assembled.config.temperature, Some(0.4));
         assert!(assembled.config.sdk_primitives.contains(&"web".into()));
         assert!(assembled.config.sdk_primitives.contains(&"fetch".into()));
@@ -419,6 +445,18 @@ mod tests {
             assembled.config.sdk_primitives
         );
         assert!(!assembled.config.sdk_primitives.contains(&"grep".into()));
+        // W3: Lead+Workers, not host_web direct answer.
+        assert_eq!(
+            assembled.config.retrieve_strategy,
+            agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers
+        );
+        assert!(agent_loop::r#loop::config::is_lead_workers_path(
+            &assembled.config
+        ));
+
+        assert!(!assembled.config.loop_exit.skip_synthesis_on_direct_answer);
+        assert!(assembled.config.loop_exit.forbid_retrieve_direct_answer);
+        assert!(!assembled.config.loop_exit.verify);
     }
 
     #[test]
@@ -441,6 +479,7 @@ mod tests {
             assembled.system_prompt_parts,
             vec![
                 "prompts/system/agent-base.md".to_string(),
+                "prompts/system/lead-base.md".to_string(),
                 "prompts/capabilities/knowledge-base/contract.md".to_string(),
             ]
         );
@@ -450,7 +489,12 @@ mod tests {
         );
         assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        assert_three_loop_enabled(&assembled.config);
+        assert_retrieve_synthesis_enabled(&assembled.config);
+        assert_eq!(
+            assembled.config.retrieve_strategy,
+            agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers,
+            "W2: rag-only uses Lead+Workers"
+        );
         assert!(
             assembled
                 .config
@@ -477,20 +521,20 @@ mod tests {
         );
     }
 
-    fn assert_three_loop_enabled(config: &ModeConfig) {
+    /// Product rag/dual: retrieve forbids direct prose; always hand off to synthesis.
+    /// Verify is optional (currently off for cost).
+    fn assert_retrieve_synthesis_enabled(config: &ModeConfig) {
         assert!(
             config.loop_exit.forbid_retrieve_direct_answer,
             "forbid_retrieve_direct_answer"
         );
-        assert!(config.loop_exit.verify, "verify");
         assert!(
-            config.loop_exit.verify_max_fail_rounds >= 3,
-            "verify_max_fail_rounds={}",
-            config.loop_exit.verify_max_fail_rounds
+            !config.loop_exit.verify,
+            "verify off (product cost)"
         );
         assert!(
             !config.loop_exit.skip_synthesis_on_direct_answer,
-            "skip_synthesis must be false under three-loop"
+            "skip_synthesis must be false when retrieve forbids direct answer"
         );
     }
 
@@ -508,7 +552,12 @@ mod tests {
         );
         assert!(!assembled.config.worker_handoff);
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
-        assert_three_loop_enabled(&assembled.config);
+        // W3: pack → Lead synthesis; no host DeepSeek user bubble.
+        assert_retrieve_synthesis_enabled(&assembled.config);
+        assert_eq!(
+            assembled.config.retrieve_strategy,
+            agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers
+        );
         assert!(
             assembled
                 .config
@@ -521,7 +570,7 @@ mod tests {
         assert_eq!(fb.tool_id, "web_search");
         assert!(
             assembled.config.tool_pool.is_empty(),
-            "search single-agent tool_pool empty (SaC web): {:?}",
+            "search single-agent tool_pool empty: {:?}",
             assembled.config.tool_pool
         );
         assert!(assembled.config.sdk_primitives.contains(&"web".into()));

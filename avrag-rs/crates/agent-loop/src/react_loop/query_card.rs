@@ -78,6 +78,9 @@ impl QueryCard {
     /// 2. 已知但未挂载（不在 `mode.sdk_primitives`）→ 丢弃（未挂载的动作
     ///    要求无意义——沙箱里根本不可达）。
     /// 返回清洗后的卡。清洗后的空 `required_actions` 即「无必做动作」。
+    ///
+    /// Dual (KB + web mounted) then always includes `web` — product rule:
+    /// hanging search means at least one Ok web observation before handoff.
     pub fn validate(&self, mode: &ModeConfig) -> QueryCard {
         let mounted: HashSet<&str> = mode.sdk_primitives.iter().map(|s| s.as_str()).collect();
         let required_actions = self
@@ -88,11 +91,45 @@ impl QueryCard {
             })
             .cloned()
             .collect();
-        QueryCard {
+        let card = QueryCard {
             question_type: self.question_type,
             required_actions,
-        }
+        };
+        enforce_dual_web_required(card, mode)
     }
+}
+
+/// True when both knowledge-base retrieval and web are mounted (dual product).
+pub fn is_dual_capability(mode: &ModeConfig) -> bool {
+    let has_web = mode.sdk_primitives.iter().any(|p| p == "web");
+    let has_kb = mode.sdk_primitives.iter().any(|p| {
+        matches!(
+            p.as_str(),
+            "dense" | "lexical" | "grep" | "doc_summary" | "struct_catalog" | "struct_query"
+        )
+    });
+    has_web && has_kb
+}
+
+/// Product: dual always requires Ok `web` (host injects even if the card LLM
+/// only listed corpus actions). No-op when web is not mounted.
+pub fn enforce_dual_web_required(mut card: QueryCard, mode: &ModeConfig) -> QueryCard {
+    if !is_dual_capability(mode) {
+        return card;
+    }
+    if !card.required_actions.iter().any(|a| a == "web") {
+        card.required_actions.push("web".to_string());
+    }
+    card
+}
+
+/// Pre-loop card for dual when the LLM card call fails: still activate the web
+/// structural gate (empty type + required `web`).
+pub fn dual_fallback_card(mode: &ModeConfig) -> Option<QueryCard> {
+    if !is_dual_capability(mode) {
+        return None;
+    }
+    Some(enforce_dual_web_required(QueryCard::default(), mode))
 }
 
 /// 原语 id → ToolResult.tool 名的别名表。SDK 方法名（`web`/`history`/`save`…）
@@ -295,6 +332,44 @@ mod tests {
         assert!(cleaned.required_actions.contains(&"calculator".to_string()));
         assert!(!cleaned.required_actions.contains(&"web".to_string()));
         assert!(!cleaned.required_actions.contains(&"not_a_real_action".to_string()));
+    }
+
+    #[test]
+    fn dual_validate_injects_web_even_when_card_omits_it() {
+        let mut mode = base_mode();
+        mode.sdk_primitives = super::super::sdk_primitives_for_caps(true, true)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(is_dual_capability(&mode));
+        let card = QueryCard {
+            question_type: QuestionType::RagFact,
+            required_actions: vec!["dense".to_string()],
+        };
+        let cleaned = card.validate(&mode);
+        assert!(cleaned.required_actions.contains(&"dense".to_string()));
+        assert!(
+            cleaned.required_actions.contains(&"web".to_string()),
+            "dual product rule: host injects web: {:?}",
+            cleaned.required_actions
+        );
+    }
+
+    #[test]
+    fn dual_fallback_card_requires_web() {
+        let mut mode = base_mode();
+        mode.sdk_primitives = super::super::sdk_primitives_for_caps(true, true)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let card = dual_fallback_card(&mode).expect("dual fallback");
+        assert_eq!(card.required_actions, vec!["web".to_string()]);
+        let mut rag_only = base_mode();
+        rag_only.sdk_primitives = super::super::sdk_primitives_for_caps(true, false)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(dual_fallback_card(&rag_only).is_none());
     }
 
     #[test]

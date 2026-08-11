@@ -1,12 +1,13 @@
 mode: rag
-# SaC: assemble_mode always loads system/agent-base, then
-# capabilities/knowledge-base when 知识库 (KB) is mounted.
-# Internal mode id remains `rag` (config compatibility). Model-facing name: 知识库 / knowledge base.
+# Lead + RAG Worker (assemble_mode sets retrieve_strategy: lead_workers for any KB mount).
+# Worker leg: host dense → EvidencePack → Lead synthesis (short SaC Worker optional later).
+# Internal mode id remains `rag`. Model-facing name: 知识库 / knowledge base.
 # system_prompt_base below is a fallback if parts metadata is missing; live path uses multi-part assemble.
 system_prompt_base: prompts/capabilities/knowledge-base/contract.md
-# Empty tool_pool: LLM uses Python sandbox (client.*). auto_fallback is host-side only.
+# Empty tool_pool: retrieval is host Worker / SaC leaf, not native tool schemas.
 tool_pool: []
 inject_retrieval_query: true
+retrieve_strategy: lead_workers
 skill_catalog:
   retrieve: [knowledge-base, memory, docscope]
   synthesis: [writing, format, brainstorming]
@@ -14,17 +15,15 @@ skill_catalog:
   # mounted (memory is on-demand via skill_request; agent-base keeps the pointer).
   # Optional cluster list above stays as-is (progressive disclosure catalog).
 budget:
-  # Rounds = safety ceiling. Tokens = primary cost budget.
-  max_iterations: 12
+  # Rounds = primary cost ceiling (each retrieve turn that consumes budget +1).
+  # No token wall: omit max_tokens (resolve → 0 = unlimited).
+  # Soft pace baseline (not hard stop); over-baseline injects round/baseline observation.
+  max_iterations: 5
+  baseline_iterations: 2
   by_user_tier:
-    free: 8
-    pro: 12
-    enterprise: 16
-  max_tokens: 28000
-  max_tokens_by_user_tier:
-    free: 16000
-    pro: 28000
-    enterprise: 40000
+    free: 5
+    pro: 5
+    enterprise: 5
 auto_fallback:
   # Host recovery only — not exposed as an LLM tool schema under SaC.
   enabled: true
@@ -35,10 +34,11 @@ loop_exit:
   # Skill-owned grounding intent (prose); structural gates still count Ok returns.
   require_evidence: false
   allow_content_early_stop: false
-  # Three-loop (2026-08-07): retrieve never ships final prose; always synthesize.
+  # Retrieve never ships final prose; always synthesize.
+  # verify off: product cost — no post-synthesis adjudicate LLM (2026-08-11).
   skip_synthesis_on_direct_answer: false
   forbid_retrieve_direct_answer: true
-  verify: true
-  verify_max_fail_rounds: 3
+  verify: false
+  verify_max_fail_rounds: 1
 synthesis_output:
   contract: prose_only

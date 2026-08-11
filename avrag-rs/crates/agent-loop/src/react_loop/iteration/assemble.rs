@@ -1,4 +1,4 @@
-use avrag_llm::{ChatMessage, LlmResponse, LlmUsage};
+use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 use common::AppError;
 
 use super::super::ReActLoop;
@@ -71,7 +71,7 @@ impl ReActLoop {
         hooks: &dyn LoopHooks,
     ) -> Result<LlmResponse, AppError> {
         let mut round_messages = vec![ChatMessage::system(assembled.system_content.clone())];
-        // Model-visible View (retrieve): history + budget + query_card + claims.
+        // Model-visible View (retrieve): history + budget + query_card + plan + claims.
         // Order fixed for prefix-cache; system stays outside the View.
         let visible = super::super::model_visible::build_retrieve_model_visible(
             super::super::model_visible::RetrieveViewInputs {
@@ -101,11 +101,19 @@ impl ReActLoop {
                 || mode.id == "chat"
                 || mode.synthesis_output.contract
                     == super::super::config::AnswerContractKind::ProseOnly);
+        let retrieve_llm = self.llm_for_retrieve(mode);
         let llm_response = if prefer_prose_stream {
-            self.call_retrieve_llm_stream(&round_messages, temperature, request, state, sink)
-                .await?
+            self.call_retrieve_llm_stream(
+                retrieve_llm,
+                &round_messages,
+                temperature,
+                request,
+                state,
+                sink,
+            )
+            .await?
         } else {
-            self.llm
+            retrieve_llm
                 .complete_with_tools(&round_messages, &assembled.tools, Some(temperature))
                 .await
                 .map_err(|e| AppError::internal(format!("llm completion failed: {e}")))?
@@ -123,6 +131,7 @@ impl ReActLoop {
 
     async fn call_retrieve_llm_stream(
         &self,
+        llm: &LlmClient,
         round_messages: &[ChatMessage],
         temperature: f32,
         request: &AgentRequest,
@@ -134,7 +143,7 @@ impl ReActLoop {
         let cancel = request.cancellation_token.clone().unwrap_or_default();
         let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let stream = self.llm.complete_stream(
+        let stream = llm.complete_stream(
             round_messages,
             Some(temperature),
             cancel.clone(),

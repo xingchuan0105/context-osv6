@@ -53,7 +53,7 @@ Claim checklist (copy and tick against returns):
 - **金额/编号/表内字面** → `lexical` / `grep`；`dense` 作定位线索。
 - **元数据 Date/Status** → 中英双词并行探测。
 - **同一主张上** dense 叙述与 lexical/grep 精确数字并存时，精确数字侧通常是更硬的回传支撑（叙述侧仍可保留主题定位）。
-- **证据** → 终答主张指向回传 alias；末行 `SELECTED: #n`（协议见 skill）。
+- **证据** → 终答主张指向回传 alias；句末 `（#n）` + 末行 `SELECTED: #n`（协议见 skill）。
 - **多轮工作集** → 检索后输出 `KEEP: #n,#m`（支撑当前主张的命中）；宿主优先注入工作集并折叠更早轮正文（协议见 skill「KEEP」）。
 - **多口径 / 干扰** → 并陈或只 KEEP 支撑主张的 alias；不依赖 chunk 可见面敲除。
 

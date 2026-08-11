@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 pub mod answer_contract;
 pub mod assembler;
-pub mod fallback;
 pub mod host_markers;
 pub mod policy;
 pub use policy::LoopPolicy;
@@ -32,7 +31,8 @@ pub mod session_fs;
 // rag_bridge moved to agent-tools (TN Wave 6)
 pub use agent_tools::rag_bridge;
 pub mod reasoning_emit;
-mod run_fallback;
+mod lead_plan;
+mod run_lead_workers;
 mod run_prepare;
 mod run_result;
 mod run_retrieval;
@@ -66,18 +66,45 @@ pub use sdk_gate::{method_allowed, sdk_primitives_for_caps};
 ///
 /// Runtime side-effects (rag/search/codegen) live in [`LoopRuntimeDeps`]; prefer
 /// `with_*` builders over reaching into `deps` from product code.
+///
+/// # Thinking policy (product hard rule)
+///
+/// - **Retrieve / query-card / verify:** thinking **off** (latency; tool rounds).
+/// - **Synthesis:** thinking **on** (DeepSeek → `reasoning_effort: max`).
+/// - Non-three-loop DirectAnswer modes (chat) still use the synthesis client so
+///   the user-facing prose turn keeps thinking max.
 pub struct ReActLoop {
+    /// Thinking forced off — retrieve tool rounds, query-card, verify.
     llm: Arc<LlmClient>,
+    /// Thinking forced on (max) — synthesis / chat DirectAnswer path.
+    synthesis_llm: Arc<LlmClient>,
     skill_registry: Arc<CapabilityRegistry>,
     deps: LoopRuntimeDeps,
 }
 
 impl ReActLoop {
     pub fn new(llm: Arc<LlmClient>, skill_registry: Arc<CapabilityRegistry>) -> Self {
+        // Phase split: ignore the inbound client's enable_thinking; product
+        // policy is retrieve=off / synthesis=on(max).
+        let retrieve = Arc::new(llm.as_ref().clone().with_enable_thinking(false));
+        let synthesis = Arc::new(llm.as_ref().clone().with_enable_thinking(true));
         Self {
-            llm,
+            llm: retrieve,
+            synthesis_llm: synthesis,
             skill_registry,
             deps: LoopRuntimeDeps::default(),
+        }
+    }
+
+    /// LLM for retrieve-phase completions.
+    ///
+    /// Three-loop modes (`forbid_retrieve_direct_answer`): thinking off.
+    /// Chat / skip-synthesis DirectAnswer: thinking on (answer is the product).
+    fn llm_for_retrieve(&self, mode: &ModeConfig) -> &LlmClient {
+        if mode.loop_exit.forbid_retrieve_direct_answer {
+            &self.llm
+        } else {
+            &self.synthesis_llm
         }
     }
 
@@ -145,14 +172,29 @@ impl ReActLoop {
             self.prepare_run_request(mode, request, sink).await?;
 
         // L0 题型卡：按挂载能力选 profile（纯 chat 跳过；search 极简；rag/dual 全量）。
+        // host_web search-only：不需要题卡（无 codegen 动作闸），省一轮 LLM。
         // 该调用不占迭代预算（budget 在 run_retrieval_loop 内计）。
         // validate：未知/未挂载动作清洗，避免 L2.5 闸对不可达动作烧满轮次。
-        let card_profile = query_card::query_card_profile(mode);
-        let query_card = query_card::fetch_query_card(&self.llm, mode, &request.query)
-            .await
-            .map(|card| card.validate(mode));
+        // LeadWorkers: skip query-card LLM (Lead plan + workers).
+        let card_profile = if config::is_lead_workers_path(mode) {
+            query_card::QueryCardProfile::Off
+        } else {
+            query_card::query_card_profile(mode)
+        };
+        let query_card = if card_profile == query_card::QueryCardProfile::Off {
+            None
+        } else {
+            match query_card::fetch_query_card(&self.llm, mode, &request.query)
+                .await
+                .map(|card| card.validate(mode))
+            {
+                Some(card) => Some(card),
+                // Dual: card LLM failure must not disable the web structural gate.
+                None => query_card::dual_fallback_card(mode),
+            }
+        };
 
-        // Pure-chat L0：无题卡 LLM + 轮次封顶，避免简单问题多轮沙箱空转。
+        // Pure-chat / LeadWorkers L0：无题卡 LLM 时轮次封顶。
         let max_iterations = if card_profile == query_card::QueryCardProfile::Off {
             max_iterations.min(2)
         } else {
@@ -507,13 +549,11 @@ impl ReActLoop {
                     match follow {
                         verify::VerifyFailFollowUp::DeliverCeiling => {
                             // Channel philosophy (2026-08-10): no host footnote.
-                            // Token exhausted → sanitize draft / disaster prose.
+                            // Token exhausted + verify fail → disaster (never ship fail draft).
                             // Rounds/fail ceiling with token left → one LLM closeout.
                             if force_ceiling {
-                                final_answer = verify::finalize_delivery_without_llm(
-                                    final_answer,
-                                    &mode.id,
-                                );
+                                final_answer =
+                                    verify::finalize_verify_failed_ceiling(&mode.id);
                             } else {
                                 messages.push(avrag_llm::ChatMessage::user(
                                     prompt_assets::user_facing_closeout_observation(),

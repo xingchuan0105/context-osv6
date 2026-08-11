@@ -11,6 +11,8 @@ description: >-
 
 相互独立的 `client.*` 调用在**同一代码块**内并行发出是默认形态（入口与 `gather` 形态见 agent-base）。同块内各方法空/非空彼此独立；存在依赖时（如 `struct_query` 的表名来自 `struct_catalog`，或 `doc_summary` 的 `doc_id` 来自 docscope）按顺序 await。
 
+宿主 `<loop_budget round baseline_rounds max_rounds>` 描述 retrieve 回合进度：常见基线 2 为软参考（如进度 3/2 表示已超过基线）；不依赖前序回传的 dense/lexical/grep 等适合首块一次扇出，有依赖链的步骤再进下一回合。
+
 ## 最小可成功首块（示例形态）
 
 **A. 独立检索同块并行（无依赖）**
@@ -77,12 +79,14 @@ print("side_a n=", len(side_a), "| side_b n=", len(side_b))
 
 | 观察 | 含义 |
 |------|------|
+| 句级标记 | 有回传支撑的文档侧主张**句末**常见 `（#n）` / `(#n)`；n 为回传 **`#alias`**（不是 chunk_id） |
 | SELECTED 位置 | **末行**（其后无更多散文）；前缀 `SELECTED` 或 `选择`，后接 `:` / `：` |
 | 条目 | 回传中的 **`#alias`**；历史轮次已出现的 alias 仍有效 |
-| 与主张 | 终答写出的每个文档侧主张宜对应至少一个圈中 alias；只圈部分时，未圈主张处于无引用状态 |
+| 与主张 | 终答写出的每个文档侧主张宜在句末带对应 alias，并出现在末行 SELECTED；只写 SELECTED 无句内标记时，用户侧只见文末角标 |
 | 与 KEEP | 宜 ⊆ 本 run 曾 `KEEP` / 工作集中的 alias |
 | 空集 | 无可用 alias 或全文未采用命中时，正文已表明未覆盖/未采用即可；无强制空行 `SELECTED:` |
-| 双源 | 与联网同挂时：doc 侧末行 `SELECTED: #n`；联网侧 `[[web:n]]` |
+| 双源 | 与联网同挂时：doc 侧句末 `（#n）` + 末行 `SELECTED`；联网侧句末 `[[web:n]]` |
+| 宿主交付 | `（#n）` → 可点击引用；SELECTED 协议行不进入用户主气泡 |
 
 | KEEP 观察 | 含义 |
 |-----------|------|

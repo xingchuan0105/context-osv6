@@ -31,6 +31,8 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | File | When used |
 |------|-----------|
 | `blocks-skipped.nudge.md` | Extra code blocks in one turn (`{n_blocks}`, `{n_skipped}`) |
+| `budget-pace-over-baseline.tmpl.md` | Soft pace when `round > baseline_rounds` (`{round}`, `{baseline}`, `{max_rounds}`, `{remaining_rounds}`) — not a hard stop |
+| `budget-pace-near-ceiling.tmpl.md` | Soft pace when `remaining_rounds ≤ 1` — last hard retrieve slot(s) |
 | `budget-exhausted-final.nudge.md` | C5 rounds exhausted + had retrieval attempt (prose + SELECTED / `[[web:n]]`) |
 | `budget-exhausted-final-tokens.nudge.md` | C5 token ceiling + had retrieval attempt |
 | `budget-exhausted-final-no-attempt.nudge.md` | C5 rounds exhausted + **no** retrieval tool attempt |
@@ -40,6 +42,7 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `codegen-sandbox-error.nudge.md` | Sandbox error recovery facts (`{n_fail}`, `{n_max}` consecutive threshold) |
 | `evidence-index.tmpl.md` | Per-round expand/card/stub counts |
 | `claim-notes.tmpl.md` | P1″ cumulative claim board |
+
 | `working-set-trimmed.nudge.md` | Near-round expanded bodies demoted under char budget |
 | `history-cleared.nudge.md` | Older retrieval observation bodies stubbed |
 | `evidence-reread.tmpl.md` | Synthesis-time EWS recency reread (`{items}`) |
@@ -47,6 +50,24 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `native-tools-closed.tmpl.md` | Closed native model surface rejection |
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + `{detail}` |
+| `lead-plan-context.tmpl.md` | Lead 规划上下文（`{caps_rag}`, `{caps_search}`, `{workspace_note}`, `{doc_scope_note}`, `{doc_lines}`） |
+| `task-brief.tmpl.md` | Lead→Worker 简报 JSON（`{brief_json}`） |
+| `evidence-pack.tmpl.md` | Worker→Lead pack JSON（`{pack_json}`；宿主 PackGate 后） |
+| `coverage-aggregate.tmpl.md` | 多 pack 覆盖聚合（`{n_packs}`, `{coverage_summary}`, `{gaps_summary}`, `{rebrief_used}`） |
+| `lead-workers-handoff-synthesis.tmpl.md` | Lead+Workers 检索结束→合成环境事实（`{n_packs}`, `{coverage_summary}`） |
+| `rebrief-wave.tmpl.md` | 宿主结构补检索波次（`{rebrief_used}`, `{channels}`） |
+| `rag-worker-sac.tmpl.md` | RAG Worker 短程 SaC 环境（`[rag_worker_sac]`） |
+
+## Lead+Workers system 拼装（非 loop 文件，索引）
+
+| 路径 | 角色 |
+|------|------|
+| `system/agent-base.md` | 会话公共层（身份 / 用户信道 / BASE） |
+| `system/lead-base.md` | Lead（规划+grounded 合成） |
+| `system/worker-sandbox.md` | Worker 沙箱精简基座 |
+| `clusters/lead/SKILL.md` | Lead 合成/Brief 细则 |
+| `workers/{rag,web}/SKILL.md` | 通道 Worker |
+| `pipeline/lead-plan.system.md` | Lead 规划 JSON LLM |
 | `retrieval-summary-detail-*.tmpl.md` / `*-nudge.md` | `{detail}` fragments |
 | `synthesis-repair.nudge.md` | Invalid synthesis JSON (non–prose_only paths) |
 | `synthesis-prose-repair.tmpl.md` | prose_only final-form repair; `{violation_detail}` |

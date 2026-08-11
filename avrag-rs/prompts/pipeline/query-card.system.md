@@ -30,7 +30,7 @@ The available action ids are:
 - `history`, `user_profile`, `user_context` — user state reads
 - `save`, `load` — session storage
 
-When both knowledge base and web are available, list only the actions the question truly needs (corpus and/or web). Unmounted action ids are dropped by the runtime.
+When both knowledge base and web are available, list corpus actions the question needs; the runtime always requires `web` as well on dual mounts (host injects it if omitted). Unmounted action ids are dropped by the runtime.
 
 ## Output
 

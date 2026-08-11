@@ -168,6 +168,42 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         forbidden_in_final: true,
         emitted_at: "prompts/loop/user-facing-closeout.nudge.md",
     },
+    // --- Lead + Workers (2026-08-11 W0) ---
+    HostMarker {
+        tag: "[lead_plan_context]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/lead-plan-context.tmpl.md",
+    },
+    HostMarker {
+        tag: "[evidence_pack]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/evidence-pack.tmpl.md",
+    },
+    HostMarker {
+        tag: "[task_brief]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/task-brief.tmpl.md",
+    },
+    HostMarker {
+        tag: "[coverage_aggregate]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/coverage-aggregate.tmpl.md",
+    },
+    HostMarker {
+        tag: "[lead_workers_handoff]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/lead-workers-handoff-synthesis.tmpl.md",
+    },
+    HostMarker {
+        tag: "[rebrief_wave]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/rebrief-wave.tmpl.md",
+    },
+    HostMarker {
+        tag: "[rag_worker_sac]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/rag-worker-sac.tmpl.md",
+    },
 ];
 
 /// 终答中出现即违规（`forbidden_in_final = true`）的标签列表——检测器

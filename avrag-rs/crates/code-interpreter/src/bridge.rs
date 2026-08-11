@@ -40,11 +40,13 @@ fn build_shim_source() -> String {
         } else {
             p.py_return.to_string()
         };
+        // to_thread so asyncio.gather does not serialize on a blocking _rpc.
         methods.push_str(&format!(
             r#"
     async def {id}({py_sig}):
         """"{docstring}"""
-        return _rpc("{id}", {py_payload}){return_path}
+        _data = await asyncio.to_thread(_rpc, "{id}", {py_payload})
+        return _data{return_path}
 "#,
             id = p.id,
             py_sig = p.py_sig,
@@ -54,22 +56,77 @@ fn build_shim_source() -> String {
         ));
     }
 
+    // Multiplexed line-JSON RPC: a dedicated reader thread demuxes replies by id
+    // so asyncio.gather can issue multiple outstanding calls. Host pump runs
+    // concurrent workers (see run_bridge_pump_sync).
     format!(
         r#"
 import json as _json
+# `threading` / `asyncio` pre-imported in wrapper before security import hook.
 _req = open(3, "w", buffering=1)
 _resp = open(4, "r", buffering=1)
 _id = 0
+_id_lock = threading.Lock()
+_write_lock = threading.Lock()
+_pending = {{}}
+_pending_lock = threading.Lock()
+_reader_started = False
+_reader_start_lock = threading.Lock()
+
+def _reader_loop():
+    while True:
+        line = _resp.readline()
+        if not line:
+            with _pending_lock:
+                for box in _pending.values():
+                    box["error"] = "bridge closed"
+                    box["ev"].set()
+                _pending.clear()
+            break
+        try:
+            msg = _json.loads(line)
+        except Exception:
+            continue
+        rid = msg.get("id")
+        with _pending_lock:
+            box = _pending.pop(rid, None)
+        if box is None:
+            continue
+        if not msg.get("ok"):
+            box["error"] = (msg.get("error") or {{}}).get("message", "bridge error")
+        else:
+            box["data"] = msg.get("data")
+        box["ev"].set()
+
+def _ensure_reader():
+    global _reader_started
+    with _reader_start_lock:
+        if _reader_started:
+            return
+        _reader_started = True
+        t = threading.Thread(target=_reader_loop, name="avrag-bridge-reader", daemon=True)
+        t.start()
 
 def _rpc(method, args):
+    """Blocking RPC; safe under gather via asyncio.to_thread (see method wrappers)."""
     global _id
-    _id += 1
-    _req.write(_json.dumps({{"id": _id, "method": method, "args": args}}) + "\n")
-    _req.flush()
-    msg = _json.loads(_resp.readline())
-    if not msg.get("ok"):
-        raise RuntimeError(msg.get("error", {{}}).get("message", "bridge error"))
-    return msg["data"]
+    _ensure_reader()
+    with _id_lock:
+        _id += 1
+        rid = _id
+    box = {{"ev": threading.Event(), "data": None, "error": None}}
+    with _pending_lock:
+        _pending[rid] = box
+    with _write_lock:
+        _req.write(_json.dumps({{"id": rid, "method": method, "args": args}}) + "\n")
+        _req.flush()
+    if not box["ev"].wait(timeout=300):
+        with _pending_lock:
+            _pending.pop(rid, None)
+        raise RuntimeError("bridge rpc timeout")
+    if box["error"] is not None:
+        raise RuntimeError(box["error"])
+    return box["data"]
 
 class _Client:
     """SaC SDK: dense/lexical; grep for line-level; web/fetch; memory; no topk."""
@@ -133,6 +190,14 @@ pub(crate) fn build_bridge_sandbox_wrapper(
 
     format!(
         r#"import sys, io, json, traceback, asyncio
+# Pre-import before the security hook: multiplexed bridge RPC uses
+# asyncio.to_thread → run_in_executor → concurrent.futures.thread, whose
+# module top level imports threading/os. Loading it here (pre-hook) keeps
+# every later blocked-name import out of the runtime path, so the hook
+# below can stay strict. User code cannot import these (hooked below).
+import threading
+import concurrent.futures
+import concurrent.futures.thread
 
 BLOCKED = {{{blocked_list}}}
 _original_import = __builtins__.__import__
@@ -184,6 +249,10 @@ output = {{
     "killed": False
 }}
 _real_stdout.write(json.dumps(output))
+# sys.stdout stays swapped for the StringIO capture; without an explicit
+# flush the buffered payload can be lost when the process exits with
+# bridge/executor threads alive.
+_real_stdout.flush()
 "#,
         blocked_list = blocked_list,
         memory_mb = memory_mb,
@@ -427,35 +496,84 @@ mod unix_impl {
             .map_err(|_| InterpreterError::Bridge("child wait channel closed".to_string()))?
     }
 
+    /// Line-JSON request pump with concurrent host calls.
+    ///
+    /// Each request is handled on a dedicated OS thread via
+    /// `runtime.handle().block_on(bridge.call)`, so multiple outstanding RPCs
+    /// (Python `asyncio.gather`) overlap. Replies are written as soon as each
+    /// call finishes and may arrive out of order (Python matches by `id`).
     fn run_bridge_pump_sync(
         req_file: std::fs::File,
-        mut resp_file: std::fs::File,
+        resp_file: std::fs::File,
         bridge: Arc<dyn HostBridge>,
     ) -> Result<(), InterpreterError> {
+        use std::sync::{Arc, Mutex};
+
         let mut reader = std::io::BufReader::new(req_file);
+        let resp = Arc::new(Mutex::new(resp_file));
+        let runtime = bridge_pump_runtime();
+        let rt_handle = runtime.handle().clone();
+        let mut workers: Vec<std::thread::JoinHandle<Result<(), InterpreterError>>> = Vec::new();
+
         loop {
             let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
-                    let response_line = match serde_json::from_str::<BridgeRequest>(line.trim()) {
-                        Ok(req) => {
-                            let data =
-                                bridge_pump_runtime().block_on(bridge.call(&req.method, req.args));
-                            bridge_ok_response(req.id, data)
-                        }
-                        Err(e) => bridge_error_response(0, "invalid_request", format!("{e}")),
-                    };
-                    resp_file
-                        .write_all(response_line.as_bytes())
-                        .map_err(InterpreterError::Io)?;
-                    resp_file.write_all(b"\n").map_err(InterpreterError::Io)?;
-                    resp_file.flush().map_err(InterpreterError::Io)?;
+                    let trimmed = line.trim().to_string();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    let bridge = Arc::clone(&bridge);
+                    let resp = Arc::clone(&resp);
+                    let rt_handle = rt_handle.clone();
+                    workers.push(std::thread::spawn(move || {
+                        let response_line = match serde_json::from_str::<BridgeRequest>(&trimmed) {
+                            Ok(req) => {
+                                let data =
+                                    rt_handle.block_on(bridge.call(&req.method, req.args));
+                                bridge_ok_response(req.id, data)
+                            }
+                            Err(e) => {
+                                bridge_error_response(0, "invalid_request", format!("{e}"))
+                            }
+                        };
+                        let mut out = resp.lock().map_err(|_| {
+                            InterpreterError::Bridge("bridge response lock poisoned".into())
+                        })?;
+                        out.write_all(response_line.as_bytes())
+                            .map_err(InterpreterError::Io)?;
+                        out.write_all(b"\n").map_err(InterpreterError::Io)?;
+                        out.flush().map_err(InterpreterError::Io)?;
+                        Ok(())
+                    }));
                 }
                 Err(e) => return Err(InterpreterError::Io(e)),
             }
         }
-        Ok(())
+
+        let mut first_err: Option<InterpreterError> = None;
+        for h in workers {
+            match h.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+                Err(_) => {
+                    if first_err.is_none() {
+                        first_err = Some(InterpreterError::Bridge(
+                            "bridge worker thread panicked".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     #[cfg(test)]
@@ -707,6 +825,68 @@ mod timeout_kill_tests {
             }
         }
     }
+
+    /// Host + shim must run independent RPCs concurrently: wall clock ≈ max
+    /// latency, not sum (ReWOO-style gather fan-out).
+    struct SlowEchoBridge;
+
+    #[async_trait]
+    impl HostBridge for SlowEchoBridge {
+        async fn call(&self, method: &str, args: Value) -> Value {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            json!({ "method": method, "args": args, "chunks": [] })
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn bridge_gather_runs_rpcs_concurrently() {
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("skipping: python3 not found on PATH");
+            return;
+        }
+
+        let code = r#"
+import asyncio
+a, b = await asyncio.gather(
+    client.calculator("1+1"),
+    client.calculator("2+2"),
+)
+print("ok", a is not None or True, b is not None or True)
+"#;
+        // calculator is always on BASE; SlowEchoBridge ignores method body.
+        let started = Instant::now();
+        let result = execute_with_bridge(
+            "python3",
+            15,
+            256,
+            30,
+            code,
+            Arc::new(SlowEchoBridge),
+        )
+        .await
+        .expect("bridge gather should succeed");
+        let elapsed = started.elapsed();
+        assert!(
+            result.success || result.exit_code == Some(0) || !result.stdout.is_empty(),
+            "unexpected result: stdout={} stderr={}",
+            result.stdout,
+            result.stderr
+        );
+        // Two 250ms serial would be ≥500ms of pure sleep; concurrent should land
+        // well under 450ms of sleep + overhead. Allow generous overhead for spawn.
+        assert!(
+            elapsed.as_millis() < 700,
+            "expected concurrent RPC wall <700ms, got {elapsed:?} (serial would be ~500ms+overhead)"
+        );
+        assert!(
+            elapsed.as_millis() >= 200,
+            "expected at least one 250ms sleep visible, got {elapsed:?}"
+        );
+    }
 }
 
 pub(crate) async fn execute_with_bridge_arc<B: HostBridge + Send + Sync + 'static>(
@@ -720,3 +900,4 @@ pub(crate) async fn execute_with_bridge_arc<B: HostBridge + Send + Sync + 'stati
     let bridge: Arc<dyn HostBridge> = bridge;
     execute_with_bridge(python_path, timeout_secs, memory_mb, cpu_secs, code, bridge).await
 }
+

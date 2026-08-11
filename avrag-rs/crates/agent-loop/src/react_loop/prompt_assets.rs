@@ -261,6 +261,87 @@ pub fn retrieval_summary(call_count: usize, total_chunks: usize, detail: &str) -
     )
 }
 
+/// Lead planning context observation (`[lead_plan_context]`).
+pub fn lead_plan_context_observation(
+    caps_rag: bool,
+    caps_search: bool,
+    workspace_note: &str,
+    doc_scope_note: &str,
+    doc_lines: &str,
+) -> String {
+    subst(
+        trim_body(loop_prompt!("lead-plan-context.tmpl.md")),
+        &[
+            ("caps_rag", if caps_rag { "是" } else { "否" }),
+            ("caps_search", if caps_search { "是" } else { "否" }),
+            ("workspace_note", workspace_note),
+            ("doc_scope_note", doc_scope_note),
+            ("doc_lines", doc_lines),
+        ],
+    )
+}
+
+/// Task Brief observation for a Worker (`[task_brief]`).
+pub fn task_brief_observation(brief_json: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("task-brief.tmpl.md")),
+        &[("brief_json", brief_json)],
+    )
+}
+
+/// EvidencePack observation after PackGate (`[evidence_pack]`).
+pub fn evidence_pack_observation(pack_json: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("evidence-pack.tmpl.md")),
+        &[("pack_json", pack_json)],
+    )
+}
+
+/// Aggregated coverage observation for Lead synthesize (`[coverage_aggregate]`).
+pub fn coverage_aggregate_observation(
+    n_packs: usize,
+    coverage_summary: &str,
+    gaps_summary: &str,
+    rebrief_used: u8,
+) -> String {
+    subst(
+        trim_body(loop_prompt!("coverage-aggregate.tmpl.md")),
+        &[
+            ("n_packs", &n_packs.to_string()),
+            ("coverage_summary", coverage_summary),
+            ("gaps_summary", gaps_summary),
+            ("rebrief_used", &rebrief_used.to_string()),
+        ],
+    )
+}
+
+/// After Lead+Workers retrieve: environment fact before product synthesis.
+pub fn lead_workers_handoff_to_synthesis(n_packs: usize, coverage_summary: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("lead-workers-handoff-synthesis.tmpl.md")),
+        &[
+            ("n_packs", &n_packs.to_string()),
+            ("coverage_summary", coverage_summary),
+        ],
+    )
+}
+
+/// Host structural re-brief wave observation (`[rebrief_wave]`).
+pub fn rebrief_wave_observation(rebrief_used: u8, channels: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("rebrief-wave.tmpl.md")),
+        &[
+            ("rebrief_used", &rebrief_used.to_string()),
+            ("channels", channels),
+        ],
+    )
+}
+
+/// RAG Worker short SaC environment fact (`[rag_worker_sac]`).
+pub fn rag_worker_sac_observation() -> String {
+    trim_body(loop_prompt!("rag-worker-sac.tmpl.md")).to_string()
+}
+
 /// Assemble the `{detail}` clause for [`retrieval_summary`] from fragment prompts.
 /// Runtime only fills numbers / alias lists; Chinese observation prose lives in
 /// `prompts/loop/retrieval-summary-detail-*.md`.

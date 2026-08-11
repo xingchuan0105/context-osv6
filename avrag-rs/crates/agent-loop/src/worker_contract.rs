@@ -1,9 +1,10 @@
-//! Shared metadata keys between channel workers (`app-chat` orchestrator) and
-//! [`crate::ReActLoop`] (Wave C3).
+//! Shared metadata keys for multi-brief retrieval alias continuity.
 //!
-//! Workers seed `AgentRequest.metadata` so multi-brief sessions keep unique
-//! retrieval-log aliases and budgets. The loop **reads** these keys; product
-//! ownership of channel sessions stays in `app-chat`.
+//! Historically used by orchestrator channel workers; Lead+Workers (2026-08-11)
+//! reuses the same key when a Worker session needs a non-zero alias start.
+//! See `docs/plans/2026-08-11-lead-rag-web-workers-design.md` §6.6.
+//!
+//! The loop **reads** these keys from `AgentRequest.metadata`.
 
 /// `AgentRequest.metadata` key: `u64` start for retrieval-log alias counter.
 ///

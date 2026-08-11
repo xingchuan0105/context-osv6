@@ -160,6 +160,14 @@ mod tests {
                 llm_usage: None,
             })
         }
+
+        async fn execute_search_no_scrape(
+            &self,
+            query: &str,
+            vertical: Option<&str>,
+        ) -> anyhow::Result<avrag_search::SearchResponse> {
+            self.execute_search(query, vertical).await
+        }
     }
 
     #[tokio::test]

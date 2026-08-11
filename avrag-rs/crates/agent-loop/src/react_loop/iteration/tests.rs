@@ -936,6 +936,88 @@ async fn validated_card_with_unmounted_action_does_not_block() {
 }
 
 #[tokio::test]
+async fn dual_card_requires_web_before_handoff() {
+    let loop_ = test_loop();
+    let mut mode = rag_mode();
+    mode.id = "rag+search".into();
+    mode.sdk_primitives = crate::react_loop::sdk_primitives_for_caps(true, true)
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    // Model only listed dense; validate injects web.
+    let raw = crate::react_loop::query_card::QueryCard {
+        question_type: crate::react_loop::query_card::QuestionType::RagFact,
+        required_actions: vec!["dense".to_string()],
+    };
+    let mut state = empty_state();
+    state.query_card = Some(raw.validate(&mode));
+    assert!(state
+        .query_card
+        .as_ref()
+        .unwrap()
+        .required_actions
+        .contains(&"web".to_string()));
+
+    // Dense ok alone is not enough.
+    state.tool_results.push(contracts::ToolResult {
+        tool: "dense_retrieval".into(),
+        version: "1".into(),
+        status: contracts::ToolStatus::Ok,
+        data: Some(serde_json::json!({"chunks": []})),
+        trace: None,
+    });
+    let sink = CollectingSink::new();
+    let auth = test_auth();
+    let outcome = loop_
+        .apply_llm_output(
+            0,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &fake_llm_response("Draft without web."),
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(outcome.control, IterationControl::Continue));
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "required_action_missing_continue"
+    );
+
+    state.tool_results.push(contracts::ToolResult {
+        tool: "web_search".into(),
+        version: "1".into(),
+        status: contracts::ToolStatus::Ok,
+        data: Some(serde_json::json!({"results": []})),
+        trace: None,
+    });
+    let outcome2 = loop_
+        .apply_llm_output(
+            1,
+            &mode,
+            &base_request(AgentKind::Rag),
+            &auth,
+            &mode.loop_exit_for_mode(),
+            &mut state,
+            &sink,
+            &fake_llm_response("Now with web evidence."),
+            std::time::Instant::now(),
+            &StandardLoopHooks::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        outcome2.control,
+        IterationControl::BreakToSynthesis { .. }
+    ));
+}
+
+#[tokio::test]
 async fn skill_request_json_in_chat_is_not_direct_answer() {
     let loop_ = test_loop();
     let mode = chat_mode();

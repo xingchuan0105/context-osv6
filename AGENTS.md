@@ -82,37 +82,38 @@ Layout map: `avrag-rs/prompts/README.md`. Loop assets: `avrag-rs/prompts/loop/RE
 
 设计与诊断：`docs/engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md`（§17 方案补丁）。
 
-### Stop decision & three-loop (retrieve → synthesis → verify)
+### Stop decision & agent-lane orchestration (Lead + Workers)
 
-Product **rag / search** (when `forbid_retrieve_direct_answer` + `verify` are on — default in `modes/rag.yaml` / `search.yaml`) use a **three-loop** host orchestration. Design: `avrag-rs/docs/engineering/2026-08-07-retrieve-synthesis-verify-loop-design.md`.
+Product **rag / search** (any non-empty `capabilities[]` containing `rag` and/or `search`) target **Lead Agent + specialized Workers**. Design: `docs/plans/2026-08-11-lead-rag-web-workers-design.md`.  
+Legacy single-brain SaC union and the 2026-08-07 **three-loop verify path** are being replaced on this lane; product YAML already has `verify: false` (no independent verify LLM).
 
-| Loop | Role | Must not |
+| Role | Does | Must not |
 |------|------|----------|
-| **Retrieve** | Find material (tools/codegen) | Ship user-facing final prose (`DirectAnswer` → handoff synthesis instead) |
-| **Synthesis** | Write / revise user answer | Act as verify |
-| **Verify** | One-shot: **pass** or **fail** + route (`synthesis` \| `retrieve`) + advice | Retrieve, rewrite final answer, call tools |
+| **Lead** | 指代消解、拆解 Task Brief、调度、覆盖度裁决、用户 prose 合成 | 直接 dense/web 检索找料（补料只 re-brief Worker）；把 pack/host 标签拼进用户主气泡 |
+| **RAG Worker** | 短程 SaC（dense/lexical/grep…）→ `evidence_pack_v1` | 调 web；写用户终答 |
+| **Web Worker** | host 检索叶子（可多 query + CRW）→ `evidence_pack_v1` | 调 dense/grep；写用户终答 |
+| **Host** | 结构门（Brief/PackGate/`tool_ok_count` 重算）、re-brief≤1、格式出站闸、进度 Delegate | 语义「覆盖够了」拒答句；用户主气泡脚注 |
 
 | Term (prefer) | Meaning | Owner |
 |---------------|---------|--------|
-| **Continue** | Next retrieve turn (codegen/tools/skill_request) | Model chose tools/code, or host structural gate |
-| **retrieve_handoff_synthesis** | Model stopped retrieve with prose under three-loop → leave retrieve for synthesis | Host orchestration |
-| **DirectAnswer** | Final prose **without** synthesis — **chat / write_refine / worker_handoff** only | Model + skill (those modes) |
-| **Synthesized + verify pass** | User-facing deliver after verify | Host routes; verify skill adjudicates |
-| **verify fail → re-entry** | Fail with advice back to synthesis (answer fix) or retrieve (补料); **≤3** fails then **user-facing closeout** (LLM 人话，仍有 token) 或 **灾难兜底**（token 尽）— **不**拼 ceiling 脚注 | Host state machine + verify skill |
-| **observation** | Host-injected user message stating runtime facts (`prompts/loop/*`) — **model channel only** | Host reports; model acts |
-| **compile_feedback** | Free correction turn after **structural** handoff compile fail (worker path only) | Host structural only |
-| **require_evidence** | Product/skill **intent** that grounded facts come from observation — **not** a host semantic “coverage enough” veto | **Skill + model** (prose); host only counts Ok returns |
-| **evidence_missing_continue** | Structural: `requires_evidence(mode)` && zero Ok retrieval → do not leave retrieve for synthesis yet; inject evidence-missing observation + Continue | Host structural (rounds budget) only |
-| **required_action_missing_continue** | Structural: query-card declared action without Ok return → inject + Continue | Host structural (rounds budget) only |
-| **token / round budget** | Primary cost ceiling; exhausted → release for synthesis/closeout per policy; **no** user-visible host disclosure footer | Host cost policy |
+| **Task Brief** | Lead→Worker 结构化简报（`task_brief_v1`） | Lead 写；host 启动门 |
+| **EvidencePack** | Worker→Lead 证据契约（`evidence_pack_v1`）；无自报 grounding flag | Worker 填；**host PackGate** |
+| **re-brief** | 最多 **1** 次补派 Worker | Lead 请求；host 计数 |
+| **Continue** | Worker 内下一检索回合 | Worker 模型 / 结构门 |
+| **DirectAnswer** | 无检索合成的终答 — **chat / write_refine** 或 Lead 判定 `base_tools`/`none` | 那些路径的模型 |
+| **Lead synthesize** | 用户可见交付（prose + 引用） | Lead；无独立 verify 环 |
+| **observation** | Host 注入的第三人称事实（`prompts/loop/*`）— **仅模型信道** | Host reports; model acts |
+| **require_evidence** | Skill/Lead **意图**：关键事实锚定 observation/pack | Lead/skill prose；host 只数 Ok |
+| **evidence_missing_continue** | 结构：应检索却零 Ok → 注入观察并 Continue（Worker 内或派工前） | Host structural |
+| **token / round budget** | 成本顶；为 Lead 合成预留；**无**用户可见 host 披露脚注 | Host cost policy |
 
-**Verify is not a host claim-checklist.** Host does **not** invent multi-entity scanners or soft-refusal keyword bars; verify skill states third-person tensions (answer × evidence), including failure-shape tensions (see `prompts/clusters/verify/`). Host only: call verify once per draft, parse pass/fail signals, route, cap fails at 3, then **closeout or disaster** — never append system footnotes to the user answer.
+**No independent verify loop on this path.** Coverage / grounded / whether to hard-answer is **Lead** adjudication at synthesize time (prompt + telemetry). Host does **not** invent multi-entity scanners or soft-refusal keyword bars.
 
-**Bypass verify (product):** calculation / chitchat query-card; **Ok `weather_query`** (tool-call success is enough — do not score live weather statements); modes with `verify: false` (chat / write_refine).
+**BASE tools** (`weather_query` / `calculator` / `user_context` / …): owned by **Lead** (or pure chat), not stuffed into `preferred_source: rag|web`. Ok `weather_query` remains enough for live weather statements without pack grounding theater.
 
-**Naming:** product post-synthesis check is **verify** (`loop_exit.verify`, `prompts/clusters/verify/`). Do **not** call it “short judge”. Eval LLM-as-Judge (`rag_quality` / eval_v2) is a separate concept.
+**Do not:** golden-set leakage; host semantic completeness veto beyond Ok-count structural gates; Worker user-facing final prose; dual single-brain KB∪web union as the long-term path.
 
-**Do not:** golden-set leakage in verify; host semantic “no chunk ⇒ no answer” as a *completeness* veto beyond Ok-count structural gates; long ReAct verify that retrieves or rewrites the user answer.
+**Product path (W0–W3):** rag / search / dual assemble to `LeadWorkers`. `HostWeb` direct-answer code may remain for tests only — not product assemble.
 
 ## Product hard rules (`avrag-rs`) — non-negotiable (formerly §8)
 

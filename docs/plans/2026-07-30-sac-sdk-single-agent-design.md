@@ -1,7 +1,10 @@
 # Search as Code SDK + 单 Agent 架构设计（决策定稿）
 
+> **部分取代（2026-08-11）** — **A2「单 agent / 无 worker」** 在产品 agent-lane（rag/search/dual）上被 **Lead + RAG/Web Workers** 取代：见 `docs/plans/2026-08-11-lead-rag-web-workers-design.md`。  
+> **仍有效：** A1/A3–A8 检索进 SDK、capability 门控原语子集、无 topk 聚合原语等 — SaC **下沉为 RAG Worker 执行引擎**，不是删除 SDK。
+
 **日期**：2026-07-30  
-**状态**：决策定稿（锚点不可偏离）  
+**状态**：决策定稿（锚点不可偏离）— **A2 已修订见上文横幅**  
 **依据**：Perplexity *Rethinking Search as Code* + 现状盘点 + 负责人决策  
 **核心**：所有检索工具进一个 SDK；单 agent；前端 capabilities 不变，选哪个就开通对应的提示词 + SDK 子集。
 
