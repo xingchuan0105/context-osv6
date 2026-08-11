@@ -10,6 +10,7 @@ import { MarketingShell } from '@/components/marketing-chrome';
 export const metadata: Metadata = {
   title: '法律中心',
   description: 'Context-OS 法律中心，查看用户服务协议、隐私政策和开源声明。',
+  alternates: { canonical: '/legal' },
 };
 
 // 从 MDX frontmatter 读取版本号作为卡片显示日期，

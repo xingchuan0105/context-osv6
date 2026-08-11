@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 
 import { formatUiMessage } from "../../../../lib/i18n/messages";
 import { useUiPreferences } from "../../../../lib/ui-preferences";
-import { AppTopBar } from "../../../../components/app-top-bar";
 
 function DocSection({
   title,
@@ -34,13 +33,15 @@ function DocSection({
   );
 }
 
-export default function HelpApiAccessPage() {
+/**
+ * 公开版 API 接入说明（GEO/SEO 方案 A3）：未登录即可读，无 App top bar。
+ * 密钥创建/撤销仍在登录后的工作区分享中心（/dashboard/:id/share#api）。
+ */
+export function ApiAccessGuideClient() {
   const { locale } = useUiPreferences();
 
   return (
-    <>
-      <AppTopBar locale={locale} />
-      <main className="app-page-shell">
+    <main className="app-page-shell">
       <div className="app-page-center" style={{ display: "grid", gap: "1rem", maxWidth: "72rem" }}>
         <header style={{ display: "grid", gap: "0.75rem" }}>
           <div
@@ -60,7 +61,7 @@ export default function HelpApiAccessPage() {
               <Link className="app-button-secondary" href="/help">
                 {formatUiMessage(locale, "helpApiAccessBackHelp")}
               </Link>
-              <Link className="app-button-secondary" href="/docs/api-access-for-agents.md">
+              <Link className="app-button-secondary" href="/help/api-access/agents">
                 {formatUiMessage(locale, "helpItemApiAgentDocs")}
               </Link>
             </div>
@@ -96,13 +97,12 @@ export default function HelpApiAccessPage() {
             <li>{formatUiMessage(locale, "helpApiAccessAutomationStep4")}</li>
           </ol>
           <div className="app-button-row" style={{ flexWrap: "wrap" }}>
-            <Link className="app-link app-link-muted" href="/docs/api-access-for-agents.md">
+            <Link className="app-link app-link-muted" href="/help/api-access/agents">
               {formatUiMessage(locale, "helpItemApiAgentDocs")}
             </Link>
           </div>
         </section>
       </div>
-      </main>
-    </>
+    </main>
   );
 }

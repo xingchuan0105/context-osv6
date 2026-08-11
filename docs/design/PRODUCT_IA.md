@@ -53,7 +53,8 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 /desktop/buy             历史/授权相关（非主推；客户端免费叙事优先）
 /legal/*                 法律
 /help                    帮助全文（含上手说明的长文入口）
-/help/api-access         Agent/API 接入
+/help/api-access         Agent/API 接入（公开 SSR，未登录可读；2026-08-11 GEO A3）
+/help/api-access/agents  Agent 可读 API 文档（公开 SSR）
 ```
 
 多站点 hub/blog/tools → 见 `site-map.ts` + `docs/engineering/MULTI_SITE_IA_INTEGRATION_PLAN_2026-07-14.md`。  
@@ -124,7 +125,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | **Dashboard main** | `/dashboard*` | 全宽内容；筛选 tab（全部/我的/收藏）；横切「分享访问」与「客户端」入口在工具栏；**无**百科主侧栏 |
 | **Workspace chrome** | `/dashboard/:id*` | 标题 · 新建 · **分享**（T0 单胶囊单行为，直开分享弹窗；访问=弹窗完整页入口，API 作为分享方法区块合入弹窗/分享中心）· 通知 · 账户 |
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |
-| **深层工具页** | `/dashboard/analytics`、`/dashboard/:id/share`、`/settings/usage`、`/help/*` | **统一 App top bar**（同上行 App top bar，经 `AppTopBar` 组件）；页内保留对象级返回链（如 share → 所属工作区）作 breadcrumb，**禁止裸返回链作为唯一出口** |
+| **深层工具页** | `/dashboard/analytics`、`/dashboard/:id/share`、`/settings/usage`、`/help/*`（公开页 `/help/api-access*` 除外，用公开轻 chrome） | **统一 App top bar**（同上行 App top bar，经 `AppTopBar` 组件）；页内保留对象级返回链（如 share → 所属工作区）作 breadcrumb，**禁止裸返回链作为唯一出口** |
 | **Onboarding map** | 按需 | 弹窗；入口是次要控件（上手），不占 240px 业务侧栏 |
 
 **Rail pattern（Grok 式）**：多分区的设置/功能 surface 统一「左导航 + 右内容」——设置页、设置快开弹窗、分享弹窗、分享中心共用 `components/ui/nav-rail.tsx`（`NavRail`）+ AppModal `size="xl" bodyVariant="rail"`；单用途页（usage/analytics/help 长文）不强制。分享中心深链 `/share#api` 选中对应分区。

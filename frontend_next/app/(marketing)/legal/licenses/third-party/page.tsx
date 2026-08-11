@@ -9,6 +9,7 @@ import { renderLegalMarkdown } from '@/lib/legal/render-markdown';
 export const metadata: Metadata = {
   title: '完整第三方组件声明',
   description: 'Context-OS 使用的所有第三方开源组件及其许可证完整列表。',
+  alternates: { canonical: '/legal/licenses/third-party' },
 };
 
 export default async function ThirdPartyNotices() {

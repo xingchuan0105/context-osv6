@@ -9,6 +9,7 @@ import { renderLegalMarkdown } from '@/lib/legal/render-markdown';
 export const metadata: Metadata = {
   title: '隐私政策',
   description: 'Context-OS 隐私政策，了解我们如何收集、使用和保护您的个人信息。',
+  alternates: { canonical: '/legal/privacy' },
 };
 
 export default async function PrivacyPage() {
