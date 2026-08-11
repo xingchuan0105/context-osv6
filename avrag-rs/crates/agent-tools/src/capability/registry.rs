@@ -63,7 +63,7 @@ impl CapabilityRegistry {
     /// All executable tool meta from [`ToolCatalog`] (execution table).
     ///
     /// **Not** the product disclosure list — HTTP capabilities use mode
-    /// `tool_pool` (+ auto_fallback) via [`super::api::build_capabilities_response`].
+    /// `tool_pool` via [`super::api::build_capabilities_response`].
     pub fn list_catalog_tools(&self) -> Vec<&ToolMetadata> {
         let _ = self;
         ToolCatalog::standard_cached()

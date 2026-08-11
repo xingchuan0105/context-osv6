@@ -1,4 +1,4 @@
-use super::{AutoFallbackConfig, BudgetConfig, ModeConfig, load_mode_config};
+use super::{BudgetConfig, ModeConfig, load_mode_config};
 
 #[test]
 fn rag_mode_config_deserializes_with_tool_pool_and_clusters() {
@@ -28,7 +28,7 @@ fn search_mode_config_has_search_cluster() {
     let config = load_mode_config("search").expect("search mode should load");
     assert!(
         config.tool_pool.is_empty(),
-        "search uses host web / SaC surface off; native tool_pool empty: {:?}",
+        "search Lead+Workers; native tool_pool empty: {:?}",
         config.tool_pool
     );
     assert!(config.skill_catalog.cluster_by_id("search").is_some());
@@ -241,25 +241,4 @@ fn budget_config_resolves_token_tier() {
     assert_eq!(with_override.resolve_continue_token_boost(28_000), 10_000);
 }
 
-#[test]
-fn auto_fallback_config_deserializes_vertical() {
-    let yaml = r#"
-enabled: true
-tool_id: web_search
-top_k: 10
-vertical: news
-"#;
-    let cfg: AutoFallbackConfig = serde_yaml::from_str(yaml).unwrap();
-    assert_eq!(cfg.vertical.as_deref(), Some("news"));
-}
 
-#[test]
-fn auto_fallback_config_default_vertical_none() {
-    let yaml = r#"
-enabled: true
-tool_id: dense_retrieval
-top_k: 10
-"#;
-    let cfg: AutoFallbackConfig = serde_yaml::from_str(yaml).unwrap();
-    assert!(cfg.vertical.is_none());
-}

@@ -84,18 +84,6 @@ const PRODUCT_MODE_FILES: &[(&str, &str)] = &[
 struct ModeYamlToolPool {
     #[serde(default)]
     tool_pool: Vec<String>,
-    /// Host-internal post-budget fallback (dense/web). Not disclosed to the LLM;
-    /// deserialized so YAML remains valid, never merged into tool_pool (A1/D6).
-    #[serde(default)]
-    #[allow(dead_code)]
-    auto_fallback: Option<ModeYamlAutoFallback>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ModeYamlAutoFallback {
-    #[serde(default)]
-    #[allow(dead_code)]
-    tool_id: Option<String>,
 }
 
 fn resolve_mode_yaml_path(file_stem: &str) -> Option<std::path::PathBuf> {
@@ -139,9 +127,7 @@ fn load_mode_tool_pool(file_stem: &str) -> Vec<String> {
 }
 
 /// Product capability disclosure for a mode: **LLM-facing** `tool_pool` only.
-///
-/// A1/D6: `auto_fallback.tool_id` is host-internal (dense/web after budget) and
-/// must **not** appear as a callable tool in the capabilities API.
+/// Host RAG/web recovery tools are not YAML-disclosed (Lead Workers / SaC leaf).
 fn load_mode_disclosed_tools(file_stem: &str) -> Vec<String> {
     parse_mode_yaml(file_stem)
         .map(|m| m.tool_pool)
@@ -302,7 +288,7 @@ mod tests {
         );
         assert!(
             !allowed.contains("dense_retrieval"),
-            "dense_retrieval auto_fallback is host-internal, not disclosed"
+            "dense_retrieval is host-internal, not LLM-disclosed"
         );
         assert!(!resp.tools.iter().any(|t| t.id == "web_search"));
         assert!(!resp.tools.iter().any(|t| t.id == "dense_retrieval"));

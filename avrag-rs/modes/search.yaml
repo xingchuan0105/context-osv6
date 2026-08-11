@@ -10,7 +10,7 @@ skill_catalog:
   retrieve: [search, memory]
   synthesis: [writing, format, brainstorming]
 budget:
-  # Host web retrieve does not burn product rounds; headroom for synthesis.
+  # Web Worker host leaf; headroom for Lead synthesis.
   # Dual takes max(rag, search) — see mode_assemble.
   # No token wall (omit max_tokens → unlimited).
   max_iterations: 2
@@ -23,15 +23,10 @@ temperature: 0.4
 loop_exit:
   require_evidence: false
   allow_content_early_stop: false
-  # Pack → synthesis; never ship retrieve prose / host DeepSeek text as user bubble.
+  # Pack → Lead synthesis; never ship retrieve prose as user bubble.
   skip_synthesis_on_direct_answer: false
   forbid_retrieve_direct_answer: true
   verify: false
   verify_max_fail_rounds: 1
 synthesis_output:
   contract: prose_only
-auto_fallback:
-  enabled: true
-  tool_id: web_search
-  top_k: 10
-  vertical: web

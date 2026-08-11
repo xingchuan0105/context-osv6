@@ -60,7 +60,7 @@ Every round also carries the **mandatory memory disclosure** (`clusters/memory/S
 
 Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_parts` → agent-loop assembler.
 
-**Host auto_fallback** (`dense_retrieval` / `web_search` tool ids in YAML) is a **server-side** recovery path. It is **not** on the LLM tool schema when SaC clears `tool_pool`; the model still uses the Python sandbox (`client.*`).
+**Host retrieval leaves** (RAG Worker dense / Web Worker search+CRW) are **not** LLM tool schemas. Product rag/search use Lead+Workers; nested short SaC still uses the Python sandbox (`client.*`).
 
 ## Layering
 

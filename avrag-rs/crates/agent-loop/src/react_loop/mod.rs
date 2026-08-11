@@ -171,11 +171,10 @@ impl ReActLoop {
         let (request, base_message_count, max_iterations, auth, loop_user_query) =
             self.prepare_run_request(mode, request, sink).await?;
 
-        // L0 题型卡：按挂载能力选 profile（纯 chat 跳过；search 极简；rag/dual 全量）。
-        // host_web search-only：不需要题卡（无 codegen 动作闸），省一轮 LLM。
+        // L0 题型卡：按挂载能力选 profile（纯 chat 跳过；SaC 路径 rag 全量）。
+        // LeadWorkers: skip query-card LLM（Lead plan + workers 自管）。
         // 该调用不占迭代预算（budget 在 run_retrieval_loop 内计）。
         // validate：未知/未挂载动作清洗，避免 L2.5 闸对不可达动作烧满轮次。
-        // LeadWorkers: skip query-card LLM (Lead plan + workers).
         let card_profile = if config::is_lead_workers_path(mode) {
             query_card::QueryCardProfile::Off
         } else {

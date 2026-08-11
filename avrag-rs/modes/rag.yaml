@@ -24,11 +24,6 @@ budget:
     free: 5
     pro: 5
     enterprise: 5
-auto_fallback:
-  # Host recovery only — not exposed as an LLM tool schema under SaC.
-  enabled: true
-  tool_id: dense_retrieval
-  top_k: 10
 temperature: 0.4
 loop_exit:
   # Skill-owned grounding intent (prose); structural gates still count Ok returns.

@@ -51,7 +51,7 @@ pub struct BridgedCodegenExec {
     pub bridge_calls: Vec<BridgeCallObs>,
 }
 
-/// Handles required to execute tools / codegen / auto-fallback inside the loop.
+/// Handles required to execute tools / codegen / host RAG·web leaves inside the loop.
 #[derive(Clone, Default)]
 pub struct LoopRuntimeDeps {
     pub rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
@@ -224,7 +224,7 @@ impl LoopRuntimeDeps {
         }
     }
 
-    /// Auto-fallback dense/lexical/graph via RagRuntime tool dispatch.
+    /// Host RAG leaf (dense/lexical/graph) via RagRuntime tool dispatch.
     pub async fn dispatch_rag_fallback(
         &self,
         auth: &AuthContext,

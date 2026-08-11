@@ -32,7 +32,6 @@ pub struct ModeConfig {
     #[serde(default)]
     pub inject_retrieval_query: bool,
     pub budget: BudgetConfig,
-    pub auto_fallback: Option<AutoFallbackConfig>,
     #[serde(default)]
     pub temperature: Option<f32>,
     #[serde(default)]
@@ -249,11 +248,4 @@ impl BudgetConfig {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AutoFallbackConfig {
-    pub enabled: bool,
-    pub tool_id: String,
-    pub top_k: u8,
-    #[serde(default)]
-    pub vertical: Option<String>,
-}
+

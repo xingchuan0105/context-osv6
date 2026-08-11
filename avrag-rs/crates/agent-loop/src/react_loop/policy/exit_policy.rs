@@ -50,7 +50,7 @@ pub use super::super::prompt_assets::{
 // Synthesis gate
 // ---------------------------------------------------------------------------
 
-/// Post-retrieve synthesis routing. Host does **not** force auto_fallback or
+/// Post-retrieve synthesis routing. Host does **not** force
 /// DegradedNoEvidence for missing chunks (skill-owned stop; retired 2026-07-31).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SynthesisGate {

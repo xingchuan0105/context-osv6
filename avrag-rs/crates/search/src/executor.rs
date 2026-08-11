@@ -20,13 +20,6 @@ pub trait SearchProvider: Send + Sync {
         query: &str,
         vertical: Option<&str>,
     ) -> anyhow::Result<SearchResponse>;
-
-    /// Same as [`execute_search`] but never runs CRW auto-scrape (search-only host_web).
-    async fn execute_search_no_scrape(
-        &self,
-        query: &str,
-        vertical: Option<&str>,
-    ) -> anyhow::Result<SearchResponse>;
 }
 
 pub struct SearchExecutor {
@@ -152,39 +145,14 @@ impl SearchExecutor {
         }
     }
 
-    /// Execute a single search query (used by SaC `client.web` and fallbacks).
-    /// Runs CRW auto-scrape when configured (thin-snippet gate inside CRW).
+    /// Execute a single search query (SaC `client.web`, Web Worker host leaf).
+    /// Runs CRW auto-scrape when configured (`WEB_AUTO_SCRAPE*`; thin-snippet gate).
     pub async fn execute_search(
         &self,
         query: &str,
         vertical: Option<&str>,
     ) -> anyhow::Result<SearchResponse> {
-        self.execute_search_ex(query, vertical, true).await
-    }
-
-    /// Host-web / latency path: skip CRW entirely.
-    pub async fn execute_search_no_scrape(
-        &self,
-        query: &str,
-        vertical: Option<&str>,
-    ) -> anyhow::Result<SearchResponse> {
-        self.execute_search_ex(query, vertical, false).await
-    }
-
-    async fn execute_search_ex(
-        &self,
-        query: &str,
-        vertical: Option<&str>,
-        auto_scrape: bool,
-    ) -> anyhow::Result<SearchResponse> {
         let cache_key = search_cache_key(self.provider(), query, vertical);
-        // Only reuse cache when scrape policy matches enrichment (scraped results
-        // must not poison the no-scrape path and vice versa).
-        let cache_key = if auto_scrape {
-            cache_key
-        } else {
-            format!("{cache_key}|noscrape")
-        };
         if let Some(cache) = &self.cache {
             if let Some(raw) = cache.get(&cache_key).await {
                 if let Ok(mut cached) = serde_json::from_str::<SearchResponse>(&raw) {
@@ -194,7 +162,7 @@ impl SearchExecutor {
             }
         }
 
-        let response = self.dispatch_search(query, vertical, auto_scrape).await?;
+        let response = self.dispatch_search(query, vertical).await?;
 
         if let Some(cache) = &self.cache {
             if let Ok(raw) = serde_json::to_string(&response) {
@@ -208,38 +176,32 @@ impl SearchExecutor {
         &self,
         query: &str,
         vertical: Option<&str>,
-        auto_scrape: bool,
     ) -> anyhow::Result<SearchResponse> {
         match self.normalized_provider().as_str() {
-            "brave_llm_context" => self.execute_brave(query, vertical, auto_scrape).await,
+            "brave_llm_context" => self.execute_brave(query, vertical).await,
             "deepseek_web" => {
                 // News vertical: DeepSeek has no news endpoint — use Brave if key present.
                 if vertical == Some("news") {
-                    return self.execute_brave(query, vertical, auto_scrape).await;
+                    return self.execute_brave(query, vertical).await;
                 }
                 let mut resp =
                     provider::execute_deepseek_web(&self.config, &self.client, query).await?;
                 trim_results(&mut resp, self.config.max_results);
-                if auto_scrape {
-                    self.enrich_with_auto_scrape(&mut resp).await;
-                }
+                self.enrich_with_auto_scrape(&mut resp).await;
                 Ok(resp)
             }
             "deepseek_web_brave" | "deepseek" => {
                 if vertical == Some("news") {
-                    return self.execute_brave(query, vertical, auto_scrape).await;
+                    return self.execute_brave(query, vertical).await;
                 }
                 match provider::execute_deepseek_web(&self.config, &self.client, query).await {
                     Ok(mut r) if !r.results.is_empty() => {
                         trim_results(&mut r, self.config.max_results);
-                        if auto_scrape {
-                            self.enrich_with_auto_scrape(&mut r).await;
-                        }
+                        self.enrich_with_auto_scrape(&mut r).await;
                         info!(
                             target: "search",
                             provider = "deepseek_web",
                             n = r.results.len(),
-                            auto_scrape,
                             "search ok"
                         );
                         Ok(r)
@@ -252,7 +214,7 @@ impl SearchExecutor {
                         if self.config.api_key.trim().is_empty() {
                             return Ok(empty);
                         }
-                        self.execute_brave(query, vertical, auto_scrape).await
+                        self.execute_brave(query, vertical).await
                     }
                     Err(e) => {
                         warn!(
@@ -263,7 +225,7 @@ impl SearchExecutor {
                         if self.config.api_key.trim().is_empty() {
                             return Err(e);
                         }
-                        self.execute_brave(query, vertical, auto_scrape).await
+                        self.execute_brave(query, vertical).await
                     }
                 }
             }
@@ -275,7 +237,6 @@ impl SearchExecutor {
         &self,
         query: &str,
         vertical: Option<&str>,
-        auto_scrape: bool,
     ) -> anyhow::Result<SearchResponse> {
         let mut resp = if vertical == Some("news") {
             provider::execute_brave_news(&self.config, &self.client, query).await?
@@ -284,9 +245,7 @@ impl SearchExecutor {
         };
         trim_results(&mut resp, self.config.max_results);
         // Brave often has thick snippets; enrich only thin ones (min_snippet gate).
-        if auto_scrape {
-            self.enrich_with_auto_scrape(&mut resp).await;
-        }
+        self.enrich_with_auto_scrape(&mut resp).await;
         Ok(resp)
     }
 
@@ -326,13 +285,5 @@ impl SearchProvider for SearchExecutor {
         vertical: Option<&str>,
     ) -> anyhow::Result<SearchResponse> {
         SearchExecutor::execute_search(self, query, vertical).await
-    }
-
-    async fn execute_search_no_scrape(
-        &self,
-        query: &str,
-        vertical: Option<&str>,
-    ) -> anyhow::Result<SearchResponse> {
-        SearchExecutor::execute_search_no_scrape(self, query, vertical).await
     }
 }

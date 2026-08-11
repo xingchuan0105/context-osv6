@@ -89,7 +89,7 @@ and gradual migration.
 | File | Responsibility |
 |------|---------------|
 | `policy/config/mod.rs` | re-export facade |
-| `policy/config/config_types.rs` | `ModeConfig`, `LoopExitConfig`, `BudgetConfig`, `AutoFallbackConfig`, etc. |
+| `policy/config/config_types.rs` | `ModeConfig`, `LoopExitConfig`, `BudgetConfig`, `RetrieveStrategy`, etc. |
 | `policy/config/mode_loader.rs` | `load_mode_config`, `load_system_prompt`, `loop_exit_for_mode`, validation |
 | `policy/config/skill_catalog.rs` | `SkillCatalogConfig`, `SkillCluster`, `DiscloseAt`, custom deserializer |
 | `policy/config/tests.rs` | mode YAML deserialization + tier budget tests |

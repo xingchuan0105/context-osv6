@@ -37,7 +37,6 @@ impl ReActLoop {
         answer_deltas_streamed: bool,
         query_card: Option<&super::query_card::QueryCard>,
     ) -> Result<Option<AgentRunResult>, AppError> {
-        // auth / retrieval_query reserved for a future budget-path auto_fallback re-entry.
         let _ = auth;
         let has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
 

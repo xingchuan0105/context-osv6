@@ -854,7 +854,7 @@ mod tests {
             .get("system_prompt_parts")
             .and_then(|v| v.as_array())
             .expect("system_prompt_parts");
-        assert_eq!(parts.len(), 3); // agent-base + knowledge-base + web
+        assert_eq!(parts.len(), 4); // agent-base + lead-base + knowledge-base + web
 
         let cfg_val = req
             .metadata

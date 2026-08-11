@@ -59,7 +59,6 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         add_budget(&mut config, &rag);
         config.inject_retrieval_query = true;
         apply_single_agent_loop_exit(&mut config, &rag);
-        config.auto_fallback = rag.auto_fallback.clone();
         if let Some(t) = rag.temperature {
             config.temperature = Some(t);
         }
@@ -73,10 +72,6 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         add_budget(&mut config, &search);
         config.inject_retrieval_query = true;
         apply_single_agent_loop_exit(&mut config, &search);
-        if !caps.rag {
-            config.auto_fallback = search.auto_fallback.clone();
-        }
-        // Dual keeps knowledge-base auto_fallback (set above when rag was applied).
         if let Some(t) = search.temperature {
             config.temperature = Some(t);
         }
@@ -97,7 +92,6 @@ pub fn assemble_mode(caps: CapabilitySet) -> Result<AssembledMode, AppError> {
         config.loop_exit.skip_synthesis_on_direct_answer = true;
         config.synthesis_output.contract = AnswerContractKind::ProseOnly;
         config.inject_retrieval_query = false;
-        config.auto_fallback = None;
         // D11: native tool surface closed — the pure-chat trio
         // (user_context/calculator/weather_query) is served via sandbox
         // `client.*` SDK primitives (base capability), never as native tools.
@@ -391,9 +385,6 @@ mod tests {
                 .cluster_by_id("search")
                 .is_some()
         );
-        // auto_fallback from rag when dual
-        let fb = assembled.config.auto_fallback.expect("rag fallback");
-        assert_eq!(fb.tool_id, "dense_retrieval");
         // Temperature unified across modes
         assert_eq!(assembled.config.temperature, Some(0.4));
     }
@@ -539,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn search_only_single_agent_contract_and_fallback() {
+    fn search_only_lead_workers_contract() {
         let assembled = assemble_mode(CapabilitySet {
             rag: false,
             search: true,
@@ -566,8 +557,6 @@ mod tests {
                 .synthesis
                 .is_empty()
         );
-        let fb = assembled.config.auto_fallback.expect("search fallback");
-        assert_eq!(fb.tool_id, "web_search");
         assert!(
             assembled.config.tool_pool.is_empty(),
             "search single-agent tool_pool empty: {:?}",
