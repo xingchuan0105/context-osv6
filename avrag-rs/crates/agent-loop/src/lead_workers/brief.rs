@@ -82,6 +82,8 @@ pub enum TaskBriefGateError {
     SourceNotActivated { source: PreferredSource },
     MaxStepsOutOfRange { got: u8 },
     SchemaMismatch { got: String },
+    OutputSchemaMismatch { got: String },
+    DuplicateSubTaskId { id: String },
 }
 
 impl std::fmt::Display for TaskBriefGateError {
@@ -96,6 +98,8 @@ impl std::fmt::Display for TaskBriefGateError {
                 write!(f, "max_steps {got} not in [1,5]")
             }
             Self::SchemaMismatch { got } => write!(f, "schema_version {got:?}"),
+            Self::OutputSchemaMismatch { got } => write!(f, "output_schema {got:?}"),
+            Self::DuplicateSubTaskId { id } => write!(f, "duplicate sub_task.id {id:?}"),
         }
     }
 }
@@ -118,6 +122,11 @@ pub fn validate_task_brief(
     if brief.schema_version != "task_brief_v1" {
         return Err(TaskBriefGateError::SchemaMismatch {
             got: brief.schema_version.clone(),
+        });
+    }
+    if brief.output_schema != "evidence_pack_v1" {
+        return Err(TaskBriefGateError::OutputSchemaMismatch {
+            got: brief.output_schema.clone(),
         });
     }
     if brief.original_query.trim().is_empty() {

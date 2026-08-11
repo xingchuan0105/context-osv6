@@ -103,7 +103,7 @@
 |------|----------|----------|-----|------|--------|
 | 上传→ingestion→completed | PG 有 summary/chunks | `smoke::ingestion_smoke` | L1 | M+I | **G-serial-rag** |
 | Mock RAG 引文 | `citations` 含 `doc_id`；`[[cite]]` 入 answer | `smoke::rag_smoke` | L1 | M+I | **G-serial-rag** |
-| RAG auto_fallback | `degrade_trace` / fallback 路径 | `smoke::rag_fallback_smoke` | L1 | M+I | **G-serial-rag** |
+| RAG Lead+Workers（无 auto_fallback） | citations / Lead path | `smoke::rag_fallback_smoke` | L1 | M+I | **G-serial-rag** |
 | Codegen 多工具链 | dense + doc_profile + chunk | `smoke::rag_codegen_multitool_smoke` | L1 | M+I | **G-serial-rag** |
 | 多文档引文 | ≥2 `doc_id` | `integration::multi_doc` | L2 | M+I | **G-serial-integration** |
 | 空文档降级 | chunk_count=0 + degrade | `integration::ingestion_full` | L2 | M+I | 串行 |

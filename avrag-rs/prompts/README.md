@@ -1,6 +1,7 @@
-# Prompt layout (CDS) — single-agent product path
+# Prompt layout (CDS) — Lead + Workers product path
 
 LLM-facing prompt assets for the agent, ingestion helpers, and chat postprocess.
+Product rag/search/dual retrieve = **Lead + channel Workers**; pure chat remains single-agent SaC.
 
 **Authoring rules (repo law — see root `AGENTS.md`):**
 
@@ -19,7 +20,10 @@ Product and code use different short names for the **same** concepts. This is in
 | 知识库 | knowledge base | `capabilities/knowledge-base/contract.md` · skill `knowledge-base` | `mode: rag` · `caps.rag` | sandbox / bridge；loop 文件名可含 `codegen-*` |
 | 联网 | web / internet | `capabilities/web/contract.md` · skill `search` | `mode: search` · `caps.search` | `client.web` / `web_search` fallback tool id |
 | 文档清单 | docscope | `clusters/docscope/SKILL.md` · skill `docscope` | pipeline 注入 `<docscope_metadata>` | profile 阶段 scope 级聚合 |
-| （无） | agent base | `system/agent-base.md` | pure chat + all SaC turns | always first system part |
+| （无） | agent base | `system/agent-base.md` | pure chat + session identity | often first system part |
+| Lead | lead | `system/lead-base.md` · `clusters/lead/SKILL.md` | rag/search/dual plan+synth | assembly when caps mounted |
+| RAG Worker | rag worker | `system/worker-sandbox.md` · `workers/rag/SKILL.md` | nested short SaC | Worker system parts only |
+| Web Worker | web worker | `workers/web/SKILL.md` | host multi-query leaf | skill + host pack |
 | 写精修 | write refine | `deprecated/.../write-refine-system.md` | `mode: write_refine` | separate product; not SaC chat tree |
 
 **Loop observation files** named `codegen-*.md` mean “sandbox execution observations”, not the retired skill id `codegen`. Product skill for KB retrieve is **`knowledge-base`**.
@@ -28,39 +32,45 @@ Product and code use different short names for the **same** concepts. This is in
 
 | Family | Path | How loaded | Role |
 |--------|------|------------|------|
-| **System** | `system/` | Mode assemble (always first: `agent-base`) | Single-agent main voice |
-| **Hints** | `system/hints/` | `include_str!` from assembler / write-core | Small per-round context blocks (`format-hint` / `writing-hint` / `persona-internalize` / `round-counter`) |
-| **Capabilities** | `capabilities/<id>/` | Assemble **only when** product mounts that capability | Directory per capability: `contract.md` (short evidence / coverage / cite contract) + `SKILL.md` (method semantics) + `reference/` |
-| **Agent guide** | `agent-guide/` | `include_str!` from `app-chat::external_agent_guide` | Standalone API summaries (RAG / search / index / workspace-create) |
-| **Clusters** | `clusters/<id>/` | `PromptRegistry` + progressive disclose | Thick world models |
-| **Loop** | `loop/` | `agent-loop` `prompt_assets` | Runtime observations |
-| **Synthesis** | `synthesis/` | `agent-loop` `prompt_assets` (`synthesis_prompt!`) | Synthesis JSON-envelope contract blocks appended to the synthesis system prompt (P2-2) |
-| **Pipeline** | `pipeline/` | Workers / postprocess | Ingestion helpers |
-| **Templates** | `templates/` | Pipeline llm calls (`summary-*` / `section-index-*`) | User-turn templates for worker prompts |
-| **Deprecated** | `deprecated/**` | Not product SaC entry | Retired monomode, multi-agent, old voices |
+| **System** | `system/` | Mode assemble (`agent-base`, `lead-base`) / Worker nest (`worker-sandbox`) | Session + Lead + Worker voice |
+| **Hints** | `system/hints/` | `include_str!` from assembler / write-core | Small per-round context blocks |
+| **Capabilities** | `capabilities/<id>/` | Assemble when product mounts that capability | `contract.md` + `SKILL.md` + `reference/` |
+| **Workers** | `workers/{rag,web}/` + `workers/default-*.md` | Nested RAG SaC / brief defaults | Channel Worker skills |
+| **Agent guide** | `agent-guide/` | `include_str!` from `app-chat::external_agent_guide` | Standalone API summaries |
+| **Clusters** | `clusters/<id>/` | `PromptRegistry` + progressive disclose | Thick world models (`lead`, memory, writing, …) |
+| **Loop** | `loop/` | `agent-loop` `prompt_assets` | Runtime observations (must register tags in `host_markers`) |
+| **Synthesis** | `synthesis/` | `agent-loop` `prompt_assets` | Synthesis contract blocks |
+| **Pipeline** | `pipeline/` | Lead plan + ingestion helpers | `lead-plan.*`, summary templates |
+| **Templates** | `templates/` | Pipeline llm calls | User-turn templates for worker prompts |
+| **Deprecated** | `deprecated/**` | Not product entry | Retired monomode / multi-agent |
 
-## Assembly (SaC)
+## Assembly (product)
 
 ```text
+# Pure chat
 parts = [ system/agent-base.md ]
-if caps.rag (知识库 mounted):   parts += capabilities/knowledge-base/contract.md
-if caps.search (联网 mounted):  parts += capabilities/web/contract.md
+
+# rag / search / dual (Lead+Workers)
+parts = [ system/agent-base.md, system/lead-base.md ]
+if caps.rag:     parts += capabilities/knowledge-base/contract.md
+if caps.search:  parts += capabilities/web/contract.md
+
+# Nested RAG Worker short SaC (not product session parts)
+worker_parts = [ system/worker-sandbox.md, knowledge-base/contract.md, workers/rag/SKILL.md ]
 ```
 
-Capability `SKILL.md` files (method semantics) and `reference/` are **not** in `system_prompt_parts`; they are disclosed progressively by `DisclosurePlanner` (mandatory retrieve skills each round + skill_request on demand).
+Capability method manuals and `reference/` are progressive via `DisclosurePlanner` (mandatory retrieve + skill_request).
 
-| Product state | System parts |
-|---------------|--------------|
-| Pure chat | `agent-base` only |
-| Knowledge base only | `agent-base` + `capabilities/knowledge-base/contract.md` |
-| Web only | `agent-base` + `capabilities/web/contract.md` |
-| Dual | `agent-base` + both capability contracts |
-
-Every round also carries the **mandatory memory disclosure** (`clusters/memory/SKILL.md`, derived by `derive_mandatory_retrieve` from CapabilitySet — never listed in mode YAML).
+| Product state | Session system parts |
+|---------------|----------------------|
+| Pure chat | `agent-base` |
+| Knowledge base only | `agent-base` + `lead-base` + KB contract |
+| Web only | `agent-base` + `lead-base` + web contract |
+| Dual | `agent-base` + `lead-base` + both contracts |
 
 Wired by `app-chat` `assemble_mode` → `AgentRequest.metadata.system_prompt_parts` → agent-loop assembler.
 
-**Host retrieval leaves** (RAG Worker dense / Web Worker search+CRW) are **not** LLM tool schemas. Product rag/search use Lead+Workers; nested short SaC still uses the Python sandbox (`client.*`).
+**Host leaves** (Web multi-query search+CRW, optional host lexical re-brief, BASE weather/calculator) are **not** LLM tool schemas. Nested RAG short SaC still uses Python sandbox (`client.*`).
 
 ## Layering
 

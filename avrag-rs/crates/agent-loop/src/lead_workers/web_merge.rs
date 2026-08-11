@@ -2,7 +2,7 @@
 //!
 //! Pure functions only (W0). Concurrent I/O is W1.
 
-use avrag_search::{SearchResponse, SearchResult};
+use avrag_search::SearchResponse;
 use serde::{Deserialize, Serialize};
 
 /// One web hit after multi-query merge (stable `web:n` alias order).
@@ -88,27 +88,6 @@ pub fn merge_search_responses(
     MergedWebHits { queries, hits }
 }
 
-/// Convenience: merge raw result lists with synthetic queries `q0..`.
-pub fn merge_web_results(batches: &[Vec<SearchResult>]) -> MergedWebHits {
-    let pairs: Vec<(String, SearchResponse)> = batches
-        .iter()
-        .enumerate()
-        .map(|(i, results)| {
-            (
-                format!("q{i}"),
-                SearchResponse {
-                    query_type: "web".into(),
-                    sub_queries: vec![format!("q{i}")],
-                    results: results.clone(),
-                    synthesized_answer: String::new(),
-                    llm_usage: None,
-                },
-            )
-        })
-        .collect();
-    merge_search_responses(&pairs, 80)
-}
-
 /// Map merged hits into evidence items for an EvidencePack (`channel=web`).
 pub fn hits_to_evidence_items(merged: &MergedWebHits) -> Vec<super::evidence_pack::EvidenceItem> {
     merged
@@ -131,6 +110,7 @@ pub fn hits_to_evidence_items(merged: &MergedWebHits) -> Vec<super::evidence_pac
 #[cfg(test)]
 mod tests {
     use super::*;
+    use avrag_search::SearchResult;
 
     fn resp(query: &str, results: Vec<(&str, &str, &str)>) -> SearchResponse {
         SearchResponse {

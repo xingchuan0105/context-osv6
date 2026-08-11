@@ -2,7 +2,7 @@
 //!
 //! Design: `docs/plans/2026-08-11-lead-rag-web-workers-design.md` D1 / §2.4.
 
-use avrag_llm::{ChatMessage, LlmClient};
+use avrag_llm::{ChatMessage, LlmClient, LlmUsage};
 use serde::Deserialize;
 
 use super::json_fence;
@@ -35,10 +35,23 @@ const DEFAULT_GROUNDING: &str = include_str!(concat!(
 /// Outcome of plan parse — distinguishes empty retrieval plan (BASE-only) from hard fail.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlanParseOutcome {
-    /// Zero or more retrieval briefs; empty means Lead chose no retrieval Worker.
-    Ok { retrieval_briefs: Vec<TaskBrief> },
+    /// Retrieval and/or base_tools briefs. Empty retrieval = no Worker channels.
+    Ok {
+        retrieval_briefs: Vec<TaskBrief>,
+        base_tool_briefs: Vec<TaskBrief>,
+    },
     /// JSON/schema unusable → host should fall back to default retrieval briefs.
     Invalid,
+}
+
+/// Lead planner result including billable usage.
+#[derive(Debug, Clone)]
+pub struct LeadPlanResult {
+    pub retrieval_briefs: Vec<TaskBrief>,
+    pub base_tool_briefs: Vec<TaskBrief>,
+    pub usage: LlmUsage,
+    /// True when host fallback briefs were used (LLM fail / invalid plan).
+    pub used_host_fallback: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,16 +82,17 @@ struct BriefWire {
     boundaries: String,
 }
 
-/// Call Lead planner. On LLM failure or invalid JSON → `host_fallback`.
-/// On valid plan with only base_tools/none → **empty** retrieval list (no forced workers).
+/// Call Lead planner. On LLM failure or invalid JSON → `host_fallback` retrieval.
+/// On valid plan with only base_tools/none → empty retrieval + optional base briefs.
 pub async fn fetch_lead_briefs(
     llm: &LlmClient,
     request: &AgentRequest,
     caps: ActivatedCaps,
     plan_context_obs: &str,
     host_fallback: Vec<TaskBrief>,
-) -> Vec<TaskBrief> {
+) -> LeadPlanResult {
     let temperature = 0.3_f32;
+    let mut usage = LlmUsage::zeroed();
     let history_block = format_history_block(request);
     let user = PLAN_USER_TMPL
         .replace("{plan_context_obs}", plan_context_obs)
@@ -90,10 +104,26 @@ pub async fn fetch_lead_briefs(
     ];
     let Ok(response) = llm.complete_json_mode(&messages, Some(temperature)).await else {
         tracing::warn!("lead_plan llm failed; using host fallback briefs");
-        return host_fallback;
+        return LeadPlanResult {
+            retrieval_briefs: host_fallback,
+            base_tool_briefs: vec![],
+            usage,
+            used_host_fallback: true,
+        };
     };
+    usage.accumulate(&response.usage);
     match parse_and_validate(&response.content, request.query.trim(), caps) {
-        PlanParseOutcome::Ok { retrieval_briefs } => return retrieval_briefs,
+        PlanParseOutcome::Ok {
+            retrieval_briefs,
+            base_tool_briefs,
+        } => {
+            return LeadPlanResult {
+                retrieval_briefs,
+                base_tool_briefs,
+                usage,
+                used_host_fallback: false,
+            };
+        }
         PlanParseOutcome::Invalid => {}
     }
 
@@ -108,11 +138,30 @@ pub async fn fetch_lead_briefs(
         .complete_json_mode(&repair_messages, Some(temperature))
         .await
     else {
-        return host_fallback;
+        return LeadPlanResult {
+            retrieval_briefs: host_fallback,
+            base_tool_briefs: vec![],
+            usage,
+            used_host_fallback: true,
+        };
     };
+    usage.accumulate(&repaired.usage);
     match parse_and_validate(&repaired.content, request.query.trim(), caps) {
-        PlanParseOutcome::Ok { retrieval_briefs } => retrieval_briefs,
-        PlanParseOutcome::Invalid => host_fallback,
+        PlanParseOutcome::Ok {
+            retrieval_briefs,
+            base_tool_briefs,
+        } => LeadPlanResult {
+            retrieval_briefs,
+            base_tool_briefs,
+            usage,
+            used_host_fallback: false,
+        },
+        PlanParseOutcome::Invalid => LeadPlanResult {
+            retrieval_briefs: host_fallback,
+            base_tool_briefs: vec![],
+            usage,
+            used_host_fallback: true,
+        },
     }
 }
 
@@ -129,8 +178,16 @@ fn trim_md(s: &str) -> &str {
 
 fn format_history_block(request: &AgentRequest) -> String {
     let mut lines = Vec::new();
-    // Recent prior turns (skip empty); cap for plan token budget.
-    for turn in request.messages.iter().rev().take(8).collect::<Vec<_>>().into_iter().rev() {
+    // Recent prior turns (skip empty); cap for plan context size (rounds budget, not token wall).
+    for turn in request
+        .messages
+        .iter()
+        .rev()
+        .take(8)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+    {
         let role = turn.role.trim();
         let content = turn.content.trim();
         if content.is_empty() {
@@ -176,11 +233,13 @@ pub fn parse_and_validate(raw: &str, query: &str, caps: ActivatedCaps) -> PlanPa
 
     let ctx_summary = wire.conversation_context_summary.trim().to_string();
     let mut retrieval = Vec::new();
+    let mut base_tools = Vec::new();
     let mut saw_any_valid = false;
-    let mut saw_non_retrieval = false;
+    let mut saw_none_only = false;
     // v1 PlanGate: at most one retrieval brief per channel (first wins).
     let mut saw_rag_retrieval = false;
     let mut saw_web_retrieval = false;
+    let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (i, b) in wire.briefs.into_iter().take(5).enumerate() {
         let Some(source) = parse_source(&b.preferred_source) else {
@@ -193,34 +252,42 @@ pub fn parse_and_validate(raw: &str, query: &str, caps: ActivatedCaps) -> PlanPa
             _ => {}
         }
         saw_any_valid = true;
-        if !source.spawns_retrieval_worker() {
-            saw_non_retrieval = true;
+
+        let id = if b.id.trim().is_empty() {
+            format!("t{}", i + 1)
+        } else {
+            b.id.trim().to_string()
+        };
+        if !seen_ids.insert(id.clone()) {
+            tracing::warn!(sub_task_id = %id, "lead_plan: duplicate sub_task.id dropped");
             continue;
         }
+
+        if source == PreferredSource::None {
+            saw_none_only = true;
+            continue;
+        }
+
         match source {
             PreferredSource::Rag if saw_rag_retrieval => {
                 tracing::warn!(
-                    sub_task_id = %b.id,
+                    sub_task_id = %id,
                     "lead_plan: extra rag brief dropped (one per channel)"
                 );
                 continue;
             }
             PreferredSource::Web if saw_web_retrieval => {
                 tracing::warn!(
-                    sub_task_id = %b.id,
+                    sub_task_id = %id,
                     "lead_plan: extra web brief dropped (one per channel)"
                 );
                 continue;
             }
             PreferredSource::Rag => saw_rag_retrieval = true,
             PreferredSource::Web => saw_web_retrieval = true,
-            _ => {}
+            PreferredSource::BaseTools | PreferredSource::None => {}
         }
-        let id = if b.id.trim().is_empty() {
-            format!("t{}", i + 1)
-        } else {
-            b.id.trim().to_string()
-        };
+
         let objective = if b.objective.trim().is_empty() {
             original.clone()
         } else {
@@ -247,8 +314,13 @@ pub fn parse_and_validate(raw: &str, query: &str, caps: ActivatedCaps) -> PlanPa
             output_schema: "evidence_pack_v1".into(),
             grounding_rule: trim_md(DEFAULT_GROUNDING).to_string(),
         };
-        if validate_task_brief(&brief, caps).is_ok() {
-            retrieval.push(brief);
+        if validate_task_brief(&brief, caps).is_err() {
+            continue;
+        }
+        match source {
+            PreferredSource::Rag | PreferredSource::Web => retrieval.push(brief),
+            PreferredSource::BaseTools => base_tools.push(brief),
+            PreferredSource::None => {}
         }
     }
 
@@ -256,16 +328,18 @@ pub fn parse_and_validate(raw: &str, query: &str, caps: ActivatedCaps) -> PlanPa
         return PlanParseOutcome::Invalid;
     }
     // Valid plan that only uses base_tools/none → empty retrieval (P0-1 short path).
-    if retrieval.is_empty() && saw_non_retrieval {
+    if retrieval.is_empty() && (!base_tools.is_empty() || saw_none_only) {
         return PlanParseOutcome::Ok {
             retrieval_briefs: vec![],
+            base_tool_briefs: base_tools,
         };
     }
-    if retrieval.is_empty() {
+    if retrieval.is_empty() && base_tools.is_empty() {
         return PlanParseOutcome::Invalid;
     }
     PlanParseOutcome::Ok {
         retrieval_briefs: retrieval,
+        base_tool_briefs: base_tools,
     }
 }
 
@@ -296,7 +370,9 @@ mod tests {
             search: true,
         };
         match parse_and_validate(raw, "q", caps) {
-            PlanParseOutcome::Ok { retrieval_briefs } => {
+            PlanParseOutcome::Ok {
+                retrieval_briefs, ..
+            } => {
                 assert_eq!(retrieval_briefs.len(), 1);
                 assert_eq!(
                     retrieval_briefs[0].sub_task.preferred_source,
@@ -321,7 +397,9 @@ mod tests {
             search: false,
         };
         match parse_and_validate(raw, "x", caps) {
-            PlanParseOutcome::Ok { retrieval_briefs } => {
+            PlanParseOutcome::Ok {
+                retrieval_briefs, ..
+            } => {
                 assert_eq!(retrieval_briefs.len(), 1);
                 assert_eq!(
                     retrieval_briefs[0].sub_task.preferred_source,
@@ -345,11 +423,15 @@ mod tests {
             search: true,
         };
         match parse_and_validate(raw, "北京今天天气", caps) {
-            PlanParseOutcome::Ok { retrieval_briefs } => {
+            PlanParseOutcome::Ok {
+                retrieval_briefs,
+                base_tool_briefs,
+            } => {
                 assert!(
                     retrieval_briefs.is_empty(),
                     "BASE-only must not force retrieval workers"
                 );
+                assert_eq!(base_tool_briefs.len(), 1);
             }
             PlanParseOutcome::Invalid => panic!("BASE-only plan must be Ok empty, not Invalid"),
         }
@@ -369,7 +451,9 @@ mod tests {
             search: true,
         };
         match parse_and_validate(raw, "x", caps) {
-            PlanParseOutcome::Ok { retrieval_briefs } => {
+            PlanParseOutcome::Ok {
+                retrieval_briefs, ..
+            } => {
                 assert_eq!(retrieval_briefs.len(), 1);
             }
             PlanParseOutcome::Invalid => panic!("should skip unknown source"),
@@ -389,9 +473,18 @@ mod tests {
             rag: false,
             search: false,
         };
-        // base_tools with no caps still valid non-retrieval
         match parse_and_validate(raw, "明天呢", caps) {
-            PlanParseOutcome::Ok { retrieval_briefs } => assert!(retrieval_briefs.is_empty()),
+            PlanParseOutcome::Ok {
+                retrieval_briefs,
+                base_tool_briefs,
+            } => {
+                assert!(retrieval_briefs.is_empty());
+                assert_eq!(base_tool_briefs.len(), 1);
+                assert_eq!(
+                    base_tool_briefs[0].conversation_context_summary,
+                    "用户在问上海天气"
+                );
+            }
             PlanParseOutcome::Invalid => panic!("expected ok"),
         }
     }
@@ -412,7 +505,9 @@ mod tests {
             search: true,
         };
         match parse_and_validate(raw, "x", caps) {
-            PlanParseOutcome::Ok { retrieval_briefs } => {
+            PlanParseOutcome::Ok {
+                retrieval_briefs, ..
+            } => {
                 assert_eq!(retrieval_briefs.len(), 2);
                 assert_eq!(retrieval_briefs[0].sub_task.id, "t1");
                 assert_eq!(
@@ -426,6 +521,30 @@ mod tests {
                 );
             }
             PlanParseOutcome::Invalid => panic!("expected ok with two channel briefs"),
+        }
+    }
+
+    #[test]
+    fn duplicate_sub_task_id_dropped() {
+        let raw = r#"{
+          "original_query": "x",
+          "briefs": [
+            {"id":"same","objective":"first","preferred_source":"rag","max_steps":2},
+            {"id":"same","objective":"dup","preferred_source":"web","queries":["q"],"max_steps":1}
+          ]
+        }"#;
+        let caps = ActivatedCaps {
+            rag: true,
+            search: true,
+        };
+        match parse_and_validate(raw, "x", caps) {
+            PlanParseOutcome::Ok {
+                retrieval_briefs, ..
+            } => {
+                assert_eq!(retrieval_briefs.len(), 1);
+                assert_eq!(retrieval_briefs[0].sub_task.objective, "first");
+            }
+            PlanParseOutcome::Invalid => panic!("expected ok"),
         }
     }
 }

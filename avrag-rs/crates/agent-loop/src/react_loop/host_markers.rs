@@ -204,6 +204,16 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         forbidden_in_final: true,
         emitted_at: "prompts/loop/rag-worker-sac.tmpl.md",
     },
+    HostMarker {
+        tag: "[brief_gate_rejects]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/brief-gate-rejects.tmpl.md",
+    },
+    HostMarker {
+        tag: "[base_tools_result]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/base-tools-result.tmpl.md",
+    },
 ];
 
 /// 终答中出现即违规（`forbidden_in_final = true`）的标签列表——检测器
@@ -227,53 +237,59 @@ mod tests {
     /// 的 probe 而误报失败。两测试共享一把锁串行化。
     static PARITY_PROBE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    /// 扫描 `prompts/loop/*.md`，提取宿主观察标签候选：
-    /// 行首/行内 `[tag]`（方括号包裹）与 `<tag…>`（尖括号开头）形态。
-    /// 排除非观察形态：`[[web:n]]` 引用、`<code language="python">` 沙箱协议、
-    /// 以及平铺散文中的标签教学引用（含 `:`/空格/`/` 的尖括号形态不采集）。
+    /// 扫描 `prompts/loop/**/*.md`（含子目录 disaster），提取宿主观察标签候选。
+    /// Host observation 模板约定放在 `loop/`；system/workers 技能正文不参与采集
+    /// （避免 prose/伪标签噪声）。`[tag]` 仅收 snake_case 标识符。
     fn collect_md_tag_candidates() -> Vec<String> {
         let mut tags = Vec::new();
         let dir = Path::new(PROMPTS_LOOP);
+        collect_md_tags_from_dir(dir, &mut tags);
+        tags.sort();
+        tags.dedup();
+        tags
+    }
+
+    fn collect_md_tags_from_dir(dir: &Path, tags: &mut Vec<String>) {
         let Ok(entries) = std::fs::read_dir(dir) else {
-            return tags;
+            return;
         };
         for entry in entries.flatten() {
             let path = entry.path();
+            if path.is_dir() {
+                // One level of subdirs (e.g. workers/rag, loop/disaster).
+                collect_md_tags_from_dir(&path, tags);
+                continue;
+            }
             if path.extension().and_then(|e| e.to_str()) != Some("md") {
                 continue;
             }
             let Ok(content) = std::fs::read_to_string(&path) else {
                 continue;
             };
-            // `[name]` 形态（nudge / summary 标签）。
             for token in content
                 .split('[')
                 .skip(1)
                 .map(|s| s.split(']').next().unwrap_or(""))
             {
                 let token = token.trim();
+                // Host observation tags are snake_case ascii ids only
+                // (filters markdown links / Chinese prose brackets).
                 if token.is_empty()
-                    || token.starts_with('/') // 闭合形态 [/tag]
-                    || token.contains(':') // 引用形态 [web:n]
-                    || token.chars().any(|c| c.is_whitespace() || c == '[' || c == ']')
+                    || !token
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                    || !token.chars().next().is_some_and(|c| c.is_ascii_lowercase())
                 {
                     continue;
                 }
-                let cand = format!("[{token}]");
-                if cand == "[[web:n]]" {
-                    continue;
-                }
-                tags.push(cand);
+                tags.push(format!("[{token}]"));
             }
-            // `<name…>` 形态（尖括号标签，前缀匹配；只取闭合结构）。
             for token in content.split('<').skip(1) {
                 let name = token.split(|c| c == '>' || c == ' ').next().unwrap_or("");
                 let name = name.trim_end_matches('/');
                 if name.is_empty() || name.contains(' ') {
                     continue;
                 }
-                // 闭合标签 `</name>`（如 </response>）与模板伪影
-                // `<|im_end|>` 不是宿主观察标签，不采集。
                 if name.starts_with('/') || name.starts_with('|') {
                     continue;
                 }
@@ -284,9 +300,6 @@ mod tests {
                 tags.push(cand);
             }
         }
-        tags.sort();
-        tags.dedup();
-        tags
     }
 
     /// parity 断言 ①：所有 md 标签候选都已在备案表中登记。
@@ -305,7 +318,7 @@ mod tests {
             });
             assert!(
                 known,
-                "未备案标签出现在 prompts/loop/ 中: {cand}（需在 host_markers.rs 登记）"
+                "未备案标签出现在 prompts/loop/** 中: {cand}（需在 host_markers.rs 登记）"
             );
         }
     }

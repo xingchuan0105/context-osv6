@@ -342,6 +342,26 @@ pub fn rag_worker_sac_observation() -> String {
     trim_body(loop_prompt!("rag-worker-sac.tmpl.md")).to_string()
 }
 
+/// Briefs rejected by PlanGate / start gate (`[brief_gate_rejects]`).
+pub fn brief_gate_rejects_observation(reject_lines: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("brief-gate-rejects.tmpl.md")),
+        &[("reject_lines", reject_lines)],
+    )
+}
+
+/// Host BASE tool result observation (`[base_tools_result]`).
+pub fn base_tools_result_observation(tool: &str, status: &str, payload: &str) -> String {
+    subst(
+        trim_body(loop_prompt!("base-tools-result.tmpl.md")),
+        &[
+            ("tool", tool),
+            ("status", status),
+            ("payload", payload),
+        ],
+    )
+}
+
 /// Assemble the `{detail}` clause for [`retrieval_summary`] from fragment prompts.
 /// Runtime only fills numbers / alias lists; Chinese observation prose lives in
 /// `prompts/loop/retrieval-summary-detail-*.md`.

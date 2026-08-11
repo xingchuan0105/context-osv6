@@ -39,4 +39,4 @@ applicable_modes: [rag, search]
 
 ## BASE 工具题
 
-天气 / 计算等可标 `preferred_source: base_tools` 或 `none`；此类 brief **不**启检索 Worker，也**不**伪装成 rag/web 命中。当前产品路径上 Lead 侧 BASE 工具执行面尚未接线时，材料侧无 weather/calc observation，合成侧按「未见工具回传」处理。
+天气 / 计算等可标 `preferred_source: base_tools` 或 `none`；此类 brief **不**启检索 Worker。宿主对 `base_tools` brief 直接执行 weather/calculator，并以 `[base_tools_result]` observation 注入合成上下文；未映射到具体工具时 observation 标明 `base_tools_unmapped`。

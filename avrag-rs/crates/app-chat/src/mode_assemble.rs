@@ -360,7 +360,7 @@ mod tests {
             assembled.config.budget.max_tokens, None,
             "dual: no token wall"
         );
-        // Dual: Lead+Workers (not host_web, not single-brain SacCodegen).
+        // Dual: Lead+Workers (not single-brain SacCodegen).
         assert_eq!(
             assembled.config.retrieve_strategy,
             agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers
@@ -436,7 +436,7 @@ mod tests {
             assembled.config.sdk_primitives
         );
         assert!(!assembled.config.sdk_primitives.contains(&"grep".into()));
-        // W3: Lead+Workers, not host_web direct answer.
+        // Lead+Workers: pack → Lead synthesis (no host direct user bubble).
         assert_eq!(
             assembled.config.retrieve_strategy,
             agent_loop::r#loop::config::RetrieveStrategy::LeadWorkers

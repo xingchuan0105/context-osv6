@@ -5,8 +5,8 @@
 
 ## 现行架构基线（2026-08-11 更新）
 
-- **Agent-lane 目标形态：Lead + RAG/Web Workers**（显式 `capabilities[]`；Workers 只回 EvidencePack；Lead 合成与覆盖度裁决；无独立 verify 环）。设计：`plans/2026-08-11-lead-rag-web-workers-design.md`（W0 契约已进 `agent-loop::lead_workers`；W1+ 接线中）
-- **SaC SDK** 下沉为 **RAG Worker** 执行引擎（dense/lexical/grep 等仍走沙箱）；2026-07-30 单 agent A2「无 worker」在 agent-lane **被本设计取代**（见该文横幅待补 / 本索引为准）
+- **Agent-lane 现行：Lead + RAG/Web Workers**（显式 `capabilities[]`；Workers 只回 EvidencePack；Lead 合成与覆盖度裁决；无独立 verify 环；host 结构 re-brief≤1；每通道 1 Brief）。设计：`plans/2026-08-11-lead-rag-web-workers-design.md`（W0–W4 + 审查收尾已进 `agent-loop`）
+- **SaC SDK** 下沉为 **RAG Worker** 短程执行引擎（dense/lexical/grep 等仍走沙箱）；2026-07-30 单 agent A2「无 worker」在 agent-lane **被本设计取代**
 - **Product Apps + AppState 组合根**：T1–T8 法则生效。见根 `../AGENTS.md` + `agent/product-apps.md`
 - **workspace 唯一产品真相**，无 org（T7/T8）
 - **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；**现行商业模式见 ADR-0010**（可分享 Workspace 名额 + 代购储值）；旧 token 滚动套餐 / 桌面买断见已取代 ADR-0004

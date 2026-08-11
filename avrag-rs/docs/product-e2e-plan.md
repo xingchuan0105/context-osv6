@@ -17,7 +17,7 @@
 
 ### 1.2 历史运行结论（2026-06 对齐后）
 
-- Smoke mock 已对齐 ReActLoop：RAG happy path 走 **codegen 主路径**；`rag_fallback_smoke` 单独覆盖 **auto_fallback** 安全网
+- Smoke mock 已对齐 Lead+Workers：RAG happy path 走 **Lead plan + Worker**；`rag_fallback_smoke` 现为 **无 auto_fallback** 的 citation 回归（旧 server dense 安全网已删）
 - 已删除 mock 中永不命中的 planner/evaluator 路由（Commander 残留）
 - `degrade_trace.reason` 已强类型化为 `DegradeReason` 枚举（JSON 仍为 snake_case 字符串）
 - 最不稳定因素仍是 infra（PG/Milvus/worker）与 LLM provider 抖动（Nightly 层）

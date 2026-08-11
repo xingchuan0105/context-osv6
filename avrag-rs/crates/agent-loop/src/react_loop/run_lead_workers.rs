@@ -2,11 +2,13 @@
 //!
 //! Design: `docs/plans/2026-08-11-lead-rag-web-workers-design.md`.
 //!
-//! - Host-deterministic plan: 1 Brief per activated channel
-//! - Workers: RAG host dense; Web multi-query host search (**with CRW**); parallel when dual
+//! - PlanGate: 1 retrieval Brief per channel; optional base_tools host leaf
+//! - Workers: RAG short SaC; Web multi-query host search (**with CRW**); dual spawn-isolated
 //! - PackGate → optional **1× re-brief** (host structural) → synthesis
-//! - Telemetry: iteration record + Evaluation/DebugTrace payload
+//! - Budget: product **rounds** (`max_iterations`); no synthesis token reserve
+//! - Telemetry: PackGate outcomes, plan usage, brief rejects
 
+use std::panic::AssertUnwindSafe;
 use std::time::Instant;
 
 use avrag_llm::ChatMessage;
@@ -14,6 +16,7 @@ use avrag_llm::LlmUsage;
 use common::AppError;
 use contracts::{ToolResult, ToolStatus};
 use futures::future::join_all;
+use futures::FutureExt;
 use serde_json::json;
 
 use super::config::{
@@ -31,7 +34,7 @@ use crate::events::{AgentEvent, AgentEventSink};
 use crate::lead_workers::{
     apply_pack_gate, count_tool_ok, effective_web_queries, hits_to_evidence_items,
     merge_search_responses, ActivatedCaps, Coverage, DocScopeSummary, EvidenceItem, EvidencePack,
-    LeadPlanContext, PreferredSource, SubTask, TaskBrief, validate_task_brief,
+    LeadPlanContext, PackGateOutcome, PreferredSource, SubTask, TaskBrief, validate_task_brief,
 };
 use crate::progress::{ProgressKind, WorkFact};
 use crate::runtime::AgentRequest;
@@ -95,10 +98,11 @@ impl ReActLoop {
         );
         state.messages.push(ChatMessage::user(plan_obs.clone()));
 
-        // Lead LLM plan → retrieval briefs.
-        // Empty Ok = BASE-only short path (no forced workers). LLM fail → host_fb.
+        // Lead LLM plan → retrieval + base_tools briefs.
+        // Empty retrieval = BASE-only short path. LLM fail → host_fb.
+        // Budget is **rounds** (mode max_iterations); no synthesis token reserve.
         let host_fb = host_default_briefs(&request.query, caps);
-        let briefs = lead_plan::fetch_lead_briefs(
+        let plan = lead_plan::fetch_lead_briefs(
             self.llm_for_retrieve(mode),
             request,
             caps,
@@ -106,17 +110,26 @@ impl ReActLoop {
             host_fb,
         )
         .await;
+        session_usage.accumulate(&plan.usage);
+
+        // Host BASE tools leaf (weather / calculator) when plan says base_tools.
+        if !plan.base_tool_briefs.is_empty() {
+            self.run_base_tool_briefs(&plan.base_tool_briefs, state)
+                .await;
+        }
 
         let mut packs: Vec<EvidencePack> = Vec::new();
         let mut rebrief_used: u8 = 0;
+        let mut pack_gate_events: Vec<serde_json::Value> = Vec::new();
+        let mut brief_rejects: Vec<String> = Vec::new();
 
-        // Wave 0 (RAG ∥ Web when both present)
-        let (wave0, u0) = self
+        // Wave 0 (RAG ∥ Web when both present; panic-isolated)
+        let (wave0, u0, rejects0, gates0) = self
             .dispatch_worker_wave(
                 mode,
                 auth,
                 request,
-                &briefs,
+                &plan.retrieval_briefs,
                 caps,
                 hooks,
                 cancel,
@@ -125,6 +138,8 @@ impl ReActLoop {
             )
             .await;
         session_usage.accumulate(&u0);
+        brief_rejects.extend(rejects0);
+        pack_gate_events.extend(gates0);
         apply_wave_outcomes(state, &mut packs, wave0);
 
         // Host structural re-brief ≤1: only channels that **ran** and returned empty/insufficient.
@@ -146,7 +161,7 @@ impl ReActLoop {
                             .join(","),
                     ),
                 ));
-                let (wave1, u1) = self
+                let (wave1, u1, rejects1, gates1) = self
                     .dispatch_worker_wave(
                         mode,
                         auth,
@@ -160,8 +175,16 @@ impl ReActLoop {
                     )
                     .await;
                 session_usage.accumulate(&u1);
+                brief_rejects.extend(rejects1);
+                pack_gate_events.extend(gates1);
                 apply_wave_outcomes(state, &mut packs, wave1);
             }
+        }
+
+        if !brief_rejects.is_empty() {
+            state.messages.push(ChatMessage::user(
+                prompt_assets::brief_gate_rejects_observation(&brief_rejects.join("\n")),
+            ));
         }
 
         let (cov_summary, gaps_summary) = summarize_packs(&packs);
@@ -183,12 +206,14 @@ impl ReActLoop {
             disclosed_skills: vec![],
             action_type: "lead_workers".into(),
             observation_preview: format!(
-                "n_packs={} rebrief_used={} coverage={}",
+                "n_packs={} rebrief_used={} coverage={} rejects={} plan_fallback={}",
                 packs.len(),
                 rebrief_used,
-                cov_summary
+                cov_summary,
+                brief_rejects.len(),
+                plan.used_host_fallback
             ),
-            llm_usage: None,
+            llm_usage: Some(llm_usage_to_agent_run(&session_usage)),
             elapsed_ms,
             exit_reason: "break_to_synthesis".into(),
         }];
@@ -201,6 +226,10 @@ impl ReActLoop {
                     "rebrief_used": rebrief_used,
                     "coverage_summary": cov_summary,
                     "gaps_summary": gaps_summary,
+                    "brief_rejects": brief_rejects,
+                    "pack_gate": pack_gate_events,
+                    "plan_used_host_fallback": plan.used_host_fallback,
+                    "n_base_tool_briefs": plan.base_tool_briefs.len(),
                     "channels": packs.iter().map(|p| json!({
                         "channel": p.channel,
                         "coverage": p.coverage.as_str(),
@@ -225,6 +254,8 @@ impl ReActLoop {
                         "rebrief_used": rebrief_used,
                         "coverage_summary": cov_summary,
                         "gaps_summary": gaps_summary,
+                        "brief_rejects": brief_rejects,
+                        "pack_gate": pack_gate_events,
                         "elapsed_ms": elapsed_ms,
                         "packs": packs,
                     }),
@@ -237,6 +268,7 @@ impl ReActLoop {
             rebrief_used,
             coverage = %cov_summary,
             elapsed_ms,
+            n_rejects = brief_rejects.len(),
             "lead_workers retrieve complete → synthesis"
         );
 
@@ -250,6 +282,52 @@ impl ReActLoop {
         ))
     }
 
+    /// Host-execute Lead `base_tools` briefs (weather / calculator).
+    async fn run_base_tool_briefs(&self, briefs: &[TaskBrief], state: &mut IterationState) {
+        for brief in briefs {
+            let kind = infer_base_tool_kind(brief);
+            let (tool, result) = match kind {
+                BaseToolKind::Weather { location } => {
+                    let tr = self.deps.execute_weather_query(&location).await;
+                    ("weather_query", tr)
+                }
+                BaseToolKind::Calculator { expression } => {
+                    let tr = self.deps.execute_calculator(&expression).await;
+                    ("calculator", tr)
+                }
+                BaseToolKind::Unmapped => {
+                    let tr = ToolResult {
+                        tool: "base_tools".into(),
+                        version: "1.0".into(),
+                        status: ToolStatus::Error,
+                        data: Some(json!({
+                            "error": "base_tools_unmapped",
+                            "objective": brief.sub_task.objective,
+                            "note": "host could not map brief to weather_query or calculator",
+                        })),
+                        trace: None,
+                    };
+                    ("base_tools", tr)
+                }
+            };
+            let status = match result.status {
+                ToolStatus::Ok => "ok",
+                ToolStatus::Error => "error",
+                _ => "other",
+            };
+            let payload = result
+                .data
+                .as_ref()
+                .map(|d| d.to_string())
+                .unwrap_or_else(|| "{}".into());
+            let payload: String = payload.chars().take(2000).collect();
+            state.tool_results.push(result);
+            state.messages.push(ChatMessage::user(
+                prompt_assets::base_tools_result_observation(tool, status, &payload),
+            ));
+        }
+    }
+
     async fn dispatch_worker_wave(
         &self,
         mode: &ModeConfig,
@@ -261,14 +339,24 @@ impl ReActLoop {
         cancel: &CancellationToken,
         sink: &dyn AgentEventSink,
         is_rebrief: bool,
-    ) -> (Vec<WorkerOutcome>, LlmUsage) {
+    ) -> (
+        Vec<WorkerOutcome>,
+        LlmUsage,
+        Vec<String>,
+        Vec<serde_json::Value>,
+    ) {
         // v1: one brief per channel (PlanGate first-wins). Extra same-channel
-        // briefs here are defense-in-depth drops with a warn.
+        // briefs here are defense-in-depth drops with a warn + Lead-visible reject.
         let mut rag_brief: Option<&TaskBrief> = None;
         let mut web_brief: Option<&TaskBrief> = None;
+        let mut rejects: Vec<String> = Vec::new();
         for brief in briefs {
             if let Err(e) = validate_task_brief(brief, caps) {
                 tracing::warn!(error = %e, is_rebrief, "lead_workers brief gate failed; skip");
+                rejects.push(format!(
+                    "- id={} source={:?} reason={e}",
+                    brief.sub_task.id, brief.sub_task.preferred_source
+                ));
                 continue;
             }
             match brief.sub_task.preferred_source {
@@ -279,6 +367,10 @@ impl ReActLoop {
                             is_rebrief,
                             "lead_workers: extra rag brief skipped (one per channel)"
                         );
+                        rejects.push(format!(
+                            "- id={} source=rag reason=duplicate_channel_slot",
+                            brief.sub_task.id
+                        ));
                     } else {
                         rag_brief = Some(brief);
                     }
@@ -290,11 +382,23 @@ impl ReActLoop {
                             is_rebrief,
                             "lead_workers: extra web brief skipped (one per channel)"
                         );
+                        rejects.push(format!(
+                            "- id={} source=web reason=duplicate_channel_slot",
+                            brief.sub_task.id
+                        ));
                     } else {
                         web_brief = Some(brief);
                     }
                 }
-                _ => {}
+                PreferredSource::BaseTools | PreferredSource::None => {
+                    // Handled outside dispatch (base tools leaf / no-op).
+                }
+                PreferredSource::Rag | PreferredSource::Web => {
+                    rejects.push(format!(
+                        "- id={} source={:?} reason=source_not_activated",
+                        brief.sub_task.id, brief.sub_task.preferred_source
+                    ));
+                }
             }
         }
 
@@ -314,6 +418,7 @@ impl ReActLoop {
         }
 
         // True parallel when both channels: wall ≈ max(rag, web).
+        // catch_unwind so one Worker panic does not take down the other.
         let (rag_out, web_out) = match (rag_brief, web_brief) {
             (Some(rb), Some(wb)) => {
                 let rag_fut = async {
@@ -330,45 +435,103 @@ impl ReActLoop {
                         .await
                     }
                 };
-                let web_fut = async { (self.run_web_worker_host_leaf(wb, cancel).await, LlmUsage::zeroed()) };
-                let (r, w) = tokio::join!(rag_fut, web_fut);
-                (Some(r), Some(w))
-            }
-            (Some(rb), None) => {
-                let r = if is_rebrief {
+                let web_fut = async {
                     (
-                        self.run_rag_worker_host(auth, request, rb, "lexical_retrieval")
-                            .await,
+                        self.run_web_worker_host_leaf(wb, cancel).await,
                         LlmUsage::zeroed(),
                     )
-                } else {
-                    self.run_rag_worker_short_sac(mode, auth, request, rb, hooks, cancel, sink)
-                        .await
                 };
-                (Some(r), None)
+                let (r, w) = tokio::join!(
+                    AssertUnwindSafe(rag_fut).catch_unwind(),
+                    AssertUnwindSafe(web_fut).catch_unwind()
+                );
+                let r = match r {
+                    Ok(v) => Some(v),
+                    Err(_) => {
+                        tracing::error!("lead_workers rag worker panicked; channel isolated");
+                        Some((
+                            empty_panic_outcome("rag", rb.sub_task.id.as_str()),
+                            LlmUsage::zeroed(),
+                        ))
+                    }
+                };
+                let w = match w {
+                    Ok(v) => Some(v),
+                    Err(_) => {
+                        tracing::error!("lead_workers web worker panicked; channel isolated");
+                        Some((
+                            empty_panic_outcome("web", wb.sub_task.id.as_str()),
+                            LlmUsage::zeroed(),
+                        ))
+                    }
+                };
+                (r, w)
             }
-            (None, Some(wb)) => (
-                None,
-                Some((self.run_web_worker_host_leaf(wb, cancel).await, LlmUsage::zeroed())),
-            ),
+            (Some(rb), None) => {
+                let fut = async {
+                    if is_rebrief {
+                        (
+                            self.run_rag_worker_host(auth, request, rb, "lexical_retrieval")
+                                .await,
+                            LlmUsage::zeroed(),
+                        )
+                    } else {
+                        self.run_rag_worker_short_sac(mode, auth, request, rb, hooks, cancel, sink)
+                            .await
+                    }
+                };
+                let r = match AssertUnwindSafe(fut).catch_unwind().await {
+                    Ok(v) => Some(v),
+                    Err(_) => {
+                        tracing::error!("lead_workers rag worker panicked; channel isolated");
+                        Some((
+                            empty_panic_outcome("rag", rb.sub_task.id.as_str()),
+                            LlmUsage::zeroed(),
+                        ))
+                    }
+                };
+                (r, None)
+            }
+            (None, Some(wb)) => {
+                let fut = async {
+                    (
+                        self.run_web_worker_host_leaf(wb, cancel).await,
+                        LlmUsage::zeroed(),
+                    )
+                };
+                let w = match AssertUnwindSafe(fut).catch_unwind().await {
+                    Ok(v) => Some(v),
+                    Err(_) => {
+                        tracing::error!("lead_workers web worker panicked; channel isolated");
+                        Some((
+                            empty_panic_outcome("web", wb.sub_task.id.as_str()),
+                            LlmUsage::zeroed(),
+                        ))
+                    }
+                };
+                (None, w)
+            }
             (None, None) => (None, None),
         };
 
         let mut out = Vec::new();
         let mut usage = LlmUsage::zeroed();
+        let mut gate_events = Vec::new();
         if let Some((o, u)) = rag_out {
             usage.accumulate(&u);
+            gate_events.push(pack_gate_json(&o));
             out.push(o);
         }
         if let Some((o, u)) = web_out {
             usage.accumulate(&u);
+            gate_events.push(pack_gate_json(&o));
             out.push(o);
         }
-        (out, usage)
+        (out, usage, rejects, gate_events)
     }
 
     /// Short SaC: nested SacCodegen retrieve (rag-only SDK, max_steps) → EvidencePack.
-    /// Falls back to host dense if nested path yields no Ok tool results.
+    /// Host assembles pack from ToolResults (no dense rewire).
     /// Returns (outcome, nested LLM usage for product budget telemetry).
     async fn run_rag_worker_short_sac(
         &self,
@@ -495,7 +658,7 @@ impl ReActLoop {
             },
             tool_ok_count: 0,
         };
-        let (pack, _) = apply_pack_gate(pack, tool_ok, Some("rag"));
+        let (pack, gate) = apply_pack_gate(pack, tool_ok, Some("rag"));
         let pack_json = serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into());
 
         tracing::info!(
@@ -505,6 +668,7 @@ impl ReActLoop {
             max_steps,
             elapsed_ms = started.elapsed().as_millis() as u64,
             coverage = pack.coverage.as_str(),
+            pack_gate = gate.kind_str(),
             "lead_workers rag worker done"
         );
 
@@ -516,6 +680,7 @@ impl ReActLoop {
         (
             WorkerOutcome {
                 pack,
+                pack_gate: gate,
                 tool_results,
                 observation: prompt_assets::evidence_pack_observation(&pack_json),
             },
@@ -538,10 +703,13 @@ impl ReActLoop {
                 let q = q.clone();
                 async move {
                     if cancel.is_cancelled() {
-                        return (q, None);
+                        return (q, WebAttempt::Cancelled);
                     }
-                    let res = self.deps.execute_search_fallback(&q, Some("web")).await;
-                    (q, res)
+                    match self.deps.execute_search_fallback(&q, Some("web")).await {
+                        None => (q, WebAttempt::Unavailable),
+                        Some(Err(e)) => (q, WebAttempt::Err(e.to_string())),
+                        Some(Ok(resp)) => (q, WebAttempt::Ok(resp)),
+                    }
                 }
             })
             .collect();
@@ -550,11 +718,24 @@ impl ReActLoop {
         let mut pairs: Vec<(String, avrag_search::SearchResponse)> = Vec::new();
         let mut any_ok = false;
         let mut last_err = String::new();
+        let mut cancelled = false;
         for (q, res) in results {
             match res {
-                None => last_err = "search provider not available".into(),
-                Some(Err(e)) => last_err = e.to_string(),
-                Some(Ok(resp)) => {
+                WebAttempt::Cancelled => {
+                    cancelled = true;
+                    last_err = "cancelled".into();
+                }
+                WebAttempt::Unavailable => {
+                    if !cancelled {
+                        last_err = "search provider not available".into();
+                    }
+                }
+                WebAttempt::Err(e) => {
+                    if !cancelled {
+                        last_err = e;
+                    }
+                }
+                WebAttempt::Ok(resp) => {
                     any_ok = true;
                     pairs.push((q, resp));
                 }
@@ -629,7 +810,7 @@ impl ReActLoop {
             },
             tool_ok_count: 0,
         };
-        let (pack, _) = apply_pack_gate(pack, tool_ok, Some("web"));
+        let (pack, gate) = apply_pack_gate(pack, tool_ok, Some("web"));
         let pack_json = serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into());
 
         tracing::info!(
@@ -637,11 +818,13 @@ impl ReActLoop {
             n_hits = n,
             elapsed_ms = started.elapsed().as_millis() as u64,
             coverage = pack.coverage.as_str(),
+            pack_gate = gate.kind_str(),
             "lead_workers web worker done"
         );
 
         WorkerOutcome {
             pack,
+            pack_gate: gate,
             tool_results: vec![tool_result],
             observation: prompt_assets::evidence_pack_observation(&pack_json),
         }
@@ -719,7 +902,7 @@ impl ReActLoop {
             },
             tool_ok_count: 0,
         };
-        let (pack, _) = apply_pack_gate(pack, tool_ok, Some("rag"));
+        let (pack, gate) = apply_pack_gate(pack, tool_ok, Some("rag"));
         let pack_json = serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into());
 
         tracing::info!(
@@ -728,11 +911,13 @@ impl ReActLoop {
             n_hits = n,
             elapsed_ms = started.elapsed().as_millis() as u64,
             coverage = pack.coverage.as_str(),
+            pack_gate = gate.kind_str(),
             "lead_workers rag worker done"
         );
 
         WorkerOutcome {
             pack,
+            pack_gate: gate,
             tool_results: vec![tool_result],
             observation: prompt_assets::evidence_pack_observation(&pack_json),
         }
@@ -741,8 +926,115 @@ impl ReActLoop {
 
 struct WorkerOutcome {
     pack: EvidencePack,
+    pack_gate: PackGateOutcome,
     tool_results: Vec<ToolResult>,
     observation: String,
+}
+
+enum WebAttempt {
+    Cancelled,
+    Unavailable,
+    Err(String),
+    Ok(avrag_search::SearchResponse),
+}
+
+enum BaseToolKind {
+    Weather { location: String },
+    Calculator { expression: String },
+    Unmapped,
+}
+
+fn infer_base_tool_kind(brief: &TaskBrief) -> BaseToolKind {
+    let blob = format!(
+        "{} {}",
+        brief.sub_task.objective, brief.original_query
+    );
+    let lower = blob.to_ascii_lowercase();
+    let weather_hit = ["天气", "气温", "降雨", "weather", "temperature", "forecast"]
+        .iter()
+        .any(|k| blob.contains(k) || lower.contains(k));
+    let calc_hit = ["计算", "算一下", "等于", "calculator", "calc", "sqrt", "sin("]
+        .iter()
+        .any(|k| blob.contains(k) || lower.contains(k))
+        || lower.chars().any(|c| "+-*/^".contains(c));
+    if weather_hit && !calc_hit {
+        // Prefer objective as location seed; skill geocodes city names.
+        let location = if brief.sub_task.objective.trim().is_empty() {
+            brief.original_query.trim().to_string()
+        } else {
+            brief.sub_task.objective.trim().to_string()
+        };
+        return BaseToolKind::Weather { location };
+    }
+    if calc_hit {
+        // Prefer a math-looking substring; else whole original query.
+        let expression = extract_math_expression(&brief.original_query)
+            .or_else(|| extract_math_expression(&brief.sub_task.objective))
+            .unwrap_or_else(|| brief.original_query.trim().to_string());
+        return BaseToolKind::Calculator { expression };
+    }
+    BaseToolKind::Unmapped
+}
+
+fn extract_math_expression(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        return None;
+    }
+    // Whole string looks like an expression.
+    if t.chars()
+        .all(|c| c.is_ascii_digit() || "+-*/^().% eE".contains(c) || c.is_ascii_whitespace())
+        && t.chars().any(|c| c.is_ascii_digit())
+    {
+        return Some(t.to_string());
+    }
+    None
+}
+
+fn empty_panic_outcome(channel: &str, sub_task_id: &str) -> WorkerOutcome {
+    let pack = EvidencePack {
+        schema_version: "evidence_pack_v1".into(),
+        sub_task_id: sub_task_id.into(),
+        channel: channel.into(),
+        key_facts: vec![],
+        evidence: vec![],
+        coverage: Coverage::Insufficient,
+        gaps: format!("{channel}_worker_panic"),
+        tool_ok_count: 0,
+    };
+    let (pack, gate) = apply_pack_gate(pack, 0, Some(channel));
+    let pack_json = serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into());
+    WorkerOutcome {
+        pack,
+        pack_gate: gate,
+        tool_results: vec![],
+        observation: prompt_assets::evidence_pack_observation(&pack_json),
+    }
+}
+
+fn pack_gate_json(o: &WorkerOutcome) -> serde_json::Value {
+    json!({
+        "channel": o.pack.channel,
+        "sub_task_id": o.pack.sub_task_id,
+        "kind": o.pack_gate.kind_str(),
+        "reasons": o.pack_gate.reasons_joined(),
+        "coverage": o.pack.coverage.as_str(),
+        "tool_ok_count": o.pack.tool_ok_count,
+        "n_evidence": o.pack.evidence.len(),
+    })
+}
+
+fn llm_usage_to_agent_run(u: &LlmUsage) -> crate::runtime::AgentRunUsage {
+    crate::runtime::AgentRunUsage {
+        provider: u.provider.clone(),
+        model: u.model.clone(),
+        prompt_tokens: u.prompt_tokens as u64,
+        completion_tokens: u.completion_tokens as u64,
+        total_tokens: u.total_tokens as u64,
+        request_count: if u.total_tokens > 0 { 1 } else { 0 },
+        cached_tokens: u.cached_tokens as u64,
+        reasoning_tokens: u.reasoning_tokens as u64,
+    }
 }
 
 fn apply_wave_outcomes(

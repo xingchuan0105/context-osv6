@@ -249,6 +249,22 @@ impl LoopRuntimeDeps {
         let executor = self.search_executor.as_ref()?;
         Some(executor.execute_search(query, vertical).await)
     }
+
+    /// Host BASE leaf: weather_query skill (Lead `base_tools` path).
+    pub async fn execute_weather_query(&self, location: &str) -> ToolResult {
+        let skill = WeatherQuerySkill;
+        let ctx = ExecutionContext::new(self.search_executor.as_deref().map(|p| p as _));
+        let args = json!({ "location": location });
+        skill.execute(&args, &ctx).await
+    }
+
+    /// Host BASE leaf: calculator skill (Lead `base_tools` path).
+    pub async fn execute_calculator(&self, expression: &str) -> ToolResult {
+        let skill = CalculatorSkill;
+        let ctx = ExecutionContext::new(self.search_executor.as_deref().map(|p| p as _));
+        let args = json!({ "expression": expression });
+        skill.execute(&args, &ctx).await
+    }
 }
 
 fn map_bridge_calls(

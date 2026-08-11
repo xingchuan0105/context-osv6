@@ -52,7 +52,7 @@ pub struct EvidenceItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EvidencePack {
-    #[serde(default = "evidence_pack_schema")]
+    /// Required exact `evidence_pack_v1` (no silent default).
     pub schema_version: String,
     pub sub_task_id: String,
     /// `rag` | `web`
@@ -67,10 +67,6 @@ pub struct EvidencePack {
     /// Model may send this; **host overwrites** via [`apply_pack_gate`].
     #[serde(default)]
     pub tool_ok_count: u32,
-}
-
-fn evidence_pack_schema() -> String {
-    "evidence_pack_v1".into()
 }
 
 /// Count Ok tool results (host-authoritative basis for `tool_ok_count`).
@@ -89,11 +85,6 @@ pub enum PackGateOutcome {
     Downgraded { reasons: Vec<&'static str> },
     /// Unparseable or wrong channel label.
     Reject { reason: &'static str },
-}
-
-/// Parse Worker JSON into an EvidencePack (no gate yet).
-pub fn parse_evidence_pack(raw: &str) -> Result<EvidencePack, serde_json::Error> {
-    serde_json::from_str(raw.trim())
 }
 
 /// Structural PackGate (design §3.2).
@@ -186,34 +177,22 @@ pub fn apply_pack_gate(
     (pack, outcome)
 }
 
-/// Build a partial pack from host-visible hits only (Worker closeout failed).
-pub fn host_partial_pack(
-    sub_task_id: impl Into<String>,
-    channel: &str,
-    evidence: Vec<EvidenceItem>,
-    host_tool_ok_count: u32,
-) -> EvidencePack {
-    let coverage = if evidence.is_empty() || host_tool_ok_count == 0 {
-        Coverage::Insufficient
-    } else {
-        Coverage::Partial
-    };
-    let gaps = if evidence.is_empty() {
-        "worker_closeout_failed_or_empty".into()
-    } else {
-        "host_assembled_partial".into()
-    };
-    let pack = EvidencePack {
-        schema_version: "evidence_pack_v1".into(),
-        sub_task_id: sub_task_id.into(),
-        channel: channel.into(),
-        key_facts: vec![],
-        evidence,
-        coverage,
-        gaps,
-        tool_ok_count: 0, // gate overwrites
-    };
-    apply_pack_gate(pack, host_tool_ok_count, Some(channel)).0
+impl PackGateOutcome {
+    pub fn reasons_joined(&self) -> String {
+        match self {
+            Self::Accept => String::new(),
+            Self::Downgraded { reasons } => reasons.join(","),
+            Self::Reject { reason } => (*reason).to_string(),
+        }
+    }
+
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Self::Accept => "accept",
+            Self::Downgraded { .. } => "downgraded",
+            Self::Reject { .. } => "reject",
+        }
+    }
 }
 
 #[cfg(test)]
@@ -360,10 +339,16 @@ mod tests {
             "gaps": "",
             "tool_ok_count": 0
         }"##;
-        let pack = parse_evidence_pack(raw).unwrap();
+        let pack: EvidencePack = serde_json::from_str(raw).unwrap();
         let (out, _) = apply_pack_gate(pack, 1, Some("rag"));
         assert_eq!(out.tool_ok_count, 1);
         assert_eq!(out.coverage, Coverage::Sufficient);
+    }
+
+    #[test]
+    fn missing_schema_version_fails_parse() {
+        let raw = r#"{"sub_task_id":"t1","channel":"rag","coverage":"partial"}"#;
+        assert!(serde_json::from_str::<EvidencePack>(raw).is_err());
     }
 
     #[test]

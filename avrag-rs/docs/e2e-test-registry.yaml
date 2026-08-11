@@ -1592,7 +1592,7 @@ tests:
       - I
     parallel_group: G-serial-rag
     ci_default: true
-  - id: product_e2e::smoke::rag_fallback_smoke::rag_auto_fallback_when_codegen_skipped
+  - id: product_e2e::smoke::rag_fallback_smoke::rag_lead_workers_returns_citations_without_auto_fallback
     layer: L1
     module: rag_fallback_smoke
     suite: smoke
