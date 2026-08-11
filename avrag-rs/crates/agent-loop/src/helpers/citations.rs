@@ -37,11 +37,16 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
             if !seen.insert(chunk_id.clone()) {
                 continue;
             }
-            let doc_id = item
+            let mut doc_id = item
                 .get("doc_id")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned)
                 .unwrap_or_default();
+            // Empty doc_id used to make frontend parseCitation drop the row,
+            // leaving [[cite:chunk_id]] unresolvable. Fall back to chunk_id.
+            if doc_id.is_empty() {
+                doc_id = chunk_id.clone();
+            }
             let mut text = chunk_text_field(item).unwrap_or_default();
             // doc_grep: `total_hits` 是运行时统计(命中行数),不在 chunk 原文里;
             // 附加到 content 前缀使 judge 可核对计数类 claim(2026-08-01 q079 回归)。

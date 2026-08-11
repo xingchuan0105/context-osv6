@@ -74,18 +74,25 @@ function parseCitation(item: unknown): Citation | null {
   }
 
   const c = item as Record<string, unknown>;
-  const docId = String(c.doc_id ?? "");
+  const chunkId =
+    c.chunk_id == null || c.chunk_id === ""
+      ? undefined
+      : String(c.chunk_id);
+  // Doc citations may arrive with chunk_id only (empty doc_id). Dropping those
+  // blanked every [[cite:chunk_id]] chip after stream/history parse.
+  const docIdRaw = String(c.doc_id ?? "").trim();
+  const docId = docIdRaw || chunkId || "";
 
-  if (!docId) {
+  if (!docId && !chunkId) {
     return null;
   }
 
   return {
     citation_id: Number(c.citation_id ?? 0),
     doc_id: docId,
-    chunk_id: c.chunk_id == null ? undefined : String(c.chunk_id),
+    chunk_id: chunkId,
     page: c.page == null ? undefined : Number(c.page),
-    doc_name: String(c.doc_name ?? ""),
+    doc_name: String(c.doc_name ?? docId),
     preview: c.preview == null ? undefined : String(c.preview),
     content: c.content == null ? undefined : String(c.content),
     score: Number(c.score ?? 0),

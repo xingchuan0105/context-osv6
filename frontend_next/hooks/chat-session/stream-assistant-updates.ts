@@ -220,10 +220,13 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
             payload.answer_blocks && payload.answer_blocks.length > 0
               ? payload.answer_blocks
               : [],
+          // Prefer done payload when it carries citations; otherwise keep the
+          // earlier `citations` SSE event. Never wipe a non-empty stream list
+          // with an empty done array (was blanking RAG/web chips on finalize).
           citations:
             payload.citations && payload.citations.length > 0
-              ? payload.citations
-              : [],
+              ? parseStreamCitations(payload.citations)
+              : (current?.citations ?? []),
           degradeTrace: payload.degrade_trace ?? [],
           guarded: hasGuardrailIntervention(payload.guard_report),
           messageId: resolvedMessageId ?? current?.messageId ?? null,

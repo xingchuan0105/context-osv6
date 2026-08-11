@@ -325,11 +325,17 @@ function markdownToRichTextHtmlWithCitationButtons(
         displayId: observationIndex,
       });
       if (!citation) {
-        const fallbackId = observationIndex;
-        if (!fallbackId) {
+        // Unresolved [[cite:…]] / [[web:n]] → non-clickable chip (never strip
+        // silently — that looked like “citation render failed” with bare 1,2,3).
+        const fallbackKey = citeChunkId
+          ? `cite:${citeChunkId}`
+          : observationIndex
+            ? `obs:${observationIndex}`
+            : "";
+        if (!fallbackKey) {
           return "";
         }
-        const seq = allocSeq(`fallback:${fallbackId}`);
+        const seq = allocSeq(`fallback:${fallbackKey}`);
         const token = `CITATIONTOKEN${citationTokens.length}END`;
         citationTokens.push({
           citation: null,
