@@ -265,6 +265,24 @@ impl LoopRuntimeDeps {
         let args = json!({ "expression": expression });
         skill.execute(&args, &ctx).await
     }
+
+    /// Host BASE leaf: user_context (local clock + IP geo).
+    pub async fn execute_user_context(&self, request: &AgentRequest) -> ToolResult {
+        let skill = UserContextSkill;
+        let meta_str = |key: &str| {
+            request
+                .metadata
+                .get(key)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let ctx = ExecutionContext::new(self.search_executor.as_deref().map(|p| p as _)).with_client_context(
+            meta_str("client_ip"),
+            meta_str("client_local_time"),
+            meta_str("client_timezone"),
+        );
+        skill.execute(&json!({}), &ctx).await
+    }
 }
 
 fn map_bridge_calls(

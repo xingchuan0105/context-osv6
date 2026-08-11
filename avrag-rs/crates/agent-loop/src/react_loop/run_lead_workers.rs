@@ -112,10 +112,14 @@ impl ReActLoop {
         .await;
         session_usage.accumulate(&plan.usage);
 
-        // Host BASE tools leaf (weather / calculator) when plan says base_tools.
+        // Host BASE tools leaf (weather / calculator / user_context) when plan
+        // says base_tools. Also run a structural utility pass when the query
+        // is clearly a BASE-only ask but plan omitted base_tools briefs.
         if !plan.base_tool_briefs.is_empty() {
-            self.run_base_tool_briefs(&plan.base_tool_briefs, state)
+            self.run_base_tool_briefs(&plan.base_tool_briefs, request, state)
                 .await;
+        } else if let Some(kind) = detect_utility_kind(&request.query) {
+            self.run_utility_kind(kind, request, state).await;
         }
 
         let mut packs: Vec<EvidencePack> = Vec::new();
@@ -290,8 +294,13 @@ impl ReActLoop {
         ))
     }
 
-    /// Host-execute Lead `base_tools` briefs (weather / calculator).
-    async fn run_base_tool_briefs(&self, briefs: &[TaskBrief], state: &mut IterationState) {
+    /// Host-execute Lead `base_tools` briefs (weather / calculator / user_context).
+    async fn run_base_tool_briefs(
+        &self,
+        briefs: &[TaskBrief],
+        request: &AgentRequest,
+        state: &mut IterationState,
+    ) {
         for brief in briefs {
             let kind = infer_base_tool_kind(brief);
             let (tool, result) = match kind {
@@ -303,6 +312,10 @@ impl ReActLoop {
                     let tr = self.deps.execute_calculator(&expression).await;
                     ("calculator", tr)
                 }
+                BaseToolKind::UserContext => {
+                    let tr = self.deps.execute_user_context(request).await;
+                    ("user_context", tr)
+                }
                 BaseToolKind::Unmapped => {
                     let tr = ToolResult {
                         tool: "base_tools".into(),
@@ -311,7 +324,7 @@ impl ReActLoop {
                         data: Some(json!({
                             "error": "base_tools_unmapped",
                             "objective": brief.sub_task.objective,
-                            "note": "host could not map brief to weather_query or calculator",
+                            "note": "host could not map brief to weather_query, calculator, or user_context",
                         })),
                         trace: None,
                     };
@@ -334,6 +347,64 @@ impl ReActLoop {
                 prompt_assets::base_tools_result_observation(tool, status, &payload),
             ));
         }
+    }
+
+    /// Pure-chat / SaC retrieve: inject BASE utility observations before the
+    /// model decides, so calc/weather/time do not depend on codegen luck.
+    pub(super) async fn host_inject_utility_if_needed(
+        &self,
+        request: &AgentRequest,
+        state: &mut IterationState,
+    ) {
+        if state
+            .tool_results
+            .iter()
+            .any(|t| matches!(t.tool.as_str(), "calculator" | "weather_query" | "user_context"))
+        {
+            return;
+        }
+        if let Some(kind) = detect_utility_kind(&request.query) {
+            self.run_utility_kind(kind, request, state).await;
+        }
+    }
+
+    /// Host structural utility (no Lead brief): calc / weather / local clock.
+    async fn run_utility_kind(
+        &self,
+        kind: BaseToolKind,
+        request: &AgentRequest,
+        state: &mut IterationState,
+    ) {
+        let (tool, result) = match kind {
+            BaseToolKind::Weather { location } => {
+                let tr = self.deps.execute_weather_query(&location).await;
+                ("weather_query", tr)
+            }
+            BaseToolKind::Calculator { expression } => {
+                let tr = self.deps.execute_calculator(&expression).await;
+                ("calculator", tr)
+            }
+            BaseToolKind::UserContext => {
+                let tr = self.deps.execute_user_context(request).await;
+                ("user_context", tr)
+            }
+            BaseToolKind::Unmapped => return,
+        };
+        let status = match result.status {
+            ToolStatus::Ok => "ok",
+            ToolStatus::Error => "error",
+            _ => "other",
+        };
+        let payload = result
+            .data
+            .as_ref()
+            .map(|d| d.to_string())
+            .unwrap_or_else(|| "{}".into());
+        let payload: String = payload.chars().take(2000).collect();
+        state.tool_results.push(result);
+        state.messages.push(ChatMessage::user(
+            prompt_assets::base_tools_result_observation(tool, status, &payload),
+        ));
     }
 
     async fn dispatch_worker_wave(
@@ -568,7 +639,11 @@ impl ReActLoop {
         alias_offset: usize,
     ) -> (WorkerOutcome, LlmUsage) {
         let started = Instant::now();
-        let max_steps = brief.sub_task.max_steps.clamp(1, 5);
+        // Product clamps Worker SaC to ≤5. Full-149 budget baseline
+        // (`E2E_UNLIMITED_BUDGET=1`) raises the clamp so measured usage is not
+        // capped by the host Worker step wall before Lead rounds.
+        let step_cap = if e2e_unlimited_budget() { 32 } else { 5 };
+        let max_steps = brief.sub_task.max_steps.clamp(1, step_cap);
 
         let mut worker_mode = parent_mode.clone();
         worker_mode.retrieve_strategy = RetrieveStrategy::SacCodegen;
@@ -934,6 +1009,16 @@ struct WorkerOutcome {
     observation: String,
 }
 
+fn e2e_unlimited_budget() -> bool {
+    match std::env::var("E2E_UNLIMITED_BUDGET") {
+        Ok(v) => {
+            let t = v.trim();
+            t == "1" || t.eq_ignore_ascii_case("true") || t.eq_ignore_ascii_case("yes")
+        }
+        Err(_) => false,
+    }
+}
+
 enum WebAttempt {
     Cancelled,
     Unavailable,
@@ -944,6 +1029,7 @@ enum WebAttempt {
 enum BaseToolKind {
     Weather { location: String },
     Calculator { expression: String },
+    UserContext,
     Unmapped,
 }
 
@@ -952,44 +1038,82 @@ fn infer_base_tool_kind(brief: &TaskBrief) -> BaseToolKind {
         "{} {}",
         brief.sub_task.objective, brief.original_query
     );
+    detect_utility_kind(&blob).unwrap_or(BaseToolKind::Unmapped)
+}
+
+/// Structural utility intent from user text (Lead brief omitted or pure chat).
+fn detect_utility_kind(query: &str) -> Option<BaseToolKind> {
+    let blob = query.trim();
+    if blob.is_empty() {
+        return None;
+    }
     let lower = blob.to_ascii_lowercase();
     let weather_hit = ["天气", "气温", "降雨", "weather", "temperature", "forecast"]
         .iter()
         .any(|k| blob.contains(k) || lower.contains(k));
-    let calc_hit = ["计算", "算一下", "等于", "calculator", "calc", "sqrt", "sin("]
+    let time_hit = [
+        "现在几点",
+        "当前时间",
+        "今天日期",
+        "日期和时间",
+        "精确到分",
+        "what time",
+        "current time",
+        "local time",
+        "today's date",
+    ]
+    .iter()
+    .any(|k| blob.contains(k) || lower.contains(k));
+    let calc_hit = ["计算", "算一下", "等于多少", "等于", "calculator", "calc", "sqrt", "sin("]
         .iter()
         .any(|k| blob.contains(k) || lower.contains(k))
-        || lower.chars().any(|c| "+-*/^".contains(c));
-    if weather_hit && !calc_hit {
-        // Prefer objective as location seed; skill geocodes city names.
-        let location = if brief.sub_task.objective.trim().is_empty() {
-            brief.original_query.trim().to_string()
-        } else {
-            brief.sub_task.objective.trim().to_string()
-        };
-        return BaseToolKind::Weather { location };
+        || blob.chars().any(|c| "+-*/^×÷".contains(c));
+    // Time before weather when both ("今天北京天气" → weather).
+    if weather_hit {
+        let location = extract_weather_location(blob);
+        return Some(BaseToolKind::Weather { location });
+    }
+    if time_hit {
+        return Some(BaseToolKind::UserContext);
     }
     if calc_hit {
-        // Prefer a math-looking substring; else whole original query.
-        let expression = extract_math_expression(&brief.original_query)
-            .or_else(|| extract_math_expression(&brief.sub_task.objective))
-            .unwrap_or_else(|| brief.original_query.trim().to_string());
-        return BaseToolKind::Calculator { expression };
+        let expression = extract_math_expression(blob)
+            .unwrap_or_else(|| blob.to_string());
+        return Some(BaseToolKind::Calculator { expression });
     }
-    BaseToolKind::Unmapped
+    None
+}
+
+fn extract_weather_location(s: &str) -> String {
+    // Prefer common "X现在的天气" / "天气 in X" patterns; else whole query.
+    for sep in ["现在的天气", "的天气", "天气怎么样", "weather in ", "weather for "] {
+        if let Some(idx) = s.find(sep) {
+            let left = s[..idx].trim();
+            if !left.is_empty() && left.chars().count() <= 32 {
+                return left
+                    .trim_start_matches(['请', '问', '查', '询', '下'])
+                    .trim()
+                    .to_string();
+            }
+        }
+    }
+    s.trim().to_string()
 }
 
 fn extract_math_expression(s: &str) -> Option<String> {
-    let t = s.trim();
-    if t.is_empty() {
-        return None;
-    }
-    // Whole string looks like an expression.
-    if t.chars()
-        .all(|c| c.is_ascii_digit() || "+-*/^().% eE".contains(c) || c.is_ascii_whitespace())
-        && t.chars().any(|c| c.is_ascii_digit())
+    use agent_tools::skills::builtin::calculator::normalize_calculator_expression;
+    let n = normalize_calculator_expression(s);
+    if n.chars().any(|c| c.is_ascii_digit())
+        && n
+            .chars()
+            .any(|c| "+-*/^%".contains(c) || c == '(')
     {
-        return Some(t.to_string());
+        return Some(n);
+    }
+    // Pure digit×digit without operator after normalize still may be "1 8 350" —
+    // leave as full normalized string for eval (may fail; caller handles).
+    if n.chars().any(|c| c.is_ascii_digit()) {
+        return Some(n);
     }
     None
 }

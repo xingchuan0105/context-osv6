@@ -106,10 +106,10 @@ export function createStreamTypewriter(deps: StreamTypewriterDeps) {
       return false;
     }
 
-    if (queuedText.length > STREAM_TYPEWRITER_MAX_DRAIN_CHARS_AFTER_DONE) {
-      return false;
-    }
-
+    // Hybrid C: tokens already streamed into the queue may lag far behind a
+    // fast LLM (>80 chars). Drain that lag always when it is still a prefix of
+    // the final answer. Abort only when the *unstreamed remainder* (final minus
+    // displayed+queued) is large — that case is partial stream + full done.
     const answer = getStreamingDisplayText(event.payload.answer ?? "", event.payload.answer_blocks ?? []);
 
     if (!answer) {

@@ -122,8 +122,106 @@ impl SkillComponent for CalculatorSkill {
 ///   `floor`, `ceil`, `round`, `min`, `max`, `pow`
 /// - Constants: `pi`, `e`
 /// - Grouping with parentheses
+/// Normalize user / LLM expressions before evalexpr.
+/// Handles fullwidth digits, unicode ×÷, thousands separators, and extracts
+/// the longest math-like substring from natural-language wrappers.
+pub fn normalize_calculator_expression(raw: &str) -> String {
+    let mut s = raw.trim().to_string();
+    // Fullwidth digits / punctuation → ASCII.
+    const FW: &str = "０１２３４５６７８９＋－＊／（）．％";
+    const ASC: &str = "0123456789+-*/().%";
+    for (a, b) in FW.chars().zip(ASC.chars()) {
+        s = s.replace(a, &b.to_string());
+    }
+    s = s
+        .replace('×', "*")
+        .replace('∗', "*")
+        .replace('·', "*")
+        .replace('÷', "/")
+        .replace('／', "/")
+        .replace('－', "-")
+        .replace('—', "-")
+        .replace('–', "-");
+    // Drop thousands separators: 2,800 → 2800, but keep arg commas in
+    // function calls: pow(2, 3) / min(1, 2, 3).
+    let mut out = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == ','
+            && i > 0
+            && chars[i - 1].is_ascii_digit()
+            && i + 1 < chars.len()
+            && chars[i + 1].is_ascii_digit()
+        {
+            // thousands if next group is exactly 3 digits then non-digit/end
+            let mut j = i + 1;
+            let mut nd = 0;
+            while j < chars.len() && chars[j].is_ascii_digit() {
+                nd += 1;
+                j += 1;
+            }
+            if nd == 3 {
+                i += 1;
+                continue;
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    s = out;
+    // If still not pure math, extract longest digit/operator span.
+    if !s.chars().any(|c| c.is_ascii_digit()) {
+        return s;
+    }
+    let is_math_char = |c: char| {
+        c.is_ascii_digit()
+            || c.is_ascii_whitespace()
+            || "+-*/^().%,eE".contains(c)
+            || c.is_ascii_alphabetic()
+    };
+    if s.chars().all(is_math_char) {
+        return s.split_whitespace().collect::<Vec<_>>().join(" ");
+    }
+    // Scan for spans that look like expressions (digits + ops / function calls).
+    let mut best = String::new();
+    let mut cur = String::new();
+    for c in s.chars() {
+        if is_math_char(c) {
+            cur.push(c);
+        } else if !cur.is_empty() {
+            let t = cur.split_whitespace().collect::<Vec<_>>().join(" ");
+            if t.chars().any(|x| x.is_ascii_digit())
+                && (t.chars().any(|x| "+-*/^%".contains(x) || x == '(') || t.contains(','))
+                && t.len() > best.len()
+            {
+                best = t;
+            }
+            cur.clear();
+        }
+    }
+    if !cur.is_empty() {
+        let t = cur.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.chars().any(|x| x.is_ascii_digit()) && t.len() >= best.len() {
+            if t.chars().any(|x| "+-*/^%(),".contains(x)) || best.is_empty() {
+                best = t;
+            }
+        }
+    }
+    if best.is_empty() {
+        s
+    } else {
+        best
+    }
+}
+
 pub fn evaluate_calculator_expression(expression: &str) -> Result<f64, String> {
     use evalexpr::*;
+
+    let expression = normalize_calculator_expression(expression);
+    if expression.trim().is_empty() {
+        return Err("empty expression after normalize".into());
+    }
 
     fn to_float(v: &Value) -> Result<f64, EvalexprError> {
         match v {
@@ -243,8 +341,8 @@ pub fn evaluate_calculator_expression(expression: &str) -> Result<f64, String> {
     ctx.set_value("e".to_string(), Value::Float(std::f64::consts::E))
         .map_err(|e| format!("register e: {e}"))?;
 
-    let result =
-        eval_with_context_mut(expression, &mut ctx).map_err(|e| format!("evalexpr error: {e}"))?;
+    let result = eval_with_context_mut(&expression, &mut ctx)
+        .map_err(|e| format!("evalexpr error: {e} (expr={expression:?})"))?;
 
     match result {
         Value::Float(f) => Ok(f),
@@ -264,6 +362,21 @@ mod tests {
         assert!((evaluate_calculator_expression("10.0 / 3.0").unwrap() - 3.33333).abs() < 1e-4);
         assert!((evaluate_calculator_expression("2 ^ 8").unwrap() - 256.0).abs() < 1e-10);
         assert!((evaluate_calculator_expression("10 % 3").unwrap() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_calculator_unicode_ops_and_nl_wrapper() {
+        assert!((evaluate_calculator_expression("128×46+357").unwrap() - 6245.0).abs() < 1e-9);
+        assert!((evaluate_calculator_expression("1 × 8 × 350").unwrap() - 2800.0).abs() < 1e-9);
+        assert!(
+            (evaluate_calculator_expression("请计算：128×46+357 等于多少？")
+                .unwrap()
+                - 6245.0)
+                .abs()
+                < 1e-9
+        );
+        assert!((evaluate_calculator_expression("（1587+2933）×1.13").unwrap() - 5107.6).abs() < 1e-6);
+        assert!((evaluate_calculator_expression("2,800 / 350").unwrap() - 8.0).abs() < 1e-9);
     }
 
     #[test]

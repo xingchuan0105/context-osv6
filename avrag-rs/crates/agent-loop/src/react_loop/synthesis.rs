@@ -466,12 +466,15 @@ pub async fn emit_prose_delivery(
 /// Max non-stream recovery attempts after a failed stream (stream + non-stream×N).
 const SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS: u8 = 2;
 
-/// One prose completion with **delivery-idempotent** resilience:
+/// One prose completion with **hybrid** delivery (option C):
 ///
-/// 1. Stream once (buffer tokens; do not paint the answer bubble until success).
+/// 1. Stream once: **hold** user-bubble deltas until the first **valid prose**
+///    prefix, then **live** `MessageDelta` for the rest (reasoning stays real-time).
 /// 2. On retryable stream failure → up to **two** non-stream `complete` fallbacks
-///    (1s backoff between them).
-/// 3. Only the winning attempt's text is returned / optionally flushed as deltas.
+///    (1s backoff). If live paint already started, caller repair/disaster still
+///    owns the final bubble text.
+/// 3. Only the winning attempt's text is returned; if live emit never started,
+///    flush the full prose as chunked deltas.
 ///
 /// Shared by the first prose pass and the code-only repair / rerender rounds.
 async fn stream_prose_to_sink(
@@ -482,28 +485,44 @@ async fn stream_prose_to_sink(
     cancel: &CancellationToken,
     emit_answer_deltas: bool,
 ) -> Result<(String, LlmResponse), AppError> {
-    match stream_prose_buffered(llm, messages, temperature, sink, cancel).await {
-        Ok((text, response)) => {
+    // If hybrid already opened the user bubble, never re-flush full prose on
+    // non-stream recovery (would double-paint). Done still carries final text.
+    let already_live = match stream_prose_hybrid(
+        llm,
+        messages,
+        temperature,
+        sink,
+        cancel,
+        emit_answer_deltas,
+    )
+    .await
+    {
+        Ok((text, response, live)) => {
             telemetry::prometheus::observe_synthesis_stream_outcome("ok");
-            if emit_answer_deltas {
+            if emit_answer_deltas && !live {
                 flush_answer_deltas(sink, &text).await;
             }
             return Ok((text, response));
         }
-        Err(e) if crate::helpers::is_cancellation_error(&e) || cancel.is_cancelled() => {
+        Err((e, live))
+            if crate::helpers::is_cancellation_error(&e) || cancel.is_cancelled() =>
+        {
+            let _ = live;
             return Err(super::cancellation::cancellation_error());
         }
-        Err(e) if !crate::helpers::is_retryable_upstream_error(&e) => {
+        Err((e, live)) if !crate::helpers::is_retryable_upstream_error(&e) => {
+            let _ = live;
             telemetry::prometheus::observe_synthesis_stream_outcome("exhausted");
             return Err(crate::helpers::map_llm_error_to_app_error(
                 "synthesis stream failed",
                 e,
             ));
         }
-        Err(e) => {
+        Err((e, live)) => {
             telemetry::prometheus::observe_synthesis_stream_outcome("stream_fail");
             tracing::warn!(
                 error = %e,
+                already_live = live,
                 "synthesis stream failed (retryable); trying non-stream fallbacks (max {SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS})"
             );
             let mut counts = std::collections::BTreeMap::new();
@@ -519,8 +538,9 @@ async fn stream_prose_to_sink(
                     sources_preview: Vec::new(),
                 })
                 .await;
+            live
         }
-    }
+    };
 
     let mut last_err: Option<anyhow::Error> = None;
     for attempt in 1..=SYNTHESIS_NONSTREAM_FALLBACK_ATTEMPTS {
@@ -556,7 +576,8 @@ async fn stream_prose_to_sink(
                     })
                     .await;
                 let text = response.content.clone();
-                if emit_answer_deltas {
+                // Skip paint if hybrid already opened the bubble.
+                if emit_answer_deltas && !already_live {
                     flush_answer_deltas(sink, &text).await;
                 }
                 return Ok((text, response));
@@ -602,15 +623,20 @@ async fn stream_prose_to_sink(
     ))
 }
 
-/// Stream once, buffering answer text until the stream finishes successfully.
-/// Reasoning deltas may still go to the process panel (non-final).
-async fn stream_prose_buffered(
+/// Hybrid stream: hold user-bubble paint until first valid prose prefix, then
+/// live `MessageDelta`. Reasoning is always real-time on the process panel.
+///
+/// Ok: `(text, response, already_live)` — when `already_live` the caller must
+/// not re-flush the full answer.
+/// Err: `(error, already_live)` so recovery can skip double-paint.
+async fn stream_prose_hybrid(
     llm: &LlmClient,
     messages: &[ChatMessage],
     temperature: f32,
     sink: &dyn AgentEventSink,
     cancel: &CancellationToken,
-) -> Result<(String, LlmResponse), anyhow::Error> {
+    emit_answer_deltas: bool,
+) -> Result<(String, LlmResponse, bool), (anyhow::Error, bool)> {
     let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let (reasoning_tx, mut reasoning_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let stream = llm.complete_stream(
@@ -631,17 +657,42 @@ async fn stream_prose_buffered(
     tokio::pin!(stream);
 
     let mut full_answer = String::new();
+    // Bytes already painted to the user bubble (prefix of `full_answer`).
+    let mut painted_len = 0usize;
+    let mut live = false;
 
     let response = loop {
         tokio::select! {
             biased;
             _ = cancel.cancelled() => {
-                return Err(anyhow::anyhow!("request cancelled during synthesis stream"));
+                return Err((
+                    anyhow::anyhow!("request cancelled during synthesis stream"),
+                    live,
+                ));
             }
             delta = delta_rx.recv() => {
                 if let Some(delta) = delta {
-                    // Buffer only — delivery-idempotent: failed streams never paint the bubble.
                     full_answer.push_str(&delta);
+                    if emit_answer_deltas {
+                        if !live {
+                            if is_first_valid_prose_prefix(&full_answer) {
+                                // Open bubble with the whole buffered prefix (first valid prose).
+                                live = true;
+                                let _ = sink
+                                    .emit(AgentEvent::MessageDelta {
+                                        text: full_answer.clone(),
+                                    })
+                                    .await;
+                                painted_len = full_answer.len();
+                            }
+                        } else if full_answer.len() > painted_len {
+                            let tail = full_answer[painted_len..].to_string();
+                            painted_len = full_answer.len();
+                            let _ = sink
+                                .emit(AgentEvent::MessageDelta { text: tail })
+                                .await;
+                        }
+                    }
                 }
             }
             reasoning = reasoning_rx.recv() => {
@@ -652,13 +703,23 @@ async fn stream_prose_buffered(
                 }
             }
             result = &mut stream => {
-                break result?;
+                match result {
+                    Ok(resp) => break resp,
+                    Err(e) => return Err((e, live)),
+                }
             }
         }
     };
 
     while let Ok(delta) = delta_rx.try_recv() {
         full_answer.push_str(&delta);
+        if emit_answer_deltas && live && full_answer.len() > painted_len {
+            let tail = full_answer[painted_len..].to_string();
+            painted_len = full_answer.len();
+            let _ = sink
+                .emit(AgentEvent::MessageDelta { text: tail })
+                .await;
+        }
     }
     while let Ok(reasoning) = reasoning_rx.try_recv() {
         let _ = sink
@@ -671,7 +732,26 @@ async fn stream_prose_buffered(
         full_answer = response.content.clone();
     }
 
-    Ok((full_answer, response))
+    // Stream ended still holding a non-empty prefix (e.g. only `{` JSON start that
+    // never became "valid prose" mid-stream) — not live yet; caller may flush.
+    Ok((full_answer, response, live))
+}
+
+/// First user-bubble paint gate: non-empty, not host/protocol shells, not raw JSON.
+fn is_first_valid_prose_prefix(s: &str) -> bool {
+    let t = s.trim_start();
+    if t.is_empty() {
+        return false;
+    }
+    // Hold host observation / tool shells until more arrives.
+    if t.starts_with('<') {
+        return false;
+    }
+    // Hold raw JSON envelopes until stream end (caller unwrap / contract check).
+    if t.starts_with('{') || t.starts_with('[') {
+        return false;
+    }
+    true
 }
 
 async fn flush_answer_deltas(sink: &dyn AgentEventSink, prose: &str) {
@@ -791,8 +871,22 @@ fn extract_refusal_sentence(reasoning: Option<&str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_refusal_sentence, trim_tool_results_for_synthesis};
+    use super::{
+        extract_refusal_sentence, is_first_valid_prose_prefix, trim_tool_results_for_synthesis,
+    };
     use contracts::ToolResult;
+
+    #[test]
+    fn first_valid_prose_prefix_holds_empty_json_and_shells() {
+        assert!(!is_first_valid_prose_prefix(""));
+        assert!(!is_first_valid_prose_prefix("   "));
+        assert!(!is_first_valid_prose_prefix("{"));
+        assert!(!is_first_valid_prose_prefix("  {\"answer\":"));
+        assert!(!is_first_valid_prose_prefix("[1,2]"));
+        assert!(!is_first_valid_prose_prefix("<retrieval_summary>"));
+        assert!(is_first_valid_prose_prefix("主要观点如下"));
+        assert!(is_first_valid_prose_prefix("  Hello"));
+    }
 
     fn tool_result(tool: &str, data: serde_json::Value) -> ToolResult {
         ToolResult {

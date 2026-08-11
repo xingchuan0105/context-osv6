@@ -43,6 +43,7 @@
 | `release/desktop/2026-08-10-v0.2.0.md` | Desktop v0.2.0 release notes |
 | `specs/usage-export-and-retention.md` | 用量导出与保留规格（Draft，与 ADR-0006 一致） |
 | `../avrag-rs/docs/e2e-gates.md` | L1/L2/L3 E2E 门径语义（本目录外，生效中） |
+| `engineering/2026-08-11-quality-gates-lead-workers-对照表.md` | **质量门禁对照表**：单 agent/three-loop → Lead+Workers（PackGate / Lead / verify 关 / 离线 eval） |
 | `../avrag-rs/prompts/README.md` | prompt CDS 布局与撰写规则 |
 | `../avrag-rs/prompts/loop/README.md` | loop 观察消息加载路径与规则 |
 | `plans/2026-08-11-lead-rag-web-workers-design.md` | **Lead + Workers 定稿**（agent-lane 编排权威） |

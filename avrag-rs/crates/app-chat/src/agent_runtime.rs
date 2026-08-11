@@ -170,6 +170,13 @@ impl ChatContext {
                 metadata.insert("client_timezone".to_string(), serde_json::json!(tz));
             }
         }
+        // E2E budget baseline: product request path never exposes max_iterations
+        // on the public HTTP body. Full-149 baseline measurement sets
+        // `E2E_UNLIMITED_BUDGET=1` (→ u8::MAX rounds, token wall stays off for
+        // rag/search YAML) or `E2E_MAX_ITERATIONS=N` for a fixed ceiling.
+        // Production processes leave both unset → YAML mode budget only.
+        let max_iterations = e2e_max_iterations_override();
+        let debug = req.debug || e2e_force_debug_observe();
         agent_loop::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
@@ -178,7 +185,7 @@ impl ChatContext {
             doc_scope,
             messages,
             user_preferences,
-            debug: req.debug,
+            debug,
             stream,
             language: req.language.clone(),
             auth: self.auth.clone(),
@@ -188,7 +195,7 @@ impl ChatContext {
             guard_pipeline: None,
             preferred_tools: vec![],
             format_hint: req.format_hint.clone(),
-            max_iterations: None,
+            max_iterations,
         }
     }
 
@@ -213,5 +220,34 @@ impl ChatContext {
             serde_json::json!(agent_request.user_preferences.is_some()),
         );
         general_debug
+    }
+}
+
+/// Full-149 budget baseline only. `E2E_UNLIMITED_BUDGET=1|true` → rounds
+/// ceiling `u8::MAX` (255). `E2E_MAX_ITERATIONS=N` → fixed N (1..=255).
+/// Unset in production → `None` (YAML mode budget).
+fn e2e_max_iterations_override() -> Option<u8> {
+    if e2e_env_truthy("E2E_UNLIMITED_BUDGET") {
+        return Some(u8::MAX);
+    }
+    std::env::var("E2E_MAX_ITERATIONS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u8>().ok())
+        .filter(|&n| n >= 1)
+}
+
+/// When measuring multi-agent packs, force `request.debug` so DebugTrace
+/// (full pack payloads) is collected even if the HTTP body omitted `debug`.
+fn e2e_force_debug_observe() -> bool {
+    e2e_env_truthy("E2E_OBSERVE_DEBUG") || e2e_env_truthy("E2E_UNLIMITED_BUDGET")
+}
+
+fn e2e_env_truthy(name: &str) -> bool {
+    match std::env::var(name) {
+        Ok(v) => {
+            let t = v.trim();
+            t == "1" || t.eq_ignore_ascii_case("true") || t.eq_ignore_ascii_case("yes")
+        }
+        Err(_) => false,
     }
 }

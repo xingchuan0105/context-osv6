@@ -224,6 +224,10 @@ async fn run_general_mode(
         );
     }
     insert_loop_observability(&mut general_debug, &agent_result);
+    // Lead+Workers pack coverage lives on Evaluation events (not Activity).
+    // Always fold into mode_debug so full-149 / non-stream harnesses can see
+    // workers under Lead without requiring request.debug.
+    insert_lead_workers_observability(&mut general_debug, &sink.events());
 
     let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
@@ -316,9 +320,9 @@ pub(crate) fn attach_activity_counts_from_sink(
 }
 
 /// Mirror dynamic-QC loop observability (query-card, terminal exit reason,
-/// compact rounds summary, verify, knockout) into `mode_debug.general` so
-/// non-streaming harnesses (rag_eval_v2) can attribute gate behavior per
-/// question. All keys optional for older runs / paths.
+/// compact rounds summary, verify, knockout, budget) into `mode_debug.general`
+/// so non-streaming harnesses (rag_eval_v2 / full-149) can attribute gate
+/// behavior per question. All keys optional for older runs / paths.
 fn insert_loop_observability(
     general_debug: &mut BTreeMap<String, serde_json::Value>,
     agent_result: &agent_loop::runtime::AgentRunResult,
@@ -343,6 +347,12 @@ fn insert_loop_observability(
     {
         general_debug.insert("ews".to_string(), val);
     }
+    if let Some(b) = agent_result.budget_used.as_ref() {
+        general_debug.insert(
+            "budget_used".to_string(),
+            serde_json::json!({ "current": b.current, "max": b.max }),
+        );
+    }
     if agent_result.iterations.is_empty() {
         return;
     }
@@ -350,6 +360,19 @@ fn insert_loop_observability(
         .iterations
         .iter()
         .map(|i| i.decision.as_str())
+        .collect();
+    // Lead+Workers records `action_type: lead_workers` on the retrieve
+    // telemetry row; expose it so multi-agent runs are not flattened to
+    // exit_reason alone.
+    let action_types: Vec<String> = agent_result
+        .iterations
+        .iter()
+        .filter_map(|i| {
+            i.plan
+                .get("action_type")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
         .collect();
     if let Some(last) = exit_reasons.last() {
         general_debug.insert("exit_reason".to_string(), serde_json::json!(last));
@@ -360,8 +383,41 @@ fn insert_loop_observability(
             "iterations": agent_result.iterations.len(),
             "total_tool_calls": agent_result.total_tool_calls,
             "exit_reasons": exit_reasons,
+            "action_types": action_types,
         }),
     );
+}
+
+/// Fold Lead+Workers `Evaluation.signals` (n_packs / rebrief / per-channel
+/// coverage) into `mode_debug.general.lead_workers`. Workers are host-wrapped;
+/// without this mirror the eval harness only sees flattened tool_results.
+fn insert_lead_workers_observability(
+    general_debug: &mut BTreeMap<String, serde_json::Value>,
+    events: &[agent_loop::events::AgentEvent],
+) {
+    // Last lead_workers Evaluation wins (rebrief may emit intermediate waves).
+    let mut last: Option<serde_json::Value> = None;
+    for event in events {
+        if let agent_loop::events::AgentEvent::Evaluation {
+            signals: Some(sig),
+            decision,
+            reasoning,
+            ..
+        } = event
+        {
+            if sig.get("lead_workers").and_then(|v| v.as_bool()) == Some(true) {
+                let mut obj = sig.clone();
+                if let Some(map) = obj.as_object_mut() {
+                    map.insert("decision".into(), serde_json::json!(decision));
+                    map.insert("reasoning".into(), serde_json::json!(reasoning));
+                }
+                last = Some(obj);
+            }
+        }
+    }
+    if let Some(v) = last {
+        general_debug.insert("lead_workers".to_string(), v);
+    }
 }
 
 /// Mirror the folded `activity_counts` from `debug_metadata` into the

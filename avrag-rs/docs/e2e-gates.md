@@ -297,6 +297,28 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 | `E2E_ABORT_AFTER_CONSECUTIVE_FAILS` | Full-149 circuit breaker: trailing streak of consecutive non-PASS v2 labels stops scheduling new questions and fails the run (default `8`; `0` disables; inert when `RAG_EVAL_V2=0` or on `E2E_QUESTIONS` filtered runs) |
 | `E2E_BUILD_TIMEOUT_SECS` / `E2E_SMOKE_TIMEOUT_SECS` / `E2E_BOOK_TIMEOUT_SECS` | Per-stage `timeout` caps in `run-staging-ingest-e2e.sh` (defaults 1800/1800/3600; timeout exits 124) |
 | `E2E_FULL149_SILENT_CAP_SECS` / `E2E_FULL149_TOTAL_CAP_SECS` | `test-full149.sh` watchdog silence cap (default 900) and total `timeout` cap (default 14400) |
+| `E2E_UNLIMITED_BUDGET=1` | Full-149 **budget baseline**: product `max_iterations=255`, worker SaC step cap 32, force debug observe. `test-full149.sh` defaults this **on**; set `0` for product YAML rounds (rag=5 / search=2). Token wall already off for rag/search YAML. |
+| `E2E_MAX_ITERATIONS=N` | Fixed product round ceiling (1..=255) when unlimited is off |
+| `E2E_OBSERVE_DEBUG=1` | Force `request.debug` (DebugTrace packs) without unlimited budget |
+
+### Full-149 prep checklist (Lead+Workers)
+
+Canonical runner: [`scripts/test-full149.sh`](../../scripts/test-full149.sh) → `realistic_corpus_full_eval` on `golden_set_realistic.json` (**149** examples).
+
+| Prep item | Status / how |
+|-----------|----------------|
+| **Explicit per-question capability switch** | Every example has `capabilities[]`: `["rag"]` · `["search"]` · `["rag","search"]` · `[]` (pure chat). Runner logs `capability modes: rag=… web=… rag+web=… chat=…` and **asserts** rag/web/dual counts > 0. |
+| **Modes covered** | **rag** (KB Lead+RAG Worker) · **web** (`search` capability → Lead+Web Worker) · **rag+web** dual · plus chat/utility subsets (not quality-gated the same way). Product name “web” = wire `search`. |
+| **Observation channel (multi-agent)** | Non-stream `mode_debug.general`: `lead_workers` (n_packs, rebrief, per-channel coverage from Evaluation), `loop_rounds.action_types` (includes `lead_workers`), `budget_used`, `exit_reason`, `activity_counts`, `tool_trace` (worker tool_results still surface `dense_retrieval` / `web_search`). Artifacts: `e2e_output/realistic_corpus_full_eval/qNNN.json` + `rag_eval_v2/{run_id}/`. Per-question log: `observe: lead_workers=…`. |
+| **Budget off for baseline** | Default full-149: `E2E_UNLIMITED_BUDGET=1`. Measure natural rounds/tokens; later set product YAML from p95/p99 of `budget_used` / usage rollup. |
+| **Quota** | Fixed test user gets `grant_e2e_unlimited_quota` (rolling plan `e2e`) — not a substitute for loop budget. |
+
+Directed smoke before full run:
+
+```bash
+# 1 rag + 1 dual + 1 web (numbers from golden order — verify after capability log)
+E2E_QUESTIONS="1,116,136" E2E_CONCURRENCY=1 bash scripts/test-full149.sh
+```
 
 ## Agent run conventions (long tasks)
 

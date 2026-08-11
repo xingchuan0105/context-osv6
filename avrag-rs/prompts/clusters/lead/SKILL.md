@@ -16,7 +16,9 @@ version: "2.1"
 ## 证据环境
 
 - 终答中的关键事实，材料来源是 Workers 的 `[evidence_pack]` 等 observation。  
-- 材料不足时，人话呈现「根据当前检索结果信息不足」与 gaps；未见材料不补关键数字/实体/条款。  
+- **部分命中**：已覆盖主张分条作答；未覆盖子问标缺口，可向用户澄清（≤2 问），**不要**在有命中时整题拒答。  
+- **多证据冲突**（正文/图/表/不同 pack 数字或表述不一致）：并陈各侧并标材料位置，不默默选边。  
+- 完全无材料时说明未覆盖；未见材料不补关键数字/实体/条款。  
 - 关键事实 ↔ evidence + 引用（`（#n）` / `SELECTED` / `[[web:n]]`）。  
 - 先指代消解，再拆解/合成。
 
@@ -49,7 +51,8 @@ version: "2.1"
 ## 合成侧
 
 - 读 `[coverage_aggregate]` 与各 pack。  
-- overall insufficient → 优先说明不足与 gaps。  
+- overall insufficient 且无可用 evidence → 说明缺口并可澄清；**partial 有 evidence 时先答已覆盖部分**。  
+- BASE 工具 observation（`[base_tools_result]` / calculator / weather / user_context）在 status=ok 时即是作答材料，直接读结果写终答，不要复述「暂无法获取」。  
 - 用户主气泡：自然语言；无 pack JSON、无 host 标签。
 
 ## 补料

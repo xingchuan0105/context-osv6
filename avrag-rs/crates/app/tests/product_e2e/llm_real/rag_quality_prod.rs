@@ -243,6 +243,11 @@ struct LoopObservability {
     verify: Option<serde_json::Value>,
     /// Evidence knockout ledger snapshot.
     knockout: Option<serde_json::Value>,
+    /// Lead+Workers pack summary (`n_packs`, per-channel coverage, rebrief).
+    /// Absent on pure-chat / pre-Lead runs.
+    lead_workers: Option<serde_json::Value>,
+    /// Product round budget snapshot at loop end (`current` / `max`).
+    budget_used: Option<serde_json::Value>,
 }
 
 /// Typed view of the query-card mirrored into `mode_debug.general`
@@ -262,6 +267,9 @@ struct LoopRoundsObservability {
     total_tool_calls: u32,
     #[serde(default)]
     exit_reasons: Vec<String>,
+    /// Retrieve strategy row labels (`lead_workers`, `code_gen`, …).
+    #[serde(default)]
+    action_types: Vec<String>,
 }
 
 fn extract_loop_observability(chat: &ChatResponse) -> LoopObservability {
@@ -285,6 +293,8 @@ fn extract_loop_observability(chat: &ChatResponse) -> LoopObservability {
             .and_then(|v| serde_json::from_value(v.clone()).ok()),
         verify: general.get("verify").cloned(),
         knockout: general.get("knockout").cloned(),
+        lead_workers: general.get("lead_workers").cloned(),
+        budget_used: general.get("budget_used").cloned(),
     }
 }
 
@@ -462,12 +472,49 @@ mod loop_observability_tests {
                 "code_gen".to_string()
             ]
         );
+        assert!(rounds.action_types.is_empty());
         let v = obs.verify.expect("verify");
         assert_eq!(v["ran"], true);
         assert_eq!(v["fail_count"], 1);
         let k = obs.knockout.expect("knockout");
         assert_eq!(k["seen_count"], 12);
         assert_eq!(k["registered_count"], 0);
+        assert!(obs.lead_workers.is_none());
+        assert!(obs.budget_used.is_none());
+    }
+
+    #[test]
+    fn extracts_lead_workers_and_budget_used() {
+        let general = serde_json::json!({
+            "exit_reason": "break_to_synthesis",
+            "loop_rounds": {
+                "iterations": 1,
+                "total_tool_calls": 0,
+                "exit_reasons": ["break_to_synthesis"],
+                "action_types": ["lead_workers"],
+            },
+            "lead_workers": {
+                "lead_workers": true,
+                "n_packs": 2,
+                "rebrief_used": 0,
+                "coverage_summary": "rag=partial,web=partial",
+            },
+            "budget_used": { "current": 0, "max": 255 },
+        });
+        let chat = chat_with_general(
+            general
+                .as_object()
+                .expect("object")
+                .clone()
+                .into_iter()
+                .collect(),
+        );
+        let obs = extract_loop_observability(&chat);
+        let lw = obs.lead_workers.expect("lead_workers");
+        assert_eq!(lw["n_packs"], 2);
+        let rounds = obs.loop_rounds.expect("rounds");
+        assert_eq!(rounds.action_types, vec!["lead_workers".to_string()]);
+        assert_eq!(obs.budget_used.unwrap()["max"], 255);
     }
 
     #[test]
@@ -758,6 +805,12 @@ impl V2RunCtx {
         }
         if let Some(knockout) = obs.knockout.as_ref() {
             artifact["knockout"] = knockout.clone();
+        }
+        if let Some(lw) = obs.lead_workers.as_ref() {
+            artifact["lead_workers"] = lw.clone();
+        }
+        if let Some(b) = obs.budget_used.as_ref() {
+            artifact["budget_used"] = b.clone();
         }
         // P1-c: same compact tool_trace as realistic_corpus_full_eval/qNNN.json
         // so behavior diagnosis does not need a second directory.
@@ -1701,6 +1754,27 @@ async fn run_single_question(
     }
     let tool_trace = compact_tool_trace(&chat.tool_results);
     let chunks: Vec<String> = retrieved.contents();
+    let loop_obs_preview = extract_loop_observability(&chat);
+    // Multi-agent observation channel: rag/web paths should surface lead_workers
+    // (or at least action_types containing lead_workers) after Lead+Workers land.
+    if caps.iter().any(|c| c == "rag" || c == "search") {
+        let has_lw = loop_obs_preview.lead_workers.is_some();
+        let actions = loop_obs_preview
+            .loop_rounds
+            .as_ref()
+            .map(|r| r.action_types.join(","))
+            .unwrap_or_default();
+        let budget = loop_obs_preview
+            .budget_used
+            .as_ref()
+            .map(|b| b.to_string())
+            .unwrap_or_else(|| "null".into());
+        eprintln!(
+            "  observe: lead_workers={} action_types=[{actions}] budget_used={budget} exit={:?}",
+            has_lw,
+            loop_obs_preview.exit_reason
+        );
+    }
     if caps.iter().any(|c| c == "rag")
         && example.expected_should_answer
         && !example.source_chunks.is_empty()
@@ -2043,6 +2117,56 @@ async fn realistic_corpus_full_eval() {
         dataset.subsets.len()
     );
     assert!(!examples.is_empty(), "golden set is empty");
+    // Explicit capability switches (every example has `capabilities[]`; empty =
+    // pure chat). Full-149 must cover rag / web(search) / rag+web dual.
+    let mut n_rag = 0usize;
+    let mut n_web = 0usize;
+    let mut n_dual = 0usize;
+    let mut n_chat = 0usize;
+    let mut n_network = 0usize;
+    for ex in &examples {
+        let caps = ex.resolved_capabilities();
+        let has_rag = caps.iter().any(|c| c == "rag");
+        let has_web = caps.iter().any(|c| c == "search");
+        match (has_rag, has_web) {
+            (true, true) => n_dual += 1,
+            (true, false) => n_rag += 1,
+            (false, true) => n_web += 1,
+            (false, false) => n_chat += 1,
+        }
+        if ex.requires_network {
+            n_network += 1;
+        }
+    }
+    eprintln!(
+        "[realistic_corpus] capability modes: rag={n_rag} web/search={n_web} \
+         rag+web={n_dual} chat={n_chat} (total={}) requires_network={n_network}",
+        examples.len()
+    );
+    assert!(n_rag > 0, "golden set must include rag-only questions");
+    assert!(n_web > 0, "golden set must include web/search-only questions");
+    assert!(n_dual > 0, "golden set must include rag+web dual questions");
+    // Budget baseline profile (product rounds wall off; tokens already unlimited
+    // on rag/search YAML). See e2e-gates.md full-149 section.
+    if std::env::var("E2E_UNLIMITED_BUDGET")
+        .map(|v| {
+            let t = v.trim();
+            t == "1" || t.eq_ignore_ascii_case("true")
+        })
+        .unwrap_or(false)
+    {
+        eprintln!(
+            "[realistic_corpus] E2E_UNLIMITED_BUDGET=1: product max_iterations=255, \
+             worker SaC step_cap=32; measure natural usage for budget baseline"
+        );
+    } else if let Ok(n) = std::env::var("E2E_MAX_ITERATIONS") {
+        eprintln!("[realistic_corpus] E2E_MAX_ITERATIONS={n}");
+    } else {
+        eprintln!(
+            "[realistic_corpus] budget: product YAML (rag max_iterations=5, search=2); \
+             set E2E_UNLIMITED_BUDGET=1 for baseline measurement"
+        );
+    }
 
     // --- Run evaluation ---
     // v3: doc_scope is resolved per example from `doc_scope_hint` (default: full corpus).
