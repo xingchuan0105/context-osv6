@@ -3,7 +3,7 @@
 | 字段 | 内容 |
 |------|------|
 | **日期** | 2026-08-11 |
-| **状态** | **W0–W4 + 序 1–4 已落地** — Lead LLM plan；RAG 短程 SaC；HostWeb 直出已删；实机冒烟需重启新 binary |
+| **状态** | **W0–W4 + 审查收尾** — Lead LLM plan；RAG 短程 SaC；HostWeb 直出已删；每通道 1 Brief；无 host dense 再接线；实机冒烟需新 binary |
 | **动机** | 把检索 agent 范式迁回 **显式激活的 capability subagent**；Lead 负责指代消解 / 拆解 / 合成与 **覆盖度裁决**；Workers 只检索与证据压缩 |
 | **范围** | 产品 agent-lane：凡 `capabilities` 含 `rag` 和/或 `search` 均走 Lead+Workers；chat / write_refine 不在本设计 |
 | **非目标** | 完整 multi-agent 产品框架 UX；独立 verify 环（本路径）；golden 对照式 host 裁决；osv7 实现细节（契约可迁移） |
@@ -60,8 +60,8 @@
 | # | 曾写 | 实际 | 对迁移的影响 |
 |---|------|------|----------------|
 | **K1** | 三环 verifyverify 为待删活机制 | `verify: false` 已产品关；代码休眠 | D6 论据 = **追认 + 删休眠**，非对抗 live 三环 |
-| **K2** | `auto_fallback` dense 为可迁「现网零件」 | `run_fallback.rs` 挂 `#[allow(dead_code)]`，全仓零调用 | **非挪位置**；若要「模型未检索时的 host 补救」须 **重新接线**（W0 决定做/不做） |
-| **K3** | 「CRW 仍在 SearchExecutor 后丰富」一笔带过 | enrich 在 `executor` 内；**search-only host_web 走 `execute_search_no_scrape`，显式无 CRW** | 新 host 叶子 **必须显式定 CRW 开/关**（§6.2 / §13.3） |
+| **K2** | `auto_fallback` dense 为可迁「现网零件」 | `run_fallback` / YAML `auto_fallback` / `execute_search_no_scrape` **已删**；RAG SaC 失败/空 **不** 再 host dense 补救 | **锁定：不接线**；空/失败 → host 从已有 ToolResults 装 pack（可 empty/insufficient） |
+| **K3** | 「CRW 仍在 SearchExecutor 后丰富」一笔带过 | enrich 在 `executor` 内；**唯一入口 `execute_search`**（`WEB_AUTO_SCRAPE*` 可关） | Web Worker pack 路径 **CRW on（默认）**（§6.2 / §13.3） |
 | **K4** | 「Web 保留 host 叶子」暗示 dual 已如此 | dual **结构性**不能 `host_web`（`is_search_host_web_path` 要求无 dense 等）；dual web 今日 = 沙箱 `client.web`/`fetch`（可带 CRW） | dual Web→host 叶子是 **变更**，不是保留；`client.fetch` 去留见 §6.2 |
 
 **仍核实为真：** dual 单脑 SDK 并集（`sdk_gate` + `dual_is_union` 测）；capabilities 多选；结构门 evidence/required_action；`host_markers` parity；SELECTED/KEEP/alias；`[[web:n]]`；沙箱 `dense/lexical/grep/save/load`（无 top_k）；§11 文档路径与 SUPERSEDED 标注。
@@ -225,8 +225,8 @@ ResolveCaps
   → WorkerRun
   → PackGate（host 重算 tool_ok_count）
   → 聚合 gaps → Lead 可见观察
-       ├─ Lead 要补料 且 rebrief_used < 1 → ReBrief → Dispatch
-       └─ LeadAdjudicateAndSynthesize
+       ├─ host 结构：已产 pack 且空/insufficient 且 rebrief_used < 1 → ReBrief → Dispatch
+       └─ LeadAdjudicateAndSynthesize（无单独 re-brief 决策 LLM）
   → Deliver prose
 ```
 
@@ -257,11 +257,10 @@ ResolveCaps
 | Lead plan repair | 0–1 |
 | RAG Worker | ≤ `max_steps` LLM（每 Brief） |
 | Web Worker | **0 LLM**（host 叶子）；若启用短程 fetch 路径另计 |
-| Re-brief 波 | ≤1 ×（相关 Worker 再跑） |
-| Lead「是否 re-brief」决策 | 可与读 pack 同轮或 **+1** LLM（实现二选一；预算按 **+1** 预留） |
+| Re-brief 波 | ≤1 ×（**host 结构触发**；仅已产 pack 且空/insufficient 通道；无 Lead 裁决 LLM） |
 | Lead 最终合成 | 1 |
 
-**Lead 最坏 LLM 次数 ≈ 4：** plan + plan repair + rebrief 决策 + synth。  
+**Lead 最坏 LLM 次数 ≈ 3：** plan + plan repair + synth（re-brief **不**另计 Lead 决策轮）。  
 **延迟（dual，无 re-brief 常见路径）：** plan + max(RAG wall, Web wall) + synth。  
 **Web wall：** `ceil(N_queries / concurrency) × search_latency`（+ 可选 CRW，见 §6.2）。
 
@@ -294,11 +293,11 @@ ResolveCaps
 | KB prompts | RAG Worker | |
 | docscope | Worker 启动注入；Lead 规划见摘要（§13.2） | |
 | soft baseline | Worker `max_steps` | |
-| **auto_fallback dense** | **死代码（K2）** | W0：**删除** YAML 与 `run_fallback` 休眠，**或** 显式重新接线「零 Ok 时 host 一次 dense → 写入 pack」——默认 **删除不接线**，靠 Worker 自己调 dense |
+| **auto_fallback dense** | **已删且不接线（K2）** | YAML / `run_fallback` / SaC 失败后的 host dense 补救均 **不存在**；Worker SaC 内自行 `client.dense` 等；失败/零 Ok → host **仅**从已有 ToolResults 装 pack |
 | query_card / plan-query | 上收 Lead 或取消重复 | |
 | SELECTED/KEEP/alias | pack.evidence | |
 
-形状：Brief → short SaC ≤ max_steps → 强制 pack 收束 → 失败则 host 从 ToolResults 装配 partial。
+形状：Brief → short SaC ≤ max_steps → **宿主始终**从 ToolResults 装配 `evidence_pack_v1`（**无**模型 pack 收束轮；`worker-sandbox` 已写明）。
 
 ### 6.2 Web Worker — host 叶子（含 dual **变更**）
 
@@ -312,13 +311,13 @@ ResolveCaps
 | 场景 | CRW |
 |------|-----|
 | **Web Worker 产 pack（本设计默认）** | **`WEB_AUTO_SCRAPE` 遵循 SearchExecutor 默认 enrich**（与 bridge `client.web` 一致：厚 snippet）——**开** |
-| 旧 search-only 直出路径 | no_scrape（将被删除） |
+| 旧 search-only 直出 / no_scrape 路径 | **已删**（`execute_search_no_scrape` 不存在） |
 
-理由：Lead 合成需要可读正文；CRW 成本进 Web wall，换 grounded 质量。实现：Web Worker **不要**再走 `execute_search_no_scrape`；走 **带 enrich 的** executor 入口（或新建 `execute_search_for_pack` 别名，语义 = 全量 dispatch+scrape）。
+理由：Lead 合成需要可读正文；CRW 成本进 Web wall，换 grounded 质量。实现：Web Worker 唯一走 **`execute_search`**（内含 enrich；由 `WEB_AUTO_SCRAPE*` 控制）。
 
 #### 6.2.2 多 query 扇出（核查缺口 #4 — 交付物）
 
-现 host_web **单 query 单调用**。本设计要求 Brief.`queries[]` 1–N（建议 ≤4–5），host **`join_all` / 并发** 调 SearchProvider，合并 results 去重 URL 后装 pack。
+Web Worker host 叶子对 Brief.`queries[]` 1–N（建议 ≤4–5）做 **`join_all` / 并发** SearchProvider，合并 results 去重 URL 后装 pack。
 
 - **波次归属：** W0 类型 + 纯函数合并；**W1 实现并行 host search**（dual 硬依赖）；W3 search-only 复用。  
 - 非「免费保留」。
@@ -337,10 +336,10 @@ ResolveCaps
 |------|------|
 | 指代消解 | 会话历史 → `original_query` |
 | 规划上下文 | §13.2 强制注入 |
-| 复杂度 | 1 Brief 或 2–5；同通道可多 Brief |
-| dual | 默认真并行 |
+| 复杂度 / Brief 数 | **每激活通道至多 1 检索 Brief**（rag≤1、web≤1；dual ≤2）；PlanGate 同通道后到丢弃（先到保留） |
+| dual | 默认真并行（`tokio::join!`） |
 | 合成+裁决 | §8.2 |
-| re-brief | ≤1 |
+| re-brief | ≤1，**host 结构触发**（D4） |
 
 ### 6.4 提示词资产
 
@@ -439,19 +438,20 @@ Worker 跑 3–4 步时用户可见过程卡：
 ### 8.1 延迟代价
 
 ```text
-常见 search-only: LeadPlan + HostWeb(N queries, +CRW) + LeadSynth
-最坏 Lead LLM: ~4（§4.4）
+常见 search-only: LeadPlan + WebWorkerHost(N queries, +CRW) + LeadSynth
+最坏 Lead LLM: ~3（plan + repair + synth；§4.4）
 ```
 
 ### 8.2 Lead 裁决义务
 
 1. 读 packs（coverage/gaps/evidence；信任 host 重算的 tool_ok_count）  
 2. 区分有证 / 不足  
-3. 不足人话缺口；禁预训练补关键事实  
+3. 不足人话缺口；材料侧未见的关键事实不补全  
 4. 引用对齐 alias  
-5. 可执行 gaps 且 rebrief_used=0 → 请求再 dispatch  
 
-Host：结构门、rebrief 计数、格式闸、telemetry、**进度 Delegate**。
+**补料：** 不由 Lead 再请求 dispatch。Host 在 pack 聚合后对「已产 pack 且空/insufficient」通道结构 re-brief ≤1；Lead 在合成轮读 `[rebrief_wave]` / 最终 packs。
+
+Host：结构门、rebrief 计数、格式闸、telemetry、**进度 Delegate**、**始终 host 装配 pack**。
 
 ---
 
@@ -512,6 +512,7 @@ Host：结构门、rebrief 计数、格式闸、telemetry、**进度 Delegate**�
 | 2026-08-11 | **W4 实现**：host 结构 re-brief≤1（空/insufficient 通道；RAG 补 lexical）；pack merge；`[rebrief_wave]`；Evaluation + DebugTrace telemetry；单测 |
 | 2026-08-11 | **后续序**：Lead `fetch_lead_briefs`；RAG `run_rag_worker_short_sac`（Box::pin 嵌套）；删除 `HostWeb`/`run_host_web_retrieve`；pipeline prompts lead-plan |
 | 2026-08-11 | **审查 P0–P1 修复**：BASE-only plan→空检索列表；prompts 单源；第三人称 plan/sac；PackGate 空证→insufficient；dual/web 真并行；rebrief 不强制未派通道；plan 注入对话史；嵌套 usage 累计 |
+| 2026-08-11 | **再审查收尾**：lead/worker 系统提示与 SKILL 回写第三人称；PlanGate **每通道 1 Brief**；撤 SaC host dense 再接线；正文对齐 re-brief=host 结构、pack=host 装配、HostWeb 命名退役 |
 
 ---
 
@@ -549,8 +550,10 @@ LeadPlan 的 model 可见输入 **至少**包括：
 | dual web | host 叶子 + 多 query + **CRW on** |
 | search 用户气泡 | Lead 合成 only |
 | verify | 不调用；收尸 |
-| auto_fallback | 默认删死代码，不接线 |
-| re-brief | ≤1 |
+| auto_fallback | **已删且不接线**（含 SaC 失败 host dense） |
+| re-brief | ≤1，host 结构触发（非 Lead LLM） |
+| brief/通道 | 每通道 1；PlanGate 先到保留 |
+| pack 收束 | 始终 host 从 ToolResults 装配 |
 | pack grounding flag | 无自报；host tool_ok_count |
 | BASE 工具 | Lead |
 | Progress | DelegateRag/Search 复用 |

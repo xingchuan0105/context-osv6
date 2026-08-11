@@ -178,6 +178,9 @@ pub fn parse_and_validate(raw: &str, query: &str, caps: ActivatedCaps) -> PlanPa
     let mut retrieval = Vec::new();
     let mut saw_any_valid = false;
     let mut saw_non_retrieval = false;
+    // v1 PlanGate: at most one retrieval brief per channel (first wins).
+    let mut saw_rag_retrieval = false;
+    let mut saw_web_retrieval = false;
 
     for (i, b) in wire.briefs.into_iter().take(5).enumerate() {
         let Some(source) = parse_source(&b.preferred_source) else {
@@ -193,6 +196,25 @@ pub fn parse_and_validate(raw: &str, query: &str, caps: ActivatedCaps) -> PlanPa
         if !source.spawns_retrieval_worker() {
             saw_non_retrieval = true;
             continue;
+        }
+        match source {
+            PreferredSource::Rag if saw_rag_retrieval => {
+                tracing::warn!(
+                    sub_task_id = %b.id,
+                    "lead_plan: extra rag brief dropped (one per channel)"
+                );
+                continue;
+            }
+            PreferredSource::Web if saw_web_retrieval => {
+                tracing::warn!(
+                    sub_task_id = %b.id,
+                    "lead_plan: extra web brief dropped (one per channel)"
+                );
+                continue;
+            }
+            PreferredSource::Rag => saw_rag_retrieval = true,
+            PreferredSource::Web => saw_web_retrieval = true,
+            _ => {}
         }
         let id = if b.id.trim().is_empty() {
             format!("t{}", i + 1)
@@ -371,6 +393,39 @@ mod tests {
         match parse_and_validate(raw, "明天呢", caps) {
             PlanParseOutcome::Ok { retrieval_briefs } => assert!(retrieval_briefs.is_empty()),
             PlanParseOutcome::Invalid => panic!("expected ok"),
+        }
+    }
+
+    #[test]
+    fn one_retrieval_brief_per_channel_first_wins() {
+        let raw = r#"{
+          "original_query": "x",
+          "briefs": [
+            {"id":"t1","objective":"first rag","preferred_source":"rag","max_steps":3},
+            {"id":"t2","objective":"second rag dropped","preferred_source":"rag","max_steps":2},
+            {"id":"t3","objective":"web a","preferred_source":"web","queries":["a"],"max_steps":1},
+            {"id":"t4","objective":"web b dropped","preferred_source":"web","queries":["b"],"max_steps":1}
+          ]
+        }"#;
+        let caps = ActivatedCaps {
+            rag: true,
+            search: true,
+        };
+        match parse_and_validate(raw, "x", caps) {
+            PlanParseOutcome::Ok { retrieval_briefs } => {
+                assert_eq!(retrieval_briefs.len(), 2);
+                assert_eq!(retrieval_briefs[0].sub_task.id, "t1");
+                assert_eq!(
+                    retrieval_briefs[0].sub_task.preferred_source,
+                    PreferredSource::Rag
+                );
+                assert_eq!(retrieval_briefs[1].sub_task.id, "t3");
+                assert_eq!(
+                    retrieval_briefs[1].sub_task.preferred_source,
+                    PreferredSource::Web
+                );
+            }
+            PlanParseOutcome::Invalid => panic!("expected ok with two channel briefs"),
         }
     }
 }

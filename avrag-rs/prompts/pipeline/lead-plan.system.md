@@ -36,12 +36,12 @@ description: "Lead plan JSON — third-person environment + schema (not a comman
 | 条件 | 结果 |
 |------|------|
 | 天气 / 计算 / 纯对话工具 | `preferred_source` 为 `base_tools` 或 `none`；`briefs` 可仅此一类 |
-| 需知识库事实 | `rag` |
-| 需网页事实 | `web` |
-| dual 双源 | 两侧可各有 brief |
+| 需知识库事实 | 至多 **1** 条 `rag` brief |
+| 需网页事实 | 至多 **1** 条 `web` brief |
+| dual 双源 | 两侧各至多 1 条（合计 ≤2 检索 brief） |
 | 简单单源 | 1 个 brief 即可 |
-| 复杂 | 2–5 个 brief，少重叠 |
 
+- **同通道第二条及以后的检索 brief 会被宿主 PlanGate 丢弃**（先到保留）。  
 - `max_steps` ∈ [1,5]。  
-- 未知 `preferred_source` 的条目应省略，勿用非法枚举。  
+- 未知 `preferred_source` 的条目可省略，勿用非法枚举。  
 - 全为 `base_tools`/`none` 时 `briefs` 仍非空（至少一条），以便宿主识别「无检索」。

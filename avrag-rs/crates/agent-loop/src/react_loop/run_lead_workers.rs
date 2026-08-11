@@ -262,6 +262,8 @@ impl ReActLoop {
         sink: &dyn AgentEventSink,
         is_rebrief: bool,
     ) -> (Vec<WorkerOutcome>, LlmUsage) {
+        // v1: one brief per channel (PlanGate first-wins). Extra same-channel
+        // briefs here are defense-in-depth drops with a warn.
         let mut rag_brief: Option<&TaskBrief> = None;
         let mut web_brief: Option<&TaskBrief> = None;
         for brief in briefs {
@@ -270,8 +272,28 @@ impl ReActLoop {
                 continue;
             }
             match brief.sub_task.preferred_source {
-                PreferredSource::Rag if caps.rag => rag_brief = Some(brief),
-                PreferredSource::Web if caps.search => web_brief = Some(brief),
+                PreferredSource::Rag if caps.rag => {
+                    if rag_brief.is_some() {
+                        tracing::warn!(
+                            sub_task_id = %brief.sub_task.id,
+                            is_rebrief,
+                            "lead_workers: extra rag brief skipped (one per channel)"
+                        );
+                    } else {
+                        rag_brief = Some(brief);
+                    }
+                }
+                PreferredSource::Web if caps.search => {
+                    if web_brief.is_some() {
+                        tracing::warn!(
+                            sub_task_id = %brief.sub_task.id,
+                            is_rebrief,
+                            "lead_workers: extra web brief skipped (one per channel)"
+                        );
+                    } else {
+                        web_brief = Some(brief);
+                    }
+                }
                 _ => {}
             }
         }
@@ -434,26 +456,20 @@ impl ReActLoop {
         ))
         .await;
 
+        // No host dense rewire on SaC fail/empty (design §13.3): assemble pack from
+        // whatever ToolResults the worker left; gaps surface to Lead.
         let nested_usage = match &nested {
             Ok((_, _, _, _, u, _)) => u.clone(),
             Err(e) => {
-                tracing::warn!(error = %e, "rag short SaC failed; host dense fallback");
-                let fb = self
-                    .run_rag_worker_host(auth, request, brief, "dense_retrieval")
-                    .await;
-                return (fb, LlmUsage::zeroed());
+                tracing::warn!(
+                    error = %e,
+                    "rag short SaC failed; host assembles pack from available tool results (no dense rewire)"
+                );
+                LlmUsage::zeroed()
             }
         };
 
         let mut tool_results = worker_state.tool_results;
-        if count_tool_ok(&tool_results) == 0 {
-            tracing::info!("rag short SaC empty Ok; host dense fallback");
-            let fb = self
-                .run_rag_worker_host(auth, request, brief, "dense_retrieval")
-                .await;
-            return (fb, nested_usage);
-        }
-
         let (evidence, key_facts) = evidence_from_tool_results(&tool_results);
         let n = evidence.len();
         let tool_ok = count_tool_ok(&tool_results);
@@ -469,7 +485,11 @@ impl ReActLoop {
                 Coverage::Insufficient
             },
             gaps: if n == 0 {
-                "rag_sac_empty".into()
+                if nested.is_err() {
+                    "rag_sac_error".into()
+                } else {
+                    "rag_sac_empty".into()
+                }
             } else {
                 String::new()
             },
