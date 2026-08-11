@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
+import { GET as llmsGet } from "@/app/llms.txt/route";
 import { metadata as homeMetadata } from "@/app/page";
 import { metadata as desktopMetadata } from "@/app/(marketing)/desktop/page";
 import { metadata as legalMetadata } from "@/app/(marketing)/legal/page";
@@ -72,6 +73,18 @@ describe("sitemap.xml（GEO 方案 A4）", () => {
     expect(urls.some((url) => url.includes("/dashboard"))).toBe(false);
     expect(urls.some((url) => url.includes("/shared"))).toBe(false);
     expect(urls.some((url) => url.includes("/settings"))).toBe(false);
+  });
+});
+
+describe("llms.txt（GEO 方案 A4）", () => {
+  it("serves an agent-readable index with key public URLs", async () => {
+    const response = llmsGet();
+    const body = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(body).toContain("https://app.contextlm.top/help/api-access/agents");
+    expect(body).toContain("https://app.contextlm.top/pricing");
+    expect(body).toContain("https://app.contextlm.top/help/api-access");
   });
 });
 

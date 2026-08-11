@@ -234,8 +234,8 @@ robots / sitemap / canonical / 索引边界
 | canonical | 每公开页唯一 | HTML link |
 | 状态码 | 无软 404；帮助旧链 307/301 正确 | curl / GSC |
 | host 规范化 | apex `contextlm.top` ↔ `www.contextlm.top` 301 到唯一首选域（`site-map.ts` 默认 `www`，审计用 apex；per-page canonical 生效前提） | curl -I 两域 |
-| AI crawler | robots.txt 明示允许 GPTBot / ClaudeBot / PerplexityBot 等（GEO 目标 = 被引用）；私有路径统一 disallow | robots.txt 正文 |
-| llms.txt | app 公开路由提供 llms.txt 索引（指向 agents 文档 / 定价 / 客户端 / 官网） | /llms.txt 200 |
+| AI crawler | robots.txt 明示允许 GPTBot / ClaudeBot / PerplexityBot 等（GEO 目标 = 被引用）；私有路径统一 disallow。**注意（2026-08-12 实测）**：Cloudflare 托管 robots 块（AI Crawl Control）在文件头部注入 GPTBot / ClaudeBot / Google-Extended 等 `Disallow: /`，需在 CF 控制台关闭或放行，否则应用层规则被抢先生效 | robots.txt 正文 |
+| llms.txt | app route 提供 llms.txt 索引（`app/llms.txt/route.ts`；public/ 在 standalone 部署不对外服务） | /llms.txt 200 |
 | 索引边界 | 登录后 dashboard **不**进 sitemap | 代码审查 |
 | 国际化 | hreflang 或明确单语默认（若中英并存） | 页面策略文档 |
 | Search Console | 提交 sitemap、监控覆盖 | GSC |
@@ -273,6 +273,7 @@ robots / sitemap / canonical / 索引边界
 | 过度优化导致产品文案失真 | 以 PRODUCT_IA 与真实能力为准 |
 | 根页面是桌面端（Tauri）/web 共用入口 | A2 改动须桌面构建（`BUILD_TARGET=desktop`）回归冷启动跳转 |
 | `/pricing` 被 `NEXT_PUBLIC_PRICING_REVAMP_ENABLED` 门控，flag=0 时 SSR 为空并跳走 | Phase B 前置确认生产 flag 常开；中期评估移除门控 |
+| Cloudflare 托管 robots.txt（AI Crawl Control）注入 GPTBot / ClaudeBot / Google-Extended 等 `Disallow: /`，与应用层 GEO 放行策略冲突 | 在 CF 控制台调整 AI Crawl Control（放行或关闭托管块）；每次部署后复核生产 robots.txt 首尾块 |
 
 ---
 
@@ -318,7 +319,9 @@ cd /home/chuan/GEOHub
 
 ## 13. 下一步（默认推荐）
 
-**执行记录（2026-08-11）**：Phase A 工程侧已在 `frontend_next` 落地——A1 全公开页 canonical（首页 / pricing / desktop / legal 族 / help/api-access / agents）、A2 首页 SSR 摘要（决策：SSR，放弃 302）、A3 `/help/api-access` 迁至 `(open)` 组公开、A4 新建 `app/robots.ts` / `app/sitemap.ts` / `public/llms.txt`（AI crawler 明示放行）。验收测试：`frontend_next/tests/seo/`。marketing 侧（§7.1）归属 `~/context-os-landing`，本轮未动。
+**执行记录（2026-08-11）**：Phase A 工程侧已在 `frontend_next` 落地——A1 全公开页 canonical（首页 / pricing / desktop / legal 族 / help/api-access / agents）、A2 首页 SSR 摘要（决策：SSR，放弃 302）、A3 `/help/api-access` 迁至 `(open)` 组公开、A4 新建 `app/robots.ts` / `app/sitemap.ts` / llms.txt（AI crawler 明示放行）。验收测试：`frontend_next/tests/seo/`。marketing 侧（§7.1）归属 `~/context-os-landing`，本轮未动。
+
+**跟进（2026-08-12）**：已部署 rev `978de4c1+dirty`，生产实测 `/` 339 字 + canonical、`/help/api-access` 644 字 + canonical、`/pricing` 797 字 + canonical、robots/sitemap 200。llms.txt 改走 `app/llms.txt/route.ts`（standalone 不服务 public/）。发现 Cloudflare 托管 robots 块注入 AI bot `Disallow: /`（见 §8 / §10），待 CF 控制台处理。
 
 1. **工程**：~~A1 + A3 + A2~~ 已落地（见执行记录）；下次部署后用 GEOHub diagnose 复跑 5 URL 并归档 run_id。  
 2. **内容**：一篇「MCP/Agent 接入」落地 + 一篇中立对比大纲（先中文）。  
