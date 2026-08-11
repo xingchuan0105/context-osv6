@@ -42,6 +42,7 @@ version: "2.1"
 ```
 
 - **每激活通道至多 1 个检索 Brief**（rag 与 web 各 ≤1）；双源最多 2 个。  
+- **web `queries[]`**：中英双语（同一意图各 ≥1 条），可带官方/标准/best practice 等质量线索；≤5 条；空则宿主回退单语 original_query。  
 - 工具细选由 Worker 主导；Brief 只给偏好。  
 - `base_tools` / `none`：不启检索 Worker。
 

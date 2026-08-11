@@ -37,9 +37,31 @@ description: "Lead plan JSON — third-person environment + schema (not a comman
 |------|------|
 | 天气 / 计算 / 纯对话工具 | `preferred_source` 为 `base_tools` 或 `none`；`briefs` 可仅此一类 |
 | 需知识库事实 | 至多 **1** 条 `rag` brief |
-| 需网页事实 | 至多 **1** 条 `web` brief |
+| 需网页事实 | 至多 **1** 条 `web` brief；`queries` 见下 |
 | dual 双源 | 两侧各至多 1 条（合计 ≤2 检索 brief） |
 | 简单单源 | 1 个 brief 即可 |
+
+### web brief 的 `queries[]`（宿主并行检索）
+
+宿主对数组**每一条**单独搜索后按 URL 去重合并；单语只覆盖该语种索引。
+
+| 环境事实 | 规划侧可见形态 |
+|----------|----------------|
+| 中文索引与英文索引不同 | `queries` 同时含 **中文** 与 **英文** 自然表述（同一意图各 ≥1 条） |
+| 来源质量影响 snippet 可用性 | 至少一条 query 带质量线索词（中文如：官方 / 标准 / 规范 / 最佳实践；英文如：`official` / `standard` / `best practice` / 机构或标准名） |
+| 条数上限 | 1–5 条；少重叠；专名与标准号原样保留 |
+| 空 `queries` | 宿主回退为仅用 `original_query`（常为单语，覆盖偏窄） |
+
+示例形状（字段值随题面变化，非固定模板）：
+
+```json
+"preferred_source": "web",
+"queries": [
+  "立项报告 数字化转型 目标 SMART 最佳实践",
+  "project initiation report digital transformation SMART goals best practices",
+  "IT project business case investment estimate NPV IRR official guidance"
+]
+```
 
 - **同通道第二条及以后的检索 brief 会被宿主 PlanGate 丢弃**（先到保留）。  
 - `max_steps` ∈ [1,5]。  

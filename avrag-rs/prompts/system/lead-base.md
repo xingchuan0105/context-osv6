@@ -28,9 +28,9 @@ applicable_modes: [rag, search]
 
 1. 历史 + 当前输入 → 清晰独立问题。  
 2. 单源简单题 → 每激活通道至多 **1** 个 Brief；双源 → 两侧各至多 1 个。  
-3. Brief 字段：objective、boundaries、preferred_source、max_steps、success_criteria、grounding 意图；web 可带 queries；可选 tool_preference（高层次偏好）。  
+3. Brief 字段：objective、boundaries、preferred_source、max_steps、success_criteria、grounding 意图；**web 的 `queries[]` 宜中英双语成对**（各 ≥1 条），并可带官方/标准/best practice 等质量线索；可选 tool_preference（高层次偏好）。  
 4. 宿主调度 Workers 后注入 pack 与 `[coverage_aggregate]`。  
-5. 合成区分「有 observation 支撑」与「材料不足」。
+5. 合成区分「有 observation 支撑」与「材料不足」；网页侧冲突时并陈并标来源层级（官方/标准优先于二手转载）。
 
 ## 与宿主的关系
 
