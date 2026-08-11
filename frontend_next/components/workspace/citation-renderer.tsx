@@ -141,6 +141,27 @@ function findCitationByDisplayId(citations: Citation[], displayId: string) {
   );
 }
 
+/**
+ * Resolve `[[web:n]]` / legacy `[[n]]` by **observation index** (`citation_id`),
+ * not array position. Lead/Workers packs alias `web:n` to SearchResult.citation_index;
+ * filtered citation lists are sparse, so index-in-array lookup breaks chips.
+ */
+function findCitationByObservationIndex(citations: Citation[], rawIndex: string): Citation | null {
+  const n = Number.parseInt(rawIndex, 10);
+  if (!Number.isFinite(n) || n < 1) {
+    return null;
+  }
+  const webHit = citations.find(
+    (citation) =>
+      Number(citation.citation_id) === n &&
+      (citation.layer === "search" || citation.chunk_type === "web"),
+  );
+  if (webHit) {
+    return webHit;
+  }
+  return citations.find((citation) => Number(citation.citation_id) === n) ?? null;
+}
+
 function findCitationIndex(citations: Citation[], target: Citation) {
   return citations.findIndex(
     (citation) =>
@@ -229,7 +250,7 @@ function hasRenderedCitationMarkup(content: string) {
 
 function resolveCitationFromMarker(
   citations: Citation[],
-  opts: { displayId?: string; chunkId?: string },
+  opts: { displayId?: string; chunkId?: string; observationIndex?: string },
 ): Citation | null {
   if (opts.chunkId) {
     const byChunk = findCitationByChunkId(citations, opts.chunkId);
@@ -237,7 +258,15 @@ function resolveCitationFromMarker(
       return byChunk;
     }
   }
+  // Web observation index first (`[[web:n]]` / bare `[[n]]` for search).
+  if (opts.observationIndex) {
+    const byObs = findCitationByObservationIndex(citations, opts.observationIndex);
+    if (byObs) {
+      return byObs;
+    }
+  }
   if (opts.displayId) {
+    // Last resort: sequential display id (1-based position in the citations array).
     return findCitationByDisplayId(citations, opts.displayId);
   }
   return null;
@@ -288,12 +317,15 @@ function markdownToRichTextHtmlWithCitationButtons(
       bracketedId: string | undefined,
       prefixedId: string | undefined,
     ) => {
+      const observationIndex = webId ?? bracketedId ?? prefixedId;
       const citation = resolveCitationFromMarker(citations, {
         chunkId: citeChunkId,
-        displayId: webId ?? bracketedId ?? prefixedId,
+        // Prefer observation index for web/legacy numeric markers.
+        observationIndex: observationIndex,
+        displayId: observationIndex,
       });
       if (!citation) {
-        const fallbackId = webId ?? bracketedId ?? prefixedId;
+        const fallbackId = observationIndex;
         if (!fallbackId) {
           return "";
         }
