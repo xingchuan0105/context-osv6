@@ -4,6 +4,7 @@ pub mod cache;
 pub mod chat;
 pub mod chat_stream;
 pub mod docker_status;
+pub mod documents;
 pub mod license;
 pub mod lifecycle;
 pub mod local;

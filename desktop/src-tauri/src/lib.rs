@@ -17,6 +17,7 @@ use commands::api::{api_call, upload_bytes};
 use commands::cache::{get_cache_value, set_cache_value};
 use commands::chat_stream::{chat_cancel, chat_stream};
 use commands::docker_status::get_docker_status;
+use commands::documents::reindex_local_documents;
 use commands::license::{
     activate_license, get_device_id, get_license_status, heartbeat_license, open_in_browser,
     revoke_this_device, start_trial,
@@ -198,7 +199,8 @@ pub fn run() {
             restart_local_product,
             stop_local_product,
             get_local_session,
-            ensure_local_session
+            ensure_local_session,
+            reindex_local_documents
         ])
         .on_page_load(|webview, _payload| {
             let _ = webview.eval(DESKTOP_EXTERNAL_LINK_GUARD_JS);

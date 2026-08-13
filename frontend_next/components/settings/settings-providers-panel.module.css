@@ -77,6 +77,14 @@
   font-size: var(--font-size-caption);
 }
 
+.reindexSection {
+  display: grid;
+  gap: var(--space-sm);
+  justify-items: start;
+  border-top: 1px solid hsl(var(--border-whisper));
+  padding-top: var(--space-md);
+}
+
 @media (max-width: 900px) {
   .tableHead {
     display: none;

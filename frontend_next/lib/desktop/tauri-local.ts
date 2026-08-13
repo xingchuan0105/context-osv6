@@ -162,6 +162,17 @@ export async function restartLocalProduct(): Promise<EnsureLocalProductResult> {
   return invoke<EnsureLocalProductResult>("restart_local_product");
 }
 
+export type ReindexDocumentsResult = {
+  total: number;
+  reindexed: number;
+  errors: string[];
+};
+
+/** Re-vectorize all local documents (manual "重新索引本机文档" — consumes embedding tokens). */
+export async function reindexLocalDocuments(): Promise<ReindexDocumentsResult> {
+  return invoke<ReindexDocumentsResult>("reindex_local_documents");
+}
+
 export type LocalAuthUser = {
   id: string;
   email: string;

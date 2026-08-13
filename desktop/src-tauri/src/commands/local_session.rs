@@ -121,6 +121,11 @@ fn load_session(app: &tauri::AppHandle) -> Option<StoredSession> {
     serde_json::from_str(&raw).ok()
 }
 
+/// JWT of the local B2C session (for shell-orchestrated API calls like reindex).
+pub(crate) fn local_session_token(app: &tauri::AppHandle) -> Option<String> {
+    load_session(app).map(|session| session.token)
+}
+
 fn save_session(app: &tauri::AppHandle, session: &StoredSession) -> Result<(), IpcApiError> {
     ensure_app_data(app)?;
     let path = session_path(app)?;

@@ -263,6 +263,29 @@ export function ProvidersPanel() {
     });
   }, [queryClient, token]);
 
+  const [reindex, setReindex] = useState<{ busy: boolean; msg: string }>({
+    busy: false,
+    msg: "",
+  });
+
+  const handleReindex = useCallback(async () => {
+    setReindex({ busy: true, msg: "" });
+    try {
+      const { reindexLocalDocuments } = await import("../../lib/desktop/tauri-local");
+      const result = await reindexLocalDocuments();
+      const failed = result.errors.length;
+      setReindex({
+        busy: false,
+        msg: `已重新索引 ${result.reindexed}/${result.total} 份文档${failed ? `（${failed} 个失败）` : ""}`,
+      });
+    } catch (err) {
+      setReindex({
+        busy: false,
+        msg: err instanceof Error ? err.message : "重新索引失败",
+      });
+    }
+  }, []);
+
   return (
     <div data-testid="settings-providers-panel" className={styles.panel}>
       <header className={styles.header}>
@@ -293,6 +316,23 @@ export function ProvidersPanel() {
           <ProviderKeyRow key={row.id} row={row} secrets={secrets} onSaved={refresh} />
         ))}
       </div>
+
+      {isTauri() ? (
+        <div className={styles.reindexSection}>
+          <p className={shared.mutedText}>
+            本机文档在开启 RAG 前入库的没有向量；重新索引会消耗 embedding token。
+          </p>
+          <button
+            type="button"
+            className="app-button-secondary"
+            disabled={reindex.busy}
+            onClick={() => void handleReindex()}
+          >
+            {reindex.busy ? "重新索引中…" : "重新索引本机文档"}
+          </button>
+          {reindex.msg ? <p className={shared.mutedText}>{reindex.msg}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
