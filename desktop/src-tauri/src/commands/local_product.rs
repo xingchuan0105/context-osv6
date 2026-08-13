@@ -5,6 +5,7 @@
 
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -43,25 +44,34 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+fn product_script(root: &Path) -> PathBuf {
+    // Prefer multi-component join (avoids Windows path glitches with "a/b" strings).
+    root.join("scripts").join("desktop-local-product.sh")
+}
+
+/// True when `root` is a real monorepo checkout on **this** host (not a WSL path
+/// baked into a Windows PE via `CARGO_MANIFEST_DIR` at cross-compile time).
+fn is_live_monorepo_root(root: &Path) -> bool {
+    root.is_dir() && product_script(root).is_file()
+}
+
 fn monorepo_root() -> Option<PathBuf> {
     if let Ok(root) = std::env::var("CONTEXT_OS_ROOT") {
         let p = PathBuf::from(root);
-        if p.join("scripts/desktop-local-product.sh").is_file() {
+        if is_live_monorepo_root(&p) {
             return Some(p);
         }
     }
+    // Compile-time path only works when developing on the same OS that built the binary.
     let mut from_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    from_manifest.pop();
-    from_manifest.pop();
-    if from_manifest
-        .join("scripts/desktop-local-product.sh")
-        .is_file()
-    {
+    from_manifest.pop(); // desktop
+    from_manifest.pop(); // repo root
+    if is_live_monorepo_root(&from_manifest) {
         return Some(from_manifest);
     }
     if let Ok(mut cwd) = std::env::current_dir() {
         for _ in 0..8 {
-            if cwd.join("scripts/desktop-local-product.sh").is_file() {
+            if is_live_monorepo_root(&cwd) {
                 return Some(cwd);
             }
             if !cwd.pop() {
@@ -70,10 +80,6 @@ fn monorepo_root() -> Option<PathBuf> {
         }
     }
     None
-}
-
-fn product_script(root: &Path) -> PathBuf {
-    root.join("scripts/desktop-local-product.sh")
 }
 
 /// State dir for client.env / run / logs (install AppData or monorepo desktop/runtime).
@@ -291,11 +297,9 @@ fn stop_pidfile(pidfile: &Path) {
             }
             #[cfg(windows)]
             {
-                let _ = Command::new("taskkill")
-                    .args(["/PID", pid, "/F"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status();
+                if let Ok(p) = pid.parse::<u32>() {
+                    let _ = super::win_cmd::kill_pid_tree(p);
+                }
             }
         }
     }
@@ -366,53 +370,35 @@ fn build_status() -> LocalProductStatus {
 }
 
 fn probe_health(url: &str) -> Result<String, String> {
-    // Prefer curl when present (WSL/Linux installers); fall back to TCP-only is not enough.
-    let output = Command::new("curl")
-        .args(["-fsS", "--max-time", "2", url])
-        .output();
-    match output {
-        Ok(o) if o.status.success() => {
-            Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
-        }
-        Ok(o) => {
-            let err = String::from_utf8_lossy(&o.stderr);
-            // Windows installs may lack curl — try reqwest-less TCP is already known open.
-            // Use a tiny blocking HTTP via std is hard; leave detail.
-            Err(if err.trim().is_empty() {
-                format!("curl exit {}", o.status)
-            } else {
-                err.trim().to_string()
-            })
-        }
-        Err(e) => {
-            // No curl: treat open port + /health path as soft-ok via raw GET with std::net is insufficient.
-            // Use reqwest in spawn path wait; for status, report curl missing.
-            Err(format!("curl unavailable: {e}"))
-        }
-    }
+    let parsed = url::Url::parse(url).map_err(|e| e.to_string())?;
+    let host = parsed.host_str().unwrap_or("127.0.0.1");
+    let port = parsed.port_or_known_default().unwrap_or(80);
+    let path = if parsed.path().is_empty() { "/" } else { parsed.path() };
+    let addr = format!("{host}:{port}");
+    let sock = addr
+        .to_socket_addrs()
+        .map_err(|e| e.to_string())?
+        .next()
+        .ok_or_else(|| "no address".to_string())?;
+    let mut stream =
+        TcpStream::connect_timeout(&sock, Duration::from_millis(400)).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(Duration::from_millis(800))).ok();
+    let req = format!("GET {path} HTTP/1.0\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+    stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&buf);
+    Ok(text
+        .split("\r\n\r\n")
+        .nth(1)
+        .unwrap_or(text.as_ref())
+        .trim()
+        .to_string())
 }
 
 fn api_healthy() -> bool {
-    let base = client_api_base();
-    let url = format!("{base}/health");
-    if probe_health(&url).is_ok() {
-        return true;
-    }
-    // Without curl, accept open API port as provisional healthy.
     let (host, port) = client_api_host_port();
-    probe_tcp(&host, port) && which_exists("curl").is_none()
-}
-
-fn which_exists(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        for cand in [dir.join(name), dir.join(format!("{name}.exe"))] {
-            if cand.is_file() {
-                return Some(cand);
-            }
-        }
-    }
-    None
+    probe_tcp(&host, port)
 }
 
 fn open_append_log(path: &Path) -> Result<File, String> {
@@ -436,22 +422,58 @@ fn spawn_with_env(
     let log = open_append_log(log_path)?;
     let log_err = open_append_log(log_path)?;
     let mut cmd = Command::new(bin);
-    if let Some(dir) = cwd {
+    // Prefer binary directory as cwd so Windows LoadLibrary finds MinGW DLLs
+    // (libstdc++-6.dll etc.) next to avrag-api.exe / Context-OS.exe.
+    let bin_dir = bin.parent();
+    if let Some(dir) = cwd.or(bin_dir) {
         cmd.current_dir(dir);
     }
     for (k, v) in env_pairs {
         cmd.env(k, v);
     }
+    // Prepend install / runtime dirs to PATH for MinGW + portable libs.
+    {
+        let mut path_prefix: Vec<PathBuf> = Vec::new();
+        if let Some(d) = bin_dir {
+            path_prefix.push(d.to_path_buf());
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(d) = exe.parent() {
+                path_prefix.push(d.to_path_buf());
+                path_prefix.push(d.join("runtime").join("mingw"));
+            }
+        }
+        if let Some(rt) = state_runtime_dir() {
+            path_prefix.push(rt.join("runtime").join("mingw"));
+            path_prefix.push(rt.join("mingw"));
+            path_prefix.push(rt.join("bin"));
+        }
+        let mut parts: Vec<String> = path_prefix
+            .into_iter()
+            .filter(|p| p.is_dir() || p.is_file())
+            .map(|p| p.display().to_string())
+            .collect();
+        if let Ok(existing) = std::env::var("PATH") {
+            parts.push(existing);
+        }
+        if !parts.is_empty() {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            cmd.env("PATH", parts.join(sep));
+        }
+    }
     // Desktop isolation defaults (client.env should already set these).
     if !env_pairs.iter().any(|(k, _)| k == "RETRIEVAL_BACKEND") {
         cmd.env("RETRIEVAL_BACKEND", "pgvector");
     }
-    // Migrations applied by stack ensure; avoid double work every API boot.
+    // Native stack writes AVRAG_RUN_MIGRATIONS=true for first boot; honor that
+    // unless an explicit product override is present. This keeps new STATE_HOME
+    // databases migrated before local session/API routes are exercised.
     cmd.env(
         "AVRAG_RUN_MIGRATIONS",
         env_pairs
             .iter()
             .find(|(k, _)| k == "AVRAG_RUN_MIGRATIONS_PRODUCT")
+            .or_else(|| env_pairs.iter().find(|(k, _)| k == "AVRAG_RUN_MIGRATIONS"))
             .map(|(_, v)| v.as_str())
             .unwrap_or("false"),
     );
@@ -459,12 +481,7 @@ fn spawn_with_env(
     cmd.stderr(Stdio::from(log_err));
     cmd.stdin(Stdio::null());
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    super::win_cmd::hide_and_detach(&mut cmd);
 
     let child = cmd
         .spawn()
@@ -480,19 +497,21 @@ fn spawn_with_env(
 
 fn wait_api_healthy(secs: u64, log: &mut String) -> bool {
     let deadline = Instant::now() + Duration::from_secs(secs);
+    let (host, port) = client_api_host_port();
     let base = client_api_base();
     let url = format!("{base}/health");
     while Instant::now() < deadline {
-        if probe_health(&url).is_ok() {
-            log.push_str("API healthy\n");
+        // Prefer TCP first — Windows curl can stall and make cold-start feel frozen.
+        if probe_tcp(&host, port) {
+            if probe_health(&url).is_ok() {
+                log.push_str("API healthy\n");
+                return true;
+            }
+            // Port open is enough for desktop bootstrap (migrations may still settle).
+            log.push_str("API port open (treating as ready)\n");
             return true;
         }
-        let (host, port) = client_api_host_port();
-        if which_exists("curl").is_none() && probe_tcp(&host, port) {
-            log.push_str("API port open (curl missing; treating as ready)\n");
-            return true;
-        }
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(400));
     }
     log.push_str("timeout waiting for API health\n");
     false
@@ -575,7 +594,7 @@ fn ensure_product_native() -> Result<String, String> {
         spawn_with_env(&worker_bin, &env_pairs, &worker_log, &worker_pid, None)?;
     }
 
-    if wait_api_healthy(120, &mut log) {
+    if wait_api_healthy(45, &mut log) {
         Ok(format!(
             "product API ready at {} (native spawn)\n{log}",
             client_api_base()
@@ -588,13 +607,44 @@ fn ensure_product_native() -> Result<String, String> {
     }
 }
 
-fn stop_product_native() -> String {
+/// Stop product sidecars (API + worker). `pub(crate)` for exit lifecycle.
+pub(crate) fn stop_product_native() -> String {
     let mut log = String::new();
     let (run_dir, _) = run_log_dir();
-    stop_pidfile(&run_dir.join("api.pid"));
-    stop_pidfile(&run_dir.join("worker.pid"));
+    // /T = kill process tree (Windows workers may spawn helpers).
+    stop_pidfile_tree(&run_dir.join("api.pid"));
+    stop_pidfile_tree(&run_dir.join("worker.pid"));
     log.push_str("stopped api/worker pidfiles (native)\n");
     log
+}
+
+fn stop_pidfile_tree(pidfile: &Path) {
+    if let Ok(raw) = fs::read_to_string(pidfile) {
+        let pid = raw.trim();
+        if !pid.is_empty() {
+            #[cfg(unix)]
+            {
+                let _ = Command::new("kill")
+                    .arg(pid)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+                thread::sleep(Duration::from_millis(200));
+                let _ = Command::new("kill")
+                    .args(["-9", pid])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(p) = pid.parse::<u32>() {
+                    let _ = super::win_cmd::kill_pid_tree(p);
+                }
+            }
+        }
+    }
+    let _ = fs::remove_file(pidfile);
 }
 
 fn run_product_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
@@ -611,12 +661,13 @@ fn run_product_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
             format!("Product script missing: {}", script.display()),
         ));
     }
-    let output = Command::new("bash")
-        .arg(&script)
+    let mut bash = Command::new("bash");
+    bash.arg(&script)
         .arg(arg)
         .current_dir(&root)
-        .env("CONTEXT_OS_ROOT", root.as_os_str())
-        .output()
+        .env("CONTEXT_OS_ROOT", root.as_os_str());
+    super::win_cmd::hide_console(&mut bash);
+    let output = bash.output()
         .map_err(|e| {
             IpcApiError::internal(format!(
                 "Failed to run desktop-local-product.sh {arg}: {e}"
@@ -785,6 +836,23 @@ pub async fn stop_local_product() -> Result<EnsureLocalProductResult, IpcApiErro
         stderr,
         status,
     })
+}
+
+/// Force restart the local product (api + worker) so newly upserted provider
+/// secrets (BYOK embedding/rerank) are resolved at bootstrap. Bypasses the
+/// `ensure_local_product` "already healthy" fast path by stopping first.
+#[tauri::command]
+pub async fn restart_local_product() -> Result<EnsureLocalProductResult, IpcApiError> {
+    let stop_log = tokio::task::spawn_blocking(stop_product_native)
+        .await
+        .map_err(|e| IpcApiError::internal(format!("stop product join: {e}")))?;
+    let mut stdout = format!("--- stop ---\n{stop_log}\n");
+    // Give the OS a beat to release the listen port before re-ensure.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    let mut result = ensure_local_product().await?;
+    result.stdout = format!("{stdout}--- ensure ---\n{}", result.stdout);
+    Ok(result)
 }
 
 /// Base URL used by desktop `api_call` HTTP proxy.

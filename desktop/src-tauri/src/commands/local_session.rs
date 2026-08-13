@@ -253,6 +253,7 @@ async fn login_or_register(
             "full_name": LOCAL_FULL_NAME,
             "terms_version": TERMS_VERSION,
             "privacy_version": PRIVACY_VERSION,
+            "local": true,
         })),
         None,
     )

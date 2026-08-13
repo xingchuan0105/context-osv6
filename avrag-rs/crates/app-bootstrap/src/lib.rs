@@ -51,8 +51,8 @@ use tokio::sync::RwLock;
 
 pub use config_helpers::{
     auth_context_from_config, build_object_store, build_unified_agent_service,
-    build_unified_agent_service_with_secrets, make_embedding_client, make_llm_client, make_planner,
-    make_reranker,
+    build_unified_agent_service_with_secrets, embedding_client_from_secret, make_embedding_client,
+    make_llm_client, make_planner, make_reranker, reranker_from_secret, resolve_bootstrap_secret,
 };
 
 pub use services::{
@@ -359,98 +359,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 ))
             });
 
-    let rag_runtime = if config.enable_rag && pg.is_some() {
-        let pg_repo = pg.as_ref().unwrap();
-        let embedding = make_embedding_client(
-            &config.embedding,
-            cache_store.clone(),
-            embedding_observer.clone(),
-        )
-        .ok_or_else(|| anyhow::anyhow!("embedding client is required when enable_rag=true"))?;
-        let mm_embedding = make_embedding_client(
-            &config.mm_embedding,
-            cache_store.clone(),
-            embedding_observer.clone(),
-        );
-        let planner = make_planner(&config.agent_llm, cache_store.clone());
-        let reranker = make_reranker(&config.rerank);
-        let mm_reranker = make_reranker(&config.mm_rerank);
-
-        let attach_rag_components = |mut rag_config: RagConfig| {
-            if let Some(p) = planner.clone() {
-                rag_config =
-                    rag_config.with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
-            }
-            if let Some(mm) = mm_embedding.clone() {
-                rag_config = rag_config
-                    .with_mm_embedding(mm as Arc<dyn avrag_rag_core_ports::EmbeddingPort>);
-            }
-            if let Some(r) = reranker.clone() {
-                rag_config =
-                    rag_config.with_reranker(r as Arc<dyn avrag_rag_core_ports::RerankPort>);
-            }
-            if let Some(mm_r) = mm_reranker.clone() {
-                rag_config =
-                    rag_config.with_mm_reranker(mm_r as Arc<dyn avrag_rag_core_ports::RerankPort>);
-            }
-            if let Some(cache) = cache_store.clone() {
-                rag_config = rag_config.with_cache(cache);
-            }
-            rag_config.with_chat_persistence(chat_persistence.clone())
-        };
-
-        let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
-            embedding as Arc<dyn avrag_rag_core_ports::EmbeddingPort>,
-            Some(
-                Arc::new(avrag_storage_pg::PgContentStore::new(pg_repo.clone()))
-                    as Arc<dyn common::ContentStore>,
-            ),
-        ));
-        let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
-            match config.retrieval_backend {
-                RetrievalBackend::Milvus => {
-                    let milvus_config = StorageMilvusConfig {
-                        url: config.milvus.url.clone(),
-                        token: Some(config.milvus.token.clone())
-                            .filter(|token| !token.trim().is_empty()),
-                        database: Some(config.milvus.database.clone())
-                            .filter(|database| !database.trim().is_empty()),
-                        collection_prefix: config.milvus.collection_prefix.clone(),
-                        text_vector_dim: config.milvus.text_vector_dim,
-                        multimodal_vector_dim: config.milvus.multimodal_vector_dim,
-                        metric_type: config.milvus.metric_type.clone(),
-                    };
-                    Arc::new(MilvusDataPlane::new(milvus_config))
-                }
-                RetrievalBackend::Pgvector => {
-                    let pgvector_config = PgvectorConfig {
-                        text_vector_dim: config.milvus.text_vector_dim,
-                        multimodal_vector_dim: config.milvus.multimodal_vector_dim,
-                        hnsw_ef_search: Some(40),
-                    };
-                    Arc::new(PgvectorDataPlane::new(
-                        pg_repo.raw().clone(),
-                        pgvector_config,
-                    ))
-                }
-            };
-        data_plane.ensure_schema().await?;
-        Some(Arc::new(RagRuntime::with_data_plane(
-            rag_config, data_plane,
-        )))
-    } else {
-        None
-    };
-
-    let mut billing =
-        BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
-    if let Some(obs) = usage_observer.clone() {
-        billing = billing.with_usage_observer(obs);
-    }
-    // ADR-0010 §1.1 protective preflight: require BYOK or wallet balance for platform LLM.
-    if let Some(wallet) = wallet_store.clone() {
-        billing = billing.with_wallet(wallet);
-    }
+    // ADR-0010 G4: build the BYOK secret store before RAG so embedding/rerank
+    // clients can be constructed from the local user's secrets when no platform key.
     let provider_secrets: Option<Arc<dyn app_core::ProviderSecretStorePort>> =
         pg.as_ref().and_then(|repository| {
             match PgProviderSecretStoreAdapter::from_env(repository.clone()) {
@@ -464,6 +374,130 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 }
             }
         });
+    let bootstrap_owner = auth.user_id().into_uuid();
+    let embedding_secret = resolve_bootstrap_secret(
+        &provider_secrets,
+        bootstrap_owner,
+        app_core::ProviderSecretPurpose::Embedding,
+    )
+    .await;
+    let rerank_secret = resolve_bootstrap_secret(
+        &provider_secrets,
+        bootstrap_owner,
+        app_core::ProviderSecretPurpose::Rerank,
+    )
+    .await;
+
+    let rag_runtime = if config.enable_rag && pg.is_some() {
+        let pg_repo = pg.as_ref().unwrap();
+        let embedding = make_embedding_client(
+            &config.embedding,
+            cache_store.clone(),
+            embedding_observer.clone(),
+        )
+        .or_else(|| {
+            embedding_client_from_secret(
+                embedding_secret.as_ref(),
+                cache_store.clone(),
+                embedding_observer.clone(),
+            )
+        });
+
+        match embedding {
+            Some(embedding) => {
+                let mm_embedding = make_embedding_client(
+                    &config.mm_embedding,
+                    cache_store.clone(),
+                    embedding_observer.clone(),
+                );
+                let planner = make_planner(&config.agent_llm, cache_store.clone());
+                let reranker = make_reranker(&config.rerank)
+                    .or_else(|| reranker_from_secret(rerank_secret.as_ref()));
+                let mm_reranker = make_reranker(&config.mm_rerank);
+
+                let attach_rag_components = |mut rag_config: RagConfig| {
+                    if let Some(p) = planner.clone() {
+                        rag_config =
+                            rag_config.with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
+                    }
+                    if let Some(mm) = mm_embedding.clone() {
+                        rag_config = rag_config
+                            .with_mm_embedding(mm as Arc<dyn avrag_rag_core_ports::EmbeddingPort>);
+                    }
+                    if let Some(r) = reranker.clone() {
+                        rag_config =
+                            rag_config.with_reranker(r as Arc<dyn avrag_rag_core_ports::RerankPort>);
+                    }
+                    if let Some(mm_r) = mm_reranker.clone() {
+                        rag_config =
+                            rag_config.with_mm_reranker(mm_r as Arc<dyn avrag_rag_core_ports::RerankPort>);
+                    }
+                    if let Some(cache) = cache_store.clone() {
+                        rag_config = rag_config.with_cache(cache);
+                    }
+                    rag_config.with_chat_persistence(chat_persistence.clone())
+                };
+
+                let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
+                    embedding as Arc<dyn avrag_rag_core_ports::EmbeddingPort>,
+                    Some(
+                        Arc::new(avrag_storage_pg::PgContentStore::new(pg_repo.clone()))
+                            as Arc<dyn common::ContentStore>,
+                    ),
+                ));
+                let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
+                    match config.retrieval_backend {
+                        RetrievalBackend::Milvus => {
+                            let milvus_config = StorageMilvusConfig {
+                                url: config.milvus.url.clone(),
+                                token: Some(config.milvus.token.clone())
+                                    .filter(|token| !token.trim().is_empty()),
+                                database: Some(config.milvus.database.clone())
+                                    .filter(|database| !database.trim().is_empty()),
+                                collection_prefix: config.milvus.collection_prefix.clone(),
+                                text_vector_dim: config.milvus.text_vector_dim,
+                                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                                metric_type: config.milvus.metric_type.clone(),
+                            };
+                            Arc::new(MilvusDataPlane::new(milvus_config))
+                        }
+                        RetrievalBackend::Pgvector => {
+                            let pgvector_config = PgvectorConfig {
+                                text_vector_dim: config.milvus.text_vector_dim,
+                                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                                hnsw_ef_search: Some(40),
+                            };
+                            Arc::new(PgvectorDataPlane::new(
+                                pg_repo.raw().clone(),
+                                pgvector_config,
+                            ))
+                        }
+                    };
+                data_plane.ensure_schema().await?;
+                Some(Arc::new(RagRuntime::with_data_plane(
+                    rag_config, data_plane,
+                )))
+            }
+            None => {
+                tracing::warn!(
+                    "enable_rag=true but no embedding client (platform or BYOK secret); RAG unavailable"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut billing =
+        BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
+    if let Some(obs) = usage_observer.clone() {
+        billing = billing.with_usage_observer(obs);
+    }
+    // ADR-0010 §1.1 protective preflight: require BYOK or wallet balance for platform LLM.
+    if let Some(wallet) = wallet_store.clone() {
+        billing = billing.with_wallet(wallet);
+    }
     if let Some(secrets) = provider_secrets.clone() {
         billing = billing.with_provider_secrets(secrets);
     }

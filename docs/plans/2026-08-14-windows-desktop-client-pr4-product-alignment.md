@@ -129,3 +129,46 @@ Layer B 完成前，`D-rag-full` / `config-gap.spec.ts` 的 `PASS` 翻转仍是 
 - **parser provisioning（markitdown shim）**：`markitdown-wsl.cmd` 仍是 WSL 开发机专属，不是发布能力。Windows 安装树的 parser 打包属独立发布工作，不在 Layer A。见 PR-3 交接 caveat。
 - 不引入 LiteLLM；不写双聊天路径；不改云侧 secrets 表 schema。
 - 不做 J3–J8 / 钱包 / 分享上云 / NSIS 卸载。
+
+## 8. Layer B 实现（2026-08-14 追加，进行中）
+
+**Q6 已拍板**：保存 SiliconFlow embedding/rerank key → **自动 force-restart** api/worker（RAG 即对新文档生效）；旧文档走**手动重索引**（不静默烧 embedding token）。
+
+**目标流**：`/settings?tab=providers` 保存 embedding key → 前端触发 force-restart → 重启时 API/worker 从 secret 构造 embedding/rerank client → RAG 对新上传生效 → 旧文档 `POST /api/v1/documents/{id}/reindex`（已有端点）手动补齐向量。
+
+### B1 — G2/G3：桌面不再硬写 RAG off
+
+`native_stack.rs::write_client_env`：`AVRAG_ENABLE_RAG=false` → `true`，并写 `AVRAG_EMBEDDING_DIM=1024`（SiliconFlow bge-m3 原生 1024d，只作 schema 尺寸，不进请求 `dimensions`）。
+
+理由：RAG 是否真正可用改由「能否构造出 embedding client」决定，而不是 env 开关。首启无 key → embedding 缺 → RAG 优雅降级（不 fail-fast），与 G5 语义一致。
+
+### B2 — G4：从 secret 构造 embedding/rerank client
+
+- `app-core/provider_secret_domain.rs` 增 `ResolvedProviderSecret::to_llm_config()`（OpenAI 方言、`dimensions=None`、`timeout_ms=120_000`），复用 G1 的构造逻辑。
+- API bootstrap（`app-bootstrap/src/lib.rs`）：把 `provider_secrets` 建到 `rag_runtime` 之前；resolve `purpose=Embedding` / `Rerank`（owner=config 的 bootstrap owner，`workspace_id=None` 账户默认）；`embedding = platform config.embedding OR secret`；**去掉 fail-fast**（无 embedding → `rag_runtime=None`，不崩启动）；reranker 同 platform OR secret。
+- worker bootstrap（`bins/worker/src/lib.rs` + `runtime_support.rs`）：resolve `purpose=Embedding` secret → `embedding_client = platform OR secret`；`retrieval_data_plane` 仍由 `enable_rag`（现恒 true）门控。
+
+### B3 — G6：保存后 force-restart
+
+- 新增 IPC `restart_local_product`（或 `ensure_local_product` 加 `force`），强制 stop→ensure，绕过「已 healthy 即返回」快路径。
+- `frontend_next/lib/desktop/tauri-local.ts` + providers panel：保存 `purpose=embedding|rerank` 成功后调用该 IPC。
+
+### B4 — G5：手动重索引
+
+- 复用 `POST /api/v1/documents/{id}/reindex`；前端在设置面板给「重新索引本机文档」入口（遍历 docs 逐个 reindex），标注会消耗 embedding token。
+
+### 实施状态（2026-08-14）
+
+**已落地并验证：**
+
+- **D1 确定性本机 owner**（Q「G4 身份对齐」拍板）：`native_stack.rs::local_identity_uuids()` 用 `compute_device_id()` 派生 owner/user（`Uuid::new_v5`），写进 `client.env` 的 `NEXT_PUBLIC_DEV_OWNER_USER_ID` / `NEXT_PUBLIC_DEV_USER_ID`；本机注册带 `local:true`，`register_user` 用 config owner（`RegisterUserInput.owner_user_id/user_id`），仅当 `NEXT_PUBLIC_DEV_OWNER_USER_ID` 存在时生效（云不会误触发）。
+- **B1**：`write_client_env` 写 `AVRAG_ENABLE_RAG=true` + `AVRAG_EMBEDDING_DIM=1024`。
+- **B2/G4**：`ResolvedProviderSecret::to_llm_config()`；API + worker bootstrap 从 `purpose=Embedding/Rerank` secret 构造 client（platform OR secret），无 embedding 时 `rag_runtime=None` 优雅降级。
+- **B3/G6**：`restart_local_product` IPC + providers panel 保存 embedding/rerank 后自动 force-restart。
+
+**待办（PR-5）：**
+
+- B4 的「重新索引本机文档」批量 UI 入口（端点已存在）。
+- `config-gap.spec.ts` 翻 PASS + `D-rag-full`（需真 key + Windows）。
+
+验证：`cargo test -p app-core --lib`、`-p app-bootstrap --lib`、`-p app-chat --lib`、`-p avrag-desktop --lib`；`cargo build -p avrag-worker`、`-p transport-http`；`pnpm tsc`；`code-review-graph update`。真实 RAG 走通仍留 PR-5 `D-rag-full`（需真 key + Windows）。

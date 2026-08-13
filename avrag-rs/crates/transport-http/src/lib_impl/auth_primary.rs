@@ -102,6 +102,16 @@ pub(crate) async fn auth_register_handler(
         }
     };
 
+    let local_identity = if req.local.unwrap_or(false)
+        && std::env::var("NEXT_PUBLIC_DEV_OWNER_USER_ID").is_ok()
+    {
+        let owner = state.auth().user_id().into_uuid();
+        let user = state.auth().actor_id().map(|a| a.into_uuid());
+        Some((owner, user))
+    } else {
+        None
+    };
+
     let result = match store
         .register_user(&RegisterUserInput {
             email: req.email.trim().to_string(),
@@ -114,6 +124,8 @@ pub(crate) async fn auth_register_handler(
                 ip_address,
                 user_agent,
             },
+            owner_user_id: local_identity.as_ref().map(|(o, _)| *o),
+            user_id: local_identity.as_ref().and_then(|(_, u)| *u),
         })
         .await
     {

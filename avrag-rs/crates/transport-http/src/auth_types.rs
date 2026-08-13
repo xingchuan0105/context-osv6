@@ -47,6 +47,10 @@ pub(crate) struct RegisterRequest {
     /// Optional referral code (ADR-0010 PR4). Invalid / over-quota codes do not block register.
     #[serde(default)]
     pub referral_code: Option<String>,
+    /// Local/desktop single-user registration (deterministic identity aligned with
+    /// `NEXT_PUBLIC_DEV_OWNER_USER_ID`). Ignored unless that env is set (cloud never sets it).
+    #[serde(default)]
+    pub local: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

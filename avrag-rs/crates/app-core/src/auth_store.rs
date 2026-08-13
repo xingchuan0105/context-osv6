@@ -18,6 +18,12 @@ pub struct RegisterUserInput {
     pub password_hash: String,
     pub full_name: Option<String>,
     pub legal_acceptance: RegisterLegalAcceptance,
+    /// Explicit account owner for local/desktop single-user registration
+    /// (deterministic identity aligned with `config.owner_user_id`). When `None`,
+    /// the store generates a fresh uuid (cloud multi-tenant path).
+    pub owner_user_id: Option<Uuid>,
+    /// Explicit actor/user id for local registration. Defaults to `owner_user_id`.
+    pub user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]

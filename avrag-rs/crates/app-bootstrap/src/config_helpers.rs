@@ -110,6 +110,48 @@ pub fn make_reranker(config: &ModelProviderConfig) -> Option<Arc<RerankerClient>
         .map(|c| Arc::new(RerankerClient::new(c)))
 }
 
+/// Resolve the local/desktop user's active secret for a purpose at bootstrap.
+/// `workspace_id = None` → account-default scope. Fail-open (None) on error.
+pub async fn resolve_bootstrap_secret(
+    store: &Option<Arc<dyn app_core::ProviderSecretStorePort>>,
+    owner: Uuid,
+    purpose: app_core::ProviderSecretPurpose,
+) -> Option<app_core::ResolvedProviderSecret> {
+    let store = store.as_ref()?;
+    match store.resolve(owner, None, purpose).await {
+        Ok(secret) => secret,
+        Err(e) => {
+            tracing::warn!(error = %e, purpose = purpose.as_str(), "bootstrap secret resolve failed");
+            None
+        }
+    }
+}
+
+/// Build an embedding client from a resolved BYOK secret (G4) when no platform key.
+pub fn embedding_client_from_secret(
+    secret: Option<&app_core::ResolvedProviderSecret>,
+    cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
+    observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
+) -> Option<Arc<EmbeddingClient>> {
+    let cfg = secret?.to_llm_config()?;
+    let mut client = EmbeddingClient::new(cfg);
+    if let Some(cache) = cache {
+        client = client.with_cache(cache);
+    }
+    if let Some((obs, tenant)) = observer {
+        client = client.with_observer(obs, tenant);
+    }
+    Some(Arc::new(client))
+}
+
+/// Build a reranker client from a resolved BYOK secret (G4) when no platform key.
+pub fn reranker_from_secret(
+    secret: Option<&app_core::ResolvedProviderSecret>,
+) -> Option<Arc<RerankerClient>> {
+    let cfg = secret?.to_llm_config()?;
+    Some(Arc::new(RerankerClient::new(cfg)))
+}
+
 pub async fn build_object_store(config: &AppConfig) -> AnyResult<ObjectStoreHandle> {
     if !config.object_storage.endpoint.trim().is_empty()
         && !config.object_storage.bucket.trim().is_empty()

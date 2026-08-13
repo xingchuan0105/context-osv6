@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { isTauri } from "../../lib/runtime/tauri-ipc";
 import {
   listProviderSecrets,
   revokeProviderSecret,
@@ -129,6 +130,15 @@ function ProviderKeyRow({
       setApiKey("");
       setNotice(formatUiMessage(locale, "settingsProviderSaved"));
       onSaved();
+      // Desktop: force-restart the local product so the embedding/rerank secret
+      // resolves at bootstrap (enables RAG for new uploads).
+      const needsRestart = row.targets.some(
+        (t) => t.purpose === "embedding" || t.purpose === "rerank",
+      );
+      if (needsRestart && isTauri()) {
+        const { restartLocalProduct } = await import("../../lib/desktop/tauri-local");
+        void restartLocalProduct().catch(() => {});
+      }
     } catch (err) {
       setError(describeAuthError(formatUiMessage(locale, "settingsProviderSaveFailed"), err, locale));
     } finally {

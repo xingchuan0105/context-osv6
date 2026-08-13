@@ -23,7 +23,7 @@ use commands::license::{
 };
 use commands::local::{get_backend_status, init_local_backend, list_local_documents};
 use commands::local_product::{
-    ensure_local_product, get_local_product_status, stop_local_product,
+    ensure_local_product, get_local_product_status, restart_local_product, stop_local_product,
 };
 use commands::local_session::{ensure_local_session, get_local_session};
 use commands::local_stack::{
@@ -195,6 +195,7 @@ pub fn run() {
             get_docker_status,
             get_local_product_status,
             ensure_local_product,
+            restart_local_product,
             stop_local_product,
             get_local_session,
             ensure_local_session

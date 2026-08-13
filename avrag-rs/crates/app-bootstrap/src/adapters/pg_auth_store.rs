@@ -88,7 +88,9 @@ impl AuthStorePort for PgAuthStoreAdapter {
         }
 
         // Personal B2C: one user row is the account; no organizations table.
-        let user_id = Uuid::new_v4();
+        // Local/desktop registration pins a deterministic identity; cloud generates fresh.
+        let user_id = input.user_id.unwrap_or_else(Uuid::new_v4);
+        let owner_user_id = input.owner_user_id.unwrap_or(user_id);
         let full_name = input.full_name.as_deref().unwrap_or_default();
 
         if let Err(error) = sqlx::query(
@@ -125,7 +127,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         Ok(RegisterUserResult {
             user_id,
             // Personal account: owner == user (legacy field name kept for JWT issuance).
-            owner_user_id: user_id,
+            owner_user_id,
             email: input.email.trim().to_string(),
             full_name: full_name.to_string(),
             auth_version: 1,

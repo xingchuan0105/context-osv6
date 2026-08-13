@@ -358,6 +358,23 @@ fn flush_ensure_log(state_rt: &Path, log: &str) {
     let _ = fs::write(path, log);
 }
 
+/// Deterministic local account identity (owner + user) derived from the machine id.
+/// Stable across restarts so API bootstrap can resolve the local user's provider
+/// secrets (`config.owner_user_id` aligns with the registered local account).
+fn local_identity_uuids() -> (String, String) {
+    let device_id = crate::commands::license::compute_device_id()
+        .unwrap_or_else(|_| "cos-local-device".to_string());
+    let owner = uuid::Uuid::new_v5(
+        &uuid::Uuid::NAMESPACE_OID,
+        format!("cos-owner:{device_id}").as_bytes(),
+    );
+    let user = uuid::Uuid::new_v5(
+        &uuid::Uuid::NAMESPACE_OID,
+        format!("cos-user:{device_id}").as_bytes(),
+    );
+    (owner.to_string(), user.to_string())
+}
+
 fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> Result<(), String> {
     let env_path = rt.join("client.env");
     let jwt_path = rt.join("jwt.secret");
@@ -391,6 +408,7 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
         fs::write(&byok_path, format!("{encoded}\n")).map_err(|e| e.to_string())?;
         encoded
     };
+    let (owner_id, user_id) = local_identity_uuids();
     let mig = migrations
         .map(|p| p.display().to_string())
         .unwrap_or_default();
@@ -414,14 +432,21 @@ CORS_ALLOWED_ORIGINS=http://tauri.localhost,https://tauri.localhost,http://127.0
 AVRAG_OBJECT_ROOT={objects}
 JWT_SECRET={jwt}
 BYOK_MASTER_KEY={byok}
+NEXT_PUBLIC_DEV_OWNER_USER_ID={owner_id}
+NEXT_PUBLIC_DEV_USER_ID={user_id}
 AVRAG_RUN_MIGRATIONS=true
 AVRAG_MIGRATIONS_DIR={mig}
-# Cold start without cloud/BYOK embedding keys — turn on after desktop embedding is configured.
-AVRAG_ENABLE_RAG=false
+# RAG availability is derived from whether an embedding client can be built
+# (platform env or SiliconFlow purpose=embedding secret), not this gate.
+AVRAG_ENABLE_RAG=true
+# SiliconFlow BAAI/bge-m3 native output dim — schema sizing only, not a request field.
+AVRAG_EMBEDDING_DIM=1024
 "#,
         objects = objects.display(),
         jwt = jwt,
         byok = byok,
+        owner_id = owner_id,
+        user_id = user_id,
         mig = mig,
     );
     fs::write(&env_path, body).map_err(|e| e.to_string())?;

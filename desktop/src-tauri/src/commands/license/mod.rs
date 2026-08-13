@@ -4,6 +4,7 @@ mod service;
 mod types;
 
 pub use commands::*;
+pub use service::compute_device_id;
 pub use service::handle_deep_link_url;
 pub use types::*;
 

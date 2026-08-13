@@ -25,7 +25,7 @@ use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 
 use app_core::{ChatPersistencePort, ProviderSecretPurpose, ProviderSecretStorePort};
-use avrag_llm::{ApiStyle, LlmClient, ModelProviderConfig, TenantContext, UsageObserver};
+use avrag_llm::{LlmClient, TenantContext, UsageObserver};
 use avrag_search::SearchProvider;
 use common::AppError;
 use std::sync::Arc;
@@ -133,32 +133,9 @@ impl UnifiedAgent {
 }
 
 /// Build a single-route `LlmClient` from a resolved BYOK secret (ADR-0010 G1).
-///
-/// BYOK secrets are OpenAI-compatible single-route endpoints; there is no
-/// multi-provider pool and no native-dialect routing. Returns `None` when the
-/// secret is missing `base_url` or `model_hint`, so callers keep the platform
-/// path unchanged (fail-open to platform config, matching the existing overlay).
+/// Reuses `ResolvedProviderSecret::to_llm_config` (OpenAI single-route, no pool).
 fn llm_client_from_secret(secret: &app_core::ResolvedProviderSecret) -> Option<LlmClient> {
-    const BYOK_DEFAULT_TIMEOUT_MS: u64 = 120_000;
-
-    let base_url = secret.base_url.as_deref()?.trim();
-    let model = secret.model_hint.as_deref()?.trim();
-    if base_url.is_empty() || model.is_empty() || secret.api_key.is_empty() {
-        return None;
-    }
-
-    Some(LlmClient::new(ModelProviderConfig {
-        base_url: base_url.to_string(),
-        api_key: secret.api_key.clone(),
-        model: model.to_string(),
-        timeout_ms: BYOK_DEFAULT_TIMEOUT_MS,
-        api_style: Some(ApiStyle::OpenAi),
-        dimensions: None,
-        enable_thinking: None,
-        enable_cache: None,
-        rpm_limit: None,
-        tpm_limit: None,
-    }))
+    secret.to_llm_config().map(LlmClient::new)
 }
 
 #[async_trait::async_trait]

@@ -115,6 +115,35 @@ impl std::fmt::Debug for ResolvedProviderSecret {
     }
 }
 
+impl ResolvedProviderSecret {
+    /// Build a single-route `avrag_llm::ModelProviderConfig` for outbound use
+    /// (ADR-0010 G1/G4). BYOK secrets are OpenAI-compatible single-route
+    /// endpoints — no multi-provider pool, no native-dialect routing, no
+    /// request-side `dimensions` (SiliconFlow bge-m3 rejects the field).
+    /// Returns `None` when `base_url` / `model_hint` / `api_key` are incomplete,
+    /// so callers keep the platform-config path unchanged.
+    pub fn to_llm_config(&self) -> Option<avrag_llm::ModelProviderConfig> {
+        const DEFAULT_TIMEOUT_MS: u64 = 120_000;
+        let base_url = self.base_url.as_deref()?.trim();
+        let model = self.model_hint.as_deref()?.trim();
+        if base_url.is_empty() || model.is_empty() || self.api_key.is_empty() {
+            return None;
+        }
+        Some(avrag_llm::ModelProviderConfig {
+            base_url: base_url.to_string(),
+            api_key: self.api_key.clone(),
+            model: model.to_string(),
+            timeout_ms: DEFAULT_TIMEOUT_MS,
+            api_style: Some(avrag_llm::ApiStyle::OpenAi),
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        })
+    }
+}
+
 /// Build display fingerprint: last 4 chars + total length. Never the full key.
 pub fn key_fingerprint(api_key: &str) -> String {
     let chars: Vec<char> = api_key.chars().collect();
@@ -149,5 +178,42 @@ mod tests {
             ProviderSecretPurpose::Embedding
         );
         assert!(ProviderSecretPurpose::parse("other").is_err());
+    }
+
+    fn dummy_secret() -> ResolvedProviderSecret {
+        ResolvedProviderSecret {
+            id: Uuid::nil(),
+            owner_user_id: Uuid::nil(),
+            workspace_id: None,
+            purpose: ProviderSecretPurpose::Embedding,
+            provider: "siliconflow".to_string(),
+            base_url: Some("https://api.siliconflow.cn/v1".to_string()),
+            model_hint: Some("BAAI/bge-m3".to_string()),
+            api_key: "sk-e2e".to_string(),
+        }
+    }
+
+    #[test]
+    fn to_llm_config_builds_openai_single_route() {
+        let cfg = dummy_secret().to_llm_config().expect("config");
+        assert_eq!(cfg.base_url, "https://api.siliconflow.cn/v1");
+        assert_eq!(cfg.model, "BAAI/bge-m3");
+        assert_eq!(cfg.api_style, Some(avrag_llm::ApiStyle::OpenAi));
+        assert_eq!(cfg.dimensions, None);
+    }
+
+    #[test]
+    fn to_llm_config_requires_complete_secret() {
+        let mut no_url = dummy_secret();
+        no_url.base_url = None;
+        assert!(no_url.to_llm_config().is_none());
+
+        let mut no_model = dummy_secret();
+        no_model.model_hint = None;
+        assert!(no_model.to_llm_config().is_none());
+
+        let mut no_key = dummy_secret();
+        no_key.api_key = String::new();
+        assert!(no_key.to_llm_config().is_none());
     }
 }

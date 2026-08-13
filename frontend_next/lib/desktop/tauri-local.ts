@@ -157,6 +157,11 @@ export async function stopLocalProduct(): Promise<EnsureLocalProductResult> {
   return invoke<EnsureLocalProductResult>("stop_local_product");
 }
 
+/** Force-restart the local product so newly upserted provider secrets resolve at boot. */
+export async function restartLocalProduct(): Promise<EnsureLocalProductResult> {
+  return invoke<EnsureLocalProductResult>("restart_local_product");
+}
+
 export type LocalAuthUser = {
   id: string;
   email: string;

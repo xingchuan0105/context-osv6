@@ -23,10 +23,11 @@ use tracing::{error, info, warn};
 use ingestion_guard::run_document_cleanup_once;
 use pipeline::{EmbeddingDeps, LlmDeps, MeteringDeps, PgTaskProcessor, StorageDeps};
 use runtime_support::{
-    apply_e2e_object_store_overrides, build_worker_embedding_client, build_worker_ingestion_llm,
-    build_worker_object_store, build_worker_retrieval_data_plane, describe_object_store_config,
-    probe_object_store, spawn_health_listener, worker_health_port, worker_poll_interval,
-    worker_runtime_mode, worker_system_tenant,
+    apply_e2e_object_store_overrides, build_worker_embedding_client,
+    build_worker_embedding_client_from_secret, build_worker_ingestion_llm, build_worker_object_store,
+    build_worker_retrieval_data_plane, describe_object_store_config, probe_object_store,
+    spawn_health_listener, worker_health_port, worker_poll_interval, worker_runtime_mode,
+    worker_system_tenant,
 };
 use sources::{PgAuditSink, PgStateSink, PgTaskSource};
 
@@ -155,6 +156,20 @@ pub async fn run() -> Result<()> {
             repo.raw().clone(),
             orphan_object_store,
         );
+        // ADR-0010 G4: resolve the local user's embedding secret once at startup.
+        let provider_secrets: Option<Arc<dyn app_core::ProviderSecretStorePort>> =
+            app_bootstrap::PgProviderSecretStoreAdapter::from_env(std::sync::Arc::new(
+                repo.clone(),
+            ))
+            .ok()
+            .map(|a| Arc::new(a) as Arc<dyn app_core::ProviderSecretStorePort>);
+        let bootstrap_owner = worker_system_tenant(&config).owner_user_id;
+        let embedding_secret = app_bootstrap::resolve_bootstrap_secret(
+            &provider_secrets,
+            bootstrap_owner,
+            app_core::ProviderSecretPurpose::Embedding,
+        )
+        .await;
         let retrieval_data_plane =
             build_worker_retrieval_data_plane(&config, Some(repo.raw())).await?;
         let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
@@ -202,7 +217,14 @@ pub async fn run() -> Result<()> {
                             &config.embedding,
                             "document_embedding",
                             &usage_observer,
-                        ),
+                        )
+                        .or_else(|| {
+                            build_worker_embedding_client_from_secret(
+                                embedding_secret.as_ref(),
+                                "document_embedding",
+                                &usage_observer,
+                            )
+                        }),
                         mm_embedding_client: build_worker_embedding_client(
                             &config.mm_embedding,
                             "document_embedding_mm",
@@ -221,14 +243,7 @@ pub async fn run() -> Result<()> {
                         task_usage_observer: Some(task_usage_observer),
                         wallet: Some(wallet_for_meter),
                         // Secrets kept for ops introspection only — index gate is balance-only.
-                        provider_secrets: app_bootstrap::PgProviderSecretStoreAdapter::from_env(
-                            std::sync::Arc::new(repo),
-                        )
-                        .ok()
-                        .map(|a| {
-                            std::sync::Arc::new(a)
-                                as std::sync::Arc<dyn app_core::ProviderSecretStorePort>
-                        }),
+                        provider_secrets: provider_secrets.clone(),
                     },
                     task_timeout_secs,
                 }

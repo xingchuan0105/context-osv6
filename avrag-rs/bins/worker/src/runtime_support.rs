@@ -235,6 +235,20 @@ pub(crate) fn build_worker_embedding_client(
     })
 }
 
+/// Build the worker embedding client from a resolved BYOK secret (G4) when no platform key.
+pub(crate) fn build_worker_embedding_client_from_secret(
+    secret: Option<&app_core::ResolvedProviderSecret>,
+    feature: &str,
+    observer: &WorkerUsageObserver,
+) -> Option<avrag_llm::EmbeddingClient> {
+    let cfg = secret?.to_llm_config()?;
+    let mut client = avrag_llm::EmbeddingClient::new(cfg).with_feature(feature);
+    if let Some((obs, tenant)) = observer {
+        client = client.with_observer(obs.clone(), tenant.clone());
+    }
+    Some(client)
+}
+
 pub(crate) fn safe_relative_object_key(value: &str) -> bool {
     if value.is_empty()
         || value.contains("..")
