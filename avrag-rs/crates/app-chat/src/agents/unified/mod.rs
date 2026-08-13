@@ -25,7 +25,7 @@ use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 
 use app_core::{ChatPersistencePort, ProviderSecretPurpose, ProviderSecretStorePort};
-use avrag_llm::{LlmClient, TenantContext, UsageObserver};
+use avrag_llm::{ApiStyle, LlmClient, ModelProviderConfig, TenantContext, UsageObserver};
 use avrag_search::SearchProvider;
 use common::AppError;
 use std::sync::Arc;
@@ -124,9 +124,41 @@ impl UnifiedAgent {
                 secret.base_url.clone(),
                 secret.model_hint.clone(),
             )),
-            (c, _) => c,
+            // G1: no platform key — construct a single-route client from the user's
+            // resolved BYOK secret instead of dropping it.
+            (None, Some(secret)) => llm_client_from_secret(secret),
+            (c, None) => c,
         }
     }
+}
+
+/// Build a single-route `LlmClient` from a resolved BYOK secret (ADR-0010 G1).
+///
+/// BYOK secrets are OpenAI-compatible single-route endpoints; there is no
+/// multi-provider pool and no native-dialect routing. Returns `None` when the
+/// secret is missing `base_url` or `model_hint`, so callers keep the platform
+/// path unchanged (fail-open to platform config, matching the existing overlay).
+fn llm_client_from_secret(secret: &app_core::ResolvedProviderSecret) -> Option<LlmClient> {
+    const BYOK_DEFAULT_TIMEOUT_MS: u64 = 120_000;
+
+    let base_url = secret.base_url.as_deref()?.trim();
+    let model = secret.model_hint.as_deref()?.trim();
+    if base_url.is_empty() || model.is_empty() || secret.api_key.is_empty() {
+        return None;
+    }
+
+    Some(LlmClient::new(ModelProviderConfig {
+        base_url: base_url.to_string(),
+        api_key: secret.api_key.clone(),
+        model: model.to_string(),
+        timeout_ms: BYOK_DEFAULT_TIMEOUT_MS,
+        api_style: Some(ApiStyle::OpenAi),
+        dimensions: None,
+        enable_thinking: None,
+        enable_cache: None,
+        rpm_limit: None,
+        tpm_limit: None,
+    }))
 }
 
 #[async_trait::async_trait]
@@ -466,6 +498,49 @@ mod tests {
         assert!(agent.llm_client.is_some());
         assert!(agent.rag_runtime.is_none());
         assert!(agent.search_executor.is_none());
+    }
+
+    fn dummy_secret() -> app_core::ResolvedProviderSecret {
+        app_core::ResolvedProviderSecret {
+            id: Uuid::nil(),
+            owner_user_id: Uuid::nil(),
+            workspace_id: None,
+            purpose: app_core::ProviderSecretPurpose::Llm,
+            provider: "custom".to_string(),
+            base_url: Some("http://127.0.0.1:9".to_string()),
+            model_hint: Some("e2e-dummy".to_string()),
+            api_key: "e2e-not-a-real-key".to_string(),
+        }
+    }
+
+    #[test]
+    fn bind_byok_constructs_client_when_no_platform_client() {
+        assert!(UnifiedAgent::bind_byok_client(None, Some(&dummy_secret())).is_some());
+    }
+
+    #[test]
+    fn bind_byok_overlays_existing_client() {
+        assert!(UnifiedAgent::bind_byok_client(Some(dummy_llm()), Some(&dummy_secret())).is_some());
+    }
+
+    #[test]
+    fn bind_byok_returns_none_without_client_or_secret() {
+        assert!(UnifiedAgent::bind_byok_client(None, None).is_none());
+    }
+
+    #[test]
+    fn llm_client_from_secret_requires_complete_secret() {
+        let mut no_url = dummy_secret();
+        no_url.base_url = None;
+        assert!(llm_client_from_secret(&no_url).is_none());
+
+        let mut no_model = dummy_secret();
+        no_model.model_hint = None;
+        assert!(llm_client_from_secret(&no_model).is_none());
+
+        let mut no_key = dummy_secret();
+        no_key.api_key = String::new();
+        assert!(llm_client_from_secret(&no_key).is_none());
     }
 
     #[test]

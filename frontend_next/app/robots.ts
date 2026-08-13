@@ -10,8 +10,10 @@ export const dynamic = "force-static";
  * 公开面 = / 、/pricing、/desktop、/legal/*、/help/api-access*、auth 页；
  * 登录后与功能面（dashboard/settings/admin/shared/api…）统一 disallow。
  *
- * AI crawler 策略：GEO 目标是「被 AI 引用」，公开内容对主流 AI bot 明示放行，
- * 私有路径同样 disallow。
+ * Crawler 策略：GEO 目标是「被搜索 / AI 引用」，公开内容对主流 bot 明示放行，
+ * 私有路径同样 disallow。`User-agent: *` 已 Allow；下列名单为**显式**对齐
+ * （欧美 AI + 国内搜索/字节系），避免被托管 robots 或默认策略误读成「未声明」。
+ * DeepSeek / 豆包对话产品无稳定公开 UA 时，仍走 `*`（不禁止）。
  */
 const PRIVATE_PATHS = [
   "/admin",
@@ -21,12 +23,13 @@ const PRIVATE_PATHS = [
   "/invite",
   "/reset-password",
   "/settings",
-  "/setup",
   "/shared",
   "/upgrade",
 ];
 
-const AI_CRAWLERS = [
+/** Explicit allow-list: same allow/disallow as `*`. Order is documentation only. */
+const NAMED_CRAWLERS = [
+  // Western AI / answer engines
   "GPTBot",
   "OAI-SearchBot",
   "ChatGPT-User",
@@ -34,13 +37,21 @@ const AI_CRAWLERS = [
   "Claude-User",
   "PerplexityBot",
   "Google-Extended",
+  // China search + major platform crawlers
+  "Baiduspider",
+  "Baiduspider-render",
+  "Bytespider",
+  "Sogou",
+  "YisouSpider",
+  "360Spider",
+  "HaosouSpider",
 ];
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       { userAgent: "*", allow: "/", disallow: PRIVATE_PATHS },
-      ...AI_CRAWLERS.map((bot) => ({
+      ...NAMED_CRAWLERS.map((bot) => ({
         userAgent: bot,
         allow: "/",
         disallow: PRIVATE_PATHS,

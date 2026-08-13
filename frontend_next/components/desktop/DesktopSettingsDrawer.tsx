@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import styles from "./desktop.module.css";
-import { LLMDiagnosticPanel } from "@/components/desktop/LLMDiagnosticPanel";
-import { findLlmPreset } from "@/lib/desktop/llm-presets";
 import {
   getLicenseStatus,
   licenseKindLabel,
@@ -18,25 +16,21 @@ import {
   ensureLocalStack,
   getClientRuntimeConfig,
   getDockerStatus,
-  getLlmConfig,
   getLocalProductStatus,
   getLocalSession,
   getLocalStackStatus,
-  setLlmConfig,
   stopLocalProduct,
   stopLocalStack,
-  testLlmConnection,
   type ClientRuntimeConfig,
   type DockerStatus,
-  type LocalLlmConfig,
   type LocalProductStatus,
   type LocalSessionStatus,
   type LocalStackStatus,
-} from "@/lib/desktop/tauri-llm";
+} from "@/lib/desktop/tauri-local";
 import { useAuth } from "@/lib/auth/context";
 import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 
-type DrawerTab = "llm" | "embedding" | "stack" | "license" | "diagnostic";
+type DrawerTab = "stack" | "license";
 
 type DesktopSettingsDrawerProps = {
   open: boolean;
@@ -45,16 +39,7 @@ type DesktopSettingsDrawerProps = {
 
 export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerProps) {
   const { completeAuth, user: authUser, isAuthenticated } = useAuth();
-  const [tab, setTab] = useState<DrawerTab>("llm");
-  const [config, setConfig] = useState<LocalLlmConfig | null>(null);
-  const [provider, setProvider] = useState("zhipu");
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [model, setModel] = useState("");
-  const [embBaseUrl, setEmbBaseUrl] = useState("");
-  const [embApiKey, setEmbApiKey] = useState("");
-  const [embModel, setEmbModel] = useState("");
-  const [embDims, setEmbDims] = useState("");
+  const [tab, setTab] = useState<DrawerTab>("stack");
   const [licenseLabel, setLicenseLabel] = useState("");
   const [licenseDetail, setLicenseDetail] = useState("");
   const [stack, setStack] = useState<LocalStackStatus | null>(null);
@@ -69,23 +54,6 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
 
   useEffect(() => {
     if (!open) return;
-
-    void getLlmConfig()
-      .then((saved) => {
-        if (!saved) return;
-        setConfig(saved);
-        setProvider(saved.provider);
-        setApiKey(saved.api_key);
-        setBaseUrl(saved.base_url);
-        setModel(saved.model);
-        if (saved.embedding) {
-          setEmbBaseUrl(saved.embedding.base_url);
-          setEmbApiKey(saved.embedding.api_key);
-          setEmbModel(saved.embedding.model);
-          setEmbDims(saved.embedding.dimensions != null ? String(saved.embedding.dimensions) : "");
-        }
-      })
-      .catch(() => {});
 
     void getLicenseStatus()
       .then((status) => {
@@ -265,71 +233,9 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     return null;
   }
 
-  function buildDraftConfig(): LocalLlmConfig {
-    const embedding =
-      embBaseUrl.trim() || embModel.trim()
-        ? {
-            base_url: embBaseUrl.trim() || baseUrl,
-            api_key: embApiKey.trim() || apiKey,
-            model: embModel.trim() || "text-embedding-3-small",
-            dimensions: embDims.trim() ? Number(embDims) : null,
-          }
-        : config?.embedding ?? null;
-
-    return {
-      provider,
-      base_url: baseUrl,
-      api_key: apiKey,
-      model,
-      timeout_ms: config?.timeout_ms ?? 30_000,
-      embedding,
-    };
-  }
-
-  async function handleSaveLlm() {
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      const next = buildDraftConfig();
-      await setLlmConfig(next);
-      setConfig(next);
-      setMessage("配置已保存");
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "保存失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleTestLlm() {
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await testLlmConnection(buildDraftConfig());
-      setMessage(result.message);
-    } catch (testError) {
-      setError(testError instanceof Error ? testError.message : "连接测试失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function applyPreset(presetId: string) {
-    const preset = findLlmPreset(presetId);
-    if (!preset) return;
-    setProvider(preset.id);
-    setBaseUrl(preset.base_url);
-    setModel(preset.model);
-  }
-
   const tabs: { id: DrawerTab; label: string }[] = [
-    { id: "llm", label: "LLM" },
-    { id: "embedding", label: "Embedding" },
     { id: "stack", label: "本机数据栈" },
     { id: "license", label: "关于" },
-    { id: "diagnostic", label: "诊断" },
   ];
 
   return (
@@ -346,6 +252,12 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
             关闭
           </button>
         </header>
+
+        <p className={styles.subtitle}>
+          <Link href="/settings?tab=providers" onClick={onClose}>
+            模型 Provider →
+          </Link>
+        </p>
 
         <div className={styles.drawerTabs}>
           {tabs.map((item) => (
@@ -366,124 +278,6 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
           </p>
         ) : null}
         {message ? <p className={styles.subtitle}>{message}</p> : null}
-
-        {tab === "llm" ? (
-          <div className={styles.drawerSection}>
-            <label className="app-form-label" htmlFor="desktop-provider">
-              Provider
-            </label>
-            <select
-              id="desktop-provider"
-              className="app-input"
-              value={provider}
-              onChange={(event) => {
-                setProvider(event.target.value);
-                applyPreset(event.target.value);
-              }}
-            >
-              <option value="zhipu">智谱 GLM</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="openai">OpenAI</option>
-              <option value="ollama">Ollama</option>
-              <option value="custom">自定义</option>
-            </select>
-
-            <label className="app-form-label" htmlFor="desktop-api-key">
-              API Key
-            </label>
-            <input
-              id="desktop-api-key"
-              className="app-input"
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-
-            <label className="app-form-label" htmlFor="desktop-model">
-              Model
-            </label>
-            <input
-              id="desktop-model"
-              className="app-input"
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-            />
-
-            <label className="app-form-label" htmlFor="desktop-base-url">
-              Base URL
-            </label>
-            <input
-              id="desktop-base-url"
-              className="app-input"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-
-            <div className="app-button-row">
-              <button type="button" className="app-button-secondary" disabled={loading} onClick={() => void handleTestLlm()}>
-                测试连接
-              </button>
-              <button type="button" className="app-button-primary" disabled={loading} onClick={() => void handleSaveLlm()}>
-                保存
-              </button>
-            </div>
-            <p className={styles.subtitle}>
-              <Link href="/setup" onClick={onClose}>
-                打开完整引导（/setup）
-              </Link>
-            </p>
-          </div>
-        ) : null}
-
-        {tab === "embedding" ? (
-          <div className={styles.drawerSection}>
-            <p className={styles.subtitle}>用于本机文档向量化；可与 LLM 共用 Key，或单独填写。</p>
-            <label className="app-form-label" htmlFor="emb-base">
-              Embedding Base URL
-            </label>
-            <input
-              id="emb-base"
-              className="app-input"
-              value={embBaseUrl}
-              placeholder={baseUrl || "https://…"}
-              onChange={(event) => setEmbBaseUrl(event.target.value)}
-            />
-            <label className="app-form-label" htmlFor="emb-key">
-              Embedding API Key
-            </label>
-            <input
-              id="emb-key"
-              className="app-input"
-              type="password"
-              value={embApiKey}
-              onChange={(event) => setEmbApiKey(event.target.value)}
-            />
-            <label className="app-form-label" htmlFor="emb-model">
-              Embedding Model
-            </label>
-            <input
-              id="emb-model"
-              className="app-input"
-              value={embModel}
-              placeholder="text-embedding-3-small / embedding-2"
-              onChange={(event) => setEmbModel(event.target.value)}
-            />
-            <label className="app-form-label" htmlFor="emb-dims">
-              Dimensions（可选）
-            </label>
-            <input
-              id="emb-dims"
-              className="app-input"
-              value={embDims}
-              placeholder="1024"
-              onChange={(event) => setEmbDims(event.target.value)}
-            />
-            <button type="button" className="app-button-primary" disabled={loading} onClick={() => void handleSaveLlm()}>
-              保存 Embedding 配置
-            </button>
-          </div>
-        ) : null}
 
         {tab === "stack" ? (
           <div className={styles.drawerSection}>
@@ -711,21 +505,6 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                 云端定价
               </button>
             </div>
-          </div>
-        ) : null}
-
-        {tab === "diagnostic" ? (
-          <div className={styles.drawerSection}>
-            <LLMDiagnosticPanel
-              config={buildDraftConfig()}
-              onConfigUpdated={(next) => {
-                setConfig(next);
-                setProvider(next.provider);
-                setApiKey(next.api_key);
-                setBaseUrl(next.base_url);
-                setModel(next.model);
-              }}
-            />
           </div>
         ) : null}
       </aside>

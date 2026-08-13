@@ -26,13 +26,19 @@ tracing = "0.1"
 common = { path = "../../avrag-rs/crates/common" }
 contracts = { path = "../../contracts" }
 storage-local = { path = "../../avrag-rs/crates/storage-local" }
-avrag-llm = { path = "../../avrag-rs/crates/llm" }
 machineid-rs = "1.2"
 ed25519-dalek = "2"
 tauri-plugin-deep-link = "2"
 base64 = "0.22"
 url = "2"
-reqwest = { version = "0.13.4", features = ["json"] }
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_System_Threading",
+  "Win32_System_Diagnostics_ToolHelp",
+] }
 
 [features]
 default = ["custom-protocol"]

@@ -6,6 +6,8 @@
 
 use std::fs;
 use std::net::{TcpStream, ToSocketAddrs};
+
+use base64::Engine as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -315,7 +317,16 @@ fn bin(pg_bin: &Path, name: &str) -> PathBuf {
     pg_bin.join(format!("{name}.exe"))
 }
 
+fn apply_windows_no_window(cmd: &mut Command) {
+    super::win_cmd::hide_console(cmd);
+}
+
+fn apply_windows_detached(cmd: &mut Command) {
+    super::win_cmd::hide_and_detach(cmd);
+}
+
 fn run_capture(cmd: &mut Command) -> (i32, String, String) {
+    apply_windows_no_window(cmd);
     match cmd.output() {
         Ok(o) => (
             o.status.code().unwrap_or(-1),
@@ -324,6 +335,27 @@ fn run_capture(cmd: &mut Command) -> (i32, String, String) {
         ),
         Err(e) => (-1, String::new(), e.to_string()),
     }
+}
+
+/// Run a command without capturing pipes (avoids Windows hangs when tools like
+/// `pg_ctl -w` block on full stdout pipes under CREATE_NO_WINDOW).
+fn run_status_null(cmd: &mut Command) -> i32 {
+    apply_windows_no_window(cmd);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    match cmd.status() {
+        Ok(s) => s.code().unwrap_or(-1),
+        Err(_) => -1,
+    }
+}
+
+fn flush_ensure_log(state_rt: &Path, log: &str) {
+    let path = state_rt.join("logs").join("ensure-native.log");
+    if let Some(p) = path.parent() {
+        let _ = fs::create_dir_all(p);
+    }
+    let _ = fs::write(path, log);
 }
 
 fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> Result<(), String> {
@@ -340,6 +372,24 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
         let s = format!("{:x}", uuid::Uuid::new_v4().as_u128());
         fs::write(&jwt_path, format!("{s}\n")).map_err(|e| e.to_string())?;
         s
+    };
+    // BYOK envelope key for `user_provider_secrets` (ADR-0010 G1). Must be stable
+    // across restarts: the local API decrypts previously upserted secrets with it.
+    let byok_path = rt.join("byok.key");
+    let byok = if byok_path.is_file() {
+        fs::read_to_string(&byok_path)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    } else {
+        let a = uuid::Uuid::new_v4();
+        let b = uuid::Uuid::new_v4();
+        let mut bytes = [0u8; 32];
+        bytes[..16].copy_from_slice(a.as_bytes());
+        bytes[16..].copy_from_slice(b.as_bytes());
+        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+        fs::write(&byok_path, format!("{encoded}\n")).map_err(|e| e.to_string())?;
+        encoded
     };
     let mig = migrations
         .map(|p| p.display().to_string())
@@ -360,13 +410,18 @@ RETRIEVAL_BACKEND=pgvector
 MILVUS_COLLECTION_PREFIX=avrag_client
 AVRAG_API_ADDR=127.0.0.1:18080
 AVRAG_PUBLIC_BASE_URL=http://127.0.0.1:18080
+CORS_ALLOWED_ORIGINS=http://tauri.localhost,https://tauri.localhost,http://127.0.0.1:18080,http://localhost:18080,http://localhost:3000,http://127.0.0.1:3000
 AVRAG_OBJECT_ROOT={objects}
 JWT_SECRET={jwt}
+BYOK_MASTER_KEY={byok}
 AVRAG_RUN_MIGRATIONS=true
 AVRAG_MIGRATIONS_DIR={mig}
+# Cold start without cloud/BYOK embedding keys — turn on after desktop embedding is configured.
+AVRAG_ENABLE_RAG=false
 "#,
         objects = objects.display(),
         jwt = jwt,
+        byok = byok,
         mig = mig,
     );
     fs::write(&env_path, body).map_err(|e| e.to_string())?;
@@ -382,35 +437,74 @@ fn ensure_postgres(pg_bin: &Path, pgdata: &Path, run_dir: &Path, log_file: &Path
         fs::create_dir_all(parent).ok();
     }
 
+    // Fast path: already listening (common after lifecycle restart race).
+    if port_open("127.0.0.1", PG_PORT) {
+        append_log(log, "postgres already listening");
+        return Ok(());
+    }
+
     let pg_ctl = bin(pg_bin, "pg_ctl");
     let initdb = bin(pg_bin, "initdb");
     let psql = bin(pg_bin, "psql");
     let createdb = bin(pg_bin, "createdb");
 
+    // Stale postmaster.pid after crash blocks start — remove if no live port.
+    let pid_marker = pgdata.join("postmaster.pid");
+    if pid_marker.is_file() && !port_open("127.0.0.1", PG_PORT) {
+        append_log(log, "removing stale postmaster.pid (port closed)");
+        let _ = fs::remove_file(&pid_marker);
+    }
+
     if !pgdata.join("PG_VERSION").is_file() {
         append_log(log, format!("initdb {}", pgdata.display()));
-        let (code, out, err) = run_capture(
-            Command::new(&initdb)
-                .arg("-D")
-                .arg(pgdata)
-                .arg("-U")
-                .arg(PG_USER)
-                .arg("--auth-local=trust")
-                .arg("--auth-host=trust")
-                .arg("--encoding=UTF8")
-                .arg("--locale=C")
-                .arg("-N"),
-        );
-        append_log(log, out);
-        append_log(log, err);
+        // initdb can emit a lot of stdout; use null stdio on Windows to avoid pipe stalls.
+        let mut init = Command::new(&initdb);
+        init.arg("-D")
+            .arg(pgdata)
+            .arg("-U")
+            .arg(PG_USER)
+            .arg("--auth-local=trust")
+            .arg("--auth-host=trust")
+            .arg("--encoding=UTF8")
+            .arg("--locale=C")
+            .arg("-N");
+        // Point portable PG at its own tree (share/timezonesets next to bin/..).
+        if let Some(home) = pg_bin.parent() {
+            init.env("PGROOT", home);
+            init.env("PGSYSCONFDIR", home.join("etc"));
+        }
+        let code = run_status_null(&mut init);
         if code != 0 {
-            return Err(format!("initdb failed code={code}"));
+            // Fall back to capture for error text.
+            let (c2, out, err) = run_capture(
+                Command::new(&initdb)
+                    .arg("-D")
+                    .arg(pgdata)
+                    .arg("-U")
+                    .arg(PG_USER)
+                    .arg("--auth-local=trust")
+                    .arg("--auth-host=trust")
+                    .arg("--encoding=UTF8")
+                    .arg("--locale=C")
+                    .arg("-N"),
+            );
+            append_log(log, out);
+            append_log(log, err);
+            return Err(format!("initdb failed code={c2}"));
         }
         let conf = pgdata.join("postgresql.conf");
-        let extra = format!(
-            "\nlisten_addresses = '127.0.0.1'\nport = {PG_PORT}\nunix_socket_directories = '{}'\nmax_connections = 40\nshared_buffers = 128MB\n",
-            run_dir.display()
-        );
+        // Windows PG has no Unix sockets; never set unix_socket_directories there
+        // (paths with spaces under "%LOCALAPPDATA%\Context-OS Client" also break -o).
+        let extra = if cfg!(windows) {
+            format!(
+                "\nlisten_addresses = '127.0.0.1'\nport = {PG_PORT}\nmax_connections = 40\nshared_buffers = 128MB\ntimezone = 'UTC'\nlog_timezone = 'UTC'\n"
+            )
+        } else {
+            format!(
+                "\nlisten_addresses = '127.0.0.1'\nport = {PG_PORT}\nunix_socket_directories = '{}'\nmax_connections = 40\nshared_buffers = 128MB\n",
+                run_dir.display()
+            )
+        };
         fs::OpenOptions::new()
             .append(true)
             .open(&conf)
@@ -428,35 +522,61 @@ host    all             all             ::1/128                 trust\n"
         fs::write(pgdata.join("pg_hba.conf"), hba).map_err(|e| e.to_string())?;
     }
 
-    // status
-    let (st, _, _) = run_capture(Command::new(&pg_ctl).arg("-D").arg(pgdata).arg("status"));
-    if st != 0 {
-        append_log(log, "pg_ctl start");
-        let (code, out, err) = run_capture(
-            Command::new(&pg_ctl)
-                .arg("-D")
-                .arg(pgdata)
-                .arg("-l")
-                .arg(log_file)
-                .arg("-w")
-                .arg("start")
-                .arg("-o")
-                .arg(format!(
-                    "-p {PG_PORT} -c listen_addresses=127.0.0.1 -c unix_socket_directories={}",
-                    run_dir.display()
-                )),
-        );
-        append_log(log, out);
-        append_log(log, err);
-        if code != 0 {
-            return Err(format!("pg_ctl start failed code={code}"));
+    // Prefer TCP over `pg_ctl status` (another console exe flash).
+    if !port_open("127.0.0.1", PG_PORT) {
+        append_log(log, "starting postgres (direct, no pg_ctl)");
+        // Spawn postgres.exe ourselves so CREATE_NO_WINDOW applies to the
+        // postmaster. `pg_ctl start` launches postgres.exe *without* that flag
+        // and Windows pops a console.
+        let postgres = bin(pg_bin, "postgres");
+        let log_out = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_file)
+            .map_err(|e| format!("open postgres log: {e}"))?;
+        let log_err = log_out.try_clone().map_err(|e| e.to_string())?;
+        let mut start = Command::new(&postgres);
+        start
+            .arg("-D")
+            .arg(pgdata)
+            .arg("-p")
+            .arg(PG_PORT.to_string())
+            .arg("-c")
+            .arg("listen_addresses=127.0.0.1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log_out))
+            .stderr(Stdio::from(log_err));
+        if let Some(home) = pg_bin.parent() {
+            start.env("PGROOT", home);
         }
+        #[cfg(not(windows))]
+        {
+            start.arg("-c").arg(format!("unix_socket_directories={}", run_dir.display()));
+        }
+        apply_windows_no_window(&mut start);
+        let child = start
+            .spawn()
+            .map_err(|e| format!("spawn postgres: {e}"))?;
+        append_log(log, format!("postgres spawned pid={}", child.id()));
+        std::mem::forget(child);
+        let _ = pg_ctl; // status unused on this path
     } else {
-        append_log(log, "postgres already running");
+        append_log(log, "postgres already listening");
     }
 
-    if !wait_port("127.0.0.1", PG_PORT, 30, log) {
+    if !wait_port("127.0.0.1", PG_PORT, 45, log) {
+        if let Ok(body) = fs::read_to_string(log_file) {
+            let tail: String = body.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+            append_log(log, format!("postgres log tail:\n{tail}"));
+        }
         return Err("postgres port not open".into());
+    }
+
+    // Skip psql/createdb after first success — they are CONSOLE exes and flash on Windows.
+    let inited = pgdata.join(".avrag_inited");
+    if inited.is_file() {
+        append_log(log, "skip psql/createdb (already initialized)");
+        return Ok(());
     }
 
     // create db
@@ -483,6 +603,7 @@ host    all             all             ::1/128                 trust\n"
             .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", PG_DB, "-c"])
             .arg("CREATE EXTENSION IF NOT EXISTS vector;"),
     );
+    let _ = fs::write(&inited, "1\n");
     Ok(())
 }
 
@@ -491,15 +612,23 @@ fn ensure_redis(redis_bin: &Path, data_dir: &Path, pid_file: &Path, log_file: &P
     if let Some(p) = log_file.parent() {
         fs::create_dir_all(p).ok();
     }
+    if let Some(p) = pid_file.parent() {
+        fs::create_dir_all(p).ok();
+    }
     if port_open("127.0.0.1", REDIS_PORT) {
         append_log(log, "redis already listening");
         return Ok(());
     }
     append_log(log, "starting redis-server");
-    let mut child = Command::new(redis_bin)
-        .arg("--daemonize")
-        .arg("yes")
-        .arg("--port")
+    // Windows Redis (tporadowski) does not fork on --daemonize; child.wait() would
+    // block forever after the port is open and freeze cold-start (Postgres never starts).
+    // Unix: daemonize + wait is fine. Windows: spawn detached and only wait on the port.
+    let mut cmd = Command::new(redis_bin);
+    #[cfg(not(windows))]
+    {
+        cmd.arg("--daemonize").arg("yes");
+    }
+    cmd.arg("--port")
         .arg(REDIS_PORT.to_string())
         .arg("--bind")
         .arg("127.0.0.1")
@@ -515,9 +644,27 @@ fn ensure_redis(redis_bin: &Path, data_dir: &Path, pid_file: &Path, log_file: &P
         .arg(log_file)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .stdin(Stdio::null());
+    apply_windows_detached(&mut cmd);
+
+    let child = cmd
         .spawn()
         .map_err(|e| format!("spawn redis-server: {e}"))?;
-    let _ = child.wait();
+
+    #[cfg(windows)]
+    {
+        let pid = child.id();
+        let _ = fs::write(pid_file, format!("{pid}\n"));
+        // Detach: do not wait — redis stays as a long-lived child of the session.
+        std::mem::forget(child);
+        append_log(log, format!("redis spawned pid={pid} (detached, no daemonize)"));
+    }
+    #[cfg(not(windows))]
+    {
+        let mut child = child;
+        let _ = child.wait();
+    }
+
     if !wait_port("127.0.0.1", REDIS_PORT, 15, log) {
         return Err("redis port not open".into());
     }
@@ -580,8 +727,30 @@ pub fn ensure_native() -> NativeEnsureReport {
     }
     append_log(&mut log, format!("state={}", state_rt.display()));
     append_log(&mut log, format!("bins={}", bins_rt.display()));
+    flush_ensure_log(&state_rt, &log);
+
+    // Fast path: both ports open → only refresh client.env (no process spawn).
+    if port_open("127.0.0.1", PG_PORT) && port_open("127.0.0.1", REDIS_PORT) {
+        append_log(&mut log, "fast-path: pg+redis already up");
+        let mig = resolve_migrations_dir(&bins_rt, &state_rt);
+        if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
+            flush_ensure_log(&state_rt, &log);
+            return NativeEnsureReport {
+                ok: false,
+                message: e,
+                log,
+            };
+        }
+        flush_ensure_log(&state_rt, &log);
+        return NativeEnsureReport {
+            ok: true,
+            message: "native stack already up (ports open), client.env refreshed".into(),
+            log,
+        };
+    }
 
     let Some(pg_bin) = find_pg_bin() else {
+        flush_ensure_log(&state_rt, &log);
         return NativeEnsureReport {
             ok: false,
             message: "pg_ctl not found — stage bundled runtime (scripts/stage-desktop-bundled-runtime.sh fetch) or install PostgreSQL 16 + pgvector".into(),
@@ -589,6 +758,7 @@ pub fn ensure_native() -> NativeEnsureReport {
         };
     };
     let Some(redis_bin) = find_redis_server() else {
+        flush_ensure_log(&state_rt, &log);
         return NativeEnsureReport {
             ok: false,
             message: "redis-server not found — stage bundled runtime or install Redis".into(),
@@ -597,6 +767,7 @@ pub fn ensure_native() -> NativeEnsureReport {
     };
     append_log(&mut log, format!("pg_bin={}", pg_bin.display()));
     append_log(&mut log, format!("redis={}", redis_bin.display()));
+    flush_ensure_log(&state_rt, &log);
 
     let pgdata = state_rt.join("data/pg-native");
     let redis_dir = state_rt.join("data/redis-native");
@@ -612,12 +783,14 @@ pub fn ensure_native() -> NativeEnsureReport {
         &logs.join("redis-native.log"),
         &mut log,
     ) {
+        flush_ensure_log(&state_rt, &log);
         return NativeEnsureReport {
             ok: false,
             message: e,
             log,
         };
     }
+    flush_ensure_log(&state_rt, &log);
     if let Err(e) = ensure_postgres(
         &pg_bin,
         &pgdata,
@@ -625,6 +798,7 @@ pub fn ensure_native() -> NativeEnsureReport {
         &logs.join("postgres-native.log"),
         &mut log,
     ) {
+        flush_ensure_log(&state_rt, &log);
         return NativeEnsureReport {
             ok: false,
             message: e,
@@ -634,19 +808,28 @@ pub fn ensure_native() -> NativeEnsureReport {
 
     let mig = resolve_migrations_dir(&bins_rt, &state_rt);
     if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
+        flush_ensure_log(&state_rt, &log);
         return NativeEnsureReport {
             ok: false,
             message: e,
             log,
         };
     }
+    // sqlx migrate is optional and can hang if a rogue sqlx is on PATH — skip on Windows install.
+    #[cfg(not(windows))]
     if let Some(ref m) = mig {
         if m.is_dir() {
             run_migrate(m, &mut log);
         }
     }
+    #[cfg(windows)]
+    {
+        let _ = mig;
+        append_log(&mut log, "skip host sqlx migrate on Windows (API applies migrations)");
+    }
 
     let ok = port_open("127.0.0.1", PG_PORT) && port_open("127.0.0.1", REDIS_PORT);
+    flush_ensure_log(&state_rt, &log);
     NativeEnsureReport {
         ok,
         message: if ok {
@@ -667,40 +850,90 @@ pub fn stop_native() -> NativeEnsureReport {
             log,
         };
     };
+    // Stop Postgres without `pg_ctl` on Windows (pg_ctl is a console exe and flashes).
     let pgdata = state_rt.join("data/pg-native");
-    if let Some(pg_bin) = find_pg_bin() {
-        if pgdata.join("PG_VERSION").is_file() {
-            let (c, o, e) = run_capture(
-                Command::new(bin(&pg_bin, "pg_ctl"))
-                    .arg("-D")
-                    .arg(&pgdata)
-                    .arg("-m")
-                    .arg("fast")
-                    .arg("-w")
-                    .arg("stop"),
+    let postmaster = pgdata.join("postmaster.pid");
+    if postmaster.is_file() {
+        if let Ok(body) = fs::read_to_string(&postmaster) {
+            if let Some(first) = body.lines().next() {
+                if let Ok(pid) = first.trim().parse::<u32>() {
+                    #[cfg(windows)]
+                    {
+                        let n = super::win_cmd::kill_pid_tree(pid);
+                        append_log(&mut log, format!("postgres TerminateProcess pid={pid} n={n}"));
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        let _ = Command::new("kill").args(["-INT", &pid.to_string()]).status();
+                        std::thread::sleep(Duration::from_millis(400));
+                        if port_open("127.0.0.1", PG_PORT) {
+                            let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+                        }
+                        append_log(&mut log, format!("postgres kill pid={pid}"));
+                    }
+                }
+            }
+        }
+    } else {
+        #[cfg(windows)]
+        {
+            let n = super::win_cmd::kill_named_under(
+                &["postgres", "pg_ctl"],
+                &[state_rt.clone()],
             );
-            append_log(&mut log, format!("pg_ctl stop {c} {o}{e}"));
+            append_log(&mut log, format!("postgres pidfile missing; scoped kill {n:?}"));
+        }
+        #[cfg(not(windows))]
+        if let Some(pg_bin) = find_pg_bin() {
+            if pgdata.join("PG_VERSION").is_file() {
+                let code = run_status_null(
+                    Command::new(bin(&pg_bin, "pg_ctl"))
+                        .arg("-D")
+                        .arg(&pgdata)
+                        .arg("-m")
+                        .arg("fast")
+                        .arg("stop"),
+                );
+                append_log(&mut log, format!("pg_ctl stop -m fast {code}"));
+            }
         }
     }
+    // Redis: pidfile first; Windows Redis rarely supports graceful SHUTDOWN from CLI without redis-cli.
     let pid_file = state_rt.join("run/redis-native.pid");
     if pid_file.is_file() {
         if let Ok(pid_s) = fs::read_to_string(&pid_file) {
             if let Ok(pid) = pid_s.trim().parse::<i32>() {
-                // Windows: taskkill; Unix: kill
                 #[cfg(windows)]
                 {
-                    let _ = Command::new("taskkill")
-                        .args(["/PID", &pid.to_string(), "/F"])
-                        .status();
+                    let n = super::win_cmd::kill_pid_tree(pid as u32);
+                    append_log(&mut log, format!("redis TerminateProcess tree n={n}"));
                 }
                 #[cfg(not(windows))]
                 {
                     let _ = Command::new("kill").arg(pid.to_string()).status();
+                    std::thread::sleep(Duration::from_millis(150));
+                    let _ = Command::new("kill")
+                        .args(["-9", &pid.to_string()])
+                        .status();
                 }
                 append_log(&mut log, format!("stopped redis pid {pid}"));
             }
         }
         let _ = fs::remove_file(&pid_file);
+    } else if port_open("127.0.0.1", REDIS_PORT) {
+        // Orphan redis on our port — try redis-cli SHUTDOWN if present next to server.
+        if let Some(redis_bin) = find_redis_server() {
+            if let Some(dir) = redis_bin.parent() {
+                let cli = bin(dir, "redis-cli");
+                if cli.is_file() {
+                    let (c, o, e) = run_capture(
+                        Command::new(&cli)
+                            .args(["-p", &REDIS_PORT.to_string(), "SHUTDOWN", "NOSAVE"]),
+                    );
+                    append_log(&mut log, format!("redis-cli SHUTDOWN {c} {o}{e}"));
+                }
+            }
+        }
     }
     NativeEnsureReport {
         ok: true,
