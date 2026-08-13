@@ -10,7 +10,7 @@ const LLM_MODEL = process.env.DESKTOP_E2E_LLM_MODEL ?? "deepseek-v4-flash";
 const EMBED_API_KEY = process.env.DESKTOP_E2E_EMBED_API_KEY;
 const EMBED_BASE_URL = process.env.DESKTOP_E2E_EMBED_BASE_URL ?? "https://api.siliconflow.cn/v1";
 const EMBED_MODEL = process.env.DESKTOP_E2E_EMBED_MODEL ?? "BAAI/bge-m3";
-const FIXTURE = process.env.DESKTOP_E2E_ANTIFRAGILE ?? "";
+const FIXTURE = process.env.DESKTOP_E2E_FIXTURE ?? "";
 
 const run = Boolean(LLM_API_KEY && EMBED_API_KEY && FIXTURE);
 
@@ -20,7 +20,7 @@ let page: Page;
 test.beforeAll(async () => {
   test.skip(
     !run,
-    "D-rag-full requires DESKTOP_E2E_LLM_API_KEY + DESKTOP_E2E_EMBED_API_KEY + DESKTOP_E2E_ANTIFRAGILE",
+    "D-rag-full requires DESKTOP_E2E_LLM_API_KEY + DESKTOP_E2E_EMBED_API_KEY + DESKTOP_E2E_FIXTURE",
   );
   const attached = await connectTauriPage();
   browser = attached.browser;
@@ -77,6 +77,10 @@ test("D-rag-full: grounded answer with citations from real llm + embedding secre
   // 3) upload the standard corpus (RAG is on after the restart)
   await workbench.uploadFile(FIXTURE);
   await workbench.waitForIngestionComplete();
+
+  // 3b) RAG requires explicit source selection + the rag capability chip
+  await workbench.selectFirstSource();
+  await workbench.enableRagMode();
 
   // 4) grounded question on the antifragile corpus → non-empty assistant + citation
   await workbench.sendMessage("What does the uploaded document say about antifragility?");

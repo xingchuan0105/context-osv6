@@ -73,4 +73,22 @@ export class DesktopWorkbench {
       .first()
       .waitFor({ state: "visible", timeout });
   }
+
+  /** Select the first completed source if not already selected (RAG needs a source). */
+  async selectFirstSource() {
+    const item = this.page
+      .locator(
+        '[data-testid="ingestion-status"][data-status="completed"], [data-testid="ingestion-status"][data-status="ready"]',
+      )
+      .first();
+    const toggle = item.locator("button[aria-pressed]").first();
+    if ((await toggle.getAttribute("aria-pressed")) === "false") {
+      await toggle.click();
+    }
+  }
+
+  /** Enable the RAG capability chip (requires a selected source). */
+  async enableRagMode() {
+    await this.page.getByTestId("workspace-chat-cap-rag").click();
+  }
 }

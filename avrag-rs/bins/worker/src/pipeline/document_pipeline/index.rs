@@ -102,7 +102,8 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
     materialize: &MaterializeOutput,
     parse_run_state: &mut ParseRunState,
 ) -> Result<(), IngestionError> {
-    let needs_text_vector_index = processor.storage.retrieval_data_plane.is_some();
+    let needs_text_vector_index = processor.storage.retrieval_data_plane.is_some()
+        && processor.embedding.embedding_client.is_some();
     let embed_started = std::time::Instant::now();
     let mut text_index_records = if needs_text_vector_index {
         tracing::info!(

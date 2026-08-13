@@ -358,21 +358,17 @@ fn flush_ensure_log(state_rt: &Path, log: &str) {
     let _ = fs::write(path, log);
 }
 
-/// Deterministic local account identity (owner + user) derived from the machine id.
-/// Stable across restarts so API bootstrap can resolve the local user's provider
-/// secrets (`config.owner_user_id` aligns with the registered local account).
+/// Deterministic local account identity derived from the machine id.
+/// Personal B2C model: owner == user (one `users` row IS the account), so both
+/// ids must be the SAME uuid — `user_provider_secrets.owner_user_id` FK → `users.id`.
 fn local_identity_uuids() -> (String, String) {
     let device_id = crate::commands::license::compute_device_id()
         .unwrap_or_else(|_| "cos-local-device".to_string());
-    let owner = uuid::Uuid::new_v5(
+    let id = uuid::Uuid::new_v5(
         &uuid::Uuid::NAMESPACE_OID,
-        format!("cos-owner:{device_id}").as_bytes(),
+        format!("cos-local:{device_id}").as_bytes(),
     );
-    let user = uuid::Uuid::new_v5(
-        &uuid::Uuid::NAMESPACE_OID,
-        format!("cos-user:{device_id}").as_bytes(),
-    );
-    (owner.to_string(), user.to_string())
+    (id.to_string(), id.to_string())
 }
 
 fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> Result<(), String> {
