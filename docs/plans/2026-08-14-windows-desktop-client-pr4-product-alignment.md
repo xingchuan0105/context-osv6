@@ -166,9 +166,9 @@ Layer B 完成前，`D-rag-full` / `config-gap.spec.ts` 的 `PASS` 翻转仍是 
 - **B2/G4**：`ResolvedProviderSecret::to_llm_config()`；API + worker bootstrap 从 `purpose=Embedding/Rerank` secret 构造 client（platform OR secret），无 embedding 时 `rag_runtime=None` 优雅降级。
 - **B3/G6**：`restart_local_product` IPC + providers panel 保存 embedding/rerank 后自动 force-restart。
 
-**待办（PR-5）：**
+**PR-5 状态（2026-08-14）：**
 
-- B4 的「重新索引本机文档」批量 UI 入口（端点已存在）。
-- `config-gap.spec.ts` 翻 PASS + `D-rag-full`（需真 key + Windows）。
+- ✅ 已翻转 spec（代码就绪，Windows 真机 + 真 key 才运行）：`config-gap.spec.ts`（chat 走本机 API，不再指向 `:9` legacy）、`chat-unconf.spec.ts`（无 llm secret → `LLM client is not configured`）、`chat-dead-endpoint.spec.ts`（dummy `:9` secret → 快速失败不 hang）、新增 `chat-rag.spec.ts`（`D-rag-full`，无 `DESKTOP_E2E_LLM_API_KEY`/`EMBED_API_KEY`/`ANTIFRAGILE` 时 skip）。
+- ⏳ B4 的「重新索引本机文档」批量 UI 入口（端点已存在；`D-rag-full` 用 re-upload 兜底，暂不阻塞）。
 
-验证：`cargo test -p app-core --lib`、`-p app-bootstrap --lib`、`-p app-chat --lib`、`-p avrag-desktop --lib`；`cargo build -p avrag-worker`、`-p transport-http`；`pnpm tsc`；`code-review-graph update`。真实 RAG 走通仍留 PR-5 `D-rag-full`（需真 key + Windows）。
+验证：`cargo test -p app-core --lib`、`-p app-bootstrap --lib`、`-p app-chat --lib`、`-p avrag-desktop --lib`；`cargo build -p avrag-worker`、`-p transport-http`；`pnpm tsc`；`code-review-graph update`。真实 RAG 走通仍留 Windows 真机 `D-rag-full`（需真 key）。
