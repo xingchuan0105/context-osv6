@@ -4,33 +4,65 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import styles from "./desktop.module.css";
+import { NavRail } from "../ui/nav-rail";
+import { useAuth } from "@/lib/auth/context";
 import {
-  getLicenseStatus,
-  licenseKindLabel,
-  licenseTypeLabel,
-  openInBrowser,
-} from "@/lib/desktop/tauri-license";
+  cloudLogout,
+  getCloudSession,
+  getCloudWalletBalance,
+  type CloudSessionView,
+  type CloudWalletView,
+} from "@/lib/desktop/tauri-cloud";
+import { openInBrowser } from "@/lib/desktop/tauri-license";
 import {
-  ensureLocalProduct,
-  ensureLocalSession,
-  ensureLocalStack,
-  getClientRuntimeConfig,
-  getDockerStatus,
+  getAppDataDir,
+  getAppVersion,
   getLocalProductStatus,
-  getLocalSession,
   getLocalStackStatus,
-  stopLocalProduct,
-  stopLocalStack,
-  type ClientRuntimeConfig,
-  type DockerStatus,
-  type LocalProductStatus,
-  type LocalSessionStatus,
+  openDataDir,
+  openLogsDir,
   type LocalStackStatus,
 } from "@/lib/desktop/tauri-local";
-import { useAuth } from "@/lib/auth/context";
+import { formatUiMessage, type UiMessageKey } from "@/lib/i18n/messages";
+import { listProviderSecrets, type ProviderSecretRow } from "@/lib/settings/client";
+import { useUiPreferences } from "@/lib/ui-preferences";
 import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 
-type DrawerTab = "stack" | "license";
+/**
+ * User-facing client settings drawer (2026-08-15 wave, W4): 账户 · 模型 ·
+ * 数据 · 关于 + 诊断（默认收起，只读）per PRODUCT_IA §5. The dev stack
+ * console (start/stop, raw client.env, CLI hints, local session block) is
+ * gone — lifecycle stays automatic in ClientLocalSessionBootstrap.
+ */
+
+/** IPC/probe error → displayable message. */
+function ipcErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Fire-and-forget probe: apply the value, or the fallback when the call fails. */
+function probe<T>(call: () => Promise<T>, apply: (value: T) => void, fallback: T) {
+  void call().then(apply).catch(() => apply(fallback));
+}
+
+type DrawerSection = "account" | "models" | "data" | "about" | "diagnostics";
+
+const SECTIONS: DrawerSection[] = ["account", "models", "data", "about", "diagnostics"];
+
+const SECTION_LABEL_KEY: Record<DrawerSection, UiMessageKey> = {
+  account: "desktop.drawer.account",
+  models: "desktop.drawer.models",
+  data: "desktop.drawer.data",
+  about: "desktop.drawer.about",
+  diagnostics: "desktop.drawer.diagnostics",
+};
+
+/** provider-secrets purpose → 模型区条目label;unknown purposes fall back to the raw string. */
+const PURPOSE_LABEL_KEY: Record<string, UiMessageKey> = {
+  llm: "desktop.drawer.modelChat",
+  embedding: "desktop.drawer.modelEmbedding",
+  rerank: "desktop.drawer.modelRerank",
+};
 
 type DesktopSettingsDrawerProps = {
   open: boolean;
@@ -38,194 +70,100 @@ type DesktopSettingsDrawerProps = {
 };
 
 export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerProps) {
-  const { completeAuth, user: authUser, isAuthenticated } = useAuth();
-  const [tab, setTab] = useState<DrawerTab>("stack");
-  const [licenseLabel, setLicenseLabel] = useState("");
-  const [licenseDetail, setLicenseDetail] = useState("");
+  const { locale } = useUiPreferences();
+  const { token } = useAuth();
+  const [section, setSection] = useState<DrawerSection>("account");
+  const [session, setSession] = useState<CloudSessionView | null>(null);
+  const [wallet, setWallet] = useState<CloudWalletView | null>(null);
+  const [walletError, setWalletError] = useState("");
+  const [byokSecrets, setByokSecrets] = useState<ProviderSecretRow[] | null>(null);
+  const [dataDir, setDataDir] = useState("");
+  const [logDir, setLogDir] = useState("");
+  const [logDirLoaded, setLogDirLoaded] = useState(false);
+  const [version, setVersion] = useState("");
   const [stack, setStack] = useState<LocalStackStatus | null>(null);
-  const [product, setProduct] = useState<LocalProductStatus | null>(null);
-  const [localSession, setLocalSession] = useState<LocalSessionStatus | null>(null);
-  const [docker, setDocker] = useState<DockerStatus | null>(null);
-  const [runtimeConfig, setRuntimeConfig] = useState<ClientRuntimeConfig | null>(null);
-  const [stackBusy, setStackBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
   const [error, setError] = useState("");
+
+  function t(key: UiMessageKey) {
+    return formatUiMessage(locale, key);
+  }
 
   useEffect(() => {
     if (!open) return;
+    setLogoutConfirm(false);
+    setError("");
+    setWalletError("");
 
-    void getLicenseStatus()
-      .then((status) => {
-        const kind = status.license_kind ?? "standard";
-        setLicenseLabel(licenseKindLabel(kind));
-        setLicenseDetail(licenseTypeLabel(kind, status.days_remaining));
+    void getCloudSession()
+      .then((next) => {
+        setSession(next);
+        if (!next.logged_in) {
+          setWallet(null);
+          return;
+        }
+        void getCloudWalletBalance()
+          .then(setWallet)
+          .catch((walletFetchError: unknown) => {
+            setWallet(null);
+            setWalletError(ipcErrorMessage(walletFetchError));
+          });
       })
-      .catch(() => {
-        setLicenseLabel("未激活");
-        setLicenseDetail("");
-      });
+      .catch(() => setSession(null));
 
-    void getLocalStackStatus()
-      .then(setStack)
-      .catch(() => setStack(null));
+    probe(getAppDataDir, setDataDir, "");
+    probe(getAppVersion, setVersion, "");
+    // BYOK 优先序(设计文档 §3):配置了有效自备 Key 即覆盖平台 relay。
+    if (token) {
+      probe(() => listProviderSecrets(token).then((r) => r.secrets), setByokSecrets, []);
+    }
+  }, [open, token]);
 
-    void getClientRuntimeConfig()
-      .then(setRuntimeConfig)
-      .catch(() => setRuntimeConfig(null));
+  // 数据/诊断 both show the logs dir — probe product status only when one of
+  // those sections is actually selected (same lazy rule as the stack status).
+  useEffect(() => {
+    if (!open || logDirLoaded || (section !== "data" && section !== "diagnostics")) return;
+    setLogDirLoaded(true);
+    probe(() => getLocalProductStatus().then((status) => status.log_dir ?? ""), setLogDir, "");
+  }, [open, section, logDirLoaded]);
 
-    void getLocalProductStatus()
-      .then(setProduct)
-      .catch(() => setProduct(null));
+  // 诊断 content loads lazily — it is the collapsed-by-default last rail entry.
+  useEffect(() => {
+    if (!open || section !== "diagnostics" || stack) return;
+    probe<LocalStackStatus | null>(getLocalStackStatus, setStack, null);
+  }, [open, section, stack]);
 
-    void getLocalSession()
-      .then(setLocalSession)
-      .catch(() => setLocalSession(null));
+  function reopenToGate() {
+    // The shell re-mounts into CloudLoginGate, which renders the login card
+    // whenever no cloud session exists.
+    onClose();
+    window.location.reload();
+  }
 
-    void getDockerStatus()
-      .then(setDocker)
-      .catch(() => setDocker(null));
-  }, [open]);
-
-  async function refreshStack() {
-    setLoading(true);
+  async function handleLogout() {
+    if (logoutBusy) return;
+    setLogoutBusy(true);
     setError("");
     try {
-      const [nextStack, nextConfig, nextProduct, nextDocker] = await Promise.all([
-        getLocalStackStatus(),
-        getClientRuntimeConfig(),
-        getLocalProductStatus(),
-        getDockerStatus(),
-      ]);
-      setStack(nextStack);
-      setRuntimeConfig(nextConfig);
-      setProduct(nextProduct);
-      setDocker(nextDocker);
-      if (nextStack.docker) {
-        setDocker(nextStack.docker);
-      }
-      const parts = [
-        nextDocker.overall_ok ? "Docker 就绪" : "Docker 未就绪",
-        nextStack.overall_ok ? "数据栈就绪" : "数据栈未全就绪",
-        nextProduct.api_ok ? "API 就绪" : "API 未就绪",
-      ];
-      setMessage(parts.join(" · "));
-    } catch (probeError) {
-      setError(probeError instanceof Error ? probeError.message : "探测失败");
-    } finally {
-      setLoading(false);
+      await cloudLogout();
+      reopenToGate();
+    } catch (logoutError) {
+      setError(ipcErrorMessage(logoutError));
+      setLogoutBusy(false);
     }
   }
 
-  async function handleEnsureStack() {
-    setStackBusy(true);
+  async function handleOpenDir(which: "data" | "logs") {
     setError("");
-    setMessage("");
     try {
-      const result = await ensureLocalStack();
-      setStack(result.status);
-      setRuntimeConfig(result.config);
-      if (result.ok) {
-        setMessage(result.message);
+      if (which === "data") {
+        await openDataDir();
       } else {
-        setError(result.message || result.stderr || "启动失败");
+        await openLogsDir();
       }
-    } catch (ensureError) {
-      setError(ensureError instanceof Error ? ensureError.message : "启动本机栈失败");
-    } finally {
-      setStackBusy(false);
-    }
-  }
-
-  async function handleStopStack() {
-    setStackBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await stopLocalStack();
-      setStack(result.status);
-      setRuntimeConfig(result.config);
-      if (result.ok) {
-        setMessage(result.message);
-      } else {
-        setError(result.message || result.stderr || "停止失败");
-      }
-    } catch (stopError) {
-      setError(stopError instanceof Error ? stopError.message : "停止本机栈失败");
-    } finally {
-      setStackBusy(false);
-    }
-  }
-
-  async function handleEnsureProduct() {
-    setStackBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await ensureLocalProduct();
-      setProduct(result.status);
-      if (result.ok) {
-        setMessage(result.message);
-      } else {
-        setError(result.message || result.stderr || "启动本机产品进程失败");
-      }
-      try {
-        setStack(await getLocalStackStatus());
-        setRuntimeConfig(await getClientRuntimeConfig());
-      } catch {
-        /* ignore */
-      }
-    } catch (productError) {
-      setError(productError instanceof Error ? productError.message : "启动本机产品进程失败");
-    } finally {
-      setStackBusy(false);
-    }
-  }
-
-  async function handleStopProduct() {
-    setStackBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await stopLocalProduct();
-      setProduct(result.status);
-      if (result.ok) {
-        setMessage(result.message);
-      } else {
-        setError(result.message || result.stderr || "停止产品进程失败");
-      }
-    } catch (stopError) {
-      setError(stopError instanceof Error ? stopError.message : "停止产品进程失败");
-    } finally {
-      setStackBusy(false);
-    }
-  }
-
-  async function handleEnsureSession() {
-    setStackBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const session = await ensureLocalSession();
-      setLocalSession(session);
-      if (session.ready && session.token && session.user) {
-        completeAuth({
-          token: session.token,
-          user: {
-            id: session.user.id,
-            email: session.user.email,
-            full_name: session.user.full_name,
-          },
-          reset_ticket: null,
-        });
-        setMessage(session.message);
-      } else {
-        setError(session.message || "本机会话未就绪");
-      }
-    } catch (sessionError) {
-      setError(sessionError instanceof Error ? sessionError.message : "本机会话失败");
-    } finally {
-      setStackBusy(false);
+    } catch (openError) {
+      setError(ipcErrorMessage(openError));
     }
   }
 
@@ -233,280 +171,272 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     return null;
   }
 
-  const tabs: { id: DrawerTab; label: string }[] = [
-    { id: "stack", label: "本机数据栈" },
-    { id: "license", label: "关于" },
-  ];
+  const loggedIn = Boolean(session?.logged_in && session.user);
+  const relay = session?.relay;
+  // BYOK 优先:存在任一未撤销的自备 Key 即走自备,官方 relay 被覆盖(§3)。
+  const activeSecrets = (byokSecrets ?? []).filter((secret) => !secret.revoked_at);
+  const modelSource: "official" | "byok" = loggedIn && activeSecrets.length === 0 ? "official" : "byok";
 
   return (
     <div className={styles.drawerOverlay} role="presentation" onClick={onClose}>
       <aside
         className={styles.drawerPanel}
         role="dialog"
-        aria-label="客户端设置"
+        aria-label={t("desktop.drawer.title")}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.drawerHeader}>
-          <h2 className={styles.drawerTitle}>客户端设置</h2>
+          <h2 className={styles.drawerTitle}>{t("desktop.drawer.title")}</h2>
           <button type="button" className="app-button-ghost" onClick={onClose}>
-            关闭
+            {t("desktop.drawer.close")}
           </button>
         </header>
 
-        <p className={styles.subtitle}>
-          <Link href="/settings?tab=providers" onClick={onClose}>
-            模型 Provider →
-          </Link>
-        </p>
+        <div className={styles.drawerBody}>
+          <NavRail
+            activeId={section}
+            ariaLabel={t("desktop.drawer.railLabel")}
+            items={SECTIONS.map((id) => ({ id, label: t(SECTION_LABEL_KEY[id]) }))}
+            testId="desktop-settings-nav-rail"
+            onSelect={(id) => setSection(id as DrawerSection)}
+          />
 
-        <div className={styles.drawerTabs}>
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={tab === item.id ? styles.drawerTabActive : styles.drawerTab}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+          <div className={styles.drawerContent}>
+            {error ? (
+              <p className={styles.errorBox} role="alert">
+                {error}
+              </p>
+            ) : null}
 
-        {error ? (
-          <p className={styles.errorBox} role="alert">
-            {error}
-          </p>
-        ) : null}
-        {message ? <p className={styles.subtitle}>{message}</p> : null}
-
-        {tab === "stack" ? (
-          <div className={styles.drawerSection}>
-            <p className={styles.subtitle}>
-              本机数据面（无 Docker）：PostgreSQL + pgvector（控制面与 Vector Graph RAG）+ Redis。
-              默认用系统 <code>pg_ctl</code> / <code>redis-server</code>；一键「启动并迁移」写出
-              client.env（RETRIEVAL_BACKEND=pgvector）并执行 migrations。Docker 仅在未安装本机
-              PG/Redis 时可选回退（STACK_MODE=docker）。
-            </p>
-
-            <div className={styles.dockerStatusCard}>
-              <p className={styles.flushParagraph}>
-                <strong>运行时</strong> — 优先 <span className={styles.statusActive}>native</span>
-                {docker ? (
+            {section === "account" ? (
+              <div className={styles.drawerSection}>
+                {loggedIn && session?.user ? (
                   <>
-                    {" "}
-                    · Docker{" "}
-                    <span className={docker.overall_ok ? styles.statusActive : styles.statusError}>
-                      {docker.overall_ok
-                        ? "可选回退可用"
-                        : !docker.cli_ok
-                          ? "未安装（不需要）"
-                          : !docker.daemon_ok
-                            ? "引擎未运行（不需要）"
-                            : "compose 不可用"}
-                    </span>
+                    <div className={styles.drawerBlock}>
+                      <p className={styles.drawerLabel}>{t("desktop.drawer.accountCloud")}</p>
+                      <p className={styles.drawerValue}>{session.user.email}</p>
+                    </div>
+                    <div className={styles.drawerBlock}>
+                      <p className={styles.drawerLabel}>{t("desktop.drawer.balance")}</p>
+                      {walletError ? (
+                        <p className={styles.errorBox} role="alert">
+                          {walletError}
+                        </p>
+                      ) : wallet ? (
+                        <p className={styles.drawerValue}>
+                          ¥{(wallet.balance_fen / 100).toFixed(2)}
+                        </p>
+                      ) : (
+                        <p className={styles.subtitle}>…</p>
+                      )}
+                    </div>
+                    <div className="app-button-row">
+                      <button
+                        type="button"
+                        className="app-button-secondary"
+                        onClick={() =>
+                          void openInBrowser(`${appAbsoluteUrl(APP_PATHS.pricing)}#topup`)
+                        }
+                      >
+                        {t("desktop.drawer.topup")}
+                      </button>
+                      {logoutConfirm ? (
+                        <>
+                          <button
+                            type="button"
+                            className="app-button-secondary"
+                            disabled={logoutBusy}
+                            onClick={() => void handleLogout()}
+                          >
+                            {logoutBusy
+                              ? t("desktop.drawer.logoutWorking")
+                              : t("desktop.drawer.logoutConfirmAction")}
+                          </button>
+                          <button
+                            type="button"
+                            className="app-button-ghost"
+                            disabled={logoutBusy}
+                            onClick={() => setLogoutConfirm(false)}
+                          >
+                            {t("commonCancel")}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="app-button-secondary"
+                          onClick={() => setLogoutConfirm(true)}
+                        >
+                          {t("desktop.drawer.logout")}
+                        </button>
+                      )}
+                    </div>
+                    {logoutConfirm ? (
+                      <p className={styles.subtitle}>{t("desktop.drawer.logoutConfirm")}</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <p className={styles.subtitle}>{t("desktop.drawer.notLoggedIn")}</p>
+                    <div className="app-button-row">
+                      <button
+                        type="button"
+                        className="app-button-primary"
+                        onClick={reopenToGate}
+                      >
+                        {t("desktop.drawer.login")}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {section === "models" ? (
+              <div className={styles.drawerSection}>
+                <div className={styles.drawerBlock}>
+                  <p className={styles.drawerLabel}>{t("desktop.drawer.modelSource")}</p>
+                  <p className={styles.drawerValue}>
+                    {modelSource === "official"
+                      ? t("desktop.drawer.modelOfficial")
+                      : t("desktop.drawer.modelByok")}
+                  </p>
+                </div>
+                <p className={styles.subtitle}>
+                  {modelSource === "official"
+                    ? t("desktop.drawer.modelOfficialHint")
+                    : t("desktop.drawer.modelByokHint")}
+                </p>
+                {modelSource === "official" && relay ? (
+                  <>
+                    <div className={styles.drawerBlock}>
+                      <p className={styles.drawerLabel}>{t("desktop.drawer.modelChat")}</p>
+                      <p className={styles.pathText}>{relay.chat_model}</p>
+                    </div>
+                    <div className={styles.drawerBlock}>
+                      <p className={styles.drawerLabel}>{t("desktop.drawer.modelEmbedding")}</p>
+                      <p className={styles.pathText}>{relay.embedding_model}</p>
+                    </div>
                   </>
                 ) : null}
-              </p>
-              {docker?.install_hint ? (
-                <p className={styles.subtitle}>{docker.install_hint}</p>
-              ) : null}
-              {docker && !docker.overall_ok ? (
-                <div className={`app-button-row ${styles.buttonRowWrap}`}>
-                  <button
-                    type="button"
-                    className="app-button-secondary"
-                    onClick={() => void openInBrowser(docker.install_url)}
-                  >
-                    本机 PG 安装说明
-                  </button>
-                  <button
-                    type="button"
-                    className="app-button-secondary"
-                    disabled={loading}
-                    onClick={() => void refreshStack()}
-                  >
-                    重新探测
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            {stack ? (
-              <ul className={styles.serviceList}>
-                {stack.services.map((s) => (
-                  <li key={s.id}>
-                    <strong>{s.label}</strong> {s.endpoint} —{" "}
-                    <span className={s.ok ? styles.statusActive : styles.statusError}>
-                      {s.ok ? "OK" : "DOWN"}
-                    </span>
-                    <div className={styles.subtitle}>{s.detail}</div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.subtitle}>尚未探测（仅桌面运行时可用）</p>
-            )}
-            <div className={`app-button-row ${styles.stackActions}`}>
-              <button
-                type="button"
-                className="app-button-primary"
-                disabled={loading || stackBusy}
-                onClick={() => void handleEnsureStack()}
-                title="优先使用本机 PostgreSQL + Redis（无需 Docker）"
-              >
-                {stackBusy ? "处理中…" : "启动并迁移"}
-              </button>
-              <button
-                type="button"
-                className="app-button-secondary"
-                disabled={loading || stackBusy}
-                onClick={() => void refreshStack()}
-              >
-                重新探测
-              </button>
-              <button
-                type="button"
-                className="app-button-secondary"
-                disabled={loading || stackBusy}
-                onClick={() => void handleStopStack()}
-              >
-                停止栈
-              </button>
-            </div>
-            {runtimeConfig ? (
-              <div className={styles.runtimeConfig}>
+                {modelSource === "byok"
+                  ? activeSecrets.map((secret) => {
+                      const labelKey = PURPOSE_LABEL_KEY[secret.purpose];
+                      return (
+                        <div className={styles.drawerBlock} key={secret.id}>
+                          <p className={styles.drawerLabel}>
+                            {labelKey ? t(labelKey) : secret.purpose}
+                          </p>
+                          <p className={styles.pathText}>
+                            {secret.provider}
+                            {secret.model_hint ? ` · ${secret.model_hint}` : ""}
+                          </p>
+                        </div>
+                      );
+                    })
+                  : null}
                 <p className={styles.subtitle}>
-                  <strong>运行时连接</strong>
-                  {runtimeConfig.env_file_exists ? " · client.env 已生成" : " · client.env 未生成"}
-                </p>
-                <code className={`${styles.subtitle} ${styles.codeBlock}`}>
-                  DATABASE_URL={runtimeConfig.database_url}
-                </code>
-                <code className={`${styles.subtitle} ${styles.codeBlock}`}>
-                  REDIS_URL={runtimeConfig.redis_url}
-                </code>
-                <code className={`${styles.subtitle} ${styles.codeBlock}`}>
-                  RETRIEVAL_BACKEND={runtimeConfig.retrieval_backend ?? "pgvector"}
-                </code>
-                {runtimeConfig.env_file_path ? (
-                  <p className={styles.subtitle}>
-                    env 文件：{runtimeConfig.env_file_path}
-                  </p>
-                ) : null}
-                <p className={styles.subtitle}>
-                  {runtimeConfig.note}
+                  <Link href="/settings?tab=providers" onClick={onClose}>
+                    {t("desktop.drawer.modelManage")}
+                  </Link>
                 </p>
               </div>
             ) : null}
 
-            <div className={styles.productSection}>
-              <p className={styles.subtitle}>
-                <strong>本机产品进程</strong>（avrag-api + worker，默认 :18080）。先起数据栈，再启动产品；REST 经桌面{" "}
-                <code>api_call</code> 代理。
-              </p>
-              {product ? (
-                <ul className={styles.productList}>
-                  <li>
-                    <strong>API</strong> {product.api_base_url} —{" "}
-                    <span className={product.api_ok ? styles.statusActive : styles.statusError}>
-                      {product.api_ok ? "OK" : "DOWN"}
-                    </span>
-                    <div className={styles.subtitle}>{product.health_detail}</div>
-                  </li>
-                  <li>
-                    <strong>Worker</strong> —{" "}
-                    <span className={product.worker_ok ? styles.statusActive : styles.statusError}>
-                      {product.worker_ok ? "OK" : "DOWN"}
-                    </span>
-                    <div className={styles.subtitle}>{product.worker_detail}</div>
-                  </li>
-                </ul>
-              ) : (
-                <p className={styles.subtitle}>尚未探测产品进程</p>
-              )}
-              <div className={`app-button-row ${styles.stackActions}`}>
-                <button
-                  type="button"
-                  className="app-button-primary"
-                  disabled={loading || stackBusy}
-                  onClick={() => void handleEnsureProduct()}
-                >
-                  {stackBusy ? "处理中…" : "启动产品进程"}
-                </button>
-                <button
-                  type="button"
-                  className="app-button-secondary"
-                  disabled={loading || stackBusy}
-                  onClick={() => void handleStopProduct()}
-                >
-                  停止产品进程
-                </button>
+            {section === "data" ? (
+              <div className={styles.drawerSection}>
+                <div className={styles.drawerBlock}>
+                  <p className={styles.drawerLabel}>{t("desktop.drawer.dataDir")}</p>
+                  <div className={styles.rowBetween}>
+                    <p className={styles.pathText}>{dataDir || "…"}</p>
+                    <button
+                      type="button"
+                      className="app-button-secondary"
+                      disabled={!dataDir}
+                      onClick={() => void handleOpenDir("data")}
+                    >
+                      {t("desktop.drawer.open")}
+                    </button>
+                  </div>
+                </div>
+                <div className={styles.drawerBlock}>
+                  <p className={styles.drawerLabel}>{t("desktop.drawer.logsDir")}</p>
+                  <div className={styles.rowBetween}>
+                    <p className={styles.pathText}>{logDir || "…"}</p>
+                    <button
+                      type="button"
+                      className="app-button-secondary"
+                      disabled={!logDir}
+                      onClick={() => void handleOpenDir("logs")}
+                    >
+                      {t("desktop.drawer.open")}
+                    </button>
+                  </div>
+                </div>
               </div>
-              {product?.log_dir ? (
-                <p className={`${styles.subtitle} ${styles.logDirNote}`}>
-                  日志：{product.log_dir}
-                </p>
-              ) : null}
+            ) : null}
 
-              <div className={styles.sessionSection}>
-                <p className={styles.subtitle}>
-                  <strong>本机个人账户</strong>（B2C · 无云登录）
-                  {isAuthenticated && authUser ? ` · ${authUser.email}` : ""}
-                </p>
-                {localSession ? (
-                  <p className={`${styles.subtitle} ${styles.sessionStatus}`}>
-                    {localSession.ready ? "会话就绪" : "会话未就绪"} — {localSession.message}
-                  </p>
-                ) : null}
-                <div className={`app-button-row ${styles.sessionActions}`}>
+            {section === "about" ? (
+              <div className={styles.drawerSection}>
+                <div className={styles.drawerBlock}>
+                  <p className={styles.drawerLabel}>{t("desktop.drawer.version")}</p>
+                  <p className={styles.drawerValue}>v{version || "…"}</p>
+                </div>
+                <p className={styles.subtitle}>{t("desktop.drawer.aboutFree")}</p>
+                <div className="app-button-row">
                   <button
                     type="button"
                     className="app-button-secondary"
-                    disabled={loading || stackBusy}
-                    onClick={() => void handleEnsureSession()}
+                    onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.desktop))}
                   >
-                    刷新本机会话
+                    {t("desktop.drawer.clientPage")}
+                  </button>
+                  <button
+                    type="button"
+                    className="app-button-secondary"
+                    onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.pricing))}
+                  >
+                    {t("desktop.drawer.pricingPage")}
                   </button>
                 </div>
               </div>
-            </div>
+            ) : null}
 
-            <p className={`${styles.subtitle} ${styles.cliHint}`}>
-              CLI 栈：<code>{stack?.compose_hint ?? "bash scripts/desktop-local-stack.sh ensure"}</code>
-              <br />
-              CLI 产品：
-              <code>{product?.compose_hint ?? "bash scripts/desktop-local-product.sh ensure"}</code>
-            </p>
+            {section === "diagnostics" ? (
+              <div className={styles.drawerSection}>
+                <p className={styles.subtitle}>{t("desktop.drawer.diagnosticsHint")}</p>
+                <div className={styles.drawerBlock}>
+                  <p className={styles.drawerLabel}>{t("desktop.drawer.stackStatus")}</p>
+                  {stack ? (
+                    <ul className={styles.serviceList}>
+                      {stack.services.map((s) => (
+                        <li key={s.id}>
+                          <strong>{s.label}</strong> {s.endpoint} —{" "}
+                          <span className={s.ok ? styles.statusActive : styles.statusError}>
+                            {s.ok ? "OK" : "DOWN"}
+                          </span>
+                          <div className={styles.subtitle}>{s.detail}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className={styles.subtitle}>…</p>
+                  )}
+                </div>
+                {stack?.env_file_path ? (
+                  <div className={styles.drawerBlock}>
+                    <p className={styles.drawerLabel}>{t("desktop.drawer.envFile")}</p>
+                    <p className={styles.pathText}>{stack.env_file_path}</p>
+                  </div>
+                ) : null}
+                <div className={styles.drawerBlock}>
+                  <p className={styles.drawerLabel}>{t("desktop.drawer.logsDir")}</p>
+                  <p className={styles.pathText}>{logDir || "…"}</p>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-
-        {tab === "license" ? (
-          <div className={styles.drawerSection}>
-            <p>
-              <strong>客户端免费</strong>
-            </p>
-            <p className={styles.subtitle}>
-              无需激活码。本机使用自备模型 Key；云端分享名额与钱包见定价页。
-              {licenseLabel ? `（本机状态：${licenseLabel}${licenseDetail ? ` · ${licenseDetail}` : ""}）` : ""}
-            </p>
-            <div className="app-button-row">
-              <button
-                type="button"
-                className="app-button-secondary"
-                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.desktop))}
-              >
-                下载 / 客户端页
-              </button>
-              <button
-                type="button"
-                className="app-button-secondary"
-                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.pricing))}
-              >
-                云端定价
-              </button>
-            </div>
-          </div>
-        ) : null}
+        </div>
       </aside>
     </div>
   );

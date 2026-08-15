@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { DesktopSettingsDrawer } from "../desktop/DesktopSettingsDrawer";
-import { DesktopStatusBadge } from "../desktop/DesktopStatusBadge";
 import { ContextOsMark } from "../context-os-mark";
 import { AccountMenu } from "../account-menu";
 import { NotificationBell } from "../notifications/notification-bell";
@@ -133,33 +132,30 @@ export function WorkspaceTopBar({
 
       <div className={styles.topBarActions}>
         {desktopRuntime ? (
-          <>
-            <DesktopStatusBadge onClick={() => setDesktopDrawerOpen(true)} />
-            <button
-              aria-label="客户端设置"
-              className={styles.topBarActionButton}
-              type="button"
-              onClick={() => {
-                setDesktopDrawerOpen(true);
-              }}
-            >
-              <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.8"
-                />
-                <path
-                  d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.05.05a2.1 2.1 0 0 1-2.96 2.96l-.05-.05a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.51V21a2.1 2.1 0 0 1-4.2 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.87.34l-.05.05a2.1 2.1 0 0 1-2.96-2.96l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.51-1H3a2.1 2.1 0 0 1 0-4.2h.09a1.7 1.7 0 0 0 1.51-1 1.7 1.7 0 0 0-.34-1.87l-.05-.05a2.1 2.1 0 0 1 2.96-2.96l.05.05a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.51V3a2.1 2.1 0 0 1 4.2 0v.09a1.7 1.7 0 0 0 1 1.51 1.7 1.7 0 0 0 1.87-.34l.05-.05a2.1 2.1 0 0 1 2.96 2.96l-.05.05a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.51 1H21a2.1 2.1 0 0 1 0 4.2h-.09a1.7 1.7 0 0 0-1.51 1Z"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.8"
-                />
-              </svg>
-              <span className={styles.topBarActionLabel}>客户端设置</span>
-            </button>
-          </>
+          <button
+            aria-label="客户端设置"
+            className={styles.topBarActionButton}
+            type="button"
+            onClick={() => {
+              setDesktopDrawerOpen(true);
+            }}
+          >
+            <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+              <path
+                d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.05.05a2.1 2.1 0 0 1-2.96 2.96l-.05-.05a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.51V21a2.1 2.1 0 0 1-4.2 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.87.34l-.05.05a2.1 2.1 0 0 1-2.96-2.96l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.51-1H3a2.1 2.1 0 0 1 0-4.2h.09a1.7 1.7 0 0 0 1.51-1 1.7 1.7 0 0 0-.34-1.87l-.05-.05a2.1 2.1 0 0 1 2.96-2.96l.05.05a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.51V3a2.1 2.1 0 0 1 4.2 0v.09a1.7 1.7 0 0 0 1 1.51 1.7 1.7 0 0 0 1.87-.34l.05-.05a2.1 2.1 0 0 1 2.96 2.96l-.05.05a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.51 1H21a2.1 2.1 0 0 1 0 4.2h-.09a1.7 1.7 0 0 0-1.51 1Z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+            </svg>
+            <span className={styles.topBarActionLabel}>客户端设置</span>
+          </button>
         ) : null}
         <div className={styles.topBarActionGroup}>
           <button

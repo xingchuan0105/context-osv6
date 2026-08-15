@@ -61,6 +61,8 @@
 
 移除:本机数据栈 tab 整页(栈启停/裸 client.env/CLI 提示/Monorepo 提示)、本机产品进程、本机个人账户块;顶栏 `DesktopStatusBadge`「已激活」胶囊一并撤掉(Keygen 残余,`license_allows_chat` 已恒 true)。诊断价值的内容(栈状态/日志路径)折叠为「诊断」区,默认收起。
 
+**W4 落地备注(2026-08-15)**:抽屉壳内用 `NavRail` 左导航(账户/模型/数据/关于/诊断)替代旧 tab;「诊断」作为最后一个 rail 项即默认收起,栈状态在选中时才探测,产品状态(日志目录来源)在选中「数据」或「诊断」时才探测(均懒加载)。新增 IPC:`cloud_wallet_balance`(会话 token → `GET /api/v1/billing/wallet` → `{logged_in, balance_fen}`(分,钱包为 CNY 计价,前端渲染 ¥);401/403 → 结构化 `cloud_session_expired`;未登录 → `logged_in:false` 结果)、`open_data_dir` / `open_logs_dir`(系统文件管理器直开,与 `open_in_browser` 共用 `system::open_with_os` 直启 helper,不引插件)。模型区「当前来源」按 §3 BYOK 优先序显示:存在任一未撤销的 `provider-secrets`(经 `listProviderSecrets`,复用 settings seam)即显示「自定义 Provider(自备 Key)」+ 已配置 provider 条目;否则已登录显示「官方模型(走余额)」+ relay 钉住型号。退出云登录 / 未登录点「登录」→ 关抽屉并整壳 reload,由 `CloudLoginGate` 重新接管显示登录卡。数据区路径:数据目录 = `get_app_data_dir`,日志目录 = `get_local_product_status().log_dir`。`desktop.status.*` i18n 键与 badge 专用 CSS 随组件一并删除。
+
 ## 6. PRODUCT_IA.md 变更(先改文档再改代码,§9 流程)
 
 - §2 Object model:Client 行补「默认平台 key 走钱包余额(云登录后下发 relay 凭据);BYOK 为高级选项」。
@@ -75,7 +77,7 @@
 | W1 | 本文 + PRODUCT_IA.md | 文档落库,IA 自检(§4 每条入口有 canonical) |
 | W2 ✅(312d5e01) | 云端:`desktop_tokens` 表 + 铸/列/撤 + relay chat/embeddings + 计量接线 + 白名单核对 | `cargo test -p transport-http -p app-billing`;curl 真云收发 + 钱包扣费行 |
 | W3 | 桌面:登录门页 + cloud_session.rs + client.env 注入 + relay 双扣防护 + 登录后重启本机产品;云端补 `relay-config` 端点 | `pnpm typecheck` + 桌面包冷启动真机:登录 → 不发 BYOK 直接 RAG 问答成功且云端钱包扣费 |
-| W4 | 抽屉重设计 + 撤「已激活」badge + i18n | `pnpm test` + `design-baseline.test.ts` + nav-config 测试 |
+| W4 ✅ | 抽屉重设计 + 撤「已激活」badge + i18n(落地备注见 §5) | `pnpm typecheck` + `tests/desktop` 全绿 + nav-config 测试;`design-baseline` 仅剩既有 WIP 违规(home-client / api-access / help 页,非本片) |
 | W5 | 打包 + l0/l1/l2/u1 全绿 + VPS 部署 | `scripts/desktop-e2e/run.sh` 四模式;`scripts/deploy-*.sh` |
 
 排序原则(layered growth):W2 云端 relay 可独立curl 验收;W3 出最小端到端(登录→relay→扣费);W4 纯前端可插在任何空档。

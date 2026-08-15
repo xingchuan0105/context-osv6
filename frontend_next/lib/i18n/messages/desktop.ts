@@ -153,33 +153,149 @@ export const desktopMessages = {
     zh: "历史授权档位（可选）",
     en: "Legacy license tiers (optional)",
   },
-  "desktop.status.ariaLabel": {
-    zh: "授权状态",
-    en: "License status",
+  "desktop.drawer.title": {
+    zh: "客户端设置",
+    en: "Client settings",
   },
-  "desktop.status.active": {
-    zh: "已激活",
-    en: "Active",
+  "desktop.drawer.close": {
+    zh: "关闭",
+    en: "Close",
   },
-  "desktop.status.trial": {
-    zh: "试用 {days}d",
-    en: "Trial {days}d",
+  "desktop.drawer.railLabel": {
+    zh: "客户端设置分区",
+    en: "Client settings sections",
   },
-  "desktop.status.expired": {
-    zh: "已过期",
-    en: "Expired",
+  "desktop.drawer.account": {
+    zh: "账户",
+    en: "Account",
   },
-  "desktop.status.revoked": {
-    zh: "已吊销",
-    en: "Revoked",
+  "desktop.drawer.models": {
+    zh: "模型",
+    en: "Models",
   },
-  "desktop.status.unactivated": {
-    zh: "未激活",
-    en: "Not activated",
+  "desktop.drawer.data": {
+    zh: "数据",
+    en: "Data",
   },
-  "desktop.status.offlineGrace": {
-    zh: "离线宽限 {days}d",
-    en: "Offline grace {days}d",
+  "desktop.drawer.about": {
+    zh: "关于",
+    en: "About",
+  },
+  "desktop.drawer.diagnostics": {
+    zh: "诊断",
+    en: "Diagnostics",
+  },
+  "desktop.drawer.accountCloud": {
+    zh: "云账户",
+    en: "Cloud account",
+  },
+  "desktop.drawer.balance": {
+    zh: "余额",
+    en: "Balance",
+  },
+  "desktop.drawer.topup": {
+    zh: "充值",
+    en: "Top up",
+  },
+  "desktop.drawer.logout": {
+    zh: "退出云登录",
+    en: "Sign out of cloud",
+  },
+  "desktop.drawer.logoutConfirm": {
+    zh: "确认退出？本机将停止使用官方模型（走余额）。",
+    en: "Sign out? This machine will stop using official models (wallet-metered).",
+  },
+  "desktop.drawer.logoutConfirmAction": {
+    zh: "确认退出",
+    en: "Confirm sign-out",
+  },
+  "desktop.drawer.logoutWorking": {
+    zh: "正在退出…",
+    en: "Signing out…",
+  },
+  "desktop.drawer.notLoggedIn": {
+    zh: "未登录云账户。登录后默认使用官方模型（走余额），按钱包余额计量扣费。",
+    en: "Not signed in. After sign-in, official models are metered against your wallet balance by default.",
+  },
+  "desktop.drawer.login": {
+    zh: "登录",
+    en: "Sign in",
+  },
+  "desktop.drawer.modelSource": {
+    zh: "当前来源",
+    en: "Current source",
+  },
+  "desktop.drawer.modelOfficial": {
+    zh: "官方模型（走余额）",
+    en: "Official models (wallet-metered)",
+  },
+  "desktop.drawer.modelByok": {
+    zh: "自定义 Provider（自备 Key）",
+    en: "Custom provider (own key)",
+  },
+  "desktop.drawer.modelOfficialHint": {
+    zh: "模型调用经云端转发，按用量从钱包余额扣费；无需配置自己的 Key。",
+    en: "Calls are relayed through the cloud and debit your wallet by usage — no own key needed.",
+  },
+  "desktop.drawer.modelByokHint": {
+    zh: "已配置的自备 Key 优先生效，调用不扣云端钱包余额；未配置时登录云账户即可使用官方模型（走余额）。",
+    en: "A configured own key takes priority and does not debit the cloud wallet; without one, sign in to use official models (wallet-metered).",
+  },
+  "desktop.drawer.modelChat": {
+    zh: "对话模型",
+    en: "Chat model",
+  },
+  "desktop.drawer.modelEmbedding": {
+    zh: "向量模型",
+    en: "Embedding model",
+  },
+  "desktop.drawer.modelRerank": {
+    zh: "重排模型",
+    en: "Rerank model",
+  },
+  "desktop.drawer.modelManage": {
+    zh: "管理 Provider（自备 Key）→",
+    en: "Manage providers (BYOK) →",
+  },
+  "desktop.drawer.dataDir": {
+    zh: "数据目录",
+    en: "Data directory",
+  },
+  "desktop.drawer.logsDir": {
+    zh: "日志目录",
+    en: "Logs directory",
+  },
+  "desktop.drawer.open": {
+    zh: "打开",
+    en: "Open",
+  },
+  "desktop.drawer.version": {
+    zh: "版本",
+    en: "Version",
+  },
+  "desktop.drawer.clientPage": {
+    zh: "客户端页",
+    en: "Client page",
+  },
+  "desktop.drawer.pricingPage": {
+    zh: "定价",
+    en: "Pricing",
+  },
+  "desktop.drawer.aboutFree": {
+    zh: "客户端免费；云端分享名额与钱包见定价页。",
+    en: "The client is free; cloud share slots and wallet are on Pricing.",
+  },
+  "desktop.drawer.diagnosticsHint": {
+    zh: "只读诊断信息，用于排查本机运行问题。",
+    en: "Read-only diagnostics for troubleshooting the local runtime.",
+  },
+  "desktop.drawer.stackStatus": {
+    zh: "本机数据栈",
+    en: "Local data stack",
+  },
+  "desktop.drawer.envFile": {
+    zh: "运行时 env 文件",
+    en: "Runtime env file",
   },
   "desktop.startingClient": {
     zh: "正在启动客户端…",

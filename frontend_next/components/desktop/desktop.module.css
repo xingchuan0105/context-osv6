@@ -166,32 +166,12 @@
   color: hsl(var(--muted-foreground));
 }
 
-.statusBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-md);
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-pill);
-  background: hsl(var(--surface-muted));
-  font-size: var(--font-size-label);
-  cursor: pointer;
-}
-
 .statusActive {
   color: hsl(var(--success));
 }
 
-.statusTrial {
-  color: hsl(var(--warning));
-}
-
 .statusError {
   color: hsl(var(--destructive));
-}
-
-.statusMuted {
-  color: hsl(var(--muted-foreground));
 }
 
 .diagnosticPanel {
@@ -333,10 +313,10 @@
 }
 
 .drawerPanel {
-  width: min(24rem, 100vw);
+  width: min(42rem, 100vw);
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   gap: var(--space-md);
   padding: var(--space-lg);
   border-left: 1px solid hsl(var(--border));
@@ -357,26 +337,21 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.drawerTabs {
-  display: flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
+/* Rail pattern (PRODUCT_IA §5): left NavRail + right content, same as
+   settings page / quick modal. */
+.drawerBody {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: var(--space-md);
+  min-height: 0;
 }
 
-.drawerTab,
-.drawerTabActive {
-  padding: var(--space-xs) var(--space-md);
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-control);
-  background: hsl(var(--surface-muted));
-  font-size: var(--font-size-label);
-  cursor: pointer;
-}
-
-.drawerTabActive {
-  border-color: hsl(var(--border-strong));
-  background: hsl(var(--surface-muted));
-  color: hsl(var(--foreground));
+.drawerContent {
+  display: grid;
+  gap: var(--space-lg);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-sm) var(--space-sm) var(--space-lg);
 }
 
 .drawerSection {
@@ -384,20 +359,35 @@
   gap: var(--space-md);
 }
 
-.flushParagraph {
-  margin: 0;
-}
-
-.dockerStatusCard {
-  margin-bottom: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-control);
+.drawerBlock {
   display: grid;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
-.buttonRowWrap {
+.drawerLabel {
+  margin: 0;
+  font-size: var(--font-size-label);
+  color: hsl(var(--subtle-foreground));
+}
+
+.drawerValue {
+  margin: 0;
+  color: hsl(var(--foreground));
+}
+
+.pathText {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+  color: hsl(var(--muted-foreground));
+  word-break: break-all;
+}
+
+.rowBetween {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
@@ -406,55 +396,6 @@
   padding-left: var(--space-lg);
   display: grid;
   gap: var(--space-sm);
-}
-
-.stackActions {
-  margin-top: var(--space-md);
-  flex-wrap: wrap;
-}
-
-.runtimeConfig {
-  margin-top: var(--space-md);
-  display: grid;
-  gap: var(--space-xs);
-}
-
-.codeBlock {
-  display: block;
-  word-break: break-all;
-}
-
-.productSection {
-  margin-top: var(--space-lg);
-  border-top: 1px solid hsl(var(--border));
-  padding-top: var(--space-md);
-}
-
-.productList {
-  margin: 0;
-  padding-left: var(--space-lg);
-  display: grid;
-  gap: var(--space-sm);
-}
-
-.logDirNote {
-  margin-top: var(--space-sm);
-}
-
-.sessionSection {
-  margin-top: var(--space-md);
-}
-
-.sessionStatus {
-  margin: var(--space-xs) 0 0;
-}
-
-.sessionActions {
-  margin-top: var(--space-sm);
-}
-
-.cliHint {
-  margin-top: var(--space-md);
 }
 
 .downloadWrap {

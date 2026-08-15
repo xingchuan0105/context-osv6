@@ -88,6 +88,16 @@ pub struct CloudLogoutResult {
     pub message: String,
 }
 
+/// Redacted wallet view for the settings drawer — balance only, no tokens.
+/// The cloud wallet response carries no currency field; the wallet is
+/// CNY-denominated and the drawer renders `¥` directly.
+#[derive(Debug, Clone, Serialize)]
+pub struct CloudWalletView {
+    pub logged_in: bool,
+    /// Spendable balance in fen (分).
+    pub balance_fen: i64,
+}
+
 fn cloud_base() -> String {
     std::env::var("CONTEXT_OS_CLOUD_BASE")
         .ok()
@@ -448,6 +458,46 @@ pub async fn get_cloud_session(app: tauri::AppHandle) -> Result<CloudSessionView
     }
 }
 
+/// Wallet balance for the signed-in cloud account (`GET /api/v1/billing/wallet`
+/// with the stored session JWT). Not logged in → `logged_in: false` result;
+/// 401/403 → structured `cloud_session_expired` error so the drawer can prompt
+/// re-login instead of showing a dead number.
+#[tauri::command]
+pub async fn cloud_wallet_balance(app: tauri::AppHandle) -> Result<CloudWalletView, IpcApiError> {
+    let Some(session) = load_session(&app) else {
+        return Ok(CloudWalletView {
+            logged_in: false,
+            balance_fen: 0,
+        });
+    };
+    let url = format!("{}/api/v1/billing/wallet", session.cloud_base);
+    let (status, value) =
+        cloud_http_json("GET", &url, None, Some(&session.session_token)).await?;
+    if status == 401 || status == 403 {
+        return Err(IpcApiError::new(
+            status,
+            "cloud_session_expired",
+            "云登录已过期，请重新登录",
+        ));
+    }
+    if status >= 300 {
+        return Err(IpcApiError::new(
+            status,
+            "cloud_wallet_failed",
+            server_message(&value, "余额查询失败"),
+        ));
+    }
+    let balance_fen = value
+        .get("data")
+        .and_then(|d| d.get("balance_fen"))
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| IpcApiError::internal("wallet response missing data.balance_fen"))?;
+    Ok(CloudWalletView {
+        logged_in: true,
+        balance_fen,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -498,5 +548,19 @@ mod tests {
         assert_eq!(token, "jwt-1");
         assert_eq!(user.email, "a@b.c");
         assert!(extract_auth_payload(&serde_json::json!({"data": {}})).is_none());
+    }
+
+    #[test]
+    fn wallet_view_serializes_frontend_contract() {
+        let view = CloudWalletView {
+            logged_in: true,
+            balance_fen: 2000,
+        };
+        let json = serde_json::to_value(&view).expect("serialize wallet view");
+        assert_eq!(json["logged_in"], true);
+        assert_eq!(json["balance_fen"], 2000);
+        // Redacted view: no token fields may leak into the WebView payload.
+        assert!(json.get("session_token").is_none());
+        assert!(json.get("desktop_token").is_none());
     }
 }

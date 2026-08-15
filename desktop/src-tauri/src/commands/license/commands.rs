@@ -152,7 +152,7 @@ pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), IpcApiEr
     }
 
     // 1) Direct OS open (no plugin ACL dependency).
-    if open_url_os(&url).is_ok() {
+    if crate::commands::system::open_with_os(std::ffi::OsStr::new(&url)).is_ok() {
         return Ok(());
     }
 
@@ -169,36 +169,3 @@ pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), IpcApiEr
     )))
 }
 
-fn open_url_os(url: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        // `cmd /C start "" <url>` — empty title avoids swallowing the URL when it
-        // is quoted. Avoid `explorer.exe <url>` which sometimes reuses a shell tab.
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
-    {
-        let _ = url;
-        Err("open_url_os unsupported on this OS".into())
-    }
-}

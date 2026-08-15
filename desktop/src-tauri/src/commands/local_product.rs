@@ -320,6 +320,11 @@ fn run_log_dir() -> (PathBuf, PathBuf) {
     )
 }
 
+/// Logs dir (api.log / worker.log). `pub(crate)` for the 数据/诊断 open-logs command.
+pub(crate) fn log_dir_path() -> PathBuf {
+    run_log_dir().1
+}
+
 fn build_status() -> LocalProductStatus {
     let (host, port) = client_api_host_port();
     let base = client_api_base();

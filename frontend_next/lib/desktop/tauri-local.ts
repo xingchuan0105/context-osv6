@@ -195,3 +195,23 @@ export async function getLocalSession(): Promise<LocalSessionStatus> {
 export async function ensureLocalSession(): Promise<LocalSessionStatus> {
   return invoke<LocalSessionStatus>("ensure_local_session");
 }
+
+/** App data dir (cloud_session.json, client state) — settings drawer 数据 section. */
+export async function getAppDataDir(): Promise<string> {
+  return invoke<string>("get_app_data_dir");
+}
+
+/** Client version string (Cargo package version) — settings drawer 关于 section. */
+export async function getAppVersion(): Promise<string> {
+  return invoke<string>("get_app_version");
+}
+
+/** Open the app data dir in the OS file manager. */
+export async function openDataDir(): Promise<void> {
+  return invoke<void>("open_data_dir");
+}
+
+/** Open the local product logs dir (api.log / worker.log) in the OS file manager. */
+export async function openLogsDir(): Promise<void> {
+  return invoke<void>("open_logs_dir");
+}

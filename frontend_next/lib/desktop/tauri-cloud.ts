@@ -41,6 +41,14 @@ export type CloudLogoutResult = {
   message: string;
 };
 
+/** Redacted wallet view — balance only; 401/403 surfaces as an Error whose
+ *  message is the re-login prompt (IPC code `cloud_session_expired`). */
+export type CloudWalletView = {
+  logged_in: boolean;
+  /** Spendable balance in fen (分); divide by 100 for ¥ (CNY-denominated). */
+  balance_fen: number;
+};
+
 function mapIpcError(error: unknown): Error {
   if (error instanceof Error) {
     return error;
@@ -91,4 +99,9 @@ export async function cloudLogin(email: string, password: string): Promise<Cloud
 /** Revoke the desktop token cloud-side (best-effort) and drop local relay creds. */
 export async function cloudLogout(): Promise<CloudLogoutResult> {
   return invoke<CloudLogoutResult>("cloud_logout");
+}
+
+/** Wallet balance for the signed-in cloud account (官方模型 走余额 metering source). */
+export async function getCloudWalletBalance(): Promise<CloudWalletView> {
+  return invoke<CloudWalletView>("cloud_wallet_balance");
 }
