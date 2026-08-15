@@ -768,6 +768,13 @@ impl ReActLoop {
             elapsed_ms = started.elapsed().as_millis() as u64,
             coverage = pack.coverage.as_str(),
             pack_gate = gate.kind_str(),
+            // Diagnosis fields: 0 executions = model never emitted a runnable
+            // block; executions>0 + tool_results=0 + sandbox_errors>0 = sandbox
+            // failing; executions>0 + tool_results=0 + errors=0 = code ran but
+            // made no bridge RPC.
+            tool_calls = worker_state.total_tool_calls,
+            tool_results = tool_results.len(),
+            sandbox_errors = worker_state.consecutive_sandbox_errors,
             "lead_workers rag worker done"
         );
 
@@ -942,7 +949,7 @@ impl ReActLoop {
         } else {
             let mut a = json!({ "query": query, "top_k": 10 });
             if !doc_ids.is_empty() {
-                a["doc_ids"] = json!(doc_ids);
+                a["doc_scope"] = json!(doc_ids);
             }
             a
         };
@@ -1413,21 +1420,32 @@ fn build_plan_context(request: &AgentRequest, caps: ActivatedCaps) -> LeadPlanCo
     }
 }
 
+// BM25 is AND semantics (lexical.rs: one zero-hit term zeroes the whole
+// query), so a natural-language question must be cut down to content terms.
+// Split on non-alphanumeric boundaries (CJK runs stay one term), drop a small
+// English stopword list (case-insensitive match; original case kept — the pg
+// 'simple' tsvector config folds case, and the CJK LIKE path is
+// case-sensitive as written). If filtering empties the list, fall back to
+// the whole trimmed query as one term.
 fn lexical_terms_from_query(query: &str) -> Vec<String> {
+    const STOPWORDS: &[&str] = &[
+        "the", "a", "an", "of", "in", "on", "for", "to", "is", "are", "what", "which", "how",
+        "does", "do", "say", "about", "and", "or",
+    ];
     let q = query.trim();
     if q.is_empty() {
         return vec![" ".into()]; // will fail empty terms — use whole query
     }
-    // Split on whitespace; if single token (CJK), keep whole query as one term.
-    let parts: Vec<String> = q
-        .split_whitespace()
-        .map(str::to_string)
+    let terms: Vec<String> = q
+        .split(|c: char| !c.is_alphanumeric())
         .filter(|s| !s.is_empty())
+        .filter(|s| !STOPWORDS.contains(&s.to_lowercase().as_str()))
+        .map(str::to_string)
         .collect();
-    if parts.is_empty() {
+    if terms.is_empty() {
         vec![q.to_string()]
     } else {
-        parts
+        terms
     }
 }
 
@@ -1577,6 +1595,51 @@ mod tests {
     }
 
     #[test]
+    fn evidence_from_tool_results_extracts_lexical_hit() {
+        let tr = ToolResult {
+            tool: "lexical_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(json!({
+                "chunks": [{
+                    "chunk_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                    "doc_id": "11111111-2222-3333-4444-555555555555",
+                    "text": "Antifragility is beyond resilience or robustness.",
+                    "score": 0.9
+                }]
+            })),
+            trace: None,
+        };
+        let (evidence, key_facts) =
+            evidence_from_tool_results(std::slice::from_ref(&tr), 0);
+        assert_eq!(evidence.len(), 1, "evidence: {evidence:?}");
+        assert_eq!(evidence[0].source, "11111111-2222-3333-4444-555555555555");
+        assert!(!evidence[0].alias.is_empty(), "alias must be assigned");
+        assert_eq!(key_facts.len(), 1);
+    }
+
+    #[test]
+    fn evidence_from_tool_results_skips_non_ok_or_empty_text() {
+        let err_tr = ToolResult {
+            tool: "lexical_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Error,
+            data: Some(json!({ "chunks": [{ "chunk_id": "x", "text": "hi", "score": 0.5 }] })),
+            trace: None,
+        };
+        assert!(evidence_from_tool_results(std::slice::from_ref(&err_tr), 0).0.is_empty());
+
+        let empty_text = ToolResult {
+            tool: "lexical_retrieval".into(),
+            version: "1.0".into(),
+            status: ToolStatus::Ok,
+            data: Some(json!({ "chunks": [{ "chunk_id": "x", "text": "", "score": 0.5 }] })),
+            trace: None,
+        };
+        assert!(evidence_from_tool_results(std::slice::from_ref(&empty_text), 0).0.is_empty());
+    }
+
+    #[test]
     fn dual_briefs_two_channels() {
         let b = host_default_briefs(
             "对比报告与行业实践",
@@ -1685,6 +1748,25 @@ mod tests {
     fn lexical_terms_split() {
         assert_eq!(lexical_terms_from_query("foo bar"), vec!["foo", "bar"]);
         assert_eq!(lexical_terms_from_query("中文查询"), vec!["中文查询"]);
+    }
+
+    #[test]
+    fn lexical_terms_drop_stopwords_from_natural_question() {
+        let terms = lexical_terms_from_query("What does the deployment guide say about redis?");
+        for t in ["deployment", "guide", "redis"] {
+            assert!(terms.iter().any(|x| x == t), "missing {t}: {terms:?}");
+        }
+        for t in ["what", "What", "does", "the", "about"] {
+            assert!(!terms.iter().any(|x| x == t), "kept {t}: {terms:?}");
+        }
+    }
+
+    #[test]
+    fn lexical_terms_all_stopwords_falls_back_to_whole_query() {
+        assert_eq!(
+            lexical_terms_from_query("what is the?"),
+            vec!["what is the?"]
+        );
     }
 
     #[test]
