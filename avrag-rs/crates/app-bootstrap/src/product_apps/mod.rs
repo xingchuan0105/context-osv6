@@ -7,13 +7,14 @@
 //! AgentApp = sessions/search/tools. Domain pipelines own `PipelineLane` internals.
 //!
 //! Product accessors: `conversation()`, `workspace()`, `share()`, `billing_api()`,
-//! `prefs()`, `admin_api()`, `admin_ops()`, `agent()`.
+//! `prefs()`, `admin_api()`, `admin_ops()`, `agent()`, `desktop_api()`.
 
 mod admin;
 mod admin_ops;
 mod agent;
 mod billing;
 mod conversation;
+mod desktop;
 mod prefs;
 mod share;
 mod workspace;
@@ -23,6 +24,7 @@ pub use admin_ops::AdminOpsApp;
 pub use agent::AgentApp;
 pub use billing::BillingApp;
 pub use conversation::ConversationApp;
+pub use desktop::DesktopApp;
 pub use prefs::PrefsApp;
 pub use share::ShareApp;
 pub use workspace::WorkspaceApp;
@@ -108,6 +110,14 @@ impl AppState {
     pub fn agent(&self) -> AgentApp<'_> {
         AgentApp { chat: &self.chat }
     }
+
+    /// Desktop product App (W2: relay token mint/list/revoke + relay guard resolve).
+    pub fn desktop_api(&self) -> DesktopApp<'_> {
+        DesktopApp {
+            auth: &self.auth,
+            store: self.desktop_token_store.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -147,6 +157,7 @@ mod tests {
         let _ = state.admin_api();
         let _ = state.admin_ops();
         let _ = state.agent();
+        let _ = state.desktop_api();
         let _ = state.conversation();
         assert!(app_chat::is_write_agent_type("Write"));
     }

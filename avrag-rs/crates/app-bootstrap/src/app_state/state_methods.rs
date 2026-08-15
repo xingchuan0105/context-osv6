@@ -23,6 +23,7 @@ impl From<AppBootstrapResult> for AppState {
             documents: result.documents,
             chat: result.chat,
             postgres: result.postgres,
+            desktop_token_store: result.desktop_token_store,
             redis_url: result.redis_url,
             rate_limit_backend: result.rate_limit_backend,
             password_reset_service: crate::services::PasswordResetService::from_env(),
@@ -113,6 +114,11 @@ impl AppState {
 
     pub fn postgres_repo(&self) -> Option<Arc<PgAppRepository>> {
         self.postgres.clone()
+    }
+
+    /// Infra: desktop relay token store (W2). Product use-cases: `desktop_api()`.
+    pub fn desktop_token_store(&self) -> Arc<dyn app_core::DesktopTokenStorePort> {
+        self.desktop_token_store.clone()
     }
 
     /// Infra: raw admin store. Prefer `admin_ops()` in HTTP product handlers.

@@ -3,7 +3,7 @@ mod app_state;
 mod product_apps;
 
 pub use product_apps::{
-    AdminApp, AdminOpsApp, AgentApp, BillingApp, ConversationApp, PrefsApp, ShareApp,
+    AdminApp, AdminOpsApp, AgentApp, BillingApp, ConversationApp, DesktopApp, PrefsApp, ShareApp,
     WorkspaceApiKeyAuth, WorkspaceApp,
 };
 mod config_helpers;
@@ -25,7 +25,8 @@ pub use adapters::{
 
 use adapters::{
     ObjectStorePortAdapter, PgAdminStoreAdapter, PgAuthStoreAdapter, PgBillingQuotaAdapter,
-    PgChatPersistenceAdapter, PgDocumentStoreAdapter, PgHealthAdapter, PgShareStoreAdapter,
+    PgChatPersistenceAdapter, PgDesktopTokenStoreAdapter, PgDocumentStoreAdapter, PgHealthAdapter,
+    PgShareStoreAdapter,
 };
 use app_admin::AdminContext;
 use app_billing::BillingContext;
@@ -80,6 +81,8 @@ pub struct AppBootstrapResult {
     pub documents: DocumentContext,
     pub chat: ChatContext,
     pub postgres: Option<Arc<PgAppRepository>>,
+    /// Desktop relay token store (W2): PG adapter in postgres mode, memory otherwise.
+    pub desktop_token_store: Arc<dyn app_core::DesktopTokenStorePort>,
     pub redis_url: String,
     pub rate_limit_backend: Option<Arc<RedisRateLimitBackend>>,
 }
@@ -255,6 +258,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         documents,
         chat,
         postgres: None,
+        desktop_token_store: Arc::new(app_core::MemoryDesktopTokenStore::new()),
         redis_url: config.redis.url.clone(),
         rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     }
@@ -606,6 +610,12 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         &documents,
     );
 
+    // W2 desktop relay tokens: PG store in postgres mode, memory otherwise.
+    let desktop_token_store: Arc<dyn app_core::DesktopTokenStorePort> = match pg.as_ref() {
+        Some(repository) => Arc::new(PgDesktopTokenStoreAdapter::new(repository.clone())),
+        None => Arc::new(app_core::MemoryDesktopTokenStore::new()),
+    };
+
     Ok(AppBootstrapResult {
         auth,
         storage,
@@ -617,6 +627,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         documents,
         chat,
         postgres: pg,
+        desktop_token_store,
         redis_url: config.redis.url.clone(),
         rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     })
@@ -666,6 +677,11 @@ mod app_state_test_support {
         pub fn test_replace_storage(&mut self, storage: StorageContext) {
             self.storage = storage.clone();
             self.chat.storage = storage;
+        }
+
+        pub fn test_set_billing(&mut self, billing: app_billing::BillingContext) {
+            self.billing = billing.clone();
+            self.chat.billing = billing;
         }
 
         pub fn test_set_rag_runtime(&mut self, rag_runtime: std::sync::Arc<avrag_rag_core::RagRuntime>) {

@@ -27,6 +27,7 @@ pub struct AppState {
     pub(crate) documents: app_documents::DocumentContext,
     pub(crate) chat: app_chat::ChatContext,
     pub(crate) postgres: Option<Arc<PgAppRepository>>,
+    pub(crate) desktop_token_store: Arc<dyn app_core::DesktopTokenStorePort>,
     pub(crate) redis_url: String,
     pub(crate) rate_limit_backend: Option<Arc<RedisRateLimitBackend>>,
     pub(crate) password_reset_service: PasswordResetService,

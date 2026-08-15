@@ -237,7 +237,7 @@ pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
 fn build_cors_layer() -> CorsLayer {
     let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
         .unwrap_or_else(|_| {
-            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080"
+            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080,http://127.0.0.1:18080,http://localhost:18080,http://tauri.localhost,https://tauri.localhost"
                 .to_string()
         });
     let origins: Vec<_> = allowed_origins
@@ -265,6 +265,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(crate::routes::rag::router())
         .merge(crate::routes::billing::router())
         .merge(crate::routes::settings::router())
+        .merge(crate::routes::desktop::router())
         .merge(crate::routes::license::router())
         .merge(crate::routes::admin::router())
         .route_layer(axum::middleware::from_fn_with_state(
@@ -289,6 +290,9 @@ pub fn build_router(state: AppState) -> Router {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .merge(crate::routes::infra::router())
         .merge(protected_dev_upload)
+        // W2 desktop official-key relay: desktop-token auth lives in the relay
+        // route layer (`desktop_token_guard`), NOT the main session middleware.
+        .merge(crate::routes::relay::router(&state))
         .nest("/api/auth", crate::routes::auth::public_router().merge(protected_auth))
         .nest("/api/v1", protected_api_v1)
         .nest("/api/e2e", crate::routes::e2e::router())

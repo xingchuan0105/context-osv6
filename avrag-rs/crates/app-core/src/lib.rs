@@ -18,6 +18,7 @@ pub mod provider_secret_domain;
 pub mod provider_secret_store;
 pub mod chat_persistence;
 pub mod config;
+pub mod desktop_token_store;
 mod config_helpers;
 pub mod document_store;
 pub mod domain_ports;
@@ -104,6 +105,11 @@ pub use chat_persistence::{
     MessagePort, ProfilePort, SessionPort,
 };
 pub use config::*;
+pub use desktop_token_store::{
+    DESKTOP_TOKEN_PREFIX, DesktopTokenIdentity, DesktopTokenStorePort, DesktopTokenView,
+    MemoryDesktopTokenStore, MintDesktopTokenRequest, MintedDesktopTokenResponse,
+    generate_desktop_token, hash_desktop_token, mint_desktop_token,
+};
 pub use document_store::DocumentStorePort;
 pub use domain_ports::*;
 pub use domain_rows::{
