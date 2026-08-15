@@ -103,6 +103,24 @@ if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
       die "could not resolve Windows npx.cmd; set DESKTOP_E2E_WIN_NPX"
     fi
   fi
+  # The Windows frontend tree (C:\dev\context-osv6) is a snapshot, not a live
+  # mount of this repo: specs/fixtures/pom edited on the WSL side are invisible
+  # to playwright there. Mirror e2e/ + the desktop-client config into it first.
+  # $ROOT is a native WSL path, so translate via wslpath (\\wsl.localhost UNC);
+  # robocopy exit codes 0-7 are success, >=8 means real failure.
+  command -v wslpath >/dev/null 2>&1 || die "wslpath not available (this harness requires WSL)"
+  WIN_FRONTEND_WIN="$(wsl_to_win "$DESKTOP_E2E_WIN_FRONTEND")"
+  WIN_E2E_SRC="$(wslpath -w "$ROOT/frontend_next/e2e" | tr -d '\r')"
+  WIN_DESKTOP_CFG_SRC="$(wslpath -w "$ROOT/frontend_next/playwright.desktop-client.config.ts" | tr -d '\r')"
+  SYNC_LOG="$(mktemp)"
+  "$POWERSHELL" -NoProfile -Command "
+    robocopy $(ps_quote "$WIN_E2E_SRC") $(ps_quote "$WIN_FRONTEND_WIN\e2e") /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    if (\$LASTEXITCODE -ge 8) { exit \$LASTEXITCODE }
+    Copy-Item -Force -ErrorAction Stop $(ps_quote "$WIN_DESKTOP_CFG_SRC") $(ps_quote "$WIN_FRONTEND_WIN\\")
+    exit 0
+  " >"$SYNC_LOG" 2>&1 || { cat "$SYNC_LOG" >&2; rm -f "$SYNC_LOG"; die "e2e source sync into $WIN_FRONTEND_WIN failed"; }
+  rm -f "$SYNC_LOG"
+  log "synced e2e sources -> $WIN_FRONTEND_WIN"
   if [[ -z "${DESKTOP_E2E_STATE_HOME:-}" ]]; then
     DESKTOP_E2E_STATE_HOME="$("$POWERSHELL" -NoProfile -Command "Write-Output (Join-Path \$env:TEMP 'cos-e2e-$RUN_ID\state')" | tr -d '\r')"
   fi

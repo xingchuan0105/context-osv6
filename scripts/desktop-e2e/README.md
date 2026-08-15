@@ -77,6 +77,12 @@ state preservation, migration idempotence, and parser-tree arrival.
 restores AppData. It also stages `antifragile.txt` under the Windows temp
 run directory and enables WebView2 CDP on port 19322 by default.
 
+The Windows frontend tree (`DESKTOP_E2E_WIN_FRONTEND`) is a snapshot of this
+repo, not a live mount: playwright there cannot see spec/fixture edits made
+on the WSL side. `l1`/`l2` therefore mirror `frontend_next/e2e/` (robocopy
+/MIR — stale files are deleted) and `playwright.desktop-client.config.ts`
+into it before every run.
+
 PR-3 config probes run in the same L1 suite. `seed-legacy-llm.ps1` writes a
 dummy `llm-config.json` with `base_url=http://127.0.0.1:9`; the specs verify
 unconfigured copy, dead-endpoint fast failure, drawer readback, and that a
