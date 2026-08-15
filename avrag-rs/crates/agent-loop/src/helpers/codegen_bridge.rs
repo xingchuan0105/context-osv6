@@ -417,6 +417,8 @@ mod tests {
 
     #[test]
     fn test_codegen_observation_stdout_uses_bridge_when_exec_stdout_empty() {
+        // Force L-eval off so a concurrent force-on test cannot flip this path.
+        let _force = force_l_eval_rrf(false);
         let bridge = vec![tr(
             "dense_retrieval",
             ToolStatus::Ok,
@@ -441,6 +443,8 @@ mod tests {
     #[test]
     fn test_observation_includes_graph_context_from_augment_telemetry() {
         use contracts::ToolTrace;
+        // Force L-eval off so a concurrent force-on test cannot flip this path.
+        let _force = force_l_eval_rrf(false);
         let bridge = vec![
             tr(
                 "lexical_retrieval",
@@ -589,6 +593,8 @@ stderr:
 
     #[test]
     fn test_bridge_skips_doc_scan_and_returns_compact_hint() {
+        // Force L-eval off so a concurrent force-on test cannot flip this path.
+        let _force = force_l_eval_rrf(false);
         let bridge = vec![tr(
             "doc_scan",
             ToolStatus::Ok,
@@ -611,6 +617,8 @@ stderr:
 
     #[test]
     fn test_bridge_skips_scan_data_trace_but_keeps_dense_retrieval() {
+        // Force L-eval off so a concurrent force-on test cannot flip this path.
+        let _force = force_l_eval_rrf(false);
         let bridge = vec![
             tr(
                 "dense_retrieval",
