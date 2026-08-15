@@ -13,7 +13,9 @@ param(
     [int]$ColdStartTimeoutSeconds = 120,
     [int]$ShutdownTimeoutSeconds = 15,
     [int]$HealthTimeoutSeconds = 55,
-    [int]$SessionTimeoutSeconds = 90
+    [int]$SessionTimeoutSeconds = 90,
+    # Dot-source support: define functions/globals without running Invoke-L0.
+    [switch]$FunctionsOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -826,6 +828,10 @@ function Invoke-L0 {
     Restore-AppDataFiles
     $global:Details.teardown_ok = $true
     Write-Result
+}
+
+if ($FunctionsOnly) {
+    return
 }
 
 try {

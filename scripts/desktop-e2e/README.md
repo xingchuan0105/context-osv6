@@ -43,6 +43,35 @@ DESKTOP_E2E_YES=1 \
   bash scripts/desktop-e2e/run.sh l1
 ```
 
+Real-LLM layer (D-rag-full grounded answer with citations). Keys are mapped
+from `avrag-rs/.env` into `DESKTOP_E2E_*` env vars only (KD8) — never echoed,
+never committed:
+
+```bash
+DESKTOP_E2E_YES=1 \
+  DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' \
+  bash scripts/desktop-e2e/run.sh l2
+```
+
+Install-upgrade-install data preservation (old setup → seed workspace marker →
+install new setup on top → marker must survive; also asserts the bundled
+parser tree). The new installer defaults to the fresh NSIS bundle; the old one
+must be given explicitly. Paths accept WSL or Windows form:
+
+```bash
+DESKTOP_E2E_YES=1 \
+  DESKTOP_E2E_OLD_SETUP='C:\temp\cos-old-setup.exe' \
+  bash scripts/desktop-e2e/run.sh u1
+```
+
+The old baseline must be a build that passes `l0` on its own — u1 exercises
+upgrade preservation, not cold-start repair. Note the published
+`dist/desktop-release/v0.2.0` setup (2026-08-10) cannot serve as the old
+baseline: its API never runs migrations on cold start (`relation "users" does
+not exist`), fixed later in 559c042d. Until a newer release artifact is kept,
+self-upgrade (OLD = NEW = current bundle) still covers installer idempotence,
+state preservation, migration idempotence, and parser-tree arrival.
+
 `l1` starts the app with a temp `STATE_HOME`, backs up AppData files, runs
 `playwright.desktop-client.config.ts`, then gracefully closes the app and
 restores AppData. It also stages `antifragile.txt` under the Windows temp

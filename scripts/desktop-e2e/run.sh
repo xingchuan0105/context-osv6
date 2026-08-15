@@ -4,7 +4,13 @@
 # Usage:
 #   DESKTOP_E2E_YES=1 bash scripts/desktop-e2e/run.sh l0
 #   DESKTOP_E2E_YES=1 DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' bash scripts/desktop-e2e/run.sh l1
+#   DESKTOP_E2E_YES=1 DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' bash scripts/desktop-e2e/run.sh l2
+#   DESKTOP_E2E_YES=1 DESKTOP_E2E_OLD_SETUP='C:\temp\old-setup.exe' bash scripts/desktop-e2e/run.sh u1
 #   DESKTOP_E2E_YES=1 DESKTOP_E2E_INSTALL_DIR='C:\Context-OS' bash scripts/desktop-e2e/run.sh l0
+#
+# l2 = l1 suite with real LLM keys mapped from avrag-rs/.env (KD8) and the
+# default grep narrowed to D-rag-full. u1 = install-upgrade-install data
+# preservation run (see upgrade.ps1).
 #
 # Safety contract:
 #   - Audits ports/data dirs before any shutdown.
@@ -26,8 +32,14 @@ log() { echo "desktop-e2e: $*"; }
 if [[ "$YES" != "1" ]]; then
   die "set DESKTOP_E2E_YES=1 to confirm this run is allowed to stop the local Context-OS client"
 fi
-if [[ "$MODE" != "l0" && "$MODE" != "audit" && "$MODE" != "l1" ]]; then
-  die "unknown mode '$MODE' (use: l0 | audit | l1)"
+if [[ "$MODE" != "l0" && "$MODE" != "audit" && "$MODE" != "l1" && "$MODE" != "l2" && "$MODE" != "u1" ]]; then
+  die "unknown mode '$MODE' (use: l0 | audit | l1 | l2 | u1)"
+fi
+# l2 = l1 with real LLM keys (KD8 opt-in made explicit as a mode) and the
+# default grep narrowed to the D-rag-full real-LLM journey.
+if [[ "$MODE" == "l2" ]]; then
+  DESKTOP_E2E_LLM=1
+  DESKTOP_E2E_GREP="${DESKTOP_E2E_GREP:-D-rag-full}"
 fi
 if ! command -v "$POWERSHELL" >/dev/null 2>&1; then
   die "cannot find Windows PowerShell: $POWERSHELL"
@@ -78,7 +90,7 @@ ps_quote() {
 
 L0_SCRIPT="$ROOT/scripts/desktop-e2e/l0.ps1"
 
-if [[ "$MODE" == "l1" ]]; then
+if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
   if [[ "${DESKTOP_E2E_AUDIT_ONLY:-0}" == "1" ]]; then
     die "DESKTOP_E2E_AUDIT_ONLY=1 is incompatible with mode l1"
   fi
@@ -103,10 +115,37 @@ if [[ "$MODE" == "l1" ]]; then
     || die "failed to stage Windows fixture: $WIN_FIXTURE"
 fi
 
+# u1: install old → seed data → install new on top → data must survive.
+# Paths may be WSL (/mnt/c/...) or Windows form; both are converted below.
+if [[ "$MODE" == "u1" ]]; then
+  if [[ "${DESKTOP_E2E_AUDIT_ONLY:-0}" == "1" ]]; then
+    die "DESKTOP_E2E_AUDIT_ONLY=1 is incompatible with mode u1"
+  fi
+  if [[ -z "${DESKTOP_E2E_OLD_SETUP:-}" ]]; then
+    die "set DESKTOP_E2E_OLD_SETUP to the previous version's setup.exe"
+  fi
+  if [[ -z "${DESKTOP_E2E_NEW_SETUP:-}" ]]; then
+    DESKTOP_E2E_NEW_SETUP="$ROOT/desktop/src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis/Context-OS Client_0.2.0_x64-setup.exe"
+  fi
+  # Existence check: /mnt/... paths check locally, C:\... paths via PowerShell.
+  u1_setup_exists() {
+    local p="$1"
+    if [[ "$p" =~ ^/ ]]; then
+      [[ -f "$p" ]]
+    else
+      "$POWERSHELL" -NoProfile -Command "if (Test-Path $(ps_quote "$p")) { exit 0 } else { exit 1 }"
+    fi
+  }
+  u1_setup_exists "$DESKTOP_E2E_OLD_SETUP" || die "old setup not found: $DESKTOP_E2E_OLD_SETUP"
+  u1_setup_exists "$DESKTOP_E2E_NEW_SETUP" || die "new setup not found: $DESKTOP_E2E_NEW_SETUP"
+fi
+
+ARGS=()
+
 ARGS=()
 ARGS+=("-NoProfile" "-ExecutionPolicy" "Bypass" "-File" "$L0_SCRIPT")
 ARGS+=("-RunId" "$RUN_ID")
-if [[ "$MODE" == "l1" ]]; then
+if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
   ARGS+=("-CdpPort" "$CDP_PORT")
   ARGS+=("-CdpTimeoutSeconds" "$((CDP_ATTACH_TIMEOUT_MS / 1000))")
 fi
@@ -141,7 +180,7 @@ fi
 
 log "mode=$MODE run_id=$RUN_ID install_dir=${DESKTOP_E2E_INSTALL_DIR:-<default>}"
 
-if [[ "$MODE" == "l1" ]]; then
+if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
   KEEP_ARGS=("${ARGS[@]}" "-KeepRunning")
   TEARDOWN_ARGS=("${ARGS[@]}" "-TeardownOnly")
   L1_CLEANUP_DONE=0
@@ -188,6 +227,22 @@ if [[ "$MODE" == "l1" ]]; then
     log "l1 failed keep=$KEEP_STATUS tests=$TEST_STATUS teardown=$TEARDOWN_STATUS"
     exit 1
   fi
+  log "done: $MODE"
+  exit 0
+fi
+
+if [[ "$MODE" == "u1" ]]; then
+  U1_ARGS=(
+    "-NoProfile" "-ExecutionPolicy" "Bypass"
+    "-File" "$ROOT/scripts/desktop-e2e/upgrade.ps1"
+    "-RunId" "$RUN_ID"
+    "-OldSetup" "$(wsl_to_win "$DESKTOP_E2E_OLD_SETUP")"
+    "-NewSetup" "$(wsl_to_win "$DESKTOP_E2E_NEW_SETUP")"
+  )
+  if [[ -n "${DESKTOP_E2E_STATE_HOME:-}" ]]; then
+    U1_ARGS+=("-StateHome" "$(wsl_to_win "$DESKTOP_E2E_STATE_HOME")")
+  fi
+  "$POWERSHELL" "${U1_ARGS[@]}"
   log "done: $MODE"
   exit 0
 fi
