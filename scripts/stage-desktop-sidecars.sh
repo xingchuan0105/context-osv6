@@ -7,6 +7,7 @@
 #   desktop/runtime/bin/context-os-mcp[.exe]   # stdio MCP for coding agents (not a Tauri sidecar)
 #   desktop/runtime/bin/context-os[.exe]      # thin CLI (status/ingest/ask/sources)
 #   desktop/runtime/bin/python/               # python embeddable bundle (windows triple only)
+#   desktop/runtime/parsers/lit/              # lit.exe + pdfium.dll (windows triple only)
 #   desktop/src-tauri/binaries/avrag-api-<triple>[.exe]
 #   desktop/src-tauri/binaries/avrag-worker-<triple>[.exe]
 #
@@ -39,6 +40,10 @@ esac
 PYTHON_EMBED_VERSION="3.12.10"
 PYTHON_EMBED_SHA256="4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3"
 PYTHON_EMBED_URL="https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/python-${PYTHON_EMBED_VERSION}-embed-amd64.zip"
+
+# liteparse CLI for the Windows PDF route (worker spawns LITEPARSE_BIN).
+# pdfium-sys runtime-loads pdfium.dll from the exe dir — both files ship together.
+LITEPARSE_VERSION="2.10.0"
 
 die() { echo "stage-desktop-sidecars: $*" >&2; exit 1; }
 # Always stderr — ensure_built is used inside $(...) capture.
@@ -206,6 +211,44 @@ if [[ "$IS_WINDOWS_TRIPLE" == "1" ]]; then
     log "python bundle: $dest (python $PYTHON_EMBED_VERSION embed amd64)"
   }
   stage_python_bundle
+
+  # liteparse CLI (lit.exe) + pdfium.dll → runtime/parsers/lit/ (PDF ingest;
+  # native_stack writes LITEPARSE_BIN into client.env when lit.exe is present).
+  stage_lit_parser() {
+    local dest="$ROOT/desktop/runtime/parsers/lit"
+    local install_root="$ROOT/desktop/runtime/vendor/lit-${LITEPARSE_VERSION}-${TRIPLE}"
+    # pdfium-sys build.rs resolves its cache dir via USERPROFILE/LOCALAPPDATA
+    # when the target OS is windows — provide a WSL-side stand-in.
+    export USERPROFILE="${USERPROFILE:-$HOME/.cache/context-osv6/win-userprofile}"
+    export LOCALAPPDATA="${LOCALAPPDATA:-$USERPROFILE/AppData/Local}"
+    mkdir -p "$LOCALAPPDATA"
+    if [[ ! -f "$install_root/bin/lit.exe" ]]; then
+      log "cross-building liteparse $LITEPARSE_VERSION for $TRIPLE …"
+      # --no-default-features: drop the `tesseract` feature (native Tesseract
+      # link is not available for windows targets; scanned PDFs route to
+      # PaddleOCR anyway, lit is always invoked with --no-ocr).
+      # Stub libdl.a: part of the dep tree emits -ldl even for windows-gnu;
+      # the symbols are dead on Windows, an empty archive satisfies ld.
+      local fakelibs="$ROOT/desktop/runtime/vendor/fakelibs-$TRIPLE"
+      mkdir -p "$fakelibs"
+      [[ -f "$fakelibs/libdl.a" ]] || x86_64-w64-mingw32-ar rcs "$fakelibs/libdl.a"
+      CARGO_TARGET_DIR="$ROOT/desktop/runtime/vendor/lit-target-$TRIPLE" \
+      RUSTFLAGS="-L $fakelibs" \
+      cargo install liteparse --version "$LITEPARSE_VERSION" --no-default-features \
+        --target "$TRIPLE" --root "$install_root" -j"${CARGO_BUILD_JOBS:-2}" \
+        || die "liteparse cross-build failed (target=$TRIPLE)"
+    fi
+    local pdfium_dll
+    pdfium_dll="$(ls -t "$LOCALAPPDATA"/pdfium-rs/*/pdfium-win-x64/bin/pdfium.dll 2>/dev/null | head -1)"
+    [[ -n "$pdfium_dll" && -f "$pdfium_dll" ]] \
+      || die "pdfium.dll not found under $LOCALAPPDATA/pdfium-rs (pdfium-sys download missing)"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -f "$install_root/bin/lit.exe" "$dest/lit.exe"
+    cp -f "$pdfium_dll" "$dest/pdfium.dll"
+    log "lit parser: $dest (liteparse $LITEPARSE_VERSION + $(basename "$pdfium_dll"))"
+  }
+  stage_lit_parser
 fi
 
 cat >"$ROOT/desktop/runtime/LAYOUT" <<EOF

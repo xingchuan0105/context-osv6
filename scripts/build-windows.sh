@@ -112,6 +112,8 @@ if not skip_sidecars:
     # ANYDOC_BIN written into client.env by native_stack when present).
     if (desktop / "runtime/parsers/markitdown-lite.cmd").is_file():
         resources["../runtime/parsers"] = "runtime/parsers"
+    if not (desktop / "runtime/parsers/lit/lit.exe").is_file():
+        print("build-windows: note: runtime/parsers/lit not staged; PDF ingest will report 'lit CLI' missing on the client", file=sys.stderr)
     # Agent-loop runtime assets: avrag-api/worker load modes/*.yaml + prompts/*.md
     # relative to CWD (= install dir for spawned sidecars). Same channel as
     # hotswap's copy_runtime_assets.

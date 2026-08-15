@@ -419,11 +419,17 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
             let dir = bins_rt.join("parsers");
             let md = dir.join("markitdown-lite.cmd");
             let ad = dir.join("anydoc-lite.cmd");
+            // Cross-built liteparse CLI; pdfium.dll sits next to lit.exe and is
+            // found by liteparse-pdfium-sys runtime search (exe dir rule).
+            let lit = dir.join("lit").join("lit.exe");
             if md.is_file() {
                 parsers_env.push_str(&format!("MARKITDOWN_BIN={}\n", md.display()));
             }
             if ad.is_file() {
                 parsers_env.push_str(&format!("ANYDOC_BIN={}\n", ad.display()));
+            }
+            if lit.is_file() {
+                parsers_env.push_str(&format!("LITEPARSE_BIN={}\n", lit.display()));
             }
         }
     }

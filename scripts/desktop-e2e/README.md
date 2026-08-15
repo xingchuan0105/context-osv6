@@ -57,9 +57,10 @@ temporary `BYOK_MASTER_KEY` so the provider-secret route can encrypt a dummy row
 
 Document parsing is provisioned by the install tree itself: `runtime/parsers/`
 ships stdlib-only `markitdown-lite` / `anydoc-lite` wrappers driven by the
-bundled Python, and the desktop shell writes `MARKITDOWN_BIN` / `ANYDOC_BIN`
-into `client.env` when they are present. No host-side markitdown install is
-needed for text/office ingest.
+bundled Python, plus `runtime/parsers/lit/` (cross-built `lit.exe` +
+`pdfium.dll`) for the PDF route. The desktop shell writes `MARKITDOWN_BIN` /
+`ANYDOC_BIN` / `LITEPARSE_BIN` into `client.env` when they are present. No
+host-side parser install is needed for text/office/PDF ingest.
 
 Optional timeout overrides:
 
