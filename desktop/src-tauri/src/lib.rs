@@ -16,6 +16,7 @@ pub struct AppLocalState {
 use commands::api::{api_call, upload_bytes};
 use commands::cache::{get_cache_value, set_cache_value};
 use commands::chat_stream::{chat_cancel, chat_stream};
+use commands::cloud_session::{cloud_login, cloud_logout, get_cloud_session};
 use commands::docker_status::get_docker_status;
 use commands::documents::reindex_local_documents;
 use commands::license::{
@@ -200,6 +201,9 @@ pub fn run() {
             stop_local_product,
             get_local_session,
             ensure_local_session,
+            cloud_login,
+            cloud_logout,
+            get_cloud_session,
             reindex_local_documents
         ])
         .on_page_load(|webview, _payload| {

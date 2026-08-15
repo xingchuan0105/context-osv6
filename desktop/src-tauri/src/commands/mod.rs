@@ -3,6 +3,7 @@ pub mod backend;
 pub mod cache;
 pub mod chat;
 pub mod chat_stream;
+pub mod cloud_session;
 pub mod docker_status;
 pub mod documents;
 pub mod license;

@@ -787,6 +787,53 @@ async fn relay_model_not_whitelisted_is_config_error() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn desktop_relay_config_reports_public_base_and_pinned_models() {
+    let _guard = TEST_LOCK.lock().unwrap();
+    mock();
+    // SAFETY: guarded by TEST_LOCK; no other test in this binary reads this var.
+    unsafe {
+        std::env::set_var("AVRAG_PUBLIC_BASE_URL", "https://app.contextlm.top/");
+    }
+    let app = transport_http::build_router(memory_state());
+    let user_id = Uuid::new_v4();
+    let bearer = session_bearer(user_id);
+
+    // No session → middleware 401.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/desktop/relay-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/desktop/relay-config")
+                .header("authorization", format!("Bearer {bearer}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    assert!(body["ok"].as_bool().unwrap(), "relay-config failed: {body}");
+    // Trailing slash on the public base is trimmed before the /v1/relay suffix.
+    assert_eq!(
+        body["data"]["relay_base_url"].as_str().unwrap(),
+        "https://app.contextlm.top/v1/relay"
+    );
+    assert_eq!(body["data"]["chat_model"], "deepseek-v4-flash");
+    assert_eq!(body["data"]["embedding_model"], "BAAI/bge-m3");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn relay_unconfigured_upstream_is_503() {
     let _guard = TEST_LOCK.lock().unwrap();
     let state = memory_state();

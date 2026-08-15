@@ -24,28 +24,30 @@
 
 ```text
 打开客户端
-  → AppShellGate:无 cloud_session → 云登录页(email+password → 云端 POST /api/auth/login)
+  → AppShellGate:无 cloud_session → 云登录页(email+password,**Rust 侧 reqwest HTTPS**,不经 WebView fetch)
   → 登录成功 → 云端 POST /api/v1/desktop/tokens 铸 desktop token(长期、可撤销、relay 专用)
+  → 云端 GET /api/v1/desktop/relay-config 取 relay base + pin 住型号(壳不硬编码型号)
   → Tauri 写 cloud_session.json(%APPDATA%\com.contextos.desktop)
   → native_stack 写 client.env:
-      AGENT_LLM_BASE_URL / EMBEDDING_BASE_URL / RERANK_BASE_URL = 云 /v1/relay
-      *_API_KEY = desktop token
+      AGENT_LLM_* / EMBEDDING_* / INGESTION_LLM_* = 云 relay base_url + desktop token + pin 型号
       AVRAG_PLATFORM_KEYS_RELAY=1(标记:平台用量已由云端计量,本地跳过 wallet debit)
+      (rerank / memory / triplet LLM v1 不注入 —— 无 relay 路由,见 §8)
   → 重启本机 api/worker(壳已有进程管理)
   → 本机 stack/产品/会话自举(现状不变,本地数据仍属 device-derived 本地账户)
 ```
 
 - **relay 端点(云)**:`POST /v1/relay/chat/completions`(SSE 透传,注入 `stream_options.include_usage`)+ `POST /v1/relay/embeddings`。认证只接受 desktop token(不放行全 API)。上游 = 平台现有 `AGENT_LLM_*`/`EMBEDDING_*` 池;按 usage 真实 token 走 `PgUsageObserver.record_chat/record_embedding` → `debit_platform_usage`(model 必须在 `wallet_pricing.rs` 白名单,否则 fail-open 不扣 —— 上线前核对白名单覆盖 relay 型号)。
+- **relay-config 端点(云,W3 新增)**:`GET /api/v1/desktop/relay-config`(session JWT)→ `{relay_base_url, chat_model, embedding_model}`;`relay_base_url = <AVRAG_PUBLIC_BASE_URL>/v1/relay`,型号取平台 `AGENT_LLM_MODEL` / `EMBEDDING_MODEL` 配置 —— 壳不硬编码型号。
 - **desktop token**:`desktop_tokens` 新表(id, user_id, name, token_hash, prefix, created_at, last_used_at, revoked_at);`cos_dt_` 前缀,只存 hash。
-- **双扣防护**:本地 `unified/mod.rs:193` 目前仅 BYOK 时 `skip_wallet_debit=true`;relay 模式下平台 env key 的用量云端已扣,本地须同跳 —— bootstrap 读 `AVRAG_PLATFORM_KEYS_RELAY=1` → tenant 同样 skip(usage 行仍落本地库,作本地用量展示)。
+- **双扣防护**:relay 模式下平台用量的钱包扣费已在云端发生,本地 api/worker 不得再扣。实现缝(W3 落地):`app-billing` `PgUsageObserver::maybe_debit_wallet` 读 `AVRAG_PLATFORM_KEYS_RELAY=1`(进程级 OnceLock)整体 early-return —— chat/embedding 与 TaskTenantUsageObserver 全部收口于该点;usage 行仍落本地库(作本地用量展示),仅跳过 ledger debit。
 - **BYOK 优先序不变**:用户填了 BYOK secret → 每请求 overlay 覆盖平台 relay(`bind_byok_client` 现状),且本地/云端都不计平台价。
 - **身份**:本地 RLS 仍用 `uuidv5(device_id)`;cloud user_id/email 只存 cloud_session.json 作账户展示与充值/余额查询(`GET /api/v1/billing/wallet` 用 cloud JWT)。
 
 ## 4. 关键缝(侦察结论,实现时按此下刀)
 
 - 登录门挂在 `frontend_next/components/desktop/AppShellGate.tsx:33-42`(`(app)` 路由唯一收口,桌面分支);登录页是桌面壳内页,不是云端 `/login`(该页对 Tauri 强制跳走,`app/(auth)/login/page.tsx:38-55`)。
-- WebView → 云端 fetch 走 CORS(非 PNA);`router_core.rs:240` 默认 CORS 已含 `http(s)://tauri.localhost` —— **部署门:VPS `.env` 的 `CORS_ALLOWED_ORIGINS` 不得覆盖掉这两个源**。
-- token 存储/client.env 注入放 `desktop/src-tauri/src/commands/` 新 `cloud_session.rs`,复用 `local_session.rs` 的 0600 写盘模式;`native_stack.rs` 生成 client.env 时读 cloud_session 注入 relay 四元组。
+- **登录走 Rust 侧 HTTPS(reqwest),不经 WebView fetch(W3 偏差,已定)**:CORS 依赖整体消失 —— 原计划的「VPS `.env` `CORS_ALLOWED_ORIGINS` 部署门」不再需要,`router_core.rs` 默认 CORS 与本 wave 无关。结构化错误(401 凭证错误 / 网络不可达)由 `IpcApiError` 透传到登录卡片。
+- token 存储/client.env 注入放 `desktop/src-tauri/src/commands/` 新 `cloud_session.rs`,复用 `local_session.rs` 的 0600 写盘模式;`native_stack.rs` 生成 client.env 时读 cloud_session 注入 relay 三元组(agent/embedding/ingestion)+ `AVRAG_PLATFORM_KEYS_RELAY=1`。`native_stack` 无 AppHandle,经 `dirs::data_dir()` + bundle identifier 定位 cloud_session.json(与 tauri PathResolver 同规则)。
 - relay 路由挂 `router_core.rs` 新 `routes/desktop.rs`(token 中间件) + `routes/relay.rs`(转发 + 计量)。
 
 ## 5. 抽屉重设计(PRODUCT_IA 先行,见本文 §6)
@@ -71,10 +73,10 @@
 | W | 内容 | 验证门 |
 |---|------|--------|
 | W1 | 本文 + PRODUCT_IA.md | 文档落库,IA 自检(§4 每条入口有 canonical) |
-| W2 | 云端:`desktop_tokens` 表 + 铸/列/撤 + relay chat/embeddings + 计量接线 + 白名单核对 | `cargo test -p transport-http -p app-billing`;curl 真云收发 + 钱包扣费行 |
-| W3 | 桌面:登录门页 + cloud_session.rs + client.env 注入 + relay 双扣防护 + 登录后重启本机产品 | `pnpm typecheck` + 桌面包冷启动真机:登录 → 不发 BYOK 直接 RAG 问答成功且云端钱包扣费 |
+| W2 ✅(312d5e01) | 云端:`desktop_tokens` 表 + 铸/列/撤 + relay chat/embeddings + 计量接线 + 白名单核对 | `cargo test -p transport-http -p app-billing`;curl 真云收发 + 钱包扣费行 |
+| W3 | 桌面:登录门页 + cloud_session.rs + client.env 注入 + relay 双扣防护 + 登录后重启本机产品;云端补 `relay-config` 端点 | `pnpm typecheck` + 桌面包冷启动真机:登录 → 不发 BYOK 直接 RAG 问答成功且云端钱包扣费 |
 | W4 | 抽屉重设计 + 撤「已激活」badge + i18n | `pnpm test` + `design-baseline.test.ts` + nav-config 测试 |
-| W5 | 打包 + l0/l1/l2/u1 全绿 + VPS 部署(CORS 门) | `scripts/desktop-e2e/run.sh` 四模式;`scripts/deploy-*.sh` |
+| W5 | 打包 + l0/l1/l2/u1 全绿 + VPS 部署 | `scripts/desktop-e2e/run.sh` 四模式;`scripts/deploy-*.sh` |
 
 排序原则(layered growth):W2 云端 relay 可独立curl 验收;W3 出最小端到端(登录→relay→扣费);W4 纯前端可插在任何空档。
 
@@ -82,5 +84,6 @@
 
 - relay 流量经过 VPS:带宽与延迟成本;SSE 必须流式透传,不能缓冲。
 - desktop token 泄漏 → 用户可在云端设置撤销;v1 不做 token 轮换提醒。
+- **follow-up:rerank relay**。v1 client.env 不注入 `RERANK_*` / memory / triplet LLM(relay 只有 chat + embeddings 两条路由);rerank 走余额需先加 `POST /v1/relay/rerank` 路由 + 白名单价目,再补注入。本地无 rerank 配置时检索退化为无 rerank 路径(现状行为)。
 - 不做:离线首启、usage 回传云对账(本地行与云行各记各的)、桌面端充值页(一律外开 `/pricing#topup`,PRODUCT_IA §4 禁止第三 checkout)。
 - 旧 `DesktopSettingsDrawer` 栈管道代码在 W4 删除,不留兼容层(no backward compatibility tax)。

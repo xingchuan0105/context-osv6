@@ -7,7 +7,7 @@ use app_bootstrap::AppState;
 use axum::{
     Extension, Json, Router,
     extract::Path,
-    routing::post,
+    routing::{get, post},
 };
 use common::ApiResponse;
 use uuid::Uuid;
@@ -21,6 +21,36 @@ pub(crate) fn router() -> Router<AppState> {
             post(mint_desktop_token).get(list_desktop_tokens),
         )
         .route("/desktop/tokens/{id}/revoke", post(revoke_desktop_token))
+        .route("/desktop/relay-config", get(desktop_relay_config))
+}
+
+/// Relay coordinates for the desktop shell (W3): server-driven so the client
+/// never hardcodes platform models. `relay_base_url` derives from the public
+/// base config; models are the platform pinned pools (same source the relay
+/// itself uses, `AppConfig::from_env`).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DesktopRelayConfigView {
+    pub relay_base_url: String,
+    pub chat_model: String,
+    pub embedding_model: String,
+}
+
+async fn desktop_relay_config(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Json<ApiResponse<DesktopRelayConfigView>> {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "desktop relay config requires a signed-in user session, not a workspace API key",
+    ) {
+        return Json(ApiResponse::err(error.code(), error.message()));
+    }
+    let config = app_core::AppConfig::from_env();
+    let base = config.public_base_url.trim().trim_end_matches('/');
+    Json(ApiResponse::ok(DesktopRelayConfigView {
+        relay_base_url: format!("{base}/v1/relay"),
+        chat_model: config.agent_llm.model,
+        embedding_model: config.embedding.model,
+    }))
 }
 
 async fn mint_desktop_token(

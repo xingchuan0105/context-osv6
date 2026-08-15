@@ -112,6 +112,7 @@ dependencies = [
  "base64 0.22.1",
  "common",
  "contracts",
+ "dirs",
  "ed25519-dalek",
  "machineid-rs",
  "reqwest",

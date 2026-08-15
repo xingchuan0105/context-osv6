@@ -16,6 +16,7 @@
 //! | no wallet store wired | no |
 //! | `billable = false` (worker path) | no |
 //! | `skip_wallet_debit = true` (BYOK / billing_mode) | no |
+//! | `AVRAG_PLATFORM_KEYS_RELAY=1` (desktop cloud-relay mode) | no |
 //! | list_fen == 0 | no |
 //!
 //! ## Insufficient balance
@@ -37,6 +38,36 @@ use avrag_billing::{UsageDebitInput, debit_platform_usage};
 use avrag_llm::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+/// Desktop cloud-relay mode (2026-08-15 wave, W3): when the desktop shell is
+/// cloud-logged-in, client.env sets `AVRAG_PLATFORM_KEYS_RELAY=1` and points
+/// the local api/worker at the cloud metered relay. The cloud already debited
+/// the wallet for platform usage, so local observers must skip the debit.
+///
+/// Read once per process in production (env is fixed at process spawn from
+/// client.env); tests read live so they can flip the var per case.
+fn platform_keys_relay_mode() -> bool {
+    #[cfg(not(test))]
+    {
+        static RELAY_MODE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *RELAY_MODE.get_or_init(relay_env_enabled)
+    }
+    #[cfg(test)]
+    {
+        relay_env_enabled()
+    }
+}
+
+fn relay_env_enabled() -> bool {
+    std::env::var("AVRAG_PLATFORM_KEYS_RELAY")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
 
 /// Writes exit-metered usage into `llm_usage_events` via [`UsageLimitStorePort`],
 /// and optionally debits the user wallet for platform-proxy spend.
@@ -176,6 +207,13 @@ impl PgUsageObserver {
         request_id: Option<String>,
     ) {
         if !self.billable || self.skip_wallet_debit {
+            return;
+        }
+        // Desktop cloud-relay mode (W3): the local api/worker points at the
+        // cloud metered relay (`AVRAG_PLATFORM_KEYS_RELAY=1` in client.env) and
+        // the cloud already debited the wallet for this usage. Skip the local
+        // debit — usage ROWS above are still written for local usage display.
+        if platform_keys_relay_mode() {
             return;
         }
         // LLM-only BYOK sets tenant.skip_wallet_debit — skip **chat** debits only.
@@ -431,6 +469,10 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     use uuid::Uuid;
+
+    /// Serializes tests that mutate/depend on the process-global
+    /// `AVRAG_PLATFORM_KEYS_RELAY` env var (read live under cfg(test)).
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn map_feature_is_deterministic_for_known_tags() {
@@ -720,6 +762,7 @@ mod tests {
 
     #[tokio::test]
     async fn recorded_chat_usage_debits_wallet_at_list_price() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
         let wallet = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         // Seed ¥20 grant.
@@ -775,6 +818,7 @@ mod tests {
 
     #[tokio::test]
     async fn llm_byok_skip_debits_embedding_not_chat() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
         let wallet = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         wallet
@@ -952,5 +996,90 @@ mod tests {
             wallet.get_wallet(user_id).await.unwrap().unwrap().balance_fen,
             app_core::SIGNUP_GRANT_FEN
         );
+    }
+
+    #[test]
+    fn relay_env_parsing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // SAFETY: serialized by ENV_LOCK; restored before the guard drops.
+        unsafe { std::env::remove_var("AVRAG_PLATFORM_KEYS_RELAY") };
+        assert!(!platform_keys_relay_mode());
+        unsafe { std::env::set_var("AVRAG_PLATFORM_KEYS_RELAY", "1") };
+        assert!(platform_keys_relay_mode());
+        unsafe { std::env::set_var("AVRAG_PLATFORM_KEYS_RELAY", "true") };
+        assert!(platform_keys_relay_mode());
+        unsafe { std::env::set_var("AVRAG_PLATFORM_KEYS_RELAY", "0") };
+        assert!(!platform_keys_relay_mode());
+        unsafe { std::env::remove_var("AVRAG_PLATFORM_KEYS_RELAY") };
+    }
+
+    /// W3 double-debit guard: `AVRAG_PLATFORM_KEYS_RELAY=1` → usage row still
+    /// written, but NO wallet ledger debit (cloud relay already charged).
+    #[tokio::test]
+    async fn platform_keys_relay_env_skips_debit_but_writes_usage() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // SAFETY: serialized by ENV_LOCK; restored before the guard drops.
+        unsafe { std::env::set_var("AVRAG_PLATFORM_KEYS_RELAY", "1") };
+
+        let wallet = Arc::new(MemoryWalletStore::new());
+        let user_id = Uuid::new_v4();
+        wallet
+            .apply_ledger_entry(&ApplyLedgerInput {
+                user_id,
+                kind: app_core::WALLET_KIND_SIGNUP_GRANT.to_string(),
+                amount_fen: app_core::SIGNUP_GRANT_FEN,
+                idempotency_key: format!("signup_grant:{user_id}"),
+                metadata: serde_json::json!({}),
+                counts_as_paid_topup: false,
+            })
+            .await
+            .unwrap();
+
+        // Deliberately billable + wallet attached + no BYOK skip: without the
+        // relay guard this exact setup debits (see recorded_chat_usage_*).
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore))
+            .with_wallet(wallet.clone() as Arc<dyn WalletStorePort>);
+        let tenant = TenantContext {
+            owner_user_id: user_id,
+            user_id,
+            skip_wallet_debit: false,
+        };
+        observer
+            .record_chat_for(
+                &tenant,
+                &ChatUsageRecord {
+                    prompt_tokens: 1_000_000,
+                    completion_tokens: 0,
+                    total_tokens: 1_000_000,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    feature: "chat".into(),
+                    stage: "chat".into(),
+                    session_id: None,
+                    document_id: None,
+                    request_id: None,
+                    trace_id: None,
+                },
+            )
+            .await;
+
+        assert_eq!(
+            wallet.get_wallet(user_id).await.unwrap().unwrap().balance_fen,
+            app_core::SIGNUP_GRANT_FEN,
+            "relay mode must skip the local wallet debit (cloud already charged)"
+        );
+        assert!(
+            wallet
+                .list_ledger(user_id, 10)
+                .await
+                .unwrap()
+                .iter()
+                .all(|e| e.kind != app_core::WALLET_KIND_USAGE_DEBIT),
+            "no usage_debit ledger row under AVRAG_PLATFORM_KEYS_RELAY=1"
+        );
+
+        unsafe { std::env::remove_var("AVRAG_PLATFORM_KEYS_RELAY") };
     }
 }

@@ -6,12 +6,15 @@ import { ProtectedRouteGate } from "@/components/auth-gates";
 import { CommandPaletteHost } from "@/components/command-palette/command-palette";
 import { ClientLicenseGate } from "@/components/desktop/ClientLicenseGate";
 import { ClientLocalSessionBootstrap } from "@/components/desktop/ClientLocalSessionBootstrap";
+import { CloudLoginGate } from "@/components/desktop/CloudLoginGate";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 
 /**
  * Web SaaS: cloud session required.
- * Desktop client: license only + local B2C session against on-machine API —
- * never redirect to cloud /login.
+ * Desktop client: license → cloud login (official models, 走余额) → local
+ * B2C session against the on-machine API — never redirect to cloud /login.
+ * Cloud login sits BEFORE the stack bootstrap: it needs no local stack, and
+ * the bootstrap then comes up with relay credentials already in client.env.
  */
 export function AppShellGate({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<"unknown" | "web" | "desktop">("unknown");
@@ -33,10 +36,12 @@ export function AppShellGate({ children }: { children: ReactNode }) {
   if (mode === "desktop") {
     return (
       <ClientLicenseGate>
-        <ClientLocalSessionBootstrap>
-          <CommandPaletteHost />
-          {children}
-        </ClientLocalSessionBootstrap>
+        <CloudLoginGate>
+          <ClientLocalSessionBootstrap>
+            <CommandPaletteHost />
+            {children}
+          </ClientLocalSessionBootstrap>
+        </CloudLoginGate>
       </ClientLicenseGate>
     );
   }

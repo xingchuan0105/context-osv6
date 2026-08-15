@@ -185,6 +185,42 @@ export const desktopMessages = {
     zh: "正在启动客户端…",
     en: "Starting client…",
   },
+  "desktop.cloudLoginTitle": {
+    zh: "登录云账户",
+    en: "Sign in to your cloud account",
+  },
+  "desktop.cloudLoginSubtitle": {
+    zh: "登录后默认使用官方模型（走余额），按钱包余额计量扣费。",
+    en: "After sign-in, official models are metered against your wallet balance by default.",
+  },
+  "desktop.cloudLoginEmail": {
+    zh: "云账户邮箱",
+    en: "Cloud account email",
+  },
+  "desktop.cloudLoginPassword": {
+    zh: "密码",
+    en: "Password",
+  },
+  "desktop.cloudLoginSubmit": {
+    zh: "登录并启用官方模型",
+    en: "Sign in and enable official models",
+  },
+  "desktop.cloudLoginSubmitting": {
+    zh: "正在登录并准备官方模型…",
+    en: "Signing in and preparing official models…",
+  },
+  "desktop.cloudLoginFailed": {
+    zh: "登录失败，请检查网络后重试",
+    en: "Sign-in failed; check your network and retry",
+  },
+  "desktop.cloudLoginByokHint": {
+    zh: "想用自己的 Key？登录后可在 设置 → Provider 切换自定义 Provider（自备 Key）。",
+    en: "Prefer your own key? After sign-in, switch under Settings → Providers (BYOK).",
+  },
+  "desktop.cloudLoginChecking": {
+    zh: "正在检查云登录状态…",
+    en: "Checking cloud sign-in…",
+  },
   "desktop.welcomeTitle": {
     zh: "欢迎使用 Context-OS",
     en: "Welcome to Context-OS",
