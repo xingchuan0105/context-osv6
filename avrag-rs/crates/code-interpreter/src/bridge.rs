@@ -1,9 +1,7 @@
 //! Sandbox retrieval bridge: line-delimited JSON RPC over fd3/fd4 pipes.
 
-use std::io::{BufRead, Read, Write};
-use std::process::{Command, Stdio};
+use std::io::{BufRead, Read};
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::{ExecutionResult, InterpreterError};
 use async_trait::async_trait;
@@ -22,14 +20,14 @@ struct BridgeRequest {
     args: Value,
 }
 
-fn bridge_shim_source() -> &'static str {
-    static SHIM: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
-    SHIM.get_or_init(|| Box::leak(build_shim_source().into_boxed_str()))
+fn bridge_shim_source(transport_setup: &str) -> String {
+    // Built per execution: the windows TCP transport embeds a per-run
+    // port/token, so no caching (unix fd setup is constant, but the build is
+    // a cheap format! over ~20 registry entries).
+    build_shim_source(transport_setup)
 }
 
-/// 从 `contracts::sdk_primitives` 注册表 codegen Python shim(D10):
-/// 每个原语一行 `async def`,docstring 与 payload 形状全部派生自注册表。
-fn build_shim_source() -> String {
+fn build_shim_source(transport_setup: &str) -> String {
     use contracts::sdk_primitives::SDK_PRIMITIVES;
 
     let mut methods = String::new();
@@ -57,14 +55,14 @@ fn build_shim_source() -> String {
     }
 
     // Multiplexed line-JSON RPC: a dedicated reader thread demuxes replies by id
-    // so asyncio.gather can issue multiple outstanding calls. Host pump runs
     // concurrent workers (see run_bridge_pump_sync).
     format!(
         r#"
 import json as _json
 # `threading` / `asyncio` pre-imported in wrapper before security import hook.
-_req = open(3, "w", buffering=1)
-_resp = open(4, "r", buffering=1)
+{transport_setup}
+_req = _bridge_transport["req"]
+_resp = _bridge_transport["resp"]
 _id = 0
 _id_lock = threading.Lock()
 _write_lock = threading.Lock()
@@ -139,7 +137,8 @@ async def load(path):
     return await client.load(path)
 
 client = _Client()
-"#
+"#,
+        transport_setup = transport_setup,
     )
 }
 
@@ -153,11 +152,20 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
     })
 }
 
-pub(crate) fn build_bridge_sandbox_wrapper(
-    user_code: &str,
-    memory_mb: u64,
-    cpu_secs: u64,
-) -> String {
+pub(crate) struct SandboxOpts<'a> {
+    pub(crate) user_code: &'a str,
+    pub(crate) memory_mb: u64,
+    pub(crate) cpu_secs: u64,
+    /// Extra pre-hook imports (platform transport needs, e.g. socket on
+    /// Windows). Injected before the security import hook so the hook stays
+    /// strict for user code.
+    pub(crate) prelude_imports: &'a str,
+    /// Python snippet assigning `_bridge_transport = {{"req":…, "resp":…}}`
+    /// (line-buffered text streams) for the shim RPC.
+    pub(crate) transport_setup: &'a str,
+}
+
+pub(crate) fn build_bridge_sandbox_wrapper(opts: &SandboxOpts<'_>) -> String {
     let blocked_modules = [
         "os",
         "subprocess",
@@ -178,11 +186,12 @@ pub(crate) fn build_bridge_sandbox_wrapper(
 
     let blocked_list = blocked_modules
         .iter()
-        .map(|m| format!("'{}'", m))
+        .map(|m| format!("'{m}'"))
         .collect::<Vec<_>>()
         .join(", ");
 
-    let indented_user_code = user_code
+    let indented_user_code = opts
+        .user_code
         .lines()
         .map(|line| format!("    {line}"))
         .collect::<Vec<_>>()
@@ -198,6 +207,7 @@ pub(crate) fn build_bridge_sandbox_wrapper(
 import threading
 import concurrent.futures
 import concurrent.futures.thread
+{prelude_imports}
 
 BLOCKED = {{{blocked_list}}}
 _original_import = __builtins__.__import__
@@ -255,9 +265,10 @@ _real_stdout.write(json.dumps(output))
 _real_stdout.flush()
 "#,
         blocked_list = blocked_list,
-        memory_mb = memory_mb,
-        cpu_secs = cpu_secs,
-        bridge_shim = bridge_shim_source(),
+        memory_mb = opts.memory_mb,
+        cpu_secs = opts.cpu_secs,
+        prelude_imports = opts.prelude_imports,
+        bridge_shim = bridge_shim_source(opts.transport_setup),
         indented_user_code = indented_user_code,
     )
 }
@@ -283,15 +294,15 @@ fn bridge_ok_response(id: u64, data: Value) -> String {
     .to_string()
 }
 
-#[cfg(unix)]
-mod unix_impl {
+/// Platform-neutral bridge plumbing: line-JSON pump, child wait, and output
+/// parsing shared by the fd (unix) and TCP (windows) transports.
+#[cfg(any(unix, windows))]
+mod shared {
     use super::*;
-    use std::os::unix::io::{FromRawFd, IntoRawFd};
-    use std::os::unix::process::CommandExt;
     use std::process::Child;
-    use std::sync::OnceLock;
+    use std::sync::{Arc, Mutex, OnceLock};
 
-    fn bridge_pump_runtime() -> &'static tokio::runtime::Runtime {
+    pub(super) fn bridge_pump_runtime() -> &'static tokio::runtime::Runtime {
         static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
         RUNTIME.get_or_init(|| {
             // Multi-thread: doc_summary/doc_metadata use tokio::join! for parallel PG
@@ -303,6 +314,180 @@ mod unix_impl {
                 .expect("bridge pump runtime")
         })
     }
+
+    pub(super) async fn wait_child(
+        mut child: Child,
+    ) -> Result<(Option<std::process::ExitStatus>, String, String), InterpreterError> {
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        std::thread::spawn(move || {
+            let result = (|| {
+                let stdout_handle = stdout_pipe.map(|mut stdout| {
+                    std::thread::spawn(move || {
+                        let mut buf = Vec::new();
+                        let _ = stdout.read_to_end(&mut buf);
+                        buf
+                    })
+                });
+                let stderr_handle = stderr_pipe.map(|mut stderr| {
+                    std::thread::spawn(move || {
+                        let mut buf = Vec::new();
+                        let _ = stderr.read_to_end(&mut buf);
+                        buf
+                    })
+                });
+
+                let status = child.wait().map_err(InterpreterError::Io)?;
+                let stdout = stdout_handle
+                    .map(|h| h.join())
+                    .transpose()
+                    .map_err(|_| {
+                        InterpreterError::Io(std::io::Error::other("stdout reader panicked"))
+                    })?
+                    .unwrap_or_default();
+                let stderr = stderr_handle
+                    .map(|h| h.join())
+                    .transpose()
+                    .map_err(|_| {
+                        InterpreterError::Io(std::io::Error::other("stderr reader panicked"))
+                    })?
+                    .unwrap_or_default();
+                Ok((
+                    Some(status),
+                    String::from_utf8(stdout)?,
+                    String::from_utf8(stderr)?,
+                ))
+            })();
+            let _ = tx.send(result);
+        });
+
+        rx.await
+            .map_err(|_| InterpreterError::Bridge("child wait channel closed".to_string()))?
+    }
+
+    /// Line-JSON request pump with concurrent host calls.
+    ///
+    /// Each request is handled on a dedicated OS thread via
+    /// `runtime.handle().block_on(bridge.call)`, so multiple outstanding RPCs
+    /// (Python `asyncio.gather`) overlap. Replies are written as soon as each
+    /// call finishes and may arrive out of order (Python matches by `id`).
+    pub(super) fn run_bridge_pump_sync<R, W>(
+        req_reader: R,
+        resp_writer: W,
+        bridge: Arc<dyn HostBridge>,
+    ) -> Result<(), InterpreterError>
+    where
+        R: std::io::Read,
+        W: std::io::Write + Send + 'static,
+    {
+        let mut reader = std::io::BufReader::new(req_reader);
+        let resp = Arc::new(Mutex::new(resp_writer));
+        let runtime = bridge_pump_runtime();
+        let rt_handle = runtime.handle().clone();
+        let mut workers: Vec<std::thread::JoinHandle<Result<(), InterpreterError>>> = Vec::new();
+
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let trimmed = line.trim().to_string();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    let bridge = Arc::clone(&bridge);
+                    let resp = Arc::clone(&resp);
+                    let rt_handle = rt_handle.clone();
+                    workers.push(std::thread::spawn(move || {
+                        let response_line = match serde_json::from_str::<BridgeRequest>(&trimmed) {
+                            Ok(req) => {
+                                let data =
+                                    rt_handle.block_on(bridge.call(&req.method, req.args));
+                                bridge_ok_response(req.id, data)
+                            }
+                            Err(e) => {
+                                bridge_error_response(0, "invalid_request", format!("{e}"))
+                            }
+                        };
+                        let mut out = resp.lock().map_err(|_| {
+                            InterpreterError::Bridge("bridge response lock poisoned".into())
+                        })?;
+                        out.write_all(response_line.as_bytes())
+                            .map_err(InterpreterError::Io)?;
+                        out.write_all(b"\n").map_err(InterpreterError::Io)?;
+                        out.flush().map_err(InterpreterError::Io)?;
+                        Ok(())
+                    }));
+                }
+                Err(e) => return Err(InterpreterError::Io(e)),
+            }
+        }
+
+        let mut first_err: Option<InterpreterError> = None;
+        for h in workers {
+            match h.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+                Err(_) => {
+                    if first_err.is_none() {
+                        first_err = Some(InterpreterError::Bridge(
+                            "bridge worker thread panicked".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    pub(super) fn parse_child_output(
+        status: Option<&std::process::ExitStatus>,
+        stdout: String,
+        stderr: String,
+    ) -> Result<ExecutionResult, InterpreterError> {
+        let exit_code = status.and_then(|s| s.code());
+        let success = status.is_some_and(|s| s.success());
+
+        match serde_json::from_str::<ExecutionResult>(&stdout) {
+            Ok(mut result) => {
+                if !stderr.is_empty() && result.stderr.is_empty() {
+                    result.stderr = stderr;
+                }
+                if !success {
+                    result.success = false;
+                    result.exit_code = exit_code;
+                }
+                Ok(result)
+            }
+            Err(_) => Ok(ExecutionResult {
+                stdout,
+                stderr,
+                result: None,
+                success,
+                exit_code,
+                killed: false,
+            }),
+        }
+    }
+}
+
+#[cfg(unix)]
+mod unix_impl {
+    use super::*;
+    use super::shared::{parse_child_output, run_bridge_pump_sync, wait_child};
+    use std::os::unix::io::{FromRawFd, IntoRawFd};
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+    use std::os::unix::process::CommandExt;
 
     /// `pre_exec` pins the bridge pipes onto fd 3/4 via `dup2` + `close`.
     /// If the OS allocated a pipe at fd 3/4 already, `dup2(x, x)` is a no-op and
@@ -331,7 +516,16 @@ mod unix_impl {
         code: &str,
         bridge: Arc<dyn HostBridge>,
     ) -> Result<ExecutionResult, InterpreterError> {
-        let sandbox_code = build_bridge_sandbox_wrapper(code, memory_mb, cpu_secs);
+        let sandbox_code = build_bridge_sandbox_wrapper(&SandboxOpts {
+            user_code: code,
+            memory_mb,
+            cpu_secs,
+            prelude_imports: "",
+            // fd3/fd4 pinned by pre_exec below; line-buffered text mode.
+            transport_setup: r#"
+_bridge_transport = {"req": open(3, "w", buffering=1), "resp": open(4, "r", buffering=1)}
+"#,
+        });
 
         let (req_reader, req_writer) = std::io::pipe().map_err(InterpreterError::Io)?;
         let (resp_reader, resp_writer) = std::io::pipe().map_err(InterpreterError::Io)?;
@@ -419,162 +613,9 @@ mod unix_impl {
             }
         };
 
-        let exit_code = status.as_ref().and_then(|s| s.code());
-        let success = status.as_ref().is_some_and(|s| s.success());
-
-        match serde_json::from_str::<ExecutionResult>(&stdout) {
-            Ok(mut result) => {
-                if !stderr.is_empty() && result.stderr.is_empty() {
-                    result.stderr = stderr;
-                }
-                if !success {
-                    result.success = false;
-                    result.exit_code = exit_code;
-                }
-                Ok(result)
-            }
-            Err(_) => Ok(ExecutionResult {
-                stdout,
-                stderr,
-                result: None,
-                success,
-                exit_code,
-                killed: false,
-            }),
-        }
+        parse_child_output(status.as_ref(), stdout, stderr)
     }
 
-    async fn wait_child(
-        mut child: Child,
-    ) -> Result<(Option<std::process::ExitStatus>, String, String), InterpreterError> {
-        let stdout_pipe = child.stdout.take();
-        let stderr_pipe = child.stderr.take();
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        std::thread::spawn(move || {
-            let result = (|| {
-                let stdout_handle = stdout_pipe.map(|mut stdout| {
-                    std::thread::spawn(move || {
-                        let mut buf = Vec::new();
-                        let _ = stdout.read_to_end(&mut buf);
-                        buf
-                    })
-                });
-                let stderr_handle = stderr_pipe.map(|mut stderr| {
-                    std::thread::spawn(move || {
-                        let mut buf = Vec::new();
-                        let _ = stderr.read_to_end(&mut buf);
-                        buf
-                    })
-                });
-
-                let status = child.wait().map_err(InterpreterError::Io)?;
-                let stdout = stdout_handle
-                    .map(|h| h.join())
-                    .transpose()
-                    .map_err(|_| {
-                        InterpreterError::Io(std::io::Error::other("stdout reader panicked"))
-                    })?
-                    .unwrap_or_default();
-                let stderr = stderr_handle
-                    .map(|h| h.join())
-                    .transpose()
-                    .map_err(|_| {
-                        InterpreterError::Io(std::io::Error::other("stderr reader panicked"))
-                    })?
-                    .unwrap_or_default();
-                Ok((
-                    Some(status),
-                    String::from_utf8(stdout)?,
-                    String::from_utf8(stderr)?,
-                ))
-            })();
-            let _ = tx.send(result);
-        });
-
-        rx.await
-            .map_err(|_| InterpreterError::Bridge("child wait channel closed".to_string()))?
-    }
-
-    /// Line-JSON request pump with concurrent host calls.
-    ///
-    /// Each request is handled on a dedicated OS thread via
-    /// `runtime.handle().block_on(bridge.call)`, so multiple outstanding RPCs
-    /// (Python `asyncio.gather`) overlap. Replies are written as soon as each
-    /// call finishes and may arrive out of order (Python matches by `id`).
-    fn run_bridge_pump_sync(
-        req_file: std::fs::File,
-        resp_file: std::fs::File,
-        bridge: Arc<dyn HostBridge>,
-    ) -> Result<(), InterpreterError> {
-        use std::sync::{Arc, Mutex};
-
-        let mut reader = std::io::BufReader::new(req_file);
-        let resp = Arc::new(Mutex::new(resp_file));
-        let runtime = bridge_pump_runtime();
-        let rt_handle = runtime.handle().clone();
-        let mut workers: Vec<std::thread::JoinHandle<Result<(), InterpreterError>>> = Vec::new();
-
-        loop {
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let trimmed = line.trim().to_string();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-                    let bridge = Arc::clone(&bridge);
-                    let resp = Arc::clone(&resp);
-                    let rt_handle = rt_handle.clone();
-                    workers.push(std::thread::spawn(move || {
-                        let response_line = match serde_json::from_str::<BridgeRequest>(&trimmed) {
-                            Ok(req) => {
-                                let data =
-                                    rt_handle.block_on(bridge.call(&req.method, req.args));
-                                bridge_ok_response(req.id, data)
-                            }
-                            Err(e) => {
-                                bridge_error_response(0, "invalid_request", format!("{e}"))
-                            }
-                        };
-                        let mut out = resp.lock().map_err(|_| {
-                            InterpreterError::Bridge("bridge response lock poisoned".into())
-                        })?;
-                        out.write_all(response_line.as_bytes())
-                            .map_err(InterpreterError::Io)?;
-                        out.write_all(b"\n").map_err(InterpreterError::Io)?;
-                        out.flush().map_err(InterpreterError::Io)?;
-                        Ok(())
-                    }));
-                }
-                Err(e) => return Err(InterpreterError::Io(e)),
-            }
-        }
-
-        let mut first_err: Option<InterpreterError> = None;
-        for h in workers {
-            match h.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    if first_err.is_none() {
-                        first_err = Some(e);
-                    }
-                }
-                Err(_) => {
-                    if first_err.is_none() {
-                        first_err = Some(InterpreterError::Bridge(
-                            "bridge worker thread panicked".into(),
-                        ));
-                    }
-                }
-            }
-        }
-        match first_err {
-            Some(e) => Err(e),
-            None => Ok(()),
-        }
-    }
 
     #[cfg(test)]
     mod tests {
@@ -617,20 +658,354 @@ mod unix_impl {
     }
 }
 
-#[cfg(not(unix))]
-pub async fn execute_with_bridge(
-    _python_path: &str,
-    _timeout_secs: u64,
-    _memory_mb: u64,
-    _cpu_secs: u64,
-    _code: &str,
-    _bridge: Arc<dyn HostBridge>,
-) -> Result<ExecutionResult, InterpreterError> {
-    Err(InterpreterError::Bridge(
-        "sandbox retrieval bridge requires a Unix platform".to_string(),
-    ))
+/// Windows transport: the shim talks line-JSON RPC over a loopback TCP socket
+/// instead of fd3/4 (no dup2/inheritable-fd equivalent). The child authenticates
+/// with a per-execution random token so unrelated local processes cannot ride
+/// the listener; the listener binds 127.0.0.1:0 and accepts exactly one
+/// connection before the host proceeds. Python is discovered via
+/// `AVRAG_SANDBOX_PYTHON`, the bundle next to the exe, or PATH (probed —
+/// WindowsApps ships a zero-byte store stub that silently exits 49).
+#[cfg(windows)]
+mod windows_impl {
+    use super::shared::{parse_child_output, run_bridge_pump_sync, wait_child};
+    use super::{
+        build_bridge_sandbox_wrapper, ExecutionResult, HostBridge, InterpreterError, SandboxOpts,
+    };
+    use std::io::{BufRead, BufReader};
+    use std::net::TcpListener;
+    use std::process::{Command, Stdio};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    const BRIDGE_TOKEN_ENV: &str = "AVRAG_SANDBOX_BRIDGE_TOKEN";
+
+    /// Resolve the Python interpreter for this host process.
+    ///
+    /// Order: `AVRAG_SANDBOX_PYTHON` (explicit override wins), bundle shipped
+    /// next to the current exe (`python\python.exe`, the desktop install tree),
+    /// then PATH candidates. Every candidate is probed with `--version` so the
+    /// WindowsApps store stub (a 2-byte reparse exe that exits silently) is
+    /// rejected instead of producing empty sandbox output.
+    pub(super) fn resolve_python_path(configured: &str) -> Result<String, InterpreterError> {
+        if let Ok(explicit) = std::env::var("AVRAG_SANDBOX_PYTHON") {
+            let explicit = explicit.trim().to_string();
+            if !explicit.is_empty() {
+                return Ok(explicit);
+            }
+        }
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(dir) = exe.parent()
+        {
+            let bundled = dir.join("python").join("python.exe");
+            if bundled.is_file() {
+                return Ok(bundled.to_string_lossy().into_owned());
+            }
+        }
+        // `configured` is "python" on Windows (CodeInterpreter default).
+        let mut candidates: Vec<String> = vec![configured.to_string(), "python".into()];
+        candidates.retain(|c| !c.trim().is_empty());
+        candidates.dedup();
+        for cand in candidates {
+            if probe_python(&cand) {
+                return Ok(cand);
+            }
+        }
+        Err(InterpreterError::PythonNotFound(
+            "no usable python on Windows (set AVRAG_SANDBOX_PYTHON or bundle python/python.exe next to avrag-api.exe)"
+                .to_string(),
+        ))
+    }
+
+    fn probe_python(candidate: &str) -> bool {
+        std::process::Command::new(candidate)
+            .arg("--version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .is_ok_and(|out| out.status.success())
+    }
+
+    fn transport_setup_py(port: u16, token: &str) -> String {
+        format!(
+            r#"_sock = socket.create_connection(("127.0.0.1", {port}), timeout=300)
+_sock.sendall(("{token}\n").encode())
+_req = _sock.makefile("w", buffering=1, encoding="utf-8")
+_resp = _sock.makefile("r", buffering=1, encoding="utf-8")
+_bridge_transport = {{"req": _req, "resp": _resp}}"#
+        )
+    }
+
+    /// Accept exactly one connection, verify the token line, then hand the
+    /// socket halves to the shared line-JSON pump.
+    fn pump_accept(
+        listener: TcpListener,
+        expected_token: &str,
+        bridge: Arc<dyn HostBridge>,
+    ) -> Result<(), InterpreterError> {
+        listener
+            .set_nonblocking(false)
+            .map_err(InterpreterError::Io)?;
+        let (stream, _) = listener.accept().map_err(InterpreterError::Io)?;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(3600)))
+            .map_err(InterpreterError::Io)?;
+        let mut reader = BufReader::new(&stream);
+        let mut token_line = String::new();
+        reader.read_line(&mut token_line).map_err(InterpreterError::Io)?;
+        if token_line.trim() != expected_token {
+            return Err(InterpreterError::Bridge(
+                "sandbox bridge token mismatch".to_string(),
+            ));
+        }
+        // Duplicate the stream so req/resp halves own independent handles.
+        run_bridge_pump_sync_req_resp(stream, bridge)
+    }
+
+    /// Same line-JSON contract as the unix fd pump, over socket halves.
+    /// The shared pump is generic over Read/Write; cloned TcpStreams feed it.
+    fn run_bridge_pump_sync_req_resp(
+        stream: std::net::TcpStream,
+        bridge: Arc<dyn HostBridge>,
+    ) -> Result<(), InterpreterError> {
+        let req_stream = stream.try_clone().map_err(InterpreterError::Io)?;
+        let resp_stream = stream;
+        run_bridge_pump_sync(req_stream, resp_stream, bridge)
+    }
+
+    pub async fn execute_with_bridge(
+        python_path: &str,
+        timeout_secs: u64,
+        memory_mb: u64,
+        cpu_secs: u64,
+        code: &str,
+        bridge: Arc<dyn HostBridge>,
+    ) -> Result<ExecutionResult, InterpreterError> {
+        let python = resolve_python_path(python_path)?;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(InterpreterError::Io)?;
+        let port = listener.local_addr().map_err(InterpreterError::Io)?.port();
+        let token = format!("{:032x}", rand_u64() | 1);
+        let sandbox_code = build_bridge_sandbox_wrapper(&SandboxOpts {
+            user_code: code,
+            memory_mb,
+            cpu_secs,
+            // socket is BLOCKED post-hook; the TCP transport needs it first.
+            prelude_imports: "import socket",
+            transport_setup: &transport_setup_py(port, &token),
+        });
+
+        let (pump_ready_tx, pump_ready_rx) = tokio::sync::oneshot::channel();
+        let pump_bridge = Arc::clone(&bridge);
+        let pump_token = token.clone();
+        std::thread::spawn(move || {
+            let _ = pump_ready_tx.send(());
+            if let Err(e) = pump_accept(listener, &pump_token, pump_bridge) {
+                tracing::warn!("bridge pump ended with error: {e}");
+            }
+        });
+        pump_ready_rx
+            .await
+            .map_err(|_| InterpreterError::Bridge("pump failed to start".to_string()))?;
+
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
+
+        let mut command = Command::new(&python);
+        command
+            .arg("-c")
+            .arg(&sandbox_code)
+            .env(BRIDGE_TOKEN_ENV, &token)
+            .current_dir(temp_dir.path())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let child = command.spawn().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                InterpreterError::PythonNotFound(python.clone())
+            } else {
+                InterpreterError::Io(e)
+            }
+        })?;
+
+        // Job Object containment is best-effort: endpoint security (observed:
+        // 360 on the acceptance machine) denies AssignProcessToJobObject with
+        // ACCESS_DENIED even for freshly spawned children. Degrade to a
+        // per-pid TerminateProcess on timeout; the wall timeout is enforced
+        // either way.
+        let job = JobObject::create(memory_mb, cpu_secs)
+            .and_then(|job| job.assign(child.id()).map(|_| job))
+            .ok();
+        if job.is_none() {
+            tracing::warn!(
+                pid = child.id(),
+                "job-object containment unavailable (endpoint security); per-pid kill on timeout"
+            );
+        }
+
+        let timeout = Duration::from_secs(timeout_secs);
+        let child_pid = child.id();
+        let wait_result = tokio::time::timeout(timeout, wait_child(child)).await;
+        let (status, stdout, stderr) = match wait_result {
+            Ok(Ok(tuple)) => tuple,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                match &job {
+                    Some(j) => j.terminate(),
+                    None => terminate_process_by_pid(child_pid),
+                }
+                return Err(InterpreterError::Timeout(timeout_secs));
+            }
+        };
+        parse_child_output(status.as_ref(), stdout, stderr)
+    }
+
+    /// Fallback kill when job containment is unavailable: open the child pid
+    /// with PROCESS_TERMINATE and terminate it. Best-effort (child may have
+    /// exited between timeout and kill); python's own subprocesses are not
+    /// covered.
+    fn terminate_process_by_pid(pid: u32) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+        };
+        unsafe {
+            let proc = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if proc.is_null() {
+                tracing::warn!(pid, "fallback kill could not open child process");
+                return;
+            }
+            TerminateProcess(proc, 1);
+            CloseHandle(proc);
+        }
+    }
+
+    /// Best-effort per-run random u64 (no rand dep): xorshift over address
+    /// entropy + nanos. Token strength is defense-in-depth on top of the
+    /// 127.0.0.1-only listener + single-accept lifecycle.
+    fn rand_u64() -> u64 {
+        use std::time::Instant;
+        let mut x = std::process::id() as u64 ^ Instant::now().elapsed().as_nanos() as u64;
+        x ^= &x as *const u64 as u64;
+        let mut s = x | 1;
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        s
+    }
+
+    /// Job Object wrapper: process-tree containment + memory/CPU limits +
+    /// `TerminateJobObject` on timeout (the killpg analogue).
+    pub(crate) struct JobObject(WindowsHandle);
+
+    pub(crate) struct WindowsHandle(WindowsSysHandle);
+    struct WindowsSysHandle(*mut core::ffi::c_void);
+
+    // A Win32 HANDLE is a process-wide kernel object identifier with no thread
+    // affinity: TerminateJobObject/AssignProcessToJobObject/CloseHandle are all
+    // callable from any thread in the owning process (same as std's own
+    // Send/Sync impls for RawHandle wrappers like std::fs::File). Required
+    // because execute_with_bridge holds the JobObject across .await points.
+    unsafe impl Send for WindowsSysHandle {}
+
+    impl JobObject {
+        pub(crate) fn create(memory_mb: u64, cpu_secs: u64) -> Result<Self, InterpreterError> {
+            use windows_sys::Win32::System::JobObjects::{
+                CreateJobObjectW, JobObjectExtendedLimitInformation,
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                JOB_OBJECT_LIMIT_PROCESS_MEMORY, JOB_OBJECT_LIMIT_PROCESS_TIME,
+                SetInformationJobObject,
+            };
+            unsafe {
+                let job = CreateJobObjectW(core::ptr::null(), core::ptr::null());
+                if job.is_null() {
+                    return Err(InterpreterError::Io(std::io::Error::last_os_error()));
+                }
+                let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = core::mem::zeroed();
+                info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                    | JOB_OBJECT_LIMIT_PROCESS_TIME
+                    | JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+                info.BasicLimitInformation.PerProcessUserTimeLimit =
+                    (cpu_secs as i64) * 10_000_000; // 100ns units
+                info.ProcessMemoryLimit = (memory_mb * 1024 * 1024) as usize;
+                let ok = SetInformationJobObject(
+                    job,
+                    JobObjectExtendedLimitInformation,
+                    &info as *const _ as *const core::ffi::c_void,
+                    core::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                );
+                if ok == 0 {
+                    return Err(InterpreterError::Io(std::io::Error::last_os_error()));
+                }
+                Ok(Self(WindowsHandle(WindowsSysHandle(job))))
+            }
+        }
+
+        pub(crate) fn assign(&self, pid: u32) -> Result<(), InterpreterError> {
+            use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+            use windows_sys::Win32::Foundation::CloseHandle;
+            unsafe {
+                let proc = open_process_for_job(pid)?;
+                let ok = AssignProcessToJobObject((self.0).0 .0, proc);
+                CloseHandle(proc);
+                if ok == 0 {
+                    return Err(InterpreterError::Io(std::io::Error::last_os_error()));
+                }
+                Ok(())
+            }
+        }
+
+        pub(crate) fn terminate(&self) {
+            use windows_sys::Win32::System::JobObjects::TerminateJobObject;
+            unsafe {
+                TerminateJobObject((self.0).0 .0, 1);
+            }
+        }
+    }
+
+    impl Drop for JobObject {
+        fn drop(&mut self) {
+            use windows_sys::Win32::Foundation::CloseHandle;
+            unsafe { CloseHandle((self.0).0 .0) };
+        }
+    }
+
+    fn open_process_for_job(pid: u32) -> Result<*mut core::ffi::c_void, InterpreterError> {
+        use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA};
+        unsafe {
+            let proc = OpenProcess(PROCESS_SET_QUOTA, 0, pid);
+            if proc.is_null() {
+                return Err(InterpreterError::Io(std::io::Error::last_os_error()));
+            }
+            Ok(proc)
+        }
+    }
 }
 
+/// Windows non-bridge `execute()` helper: create a Job Object with the same
+/// kill-on-close/limits policy and assign the spawned child, so the plain
+/// sandbox path also gets process-tree containment + timeout kill.
+#[cfg(windows)]
+pub(crate) fn job_object_for_child(
+    pid: u32,
+    memory_mb: u64,
+    cpu_secs: u64,
+) -> Option<windows_impl::JobObject> {
+    windows_impl::JobObject::create(memory_mb, cpu_secs)
+        .and_then(|job| job.assign(pid).map(|_| job))
+        .ok()
+}
+
+/// Windows non-bridge `execute()` helper: resolve a usable Python interpreter
+/// (env override → bundle next to the exe → probed PATH candidates) so the
+/// plain sandbox path cannot pick up the zero-byte WindowsApps store stub.
+#[cfg(windows)]
+pub(crate) fn resolve_python_path(configured: &str) -> Result<String, InterpreterError> {
+    windows_impl::resolve_python_path(configured)
+}
+
+
+#[cfg(windows)]
+pub use windows_impl::execute_with_bridge;
 #[cfg(unix)]
 pub use unix_impl::execute_with_bridge;
 
@@ -684,7 +1059,7 @@ mod bridge_shim_tests {
 #[cfg(all(test, unix))]
 mod spawn_tests {
     use super::*;
-    use std::io::Read;
+    use std::process::Command;
     use std::os::unix::io::IntoRawFd;
     use std::os::unix::process::CommandExt;
 
@@ -901,3 +1276,108 @@ pub(crate) async fn execute_with_bridge_arc<B: HostBridge + Send + Sync + 'stati
     execute_with_bridge(python_path, timeout_secs, memory_mb, cpu_secs, code, bridge).await
 }
 
+
+/// Platform-neutral bridge interop tests (unix fd transport + windows TCP
+/// transport both run these). Python resolution goes through the same
+/// production discovery as the runtime path.
+#[cfg(test)]
+mod bridge_interop_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct EchoBridge {
+        calls: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl HostBridge for EchoBridge {
+        async fn call(&self, method: &str, args: Value) -> Value {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            json!({ "method": method, "args": args })
+        }
+    }
+
+    fn platform_python() -> Option<String> {
+        #[cfg(unix)]
+        {
+            if std::process::Command::new("python3").arg("--version").output().is_ok() {
+                return Some("python3".to_string());
+            }
+            None
+        }
+        #[cfg(windows)]
+        {
+            super::windows_impl::resolve_python_path("python").ok()
+        }
+    }
+
+    /// Round trip: sandbox code calls `client.save` (module-level alias) and
+    /// prints the response; the host bridge must observe the RPC and the
+    /// captured stdout must carry the echoed payload.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_rpc_roundtrip_across_transport() {
+        let Some(python) = platform_python() else {
+            eprintln!("skipping: no usable python on this host");
+            return;
+        };
+        let bridge = Arc::new(EchoBridge {
+            calls: AtomicUsize::new(0),
+        });
+        let result = execute_with_bridge(
+            &python,
+            60,
+            256,
+            60,
+            "data = await client.save('k', {'v': 42})\nprint('got', data['method'], data['args']['data']['v'])",
+            bridge.clone(),
+        )
+        .await
+        .expect("bridge execution");
+        assert!(
+            result.success || result.exit_code == Some(0),
+            "sandbox failed: {} {}",
+            result.stdout,
+            result.stderr
+        );
+        assert_eq!(bridge.calls.load(Ordering::SeqCst), 1, "host must see 1 RPC");
+        assert!(
+            result.stdout.contains("got save 42"),
+            "stdout must carry echoed RPC payload, got: {}",
+            result.stdout
+        );
+    }
+
+    /// A blocked import from user code must stay blocked on both transports
+    /// (security hook parity), surfacing as a traceback in stderr.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_blocks_os_import_on_all_transports() {
+        let Some(python) = platform_python() else {
+            eprintln!("skipping: no usable python on this host");
+            return;
+        };
+        let bridge = Arc::new(EchoBridge {
+            calls: AtomicUsize::new(0),
+        });
+        let result = execute_with_bridge(
+            &python,
+            60,
+            256,
+            60,
+            "import os\nprint('should not reach')",
+            bridge,
+        )
+        .await
+        .expect("bridge execution");
+        assert!(
+            result.stderr.contains("blocked for security reasons"),
+            "expected import block traceback, got stderr: {}",
+            result.stderr
+        );
+        assert!(
+            !result.stdout.contains("should not reach"),
+            "user code after blocked import must not run"
+        );
+    }
+}

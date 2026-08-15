@@ -79,11 +79,22 @@ pub struct CodeInterpreter {
 impl Default for CodeInterpreter {
     fn default() -> Self {
         Self {
-            python_path: "python3".to_string(),
+            python_path: default_python_path(),
             timeout_secs: 30,
             memory_limit_mb: 256,
             cpu_limit_secs: 30,
         }
+    }
+}
+
+/// Platform default Python binary. Unix keeps `python3`; Windows prefers the
+/// bundle shipped next to the exe (`python/python.exe`), falling back to PATH
+/// discovery at spawn time (see `bridge::resolve_python_path`).
+fn default_python_path() -> String {
+    if cfg!(windows) {
+        "python".to_string()
+    } else {
+        "python3".to_string()
     }
 }
 
@@ -126,7 +137,13 @@ impl CodeInterpreter {
         let temp_dir = tempfile::TempDir::new()
             .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
 
-        let mut command = Command::new(&self.python_path);
+        // Windows PATH may only offer the zero-byte WindowsApps store stub, so
+        // resolve a real interpreter first (env override → bundle → probed PATH).
+        #[cfg(windows)]
+        let python_path = bridge::resolve_python_path(&self.python_path)?;
+        #[cfg(not(windows))]
+        let python_path = self.python_path.clone();
+        let mut command = Command::new(&python_path);
         command
             .arg("-c")
             .arg(&sandbox_code)
@@ -147,13 +164,12 @@ impl CodeInterpreter {
             }
         })?;
         // Capture the child's pid before it is moved into the wait thread; with
-        // process_group(0) set, this pid doubles as the process-group id for killpg.
+        // process_group(0) set, this pid doubles as the process-group id for
+        // killpg (unix). Windows kills via the job object assigned below.
         #[cfg(unix)]
         let child_pid = child.id();
-        // Keep `child_pid` referenced on non-unix so the binding stays live; the
-        // group-kill is a no-op there (sandbox requires Unix anyway).
-        #[cfg(not(unix))]
-        let child_pid: Option<u32> = Some(child.id());
+        #[cfg(windows)]
+        let job = bridge::job_object_for_child(child.id(), self.memory_limit_mb, self.cpu_limit_secs);
 
         // Resource limits are applied inside the Python sandbox via the
         // `resource` module.  The Python wrapper calls resource.setrlimit()
@@ -194,11 +210,15 @@ impl CodeInterpreter {
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // Child was moved into the wait thread; kill its whole process
-                // group to clean up python + any subprocesses it spawned, then
-                // reap the zombie via the wait thread (which still owns `child`).
+                // tree (unix: process group; windows: job object), then reap
+                // via the wait thread (which still owns `child`).
                 #[cfg(unix)]
                 unsafe {
                     let _ = libc::killpg(child_pid as i32, libc::SIGKILL);
+                }
+                #[cfg(windows)]
+                if let Some(job) = job.as_ref() {
+                    job.terminate();
                 }
                 Err(InterpreterError::Timeout(self.timeout_secs))
             }
