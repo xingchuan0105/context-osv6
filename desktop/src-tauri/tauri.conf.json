@@ -51,11 +51,12 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../runtime/docker-compose.client.yml",
-      "../runtime/README.md",
-      { "../runtime/bin/python": "python/" }
-    ],
+    "resources": {
+      "../runtime/docker-compose.client.yml": "runtime/docker-compose.client.yml",
+      "../runtime/README.md": "runtime/README.md",
+      "../runtime/bin/python": "python/",
+      "../runtime/parsers": "runtime/parsers"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser",

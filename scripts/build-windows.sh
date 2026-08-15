@@ -108,6 +108,10 @@ if not skip_sidecars:
         resources["../runtime/bin/python"] = "python/"
     else:
         print("build-windows: warning: runtime/bin/python not staged; sandbox bridge will fall back to PATH probing", file=sys.stderr)
+    # Stdlib-only document parsers driven by the bundled python (MARKITDOWN_BIN /
+    # ANYDOC_BIN written into client.env by native_stack when present).
+    if (desktop / "runtime/parsers/markitdown-lite.cmd").is_file():
+        resources["../runtime/parsers"] = "runtime/parsers"
     # Agent-loop runtime assets: avrag-api/worker load modes/*.yaml + prompts/*.md
     # relative to CWD (= install dir for spawned sidecars). Same channel as
     # hotswap's copy_runtime_assets.

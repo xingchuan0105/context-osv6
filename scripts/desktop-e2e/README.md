@@ -55,11 +55,11 @@ stored provider secret does not reroute desktop chat. L1 also injects
 test-only `E2E_ENABLED=true` (disables local HTTP rate limiting) and a
 temporary `BYOK_MASTER_KEY` so the provider-secret route can encrypt a dummy row.
 
-The packaged Windows worker currently requires a `markitdown` CLI. For this
-WSL-backed dev tree, L1 also stages `markitdown-wsl.cmd` beside the run state
-and sets `MARKITDOWN_BIN` to it, so text-file ingest can complete without
-installing Python on Windows. A shipping installer still needs its own parser
-provisioning; this shim is not a product replacement.
+Document parsing is provisioned by the install tree itself: `runtime/parsers/`
+ships stdlib-only `markitdown-lite` / `anydoc-lite` wrappers driven by the
+bundled Python, and the desktop shell writes `MARKITDOWN_BIN` / `ANYDOC_BIN`
+into `client.env` when they are present. No host-side markitdown install is
+needed for text/office ingest.
 
 Optional timeout overrides:
 

@@ -562,10 +562,6 @@ function Start-E2eApp {
         $global:Details.byok_master_key_provisioned = $true
         $env:E2E_ENABLED = "true"
         $global:Details.e2e_enabled = $true
-        $markitdownShim = Join-Path (Split-Path -Parent $StateHome) "markitdown-wsl.cmd"
-        Copy-Item -Force -Path (Join-Path $PSScriptRoot "markitdown-wsl.cmd") -Destination $markitdownShim
-        $env:MARKITDOWN_BIN = $markitdownShim
-        $global:Details.markitdown_bin = $markitdownShim
     } else {
         Remove-Item Env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS -ErrorAction SilentlyContinue
         Remove-Item Env:WEBVIEW2_USER_DATA_FOLDER -ErrorAction SilentlyContinue
