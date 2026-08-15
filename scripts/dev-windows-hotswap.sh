@@ -137,6 +137,14 @@ copy_sidecars_into() {
   [[ -f "$api" ]] && cp -f "$api" "$dest/avrag-api.exe"
   [[ -f "$worker" ]] && cp -f "$worker" "$dest/avrag-worker.exe"
   copy_mingw_into "$dest"
+  # Python embeddable bundle for the sandbox bridge (staged into
+  # runtime/bin/python by stage-desktop-sidecars.sh; the sandbox resolves
+  # <exe_dir>/python/python.exe at spawn time).
+  if [[ -d "$DESKTOP/runtime/bin/python" ]]; then
+    rm -rf "$dest/python"
+    cp -r "$DESKTOP/runtime/bin/python" "$dest/python"
+    log "python bundle → $dest/python"
+  fi
 }
 
 # Agent-loop runtime assets: the sidecars load modes/*.yaml + prompts/*.md at

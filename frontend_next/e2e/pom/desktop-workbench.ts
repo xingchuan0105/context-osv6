@@ -69,7 +69,7 @@ export class DesktopWorkbench {
 
   async waitForAssistantMessage(timeout = 120_000) {
     await this.page
-      .locator('[data-testid="workspace-chat-pane"] [data-testid="chat-message-assistant"]')
+      .locator('[data-testid="workspace-chat-pane"] [data-testid="chat-message"][data-role="assistant"]')
       .first()
       .waitFor({ state: "visible", timeout });
   }

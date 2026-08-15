@@ -6,6 +6,7 @@
 #   desktop/runtime/bin/avrag-worker[.exe]
 #   desktop/runtime/bin/context-os-mcp[.exe]   # stdio MCP for coding agents (not a Tauri sidecar)
 #   desktop/runtime/bin/context-os[.exe]      # thin CLI (status/ingest/ask/sources)
+#   desktop/runtime/bin/python/               # python embeddable bundle (windows triple only)
 #   desktop/src-tauri/binaries/avrag-api-<triple>[.exe]
 #   desktop/src-tauri/binaries/avrag-worker-<triple>[.exe]
 #
@@ -13,6 +14,8 @@
 #   STAGE_TARGET_TRIPLE  default: host (use x86_64-pc-windows-gnu for NSIS)
 #   STAGE_BUILD=1        cargo build --release [--target] if missing
 #   CARGO_BUILD_JOBS     default 2
+#   PYTHON_EMBED_ZIP     path to a local python-embed zip (skips download;
+#                        sha256 is still verified against the pin below)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,6 +31,14 @@ IS_WINDOWS_TRIPLE=0
 case "$TRIPLE" in
   *windows*) IS_WINDOWS_TRIPLE=1 ;;
 esac
+
+# Pinned CPython embeddable for the Windows sandbox (code-interpreter resolves
+# <exe_dir>/python/python.exe at spawn time). Flat layout: python.exe + DLLs +
+# python312.zip; keep python312._pth untouched. Embeddable has no pip — SaC
+# sandbox only needs the stdlib (asyncio/json/threading/socket).
+PYTHON_EMBED_VERSION="3.12.10"
+PYTHON_EMBED_SHA256="4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3"
+PYTHON_EMBED_URL="https://www.python.org/ftp/python/${PYTHON_EMBED_VERSION}/python-${PYTHON_EMBED_VERSION}-embed-amd64.zip"
 
 die() { echo "stage-desktop-sidecars: $*" >&2; exit 1; }
 # Always stderr — ensure_built is used inside $(...) capture.
@@ -136,6 +147,65 @@ if [[ -n "$TRIPLE" ]]; then
     chmod +x "$TAURI_BIN/avrag-api-${TRIPLE}" "$TAURI_BIN/avrag-worker-${TRIPLE}"
   fi
   log "tauri externalBin: $TAURI_BIN/avrag-*-${TRIPLE}*"
+fi
+
+# MinGW runtime DLLs (gnu target): avrag-api/worker need these next to the exe on Windows.
+# Without them Windows shows "找不到 libstdc++-6.dll" and API never binds :18080.
+if [[ "$IS_WINDOWS_TRIPLE" == "1" ]]; then
+  MINGW_DEST="$ROOT/desktop/runtime/mingw"
+  mkdir -p "$MINGW_DEST" "$RUNTIME_BIN" "$TAURI_BIN"
+  copy_mingw_dll() {
+    local name="$1"
+    local src=""
+    local c
+    for c in \
+      "/usr/lib/gcc/x86_64-w64-mingw32/13-posix/${name}" \
+      "/usr/lib/gcc/x86_64-w64-mingw32/13-win32/${name}" \
+      "/usr/lib/gcc/x86_64-w64-mingw32/12-posix/${name}" \
+      "/usr/lib/gcc/x86_64-w64-mingw32/12-win32/${name}" \
+      "/usr/x86_64-w64-mingw32/lib/${name}" \
+      "/usr/x86_64-w64-mingw32/bin/${name}"; do
+      if [[ -f "$c" ]]; then
+        src="$c"
+        break
+      fi
+    done
+    if [[ -z "$src" ]]; then
+      # last resort: locate
+      src="$(find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32 -name "$name" 2>/dev/null | head -1 || true)"
+    fi
+    if [[ -n "$src" && -f "$src" ]]; then
+      cp -f "$src" "$MINGW_DEST/$name"
+      cp -f "$src" "$RUNTIME_BIN/$name"
+      cp -f "$src" "$TAURI_BIN/$name"
+      log "mingw dll: $name <- $src"
+    else
+      log "warning: missing MinGW DLL $name (Windows sidecars may fail to start)"
+    fi
+  }
+  copy_mingw_dll "libstdc++-6.dll"
+  copy_mingw_dll "libgcc_s_seh-1.dll"
+  copy_mingw_dll "libwinpthread-1.dll"
+
+  # Python embeddable bundle → runtime/bin/python/ (next to avrag-api.exe;
+  # NSIS installs it via the bundle.resources map in tauri.conf.json).
+  stage_python_bundle() {
+    local dest="$RUNTIME_BIN/python"
+    local zip="${PYTHON_EMBED_ZIP:-$ROOT/desktop/runtime/vendor/python-${PYTHON_EMBED_VERSION}-embed-amd64.zip}"
+    if [[ ! -f "$zip" ]]; then
+      mkdir -p "$(dirname "$zip")"
+      log "downloading ${PYTHON_EMBED_URL} …"
+      curl -fL --retry 3 -o "$zip" "$PYTHON_EMBED_URL" || die "python embed download failed"
+    fi
+    echo "$PYTHON_EMBED_SHA256  $zip" | sha256sum -c - >/dev/null \
+      || die "python embed sha256 mismatch: $zip (expected $PYTHON_EMBED_SHA256)"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    unzip -q -o "$zip" -d "$dest" || die "python embed unzip failed: $zip"
+    [[ -f "$dest/python.exe" ]] || die "python bundle incomplete: $dest/python.exe missing"
+    log "python bundle: $dest (python $PYTHON_EMBED_VERSION embed amd64)"
+  }
+  stage_python_bundle
 fi
 
 cat >"$ROOT/desktop/runtime/LAYOUT" <<EOF

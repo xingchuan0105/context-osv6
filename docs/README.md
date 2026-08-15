@@ -47,6 +47,8 @@
 | `../avrag-rs/prompts/README.md` | prompt CDS 布局与撰写规则 |
 | `../avrag-rs/prompts/loop/README.md` | loop 观察消息加载路径与规则 |
 | `plans/2026-08-11-lead-rag-web-workers-design.md` | **Lead + Workers 定稿**（agent-lane 编排权威） |
+| `plans/2026-08-11-contextlm-geo-seo-optimization-plan.md` | **Context LM 公开站 GEO/SEO 优化方案**（GEOHub 实测 + 分阶段 backlog） |
+| `plans/geo-seo-briefs/` | GEOHub diagnose/seo/discover 复跑 brief（JSON） |
 
 ## 近期审计快照（时间点；未吸收进 AGENTS 前非强制）
 
@@ -54,6 +56,8 @@
 
 ## 进行中的计划
 
+- `plans/2026-08-13-windows-desktop-client-e2e-journey-design.md` — **Windows 桌面客户端打包本机 E2E**（默认套件 shell+ingest；全量旅程锁在产品对齐后；L0 / Windows Playwright+独立 config / L2；`llm-config.json` vs `user_provider_secrets`）。PR-3 交接见 [`plans/2026-08-14-windows-desktop-client-e2e-pr3-handoff.md`](plans/2026-08-14-windows-desktop-client-e2e-pr3-handoff.md)；**产品对齐（PR-4/PR-5）+ 真机验收交接**见 [`plans/2026-08-14-windows-desktop-client-acceptance-handoff.md`](plans/2026-08-14-windows-desktop-client-acceptance-handoff.md)
+- `plans/2026-08-15-windows-sandbox-bridge-port-handoff.md` — **Windows 沙箱 bridge 移植交接**（TCP transport + Job Object；修正 08-14 交接 §4 的 knockout 误诊——真根因是 `#[cfg(not(unix))]` 存根；Linux 18 绿 + Windows bridge interop 绿；剩非 bridge execute 发现、Python 捆绑、D-rag-full 重跑）
 - `plans/2026-08-02-architecture-deepening-plan.md` — 架构深化 5 波（C1 doc-scope / C2 profile memory / C3 Alipay / C4 llm / C5 citations 等）
 - `../avrag-rs/docs/plans/2026-08-06-ingestion-window-session-ps-merge.md` — **ingestion 原文均切窗口会话 + PS 合一 + triplet 同链 + SaC 去 doc_profile**（主干已接线；需 migration 0075 + 探针）
 - `../avrag-rs/docs/plans/2026-08-06-rerank-style-sticky-and-querycard-calc.md` — **Rerank style 粘连 + P-calc-ok + 外推/截断/天气/元数据提示**（2026-08-06 **已落地**）

@@ -53,7 +53,8 @@
     ],
     "resources": [
       "../runtime/docker-compose.client.yml",
-      "../runtime/README.md"
+      "../runtime/README.md",
+      { "../runtime/bin/python/*": "python/" }
     ],
     "windows": {
       "nsis": {
