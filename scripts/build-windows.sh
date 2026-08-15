@@ -80,17 +80,39 @@ TAURI_EXTRA_FILE="$(mktemp "${TMPDIR:-/tmp}/tauri-extra-XXXXXX.json")"
 cleanup_extra() { rm -f "$TAURI_EXTRA_FILE"; }
 trap cleanup_extra EXIT
 
-python3 - "$TAURI_EXTRA_FILE" "$SKIP_SIDECARS" "$SKIP_BUNDLED_RUNTIME" <<'PY'
+# Paths in this JSON are relative to desktop/src-tauri (Tauri convention).
+python3 - "$TAURI_EXTRA_FILE" "$SKIP_SIDECARS" "$SKIP_BUNDLED_RUNTIME" "$DESKTOP" <<'PY'
 import json, sys
-path, skip_sidecars, skip_rt = sys.argv[1], sys.argv[2] == "1", sys.argv[3] == "1"
+from pathlib import Path
+
+path, skip_sidecars, skip_rt, desktop = sys.argv[1], sys.argv[2] == "1", sys.argv[3] == "1", Path(sys.argv[4])
+src_tauri = desktop / "src-tauri"
 bundle = {}
 if not skip_sidecars:
     bundle["externalBin"] = ["binaries/avrag-api", "binaries/avrag-worker"]
-# Map form: source (rel to src-tauri) → install path under $RESOURCES
+# Map form: source (rel to src-tauri) → install path (next to exe / under resources)
 resources = {
     "../runtime/docker-compose.client.yml": "runtime/docker-compose.client.yml",
     "../runtime/README.md": "runtime/README.md",
 }
+# MinGW runtime for gnu-built avrag-api/worker (LoadLibrary looks next to the exe).
+for dll in ("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll"):
+    for rel in (f"binaries/{dll}", f"../runtime/mingw/{dll}", f"../runtime/bin/{dll}"):
+        if (src_tauri / rel).is_file():
+            resources[rel] = dll
+            break
+# Python embeddable for the sandbox bridge: install as $INSTDIR/python/ next to
+# avrag-api.exe (code-interpreter resolves <exe_dir>/python/python.exe).
+if not skip_sidecars:
+    if (desktop / "runtime/bin/python/python.exe").is_file():
+        resources["../runtime/bin/python"] = "python/"
+    else:
+        print("build-windows: warning: runtime/bin/python not staged; sandbox bridge will fall back to PATH probing", file=sys.stderr)
+    # Agent-loop runtime assets: avrag-api/worker load modes/*.yaml + prompts/*.md
+    # relative to CWD (= install dir for spawned sidecars). Same channel as
+    # hotswap's copy_runtime_assets.
+    resources["../../avrag-rs/modes"] = "modes"
+    resources["../../avrag-rs/prompts"] = "prompts"
 if not skip_rt:
     resources.update({
         "../runtime/bundled/windows-x64/pgsql": "runtime/pgsql",
@@ -103,6 +125,9 @@ if not skip_rt:
 bundle["resources"] = resources
 json.dump({"bundle": bundle}, open(path, "w"), indent=2)
 print(path)
+missing = [d for d in ("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll") if d not in resources.values()]
+if missing and not skip_sidecars:
+    print("build-windows: warning: MinGW DLLs not staged:", ", ".join(missing), file=sys.stderr)
 PY
 log "tauri extra config: $TAURI_EXTRA_FILE"
 log "tauri build --target $TARGET --bundles nsis (+ sidecars + bundled runtime)"
