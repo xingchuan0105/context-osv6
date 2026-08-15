@@ -36,7 +36,7 @@ User
       ├─ Sources / Notes / Chat
       ├─ Share settings + public surface
       └─ Share analytics（对象级）
-Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
+Client (desktop) — 同能力本机形态；分享上云仍走 Subscription；模型默认平台 key 走钱包余额（云登录后下发 relay 凭据），BYOK 为登录后高级选项
 ```
 
 **禁止**新产品对象绕过 Workspace 成为主 API 真相。
@@ -55,15 +55,19 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 /help                    帮助全文（含上手说明的长文入口）
 /help/api-access         Agent/API 接入（公开 SSR，未登录可读；2026-08-11 GEO A3）
 /help/api-access/agents  Agent 可读 API 文档（公开 SSR）
+/help/faq                产品事实 FAQ（公开 SSR；MCP / 密钥 / 名额 / BYOK / 定价）
+/help/compare            选型对比（公开 SSR；Context OS vs 笔记 AI / 第二大脑 / 通用 RAG；中立、无编造竞品数据）
 ```
 
 多站点 hub/blog/tools → 见 `site-map.ts` + `docs/engineering/MULTI_SITE_IA_INTEGRATION_PLAN_2026-07-14.md`。  
+编辑型长文/系列文仍可走 `blog.contextlm.top`（Ghost）；**产品事实型 FAQ 与可引用对比表** 以 app 公开 SSR 为 canonical（GEO Phase C，2026-08-12）。  
 **不要**把 family nav 写进登录后 App shell。
 
 ### 3.2 认证
 
 ```text
 /login · /register · /reset-password/*
+桌面壳内云登录门            客户端首次打开（非路由；登录后下发官方 key relay 凭据，见 docs/plans/2026-08-15-desktop-cloud-login-official-keys.md）
 ```
 
 ### 3.3 登录后 App（无永久「百科侧栏」）
@@ -127,6 +131,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |
 | **深层工具页** | `/dashboard/analytics`、`/dashboard/:id/share`、`/settings/usage`、`/help/*`（公开页 `/help/api-access*` 除外，用公开轻 chrome） | **统一 App top bar**（同上行 App top bar，经 `AppTopBar` 组件）；页内保留对象级返回链（如 share → 所属工作区）作 breadcrumb，**禁止裸返回链作为唯一出口** |
 | **Onboarding map** | 按需 | 弹窗；入口是次要控件（上手），不占 240px 业务侧栏 |
+| **Desktop shell** | 客户端 | 打开 → 云登录门（无 cloud_session 时）→ 工作台；抽屉「客户端设置」= 账户（云账户/余额）· 模型来源 · 数据 · 关于；栈管道诊断折叠收起，顶栏不设「已激活」胶囊 |
 
 **Rail pattern（Grok 式）**：多分区的设置/功能 surface 统一「左导航 + 右内容」——设置页、设置快开弹窗、分享弹窗、分享中心共用 `components/ui/nav-rail.tsx`（`NavRail`）+ AppModal `size="xl" bodyVariant="rail"`；单用途页（usage/analytics/help 长文）不强制。分享中心深链 `/share#api` 选中对应分区。
 
@@ -148,6 +153,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription
 | 可分享名额 / 会员档位 | 「token 套餐」作主商品（已废除） |
 | 充值 / 余额 | 仅写「模型调用余额」却链到设置且无法付 |
 | 自定义 Provider / 自备 Key | 裸 BYOK 无解释（可括号补充） |
+| 官方模型（走余额） | 「平台 key」「代购 key」等内部词 |
 | 分享访问 / 独立访客 | 代理、墙钟、RAG（中英不一致处改掉） |
 | 所有者付费 | 裸 Owner-pays 无解释 |
 | 上手 / 产品说明 | 把帮助标成「主导航」 |
