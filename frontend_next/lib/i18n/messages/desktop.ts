@@ -329,6 +329,14 @@ export const desktopMessages = {
     zh: "登录失败，请检查网络后重试",
     en: "Sign-in failed; check your network and retry",
   },
+  "desktop.cloudLoginNoAccount": {
+    zh: "没有账户？",
+    en: "No account yet?",
+  },
+  "desktop.cloudLoginRegister": {
+    zh: "去注册 →",
+    en: "Sign up →",
+  },
   "desktop.cloudLoginByokHint": {
     zh: "想用自己的 Key？登录后可在 设置 → Provider 切换自定义 Provider（自备 Key）。",
     en: "Prefer your own key? After sign-in, switch under Settings → Providers (BYOK).",

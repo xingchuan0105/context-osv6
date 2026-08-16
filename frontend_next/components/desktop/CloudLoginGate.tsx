@@ -3,8 +3,10 @@
 import { type KeyboardEvent, useEffect, useState, type ReactNode } from "react";
 
 import { cloudLogin, getCloudSession, isCloudGateBypassed } from "@/lib/desktop/tauri-cloud";
+import { openInBrowser } from "@/lib/desktop/tauri-license";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
+import { APP_PATHS, appAbsoluteUrl } from "@/lib/site-map";
 import { useUiPreferences } from "@/lib/ui-preferences";
 
 /**
@@ -155,6 +157,16 @@ export function CloudLoginGate({ children }: { children: ReactNode }) {
               : formatUiMessage(locale, "desktop.cloudLoginSubmit")}
           </button>
         </div>
+        <p className="app-form-footnote">
+          {formatUiMessage(locale, "desktop.cloudLoginNoAccount")}{" "}
+          <button
+            className="app-button-ghost"
+            type="button"
+            onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.register))}
+          >
+            {formatUiMessage(locale, "desktop.cloudLoginRegister")}
+          </button>
+        </p>
         <p className="app-form-footnote">
           {formatUiMessage(locale, "desktop.cloudLoginByokHint")}
         </p>

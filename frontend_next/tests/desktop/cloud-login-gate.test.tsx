@@ -12,11 +12,16 @@ vi.mock("@/lib/desktop/tauri-cloud", () => ({
   isCloudGateBypassed: vi.fn(),
 }));
 
+vi.mock("@/lib/desktop/tauri-license", () => ({
+  openInBrowser: vi.fn(),
+}));
+
 vi.mock("@/lib/ui-preferences", () => ({
   useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
 }));
 
 import { cloudLogin, getCloudSession, isCloudGateBypassed } from "@/lib/desktop/tauri-cloud";
+import { openInBrowser } from "@/lib/desktop/tauri-license";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { CloudLoginGate } from "@/components/desktop/CloudLoginGate";
 
@@ -48,6 +53,7 @@ describe("CloudLoginGate", () => {
     vi.mocked(cloudLogin).mockReset();
     vi.mocked(isCloudGateBypassed).mockReset();
     vi.mocked(isCloudGateBypassed).mockResolvedValue(false);
+    vi.mocked(openInBrowser).mockReset();
   });
 
   afterEach(() => {
@@ -101,6 +107,27 @@ describe("CloudLoginGate", () => {
     // 官方模型（走余额）+ BYOK hint per PRODUCT_IA §6.
     expect(screen.getByText(/官方模型（走余额）/)).toBeInTheDocument();
     expect(screen.getByText(/自定义 Provider（自备 Key）/)).toBeInTheDocument();
+  });
+
+  it("opens the cloud register page in the system browser from the login card", async () => {
+    vi.mocked(isTauri).mockReturnValue(true);
+    vi.mocked(getCloudSession).mockResolvedValue(loggedOutSession);
+
+    render(
+      <CloudLoginGate>
+        <div data-testid="app-child">App</div>
+      </CloudLoginGate>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("没有账户？")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "去注册 →" }));
+
+    await waitFor(() => {
+      expect(openInBrowser).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(openInBrowser).mock.calls[0]?.[0]).toContain("/register");
   });
 
   it("renders children when a cloud session exists", async () => {
