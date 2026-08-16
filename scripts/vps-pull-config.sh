@@ -29,6 +29,7 @@ echo "vps-pull-config: fetching from ${VPS_MAIN_HOST} → deploy/pulled/${STAMP}
   cp -a /etc/nginx/conf.d/app-contextlm.conf /tmp/vps-config-export/ 2>/dev/null || true
   cp -a /etc/nginx/conf.d/canju.conf /etc/nginx/conf.d/ghost.conf /tmp/vps-config-export/ 2>/dev/null || true
   cp -a /etc/nginx/conf.d/whyiamright.conf /etc/nginx/conf.d/context-os-landing.conf /tmp/vps-config-export/ 2>/dev/null || true
+  cp -a /etc/nginx/conf.d/sparklist.conf /etc/nginx/conf.d/elo.contextlm.top.conf /tmp/vps-config-export/ 2>/dev/null || true
   cp -a /etc/systemd/system/avrag-frontend.service /etc/systemd/system/why-*.service /tmp/vps-config-export/ 2>/dev/null || true
   ls /tmp/vps-config-export'
 
@@ -43,7 +44,7 @@ for unit in why-frontend.service why-api.service; do
     cp -f "$OUT/$STAMP/$unit" "$ROOT/deploy/systemd/$unit"
   fi
 done
-for conf in app-contextlm.conf canju.conf context-os-landing.conf whyiamright.conf; do
+for conf in app-contextlm.conf canju.conf context-os-landing.conf whyiamright.conf ghost.conf sparklist.conf elo.contextlm.top.conf; do
   if [[ -f "$OUT/$STAMP/$conf" ]]; then
     cp -f "$OUT/$STAMP/$conf" "$ROOT/deploy/nginx/$conf"
   fi
@@ -51,5 +52,5 @@ done
 
 # Ignore pulled snapshots in git by default (keep canonical deploy/nginx + systemd tracked)
 echo "vps-pull-config: wrote $OUT/$STAMP"
-echo "  updated deploy/systemd/avrag-frontend.service and deploy/nginx/app-contextlm.conf if present"
+echo "  updated deploy/systemd units and deploy/nginx/*.conf canonical copies if present"
 ls -la "$OUT/$STAMP"

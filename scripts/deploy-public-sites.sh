@@ -68,7 +68,7 @@ fi
 # Nginx confs synced by APPLY_NGINX=1 (override with NGINX_CONFS="a.conf …").
 # app-contextlm.conf is script-managed like the others — edit the repo file,
 # never the live one by hand.
-NGINX_CONFS="${NGINX_CONFS:-canju.conf context-os-landing.conf whyiamright.conf app-contextlm.conf}"
+NGINX_CONFS="${NGINX_CONFS:-00-logging.conf app-contextlm.conf canju.conf context-os-landing.conf whyiamright.conf elo.contextlm.top.conf sparklist.conf ghost.conf}"
 # ONLY_NGINX=1: skip all site deploys, just sync nginx confs (with APPLY_NGINX=1).
 if [[ "${ONLY_NGINX:-0}" == "1" ]]; then
   SITES=()
