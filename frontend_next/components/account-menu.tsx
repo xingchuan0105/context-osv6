@@ -8,8 +8,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "../lib/auth/context";
 import { probeAdminAccess } from "../lib/admin/client";
-import { formatUiMessage } from "../lib/i18n/messages";
-import type { UiLocale } from "../lib/i18n/config";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import type { UiLocale } from "@/lib/i18n/config";
+import { cloudLogout, getCloudSession } from "@/lib/desktop/tauri-cloud";
+import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { getSubscription } from "../lib/settings/client";
 import { useUiPreferences } from "../lib/ui-preferences";
 import {
@@ -35,10 +37,16 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
   const auth = useAuth();
   const router = useRouter();
   const { theme, setTheme, setLocale } = useUiPreferences();
+  const [mode, setMode] = useState<"unknown" | "web" | "desktop">("unknown");
   const [menuOpen, setMenuOpen] = useState(false);
   const [flyout, setFlyout] = useState<"theme" | "locale" | null>(null);
   const [quickTab, setQuickTab] = useState<SettingsQuickTab | null>(null);
+  const [logoutError, setLogoutError] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMode(isTauri() ? "desktop" : "web");
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -64,6 +72,20 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
   }, [menuOpen]);
 
   async function handleLogout() {
+    setLogoutError("");
+    if (mode === "desktop") {
+      // Desktop identity is the cloud session: logout = cloud logout, the
+      // shell reloads back into the cloud login gate (never web /login).
+      try {
+        await cloudLogout();
+      } catch (error) {
+        setLogoutError(error instanceof Error ? error.message : String(error));
+        return;
+      }
+      setMenuOpen(false);
+      window.location.reload();
+      return;
+    }
     setMenuOpen(false);
     await auth.logout();
     router.replace("/login");
@@ -74,14 +96,25 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
     setQuickTab(tab);
   }
 
+  // Desktop: identity comes from the cloud session; the auto-provisioned
+  // local B2C account is data-plane infrastructure, never a user identity.
+  const cloudSessionQuery = useQuery({
+    queryKey: ["account-menu-cloud-session"],
+    enabled: mode === "desktop",
+    staleTime: 60_000,
+    queryFn: () => getCloudSession(),
+  });
+  const identityUser =
+    mode === "desktop" ? cloudSessionQuery.data?.user ?? null : auth.user;
   const displayName =
-    auth.user?.full_name?.trim() ||
-    auth.user?.email?.split("@")[0] ||
+    identityUser?.full_name?.trim() ||
+    identityUser?.email?.split("@")[0] ||
     formatUiMessage(locale, "dashboardAccountLink");
-  const email = auth.user?.email ?? "";
+  const email = identityUser?.email ?? "";
+  const isWeb = mode === "web";
   const subscriptionQuery = useQuery({
     queryKey: ["account-menu-subscription", auth.token],
-    enabled: Boolean(auth.token),
+    enabled: isWeb && Boolean(auth.token),
     staleTime: 60_000,
     queryFn: async () => {
       try {
@@ -94,7 +127,7 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
   // Platform-admin entry: backend roles (super/ops/finance_admin) → 403 probe.
   const adminProbe = useQuery({
     queryKey: ["account-menu-admin-access", auth.token],
-    enabled: Boolean(auth.token),
+    enabled: isWeb && Boolean(auth.token),
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: () => probeAdminAccess(auth.token as string),
@@ -130,24 +163,39 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
             role="menu"
           >
             <div className="dashboard-account-user-card" data-testid="account-user-card">
-              <div className="dashboard-account-user-avatar" aria-hidden="true">
-                {(displayName[0] || "U").toUpperCase()}
-              </div>
-              <div className="dashboard-account-user-meta">
-                <div className="dashboard-account-user-name-row">
-                  <strong className="dashboard-account-user-name">{displayName}</strong>
-                  <span
-                    className="dashboard-account-plan-badge"
-                    data-plan={planBadge.toLowerCase()}
-                    data-testid="account-plan-badge"
-                  >
-                    {planBadge}
-                  </span>
+              <div className="dashboard-account-user-card-main">
+                <div className="dashboard-account-user-avatar" aria-hidden="true">
+                  {(displayName[0] || "U").toUpperCase()}
                 </div>
-                {email ? (
-                  <span className="dashboard-account-user-email">{email}</span>
-                ) : null}
+                <div className="dashboard-account-user-meta">
+                  <div className="dashboard-account-user-name-row">
+                    <strong className="dashboard-account-user-name">{displayName}</strong>
+                    {isWeb ? (
+                      <span
+                        className="dashboard-account-plan-badge"
+                        data-plan={planBadge.toLowerCase()}
+                        data-testid="account-plan-badge"
+                      >
+                        {planBadge}
+                      </span>
+                    ) : null}
+                  </div>
+                  {email ? (
+                    <span className="dashboard-account-user-email">{email}</span>
+                  ) : null}
+                </div>
               </div>
+              {/* Red-box CTA: open membership/usage quick surface (upgrade lives on /pricing). */}
+              <button
+                className="dashboard-account-membership-btn"
+                data-testid="account-membership-cta"
+                type="button"
+                onClick={() => openQuick("billing")}
+              >
+                {planBadge === "Free"
+                  ? formatUiMessage(locale, "accountMenu.upgradeMembership")
+                  : formatUiMessage(locale, "accountMenu.manageMembership")}
+              </button>
             </div>
 
             <button
@@ -287,6 +335,19 @@ export function AccountMenu({ locale }: { locale: UiLocale }) {
               {formatUiMessage(locale, "accountMenu.help")}
             </Link>
 
+            {logoutError ? (
+              <p
+                role="alert"
+                style={{
+                  margin: 0,
+                  padding: "0 0.75rem",
+                  fontSize: "0.8rem",
+                  color: "hsl(var(--destructive))",
+                }}
+              >
+                {logoutError}
+              </p>
+            ) : null}
             <button
               className="dashboard-account-menu-item dashboard-account-menu-danger"
               data-testid="dashboard-logout"

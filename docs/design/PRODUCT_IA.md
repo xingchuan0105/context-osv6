@@ -131,7 +131,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription；�
 | **Settings** | `/settings` | 左侧 tabs（≤5）+ 面板 |
 | **深层工具页** | `/dashboard/analytics`、`/dashboard/:id/share`、`/settings/usage`、`/help/*`（公开页 `/help/api-access*` 除外，用公开轻 chrome） | **统一 App top bar**（同上行 App top bar，经 `AppTopBar` 组件）；页内保留对象级返回链（如 share → 所属工作区）作 breadcrumb，**禁止裸返回链作为唯一出口** |
 | **Onboarding map** | 按需 | 弹窗；入口是次要控件（上手），不占 240px 业务侧栏 |
-| **Desktop shell** | 客户端 | 打开 → 云登录门（无 cloud_session 时）→ 工作台；抽屉「客户端设置」= 账户（云账户/余额）· 模型来源 · 数据 · 关于；栈管道诊断折叠收起，顶栏不设「已激活」胶囊 |
+| **Desktop shell** | 客户端 | 打开 → 云登录门（无 cloud_session 时）→ 工作台；抽屉「客户端设置」= 账户（云账户/余额）· 模型来源 · 数据 · 关于；栈管道诊断折叠收起，顶栏不设「已激活」胶囊。顶栏「账户」菜单 = **云身份**（名字/邮箱取 cloud session，不显示本机 B2C 内部账户，不显示订阅徽章）；退出登录 = `cloudLogout` + 回云登录门（不走 web `/login`，本机数据面会话不面向用户）；订阅/管理台探测仅 web |
 
 **Rail pattern（Grok 式）**：多分区的设置/功能 surface 统一「左导航 + 右内容」——设置页、设置快开弹窗、分享弹窗、分享中心共用 `components/ui/nav-rail.tsx`（`NavRail`）+ AppModal `size="xl" bodyVariant="rail"`；单用途页（usage/analytics/help 长文）不强制。分享中心深链 `/share#api` 选中对应分区。
 
