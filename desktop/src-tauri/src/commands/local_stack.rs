@@ -89,30 +89,36 @@ fn probe_tcp(host: &str, port: u16) -> (bool, String) {
 }
 
 /// Resolve monorepo root for compose script / migrations (dev + monorepo installs).
+fn script_path(root: &Path) -> PathBuf {
+    root.join("scripts").join("desktop-local-stack.sh")
+}
+
+fn is_live_monorepo_root(root: &Path) -> bool {
+    root.is_dir() && script_path(root).is_file()
+}
+
 fn monorepo_root() -> Option<PathBuf> {
     if let Ok(root) = std::env::var("CONTEXT_OS_ROOT") {
         let p = PathBuf::from(root);
-        if p.join("scripts/desktop-local-stack.sh").is_file() {
+        if is_live_monorepo_root(&p) {
             return Some(p);
         }
     }
 
-    // desktop/src-tauri → ../.. at compile time (works while developing from the tree).
+    // Compile-time path only when that checkout exists on this host (not a
+    // cross-compiled Windows PE carrying a WSL `CARGO_MANIFEST_DIR`).
     let mut from_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     // src-tauri → desktop → repo root
     from_manifest.pop();
     from_manifest.pop();
-    if from_manifest
-        .join("scripts/desktop-local-stack.sh")
-        .is_file()
-    {
+    if is_live_monorepo_root(&from_manifest) {
         return Some(from_manifest);
     }
 
     // Walk cwd upward (useful if launched from monorepo subdir).
     if let Ok(mut cwd) = std::env::current_dir() {
         for _ in 0..8 {
-            if cwd.join("scripts/desktop-local-stack.sh").is_file() {
+            if is_live_monorepo_root(&cwd) {
                 return Some(cwd);
             }
             if !cwd.pop() {
@@ -122,10 +128,6 @@ fn monorepo_root() -> Option<PathBuf> {
     }
 
     None
-}
-
-fn script_path(root: &Path) -> PathBuf {
-    root.join("scripts/desktop-local-stack.sh")
 }
 
 fn env_file_path(root: &Path) -> PathBuf {
@@ -254,12 +256,13 @@ fn run_stack_script(arg: &str) -> Result<(i32, String, String), IpcApiError> {
         ));
     }
 
-    let output = Command::new("bash")
-        .arg(&script)
+    let mut bash = Command::new("bash");
+    bash.arg(&script)
         .arg(arg)
         .current_dir(&root)
-        .env("CONTEXT_OS_ROOT", root.as_os_str())
-        .output()
+        .env("CONTEXT_OS_ROOT", root.as_os_str());
+    super::win_cmd::hide_console(&mut bash);
+    let output = bash.output()
         .map_err(|e| {
             IpcApiError::internal(format!(
                 "Failed to run desktop-local-stack.sh {arg}: {e}. Is Docker installed?"
@@ -283,15 +286,40 @@ pub fn get_client_runtime_config() -> ClientRuntimeConfig {
 }
 
 /// Bring up data plane: **Rust native first** (no bash/Docker), then bash script fallback.
+/// Hard timeout so a stuck `pg_ctl`/pipe cannot freeze the UI forever.
 #[tauri::command]
 pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError> {
     let docker = super::docker_status::docker_status_snapshot();
+    const NATIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
     // 1) Pure-Rust native path when pg_ctl + redis-server are available.
     if super::native_stack::native_tools_available() {
-        let report = tokio::task::spawn_blocking(super::native_stack::ensure_native)
-            .await
-            .map_err(|e| IpcApiError::internal(format!("native ensure join: {e}")))?;
+        let report = match tokio::time::timeout(
+            NATIVE_TIMEOUT,
+            tokio::task::spawn_blocking(super::native_stack::ensure_native),
+        )
+        .await
+        {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => {
+                return Err(IpcApiError::internal(format!("native ensure join: {e}")));
+            }
+            Err(_) => {
+                let status = build_status();
+                let config = build_runtime_config();
+                return Ok(EnsureLocalStackResult {
+                    ok: false,
+                    message: format!(
+                        "本机数据面启动超时（{secs}s）。请查看 %LOCALAPPDATA%\\Context-OS Client\\logs\\ensure-native.log 与 postgres-native.log",
+                        secs = NATIVE_TIMEOUT.as_secs()
+                    ),
+                    stdout: String::new(),
+                    stderr: "timeout".into(),
+                    status,
+                    config,
+                });
+            }
+        };
         let status = build_status();
         let config = build_runtime_config();
         if report.ok && status.overall_ok {
@@ -307,7 +335,24 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
                 config,
             });
         }
-        // Soft-fail into bash fallback with log attached.
+        // Soft-fail into bash fallback only on non-Windows monorepo hosts.
+        // Packaged Windows must never invoke WSL/Git-bash paths (hangs or bad paths).
+        #[cfg(windows)]
+        {
+            return Ok(EnsureLocalStackResult {
+                ok: false,
+                message: format!(
+                    "本机数据面未就绪：{}。日志：ensure-native.log / postgres-native.log",
+                    report.message
+                ),
+                stdout: report.log,
+                stderr: String::new(),
+                status,
+                config,
+            });
+        }
+        #[cfg(not(windows))]
+        {
         let native_log = report.log;
         let native_msg = report.message;
         if let Ok((code, stdout, stderr)) =
@@ -333,9 +378,27 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
                 config,
             });
         }
+        }
     }
 
-    // 2) Bash script (auto native/docker).
+    // 2) Bash script (auto native/docker) — Unix monorepo only.
+    #[cfg(windows)]
+    {
+        let _ = docker;
+        let status = build_status();
+        let config = build_runtime_config();
+        return Ok(EnsureLocalStackResult {
+            ok: false,
+            message: "本机数据面工具不可用（未找到 pg_ctl/redis-server）。请重装客户端以恢复 runtime/pgsql 与 runtime/redis。".into(),
+            stdout: String::new(),
+            stderr: String::new(),
+            status,
+            config,
+        });
+    }
+
+    #[cfg(not(windows))]
+    {
     let script_result = tokio::task::spawn_blocking(|| run_stack_script("ensure")).await;
     match script_result {
         Ok(Ok((code, stdout, stderr))) => {
@@ -389,6 +452,7 @@ pub async fn ensure_local_stack() -> Result<EnsureLocalStackResult, IpcApiError>
             })
         }
         Err(e) => Err(IpcApiError::internal(format!("ensure task join error: {e}"))),
+    }
     }
 }
 

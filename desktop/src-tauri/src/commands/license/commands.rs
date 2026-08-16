@@ -3,7 +3,7 @@
 //! Command errors use [`IpcApiError`] so the frontend always sees
 //! `{ status, code, message }`. Domain [`LicenseError`] converts via `From`.
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 
 use super::service::*;
@@ -151,6 +151,19 @@ pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), IpcApiEr
         )));
     }
 
+    // Packaged webview origin is not reachable from the OS browser.
+    if crate::app_nav::is_webview_local_url(&url) {
+        let mapped = crate::app_nav::map_static_export_href(&url);
+        if let Some(window) = app.get_webview_window("main") {
+            let js = format!(
+                "window.location.assign({})",
+                serde_json::to_string(&mapped).unwrap_or_else(|_| "\"/\"".into())
+            );
+            let _ = window.eval(&js);
+        }
+        return Ok(());
+    }
+
     // 1) Direct OS open (no plugin ACL dependency).
     if crate::commands::system::open_with_os(std::ffi::OsStr::new(&url)).is_ok() {
         return Ok(());
@@ -168,4 +181,3 @@ pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), IpcApiEr
         "Failed to open browser for {url}"
     )))
 }
-

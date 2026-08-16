@@ -1,5 +1,7 @@
 //! Unified desktop IPC error shape + HTTP proxy to local product API.
 
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+
 use super::local_product::product_api_base_url;
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
@@ -173,6 +175,98 @@ pub async fn api_call(
     }
 }
 
+fn is_loopback_host(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
+}
+
+/// Only the local product `/uploads/:id` endpoint may receive raw bytes.
+pub(crate) fn assert_desktop_upload_url(url: &str, api_base: &str) -> Result<(), IpcApiError> {
+    let parsed = url::Url::parse(url).map_err(|e| {
+        IpcApiError::bad_request("invalid_upload_url", format!("invalid upload url: {e}"))
+    })?;
+    let base = url::Url::parse(api_base).map_err(|e| {
+        IpcApiError::internal(format!("invalid product API base {api_base}: {e}"))
+    })?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err(IpcApiError::bad_request(
+            "invalid_upload_url",
+            "upload url must be http(s)",
+        ));
+    }
+    if !is_loopback_host(parsed.host_str().unwrap_or("")) {
+        return Err(IpcApiError::bad_request(
+            "invalid_upload_url",
+            "upload url host must be loopback",
+        ));
+    }
+    if !parsed.path().starts_with("/uploads/") {
+        return Err(IpcApiError::bad_request(
+            "invalid_upload_url",
+            "upload url path must start with /uploads/",
+        ));
+    }
+    if parsed.port_or_known_default() != base.port_or_known_default() {
+        return Err(IpcApiError::bad_request(
+            "invalid_upload_url",
+            "upload url port must match the local product API",
+        ));
+    }
+    Ok(())
+}
+
+/// PUT file bytes to a signed local upload URL (WebView fetch is blocked by CORS).
+#[tauri::command]
+pub async fn upload_bytes(
+    url: String,
+    content_type: Option<String>,
+    body_base64: String,
+) -> Result<serde_json::Value, IpcApiError> {
+    let base = product_api_base_url();
+    assert_desktop_upload_url(&url, &base)?;
+
+    let bytes = STANDARD
+        .decode(body_base64.as_bytes())
+        .map_err(|e| IpcApiError::bad_request("invalid_body", format!("base64: {e}")))?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| IpcApiError::internal(format!("http client: {e}")))?;
+
+    let mut req = client.put(&url).body(bytes);
+    if let Some(ct) = content_type.as_deref().filter(|s| !s.is_empty()) {
+        req = req.header(reqwest::header::CONTENT_TYPE, ct);
+    }
+
+    let resp = req.send().await.map_err(|e| {
+        if e.is_connect() {
+            IpcApiError::service_unavailable(format!(
+                "Local product API not reachable at {base} ({e})"
+            ))
+        } else {
+            IpcApiError::internal(format!("upload to {url} failed: {e}"))
+        }
+    })?;
+
+    let status = resp.status().as_u16();
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| IpcApiError::internal(format!("read upload response: {e}")))?;
+    if !(200..300).contains(&status) {
+        return Err(IpcApiError::new(
+            status,
+            "upstream_error",
+            if text.trim().is_empty() {
+                format!("upload failed (HTTP {status})")
+            } else {
+                text
+            },
+        ));
+    }
+    Ok(serde_json::json!({ "ok": true, "status": status }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +306,33 @@ mod tests {
     fn normalize_path_adds_slash() {
         assert_eq!(normalize_path("health"), "/health");
         assert_eq!(normalize_path("/health"), "/health");
+    }
+
+    #[test]
+    fn desktop_upload_url_allows_local_signed_path() {
+        assert!(assert_desktop_upload_url(
+            "http://127.0.0.1:18080/uploads/doc-1?expires=1&signature=abc",
+            "http://127.0.0.1:18080",
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn desktop_upload_url_rejects_remote_or_wrong_path() {
+        assert!(assert_desktop_upload_url(
+            "https://evil.example/uploads/doc-1",
+            "http://127.0.0.1:18080",
+        )
+        .is_err());
+        assert!(assert_desktop_upload_url(
+            "http://127.0.0.1:18080/api/v1/documents",
+            "http://127.0.0.1:18080",
+        )
+        .is_err());
+        assert!(assert_desktop_upload_url(
+            "http://127.0.0.1:8080/uploads/doc-1",
+            "http://127.0.0.1:18080",
+        )
+        .is_err());
     }
 }

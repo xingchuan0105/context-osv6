@@ -25,7 +25,10 @@ fn run_cmd(program: &str, args: &[&str], timeout_secs: u64) -> (bool, String) {
     // Best-effort: spawn and wait with a soft timeout via thread + kill is heavy;
     // docker info usually returns quickly. Use status only.
     let _ = timeout_secs;
-    match Command::new(program).args(args).output() {
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    crate::commands::win_cmd::hide_console(&mut cmd);
+    match cmd.output() {
         Ok(out) => {
             let ok = out.status.success();
             let mut msg = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -80,9 +83,26 @@ fn build_status() -> DockerStatus {
     let (install_url, install_hint) = install_meta();
     let platform = platform_label().to_string();
 
+    // Packaged Windows client never uses Docker for the data plane. Skip spawning
+    // docker.exe (console) on every ensure/status — that flashes 3–4 black windows.
+    #[cfg(windows)]
+    {
+        return DockerStatus {
+            cli_ok: false,
+            daemon_ok: false,
+            compose_ok: false,
+            overall_ok: false,
+            detail: "Docker not probed on Windows packaged client (native PG+Redis)".into(),
+            install_url,
+            install_hint,
+            platform,
+        };
+    }
+
+    #[cfg(not(windows))]
+    {
     let (cli_ok, cli_detail) = run_cmd("docker", &["version", "--format", "{{.Client.Version}}"], 5);
     if !cli_ok {
-        // Windows may need docker.exe explicit — try once more.
         let (cli2, d2) = run_cmd("docker.exe", &["version", "--format", "{{.Client.Version}}"], 5);
         if !cli2 {
             return DockerStatus {
@@ -100,6 +120,7 @@ fn build_status() -> DockerStatus {
     }
 
     finish_probe(cli_ok, cli_detail, false, install_url, install_hint, platform)
+    }
 }
 
 fn finish_probe(
