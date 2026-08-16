@@ -105,8 +105,9 @@ pub fn official_rates_for(provider: &str, model: &str) -> Option<OfficialRates> 
         }
     }
 
-    // Embedding whitelist (SiliconFlow / names containing embed/bge).
-    if m.contains("embed") || m.contains("bge-m3") || m.contains("bge_m3") {
+    // Embedding whitelist (SiliconFlow / names containing embed/bge; bge-reranker
+    // is the same embed tier — e.g. BAAI/bge-reranker-v2-m3 on the relay).
+    if m.contains("embed") || m.contains("bge-m3") || m.contains("bge_m3") || m.contains("bge-reranker") {
         return Some(RATES_SILICONFLOW_EMBED);
     }
     if p.contains("siliconflow") && (m.contains("bge") || m.contains("qwen")) {

@@ -8,6 +8,7 @@
 //!   actual usage (incl. cache/reasoning split) metered → wallet debited.
 //! - Preflight: empty wallet → 402 before any upstream call.
 //! - Embeddings relay: `usage.total_tokens` metered.
+//! - Rerank relay: model pinned, no-usage response → estimated tokens metered.
 //! - Model off the price whitelist → structured config error (no silent free ride).
 //! - Unconfigured platform upstream → 503.
 
@@ -122,6 +123,31 @@ async fn mock_embeddings(
     .into_response()
 }
 
+/// SiliconFlow-style rerank stand-in: results only, deliberately NO usage —
+/// the relay must fall back to estimated metering.
+async fn mock_rerank(
+    State(state): State<Arc<Mutex<Vec<CapturedCall>>>>,
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let authorization = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    state.lock().unwrap().push(CapturedCall {
+        path: "/rerank".to_string(),
+        authorization,
+        body,
+    });
+    Json(serde_json::json!({
+        "results": [
+            {"index": 1, "relevance_score": 0.9},
+            {"index": 0, "relevance_score": 0.1}
+        ]
+    }))
+    .into_response()
+}
+
 /// Spawn the mock upstream once per test binary; point relay env at it.
 fn mock() -> &'static MockUpstream {
     MOCK.get_or_init(|| {
@@ -134,6 +160,7 @@ fn mock() -> &'static MockUpstream {
                 let app = Router::new()
                     .route("/chat/completions", axum::routing::post(mock_chat_completions))
                     .route("/embeddings", axum::routing::post(mock_embeddings))
+                    .route("/rerank", axum::routing::post(mock_rerank))
                     .with_state(calls_clone);
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                 let addr = listener.local_addr().unwrap();
@@ -150,6 +177,9 @@ fn mock() -> &'static MockUpstream {
             std::env::set_var("EMBEDDING_BASE_URL", &base_url);
             std::env::set_var("EMBEDDING_API_KEY", "sk-embed-test");
             std::env::set_var("EMBEDDING_MODEL", "BAAI/bge-m3");
+            std::env::set_var("RERANK_BASE_URL", &base_url);
+            std::env::set_var("RERANK_API_KEY", "sk-rerank-test");
+            std::env::set_var("RERANK_MODEL", "BAAI/bge-reranker-v2-m3");
         }
         MockUpstream { calls }
     })
@@ -753,6 +783,65 @@ async fn relay_embeddings_meters_actual_tokens() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn relay_rerank_pins_model_and_meters_estimated_tokens() {
+    let _guard = TEST_LOCK.lock().unwrap();
+    let mock = mock();
+
+    let mut state = memory_state();
+    let wallet = Arc::new(StubWallet::with_balance(0));
+    let usage_store = Arc::new(StubUsageLimitStore::default());
+    state.test_set_billing(metered_billing(wallet.clone(), usage_store.clone()));
+    let app = transport_http::build_router(state);
+
+    let user_id = Uuid::new_v4();
+    let bearer = session_bearer(user_id);
+    let minted = mint_token_via_http(&app, &bearer, "rerank-laptop").await;
+    let desktop_token = minted["token"].as_str().unwrap().to_string();
+
+    let marker = format!("relay-test-{}", Uuid::new_v4());
+    let response = app
+        .clone()
+        .oneshot(json_post(
+            "/v1/relay/rerank",
+            Some(&desktop_token),
+            serde_json::json!({
+                "model": "ignored",
+                "user": marker,
+                "query": "速冻",
+                "documents": ["abcdefghij", "ab"]
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    // Response passed through verbatim (no usage field from the provider).
+    assert_eq!(body["results"][0]["index"], 1);
+    assert!(body.get("usage").is_none());
+
+    // Upstream got the pinned rerank model + platform rerank key.
+    let calls = captured_calls_for(mock, "/rerank");
+    let call = calls
+        .iter()
+        .find(|call| call.body["user"] == serde_json::json!(marker))
+        .expect("mock captured the relayed rerank call");
+    assert_eq!(call.body["model"], "BAAI/bge-reranker-v2-m3");
+    assert_eq!(call.authorization.as_deref(), Some("Bearer sk-rerank-test"));
+
+    // Metering: query(2) + docs(12) = 14 chars → 4 estimated tokens; wallet
+    // debited via the siliconflow/bge embed-tier whitelist.
+    let events = usage_store.events.lock().unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.model == "BAAI/bge-reranker-v2-m3")
+        .expect("rerank usage event recorded");
+    assert_eq!(event.usage_kind, "embedding_text");
+    assert_eq!(event.prompt_tokens, 4);
+    drop(events);
+    assert_eq!(wallet.balance(), 1999);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn relay_model_not_whitelisted_is_config_error() {
     let _guard = TEST_LOCK.lock().unwrap();
     let state = memory_state();
@@ -769,6 +858,7 @@ async fn relay_model_not_whitelisted_is_config_error() {
             provider: "openai".to_string(),
             timeout_ms: 5_000,
         }),
+        None,
         None,
     );
     let app = transport_http::build_relay_router(state.clone(), service).with_state(state);
@@ -831,6 +921,7 @@ async fn desktop_relay_config_reports_public_base_and_pinned_models() {
     );
     assert_eq!(body["data"]["chat_model"], "deepseek-v4-flash");
     assert_eq!(body["data"]["embedding_model"], "BAAI/bge-m3");
+    assert_eq!(body["data"]["rerank_model"], "BAAI/bge-reranker-v2-m3");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -842,7 +933,7 @@ async fn relay_unconfigured_upstream_is_503() {
         .await
         .unwrap();
 
-    let service = transport_http::RelayService::from_upstreams(None, None);
+    let service = transport_http::RelayService::from_upstreams(None, None, None);
     let app = transport_http::build_relay_router(state.clone(), service).with_state(state);
 
     let response = app
@@ -859,10 +950,21 @@ async fn relay_unconfigured_upstream_is_503() {
     assert_eq!(body["error"]["code"], "relay_upstream_not_configured");
 
     let response = app
+        .clone()
         .oneshot(json_post(
             "/v1/relay/embeddings",
             Some(&minted.token),
             serde_json::json!({"input": "x"}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let response = app
+        .oneshot(json_post(
+            "/v1/relay/rerank",
+            Some(&minted.token),
+            serde_json::json!({"query": "x", "documents": ["y"]}),
         ))
         .await
         .unwrap();

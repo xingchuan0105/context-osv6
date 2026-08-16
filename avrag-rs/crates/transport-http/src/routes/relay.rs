@@ -65,6 +65,7 @@ impl RelayUpstream {
 pub struct RelayService {
     pub chat: Option<RelayUpstream>,
     pub embeddings: Option<RelayUpstream>,
+    pub rerank: Option<RelayUpstream>,
     http: reqwest::Client,
 }
 
@@ -75,15 +76,21 @@ impl RelayService {
         Self {
             chat: RelayUpstream::from_model_config(&config.agent_llm),
             embeddings: RelayUpstream::from_model_config(&config.embedding),
+            rerank: RelayUpstream::from_model_config(&config.rerank),
             http: reqwest::Client::new(),
         }
     }
 
     /// Explicit constructor (tests pin a mock upstream).
-    pub fn from_upstreams(chat: Option<RelayUpstream>, embeddings: Option<RelayUpstream>) -> Self {
+    pub fn from_upstreams(
+        chat: Option<RelayUpstream>,
+        embeddings: Option<RelayUpstream>,
+        rerank: Option<RelayUpstream>,
+    ) -> Self {
         Self {
             chat,
             embeddings,
+            rerank,
             http: reqwest::Client::new(),
         }
     }
@@ -112,6 +119,7 @@ pub fn build_relay_router(state: AppState, service: RelayService) -> Router<AppS
     Router::new()
         .route("/v1/relay/chat/completions", post(relay_chat_completions))
         .route("/v1/relay/embeddings", post(relay_embeddings))
+        .route("/v1/relay/rerank", post(relay_rerank))
         .layer(Extension(service))
         .route_layer(axum::middleware::from_fn_with_state(
             state,
@@ -374,6 +382,88 @@ async fn relay_embeddings(
     json_verbatim_response(bytes)
 }
 
+/// Rerank relay (§7 R1): same shape the local `RerankerClient` speaks —
+/// `POST {base}/rerank` with `{model, query, documents}`. Model pinned
+/// server-side; usage metered like embeddings (providers rarely return usage
+/// for rerank, so the estimate path carries it).
+async fn relay_rerank(
+    State(state): State<AppState>,
+    Extension(service): Extension<RelayService>,
+    Extension(auth): Extension<DesktopRelayAuth>,
+    body: axum::body::Bytes,
+) -> Response {
+    let Some(upstream) = service.rerank.clone() else {
+        return upstream_not_configured("rerank", "RERANK");
+    };
+    if let Err(resp) = ensure_whitelisted(&upstream, "RERANK") {
+        return resp;
+    }
+    if let Err(resp) = ensure_relay_balance(&state, auth.user_id).await {
+        return resp;
+    }
+
+    let mut payload: serde_json::Value = match serde_json::from_slice::<serde_json::Value>(&body) {
+        Ok(value) if value.is_object() => value,
+        _ => {
+            return relay_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "request body must be a JSON object",
+                "invalid_request_error",
+            );
+        }
+    };
+    payload["model"] = json!(upstream.model);
+    let estimated_tokens = estimate_rerank_tokens(&payload);
+
+    let url = format!("{}/rerank", upstream.base_url);
+    let request_id = format!("relay-{}", Uuid::new_v4());
+    let response = match service
+        .http
+        .post(&url)
+        .bearer_auth(&upstream.api_key)
+        .timeout(std::time::Duration::from_millis(upstream.timeout_ms.max(15_000)))
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(request_id = %request_id, error = %error, "relay rerank request failed");
+            return relay_error(
+                StatusCode::BAD_GATEWAY,
+                "relay_upstream_request_failed",
+                format!("upstream rerank request failed: {error}"),
+                "relay_upstream_error",
+            );
+        }
+    };
+
+    if !response.status().is_success() {
+        return verbatim_error_response(response).await;
+    }
+
+    let bytes = response.bytes().await.unwrap_or_default();
+    let actual_tokens = parse_rerank_usage(&bytes);
+    if actual_tokens.is_some() || estimated_tokens > 0 {
+        let observer = state.billing().usage_observer().cloned();
+        let tenant = TenantContext::new(auth.user_id, auth.user_id);
+        let record = EmbeddingUsageRecord {
+            estimated_tokens,
+            actual_tokens,
+            provider: upstream.provider.clone(),
+            model: upstream.model.clone(),
+            feature: "desktop_relay".to_string(),
+        };
+        if let Some(observer) = observer {
+            observer.record_embedding(&tenant, &record).await;
+        }
+    } else {
+        tracing::warn!(request_id = %request_id, "relay rerank response had no usage and request was not estimable; metering skipped (fail-open)");
+    }
+    json_verbatim_response(bytes)
+}
+
 // ---------------------------------------------------------------------------
 // Preflight / metering wiring
 // ---------------------------------------------------------------------------
@@ -588,6 +678,48 @@ fn estimate_embedding_tokens(payload: &serde_json::Value) -> u32 {
     chars.div_ceil(4) as u32
 }
 
+/// Parse rerank usage: top-level `usage` envelope, else SiliconFlow-style
+/// `meta.tokens.input_tokens` (their rerank responses carry usage there).
+fn parse_rerank_usage(bytes: &[u8]) -> Option<u32> {
+    if let Some(tokens) = parse_embedding_usage(bytes) {
+        return Some(tokens);
+    }
+    let body = serde_json::from_slice::<serde_json::Value>(bytes).ok()?;
+    body
+        .get("meta")?
+        .get("tokens")?
+        .get("input_tokens")?
+        .as_u64()
+        .map(|tokens| tokens as u32)
+        .filter(|tokens| *tokens > 0)
+}
+
+/// Rerank estimate (~4 chars per token) over `query` + string `documents`;
+/// documents may also be `{text|image|video}` objects (multimodal shape).
+fn estimate_rerank_tokens(payload: &serde_json::Value) -> u32 {
+    let query_chars = payload
+        .get("query")
+        .and_then(|q| q.as_str())
+        .map(|q| q.chars().count())
+        .unwrap_or(0);
+    let doc_chars: usize = match payload.get("documents") {
+        Some(serde_json::Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                item.as_str().map(|s| s.chars().count()).unwrap_or_else(|| {
+                    ["text", "image", "video"]
+                        .iter()
+                        .filter_map(|key| item.get(key).and_then(|v| v.as_str()))
+                        .map(|s| s.chars().count())
+                        .sum()
+                })
+            })
+            .sum(),
+        _ => 0,
+    };
+    (query_chars + doc_chars).div_ceil(4) as u32
+}
+
 /// Incremental SSE scanner: retains only the incomplete-line tail between
 /// chunks (O(1) memory) and captures the final `usage` chunk verbatim.
 #[derive(Default)]
@@ -689,6 +821,39 @@ mod tests {
         let payload = json!({"model": "x", "input": ["abcdefghij", "abcd"]});
         assert_eq!(estimate_embedding_tokens(&payload), 4); // 14 chars / 4 ceil
         assert_eq!(estimate_embedding_tokens(&json!({"input": 42})), 0);
+    }
+
+    #[test]
+    fn rerank_estimate_covers_query_and_document_shapes() {
+        // query (4 chars) + two string docs (12) → 16/4 = 4
+        let payload = json!({"model": "x", "query": "速冻", "documents": ["abcdefghij", "ab"]});
+        assert_eq!(estimate_rerank_tokens(&payload), 4);
+        // multimodal object documents count their text field
+        let mm = json!({"query": "q", "documents": [{"text": "abcd"}, {"image": "http://x/y.png"}]});
+        assert_eq!(estimate_rerank_tokens(&mm).cmp(&0), std::cmp::Ordering::Greater);
+        assert_eq!(estimate_rerank_tokens(&json!({"documents": 42})), 0);
+    }
+
+    #[test]
+    fn rerank_usage_reads_siliconflow_meta_tokens() {
+        // SiliconFlow rerank carries usage in meta.tokens, not a usage envelope.
+        let body = br#"{"id":"x","results":[],"meta":{"tokens":{"input_tokens":58,"output_tokens":0}}}"#;
+        assert_eq!(parse_rerank_usage(body), Some(58));
+        // usage envelope wins when both exist
+        let both = br#"{"usage":{"total_tokens":7},"meta":{"tokens":{"input_tokens":58}}}"#;
+        assert_eq!(parse_rerank_usage(both), Some(7));
+        assert_eq!(parse_rerank_usage(br#"{"results":[]}"#), None);
+    }
+
+    #[test]
+    fn rerank_model_is_whitelisted_as_embed_tier() {
+        // Default platform rerank pool (SiliconFlow bge-reranker) prices under
+        // the embed-tier whitelist — provider-derived or explicit both match.
+        assert!(
+            avrag_billing::official_rates_for("siliconflow", "Pro/BAAI/bge-reranker-v2-m3")
+                .is_some()
+        );
+        assert!(avrag_billing::official_rates_for("custom", "BAAI/bge-reranker-v2-m3").is_some());
     }
 
     #[test]

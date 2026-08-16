@@ -563,6 +563,7 @@ fn normalize_route(path: &str) -> &'static str {
         _ if path.starts_with("/v1/workspaces/") => "/v1/workspaces/:id/chat/completions",
         "/v1/relay/chat/completions" => "/v1/relay/chat/completions",
         "/v1/relay/embeddings" => "/v1/relay/embeddings",
+        "/v1/relay/rerank" => "/v1/relay/rerank",
         _ if path.starts_with("/api/v1/desktop/tokens/") => "/api/v1/desktop/tokens/:id",
         "/api/v1/desktop/tokens" => "/api/v1/desktop/tokens",
         _ if path.starts_with("/mcp/workspaces/") && path.ends_with("/tools/call") => {

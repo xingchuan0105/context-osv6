@@ -70,6 +70,7 @@ const loggedInSession = {
     base_url: "https://app.contextlm.top/v1/relay",
     chat_model: "deepseek-v4-flash",
     embedding_model: "BAAI/bge-m3",
+    rerank_model: "Pro/BAAI/bge-reranker-v2-m3",
   },
   message: "Cloud session active",
 };

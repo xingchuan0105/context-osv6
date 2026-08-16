@@ -79,6 +79,9 @@
 | W3 | 桌面:登录门页 + cloud_session.rs + client.env 注入 + relay 双扣防护 + 登录后重启本机产品;云端补 `relay-config` 端点 | `pnpm typecheck` + 桌面包冷启动真机:登录 → 不发 BYOK 直接 RAG 问答成功且云端钱包扣费 |
 | W4 ✅ | 抽屉重设计 + 撤「已激活」badge + i18n(落地备注见 §5) | `pnpm typecheck` + `tests/desktop` 全绿 + nav-config 测试;`design-baseline` 仅剩既有 WIP 违规(home-client / api-access / help 页,非本片) |
 | W5 ✅ | 打包 + l0/l1/l2/u1 全绿 + VPS 部署 + l3 真机门(落地备注见 §8) | `scripts/desktop-e2e/run.sh` 五模式;`scripts/deploy-*.sh` |
+| R1 ✅ | 云端 `/v1/relay/rerank`:型号钉住 + 白名单预检(`bge-reranker` 入 embed 档)+ 余额预检 + 计量(复用 embedding 管道,estimate=字符/4)+ 契约测试 | `cargo test -p transport-http`(lib 8/8 + desktop_relay_contract 9/9) |
+| R2 ✅ | relay-config 补 `rerank_model`;桌面 session/env 注入 `RERANK_*`;抽屉模型区显示重排模型 | desktop `cargo test` 37/37 + vitest 42/42 + typecheck |
+| R3 ✅ | 部署 + 真云冒烟(rerank 排序正确,`meta.tokens` 实计量 1979→1978)+ l3 回归 3.6m 过(1978→1955)+ 文档 | curl + `run.sh l3` |
 
 排序原则(layered growth):W2 云端 relay 可独立curl 验收;W3 出最小端到端(登录→relay→扣费);W4 纯前端可插在任何空档。
 
@@ -86,7 +89,7 @@
 
 - relay 流量经过 VPS:带宽与延迟成本;SSE 必须流式透传,不能缓冲。
 - desktop token 泄漏 → 用户可在云端设置撤销;v1 不做 token 轮换提醒。
-- **follow-up:rerank relay**。v1 client.env 不注入 `RERANK_*` / memory / triplet LLM(relay 只有 chat + embeddings 两条路由);rerank 走余额需先加 `POST /v1/relay/rerank` 路由 + 白名单价目,再补注入。本地无 rerank 配置时检索退化为无 rerank 路径(现状行为)。
+- **rerank relay ✅(§7 R1–R3,2026-08-16)**:`POST /v1/relay/rerank` 上线(型号钉住 + 白名单/余额预检 + `meta.tokens` 实计量,SiliconFlow 用量藏在 meta 不藏在 usage 信封),client.env 注入 `RERANK_*`,抽屉显示重排模型。memory / triplet LLM 仍不注入(检索退化路径不变)。
 - 不做:离线首启、usage 回传云对账(本地行与云行各记各的)、桌面端充值页(一律外开 `/pricing#topup`,PRODUCT_IA §4 禁止第三 checkout)。
 - 旧 `DesktopSettingsDrawer` 栈管道代码在 W4 删除,不留兼容层(no backward compatibility tax)。
 - **E2E 绕行(W5)**:`scripts/desktop-e2e/l0.ps1` 在 KeepRunning(playwright)模式以 `CONTEXT_OS_SKIP_CLOUD_GATE=1` 启动壳;`cloud_gate_bypassed` IPC 为 true 时登录门直接放行——E2E 环境没有真实云账户,预置假 session 还会把 relay 块写进 client.env 改变 chat-unconf 等 spec 的语义。生产安装永不设置该变量。登录门本身由 `tests/desktop/cloud-login-gate.test.tsx` 单测 + l3 真机验收覆盖。

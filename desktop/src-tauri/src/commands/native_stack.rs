@@ -459,11 +459,15 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
              INGESTION_LLM_BASE_URL={relay_base}\n\
              INGESTION_LLM_API_KEY={token}\n\
              INGESTION_LLM_MODEL={chat_model}\n\
+             RERANK_BASE_URL={relay_base}\n\
+             RERANK_API_KEY={token}\n\
+             RERANK_MODEL={rerank_model}\n\
              AVRAG_PLATFORM_KEYS_RELAY=1\n",
             relay_base = relay.base_url,
             token = session.desktop_token,
             chat_model = relay.chat_model,
             embedding_model = relay.embedding_model,
+            rerank_model = relay.rerank_model,
         );
     }
     let body = format!(

@@ -9,13 +9,14 @@ vi.mock("@/lib/desktop/tauri-cloud", () => ({
   getCloudSession: vi.fn(),
   cloudLogin: vi.fn(),
   cloudLogout: vi.fn(),
+  isCloudGateBypassed: vi.fn(),
 }));
 
 vi.mock("@/lib/ui-preferences", () => ({
   useUiPreferences: () => ({ locale: "zh-CN" as const, theme: "system" as const }),
 }));
 
-import { cloudLogin, getCloudSession } from "@/lib/desktop/tauri-cloud";
+import { cloudLogin, getCloudSession, isCloudGateBypassed } from "@/lib/desktop/tauri-cloud";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { CloudLoginGate } from "@/components/desktop/CloudLoginGate";
 
@@ -35,6 +36,7 @@ const loggedInSession = {
     base_url: "https://app.contextlm.top/v1/relay",
     chat_model: "deepseek-v4-flash",
     embedding_model: "BAAI/bge-m3",
+    rerank_model: "Pro/BAAI/bge-reranker-v2-m3",
   },
   message: "Cloud session active",
 };
@@ -44,6 +46,8 @@ describe("CloudLoginGate", () => {
     vi.mocked(isTauri).mockReset();
     vi.mocked(getCloudSession).mockReset();
     vi.mocked(cloudLogin).mockReset();
+    vi.mocked(isCloudGateBypassed).mockReset();
+    vi.mocked(isCloudGateBypassed).mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -61,6 +65,23 @@ describe("CloudLoginGate", () => {
 
     expect(screen.getByTestId("app-child")).toBeInTheDocument();
     expect(getCloudSession).not.toHaveBeenCalled();
+  });
+
+  it("renders children without a session when the E2E bypass env is set", async () => {
+    vi.mocked(isTauri).mockReturnValue(true);
+    vi.mocked(isCloudGateBypassed).mockResolvedValue(true);
+
+    render(
+      <CloudLoginGate>
+        <div data-testid="app-child">App</div>
+      </CloudLoginGate>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-child")).toBeInTheDocument();
+    });
+    expect(getCloudSession).not.toHaveBeenCalled();
+    expect(screen.queryByText("登录云账户")).not.toBeInTheDocument();
   });
 
   it("shows the login card when no cloud session exists", async () => {
@@ -107,6 +128,7 @@ describe("CloudLoginGate", () => {
         base_url: "https://app.contextlm.top/v1/relay",
         chat_model: "deepseek-v4-flash",
         embedding_model: "BAAI/bge-m3",
+        rerank_model: "Pro/BAAI/bge-reranker-v2-m3",
       },
       env_updated: true,
       product_restarted: false,

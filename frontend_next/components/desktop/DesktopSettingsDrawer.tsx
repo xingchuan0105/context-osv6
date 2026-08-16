@@ -317,6 +317,10 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                       <p className={styles.drawerLabel}>{t("desktop.drawer.modelEmbedding")}</p>
                       <p className={styles.pathText}>{relay.embedding_model}</p>
                     </div>
+                    <div className={styles.drawerBlock}>
+                      <p className={styles.drawerLabel}>{t("desktop.drawer.modelRerank")}</p>
+                      <p className={styles.pathText}>{relay.rerank_model}</p>
+                    </div>
                   </>
                 ) : null}
                 {modelSource === "byok"

@@ -33,6 +33,7 @@ pub struct CloudRelayConfig {
     pub base_url: String,
     pub chat_model: String,
     pub embedding_model: String,
+    pub rerank_model: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +55,7 @@ impl StoredCloudSession {
             || self.relay.base_url.is_empty()
             || self.relay.chat_model.is_empty()
             || self.relay.embedding_model.is_empty()
+            || self.relay.rerank_model.is_empty()
         {
             return None;
         }
@@ -374,8 +376,16 @@ pub async fn cloud_login(
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string(),
+        rerank_model: data
+            .get("rerank_model")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
     };
-    if relay.base_url.is_empty() || relay.chat_model.is_empty() || relay.embedding_model.is_empty()
+    if relay.base_url.is_empty()
+        || relay.chat_model.is_empty()
+        || relay.embedding_model.is_empty()
+        || relay.rerank_model.is_empty()
     {
         return Err(IpcApiError::internal("relay-config response incomplete"));
     }
@@ -536,6 +546,7 @@ mod tests {
                 base_url: "https://app.contextlm.top/v1/relay".into(),
                 chat_model: "deepseek-v4-flash".into(),
                 embedding_model: "BAAI/bge-m3".into(),
+                rerank_model: "Pro/BAAI/bge-reranker-v2-m3".into(),
             },
         };
         assert!(session.clone().well_formed().is_some());

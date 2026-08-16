@@ -15,6 +15,7 @@ export type CloudRelayConfig = {
   base_url: string;
   chat_model: string;
   embedding_model: string;
+  rerank_model: string;
 };
 
 /** Redacted view — tokens never cross to the WebView. */
