@@ -174,6 +174,9 @@ fn mock() -> &'static MockUpstream {
             std::env::set_var("AGENT_LLM_BASE_URL", &base_url);
             std::env::set_var("AGENT_LLM_API_KEY", "sk-platform-test");
             std::env::set_var("AGENT_LLM_MODEL", "deepseek-v4-flash");
+            std::env::set_var("INGESTION_LLM_BASE_URL", &base_url);
+            std::env::set_var("INGESTION_LLM_API_KEY", "sk-ingestion-test");
+            std::env::set_var("INGESTION_LLM_MODEL", "qwen3.7-flash");
             std::env::set_var("EMBEDDING_BASE_URL", &base_url);
             std::env::set_var("EMBEDDING_API_KEY", "sk-embed-test");
             std::env::set_var("EMBEDDING_MODEL", "BAAI/bge-m3");
@@ -684,6 +687,68 @@ async fn relay_chat_streams_verbatim_pins_model_and_meters() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn relay_ingestion_chat_pins_own_model_and_meters() {
+    let _guard = TEST_LOCK.lock().unwrap();
+    let mock = mock();
+
+    let mut state = memory_state();
+    let wallet = Arc::new(StubWallet::with_balance(0));
+    let usage_store = Arc::new(StubUsageLimitStore::default());
+    state.test_set_billing(metered_billing(wallet.clone(), usage_store.clone()));
+    let app = transport_http::build_router(state);
+
+    let user_id = Uuid::new_v4();
+    let bearer = session_bearer(user_id);
+    let minted = mint_token_via_http(&app, &bearer, "ingestion-laptop").await;
+    let desktop_token = minted["token"].as_str().unwrap().to_string();
+
+    let marker = format!("relay-ing-{}", Uuid::new_v4());
+    let response = app
+        .clone()
+        .oneshot(json_post(
+            "/v1/relay/ingestion/chat/completions",
+            Some(&desktop_token),
+            serde_json::json!({
+                "model": "gpt-4o", // client choice ignored — ingestion pool pins its own
+                "stream": true,
+                "user": marker,
+                "messages": [{"role": "user", "content": "ping"}]
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+    assert_eq!(body, chat_sse_body());
+
+    // Upstream saw the ingestion pool's pinned model + key, never the chat pool's.
+    let calls = captured_calls_for(mock, "/chat/completions");
+    let call = calls
+        .iter()
+        .find(|call| call.body["user"] == serde_json::json!(marker))
+        .expect("mock captured the ingestion-relayed chat call");
+    assert_eq!(call.body["model"], "qwen3.7-flash");
+    assert_eq!(
+        call.authorization.as_deref(),
+        Some("Bearer sk-ingestion-test"),
+        "upstream auth must be the ingestion pool's platform key"
+    );
+
+    // Metering rides the qwen flash whitelist tier.
+    let events = usage_store.events.lock().unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.usage_kind == "chat" && event.model == "qwen3.7-flash")
+        .expect("ingestion usage event recorded");
+    assert_eq!(event.prompt_tokens, 100);
+    assert_eq!(event.completion_tokens, 20);
+    assert!(event.billable);
+    drop(events);
+    assert_eq!(wallet.balance(), 1999);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn relay_chat_insufficient_balance_refused_before_upstream() {
     let _guard = TEST_LOCK.lock().unwrap();
     let mock = mock();
@@ -860,6 +925,7 @@ async fn relay_model_not_whitelisted_is_config_error() {
         }),
         None,
         None,
+        None,
     );
     let app = transport_http::build_relay_router(state.clone(), service).with_state(state);
 
@@ -920,6 +986,7 @@ async fn desktop_relay_config_reports_public_base_and_pinned_models() {
         "https://app.contextlm.top/v1/relay"
     );
     assert_eq!(body["data"]["chat_model"], "deepseek-v4-flash");
+    assert_eq!(body["data"]["ingestion_model"], "qwen3.7-flash");
     assert_eq!(body["data"]["embedding_model"], "BAAI/bge-m3");
     assert_eq!(body["data"]["rerank_model"], "BAAI/bge-reranker-v2-m3");
 }
@@ -933,13 +1000,26 @@ async fn relay_unconfigured_upstream_is_503() {
         .await
         .unwrap();
 
-    let service = transport_http::RelayService::from_upstreams(None, None, None);
+    let service = transport_http::RelayService::from_upstreams(None, None, None, None);
     let app = transport_http::build_relay_router(state.clone(), service).with_state(state);
 
     let response = app
         .clone()
         .oneshot(json_post(
             "/v1/relay/chat/completions",
+            Some(&minted.token),
+            serde_json::json!({"messages": []}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = body_json(response).await;
+    assert_eq!(body["error"]["code"], "relay_upstream_not_configured");
+
+    let response = app
+        .clone()
+        .oneshot(json_post(
+            "/v1/relay/ingestion/chat/completions",
             Some(&minted.token),
             serde_json::json!({"messages": []}),
         ))

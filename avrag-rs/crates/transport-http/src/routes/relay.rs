@@ -64,6 +64,7 @@ impl RelayUpstream {
 #[derive(Debug, Clone)]
 pub struct RelayService {
     pub chat: Option<RelayUpstream>,
+    pub ingestion: Option<RelayUpstream>,
     pub embeddings: Option<RelayUpstream>,
     pub rerank: Option<RelayUpstream>,
     http: reqwest::Client,
@@ -75,6 +76,7 @@ impl RelayService {
         let config = app_core::AppConfig::from_env();
         Self {
             chat: RelayUpstream::from_model_config(&config.agent_llm),
+            ingestion: RelayUpstream::from_model_config(&config.ingestion_llm),
             embeddings: RelayUpstream::from_model_config(&config.embedding),
             rerank: RelayUpstream::from_model_config(&config.rerank),
             http: reqwest::Client::new(),
@@ -84,11 +86,13 @@ impl RelayService {
     /// Explicit constructor (tests pin a mock upstream).
     pub fn from_upstreams(
         chat: Option<RelayUpstream>,
+        ingestion: Option<RelayUpstream>,
         embeddings: Option<RelayUpstream>,
         rerank: Option<RelayUpstream>,
     ) -> Self {
         Self {
             chat,
+            ingestion,
             embeddings,
             rerank,
             http: reqwest::Client::new(),
@@ -118,6 +122,10 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
 pub fn build_relay_router(state: AppState, service: RelayService) -> Router<AppState> {
     Router::new()
         .route("/v1/relay/chat/completions", post(relay_chat_completions))
+        .route(
+            "/v1/relay/ingestion/chat/completions",
+            post(relay_ingestion_chat_completions),
+        )
         .route("/v1/relay/embeddings", post(relay_embeddings))
         .route("/v1/relay/rerank", post(relay_rerank))
         .layer(Extension(service))
@@ -184,10 +192,36 @@ async fn relay_chat_completions(
     Extension(auth): Extension<DesktopRelayAuth>,
     body: axum::body::Bytes,
 ) -> Response {
-    let Some(upstream) = service.chat.clone() else {
-        return upstream_not_configured("chat", "AGENT_LLM");
+    let upstream = service.chat.clone();
+    relay_chat_via_upstream(state, auth, service, upstream, "chat", "AGENT_LLM", body).await
+}
+
+/// Windowed ingestion summaries ride their own pinned pool (`INGESTION_LLM_*`)
+/// instead of being forced onto the chat model.
+async fn relay_ingestion_chat_completions(
+    State(state): State<AppState>,
+    Extension(service): Extension<RelayService>,
+    Extension(auth): Extension<DesktopRelayAuth>,
+    body: axum::body::Bytes,
+) -> Response {
+    let upstream = service.ingestion.clone();
+    relay_chat_via_upstream(state, auth, service, upstream, "ingestion", "INGESTION_LLM", body)
+        .await
+}
+
+async fn relay_chat_via_upstream(
+    state: AppState,
+    auth: DesktopRelayAuth,
+    service: RelayService,
+    upstream: Option<RelayUpstream>,
+    pool: &str,
+    env_prefix: &str,
+    body: axum::body::Bytes,
+) -> Response {
+    let Some(upstream) = upstream else {
+        return upstream_not_configured(pool, env_prefix);
     };
-    if let Err(resp) = ensure_whitelisted(&upstream, "AGENT_LLM") {
+    if let Err(resp) = ensure_whitelisted(&upstream, env_prefix) {
         return resp;
     }
     if let Err(resp) = ensure_relay_balance(&state, auth.user_id).await {

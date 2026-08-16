@@ -32,6 +32,7 @@ pub struct CloudUser {
 pub struct CloudRelayConfig {
     pub base_url: String,
     pub chat_model: String,
+    pub ingestion_model: String,
     pub embedding_model: String,
     pub rerank_model: String,
 }
@@ -54,6 +55,7 @@ impl StoredCloudSession {
             || self.desktop_token.is_empty()
             || self.relay.base_url.is_empty()
             || self.relay.chat_model.is_empty()
+            || self.relay.ingestion_model.is_empty()
             || self.relay.embedding_model.is_empty()
             || self.relay.rerank_model.is_empty()
         {
@@ -371,6 +373,11 @@ pub async fn cloud_login(
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string(),
+        ingestion_model: data
+            .get("ingestion_model")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
         embedding_model: data
             .get("embedding_model")
             .and_then(|v| v.as_str())
@@ -384,6 +391,7 @@ pub async fn cloud_login(
     };
     if relay.base_url.is_empty()
         || relay.chat_model.is_empty()
+        || relay.ingestion_model.is_empty()
         || relay.embedding_model.is_empty()
         || relay.rerank_model.is_empty()
     {
@@ -545,6 +553,7 @@ mod tests {
             relay: CloudRelayConfig {
                 base_url: "https://app.contextlm.top/v1/relay".into(),
                 chat_model: "deepseek-v4-flash".into(),
+                ingestion_model: "qwen3.7-flash".into(),
                 embedding_model: "BAAI/bge-m3".into(),
                 rerank_model: "Pro/BAAI/bge-reranker-v2-m3".into(),
             },
@@ -552,6 +561,9 @@ mod tests {
         assert!(session.clone().well_formed().is_some());
         let mut broken = session;
         broken.relay.chat_model = String::new();
+        assert!(broken.clone().well_formed().is_none());
+        broken.relay.chat_model = "deepseek-v4-flash".into();
+        broken.relay.ingestion_model = String::new();
         assert!(broken.well_formed().is_none());
     }
 

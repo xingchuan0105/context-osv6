@@ -14,6 +14,7 @@ export type CloudUser = {
 export type CloudRelayConfig = {
   base_url: string;
   chat_model: string;
+  ingestion_model: string;
   embedding_model: string;
   rerank_model: string;
 };

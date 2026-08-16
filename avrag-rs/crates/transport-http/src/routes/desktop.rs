@@ -32,6 +32,7 @@ pub(crate) fn router() -> Router<AppState> {
 pub struct DesktopRelayConfigView {
     pub relay_base_url: String,
     pub chat_model: String,
+    pub ingestion_model: String,
     pub embedding_model: String,
     pub rerank_model: String,
 }
@@ -50,6 +51,7 @@ async fn desktop_relay_config(
     Json(ApiResponse::ok(DesktopRelayConfigView {
         relay_base_url: format!("{base}/v1/relay"),
         chat_model: config.agent_llm.model,
+        ingestion_model: config.ingestion_llm.model,
         embedding_model: config.embedding.model,
         rerank_model: config.rerank.model,
     }))

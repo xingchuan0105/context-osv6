@@ -40,6 +40,7 @@ const loggedInSession = {
   relay: {
     base_url: "https://app.contextlm.top/v1/relay",
     chat_model: "deepseek-v4-flash",
+    ingestion_model: "qwen3.7-flash",
     embedding_model: "BAAI/bge-m3",
     rerank_model: "Pro/BAAI/bge-reranker-v2-m3",
   },
@@ -154,6 +155,7 @@ describe("CloudLoginGate", () => {
       relay: {
         base_url: "https://app.contextlm.top/v1/relay",
         chat_model: "deepseek-v4-flash",
+        ingestion_model: "qwen3.7-flash",
         embedding_model: "BAAI/bge-m3",
         rerank_model: "Pro/BAAI/bge-reranker-v2-m3",
       },

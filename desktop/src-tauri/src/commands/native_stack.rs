@@ -456,9 +456,11 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
              EMBEDDING_BASE_URL={relay_base}\n\
              EMBEDDING_API_KEY={token}\n\
              EMBEDDING_MODEL={embedding_model}\n\
-             INGESTION_LLM_BASE_URL={relay_base}\n\
+             INGESTION_LLM_BASE_URL={relay_base}/ingestion\n\
              INGESTION_LLM_API_KEY={token}\n\
-             INGESTION_LLM_MODEL={chat_model}\n\
+             INGESTION_LLM_MODEL={ingestion_model}\n\
+             INGESTION_LLM_ENABLE_THINKING=false\n\
+             INGESTION_LLM_TIMEOUT_MS=60000\n\
              RERANK_BASE_URL={relay_base}\n\
              RERANK_API_KEY={token}\n\
              RERANK_MODEL={rerank_model}\n\
@@ -466,6 +468,7 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
             relay_base = relay.base_url,
             token = session.desktop_token,
             chat_model = relay.chat_model,
+            ingestion_model = relay.ingestion_model,
             embedding_model = relay.embedding_model,
             rerank_model = relay.rerank_model,
         );
