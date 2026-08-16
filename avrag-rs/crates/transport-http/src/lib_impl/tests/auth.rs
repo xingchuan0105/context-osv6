@@ -140,6 +140,140 @@ async fn change_password_allows_login_with_new_secret_when_database_available() 
 
 
 #[tokio::test]
+async fn local_reregister_resets_password_when_database_available() {
+    let Some(state) = pg_test_app_state().await else {
+        return;
+    };
+    let app = build_router(state);
+    let email = format!("local-reset-{}@example.test", Uuid::new_v4());
+    let register_req = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(register_body(&email, "Local Reset User")))
+        .unwrap();
+    let register_resp = app.clone().oneshot(register_req).await.unwrap();
+    assert_eq!(register_resp.status(), StatusCode::CREATED);
+
+    let previous = env::var("NEXT_PUBLIC_DEV_OWNER_USER_ID").ok();
+    unsafe {
+        env::set_var(
+            "NEXT_PUBLIC_DEV_OWNER_USER_ID",
+            "00000000-0000-0000-0000-000000000001",
+        );
+    }
+
+    // Desktop cold boot: credential file regenerated → new random password →
+    // re-register with local:true must reset, not 409.
+    let re_register_req = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(format!(
+            r#"{{"email":"{email}","password":"password456","full_name":"Local Reset User","terms_version":"{}","privacy_version":"{}","local":true}}"#,
+            app_core::PUBLISHED_TERMS_VERSION,
+            app_core::PUBLISHED_PRIVACY_VERSION,
+        )))
+        .unwrap();
+    let re_register_resp = app.clone().oneshot(re_register_req).await.unwrap();
+    assert_eq!(re_register_resp.status(), StatusCode::OK);
+    let re_register_body = to_bytes(re_register_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let re_register_payload: serde_json::Value =
+        serde_json::from_slice(&re_register_body).unwrap();
+    assert!(
+        re_register_payload["data"]["token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
+    );
+
+    let login_req = Request::builder()
+        .uri("/api/auth/login")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(format!(
+            r#"{{"email":"{email}","password":"password456"}}"#
+        )))
+        .unwrap();
+    let login_resp = app.clone().oneshot(login_req).await.unwrap();
+    assert_eq!(login_resp.status(), StatusCode::OK);
+
+    let old_password_req = Request::builder()
+        .uri("/api/auth/login")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(format!(
+            r#"{{"email":"{email}","password":"password123"}}"#
+        )))
+        .unwrap();
+    let old_password_resp = app.oneshot(old_password_req).await.unwrap();
+    assert_eq!(old_password_resp.status(), StatusCode::UNAUTHORIZED);
+
+    if let Some(value) = previous {
+        unsafe {
+            env::set_var("NEXT_PUBLIC_DEV_OWNER_USER_ID", value);
+        }
+    } else {
+        unsafe {
+            env::remove_var("NEXT_PUBLIC_DEV_OWNER_USER_ID");
+        }
+    }
+}
+
+
+#[tokio::test]
+async fn register_still_conflicts_for_existing_email_without_local_flag() {
+    let Some(state) = pg_test_app_state().await else {
+        return;
+    };
+    let app = build_router(state);
+    let email = format!("conflict-{}@example.test", Uuid::new_v4());
+    let register_req = Request::builder()
+        .uri("/api/auth/register")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(register_body(&email, "Conflict User")))
+        .unwrap();
+    let register_resp = app.clone().oneshot(register_req).await.unwrap();
+    assert_eq!(register_resp.status(), StatusCode::CREATED);
+
+    // Even with the local deployment env present, cloud-shaped requests
+    // (no local:true) must keep getting the plain 409.
+    let previous = env::var("NEXT_PUBLIC_DEV_OWNER_USER_ID").ok();
+    unsafe {
+        env::set_var(
+            "NEXT_PUBLIC_DEV_OWNER_USER_ID",
+            "00000000-0000-0000-0000-000000000001",
+        );
+    }
+    let duplicate_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/register")
+                .method("POST")
+                .header("Content-Type", "application/json")
+                .body(Body::from(register_body(&email, "Conflict User")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(duplicate_resp.status(), StatusCode::CONFLICT);
+
+    if let Some(value) = previous {
+        unsafe {
+            env::set_var("NEXT_PUBLIC_DEV_OWNER_USER_ID", value);
+        }
+    } else {
+        unsafe {
+            env::remove_var("NEXT_PUBLIC_DEV_OWNER_USER_ID");
+        }
+    }
+}
+
+
+#[tokio::test]
 async fn login_returns_distinct_codes_for_missing_account_and_wrong_password() {
     let Some(state) = pg_test_app_state().await else {
         return;

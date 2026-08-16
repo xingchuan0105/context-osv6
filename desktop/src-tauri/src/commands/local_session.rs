@@ -270,14 +270,6 @@ async fn login_or_register(
         }
     }
 
-    // Email exists with different password: surface clear error.
-    if r_status == 409 {
-        return Err(IpcApiError::bad_request(
-            "local_user_conflict",
-            "Local user already exists with a different password. Delete app data local_user.json / local_session.json to reset.",
-        ));
-    }
-
     // Retry login once more (race: another process registered).
     let (status2, value2) = http_json(
         "POST",

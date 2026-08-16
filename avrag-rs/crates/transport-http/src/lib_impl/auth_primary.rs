@@ -115,7 +115,7 @@ pub(crate) async fn auth_register_handler(
     let result = match store
         .register_user(&RegisterUserInput {
             email: req.email.trim().to_string(),
-            password_hash,
+            password_hash: password_hash.clone(),
             full_name: req.full_name.clone(),
             legal_acceptance: app_core::RegisterLegalAcceptance {
                 terms_version,
@@ -131,11 +131,68 @@ pub(crate) async fn auth_register_handler(
     {
         Ok(result) => result,
         Err(error) if error.http_status() == 409 => {
-            return handlers::error_response(
-                StatusCode::CONFLICT,
-                "email_exists",
-                "An account with this email already exists",
+            // Desktop local installs re-register the fixed local account when
+            // local_user.json was regenerated while the local DB persisted —
+            // reset that account's password instead of dead-ending on 409.
+            if !(req.local.unwrap_or(false)
+                && std::env::var("NEXT_PUBLIC_DEV_OWNER_USER_ID").is_ok())
+            {
+                return handlers::error_response(
+                    StatusCode::CONFLICT,
+                    "email_exists",
+                    "An account with this email already exists",
+                );
+            }
+            let credentials = match store.find_user_for_login(req.email.trim()).await {
+                Ok(Some(credentials)) => credentials,
+                Ok(None) => {
+                    return handlers::error_response(
+                        StatusCode::CONFLICT,
+                        "email_exists",
+                        "An account with this email already exists",
+                    );
+                }
+                Err(error) => {
+                    warn!(error = %error, "local re-register user lookup failed");
+                    return handlers::error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "internal_error",
+                        "Registration failed",
+                    );
+                }
+            };
+            if let Err(error) = store.change_password(credentials.user_id, &password_hash).await {
+                warn!(error = %error, "local re-register password reset failed");
+                return handlers::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "Registration failed",
+                );
+            }
+            // change_password bumps auth_version; issue the JWT at the new version.
+            let token = issue_jwt_for_auth_version(
+                &credentials.user_id,
+                &credentials.owner_user_id,
+                credentials.auth_version + 1,
+                &credentials.role,
             );
+            return (
+                StatusCode::OK,
+                Json(AuthEnvelope {
+                    success: true,
+                    data: Some(AuthPayload {
+                        token,
+                        user: super::auth::profile::empty_auth_user(
+                            credentials.user_id.to_string(),
+                            credentials.email.clone(),
+                            credentials.full_name.clone().unwrap_or_default(),
+                        ),
+                        reset_ticket: None,
+                    }),
+                    error: None,
+                }),
+            )
+                .into_response();
         }
         Err(error) => {
             warn!(error = %error, "registration failed");
