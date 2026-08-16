@@ -101,6 +101,12 @@ export async function cloudLogout(): Promise<CloudLogoutResult> {
   return invoke<CloudLogoutResult>("cloud_logout");
 }
 
+/** E2E-only: true when the shell was launched with CONTEXT_OS_SKIP_CLOUD_GATE=1
+ *  (scripts/desktop-e2e; no real cloud account exists there). */
+export async function isCloudGateBypassed(): Promise<boolean> {
+  return invoke<boolean>("cloud_gate_bypassed");
+}
+
 /** Wallet balance for the signed-in cloud account (官方模型 走余额 metering source). */
 export async function getCloudWalletBalance(): Promise<CloudWalletView> {
   return invoke<CloudWalletView>("cloud_wallet_balance");

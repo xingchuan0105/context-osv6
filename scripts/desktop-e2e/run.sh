@@ -5,11 +5,14 @@
 #   DESKTOP_E2E_YES=1 bash scripts/desktop-e2e/run.sh l0
 #   DESKTOP_E2E_YES=1 DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' bash scripts/desktop-e2e/run.sh l1
 #   DESKTOP_E2E_YES=1 DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' bash scripts/desktop-e2e/run.sh l2
+#   DESKTOP_E2E_YES=1 DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' bash scripts/desktop-e2e/run.sh l3
 #   DESKTOP_E2E_YES=1 DESKTOP_E2E_OLD_SETUP='C:\temp\old-setup.exe' bash scripts/desktop-e2e/run.sh u1
 #   DESKTOP_E2E_YES=1 DESKTOP_E2E_INSTALL_DIR='C:\Context-OS' bash scripts/desktop-e2e/run.sh l0
 #
 # l2 = l1 suite with real LLM keys mapped from avrag-rs/.env (KD8) and the
-# default grep narrowed to D-rag-full. u1 = install-upgrade-install data
+# default grep narrowed to D-rag-full. l3 = cloud-login acceptance: real gate
+# (no bypass), no BYOK seed, RAG via the official relay (cloud creds come from
+# avrag-rs/.env DESKTOP_E2E_CLOUD_*). u1 = install-upgrade-install data
 # preservation run (see upgrade.ps1).
 #
 # Safety contract:
@@ -32,8 +35,8 @@ log() { echo "desktop-e2e: $*"; }
 if [[ "$YES" != "1" ]]; then
   die "set DESKTOP_E2E_YES=1 to confirm this run is allowed to stop the local Context-OS client"
 fi
-if [[ "$MODE" != "l0" && "$MODE" != "audit" && "$MODE" != "l1" && "$MODE" != "l2" && "$MODE" != "u1" ]]; then
-  die "unknown mode '$MODE' (use: l0 | audit | l1 | l2 | u1)"
+if [[ "$MODE" != "l0" && "$MODE" != "audit" && "$MODE" != "l1" && "$MODE" != "l2" && "$MODE" != "l3" && "$MODE" != "u1" ]]; then
+  die "unknown mode '$MODE' (use: l0 | audit | l1 | l2 | l3 | u1)"
 fi
 # l2 = l1 with real LLM keys (KD8 opt-in made explicit as a mode) and the
 # default grep narrowed to the D-rag-full real-LLM journey.
@@ -41,23 +44,35 @@ if [[ "$MODE" == "l2" ]]; then
   DESKTOP_E2E_LLM=1
   DESKTOP_E2E_GREP="${DESKTOP_E2E_GREP:-D-rag-full}"
 fi
+# l3 = cloud-login acceptance (W3 gate 真机门): real login gate (no bypass env),
+# no legacy BYOK seed — the RAG answer must come from the official relay.
+if [[ "$MODE" == "l3" ]]; then
+  DESKTOP_E2E_NO_BYPASS=1
+  DESKTOP_E2E_GREP="${DESKTOP_E2E_GREP:-cloud-login}"
+fi
 if ! command -v "$POWERSHELL" >/dev/null 2>&1; then
   die "cannot find Windows PowerShell: $POWERSHELL"
 fi
 
+env_value() {
+  grep -E "^$1=" "$ROOT/avrag-rs/.env" 2>/dev/null | head -n1 | cut -d= -f2- \
+    | sed -e 's/^[[:space:]]*//' -e 's/^"//' -e 's/"$//' | tr -d '\r'
+}
+
 # L2 / D-rag-full real keys (KD8): opt-in via DESKTOP_E2E_LLM=1. Map avrag-rs/.env
 # platform keys to DESKTOP_E2E_* (respecting pre-set vars). Values never echo.
 if [[ "${DESKTOP_E2E_LLM:-0}" == "1" ]]; then
-  env_value() {
-    grep -E "^$1=" "$ROOT/avrag-rs/.env" 2>/dev/null | head -n1 | cut -d= -f2- \
-      | sed -e 's/^[[:space:]]*//' -e 's/^"//' -e 's/"$//' | tr -d '\r'
-  }
   DESKTOP_E2E_LLM_API_KEY="${DESKTOP_E2E_LLM_API_KEY:-$(env_value AGENT_LLM_API_KEY)}"
   DESKTOP_E2E_LLM_BASE_URL="${DESKTOP_E2E_LLM_BASE_URL:-$(env_value AGENT_LLM_BASE_URL)}"
   DESKTOP_E2E_LLM_MODEL="${DESKTOP_E2E_LLM_MODEL:-$(env_value AGENT_LLM_MODEL)}"
   DESKTOP_E2E_EMBED_API_KEY="${DESKTOP_E2E_EMBED_API_KEY:-$(env_value EMBEDDING_API_KEY)}"
   DESKTOP_E2E_EMBED_BASE_URL="${DESKTOP_E2E_EMBED_BASE_URL:-$(env_value EMBEDDING_BASE_URL)}"
   DESKTOP_E2E_EMBED_MODEL="${DESKTOP_E2E_EMBED_MODEL:-$(env_value EMBEDDING_MODEL)}"
+fi
+# L3 cloud account (mapped from avrag-rs/.env like the LLM keys; never echoed).
+if [[ "$MODE" == "l3" ]]; then
+  DESKTOP_E2E_CLOUD_EMAIL="${DESKTOP_E2E_CLOUD_EMAIL:-$(env_value DESKTOP_E2E_CLOUD_EMAIL)}"
+  DESKTOP_E2E_CLOUD_PASSWORD="${DESKTOP_E2E_CLOUD_PASSWORD:-$(env_value DESKTOP_E2E_CLOUD_PASSWORD)}"
 fi
 
 if [[ "${DESKTOP_E2E_HOTSWAP:-0}" == "1" ]]; then
@@ -90,7 +105,7 @@ ps_quote() {
 
 L0_SCRIPT="$ROOT/scripts/desktop-e2e/l0.ps1"
 
-if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
+if [[ "$MODE" == "l1" || "$MODE" == "l2" || "$MODE" == "l3" ]]; then
   if [[ "${DESKTOP_E2E_AUDIT_ONLY:-0}" == "1" ]]; then
     die "DESKTOP_E2E_AUDIT_ONLY=1 is incompatible with mode l1"
   fi
@@ -163,7 +178,7 @@ ARGS=()
 ARGS=()
 ARGS+=("-NoProfile" "-ExecutionPolicy" "Bypass" "-File" "$L0_SCRIPT")
 ARGS+=("-RunId" "$RUN_ID")
-if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
+if [[ "$MODE" == "l1" || "$MODE" == "l2" || "$MODE" == "l3" ]]; then
   ARGS+=("-CdpPort" "$CDP_PORT")
   ARGS+=("-CdpTimeoutSeconds" "$((CDP_ATTACH_TIMEOUT_MS / 1000))")
 fi
@@ -179,6 +194,11 @@ if [[ -n "${DESKTOP_E2E_APP_DATA_BACKUP:-}" ]]; then
 fi
 if [[ "${DESKTOP_E2E_USE_DEFAULT_TREE:-0}" == "1" ]]; then
   ARGS+=("-UseDefaultTree")
+fi
+if [[ "${DESKTOP_E2E_NO_BYPASS:-0}" == "1" ]]; then
+  # l3: keep the W3 login gate real and skip the legacy BYOK seed — the answer
+  # must come from the official relay, not a seeded provider secret.
+  ARGS+=("-NoCloudGateBypass" "-NoLegacyLlmSeed")
 fi
 if [[ "$MODE" == "audit" || "${DESKTOP_E2E_AUDIT_ONLY:-0}" == "1" ]]; then
   ARGS+=("-AuditOnly")
@@ -198,7 +218,7 @@ fi
 
 log "mode=$MODE run_id=$RUN_ID install_dir=${DESKTOP_E2E_INSTALL_DIR:-<default>}"
 
-if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
+if [[ "$MODE" == "l1" || "$MODE" == "l2" || "$MODE" == "l3" ]]; then
   KEEP_ARGS=("${ARGS[@]}" "-KeepRunning")
   TEARDOWN_ARGS=("${ARGS[@]}" "-TeardownOnly")
   L1_CLEANUP_DONE=0
@@ -223,6 +243,8 @@ if [[ "$MODE" == "l1" || "$MODE" == "l2" ]]; then
   [[ -n "${DESKTOP_E2E_EMBED_API_KEY:-}" ]] && PS_CMD+=" \$env:DESKTOP_E2E_EMBED_API_KEY=$(ps_quote "$DESKTOP_E2E_EMBED_API_KEY");"
   [[ -n "${DESKTOP_E2E_EMBED_BASE_URL:-}" ]] && PS_CMD+=" \$env:DESKTOP_E2E_EMBED_BASE_URL=$(ps_quote "$DESKTOP_E2E_EMBED_BASE_URL");"
   [[ -n "${DESKTOP_E2E_EMBED_MODEL:-}" ]] && PS_CMD+=" \$env:DESKTOP_E2E_EMBED_MODEL=$(ps_quote "$DESKTOP_E2E_EMBED_MODEL");"
+  [[ -n "${DESKTOP_E2E_CLOUD_EMAIL:-}" ]] && PS_CMD+=" \$env:DESKTOP_E2E_CLOUD_EMAIL=$(ps_quote "$DESKTOP_E2E_CLOUD_EMAIL");"
+  [[ -n "${DESKTOP_E2E_CLOUD_PASSWORD:-}" ]] && PS_CMD+=" \$env:DESKTOP_E2E_CLOUD_PASSWORD=$(ps_quote "$DESKTOP_E2E_CLOUD_PASSWORD");"
   PS_CMD+=" Set-Location $(ps_quote "$DESKTOP_E2E_WIN_FRONTEND");"
   PS_CMD+=" & $(ps_quote "$DESKTOP_E2E_WIN_NPX") playwright test --config=playwright.desktop-client.config.ts"
   [[ -n "${DESKTOP_E2E_GREP:-}" ]] && PS_CMD+=" --grep $(ps_quote "$DESKTOP_E2E_GREP")"

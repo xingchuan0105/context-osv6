@@ -14,7 +14,8 @@
 #   SKIP_BUILD=1 use existing build outputs
 #   WHY_API=0    skip why-api binary (frontend only)
 #   CANJU_SERVER=1 also rebuild/upload cchess server binary (default off)
-#   APPLY_NGINX=1 rsync deploy/nginx/{canju,context-os-landing,whyiamright}.conf + reload
+#   APPLY_NGINX=1 rsync deploy/nginx/*.conf (NGINX_CONFS list) + reload
+#   ONLY_NGINX=1 APPLY_NGINX=1 NGINX_CONFS=app-contextlm.conf — sync only that conf
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -62,6 +63,15 @@ elif [[ -n "${SITES:-}" ]]; then
   IFS=',' read -r -a SITES <<< "$SITES"
 else
   SITES=(landing why canju)
+fi
+
+# Nginx confs synced by APPLY_NGINX=1 (override with NGINX_CONFS="a.conf …").
+# app-contextlm.conf is script-managed like the others — edit the repo file,
+# never the live one by hand.
+NGINX_CONFS="${NGINX_CONFS:-canju.conf context-os-landing.conf whyiamright.conf app-contextlm.conf}"
+# ONLY_NGINX=1: skip all site deploys, just sync nginx confs (with APPLY_NGINX=1).
+if [[ "${ONLY_NGINX:-0}" == "1" ]]; then
+  SITES=()
 fi
 
 site_rev() {
@@ -302,8 +312,13 @@ REMOTE
 apply_nginx_if_requested() {
   [[ "$APPLY_NGINX" == "1" ]] || return 0
   log "=== apply nginx confs from deploy/nginx ==="
+  "${SSH[@]}" "mkdir -p /etc/nginx/snippets"
+  if [[ -d "$ROOT/deploy/nginx/snippets" ]]; then
+    "${SCP[@]}" "$ROOT/deploy/nginx/snippets/"*.conf \
+      "${VPS_MAIN_USER}@${VPS_MAIN_HOST}:/etc/nginx/snippets/"
+  fi
   local f
-  for f in canju.conf context-os-landing.conf whyiamright.conf; do
+  for f in $NGINX_CONFS; do
     [[ -f "$ROOT/deploy/nginx/$f" ]] || continue
     "${SCP[@]}" "$ROOT/deploy/nginx/$f" \
       "${VPS_MAIN_USER}@${VPS_MAIN_HOST}:/tmp/$f"

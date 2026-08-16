@@ -31,6 +31,14 @@ fn append_log(log: &mut String, line: impl AsRef<str>) {
     log.push('\n');
 }
 
+/// Process-global serializer for `ensure_native` (see its doc comment at the
+/// call site) — concurrent ensure IPC calls must not interleave initdb /
+/// createdb against the same cluster.
+fn ensure_native_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    &LOCK
+}
+
 fn port_open(host: &str, port: u16) -> bool {
     let endpoint = format!("{host}:{port}");
     let Ok(addrs) = endpoint.to_socket_addrs() else {
@@ -645,6 +653,29 @@ host    all             all             ::1/128                 trust\n"
         return Err("postgres port not open".into());
     }
 
+    // TCP-open ≠ SQL-ready: a fresh initdb accepts TCP before SQL. A second
+    // ensure pass racing the first must not probe/createdb against a half-up
+    // postgres (createdb fails there and the old code still latched the
+    // .avrag_inited marker — every later pass then skipped createdb and the
+    // API crashed on `database "avrag_client" does not exist`).
+    let mut sql_ready = false;
+    for _ in 0..60 {
+        let (code, _, _) = run_capture(
+            Command::new(&psql)
+                .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", "postgres", "-tAc"])
+                .arg("SELECT 1"),
+        );
+        if code == 0 {
+            sql_ready = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    if !sql_ready {
+        append_log(log, "postgres SQL not ready after TCP open");
+        return Err("postgres SQL not ready after TCP open".into());
+    }
+
     // Skip psql/createdb after first success — they are CONSOLE exes and flash on Windows.
     let inited = pgdata.join(".avrag_inited");
     if inited.is_file() {
@@ -676,8 +707,21 @@ host    all             all             ::1/128                 trust\n"
             .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", PG_DB, "-c"])
             .arg("CREATE EXTENSION IF NOT EXISTS vector;"),
     );
-    let _ = fs::write(&inited, "1\n");
-    Ok(())
+    // Latch the marker only when the db verifiably exists — a failed createdb
+    // must not mark the cluster initialized (next ensure then retries instead
+    // of every later pass skipping createdb).
+    let (_, verify, _) = run_capture(
+        Command::new(&psql)
+            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", "postgres", "-tAc"])
+            .arg(format!("SELECT 1 FROM pg_database WHERE datname='{PG_DB}'")),
+    );
+    if verify.trim() == "1" {
+        let _ = fs::write(&inited, "1\n");
+        Ok(())
+    } else {
+        append_log(log, format!("db {PG_DB} still missing after createdb step"));
+        Err(format!("createdb {PG_DB} failed"))
+    }
 }
 
 fn ensure_redis(redis_bin: &Path, data_dir: &Path, pid_file: &Path, log_file: &Path, log: &mut String) -> Result<(), String> {
@@ -800,6 +844,14 @@ pub(crate) fn refresh_client_env() -> Result<String, String> {
 }
 
 pub fn ensure_native() -> NativeEnsureReport {
+    // Serialize concurrent ensures: bootstrap / product / login paths can race
+    // (e.g. right after the W3 gate releases), and two passes running initdb
+    // or createdb against the same half-initialized cluster fail in ways the
+    // old code then latched (.avrag_inited). The second caller waits here and
+    // takes the fast path once the first completes.
+    let _ensure_guard = ensure_native_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut log = String::new();
     let Some(state_rt) = runtime_home() else {
         return NativeEnsureReport {

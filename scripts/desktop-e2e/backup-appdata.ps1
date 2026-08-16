@@ -13,7 +13,7 @@ Set-StrictMode -Version Latest
 
 $appData = Join-Path $env:APPDATA "com.contextos.desktop"
 $backupDir = Join-Path $BackupPath "appdata"
-$names = @("local_user.json", "local_session.json", "llm-config.json")
+$names = @("local_user.json", "local_session.json", "llm-config.json", "cloud_session.json")
 
 if ($Action -eq "Backup") {
     New-Item -ItemType Directory -Force -Path $backupDir | Out-Null

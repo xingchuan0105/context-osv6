@@ -2,7 +2,7 @@
 
 import { type KeyboardEvent, useEffect, useState, type ReactNode } from "react";
 
-import { cloudLogin, getCloudSession } from "@/lib/desktop/tauri-cloud";
+import { cloudLogin, getCloudSession, isCloudGateBypassed } from "@/lib/desktop/tauri-cloud";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { useUiPreferences } from "@/lib/ui-preferences";
@@ -31,17 +31,23 @@ export function CloudLoginGate({ children }: { children: ReactNode }) {
       return;
     }
     let cancelled = false;
-    void getCloudSession()
-      .then((session) => {
-        if (!cancelled) {
-          setPhase(session.logged_in ? "ready" : "login");
+    void (async () => {
+      try {
+        // scripts/desktop-e2e launches the shell with the bypass env set — no
+        // real cloud account exists in that environment.
+        if (await isCloudGateBypassed()) {
+          return "ready" as const;
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPhase("login");
-        }
-      });
+        const session = await getCloudSession();
+        return session.logged_in ? ("ready" as const) : ("login" as const);
+      } catch {
+        return "login" as const;
+      }
+    })().then((next) => {
+      if (!cancelled) {
+        setPhase(next);
+      }
+    });
     return () => {
       cancelled = true;
     };

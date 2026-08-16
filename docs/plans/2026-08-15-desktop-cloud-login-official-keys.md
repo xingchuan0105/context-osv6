@@ -78,7 +78,7 @@
 | W2 ✅(312d5e01) | 云端:`desktop_tokens` 表 + 铸/列/撤 + relay chat/embeddings + 计量接线 + 白名单核对 | `cargo test -p transport-http -p app-billing`;curl 真云收发 + 钱包扣费行 |
 | W3 | 桌面:登录门页 + cloud_session.rs + client.env 注入 + relay 双扣防护 + 登录后重启本机产品;云端补 `relay-config` 端点 | `pnpm typecheck` + 桌面包冷启动真机:登录 → 不发 BYOK 直接 RAG 问答成功且云端钱包扣费 |
 | W4 ✅ | 抽屉重设计 + 撤「已激活」badge + i18n(落地备注见 §5) | `pnpm typecheck` + `tests/desktop` 全绿 + nav-config 测试;`design-baseline` 仅剩既有 WIP 违规(home-client / api-access / help 页,非本片) |
-| W5 | 打包 + l0/l1/l2/u1 全绿 + VPS 部署 | `scripts/desktop-e2e/run.sh` 四模式;`scripts/deploy-*.sh` |
+| W5 ✅ | 打包 + l0/l1/l2/u1 全绿 + VPS 部署 + l3 真机门(落地备注见 §8) | `scripts/desktop-e2e/run.sh` 五模式;`scripts/deploy-*.sh` |
 
 排序原则(layered growth):W2 云端 relay 可独立curl 验收;W3 出最小端到端(登录→relay→扣费);W4 纯前端可插在任何空档。
 
@@ -89,3 +89,14 @@
 - **follow-up:rerank relay**。v1 client.env 不注入 `RERANK_*` / memory / triplet LLM(relay 只有 chat + embeddings 两条路由);rerank 走余额需先加 `POST /v1/relay/rerank` 路由 + 白名单价目,再补注入。本地无 rerank 配置时检索退化为无 rerank 路径(现状行为)。
 - 不做:离线首启、usage 回传云对账(本地行与云行各记各的)、桌面端充值页(一律外开 `/pricing#topup`,PRODUCT_IA §4 禁止第三 checkout)。
 - 旧 `DesktopSettingsDrawer` 栈管道代码在 W4 删除,不留兼容层(no backward compatibility tax)。
+- **E2E 绕行(W5)**:`scripts/desktop-e2e/l0.ps1` 在 KeepRunning(playwright)模式以 `CONTEXT_OS_SKIP_CLOUD_GATE=1` 启动壳;`cloud_gate_bypassed` IPC 为 true 时登录门直接放行——E2E 环境没有真实云账户,预置假 session 还会把 relay 块写进 client.env 改变 chat-unconf 等 spec 的语义。生产安装永不设置该变量。登录门本身由 `tests/desktop/cloud-login-gate.test.tsx` 单测 + l3 真机验收覆盖。
+
+**W5 落地备注(2026-08-16)**:
+
+- **门在栈自举之前是硬设计**:无云会话冷启动不开栈端口。l0/l1/l2/u1 一律注入 `CONTEXT_OS_SKIP_CLOUD_GATE=1`(不只 KeepRunning),只有 **l3**(`run.sh l3`,grep `cloud-login`)用 `-NoCloudGateBypass` 保留真门:keep 阶段只验窗口标题 + CDP(端口/健康/client.env/会话都是登录后的事),spec 走 登录卡 → 填 `.env` 的 `DESKTOP_E2E_CLOUD_*` → 等门释放(不得提前导航——重挂载的门不重查会话)→ 入库 → RAG → 引用。云凭据经 run.sh 从 `avrag-rs/.env` 映射;`cloud_session.json` 已纳入 backup/restore(可重复跑)。
+- **云端部署缺口(已补)**:nginx `app-contextlm.conf` 缺 `/v1/relay/` location(SSE 透传配置同 `/api/`),relay 公开路径 404。已补并实部署;`deploy-public-sites.sh` 的 nginx 清单改为 `NGINX_CONFS`(默认含 app-contextlm.conf)+ `ONLY_NGINX=1` 外科手术模式,防再漂移。
+- **ensure_native 并发竞态(产品修复,l3 揪出)**:门释放后 bootstrap 会并发触发多次 `ensure_native`;两遍 ensure 交错时,后者在前者 initdb 半途重跑 initdb(code=1),或探到 TCP 开但 SQL 未就绪 → createdb 失败 → **旧代码仍写 `.avrag_inited`**,之后所有 pass 跳过 createdb,api 崩在 `database "avrag_client" does not exist`。修复(`native_stack.rs`):进程级互斥锁串行化 ensure + TCP 开后等 SQL 就绪再 probe + **createdb 验证成功才写标记**。真实用户首启登录同样可能踩中,属本 wave 最重要的产品修复。
+- **代理**:E2E 那台 Windows 的系统代理(127.0.0.1:20000)对云端主机不稳定;reqwest 0.13 默认吃系统代理 → l3 登录失败。harness 在 l3 给壳注入 `NO_PROXY=app.contextlm.top` 直连。生产保持默认(尊重系统代理;代理不可用时门给出明确的「云端不可达」错误)。
+- **E2E 前置**:`run.sh` 的 l0/l1/l2/l3 用**当前安装**的客户端,不自动装包;换包先 `C:\temp` 本地拷再 `/S` 静默装(从 Z: 网络盘直接跑 NSIS 会挂起)。u1 跨版本(发布版 v0.2.0)被旧包 fresh-bootstrap 不应用迁移阻塞(旧包自身缺陷,现行代码已修),u1 沿用 self 语义(旧=新=当前包)。
+- **验收数**:l0/l1/l2 链全绿(l1 6 过 2 跳,l2 D-rag-full 56s),u1-self 绿,l3 4 分钟过(门→登录→relay RAG→引用);云端钱包 2000 → 1998(冒烟)→ **1980**(l3 扣 18 分);本地侧 `AVRAG_PLATFORM_KEYS_RELAY=1` 双扣防护(W3 cargo 测试覆盖)。
+- **杂项**:l0.ps1 `Close-AppProcesses` 对 `MainWindowHandle==0` 加 5s 重试(旧包观察到的窗口句柄瞬态);测试号 `e2e-desktop-20260816@contextlm.top` 凭据在 `avrag-rs/.env`(`DESKTOP_E2E_CLOUD_*`)。

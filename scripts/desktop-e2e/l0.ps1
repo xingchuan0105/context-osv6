@@ -7,6 +7,9 @@ param(
     [switch]$AuditOnly,
     [switch]$KeepRunning,
     [switch]$TeardownOnly,
+    # l3 cloud-login acceptance: no gate bypass env, no legacy BYOK seed.
+    [switch]$NoCloudGateBypass,
+    [switch]$NoLegacyLlmSeed,
     [string]$AppDataBackupPath = "",
     [int]$CdpPort = 19322,
     [int]$CdpTimeoutSeconds = 30,
@@ -324,6 +327,17 @@ function Close-AppProcesses {
             if ($app.HasExited) {
                 continue
             }
+            # MainWindowHandle can read 0 transiently while the window is being
+            # (re)created — retry briefly before declaring a windowless process.
+            $hwndWait = 0
+            while (-not $app.HasExited -and $app.MainWindowHandle -eq 0 -and $hwndWait -lt 10) {
+                Start-Sleep -Milliseconds 500
+                $app.Refresh()
+                $hwndWait += 1
+            }
+            if ($app.HasExited) {
+                continue
+            }
             if ($app.MainWindowHandle -eq 0) {
                 return $false
             }
@@ -554,6 +568,24 @@ function Start-E2eApp {
     $exe = Join-Path $InstallDir "Context-OS.exe"
     Remove-Item Env:CONTEXT_OS_CLIENT_HOME -ErrorAction SilentlyContinue
     $env:CONTEXT_OS_STATE_HOME = $StateHome
+    # W3: the cloud login gate blocks the local-stack bootstrap until a session
+    # exists. E2E modes (except l3's -NoCloudGateBypass) bypass it — no real
+    # cloud account exists here, and without the bypass cold start never opens
+    # the stack ports.
+    if ($NoCloudGateBypass) {
+        Remove-Item Env:CONTEXT_OS_SKIP_CLOUD_GATE -ErrorAction SilentlyContinue
+        # l3 only: this box's system proxy (127.0.0.1:20000) is flaky for the
+        # cloud host, and reqwest honors system proxy settings by default —
+        # pin direct egress for the login path. Production keeps default
+        # (system proxy honored); the gate surfaces a clear 云端不可达 error.
+        $env:NO_PROXY = "app.contextlm.top"
+    } else {
+        $env:CONTEXT_OS_SKIP_CLOUD_GATE = "1"
+        $global:Details.cloud_gate_bypassed = $true
+        if ($env:NO_PROXY -eq "app.contextlm.top") {
+            Remove-Item Env:NO_PROXY -ErrorAction SilentlyContinue
+        }
+    }
     if ($KeepRunning) {
         $webView2Data = Join-Path (Split-Path -Parent $StateHome) "webview2-$RunId"
         $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$CdpPort --remote-allow-origins=*"
@@ -722,9 +754,28 @@ function Invoke-L0 {
     }
 
     Backup-AppDataFiles
-    Seed-LegacyLlm
+    if (-not $NoLegacyLlmSeed) {
+        Seed-LegacyLlm
+    }
     $process = Start-E2eApp
     $global:Details.app_pid = $process.Id
+    if ($NoCloudGateBypass) {
+        # l3: the real W3 login gate blocks the local-stack bootstrap until the
+        # spec signs in — stack ports/health/client.env/session are post-login
+        # concerns. Keep asserts only what the gate allows: window + CDP.
+        $windowTitle = Wait-DesktopWindowTitle 30
+        $global:Details.window_title = $windowTitle
+        if ([string]::IsNullOrWhiteSpace($windowTitle) -or $windowTitle -notmatch "Context-OS Client") {
+            Add-Signal FAIL "S-desktop-cold" "expected Context-OS Client window title; got '$windowTitle'"
+        }
+        $cdpReady = Wait-CdpReady $CdpTimeoutSeconds
+        $global:Details.cdp_ready = $cdpReady
+        if (-not $cdpReady) {
+            Add-Signal FAIL "S-desktop-cdp" "WebView2 CDP did not open on port $CdpPort"
+        }
+        Write-Result
+        return
+    }
     if (-not (Wait-PortsOpen $ColdStartTimeoutSeconds)) {
         Add-Signal FAIL "S-desktop-port" "cold start ports did not open within ${ColdStartTimeoutSeconds}s"
         Write-Result

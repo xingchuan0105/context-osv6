@@ -458,6 +458,14 @@ pub async fn get_cloud_session(app: tauri::AppHandle) -> Result<CloudSessionView
     }
 }
 
+/// E2E escape hatch (scripts/desktop-e2e): the playwright harness launches the
+/// shell with `CONTEXT_OS_SKIP_CLOUD_GATE=1` because no real cloud account
+/// exists in that environment. Production installs never set it.
+#[tauri::command]
+pub fn cloud_gate_bypassed() -> bool {
+    std::env::var("CONTEXT_OS_SKIP_CLOUD_GATE").ok().as_deref() == Some("1")
+}
+
 /// Wallet balance for the signed-in cloud account (`GET /api/v1/billing/wallet`
 /// with the stored session JWT). Not logged in → `logged_in: false` result;
 /// 401/403 → structured `cloud_session_expired` error so the drawer can prompt

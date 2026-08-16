@@ -16,7 +16,9 @@ pub struct AppLocalState {
 use commands::api::{api_call, upload_bytes};
 use commands::cache::{get_cache_value, set_cache_value};
 use commands::chat_stream::{chat_cancel, chat_stream};
-use commands::cloud_session::{cloud_login, cloud_logout, cloud_wallet_balance, get_cloud_session};
+use commands::cloud_session::{
+    cloud_gate_bypassed, cloud_login, cloud_logout, cloud_wallet_balance, get_cloud_session,
+};
 use commands::docker_status::get_docker_status;
 use commands::documents::reindex_local_documents;
 use commands::license::{
@@ -206,6 +208,7 @@ pub fn run() {
             cloud_login,
             cloud_logout,
             get_cloud_session,
+            cloud_gate_bypassed,
             cloud_wallet_balance,
             open_data_dir,
             open_logs_dir,

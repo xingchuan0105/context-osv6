@@ -53,6 +53,30 @@ DESKTOP_E2E_YES=1 \
   bash scripts/desktop-e2e/run.sh l2
 ```
 
+Cloud-login acceptance (W3 gate 真机门): the **real** login gate stays up (no
+bypass), no legacy BYOK seed — the RAG answer must come from the official
+relay. Cloud creds are mapped from `avrag-rs/.env` (`DESKTOP_E2E_CLOUD_*`):
+
+```bash
+DESKTOP_E2E_YES=1 \
+  DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' \
+  bash scripts/desktop-e2e/run.sh l3
+```
+
+l3 notes: the W3 cloud login gate blocks the local-stack bootstrap until a
+session exists, so the keep phase asserts only the window title + CDP (ports,
+health, client.env and the local session are post-login concerns exercised by
+the spec). Every other mode launches the shell with
+`CONTEXT_OS_SKIP_CLOUD_GATE=1` (no real cloud account exists in E2E); l3
+additionally pins `NO_PROXY=app.contextlm.top` because the E2E box's system
+proxy is flaky for the cloud host. `cloud_session.json` is covered by the
+AppData backup/restore, so l3 is re-runnable.
+
+Prerequisite for l0/l1/l2/l3: they exercise the **currently installed**
+client — install the fresh bundle first (copy the NSIS setup to a local
+Windows path like `C:\temp` before running `/S`; running it from the `Z:`
+network drive hangs).
+
 Install-upgrade-install data preservation (old setup → seed workspace marker →
 install new setup on top → marker must survive; also asserts the bundled
 parser tree). The new installer defaults to the fresh NSIS bundle; the old one
