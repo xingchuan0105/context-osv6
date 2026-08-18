@@ -23,4 +23,10 @@ COPY anydoc-extract /tmp/anydoc-extract
 RUN python3 -m pip install --break-system-packages --no-cache-dir /tmp/anydoc-extract \
   && rm -rf /tmp/anydoc-extract
 
+# lit (liteparse PDF CLI) + official pdfium runtime lib (scanned PDFs fall back
+# to remote PaddleOCR, so the tesseract feature is stripped from this build).
+COPY lit /usr/local/bin/lit
+COPY libpdfium.so /usr/local/lib/libpdfium.so
+RUN chmod 755 /usr/local/bin/lit && ldconfig
+
 WORKDIR /opt/avrag-rs
