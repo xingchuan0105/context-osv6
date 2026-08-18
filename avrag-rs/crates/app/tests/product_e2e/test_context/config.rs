@@ -103,6 +103,15 @@ impl E2eBootstrapConfig {
         if let Ok(v) = std::env::var("SEARCH_API_KEY") {
             config.search.api_key = v;
         }
+        if let Ok(v) = std::env::var("SEARCH_QWEN_BASE_URL") {
+            config.search.qwen_base_url = v;
+        }
+        if let Ok(v) = std::env::var("SEARCH_QWEN_API_KEY") {
+            config.search.qwen_api_key = v;
+        }
+        if let Ok(v) = std::env::var("SEARCH_QWEN_MODEL") {
+            config.search.qwen_model = v;
+        }
         if let Ok(v) = std::env::var("SEARCH_MODE") {
             config.search.mode = v;
         }
@@ -330,6 +339,12 @@ impl E2eBootstrapConfig {
                 "SEARCH_PROVIDER",
                 "SEARCH_BASE_URL",
                 "SEARCH_API_KEY",
+                "SEARCH_QWEN_BASE_URL",
+                "SEARCH_QWEN_API_KEY",
+                "SEARCH_QWEN_MODEL",
+                "RETRIEVE_LLM_BASE_URL",
+                "RETRIEVE_LLM_API_KEY",
+                "RETRIEVE_LLM_MODEL",
                 "SEARCH_MODE",
                 "HTTPS_PROXY",
                 "https_proxy",

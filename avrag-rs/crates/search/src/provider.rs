@@ -791,12 +791,183 @@ pub(crate) fn search_response_from_deepseek_responses(
     }
 }
 
+// ── Qwen (dashscope) Responses API native web_search ──────────────────────
+// Docs: https://help.aliyun.com/zh/model-studio/web-search (Responses API)
+//
+// Non-stream POST `{qwen_base_url}/responses` with `tools: [{type: web_search}]`.
+// `output[]` carries `web_search_call` items whose `action.sources` are the
+// grounding URLs (`{type:"url", url}` — no title/snippet; CRW auto-scrape fills
+// thin snippets downstream), `action.queries` the server-side rewrites, and a
+// `message` item with the synthesized `output_text`.
+// Thinking is disabled for the search leaf — retrieval latency over reasoning.
+
+const QWEN_RESPONSES_WEB_TOOL: &str = "web_search";
+
+pub(crate) async fn execute_qwen_web(
+    config: &SearchConfig,
+    client: &Client,
+    query: &str,
+) -> anyhow::Result<SearchResponse> {
+    let api_key = config.qwen_api_key.trim();
+    if api_key.is_empty() {
+        anyhow::bail!(
+            "Qwen web search API key not configured (SEARCH_QWEN_API_KEY or RETRIEVE_LLM_API_KEY)"
+        );
+    }
+    let endpoint = format!(
+        "{}/responses",
+        config.qwen_base_url.trim().trim_end_matches('/')
+    );
+    let body = serde_json::json!({
+        "model": config.qwen_model.trim(),
+        "input": query.trim(),
+        "tools": [{ "type": QWEN_RESPONSES_WEB_TOOL }],
+        // Worker 派工到 web 路即已判定需要联网；不让 qwen 二次「判断无需搜索」，
+        // 否则抽象/对比类 query 会零搜索直接答（web_empty）。
+        "tool_choice": "required",
+        "enable_thinking": false,
+    });
+
+    let req_timeout_ms = config.timeout_ms.max(120_000);
+    let response = client
+        .post(&endpoint)
+        .timeout(std::time::Duration::from_millis(req_timeout_ms))
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        anyhow::bail!("qwen responses web_search api error {status}: {body}");
+    }
+
+    let value: serde_json::Value = response.json().await?;
+    Ok(search_response_from_qwen_responses(value, query))
+}
+
+pub(crate) async fn stream_qwen_web(
+    config: &SearchConfig,
+    client: &Client,
+    query: &str,
+    on_update: &mut impl FnMut(SearchStreamUpdate),
+) -> anyhow::Result<SearchResponse> {
+    on_update(SearchStreamUpdate::Searching {
+        queries: vec![query.trim().to_string()],
+    });
+    let mut response = execute_qwen_web(config, client, query).await?;
+    // Sources carry URLs only; CRW fills thin snippets when configured.
+    crate::crw::auto_scrape_enrich_results(config, client, &mut response.results).await;
+    on_update(SearchStreamUpdate::SourcesCollected {
+        results: response.results.clone(),
+    });
+    Ok(response)
+}
+
+/// Map dashscope Responses API response object → SearchResponse.
+pub(crate) fn search_response_from_qwen_responses(
+    value: serde_json::Value,
+    original_query: &str,
+) -> SearchResponse {
+    let mut results = Vec::new();
+    let mut seen = HashSet::new();
+    let mut text_parts = Vec::new();
+    let mut sub_queries = Vec::new();
+
+    if let Some(items) = value.get("output").and_then(|c| c.as_array()) {
+        for item in items {
+            let ty = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            match ty {
+                "web_search_call" => {
+                    let action = item.get("action").cloned().unwrap_or(serde_json::Value::Null);
+                    if let Some(qs) = action.get("queries").and_then(|q| q.as_array()) {
+                        for q in qs {
+                            if let Some(s) = q.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                                if !sub_queries.iter().any(|x| x == s) {
+                                    sub_queries.push(s.to_string());
+                                }
+                            }
+                        }
+                    }
+                    if let Some(sources) = action.get("sources").and_then(|s| s.as_array()) {
+                        for source in sources {
+                            let url = source
+                                .get("url")
+                                .and_then(|u| u.as_str())
+                                .or_else(|| source.as_str())
+                                .unwrap_or("");
+                            let title = source.get("title").and_then(|t| t.as_str());
+                            let snip = extract_body_text(source);
+                            push_result(&mut results, &mut seen, url, title, &snip);
+                        }
+                    }
+                }
+                "message" => {
+                    if let Some(parts) = item.get("content").and_then(|c| c.as_array()) {
+                        for part in parts {
+                            if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
+                                let t = t.trim();
+                                if !t.is_empty() {
+                                    text_parts.push(t.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if sub_queries.is_empty() {
+        sub_queries.push(original_query.trim().to_string());
+    }
+
+    let synthesized_answer = if !text_parts.is_empty() {
+        text_parts.join("\n")
+    } else if results.is_empty() {
+        format!(
+            "No Qwen web_search sources were found for: {}",
+            original_query.trim()
+        )
+    } else {
+        let source_lines = results
+            .iter()
+            .map(|result| {
+                let index = result.citation_index.unwrap_or(0);
+                if result.snippet.is_empty() {
+                    format!("[[{index}]] {}", result.title)
+                } else {
+                    format!("[[{index}]] {}: {}", result.title, result.snippet)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        format!(
+            "Qwen web_search returned these sources for '{}':\n\n{}",
+            original_query.trim(),
+            source_lines
+        )
+    };
+
+    SearchResponse {
+        query_type: "qwen_web".to_string(),
+        sub_queries,
+        results,
+        synthesized_answer,
+        llm_usage: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         BraveLlmContextRequest, BraveLlmContextResponse, BraveNewsItem, BraveNewsResponse,
         SseFold, fold_deepseek_sse_block, search_response_from_brave_context,
         search_response_from_brave_news, search_response_from_deepseek_responses,
+        search_response_from_qwen_responses,
     };
 
     #[test]
@@ -1040,5 +1211,47 @@ mod tests {
             ),
             SseFold::Failed(_)
         ));
+    }
+
+    #[test]
+    fn parses_qwen_responses_sources_and_answer() {
+        let value = serde_json::json!({
+            "status": "completed",
+            "output": [
+                { "type": "reasoning", "summary": [] },
+                {
+                    "type": "web_search_call",
+                    "action": {
+                        "type": "search",
+                        "queries": ["杭州八月平均天气", "Hangzhou weather August"],
+                        "sources": [
+                            { "type": "url", "url": "https://example.com/hz-weather" },
+                            { "type": "url", "url": "https://example.com/hz-climate" },
+                            { "type": "url", "url": "https://example.com/hz-weather" }
+                        ]
+                    }
+                },
+                {
+                    "type": "message",
+                    "content": [{ "type": "output_text", "text": "杭州今天小雨转阴，最高26℃。" }]
+                }
+            ]
+        });
+        let resp = search_response_from_qwen_responses(value, "今天杭州天气");
+        assert_eq!(resp.query_type, "qwen_web");
+        assert_eq!(resp.sub_queries.len(), 2);
+        assert_eq!(resp.results.len(), 2, "duplicate URL deduped");
+        assert!(resp.results.iter().all(|r| r.url.starts_with("http")));
+        assert_eq!(resp.results[0].citation_index, Some(1));
+        assert!(resp.synthesized_answer.contains("小雨转阴"));
+    }
+
+    #[test]
+    fn qwen_responses_empty_output_falls_back_to_no_sources_message() {
+        let value = serde_json::json!({ "output": [] });
+        let resp = search_response_from_qwen_responses(value, "obscure query");
+        assert!(resp.results.is_empty());
+        assert_eq!(resp.sub_queries, vec!["obscure query".to_string()]);
+        assert!(resp.synthesized_answer.contains("No Qwen web_search sources"));
     }
 }

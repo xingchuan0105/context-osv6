@@ -190,6 +190,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         Some(Arc::new(app_core::MemoryBillingQuotaPort));
     let agent_service = Some(build_unified_agent_service(
         llm_ctx.agent_client().cloned(),
+        make_llm_client(&config.retrieve_llm, None),
         search_executor.clone(),
         None,
         chat_persistence.clone(),
@@ -554,6 +555,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         };
     let agent_service = Some(build_unified_agent_service_with_secrets(
         llm_ctx.agent_client().cloned(),
+        make_llm_client(&config.retrieve_llm, None),
         search_executor.clone(),
         rag_runtime.clone(),
         chat_persistence.clone(),
@@ -642,6 +644,9 @@ fn map_avrag_search_config(config: &AppConfig) -> avrag_search::SearchConfig {
         deepseek_base_url: config.search.deepseek_base_url.clone(),
         deepseek_api_key: config.search.deepseek_api_key.clone(),
         deepseek_model: config.search.deepseek_model.clone(),
+        qwen_base_url: config.search.qwen_base_url.clone(),
+        qwen_api_key: config.search.qwen_api_key.clone(),
+        qwen_model: config.search.qwen_model.clone(),
         max_results: config.search.max_results,
         timeout_ms: config.search.timeout_ms,
         search_lang: config.search.search_lang.clone(),

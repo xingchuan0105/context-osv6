@@ -1,14 +1,13 @@
 use crate::{SearchConfig, SearchExecutor};
 
 #[test]
-fn default_provider_is_deepseek_web_brave() {
-    assert_eq!(SearchConfig::default().provider, "deepseek_web_brave");
+fn default_provider_is_qwen_web() {
+    assert_eq!(SearchConfig::default().provider, "qwen_web");
 }
 
 #[tokio::test]
-async fn missing_deepseek_and_brave_keys_is_explicit_error() {
-    // Default provider is deepseek_web_brave; with no keys, DeepSeek fails and
-    // Brave fallback is skipped (empty Brave key) → surface DeepSeek error.
+async fn missing_qwen_key_is_explicit_error() {
+    // Default provider is qwen_web; with no dashscope key the error is explicit.
     let executor = SearchExecutor::new(SearchConfig::default());
     let request = contracts::chat::ChatRequest {
         query: "test".to_string(),
@@ -35,8 +34,7 @@ async fn missing_deepseek_and_brave_keys_is_explicit_error() {
     let error = executor.execute(&request, &auth).await.unwrap_err();
     let msg = error.to_string();
     assert!(
-        msg.contains("DeepSeek web search API key not configured")
-            || msg.contains("Brave LLM Context API key not configured"),
+        msg.contains("Qwen web search API key not configured"),
         "unexpected error: {msg}"
     );
 }

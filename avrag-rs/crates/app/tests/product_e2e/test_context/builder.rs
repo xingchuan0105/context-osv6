@@ -219,6 +219,15 @@ impl TestContext {
         super::super::llm_real::load_env_from_repo_dotenv();
         avrag_search::sync_resolved_proxy_env();
 
+        let provider = std::env::var("SEARCH_PROVIDER")
+            .unwrap_or_else(|_| "qwen_web".to_string())
+            .trim()
+            .to_ascii_lowercase();
+
+        if provider == "qwen_web" || provider == "qwen" {
+            return Self::probe_qwen_web().await;
+        }
+
         let base = std::env::var("SEARCH_BASE_URL")
             .unwrap_or_else(|_| "https://api.search.brave.com".to_string());
         let api_key = std::env::var("SEARCH_API_KEY").unwrap_or_default();
@@ -270,6 +279,66 @@ impl TestContext {
             }
             eprintln!(
                 "[product_e2e] WARN: Brave Search unreachable at {url} — \
+                 falling back to mock search (set SEARCH_REQUIRE_REAL=1 to fail instead)"
+            );
+            false
+        }
+    }
+
+    /// Probe the dashscope Responses endpoint for Qwen native web_search.
+    /// Any HTTP status (even 401/404) proves reachability; only transport errors fail.
+    async fn probe_qwen_web() -> bool {
+        let base = std::env::var("SEARCH_QWEN_BASE_URL")
+            .or_else(|_| std::env::var("RETRIEVE_LLM_BASE_URL"))
+            .unwrap_or_else(|_| "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string());
+        let api_key = std::env::var("SEARCH_QWEN_API_KEY")
+            .or_else(|_| std::env::var("RETRIEVE_LLM_API_KEY"))
+            .or_else(|_| std::env::var("DASHSCOPE_API_KEY"))
+            .unwrap_or_default();
+        let url = format!("{}/models", base.trim().trim_end_matches('/'));
+
+        let mut client_builder = reqwest::Client::builder().timeout(Duration::from_secs(8));
+        if let Some(proxy_url) = avrag_search::resolved_proxy_url() {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+        let client = match client_builder.build() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[product_e2e] Qwen web probe client build failed: {e}");
+                return false;
+            }
+        };
+
+        let reachable = match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {api_key}"))
+            .send()
+            .await
+        {
+            Ok(_) => true,
+            Err(e) => {
+                eprintln!("[product_e2e] Qwen web probe failed: {e}");
+                false
+            }
+        };
+
+        if reachable {
+            eprintln!("[product_e2e] using real Qwen web_search at {base}");
+            true
+        } else {
+            let require_real = std::env::var("SEARCH_REQUIRE_REAL")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            if require_real {
+                panic!(
+                    "SEARCH_REQUIRE_REAL=1 but Qwen web_search unreachable at {url} — \
+                     fix network/proxy or unset SEARCH_REQUIRE_REAL for mock fallback"
+                );
+            }
+            eprintln!(
+                "[product_e2e] WARN: Qwen web_search unreachable at {url} — \
                  falling back to mock search (set SEARCH_REQUIRE_REAL=1 to fail instead)"
             );
             false

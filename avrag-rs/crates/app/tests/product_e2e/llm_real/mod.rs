@@ -103,7 +103,11 @@ pub fn has_real_search_credentials() -> bool {
     fn valid_key(key: Result<String, std::env::VarError>) -> bool {
         key.map(|k| !k.is_empty() && k != "mock").unwrap_or(false)
     }
-    valid_key(std::env::var("SEARCH_API_KEY")) || valid_key(std::env::var("E2E_BRAVE_API_KEY"))
+    valid_key(std::env::var("SEARCH_API_KEY"))
+        || valid_key(std::env::var("E2E_BRAVE_API_KEY"))
+        || valid_key(std::env::var("SEARCH_QWEN_API_KEY"))
+        || valid_key(std::env::var("RETRIEVE_LLM_API_KEY"))
+        || valid_key(std::env::var("DASHSCOPE_API_KEY"))
 }
 
 /// Ensure OpenWeather credentials for utility `weather_query` (G-17).
@@ -131,7 +135,7 @@ pub async fn ensure_weather_defaults() {
     eprintln!("[e2e] OPENWEATHER_API_KEY unset — mock weather at {base_url}");
 }
 
-/// Ensure SEARCH_PROVIDER / SEARCH_BASE_URL defaults when using real Brave.
+/// Ensure SEARCH_PROVIDER / SEARCH_BASE_URL defaults when using real search.
 pub fn ensure_search_defaults() {
     if !std::env::var("SEARCH_API_KEY")
         .map(|k| !k.is_empty() && k != "mock")
@@ -147,7 +151,7 @@ pub fn ensure_search_defaults() {
         .map(|v| !v.is_empty())
         .unwrap_or(false)
     {
-        unsafe { std::env::set_var("SEARCH_PROVIDER", "brave_llm_context") };
+        unsafe { std::env::set_var("SEARCH_PROVIDER", "qwen_web") };
     }
     if !std::env::var("SEARCH_BASE_URL")
         .map(|v| !v.is_empty())

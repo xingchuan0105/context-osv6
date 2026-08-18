@@ -65,6 +65,10 @@ impl SearchExecutor {
         mut on_update: impl FnMut(SearchStreamUpdate),
     ) -> anyhow::Result<SearchResponse> {
         match self.normalized_provider().as_str() {
+            "qwen_web" | "qwen" => {
+                provider::stream_qwen_web(&self.config, &self.client, &request.query, &mut on_update)
+                    .await
+            }
             "brave_llm_context" => {
                 provider::stream_brave_llm_context(
                     &self.config,
@@ -138,6 +142,7 @@ impl SearchExecutor {
 
     pub fn provider(&self) -> &str {
         match self.normalized_provider().as_str() {
+            "qwen_web" | "qwen" => "qwen_web",
             "brave_llm_context" => "brave_llm_context",
             "deepseek_web" => "deepseek_web",
             "deepseek_web_brave" | "deepseek" => "deepseek_web_brave",
@@ -178,6 +183,19 @@ impl SearchExecutor {
         vertical: Option<&str>,
     ) -> anyhow::Result<SearchResponse> {
         match self.normalized_provider().as_str() {
+            "qwen_web" | "qwen" => {
+                // Qwen native web_search has no news vertical — all queries go the same path.
+                let mut resp = provider::execute_qwen_web(&self.config, &self.client, query).await?;
+                trim_results(&mut resp, self.config.max_results);
+                self.enrich_with_auto_scrape(&mut resp).await;
+                info!(
+                    target: "search",
+                    provider = "qwen_web",
+                    n = resp.results.len(),
+                    "search ok"
+                );
+                Ok(resp)
+            }
             "brave_llm_context" => self.execute_brave(query, vertical).await,
             "deepseek_web" => {
                 // News vertical: DeepSeek has no news endpoint — use Brave if key present.
@@ -273,7 +291,7 @@ fn search_cache_key(provider: &str, query: &str, vertical: Option<&str>) -> Stri
 
 fn unsupported_provider<T>(provider: &str) -> anyhow::Result<T> {
     anyhow::bail!(
-        "unsupported search provider: {provider}; supported: deepseek_web_brave, deepseek_web, brave_llm_context"
+        "unsupported search provider: {provider}; supported: qwen_web, deepseek_web_brave, deepseek_web, brave_llm_context"
     )
 }
 

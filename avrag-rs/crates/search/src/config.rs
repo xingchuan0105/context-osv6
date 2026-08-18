@@ -1,6 +1,7 @@
 /// Web search backend configuration.
 ///
-/// - `provider`: `deepseek_web` | `deepseek_web_brave` | `brave_llm_context`
+/// - `provider`: `qwen_web` | `deepseek_web` | `deepseek_web_brave` | `brave_llm_context`
+/// - Qwen uses dashscope Responses API native `web_search` (`SEARCH_QWEN_*`, fallback `RETRIEVE_LLM_*`)
 /// - Brave uses `base_url` + `api_key` (SEARCH_BASE_URL / SEARCH_API_KEY)
 /// - DeepSeek Anthropic server web_search uses `deepseek_*` (defaults from AGENT_LLM_*)
 /// - Optional CRW (`CRW_BASE_URL`) auto-scrapes top-K thin-snippet URLs after search
@@ -14,6 +15,10 @@ pub struct SearchConfig {
     pub deepseek_base_url: String,
     pub deepseek_api_key: String,
     pub deepseek_model: String,
+    /// dashscope OpenAI-compatible root (`{root}/responses` is invoked).
+    pub qwen_base_url: String,
+    pub qwen_api_key: String,
+    pub qwen_model: String,
     pub max_results: usize,
     pub timeout_ms: u64,
     pub search_lang: Option<String>,
@@ -38,13 +43,16 @@ pub struct SearchConfig {
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
-            // B2: DeepSeek Anthropic server web_search primary; Brave fallback.
-            provider: "deepseek_web_brave".to_string(),
+            // Qwen (dashscope) Responses API native web_search; LLM-native, no Brave key needed.
+            provider: "qwen_web".to_string(),
             base_url: "https://api.search.brave.com".to_string(),
             api_key: String::new(),
             deepseek_base_url: "https://api.deepseek.com".to_string(),
             deepseek_api_key: String::new(),
             deepseek_model: "deepseek-v4-flash".to_string(),
+            qwen_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+            qwen_api_key: String::new(),
+            qwen_model: "qwen3.7-flash".to_string(),
             max_results: 10,
             timeout_ms: 30_000,
             search_lang: None,

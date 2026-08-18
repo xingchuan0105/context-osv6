@@ -23,6 +23,10 @@ pub struct AppConfig {
     /// Multi-provider pool for the agent LLM (extra keys + fallbacks); `None`
     /// keeps the single-route behavior.
     pub agent_llm_pool: Option<avrag_llm::LlmPoolConfig>,
+    /// Optional retrieve-phase LLM (Lead plan / Worker SaC / tool rounds).
+    /// Empty `api_key`/`base_url` = unset → the loop reuses `agent_llm` for
+    /// retrieve. Synthesis always uses `agent_llm`.
+    pub retrieve_llm: ModelProviderConfig,
     pub memory_llm: ModelProviderConfig,
     pub ingestion_llm: ModelProviderConfig,
     /// Optional standalone triplet LLM (e2e probes / rollback). Production
@@ -119,7 +123,7 @@ pub struct SearchConfig {
     pub mode: String,
     pub enable_thinking: bool,
     pub tools: Vec<String>,
-    /// `deepseek_web_brave` | `deepseek_web` | `brave_llm_context`
+    /// `qwen_web` | `deepseek_web_brave` | `deepseek_web` | `brave_llm_context`
     pub provider: String,
     /// Brave Search API base.
     pub base_url: String,
@@ -129,6 +133,10 @@ pub struct SearchConfig {
     pub deepseek_base_url: String,
     pub deepseek_api_key: String,
     pub deepseek_model: String,
+    /// dashscope OpenAI-compatible root for Qwen native web_search (`SEARCH_QWEN_*` or `RETRIEVE_LLM_*`).
+    pub qwen_base_url: String,
+    pub qwen_api_key: String,
+    pub qwen_model: String,
     pub max_results: usize,
     pub max_sub_queries: usize,
     pub timeout_ms: u64,
@@ -271,6 +279,21 @@ impl Default for AppConfig {
                 tpm_limit: None,
             },
             agent_llm_pool: None,
+            retrieve_llm: ModelProviderConfig {
+                // Empty = unset; `to_llm_config()` returns None and the loop
+                // falls back to `agent_llm` for retrieve.
+                base_url: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+                timeout_ms: 180000,
+                temperature: Some(0.2),
+                api_style: Some("openai".to_string()),
+                dimensions: None,
+                enable_thinking: Some(false),
+                enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
             memory_llm: ModelProviderConfig {
                 base_url: "https://api.deepseek.com".to_string(),
                 api_key: String::new(),
@@ -318,13 +341,16 @@ impl Default for AppConfig {
                     "web_extractor".to_string(),
                     "code_interpreter".to_string(),
                 ],
-                // B2: DeepSeek Anthropic server web_search primary; Brave fallback.
-                provider: "deepseek_web_brave".to_string(),
+                // Qwen (dashscope) native web_search; no Brave key needed.
+                provider: "qwen_web".to_string(),
                 base_url: "https://api.search.brave.com".to_string(),
                 api_key: String::new(),
                 deepseek_base_url: "https://api.deepseek.com".to_string(),
                 deepseek_api_key: String::new(),
                 deepseek_model: "deepseek-v4-flash".to_string(),
+                qwen_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+                qwen_api_key: String::new(),
+                qwen_model: "qwen3.7-flash".to_string(),
                 max_results: 10,
                 max_sub_queries: 3,
                 timeout_ms: 30000,
@@ -430,6 +456,7 @@ impl AppConfig {
         );
         config.agent_llm = model_config_from_env("AGENT_LLM", &config.agent_llm, None);
         config.agent_llm_pool = llm_pool_config_from_env("AGENT_LLM", &config.agent_llm);
+        config.retrieve_llm = model_config_from_env("RETRIEVE_LLM", &config.retrieve_llm, None);
         config.memory_llm = model_config_from_env("MEMORY_LLM", &config.memory_llm, None);
         config.ingestion_llm = model_config_from_env("INGESTION_LLM", &config.ingestion_llm, None);
         config.triplet_llm = model_config_from_env("TRIPLET_LLM", &config.triplet_llm, None);
@@ -453,6 +480,19 @@ impl AppConfig {
         config.search.deepseek_model = env_string(
             "SEARCH_DEEPSEEK_MODEL",
             &env_string("AGENT_LLM_MODEL", &config.search.deepseek_model),
+        );
+        // Qwen native web_search: SEARCH_QWEN_* overrides, else RETRIEVE_LLM_* (dashscope stack).
+        config.search.qwen_base_url = env_string(
+            "SEARCH_QWEN_BASE_URL",
+            &env_string("RETRIEVE_LLM_BASE_URL", &config.search.qwen_base_url),
+        );
+        config.search.qwen_api_key = env_string(
+            "SEARCH_QWEN_API_KEY",
+            &env_string("RETRIEVE_LLM_API_KEY", &config.search.qwen_api_key),
+        );
+        config.search.qwen_model = env_string(
+            "SEARCH_QWEN_MODEL",
+            &env_string("RETRIEVE_LLM_MODEL", &config.search.qwen_model),
         );
         config.search.max_results = env_usize("SEARCH_MAX_RESULTS", config.search.max_results);
         config.search.max_sub_queries =
