@@ -1,10 +1,31 @@
-use anyhow::{Context, Result};
-use reqwest::Client;
+use anyhow::Context;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{debug, info, warn};
+
+use crate::IngestionError;
+
+/// Default max single-file (PDF) size accepted for a Paddle OCR job.
+///
+/// Matches the provider's documented single-file limit (≤200MB & ≤1000 pages).
+/// Rejects oversized inputs locally before any upload instead of letting a
+/// rejected/hung job burn the retry budget. Configurable via
+/// `PADDLE_OCR_MAX_FILE_SIZE_BYTES`.
+const DEFAULT_MAX_FILE_SIZE_BYTES: u64 = 200 * 1024 * 1024;
+
+/// Default max single-image size accepted for a Paddle OCR job.
+///
+/// Provider's documented single-image limit is ≤10MB (tighter than the file
+/// limit). Configurable via `PADDLE_OCR_MAX_IMAGE_SIZE_BYTES`.
+const DEFAULT_MAX_IMAGE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Bounded number of consecutive non-200 poll responses before failing, so a
+/// provider that starts rejecting poll requests surfaces an error instead of
+/// silently polling until the task timeout.
+const MAX_CONSECUTIVE_POLL_FAILURES: u32 = 5;
 
 #[derive(Debug, Clone)]
 pub struct PaddleOcrConfig {
@@ -15,13 +36,15 @@ pub struct PaddleOcrConfig {
     pub job_timeout_secs: u64,
     pub max_jobs_per_document: usize,
     pub max_concurrent_jobs: usize,
+    pub max_file_size_bytes: u64,
+    pub max_image_size_bytes: u64,
 }
 
 /// Alias for architecture doc naming.
 pub type PaddleJobsOcrService = PaddleOcrClient;
 
 impl PaddleOcrConfig {
-    pub fn from_env() -> Result<Self> {
+    pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             base_url: std::env::var("PADDLE_OCR_BASE_URL")
                 .unwrap_or_else(|_| "https://paddleocr.aistudio-app.com/api/v2/ocr".to_string()),
@@ -45,6 +68,14 @@ impl PaddleOcrConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(5),
+            max_file_size_bytes: std::env::var("PADDLE_OCR_MAX_FILE_SIZE_BYTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_MAX_FILE_SIZE_BYTES),
+            max_image_size_bytes: std::env::var("PADDLE_OCR_MAX_IMAGE_SIZE_BYTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_MAX_IMAGE_SIZE_BYTES),
         })
     }
 }
@@ -138,54 +169,39 @@ impl PaddleOcrClient {
         &self,
         pdf_bytes: &[u8],
         start_page: u32,
-    ) -> Result<Vec<PaddleOcrPageResult>> {
-        match self
-            .run_ocr_job(pdf_bytes, "document.pdf", "application/pdf", start_page)
-            .await
-        {
-            Ok(pages) => Ok(pages),
-            Err(first_err) => {
-                warn!(start_page, error = %first_err, "PaddleOCR job failed on first attempt, retrying after 5s");
-                sleep(Duration::from_secs(5)).await;
-                self.run_ocr_job(pdf_bytes, "document.pdf", "application/pdf", start_page)
-                    .await
-                    .map_err(|retry_err| {
-                        retry_err.context(format!(
-                            "PaddleOCR job failed after retry (first error: {first_err})"
-                        ))
-                    })
-            }
+    ) -> Result<Vec<PaddleOcrPageResult>, IngestionError> {
+        if pdf_bytes.len() as u64 > self.config.max_file_size_bytes {
+            return Err(IngestionError::ocr_rejected(format!(
+                "file size {} bytes exceeds Paddle OCR max file size {} bytes",
+                pdf_bytes.len(),
+                self.config.max_file_size_bytes
+            )));
         }
+        self.run_ocr_job(pdf_bytes, "document.pdf", "application/pdf", start_page)
+            .await
     }
 
     pub async fn ocr_image_bytes(
         &self,
         image_bytes: &[u8],
         filename: &str,
-    ) -> Result<PaddleOcrPageResult> {
-        let (mime_type, upload_name) = image_upload_meta(filename)?;
-        match self
-            .run_ocr_job(image_bytes, upload_name, mime_type, 1)
-            .await
-        {
-            Ok(pages) => pages
-                .into_iter()
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("PaddleOCR returned no pages for image {filename}")),
-            Err(first_err) => {
-                warn!(filename, error = %first_err, "PaddleOCR image job failed on first attempt, retrying after 5s");
-                sleep(Duration::from_secs(5)).await;
-                self.run_ocr_job(image_bytes, upload_name, mime_type, 1)
-                    .await?
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "PaddleOCR returned no pages for image {filename} after retry"
-                        )
-                    })
-            }
+    ) -> Result<PaddleOcrPageResult, IngestionError> {
+        if image_bytes.len() as u64 > self.config.max_image_size_bytes {
+            return Err(IngestionError::ocr_rejected(format!(
+                "image size {} bytes exceeds Paddle OCR max image size {} bytes",
+                image_bytes.len(),
+                self.config.max_image_size_bytes
+            )));
         }
+        let (mime_type, upload_name) = image_upload_meta(filename)?;
+        let pages = self
+            .run_ocr_job(image_bytes, upload_name, mime_type, 1)
+            .await?;
+        pages.into_iter().next().ok_or_else(|| {
+            IngestionError::parse(format!(
+                "PaddleOCR returned no pages for image {filename}"
+            ))
+        })
     }
 
     async fn run_ocr_job(
@@ -194,14 +210,14 @@ impl PaddleOcrClient {
         upload_name: &str,
         mime_type: &str,
         start_page: u32,
-    ) -> Result<Vec<PaddleOcrPageResult>> {
+    ) -> Result<Vec<PaddleOcrPageResult>, IngestionError> {
         let job_id = self.submit_job(file_bytes, upload_name, mime_type).await?;
         info!(job_id = %job_id, start_page, "PaddleOCR job submitted");
 
         let result_url = self.poll_job(&job_id).await?;
-        let json_url = result_url
-            .json_url
-            .context("PaddleOCR job done but no jsonUrl")?;
+        let json_url = result_url.json_url.ok_or_else(|| {
+            IngestionError::parse("PaddleOCR job done but no jsonUrl".to_string())
+        })?;
 
         let pages = self.fetch_and_parse_result(&json_url, start_page).await?;
         Ok(pages)
@@ -212,7 +228,7 @@ impl PaddleOcrClient {
         file_bytes: &[u8],
         upload_name: &str,
         mime_type: &str,
-    ) -> Result<String> {
+    ) -> Result<String, IngestionError> {
         let url = format!("{}/jobs", self.config.base_url);
         let optional_payload = optional_payload_json();
 
@@ -221,7 +237,8 @@ impl PaddleOcrClient {
                 "file",
                 reqwest::multipart::Part::bytes(file_bytes.to_vec())
                     .file_name(upload_name.to_string())
-                    .mime_str(mime_type)?,
+                    .mime_str(mime_type)
+                    .map_err(|e| IngestionError::parse(format!("PaddleOCR mime error: {e}")))?,
             )
             .text("model", self.config.model.clone())
             .text("optionalPayload", optional_payload.to_string());
@@ -233,31 +250,34 @@ impl PaddleOcrClient {
             .multipart(form)
             .send()
             .await
-            .context("PaddleOCR submit request failed")?;
+            .map_err(|e| IngestionError::parse(format!("PaddleOCR submit request failed: {e}")))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("PaddleOCR submit failed ({status}): {body}");
+            // Deterministic 4xx (bad auth, bad file, too large, …) → terminal; retrying
+            // a 4xx cannot succeed. Transient 5xx/408/429 → retryable parse error.
+            return Err(submit_error(status, &body));
         }
 
-        let body = resp.text().await.context("reading submit response body")?;
-        let resp: ApiResponse<SubmitJobData> =
-            serde_json::from_str(&body).context("invalid submit response JSON")?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| IngestionError::parse(format!("reading submit response body: {e}")))?;
+        let resp: ApiResponse<SubmitJobData> = serde_json::from_str(&body)
+            .map_err(|e| IngestionError::parse(format!("invalid submit response JSON: {e}")))?;
         Ok(resp.data.job_id)
     }
 
-    async fn poll_job(&self, job_id: &str) -> Result<ResultUrl> {
+    async fn poll_job(&self, job_id: &str) -> Result<ResultUrl, IngestionError> {
         let url = format!("{}/jobs/{}", self.config.base_url, job_id);
         let deadline =
             tokio::time::Instant::now() + Duration::from_secs(self.config.job_timeout_secs);
+        let mut consecutive_non_ok = 0u32;
 
         loop {
             if tokio::time::Instant::now() >= deadline {
-                anyhow::bail!(
-                    "PaddleOCR job {job_id} timed out after {}s",
-                    self.config.job_timeout_secs
-                );
+                return Err(IngestionError::Timeout(self.config.job_timeout_secs));
             }
 
             let resp = self
@@ -266,28 +286,50 @@ impl PaddleOcrClient {
                 .header("Authorization", format!("Bearer {}", self.config.api_token))
                 .send()
                 .await
-                .context("PaddleOCR poll request failed")?;
+                .map_err(|e| IngestionError::parse(format!("PaddleOCR poll request failed: {e}")))?;
 
             if !resp.status().is_success() {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();
                 warn!(job_id, %status, body, "PaddleOCR poll non-200");
+                // Deterministic 4xx → fail now, never silently poll through it.
+                if is_deterministic_rejection(status) {
+                    return Err(IngestionError::ocr_rejected(format!(
+                        "PaddleOCR poll failed ({status}): {body}"
+                    )));
+                }
+                // Transient (5xx/408/429): bounded retries, then fail — no unbounded wait.
+                consecutive_non_ok += 1;
+                if consecutive_non_ok >= MAX_CONSECUTIVE_POLL_FAILURES {
+                    return Err(IngestionError::parse(format!(
+                        "PaddleOCR poll failed after {consecutive_non_ok} consecutive non-200 responses (last {status}): {body}"
+                    )));
+                }
                 sleep(Duration::from_secs(self.config.poll_interval_secs)).await;
                 continue;
             }
 
-            let body = resp.text().await.context("reading poll response body")?;
-            let resp: ApiResponse<JobStatusData> =
-                serde_json::from_str(&body).context("invalid poll response JSON")?;
+            consecutive_non_ok = 0;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| IngestionError::parse(format!("reading poll response body: {e}")))?;
+            let resp: ApiResponse<JobStatusData> = serde_json::from_str(&body)
+                .map_err(|e| IngestionError::parse(format!("invalid poll response JSON: {e}")))?;
             let status = resp.data;
             debug!(job_id, state = %status.state, "PaddleOCR poll");
 
             match status.state.as_str() {
                 "done" | "success" | "completed" => {
-                    return status.result_url.context("job done but no result_url");
+                    return status
+                        .result_url
+                        .ok_or_else(|| IngestionError::parse("job done but no result_url".to_string()));
                 }
                 "failed" | "error" => {
-                    anyhow::bail!("PaddleOCR job {job_id} failed (state={})", status.state);
+                    return Err(IngestionError::parse(format!(
+                        "PaddleOCR job {job_id} failed (state={})",
+                        status.state
+                    )));
                 }
                 _ => {
                     sleep(Duration::from_secs(self.config.poll_interval_secs)).await;
@@ -300,16 +342,20 @@ impl PaddleOcrClient {
         &self,
         json_url: &str,
         start_page: u32,
-    ) -> Result<Vec<PaddleOcrPageResult>> {
+    ) -> Result<Vec<PaddleOcrPageResult>, IngestionError> {
         let resp = self
             .http
             .get(json_url)
             .send()
             .await
-            .context("fetch OCR result JSON failed")?;
+            .map_err(|e| IngestionError::parse(format!("fetch OCR result JSON failed: {e}")))?;
 
-        let body = resp.text().await.context("reading OCR result body")?;
-        let pages = parse_jsonl_or_json_pages(&body, start_page)?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| IngestionError::parse(format!("reading OCR result body: {e}")))?;
+        let pages = parse_jsonl_or_json_pages(&body, start_page)
+            .map_err(|e| IngestionError::parse(format!("invalid OCR result JSON: {e}")))?;
         Ok(pages)
     }
 
@@ -318,13 +364,31 @@ impl PaddleOcrClient {
         &self,
         pdf_bytes: &[u8],
         page_number: u32,
-    ) -> Result<PaddleOcrPageResult> {
+    ) -> Result<PaddleOcrPageResult, IngestionError> {
         let pages = self.ocr_pdf_bytes(pdf_bytes, page_number).await?;
-        pages
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("PaddleOCR returned no pages for page {page_number}"))
+        pages.into_iter().next().ok_or_else(|| {
+            IngestionError::parse(format!("PaddleOCR returned no pages for page {page_number}"))
+        })
     }
+}
+
+/// Map a submit HTTP status to an `IngestionError`, marking deterministic 4xx
+/// as terminal (`OcrRejected`) and transient 5xx/408/429 as retryable (`Parse`).
+fn submit_error(status: StatusCode, body: &str) -> IngestionError {
+    let message = format!("PaddleOCR submit failed ({status}): {body}");
+    if is_deterministic_rejection(status) {
+        IngestionError::ocr_rejected(message)
+    } else {
+        IngestionError::parse(message)
+    }
+}
+
+/// Deterministic provider rejection that retrying cannot fix: any 4xx except
+/// the retryable 408 (timeout) / 429 (rate-limit).
+fn is_deterministic_rejection(status: StatusCode) -> bool {
+    status.is_client_error()
+        && status != StatusCode::REQUEST_TIMEOUT
+        && status != StatusCode::TOO_MANY_REQUESTS
 }
 
 /// JSON payload for Paddle optionalPayload (§7.2).
@@ -346,7 +410,7 @@ pub fn optional_payload_hash() -> String {
     format!("{:x}", Sha256::digest(payload.as_bytes()))
 }
 
-fn image_upload_meta(filename: &str) -> Result<(&'static str, &'static str)> {
+fn image_upload_meta(filename: &str) -> Result<(&'static str, &'static str), IngestionError> {
     let ext = filename
         .rsplit('.')
         .next()
@@ -358,11 +422,16 @@ fn image_upload_meta(filename: &str) -> Result<(&'static str, &'static str)> {
         "webp" => Ok(("image/webp", "document.webp")),
         "gif" => Ok(("image/gif", "document.gif")),
         "bmp" => Ok(("image/bmp", "document.bmp")),
-        other => anyhow::bail!("unsupported image extension for Paddle OCR: {other}"),
+        other => Err(IngestionError::parse(format!(
+            "unsupported image extension for Paddle OCR: {other}"
+        ))),
     }
 }
 
-fn parse_jsonl_or_json_pages(body: &str, start_page: u32) -> Result<Vec<PaddleOcrPageResult>> {
+fn parse_jsonl_or_json_pages(
+    body: &str,
+    start_page: u32,
+) -> anyhow::Result<Vec<PaddleOcrPageResult>> {
     let mut pages = Vec::new();
 
     for (i, line) in body.trim().lines().enumerate() {
@@ -614,5 +683,117 @@ mod tests {
         let resp: ApiResponse<JobStatusData> = serde_json::from_str(body).unwrap();
         assert_eq!(resp.data.state, "processing");
         assert!(resp.data.result_url.is_none());
+    }
+
+    #[test]
+    fn submit_error_classifies_4xx_terminal_and_5xx_retryable() {
+        // Deterministic rejections → terminal (no retry).
+        assert!(matches!(
+            submit_error(StatusCode::BAD_REQUEST, "bad"),
+            IngestionError::OcrRejected(_)
+        ));
+        assert!(matches!(
+            submit_error(StatusCode::UNAUTHORIZED, "no"),
+            IngestionError::OcrRejected(_)
+        ));
+        assert!(matches!(
+            submit_error(StatusCode::NOT_FOUND, "nf"),
+            IngestionError::OcrRejected(_)
+        ));
+        // Transient → retryable parse.
+        assert!(matches!(
+            submit_error(StatusCode::SERVICE_UNAVAILABLE, "down"),
+            IngestionError::Parse { .. }
+        ));
+        assert!(matches!(
+            submit_error(StatusCode::TOO_MANY_REQUESTS, "slow"),
+            IngestionError::Parse { .. }
+        ));
+        assert!(matches!(
+            submit_error(StatusCode::REQUEST_TIMEOUT, "t"),
+            IngestionError::Parse { .. }
+        ));
+    }
+
+    #[test]
+    fn deterministic_rejection_predicate() {
+        assert!(is_deterministic_rejection(StatusCode::BAD_REQUEST));
+        assert!(is_deterministic_rejection(StatusCode::PAYLOAD_TOO_LARGE));
+        assert!(is_deterministic_rejection(StatusCode::UNAUTHORIZED));
+        assert!(!is_deterministic_rejection(StatusCode::TOO_MANY_REQUESTS));
+        assert!(!is_deterministic_rejection(StatusCode::REQUEST_TIMEOUT));
+        assert!(!is_deterministic_rejection(StatusCode::SERVICE_UNAVAILABLE));
+        assert!(!is_deterministic_rejection(StatusCode::OK));
+    }
+
+    #[tokio::test]
+    async fn oversized_input_rejected_before_any_submit() {
+        // max_file_size_bytes = 10; base_url points at an unreachable host to prove
+        // the size guard short-circuits before any network I/O.
+        let config = PaddleOcrConfig {
+            base_url: "http://127.0.0.1:9".to_string(),
+            api_token: "unused".to_string(),
+            model: "m".to_string(),
+            poll_interval_secs: 1,
+            job_timeout_secs: 60,
+            max_jobs_per_document: 1,
+            max_concurrent_jobs: 1,
+            max_file_size_bytes: 10,
+            max_image_size_bytes: 10,
+        };
+        let client = PaddleOcrClient::new(config);
+        let err = client
+            .ocr_pdf_bytes(&[0u8; 100], 1)
+            .await
+            .expect_err("oversized input must fail before submit");
+        assert!(
+            matches!(err, IngestionError::OcrRejected(_)),
+            "oversized must be terminal OcrRejected, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_image_rejected_before_any_submit() {
+        let config = PaddleOcrConfig {
+            base_url: "http://127.0.0.1:9".to_string(),
+            api_token: "unused".to_string(),
+            model: "m".to_string(),
+            poll_interval_secs: 1,
+            job_timeout_secs: 60,
+            max_jobs_per_document: 1,
+            max_concurrent_jobs: 1,
+            max_file_size_bytes: 200 * 1024 * 1024,
+            max_image_size_bytes: 10,
+        };
+        let client = PaddleOcrClient::new(config);
+        // 100 bytes image exceeds the 10-byte image cap → rejected before upload.
+        let err = client
+            .ocr_image_bytes(&[0u8; 100], "photo.png")
+            .await
+            .expect_err("oversized image must fail before submit");
+        assert!(
+            matches!(err, IngestionError::OcrRejected(_)),
+            "oversized image must be terminal OcrRejected, got: {err}"
+        );
+    }
+
+    #[test]
+    fn config_defaults_to_200mb_file_and_10mb_image_caps() {
+        unsafe {
+            std::env::remove_var("PADDLE_OCR_MAX_FILE_SIZE_BYTES");
+            std::env::remove_var("PADDLE_OCR_MAX_IMAGE_SIZE_BYTES");
+            std::env::set_var("PADDLE_OCR_API_TOKEN", "test-token");
+        }
+        let config = PaddleOcrConfig::from_env().expect("config with token");
+        assert_eq!(config.max_file_size_bytes, DEFAULT_MAX_FILE_SIZE_BYTES);
+        assert_eq!(config.max_image_size_bytes, DEFAULT_MAX_IMAGE_SIZE_BYTES);
+        unsafe {
+            std::env::set_var("PADDLE_OCR_MAX_IMAGE_SIZE_BYTES", "12345");
+        }
+        let config = PaddleOcrConfig::from_env().expect("config with token");
+        assert_eq!(config.max_image_size_bytes, 12345);
+        unsafe {
+            std::env::remove_var("PADDLE_OCR_MAX_IMAGE_SIZE_BYTES");
+        }
     }
 }

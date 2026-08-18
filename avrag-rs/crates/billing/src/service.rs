@@ -444,6 +444,10 @@ impl BillingService {
 
     /// Poll-friendly order status for the Alipay F2F (QR) checkout flow: the
     /// frontend shows the QR code and polls until the webhook marks the order paid.
+    ///
+    /// If the order is still `pending`, also call `alipay.trade.query` and apply
+    /// the same fulfillment path as async notify. This recovers when notify was
+    /// missed or failed after signature verification (e.g. lease insert 500).
     pub async fn get_order_status(
         &self,
         store: Arc<dyn BillingStorePort>,
@@ -455,11 +459,48 @@ impl BillingService {
             return ApiResponse::err("billing_order_invalid", "order id is required");
         }
         match store.load_alipay_order_status(user_id, order_id).await {
-            Ok(Some((status, plan_id))) => ApiResponse::ok(OrderStatusResponse {
-                order_id: order_id.to_string(),
-                status,
-                plan_id,
-            }),
+            Ok(Some((status, plan_id))) => {
+                let mut status = status;
+                let mut plan_id = plan_id;
+                if status == "pending" && self.config.alipay_enabled() {
+                    if let Ok(Some((trade_status, paid_cents))) =
+                        self.alipay.client_query_trade(order_id).await
+                    {
+                        if matches!(
+                            trade_status.as_str(),
+                            "TRADE_SUCCESS" | "TRADE_FINISHED"
+                        ) && paid_cents > 0
+                        {
+                            let event = app_core::ProviderEvent::AlipayOrderPaid {
+                                out_trade_no: order_id.to_string(),
+                                paid_cents,
+                            };
+                            // Idempotent: paid update + subscription upsert / wallet credit.
+                            if process_webhook_event(
+                                store.clone(),
+                                BillingProvider::Alipay,
+                                &event,
+                            )
+                            .await
+                            .is_ok()
+                            {
+                                if let Ok(Some((s, p))) =
+                                    store.load_alipay_order_status(user_id, order_id).await
+                                {
+                                    status = s;
+                                    plan_id = p;
+                                }
+                            }
+                            // Query/fulfillment errors stay silent: poll continues on pending.
+                        }
+                    }
+                }
+                ApiResponse::ok(OrderStatusResponse {
+                    order_id: order_id.to_string(),
+                    status,
+                    plan_id,
+                })
+            }
             Ok(None) => ApiResponse::err("billing_order_not_found", "order not found"),
             Err(error) => ApiResponse::err("billing_order_status_failed", &error.to_string()),
         }

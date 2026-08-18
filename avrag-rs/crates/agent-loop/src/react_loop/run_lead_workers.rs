@@ -70,6 +70,7 @@ impl ReActLoop {
     > {
         let wall = Instant::now();
         let mut session_usage = LlmUsage::zeroed();
+        let mut run_log = super::run_log::RunEventLog::new();
 
         let caps = ActivatedCaps {
             rag: mode_has_rag_primitives(mode),
@@ -101,31 +102,37 @@ impl ReActLoop {
         // Lead LLM plan → retrieval + base_tools briefs.
         // Empty retrieval = BASE-only short path. LLM fail → host_fb.
         // Budget is **rounds** (mode max_iterations); no synthesis token reserve.
+        //
+        // Model split (2026-08-17): the Lead plans on the **synthesis** client
+        // (primary model, thinking on/max) — plan quality (decomposition,
+        // routing, JSON discipline) is the Lead's job and belongs to the
+        // stronger model. Only Worker SaC / retrieval-loop turns ride the
+        // retrieve override (`with_retrieve_llm`, thinking off).
         let host_fb = host_default_briefs(&request.query, caps);
         let plan = lead_plan::fetch_lead_briefs(
-            self.llm_for_retrieve(mode),
+            &self.synthesis_llm,
             request,
             caps,
             &plan_obs,
             host_fb,
+            &mut run_log,
         )
         .await;
         session_usage.accumulate(&plan.usage);
 
-        // Host BASE tools leaf (weather / calculator / user_context) when plan
-        // says base_tools. Also run a structural utility pass when the query
-        // is clearly a BASE-only ask but plan omitted base_tools briefs.
+        // Host BASE tools leaf (weather / calculator / user_context) when the
+        // Lead plan explicitly routes a brief to `base_tools`. The concrete tool
+        // and its argument come from the brief itself (LLM-decided); the host
+        // does no keyword/char intent guessing.
         if !plan.base_tool_briefs.is_empty() {
-            self.run_base_tool_briefs(&plan.base_tool_briefs, request, state)
+            self.run_base_tool_briefs(&plan.base_tool_briefs, request, state, &mut run_log)
                 .await;
-        } else if let Some(kind) = detect_utility_kind(&request.query) {
-            self.run_utility_kind(kind, request, state).await;
         }
 
         let mut packs: Vec<EvidencePack> = Vec::new();
         let mut rebrief_used: u8 = 0;
         let mut pack_gate_events: Vec<serde_json::Value> = Vec::new();
-        let mut brief_rejects: Vec<String> = Vec::new();
+        let mut brief_rejects: Vec<BriefReject> = Vec::new();
 
         // Wave 0 (RAG ∥ Web when both present; panic-isolated)
         // Pack alias numbering continues the delivery replay stream
@@ -143,31 +150,41 @@ impl ReActLoop {
                 cancel,
                 sink,
                 /*rebrief*/ false,
+                // Dead on wave 0 (is_rebrief=false); the re-brief block below
+                // recomputes the tool from actual wave-0 usage.
+                "dense_retrieval",
                 alias_offset,
             )
             .await;
         session_usage.accumulate(&u0);
+        log_wave_outcomes(&mut run_log, 0, &plan.retrieval_briefs, &wave0, &rejects0);
         brief_rejects.extend(rejects0);
         pack_gate_events.extend(gates0);
-        apply_wave_outcomes(state, &mut packs, wave0);
+        apply_wave_outcomes(state, &mut packs, wave0, 0, &mut run_log);
 
-        // Host structural re-brief ≤1: only channels that **ran** and returned empty/insufficient.
-        // Does not invent packs for channels Lead intentionally omitted.
-        let rebrief_channels = channels_needing_rebrief(&packs);
-        if !rebrief_channels.is_empty() && rebrief_used < MAX_REBRIEF_WAVES && !cancel.is_cancelled()
+        // Host structural re-brief ≤1, facet-granular: only sub-tasks that ran
+        // and came back empty/insufficient. Does not invent sub-tasks Lead
+        // intentionally omitted.
+        let rebrief_targets = packs_needing_rebrief(&packs);
+        if !rebrief_targets.is_empty() && rebrief_used < MAX_REBRIEF_WAVES && !cancel.is_cancelled()
         {
             rebrief_used = 1;
+            run_log.push(super::run_log::RunEventKind::RebriefWave {
+                targets: rebrief_targets.clone(),
+            });
             let rebrief_briefs =
-                host_rebrief_briefs(&request.query, &rebrief_channels, &packs);
+                host_rebrief_briefs(&packs, &rebrief_targets, &plan.retrieval_briefs);
             if !rebrief_briefs.is_empty() {
+                // Tool choice from wave-0 usage facts: first unused tool wins
+                // (a re-run with the same dead tool is a wasted wave).
+                let stats = prior_tool_stats(&state.tool_results);
+                let tool_id = rebrief_tool_choice(stats);
                 state.messages.push(ChatMessage::user(
                     prompt_assets::rebrief_wave_observation(
                         rebrief_used,
-                        &rebrief_channels
-                            .iter()
-                            .map(|c| c.as_str())
-                            .collect::<Vec<_>>()
-                            .join(","),
+                        &rebrief_targets.join(","),
+                        &stats.render(),
+                        tool_id,
                     ),
                 ));
                 let alias_offset =
@@ -183,33 +200,38 @@ impl ReActLoop {
                         cancel,
                         sink,
                         /*rebrief*/ true,
+                        tool_id,
                         alias_offset,
                     )
                     .await;
                 session_usage.accumulate(&u1);
+                log_wave_outcomes(&mut run_log, 1, &rebrief_briefs, &wave1, &rejects1);
                 brief_rejects.extend(rejects1);
                 pack_gate_events.extend(gates1);
-                apply_wave_outcomes(state, &mut packs, wave1);
+                apply_wave_outcomes(state, &mut packs, wave1, 1, &mut run_log);
             }
         }
 
         if !brief_rejects.is_empty() {
+            let lines = brief_rejects
+                .iter()
+                .map(|r| r.line())
+                .collect::<Vec<_>>()
+                .join("\n");
             state.messages.push(ChatMessage::user(
-                prompt_assets::brief_gate_rejects_observation(&brief_rejects.join("\n")),
+                prompt_assets::brief_gate_rejects_observation(&lines),
             ));
         }
 
         let (cov_summary, gaps_summary) = summarize_packs(&packs);
         state.messages.push(ChatMessage::user(
-            prompt_assets::coverage_aggregate_observation(
-                packs.len(),
-                &cov_summary,
-                &gaps_summary,
-                rebrief_used,
-            ),
+            prompt_assets::retrieval_worklog_observation(request.query.trim(), &run_log),
         ));
+        run_log.push(super::run_log::RunEventKind::Handoff {
+            packs: packs.len(),
+        });
         state.messages.push(ChatMessage::user(
-            prompt_assets::lead_workers_handoff_to_synthesis(packs.len(), &cov_summary),
+            prompt_assets::lead_workers_handoff_to_synthesis(packs.len()),
         ));
 
         let elapsed_ms = wall.elapsed().as_millis() as u64;
@@ -242,6 +264,7 @@ impl ReActLoop {
                     "pack_gate": pack_gate_events,
                     "plan_used_host_fallback": plan.used_host_fallback,
                     "n_base_tool_briefs": plan.base_tool_briefs.len(),
+                    "run_events": run_log.to_json(),
                     "channels": packs.iter().map(|p| json!({
                         "channel": p.channel,
                         "coverage": p.coverage.as_str(),
@@ -270,6 +293,7 @@ impl ReActLoop {
                         "pack_gate": pack_gate_events,
                         "elapsed_ms": elapsed_ms,
                         "packs": packs,
+                        "run_events": run_log.to_json(),
                     }),
                 })
                 .await;
@@ -295,28 +319,38 @@ impl ReActLoop {
     }
 
     /// Host-execute Lead `base_tools` briefs (weather / calculator / user_context).
+    ///
+    /// The concrete tool and argument are decided by the Lead LLM and carried in
+    /// the brief (`sub_task.base_tool` / `sub_task.base_tool_arg`). The host only
+    /// executes; it never guesses intent from keywords or characters.
     async fn run_base_tool_briefs(
         &self,
         briefs: &[TaskBrief],
         request: &AgentRequest,
         state: &mut IterationState,
+        run_log: &mut super::run_log::RunEventLog,
     ) {
         for brief in briefs {
-            let kind = infer_base_tool_kind(brief);
-            let (tool, result) = match kind {
-                BaseToolKind::Weather { location } => {
-                    let tr = self.deps.execute_weather_query(&location).await;
+            let tool_name = brief.sub_task.base_tool.trim().to_ascii_lowercase();
+            let arg = if brief.sub_task.base_tool_arg.trim().is_empty() {
+                brief.sub_task.objective.trim().to_string()
+            } else {
+                brief.sub_task.base_tool_arg.trim().to_string()
+            };
+            let (tool, result) = match tool_name.as_str() {
+                "weather" | "weather_query" => {
+                    let tr = self.deps.execute_weather_query(&arg).await;
                     ("weather_query", tr)
                 }
-                BaseToolKind::Calculator { expression } => {
-                    let tr = self.deps.execute_calculator(&expression).await;
+                "calculator" | "calc" => {
+                    let tr = self.deps.execute_calculator(&arg).await;
                     ("calculator", tr)
                 }
-                BaseToolKind::UserContext => {
+                "user_context" | "time" | "clock" => {
                     let tr = self.deps.execute_user_context(request).await;
                     ("user_context", tr)
                 }
-                BaseToolKind::Unmapped => {
+                _ => {
                     let tr = ToolResult {
                         tool: "base_tools".into(),
                         version: "1.0".into(),
@@ -324,7 +358,7 @@ impl ReActLoop {
                         data: Some(json!({
                             "error": "base_tools_unmapped",
                             "objective": brief.sub_task.objective,
-                            "note": "host could not map brief to weather_query, calculator, or user_context",
+                            "note": "brief did not specify a concrete base tool (weather | calculator | user_context)",
                         })),
                         trace: None,
                     };
@@ -342,69 +376,15 @@ impl ReActLoop {
                 .map(|d| d.to_string())
                 .unwrap_or_else(|| "{}".into());
             let payload: String = payload.chars().take(2000).collect();
+            run_log.push(super::run_log::RunEventKind::BaseToolExecuted {
+                tool: tool.to_string(),
+                ok: result.status == ToolStatus::Ok,
+            });
             state.tool_results.push(result);
             state.messages.push(ChatMessage::user(
                 prompt_assets::base_tools_result_observation(tool, status, &payload),
             ));
         }
-    }
-
-    /// Pure-chat / SaC retrieve: inject BASE utility observations before the
-    /// model decides, so calc/weather/time do not depend on codegen luck.
-    pub(super) async fn host_inject_utility_if_needed(
-        &self,
-        request: &AgentRequest,
-        state: &mut IterationState,
-    ) {
-        if state
-            .tool_results
-            .iter()
-            .any(|t| matches!(t.tool.as_str(), "calculator" | "weather_query" | "user_context"))
-        {
-            return;
-        }
-        if let Some(kind) = detect_utility_kind(&request.query) {
-            self.run_utility_kind(kind, request, state).await;
-        }
-    }
-
-    /// Host structural utility (no Lead brief): calc / weather / local clock.
-    async fn run_utility_kind(
-        &self,
-        kind: BaseToolKind,
-        request: &AgentRequest,
-        state: &mut IterationState,
-    ) {
-        let (tool, result) = match kind {
-            BaseToolKind::Weather { location } => {
-                let tr = self.deps.execute_weather_query(&location).await;
-                ("weather_query", tr)
-            }
-            BaseToolKind::Calculator { expression } => {
-                let tr = self.deps.execute_calculator(&expression).await;
-                ("calculator", tr)
-            }
-            BaseToolKind::UserContext => {
-                let tr = self.deps.execute_user_context(request).await;
-                ("user_context", tr)
-            }
-            BaseToolKind::Unmapped => return,
-        };
-        let status = match result.status {
-            ToolStatus::Ok => "ok",
-            ToolStatus::Error => "error",
-            _ => "other",
-        };
-        let payload = result
-            .data
-            .as_ref()
-            .map(|d| d.to_string())
-            .unwrap_or_else(|| "{}".into());
-        let payload: String = payload.chars().take(2000).collect();
-        state.tool_results.push(result);
-        state.messages.push(ChatMessage::user(
-            prompt_assets::base_tools_result_observation(tool, status, &payload),
-        ));
     }
 
     async fn dispatch_worker_wave(
@@ -418,25 +398,27 @@ impl ReActLoop {
         cancel: &CancellationToken,
         sink: &dyn AgentEventSink,
         is_rebrief: bool,
+        rebrief_tool_id: &str,
         alias_offset: usize,
     ) -> (
         Vec<WorkerOutcome>,
         LlmUsage,
-        Vec<String>,
+        Vec<BriefReject>,
         Vec<serde_json::Value>,
     ) {
         // v1: one brief per channel (PlanGate first-wins). Extra same-channel
         // briefs here are defense-in-depth drops with a warn + Lead-visible reject.
         let mut rag_brief: Option<&TaskBrief> = None;
         let mut web_brief: Option<&TaskBrief> = None;
-        let mut rejects: Vec<String> = Vec::new();
+        let mut rejects: Vec<BriefReject> = Vec::new();
         for brief in briefs {
             if let Err(e) = validate_task_brief(brief, caps) {
                 tracing::warn!(error = %e, is_rebrief, "lead_workers brief gate failed; skip");
-                rejects.push(format!(
-                    "- id={} source={:?} reason={e}",
-                    brief.sub_task.id, brief.sub_task.preferred_source
-                ));
+                rejects.push(BriefReject {
+                    id: brief.sub_task.id.clone(),
+                    source: brief.sub_task.preferred_source.as_str().to_string(),
+                    reason: e.to_string(),
+                });
                 continue;
             }
             match brief.sub_task.preferred_source {
@@ -447,10 +429,11 @@ impl ReActLoop {
                             is_rebrief,
                             "lead_workers: extra rag brief skipped (one per channel)"
                         );
-                        rejects.push(format!(
-                            "- id={} source=rag reason=duplicate_channel_slot",
-                            brief.sub_task.id
-                        ));
+                        rejects.push(BriefReject {
+                            id: brief.sub_task.id.clone(),
+                            source: "rag".into(),
+                            reason: "duplicate_channel_slot".into(),
+                        });
                     } else {
                         rag_brief = Some(brief);
                     }
@@ -462,10 +445,11 @@ impl ReActLoop {
                             is_rebrief,
                             "lead_workers: extra web brief skipped (one per channel)"
                         );
-                        rejects.push(format!(
-                            "- id={} source=web reason=duplicate_channel_slot",
-                            brief.sub_task.id
-                        ));
+                        rejects.push(BriefReject {
+                            id: brief.sub_task.id.clone(),
+                            source: "web".into(),
+                            reason: "duplicate_channel_slot".into(),
+                        });
                     } else {
                         web_brief = Some(brief);
                     }
@@ -474,10 +458,11 @@ impl ReActLoop {
                     // Handled outside dispatch (base tools leaf / no-op).
                 }
                 PreferredSource::Rag | PreferredSource::Web => {
-                    rejects.push(format!(
-                        "- id={} source={:?} reason=source_not_activated",
-                        brief.sub_task.id, brief.sub_task.preferred_source
-                    ));
+                    rejects.push(BriefReject {
+                        id: brief.sub_task.id.clone(),
+                        source: brief.sub_task.preferred_source.as_str().to_string(),
+                        reason: "source_not_activated".into(),
+                    });
                 }
             }
         }
@@ -508,7 +493,7 @@ impl ReActLoop {
                                 auth,
                                 request,
                                 rb,
-                                "lexical_retrieval",
+                                rebrief_tool_id,
                                 alias_offset,
                             )
                             .await,
@@ -536,7 +521,7 @@ impl ReActLoop {
                     Err(_) => {
                         tracing::error!("lead_workers rag worker panicked; channel isolated");
                         Some((
-                            empty_panic_outcome("rag", rb.sub_task.id.as_str()),
+                            vec![empty_panic_outcome("rag", rb.sub_task.id.as_str())],
                             LlmUsage::zeroed(),
                         ))
                     }
@@ -561,7 +546,7 @@ impl ReActLoop {
                                 auth,
                                 request,
                                 rb,
-                                "lexical_retrieval",
+                                rebrief_tool_id,
                                 alias_offset,
                             )
                             .await,
@@ -579,7 +564,7 @@ impl ReActLoop {
                     Err(_) => {
                         tracing::error!("lead_workers rag worker panicked; channel isolated");
                         Some((
-                            empty_panic_outcome("rag", rb.sub_task.id.as_str()),
+                            vec![empty_panic_outcome("rag", rb.sub_task.id.as_str())],
                             LlmUsage::zeroed(),
                         ))
                     }
@@ -611,10 +596,12 @@ impl ReActLoop {
         let mut out = Vec::new();
         let mut usage = LlmUsage::zeroed();
         let mut gate_events = Vec::new();
-        if let Some((o, u)) = rag_out {
+        if let Some((os, u)) = rag_out {
             usage.accumulate(&u);
-            gate_events.push(pack_gate_json(&o));
-            out.push(o);
+            for o in os {
+                gate_events.push(pack_gate_json(&o));
+                out.push(o);
+            }
         }
         if let Some((o, u)) = web_out {
             usage.accumulate(&u);
@@ -624,9 +611,10 @@ impl ReActLoop {
         (out, usage, rejects, gate_events)
     }
 
-    /// Short SaC: nested SacCodegen retrieve (rag-only SDK, max_steps) → EvidencePack.
-    /// Host assembles pack from ToolResults (no dense rewire).
-    /// Returns (outcome, nested LLM usage for product budget telemetry).
+    /// Short SaC: one Worker, facets executed **sequentially** — each facet
+    /// gets its own step budget (independent budget) and its own
+    /// host-assembled pack (independent screening). Single-facet briefs
+    /// behave exactly like the pre-facet path.
     async fn run_rag_worker_short_sac(
         &self,
         parent_mode: &ModeConfig,
@@ -637,13 +625,63 @@ impl ReActLoop {
         cancel: &CancellationToken,
         sink: &dyn AgentEventSink,
         alias_offset: usize,
-    ) -> (WorkerOutcome, LlmUsage) {
-        let started = Instant::now();
-        // Product clamps Worker SaC to ≤5. Full-149 budget baseline
+    ) -> (Vec<WorkerOutcome>, LlmUsage) {
+        // Product clamps Worker SaC to ≤5 per facet. Full-149 budget baseline
         // (`E2E_UNLIMITED_BUDGET=1`) raises the clamp so measured usage is not
         // capped by the host Worker step wall before Lead rounds.
         let step_cap = if e2e_unlimited_budget() { 32 } else { 5 };
         let max_steps = brief.sub_task.max_steps.clamp(1, step_cap);
+
+        let mut outcomes = Vec::new();
+        let mut total_usage = LlmUsage::zeroed();
+        let mut alias_cursor = alias_offset;
+        for facet in brief.sub_task.effective_facets() {
+            // Facet-scoped brief view: the worker sees this unit standalone.
+            let mut fbrief = brief.clone();
+            fbrief.sub_task.id = facet.id.clone();
+            fbrief.sub_task.objective = facet.objective.clone();
+            fbrief.sub_task.facets = vec![];
+            let (outcome, usage) = self
+                .run_rag_facet_sac(
+                    parent_mode,
+                    auth,
+                    request,
+                    &fbrief,
+                    max_steps,
+                    hooks,
+                    cancel,
+                    sink,
+                    alias_cursor,
+                )
+                .await;
+            alias_cursor +=
+                crate::helpers::selected::alias_chunk_ids_in_order(&outcome.tool_results).len();
+            total_usage.accumulate(&usage);
+            outcomes.push(outcome);
+            if cancel.is_cancelled() {
+                break;
+            }
+        }
+        (outcomes, total_usage)
+    }
+
+    /// One facet: nested SacCodegen retrieve (rag-only SDK, max_steps) →
+    /// EvidencePack. Host assembles pack from ToolResults (no dense rewire).
+    /// Returns (outcome, nested LLM usage for product budget telemetry).
+    #[allow(clippy::too_many_arguments)]
+    async fn run_rag_facet_sac(
+        &self,
+        parent_mode: &ModeConfig,
+        auth: &contracts::auth_runtime::AuthContext,
+        request: &AgentRequest,
+        brief: &TaskBrief,
+        max_steps: u8,
+        hooks: &dyn LoopHooks,
+        cancel: &CancellationToken,
+        sink: &dyn AgentEventSink,
+        alias_offset: usize,
+    ) -> (WorkerOutcome, LlmUsage) {
+        let started = Instant::now();
 
         let mut worker_mode = parent_mode.clone();
         worker_mode.retrieve_strategy = RetrieveStrategy::SacCodegen;
@@ -732,14 +770,13 @@ impl ReActLoop {
         };
 
         let mut tool_results = worker_state.tool_results;
-        let (evidence, key_facts) = evidence_from_tool_results(&tool_results, alias_offset);
+        let evidence = evidence_from_tool_results(&tool_results, alias_offset);
         let n = evidence.len();
         let tool_ok = count_tool_ok(&tool_results);
         let pack = EvidencePack {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: brief.sub_task.id.clone(),
             channel: "rag".into(),
-            key_facts,
             evidence,
             coverage: if n > 0 {
                 Coverage::Partial
@@ -872,11 +909,6 @@ impl ReActLoop {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: brief.sub_task.id.clone(),
             channel: "web".into(),
-            key_facts: evidence
-                .iter()
-                .take(5)
-                .map(|e| e.content.chars().take(160).collect())
-                .collect(),
             evidence,
             coverage: if n > 0 {
                 Coverage::Partial
@@ -914,7 +946,34 @@ impl ReActLoop {
         }
     }
 
+    /// Host-side rag leaf (re-brief path), facet-granular: one host retrieval
+    /// per facet, one pack per facet.
     async fn run_rag_worker_host(
+        &self,
+        auth: &contracts::auth_runtime::AuthContext,
+        request: &AgentRequest,
+        brief: &TaskBrief,
+        tool_id: &str,
+        alias_offset: usize,
+    ) -> Vec<WorkerOutcome> {
+        let mut out = Vec::new();
+        let mut alias_cursor = alias_offset;
+        for facet in brief.sub_task.effective_facets() {
+            let mut fbrief = brief.clone();
+            fbrief.sub_task.id = facet.id.clone();
+            fbrief.sub_task.facets = vec![];
+            let o = self
+                .run_rag_host_leaf_one(auth, request, &fbrief, tool_id, alias_cursor)
+                .await;
+            alias_cursor +=
+                crate::helpers::selected::alias_chunk_ids_in_order(&o.tool_results).len();
+            out.push(o);
+        }
+        out
+    }
+
+    /// One host-leaf retrieval for a single (facet-scoped) brief.
+    async fn run_rag_host_leaf_one(
         &self,
         auth: &contracts::auth_runtime::AuthContext,
         request: &AgentRequest,
@@ -923,7 +982,7 @@ impl ReActLoop {
         alias_offset: usize,
     ) -> WorkerOutcome {
         let started = Instant::now();
-        let query = brief.original_query.trim();
+        let query = brief.sub_task.objective.trim();
 
         let mut doc_ids: Vec<String> = request.doc_scope.clone();
         if doc_ids.is_empty() {
@@ -965,7 +1024,7 @@ impl ReActLoop {
             },
         };
 
-        let (evidence, key_facts) = evidence_from_dense_tool(&tool_result, alias_offset);
+        let evidence = evidence_from_dense_tool(&tool_result, alias_offset);
         let n = evidence.len();
         let tool_ok = count_tool_ok(std::slice::from_ref(&tool_result));
 
@@ -973,7 +1032,6 @@ impl ReActLoop {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: brief.sub_task.id.clone(),
             channel: "rag".into(),
-            key_facts,
             evidence,
             coverage: if n > 0 {
                 Coverage::Partial
@@ -1016,6 +1074,21 @@ struct WorkerOutcome {
     observation: String,
 }
 
+/// Brief rejected at the dispatch gate (never spawned a Worker).
+#[derive(Debug, serde::Serialize)]
+struct BriefReject {
+    id: String,
+    source: String,
+    reason: String,
+}
+
+impl BriefReject {
+    /// Single line for the `[brief_gate_rejects]` observation.
+    fn line(&self) -> String {
+        format!("- id={} source={} reason={}", self.id, self.source, self.reason)
+    }
+}
+
 fn e2e_unlimited_budget() -> bool {
     match std::env::var("E2E_UNLIMITED_BUDGET") {
         Ok(v) => {
@@ -1033,104 +1106,11 @@ enum WebAttempt {
     Ok(avrag_search::SearchResponse),
 }
 
-enum BaseToolKind {
-    Weather { location: String },
-    Calculator { expression: String },
-    UserContext,
-    Unmapped,
-}
-
-fn infer_base_tool_kind(brief: &TaskBrief) -> BaseToolKind {
-    let blob = format!(
-        "{} {}",
-        brief.sub_task.objective, brief.original_query
-    );
-    detect_utility_kind(&blob).unwrap_or(BaseToolKind::Unmapped)
-}
-
-/// Structural utility intent from user text (Lead brief omitted or pure chat).
-fn detect_utility_kind(query: &str) -> Option<BaseToolKind> {
-    let blob = query.trim();
-    if blob.is_empty() {
-        return None;
-    }
-    let lower = blob.to_ascii_lowercase();
-    let weather_hit = ["天气", "气温", "降雨", "weather", "temperature", "forecast"]
-        .iter()
-        .any(|k| blob.contains(k) || lower.contains(k));
-    let time_hit = [
-        "现在几点",
-        "当前时间",
-        "今天日期",
-        "日期和时间",
-        "精确到分",
-        "what time",
-        "current time",
-        "local time",
-        "today's date",
-    ]
-    .iter()
-    .any(|k| blob.contains(k) || lower.contains(k));
-    let calc_hit = ["计算", "算一下", "等于多少", "等于", "calculator", "calc", "sqrt", "sin("]
-        .iter()
-        .any(|k| blob.contains(k) || lower.contains(k))
-        || blob.chars().any(|c| "+-*/^×÷".contains(c));
-    // Time before weather when both ("今天北京天气" → weather).
-    if weather_hit {
-        let location = extract_weather_location(blob);
-        return Some(BaseToolKind::Weather { location });
-    }
-    if time_hit {
-        return Some(BaseToolKind::UserContext);
-    }
-    if calc_hit {
-        let expression = extract_math_expression(blob)
-            .unwrap_or_else(|| blob.to_string());
-        return Some(BaseToolKind::Calculator { expression });
-    }
-    None
-}
-
-fn extract_weather_location(s: &str) -> String {
-    // Prefer common "X现在的天气" / "天气 in X" patterns; else whole query.
-    for sep in ["现在的天气", "的天气", "天气怎么样", "weather in ", "weather for "] {
-        if let Some(idx) = s.find(sep) {
-            let left = s[..idx].trim();
-            if !left.is_empty() && left.chars().count() <= 32 {
-                return left
-                    .trim_start_matches(['请', '问', '查', '询', '下'])
-                    .trim()
-                    .to_string();
-            }
-        }
-    }
-    s.trim().to_string()
-}
-
-fn extract_math_expression(s: &str) -> Option<String> {
-    use agent_tools::skills::builtin::calculator::normalize_calculator_expression;
-    let n = normalize_calculator_expression(s);
-    if n.chars().any(|c| c.is_ascii_digit())
-        && n
-            .chars()
-            .any(|c| "+-*/^%".contains(c) || c == '(')
-    {
-        return Some(n);
-    }
-    // Pure digit×digit without operator after normalize still may be "1 8 350" —
-    // leave as full normalized string for eval (may fail; caller handles).
-    if n.chars().any(|c| c.is_ascii_digit()) {
-        return Some(n);
-    }
-    None
-}
-
 fn empty_panic_outcome(channel: &str, sub_task_id: &str) -> WorkerOutcome {
     let pack = EvidencePack {
         schema_version: "evidence_pack_v1".into(),
         sub_task_id: sub_task_id.into(),
         channel: channel.into(),
-        key_facts: vec![],
         evidence: vec![],
         coverage: Coverage::Insufficient,
         gaps: format!("{channel}_worker_panic"),
@@ -1175,111 +1155,224 @@ fn apply_wave_outcomes(
     state: &mut IterationState,
     packs: &mut Vec<EvidencePack>,
     wave: Vec<WorkerOutcome>,
+    wave_no: u8,
+    run_log: &mut super::run_log::RunEventLog,
 ) {
     for outcome in wave {
         state.tool_results.extend(outcome.tool_results);
         state.messages.push(ChatMessage::user(outcome.observation));
-        merge_or_push_pack(packs, outcome.pack);
+        let channel = outcome.pack.channel.clone();
+        if merge_or_push_pack(packs, outcome.pack) == MergeResult::Replaced {
+            run_log.push(super::run_log::RunEventKind::PackSuperseded {
+                wave: wave_no,
+                channel,
+            });
+        }
     }
 }
 
-/// Prefer the pack with more evidence for the same channel; else push.
-fn merge_or_push_pack(packs: &mut Vec<EvidencePack>, new_pack: EvidencePack) {
-    if let Some(existing) = packs.iter_mut().find(|p| p.channel == new_pack.channel) {
+/// Record one wave into the run event log: brief rejects, per-call tool
+/// traces (log-only), worker completions (surface), pack gate rewrites
+/// (log-only, non-accept only).
+fn log_wave_outcomes(
+    run_log: &mut super::run_log::RunEventLog,
+    wave_no: u8,
+    briefs: &[TaskBrief],
+    outcomes: &[WorkerOutcome],
+    rejects: &[BriefReject],
+) {
+    use super::run_log::RunEventKind;
+    for r in rejects {
+        run_log.push(RunEventKind::BriefRejected {
+            id: r.id.clone(),
+            source: r.source.clone(),
+            reason: r.reason.clone(),
+        });
+    }
+    for o in outcomes {
+        let channel = o.pack.channel.clone();
+        for tr in &o.tool_results {
+            let preview = if tr.status == ToolStatus::Ok {
+                tr.trace
+                    .as_ref()
+                    .and_then(|t| t.degrade_reason.clone())
+                    .unwrap_or_default()
+            } else {
+                tr.data
+                    .as_ref()
+                    .map(|d| d.to_string().chars().take(120).collect())
+                    .unwrap_or_default()
+            };
+            run_log.push(RunEventKind::ToolCall {
+                wave: wave_no,
+                channel: channel.clone(),
+                tool: tr.tool.clone(),
+                ok: tr.status == ToolStatus::Ok,
+                elapsed_ms: tr.trace.as_ref().and_then(|t| t.elapsed_ms),
+                preview,
+            });
+        }
+        let objective = briefs
+            .iter()
+            .flat_map(|b| b.sub_task.effective_facets())
+            .find(|f| f.id == o.pack.sub_task_id)
+            .map(|f| f.objective)
+            .unwrap_or_default();
+        run_log.push(RunEventKind::WorkerCompleted {
+            wave: wave_no,
+            sub_task_id: o.pack.sub_task_id.clone(),
+            channel: channel.clone(),
+            objective,
+            n_evidence: o.pack.evidence.len(),
+            gaps: o.pack.gaps.clone(),
+        });
+        if !matches!(o.pack_gate, PackGateOutcome::Accept) {
+            run_log.push(RunEventKind::PackGated {
+                wave: wave_no,
+                channel,
+                outcome: o.pack_gate.reasons_joined(),
+            });
+        }
+    }
+}
+
+/// Outcome of merging a pack into the per-channel slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MergeResult {
+    Pushed,
+    KeptExisting,
+    /// Later wave replaced the channel's earlier pack.
+    Replaced,
+}
+
+/// Merge keyed by **sub_task_id** (facet-granular): packs from different
+/// facets of the same channel coexist; a re-brief pack replaces its own
+/// empty slot only.
+fn merge_or_push_pack(packs: &mut Vec<EvidencePack>, new_pack: EvidencePack) -> MergeResult {
+    if let Some(existing) = packs
+        .iter_mut()
+        .find(|p| p.sub_task_id == new_pack.sub_task_id)
+    {
         let better = new_pack.evidence.len() > existing.evidence.len()
             || (new_pack.coverage.as_str() != "insufficient"
                 && existing.coverage == Coverage::Insufficient);
         if better {
             *existing = new_pack;
+            return MergeResult::Replaced;
         } else if !new_pack.evidence.is_empty() && existing.evidence.is_empty() {
             *existing = new_pack;
+            return MergeResult::Replaced;
         }
+        MergeResult::KeptExisting
         // else keep existing (wave0 may already have partial hits)
     } else {
         packs.push(new_pack);
+        MergeResult::Pushed
     }
 }
 
-/// Host structural re-brief (design W4 / D4 hard cap).
-///
-/// Only channels that **already produced a pack** and still have empty evidence
-/// or `insufficient` are re-briefed. Channels Lead intentionally omitted (no pack)
-/// are **not** invented — fixes unwrap_or(true) forced-dispatch bug.
-pub(super) fn channels_needing_rebrief(packs: &[EvidencePack]) -> Vec<PreferredSource> {
-    let mut out = Vec::new();
-    for p in packs {
-        let need = p.evidence.is_empty() || p.coverage == Coverage::Insufficient;
-        if !need {
+/// Ok-call counts per rag retrieval tool family across the waves so far.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct PriorToolStats {
+    dense: usize,
+    lexical: usize,
+    grep: usize,
+}
+
+/// Host-known fact: which rag tools already ran (Ok) in prior waves.
+fn prior_tool_stats(tool_results: &[ToolResult]) -> PriorToolStats {
+    let mut s = PriorToolStats::default();
+    for tr in tool_results {
+        if tr.status != ToolStatus::Ok {
             continue;
         }
-        match p.channel.as_str() {
-            "rag" if !out.contains(&PreferredSource::Rag) => out.push(PreferredSource::Rag),
-            "web" if !out.contains(&PreferredSource::Web) => out.push(PreferredSource::Web),
+        match tr.tool.as_str() {
+            "dense_retrieval" => s.dense += 1,
+            "lexical_retrieval" => s.lexical += 1,
+            "doc_grep" => s.grep += 1,
             _ => {}
         }
     }
-    out
+    s
 }
 
+impl PriorToolStats {
+    fn render(&self) -> String {
+        format!(
+            "dense {} 次、lexical {} 次、grep {} 次",
+            self.dense, self.lexical, self.grep
+        )
+    }
+}
+
+/// Structural tool choice for the host re-brief leaf: first **unused** tool in
+/// preference order (dense covers natural-language sentences best, lexical
+/// exact terms, grep literal patterns); dense when all were tried. Pure
+/// function of host-known usage facts — no semantic judgment.
+fn rebrief_tool_choice(stats: PriorToolStats) -> &'static str {
+    if stats.dense == 0 {
+        "dense_retrieval"
+    } else if stats.lexical == 0 {
+        "lexical_retrieval"
+    } else if stats.grep == 0 {
+        "doc_grep"
+    } else {
+        "dense_retrieval"
+    }
+}
+
+/// Host structural re-brief (design W4 / D4 hard cap), facet-granular.
+///
+/// Only sub-tasks that **already produced a pack** and still have empty
+/// evidence are re-briefed. Sub-tasks Lead intentionally omitted (no pack)
+/// are **not** invented — fixes unwrap_or(true) forced-dispatch bug.
+pub(super) fn packs_needing_rebrief(packs: &[EvidencePack]) -> Vec<String> {
+    packs
+        .iter()
+        .filter(|p| p.evidence.is_empty() || p.coverage == Coverage::Insufficient)
+        .map(|p| p.sub_task_id.clone())
+        .collect()
+}
+
+/// Build re-brief briefs targeting exactly the empty facets. One output brief
+/// per original brief, containing only its empty facets (ids preserved so the
+/// follow-up pack **replaces** the empty one at merge).
 fn host_rebrief_briefs(
-    query: &str,
-    channels: &[PreferredSource],
     prior: &[EvidencePack],
+    targets: &[String],
+    originals: &[TaskBrief],
 ) -> Vec<TaskBrief> {
-    let q = query.trim();
-    let boundaries = DEFAULT_BOUNDARIES.trim().to_string();
-    let grounding = DEFAULT_GROUNDING.trim().to_string();
     let mut out = Vec::new();
-    for ch in channels {
-        match ch {
-            PreferredSource::Rag => {
-                let gap = prior
-                    .iter()
-                    .find(|p| p.channel == "rag")
-                    .map(|p| p.gaps.as_str())
-                    .unwrap_or("empty");
-                out.push(TaskBrief {
-                    schema_version: "task_brief_v1".into(),
-                    original_query: q.into(),
-                    conversation_context_summary: format!("rebrief after: {gap}"),
-                    sub_task: SubTask {
-                        id: "t_rag_rebrief".into(),
-                        objective: format!("补检索知识库（lexical）：{q}"),
-                        boundaries: boundaries.clone(),
-                        preferred_source: PreferredSource::Rag,
-                        queries: vec![],
-                        max_steps: 2,
-                        success_criteria: "有可引用片段".into(),
-                    },
-                    output_schema: "evidence_pack_v1".into(),
-                    grounding_rule: grounding.clone(),
-                });
-            }
-            PreferredSource::Web => {
-                let gap = prior
-                    .iter()
-                    .find(|p| p.channel == "web")
-                    .map(|p| p.gaps.as_str())
-                    .unwrap_or("empty");
-                out.push(TaskBrief {
-                    schema_version: "task_brief_v1".into(),
-                    original_query: q.into(),
-                    conversation_context_summary: format!("rebrief after: {gap}"),
-                    sub_task: SubTask {
-                        id: "t_web_rebrief".into(),
-                        objective: format!("补检索网页：{q}"),
-                        boundaries: boundaries.clone(),
-                        preferred_source: PreferredSource::Web,
-                        queries: vec![q.to_string()],
-                        max_steps: 1,
-                        success_criteria: "有带 URL 的 snippet".into(),
-                    },
-                    output_schema: "evidence_pack_v1".into(),
-                    grounding_rule: grounding.clone(),
-                });
-            }
-            PreferredSource::BaseTools | PreferredSource::None => {}
+    for ob in originals {
+        let hit: Vec<crate::lead_workers::Facet> = ob
+            .sub_task
+            .effective_facets()
+            .into_iter()
+            .filter(|f| targets.iter().any(|t| t == &f.id))
+            .collect();
+        if hit.is_empty() {
+            continue;
         }
+        let gap = prior
+            .iter()
+            .find(|p| p.sub_task_id == hit[0].id)
+            .map(|p| p.gaps.as_str())
+            .unwrap_or("empty");
+        let mut b = ob.clone();
+        b.conversation_context_summary = format!("rebrief after: {gap}");
+        if !ob.sub_task.facets.is_empty() {
+            // Unscope facet ids ("{brief}/{facet}" → "{facet}") so the rebuilt
+            // brief re-scopes to the same pack slot.
+            let prefix = format!("{}/", ob.sub_task.id);
+            b.sub_task.facets = hit
+                .iter()
+                .map(|f| crate::lead_workers::Facet {
+                    id: f.id.strip_prefix(&prefix).unwrap_or(&f.id).to_string(),
+                    objective: f.objective.clone(),
+                })
+                .collect();
+        }
+        out.push(b);
     }
     out
 }
@@ -1330,6 +1423,9 @@ fn host_default_briefs(query: &str, caps: ActivatedCaps) -> Vec<TaskBrief> {
                 objective: format!("从知识库检索：{q}"),
                 boundaries: boundaries.clone(),
                 preferred_source: PreferredSource::Rag,
+                base_tool: String::new(),
+                base_tool_arg: String::new(),
+                facets: vec![],
                 queries: vec![],
                 max_steps: 4,
                 success_criteria: "有可引用片段".into(),
@@ -1349,6 +1445,9 @@ fn host_default_briefs(query: &str, caps: ActivatedCaps) -> Vec<TaskBrief> {
                 objective: format!("从网页检索：{q}"),
                 boundaries,
                 preferred_source: PreferredSource::Web,
+                base_tool: String::new(),
+                base_tool_arg: String::new(),
+                facets: vec![],
                 queries,
                 max_steps: 1,
                 success_criteria: "有带 URL 的 snippet".into(),
@@ -1449,12 +1548,8 @@ fn lexical_terms_from_query(query: &str) -> Vec<String> {
     }
 }
 
-fn evidence_from_tool_results(
-    trs: &[ToolResult],
-    start_alias: usize,
-) -> (Vec<EvidenceItem>, Vec<String>) {
+fn evidence_from_tool_results(trs: &[ToolResult], start_alias: usize) -> Vec<EvidenceItem> {
     let mut evidence = Vec::new();
-    let mut key_facts = Vec::new();
     // Alias numbering mirrors helpers::selected::alias_chunk_ids_in_order exactly:
     // every Ok, aliased-tool item with a non-empty chunk_id consumes one number
     // (even when its text is empty and yields no evidence item), so pack aliases
@@ -1508,9 +1603,6 @@ fn evidence_from_tool_results(
                 format!("chunk-{}", evidence.len() + 1)
             };
             let score = c.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
-            if key_facts.len() < 5 {
-                key_facts.push(text.chars().take(160).collect());
-            }
             evidence.push(EvidenceItem {
                 content: text,
                 source,
@@ -1520,10 +1612,10 @@ fn evidence_from_tool_results(
             });
         }
     }
-    (evidence, key_facts)
+    evidence
 }
 
-fn evidence_from_dense_tool(tr: &ToolResult, start_alias: usize) -> (Vec<EvidenceItem>, Vec<String>) {
+fn evidence_from_dense_tool(tr: &ToolResult, start_alias: usize) -> Vec<EvidenceItem> {
     evidence_from_tool_results(std::slice::from_ref(tr), start_alias)
 }
 
@@ -1563,11 +1655,14 @@ mod tests {
     use super::*;
 
     fn empty_pack(channel: &str) -> EvidencePack {
+        empty_pack_id(channel, "t")
+    }
+
+    fn empty_pack_id(channel: &str, sub_task_id: &str) -> EvidencePack {
         EvidencePack {
             schema_version: "evidence_pack_v1".into(),
-            sub_task_id: "t".into(),
+            sub_task_id: sub_task_id.into(),
             channel: channel.into(),
-            key_facts: vec![],
             evidence: vec![],
             coverage: Coverage::Insufficient,
             gaps: format!("{channel}_empty"),
@@ -1576,11 +1671,14 @@ mod tests {
     }
 
     fn partial_pack(channel: &str) -> EvidencePack {
+        partial_pack_id(channel, "t")
+    }
+
+    fn partial_pack_id(channel: &str, sub_task_id: &str) -> EvidencePack {
         EvidencePack {
             schema_version: "evidence_pack_v1".into(),
-            sub_task_id: "t".into(),
+            sub_task_id: sub_task_id.into(),
             channel: channel.into(),
-            key_facts: vec!["k".into()],
             evidence: vec![EvidenceItem {
                 content: "hit".into(),
                 source: "s1".into(),
@@ -1610,12 +1708,10 @@ mod tests {
             })),
             trace: None,
         };
-        let (evidence, key_facts) =
-            evidence_from_tool_results(std::slice::from_ref(&tr), 0);
+        let evidence = evidence_from_tool_results(std::slice::from_ref(&tr), 0);
         assert_eq!(evidence.len(), 1, "evidence: {evidence:?}");
         assert_eq!(evidence[0].source, "11111111-2222-3333-4444-555555555555");
         assert!(!evidence[0].alias.is_empty(), "alias must be assigned");
-        assert_eq!(key_facts.len(), 1);
     }
 
     #[test]
@@ -1627,7 +1723,7 @@ mod tests {
             data: Some(json!({ "chunks": [{ "chunk_id": "x", "text": "hi", "score": 0.5 }] })),
             trace: None,
         };
-        assert!(evidence_from_tool_results(std::slice::from_ref(&err_tr), 0).0.is_empty());
+        assert!(evidence_from_tool_results(std::slice::from_ref(&err_tr), 0).is_empty());
 
         let empty_text = ToolResult {
             tool: "lexical_retrieval".into(),
@@ -1636,7 +1732,7 @@ mod tests {
             data: Some(json!({ "chunks": [{ "chunk_id": "x", "text": "", "score": 0.5 }] })),
             trace: None,
         };
-        assert!(evidence_from_tool_results(std::slice::from_ref(&empty_text), 0).0.is_empty());
+        assert!(evidence_from_tool_results(std::slice::from_ref(&empty_text), 0).is_empty());
     }
 
     #[test]
@@ -1685,33 +1781,29 @@ mod tests {
 
     #[test]
     fn rebrief_when_empty_insufficient() {
-        let packs = vec![empty_pack("rag"), empty_pack("web")];
-        let ch = channels_needing_rebrief(&packs);
-        assert_eq!(ch.len(), 2);
-        assert!(ch.contains(&PreferredSource::Rag));
-        assert!(ch.contains(&PreferredSource::Web));
+        let packs = vec![empty_pack_id("rag", "t_rag"), empty_pack_id("web", "t_web")];
+        let ids = packs_needing_rebrief(&packs);
+        assert_eq!(ids, vec!["t_rag".to_string(), "t_web".to_string()]);
     }
 
     #[test]
     fn no_rebrief_when_partial_hits() {
         let packs = vec![partial_pack("rag"), partial_pack("web")];
-        let ch = channels_needing_rebrief(&packs);
-        assert!(ch.is_empty());
+        assert!(packs_needing_rebrief(&packs).is_empty());
     }
 
     #[test]
-    fn rebrief_only_empty_channel() {
-        let packs = vec![partial_pack("rag"), empty_pack("web")];
-        let ch = channels_needing_rebrief(&packs);
-        assert_eq!(ch, vec![PreferredSource::Web]);
+    fn rebrief_only_empty_facet() {
+        // 同一通道两个 facet 的 pack：只补空的那一路。
+        let packs = vec![partial_pack_id("rag", "t1/f1"), empty_pack_id("rag", "t1/f2")];
+        assert_eq!(packs_needing_rebrief(&packs), vec!["t1/f2".to_string()]);
     }
 
     #[test]
     fn no_rebrief_for_missing_pack_lead_omitted_channel() {
         // Lead dispatched web only; host must not invent rag re-brief.
         let packs = vec![partial_pack("web")];
-        let ch = channels_needing_rebrief(&packs);
-        assert!(ch.is_empty());
+        assert!(packs_needing_rebrief(&packs).is_empty());
     }
 
     #[test]
@@ -1724,24 +1816,121 @@ mod tests {
     }
 
     #[test]
-    fn rebrief_briefs_respect_cap() {
-        let prior = vec![empty_pack("web")];
-        let b = host_rebrief_briefs("q", &[PreferredSource::Web], &prior);
-        assert_eq!(b.len(), 1);
-        assert_eq!(b[0].sub_task.id, "t_web_rebrief");
-        assert!(validate_task_brief(
-            &b[0],
-            ActivatedCaps {
-                rag: false,
-                search: true
-            }
-        )
-        .is_ok());
+    fn merge_keeps_distinct_facets_of_same_channel() {
+        let mut packs = vec![partial_pack_id("rag", "t1/f1")];
+        merge_or_push_pack(&mut packs, partial_pack_id("rag", "t1/f2"));
+        assert_eq!(packs.len(), 2, "facet packs must coexist");
     }
 
     #[test]
-    fn max_rebrief_waves_is_one() {
-        assert_eq!(MAX_REBRIEF_WAVES, 1);
+    fn rebrief_rebuilds_only_empty_facet_with_same_slot() {
+        // 原始 brief：t1 带两个 facet；f2 空 → 补派 brief 只含 f2，且 scoped id 不变。
+        let mut brief = host_default_briefs(
+            "q",
+            ActivatedCaps {
+                rag: true,
+                search: false,
+            },
+        )
+        .remove(0);
+        brief.sub_task.id = "t1".into();
+        brief.sub_task.facets = vec![
+            crate::lead_workers::Facet {
+                id: "f1".into(),
+                objective: "侧 A".into(),
+            },
+            crate::lead_workers::Facet {
+                id: "f2".into(),
+                objective: "侧 B".into(),
+            },
+        ];
+        let prior = vec![
+            partial_pack_id("rag", "t1/f1"),
+            empty_pack_id("rag", "t1/f2"),
+        ];
+        let targets = packs_needing_rebrief(&prior);
+        let briefs = host_rebrief_briefs(&prior, &targets, &[brief]);
+        assert_eq!(briefs.len(), 1);
+        assert_eq!(briefs[0].sub_task.facets.len(), 1);
+        assert_eq!(briefs[0].sub_task.facets[0].id, "f2");
+        // 重新 scope 后仍是 t1/f2 → merge 时替换空槽位。
+        let eff = briefs[0].sub_task.effective_facets();
+        assert_eq!(eff[0].id, "t1/f2");
+    }
+
+    #[test]
+    fn rebrief_single_unit_clones_original_brief() {
+        let brief = host_default_briefs(
+            "q",
+            ActivatedCaps {
+                rag: false,
+                search: true,
+            },
+        )
+        .remove(0);
+        let prior = vec![empty_pack_id("web", "t_web")];
+        let targets = packs_needing_rebrief(&prior);
+        let briefs = host_rebrief_briefs(&prior, &targets, std::slice::from_ref(&brief));
+        assert_eq!(briefs.len(), 1);
+        assert_eq!(briefs[0].sub_task.id, "t_web");
+        assert!(
+            validate_task_brief(
+                &briefs[0],
+                ActivatedCaps {
+                    rag: false,
+                    search: true
+                }
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn rebrief_tool_choice_prefers_first_unused() {
+        use contracts::ToolStatus;
+        fn ok(tool: &str) -> ToolResult {
+            ToolResult {
+                tool: tool.into(),
+                version: "1.0".into(),
+                status: ToolStatus::Ok,
+                data: None,
+                trace: None,
+            }
+        }
+        // 全未用 → dense
+        assert_eq!(rebrief_tool_choice(prior_tool_stats(&[])), "dense_retrieval");
+        // lexical 已用且空 → dense（q14 死路场景：不再复读 lexical）
+        assert_eq!(
+            rebrief_tool_choice(prior_tool_stats(&[ok("lexical_retrieval"), ok("lexical_retrieval")])),
+            "dense_retrieval"
+        );
+        // dense 已用 → lexical
+        assert_eq!(
+            rebrief_tool_choice(prior_tool_stats(&[ok("dense_retrieval")])),
+            "lexical_retrieval"
+        );
+        // dense+lexical 已用 → grep
+        assert_eq!(
+            rebrief_tool_choice(prior_tool_stats(&[ok("dense_retrieval"), ok("lexical_retrieval")])),
+            "doc_grep"
+        );
+        // 全用过 → dense
+        assert_eq!(
+            rebrief_tool_choice(prior_tool_stats(&[
+                ok("dense_retrieval"),
+                ok("lexical_retrieval"),
+                ok("doc_grep"),
+            ])),
+            "dense_retrieval"
+        );
+        // Error 不计入「已用」
+        let mut err = ok("dense_retrieval");
+        err.status = ToolStatus::Error;
+        assert_eq!(rebrief_tool_choice(prior_tool_stats(&[err])), "dense_retrieval");
+    }
+
+    #[test]
+    fn max_rebrief_waves_is_one() {        assert_eq!(MAX_REBRIEF_WAVES, 1);
     }
 
     #[test]
@@ -1783,7 +1972,7 @@ mod tests {
             ]})),
             trace: None,
         };
-        let (evidence, _) = evidence_from_tool_results(std::slice::from_ref(&tr), 0);
+        let evidence = evidence_from_tool_results(std::slice::from_ref(&tr), 0);
         // orphan has text but no chunk_id → uncitable (no alias, no number consumed);
         // c2 consumes #2 but empty text yields no evidence item.
         let aliases: Vec<&str> = evidence.iter().map(|e| e.alias.as_str()).collect();
@@ -1800,7 +1989,7 @@ mod tests {
             data: Some(json!({"chunks": [{"chunk_id": "c4", "text": "delta"}]})),
             trace: None,
         };
-        let (evidence2, _) = evidence_from_tool_results(std::slice::from_ref(&tr2), 3);
+        let evidence2 = evidence_from_tool_results(std::slice::from_ref(&tr2), 3);
         assert_eq!(evidence2[0].alias, "#4");
     }
 

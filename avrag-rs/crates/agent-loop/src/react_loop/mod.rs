@@ -33,6 +33,7 @@ pub use agent_tools::rag_bridge;
 pub mod reasoning_emit;
 mod lead_plan;
 mod run_lead_workers;
+mod run_log;
 mod run_prepare;
 mod run_result;
 mod run_retrieval;
@@ -106,6 +107,17 @@ impl ReActLoop {
         } else {
             &self.synthesis_llm
         }
+    }
+
+    /// Override the **Worker-side** retrieve LLM (Worker SaC / retrieval-loop
+    /// turns; thinking stays forced off per product policy).
+    ///
+    /// The Lead's own turns — plan and synthesis — always use the constructor
+    /// client (synthesis thinking on, max). When never called, Worker turns
+    /// also use the constructor client (single-model default).
+    pub fn with_retrieve_llm(mut self, llm: Arc<LlmClient>) -> Self {
+        self.llm = Arc::new(llm.as_ref().clone().with_enable_thinking(false));
+        self
     }
 
     pub fn with_chat_persistence(

@@ -51,12 +51,12 @@ version: "2.2"
 | 较低 | 论坛灌水、纯营销落地页、来源不明转载 |
 
 - `boundaries` / `success_criteria` 可写明偏好领域（如「立项/投资论证」「数字化转型成熟度」），便于 Lead 规划 query 时带上质量词。  
-- 多来源冲突时，pack 的 key_facts 侧宜区分「官方表述」与「二手解读」；空命中 → `coverage: insufficient` + gaps。
+- 多来源冲突时，pack 的 evidence 侧宜区分「官方表述」与「二手解读」；空命中 → `coverage: insufficient` + gaps。
 
 ## 工作方式（环境）
 
 1. 按 objective / **双语** queries 检索（宿主叶子并行；常带 auto-scrape 厚 snippet）。  
-2. 过滤弱相关与明显无源/空 URL → 压成 key_facts + evidence。  
+2. 过滤弱相关与明显无源/空 URL → 压成 evidence。  
 3. 空结果 → `coverage: "insufficient"` + gaps。  
 4. pack 由**宿主**从搜索结果装配（无模型 pack 收束轮）。
 
@@ -67,7 +67,6 @@ version: "2.2"
   "schema_version": "evidence_pack_v1",
   "sub_task_id": "t1",
   "channel": "web",
-  "key_facts": ["仅来自网页回传的事实"],
   "evidence": [
     {
       "content": "snippet 或抽取要点",

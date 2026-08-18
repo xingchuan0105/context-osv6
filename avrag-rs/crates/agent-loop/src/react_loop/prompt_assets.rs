@@ -297,42 +297,112 @@ pub fn evidence_pack_observation(pack_json: &str) -> String {
     )
 }
 
-/// Aggregated coverage observation for Lead synthesize (`[coverage_aggregate]`).
-pub fn coverage_aggregate_observation(
-    n_packs: usize,
-    coverage_summary: &str,
-    gaps_summary: &str,
-    rebrief_used: u8,
-) -> String {
+/// Retrieval work-log projection for Lead synthesize (`[retrieval_worklog]`).
+///
+/// Projects the run event log's surface events (see `run_log`) into a
+/// chronological work log: original query → plan briefs → per-subtask
+/// findings → wave events. No counts, no coverage labels — volume is not
+/// evidence quality; the Lead judges logical completeness from what each
+/// subquery actually found.
+pub fn retrieval_worklog_observation(query: &str, log: &super::run_log::RunEventLog) -> String {
+    use super::run_log::RunEventKind;
+
+    let mut lines: Vec<String> = Vec::new();
+    for e in log.surface_events() {
+        match &e.event {
+            RunEventKind::PlanProposed {
+                used_host_fallback,
+                briefs,
+            } => {
+                let list = briefs
+                    .iter()
+                    .map(|b| format!("{}（{}）：{}", b.id, b.source, b.objective))
+                    .collect::<Vec<_>>()
+                    .join("；");
+                if *used_host_fallback {
+                    lines.push(format!("规划：Lead 规划未生效，宿主回退默认派工（{list}）。"));
+                } else {
+                    lines.push(format!("规划：{list}。"));
+                }
+            }
+            RunEventKind::PlanRepairRequested { reason, .. } => {
+                lines.push(format!("规划打回重出：{reason}。"));
+            }
+            RunEventKind::BriefRejected { id, source, reason } => {
+                lines.push(format!("brief {id}（{source}）未进入调度：{reason}。"));
+            }
+            RunEventKind::WorkerCompleted {
+                wave,
+                sub_task_id,
+                channel,
+                objective,
+                n_evidence,
+                gaps,
+            } => {
+                let wave_note = if *wave > 0 {
+                    format!("（第 {} 波补检）", wave + 1)
+                } else {
+                    String::new()
+                };
+                lines.push(format!("子任务 {sub_task_id}（{channel}）{wave_note}：{objective}"));
+                // 证据全文在对应 [evidence_pack] observation；工作日志不做
+                // 摘要——摘要是没有质量依据的第二事实源（key_facts 教训）。
+                if *n_evidence == 0 {
+                    lines.push("  未回传证据。".to_string());
+                }
+                let gaps = gaps.trim();
+                if !gaps.is_empty() {
+                    lines.push(format!("  缺口：{gaps}"));
+                }
+            }
+            RunEventKind::PackSuperseded { wave, channel } => {
+                lines.push(format!(
+                    "通道 {channel} 此前波次的结果已被第 {} 波补检取代。",
+                    wave + 1
+                ));
+            }
+            RunEventKind::RebriefWave { targets } => {
+                lines.push(format!(
+                    "宿主对以下子检索发起了一轮补检：{}。",
+                    targets.join("、")
+                ));
+            }
+            // Log-only kinds never reach this projection (filtered upstream).
+            _ => {}
+        }
+    }
+
     subst(
-        trim_body(loop_prompt!("coverage-aggregate.tmpl.md")),
+        trim_body(loop_prompt!("retrieval-worklog.tmpl.md")),
         &[
-            ("n_packs", &n_packs.to_string()),
-            ("coverage_summary", coverage_summary),
-            ("gaps_summary", gaps_summary),
-            ("rebrief_used", &rebrief_used.to_string()),
+            ("query", query),
+            ("log_lines", &lines.join("\n")),
         ],
     )
 }
 
 /// After Lead+Workers retrieve: environment fact before product synthesis.
-pub fn lead_workers_handoff_to_synthesis(n_packs: usize, coverage_summary: &str) -> String {
+pub fn lead_workers_handoff_to_synthesis(n_packs: usize) -> String {
     subst(
         trim_body(loop_prompt!("lead-workers-handoff-synthesis.tmpl.md")),
-        &[
-            ("n_packs", &n_packs.to_string()),
-            ("coverage_summary", coverage_summary),
-        ],
+        &[("n_packs", &n_packs.to_string())],
     )
 }
 
 /// Host structural re-brief wave observation (`[rebrief_wave]`).
-pub fn rebrief_wave_observation(rebrief_used: u8, channels: &str) -> String {
+pub fn rebrief_wave_observation(
+    rebrief_used: u8,
+    channels: &str,
+    prior_stats: &str,
+    tool: &str,
+) -> String {
     subst(
         trim_body(loop_prompt!("rebrief-wave.tmpl.md")),
         &[
             ("rebrief_used", &rebrief_used.to_string()),
             ("channels", channels),
+            ("prior_stats", prior_stats),
+            ("tool", tool),
         ],
     )
 }

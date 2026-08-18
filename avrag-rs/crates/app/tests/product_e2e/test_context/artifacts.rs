@@ -421,6 +421,7 @@ impl TestContext {
             }).unwrap_or_default(),
             "models": {
                 "agent_llm": std::env::var("AGENT_LLM_MODEL").unwrap_or_default(),
+                "retrieve_llm": std::env::var("RETRIEVE_LLM_MODEL").unwrap_or_default(),
                 "embedding": std::env::var("EMBEDDING_MODEL").unwrap_or_default(),
             },
             "extra": extra_value,

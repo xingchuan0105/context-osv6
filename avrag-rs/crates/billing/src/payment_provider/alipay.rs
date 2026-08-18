@@ -27,6 +27,17 @@ impl AlipayAdapter {
         Self { config, client }
     }
 
+    /// Active trade query for F2F reconciliation (pending QR poll path).
+    pub async fn client_query_trade(
+        &self,
+        out_trade_no: &str,
+    ) -> Result<Option<(String, i64)>, ProviderError> {
+        self.client
+            .query_trade(out_trade_no)
+            .await
+            .map_err(|error| ProviderError::Request(error.to_string()))
+    }
+
     /// F2F QR for wallet top-up (amount already resolved from pack fen).
     pub async fn client_create_topup_qr(
         &self,

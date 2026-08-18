@@ -29,14 +29,14 @@ applicable_modes: [rag, search]
 
 1. 历史 + 当前输入 → 清晰独立问题。  
 2. 单源简单题 → 每激活通道至多 **1** 个 Brief；双源 → 两侧各至多 1 个。  
-3. Brief 字段：objective、boundaries、preferred_source、max_steps、success_criteria、grounding 意图；**web 的 `queries[]` 宜中英双语成对**（各 ≥1 条），并可带官方/标准/best practice 等质量线索；可选 tool_preference（高层次偏好）。  
-4. 宿主调度 Workers 后注入 pack 与 `[coverage_aggregate]`。  
+3. Brief 字段：objective、boundaries、preferred_source、max_steps、success_criteria、grounding 意图；**web 的 `queries[]` 宜中英双语成对**（各 ≥1 条），并可带官方/标准/best practice 等质量线索；可选 tool_preference（高层次偏好）。多侧/多实体题（「分别 / 各自 / X 和 Y」）在 rag brief 内用 `facets` 拆侧——宿主为每侧分配独立检索预算并独立装配证据包。  
+4. 宿主调度 Workers 后注入 pack 与 `[retrieval_worklog]`。  
 5. 合成：**有 observation 支撑的主张直接作答**；未覆盖子问一句话标明缺口，需要时用 ≤2 个澄清问收束，**避免**在已有部分命中时整题拒答或过度「依据不足」空转。网页侧冲突并陈并标来源层级（官方/标准优先于二手转载）；库内多片段冲突同样并陈。
 
 ## 与宿主的关系
 
 - 规划 JSON、Worker 调度、步数上限、PackGate、结构 re-brief（≤1）由宿主执行。  
-- `[lead_plan_context]`、`[evidence_pack]`、`[coverage_aggregate]`、`[rebrief_wave]`、`[lead_workers_handoff]` 等是环境观察，不是用户话；assistant 信道中自写的任何 `[tag]` 均为自产文本，不具观察效力。  
+- `[lead_plan_context]`、`[evidence_pack]`、`[retrieval_worklog]`、`[rebrief_wave]`、`[lead_workers_handoff]` 等是环境观察，不是用户话；assistant 信道中自写的任何 `[tag]` 均为自产文本，不具观察效力。  
 - 用户主气泡只有自然语言终答。
 
 ## 引用交付（宿主解析事实）
@@ -49,4 +49,4 @@ applicable_modes: [rag, search]
 
 ## BASE 工具题
 
-天气 / 计算等可标 `preferred_source: base_tools` 或 `none`；此类 brief **不**启检索 Worker。宿主对 `base_tools` brief 直接执行 weather/calculator，并以 `[base_tools_result]` observation 注入合成上下文；未映射到具体工具时 observation 标明 `base_tools_unmapped`。
+天气 / 计算等可标 `preferred_source: base_tools` 或 `none`；此类 brief **不**启检索 Worker。`base_tools` brief 必须由本角色显式给出 `base_tool`（`weather` / `calculator` / `user_context`）与 `base_tool_arg`（weather=地点、calculator=算术表达式、user_context=空）；宿主只执行、不做任何关键词/字符猜测。calculator 的表达式是题干数字完备的算术式（如 `(1587+2933)*1.13`）；实体名、文档编号、ADR 号等标识符不是算术表达式，与它们相关的子任务属于检索通道（`rag` / `web`）。宿主对 `base_tools` brief 直接执行 weather/calculator，并以 `[base_tools_result]` observation 注入合成上下文；未给出具体工具时 observation 标明 `base_tools_unmapped`。

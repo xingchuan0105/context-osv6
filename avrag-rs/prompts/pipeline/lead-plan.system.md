@@ -22,6 +22,9 @@ description: "Lead plan JSON — third-person environment + schema (not a comman
       "objective": "自包含子目标",
       "boundaries": "检索边界说明",
       "preferred_source": "rag|web|base_tools|none",
+      "base_tool": "base_tools 时必填：weather|calculator|user_context",
+      "base_tool_arg": "base_tools 时必填：weather 为地点、calculator 为算术表达式、user_context 留空",
+      "facets": [{"id": "f1", "objective": "单侧自包含子目标"}],
       "tool_preference": "可选高层次工具偏好",
       "queries": ["web 可选 1-5 条 query"],
       "max_steps": 4,
@@ -31,14 +34,16 @@ description: "Lead plan JSON — third-person environment + schema (not a comman
 }
 ```
 
+`facets`（仅 `rag` brief 生效）：题面含「分别 / 各自 / X 和 Y / 对比」等多侧语义时，把每一侧拆成一条自包含 facet。宿主为每个 facet 分配**独立的检索步数预算**，逐 facet 顺序执行、逐 facet 装配证据包；某侧证据为空时宿主只对该 facet 补检一次。facet ≤ 4 条。
+
 ## 事实约束
 
 | 条件 | 结果 |
 |------|------|
-| 天气 / 计算 / 纯对话工具 | `preferred_source` 为 `base_tools` 或 `none`；`briefs` 可仅此一类 |
-| 需知识库事实 | 至多 **1** 条 `rag` brief |
+| 天气 / 计算 / 纯对话工具 | `preferred_source` 为 `base_tools` 或 `none`；`briefs` 可仅此一类。`base_tools` 必须同时给出 `base_tool`（`weather`/`calculator`/`user_context`）与 `base_tool_arg`（weather=地点、calculator=算术表达式、user_context=空）。calculator 的表达式是题干数字完备的算术式；实体名、文档编号、ADR 号等标识符不是算术表达式，与它们相关的子任务属于检索通道（`rag`/`web`） |
+| 需知识库事实 | 至多 **1** 条 `rag` brief；多侧/多实体题用 brief 内 `facets` 拆侧（每侧一条自包含 objective，≤4） |
 | 需网页事实 | 至多 **1** 条 `web` brief；`queries` 见下 |
-| dual 双源 | 两侧各至多 1 条（合计 ≤2 检索 brief） |
+| dual 双源（rag 与 search 同时激活） | 选择检索时 rag、web **各恰好 1 条**；只覆盖一侧的 plan 被宿主整组打回重规划——派工后被省略的通道对宿主不可见，不存在补派 |
 | 简单单源 | 1 个 brief 即可 |
 
 ### web brief 的 `queries[]`（宿主并行检索）

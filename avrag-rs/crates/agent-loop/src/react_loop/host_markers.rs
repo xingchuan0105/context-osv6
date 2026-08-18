@@ -185,9 +185,9 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         emitted_at: "prompts/loop/task-brief.tmpl.md",
     },
     HostMarker {
-        tag: "[coverage_aggregate]",
+        tag: "[retrieval_worklog]",
         forbidden_in_final: true,
-        emitted_at: "prompts/loop/coverage-aggregate.tmpl.md",
+        emitted_at: "prompts/loop/retrieval-worklog.tmpl.md",
     },
     HostMarker {
         tag: "[lead_workers_handoff]",

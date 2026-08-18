@@ -33,12 +33,15 @@ version: "2.1"
     "objective": "自包含子目标",
     "boundaries": "只检索与压缩证据；不撰写用户完整终答",
     "preferred_source": "rag | web | base_tools | none",
+    "base_tool": "base_tools 时必填：weather | calculator | user_context",
+    "base_tool_arg": "base_tools 时必填：weather=地点、calculator=算术表达式、user_context=空",
+    "facets": [{"id": "f1", "objective": "单侧自包含子目标（多侧题拆侧，仅 rag 生效，≤4）"}],
     "tool_preference": "可选：优先 dense+lexical / 优先 grep 等（高层次）",
     "queries": ["web 可选 1-5 条"],
     "max_steps": 4,
     "success_criteria": "完成判据"
   },
-  "grounding_rule": "key_facts 与 evidence 仅可来自本轮检索 observation",
+  "grounding_rule": "evidence 仅可来自本轮检索 observation",
   "output_schema": "evidence_pack_v1"
 }
 ```
@@ -50,7 +53,7 @@ version: "2.1"
 
 ## 合成侧
 
-- 读 `[coverage_aggregate]` 与各 pack。  
+- 读 `[retrieval_worklog]` 与各 pack——工作日志按发生顺序列出原始问题、每个子任务的目标与回传的关键事实；证据的逻辑完整性从这里读。  
 - overall insufficient 且无可用 evidence → 说明缺口并可澄清；**partial 有 evidence 时先答已覆盖部分**。  
 - BASE 工具 observation（`[base_tools_result]` / calculator / weather / user_context）在 status=ok 时即是作答材料，直接读结果写终答，不要复述「暂无法获取」。  
 - 用户主气泡：自然语言；无 pack JSON、无 host 标签。

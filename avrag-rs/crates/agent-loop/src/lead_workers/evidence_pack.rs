@@ -57,16 +57,25 @@ pub struct EvidencePack {
     pub sub_task_id: String,
     /// `rag` | `web`
     pub channel: String,
-    #[serde(default)]
-    pub key_facts: Vec<String>,
+    /// The single source of truth: full evidence items with aliases. There is
+    /// deliberately **no digest/summary field** — a host-made excerpt list
+    /// presented as "what was found" misleads the reader of the pack (the
+    /// coverage pseudo-label lesson); consumers read `evidence` directly.
     #[serde(default)]
     pub evidence: Vec<EvidenceItem>,
+    /// Host-internal gate signal (re-brief hard trigger). Never serialized:
+    /// the wire/LLM-facing pack carries evidence, not volume-derived labels.
+    #[serde(skip_serializing, default = "default_coverage")]
     pub coverage: Coverage,
     #[serde(default)]
     pub gaps: String,
     /// Model may send this; **host overwrites** via [`apply_pack_gate`].
     #[serde(default)]
     pub tool_ok_count: u32,
+}
+
+fn default_coverage() -> Coverage {
+    Coverage::Insufficient
 }
 
 /// Count Ok tool results (host-authoritative basis for `tool_ok_count`).
@@ -92,7 +101,6 @@ pub enum PackGateOutcome {
 /// - Overwrites `tool_ok_count` from host count (never trust model).
 /// - Drops evidence items with empty `source`.
 /// - Caps `coverage=sufficient` when `tool_ok_count == 0` or evidence empty after scrub.
-/// - Empty `key_facts` + sufficient → partial.
 pub fn apply_pack_gate(
     mut pack: EvidencePack,
     host_tool_ok_count: u32,
@@ -153,10 +161,6 @@ pub fn apply_pack_gate(
     if pack.tool_ok_count == 0 && cov == Coverage::Sufficient {
         cov = Coverage::Insufficient;
         reasons.push("sufficient_without_tool_ok");
-    }
-    if pack.key_facts.is_empty() && cov == Coverage::Sufficient {
-        cov = Coverage::Partial;
-        reasons.push("sufficient_without_key_facts");
     }
     // Zero Ok cannot claim sufficient; empty evidence already insufficient above.
     if pack.tool_ok_count == 0 && !pack.evidence.is_empty() {
@@ -226,7 +230,6 @@ mod tests {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: "t1".into(),
             channel: "rag".into(),
-            key_facts: vec!["a".into()],
             evidence: vec![item("doc1")],
             coverage: Coverage::Sufficient,
             gaps: String::new(),
@@ -247,7 +250,6 @@ mod tests {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: "t1".into(),
             channel: "web".into(),
-            key_facts: vec!["a".into()],
             evidence: vec![item("https://x")],
             coverage: Coverage::Sufficient,
             gaps: String::new(),
@@ -265,7 +267,6 @@ mod tests {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: "t1".into(),
             channel: "rag".into(),
-            key_facts: vec!["a".into()],
             evidence: vec![item("")], // dropped for empty source
             coverage: Coverage::Partial,
             gaps: String::new(),
@@ -287,7 +288,6 @@ mod tests {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: "t1".into(),
             channel: "rag".into(),
-            key_facts: vec!["a".into()],
             evidence: vec![item(""), item("doc1")],
             coverage: Coverage::Sufficient,
             gaps: String::new(),
@@ -304,7 +304,6 @@ mod tests {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: "t1".into(),
             channel: "web".into(),
-            key_facts: vec![],
             evidence: vec![],
             coverage: Coverage::Partial,
             gaps: String::new(),
@@ -333,7 +332,6 @@ mod tests {
             "schema_version": "evidence_pack_v1",
             "sub_task_id": "t1",
             "channel": "rag",
-            "key_facts": ["k"],
             "evidence": [{"content":"c","source":"d1","alias":"#1"}],
             "coverage": "sufficient",
             "gaps": "",
@@ -357,7 +355,6 @@ mod tests {
             schema_version: "evidence_pack_v1".into(),
             sub_task_id: "t1".into(),
             channel: "rag".into(),
-            key_facts: vec![],
             evidence: vec![],
             coverage: Coverage::Insufficient,
             gaps: "x".into(),

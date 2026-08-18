@@ -133,23 +133,17 @@ impl AlipayClient {
             .map_err(|e| anyhow!("alipay signature verification failed: {}", e))
     }
 
-    pub async fn create_precreate_order(
+    /// Signed openapi call. Common params go in the URL query string (Alipay
+    /// requirement); `biz_content` is JSON in that same query map.
+    async fn gateway_call(
         &self,
-        amount: &str,
-        subject: &str,
-        order_id: &str,
-        notify_url: &str,
-    ) -> Result<String> {
+        method: &str,
+        biz_content: serde_json::Value,
+        extra: &[(&str, String)],
+    ) -> Result<serde_json::Value> {
         if !self.config.alipay_enabled() {
             bail!("alipay_billing_unconfigured");
         }
-
-        let biz_content = serde_json::json!({
-            "out_trade_no": order_id,
-            "total_amount": amount,
-            "subject": subject,
-        })
-        .to_string();
 
         // Alipay expects Beijing time (UTC+8) regardless of server timezone.
         let timestamp = chrono::Utc::now()
@@ -159,14 +153,16 @@ impl AlipayClient {
 
         let mut params = vec![
             ("app_id".to_string(), self.config.alipay_app_id.clone()),
-            ("method".to_string(), "alipay.trade.precreate".to_string()),
+            ("method".to_string(), method.to_string()),
             ("charset".to_string(), "utf-8".to_string()),
             ("sign_type".to_string(), "RSA2".to_string()),
             ("timestamp".to_string(), timestamp),
             ("version".to_string(), "1.0".to_string()),
-            ("notify_url".to_string(), notify_url.to_string()),
-            ("biz_content".to_string(), biz_content),
+            ("biz_content".to_string(), biz_content.to_string()),
         ];
+        for (k, v) in extra {
+            params.push(((*k).to_string(), v.clone()));
+        }
 
         let sign = self.sign(&params)?;
         params.push(("sign".to_string(), sign));
@@ -184,13 +180,34 @@ impl AlipayClient {
         let status = response.status();
         let body = response.text().await?;
         if !status.is_success() {
-            bail!("alipay_precreate_failed: {body}");
+            bail!("alipay_gateway_http_failed method={method}: {body}");
         }
+        serde_json::from_str(&body)
+            .map_err(|e| anyhow!("alipay gateway response not json: {e}; body={body}"))
+    }
 
-        let json: serde_json::Value = serde_json::from_str(&body)?;
+    pub async fn create_precreate_order(
+        &self,
+        amount: &str,
+        subject: &str,
+        order_id: &str,
+        notify_url: &str,
+    ) -> Result<String> {
+        let json = self
+            .gateway_call(
+                "alipay.trade.precreate",
+                serde_json::json!({
+                    "out_trade_no": order_id,
+                    "total_amount": amount,
+                    "subject": subject,
+                }),
+                &[("notify_url", notify_url.to_string())],
+            )
+            .await?;
+
         let resp = json
             .get("alipay_trade_precreate_response")
-            .ok_or_else(|| anyhow!("alipay response missing precreate response: {}", body))?;
+            .ok_or_else(|| anyhow!("alipay response missing precreate response: {}", json))?;
 
         let code = resp.get("code").and_then(|c| c.as_str()).unwrap_or("");
         if code != "10000" {
@@ -205,5 +222,49 @@ impl AlipayClient {
             .to_string();
 
         Ok(qr_code)
+    }
+
+    /// Active reconciliation for F2F QR: when async notify is delayed/failed,
+    /// poll `alipay.trade.query` by merchant `out_trade_no`.
+    ///
+    /// Returns `Some((trade_status, paid_cents))` when Alipay knows the trade;
+    /// `None` when the trade is not found yet (buyer has not paid / QR still open).
+    pub async fn query_trade(&self, out_trade_no: &str) -> Result<Option<(String, i64)>> {
+        let json = self
+            .gateway_call(
+                "alipay.trade.query",
+                serde_json::json!({ "out_trade_no": out_trade_no }),
+                &[],
+            )
+            .await?;
+
+        let resp = json
+            .get("alipay_trade_query_response")
+            .ok_or_else(|| anyhow!("alipay response missing trade.query response: {}", json))?;
+
+        let code = resp.get("code").and_then(|c| c.as_str()).unwrap_or("");
+        // ACQ.TRADE_NOT_EXIST — buyer has not completed payment yet.
+        if code == "40004" {
+            let sub = resp.get("sub_code").and_then(|c| c.as_str()).unwrap_or("");
+            if sub == "ACQ.TRADE_NOT_EXIST" {
+                return Ok(None);
+            }
+        }
+        if code != "10000" {
+            let sub_msg = resp.get("sub_msg").and_then(|m| m.as_str()).unwrap_or("");
+            bail!("alipay trade.query failed: {sub_msg}");
+        }
+
+        let trade_status = resp
+            .get("trade_status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        let paid_cents = crate::types::BillingConfig::decimal_price_to_cents(
+            resp.get("total_amount")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default(),
+        );
+        Ok(Some((trade_status, paid_cents)))
     }
 }

@@ -79,6 +79,10 @@ pub enum IngestionError {
     /// ADR-0010: owner has no wallet balance for platform indexing (terminal — do not requeue).
     #[error("payer funds required: {0}")]
     PayerFundsRequired(String),
+    /// External OCR provider deterministically rejected the request (file over size
+    /// cap, bad auth, 4xx on submit/poll, …). Retrying cannot succeed — terminal.
+    #[error("OCR provider rejected request: {0}")]
+    OcrRejected(String),
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -127,6 +131,7 @@ impl IngestionError {
             Self::EmptyIndex { .. } => "empty_index",
             Self::SeedNotFound => "seed_not_found",
             Self::PayerFundsRequired(_) => "payer_funds_required",
+            Self::OcrRejected(_) => "ocr_rejected",
             Self::Internal(_) => "internal",
         }
     }
@@ -160,12 +165,18 @@ impl IngestionError {
             } => false,
             Self::InvalidId(_) => false,
             // Transient infra / parse / index: allow attempt budget.
+            Self::OcrRejected(_) => false,
             _ => true,
         }
     }
 
     pub fn payer_funds_required(message: impl ToString) -> Self {
         Self::PayerFundsRequired(message.to_string())
+    }
+
+    /// Terminal OCR provider rejection (over size cap, 4xx auth/reject, …). Do not requeue.
+    pub fn ocr_rejected(message: impl ToString) -> Self {
+        Self::OcrRejected(message.to_string())
     }
 
     pub fn storage(error: impl ToString) -> Self {
@@ -348,5 +359,14 @@ mod tests {
         assert!(!err.is_retryable());
         assert_eq!(err.class(), "payer_funds_required");
         assert!(matches!(err, IngestionError::PayerFundsRequired(_)));
+    }
+
+    #[test]
+    fn ocr_rejected_is_terminal() {
+        let err = IngestionError::ocr_rejected("file exceeds Paddle OCR max size");
+        assert!(!err.is_retryable(), "OCR rejection must not requeue");
+        assert_eq!(err.class(), "ocr_rejected");
+        assert!(matches!(err, IngestionError::OcrRejected(_)));
+        assert!(err.to_string().contains("file exceeds"));
     }
 }

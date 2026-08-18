@@ -146,9 +146,14 @@ pub const SDK_PRIMITIVES: &[SdkPrimitive] = &[
     SdkPrimitive {
         id: "grep",
         capability: SdkCapability::RAG,
-        docstring: "Line-level locate (coding-agent grep). Returns full payload: \
-            total_hits / returned / truncated / hits[{doc_id, line, text, before, after}]. \
-            total_hits is exact (host-counted) — use it; do not re-count or dedupe in code.",
+        docstring: "Line-level locate. pattern matches literally by default; when a literal pass \
+            yields zero hits and the pattern carries regex metacharacters (| .* + ? etc.), the \
+            host retries it once as a regular expression. matched_by in the payload states which \
+            semantics produced the result (substring / regex / regex_fallback). Returns full \
+            payload: total_hits / returned / truncated / matched_by / \
+            hits[{doc_id, line, text, before, after}] / chunks[{chunk_id, doc_id, text}] (full \
+            text of the chunks owning the hit lines). total_hits is exact (host-counted) and \
+            matches the semantics named by matched_by.",
         handler: "retrieval_grep",
         py_sig: "self, pattern, doc_ids=None, regex=False, context=0, max_hits=50",
         py_payload: "{\"pattern\": pattern, \"regex\": regex, \"context\": context, \"max_hits\": max_hits, **({\"doc_ids\": doc_ids} if doc_ids is not None else {})}",

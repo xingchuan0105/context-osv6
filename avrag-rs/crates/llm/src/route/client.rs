@@ -164,6 +164,18 @@ pub fn build_route_from_config(
     }
 }
 
+/// Wafer Zero Data Retention opt-in (deployment choice via `WAFER_ZDR=required`).
+pub(crate) fn apply_wafer_zdr_header(config: &crate::ModelProviderConfig, headers: &mut HeaderMap) {
+    if config.base_url.to_ascii_lowercase().contains("wafer")
+        && std::env::var("WAFER_ZDR").ok().as_deref() == Some("required")
+    {
+        headers.insert(
+            reqwest::header::HeaderName::from_static("wafer-zdr"),
+            reqwest::header::HeaderValue::from_static("required"),
+        );
+    }
+}
+
 impl<P: Protocol> Route<P> {
     /// DashScope's Responses endpoint honors a session-cache header; without it
     /// the previous_response_id chain degrades to a full-context resend each turn.
@@ -197,6 +209,7 @@ impl<P: Protocol> Route<P> {
         let mut headers = HeaderMap::new();
         self.auth.apply(&mut headers);
         Self::apply_session_header(&req, &mut headers);
+        apply_wafer_zdr_header(&req.config, &mut headers);
         let body_value = serde_json::to_value(&body)
             .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 
@@ -235,6 +248,7 @@ impl<P: Protocol> Route<P> {
             let mut headers = HeaderMap::new();
             self.auth.apply(&mut headers);
             Self::apply_session_header(&req, &mut headers);
+            apply_wafer_zdr_header(&req.config, &mut headers);
             let body_value = serde_json::to_value(&body)
                 .map_err(|e| LlmError::parse(format!("failed to serialize completion body: {e}")))?;
 

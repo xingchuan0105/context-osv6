@@ -343,6 +343,13 @@ fn compact_tool_trace_entry(r: &contracts::ToolResult) -> serde_json::Value {
     let retrieval_path = data
         .and_then(|d| d.get("retrieval_path").and_then(|v| v.as_str()))
         .map(|s| s.to_string());
+    // grep 诊断（2026-08-17）：total_hits / matched_by / truncated 直接来自
+    // doc_grep payload——离线即可判「pattern 是否真的命中、按哪种语义命中」。
+    let grep_total_hits = data.and_then(|d| d.get("total_hits").and_then(|v| v.as_u64()));
+    let grep_matched_by = data
+        .and_then(|d| d.get("matched_by").and_then(|v| v.as_str()))
+        .map(|s| s.to_string());
+    let grep_truncated = data.and_then(|d| d.get("truncated").and_then(|v| v.as_bool()));
 
     // Prefer structured error fields; fall back to degrade_reason.
     let error = data
@@ -384,6 +391,9 @@ fn compact_tool_trace_entry(r: &contracts::ToolResult) -> serde_json::Value {
         "vgrag_evidence_raw_n": vgrag_evidence_raw_n,
         "vgrag_evidence_dropped": vgrag_evidence_dropped,
         "retrieval_path": retrieval_path,
+        "grep_total_hits": grep_total_hits,
+        "grep_matched_by": grep_matched_by,
+        "grep_truncated": grep_truncated,
         "error": error,
         "stderr": stderr,
     })
@@ -572,6 +582,29 @@ mod loop_observability_tests {
         assert!(err.chars().count() <= TOOL_TRACE_ERR_CAP + 1);
         assert!(err.ends_with('…'));
         assert_eq!(v["stderr"], "TypeError: boom");
+    }
+
+    #[test]
+    fn compact_tool_trace_captures_grep_diagnostics() {
+        let r = contracts::ToolResult {
+            tool: "doc_grep".to_string(),
+            version: "1.0".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "total_hits": 57,
+                "returned": 50,
+                "truncated": true,
+                "matched_by": "regex_fallback",
+                "request_pattern": "退市|停产|生命终止",
+                "request_regex": false,
+            })),
+            trace: None,
+        };
+        let v = compact_tool_trace_entry(&r);
+        assert_eq!(v["request"], "退市|停产|生命终止");
+        assert_eq!(v["grep_total_hits"], 57);
+        assert_eq!(v["grep_matched_by"], "regex_fallback");
+        assert_eq!(v["grep_truncated"], true);
     }
 }
 

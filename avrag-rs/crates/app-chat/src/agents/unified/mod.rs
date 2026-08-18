@@ -36,6 +36,10 @@ pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
     chat_llm_client: Option<LlmClient>,
     search_llm_client: Option<LlmClient>,
+    /// Optional Worker-side retrieve LLM (RETRIEVE_LLM_*). When set and the
+    /// request is not BYOK, Worker SaC / retrieval-loop turns use it; Lead
+    /// plan and synthesis stay on the main client (thinking max).
+    retrieve_llm_client: Option<LlmClient>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn SearchProvider>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
@@ -54,6 +58,7 @@ impl UnifiedAgent {
             llm_client,
             chat_llm_client,
             search_llm_client,
+            retrieve_llm_client: None,
             rag_runtime: None,
             search_executor: None,
             chat_persistence: None,
@@ -82,6 +87,11 @@ impl UnifiedAgent {
 
     pub fn with_usage_observer(mut self, observer: Arc<dyn UsageObserver>) -> Self {
         self.usage_observer = Some(observer);
+        self
+    }
+
+    pub fn with_retrieve_llm_client(mut self, client: Option<LlmClient>) -> Self {
+        self.retrieve_llm_client = client;
         self
     }
 
@@ -207,7 +217,7 @@ impl Agent for UnifiedAgent {
                         .or_else(|| self.llm_client.clone()),
                     byok.as_ref(),
                 );
-                self.run_react_mode("chat", llm, |lp| lp, request, sink, &tenant)
+                self.run_react_mode("chat", llm, byok.is_some(), |lp| lp, request, sink, &tenant)
                     .await
             }
             crate::agents::AgentKind::Rag => {
@@ -274,6 +284,7 @@ impl Agent for UnifiedAgent {
                 self.run_react_mode(
                     "rag",
                     llm,
+                    byok.is_some(),
                     |lp| {
                         let mut lp = lp.with_rag_runtime(Some(rag));
                         if let Some(search) = search_executor {
@@ -321,6 +332,7 @@ impl Agent for UnifiedAgent {
                 self.run_react_mode(
                     "search",
                     llm,
+                    byok.is_some(),
                     |lp| {
                         let mut lp = lp.with_search_executor(Some(search_executor));
                         if let Some(rag) = rag_for_dense {
@@ -353,6 +365,7 @@ impl UnifiedAgent {
         &self,
         mode_id: &str,
         llm_client: Option<LlmClient>,
+        byok_active: bool,
         configure_loop: impl FnOnce(agent_loop::r#loop::ReActLoop) -> agent_loop::r#loop::ReActLoop,
         request: AgentRequest,
         sink: &dyn AgentEventSink,
@@ -404,11 +417,37 @@ impl UnifiedAgent {
             }
         };
 
+        // Retrieve-phase model override: platform-configured fast model for
+        // Lead plan / Worker SaC / tool rounds. Skipped under BYOK so a
+        // user-key request stays entirely on the user's endpoint.
+        let retrieve_llm = if byok_active {
+            None
+        } else {
+            self.retrieve_llm_client.as_ref().map(|client| {
+                let client = client.clone().with_stage(&stage_id).with_request_context(
+                    request
+                        .session_id
+                        .as_deref()
+                        .and_then(|s| uuid::Uuid::parse_str(s).ok()),
+                    request.auth.request_id().map(|s| s.to_string()),
+                );
+                let client = if let Some(ref observer) = self.usage_observer {
+                    client.with_observer(observer.clone(), tenant.clone())
+                } else {
+                    client
+                };
+                Arc::new(client)
+            })
+        };
+
         let skill_registry = Arc::new(agent_tools::capability::CapabilityRegistry::standard());
-        let loop_agent = configure_loop(
-            agent_loop::r#loop::ReActLoop::new(llm, skill_registry)
-                .with_chat_persistence(self.chat_persistence.clone()),
-        );
+        let base_loop = agent_loop::r#loop::ReActLoop::new(llm, skill_registry)
+            .with_chat_persistence(self.chat_persistence.clone());
+        let base_loop = match retrieve_llm {
+            Some(retrieve) => base_loop.with_retrieve_llm(retrieve),
+            None => base_loop,
+        };
+        let loop_agent = configure_loop(base_loop);
         let mut result = loop_agent.run(&mode, request, sink).await?;
         result.routing_decision = Some(stage_id);
         Ok(result)

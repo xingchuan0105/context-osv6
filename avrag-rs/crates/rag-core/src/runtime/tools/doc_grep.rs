@@ -122,6 +122,88 @@ impl Matcher {
     }
 }
 
+/// Chars whose meaning differs between literal substring and regex matching.
+/// `/` is excluded on purpose: `S/A/B` separators are literal corpus text.
+const REGEX_METACHARS: &[char] = &[
+    '|', '.', '*', '+', '?', '(', ')', '[', ']', '{', '}', '^', '$', '\\',
+];
+
+fn contains_regex_metachar(pattern: &str) -> bool {
+    pattern.chars().any(|c| REGEX_METACHARS.contains(&c))
+}
+
+/// One full-corpus pass with a fixed matcher.
+struct GrepScan {
+    total_hits: usize,
+    hits: Vec<serde_json::Value>,
+    hit_chunk_ids: Vec<Uuid>,
+    truncated: bool,
+}
+
+fn scan_with_matcher(
+    views: &BTreeMap<Uuid, DocLines>,
+    matcher: &Matcher,
+    context: u32,
+    max_hits: usize,
+) -> GrepScan {
+    let mut scan = GrepScan {
+        total_hits: 0,
+        hits: Vec::new(),
+        hit_chunk_ids: Vec::new(),
+        truncated: false,
+    };
+    // 永远扫完全部行：total_hits 必须精确（计数语义），截断只影响返回条数。
+    for (doc_id, view) in views {
+        for (idx, (cid, line)) in view.lines.iter().enumerate() {
+            if !matcher.is_hit(line) {
+                continue;
+            }
+            scan.total_hits += 1;
+            if scan.hits.len() >= max_hits {
+                scan.truncated = true;
+                continue;
+            }
+            let (before, after) = context_window(&view.lines, idx, context);
+            scan.hit_chunk_ids.push(*cid);
+            scan.hits.push(json!({
+                "doc_id": doc_id.to_string(),
+                "line": idx + 1,
+                "text": clip(line),
+                "chunk_id": cid.to_string(),
+                "before": before,
+                "after": after,
+            }));
+        }
+    }
+    scan
+}
+
+/// Literal-first matching with an automatic regex retry (2026-08-17): callers
+/// that already hit literally keep their exact semantics; only a zero-hit
+/// literal pattern carrying regex metacharacters (`退市|停产` style, written by
+/// LLM workers out of grep -E habit) is rescanned once as a regex. An invalid
+/// regex (e.g. `C++`) leaves the literal zero-hit standing. `matched_by`
+/// reports which semantics produced the returned scan.
+fn scan_with_regex_fallback(
+    views: &BTreeMap<Uuid, DocLines>,
+    literal: Matcher,
+    pattern: &str,
+    context: u32,
+    max_hits: usize,
+) -> (GrepScan, &'static str) {
+    let scan = scan_with_matcher(views, &literal, context, max_hits);
+    if scan.total_hits > 0 || !contains_regex_metachar(pattern) {
+        return (scan, "substring");
+    }
+    match regex::Regex::new(pattern) {
+        Ok(re) => (
+            scan_with_matcher(views, &Matcher::Regex(re), context, max_hits),
+            "regex_fallback",
+        ),
+        Err(_) => (scan, "substring"),
+    }
+}
+
 fn resolve_doc_uuids(raw: &[String], tool: &str) -> Result<Vec<Uuid>, ToolResult> {
     if raw.is_empty() {
         return Err(super::error_result(
@@ -206,33 +288,20 @@ pub async fn run_grep(
         Err(r) => return r,
     };
 
-    let mut total_hits = 0usize;
-    let mut hits = Vec::new();
-    let mut hit_chunk_ids: Vec<Uuid> = Vec::new();
-    let mut truncated = false;
-    // 永远扫完全部行：total_hits 必须精确（计数语义），截断只影响返回条数。
-    for (doc_id, view) in &views {
-        for (idx, (cid, line)) in view.lines.iter().enumerate() {
-            if !matcher.is_hit(line) {
-                continue;
-            }
-            total_hits += 1;
-            if hits.len() >= max_hits {
-                truncated = true;
-                continue;
-            }
-            let (before, after) = context_window(&view.lines, idx, context);
-            hit_chunk_ids.push(*cid);
-            hits.push(json!({
-                "doc_id": doc_id.to_string(),
-                "line": idx + 1,
-                "text": clip(line),
-                "chunk_id": cid.to_string(),
-                "before": before,
-                "after": after,
-            }));
-        }
-    }
+    let (scan, matched_by) = if args.regex {
+        (
+            scan_with_matcher(&views, &matcher, context, max_hits),
+            "regex",
+        )
+    } else {
+        scan_with_regex_fallback(&views, matcher, &args.pattern, context, max_hits)
+    };
+    let GrepScan {
+        total_hits,
+        hits,
+        hit_chunk_ids,
+        truncated,
+    } = scan;
     let chunks = chunks_json_for_hits(&hit_chunk_ids, &views);
 
     ToolResult {
@@ -243,6 +312,7 @@ pub async fn run_grep(
             "total_hits": total_hits,
             "returned": hits.len(),
             "truncated": truncated,
+            "matched_by": matched_by,
             "hits": hits,
             "chunks": chunks,
             "request_pattern": args.pattern,
@@ -422,5 +492,89 @@ mod tests {
     fn clip_bounds_long_lines() {
         let long = "x".repeat(500);
         assert!(clip(&long).chars().count() <= MAX_LINE_CHARS + 1);
+    }
+
+    fn single_view(text: &str) -> BTreeMap<Uuid, DocLines> {
+        build_doc_line_views(vec![chunk(DOC, 1, 1, text)])
+    }
+
+    #[test]
+    fn literal_hit_keeps_substring_semantics() {
+        let views = single_view("plain\nhit line\nend");
+        let (scan, matched_by) =
+            scan_with_regex_fallback(&views, Matcher::Substring("hit".into()), "hit", 0, 50);
+        assert_eq!(matched_by, "substring");
+        assert_eq!(scan.total_hits, 1);
+        assert!(!scan.truncated);
+    }
+
+    #[test]
+    fn pipe_pattern_cjk_zero_literal_falls_back_to_regex() {
+        // run6 q82 形态：`退市|停产` 字面整串不存在 → regex OR 语义救活。
+        let views = single_view("产品退市方案\n停产日期\n无关行");
+        let (scan, matched_by) = scan_with_regex_fallback(
+            &views,
+            Matcher::Substring("退市|停产".into()),
+            "退市|停产",
+            0,
+            50,
+        );
+        assert_eq!(matched_by, "regex_fallback");
+        assert_eq!(scan.total_hits, 2);
+    }
+
+    #[test]
+    fn invalid_regex_keeps_literal_zero() {
+        // `+only`：字面不命中，且不是合法正则（量词开头）→ 字面 0 命中保留。
+        let views = single_view("plain line");
+        let (scan, matched_by) = scan_with_regex_fallback(
+            &views,
+            Matcher::Substring("+only".into()),
+            "+only",
+            0,
+            50,
+        );
+        assert_eq!(matched_by, "substring");
+        assert_eq!(scan.total_hits, 0);
+    }
+
+    #[test]
+    fn zero_hits_without_metachars_stays_substring() {
+        let views = single_view("plain line");
+        let (scan, matched_by) = scan_with_regex_fallback(
+            &views,
+            Matcher::Substring("missing".into()),
+            "missing",
+            0,
+            50,
+        );
+        assert_eq!(matched_by, "substring");
+        assert_eq!(scan.total_hits, 0);
+    }
+
+    #[test]
+    fn fallback_respects_max_hits_truncation() {
+        // 回退后 total_hits 仍按 regex 语义全量精确，截断只裁返回条数。
+        let views = single_view("a1\na2\na3\nb\na4");
+        let (scan, matched_by) = scan_with_regex_fallback(
+            &views,
+            Matcher::Substring("a[0-9]|b".into()),
+            "a[0-9]|b",
+            0,
+            3,
+        );
+        assert_eq!(matched_by, "regex_fallback");
+        // a[0-9] 命中 a1/a2/a3/a4，b 命中 b：total_hits 全量 = 5。
+        assert_eq!(scan.total_hits, 5);
+        assert_eq!(scan.hits.len(), 3);
+        assert!(scan.truncated);
+    }
+
+    #[test]
+    fn metachar_detection_excludes_slash() {
+        assert!(contains_regex_metachar("退市|停产"));
+        assert!(contains_regex_metachar("code_gen_query\\.rs"));
+        assert!(!contains_regex_metachar("S/A/B"));
+        assert!(!contains_regex_metachar("PAC- 100"));
     }
 }

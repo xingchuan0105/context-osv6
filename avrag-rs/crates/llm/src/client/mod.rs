@@ -582,6 +582,7 @@ impl LlmClient {
             .map_err(Self::map_route_error)?;
         let mut headers = reqwest::header::HeaderMap::new();
         openai_route.auth.apply(&mut headers);
+        crate::route::apply_wafer_zdr_header(&request.config, &mut headers);
         let body_value = serde_json::to_value(&body)
             .map_err(|e| anyhow::anyhow!("failed to serialize completion body: {e}"))?;
 

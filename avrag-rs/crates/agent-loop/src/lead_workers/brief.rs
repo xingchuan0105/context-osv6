@@ -38,14 +38,60 @@ pub struct SubTask {
     #[serde(default)]
     pub boundaries: String,
     pub preferred_source: PreferredSource,
+    /// Concrete BASE tool for `base_tools` briefs, chosen by the Lead LLM:
+    /// `weather` | `calculator` | `user_context`. Empty ⇒ host marks the brief
+    /// unmapped (no keyword/char guessing).
+    #[serde(default)]
+    pub base_tool: String,
+    /// Argument for the BASE tool: location for weather, expression for
+    /// calculator. Empty ⇒ host falls back to `objective`.
+    #[serde(default)]
+    pub base_tool_arg: String,
+    /// Multi-side retrieval units inside one brief. Non-empty ⇒ the Worker
+    /// runs each facet sequentially with its **own** step budget and the host
+    /// assembles one pack per facet (independent screening). Empty ⇒ single
+    /// unit covering `objective`.
+    #[serde(default)]
+    pub facets: Vec<Facet>,
     /// Web host fan-out queries; empty ⇒ host uses `original_query` alone.
     #[serde(default)]
     pub queries: Vec<String>,
-    /// Worker inner steps (SaC turns). Host clamps to [1, 5].
+    /// Worker inner steps (SaC turns) **per facet**. Host clamps to [1, 5].
     #[serde(default = "default_max_steps")]
     pub max_steps: u8,
     #[serde(default)]
     pub success_criteria: String,
+}
+
+/// One retrieval unit inside a brief: a self-contained single-side objective.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Facet {
+    pub id: String,
+    pub objective: String,
+}
+
+/// Product cap on facets per brief (cost wall; each facet = one budgeted run).
+pub const MAX_FACETS: usize = 4;
+
+impl SubTask {
+    /// Facets to execute: explicit list, or the objective itself as one unit.
+    /// Facet ids are scoped as `{sub_task_id}/{facet_id}` when explicit so
+    /// packs from different facets of the same channel stay distinct.
+    pub fn effective_facets(&self) -> Vec<Facet> {
+        if self.facets.is_empty() {
+            return vec![Facet {
+                id: self.id.clone(),
+                objective: self.objective.clone(),
+            }];
+        }
+        self.facets
+            .iter()
+            .map(|f| Facet {
+                id: format!("{}/{}", self.id, f.id),
+                objective: f.objective.clone(),
+            })
+            .collect()
+    }
 }
 
 fn default_max_steps() -> u8 {
@@ -192,6 +238,9 @@ mod tests {
                 objective: "检索 BYOK 定义".into(),
                 boundaries: "只检索".into(),
                 preferred_source: source,
+                base_tool: String::new(),
+                base_tool_arg: String::new(),
+                facets: vec![],
                 queries: vec![],
                 max_steps: 4,
                 success_criteria: "有定义句".into(),

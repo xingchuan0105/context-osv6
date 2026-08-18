@@ -31,6 +31,7 @@ pub fn make_llm_client(
 
 pub fn build_unified_agent_service(
     llm_client: Option<LlmClient>,
+    retrieve_llm_client: Option<LlmClient>,
     search_executor: Option<Arc<SearchExecutor>>,
     rag_runtime: Option<Arc<RagRuntime>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
@@ -39,6 +40,7 @@ pub fn build_unified_agent_service(
 ) -> Arc<UnifiedAgentService> {
     build_unified_agent_service_with_secrets(
         llm_client,
+        retrieve_llm_client,
         search_executor,
         rag_runtime,
         chat_persistence,
@@ -50,6 +52,7 @@ pub fn build_unified_agent_service(
 
 pub fn build_unified_agent_service_with_secrets(
     llm_client: Option<LlmClient>,
+    retrieve_llm_client: Option<LlmClient>,
     search_executor: Option<Arc<SearchExecutor>>,
     rag_runtime: Option<Arc<RagRuntime>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
@@ -61,6 +64,7 @@ pub fn build_unified_agent_service_with_secrets(
         search_executor.map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
     let mut agent = app_chat::agents::unified::UnifiedAgent::new(llm_client.clone(), None, None)
+        .with_retrieve_llm_client(retrieve_llm_client)
         .with_rag_runtime(rag_runtime)
         .with_search_executor(search_provider)
         .with_chat_persistence(chat_persistence)

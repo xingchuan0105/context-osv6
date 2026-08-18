@@ -110,10 +110,6 @@ impl ReActLoop {
             .await;
         }
 
-        // Pure-chat / SaC path: host structural BASE utilities (calc / weather /
-        // local clock) so the model is not the only path to invoke them.
-        self.host_inject_utility_if_needed(request, state).await;
-
         loop {
             if cancel.is_cancelled() {
                 break;

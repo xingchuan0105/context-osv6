@@ -37,13 +37,9 @@ pub(crate) async fn execute_local_parse(
                     })?;
             // 扫描检测：liteparse 提取近空 → 整本转 PaddleOCR，避免 EmptyIndex 死档。
             if ingestion::parser::is_scanned_markdown(&markdown) {
-                let ocr_ir = pdf::execute_paddle_ocr_pdf(bytes, filename, document_id)
-                    .await
-                    .map_err(|error| {
-                        IngestionError::parse(format!(
-                            "scanned PDF paddle OCR failed for {filename}: {error}"
-                        ))
-                    })?;
+                // Propagate Paddle OCR errors as-is so terminal rejections (OcrRejected)
+                // are not downgraded to retryable parse errors.
+                let ocr_ir = pdf::execute_paddle_ocr_pdf(bytes, filename, document_id).await?;
                 return Ok((ocr_ir, None));
             }
             Ok((ir, Some(markdown)))

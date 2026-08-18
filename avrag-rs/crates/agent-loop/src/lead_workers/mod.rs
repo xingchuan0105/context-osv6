@@ -8,8 +8,8 @@ mod plan_context;
 mod web_merge;
 
 pub use brief::{
-    ActivatedCaps, PreferredSource, SubTask, TaskBrief, TaskBriefGateError, effective_web_queries,
-    validate_task_brief,
+    ActivatedCaps, Facet, MAX_FACETS, PreferredSource, SubTask, TaskBrief, TaskBriefGateError,
+    effective_web_queries, validate_task_brief,
 };
 pub use evidence_pack::{
     Coverage, EvidenceItem, EvidencePack, PackGateOutcome, apply_pack_gate, count_tool_ok,

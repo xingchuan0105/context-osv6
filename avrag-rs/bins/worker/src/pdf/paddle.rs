@@ -46,10 +46,9 @@ pub async fn execute_paddle_ocr_image(
     let config = PaddleOcrConfig::from_env()
         .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
     let client = PaddleOcrClient::new(config);
-    let page_result = client
-        .ocr_image_bytes(bytes, filename)
-        .await
-        .map_err(|e| IngestionError::parse(format!("PaddleOCR image job failed: {e}")))?;
+    // Propagate the client error as-is so terminal OCR rejections
+    // (OcrRejected) are not downgraded to retryable parse errors.
+    let page_result = client.ocr_image_bytes(bytes, filename).await?;
 
     let table_pages = std::collections::HashSet::new();
     let mut ir = build_document_ir_from_paddle(
@@ -71,10 +70,7 @@ pub async fn execute_paddle_ocr_pdf(
     let config = PaddleOcrConfig::from_env()
         .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
     let client = PaddleOcrClient::new(config);
-    let pages = client
-        .ocr_pdf_bytes(bytes, 1)
-        .await
-        .map_err(|e| IngestionError::parse(format!("PaddleOCR PDF job failed: {e}")))?;
+    let pages = client.ocr_pdf_bytes(bytes, 1).await?;
 
     let table_pages = std::collections::HashSet::new();
     let mut ir = build_document_ir_from_paddle(document_id, filename, &pages, &table_pages);

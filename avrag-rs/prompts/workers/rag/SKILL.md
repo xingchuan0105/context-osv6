@@ -39,7 +39,7 @@ version: "2.1"
 
 1. 读 Brief。  
 2. 按 objective 与 tool_preference 选工具（可并行）。  
-3. 检索 → 过滤弱相关 → 压成 key_facts + evidence 语义等价物（宿主最终装配）。  
+3. 检索 → 过滤弱相关 → 压成 evidence 语义等价物（宿主最终装配）。  
 4. 自检：success_criteria 是否已有 observation 支撑；是否仍有可尝试的工具。  
 5. 够了或步数将尽 → 停止写代码；**宿主**从 ToolResults 装配 pack（无模型 pack 收束轮）。
 
@@ -52,7 +52,6 @@ version: "2.1"
   "schema_version": "evidence_pack_v1",
   "sub_task_id": "t1",
   "channel": "rag",
-  "key_facts": ["仅来自检索的事实"],
   "evidence": [
     {
       "content": "原文关键片段或高密度摘要",
@@ -69,5 +68,5 @@ version: "2.1"
 ```
 
 - 不依赖自报「仅用了检索内容」类布尔字段；宿主用 `tool_ok_count` 与有源 evidence 校验。  
-- 空命中对应 `insufficient`，不编造 key_facts。  
+- 空命中对应 `insufficient`，不编造 evidence。  
 - 宿主**不**在 SaC 失败/空 Ok 时另接 host dense 补救；缺口进入 pack 供 Lead 阅读。

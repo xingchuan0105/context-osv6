@@ -6,10 +6,12 @@ pub(super) async fn claim_webhook_with_lease(
     let mut tx = repo.raw().begin().await?;
     set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
 
+    // event_type is NOT NULL (0007_billing); omitting it makes every webhook 500
+    // after signature verification — Alipay notify never marks orders paid.
     sqlx::query(
         r#"
-        INSERT INTO webhook_events (provider, event_id, status, created_at, updated_at)
-        VALUES ($1, $2, 'pending', NOW(), NOW())
+        INSERT INTO webhook_events (provider, event_id, event_type, status, created_at, updated_at)
+        VALUES ($1, $2, 'provider.delivery', 'pending', NOW(), NOW())
         ON CONFLICT (provider, event_id) DO NOTHING
         "#,
     )
