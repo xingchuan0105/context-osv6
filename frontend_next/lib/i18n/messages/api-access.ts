@@ -117,12 +117,12 @@ export const apiAccessMessages = {
     en: "Revoking…",
   },
   "apiAccess.agentTitle": {
-    zh: "给 Agent 用",
-    en: "For agents",
+    zh: "接入本工作区（给 Agent）",
+    en: "Connect this workspace (for agents)",
   },
   "apiAccess.agentSubtitle": {
-    zh: "把本工作区交给 Claude Code / Codex / Cursor：先创建密钥（上方），再复制下列字段与 MCP 配置。",
-    en: "Hand this workspace to Claude Code / Codex / Cursor: create a key above, then copy fields and MCP config.",
+    zh: "创建密钥后，一次复制完整接入包，粘贴给 Cursor / Claude / 外接 Agent 即可连接。",
+    en: "After creating a key, copy the full agent pack once and paste it into Cursor / Claude / an external agent.",
   },
   "apiAccess.agentDesktopHint": {
     zh: "本机客户端默认 API 为 127.0.0.1:18080；请先确认客户端栈已启动。",
@@ -131,6 +131,30 @@ export const apiAccessMessages = {
   "apiAccess.agentCloudHint": {
     zh: "云端与本机使用同一 MCP 工具表，仅 base URL 不同。",
     en: "Cloud and local use the same MCP tool table; only the base URL differs.",
+  },
+  "apiAccess.copyPack": {
+    zh: "复制完整接入包",
+    en: "Copy full agent pack",
+  },
+  "apiAccess.copyPackDisabled": {
+    zh: "先创建密钥",
+    en: "Create a key first",
+  },
+  "apiAccess.packReady": {
+    zh: "已含本次密钥，可直接交给 Agent。",
+    en: "Includes this session’s key — ready to hand to an agent.",
+  },
+  "apiAccess.packNeedKey": {
+    zh: "请先在上方创建工作区密钥，主按钮才会启用。",
+    en: "Create a workspace key above to enable the primary copy action.",
+  },
+  "apiAccess.packCopied": {
+    zh: "已复制完整接入包，可粘贴给 Agent",
+    en: "Full agent pack copied — paste into your agent",
+  },
+  "apiAccess.packPreviewTitle": {
+    zh: "接入包预览",
+    en: "Pack preview",
   },
   "apiAccess.copy": {
     zh: "复制",
@@ -152,21 +176,29 @@ export const apiAccessMessages = {
     zh: "复制失败，请手动选择 {label}",
     en: "Copy failed; select {label} manually",
   },
+  "apiAccess.advancedTitle": {
+    zh: "高级",
+    en: "Advanced",
+  },
+  "apiAccess.advancedHint": {
+    zh: "单字段复制、用户态 token、探测说明。日常接入用上方完整包即可。",
+    en: "Per-field copy, user agent token, probes. Day-to-day setup uses the full pack above.",
+  },
   "apiAccess.mcpSnippetTitle": {
     zh: "stdio MCP 配置片段",
     en: "stdio MCP snippet",
   },
   "apiAccess.mcpSnippetHint": {
-    zh: "粘贴到 Claude Code / Cursor 的 MCP 配置；将 command 换成本机 context-os-mcp 路径，密钥用上方一次性明文替换。",
-    en: "Paste into Claude Code / Cursor MCP config; set command to your local context-os-mcp path and replace the key with the one-time plaintext above.",
+    zh: "已含于完整接入包；需要单独复制时用此按钮。",
+    en: "Already included in the full pack; use this to copy JSON alone.",
   },
   "apiAccess.agentTokenTitle": {
-    zh: "用户态 agent token（建库）",
-    en: "User agent token (create workspace)",
+    zh: "用户态 agent token（建库 / 分享工具）",
+    en: "User agent token (create workspace / share tools)",
   },
   "apiAccess.agentTokenHint": {
-    zh: "短时用户 JWT（默认 120 分钟）。export 为 CONTEXT_OS_USER_TOKEN 后可用 context-os workspace create；工作区密钥仍不能建库。分享仍走 UI。",
-    en: "Short-lived user JWT (default 120 min). Export as CONTEXT_OS_USER_TOKEN for context-os workspace create; workspace keys cannot create workspaces. Sharing stays in the UI.",
+    zh: "短时用户 JWT（默认 120 分钟）。工作区密钥不能建库或管分享；仅高级自动化需要。",
+    en: "Short-lived user JWT (default 120 min). Workspace keys cannot create workspaces or manage share; advanced only.",
   },
   "apiAccess.mintToken": {
     zh: "签发 2h token",
@@ -185,41 +217,26 @@ export const apiAccessMessages = {
     en: "Minted agent token",
   },
   "apiAccess.agentProbeNote": {
-    zh: "探活：context-os status。本机桌面可 context-os auth from-desktop --save 写入 ~/.config/context-os/user.token（CLI/MCP 自动加载）。脚本：context-os ingest / ask / share enable（需 user token）。工具参数 workspace_id 须与本页一致。",
-    en: "Probe: context-os status. On desktop, context-os auth from-desktop --save writes ~/.config/context-os/user.token (auto-loaded by CLI/MCP). Scripts: context-os ingest / ask / share enable (user token). Tool args must use this page’s workspace_id.",
+    zh: "探活：context-os status。本机可 context-os auth from-desktop --save。工具参数 workspace_id 须与本页一致。",
+    en: "Probe: context-os status. Desktop: context-os auth from-desktop --save. Tool args must use this page’s workspace_id.",
   },
   "apiAccess.docsTitle": {
-    zh: "给 LLM Agents",
-    en: "For LLM agents",
+    zh: "说明链接",
+    en: "Documentation",
   },
   "apiAccess.docsSubtitle": {
-    zh: "给要接入这个工作区的 agent 看的入口卡。先理解边界，再读取稳定文档。",
-    en: "Onboarding card for agents connecting to this workspace. Read the boundary first, then the stable doc.",
+    zh: "连接优先；文档作补强。链接均为绝对地址。",
+    en: "Connect first; docs are secondary. Links are absolute.",
   },
-  "apiAccess.docsOrderTitle": {
-    zh: "推荐顺序",
-    en: "Suggested order",
+  "apiAccess.docsHumanLabel": {
+    zh: "给人类",
+    en: "For humans",
   },
-  "apiAccess.docsOrderBody": {
-    zh: "如果 agent 要直连这个工作区，先读人类说明确认作用域，再读取稳定 agent 文档执行。",
-    en: "If an agent connects directly, read the human guide for scope, then the stable agent doc to execute.",
+  "apiAccess.docsAgentLabel": {
+    zh: "给 Agent",
+    en: "For agents",
   },
-  "apiAccess.docsStep1Title": {
-    zh: "先读说明页",
-    en: "Read the guide first",
-  },
-  "apiAccess.docsStep1Body": {
-    zh: "看清支持范围、认证方式，以及工作区与 workspace_id 的映射。",
-    en: "Confirm scope, auth, and the workspace ↔ workspace_id mapping.",
-  },
-  "apiAccess.docsStep2Title": {
-    zh: "再读稳定 agent 文档",
-    en: "Then the stable agent doc",
-  },
-  "apiAccess.docsStep2Body": {
-    zh: "这份链接适合 agent 直接抓取，内容更短，也更适合程序化读取。",
-    en: "This link is short and stable for agents to fetch programmatically.",
-  },
+
   "apiAccess.errMissingWorkspaceId": {
     zh: "工作区 ID 缺失，未发起 API 请求。请检查路由参数。",
     en: "Missing workspace id; no API call was made. Check the route.",

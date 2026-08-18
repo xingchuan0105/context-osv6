@@ -1,7 +1,7 @@
 # Context LM / Context OS — GEO & SEO 优化方案
 
-**日期**: 2026-08-11  
-**状态**: Active plan（基于 GEOHub 0.3.1 实测；按 PR 切片落地。2026-08-11 复审决策已并入：A2 选定 SSR 摘要、Phase C 内容宿主已定、A4 实为从零创建）  
+**日期**: 2026-08-11（初版）· **GEOHub 复测 2026-08-12**（§14）· **Phase B §15** · **Phase C §16**  
+**状态**: Active plan — Phase A/B/C 已部署；GSC D1 用户已确认完成（§17）；D2 月度抽检仍开；CF robots 用户侧已关  
 **范围**: 公开站点与文档面（`contextlm.top`、`app.contextlm.top` 的公开路由）  
 **非目标**: 保证搜索排名/AI 引用率；自动改 CMS；GSC/Analytics 账号操作  
 
@@ -14,27 +14,26 @@
 | 工具 | [GEOHub](https://github.com/yaojingang/GEOHub) v0.3.1（本地：`/home/chuan/GEOHub`） |
 | GEO | Generative Engine Optimization：提升在 AI 回答中的**可引用 / 可抽取**就绪度 |
 | SEO | 传统技术与内容规划（本轮 SEO skill 为 **advisory / 只读计划**） |
-| 分析产物 | `/home/chuan/GEOHub/runs/contextlm/` |
+| 分析产物 | 基线：`runs/contextlm/` · 复测：`runs/contextlm-2026-08-12/` |
 
-### 1.1 本轮运行 ID
+### 1.1 运行 ID
 
-| 能力 | Run ID | 主要内容 |
-|------|--------|----------|
-| `geo-diagnose` | `run-b664673877e5` | 5 URL 抓取 + 诊断报告 `report.md` |
-| `seo` | `run-cd08db440bd7` | 技术审计模式行动计划 `seo-plan.json` |
-| `geo-discover` | `run-ae2f5a18bf60` | 180 条问题地图 + 机会表 |
+| 能力 | 基线 2026-08-11 | 复测 2026-08-12 | 主要内容 |
+|------|-----------------|-----------------|----------|
+| `geo-diagnose` | `run-b664673877e5` | **`run-62645983aca5`** | 5 URL 抓取 + `report.md` |
+| `seo` | `run-cd08db440bd7` | `run-cd08db440bd7`（新目录复跑） | 技术审计计划 |
+| `geo-discover` | `run-ae2f5a18bf60` | （本轮未重跑） | 180 条问题地图 |
 
 复跑：
 
 ```bash
 cd /home/chuan/GEOHub
 .venv/bin/geo-seo-hub diagnose \
-  --input /tmp/geohub-briefs/diagnose-contextlm.json \
-  --output runs/contextlm
+  --input /home/chuan/context-osv6/docs/plans/geo-seo-briefs/diagnose-contextlm.json \
+  --output runs/contextlm-2026-08-12
 ```
 
-Brief 模板见同次会话生成的 `/tmp/geohub-briefs/*.json`；建议迁入仓库 `docs/plans/geo-seo-briefs/` 以便复现（可选后续 PR）。
-
+Brief：`docs/plans/geo-seo-briefs/*.json`。
 ---
 
 ## 2. 审计范围与抓取结果
@@ -234,7 +233,7 @@ robots / sitemap / canonical / 索引边界
 | canonical | 每公开页唯一 | HTML link |
 | 状态码 | 无软 404；帮助旧链 307/301 正确 | curl / GSC |
 | host 规范化 | apex `contextlm.top` ↔ `www.contextlm.top` 301 到唯一首选域（`site-map.ts` 默认 `www`，审计用 apex；per-page canonical 生效前提） | curl -I 两域 |
-| AI crawler | robots.txt 明示允许 GPTBot / ClaudeBot / PerplexityBot 等（GEO 目标 = 被引用）；私有路径统一 disallow。**注意（2026-08-12 实测）**：Cloudflare 托管 robots 块（AI Crawl Control）在文件头部注入 GPTBot / ClaudeBot / Google-Extended 等 `Disallow: /`，需在 CF 控制台关闭或放行，否则应用层规则被抢先生效 | robots.txt 正文 |
+| AI / 国内 crawler | robots 明示允许：欧美 AI（GPTBot / ClaudeBot / PerplexityBot / Google-Extended 等）+ 国内（Baiduspider / Bytespider / Sogou / YisouSpider / 360Spider 等）；私有路径统一 disallow。DeepSeek/豆包对话无稳定公开 UA → 走 `*`。**注意（2026-08-12）**：CF AI Crawl Control 曾注入 Disallow，用户侧已关 | robots.txt 正文 |
 | llms.txt | app route 提供 llms.txt 索引（`app/llms.txt/route.ts`；public/ 在 standalone 部署不对外服务） | /llms.txt 200 |
 | 索引边界 | 登录后 dashboard **不**进 sitemap | 代码审查 |
 | 国际化 | hreflang 或明确单语默认（若中英并存） | 页面策略文档 |
@@ -323,8 +322,382 @@ cd /home/chuan/GEOHub
 
 **跟进（2026-08-12）**：已部署 rev `978de4c1+dirty`，生产实测 `/` 339 字 + canonical、`/help/api-access` 644 字 + canonical、`/pricing` 797 字 + canonical、robots/sitemap 200。llms.txt 改走 `app/llms.txt/route.ts`（standalone 不服务 public/）。发现 Cloudflare 托管 robots 块注入 AI bot `Disallow: /`（见 §8 / §10），待 CF 控制台处理。
 
-1. **工程**：~~A1 + A3 + A2~~ 已落地（见执行记录）；下次部署后用 GEOHub diagnose 复跑 5 URL 并归档 run_id。  
+1. **工程**：~~A1 + A3 + A2~~ 已落地；**2026-08-12 GEOHub 复测已归档**（§14，run `run-62645983aca5`）。  
 2. **内容**：一篇「MCP/Agent 接入」落地 + 一篇中立对比大纲（先中文）。  
-3. **运维**：GSC 接入后把本文件 §9 表补上真实基线。  
+3. **运维**：GSC 接入；`contextlm.top` canonical + sitemap；CF robots AI bot 策略。  
+4. **Phase B**：定价/帮助 authority + freshness（更新日、组织身份）；app 首页 H2。  
 
 文档状态随 PR 关闭更新：完成项在 §7 打勾，并追加复跑 run_id。
+
+---
+
+## 14. 复测记录（2026-08-12）
+
+同一 brief 重跑 GEOHub diagnose，与 08-11 基线对比。
+
+- Run：`/home/chuan/GEOHub/runs/contextlm-2026-08-12/run-62645983aca5/`
+- 部署 rev：`5e0c12ee+dirty`（Phase A 上线后）
+
+### 14.1 站点分对比
+
+| 维度 | 基线（08-11） | 复测（08-12） | Δ |
+|------|-----:|-----:|---:|
+| Discoverability | 75 | **95** | +20 |
+| Extractability | 56 | **76** | +20 |
+| Structure | 50 | **80** | +30 |
+| Authority | 52 | 52 | 0 |
+| Evidence | 52 | 52 | 0 |
+| Freshness | 36 | 36 | 0 |
+
+结构类维度（Discoverability / Extractability / Structure）显著上涨；Authority / Evidence / Freshness 未动——正是 Phase B 与内容期的目标面。
+
+### 14.2 页面就绪度对比
+
+| 页面 | 基线 | 复测 | Δ |
+|------|-----:|-----:|---:|
+| `app.contextlm.top/` | 26 | **47** | +21 |
+| `/help/api-access` | 28 | **57** | +29 |
+| `/pricing` | 54 | **58** | +4 |
+| `/help/api-access/agents` | 69 | **73** | +4 |
+| `contextlm.top/`（marketing） | 91 | 91 | 0 |
+
+- 可见文本：app 首页 ~354 字（H1 + 摘要；基线 64）；`/help/api-access` ~659 字（不再是「加载中…」；基线 15）。
+- diagnose warning 总数：23 → 13。
+
+### 14.3 §9 指标快照
+
+| 指标 | 基线 | 目标 | 复测实际 | 状态 |
+|------|------|------|----------|------|
+| app 首页可见文本 | ~64 | ≥ 300 且 H1=1 | ~354，H1=1 | ✅ |
+| help/api-access 未登录可见文本 | ~15 | ≥ 500 | ~659 | ✅ |
+| 公开页 canonical | 0/5 | 5/5 | 4/5（缺 marketing 首页） | 🟡 |
+| diagnose Freshness | 36 | ≥ 55 | 36 | ⬜ Phase B |
+| diagnose Extractability | 56 | ≥ 70 | 76 | ✅ |
+| 对外对比/FAQ 页 | 0 | ≥ 2 篇 SSR | 0 | ⬜ Phase C |
+| GSC 索引覆盖 | 未知 | 已配置并有数据 | 属性+sitemap 已提交（2026-08-12） | ✅ D1（索引量随时间爬升） |
+| AI 引用抽检 | 未测 | 月度 3 问有记录 | 未测 | ⬜ D2 |
+
+### 14.4 仍未关的口
+
+1. `contextlm.top` 仍无 canonical；sitemap 404（marketing 侧，归属 `~/context-os-landing`）。
+2. app 多页仍缺 authority / freshness / evidence 信号（Phase B 主战场）。
+3. app 首页无 H2；agents 页正文在 `<pre>` 里，结构分仍吃亏。
+4. Cloudflare 托管 robots 对 AI bot 的 Disallow 仍需控制台处理（见 §8 / §10）。
+
+### 14.5 结论
+
+Phase A（可抓取 / SSR / canonical）在 app 侧已验证有效。下一步顺序：marketing canonical + sitemap（`~/context-os-landing`）→ CF robots 控制台放行 → Phase B（更新日 / 组织身份 / authority-freshness 信号）→ 再开对比 / FAQ 内容（Phase C）。
+
+---
+
+## 14. GEOHub 复测报告（2026-08-12）
+
+> 同一 diagnose brief 复跑。产物：`/home/chuan/GEOHub/runs/contextlm-2026-08-12/run-62645983aca5/`。
+
+### 14.1 站点分：基线 → 复测
+
+| 维度 | 2026-08-11 | 2026-08-12 | Δ |
+|------|----------:|----------:|---:|
+| Discoverability | 75 | **95** | **+20** |
+| Extractability | 56 | **76** | **+20** |
+| Structure | 50 | **80** | **+30** |
+| Authority | 52 | 52 | 0 |
+| Evidence | 52 | 52 | 0 |
+| Freshness | 36 | 36 | 0 |
+
+**解读**：Phase A（可抓取 / 结构 / canonical）达标；authority / evidence / freshness 未改善，需 Phase B 内容运营。
+
+### 14.2 页面回答就绪度（启发式）
+
+| URL | 基线 | 复测 | Δ | 可见文本（复测 snapshot） |
+|-----|-----:|-----:|---:|---------------------------|
+| https://contextlm.top/ | 91 | 91 | 0 | ~1489 |
+| https://app.contextlm.top/ | 26 | **47** | **+21** | ~354（H1 + 产品摘要 SSR） |
+| https://app.contextlm.top/pricing | 54 | **58** | +4 | ~863 |
+| https://app.contextlm.top/help/api-access | 28 | **57** | **+29** | ~659（公开说明，非「加载中…」） |
+| https://app.contextlm.top/help/api-access/agents | 69 | **73** | +4 | ~8930 |
+
+### 14.3 Warning 数量
+
+| | 基线 | 复测 |
+|--|-----:|-----:|
+| warning 条数 | 23 | **13**（−10） |
+
+**已消除（相对基线，app 侧）**：空壳无 H1、近空可见文本、app 公开路由缺 canonical 等。
+
+**仍在的 warning：**
+
+| 页面 | 残留 |
+|------|------|
+| `contextlm.top` | **canonical 仍缺**（营销站 `~/context-os-landing`，本轮未动） |
+| `app.contextlm.top/` | 无 H2；无 evidence / authority / freshness 信号 |
+| `/pricing` | evidence / authority / freshness |
+| `/help/api-access` | evidence / authority / freshness |
+| `/help/api-access/agents` | 无 H2（正文在 `<pre>`）；无 freshness |
+
+### 14.4 配套探测
+
+| 探测 | 结果 |
+|------|------|
+| `app…/sitemap.xml` | **200**（含 `/` `/pricing` `/desktop` 等） |
+| `contextlm.top/sitemap.xml` | **404** |
+| app 公开页 live canonical | **有** |
+| marketing live canonical | **无** |
+| robots.txt（双域） | 200；注意 CF 托管块可能对 AI bot `Disallow`（见执行记录） |
+
+### 14.5 Phase 勾选（复测后）
+
+| ID | 状态 |
+|----|------|
+| A1 canonical | **部分**：app 完成；marketing **未完成** |
+| A2 app 首页 SSR | **完成**（26→47） |
+| A3 help/api-access 公开 | **完成**（28→57） |
+| A4 robots/sitemap | **部分**：app sitemap 有；marketing sitemap 404 |
+| B / C / D | **未完成** |
+
+### 14.6 复测后下一刀
+
+1. marketing `contextlm.top`：**canonical + sitemap**（关 A1/A4 剩余）。  
+2. 处理 **Cloudflare robots** 对 AI bot 的 Disallow（否则 GEO 与 sitemap 放行被上游抵消）。  
+3. 定价 + help：**更新日期 + 组织/产品身份**（抬 freshness/authority）。  
+4. app 首页：H1 下 **2～3 个 H2**（能力 / Agent 接入 / 定价）。  
+5. agents 页：markdown **渲染为真 H2**（勿长期整页 pre）。  
+6. Phase C：comparison + FAQ 各一。  
+
+### 14.7 复测产物
+
+```
+/home/chuan/GEOHub/runs/contextlm-2026-08-12/run-62645983aca5/
+  report.md · diagnosis.json · diagnosis-funnel.json · input/sources/url-*.html
+```
+
+---
+
+## 15. Phase B 落地 + GEOHub 复测（2026-08-12 下午）
+
+工程已合入并部署：marketing canonical/sitemap；app 首页 H2×3；pricing/help 更新日；agents 真 H2 markdown。随后同一 brief 再跑 diagnose。
+
+- Run：`/home/chuan/GEOHub/runs/contextlm-2026-08-12-phaseb/run-063c47ba2e1a/`
+- Live 验收（curl）：`contextlm.top` `rel=canonical` + `/sitemap.xml` 200 + `/robots.txt` 200；app `/` 三 H2；`/help/api-access/agents` 多 H2（非整页 pre）
+
+### 15.1 站点分：基线 → Phase A 复测 → Phase B 复测
+
+| 维度 | 08-11 基线 | 08-12 A | 08-12 B | Δ(A→B) | Δ(基线→B) |
+|------|----------:|--------:|--------:|-------:|----------:|
+| Discoverability | 75 | 95 | **100** | +5 | **+25** |
+| Extractability | 56 | 76 | **80** | +4 | **+24** |
+| Structure | 50 | 80 | **100** | +20 | **+50** |
+| Authority | 52 | 52 | 52 | 0 | 0 |
+| Evidence | 52 | 52 | 52 | 0 | 0 |
+| Freshness | 36 | 36 | **100** | **+64** | **+64** |
+
+**解读**：H2 / canonical / 更新日期把结构与新鲜度拉满。Authority/Evidence 站点分仍 52——因 5 页里 3 页（home / pricing / api-access）未命中 GEOHub **英文/关键词**启发式（见 §15.3）。
+
+### 15.2 页面就绪度
+
+| URL | 基线 | A 复测 | B 复测 | Δ(A→B) | 可见文本（B） | H2（B） |
+|-----|-----:|-------:|-------:|-------:|---------------|--------:|
+| `contextlm.top/` | 91 | 91 | **95** | +4 | ~1489 | 5 |
+| `app…/` | 26 | 47 | **67** | +20 | ~449 | **3** |
+| `app…/pricing` | 54 | 58 | **72** | +14 | ~921 | 3 |
+| `app…/help/api-access` | 28 | 57 | **70** | +13 | ~717 | 2 |
+| `app…/help/api-access/agents` | 69 | 73 | **100** | +27 | ~8472 | **9** |
+
+Warning 条数：23（基线）→ 13（A）→ **6**（B）。  
+B 残留 6 条 warning 全部是 home/pricing/api-access 的 **no authority** + **no evidence**（各 3）。
+
+### 15.3 §9 指标快照（B 后）
+
+| 指标 | 目标 | B 实际 | 状态 |
+|------|------|--------|------|
+| app 首页可见文本 + H1/H2 | ≥300 且结构完整 | ~449，H1=1，H2=3 | ✅ |
+| help/api-access 未登录可见 | ≥500 | ~717 | ✅ |
+| 公开页 canonical | 5/5 | **5/5**（marketing 已补） | ✅ |
+| marketing sitemap | 200 | **200** | ✅ |
+| diagnose Freshness | ≥55 | **100** | ✅ |
+| diagnose Structure | — | **100** | ✅ |
+| diagnose Extractability | ≥70 | **80** | ✅ |
+| diagnose Authority / Evidence | ≥70 | 仍 52 | 🟡（§15.4 修） |
+| 对比/FAQ SSR | ≥2 | 0 | ⬜ Phase C |
+| GSC / AI 引用抽检 | 配置+记录 | GSC ✅；抽检 ⬜ | 🟡 D1 关 / D2 开 |
+
+### 15.4 Authority/Evidence 关键词对齐（已部署 + 再测通过）
+
+GEOHub `diagnose.py` 启发式（非语义）：
+
+- **authority**：`author|editor|expert|about|contact|作者|专家|关于|联系`
+- **evidence**：`source|reference|citation|method|数据|来源|参考|方法`
+
+此前中文页写「主理人：邢川」**不命中**；agents 英文页因正文含 `Authentication`（子串 `author`）与 `source/method` 正命中。  
+补丁：`home.seoPublisher` → **作者 / author**；新增 `home.seoEvidence`（**来源 / source**），挂 home / pricing / api-access。前端 rev `5e0c12ee+dirty` 已部署。
+
+#### B2 再测（补丁后）`run-d925f7257d18`
+
+| 维度 | B1 | B2 |
+|------|---:|---:|
+| Discoverability | 100 | **100** |
+| Extractability | 80 | **80** |
+| Structure | 100 | **100** |
+| Authority | 52 | **100** |
+| Evidence | 52 | **100** |
+| Freshness | 100 | **100** |
+
+| URL | B1 就绪 | B2 就绪 |
+|-----|--------:|--------:|
+| marketing | 95 | 95 |
+| app `/` | 67 | **93** |
+| pricing | 72 | **98** |
+| help/api-access | 70 | **97** |
+| agents | 100 | **100** |
+
+- **warning 条数：6 → 0**；run status：`completed`（无 `completed-with-warnings`）。
+- Extractability 仍 80：部分页 landmark/list 信号未拉满；非 P0。
+
+### 15.5 仍未关的口
+
+1. **Cloudflare 托管 robots** 对 AI bot 的 Disallow（若 CF 仍注入）— 控制台人工。  
+2. **Phase C**：comparison + FAQ 各一篇 SSR。  
+3. **GSC** 提交 sitemap；AI 引用月度抽检。  
+4. （可选）抬 Extractability：更多 `<main>`/`<article>`/列表/表格 landmark。
+
+### 15.6 结论与下一刀
+
+Phase B **关闭**：结构 / 可发现 / 新鲜度 / 权威 / 证据 均已在 GEOHub 代理指标上达标；marketing canonical+sitemap 线上 200。  
+下一刀顺序：
+
+1. CF robots AI bot 策略（运维控制台）。  
+2. Phase C：中文对比文 + FAQ（SSR）。  
+3. GSC / 抽检（D1/D2）。
+
+### 15.7 产物
+
+```
+B1: /home/chuan/GEOHub/runs/contextlm-2026-08-12-phaseb/run-063c47ba2e1a/
+B2: /home/chuan/GEOHub/runs/contextlm-2026-08-12-phaseb2/run-d925f7257d18/
+  report.md · diagnosis.json · input/sources/url-*.html
+```
+
+---
+
+## 16. Phase C — FAQ + 选型对比 SSR（2026-08-12）
+
+**内容宿主**：产品事实 FAQ / 中立对比表放 app 公开 SSR（`/help/faq`、`/help/compare`）；长文编辑型仍可 Ghost。已先更新 `docs/design/PRODUCT_IA.md` §3.1。
+
+### 16.1 交付
+
+| URL | 角色 | 线上 |
+|-----|------|------|
+| https://app.contextlm.top/help/faq | MCP / 密钥 / 名额 / BYOK / 定价 FAQ | **200**，H1=1，H2=10，canonical，作者/来源/更新日期 |
+| https://app.contextlm.top/help/compare | 类别级选型对照表（无编造竞品数据） | **200**，H1=1，H2=6，HTML table，canonical |
+
+配套：`sitemap.ts` / `llms.txt` 收录；首页 / API 接入 / Agent 文档互链；SEO 测试 19 通过；前端 rev `5e0c12ee+dirty`。
+
+Brief：`docs/plans/geo-seo-briefs/diagnose-contextlm-phase-c.json`
+
+### 16.2 GEOHub 单页复测
+
+- Run：`/home/chuan/GEOHub/runs/contextlm-2026-08-12-phasec/run-2de2d2e79bc4/`
+- status：`completed`，**warning_count = 0**
+
+| 维度 | 分数 |
+|------|-----:|
+| Discoverability | **100** |
+| Structure | **100** |
+| Extractability | **90** |
+| Authority | **100** |
+| Evidence | **100** |
+| Freshness | **100** |
+
+| URL | 就绪度 | 可见文本 | H2 |
+|-----|-------:|---------:|---:|
+| `/help/faq` | **97** | ~1358 | 10 |
+| `/help/compare` | **100** | ~1344 | 6 |
+
+### 16.3 §9 指标
+
+| 指标 | 目标 | 实际 | 状态 |
+|------|------|------|------|
+| 对外对比/FAQ 页 | ≥ 2 篇 SSR | **2**（faq + compare） | ✅ |
+| CF AI bot robots | 放行 | 用户确认已关 | ✅ |
+| GSC | 配置 | **用户 2026-08-12 确认完成** | ✅ D1 |
+| AI 引用抽检 | 月度 3 问 | 种子问已写入 GSC 清单 §9 | ⬜ D2 |
+
+### 16.4 下一刀
+
+1. ~~GSC 手册~~ → **§17**（待人工在控制台完成验证与提交）。  
+2. D2：种子问月度抽检 → 可选 `geo-measure`（种子问见 GSC 清单 §9）。  
+3. （可选）www→apex 301；Ghost 长文；对比表保持 app canonical。
+
+### 16.5 产物
+
+```
+/home/chuan/GEOHub/runs/contextlm-2026-08-12-phasec/run-2de2d2e79bc4/
+```
+
+---
+
+## 17. GSC 接入说明（D1 · 2026-08-12）
+
+**完整操作清单**（逐步截图式文字）：
+
+[`docs/plans/2026-08-12-gsc-onboarding-checklist.md`](./2026-08-12-gsc-onboarding-checklist.md)
+
+### 17.1 摘要（给执行人 5 分钟扫完）
+
+| 步骤 | 动作 |
+|------|------|
+| 1 | GSC 添加 **Domain 属性** `contextlm.top`（推荐）或 URL-prefix：`app.` + apex |
+| 2 | Cloudflare 加 Google 给的 **DNS TXT** → 点验证 |
+| 3 | 提交 sitemap：`https://app.contextlm.top/sitemap.xml` + `https://contextlm.top/sitemap.xml` |
+| 4 | 对 `/help/faq`、`/help/compare`、`/pricing`、marketing 首页做 **网址检查** |
+
+### 17.2 提交用 URL（复制粘贴）
+
+```
+https://app.contextlm.top/sitemap.xml
+https://contextlm.top/sitemap.xml
+```
+
+App sitemap 当前公开路径（随发版变；以线上 XML 为准）：
+
+`/` · `/pricing` · `/desktop` · `/legal/*` · `/help/api-access` · `/help/api-access/agents` · `/help/faq` · `/help/compare`
+
+### 17.3 探测备注（写手册时）
+
+- Marketing **canonical = apex**（`https://contextlm.top`）；www 与 apex 均 200，**尚未** 301 合并。  
+- 工程侧 D1 **文档完成**；**账号验证/提交** 须人工勾选清单 §10。  
+
+### 17.4 D1 状态
+
+| 项 | 状态 |
+|----|------|
+| 操作手册 | ✅ 已写 |
+| GSC 属性验证 | ✅ **2026-08-12 用户确认完成** |
+| Sitemap 提交成功 | ✅ **2026-08-12 用户确认完成** |
+| 索引覆盖有数据 | ⏳ 通常数日～数周后在 GSC「网页索引编制 / 效果」中可见（无需再操作） |
+
+**D1 关闭**。剩余增长向：D2 月度 AI 引用抽检；可选 www→apex 301。
+
+---
+
+## 18. 国内爬虫显式放行（2026-08-12）
+
+**改动**
+
+| 面 | 文件 | 内容 |
+|----|------|------|
+| App | `frontend_next/app/robots.ts` | 在 `*` 之外点名 Allow：Baiduspider / Baiduspider-render / Bytespider / Sogou / YisouSpider / 360Spider / HaosouSpider（+ 原有 GPT/Claude/Perplexity/Google-Extended）；私有路径仍 Disallow |
+| Marketing | `context-os-landing/public/robots.txt` | 同上显式 Allow（无私有路径） |
+| Nginx | `deploy/nginx/context-os-landing.conf` | `/robots.txt`、`/sitemap.xml` → `Cache-Control: max-age=300`，避免 CF 长时间 HIT 旧文件 |
+
+**线上**
+
+- `app.contextlm.top/robots.txt`：已含 Baiduspider / Bytespider 等（部署 rev `14705287+dirty`）。  
+- Marketing：源站 + **用户 2026-08-12 确认 CF purge 完成**，边缘应与源站一致（含国内爬虫 Allow）。  
+
+**未做 / 边界**
+
+- DeepSeek / 豆包对话产品：无稳定公开 UA → 继续走 `*`，不禁止。  
+- 百度站长平台：未接（可选，类似 GSC）。  
+- 不保证国内搜索排名或模型引用。  
+- 百度站长操作手册：[`docs/plans/2026-08-12-baidu-ziyuan-checklist.md`](./2026-08-12-baidu-ziyuan-checklist.md)（待人工验证）。  

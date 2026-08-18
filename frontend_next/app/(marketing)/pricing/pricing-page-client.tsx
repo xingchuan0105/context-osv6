@@ -217,6 +217,15 @@ export function PricingPageClient() {
       <header className={styles.header}>
         <h1 className={styles.title}>{formatUiMessage(locale, "pricingTitle")}</h1>
         <p className={styles.subtitle}>{formatUiMessage(locale, "pricingSubtitle")}</p>
+        <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px", margin: "0.35rem 0 0" }}>
+          {formatUiMessage(locale, "home.seoPublisher")}
+        </p>
+        <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: "0.2rem 0 0" }}>
+          {formatUiMessage(locale, "home.seoUpdated", { date: "2026-08-12" })}
+        </p>
+        <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: "0.2rem 0 0" }}>
+          {formatUiMessage(locale, "home.seoEvidence")}
+        </p>
         <div className={styles.billingToggle} role="group" aria-label="billing interval">
           <button
             type="button"

@@ -1,0 +1,19 @@
+{
+  "subject": "Context OS / contextlm.top product site",
+  "scope": "site",
+  "target_urls": [
+    "https://contextlm.top/",
+    "https://app.contextlm.top/",
+    "https://app.contextlm.top/pricing",
+    "https://app.contextlm.top/help/api-access",
+    "https://app.contextlm.top/help/api-access/agents"
+  ],
+  "evidence": [],
+  "locale": "zh-CN",
+  "audience": "product evaluators and technical buyers of AI knowledge workspace",
+  "goals": [
+    "Improve AI-search citation readiness and extractability",
+    "Clarify product entity and value proposition on landing pages",
+    "Strengthen help and agent documentation for GEO"
+  ]
+}

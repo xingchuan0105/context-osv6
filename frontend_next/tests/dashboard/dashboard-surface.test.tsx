@@ -48,6 +48,25 @@ vi.mock("../../lib/dashboard/preferences", () => ({
 
 vi.mock("../../lib/settings/client", () => ({
   getUsageLimit: mocks.getUsageLimitMock,
+  getSubscription: vi.fn().mockResolvedValue({
+    plan_id: "free",
+    status: "active",
+    current_period_end: null,
+  }),
+  getWalletBalance: vi.fn().mockResolvedValue({
+    balance_fen: 0,
+    lifetime_paid_topup_fen: 0,
+  }),
+  getReferralStats: vi.fn().mockResolvedValue(null),
+  listProviderSecrets: vi.fn().mockResolvedValue({ secrets: [] }),
+}));
+
+vi.mock("../../lib/share/client", () => ({
+  getShareQuota: vi.fn().mockResolvedValue({ used: 0, max: 3 }),
+}));
+
+vi.mock("../../lib/admin/client", () => ({
+  probeAdminAccess: vi.fn().mockResolvedValue(false),
 }));
 
 const searchProductIndexMock = vi.hoisted(() => vi.fn());
@@ -248,6 +267,15 @@ describe("DashboardSurface", () => {
       "/settings?tab=security",
     );
     expect(screen.getByTestId("account-user-card")).toBeTruthy();
+    // User-card membership CTA → billing quick modal (upgrade path from plan card).
+    const membershipCta = screen.getByTestId("account-membership-cta");
+    expect(membershipCta).toBeTruthy();
+    await user.click(membershipCta);
+    expect(await screen.findByTestId("settings-quick-modal-billing")).toBeTruthy();
+    expect(await screen.findByTestId("settings-manage-subscription")).toBeTruthy();
+
+    // Re-open account menu for logout.
+    await user.click(screen.getByTestId("dashboard-account-menu-trigger"));
     expect(screen.getByTestId("dashboard-logout")).toBeTruthy();
 
     await user.click(screen.getByTestId("dashboard-logout"));

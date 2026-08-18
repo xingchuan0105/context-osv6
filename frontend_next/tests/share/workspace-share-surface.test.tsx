@@ -14,6 +14,7 @@ vi.mock("../../lib/ui-preferences", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard/ws-1/share",
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }));
 

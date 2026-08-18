@@ -53,8 +53,15 @@ function formatFenAsYuan(fen: number, locale: string): string {
 /**
  * Billing summary. Canonical checkout lives on /pricing (membership) and
  * /pricing#topup (wallet) per PRODUCT_IA.md — this panel does not host a second top-up checkout.
+ *
+ * Manage-plan CTA sits inside the plan card (not modal footer). Pass
+ * `onManagePlan` to open the marketing upgrade explainer; otherwise link to /pricing.
  */
-export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: boolean } = {}) {
+export function BillingPanel({
+  onManagePlan,
+}: {
+  onManagePlan?: () => void;
+} = {}) {
   const { token } = useAuth();
   const { locale } = useUiPreferences();
   const [referralCopied, setReferralCopied] = useState(false);
@@ -146,15 +153,6 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
               {formatUiMessage(locale, "settings.billing.sectionSubtitle")}
             </p>
           </div>
-          {hideManagePlan ? null : (
-            <Link
-              className="app-button-primary app-button-accent"
-              data-testid="settings-manage-subscription"
-              href="/pricing"
-            >
-              {formatUiMessage(locale, "settings.billing.managePlanAction")}
-            </Link>
-          )}
         </div>
         {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
         {/* DeepSeek-style stat cards lead: balance (with top-up CTA) + lifetime top-ups. */}
@@ -263,6 +261,27 @@ export function BillingPanel({ hideManagePlan = false }: { hideManagePlan?: bool
               <Link className="app-link" href="/settings/usage" data-testid="settings-usage-details-link">
                 {formatUiMessage(locale, "settings.billing.usageDetailsLink")}
               </Link>
+            </div>
+            {/* Plan-card CTA: upgrade / manage → /pricing (or parent upgrade explainer). */}
+            <div className={styles.planActions} data-testid="plan-manage-actions">
+              {onManagePlan ? (
+                <button
+                  className="app-button-primary app-button-accent"
+                  data-testid="settings-manage-subscription"
+                  type="button"
+                  onClick={onManagePlan}
+                >
+                  {formatUiMessage(locale, "settings.billing.managePlanAction")}
+                </button>
+              ) : (
+                <Link
+                  className="app-button-primary app-button-accent"
+                  data-testid="settings-manage-subscription"
+                  href="/pricing"
+                >
+                  {formatUiMessage(locale, "settings.billing.managePlanAction")}
+                </Link>
+              )}
             </div>
           </div>
         )}

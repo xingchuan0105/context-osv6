@@ -22,6 +22,7 @@ import {
   updateFavoriteWorkspaceIds,
 } from "../../lib/dashboard/preferences";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { desktopAppHref } from "../../lib/runtime/desktop-app-href";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { ProductChromeFooter } from "../product-chrome-footer";
 import { ReferralInviteSurface } from "../referral/referral-invite-surface";
@@ -168,7 +169,7 @@ export function DashboardSurface() {
 
       setWorkspaces((current) => [response.workspace, ...current]);
       markDefaultWorkspaceTitleUsed(locale, "");
-      router.push(`/dashboard/${response.workspace.workspace_id}`);
+      router.push(desktopAppHref(`/dashboard/${response.workspace.workspace_id}`));
     } catch (submitError) {
       reportError(submitError, () => void handleCreateWorkspace());
     } finally {

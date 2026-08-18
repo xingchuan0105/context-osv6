@@ -14,6 +14,8 @@ import { metadata as termsMetadata } from "@/app/(marketing)/legal/terms/page";
 import { metadata as pricingMetadata } from "@/app/(marketing)/pricing/page";
 import { metadata as apiAccessMetadata } from "@/app/(open)/help/api-access/page";
 import { metadata as agentsMetadata } from "@/app/(open)/help/api-access/agents/page";
+import { metadata as faqMetadata } from "@/app/(open)/help/faq/page";
+import { metadata as compareMetadata } from "@/app/(open)/help/compare/page";
 
 type RobotsRule = {
   userAgent?: string | string[];
@@ -43,11 +45,20 @@ describe("robots.txt（GEO 方案 A4）", () => {
     expect(result.sitemap).toBe("https://app.contextlm.top/sitemap.xml");
   });
 
-  it("explicitly allows major AI crawlers with the same private-path boundary", () => {
+  it("explicitly allows major AI and China crawlers with the same private-path boundary", () => {
     const result = robots();
     const rules = asArray(result.rules) as RobotsRule[];
 
-    for (const bot of ["GPTBot", "ClaudeBot", "PerplexityBot"]) {
+    for (const bot of [
+      "GPTBot",
+      "ClaudeBot",
+      "PerplexityBot",
+      "Baiduspider",
+      "Bytespider",
+      "Sogou",
+      "YisouSpider",
+      "360Spider",
+    ]) {
       const rule = rules.find((entry) => entry.userAgent === bot);
       expect(rule, `missing rule for ${bot}`).toBeDefined();
       expect(asArray(rule?.allow)).toContain("/");
@@ -66,6 +77,8 @@ describe("sitemap.xml（GEO 方案 A4）", () => {
       "/legal",
       "/help/api-access",
       "/help/api-access/agents",
+      "/help/faq",
+      "/help/compare",
     ]) {
       expect(urls).toContain(`https://app.contextlm.top${path}`);
     }
@@ -85,6 +98,8 @@ describe("llms.txt（GEO 方案 A4）", () => {
     expect(body).toContain("https://app.contextlm.top/help/api-access/agents");
     expect(body).toContain("https://app.contextlm.top/pricing");
     expect(body).toContain("https://app.contextlm.top/help/api-access");
+    expect(body).toContain("https://app.contextlm.top/help/faq");
+    expect(body).toContain("https://app.contextlm.top/help/compare");
   });
 });
 
@@ -101,6 +116,8 @@ describe("公开页 canonical（GEO 方案 A1）", () => {
     ["/legal/licenses/third-party", licensesThirdPartyMetadata],
     ["/help/api-access", apiAccessMetadata],
     ["/help/api-access/agents", agentsMetadata],
+    ["/help/faq", faqMetadata],
+    ["/help/compare", compareMetadata],
   ];
 
   it.each(cases)("%s declares a self-referencing canonical", (path, metadata) => {

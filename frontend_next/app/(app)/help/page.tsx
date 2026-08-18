@@ -109,7 +109,7 @@ export default function HelpPage() {
             <Link className="app-link app-link-muted" href="/help/api-access">
               {formatUiMessage(locale, "helpItemApiHumanDocs")}
             </Link>,
-            <Link className="app-link app-link-muted" href="/docs/api-access-for-agents.md">
+            <Link className="app-link app-link-muted" href="/help/api-access/agents">
               {formatUiMessage(locale, "helpItemApiAgentDocs")}
             </Link>,
           ]}

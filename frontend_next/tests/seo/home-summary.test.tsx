@@ -27,9 +27,17 @@ describe("HomeClient SSR 摘要（GEO 方案 A2）", () => {
     expect(headings).toHaveLength(1);
     expect(headings[0]?.textContent).toContain("可分享的个人知识工作区");
 
+    const h2 = screen.getAllByRole("heading", { level: 2 });
+    expect(h2.length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByRole("heading", { level: 2, name: "文档入库与问答" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: /外接 Agent/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: /会员与可分享/ })).toBeTruthy();
+
     expect(screen.getByText(/回答可溯源到具体文档/)).toBeTruthy();
     expect(screen.getByText(/把知识库接到 Cursor、Claude/)).toBeTruthy();
     expect(screen.getByText(/访客免登录浏览公开库/)).toBeTruthy();
+    expect(screen.getByText(/ContextLM/)).toBeTruthy();
+    expect(screen.getByText(/2026-08-12/)).toBeTruthy();
 
     expect(screen.getByRole("link", { name: "进入应用" }).getAttribute("href")).toBe("/dashboard");
     expect(screen.getByRole("link", { name: "查看定价" }).getAttribute("href")).toBe("/pricing");
@@ -38,3 +46,4 @@ describe("HomeClient SSR 摘要（GEO 方案 A2）", () => {
     );
   });
 });
+

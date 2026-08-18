@@ -70,6 +70,8 @@ export default defineConfig({
 
   webServer: [
     // 本地测试 auth-flow 等纯前端场景时，可通过 SKIP_BACKEND=1 跳过 Rust 后端启动
+    // 打已部署环境（PLAYWRIGHT_BASE_URL 指向远端）时，SKIP_BACKEND=1 + SKIP_FRONTEND=1
+    // 本地不起任何 webServer，全部流量走目标域名（scripts/test-vps-e2e.sh 封装）。
     // Billing E2E: set PRICING_REVAMP_ROLLOUT=100 on avrag-api so test users pass hash-bucket gate.
     ...(process.env.SKIP_BACKEND
       ? []
@@ -94,19 +96,23 @@ export default defineConfig({
             env: webServerEnv(backendServerEnv),
           },
         ]),
-    {
-      // 统一由 Playwright webServer 启动前端；CI用 build+start，本地用 dev
-      command: process.env.CI ? "pnpm build && pnpm start" : "pnpm dev",
-      url: "http://127.0.0.1:3000",
-      // 300s: `pnpm build` (Next.js production build) on a 2-core CI runner takes
-      // 90–180s, far exceeding the prior 60s timeout — which made the webServer fail
-      // to start and red-flagged every journey/billing spec (observed 2026-06-29).
-      timeout: 300_000,
-      reuseExistingServer,
-      env: webServerEnv({
-        NEXT_PUBLIC_PRICING_REVAMP_ENABLED: "1",
-      }),
-    },
+    ...(process.env.SKIP_FRONTEND
+      ? []
+      : [
+          {
+            // 统一由 Playwright webServer 启动前端；CI用 build+start，本地用 dev
+            command: process.env.CI ? "pnpm build && pnpm start" : "pnpm dev",
+            url: "http://127.0.0.1:3000",
+            // 300s: `pnpm build` (Next.js production build) on a 2-core CI runner takes
+            // 90–180s, far exceeding the prior 60s timeout — which made the webServer fail
+            // to start and red-flagged every journey/billing spec (observed 2026-06-29).
+            timeout: 300_000,
+            reuseExistingServer,
+            env: webServerEnv({
+              NEXT_PUBLIC_PRICING_REVAMP_ENABLED: "1",
+            }),
+          },
+        ]),
   ],
 
   projects: [

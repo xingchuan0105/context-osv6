@@ -56,6 +56,15 @@ export function ApiAccessGuideClient() {
             <div>
               <h1 className="app-page-title">{formatUiMessage(locale, "helpApiAccessTitle")}</h1>
               <p className="app-page-subtitle">{formatUiMessage(locale, "helpApiAccessSubtitle")}</p>
+              <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px", margin: "0.5rem 0 0" }}>
+                {formatUiMessage(locale, "home.seoPublisher")}
+              </p>
+              <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: "0.25rem 0 0" }}>
+                {formatUiMessage(locale, "home.seoUpdated", { date: "2026-08-12" })}
+              </p>
+              <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: "0.25rem 0 0" }}>
+                {formatUiMessage(locale, "home.seoEvidence")}
+              </p>
             </div>
             <div className="app-button-row">
               <Link className="app-button-secondary" href="/help">
@@ -63,6 +72,12 @@ export function ApiAccessGuideClient() {
               </Link>
               <Link className="app-button-secondary" href="/help/api-access/agents">
                 {formatUiMessage(locale, "helpItemApiAgentDocs")}
+              </Link>
+              <Link className="app-button-secondary" href="/help/faq">
+                FAQ
+              </Link>
+              <Link className="app-button-secondary" href="/help/compare">
+                选型对比
               </Link>
             </div>
           </div>

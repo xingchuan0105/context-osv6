@@ -209,16 +209,23 @@ export async function streamChatViaIPC(
 
     signal?.addEventListener("abort", abortHandler, { once: true });
 
-    await invoke("chat_stream", {
-      token,
-      request: {
-        ...request,
-        request_id: requestId,
-        stream: true,
-      },
-    });
+    try {
+      await invoke("chat_stream", {
+        token,
+        request: {
+          ...request,
+          request_id: requestId,
+          stream: true,
+        },
+      });
 
-    throwIfAborted(signal);
+      throwIfAborted(signal);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+      throw mapInvokeError(error);
+    }
   } finally {
     if (abortHandler && signal) {
       signal.removeEventListener("abort", abortHandler);
@@ -253,6 +260,24 @@ export async function requestViaIPC<T>(
       path,
       body,
       token,
+    });
+  } catch (error) {
+    throw mapInvokeError(error);
+  }
+}
+
+/** PUT signed local upload bytes. WebView `fetch` to 127.0.0.1 is blocked by CORS. */
+export async function uploadBytesViaIPC(
+  url: string,
+  contentType: string,
+  bodyBase64: string,
+): Promise<void> {
+  const invoke = await getTauriInvoke();
+  try {
+    await invoke("upload_bytes", {
+      url,
+      contentType,
+      bodyBase64,
     });
   } catch (error) {
     throw mapInvokeError(error);

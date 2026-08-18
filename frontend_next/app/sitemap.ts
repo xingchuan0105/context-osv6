@@ -21,6 +21,8 @@ const PUBLIC_PATHS = [
   "/legal/licenses/third-party",
   "/help/api-access",
   "/help/api-access/agents",
+  "/help/faq",
+  "/help/compare",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

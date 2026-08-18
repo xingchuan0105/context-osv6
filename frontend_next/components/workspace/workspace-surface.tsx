@@ -13,7 +13,9 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { useAppWorkspaceId } from "../../hooks/use-app-workspace-id";
 import { useWorkspaceData } from "../../hooks/use-workspace-data";
+import { desktopAppHref } from "../../lib/runtime/desktop-app-href";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
@@ -73,9 +75,10 @@ function useIsMobile() {
   return isMobile;
 }
 
-export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
+export function WorkspaceSurface({ workspaceId: workspaceIdProp }: { workspaceId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const workspaceId = useAppWorkspaceId(workspaceIdProp);
   const sessionFromUrl = searchParams.get("session");
   const sourceFromUrl = searchParams.get("source")?.trim() || null;
   const { locale } = useUiPreferences();
@@ -101,7 +104,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     (sessionId: string | null) => {
       // Always replace: comparing against a stale searchParams closure is
       // easy to get wrong after programmatic query updates; replace is cheap.
-      router.replace(workspaceSessionHref(workspaceId, sessionId));
+      router.replace(desktopAppHref(workspaceSessionHref(workspaceId, sessionId)));
     },
     [router, workspaceId],
   );
@@ -175,7 +178,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     if (sessions.some((session) => session.id === urlSession)) {
       return;
     }
-    router.replace(workspaceSessionHref(workspaceId, activeSessionId));
+    router.replace(desktopAppHref(workspaceSessionHref(workspaceId, activeSessionId)));
   }, [activeSessionId, router, sessionFromUrl, sessions, workspace, workspaceId]);
 
   const handleOpenSourceConsumed = useCallback(() => {
@@ -184,10 +187,12 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
       return;
     }
     router.replace(
-      workspaceDeepLinkHref(workspaceId, {
-        sessionId: sessionFromUrl,
-        sourceId: null,
-      }),
+      desktopAppHref(
+        workspaceDeepLinkHref(workspaceId, {
+          sessionId: sessionFromUrl,
+          sourceId: null,
+        }),
+      ),
     );
   }, [router, sessionFromUrl, sourceFromUrl, workspaceId]);
 

@@ -33,4 +33,30 @@ export const homeMessages = {
     zh: "Agent 接入说明",
     en: "Agent access guide",
   },
+  "home.seoSectionDocs": {
+    zh: "文档入库与问答",
+    en: "Documents & Q&A",
+  },
+  "home.seoSectionAgents": {
+    zh: "外接 Agent（MCP / API）",
+    en: "External agents (MCP / API)",
+  },
+  "home.seoSectionShare": {
+    zh: "会员与可分享名额",
+    en: "Membership & share slots",
+  },
+  "home.seoPublisher": {
+    // GEOHub authority heuristic matches author|作者|关于|… (not 主理人 alone).
+    zh: "产品：Context OS · 品牌：ContextLM · 作者：邢川",
+    en: "Product: Context OS · Brand: ContextLM · author: Xing Chuan",
+  },
+  "home.seoUpdated": {
+    zh: "页面说明更新日期：{date}",
+    en: "Page copy last updated: {date}",
+  },
+  "home.seoEvidence": {
+    // GEOHub evidence heuristic matches source|来源|方法|…
+    zh: "说明基于本站公开能力与定价文档（来源：帮助 / 定价页）。",
+    en: "Claims summarize public product capabilities (source: help / pricing docs).",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

@@ -1,0 +1,16 @@
+{
+  "protocol_version": "1.0.0",
+  "brief_id": "discover-contextlm-2026-08-11",
+  "subject": "Context OS second-brain workspace with RAG, MCP API, and knowledge sharing",
+  "locale": "zh-CN",
+  "seed_queries": [
+    "第二大脑 AI 知识库",
+    "个人知识库 RAG 工作区",
+    "MCP API 连接 AI agent 知识库",
+    "团队可分享文档问答",
+    "Context OS 是什么"
+  ],
+  "audiences": ["个人知识工作者", "技术创业者", "需要给 AI Agent 接知识库的开发者"],
+  "scenarios": ["选型对比", "接入外接 Agent", "工作区分享", "定价升级"],
+  "evidence": []
+}

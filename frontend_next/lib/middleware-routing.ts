@@ -14,6 +14,14 @@ function resolveCompatibilityRedirect(pathname: string): string | null {
     return "/dashboard";
   }
 
+  // Agent API doc moved off fragile public/*.md (was 404 on standalone).
+  if (
+    pathname === "/docs/api-access-for-agents.md" ||
+    pathname === "/docs/api-access-for-agents"
+  ) {
+    return "/help/api-access/agents";
+  }
+
   // Legacy/public share URLs under /workspaces/:id/share → app dashboard share UI.
   if (pathname.startsWith("/workspaces/")) {
     const match = pathname.match(

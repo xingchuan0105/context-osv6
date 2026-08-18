@@ -1,0 +1,15 @@
+{
+  "subject": "Context OS Phase C content pages (FAQ + compare)",
+  "scope": "site",
+  "target_urls": [
+    "https://app.contextlm.top/help/faq",
+    "https://app.contextlm.top/help/compare"
+  ],
+  "evidence": [],
+  "locale": "zh-CN",
+  "audience": "product evaluators comparing knowledge workspaces and agent integration",
+  "goals": [
+    "Verify FAQ and comparison pages are extractable and citation-ready",
+    "Confirm structure, freshness, authority, and evidence signals"
+  ]
+}

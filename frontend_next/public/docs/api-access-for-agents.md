@@ -1,27 +1,35 @@
 # API Access for Agents
 
-Stable link: `/docs/api-access-for-agents.md`
+Stable link (canonical): `/help/api-access/agents`  
+Legacy (redirects): `/docs/api-access-for-agents.md`
 
 This page is the agent-readable entry point for **workspace-scoped** API access.
 
-Context-OS is a **personal knowledge product**: one signed-in user owns their workspaces. There is no team/org administration surface in the product UI. External automation should attach to a **specific workspace** the user already created.
+## Connection (minimum)
 
-2026-04-26 architecture note:
-- Product-side user interaction is owned by Main Agent.
-- RAG API is a retrieval service and returns evidence/retrieval bundles to Main Agent.
-- This public endpoint document describes the current HTTP access shape; deeper target architecture is documented in [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
+Human creates a **workspace API key** in the product (Share → API Access), then pastes the **Agent Pack** into the client. The pack includes:
+
+| Field | Meaning |
+| --- | --- |
+| `workspace_id` | Target workspace UUID (required on every `tools/call`) |
+| `api_base` | HTTPS origin of the API (cloud or `http://127.0.0.1:18080` desktop) |
+| `mcp_http` | `{api_base}/api/v1/mcp` |
+| `api_key` | Workspace key; send as `Authorization: Bearer <api_key>` |
+| `docs_human` | `{origin}/help/api-access` |
+| `docs_agent` | `{origin}/help/api-access/agents` (this page) |
 
 ## Scope
 - `workspace` maps to `workspace_id`.
-- External agents should prefer the **unified MCP** entry point at `POST /api/v1/mcp`.
+- Prefer the **unified MCP** entry point at `POST /api/v1/mcp`.
 - REST/SSE remains available for UI, streaming, and binary uploads.
-- **Local desktop client:** the same MCP/REST surface can target the on-machine API (default `http://127.0.0.1:18080`) after the client stack is running. Capability matrix, share limits, and MCP/CLI delivery gaps: `docs/desktop/LOCAL-CLIENT-MCP-CLI-AGENT-ACCESS.md` (repo path; not a public marketing URL).
+- **Local desktop client:** same MCP/REST surface at `http://127.0.0.1:18080` when the client stack is running.
 
 ## Typical personal workflow
 
 1. The human creates a workspace in the product UI.
-2. On that workspace's **API Access** page, they create a **workspace API key** (permissions `index` and/or `query`).
-3. The agent uses that key plus the workspace's `workspace_id` for upload, indexing, and RAG.
+2. On that workspace's **API Access** panel, they create a **workspace API key** (`index` and/or `query`).
+3. They click **Copy full agent pack** once and paste it into Cursor / Claude / another agent.
+4. The agent uses that key plus `workspace_id` for upload, indexing, and RAG.
 
 Agents do **not** need a separate “account-level” or “org-level” key for normal personal use.
 

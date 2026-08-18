@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useAppWorkspaceId } from "../../hooks/use-app-workspace-id";
+
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { AppTopBar } from "../app-top-bar";
@@ -50,8 +52,9 @@ function initialSectionFromHash(): ShareCenterSection {
 }
 
 export function WorkspaceShareCenterSurface({
-  workspaceId,
+  workspaceId: workspaceIdProp,
 }: WorkspaceShareCenterSurfaceProps) {
+  const workspaceId = useAppWorkspaceId(workspaceIdProp);
   const { locale } = useUiPreferences();
   const center = useShareCenter(workspaceId);
   const { actionError, actionMessage, settingsQuery, quotaSummary } = center;

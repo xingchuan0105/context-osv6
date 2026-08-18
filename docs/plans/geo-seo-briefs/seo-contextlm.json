@@ -1,0 +1,19 @@
+{
+  "protocol_version": "1.0.0",
+  "brief_id": "seo-contextlm-2026-08-11",
+  "request": "为 Context OS（contextlm.top / app.contextlm.top）做只读 SEO 与 GEO 可见性规划：覆盖索引与 sitemap、canonical、核心落地页与帮助文档模板、定价页与登录后应用边界，以及 AI 搜索引用就绪度。",
+  "target_urls": [
+    "https://contextlm.top/",
+    "https://app.contextlm.top/",
+    "https://app.contextlm.top/pricing",
+    "https://app.contextlm.top/help",
+    "https://app.contextlm.top/help/api-access/agents",
+    "https://app.contextlm.top/desktop",
+    "https://blog.contextlm.top/"
+  ],
+  "market": "zh-CN",
+  "language": "zh-CN",
+  "authorized_action": "advisory",
+  "rollback_boundary": null,
+  "evidence": []
+}

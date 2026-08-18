@@ -251,13 +251,21 @@ a.dashboard-brand-title:hover {
 
 .dashboard-account-user-card {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-sm);
   min-height: 4rem;
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-xs);
   border-radius: var(--radius-control);
   background: hsl(var(--dashboard-surface-muted) / 0.55);
+}
+
+.dashboard-account-user-card-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
 }
 
 .dashboard-account-user-avatar {
@@ -278,6 +286,34 @@ a.dashboard-brand-title:hover {
   display: grid;
   gap: 2px;
   min-width: 0;
+  flex: 1;
+}
+
+.dashboard-account-membership-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.35rem var(--space-md);
+  border: 1px solid color-mix(in srgb, hsl(var(--accent)) 45%, hsl(var(--dashboard-border)));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, hsl(var(--accent)) 12%, hsl(var(--dashboard-surface)));
+  color: hsl(var(--accent));
+  font: inherit;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.dashboard-account-membership-btn:hover {
+  background: color-mix(in srgb, hsl(var(--accent)) 20%, hsl(var(--dashboard-surface)));
+  border-color: color-mix(in srgb, hsl(var(--accent)) 65%, hsl(var(--dashboard-border)));
 }
 
 .dashboard-account-user-name {

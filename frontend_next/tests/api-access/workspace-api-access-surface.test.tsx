@@ -104,12 +104,20 @@ describe("WorkspaceApiAccessSurface", () => {
     });
   });
 
-  it("creates a new api key and shows the plaintext key once", async () => {
+  it("creates a new api key, shows plaintext once, and enables full pack copy", async () => {
     const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
 
     render(<WorkspaceApiAccessSurface workspaceId={workspaceId} />);
 
     await screen.findByText("Existing Key");
+    // Pack CTA disabled until a one-time plaintext key exists this session.
+    expect(screen.getByTestId("copy-agent-pack")).toBeDisabled();
+
     await user.type(screen.getByLabelText("密钥名称"), "Agent Key");
     await user.click(screen.getByRole("button", { name: "创建密钥" }));
 
@@ -123,6 +131,17 @@ describe("WorkspaceApiAccessSurface", () => {
 
     expect(await screen.findByText("sk_workspace_plaintext")).toBeTruthy();
     expect(screen.getByText("Agent Key")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId("copy-agent-pack")).not.toBeDisabled();
+    });
+    // Auto-copy full pack after create.
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalled();
+    });
+    const copied = String(writeText.mock.calls[0]?.[0] ?? "");
+    expect(copied).toContain("sk_workspace_plaintext");
+    expect(copied).toContain(workspaceId);
+    expect(copied).toContain("/help/api-access/agents");
   });
 
   it("revokes a listed api key from the active workspace", async () => {
@@ -147,12 +166,11 @@ describe("WorkspaceApiAccessSurface", () => {
     expect(mocks.listApiKeysMock).not.toHaveBeenCalled();
   });
 
-  it("renders the llm agent guidance links", () => {
+  it("renders absolute-style agent and human doc links to the canonical paths", async () => {
     render(<WorkspaceApiAccessSurface workspaceId={workspaceId} />);
 
-    expect(screen.getByRole("link", { name: "/help/api-access" }).getAttribute("href")).toBe("/help/api-access");
-    expect(screen.getByRole("link", { name: "/docs/api-access-for-agents.md" }).getAttribute("href")).toBe(
-      "/docs/api-access-for-agents.md",
-    );
+    const agentLink = await screen.findByTestId("agent-docs-link");
+    expect(agentLink.getAttribute("href")).toBe("/help/api-access/agents");
+    expect(screen.getByRole("link", { name: /help\/api-access$/ })).toBeTruthy();
   });
 });

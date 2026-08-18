@@ -13,6 +13,8 @@ const LLMS_TXT = `# Context OS
 
 - Agent API 接入（agent-readable）: https://app.contextlm.top/help/api-access/agents
 - 人类 API 接入说明: https://app.contextlm.top/help/api-access
+- 产品 FAQ: https://app.contextlm.top/help/faq
+- 选型对比: https://app.contextlm.top/help/compare
 - 定价与充值: https://app.contextlm.top/pricing
 - 桌面客户端（免费）: https://app.contextlm.top/desktop
 - 品牌官网: https://www.contextlm.top

@@ -1,4 +1,6 @@
 import { fetchResponse, request } from "../http/request";
+import { blobToBase64 } from "../runtime/bytes";
+import { isTauri } from "../runtime/tauri-ipc";
 import type { Workspace as ApiWorkspace } from "../contracts/generated";
 import type {
   WorkspaceNote,
@@ -367,6 +369,12 @@ export async function uploadWorkspaceDocumentFile(
     file.type ||
     "application/octet-stream";
   headers.set("Content-Type", type);
+
+  if (isTauri()) {
+    const { uploadBytesViaIPC } = await import("../runtime/tauri-ipc");
+    await uploadBytesViaIPC(upload_url, type, await blobToBase64(file));
+    return;
+  }
 
   await fetchResponse(upload_url, {
     method: "PUT",

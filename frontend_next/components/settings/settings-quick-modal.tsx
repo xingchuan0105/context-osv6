@@ -62,20 +62,9 @@ export function SettingsQuickModal({
         testId={`settings-quick-modal-${tab}`}
         onClose={onClose}
         footer={
-          activeTab === "billing" ? (
-            <button
-              className="app-button-primary app-button-accent"
-              data-testid="settings-quick-upgrade"
-              type="button"
-              onClick={() => setUpgradeOpen(true)}
-            >
-              {formatUiMessage(locale, "settings.billing.managePlanAction")}
-            </button>
-          ) : (
-            <Link className="app-link app-link-muted" href="/settings">
-              {formatUiMessage(locale, "settingsQuickModal.moreSettings")}
-            </Link>
-          )
+          <Link className="app-link app-link-muted" href="/settings">
+            {formatUiMessage(locale, "settingsQuickModal.moreSettings")}
+          </Link>
         }
       >
         {/* Grok 式：左导航 + 右设置面板，与 /settings 页同一模式 */}
@@ -101,7 +90,9 @@ export function SettingsQuickModal({
         >
           {activeTab === "profile" ? <ProfilePanel /> : null}
           {activeTab === "preferences" ? <AppearancePanel /> : null}
-          {activeTab === "billing" ? <BillingPanel hideManagePlan /> : null}
+          {activeTab === "billing" ? (
+            <BillingPanel onManagePlan={() => setUpgradeOpen(true)} />
+          ) : null}
           {activeTab === "security" ? <SecurityPanel /> : null}
         </div>
       </AppModal>

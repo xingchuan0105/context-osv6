@@ -26,4 +26,15 @@ describe("resolveMiddlewareAction", () => {
     expect(resolveMiddlewareAction("/login", false)).toEqual({ type: "next" });
     expect(resolveMiddlewareAction("/dashboard", false)).toEqual({ type: "next" });
   });
+
+  it("redirects legacy agent api doc paths to /help/api-access/agents", () => {
+    expect(resolveMiddlewareAction("/docs/api-access-for-agents.md", false)).toEqual({
+      type: "redirect",
+      destination: "/help/api-access/agents",
+    });
+    expect(resolveMiddlewareAction("/docs/api-access-for-agents", true)).toEqual({
+      type: "redirect",
+      destination: "/help/api-access/agents",
+    });
+  });
 });

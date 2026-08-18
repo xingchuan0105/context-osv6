@@ -72,11 +72,20 @@ export default function HomeClient() {
     };
   }, [router]);
 
-  const bullets = [
-    formatUiMessage(locale, "home.seoBulletDocs"),
-    formatUiMessage(locale, "home.seoBulletAgents"),
-    formatUiMessage(locale, "home.seoBulletShare"),
-  ];
+  const sections = [
+    {
+      title: formatUiMessage(locale, "home.seoSectionDocs"),
+      body: formatUiMessage(locale, "home.seoBulletDocs"),
+    },
+    {
+      title: formatUiMessage(locale, "home.seoSectionAgents"),
+      body: formatUiMessage(locale, "home.seoBulletAgents"),
+    },
+    {
+      title: formatUiMessage(locale, "home.seoSectionShare"),
+      body: formatUiMessage(locale, "home.seoBulletShare"),
+    },
+  ] as const;
 
   return (
     <main className="app-page-shell">
@@ -87,21 +96,25 @@ export default function HomeClient() {
         <header style={{ display: "grid", gap: "0.75rem" }}>
           <h1 className="app-page-title">{formatUiMessage(locale, "home.seoTitle")}</h1>
           <p className="app-page-subtitle">{formatUiMessage(locale, "home.seoSubtitle")}</p>
+          <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px", margin: 0 }}>
+            {formatUiMessage(locale, "home.seoPublisher")}
+          </p>
+          <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: 0 }}>
+            {formatUiMessage(locale, "home.seoUpdated", { date: "2026-08-12" })}
+          </p>
+          <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: 0 }}>
+            {formatUiMessage(locale, "home.seoEvidence")}
+          </p>
         </header>
 
-        <ul
-          style={{
-            color: "hsl(var(--muted-foreground))",
-            display: "grid",
-            gap: "0.75rem",
-            margin: 0,
-            paddingLeft: "1.2rem",
-          }}
-        >
-          {bullets.map((item, index) => (
-            <li key={index}>{item}</li>
-          ))}
-        </ul>
+        {sections.map((section) => (
+          <section key={section.title} style={{ display: "grid", gap: "0.4rem" }}>
+            <h2 style={{ fontSize: "1.15rem", margin: 0 }}>{section.title}</h2>
+            <p style={{ color: "hsl(var(--muted-foreground))", margin: 0, lineHeight: 1.55 }}>
+              {section.body}
+            </p>
+          </section>
+        ))}
 
         <div className="app-button-row" style={{ flexWrap: "wrap" }}>
           <Link className="app-button-primary" href="/dashboard">
@@ -112,6 +125,12 @@ export default function HomeClient() {
           </Link>
           <Link className="app-button-secondary" href="/help/api-access/agents">
             {formatUiMessage(locale, "home.seoCtaAgents")}
+          </Link>
+          <Link className="app-button-secondary" href="/help/faq">
+            FAQ
+          </Link>
+          <Link className="app-button-secondary" href="/help/compare">
+            选型对比
           </Link>
         </div>
 

@@ -62,6 +62,23 @@ describe("tauri-ipc runtime", () => {
     });
   });
 
+  it("uploadBytesViaIPC invokes upload_bytes with base64 payload", async () => {
+    invokeMock.mockResolvedValue({ ok: true, status: 200 });
+
+    const { uploadBytesViaIPC } = await import("../../lib/runtime/tauri-ipc");
+    await uploadBytesViaIPC(
+      "http://127.0.0.1:18080/uploads/doc-1?expires=1&signature=abc",
+      "text/plain",
+      "aGVsbG8=",
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("upload_bytes", {
+      url: "http://127.0.0.1:18080/uploads/doc-1?expires=1&signature=abc",
+      contentType: "text/plain",
+      bodyBase64: "aGVsbG8=",
+    });
+  });
+
   it("requestViaIPC throws TypeError for non-string bodies", async () => {
     const { requestViaIPC } = await import("../../lib/runtime/tauri-ipc");
 
@@ -199,6 +216,39 @@ describe("tauri-ipc runtime", () => {
 
     expect(capturedRequestId).toBeTruthy();
     expect(invokeMock).toHaveBeenCalledWith("chat_cancel", { request_id: capturedRequestId });
+    expect(unlistenMock).toHaveBeenCalled();
+  });
+
+  it("streamChatViaIPC maps rejected chat_stream errors to ApiError", async () => {
+    listenMock.mockResolvedValue(unlistenMock);
+    invokeMock.mockRejectedValue({
+      status: 500,
+      code: "desktop_error",
+      message: "LLM request failed: connection refused",
+    });
+
+    const { streamChatViaIPC } = await import("../../lib/runtime/tauri-ipc");
+
+    await expect(
+      streamChatViaIPC(
+        "token-1",
+        {
+          query: "hello",
+          workspace_id: "ws-1",
+          session_id: undefined,
+          agent_type: "chat",
+          doc_scope: [],
+          messages: [],
+          stream: true,
+        },
+        () => {},
+      ),
+    ).rejects.toMatchObject({
+      name: "ApiError",
+      status: 500,
+      code: "desktop_error",
+      message: "LLM request failed: connection refused",
+    });
     expect(unlistenMock).toHaveBeenCalled();
   });
 });

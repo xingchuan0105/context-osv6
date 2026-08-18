@@ -3,6 +3,8 @@ import path from "node:path";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { renderAgentMarkdown } from "@/lib/api-access/render-agent-markdown";
+
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
@@ -28,9 +30,11 @@ async function loadAgentDoc(): Promise<string> {
   }
 }
 
-/** Canonical agent-readable doc. Prefer this over public/*.md (404 on some deploys). */
+/** Canonical agent-readable doc with real H2 structure for crawlers. */
 export default async function HelpApiAccessAgentsPage() {
   const content = await loadAgentDoc();
+  // Page already provides one H1; demote doc-level `#` title to avoid dual H1.
+  const body = renderAgentMarkdown(content.replace(/^#\s+.+\n+/, ""));
 
   return (
     <main className="app-page-shell">
@@ -40,31 +44,35 @@ export default async function HelpApiAccessAgentsPage() {
             Agent-readable API access
           </p>
           <h1 className="app-page-title" style={{ margin: 0 }}>
-            /help/api-access/agents
+            Context OS Agent API
           </h1>
-          <div className="app-button-row">
+          <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px", margin: 0 }}>
+            Product: Context OS · Brand: ContextLM · Operator: Xing Chuan
+          </p>
+          <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: 0 }}>
+            Page copy last updated: 2026-08-12
+          </p>
+          <div className="app-button-row" style={{ flexWrap: "wrap" }}>
             <Link className="app-button-secondary" href="/help/api-access">
               Human guide
+            </Link>
+            <Link className="app-button-secondary" href="/help/faq">
+              FAQ
+            </Link>
+            <Link className="app-button-secondary" href="/help/compare">
+              Compare
             </Link>
             <Link className="app-button-secondary" href="/help">
               Help
             </Link>
           </div>
         </header>
-        <article className="app-surface-card" style={{ margin: 0, overflow: "auto", padding: "1.25rem" }}>
-          <pre
-            data-testid="agent-api-doc-body"
-            style={{
-              fontFamily: "var(--font-mono, ui-monospace, monospace)",
-              fontSize: "0.875rem",
-              lineHeight: 1.55,
-              margin: 0,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {content}
-          </pre>
+        <article
+          className="app-surface-card"
+          data-testid="agent-api-doc-body"
+          style={{ margin: 0, overflow: "auto", padding: "1.25rem 1.35rem" }}
+        >
+          {body}
         </article>
       </div>
     </main>

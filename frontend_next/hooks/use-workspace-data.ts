@@ -14,6 +14,7 @@ import {
 } from "../lib/workspace/client";
 import type { Workspace } from "../lib/workspace/client";
 import type { WorkspaceSession } from "../lib/workspace/model";
+import { desktopAppHref } from "../lib/runtime/desktop-app-href";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -197,7 +198,7 @@ export function useWorkspaceData(
     const title = getDefaultWorkspaceTitle(locale, today);
     const response = await createWorkspace(auth.token, { name: title, description: "" });
     markDefaultWorkspaceTitleUsed(locale, today);
-    router.push(`/dashboard/${response.workspace.workspace_id}`);
+    router.push(desktopAppHref(`/dashboard/${response.workspace.workspace_id}`));
   }, [auth.token, locale, router]);
 
   const startNewThread = useCallback(() => {

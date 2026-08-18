@@ -4,9 +4,10 @@ export class ApiAccessPage {
   constructor(private page: Page) {}
 
   async goto(workspaceId: string) {
-    // API 设置已合并进分享中心（API = 一种分享方法）。
+    // API 设置已合并进分享中心（API = 一种分享方法）；入口在「API 访问」标签页。
     await this.page.goto(`/dashboard/${workspaceId}/share`);
     await this.page.waitForLoadState("networkidle");
+    await this.page.getByRole("button", { name: "API 访问" }).click();
   }
 
   async expectApiKeyListVisible() {
@@ -21,13 +22,16 @@ export class ApiAccessPage {
 
   async createApiKey(name: string) {
     await this.page.getByLabel(/密钥名称|Key name/i).fill(name);
-    await this.page.getByRole("button", { name: /创建密钥/i }).click();
+    //「先创建密钥」(copy-agent-pack, disabled 占位) 也会命中 /创建密钥/，须精确匹配提交键。
+    await this.page.getByRole("button", { name: "创建密钥", exact: true }).click();
   }
 
   async expectPlaintextShown() {
     await expect(this.page.getByText(/明文只会返回这一次/)).toBeVisible();
-    await expect(this.page.locator("pre")).toBeVisible();
-    await expect(this.page.locator("pre")).not.toBeEmpty();
+    // agent-pack-preview 也是 <pre>（常驻），新密钥明文块须排除它。
+    const plaintext = this.page.locator('pre:not([data-testid="agent-pack-preview"])');
+    await expect(plaintext).toBeVisible();
+    await expect(plaintext).not.toBeEmpty();
   }
 
   keyItem(name: string) {

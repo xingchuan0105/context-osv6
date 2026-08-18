@@ -12,6 +12,7 @@ import {
   type GlobalSearchResponse,
 } from "../../lib/search/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { desktopAppHref } from "../../lib/runtime/desktop-app-href";
 import { workspaceSourceHref } from "../../lib/workspace/session-url";
 import styles from "./command-palette.module.css";
 
@@ -266,7 +267,7 @@ export function CommandPaletteHost() {
         }
       }
       close();
-      router.push(item.href);
+      router.push(desktopAppHref(item.href));
     },
     [close, router],
   );

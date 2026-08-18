@@ -11,6 +11,12 @@ import {
   type ApiKeyRow,
   type CreateApiKeyRequest,
 } from "../../lib/api-access/client";
+import {
+  AGENT_DOCS_PATH,
+  HUMAN_DOCS_PATH,
+  absoluteDocUrl,
+  buildAgentPack,
+} from "../../lib/api-access/agent-pack";
 import { getApiBaseUrl } from "../../lib/http/request";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/i18n/config";
@@ -79,22 +85,11 @@ function resolveAgentApiBase(): string {
   return LOCAL_DESKTOP_API_BASE;
 }
 
-function buildAgentMcpSnippet(apiBase: string): string {
-  return JSON.stringify(
-    {
-      mcpServers: {
-        "context-os": {
-          command: "context-os-mcp",
-          env: {
-            CONTEXT_OS_API_BASE: apiBase,
-            CONTEXT_OS_API_KEY: "<paste_workspace_api_key>",
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
+function resolveDocsOrigin(apiBase: string): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
+  return apiBase.replace(/\/$/, "");
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -130,12 +125,37 @@ export function WorkspaceApiAccessSurface({
   const [copyFeedback, setCopyFeedback] = useState("");
   const [agentUserToken, setAgentUserToken] = useState("");
   const [mintingToken, setMintingToken] = useState(false);
-  // Resolve after mount so desktop (Tauri) base is correct and SSR/hydration stay stable.
   const [agentApiBase, setAgentApiBase] = useState(LOCAL_DESKTOP_API_BASE);
-  const mcpSnippet = useMemo(() => buildAgentMcpSnippet(agentApiBase), [agentApiBase]);
-  const mcpEndpoint = `${agentApiBase}/api/v1/mcp`;
+  const [docsOrigin, setDocsOrigin] = useState(LOCAL_DESKTOP_API_BASE);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const desktopLocal =
     agentApiBase.includes("127.0.0.1") || agentApiBase.includes("localhost");
+  const hasPackKey = Boolean(plaintextKey.trim());
+  const permissions = useMemo(
+    () =>
+      [indexPermissionEnabled ? "index" : null, queryPermissionEnabled ? "query" : null].filter(
+        (p): p is string => p !== null,
+      ),
+    [indexPermissionEnabled, queryPermissionEnabled],
+  );
+
+  const agentPack = useMemo(
+    () =>
+      buildAgentPack({
+        workspaceId: workspaceIdValue,
+        apiBase: agentApiBase,
+        apiKey: plaintextKey || null,
+        permissions,
+        docsOrigin,
+        runtime: desktopLocal ? "desktop-local" : "cloud",
+      }),
+    [workspaceIdValue, agentApiBase, plaintextKey, permissions, docsOrigin, desktopLocal],
+  );
+
+  const docsHumanUrl = absoluteDocUrl(docsOrigin, HUMAN_DOCS_PATH);
+  const docsAgentUrl = absoluteDocUrl(docsOrigin, AGENT_DOCS_PATH);
+  const mcpEndpoint = `${agentApiBase.replace(/\/$/, "")}/api/v1/mcp`;
 
   async function handleCopy(label: string, value: string) {
     const ok = await copyText(value);
@@ -145,6 +165,21 @@ export function WorkspaceApiAccessSurface({
         : formatUiMessage(locale, "apiAccess.copyFailed", { label }),
     );
     window.setTimeout(() => setCopyFeedback(""), 2500);
+  }
+
+  async function handleCopyPack() {
+    if (!hasPackKey) {
+      return;
+    }
+    const ok = await copyText(agentPack);
+    setCopyFeedback(
+      ok
+        ? formatUiMessage(locale, "apiAccess.packCopied")
+        : formatUiMessage(locale, "apiAccess.copyFailed", {
+            label: formatUiMessage(locale, "apiAccess.packPreviewTitle"),
+          }),
+    );
+    window.setTimeout(() => setCopyFeedback(""), 4000);
   }
 
   async function handleMintAgentToken() {
@@ -192,7 +227,9 @@ export function WorkspaceApiAccessSurface({
   }
 
   useEffect(() => {
-    setAgentApiBase(resolveAgentApiBase());
+    const base = resolveAgentApiBase();
+    setAgentApiBase(base);
+    setDocsOrigin(resolveDocsOrigin(base));
   }, []);
 
   useEffect(() => {
@@ -220,7 +257,6 @@ export function WorkspaceApiAccessSurface({
 
       try {
         const response = await listApiKeys(auth.token, workspaceIdValue);
-
         if (!cancelled) {
           setKeys(response.api_keys);
         }
@@ -258,23 +294,16 @@ export function WorkspaceApiAccessSurface({
     }
 
     const trimmedName = nameDraft.trim();
-
     if (!trimmedName) {
       setError(formatUiMessage(locale, "apiAccess.errNameRequired"));
       return;
     }
 
     const parsedRateLimit = Number.parseInt(rateLimitDraft.trim(), 10);
-
     if (!Number.isFinite(parsedRateLimit) || parsedRateLimit <= 0) {
       setError(formatUiMessage(locale, "apiAccess.errRateLimit"));
       return;
     }
-
-    const permissions = [
-      indexPermissionEnabled ? "index" : null,
-      queryPermissionEnabled ? "query" : null,
-    ].filter((permission): permission is string => permission !== null);
 
     if (permissions.length === 0) {
       setError(formatUiMessage(locale, "apiAccess.errPermissions"));
@@ -287,7 +316,6 @@ export function WorkspaceApiAccessSurface({
       rate_limit_rpm: parsedRateLimit,
     };
     const trimmedExpiresAt = expiresAtDraft.trim();
-
     if (trimmedExpiresAt) {
       requestBody.expires_at = trimmedExpiresAt;
     }
@@ -297,13 +325,35 @@ export function WorkspaceApiAccessSurface({
 
     try {
       const response = await createApiKey(auth.token, workspaceIdValue, requestBody);
-      setPlaintextKey(response.plaintext_key);
+      const key = response.plaintext_key;
+      setPlaintextKey(key);
       setKeys((current) => [
         response.api_key,
-        ...current.filter((key) => key.id !== response.api_key.id),
+        ...current.filter((row) => row.id !== response.api_key.id),
       ]);
       setNameDraft("");
       setExpiresAtDraft("");
+
+      // Auto-copy full pack with the new key injected (design §12 decision 2).
+      const pack = buildAgentPack({
+        workspaceId: workspaceIdValue,
+        apiBase: agentApiBase,
+        apiKey: key,
+        permissions: response.api_key.permissions?.length
+          ? response.api_key.permissions
+          : permissions,
+        docsOrigin,
+        runtime: desktopLocal ? "desktop-local" : "cloud",
+      });
+      const ok = await copyText(pack);
+      setCopyFeedback(
+        ok
+          ? formatUiMessage(locale, "apiAccess.packCopied")
+          : formatUiMessage(locale, "apiAccess.copied", {
+              label: formatUiMessage(locale, "apiAccess.newKeyTitle"),
+            }),
+      );
+      window.setTimeout(() => setCopyFeedback(""), 4000);
     } catch (createError) {
       setError(
         errorMessage(createError, formatUiMessage(locale, "apiAccess.errCreateKey"), locale),
@@ -318,7 +368,6 @@ export function WorkspaceApiAccessSurface({
       setError(workspaceIdValidationError);
       return;
     }
-
     if (!auth.token) {
       setError(formatUiMessage(locale, "apiAccess.errSession"));
       return;
@@ -339,100 +388,151 @@ export function WorkspaceApiAccessSurface({
     }
   }
 
-  const body = (
-    <>
+  return (
+    <div className={styles.container}>
       {error ? <p className="app-notice-banner">{error}</p> : null}
+      {copyFeedback ? <p className={styles.copyFeedback}>{copyFeedback}</p> : null}
 
-      <div className={styles.stackLarge}>
-        <section className={`app-surface-card ${styles.card}`}>
-          <div>
-            <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.createTitle")}</h2>
-            <p className="app-page-subtitle">
-              {formatUiMessage(locale, "apiAccess.createSubtitle")}
-            </p>
+      {/* ① Connect / Agent pack — primary */}
+      <section className={`app-surface-card ${styles.card}`} data-testid="api-access-agent-setup-card">
+        <div>
+          <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.agentTitle")}</h2>
+          <p className="app-page-subtitle">
+            {formatUiMessage(locale, "apiAccess.agentSubtitle")}{" "}
+            {desktopLocal
+              ? formatUiMessage(locale, "apiAccess.agentDesktopHint")
+              : formatUiMessage(locale, "apiAccess.agentCloudHint")}
+          </p>
+        </div>
+
+        <p className={hasPackKey ? styles.packStatusReady : styles.packStatusNeed}>
+          {hasPackKey
+            ? formatUiMessage(locale, "apiAccess.packReady")
+            : formatUiMessage(locale, "apiAccess.packNeedKey")}
+        </p>
+
+        <div className="app-button-row">
+          <button
+            className="app-button-primary"
+            type="button"
+            data-testid="copy-agent-pack"
+            disabled={!hasPackKey || !workspaceIdValue}
+            title={
+              hasPackKey
+                ? formatUiMessage(locale, "apiAccess.copyPack")
+                : formatUiMessage(locale, "apiAccess.copyPackDisabled")
+            }
+            onClick={() => void handleCopyPack()}
+          >
+            {hasPackKey
+              ? formatUiMessage(locale, "apiAccess.copyPack")
+              : formatUiMessage(locale, "apiAccess.copyPackDisabled")}
+          </button>
+        </div>
+
+        <details className={styles.packDetails} open={hasPackKey}>
+          <summary className={styles.packSummary}>
+            {formatUiMessage(locale, "apiAccess.packPreviewTitle")}
+          </summary>
+          <pre className={styles.codeBlock} data-testid="agent-pack-preview">
+            {agentPack}
+          </pre>
+        </details>
+      </section>
+
+      {/* ② Create key */}
+      <section className={`app-surface-card ${styles.card}`}>
+        <div>
+          <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.createTitle")}</h2>
+          <p className="app-page-subtitle">{formatUiMessage(locale, "apiAccess.createSubtitle")}</p>
+        </div>
+        <form className={styles.form} onSubmit={handleCreate}>
+          <label>
+            <span className="app-form-label">{formatUiMessage(locale, "apiAccess.nameLabel")}</span>
+            <input
+              aria-label={formatUiMessage(locale, "apiAccess.nameLabel")}
+              className="app-input"
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+            />
+          </label>
+          <fieldset className={styles.fieldset}>
+            <legend className="app-form-label">
+              {formatUiMessage(locale, "apiAccess.permissionsLabel")}
+            </legend>
+            <div className={styles.checkboxGroup}>
+              <label className={styles.checkboxLabel}>
+                <input
+                  checked={indexPermissionEnabled}
+                  type="checkbox"
+                  onChange={(event) => setIndexPermissionEnabled(event.target.checked)}
+                />
+                <span>{formatUiMessage(locale, "apiAccess.permIndex")}</span>
+              </label>
+              <label className={styles.checkboxLabel}>
+                <input
+                  checked={queryPermissionEnabled}
+                  type="checkbox"
+                  onChange={(event) => setQueryPermissionEnabled(event.target.checked)}
+                />
+                <span>{formatUiMessage(locale, "apiAccess.permQuery")}</span>
+              </label>
+            </div>
+          </fieldset>
+          <p className={styles.note}>{formatUiMessage(locale, "apiAccess.permNote")}</p>
+          <details className={styles.advancedDetails}>
+            <summary>{formatUiMessage(locale, "apiAccess.advancedTitle")}</summary>
+            <div className={styles.form} style={{ marginTop: "0.75rem" }}>
+              <label>
+                <span className="app-form-label">
+                  {formatUiMessage(locale, "apiAccess.rateLimitLabel")}
+                </span>
+                <input
+                  aria-label={formatUiMessage(locale, "apiAccess.rateLimitLabel")}
+                  className="app-input"
+                  inputMode="numeric"
+                  type="number"
+                  value={rateLimitDraft}
+                  onChange={(event) => setRateLimitDraft(event.target.value)}
+                />
+              </label>
+              <label>
+                <span className="app-form-label">
+                  {formatUiMessage(locale, "apiAccess.expiresLabel")}
+                </span>
+                <input
+                  aria-label={formatUiMessage(locale, "apiAccess.expiresLabel")}
+                  className="app-input"
+                  placeholder="2026-03-31T18:00:00Z"
+                  value={expiresAtDraft}
+                  onChange={(event) => setExpiresAtDraft(event.target.value)}
+                />
+              </label>
+            </div>
+          </details>
+          <div className="app-button-row">
+            <button className="app-button-primary" disabled={submitting} type="submit">
+              {submitting
+                ? formatUiMessage(locale, "apiAccess.creating")
+                : formatUiMessage(locale, "apiAccess.createAction")}
+            </button>
           </div>
-          <form className={styles.form} onSubmit={handleCreate}>
-            <label>
-              <span className="app-form-label">{formatUiMessage(locale, "apiAccess.nameLabel")}</span>
-              <input
-                aria-label={formatUiMessage(locale, "apiAccess.nameLabel")}
-                className="app-input"
-                value={nameDraft}
-                onChange={(event) => setNameDraft(event.target.value)}
-              />
-            </label>
-            <fieldset className={styles.fieldset}>
-              <legend className="app-form-label">
-                {formatUiMessage(locale, "apiAccess.permissionsLabel")}
-              </legend>
-              <div className={styles.checkboxGroup}>
-                <label className={styles.checkboxLabel}>
-                  <input
-                    checked={indexPermissionEnabled}
-                    type="checkbox"
-                    onChange={(event) => setIndexPermissionEnabled(event.target.checked)}
-                  />
-                  <span>{formatUiMessage(locale, "apiAccess.permIndex")}</span>
-                </label>
-                <label className={styles.checkboxLabel}>
-                  <input
-                    checked={queryPermissionEnabled}
-                    type="checkbox"
-                    onChange={(event) => setQueryPermissionEnabled(event.target.checked)}
-                  />
-                  <span>{formatUiMessage(locale, "apiAccess.permQuery")}</span>
-                </label>
-              </div>
-            </fieldset>
-            <p className={styles.note}>{formatUiMessage(locale, "apiAccess.permNote")}</p>
-            <label>
-              <span className="app-form-label">
-                {formatUiMessage(locale, "apiAccess.rateLimitLabel")}
-              </span>
-              <input
-                aria-label={formatUiMessage(locale, "apiAccess.rateLimitLabel")}
-                className="app-input"
-                inputMode="numeric"
-                type="number"
-                value={rateLimitDraft}
-                onChange={(event) => setRateLimitDraft(event.target.value)}
-              />
-            </label>
-            <label>
-              <span className="app-form-label">
-                {formatUiMessage(locale, "apiAccess.expiresLabel")}
-              </span>
-              <input
-                aria-label={formatUiMessage(locale, "apiAccess.expiresLabel")}
-                className="app-input"
-                placeholder="2026-03-31T18:00:00Z"
-                value={expiresAtDraft}
-                onChange={(event) => setExpiresAtDraft(event.target.value)}
-              />
-            </label>
-            <div className="app-button-row">
-              <button className="app-button-primary" disabled={submitting} type="submit">
-                {submitting
-                  ? formatUiMessage(locale, "apiAccess.creating")
-                  : formatUiMessage(locale, "apiAccess.createAction")}
-              </button>
-            </div>
-          </form>
+        </form>
 
-          {plaintextKey ? (
-            <div className={`app-inline-surface ${styles.stack}`}>
-              <div>
-                <strong>{formatUiMessage(locale, "apiAccess.newKeyTitle")}</strong>
-                <p className={styles.mutedTextSpaced}>
-                  {formatUiMessage(locale, "apiAccess.newKeyOnce")}
-                </p>
-              </div>
-              <pre className={styles.codeBlock}>{plaintextKey}</pre>
+        {plaintextKey ? (
+          <div className={`app-inline-surface ${styles.stack}`}>
+            <div>
+              <strong>{formatUiMessage(locale, "apiAccess.newKeyTitle")}</strong>
+              <p className={styles.mutedTextSpaced}>
+                {formatUiMessage(locale, "apiAccess.newKeyOnce")}
+              </p>
             </div>
-          ) : null}
-        </section>
-      </div>
+            <pre className={styles.codeBlock}>{plaintextKey}</pre>
+          </div>
+        ) : null}
+      </section>
 
+      {/* Key list */}
       <section className={`app-surface-card ${styles.card}`}>
         <div className={styles.sectionHeader}>
           <div>
@@ -492,167 +592,146 @@ export function WorkspaceApiAccessSurface({
         </div>
       </section>
 
-      <section className={`app-surface-card ${styles.card}`} data-testid="api-access-agent-setup-card">
-        <div>
-          <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.agentTitle")}</h2>
-          <p className="app-page-subtitle">
-            {formatUiMessage(locale, "apiAccess.agentSubtitle")}{" "}
-            {desktopLocal
-              ? formatUiMessage(locale, "apiAccess.agentDesktopHint")
-              : formatUiMessage(locale, "apiAccess.agentCloudHint")}
-          </p>
-        </div>
-
-        {copyFeedback ? <p className={styles.copyFeedback}>{copyFeedback}</p> : null}
-
-        <div className={styles.copyGrid}>
-          <div className={`app-inline-surface ${styles.copyRow}`}>
-            <div className={styles.copyBody}>
-              <span className={styles.overlineSmall}>workspace_id</span>
-              <code className={styles.copyValue}>{workspaceIdValue || "—"}</code>
-            </div>
-            <button
-              className="app-button-secondary"
-              type="button"
-              disabled={!workspaceIdValue}
-              onClick={() => void handleCopy("workspace_id", workspaceIdValue)}
-            >
-              {formatUiMessage(locale, "apiAccess.copy")}
-            </button>
-          </div>
-          <div className={`app-inline-surface ${styles.copyRow}`}>
-            <div className={styles.copyBody}>
-              <span className={styles.overlineSmall}>API base URL</span>
-              <code className={styles.copyValue}>{agentApiBase}</code>
-            </div>
-            <button
-              className="app-button-secondary"
-              type="button"
-              onClick={() => void handleCopy("API base URL", agentApiBase)}
-            >
-              {formatUiMessage(locale, "apiAccess.copy")}
-            </button>
-          </div>
-          <div className={`app-inline-surface ${styles.copyRow}`}>
-            <div className={styles.copyBody}>
-              <span className={styles.overlineSmall}>HTTP MCP</span>
-              <code className={styles.copyValue}>{mcpEndpoint}</code>
-            </div>
-            <button
-              className="app-button-secondary"
-              type="button"
-              onClick={() => void handleCopy("HTTP MCP", mcpEndpoint)}
-            >
-              {formatUiMessage(locale, "apiAccess.copy")}
-            </button>
-          </div>
-        </div>
-
-        <div className={`app-inline-surface ${styles.stack}`}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <strong>{formatUiMessage(locale, "apiAccess.mcpSnippetTitle")}</strong>
-              <p className={styles.mutedTextSpaced}>
-                {formatUiMessage(locale, "apiAccess.mcpSnippetHint")}
-              </p>
-            </div>
-            <button
-              className="app-button-secondary"
-              type="button"
-              onClick={() =>
-                void handleCopy(formatUiMessage(locale, "apiAccess.mcpSnippetTitle"), mcpSnippet)
-              }
-            >
-              {formatUiMessage(locale, "apiAccess.copyConfig")}
-            </button>
-          </div>
-          <pre className={styles.codeBlock} data-testid="agent-mcp-snippet">
-            {mcpSnippet}
-          </pre>
-          <div className={`app-inline-surface ${styles.stack}`}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <strong>{formatUiMessage(locale, "apiAccess.agentTokenTitle")}</strong>
-                <p className={styles.mutedTextSpaced}>
-                  {formatUiMessage(locale, "apiAccess.agentTokenHint")}
-                </p>
-              </div>
-              <button
-                className="app-button-secondary"
-                type="button"
-                disabled={mintingToken || !auth.token}
-                onClick={() => void handleMintAgentToken()}
-              >
-                {mintingToken
-                  ? formatUiMessage(locale, "apiAccess.minting")
-                  : formatUiMessage(locale, "apiAccess.mintToken")}
-              </button>
-            </div>
-            {agentUserToken ? (
-              <>
-                <pre className={styles.codeBlock} data-testid="agent-user-token">
-                  {agentUserToken}
-                </pre>
-                <button
-                  className="app-button-secondary"
-                  type="button"
-                  onClick={() => void handleCopy("agent token", agentUserToken)}
-                >
-                  {formatUiMessage(locale, "apiAccess.copyToken")}
-                </button>
-              </>
-            ) : null}
-          </div>
-
-          <p className={styles.note}>{formatUiMessage(locale, "apiAccess.agentProbeNote")}</p>
-        </div>
-      </section>
-
+      {/* ③ Docs */}
       <section className={`app-surface-card ${styles.card}`} data-testid="api-access-docs-card">
         <div>
           <h2 className={styles.cardTitle}>{formatUiMessage(locale, "apiAccess.docsTitle")}</h2>
           <p className="app-page-subtitle">{formatUiMessage(locale, "apiAccess.docsSubtitle")}</p>
         </div>
-        <div className={`app-inline-surface ${styles.agentCard}`}>
-          <div className={styles.agentIntro}>
-            <p className={styles.overlineSmall}>Agent onboarding</p>
-            <div>
-              <strong>{formatUiMessage(locale, "apiAccess.docsOrderTitle")}</strong>
-              <p className={styles.mutedTextSpaced}>
-                {formatUiMessage(locale, "apiAccess.docsOrderBody")}
-              </p>
+        <div className={styles.docsGrid}>
+          <div className={`app-inline-surface ${styles.copyRow}`}>
+            <div className={styles.copyBody}>
+              <span className={styles.overlineSmall}>
+                {formatUiMessage(locale, "apiAccess.docsHumanLabel")}
+              </span>
+              <Link className="app-link" href={HUMAN_DOCS_PATH}>
+                {docsHumanUrl}
+              </Link>
             </div>
+            <button
+              className="app-button-secondary"
+              type="button"
+              onClick={() => void handleCopy("docs_human", docsHumanUrl)}
+            >
+              {formatUiMessage(locale, "apiAccess.copy")}
+            </button>
           </div>
-          <div className={styles.stack}>
-            <div className={styles.step}>
-              <div className={styles.stepBadge}>1</div>
-              <div className={styles.stepBody}>
-                <strong>{formatUiMessage(locale, "apiAccess.docsStep1Title")}</strong>
-                <p className={styles.mutedText}>
-                  {formatUiMessage(locale, "apiAccess.docsStep1Body")}
-                </p>
-                <Link className="app-link" href="/help/api-access">
-                  /help/api-access
-                </Link>
-              </div>
+          <div className={`app-inline-surface ${styles.copyRow}`}>
+            <div className={styles.copyBody}>
+              <span className={styles.overlineSmall}>
+                {formatUiMessage(locale, "apiAccess.docsAgentLabel")}
+              </span>
+              <Link className="app-link" href={AGENT_DOCS_PATH} data-testid="agent-docs-link">
+                {docsAgentUrl}
+              </Link>
             </div>
-            <div className={styles.step}>
-              <div className={styles.stepBadgeMuted}>2</div>
-              <div className={styles.stepBody}>
-                <strong>{formatUiMessage(locale, "apiAccess.docsStep2Title")}</strong>
-                <p className={styles.mutedText}>
-                  {formatUiMessage(locale, "apiAccess.docsStep2Body")}
-                </p>
-                <Link className="app-link" href="/docs/api-access-for-agents.md">
-                  /docs/api-access-for-agents.md
-                </Link>
-              </div>
-            </div>
+            <button
+              className="app-button-secondary"
+              type="button"
+              onClick={() => void handleCopy("docs_agent", docsAgentUrl)}
+            >
+              {formatUiMessage(locale, "apiAccess.copy")}
+            </button>
           </div>
         </div>
       </section>
-    </>
-  );
 
-  return <div className={styles.container}>{body}</div>;
+      {/* ④ Advanced */}
+      <section className={`app-surface-card ${styles.card}`}>
+        <button
+          type="button"
+          className={styles.advancedToggle}
+          aria-expanded={advancedOpen}
+          onClick={() => setAdvancedOpen((v) => !v)}
+        >
+          <strong>{formatUiMessage(locale, "apiAccess.advancedTitle")}</strong>
+          <span className={styles.mutedText}>
+            {formatUiMessage(locale, "apiAccess.advancedHint")}
+          </span>
+        </button>
+        {advancedOpen ? (
+          <div className={styles.stack}>
+            <div className={styles.copyGrid}>
+              <div className={`app-inline-surface ${styles.copyRow}`}>
+                <div className={styles.copyBody}>
+                  <span className={styles.overlineSmall}>workspace_id</span>
+                  <code className={styles.copyValue}>{workspaceIdValue || "—"}</code>
+                </div>
+                <button
+                  className="app-button-secondary"
+                  type="button"
+                  disabled={!workspaceIdValue}
+                  onClick={() => void handleCopy("workspace_id", workspaceIdValue)}
+                >
+                  {formatUiMessage(locale, "apiAccess.copy")}
+                </button>
+              </div>
+              <div className={`app-inline-surface ${styles.copyRow}`}>
+                <div className={styles.copyBody}>
+                  <span className={styles.overlineSmall}>API base URL</span>
+                  <code className={styles.copyValue}>{agentApiBase}</code>
+                </div>
+                <button
+                  className="app-button-secondary"
+                  type="button"
+                  onClick={() => void handleCopy("API base URL", agentApiBase)}
+                >
+                  {formatUiMessage(locale, "apiAccess.copy")}
+                </button>
+              </div>
+              <div className={`app-inline-surface ${styles.copyRow}`}>
+                <div className={styles.copyBody}>
+                  <span className={styles.overlineSmall}>HTTP MCP</span>
+                  <code className={styles.copyValue}>{mcpEndpoint}</code>
+                </div>
+                <button
+                  className="app-button-secondary"
+                  type="button"
+                  onClick={() => void handleCopy("HTTP MCP", mcpEndpoint)}
+                >
+                  {formatUiMessage(locale, "apiAccess.copy")}
+                </button>
+              </div>
+            </div>
+
+            <div className={`app-inline-surface ${styles.stack}`}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <strong>{formatUiMessage(locale, "apiAccess.agentTokenTitle")}</strong>
+                  <p className={styles.mutedTextSpaced}>
+                    {formatUiMessage(locale, "apiAccess.agentTokenHint")}
+                  </p>
+                </div>
+                <button
+                  className="app-button-secondary"
+                  type="button"
+                  disabled={mintingToken || !auth.token}
+                  onClick={() => void handleMintAgentToken()}
+                >
+                  {mintingToken
+                    ? formatUiMessage(locale, "apiAccess.minting")
+                    : formatUiMessage(locale, "apiAccess.mintToken")}
+                </button>
+              </div>
+              {agentUserToken ? (
+                <>
+                  <pre className={styles.codeBlock} data-testid="agent-user-token">
+                    {agentUserToken}
+                  </pre>
+                  <button
+                    className="app-button-secondary"
+                    type="button"
+                    onClick={() => void handleCopy("agent token", agentUserToken)}
+                  >
+                    {formatUiMessage(locale, "apiAccess.copyToken")}
+                  </button>
+                </>
+              ) : null}
+              <p className={styles.note}>{formatUiMessage(locale, "apiAccess.agentProbeNote")}</p>
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
 }

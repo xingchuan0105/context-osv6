@@ -145,6 +145,16 @@ export const commonMessages = {
     zh: "帮助",
     en: "Help",
   },
+  /** User-card CTA in account menu → open usage/membership quick surface. */
+  "accountMenu.manageMembership": {
+    zh: "会员管理",
+    en: "Membership",
+  },
+  "accountMenu.upgradeMembership": {
+    zh: "升级会员",
+    en: "Upgrade plan",
+  },
+
   "settingsTabBar.searchLabel": {
     zh: "搜索设置",
     en: "Search settings",
