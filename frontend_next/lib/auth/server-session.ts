@@ -10,12 +10,20 @@ type PersistedAuthCookie = {
   user: AuthUser;
 };
 
+function cookieSecurityAttrs() {
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "; Secure"
+      : "";
+  return `; Path=/; SameSite=Lax${secure}`;
+}
+
 function buildCookieString(maxAge: number) {
-  return `${AUTH_SESSION_COOKIE_NAME}=${AUTH_SESSION_COOKIE_VALUE}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+  return `${AUTH_SESSION_COOKIE_NAME}=${AUTH_SESSION_COOKIE_VALUE}${cookieSecurityAttrs()}; Max-Age=${maxAge}`;
 }
 
 function buildPersistedCookieString(value: string, maxAge: number) {
-  return `${AUTH_PERSISTED_COOKIE_NAME}=${value}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+  return `${AUTH_PERSISTED_COOKIE_NAME}=${value}${cookieSecurityAttrs()}; Max-Age=${maxAge}`;
 }
 
 export function setAuthSessionHint() {

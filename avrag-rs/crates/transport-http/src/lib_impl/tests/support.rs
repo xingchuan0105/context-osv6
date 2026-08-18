@@ -16,10 +16,26 @@ pub(super) use super::super::{
 pub(super) use crate::middleware;
 
 pub(super) fn test_app_state() -> AppState {
+    ensure_test_upload_signing_secret();
     let mut config = app_core::AppConfig::default();
     config.owner_user_id = "00000000-0000-0000-0000-000000000001".to_string();
     config.user_id = "00000000-0000-0000-0000-000000000002".to_string();
     AppState::new(config)
+}
+
+fn ensure_test_upload_signing_secret() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .is_none()
+        {
+            unsafe {
+                std::env::set_var("AVRAG_UPLOAD_SIGNING_SECRET", "test-upload-signing-secret");
+            }
+        }
+    });
 }
 
 pub(super) async fn pg_test_app_state() -> Option<AppState> {

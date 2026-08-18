@@ -11,9 +11,9 @@ impl PgvectorDataPlane {
         &self,
         request: GraphSearchRequest,
     ) -> anyhow::Result<GraphSearchOutput> {
-        if request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        let Some(doc_ids) = request.doc_ids.as_deref().filter(|ids| !ids.is_empty()) else {
             return Ok(GraphSearchOutput::default());
-        }
+        };
 
         // Seed entities (names + query entities + ANN on entity vectors).
         let mut seed_entities: HashSet<String> = HashSet::new();
@@ -35,7 +35,7 @@ impl PgvectorDataPlane {
         if !request.query_entity_vectors.is_empty() {
             for vector in &request.query_entity_vectors {
                 let names = self
-                    .ann_entity_names(owner, request.doc_ids.as_deref(), vector, 10)
+                    .ann_entity_names(owner, doc_ids, vector, 10)
                     .await?;
                 for n in names {
                     seed_entities.insert(n);
@@ -47,7 +47,7 @@ impl PgvectorDataPlane {
         // Combined with case-insensitive relation match (below), G1-S2 lowercase
         // query_entities expand correctly against subject/object like "Alpha".
         let resolved = self
-            .resolve_entity_surface_names(owner, request.doc_ids.as_deref(), &seed_entities)
+            .resolve_entity_surface_names(owner, doc_ids, &seed_entities)
             .await?;
         seed_entities.extend(resolved);
 
@@ -73,7 +73,7 @@ impl PgvectorDataPlane {
             let rows = self
                 .query_relations_touching(
                     owner,
-                    request.doc_ids.as_deref(),
+                    doc_ids,
                     &current_boundary,
                     request.fan_out_limit,
                 )
@@ -146,16 +146,15 @@ impl PgvectorDataPlane {
     async fn resolve_entity_surface_names(
         &self,
         owner: Uuid,
-        doc_ids: Option<&[Uuid]>,
+        doc_ids: &[Uuid],
         seeds: &HashSet<String>,
     ) -> anyhow::Result<HashSet<String>> {
         if seeds.is_empty() {
             return Ok(HashSet::new());
         }
         let seeds_lower: Vec<String> = seeds.iter().map(|s| s.to_lowercase()).collect();
-        let rows = if let Some(doc_ids) = doc_ids {
-            sqlx::query_as::<_, (String,)>(
-                r#"
+        let rows = sqlx::query_as::<_, (String,)>(
+            r#"
                 SELECT name FROM rag_kg_entities
                 WHERE owner_user_id = $1
                   AND doc_id = ANY($2)
@@ -164,35 +163,19 @@ impl PgvectorDataPlane {
                     OR lower(normalized_name) = ANY($3)
                   )
                 "#,
-            )
-            .bind(owner)
-            .bind(doc_ids)
-            .bind(&seeds_lower)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, (String,)>(
-                r#"
-                SELECT name FROM rag_kg_entities
-                WHERE owner_user_id = $1
-                  AND (
-                    lower(name) = ANY($2)
-                    OR lower(normalized_name) = ANY($2)
-                  )
-                "#,
-            )
-            .bind(owner)
-            .bind(&seeds_lower)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        )
+        .bind(owner)
+        .bind(doc_ids)
+        .bind(&seeds_lower)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows.into_iter().map(|(n,)| n).collect())
     }
 
     async fn ann_entity_names(
         &self,
         owner: Uuid,
-        doc_ids: Option<&[Uuid]>,
+        doc_ids: &[Uuid],
         vector: &[f32],
         limit: i64,
     ) -> anyhow::Result<Vec<String>> {
@@ -200,43 +183,27 @@ impl PgvectorDataPlane {
             return Ok(Vec::new());
         }
         let dense = Vector::from(vector.to_vec());
-        let rows = if let Some(doc_ids) = doc_ids {
-            sqlx::query_as::<_, (String,)>(
-                r#"
+        let rows = sqlx::query_as::<_, (String,)>(
+            r#"
                 SELECT name FROM rag_kg_entities
                 WHERE owner_user_id = $1 AND doc_id = ANY($2)
                 ORDER BY entity_dense <=> $3
                 LIMIT $4
                 "#,
-            )
-            .bind(owner)
-            .bind(doc_ids)
-            .bind(&dense)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, (String,)>(
-                r#"
-                SELECT name FROM rag_kg_entities
-                WHERE owner_user_id = $1
-                ORDER BY entity_dense <=> $2
-                LIMIT $3
-                "#,
-            )
-            .bind(owner)
-            .bind(&dense)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        )
+        .bind(owner)
+        .bind(doc_ids)
+        .bind(&dense)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows.into_iter().map(|(n,)| n).collect())
     }
 
     async fn query_relations_touching(
         &self,
         owner: Uuid,
-        doc_ids: Option<&[Uuid]>,
+        doc_ids: &[Uuid],
         boundary: &[String],
         fan_out_limit: usize,
     ) -> anyhow::Result<Vec<RelationRow>> {
@@ -244,9 +211,8 @@ impl PgvectorDataPlane {
         // Case-insensitive edge match: seeds from query_entities are lowercased
         // while relation subject/object keep surface form (e.g. "Alpha").
         let boundary_lower: Vec<String> = boundary.iter().map(|s| s.to_lowercase()).collect();
-        let rows = if let Some(doc_ids) = doc_ids {
-            sqlx::query_as::<_, RelationRow>(
-                r#"
+        let rows = sqlx::query_as::<_, RelationRow>(
+            r#"
                 SELECT relation_id, doc_id, parse_run_id, subject, predicate, object,
                        relation_text, supporting_chunk_ids
                 FROM rag_kg_relations
@@ -258,33 +224,13 @@ impl PgvectorDataPlane {
                   )
                 LIMIT $4
                 "#,
-            )
-            .bind(owner)
-            .bind(doc_ids)
-            .bind(&boundary_lower)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, RelationRow>(
-                r#"
-                SELECT relation_id, doc_id, parse_run_id, subject, predicate, object,
-                       relation_text, supporting_chunk_ids
-                FROM rag_kg_relations
-                WHERE owner_user_id = $1
-                  AND (
-                    lower(subject) = ANY($2)
-                    OR lower(object) = ANY($2)
-                  )
-                LIMIT $3
-                "#,
-            )
-            .bind(owner)
-            .bind(&boundary_lower)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        )
+        .bind(owner)
+        .bind(doc_ids)
+        .bind(&boundary_lower)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows)
     }
 }

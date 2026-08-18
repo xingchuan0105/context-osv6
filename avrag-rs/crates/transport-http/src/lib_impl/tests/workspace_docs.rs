@@ -245,9 +245,13 @@ async fn create_document_upload_rejects_unsupported_file_type() {
 
 #[tokio::test]
 async fn dev_upload_handler_completes_upload_flow() {
-    let previous = env::var("E2E_ENABLED").ok();
+    let previous_e2e = env::var("E2E_ENABLED").ok();
+    let previous_trust = env::var("TRUST_PROXY_AUTH").ok();
     unsafe {
+        // Handler gate is E2E_ENABLED + NODE_ENV; proxy headers need TRUST_PROXY_AUTH
+        // (or memory-only). Set both so the test does not depend on process env.
         env::set_var("E2E_ENABLED", "true");
+        env::set_var("TRUST_PROXY_AUTH", "true");
     }
 
     let state = test_app_state();
@@ -288,13 +292,18 @@ async fn dev_upload_handler_completes_upload_flow() {
         Some("queued")
     );
 
+    restore_env("E2E_ENABLED", previous_e2e);
+    restore_env("TRUST_PROXY_AUTH", previous_trust);
+}
+
+fn restore_env(key: &str, previous: Option<String>) {
     if let Some(value) = previous {
         unsafe {
-            env::set_var("E2E_ENABLED", value);
+            env::set_var(key, value);
         }
     } else {
         unsafe {
-            env::remove_var("E2E_ENABLED");
+            env::remove_var(key);
         }
     }
 }

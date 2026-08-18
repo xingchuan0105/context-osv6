@@ -15,16 +15,18 @@ impl PgvectorDataPlane {
         &self,
         request: TextDenseSearchRequest,
     ) -> anyhow::Result<Vec<ScoredChunk>> {
-        if request.query_vector.is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.query_vector.is_empty() {
             return Ok(Vec::new());
         }
+        let Some(doc_ids) = request.doc_ids.as_ref().filter(|ids| !ids.is_empty()) else {
+            return Ok(Vec::new());
+        };
         let owner = owner_uuid(&request.auth);
         let dense = Vector::from(request.query_vector.clone());
         let limit = request.limit as i64;
 
-        let rows = if let Some(doc_ids) = request.doc_ids.as_ref() {
-            sqlx::query_as::<_, TextChunkRow>(
-                r#"
+        let rows = sqlx::query_as::<_, TextChunkRow>(
+            r#"
                 SELECT chunk_id, doc_id, text, page, chunk_type, parser_backend,
                        source_locator, parse_run_id,
                        (1.0 - (text_dense <=> $1))::float4 AS score
@@ -33,31 +35,13 @@ impl PgvectorDataPlane {
                 ORDER BY text_dense <=> $1
                 LIMIT $4
                 "#,
-            )
-            .bind(&dense)
-            .bind(owner)
-            .bind(doc_ids)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, TextChunkRow>(
-                r#"
-                SELECT chunk_id, doc_id, text, page, chunk_type, parser_backend,
-                       source_locator, parse_run_id,
-                       (1.0 - (text_dense <=> $1))::float4 AS score
-                FROM rag_text_chunks
-                WHERE owner_user_id = $2
-                ORDER BY text_dense <=> $1
-                LIMIT $3
-                "#,
-            )
-            .bind(&dense)
-            .bind(owner)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        )
+        .bind(&dense)
+        .bind(owner)
+        .bind(doc_ids)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -69,7 +53,7 @@ impl PgvectorDataPlane {
         &self,
         request: Bm25SearchRequest,
     ) -> anyhow::Result<Bm25SearchOutput> {
-        if request.query.trim().is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.query.trim().is_empty() {
             return Ok(Bm25SearchOutput {
                 chunks: Vec::new(),
                 trace: Bm25SearchTrace {
@@ -80,6 +64,17 @@ impl PgvectorDataPlane {
                 },
             });
         }
+        let Some(doc_ids) = request.doc_ids.as_ref().filter(|ids| !ids.is_empty()) else {
+            return Ok(Bm25SearchOutput {
+                chunks: Vec::new(),
+                trace: Bm25SearchTrace {
+                    backend: "pgvector_fts".to_string(),
+                    raw_hit_count: 0,
+                    hydrated_hit_count: 0,
+                    fallback_reason: None,
+                },
+            });
+        };
 
         let owner = owner_uuid(&request.auth);
         let limit = request.limit as i64;
@@ -90,9 +85,8 @@ impl PgvectorDataPlane {
         // path (LIKE per term + similarity() score); ASCII stays on
         // tsvector/ts_rank. Same return shape and backend labels either way.
         let rows = if has_cjk(q) {
-            self.search_bm25_cjk(q, owner, request.doc_ids.as_ref(), limit)
-                .await?
-        } else if let Some(doc_ids) = request.doc_ids.as_ref() {
+            self.search_bm25_cjk(q, owner, doc_ids, limit).await?
+        } else {
             sqlx::query_as::<_, TextChunkRow>(
                 r#"
                 SELECT chunk_id, doc_id, text, page, chunk_type, parser_backend,
@@ -109,24 +103,6 @@ impl PgvectorDataPlane {
             .bind(q)
             .bind(owner)
             .bind(doc_ids)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, TextChunkRow>(
-                r#"
-                SELECT chunk_id, doc_id, text, page, chunk_type, parser_backend,
-                       source_locator, parse_run_id,
-                       ts_rank(search_vector, plainto_tsquery('simple', $1))::float4 AS score
-                FROM rag_text_chunks
-                WHERE owner_user_id = $2
-                  AND search_vector @@ plainto_tsquery('simple', $1)
-                ORDER BY score DESC
-                LIMIT $3
-                "#,
-            )
-            .bind(q)
-            .bind(owner)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?
@@ -153,7 +129,7 @@ impl PgvectorDataPlane {
     /// E1: CJK lexical path over pg_bigm — one `text LIKE '%term%'` per
     /// whitespace-split term (AND chain), scored by the sum of pg_trgm
     /// `similarity(text, term)` (float4, 0..1 per term). Mirrors the tsvector
-    /// path's filters (owner / optional doc scope / limit) and row shape.
+    /// path's filters (owner / required doc scope / limit) and row shape.
     /// NOTE: LIKE (not ILIKE) — the gin_bigm_ops opclass only accelerates the
     /// case-sensitive operator; CJK has no case, and embedded ASCII terms are
     /// matched as written (verified 2026-07-28: ILIKE seq-scans).
@@ -161,19 +137,17 @@ impl PgvectorDataPlane {
         &self,
         q: &str,
         owner: Uuid,
-        doc_ids: Option<&Vec<Uuid>>,
+        doc_ids: &[Uuid],
         limit: i64,
     ) -> anyhow::Result<Vec<TextChunkRow>> {
         let terms = split_terms(q);
-        let (sql, patterns) = build_cjk_bm25_query(&terms, doc_ids.is_some());
+        let (sql, patterns) = build_cjk_bm25_query(&terms);
         let mut query = sqlx::query_as::<_, TextChunkRow>(&sql);
         for pattern in &patterns {
             query = query.bind(pattern);
         }
         query = query.bind(owner);
-        if let Some(ids) = doc_ids {
-            query = query.bind(ids);
-        }
+        query = query.bind(doc_ids);
         query = query.bind(limit);
         Ok(query.fetch_all(&self.pool).await?)
     }
@@ -182,16 +156,18 @@ impl PgvectorDataPlane {
         &self,
         request: MultimodalSearchRequest,
     ) -> anyhow::Result<Vec<ScoredChunk>> {
-        if request.query_vector.is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.query_vector.is_empty() {
             return Ok(Vec::new());
         }
+        let Some(doc_ids) = request.doc_ids.as_ref().filter(|ids| !ids.is_empty()) else {
+            return Ok(Vec::new());
+        };
         let owner = owner_uuid(&request.auth);
         let dense = Vector::from(request.query_vector.clone());
         let limit = request.limit as i64;
 
-        let rows = if let Some(doc_ids) = request.doc_ids.as_ref() {
-            sqlx::query_as::<_, MultimodalChunkRow>(
-                r#"
+        let rows = sqlx::query_as::<_, MultimodalChunkRow>(
+            r#"
                 SELECT chunk_id, doc_id, context_text, caption, image_path, page, chunk_type,
                        parser_backend, source_locator, parse_run_id, asset_id, retrieval_weight,
                        (1.0 - (multimodal_dense <=> $1))::float4 AS score
@@ -200,31 +176,13 @@ impl PgvectorDataPlane {
                 ORDER BY multimodal_dense <=> $1
                 LIMIT $4
                 "#,
-            )
-            .bind(&dense)
-            .bind(owner)
-            .bind(doc_ids)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, MultimodalChunkRow>(
-                r#"
-                SELECT chunk_id, doc_id, context_text, caption, image_path, page, chunk_type,
-                       parser_backend, source_locator, parse_run_id, asset_id, retrieval_weight,
-                       (1.0 - (multimodal_dense <=> $1))::float4 AS score
-                FROM rag_multimodal_chunks
-                WHERE owner_user_id = $2
-                ORDER BY multimodal_dense <=> $1
-                LIMIT $3
-                "#,
-            )
-            .bind(&dense)
-            .bind(owner)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        )
+        .bind(&dense)
+        .bind(owner)
+        .bind(doc_ids)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -430,9 +388,9 @@ fn split_terms(query: &str) -> Vec<String> {
 }
 
 /// Build the CJK bm25 query: `$1..$n` are the `%term%` LIKE patterns
-/// (escaped), then owner, then optional doc_ids, then limit — matching the
-/// bind order in `search_bm25_cjk`. Returns (sql, patterns).
-fn build_cjk_bm25_query(terms: &[String], with_doc_ids: bool) -> (String, Vec<String>) {
+/// (escaped), then owner, doc_ids, then limit — matching the bind order in
+/// `search_bm25_cjk`. Scope is always `doc_id = ANY` (no owner-wide branch).
+fn build_cjk_bm25_query(terms: &[String]) -> (String, Vec<String>) {
     let n = terms.len().min(MAX_CJK_TERMS);
     let score = (1..=n)
         .map(|i| format!("similarity(text, ${i})"))
@@ -443,20 +401,17 @@ fn build_cjk_bm25_query(terms: &[String], with_doc_ids: bool) -> (String, Vec<St
         .collect::<Vec<_>>()
         .join(" AND ");
     let owner_idx = n + 1;
-    let limit_idx = if with_doc_ids { n + 3 } else { n + 2 };
-    let mut sql = format!(
+    let doc_idx = n + 2;
+    let limit_idx = n + 3;
+    let sql = format!(
         "SELECT chunk_id, doc_id, text, page, chunk_type, parser_backend,\n\
          \x20      source_locator, parse_run_id,\n\
          \x20      ({score})::float4 AS score\n\
          FROM rag_text_chunks\n\
-         WHERE owner_user_id = ${owner_idx}"
+         WHERE owner_user_id = ${owner_idx}\n\
+         \x20 AND doc_id = ANY(${doc_idx})\n\
+         \x20 AND {conds}\nORDER BY score DESC\nLIMIT ${limit_idx}"
     );
-    if with_doc_ids {
-        sql.push_str(&format!("\n  AND doc_id = ANY(${})", n + 2));
-    }
-    sql.push_str(&format!(
-        "\n  AND {conds}\nORDER BY score DESC\nLIMIT ${limit_idx}"
-    ));
     let patterns = terms
         .iter()
         .take(n)
@@ -468,6 +423,7 @@ fn build_cjk_bm25_query(terms: &[String], with_doc_ids: bool) -> (String, Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 
     #[test]
     fn cjk_detection() {
@@ -498,7 +454,6 @@ mod tests {
     fn cjk_query_sql_and_binds() {
         let (sql, patterns) = build_cjk_bm25_query(
             &["速冻机".to_string(), "年产".to_string()],
-            true,
         );
         assert_eq!(patterns, vec!["%速冻机%", "%年产%"]);
         // score sums both similarities; conditions AND-chained with ESCAPE.
@@ -508,23 +463,43 @@ mod tests {
         assert!(sql.contains("owner_user_id = $3"), "{sql}");
         assert!(sql.contains("doc_id = ANY($4)"), "{sql}");
         assert!(sql.contains("LIMIT $5"), "{sql}");
-
-        let (sql, _) = build_cjk_bm25_query(&["营销".to_string()], false);
-        assert!(sql.contains("owner_user_id = $2"), "{sql}");
-        assert!(sql.contains("LIMIT $3"), "{sql}");
-        assert!(!sql.contains("doc_id = ANY"), "{sql}");
+        assert!(!sql.contains("LIMIT $3\n") && !sql.contains("LIMIT $3\r"));
     }
 
     #[test]
     fn cjk_query_escapes_patterns_and_caps_terms() {
-        let (sql, patterns) = build_cjk_bm25_query(&["100%_\\".to_string()], false);
+        let (sql, patterns) = build_cjk_bm25_query(&["100%_\\".to_string()]);
         assert_eq!(patterns, vec!["%100\\%\\_\\\\%"]);
         assert!(sql.contains("text LIKE $1 ESCAPE '\\'"), "{sql}");
+        assert!(sql.contains("doc_id = ANY($3)"), "{sql}");
 
         let many: Vec<String> = (0..12).map(|i| format!("词{i}")).collect();
-        let (sql, patterns) = build_cjk_bm25_query(&many, false);
+        let (sql, patterns) = build_cjk_bm25_query(&many);
         assert_eq!(patterns.len(), MAX_CJK_TERMS);
         assert!(sql.contains("owner_user_id = $9"), "{sql}");
-        assert!(sql.contains("LIMIT $10"), "{sql}");
+        assert!(sql.contains("doc_id = ANY($10)"), "{sql}");
+        assert!(sql.contains("LIMIT $11"), "{sql}");
+    }
+
+    #[test]
+    fn missing_or_empty_doc_ids_are_a_closed_scope() {
+        fn closed(doc_ids: Option<Vec<Uuid>>) -> bool {
+            doc_ids.as_ref().filter(|ids| !ids.is_empty()).is_none()
+        }
+        assert!(closed(None));
+        assert!(closed(Some(vec![])));
+        assert!(!closed(Some(vec![Uuid::nil()])));
+    }
+
+    #[test]
+    fn share_remapped_owner_still_needs_doc_ids() {
+        // Share visitors are remapped to the owner's user_id before search.
+        // Fail-closed is the missing doc_ids, not a different owner column.
+        let owner = Uuid::new_v4();
+        let share_auth = AuthContext::new(UserId::from(owner), SubjectKind::User)
+            .with_actor_id(ActorId::new(Uuid::new_v4()));
+        assert_eq!(crate::owner_uuid(&share_auth), owner);
+        let (sql, _) = build_cjk_bm25_query(&["词".to_string()]);
+        assert!(sql.contains("doc_id = ANY("), "{sql}");
     }
 }

@@ -340,18 +340,16 @@ pub fn bm25_index(field_name: &str, index_name: &str) -> Value {
 }
 
 pub fn doc_filter(auth: &AuthContext, doc_ids: Option<&[Uuid]>) -> String {
+    let Some(doc_ids) = doc_ids.filter(|ids| !ids.is_empty()) else {
+        return "doc_id == 'none'".to_string();
+    };
     let mut filter = format!("owner_user_id == {}", milvus_string(&auth.user_id().to_string()));
-    if let Some(doc_ids) = doc_ids {
-        if doc_ids.is_empty() {
-            return "doc_id == 'none'".to_string(); // Block everything if empty
-        }
-        let docs = doc_ids
-            .iter()
-            .map(|doc_id| milvus_string(&doc_id.to_string()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        filter.push_str(&format!(" and doc_id in [{docs}]"));
-    }
+    let docs = doc_ids
+        .iter()
+        .map(|doc_id| milvus_string(&doc_id.to_string()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    filter.push_str(&format!(" and doc_id in [{docs}]"));
     filter
 }
 
@@ -558,5 +556,18 @@ mod tests {
         let (schema, _) = schema_text(&test_config());
         let chunk_type = field_by_name(&schema, "chunk_type");
         assert!(chunk_type["elementTypeParams"]["enable_analyzer"].is_null());
+    }
+
+    #[test]
+    fn doc_filter_none_or_empty_is_closed() {
+        use contracts::auth_runtime::{AuthContext, SubjectKind};
+        let auth = AuthContext::new(uuid::Uuid::from_u128(1).into(), SubjectKind::User);
+        assert_eq!(doc_filter(&auth, None), "doc_id == 'none'");
+        assert_eq!(doc_filter(&auth, Some(&[])), "doc_id == 'none'");
+        let id = uuid::Uuid::from_u128(2);
+        let filter = doc_filter(&auth, Some(&[id]));
+        assert!(filter.contains("owner_user_id"), "{filter}");
+        assert!(filter.contains(&id.to_string()), "{filter}");
+        assert!(!filter.contains("doc_id == 'none'"), "{filter}");
     }
 }

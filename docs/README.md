@@ -52,10 +52,13 @@
 
 ## 近期审计快照（时间点；未吸收进 AGENTS 前非强制）
 
+- `engineering/2026-08-18-security-audit-ai-product.md` — AI 产品安全审查（L0–L6）；修补编排见 `plans/2026-08-18-security-remediation-plan.md`
 - `engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` — **Harness / LLM / 用户三角信道** vs 现网出站；主审复核通过；**§17 方案补丁**（verify 面 / ceiling 分叉 / 次数阈值）闭合后可开 P0
 
 ## 进行中的计划
 
+- `plans/2026-08-18-security-remediation-plan.md` — **AI 产品安全修补**（W0–W5 代码在工作区；P2-14 延期）
+- `plans/2026-08-18-security-review-fixes.md` — **W0–W5 审查修复**（F1–F3 已落地；`--lib` 已过）
 - `plans/2026-08-13-windows-desktop-client-e2e-journey-design.md` — **Windows 桌面客户端打包本机 E2E**（默认套件 shell+ingest；全量旅程锁在产品对齐后；L0 / Windows Playwright+独立 config / L2；`llm-config.json` vs `user_provider_secrets`）。PR-3 交接见 [`plans/2026-08-14-windows-desktop-client-e2e-pr3-handoff.md`](plans/2026-08-14-windows-desktop-client-e2e-pr3-handoff.md)；**产品对齐（PR-4/PR-5）+ 真机验收交接**见 [`plans/2026-08-14-windows-desktop-client-acceptance-handoff.md`](plans/2026-08-14-windows-desktop-client-acceptance-handoff.md)
 - `plans/2026-08-15-windows-sandbox-bridge-port-handoff.md` — **Windows 沙箱 bridge 移植交接**（TCP transport + Job Object；修正 08-14 交接 §4 的 knockout 误诊——真根因是 `#[cfg(not(unix))]` 存根；Linux 18 绿 + Windows bridge interop 绿；剩非 bridge execute 发现、Python 捆绑、D-rag-full 重跑）
 - `plans/2026-08-02-architecture-deepening-plan.md` — 架构深化 5 波（C1 doc-scope / C2 profile memory / C3 Alipay / C4 llm / C5 citations 等）

@@ -56,7 +56,10 @@ impl MilvusDataPlane {
         &self,
         request: TextDenseSearchRequest,
     ) -> anyhow::Result<Vec<ScoredChunk>> {
-        if request.query_vector.is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.query_vector.is_empty() {
+            return Ok(Vec::new());
+        }
+        if request.doc_ids.as_ref().is_none_or(|ids| ids.is_empty()) {
             return Ok(Vec::new());
         }
         let filter = doc_filter(&request.auth, request.doc_ids.as_deref());
@@ -149,7 +152,18 @@ impl MilvusDataPlane {
         &self,
         request: Bm25SearchRequest,
     ) -> anyhow::Result<Bm25SearchOutput> {
-        if request.query.trim().is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.query.trim().is_empty() {
+            return Ok(Bm25SearchOutput {
+                chunks: Vec::new(),
+                trace: Bm25SearchTrace {
+                    backend: "milvus_bm25".to_string(),
+                    raw_hit_count: 0,
+                    hydrated_hit_count: 0,
+                    fallback_reason: None,
+                },
+            });
+        }
+        if request.doc_ids.as_ref().is_none_or(|ids| ids.is_empty()) {
             return Ok(Bm25SearchOutput {
                 chunks: Vec::new(),
                 trace: Bm25SearchTrace {
@@ -201,7 +215,10 @@ impl MilvusDataPlane {
         &self,
         request: MultimodalSearchRequest,
     ) -> anyhow::Result<Vec<ScoredChunk>> {
-        if request.query_vector.is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.query_vector.is_empty() {
+            return Ok(Vec::new());
+        }
+        if request.doc_ids.as_ref().is_none_or(|ids| ids.is_empty()) {
             return Ok(Vec::new());
         }
         let rows = self

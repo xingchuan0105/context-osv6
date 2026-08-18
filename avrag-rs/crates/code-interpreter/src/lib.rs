@@ -3,11 +3,11 @@
 //! ## Security
 //!
 //! The interpreter runs user-submitted Python code in an isolated subprocess:
-//! - `setrlimit(RLIMIT_AS, 256MB)` — virtual memory cap
-//! - `setrlimit(RLIMIT_CPU, 30s)` — CPU time cap
+//! - Child env is cleared (no inherited `JWT_SECRET` / `DATABASE_URL` / API keys)
+//! - Unix `pre_exec` `setrlimit(RLIMIT_AS, RLIMIT_CPU)`; Windows job object
 //! - Process-level timeout (30s wall-clock)
-//! - Temp directory with restricted permissions
-//! - Python `__import__` hook blocks: `os`, `subprocess`, `socket`, `sys`, `ctypes`, `shutil`, `posix`, `fcntl`, `pty`, `pwd`, `grp`, `resource`, `signal`, `multiprocessing`, `threading`
+//! - Temp directory working dir
+//! - Import hook blocks dangerous modules (defense in depth, not the boundary)
 //!
 //! ## Output
 //!
@@ -20,6 +20,7 @@ mod bridge;
 pub use bridge::{HostBridge, bridge_shim_client_method_names};
 
 use std::io::Read;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
@@ -126,11 +127,9 @@ impl CodeInterpreter {
     ///
     /// # Security
     ///
-    /// The code runs inside a wrapper that:
-    /// 1. Creates a temporary working directory
-    /// 2. Sets resource limits (memory, CPU)
-    /// 3. Blocks dangerous `import` calls
-    /// 4. Captures output
+    /// The code runs in a subprocess with a cleared environment, OS resource
+    /// limits (unix rlimits / windows job object), and an import hook. The
+    /// import hook is defense in depth, not a security boundary.
     pub fn execute(&self, code: &str) -> Result<ExecutionResult, InterpreterError> {
         let sandbox_code = build_sandbox_wrapper(code, self.memory_limit_mb, self.cpu_limit_secs);
 
@@ -139,10 +138,7 @@ impl CodeInterpreter {
 
         // Windows PATH may only offer the zero-byte WindowsApps store stub, so
         // resolve a real interpreter first (env override → bundle → probed PATH).
-        #[cfg(windows)]
-        let python_path = bridge::resolve_python_path(&self.python_path)?;
-        #[cfg(not(windows))]
-        let python_path = self.python_path.clone();
+        let python_path = resolve_python_executable(&self.python_path)?;
         let mut command = Command::new(&python_path);
         command
             .arg("-c")
@@ -151,11 +147,16 @@ impl CodeInterpreter {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        // Put the child in its own process group so that, on timeout, we can
-        // kill the python process *and* any subprocesses it may have spawned
-        // (child becomes the pgid leader, so pid == pgid).
+        apply_sandbox_env(&mut command, &python_path, temp_dir.path(), &[]);
         #[cfg(unix)]
-        command.process_group(0);
+        {
+            command.process_group(0);
+            let memory_mb = self.memory_limit_mb;
+            let cpu_secs = self.cpu_limit_secs;
+            unsafe {
+                command.pre_exec(move || apply_unix_rlimits(memory_mb, cpu_secs));
+            }
+        }
         let mut child = command.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 InterpreterError::PythonNotFound(self.python_path.clone())
@@ -171,9 +172,9 @@ impl CodeInterpreter {
         #[cfg(windows)]
         let job = bridge::job_object_for_child(child.id(), self.memory_limit_mb, self.cpu_limit_secs);
 
-        // Resource limits are applied inside the Python sandbox via the
-        // `resource` module.  The Python wrapper calls resource.setrlimit()
-        // before executing user code (see build_sandbox_wrapper).
+        // Resource limits are applied in the child (unix: pre_exec setrlimit;
+        // windows: job object below). The Python wrapper also tries resource
+        // as defense in depth and must not be treated as the security boundary.
 
         let timeout = Duration::from_secs(self.timeout_secs);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -254,39 +255,124 @@ fn read_pipe<R: Read>(stream: &mut Option<R>) -> Result<String, InterpreterError
     Ok(String::from_utf8(buf)?)
 }
 
+pub(crate) fn resolve_python_executable(configured: &str) -> Result<String, InterpreterError> {
+    #[cfg(windows)]
+    {
+        return bridge::resolve_python_path(configured);
+    }
+    #[cfg(not(windows))]
+    {
+        let path = Path::new(configured);
+        if path.is_absolute() {
+            return Ok(configured.to_string());
+        }
+        if let Ok(path_var) = std::env::var("PATH") {
+            for dir in std::env::split_paths(&path_var) {
+                let candidate = dir.join(configured);
+                if candidate.is_file() {
+                    return Ok(candidate.to_string_lossy().into_owned());
+                }
+            }
+        }
+        Err(InterpreterError::PythonNotFound(configured.to_string()))
+    }
+}
+
+/// Minimal child environment: no inherited secrets. `python_path` must already
+/// be an executable path whose parent can be used as PATH.
+pub(crate) fn apply_sandbox_env(
+    command: &mut Command,
+    python_path: &str,
+    temp_dir: &Path,
+    extra_env: &[(&str, &str)],
+) {
+    command.env_clear();
+    let python_dir = Path::new(python_path)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    command.env("PATH", python_dir);
+    command.env("HOME", temp_dir);
+    command.env("TMPDIR", temp_dir);
+    command.env("LANG", "C.UTF-8");
+    command.env("LC_ALL", "C.UTF-8");
+    command.env("PYTHONDONTWRITEBYTECODE", "1");
+    #[cfg(windows)]
+    {
+        command.env("TEMP", temp_dir);
+        command.env("TMP", temp_dir);
+        for key in ["SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "PATHEXT"] {
+            if let Ok(value) = std::env::var(key) {
+                command.env(key, value);
+            }
+        }
+    }
+    for (key, value) in extra_env {
+        command.env(*key, *value);
+    }
+}
+
+#[cfg(unix)]
+pub(crate) fn apply_unix_rlimits(memory_mb: u64, cpu_secs: u64) -> std::io::Result<()> {
+    unsafe {
+        let mem_bytes = (memory_mb as libc::rlim_t).saturating_mul(1024 * 1024);
+        let mem = libc::rlimit {
+            rlim_cur: mem_bytes,
+            rlim_max: mem_bytes,
+        };
+        if libc::setrlimit(libc::RLIMIT_AS, &mem) != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let cpu = libc::rlimit {
+            rlim_cur: cpu_secs as libc::rlim_t,
+            rlim_max: cpu_secs as libc::rlim_t,
+        };
+        if libc::setrlimit(libc::RLIMIT_CPU, &cpu) != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Python sandbox wrapper
 // ---------------------------------------------------------------------------
 
-/// Build the Python sandbox wrapper that:
-/// 1. Sets resource limits via the `resource` module
-/// 2. Overrides `__import__` to block dangerous modules
-/// 3. Captures stdout/stderr
-/// 4. Returns a JSON-serialized `ExecutionResult`
-fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, cpu_secs: u64) -> String {
-    let blocked_modules = [
-        "os",
-        "subprocess",
-        "socket",
-        "sys",
-        "ctypes",
-        "shutil",
-        "posix",
-        "fcntl",
-        "pty",
-        "pwd",
-        "grp",
-        "resource",
-        "signal",
-        "multiprocessing",
-        "threading",
-    ];
+const BLOCKED_MODULES: &[&str] = &[
+    "os",
+    "subprocess",
+    "socket",
+    "sys",
+    "ctypes",
+    "shutil",
+    "posix",
+    "fcntl",
+    "pty",
+    "pwd",
+    "grp",
+    "resource",
+    "signal",
+    "multiprocessing",
+    "threading",
+    "importlib",
+];
 
-    let blocked_list = blocked_modules
+pub(crate) fn blocked_modules_literal() -> String {
+    BLOCKED_MODULES
         .iter()
-        .map(|m| format!("'{}'", m))
+        .map(|m| format!("'{m}'"))
         .collect::<Vec<_>>()
-        .join(", ");
+        .join(", ")
+}
+
+/// Build the Python sandbox wrapper.
+///
+/// OS rlimits are applied by the parent (`pre_exec` / job object). This wrapper
+/// still tries `resource` before installing the import hook (defense in depth).
+/// User code runs in an isolated globals dict so wrapper names are not visible.
+fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, cpu_secs: u64) -> String {
+    let blocked_list = blocked_modules_literal();
 
     // Escape user code for safe embedding in a Python string literal.
     let escaped_code = user_code
@@ -297,29 +383,27 @@ fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, cpu_secs: u64) -> Stri
     format!(
         r#"import sys, io, json, traceback
 
-BLOCKED = {{{blocked_list}}}
-_original_import = __builtins__.__import__
-
-def _safe_import(name, *args, **kwargs):
-    top = name.split('.')[0]
-    if top in BLOCKED:
-        raise ImportError(f"import of '{{name}}' is blocked for security reasons")
-    return _original_import(name, *args, **kwargs)
-
-__builtins__.__import__ = _safe_import
-
 try:
     import resource
     mem_bytes = {memory_mb} * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-except Exception:
-    pass
-
-try:
-    import resource
     resource.setrlimit(resource.RLIMIT_CPU, ({cpu_secs}, {cpu_secs}))
 except Exception:
     pass
+
+BLOCKED = {{{blocked_list}}}
+
+def _install_import_hook(blocked):
+    orig = __builtins__.__import__
+    def _safe_import(name, *args, **kwargs):
+        top = name.split('.')[0]
+        if top in blocked:
+            raise ImportError(f"import of '{{name}}' is blocked for security reasons")
+        return orig(name, *args, **kwargs)
+    __builtins__.__import__ = _safe_import
+
+_install_import_hook(BLOCKED)
+del _install_import_hook, BLOCKED
 
 _real_stdout = sys.stdout
 _real_stderr = sys.stderr
@@ -330,8 +414,9 @@ sys.stderr = _cap_stderr
 
 _result = None
 _code = '{escaped_code}'
+_user_ns = {{'__name__': '__main__'}}
 try:
-    exec(compile(_code, '<sandbox>', 'exec'))
+    exec(compile(_code, '<sandbox>', 'exec'), _user_ns)
 except Exception:
     traceback.print_exc()
 
@@ -457,6 +542,126 @@ print(json.dumps(chunks))
         let interpreter = CodeInterpreter::new().with_timeout(10);
         let result = interpreter.execute("import subprocess").unwrap();
         assert!(!result.stderr.is_empty(), "stderr: {}", result.stderr);
+    }
+
+    #[test]
+    fn original_import_is_not_visible_to_user_code() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute("print('_original_import' in globals() or '_original_import' in dir())")
+            .unwrap();
+        assert!(
+            result.stdout.contains("False"),
+            "stdout={} stderr={}",
+            result.stdout,
+            result.stderr
+        );
+    }
+
+    #[test]
+    fn importlib_is_blocked() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute("import importlib")
+            .unwrap();
+        assert!(
+            result.stderr.contains("blocked") || result.stderr.contains("ImportError"),
+            "stderr: {}",
+            result.stderr
+        );
+    }
+
+    #[test]
+    fn importlib_import_module_subprocess_is_blocked() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute("__import__('importlib').import_module('subprocess')")
+            .unwrap();
+        assert!(
+            result.stderr.contains("blocked") || result.stderr.contains("ImportError"),
+            "stderr: {}",
+            result.stderr
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn child_rlimit_as_is_not_unlimited() {
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("skipping: python3 not found on PATH");
+            return;
+        }
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute("print(open('/proc/self/limits').read())")
+            .unwrap();
+        assert!(result.success, "stderr: {}", result.stderr);
+        let line = result
+            .stdout
+            .lines()
+            .find(|l| l.contains("Max address space"))
+            .expect("Max address space row in /proc/self/limits");
+        assert!(
+            !line.to_ascii_lowercase().contains("unlimited"),
+            "RLIMIT_AS should be finite: {line}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_user_ns_hides_wrapper_globals() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute_with_bridge(
+                "print('sys' in globals())\nprint('client' in globals())",
+                std::sync::Arc::new(StubBridge),
+            )
+            .await
+            .unwrap();
+        assert!(result.success, "stderr: {}", result.stderr);
+        let lines: Vec<&str> = result.stdout.lines().collect();
+        assert!(
+            lines.iter().any(|l| *l == "False"),
+            "sys must not be in user globals: stdout={}",
+            result.stdout
+        );
+        assert!(
+            lines.iter().any(|l| *l == "True"),
+            "client must be in user globals: stdout={}",
+            result.stdout
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn child_does_not_inherit_parent_secrets() {
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("skipping: python3 not found on PATH");
+            return;
+        }
+        unsafe {
+            std::env::set_var("JWT_SECRET", "unit-test-should-not-leak");
+            std::env::set_var("DATABASE_URL", "postgres://unit-test-should-not-leak");
+        }
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute(
+                "env = open('/proc/self/environ','rb').read()\nprint('LEAK' if b'unit-test-should-not-leak' in env else 'CLEAN')",
+            )
+            .unwrap();
+        assert!(
+            result.stdout.contains("CLEAN"),
+            "stdout={} stderr={}",
+            result.stdout,
+            result.stderr
+        );
     }
 
     #[test]

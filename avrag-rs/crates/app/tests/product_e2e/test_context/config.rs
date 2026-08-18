@@ -213,9 +213,16 @@ impl E2eBootstrapConfig {
             self.object_root, self.ingestion_queue_group
         );
         cmd.env("E2E_ENABLED", "true")
+            .env("TRUST_PROXY_AUTH", "true")
+            .env("NODE_ENV", "test")
             .env("NEXT_PUBLIC_DEV_OWNER_USER_ID", &self.owner_user_id)
             .env("NEXT_PUBLIC_DEV_USER_ID", &self.user_id)
             .env("DATABASE_URL", &self.database_url)
+            .env(
+                "AVRAG_UPLOAD_SIGNING_SECRET",
+                std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
+                    .unwrap_or_else(|_| "e2e-upload-signing-secret".to_string()),
+            )
             .env(
                 "AVRAG_RUN_MIGRATIONS",
                 if self.auto_migrate { "true" } else { "false" },

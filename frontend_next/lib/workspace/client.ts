@@ -21,6 +21,9 @@ export function mapWorkspace(raw: ApiWorkspace): Workspace {
   return { ...rest, workspace_id: id };
 }
 
+/** Matches server default `AVRAG_MAX_UPLOAD_FILE_SIZE_BYTES` (100 MiB). */
+export const MAX_UPLOAD_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+
 function workspaceFromEnvelope(resp: { workspace?: ApiWorkspace }): Workspace {
   const raw = resp.workspace;
   if (!raw) {
@@ -283,6 +286,9 @@ export async function createWorkspaceDocumentUpload(
   workspace_id: string,
   requestBody: CreateWorkspaceDocumentUploadRequest,
 ): Promise<WorkspaceDocumentUploadResponse> {
+  if (requestBody.file_size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+    throw new Error(`file exceeds ${MAX_UPLOAD_FILE_SIZE_BYTES} bytes`);
+  }
   const resp = await request<WorkspaceDocumentUploadResponse>(
     `/api/v1/workspaces/${workspace_id}/documents`,
     {

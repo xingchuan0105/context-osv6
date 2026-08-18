@@ -28,13 +28,25 @@ pub fn get_app_version() -> String {
 pub(crate) fn open_with_os(target: &std::ffi::OsStr) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        // `cmd /C start "" <target>`; the empty title avoids swallowing a
-        // quoted target. Avoid `explorer.exe <url>` which sometimes reuses a
-        // shell tab.
-        let mut cmd = std::process::Command::new("cmd");
-        cmd.args(["/C", "start", ""]).arg(target);
-        crate::commands::win_cmd::hide_console(&mut cmd);
-        cmd.spawn().map_err(|e| e.to_string())?;
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+        let wide: Vec<u16> = target.encode_wide().chain(Some(0)).collect();
+        let operation: Vec<u16> = "open".encode_utf16().chain(Some(0)).collect();
+        let result = unsafe {
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                operation.as_ptr(),
+                wide.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if result as isize <= 32 {
+            return Err(format!("ShellExecuteW failed: {result:?}"));
+        }
         return Ok(());
     }
     #[cfg(target_os = "macos")]

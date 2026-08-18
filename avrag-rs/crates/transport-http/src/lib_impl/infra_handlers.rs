@@ -69,7 +69,24 @@ pub(crate) async fn ready_handler(State(state): State<AppState>) -> Response {
     }
 }
 
-pub(crate) async fn metrics_handler(State(state): State<AppState>) -> Response {
+pub(crate) async fn metrics_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    match metrics_access(
+        &headers,
+        &std::env::var("NODE_ENV").unwrap_or_default(),
+        std::env::var("METRICS_TOKEN").ok().as_deref(),
+    ) {
+        MetricsAccess::Allow => {}
+        MetricsAccess::NotFound => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        MetricsAccess::Unauthorized => {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+    }
+
     let mut body = telemetry::prometheus::encode_metrics();
     // Ingestion queue depth by status — scrape-time read so the gauge is fresh.
     if let Some(pool) = state.postgres_pool() {
@@ -99,6 +116,49 @@ pub(crate) async fn metrics_handler(State(state): State<AppState>) -> Response {
         body,
     )
         .into_response()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MetricsAccess {
+    Allow,
+    NotFound,
+    Unauthorized,
+}
+
+fn metrics_access(headers: &HeaderMap, node_env: &str, metrics_token: Option<&str>) -> MetricsAccess {
+    let expected = metrics_token.map(str::trim).filter(|t| !t.is_empty());
+    match expected {
+        Some(token) => {
+            if metrics_token_matches(headers, token) {
+                MetricsAccess::Allow
+            } else {
+                MetricsAccess::Unauthorized
+            }
+        }
+        None if node_env == "production" => MetricsAccess::NotFound,
+        None => MetricsAccess::Allow,
+    }
+}
+
+fn metrics_token_matches(headers: &HeaderMap, expected: &str) -> bool {
+    if let Some(header) = headers
+        .get("x-metrics-token")
+        .and_then(|value| value.to_str().ok())
+    {
+        if header.trim() == expected {
+            return true;
+        }
+    }
+    let Some(auth) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return false;
+    };
+    auth.strip_prefix("Bearer ")
+        .or_else(|| auth.strip_prefix("bearer "))
+        .map(str::trim)
+        == Some(expected)
 }
 
 pub(crate) async fn docs_handler() -> Response {
@@ -214,12 +274,11 @@ pub(crate) async fn signed_upload_handler(
                 return handlers::app_error_response(error);
             }
         }
-        None if state.postgres_configured() => {
+        None => {
             return handlers::app_error_response(common::AppError::internal(
                 "upload object path is not configured",
             ));
         }
-        None => {}
     }
 
     if body.len() as u64 > state.max_upload_file_size_bytes() {
@@ -475,3 +534,48 @@ fn extract_document_id_from_object_path(path: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn metrics_open_outside_production_when_token_unset() {
+        let headers = HeaderMap::new();
+        assert_eq!(metrics_access(&headers, "test", None), MetricsAccess::Allow);
+        assert_eq!(metrics_access(&headers, "", Some("  ")), MetricsAccess::Allow);
+    }
+
+    #[test]
+    fn metrics_hidden_in_production_when_token_unset() {
+        let headers = HeaderMap::new();
+        assert_eq!(
+            metrics_access(&headers, "production", None),
+            MetricsAccess::NotFound
+        );
+    }
+
+    #[test]
+    fn metrics_token_requires_header() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(
+            metrics_access(&headers, "production", Some("s3cret")),
+            MetricsAccess::Unauthorized
+        );
+        headers.insert("x-metrics-token", HeaderValue::from_static("s3cret"));
+        assert_eq!(
+            metrics_access(&headers, "production", Some("s3cret")),
+            MetricsAccess::Allow
+        );
+        headers.clear();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer s3cret"),
+        );
+        assert_eq!(
+            metrics_access(&headers, "test", Some("s3cret")),
+            MetricsAccess::Allow
+        );
+    }
+}

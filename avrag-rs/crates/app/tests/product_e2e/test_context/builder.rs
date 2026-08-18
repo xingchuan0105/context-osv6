@@ -469,9 +469,23 @@ impl TestContext {
                 (None, None, None, None)
             };
 
-        // Transport middleware still reads this single flag from env (known seam).
+        // Transport middleware reads TRUST_PROXY_AUTH (not E2E_ENABLED) for
+        // x-owner-user-id header auth. E2E_ENABLED still lifts rate limits and
+        // opens /api/e2e/*. NODE_ENV must not be production or proxy auth is hard-denied.
         unsafe {
             std::env::set_var("E2E_ENABLED", "true");
+            std::env::set_var("TRUST_PROXY_AUTH", "true");
+            std::env::set_var("NODE_ENV", "test");
+            if std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .is_none()
+            {
+                std::env::set_var(
+                    "AVRAG_UPLOAD_SIGNING_SECRET",
+                    "e2e-upload-signing-secret",
+                );
+            }
         }
 
         let run_migrations = pg_url_needs_migration(&pg_url);

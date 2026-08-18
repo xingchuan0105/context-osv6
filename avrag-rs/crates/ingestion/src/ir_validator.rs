@@ -23,6 +23,7 @@ pub struct DocumentIrValidationReport {
 pub struct DocumentIrValidationOptions {
     pub strip_nul_bytes: bool,
     pub normalize_line_endings: bool,
+    pub strip_hidden_unicode: bool,
 }
 
 impl Default for DocumentIrValidationOptions {
@@ -30,6 +31,7 @@ impl Default for DocumentIrValidationOptions {
         Self {
             strip_nul_bytes: true,
             normalize_line_endings: true,
+            strip_hidden_unicode: true,
         }
     }
 }
@@ -298,7 +300,17 @@ fn sanitize_string_field(
         warnings.push(issue(
             "nul_bytes_stripped",
             "stripped NUL bytes from document ir field".to_string(),
-            block_id,
+            block_id.clone(),
+            None,
+            page,
+        ));
+    }
+    if options.strip_hidden_unicode && value.chars().any(is_hidden_unicode) {
+        value.retain(|c| !is_hidden_unicode(c));
+        warnings.push(issue(
+            "hidden_unicode_stripped",
+            "stripped hidden / bidi unicode from document ir field".to_string(),
+            block_id.clone(),
             None,
             page,
         ));
@@ -306,6 +318,24 @@ fn sanitize_string_field(
     if options.normalize_line_endings && (value.contains("\r\n") || value.contains('\r')) {
         *value = value.replace("\r\n", "\n").replace('\r', "\n");
     }
+}
+
+/// Zero-width, BOM, soft hyphen, and bidi override/isolate controls used to
+/// hide payload from humans while still reaching the model.
+fn is_hidden_unicode(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{200B}'
+            | '\u{200C}'
+            | '\u{200D}'
+            | '\u{200E}'
+            | '\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
 }
 
 fn contains_nul(value: &str) -> bool {
@@ -547,6 +577,26 @@ mod tests {
                 .warnings
                 .iter()
                 .any(|warning| warning.code == "nul_bytes_stripped")
+        );
+    }
+
+    #[test]
+    fn sanitize_and_validate_document_ir_strips_hidden_unicode() {
+        let mut document = base_document();
+        document.title = "vis\u{200B}ible".to_string();
+        document.blocks[0].text = "hello\u{202E}dlrow".to_string();
+
+        let report =
+            sanitize_and_validate_document_ir(document, &DocumentIrValidationOptions::default())
+                .expect("sanitized document should validate");
+
+        assert_eq!(report.document.title, "visible");
+        assert_eq!(report.document.blocks[0].text, "hellodlrow");
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.code == "hidden_unicode_stripped")
         );
     }
 

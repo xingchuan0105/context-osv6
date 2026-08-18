@@ -38,10 +38,12 @@ describe("ConsentCheckbox", () => {
     const termsLink = screen.getByText("《用户服务协议》").closest("a");
     expect(termsLink).toHaveAttribute("href", "/legal/terms");
     expect(termsLink).toHaveAttribute("target", "_blank");
+    expect(termsLink).toHaveAttribute("rel", "noopener noreferrer");
 
     const privacyLink = screen.getByText("《隐私政策》").closest("a");
     expect(privacyLink).toHaveAttribute("href", "/legal/privacy");
     expect(privacyLink).toHaveAttribute("target", "_blank");
+    expect(privacyLink).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("calls onConsentChange with true when checked", () => {

@@ -72,19 +72,11 @@ fn ensure_app_data(app: &tauri::AppHandle) -> Result<PathBuf, IpcApiError> {
 }
 
 fn random_password() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let mut hasher = DefaultHasher::new();
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
-        .hash(&mut hasher);
-    std::process::id().hash(&mut hasher);
-    // 32 hex chars (>= 8) — stable enough for local single-user install.
-    format!("{:x}{:x}", hasher.finish(), hasher.finish().wrapping_mul(0x9e37))
+    format!(
+        "{:032x}{:032x}",
+        uuid::Uuid::new_v4().as_u128(),
+        uuid::Uuid::new_v4().as_u128()
+    )
 }
 
 fn load_or_create_credentials(app: &tauri::AppHandle) -> Result<StoredCredentials, IpcApiError> {
@@ -107,11 +99,7 @@ fn load_or_create_credentials(app: &tauri::AppHandle) -> Result<StoredCredential
         .map_err(|e| IpcApiError::internal(format!("serialize local_user: {e}")))?;
     std::fs::write(&path, raw)
         .map_err(|e| IpcApiError::internal(format!("write local_user: {e}")))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-    }
+    super::secret_fs::restrict_secret_file(&path);
     Ok(creds)
 }
 
@@ -400,7 +388,10 @@ mod tests {
 
     #[test]
     fn random_password_long_enough() {
-        assert!(random_password().len() >= 16);
+        let a = random_password();
+        let b = random_password();
+        assert!(a.len() >= 16);
+        assert_ne!(a, b);
     }
 
     #[test]

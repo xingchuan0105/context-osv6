@@ -20,6 +20,7 @@ import {
   updateWorkspace,
   updateWorkspaceNote,
   updateWorkspaceSession,
+  MAX_UPLOAD_FILE_SIZE_BYTES,
 } from "../../lib/workspace/client";
 
 const fetchMock = vi.fn();
@@ -802,5 +803,16 @@ describe("workspace client", () => {
         body: JSON.stringify({}),
       }),
     );
+  });
+
+  it("rejects uploads over the 100MB client precheck", async () => {
+    await expect(
+      createWorkspaceDocumentUpload("token-123", "ws-1", {
+        filename: "huge.bin",
+        file_size: MAX_UPLOAD_FILE_SIZE_BYTES + 1,
+        mime_type: "application/octet-stream",
+      }),
+    ).rejects.toThrow(/exceeds/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

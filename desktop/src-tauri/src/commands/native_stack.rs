@@ -392,6 +392,7 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
     } else {
         let s = format!("{:x}", uuid::Uuid::new_v4().as_u128());
         fs::write(&jwt_path, format!("{s}\n")).map_err(|e| e.to_string())?;
+        super::secret_fs::restrict_secret_file(&jwt_path);
         s
     };
     // BYOK envelope key for `user_provider_secrets` (ADR-0010 G1). Must be stable
@@ -410,6 +411,7 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
         bytes[16..].copy_from_slice(b.as_bytes());
         let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
         fs::write(&byok_path, format!("{encoded}\n")).map_err(|e| e.to_string())?;
+        super::secret_fs::restrict_secret_file(&byok_path);
         encoded
     };
     let (owner_id, user_id) = local_identity_uuids();
@@ -513,6 +515,9 @@ AVRAG_EMBEDDING_DIM=1024
         relay_env = relay_env,
     );
     fs::write(&env_path, body).map_err(|e| e.to_string())?;
+    super::secret_fs::restrict_secret_file(&env_path);
+    super::secret_fs::restrict_secret_file(&jwt_path);
+    super::secret_fs::restrict_secret_file(&byok_path);
     fs::write(rt.join("stack.mode"), "native\n").ok();
     append_log(log, format!("wrote {}", env_path.display()));
     Ok(())

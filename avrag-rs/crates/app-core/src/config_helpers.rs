@@ -22,11 +22,33 @@ pub(crate) fn build_redis_url(addr: &str, password: &str, db: i64) -> String {
     }
 }
 
-pub(crate) fn upload_signing_secret() -> String {
+pub(crate) fn upload_signing_secret() -> Result<String, AppError> {
     std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
         .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "context-osv6-local-upload-secret".to_string())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            AppError::internal_code(
+                "upload_signing_unconfigured",
+                "AVRAG_UPLOAD_SIGNING_SECRET is not configured",
+            )
+        })
+}
+
+fn upload_hmac(
+    secret: &str,
+    document_id: &str,
+    object_path: &str,
+    expires: u64,
+) -> Result<HmacSha256, AppError> {
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|error| AppError::internal(format!("upload signer init failed: {error}")))?;
+    mac.update(document_id.as_bytes());
+    mac.update(b":");
+    mac.update(object_path.as_bytes());
+    mac.update(b":");
+    mac.update(expires.to_string().as_bytes());
+    Ok(mac)
 }
 
 pub(crate) fn sign_upload_payload(
@@ -35,14 +57,24 @@ pub(crate) fn sign_upload_payload(
     object_path: &str,
     expires: u64,
 ) -> Result<String, AppError> {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .map_err(|error| AppError::internal(format!("upload signer init failed: {error}")))?;
-    mac.update(document_id.as_bytes());
-    mac.update(b":");
-    mac.update(object_path.as_bytes());
-    mac.update(b":");
-    mac.update(expires.to_string().as_bytes());
+    let mac = upload_hmac(secret, document_id, object_path, expires)?;
     Ok(hex::encode(mac.finalize().into_bytes()))
+}
+
+pub(crate) fn verify_upload_payload(
+    secret: &str,
+    document_id: &str,
+    object_path: &str,
+    expires: u64,
+    signature: &str,
+) -> Result<(), AppError> {
+    let mac = upload_hmac(secret, document_id, object_path, expires)?;
+    let provided = hex::decode(signature.trim()).map_err(|_| {
+        AppError::validation("invalid_upload_signature", "invalid upload signature")
+    })?;
+    mac.verify_slice(&provided).map_err(|_| {
+        AppError::validation("invalid_upload_signature", "invalid upload signature")
+    })
 }
 
 pub fn parse_uuid_or_app_error(
@@ -379,5 +411,42 @@ mod tests {
         let pool = llm_pool_config_from_env("TESTPOOL", &primary()).expect("pool");
         assert_eq!(pool.members.len(), 1);
         assert_eq!(pool.members[0].api_keys, vec!["pk"]);
+    }
+
+    #[test]
+    fn upload_signing_secret_fail_closed_and_rejects_legacy_constant() {
+        let _g = EnvGuard::remove("AVRAG_UPLOAD_SIGNING_SECRET");
+        let err = upload_signing_secret().expect_err("secret must be required");
+        match err {
+            AppError::Internal { code, .. } => {
+                assert_eq!(code, "upload_signing_unconfigured");
+            }
+            other => panic!("expected internal_code, got {other:?}"),
+        }
+
+        let _g = EnvGuard::set("AVRAG_UPLOAD_SIGNING_SECRET", "unit-test-upload-secret");
+        let expires = 9_999_999_999u64;
+        let sig = sign_upload_payload("unit-test-upload-secret", "doc", "obj", expires).unwrap();
+        verify_upload_payload("unit-test-upload-secret", "doc", "obj", expires, &sig).unwrap();
+        let forged = sign_upload_payload(
+            "context-osv6-local-upload-secret",
+            "doc",
+            "obj",
+            expires,
+        )
+        .unwrap();
+        assert!(
+            verify_upload_payload("unit-test-upload-secret", "doc", "obj", expires, &forged)
+                .is_err(),
+            "legacy hardcoded secret must not verify"
+        );
+        assert!(verify_upload_payload(
+            "unit-test-upload-secret",
+            "doc",
+            "obj",
+            expires,
+            "not-hex"
+        )
+        .is_err());
     }
 }

@@ -25,7 +25,7 @@ export async function renderLegalMarkdown(
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
-    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(remarkRehype, { allowDangerousHtml: false })
     .use(rehypeSlug)
     .use(rehypeAutolinkHeadings, {
       behavior: "wrap",
@@ -33,7 +33,7 @@ export async function renderLegalMarkdown(
         className: ["legal-heading-anchor"],
       },
     })
-    .use(rehypeStringify, { allowDangerousHtml: true });
+    .use(rehypeStringify, { allowDangerousHtml: false });
 
   const file = await processor.process(markdown);
   const html = String(file);

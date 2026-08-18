@@ -12,7 +12,7 @@ use avrag_retrieval_data_plane::{
     TextDenseSearchRequest,
 };
 use avrag_storage_pgvector::{PgvectorConfig, PgvectorDataPlane};
-use contracts::auth_runtime::{AuthContext, SubjectKind, UserId};
+use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -125,6 +125,49 @@ async fn replace_search_and_graph_roundtrip() {
         "expected dense hit, got {dense_hits:?}"
     );
     assert_eq!(dense_hits[0].chunk_id, chunk_id);
+
+    let none_hits = plane
+        .search_text_dense(TextDenseSearchRequest {
+            auth: auth.clone(),
+            query_vector: unit_vec(dim, 3),
+            doc_ids: None,
+            limit: 5,
+        })
+        .await
+        .expect("search_text_dense none scope");
+    assert!(
+        none_hits.is_empty(),
+        "doc_ids=None must fail closed, got {none_hits:?}"
+    );
+
+    let share_auth = AuthContext::new(UserId::from(owner), SubjectKind::User)
+        .with_actor_id(ActorId::new(Uuid::new_v4()));
+    let share_none = plane
+        .search_text_dense(TextDenseSearchRequest {
+            auth: share_auth.clone(),
+            query_vector: unit_vec(dim, 3),
+            doc_ids: None,
+            limit: 5,
+        })
+        .await
+        .expect("search_text_dense share none");
+    assert!(
+        share_none.is_empty(),
+        "share remap + doc_ids=None must fail closed, got {share_none:?}"
+    );
+    let share_hits = plane
+        .search_text_dense(TextDenseSearchRequest {
+            auth: share_auth,
+            query_vector: unit_vec(dim, 3),
+            doc_ids: Some(vec![doc_id]),
+            limit: 5,
+        })
+        .await
+        .expect("search_text_dense share scoped");
+    assert!(
+        !share_hits.is_empty(),
+        "share remap + scoped doc_ids should hit, got {share_hits:?}"
+    );
 
     let graph = plane
         .search_graph(GraphSearchRequest {

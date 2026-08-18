@@ -10,6 +10,8 @@
 pub mod input;
 pub mod output;
 
+pub use input::INJECTION_SUBSTRINGS;
+
 use contracts::chat::{DegradeReason, DegradeTraceItem, GuardReport, GuardResult};
 use uuid::Uuid;
 

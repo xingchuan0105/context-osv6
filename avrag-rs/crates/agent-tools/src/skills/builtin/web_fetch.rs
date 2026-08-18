@@ -96,7 +96,7 @@ impl SkillComponent for WebFetchSkill {
             };
         }
 
-        if let Err(e) = validate_url(url) {
+        if let Err(e) = common::validate_http_url_with_dns(url, true) {
             return ToolResult {
                 tool: self.id().to_string(),
                 version: self.version().to_string(),
@@ -162,12 +162,17 @@ struct FetchResult {
 }
 
 async fn fetch_and_extract(url: &str, max_length: usize) -> anyhow::Result<FetchResult> {
+    // Re-check here so CRW never receives a private target even if a caller
+    // bypasses execute(). DNS is resolved so names that map to RFC1918 fail closed.
+    common::validate_http_url_with_dns(url, true)?;
+
     // Prefer CRW (Docker/local binary) when configured — same reader as web auto-scrape.
     if let Some(result) = try_crw_scrape(url, max_length).await {
         return result;
     }
 
     let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("Context-OS-Agent/1.0")
         .build()?;
@@ -234,42 +239,6 @@ async fn try_crw_scrape(url: &str, max_length: usize) -> Option<anyhow::Result<F
         }
         Err(e) => Some(Err(e)),
     }
-}
-
-fn validate_url(url: &str) -> anyhow::Result<()> {
-    let lower = url.to_lowercase();
-    if !lower.starts_with("http://") && !lower.starts_with("https://") {
-        anyhow::bail!("only http:// and https:// URLs are supported");
-    }
-
-    // Basic SSRF guard: block private addresses.
-    if lower.contains("localhost")
-        || lower.contains("127.0.0.1")
-        || lower.contains("::1")
-        || lower.starts_with("http://10.")
-        || lower.starts_with("https://10.")
-        || lower.starts_with("http://192.168.")
-        || lower.starts_with("https://192.168.")
-    {
-        anyhow::bail!("private network addresses are not allowed");
-    }
-
-    // 172.16.0.0/12
-    for prefix in &["http://172.", "https://172."] {
-        if lower.starts_with(prefix) {
-            let after = &lower[prefix.len()..];
-            if let Some(dot_idx) = after.find('.') {
-                let second_octet = &after[..dot_idx];
-                if let Ok(n) = second_octet.parse::<u8>() {
-                    if n >= 16 && n <= 31 {
-                        anyhow::bail!("private network addresses are not allowed");
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn extract_title(html: &str) -> String {
@@ -349,47 +318,62 @@ mod tests {
 
     #[test]
     fn validate_url_accepts_http() {
-        assert!(validate_url("http://example.com").is_ok());
+        assert!(common::validate_http_url("http://example.com").is_ok());
     }
 
     #[test]
     fn validate_url_accepts_https() {
-        assert!(validate_url("https://example.com").is_ok());
+        assert!(common::validate_http_url("https://example.com").is_ok());
     }
 
     #[test]
     fn validate_url_rejects_ftp() {
-        assert!(validate_url("ftp://example.com").is_err());
+        assert!(common::validate_http_url("ftp://example.com").is_err());
     }
 
     #[test]
     fn validate_url_rejects_localhost() {
-        assert!(validate_url("http://localhost:8080").is_err());
+        assert!(common::validate_http_url("http://localhost:8080").is_err());
     }
 
     #[test]
     fn validate_url_rejects_127_0_0_1() {
-        assert!(validate_url("http://127.0.0.1/api").is_err());
+        assert!(common::validate_http_url("http://127.0.0.1/api").is_err());
     }
 
     #[test]
     fn validate_url_rejects_10_x() {
-        assert!(validate_url("http://10.0.0.1/").is_err());
+        assert!(common::validate_http_url("http://10.0.0.1/").is_err());
     }
 
     #[test]
     fn validate_url_rejects_192_168() {
-        assert!(validate_url("https://192.168.1.1/").is_err());
+        assert!(common::validate_http_url("https://192.168.1.1/").is_err());
     }
 
     #[test]
     fn validate_url_rejects_172_16() {
-        assert!(validate_url("http://172.16.0.1/").is_err());
+        assert!(common::validate_http_url("http://172.16.0.1/").is_err());
     }
 
     #[test]
     fn validate_url_accepts_172_32() {
-        assert!(validate_url("http://172.32.0.1/").is_ok());
+        assert!(common::validate_http_url("http://172.32.0.1/").is_ok());
+    }
+
+    #[test]
+    fn validate_url_rejects_link_local_metadata() {
+        assert!(common::validate_http_url("http://169.254.169.254/").is_err());
+    }
+
+    #[test]
+    fn validate_url_rejects_unspecified_ipv4() {
+        assert!(common::validate_http_url("http://0.0.0.0/").is_err());
+    }
+
+    #[test]
+    fn validate_url_rejects_unique_local_ipv6() {
+        assert!(common::validate_http_url("http://[fd00::1]/").is_err());
     }
 
     #[test]
@@ -451,15 +435,30 @@ mod tests {
         assert!(data["error"].as_str().unwrap().contains("missing url"));
     }
 
-    #[tokio::test]
-    async fn test_web_fetch_private_url() {
+    async fn assert_fetch_rejects(url: &str) {
         let skill = WebFetchSkill;
         let ctx = ExecutionContext::new(None);
         let result = skill
-            .execute(&serde_json::json!({"url": "http://localhost:8080"}), &ctx)
+            .execute(&serde_json::json!({"url": url}), &ctx)
             .await;
-        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(result.status, ToolStatus::Error, "url={url}");
         let data = result.data.unwrap();
-        assert!(data["error"].as_str().unwrap().contains("private"));
+        let err = data["error"].as_str().unwrap();
+        assert!(
+            err.contains("not permitted") || err.contains("private") || err.contains("scheme"),
+            "unexpected ssrf error for {url}: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_web_fetch_private_url() {
+        assert_fetch_rejects("http://localhost:8080").await;
+    }
+
+    #[tokio::test]
+    async fn test_web_fetch_rejects_metadata_and_ula() {
+        assert_fetch_rejects("http://169.254.169.254/").await;
+        assert_fetch_rejects("http://0.0.0.0/").await;
+        assert_fetch_rejects("http://[fd00::1]/").await;
     }
 }

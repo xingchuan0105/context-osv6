@@ -70,6 +70,25 @@ pub(crate) fn check_rate_limit(key: &str, limit_rpm: u32) -> (bool, u32, u32) {
 }
 
 pub(crate) fn extract_client_ip(headers: &HeaderMap) -> String {
+    extract_client_ip_with_trust(headers, trust_forwarded_for())
+}
+
+fn trust_forwarded_for() -> bool {
+    matches!(
+        std::env::var("TRUST_FORWARDED_FOR")
+            .ok()
+            .as_deref()
+            .map(str::trim),
+        Some("true") | Some("1") | Some("yes")
+    )
+}
+
+/// Honor `x-forwarded-for` / `x-real-ip` only when the operator opted in
+/// (`TRUST_FORWARDED_FOR`). Independent of proxy-header auth.
+fn extract_client_ip_with_trust(headers: &HeaderMap, trust: bool) -> String {
+    if !trust {
+        return "unknown".to_string();
+    }
     headers
         .get(HEADER_FORWARDED_FOR)
         .and_then(|value| value.to_str().ok())
@@ -497,16 +516,30 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
 }
 
 fn proxy_auth_allowed(state: &AppState) -> bool {
-    if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
-        return true;
+    proxy_auth_policy(
+        std::env::var("NODE_ENV").unwrap_or_default(),
+        std::env::var("TRUST_PROXY_AUTH").ok(),
+        state.postgres_configured(),
+    )
+}
+
+/// Proxy-header auth is never available in production. `E2E_ENABLED` does not
+/// grant it. Non-production: explicit `TRUST_PROXY_AUTH`, or memory-only (no PG).
+fn proxy_auth_policy(
+    node_env: impl AsRef<str>,
+    trust_proxy_auth: Option<impl AsRef<str>>,
+    postgres_configured: bool,
+) -> bool {
+    if node_env.as_ref() == "production" {
+        return false;
     }
     if matches!(
-        std::env::var("TRUST_PROXY_AUTH").as_deref(),
-        Ok("true") | Ok("1") | Ok("yes")
+        trust_proxy_auth.as_ref().map(|v| v.as_ref()),
+        Some("true") | Some("1") | Some("yes")
     ) {
         return true;
     }
-    !state.postgres_configured()
+    !postgres_configured
 }
 
 fn auth_from_proxy_headers(headers: &HeaderMap) -> Option<AuthContext> {
@@ -580,5 +613,53 @@ fn normalize_route(path: &str) -> &'static str {
         }
         _ if path.starts_with("/mcp/workspaces/") => "/mcp/workspaces/:id",
         _ => "other",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::HeaderMap;
+
+    use super::{
+        extract_client_ip_with_trust, proxy_auth_policy, HEADER_FORWARDED_FOR, HEADER_REAL_IP,
+    };
+
+    #[test]
+    fn production_never_allows_proxy_auth() {
+        assert!(!proxy_auth_policy("production", Some("true"), false));
+        assert!(!proxy_auth_policy("production", Some("true"), true));
+        assert!(!proxy_auth_policy("production", None::<&str>, false));
+    }
+
+    #[test]
+    fn e2e_enabled_is_not_consulted_by_policy() {
+        // Policy args do not include E2E_ENABLED; production + trust still false.
+        assert!(!proxy_auth_policy("production", Some("true"), true));
+    }
+
+    #[test]
+    fn trust_proxy_auth_works_outside_production() {
+        assert!(proxy_auth_policy("test", Some("true"), true));
+        assert!(proxy_auth_policy("", Some("1"), true));
+        assert!(proxy_auth_policy("development", Some("yes"), true));
+        assert!(!proxy_auth_policy("test", Some("false"), true));
+        assert!(!proxy_auth_policy("test", None::<&str>, true));
+    }
+
+    #[test]
+    fn memory_only_allows_proxy_auth_outside_production() {
+        assert!(proxy_auth_policy("test", None::<&str>, false));
+        assert!(!proxy_auth_policy("production", None::<&str>, false));
+    }
+
+    #[test]
+    fn forwarded_for_is_opt_in() {
+        let mut headers = HeaderMap::new();
+        headers.insert(HEADER_FORWARDED_FOR, "203.0.113.9".parse().unwrap());
+        headers.insert(HEADER_REAL_IP, "198.51.100.7".parse().unwrap());
+        assert_eq!(extract_client_ip_with_trust(&headers, false), "unknown");
+        assert_eq!(extract_client_ip_with_trust(&headers, true), "203.0.113.9");
+        headers.remove(HEADER_FORWARDED_FOR);
+        assert_eq!(extract_client_ip_with_trust(&headers, true), "198.51.100.7");
     }
 }

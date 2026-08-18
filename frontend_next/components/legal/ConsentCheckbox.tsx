@@ -36,11 +36,21 @@ export default function ConsentCheckbox({
         />
         <span className="consent-text">
           {formatUiMessage(locale, "legalConsentPrefix")}
-          <Link href="/legal/terms" target="_blank" className="consent-link">
+          <Link
+            href="/legal/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="consent-link"
+          >
             {formatUiMessage(locale, "legalConsentTerms")}
           </Link>
           {formatUiMessage(locale, "legalConsentAnd")}
-          <Link href="/legal/privacy" target="_blank" className="consent-link">
+          <Link
+            href="/legal/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="consent-link"
+          >
             {formatUiMessage(locale, "legalConsentPrivacy")}
           </Link>
         </span>

@@ -43,7 +43,7 @@ impl MilvusDataPlane {
         &self,
         request: GraphSearchRequest,
     ) -> anyhow::Result<GraphSearchOutput> {
-        if request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
+        if request.doc_ids.as_ref().is_none_or(|ids| ids.is_empty()) {
             return Ok(GraphSearchOutput::default());
         }
 

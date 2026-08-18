@@ -12,7 +12,7 @@ use crate::billing_quota::BillingQuotaPort;
 use crate::billing_store::BillingStorePort;
 use crate::chat_persistence::ChatPersistencePort;
 use crate::config_helpers::{
-    is_remote_asset_reference, sign_upload_payload, upload_signing_secret,
+    is_remote_asset_reference, sign_upload_payload, upload_signing_secret, verify_upload_payload,
 };
 use crate::document_store::DocumentStorePort;
 use crate::domain_rows::DocumentAssetRow;
@@ -86,7 +86,7 @@ impl ObjectStoreConfig {
                 + self.upload_expire_sec
         });
         let signature =
-            sign_upload_payload(&upload_signing_secret(), document_id, object_path, expires)?;
+            sign_upload_payload(&upload_signing_secret()?, document_id, object_path, expires)?;
         Ok(format!(
             "{}/uploads/{}?expires={}&signature={}",
             self.public_base_url, document_id, expires, signature
@@ -110,15 +110,13 @@ impl ObjectStoreConfig {
                 "upload url expired",
             ));
         }
-        let expected =
-            sign_upload_payload(&upload_signing_secret(), document_id, object_path, expires)?;
-        if expected != signature {
-            return Err(AppError::validation(
-                "invalid_upload_signature",
-                "invalid upload signature",
-            ));
-        }
-        Ok(())
+        verify_upload_payload(
+            &upload_signing_secret()?,
+            document_id,
+            object_path,
+            expires,
+            signature,
+        )
     }
 
     pub async fn resolve_citation_asset_url(&self, asset: &DocumentAssetRow) -> Option<String> {

@@ -235,24 +235,36 @@ pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
 // ---------------------------------------------------------------------------
 
 fn build_cors_layer() -> CorsLayer {
-    let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
-        .unwrap_or_else(|_| {
-            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080,http://127.0.0.1:18080,http://localhost:18080,http://tauri.localhost,https://tauri.localhost"
-                .to_string()
-        });
-    let origins: Vec<_> = allowed_origins
-        .split(',')
-        .filter_map(|s| s.trim().parse::<HeaderValue>().ok())
-        .collect();
-    let allow_origin = if origins.is_empty() {
-        AllowOrigin::any()
-    } else {
-        AllowOrigin::list(origins)
-    };
     CorsLayer::new()
-        .allow_origin(allow_origin)
+        .allow_origin(AllowOrigin::list(resolved_cors_origins(
+            std::env::var("CORS_ALLOWED_ORIGINS").ok().as_deref(),
+        )))
         .allow_methods(AllowMethods::any())
         .allow_headers(AllowHeaders::any())
+}
+
+const DEFAULT_CORS_ORIGINS: &str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080,http://127.0.0.1:18080,http://localhost:18080,http://tauri.localhost,https://tauri.localhost";
+
+fn parse_cors_origin_list(raw: &str) -> Vec<HeaderValue> {
+    raw.split(',')
+        .filter_map(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                trimmed.parse::<HeaderValue>().ok()
+            }
+        })
+        .collect()
+}
+
+fn resolved_cors_origins(env_value: Option<&str>) -> Vec<HeaderValue> {
+    let parsed = parse_cors_origin_list(env_value.unwrap_or(""));
+    if parsed.is_empty() {
+        parse_cors_origin_list(DEFAULT_CORS_ORIGINS)
+    } else {
+        parsed
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -320,3 +332,35 @@ pub fn build_router(state: AppState) -> Router {
 // ---------------------------------------------------------------------------
 // Auth handlers
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod cors_tests {
+    use super::*;
+
+    #[test]
+    fn empty_cors_env_falls_back_to_localhost_list() {
+        let origins = resolved_cors_origins(Some(""));
+        assert!(!origins.is_empty());
+        let encoded: Vec<String> = origins
+            .iter()
+            .map(|v| String::from_utf8_lossy(v.as_bytes()).into_owned())
+            .collect();
+        assert!(encoded.contains(&"http://localhost:3000".to_string()), "{encoded:?}");
+        assert!(encoded.contains(&"https://tauri.localhost".to_string()), "{encoded:?}");
+        assert!(!encoded.iter().any(|s| s == "*"), "{encoded:?}");
+    }
+
+    #[test]
+    fn whitespace_only_cors_env_is_not_wildcard() {
+        let origins = resolved_cors_origins(Some("  , , "));
+        assert!(!origins.is_empty());
+        assert!(origins.iter().all(|v| v.as_bytes() != b"*"));
+    }
+
+    #[test]
+    fn explicit_cors_env_is_used() {
+        let origins = resolved_cors_origins(Some("https://app.example.com"));
+        assert_eq!(origins.len(), 1);
+        assert_eq!(origins[0].as_bytes(), b"https://app.example.com");
+    }
+}

@@ -73,6 +73,17 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+/// Strip URL passwords before returning connection strings over IPC.
+fn redact_url_credentials(raw: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(raw) else {
+        return raw.to_string();
+    };
+    if parsed.password().is_some() {
+        let _ = parsed.set_password(Some("***"));
+    }
+    parsed.to_string()
+}
+
 fn probe_tcp(host: &str, port: u16) -> (bool, String) {
     let endpoint = format!("{host}:{port}");
     let addrs = match endpoint.to_socket_addrs() {
@@ -223,8 +234,8 @@ fn build_runtime_config() -> ClientRuntimeConfig {
     };
 
     ClientRuntimeConfig {
-        database_url,
-        redis_url,
+        database_url: redact_url_credentials(&database_url),
+        redis_url: redact_url_credentials(&redis_url),
         retrieval_backend,
         milvus_url: String::new(),
         pg_host,
@@ -510,6 +521,17 @@ mod tests {
         assert!(cfg.redis_url.contains("6380"));
         assert!(cfg.milvus_url.is_empty());
         assert_eq!(cfg.milvus_port, 0);
+    }
+
+    #[test]
+    fn runtime_config_redacts_url_passwords() {
+        let redacted = redact_url_credentials("postgres://avrag:s3cret@127.0.0.1:5433/avrag_client");
+        assert!(redacted.contains("5433"));
+        assert!(redacted.contains(":***@"));
+        assert!(!redacted.contains("s3cret"));
+        let redis = redact_url_credentials("redis://:hunter2@127.0.0.1:6380/0");
+        assert!(redis.contains("6380"));
+        assert!(!redis.contains("hunter2"));
     }
 
     #[test]

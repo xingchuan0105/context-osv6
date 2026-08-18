@@ -103,13 +103,8 @@ pub(crate) async fn expand_external_workspace_rag_scope(
         .filter(|document| matches!(document.status, DocumentStatus::Completed))
         .map(|document| document.id)
         .collect::<Vec<_>>();
-    if doc_scope.is_empty() {
-        return Err(AppError::validation(
-            "docscope_required",
-            "No ready documents are available in this notebook for RAG.",
-        ));
-    }
-
+    // Empty stays empty: retrieval data plane fail-closes on missing doc_ids
+    // instead of searching the owner-wide corpus.
     req.doc_scope = doc_scope;
     Ok(())
 }

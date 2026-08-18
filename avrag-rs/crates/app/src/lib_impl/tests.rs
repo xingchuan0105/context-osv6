@@ -18,6 +18,21 @@ mod tests {
     use std::sync::Arc;
     use tokio::fs;
 
+    fn ensure_test_upload_signing_secret() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            if std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .is_none()
+            {
+                unsafe {
+                    std::env::set_var("AVRAG_UPLOAD_SIGNING_SECRET", "test-upload-signing-secret");
+                }
+            }
+        });
+    }
+
     #[test]
     fn build_docscope_metadata_dedupes_known_profile_values() {
         let metadata = vec![
@@ -174,6 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn memory_delete_document_soft_deletes_and_hides_document() {
+        ensure_test_upload_signing_secret();
         let state = AppState::new(AppConfig::default());
         let notebook = state
             .workspace()
@@ -228,6 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn memory_update_document_rejects_deletion_workflow_statuses() {
+        ensure_test_upload_signing_secret();
         let state = AppState::new(AppConfig::default());
         let notebook = state
             .workspace()
@@ -683,6 +700,7 @@ mod tests {
         filename: &str,
         file_size: u64,
     ) -> (Workspace, CreateDocumentUploadResponse) {
+        ensure_test_upload_signing_secret();
         let notebook = state
             .workspace()
             .create_workspace(CreateWorkspaceRequest {

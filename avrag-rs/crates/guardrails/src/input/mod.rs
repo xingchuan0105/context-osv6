@@ -11,7 +11,7 @@ mod prompt_injection;
 mod scope;
 
 pub use privilege_escalation::PrivilegeEscalationGuard;
-pub use prompt_injection::PromptInjectionGuard;
+pub use prompt_injection::{INJECTION_SUBSTRINGS, PromptInjectionGuard};
 pub use scope::ScopeGuard;
 
 use contracts::chat::GuardResult;

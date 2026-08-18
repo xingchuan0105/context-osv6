@@ -166,36 +166,12 @@ pub(crate) struct SandboxOpts<'a> {
 }
 
 pub(crate) fn build_bridge_sandbox_wrapper(opts: &SandboxOpts<'_>) -> String {
-    let blocked_modules = [
-        "os",
-        "subprocess",
-        "socket",
-        "sys",
-        "ctypes",
-        "shutil",
-        "posix",
-        "fcntl",
-        "pty",
-        "pwd",
-        "grp",
-        "resource",
-        "signal",
-        "multiprocessing",
-        "threading",
-    ];
-
-    let blocked_list = blocked_modules
-        .iter()
-        .map(|m| format!("'{m}'"))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let indented_user_code = opts
+    let blocked_list = crate::blocked_modules_literal();
+    let escaped_code = opts
         .user_code
-        .lines()
-        .map(|line| format!("    {line}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+        .replace('\\', "\\\\")
+        .replace('\'', "\\'")
+        .replace('\n', "\\n");
 
     format!(
         r#"import sys, io, json, traceback, asyncio
@@ -209,29 +185,27 @@ import concurrent.futures
 import concurrent.futures.thread
 {prelude_imports}
 
-BLOCKED = {{{blocked_list}}}
-_original_import = __builtins__.__import__
-
-def _safe_import(name, *args, **kwargs):
-    top = name.split('.')[0]
-    if top in BLOCKED:
-        raise ImportError(f"import of '{{name}}' is blocked for security reasons")
-    return _original_import(name, *args, **kwargs)
-
-__builtins__.__import__ = _safe_import
-
 try:
     import resource
     mem_bytes = {memory_mb} * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-except Exception:
-    pass
-
-try:
-    import resource
     resource.setrlimit(resource.RLIMIT_CPU, ({cpu_secs}, {cpu_secs}))
 except Exception:
     pass
+
+BLOCKED = {{{blocked_list}}}
+
+def _install_import_hook(blocked):
+    orig = __builtins__.__import__
+    def _safe_import(name, *args, **kwargs):
+        top = name.split('.')[0]
+        if top in blocked:
+            raise ImportError(f"import of '{{name}}' is blocked for security reasons")
+        return orig(name, *args, **kwargs)
+    __builtins__.__import__ = _safe_import
+
+_install_import_hook(BLOCKED)
+del _install_import_hook, BLOCKED
 
 {bridge_shim}
 
@@ -242,11 +216,17 @@ _cap_stderr = io.StringIO()
 sys.stdout = _cap_stdout
 sys.stderr = _cap_stderr
 
-async def __avrag_main():
-{indented_user_code}
-
+_code = '{escaped_code}'
+_user_ns = {{'__name__': '__main__'}}
+_user_ns['client'] = client
+_body_lines = ['async def __avrag_user_main():']
+if _code.strip():
+    _body_lines.extend(('    ' + _ln) for _ln in _code.split('\n'))
+else:
+    _body_lines.append('    pass')
+exec(compile('\n'.join(_body_lines), '<sandbox>', 'exec'), _user_ns)
 try:
-    asyncio.run(__avrag_main())
+    asyncio.run(_user_ns['__avrag_user_main']())
 except Exception:
     traceback.print_exc()
 
@@ -269,7 +249,7 @@ _real_stdout.flush()
         cpu_secs = opts.cpu_secs,
         prelude_imports = opts.prelude_imports,
         bridge_shim = bridge_shim_source(opts.transport_setup),
-        indented_user_code = indented_user_code,
+        escaped_code = escaped_code,
     )
 }
 
@@ -557,7 +537,8 @@ _bridge_transport = {"req": open(3, "w", buffering=1), "resp": open(4, "r", buff
         pump_ready_rx
             .await
             .map_err(|_| InterpreterError::Bridge("pump failed to start".to_string()))?;
-        let mut command = Command::new(python_path);
+        let python_path = crate::resolve_python_executable(python_path)?;
+        let mut command = Command::new(&python_path);
         command
             .arg("-c")
             .arg(&sandbox_code)
@@ -565,11 +546,13 @@ _bridge_transport = {"req": open(3, "w", buffering=1), "resp": open(4, "r", buff
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        crate::apply_sandbox_env(&mut command, &python_path, temp_dir.path(), &[]);
         // Put the child in its own process group so that, on timeout, we can
         // kill python *and* any subprocesses it spawned (pid == pgid).
         command.process_group(0);
         unsafe {
             command.pre_exec(move || {
+                crate::apply_unix_rlimits(memory_mb, cpu_secs)?;
                 if libc::dup2(req_write_fd, 3) == -1 {
                     return Err(std::io::Error::last_os_error());
                 }
@@ -814,11 +797,16 @@ _bridge_transport = {{"req": _req, "resp": _resp}}"#
         command
             .arg("-c")
             .arg(&sandbox_code)
-            .env(BRIDGE_TOKEN_ENV, &token)
             .current_dir(temp_dir.path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        crate::apply_sandbox_env(
+            &mut command,
+            &python,
+            temp_dir.path(),
+            &[(BRIDGE_TOKEN_ENV, token.as_str())],
+        );
         let child = command.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 InterpreterError::PythonNotFound(python.clone())

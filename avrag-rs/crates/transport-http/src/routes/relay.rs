@@ -8,7 +8,7 @@
 //! actual usage through the platform `PgUsageObserver` → `debit_platform_usage`
 //! (wallet list price = official × 1.5, whitelist in `wallet_pricing.rs`).
 //!
-//! Fail-closed on token verification; fail-open only on metering.
+//! Fail-closed on token verification and on metering (estimate, else refuse).
 
 use app_bootstrap::AppState;
 use axum::{
@@ -280,6 +280,7 @@ async fn relay_chat_via_upstream(
 
     let observer = state.billing().usage_observer().cloned();
     let tenant = TenantContext::new(auth.user_id, auth.user_id);
+    let estimated_usage = estimate_chat_usage(&payload);
 
     if !wants_stream {
         let bytes = response.bytes().await.unwrap_or_default();
@@ -293,8 +294,29 @@ async fn relay_chat_via_upstream(
                 usage,
             )
             .await;
+        } else if let Some(usage) = estimated_usage {
+            tracing::warn!(
+                request_id = %request_id,
+                prompt_tokens = usage.prompt_tokens,
+                "relay chat response had no usage; debiting request estimate"
+            );
+            record_chat_metering(
+                observer,
+                &tenant,
+                &upstream.provider,
+                &upstream.model,
+                &request_id,
+                usage,
+            )
+            .await;
         } else {
-            tracing::warn!(request_id = %request_id, "relay chat response had no usage; metering skipped (fail-open)");
+            tracing::warn!(request_id = %request_id, "relay chat response had no usage and request was not estimable");
+            return relay_error(
+                StatusCode::BAD_GATEWAY,
+                "relay_usage_missing",
+                "upstream chat response had no usage and request was not estimable",
+                "relay_upstream_error",
+            );
         }
         return json_verbatim_response(bytes);
     }
@@ -322,7 +344,20 @@ async fn relay_chat_via_upstream(
                 record_chat_metering(observer, &tenant, &provider, &model, &request_id, usage).await;
             }
             None => {
-                tracing::warn!(request_id = %request_id, "relay chat stream ended without usage chunk; metering skipped (fail-open)");
+                if let Some(usage) = estimated_usage {
+                    tracing::warn!(
+                        request_id = %request_id,
+                        prompt_tokens = usage.prompt_tokens,
+                        "relay chat stream ended without usage chunk; debiting request estimate"
+                    );
+                    record_chat_metering(observer, &tenant, &provider, &model, &request_id, usage)
+                        .await;
+                } else {
+                    tracing::error!(
+                        request_id = %request_id,
+                        "relay chat stream ended without usage and request was not estimable; already streamed"
+                    );
+                }
             }
         }
     };
@@ -411,7 +446,13 @@ async fn relay_embeddings(
             observer.record_embedding(&tenant, &record).await;
         }
     } else {
-        tracing::warn!(request_id = %request_id, "relay embeddings response had no usage and request was not estimable; metering skipped (fail-open)");
+        tracing::warn!(request_id = %request_id, "relay embeddings response had no usage and request was not estimable");
+        return relay_error(
+            StatusCode::BAD_GATEWAY,
+            "relay_usage_missing",
+            "upstream embeddings response had no usage and request was not estimable",
+            "relay_upstream_error",
+        );
     }
     json_verbatim_response(bytes)
 }
@@ -493,7 +534,13 @@ async fn relay_rerank(
             observer.record_embedding(&tenant, &record).await;
         }
     } else {
-        tracing::warn!(request_id = %request_id, "relay rerank response had no usage and request was not estimable; metering skipped (fail-open)");
+        tracing::warn!(request_id = %request_id, "relay rerank response had no usage and request was not estimable");
+        return relay_error(
+            StatusCode::BAD_GATEWAY,
+            "relay_usage_missing",
+            "upstream rerank response had no usage and request was not estimable",
+            "relay_upstream_error",
+        );
     }
     json_verbatim_response(bytes)
 }
@@ -546,8 +593,8 @@ fn ensure_whitelisted(upstream: &RelayUpstream, env_prefix: &str) -> Result<(), 
 }
 
 /// Record actual chat usage via the platform observer (insert usage event +
-/// wallet debit at list price). Observer absence (memory bootstrap) or debit
-/// failure stays fail-open per UsageObserver convention.
+/// wallet debit at list price). Observer absence (memory bootstrap) skips
+/// the write; debit errors stay inside UsageObserver.
 async fn record_chat_metering(
     observer: Option<std::sync::Arc<dyn avrag_llm::UsageObserver>>,
     tenant: &TenantContext,
@@ -685,6 +732,35 @@ fn parse_chat_usage(bytes: &[u8]) -> Option<RelayUsage> {
     serde_json::from_slice::<RelayChatEnvelope>(bytes)
         .ok()
         .and_then(|envelope| envelope.usage)
+}
+
+/// Rough estimate when the provider omits usage: ~4 chars per token over
+/// `messages[].content` (string or text parts).
+fn estimate_chat_usage(payload: &serde_json::Value) -> Option<RelayUsage> {
+    let messages = payload.get("messages")?.as_array()?;
+    let chars: usize = messages.iter().map(message_char_count).sum();
+    if chars == 0 {
+        return None;
+    }
+    let prompt = chars.div_ceil(4) as u32;
+    Some(RelayUsage {
+        prompt_tokens: prompt,
+        completion_tokens: 0,
+        total_tokens: Some(prompt),
+        ..Default::default()
+    })
+}
+
+fn message_char_count(message: &serde_json::Value) -> usize {
+    match message.get("content") {
+        Some(serde_json::Value::String(text)) => text.chars().count(),
+        Some(serde_json::Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|part| part.get("text").and_then(|value| value.as_str()))
+            .map(|text| text.chars().count())
+            .sum(),
+        _ => 0,
+    }
 }
 
 /// Parse usage from an embeddings response (`usage.total_tokens`, else prompt).
@@ -882,6 +958,21 @@ mod tests {
         let payload = json!({"model": "x", "input": ["abcdefghij", "abcd"]});
         assert_eq!(estimate_embedding_tokens(&payload), 4); // 14 chars / 4 ceil
         assert_eq!(estimate_embedding_tokens(&json!({"input": 42})), 0);
+    }
+
+    #[test]
+    fn chat_usage_estimate_from_messages() {
+        let payload = json!({
+            "messages": [
+                {"role": "user", "content": "abcdefghij"},
+                {"role": "assistant", "content": [{"type": "text", "text": "abcd"}]}
+            ]
+        });
+        let usage = estimate_chat_usage(&payload).expect("estimable");
+        assert_eq!(usage.prompt_tokens, 4); // 14 chars / 4 ceil
+        assert_eq!(usage.completion_tokens, 0);
+        assert!(estimate_chat_usage(&json!({"messages": []})).is_none());
+        assert!(estimate_chat_usage(&json!({"messages": [{"role": "user"}]})).is_none());
     }
 
     #[test]

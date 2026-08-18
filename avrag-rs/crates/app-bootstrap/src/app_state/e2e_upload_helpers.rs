@@ -92,7 +92,7 @@ impl AppState {
         full_name: &str,
     ) -> Result<(), String> {
         use app_core::{PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION};
-        use bcrypt::{DEFAULT_COST, hash};
+        use bcrypt::{hash, DEFAULT_COST};
 
         let repo = self
             .postgres_repo()
@@ -280,7 +280,21 @@ impl AppState {
         document_id: &str,
     ) -> Result<(Self, Option<String>), common::AppError> {
         let Some(repo) = self.postgres_repo() else {
-            return Ok((self.clone(), None));
+            let document_uuid = Uuid::parse_str(document_id).map_err(|_| {
+                common::AppError::validation("document_not_found", "document not found")
+            })?;
+            let Some(store) = self.storage.document_store() else {
+                return Err(common::AppError::internal(
+                    "document store is not configured",
+                ));
+            };
+            let seed = store
+                .get_document_task_seed(self.auth(), document_uuid)
+                .await?
+                .ok_or_else(|| {
+                    common::AppError::not_found("document_not_found", "document not found")
+                })?;
+            return Ok((self.clone(), Some(seed.object_path)));
         };
         let document_uuid = Uuid::parse_str(document_id).map_err(|_| {
             common::AppError::validation("document_not_found", "document not found")

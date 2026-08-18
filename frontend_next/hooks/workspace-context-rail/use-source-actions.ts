@@ -10,6 +10,7 @@ import {
   addWorkspaceSourceUrl,
   completeWorkspaceDocumentUpload,
   createWorkspaceDocumentUpload,
+  MAX_UPLOAD_FILE_SIZE_BYTES,
   resolveUploadMimeType,
   uploadWorkspaceDocumentFile,
 } from "../../lib/workspace/client";
@@ -115,6 +116,9 @@ export function useWorkspaceSourceActions({
         const uploadedSourceIds: string[] = [];
 
         for (const file of files) {
+          if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+            throw new Error(formatUiMessage(locale, "workspaceRightRail.uploadTooLarge"));
+          }
           const mime_type = resolveUploadMimeType(file);
           const upload = await createWorkspaceDocumentUpload(token, workspaceId, {
             filename: file.name,

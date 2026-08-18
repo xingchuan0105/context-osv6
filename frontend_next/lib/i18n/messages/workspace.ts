@@ -361,6 +361,10 @@ export const workspaceMessages = {
     zh: "加载资料失败。",
     en: "Failed to load sources.",
   },
+  "workspaceRightRail.uploadTooLarge": {
+    zh: "文件超过 100MB 上限。",
+    en: "File exceeds the 100MB upload limit.",
+  },
   "workspaceRightRail.notesError": {
     zh: "加载笔记失败。",
     en: "Failed to load notes.",

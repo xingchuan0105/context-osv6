@@ -849,6 +849,55 @@ async fn g1_i3_empty_doc_ids() {
 }
 
 #[tokio::test]
+async fn g1_i3b_none_doc_ids_fail_closed() {
+    let Some(live) = try_live().await else {
+        return;
+    };
+    let ids = ChainIds::fresh();
+    index_chain(&live, &ids, false).await;
+
+    let scoped = live
+        .plane
+        .search_graph(graph_req(
+            vec!["Alpha".into()],
+            vec![],
+            vec![],
+            1,
+            50,
+            50,
+            Some(vec![ids.doc]),
+            ids.owner,
+        ))
+        .await
+        .expect("search_graph scoped");
+    assert!(
+        !scoped.relation_paths.is_empty(),
+        "scoped search should hit indexed chain"
+    );
+
+    let out = live
+        .plane
+        .search_graph(graph_req(
+            vec!["Alpha".into()],
+            vec![],
+            vec![],
+            1,
+            50,
+            50,
+            None,
+            ids.owner,
+        ))
+        .await
+        .expect("search_graph none");
+    assert!(
+        out.relation_paths.is_empty(),
+        "doc_ids=None must fail closed, got {:?}",
+        out.relation_paths
+    );
+    cleanup(&live, &ids).await;
+}
+
+#[tokio::test]
 async fn g1_i4_unknown_seed() {
     let Some(live) = try_live().await else {
         return;

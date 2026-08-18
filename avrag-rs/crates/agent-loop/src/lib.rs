@@ -70,7 +70,6 @@ impl AgentKind {
 
 pub mod audit;
 pub mod cite_extract;
-pub mod content_guard;
 pub mod error_kind;
 pub mod events;
 pub mod helpers;

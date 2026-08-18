@@ -2,9 +2,10 @@
 //!
 //! # ClamAV integration (optional)
 //!
-//! Set `CLAMAV_HOST` (default: `localhost`) and `CLAMAV_PORT` (default: `3310`).
-//! If the daemon is unreachable the scan is skipped (fail-open) so that a
-//! down AV service does not block all uploads.
+//! Set `CLAMAV_HOST` (and optional `CLAMAV_PORT`, default `3310`) to enable.
+//! Unset host → skip the malware scan (local/dev without clamd).
+//! Host set but daemon unreachable or response unexpected → **error**
+//! (callers fail-closed unless they opt into `SECURITY_SCAN_FAIL_OPEN`).
 //!
 //! # ZIP-bomb detection
 //!
@@ -34,8 +35,8 @@ pub enum ScanResult {
 
 /// Scan `data` for known malware (via ClamAV) and ZIP bombs.
 ///
-/// * ClamAV is best-effort: if the daemon is unreachable the scan is skipped.
-/// * ZIP-bomb detection runs locally and never fails open.
+/// ZIP-bomb detection always runs. ClamAV runs only when `CLAMAV_HOST` is set;
+/// a configured but unreachable daemon is an error, not a clean bill.
 pub async fn scan_upload(data: &[u8], filename: &str) -> anyhow::Result<ScanResult> {
     // 1. ZIP-bomb check (local, always runs).
     if looks_like_zip(data) || filename.to_ascii_lowercase().ends_with(".zip") {
@@ -51,19 +52,36 @@ pub async fn scan_upload(data: &[u8], filename: &str) -> anyhow::Result<ScanResu
         }
     }
 
-    // 2. ClamAV malware scan (optional, fail-open).
-    match clamav_scan(data).await {
-        Ok(ScanResult::Clean) => Ok(ScanResult::Clean),
-        Ok(ScanResult::ThreatDetected { threat_name }) => {
+    let Some(addr) = clamav_endpoint() else {
+        return Ok(ScanResult::Clean);
+    };
+
+    match clamav_scan(&addr, data).await? {
+        ScanResult::ThreatDetected { threat_name } => {
             info!(filename = %filename, threat = %threat_name, "ClamAV detected malware");
             Ok(ScanResult::ThreatDetected { threat_name })
         }
-        Ok(other) => Ok(other),
-        Err(error) => {
-            warn!(error = %error, "ClamAV scan failed, allowing upload through (fail-open)");
-            Ok(ScanResult::Clean)
-        }
+        other => Ok(other),
     }
+}
+
+/// `None` when ClamAV is not configured (do not default to localhost).
+fn clamav_endpoint() -> Option<String> {
+    clamav_endpoint_from(
+        std::env::var("CLAMAV_HOST").ok().as_deref(),
+        std::env::var("CLAMAV_PORT").ok().as_deref(),
+    )
+}
+
+fn clamav_endpoint_from(host: Option<&str>, port: Option<&str>) -> Option<String> {
+    let host = host?.trim();
+    if host.is_empty() {
+        return None;
+    }
+    let port = port
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .unwrap_or(CLAMAV_DEFAULT_PORT);
+    Some(format!("{host}:{port}"))
 }
 
 fn looks_like_zip(data: &[u8]) -> bool {
@@ -108,19 +126,8 @@ fn zip_compression_ratio(data: &[u8]) -> anyhow::Result<Option<f64>> {
     Ok(Some(ratio))
 }
 
-async fn clamav_scan(data: &[u8]) -> anyhow::Result<ScanResult> {
-    let host = std::env::var("CLAMAV_HOST")
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "localhost".to_string());
-    let port = std::env::var("CLAMAV_PORT")
-        .ok()
-        .and_then(|v| v.trim().parse::<u16>().ok())
-        .unwrap_or(CLAMAV_DEFAULT_PORT);
-
-    let addr = format!("{}:{}", host, port);
-
-    // Use a blocking task for the synchronous TCP conversation.
+async fn clamav_scan(addr: &str, data: &[u8]) -> anyhow::Result<ScanResult> {
+    let addr = addr.to_string();
     let data = data.to_vec();
     let response = tokio::task::spawn_blocking(move || clamav_scan_sync(&addr, &data))
         .await
@@ -182,8 +189,6 @@ fn parse_clamav_response(response: &str) -> anyhow::Result<ScanResult> {
     if trimmed.contains("ERROR") {
         return Err(anyhow::anyhow!("clamd returned error: {trimmed}"));
     }
-    // Unknown response — treat as error to be safe, but the caller (scan_upload)
-    // will fail-open because clamav_scan errors are swallowed.
     Err(anyhow::anyhow!("unexpected clamd response: {trimmed}"))
 }
 
@@ -224,5 +229,20 @@ mod tests {
     #[test]
     fn parse_clamav_response_error() {
         assert!(parse_clamav_response("stream: ERROR").is_err());
+    }
+
+    #[test]
+    fn clamav_endpoint_is_opt_in() {
+        assert_eq!(clamav_endpoint_from(None, None), None);
+        assert_eq!(clamav_endpoint_from(Some(""), None), None);
+        assert_eq!(clamav_endpoint_from(Some("  "), Some("3310")), None);
+        assert_eq!(
+            clamav_endpoint_from(Some("clamd.internal"), None).as_deref(),
+            Some("clamd.internal:3310")
+        );
+        assert_eq!(
+            clamav_endpoint_from(Some("clamd.internal"), Some("3311")).as_deref(),
+            Some("clamd.internal:3311")
+        );
     }
 }
