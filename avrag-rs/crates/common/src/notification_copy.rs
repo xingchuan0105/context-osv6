@@ -32,17 +32,12 @@ impl NotifyLocale {
 /// Known in-app notification kinds (stable product events).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotifyKind {
-    IngestionSuccess,
-    IngestionFailed,
     FundsRequired,
     PasswordChanged,
     ShareEnabled,
     SubscriptionPaid,
     SubscriptionExpired,
     BillingUpdate,
-    DegradeGeneral,
-    DegradeSearch,
-    DegradeRag,
 }
 
 impl NotifyKind {
@@ -52,17 +47,6 @@ impl NotifyKind {
             "subscription.paid" => Self::SubscriptionPaid,
             "subscription.expired" => Self::SubscriptionExpired,
             _ => Self::BillingUpdate,
-        }
-    }
-
-    /// Map chat agent mode to degrade notification copy.
-    pub fn degrade_for_mode(mode: &str, is_direct_chat: bool) -> Self {
-        if is_direct_chat {
-            Self::DegradeGeneral
-        } else if mode == "search" {
-            Self::DegradeSearch
-        } else {
-            Self::DegradeRag
         }
     }
 }
@@ -113,22 +97,6 @@ pub fn render(kind: NotifyKind, locale: NotifyLocale) -> NotifyCopy {
 pub fn render_with(kind: NotifyKind, locale: NotifyLocale, vars: &[(&str, &str)]) -> NotifyCopy {
     // Paths are relative to this source file: crates/common/src → avrag-rs/notifications
     match kind {
-        NotifyKind::IngestionSuccess => pair(
-            locale,
-            include_str!("../../../notifications/ingestion-success.title.zh.txt"),
-            include_str!("../../../notifications/ingestion-success.title.en.txt"),
-            include_str!("../../../notifications/ingestion-success.body.zh.txt"),
-            include_str!("../../../notifications/ingestion-success.body.en.txt"),
-            vars,
-        ),
-        NotifyKind::IngestionFailed => pair(
-            locale,
-            include_str!("../../../notifications/ingestion-failed.title.zh.txt"),
-            include_str!("../../../notifications/ingestion-failed.title.en.txt"),
-            include_str!("../../../notifications/ingestion-failed.body.zh.txt"),
-            include_str!("../../../notifications/ingestion-failed.body.en.txt"),
-            vars,
-        ),
         NotifyKind::FundsRequired => pair(
             locale,
             include_str!("../../../notifications/funds-required.title.zh.txt"),
@@ -177,30 +145,6 @@ pub fn render_with(kind: NotifyKind, locale: NotifyLocale, vars: &[(&str, &str)]
             include_str!("../../../notifications/billing-update.body.en.txt"),
             vars,
         ),
-        NotifyKind::DegradeGeneral => pair(
-            locale,
-            include_str!("../../../notifications/degrade-general.title.zh.txt"),
-            include_str!("../../../notifications/degrade-general.title.en.txt"),
-            include_str!("../../../notifications/degrade-general.body.zh.txt"),
-            include_str!("../../../notifications/degrade-general.body.en.txt"),
-            vars,
-        ),
-        NotifyKind::DegradeSearch => pair(
-            locale,
-            include_str!("../../../notifications/degrade-search.title.zh.txt"),
-            include_str!("../../../notifications/degrade-search.title.en.txt"),
-            include_str!("../../../notifications/degrade-search.body.zh.txt"),
-            include_str!("../../../notifications/degrade-search.body.en.txt"),
-            vars,
-        ),
-        NotifyKind::DegradeRag => pair(
-            locale,
-            include_str!("../../../notifications/degrade-rag.title.zh.txt"),
-            include_str!("../../../notifications/degrade-rag.title.en.txt"),
-            include_str!("../../../notifications/degrade-rag.body.zh.txt"),
-            include_str!("../../../notifications/degrade-rag.body.en.txt"),
-            vars,
-        ),
     }
 }
 
@@ -209,17 +153,12 @@ mod tests {
     use super::*;
 
     const ALL: &[NotifyKind] = &[
-        NotifyKind::IngestionSuccess,
-        NotifyKind::IngestionFailed,
         NotifyKind::FundsRequired,
         NotifyKind::PasswordChanged,
         NotifyKind::ShareEnabled,
         NotifyKind::SubscriptionPaid,
         NotifyKind::SubscriptionExpired,
         NotifyKind::BillingUpdate,
-        NotifyKind::DegradeGeneral,
-        NotifyKind::DegradeSearch,
-        NotifyKind::DegradeRag,
     ];
 
     #[test]

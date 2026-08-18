@@ -1,5 +1,5 @@
 use anyhow::Result;
-use avrag_storage_pg::{NotificationCreateParams, PgAppRepository};
+use avrag_storage_pg::PgAppRepository;
 use ingestion::{
     AuditRecord, AuditSink, IngestionError, IngestionTask, StateSink, TaskCompletionOutcome,
     TaskFailureOutcome, TaskSource, Transition,
@@ -225,47 +225,6 @@ impl StateSink for PgStateSink {
                 if let Err(error) = analytics.record_product_event(&event).await {
                     info!(error = %error, document_id = task.document_id, "failed to record document upload failure event");
                 }
-            }
-            if let Some(user_id) = task
-                .requested_by
-                .as_deref()
-                .and_then(|value| Uuid::parse_str(value).ok())
-            {
-                let ok = matches!(
-                    transition.to,
-                    contracts::documents::DocumentStatus::Completed
-                );
-                let copy = common::notification_copy::render(
-                    if ok {
-                        common::notification_copy::NotifyKind::IngestionSuccess
-                    } else {
-                        common::notification_copy::NotifyKind::IngestionFailed
-                    },
-                    common::notification_copy::NotifyLocale::product_default(),
-                );
-                let _ = self
-                    .repo
-                    .auth()
-                    .create_notification(
-                        &context,
-                        NotificationCreateParams {
-                            user_id,
-                            event_type: if ok {
-                                "ingestion.success".to_string()
-                            } else {
-                                "ingestion.failed".to_string()
-                            },
-                            title: copy.title,
-                            body: copy.body,
-                            data: serde_json::json!({
-                                "document_id": task.document_id.clone(),
-                                "task_id": task.task_id.clone(),
-                                "status": format!("{:?}", transition.to),
-                            }),
-                            channels: vec!["in_app".to_string()],
-                        },
-                    )
-                    .await;
             }
         }
 

@@ -324,11 +324,6 @@ fn is_graph_augment_telemetry(result: &ToolResult) -> bool {
 
 fn should_skip_bridge_tool_result(result: &ToolResult) -> bool {
     result.tool == "doc_scan"
-        || result
-            .trace
-            .as_ref()
-            .and_then(|t| t.degrade_reason.as_deref())
-            == Some("scan_data")
 }
 
 fn count_bridge_tool_chunks(result: &ToolResult) -> usize {
@@ -616,7 +611,7 @@ stderr:
     }
 
     #[test]
-    fn test_bridge_skips_scan_data_trace_but_keeps_dense_retrieval() {
+    fn test_bridge_skips_doc_scan_but_keeps_dense_retrieval() {
         // Force L-eval off so a concurrent force-on test cannot flip this path.
         let _force = force_l_eval_rrf(false);
         let bridge = vec![

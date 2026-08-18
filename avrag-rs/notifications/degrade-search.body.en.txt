@@ -1,1 +1,0 @@
-Search mode could not complete a real provider-backed search.

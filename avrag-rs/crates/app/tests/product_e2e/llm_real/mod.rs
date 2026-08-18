@@ -932,7 +932,7 @@ pub(crate) fn require_real_llm_config() {
 
 /// Degrade items that are **not** product failures on happy paths.
 ///
-/// - `doc_scan` / `scan_data`: successful scan path labels (see rag-core doc_scan).
+/// - `doc_scan`: data-plane scan (not a citation source); tolerated by impact label.
 /// - multimodal embedding empty: known soft degrade when no MM content.
 /// - `web_fetch` ToolUnavailable: optional enricher; Brave snippet search can still succeed.
 pub(crate) fn non_blocking_degrade(
@@ -940,10 +940,7 @@ pub(crate) fn non_blocking_degrade(
 ) -> bool {
     use crate::product_e2e::DegradeReason;
     if item.stage == "doc_scan" {
-        return matches!(
-            &item.reason,
-            DegradeReason::Other(msg) if msg == "scan_data" || msg.contains("scan_data")
-        ) || item.impact.contains("doc_scan");
+        return item.impact.contains("doc_scan");
     }
     if item.stage == "web_fetch" {
         return matches!(&item.reason, DegradeReason::ToolUnavailable)

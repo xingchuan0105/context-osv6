@@ -243,37 +243,4 @@ impl ChatContext {
 
         Ok(())
     }
-
-    pub(crate) async fn emit_notifications_for_execution(
-        &self,
-        session: &ChatSession,
-        execution: &ChatExecution,
-    ) -> Result<(), AppError> {
-        if execution.response.degrade_trace.is_empty() {
-            return Ok(());
-        }
-
-        let kind = common::notification_copy::NotifyKind::degrade_for_mode(
-            execution.mode.as_str(),
-            crate::profile_update::is_direct_chat_mode(execution.mode.as_str()),
-        );
-        let copy = common::notification_copy::render(
-            kind,
-            common::notification_copy::NotifyLocale::product_default(),
-        );
-
-        let _ = self
-            .emit_notification(
-                "system.degrade",
-                &copy.title,
-                &copy.body,
-                serde_json::json!({
-                    "agent_type": execution.mode,
-                    "session_id": session.id,
-                    "reasons": execution.response.degrade_trace.iter().map(|item| item.reason.clone()).collect::<Vec<_>>(),
-                }),
-            )
-            .await;
-        Ok(())
-    }
 }

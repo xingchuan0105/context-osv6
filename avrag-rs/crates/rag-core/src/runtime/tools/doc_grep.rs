@@ -322,7 +322,7 @@ pub async fn run_grep(
             elapsed_ms: Some(started.elapsed().as_millis() as u64),
             raw_hit_count: Some(total_hits),
             hydrated_hit_count: Some(total_hits),
-            degrade_reason: Some("grep_data".to_string()),
+            degrade_reason: None,
         }),
     }
 }

@@ -3,7 +3,7 @@
 // All chat execution flows through a linear async pipeline:
 //   preflight → resolve_session → Start event → dispatch_agent_mode | run_write_mode
 //   → audit → output_guard → terminal stream events
-//   → persist → usage → notifications → attach operation guide.
+//   → persist → usage → attach operation guide.
 //
 // Notes on the real order (locked by `pipeline_spine_locks_audit_before_persist`):
 // - The audit record is appended right after the agent step, before the output

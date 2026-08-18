@@ -360,7 +360,7 @@ impl RerankerClient {
         matches!(
             self.config.api_style,
             Some(crate::ApiStyle::DashScopeVlRerank)
-        ) || self.config.model == "qwen3-vl-rerank"
+        )
     }
 
     fn uses_openai_vl_rerank(&self) -> bool {

@@ -61,7 +61,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                     elapsed_ms: Some(started.elapsed().as_millis() as u64),
                     raw_hit_count: Some(chunks.len()),
                     hydrated_hit_count: Some(chunks.len()),
-                    degrade_reason: Some("scan_data".to_string()),
+                    degrade_reason: None,
                 }),
             }
         }

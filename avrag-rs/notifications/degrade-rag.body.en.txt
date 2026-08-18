@@ -1,1 +1,0 @@
-Knowledge-base mode used a degraded retrieval or synthesis path.

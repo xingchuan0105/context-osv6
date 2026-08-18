@@ -258,7 +258,7 @@ impl Default for AppConfig {
                 model: "qwen3-vl-rerank".to_string(),
                 timeout_ms: 15000,
                 temperature: None,
-                api_style: Some("dashscope_vl_rerank".to_string()),
+                api_style: Some("openai".to_string()),
                 dimensions: None,
                 enable_thinking: None,
                 enable_cache: None,
