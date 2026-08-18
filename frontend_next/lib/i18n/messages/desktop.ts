@@ -6,20 +6,20 @@ export const desktopMessages = {
     en: "Desktop client · free",
   },
   "desktop.productSubtitle": {
-    zh: "数据私有、可被 Claude / Codex 等桌面 Agent 以 MCP / CLI 调用。下载即用，无需买断许可。",
-    en: "Private data, callable by Claude / Codex and other desktop agents via MCP / CLI. Free to download — no license fee.",
+    zh: "数据本地私有，开箱即用官方模型或配置自备 Key，可被 Claude / Codex 等桌面 Agent 以 MCP / CLI 调用。完全免费，无需买断许可。",
+    en: "Private by default, official models out of the box or BYOK, callable by Claude / Codex via MCP / CLI. 100% free with no license fee.",
   },
   "desktop.feature1": {
-    zh: "数据私有：文档与索引默认留在本机，不上云也能工作",
-    en: "Private by default: docs and index stay on this machine",
+    zh: "数据本地私有：文档与索引默认保存在本机，核心检索无需数据上云",
+    en: "Private by default: docs and indexes stay on this machine",
   },
   "desktop.feature2": {
-    zh: "MCP / CLI：本机 API 可被 coding agent 调用（建库、解析、问答）",
-    en: "MCP / CLI: local API for coding agents (workspaces, ingest, Q&A)",
+    zh: "开箱即用 + BYOK：内置官方托管模型免配置体验，同时支持自备主流大模型 Key",
+    en: "Out of the box + BYOK: official models ready to use, or bring your own LLM keys",
   },
   "desktop.feature3": {
-    zh: "桌面 Agent 友好：Claude Code、Codex 等可接本机知识库",
-    en: "Desktop-agent ready: Claude Code, Codex, and more can use your local KB",
+    zh: "桌面 Agent 友好：提供标准 MCP / CLI 接口，无缝接入 Claude Code、Codex 等本地编程助手",
+    en: "Desktop-agent ready: standard MCP & CLI for Claude Code, Codex, and local agents",
   },
   "desktop.feature4": {
     zh: "完全免费使用客户端；需要上云分享时再升级云端名额",
@@ -102,8 +102,8 @@ export const desktopMessages = {
     en: "Run the installer (Windows 10+ with WebView2)",
   },
   "desktop.installStep3": {
-    zh: "启动后配置 LLM Key，即可本地索引与问答；需要 MCP 时指向本机 API",
-    en: "Add your LLM key, then index and chat locally; point MCP clients at the local API when needed",
+    zh: "启动后登录账号即可直接问答（开箱自带官方模型），亦可按需切换自备 Key 或连接桌面 Agent (MCP / CLI)",
+    en: "Sign in to chat immediately with official models, or switch to your own key and connect agents (MCP / CLI)",
   },
   "desktop.smartScreenHint": {
     zh: "若 SmartScreen 提示未知应用，选择「仍要运行」（正式签名信誉积累前属正常现象）。",
@@ -202,8 +202,8 @@ export const desktopMessages = {
     en: "Sign out of cloud",
   },
   "desktop.drawer.logoutConfirm": {
-    zh: "确认退出？本机将停止使用官方模型（走余额）。",
-    en: "Sign out? This machine will stop using official models (wallet-metered).",
+    zh: "确认退出登录？退出后将暂停官方模型中继服务，您的本地知识库与历史记录将完整保留。",
+    en: "Sign out? Official relay models will be paused; your local workspaces and history remain intact.",
   },
   "desktop.drawer.logoutConfirmAction": {
     zh: "确认退出",
@@ -214,8 +214,8 @@ export const desktopMessages = {
     en: "Signing out…",
   },
   "desktop.drawer.notLoggedIn": {
-    zh: "未登录云账户。登录后默认使用官方模型（走余额），按钱包余额计量扣费。",
-    en: "Not signed in. After sign-in, official models are metered against your wallet balance by default.",
+    zh: "未登录账号。登录后默认使用官方托管模型（按量计费）；亦可随时配置自备 Key。",
+    en: "Not signed in. After sign-in, official models are metered by usage; you can also configure your own keys anytime.",
   },
   "desktop.drawer.login": {
     zh: "登录",
@@ -226,20 +226,20 @@ export const desktopMessages = {
     en: "Current source",
   },
   "desktop.drawer.modelOfficial": {
-    zh: "官方模型（走余额）",
-    en: "Official models (wallet-metered)",
+    zh: "官方托管模型（按量计费）",
+    en: "Official models (metered)",
   },
   "desktop.drawer.modelByok": {
-    zh: "自定义 Provider（自备 Key）",
-    en: "Custom provider (own key)",
+    zh: "自备模型密钥 (BYOK)",
+    en: "Bring your own key (BYOK)",
   },
   "desktop.drawer.modelOfficialHint": {
-    zh: "模型调用经云端转发，按用量从钱包余额扣费；无需配置自己的 Key。",
-    en: "Calls are relayed through the cloud and debit your wallet by usage — no own key needed.",
+    zh: "通过平台安全中继调用模型，按实际 Token 用量从账户余额扣除，无需自备 Key。",
+    en: "Relayed through the cloud and debited by usage — no own key needed.",
   },
   "desktop.drawer.modelByokHint": {
-    zh: "已配置的自备 Key 优先生效，调用不扣云端钱包余额；未配置时登录云账户即可使用官方模型（走余额）。",
-    en: "A configured own key takes priority and does not debit the cloud wallet; without one, sign in to use official models (wallet-metered).",
+    zh: "优先用您的 Key 写最终回答，不扣平台对话费；翻资料仍走平台更快的模型。未配置时登录即可使用官方托管模型。",
+    en: "Your key writes the final answer with no chat wallet debit; retrieval still uses the faster platform model. Otherwise sign in for official models.",
   },
   "desktop.drawer.modelChat": {
     zh: "对话模型",
@@ -254,7 +254,7 @@ export const desktopMessages = {
     en: "Rerank model",
   },
   "desktop.drawer.modelManage": {
-    zh: "管理 Provider（自备 Key）→",
+    zh: "管理模型服务商 (BYOK) →",
     en: "Manage providers (BYOK) →",
   },
   "desktop.drawer.dataDir": {
@@ -286,8 +286,8 @@ export const desktopMessages = {
     en: "The client is free; cloud share slots and wallet are on Pricing.",
   },
   "desktop.drawer.diagnosticsHint": {
-    zh: "只读诊断信息，用于排查本机运行问题。",
-    en: "Read-only diagnostics for troubleshooting the local runtime.",
+    zh: "本地运行环境诊断信息（PostgreSQL 向量库、Redis 缓存与核心引擎状态）。",
+    en: "Local runtime diagnostics (PostgreSQL vector DB, Redis cache, and core engine status).",
   },
   "desktop.drawer.stackStatus": {
     zh: "本机数据栈",
@@ -302,44 +302,52 @@ export const desktopMessages = {
     en: "Starting client…",
   },
   "desktop.cloudLoginTitle": {
-    zh: "登录云账户",
-    en: "Sign in to your cloud account",
+    zh: "欢迎使用 Context-OS",
+    en: "Welcome to Context-OS",
   },
   "desktop.cloudLoginSubtitle": {
-    zh: "登录后默认使用官方模型（走余额），按钱包余额计量扣费。",
-    en: "After sign-in, official models are metered against your wallet balance by default.",
+    zh: "登录账号以启用官方模型开箱即用。文档与索引全程保留在您的本地设备。",
+    en: "Sign in to access official models out of the box. Your docs and indexes stay local.",
   },
   "desktop.cloudLoginEmail": {
-    zh: "云账户邮箱",
-    en: "Cloud account email",
+    zh: "账号邮箱",
+    en: "Account Email",
   },
   "desktop.cloudLoginPassword": {
     zh: "密码",
     en: "Password",
   },
+  "desktop.cloudLoginForgotPassword": {
+    zh: "忘记密码？",
+    en: "Forgot password?",
+  },
   "desktop.cloudLoginSubmit": {
-    zh: "登录并启用官方模型",
-    en: "Sign in and enable official models",
+    zh: "登录并进入工作区",
+    en: "Sign in & continue",
   },
   "desktop.cloudLoginSubmitting": {
-    zh: "正在登录并准备官方模型…",
-    en: "Signing in and preparing official models…",
+    zh: "正在登录并初始化…",
+    en: "Signing in & initializing…",
   },
   "desktop.cloudLoginFailed": {
-    zh: "登录失败，请检查网络后重试",
-    en: "Sign-in failed; check your network and retry",
+    zh: "登录失败，请检查网络或账号密码后重试",
+    en: "Sign-in failed; check your network or credentials and retry",
   },
   "desktop.cloudLoginNoAccount": {
-    zh: "没有账户？",
-    en: "No account yet?",
+    zh: "还没有账号？",
+    en: "Don't have an account?",
   },
   "desktop.cloudLoginRegister": {
-    zh: "去注册 →",
+    zh: "立即注册 →",
     en: "Sign up →",
   },
   "desktop.cloudLoginByokHint": {
-    zh: "想用自己的 Key？登录后可在 设置 → Provider 切换自定义 Provider（自备 Key）。",
-    en: "Prefer your own key? After sign-in, switch under Settings → Providers (BYOK).",
+    zh: "💡 提示：登录后可随时在「设置 → 模型服务商」切换为您自备的 API Key (BYOK)。",
+    en: "💡 Tip: You can switch to Bring-Your-Own-Key (BYOK) anytime under Settings → Providers.",
+  },
+  "desktop.cloudLoginPrivacyHint": {
+    zh: "🔒 数据隐私承诺：您的知识库文档、向量索引与聊天记录仅保存在本机。",
+    en: "🔒 Privacy First: Your local docs, vector indexes, and chat history never leave your machine.",
   },
   "desktop.cloudLoginChecking": {
     zh: "正在检查云登录状态…",

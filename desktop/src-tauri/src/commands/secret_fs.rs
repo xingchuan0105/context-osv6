@@ -26,7 +26,7 @@ fn restrict_secret_file_windows(path: &Path) {
         SDDL_REVISION_1, SE_FILE_OBJECT,
     };
     use windows_sys::Win32::Security::{
-        DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, PACL, PSECURITY_DESCRIPTOR,
+        ACL, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, PSECURITY_DESCRIPTOR,
         PROTECTED_DACL_SECURITY_INFORMATION,
     };
 
@@ -45,7 +45,7 @@ fn restrict_secret_file_windows(path: &Path) {
         }
         let mut present = 0i32;
         let mut defaulted = 0i32;
-        let mut dacl: PACL = std::ptr::null_mut();
+        let mut dacl: *mut ACL = std::ptr::null_mut();
         if GetSecurityDescriptorDacl(sd, &mut present, &mut dacl, &mut defaulted) != 0
             && present != 0
         {

@@ -198,8 +198,8 @@ export const helpMessages = {
     en: "The Windows client is free. Data can stay local; MCP / CLI work with desktop agents.",
   },
   helpItemDesktop2: {
-    zh: "安装后配置 LLM Key 即可本地索引与问答；SmartScreen 提示时选择仍要运行。需要上云分享时再升级云端名额。",
-    en: "Add an LLM key after install for local index and Q&A; use Run anyway if SmartScreen warns. Upgrade cloud share slots only when publishing online.",
+    zh: "安装后登录账号即可直接问答（开箱自带官方模型），亦支持配置自备 Key；SmartScreen 提示时选择仍要运行。",
+    en: "Sign in after installation to chat immediately with official models, or configure your own keys; use Run anyway if SmartScreen warns.",
   },
   helpItemDesktopDownload: {
     zh: "下载 / 了解客户端（免费）",

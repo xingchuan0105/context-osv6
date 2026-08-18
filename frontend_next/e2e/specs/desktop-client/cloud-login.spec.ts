@@ -41,7 +41,7 @@ test("cloud-login: gate → login → official-relay RAG answer with citations",
   test.setTimeout(600_000);
 
   // 1) Without a cloud session the shell renders only the W3 login card.
-  const emailField = page.getByLabel("云账户邮箱");
+  const emailField = page.getByLabel(/邮箱|账号邮箱/);
   await emailField.waitFor({ state: "visible", timeout: 120_000 });
 
   // 2) Login runs Rust-side (reqwest): session JWT → desktop token →
@@ -50,7 +50,7 @@ test("cloud-login: gate → login → official-relay RAG answer with citations",
   //    re-mounted card never rechecks the session the IPC may have saved.
   await emailField.fill(CLOUD_EMAIL as string);
   await page.getByLabel("密码").fill(CLOUD_PASSWORD as string);
-  await page.getByRole("button", { name: "登录并启用官方模型" }).click();
+  await page.getByRole("button", { name: /登录/ }).click();
   await emailField.waitFor({ state: "hidden", timeout: 120_000 });
 
   // 3) Gate released → local session bootstrap → workspace UI. The bootstrap

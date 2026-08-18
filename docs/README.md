@@ -52,6 +52,7 @@
 
 ## 近期审计快照（时间点；未吸收进 AGENTS 前非强制）
 
+- `engineering/2026-08-19-updates-since-0810.md` — **08-10～08-18 升级更新总览**（Lead+Workers、桌面 0.2→0.3、qwen_web、安全 W0–W5、relay/计费）
 - `engineering/2026-08-18-security-audit-ai-product.md` — AI 产品安全审查（L0–L6）；修补编排见 `plans/2026-08-18-security-remediation-plan.md`
 - `engineering/2026-08-10-harness-llm-user-channel-philosophy-diagnosis.md` — **Harness / LLM / 用户三角信道** vs 现网出站；主审复核通过；**§17 方案补丁**（verify 面 / ceiling 分叉 / 次数阈值）闭合后可开 P0
 

@@ -662,12 +662,12 @@ export const shareMessages = {
     en: "Share slots full · upgrade or free a slot",
   },
   "shareConversion.body": {
-    zh: "当前 {plan}：已开分享 {used}/{max}。升级 Plus/Pro 可提高可分享工作区数；访客问答若走平台模型，由工作区所有者余额支付（自定义 Provider 不扣钱包，仍计入用量）。",
-    en: "Plan {plan}: {used}/{max} shared workspaces. Upgrade Plus/Pro for more slots. Guest Q&A on platform models bills the workspace owner; a custom provider skips wallet debit but still counts toward usage.",
+    zh: "当前 {plan}：已开分享 {used}/{max}。升级 Plus/Pro 可提高可分享工作区数；访客问答若走平台模型，由工作区所有者余额支付（自定义 Provider 不扣对话费，翻资料仍扣余额，并计入用量）。",
+    en: "Plan {plan}: {used}/{max} shared workspaces. Upgrade Plus/Pro for more slots. Guest Q&A on platform models bills the workspace owner; a custom provider skips chat debit, while retrieval still bills the wallet and counts toward usage.",
   },
   "shareConversion.byokHint": {
-    zh: "建议：分享场景可先配自定义 Provider（不扣余额），或保持平台模型所需余额。",
-    en: "Tip: use a custom provider for shared chat (no wallet debit), or keep wallet funded for platform models.",
+    zh: "建议：分享场景可先配自定义 Provider（不扣对话费，翻资料仍走平台），或保持平台模型所需余额。",
+    en: "Tip: use a custom provider for shared answers (no chat debit; retrieval still uses the platform), or keep wallet funded for platform models.",
   },
   "shareConversion.upgradeCta": {
     zh: "升级会员 · 更多分享名额",

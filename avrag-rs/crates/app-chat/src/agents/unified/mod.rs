@@ -36,9 +36,9 @@ pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
     chat_llm_client: Option<LlmClient>,
     search_llm_client: Option<LlmClient>,
-    /// Optional Worker-side retrieve LLM (RETRIEVE_LLM_*). When set and the
-    /// request is not BYOK, Worker SaC / retrieval-loop turns use it; Lead
-    /// plan and synthesis stay on the main client (thinking max).
+    /// Optional Worker-side retrieve LLM (RETRIEVE_LLM_*). When set, Worker
+    /// SaC / retrieval-loop turns use it — including BYOK requests. Lead plan
+    /// and synthesis stay on the main client (BYOK overlays that client).
     retrieve_llm_client: Option<LlmClient>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn SearchProvider>>,
@@ -365,7 +365,7 @@ impl UnifiedAgent {
         &self,
         mode_id: &str,
         llm_client: Option<LlmClient>,
-        byok_active: bool,
+        _byok_active: bool,
         configure_loop: impl FnOnce(agent_loop::r#loop::ReActLoop) -> agent_loop::r#loop::ReActLoop,
         request: AgentRequest,
         sink: &dyn AgentEventSink,
@@ -417,28 +417,25 @@ impl UnifiedAgent {
             }
         };
 
-        // Retrieve-phase model override: platform-configured fast model for
-        // Lead plan / Worker SaC / tool rounds. Skipped under BYOK so a
-        // user-key request stays entirely on the user's endpoint.
-        let retrieve_llm = if byok_active {
-            None
-        } else {
-            self.retrieve_llm_client.as_ref().map(|client| {
-                let client = client.clone().with_stage(&stage_id).with_request_context(
-                    request
-                        .session_id
-                        .as_deref()
-                        .and_then(|s| uuid::Uuid::parse_str(s).ok()),
-                    request.auth.request_id().map(|s| s.to_string()),
-                );
-                let client = if let Some(ref observer) = self.usage_observer {
-                    client.with_observer(observer.clone(), tenant.clone())
-                } else {
-                    client
-                };
-                Arc::new(client)
-            })
-        };
+        // Platform fast model for Worker SaC / retrieval rounds. BYOK only
+        // overlays Lead / synthesis; retrieval still bills the wallet.
+        let retrieve_llm = self.retrieve_llm_client.as_ref().map(|client| {
+            let mut retrieve_tenant = tenant.clone();
+            retrieve_tenant.skip_wallet_debit = false;
+            let client = client.clone().with_stage(&stage_id).with_request_context(
+                request
+                    .session_id
+                    .as_deref()
+                    .and_then(|s| uuid::Uuid::parse_str(s).ok()),
+                request.auth.request_id().map(|s| s.to_string()),
+            );
+            let client = if let Some(ref observer) = self.usage_observer {
+                client.with_observer(observer.clone(), retrieve_tenant)
+            } else {
+                client
+            };
+            Arc::new(client)
+        });
 
         let skill_registry = Arc::new(agent_tools::capability::CapabilityRegistry::standard());
         let base_loop = agent_loop::r#loop::ReActLoop::new(llm, skill_registry)

@@ -88,7 +88,7 @@ describe("CloudLoginGate", () => {
       expect(screen.getByTestId("app-child")).toBeInTheDocument();
     });
     expect(getCloudSession).not.toHaveBeenCalled();
-    expect(screen.queryByText("登录云账户")).not.toBeInTheDocument();
+    expect(screen.queryByText("欢迎使用 Context-OS")).not.toBeInTheDocument();
   });
 
   it("shows the login card when no cloud session exists", async () => {
@@ -102,12 +102,12 @@ describe("CloudLoginGate", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("登录云账户")).toBeInTheDocument();
+      expect(screen.getByText("欢迎使用 Context-OS")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("app-child")).not.toBeInTheDocument();
-    // 官方模型（走余额）+ BYOK hint per PRODUCT_IA §6.
-    expect(screen.getByText(/官方模型（走余额）/)).toBeInTheDocument();
-    expect(screen.getByText(/自定义 Provider（自备 Key）/)).toBeInTheDocument();
+    expect(screen.getByText(/官方模型开箱即用/)).toBeInTheDocument();
+    expect(screen.getByText(/自备的 API Key \(BYOK\)/)).toBeInTheDocument();
+    expect(screen.getByText(/数据隐私承诺/)).toBeInTheDocument();
   });
 
   it("opens the cloud register page in the system browser from the login card", async () => {
@@ -121,14 +121,35 @@ describe("CloudLoginGate", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("没有账户？")).toBeInTheDocument();
+      expect(screen.getByText("还没有账号？")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: "去注册 →" }));
+    fireEvent.click(screen.getByRole("button", { name: "立即注册 →" }));
 
     await waitFor(() => {
       expect(openInBrowser).toHaveBeenCalledTimes(1);
     });
     expect(vi.mocked(openInBrowser).mock.calls[0]?.[0]).toContain("/register");
+  });
+
+  it("opens the cloud reset password page in the system browser from the forgot password button", async () => {
+    vi.mocked(isTauri).mockReturnValue(true);
+    vi.mocked(getCloudSession).mockResolvedValue(loggedOutSession);
+
+    render(
+      <CloudLoginGate>
+        <div data-testid="app-child">App</div>
+      </CloudLoginGate>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "忘记密码？" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "忘记密码？" }));
+
+    await waitFor(() => {
+      expect(openInBrowser).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(openInBrowser).mock.calls[0]?.[0]).toContain("/reset-password");
   });
 
   it("renders children when a cloud session exists", async () => {
@@ -144,7 +165,7 @@ describe("CloudLoginGate", () => {
     await waitFor(() => {
       expect(screen.getByTestId("app-child")).toBeInTheDocument();
     });
-    expect(screen.queryByText("登录云账户")).not.toBeInTheDocument();
+    expect(screen.queryByText("欢迎使用 Context-OS")).not.toBeInTheDocument();
   });
 
   it("submits credentials through IPC and proceeds on success", async () => {
@@ -171,11 +192,11 @@ describe("CloudLoginGate", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("云账户邮箱")).toBeInTheDocument();
+      expect(screen.getByLabelText("账号邮箱")).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByLabelText("云账户邮箱"), { target: { value: "a@b.c" } });
+    fireEvent.change(screen.getByLabelText("账号邮箱"), { target: { value: "a@b.c" } });
     fireEvent.change(screen.getByLabelText("密码"), { target: { value: "secret-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "登录并启用官方模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "登录并进入工作区" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("app-child")).toBeInTheDocument();
@@ -195,11 +216,11 @@ describe("CloudLoginGate", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("云账户邮箱")).toBeInTheDocument();
+      expect(screen.getByLabelText("账号邮箱")).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByLabelText("云账户邮箱"), { target: { value: "a@b.c" } });
+    fireEvent.change(screen.getByLabelText("账号邮箱"), { target: { value: "a@b.c" } });
     fireEvent.change(screen.getByLabelText("密码"), { target: { value: "wrong" } });
-    fireEvent.click(screen.getByRole("button", { name: "登录并启用官方模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "登录并进入工作区" }));
 
     await waitFor(() => {
       expect(screen.getByText("邮箱或密码错误")).toBeInTheDocument();

@@ -58,6 +58,7 @@ export function appAbsoluteUrl(path: string): string {
 export const APP_PATHS = {
   login: "/login",
   register: "/register",
+  resetPassword: "/reset-password",
   dashboard: "/dashboard",
   desktop: "/desktop",
   desktopBuy: "/desktop/buy",

@@ -132,9 +132,19 @@ export function CloudLoginGate({ children }: { children: ReactNode }) {
             />
           </div>
           <div>
-            <label className="app-form-label" htmlFor="cloud-login-password">
-              {formatUiMessage(locale, "desktop.cloudLoginPassword")}
-            </label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <label className="app-form-label" htmlFor="cloud-login-password">
+                {formatUiMessage(locale, "desktop.cloudLoginPassword")}
+              </label>
+              <button
+                className="app-button-ghost"
+                style={{ fontSize: "0.8rem", padding: 0 }}
+                type="button"
+                onClick={() => void openInBrowser(appAbsoluteUrl(APP_PATHS.resetPassword))}
+              >
+                {formatUiMessage(locale, "desktop.cloudLoginForgotPassword")}
+              </button>
+            </div>
             <input
               autoComplete="current-password"
               className="app-input"
@@ -157,7 +167,7 @@ export function CloudLoginGate({ children }: { children: ReactNode }) {
               : formatUiMessage(locale, "desktop.cloudLoginSubmit")}
           </button>
         </div>
-        <p className="app-form-footnote">
+        <p className="app-form-footnote" style={{ marginTop: "1rem" }}>
           {formatUiMessage(locale, "desktop.cloudLoginNoAccount")}{" "}
           <button
             className="app-button-ghost"
@@ -170,6 +180,11 @@ export function CloudLoginGate({ children }: { children: ReactNode }) {
         <p className="app-form-footnote">
           {formatUiMessage(locale, "desktop.cloudLoginByokHint")}
         </p>
+        <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid hsl(var(--border) / 0.5)" }}>
+          <p style={{ margin: 0, fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textAlign: "center" }}>
+            {formatUiMessage(locale, "desktop.cloudLoginPrivacyHint")}
+          </p>
+        </div>
       </section>
     </main>
   );

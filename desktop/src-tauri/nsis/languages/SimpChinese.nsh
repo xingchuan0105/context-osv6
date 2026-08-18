@@ -28,7 +28,7 @@ LangString deleteAppData ${LANG_SIMPCHINESE} "删除应用程序数据"
 
 ; --- Context-OS 客户端自定义 MUI 文案（单行；$\r$\n 为 NSIS 换行）---
 LangString COS_WELCOME_TITLE ${LANG_SIMPCHINESE} "欢迎使用 Context-OS 客户端"
-LangString COS_WELCOME_TEXT ${LANG_SIMPCHINESE} "本向导将在您的计算机上安装 $(^NameDA)。$\r$\n$\r$\n本机知识库与 Vector Graph RAG。客户端免费，无需激活；核心本机使用无需云登录。$\r$\n$\r$\n点击「下一步」继续。"
+LangString COS_WELCOME_TEXT ${LANG_SIMPCHINESE} "本向导将在您的计算机上安装 $(^NameDA)。$\r$\n$\r$\n本地知识库与向量图谱检索。客户端完全免费；登录账号即可开箱体验官方模型，同时支持配置自备 API 密钥与桌面 Coding Agent 调用。$\r$\n$\r$\n点击「下一步」继续。"
 LangString COS_FINISH_TITLE ${LANG_SIMPCHINESE} "安装完成"
 LangString COS_FINISH_TEXT ${LANG_SIMPCHINESE} "$(^NameDA) 已成功安装到本机。$\r$\n$\r$\n点击「完成」关闭向导。"
 LangString COS_FINISH_RUN ${LANG_SIMPCHINESE} "立即启动 Context-OS 客户端"

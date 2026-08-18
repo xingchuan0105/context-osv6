@@ -28,7 +28,7 @@ LangString deleteAppData ${LANG_ENGLISH} "Delete the application data"
 
 ; --- Context-OS Client custom MUI strings (single-line; $\r$\n = NSIS newline) ---
 LangString COS_WELCOME_TITLE ${LANG_ENGLISH} "Welcome to Context-OS Client"
-LangString COS_WELCOME_TEXT ${LANG_ENGLISH} "This wizard will install $(^NameDA) on your computer.$\r$\n$\r$\nLocal knowledge base with Vector Graph RAG. The client is free — no activation required; no cloud login for core local use.$\r$\n$\r$\nClick Next to continue."
+LangString COS_WELCOME_TEXT ${LANG_ENGLISH} "This wizard will install $(^NameDA) on your computer.$\r$\n$\r$\nLocal knowledge base with Vector Graph RAG. The client is free; sign in to access official models out of the box, with support for BYOK keys and desktop Coding Agents (MCP / CLI).$\r$\n$\r$\nClick Next to continue."
 LangString COS_FINISH_TITLE ${LANG_ENGLISH} "Installation complete"
 LangString COS_FINISH_TEXT ${LANG_ENGLISH} "$(^NameDA) has been installed on your computer.$\r$\n$\r$\nClick Finish to close this wizard."
 LangString COS_FINISH_RUN ${LANG_ENGLISH} "Launch Context-OS Client"

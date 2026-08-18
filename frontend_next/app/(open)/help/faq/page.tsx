@@ -101,12 +101,12 @@ export default function HelpFaqPage() {
           <h2 style={h2}>余额充值与会员有何区别？</h2>
           <p style={p}>
             两者独立。余额用于平台模型调用、向量检索，以及分享页上由所有者承担的访客问答（Owner-pays）。可以只充值不升级，也可以两者都要。配置自定义
-            Provider（BYOK）后，对话可走你自己的模型额度，从而减少平台对话扣费。
+            Provider（BYOK）后，最终回答走你自己的模型额度，从而减少平台对话扣费；翻资料仍走平台更快的模型，并从余额扣费。
           </p>
 
           <h2 style={h2}>什么是 BYOK？</h2>
           <p style={p}>
-            BYOK（Bring Your Own Key）即在设置中配置自己的模型 Provider。适合希望对话走自有额度、降低平台模型消耗的用户。入口：
+            BYOK（Bring Your Own Key）即在设置中配置自己的模型 Provider。最终回答走自有额度；翻资料仍用平台更快的模型，等待时间同样会短一截。入口：
             <Link href="/settings?tab=providers">设置 · 模型 Provider</Link>
             （需登录）；说明见 <Link href="/pricing">定价页</Link> 相关提示。
           </p>

@@ -152,27 +152,27 @@ describe("DesktopSettingsDrawer", () => {
     });
   });
 
-  it("模型 section shows 官方模型（走余额） with the pinned relay models when signed in", async () => {
+  it("模型 section shows 官方托管模型（按量计费） with the pinned relay models when signed in", async () => {
     render(<DesktopSettingsDrawer open onClose={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "模型" }));
 
     await waitFor(() => {
-      expect(screen.getByText("官方模型（走余额）")).toBeInTheDocument();
+      expect(screen.getByText("官方托管模型（按量计费）")).toBeInTheDocument();
     });
     expect(screen.getByText("deepseek-v4-flash")).toBeInTheDocument();
     expect(screen.getByText("BAAI/bge-m3")).toBeInTheDocument();
-    expect(screen.getByText("管理 Provider（自备 Key）→")).toBeInTheDocument();
+    expect(screen.getByText("管理模型服务商 (BYOK) →")).toBeInTheDocument();
   });
 
-  it("模型 section shows 自定义 Provider（自备 Key） when signed out", async () => {
+  it("模型 section shows 自备模型密钥 (BYOK) when signed out", async () => {
     vi.mocked(getCloudSession).mockResolvedValue(loggedOutSession);
     render(<DesktopSettingsDrawer open onClose={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "模型" }));
 
     await waitFor(() => {
-      expect(screen.getByText("自定义 Provider（自备 Key）")).toBeInTheDocument();
+      expect(screen.getByText("自备模型密钥 (BYOK)")).toBeInTheDocument();
     });
   });
 
@@ -195,10 +195,10 @@ describe("DesktopSettingsDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "模型" }));
 
     await waitFor(() => {
-      expect(screen.getByText("自定义 Provider（自备 Key）")).toBeInTheDocument();
+      expect(screen.getByText("自备模型密钥 (BYOK)")).toBeInTheDocument();
     });
     expect(screen.getByText("deepseek · deepseek-chat")).toBeInTheDocument();
-    expect(screen.queryByText("官方模型（走余额）")).not.toBeInTheDocument();
+    expect(screen.queryByText("官方托管模型（按量计费）")).not.toBeInTheDocument();
     expect(screen.queryByText("deepseek-v4-flash")).not.toBeInTheDocument();
   });
 
@@ -221,7 +221,7 @@ describe("DesktopSettingsDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "模型" }));
 
     await waitFor(() => {
-      expect(screen.getByText("官方模型（走余额）")).toBeInTheDocument();
+      expect(screen.getByText("官方托管模型（按量计费）")).toBeInTheDocument();
     });
   });
 
@@ -232,7 +232,7 @@ describe("DesktopSettingsDrawer", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
     });
-    expect(screen.getByText(/未登录云账户/)).toBeInTheDocument();
+    expect(screen.getByText(/未登录账号/)).toBeInTheDocument();
     expect(getCloudWalletBalance).not.toHaveBeenCalled();
   });
 

@@ -85,8 +85,8 @@ export const productGuideMessages = {
     en: "BYOK · custom provider",
   },
   "productGuide.llm.byokBody": {
-    zh: "在设置 → 模型服务商中填入你自己的 API Key（如 DeepSeek / 百炼 / SiliconFlow）。对话走你自己的额度；适合已有账号的用户。",
-    en: "Add your own API keys under Settings → Providers. Chat uses your quota — best if you already have keys.",
+    zh: "在设置 → 模型服务商中填入你自己的 API Key（如 DeepSeek / 百炼 / SiliconFlow）。最终回答走你自己的额度；翻资料仍用平台更快的模型，等待时间同样会短一截。",
+    en: "Add your own API keys under Settings → Providers. The final answer uses your quota; retrieval still uses the faster platform model, so wait time drops the same way.",
   },
   "productGuide.llm.platformTitle": {
     zh: "平台代购 · 余额扣费",

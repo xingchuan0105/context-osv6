@@ -202,8 +202,8 @@ export const settingsMessages = {
     en: "Custom provider",
   },
   "settings.billing.byokSubtitle": {
-    zh: "密钥加密存储。自定义 Provider 仅用于对话模型；向量与检索始终由平台处理并从余额扣费。",
-    en: "Keys are encrypted at rest. A custom provider covers chat models only; embedding and retrieval always use the platform and bill your balance.",
+    zh: "密钥加密存储。自备 Key 只用于最终回答；翻资料走平台更快的模型，向量检索仍从余额扣费。",
+    en: "Keys are encrypted at rest. Your key writes the final answer; retrieval uses the faster platform model, and embeddings still debit your balance.",
   },
   "settings.billing.byokProvider": {
     zh: "Provider",
