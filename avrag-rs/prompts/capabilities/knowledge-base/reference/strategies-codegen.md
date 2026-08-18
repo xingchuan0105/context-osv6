@@ -1,15 +1,12 @@
 # 沙箱 codegen 噪声（knowledge-base/strategies-codegen）
 
 按需加载：`{"skill_request": ["knowledge-base/strategies-codegen"]}`。  
-方法签名以 **knowledge-base** skill 为准。
+方法签名以 **knowledge-base** skill 为准；失败形态见本轮 `[sandbox_error]`。
 
 本文件只谈 **沙箱写码形态**：一次可执行、少噪声。检索策略（entity-first / 表 / grounding）在对应 spoke。
 
 ## 写码形态（观察）
 
-- 沙箱侧可调用的检索面是 `client.dense` / `client.lexical` / `client.grep` / `client.struct_*` 等契约名；轨迹里出现 `dense_search`、`graph_search`、`read_lines` 时，stderr 常见 `AttributeError` / `NameError`，本轮无有效 Ok 检索回传。
-- 方法参数与 skill 方法表一致时，首轮即可得到 Ok；多出的 `top_k=` 等键会在调用期 TypeError，同样无 Ok。
-- 协程路径下，`await client.xxx(...)` 执行后才有回传；同步写法或漏 `await` 时，列表/打印侧常仍为空。
 - 独立子查询可用 `asyncio.gather`；有前后依赖的链（先 catalog 再 query）串行更稳。
 - 回传消费侧：打印 **短摘要 / id / 计数** 比整段 chunk 正文更不易挤爆窗口；大段 dump 时后续轮上下文常被噪声占满。
 
@@ -33,15 +30,9 @@
 
 | 现象 | 回传实际含义 | 常见误读 / 噪声来源 |
 |------|--------------|-------------------|
-| `NameError` / `AttributeError: ... graph_search` / `dense_search` | 契约是 `client.dense` / `lexical` / `grep` 等；**没有** `graph_search`、`read_lines`、旧式 `*_search` | 旧文档或外部 SDK 记忆 |
-| 调用带 `top_k=` | 当前 client 检索方法**无** `top_k` → TypeError | 抄原生 tool schema |
-| 忘记 `await` 或混用同步写法 | 协程未执行 | 以为写了 client.xxx 即已检索 |
 | 有依赖却 `asyncio.gather` 并行 | 依赖边未满足 | 把「独立可并行」套到有依赖链 |
 | `import os` / `subprocess` 等 | 沙箱禁止 → 执行失败 | 想绕过 client |
-| 连续两轮 `Execution failed` | 可能转入合成收口 | 同一错误代码原样重贴 |
-| stderr 写明缺参后仍换无关方法 | 失败原因已在 stderr | 概括成「库为空」 |
 | 只 `print` 大段 chunk 正文 | 回传窗口被占满 | 多 print 当证据更全 |
-| `calculator` 有结果且检索 alias=0 | 算术 ≠ 文档主张已覆盖 | 用题干数字终答文档题 |
 | 首轮贴多段试错式重复 client 调用 / Ok 后仍追加调用 | 同 seed 重复占轮次，且追加调用可能 err | 把「多写几遍」当召回策略 |
 
 ## Ok 后收口

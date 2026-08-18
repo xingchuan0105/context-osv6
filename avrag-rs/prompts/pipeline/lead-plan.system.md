@@ -34,7 +34,7 @@ description: "Lead plan JSON — third-person environment + schema (not a comman
 }
 ```
 
-`facets`（仅 `rag` brief 生效）：题面含「分别 / 各自 / X 和 Y / 对比」等多侧语义时，把每一侧拆成一条自包含 facet。宿主为每个 facet 分配**独立的检索步数预算**，逐 facet 顺序执行、逐 facet 装配证据包；某侧证据为空时宿主只对该 facet 补检一次。facet ≤ 4 条。
+`facets`（仅 `rag` brief 生效）：题面含「分别 / 各自 / X 和 Y / 对比」或多问号拆侧时，把每一侧拆成一条自包含 facet。宿主为每个 facet 分配**独立的检索步数预算**，逐 facet 顺序执行、逐 facet 装配证据包；某侧证据为空时宿主只对该 facet 补检一次。facet ≤ 4 条。常见不够见本轮 `[coverage_gotcha]` 观察。
 
 ## 事实约束
 

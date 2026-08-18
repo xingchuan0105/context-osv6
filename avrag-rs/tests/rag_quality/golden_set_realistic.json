@@ -676,7 +676,7 @@
       "examples": [
         {
           "query": "2019年我国速冻食品行业规模是多少亿元人民币？",
-          "expected_answer": "1467亿元",
+          "expected_answer": "正文市场规模测算写2019年行业规模1467亿元人民币；图4.1/经济环境段把1467亿元写在2020年口径下。充分揭露是标明两种年份归属并陈，或锚定2019年正文口径答1467亿元。",
           "source_chunks": [
             {
               "type": "substring",
@@ -694,7 +694,8 @@
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "充分揭露：答2019年1467亿元为 correct；同时指出文中另有2020年同数并标明正文/图出处，仍为 correct，不因并陈扣分。只采一侧且把2019/2020张冠李戴 → partial。编造文中未出现的第三个数 → faithfulness 扣分。并陈不是拒答（is_refusal=false）。"
         },
         {
           "query": "2019年速冻食品行业中速冻米面制品、速冻火锅料、速冻菜肴及其他各自的份额是多少？",
@@ -763,8 +764,8 @@
           ]
         },
         {
-          "query": "按照1T/H型号速冻机每天生产8小时、每年工作350天计算，一台速冻机一年能生产多少吨速冻食品？",
-          "expected_answer": "2800吨",
+          "query": "论文里 1T/H 型号速冻机的日工时和年工作日是怎么写的？按该口径一台一年能生产多少吨速冻食品？",
+          "expected_answer": "论文按每天生产8小时、每年工作350天计算，一台1T/H速冻机一年能生产2800吨速冻食品。",
           "source_chunks": [
             {
               "type": "substring",
@@ -775,14 +776,15 @@
             1
           ],
           "mode": "rag",
-          "description": "单台年产量",
+          "description": "单台年产量：工时与年工作日须从论文确认后再算，题干不给齐参数",
           "expected_should_answer": true,
           "must_include": [
             "2800吨"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "题干未给齐工时/年工作日。须从材料确认日工时与年工作日后给出2800吨。只凭题外算术、未检索即报数 → 未充分揭露材料口径。答出2800吨并引用材料中的8小时/350天为 correct。"
         },
         {
           "query": "论文预测2021年至2025年期间速冻机市场总需求约为多少台？市场规模约为多少亿元？",
@@ -1096,7 +1098,7 @@
       "examples": [
         {
           "query": "ADR-0004的决策日期是哪一天？",
-          "expected_answer": "2026年6月6日",
+          "expected_answer": "2026年6月6日（与 2026-06-06 / 2026年6月6号 等价）",
           "source_chunks": [
             {
               "type": "substring",
@@ -1114,11 +1116,12 @@
           "description": "ADR-0004日期",
           "expected_should_answer": true,
           "must_include": [
-            "2026年6月6日"
+            "2026"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "2026-06-06、2026年6月6日、2026年6月6号语义等价，判 correct。不要因未出现「Date」字面或中文年月日格式扣分。"
         },
         {
           "query": "ADR-0004提出将RAG管道转变成由什么驱动的真正的Agent Loop？",
@@ -1304,7 +1307,7 @@
         },
         {
           "query": "ADR-0009拒绝了哪些备选方案？",
-          "expected_answer": "方案A（解封socket+真HTTP）和方案C（预取+变量注入）",
+          "expected_answer": "方案A（解封socket+真HTTP）和方案C（预取+变量注入）。材料未见方案名时：交代已见元信息并标明备选清单未出现、不编造方案名。",
           "source_chunks": [
             {
               "type": "substring",
@@ -1322,11 +1325,12 @@
           "description": "拒绝的备选方案",
           "expected_should_answer": true,
           "must_include": [
-            "方案A（解封socket+真HTTP）和方案C（预取+变量注入）"
+            "ADR-0009"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "两条满分路径：(1) 列出材料中的方案A/C（或等价表述）→ correct，is_refusal=false；(2) 材料仅有标题/问题陈述、答案交代已见内容并标明备选清单未出现、不编造方案名 → 充分揭露，correctness=correct，is_refusal=false（分槽缺口说明不是整题拒答）。编造方案名 → ungrounded。"
         },
         {
           "query": "根据ADR-0009，桥接协议中doc_scope由谁强制注入？为什么不由模型传入？",
@@ -1493,7 +1497,7 @@
         },
         {
           "query": "ADR-0004的验证计划分为几个Slice？ADR-0009的分阶段实施分为几个Phase？",
-          "expected_answer": "ADR-0004分为3个Slice（native tools、loop flow、multi-iteration testing），ADR-0009分为4个Phase（P1 interpreter bridge、P2 rag-core bridge、P3 mock/e2e、P4 telemetry）",
+          "expected_answer": "ADR-0004分为3个Slice（native tools、loop flow、multi-iteration testing），ADR-0009分为4个Phase（P1 interpreter bridge、P2 rag-core bridge、P3 mock/e2e、P4 telemetry）。只覆盖一侧时标明另一侧当前材料未覆盖。",
           "source_chunks": [
             {
               "type": "substring",
@@ -1515,15 +1519,16 @@
           "description": "两篇ADR实施阶段对比",
           "expected_should_answer": true,
           "must_include": [
-            "ADR-0004分为3个Slice（native tools、loop flow、multi-iteration testing），ADR-0009分为4个Phase（P1 interpreter bridge、P2 rag-core bridge、P3 mock/e2e、P4 telemetry）"
+            "ADR-0004"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "两侧都答满 → correct。一侧完整（含 Slice 数或 Phase 数）且另一侧明确标明当前材料未覆盖、不编造该侧数字 → 充分揭露，correctness=correct，is_refusal=false。编造未出现的 Slice/Phase 数 → ungrounded。"
         },
         {
           "query": "ADR-0004废弃了parse_rag_plan_decision，ADR-0009废弃了什么文件？",
-          "expected_answer": "ADR-0009废弃了code_gen_query.rs",
+          "expected_answer": "ADR-0009废弃了code_gen_query.rs。材料未见该文件名时：交代已见内容并标明废弃文件名未出现、不编造文件名。",
           "source_chunks": [
             {
               "type": "substring",
@@ -1541,11 +1546,12 @@
           "description": "两篇ADR废弃项对比",
           "expected_should_answer": true,
           "must_include": [
-            "ADR-0009废弃了code_gen_query.rs"
+            "ADR-0009"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "给出 code_gen_query.rs（或等价文件名）→ correct。材料未见该文件名、答案标明废弃文件名未出现且不编造 → 充分揭露，correctness=correct，is_refusal=false。编造文件名 → ungrounded。"
         }
       ]
     },
@@ -1954,14 +1960,12 @@
           "description": "概念阶段活动数",
           "expected_should_answer": true,
           "must_include": [
-            "81",
-            "去重",
-            "口径"
+            "81"
           ],
           "capabilities": [
             "rag"
           ],
-          "rubric_notes": "多口径题：同时给出行数口径（81/total_hits 类）与按活动名（或活动号）去重口径并标明统计键 → correct。仅 81 且明确为行/条目 → partial 或 correct（可接受）。仅 57 且不提行数/不标去重 → incorrect。编造第三种无回传支撑的数 → faithfulness 扣分。"
+          "rubric_notes": "充分揭露：仅 81 且明确为行/条目/total_hits 口径 → correct。同时给出去重口径并标明统计键 → correct。仅 57 且不提行数/不标去重 → incorrect。编造第三种无回传支撑的数 → faithfulness 扣分。不因未写「去重」「口径」四字扣分。"
         },
         {
           "query": "华为IPD流程中开发阶段有多少个活动？哪个阶段活动最多？",
@@ -2589,7 +2593,7 @@
         },
         {
           "query": "华为IPD流程中的PAC角色和云南白药IT规划中的项目分级，分别涉及什么决策机制？",
-          "expected_answer": "华为IPD中PAC是产品审批委员会，负责各阶段决策评审（PAC-05/20/40/60/100等）；云南白药按项目投入金额分S/A/B级，不同级别有不同审批要求",
+          "expected_answer": "华为IPD中PAC是产品审批委员会，负责各阶段决策评审（PAC-05/20/40/60/100等）；云南白药按项目投入金额分S/A/B级，不同级别有不同审批要求。只覆盖一侧时标明另一侧当前材料未覆盖。",
           "source_chunks": [
             {
               "type": "substring",
@@ -2607,12 +2611,12 @@
           "description": "IPD PAC vs 白药项目分级",
           "expected_should_answer": true,
           "must_include": [
-            "华为IPD中PAC是产品审批委员会，负责各阶段决策评审（PAC-05/20/40/60/100等）",
-            "云南白药按项目投入金额分S/A/B级，不同级别有不同审批要求"
+            "PAC"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "两侧都答满 → correct。一侧完整（PAC 角色或白药 S/A/B 分级）且另一侧明确标明当前材料未覆盖、不编造该侧分级/角色 → 充分揭露，correctness=correct，is_refusal=false。编造未出现的分级标准 → ungrounded。"
         },
         {
           "query": "在这些文档中，哪些文档提到了'客户'的重要性？分别从什么角度？",
@@ -2677,7 +2681,7 @@
         },
         {
           "query": "华为IPD流程有多少个活动？云南白药IT规划有多少个业务对象？两者在'体系化'方面有什么共同特点？",
-          "expected_answer": "华为IPD有370个活动（372行含标题），云南白药有638个业务对象；两者都将复杂业务拆解为大量结构化要素进行体系化管理",
+          "expected_answer": "华为IPD活动数按表行口径约368–372（含标题行时常见370/372），云南白药有638个业务对象；两者都将复杂业务拆解为大量结构化要素进行体系化管理。",
           "source_chunks": [
             {
               "type": "substring",
@@ -2695,12 +2699,12 @@
           "description": "结构化拆解跨文档",
           "expected_should_answer": true,
           "must_include": [
-            "华为IPD有370个活动（372行含标题），云南白药有638个业务对象",
-            "两者都将复杂业务拆解为大量结构化要素进行体系化管理"
+            "638"
           ],
           "capabilities": [
             "rag"
-          ]
+          ],
+          "rubric_notes": "白药业务对象 638 须出现。IPD 活动数 368、370、372 视为同行口径差，任一即可，不因与 370 差 1–2 判 partial。两侧数字都有且点到体系化拆解 → correct。一侧数字+另一侧标明未覆盖 → 充分揭露 correct。"
         },
         {
           "query": "ADR-0009中的沙箱检索桥接和华为IPD流程中的模块化设计，在'解耦'思想上有什么联系？",
@@ -3118,7 +3122,8 @@
           "expected_should_answer": true,
           "must_include": [
             "60年代"
-          ]
+          ],
+          "rubric_notes": "两侧都交代（文中60年代 + 公开资料商业化时期如1920s/Birdseye）→ correct。只答公开资料侧并标明文中年代未在本轮材料出现 → 充分揭露，correctness=correct，is_refusal=false。只答一侧且把另一侧当已覆盖、或编造文中未出现的年代 → partial/ungrounded。"
         }
       ]
     },
@@ -3183,7 +3188,8 @@
           "must_include": [
             "2026-07-19",
             "15:04"
-          ]
+          ],
+          "rubric_notes": "空 capabilities 纯对话。须调用 user_context()（带括号）后把注入时间写入终答。把方法名、Traceback、沙箱失败自述当终答 → incorrect。时间格式 2026-07-19 15:04 与中文年月日等价。"
         },
         {
           "query": "北京现在的天气怎么样？",

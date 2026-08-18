@@ -1,7 +1,7 @@
 ---
 name: capability-web
 description: "Web capability — mount contract when internet retrieval is on (Lead+Workers)"
-version: "2.1"
+version: "2.2"
 category: "system-prompt"
 applicable_strategies: [search]
 ---
@@ -30,12 +30,7 @@ applicable_strategies: [search]
 | 中等 | 行业媒体、百科、厂商技术文 |
 | 较低 | 论坛、纯营销页、不明转载 |
 
-冲突时并陈并标来源层级；不把未见 URL 的正文当已知。
-
-### 引用
-
-网页序号：`[[web:n]]`，与合并后 results / pack alias `web:n` 一致。  
-与知识库同挂时：网页 `[[web:n]]`，文档 `（#n）` / `SELECTED`，不混挂。
+冲突时各来源并陈；未见回传不编造。来源层级仅作排序观察。本通道不写用户终答。
 
 ### 空结果
 
@@ -43,6 +38,5 @@ applicable_strategies: [search]
 |------|------|
 | 某 query 空 | 该 query 未命中 |
 | 中英多 query 仍空 | 当前检索面未覆盖；≠ 全网不存在 |
-| 多来源冲突 | 并陈并标来源层级 |
 
 细节见 `workers/web/SKILL.md` 与宿主观察。

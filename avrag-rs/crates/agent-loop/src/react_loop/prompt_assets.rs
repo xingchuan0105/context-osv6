@@ -261,6 +261,17 @@ pub fn retrieval_summary(call_count: usize, total_chunks: usize, detail: &str) -
     )
 }
 
+/// Retrieve-window scene gotchas (`[coverage_gotcha]`) — plan LLM + RAG Worker.
+/// Synthesis 充分揭露 is `coverage_gotcha_synth` (handoff recency).
+pub fn coverage_gotcha() -> &'static str {
+    trim_body(loop_prompt!("coverage-gotcha.nudge.md"))
+}
+
+/// Synthesis-window scene gotchas (`[coverage_gotcha_synth]`) — Lead handoff.
+pub fn coverage_gotcha_synth() -> &'static str {
+    trim_body(loop_prompt!("coverage-gotcha-synth.nudge.md"))
+}
+
 /// Lead planning context observation (`[lead_plan_context]`).
 pub fn lead_plan_context_observation(
     caps_rag: bool,
@@ -269,7 +280,7 @@ pub fn lead_plan_context_observation(
     doc_scope_note: &str,
     doc_lines: &str,
 ) -> String {
-    subst(
+    let ctx = subst(
         trim_body(loop_prompt!("lead-plan-context.tmpl.md")),
         &[
             ("caps_rag", if caps_rag { "是" } else { "否" }),
@@ -278,7 +289,8 @@ pub fn lead_plan_context_observation(
             ("doc_scope_note", doc_scope_note),
             ("doc_lines", doc_lines),
         ],
-    )
+    );
+    format!("{ctx}\n\n{}", coverage_gotcha())
 }
 
 /// Task Brief observation for a Worker (`[task_brief]`).
@@ -382,11 +394,13 @@ pub fn retrieval_worklog_observation(query: &str, log: &super::run_log::RunEvent
 }
 
 /// After Lead+Workers retrieve: environment fact before product synthesis.
+/// Appends `[coverage_gotcha_synth]` at recency (not the retrieve-window gotcha).
 pub fn lead_workers_handoff_to_synthesis(n_packs: usize) -> String {
-    subst(
+    let handoff = subst(
         trim_body(loop_prompt!("lead-workers-handoff-synthesis.tmpl.md")),
         &[("n_packs", &n_packs.to_string())],
-    )
+    );
+    format!("{handoff}\n\n{}", coverage_gotcha_synth())
 }
 
 /// Host structural re-brief wave observation (`[rebrief_wave]`).
@@ -409,7 +423,11 @@ pub fn rebrief_wave_observation(
 
 /// RAG Worker short SaC environment fact (`[rag_worker_sac]`).
 pub fn rag_worker_sac_observation() -> String {
-    trim_body(loop_prompt!("rag-worker-sac.tmpl.md")).to_string()
+    format!(
+        "{}\n\n{}",
+        trim_body(loop_prompt!("rag-worker-sac.tmpl.md")),
+        coverage_gotcha()
+    )
 }
 
 /// Briefs rejected by PlanGate / start gate (`[brief_gate_rejects]`).
@@ -720,6 +738,25 @@ mod tests {
         assert!(required_action_missing("dense", false).contains("尚未出现"));
         assert!(required_action_missing("dense", true).contains("Status=Ok") || required_action_missing("dense", true).contains("成功回传"));
         assert!(selected_protocol_nudge().contains("[selected_protocol]"));
+        assert!(coverage_gotcha().contains("[coverage_gotcha]"));
+        assert!(!coverage_gotcha().contains("[coverage_gotcha_synth]"));
+        assert!(coverage_gotcha_synth().contains("[coverage_gotcha_synth]"));
+        let plan_obs = lead_plan_context_observation(true, false, "ws", "docs", "- d1");
+        assert!(plan_obs.contains("[lead_plan_context]"));
+        assert!(plan_obs.contains("[coverage_gotcha]"));
+        assert!(!plan_obs.contains("[coverage_gotcha_synth]"));
+        let worker_obs = rag_worker_sac_observation();
+        assert!(worker_obs.contains("[rag_worker_sac]"));
+        assert!(worker_obs.contains("[coverage_gotcha]"));
+        assert!(!worker_obs.contains("[coverage_gotcha_synth]"));
+        let handoff = lead_workers_handoff_to_synthesis(2);
+        assert!(handoff.contains("[lead_workers_handoff]"));
+        assert!(handoff.contains("[coverage_gotcha_synth]"));
+        let handoff_without_synth = handoff.replace("[coverage_gotcha_synth]", "");
+        assert!(
+            !handoff_without_synth.contains("[coverage_gotcha]"),
+            "retrieve-window gotcha must not ride along on synthesis handoff"
+        );
         assert!(user_facing_closeout_observation().contains("[user_facing_closeout]"));
         assert!(!disaster_format_exhausted().is_empty());
         assert!(!disaster_no_evidence_answer("rag").is_empty());

@@ -703,8 +703,8 @@
           "manual_notes": ""
         },
         {
-          "query": "按照1T/H型号速冻机每天生产8小时、每年工作350天计算，一台速冻机一年能生产多少吨速冻食品？",
-          "expected_answer": "2800吨",
+          "query": "论文里 1T/H 型号速冻机的日工时和年工作日是怎么写的？按该口径一台一年能生产多少吨速冻食品？",
+          "expected_answer": "论文按每天生产8小时、每年工作350天计算，一台1T/H速冻机一年能生产2800吨速冻食品。",
           "source_chunks": [
             {
               "type": "substring",
@@ -715,7 +715,7 @@
             1
           ],
           "mode": "rag",
-          "description": "单台年产量",
+          "description": "单台年产量：工时与年工作日须从论文确认后再算，题干不给齐参数",
           "expected_should_answer": true,
           "must_include": [
             "2800吨"

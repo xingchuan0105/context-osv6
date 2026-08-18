@@ -4,7 +4,7 @@ description: "Web search — Lead+Workers host leaf (all modes with web); Eviden
 disclose_at: retrieve
 atomic: true
 applicable_modes: [search]
-version: "3.4"
+version: "3.5"
 ---
 
 ## 环境
@@ -59,8 +59,4 @@ print(en)
 | snippet 已含正文 | 宿主 auto-scrape 后常见 |
 | 空结果 | 该 query 未命中 |
 
-合成侧对冲突事实：并陈并标来源层级；未见 observation 的正文视为未知。
-
-## 引用
-
-最终答复中网页序号写作 `[[web:n]]`，与 results 顺序一致。若同时有知识库命中，文档侧用末行 `SELECTED: #n`，与 `[[web:n]]` 分源，不混挂。
+本通道不写用户终答。

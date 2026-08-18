@@ -9,14 +9,14 @@ description: >-
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "6.0"
+version: "6.1"
 ---
 
 ## 证据（硬句）
 
 知识库文档侧事实的权威来源 = 本轮及历史轮次 **宿主执行回传**（`<code_execution_result>` 等）中实际出现的内容。回传未覆盖的断言处于 **未知 / 未覆盖**（≠ 语料一定不存在）。覆盖以回传正文为准：`dense` / `lexical` 的 chunk 正文与 `grep` 命中行同权。题干并置「文档内概念」与「业界框架」时两侧各一主张槽。行级/计数结论需要行级回传（常见于 `grep` 的 `total_hits`）。大段 `print` 会占满回传窗口。
 
-沙箱入口、首块执行、并行 `gather`、基础原语见 **agent-base「沙箱基座」**（不在此复述）。本 skill 检索入口是 **`client.方法名(...)`**；同名点选式原生工具不在此沙箱契约内。
+沙箱入口、首块执行、并行 `gather` 见本轮沙箱环境段（不在此复述）。本 skill 检索入口是 **`client.方法名(...)`**；同名点选式原生工具不在此沙箱契约内。
 
 **docscope** 是 skill_request 注入的文档清单/画像（拿 `doc_id`），不是沙箱方法。
 
@@ -38,23 +38,7 @@ version: "6.0"
 
 空结果 / 截断 / 失败对照表、最小成功代码形态、回传块格式：见 **api-detail**（首轮或沙箱错误后披露；也可 `{"skill_request":["knowledge-base/api-detail"]}`）。
 
-## SELECTED / KEEP（线协议）
-
-终答采用了文档侧命中时，用户可见形态常见两层：
-
-1. **句级**：每个有回传支撑的文档侧主张，**句末**常见 `（#n）`（或半角 `(#n)`），n 为回传 alias。  
-2. **文末**：全文**最后一行**常见：
-
-```text
-SELECTED: #1, #3
-```
-
-与句内出现的 alias 一致。宿主交付时会把 `（#n）` 转为可点击引用，并去掉 SELECTED 协议行。
-
-```text
-主张一句……（#1）另一句……（#3）
-SELECTED: #1, #3
-```
+## KEEP（工作集）
 
 多轮工作集：
 
@@ -62,7 +46,7 @@ SELECTED: #1, #3
 KEEP: #3, #7
 ```
 
-（可选 `KEEP_DROP: #5`。）无 KEEP 时宿主 sticky 上一工作集。`SELECTED` 宜 ⊆ 本 run 曾 KEEP 的 alias。细则、空集、双源与 cite 标记见 **api-detail**。
+（可选 `KEEP_DROP: #5`。）无 KEEP 时宿主 sticky 上一工作集。本通道不写用户终答。
 
 ## 表格 / 策略
 

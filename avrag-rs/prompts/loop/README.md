@@ -17,6 +17,8 @@ See root `AGENTS.md` §「User channel」and `docs/engineering/2026-08-10-harnes
 
 Third-person **what happened / what is true** for model observations. No “please / you must”. Hard gates live in code. Disaster lines are short **human** product copy (librarian tone), not run diagnostics.
 
+**Scene gotchas 只注册一次、按窗口注入。** 常驻 system/skill 只留 schema 与环境事实。检索够不够写在 `coverage-gotcha.nudge.md`（规划 + RAG Worker）；终答充分揭露写在 `coverage-gotcha-synth.nudge.md`（合成 handoff 近端）。不要把同一段 gotcha 再抄进 Lead SKILL、lead-plan、handoff、strategies。
+
 ## Naming: `codegen-*` files
 
 Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution implementation** (historical “codegen bridge”), **not** the product skill id.
@@ -51,6 +53,8 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | `format-hint-*.nudge.md` | Table pattern mismatch hints in code |
 | `retrieval-summary.tmpl.md` | Per-round retrieve counts + `{detail}` |
 | `lead-plan-context.tmpl.md` | Lead 规划上下文（`{caps_rag}`, `{caps_search}`, `{workspace_note}`, `{doc_scope_note}`, `{doc_lines}`） |
+| `coverage-gotcha.nudge.md` | 检索还不够的场景观察（规划 LLM + RAG Worker） |
+| `coverage-gotcha-synth.nudge.md` | 终答充分揭露（Lead 合成 handoff 近端；与检索窗口分开） |
 | `task-brief.tmpl.md` | Lead→Worker 简报 JSON（`{brief_json}`） |
 | `evidence-pack.tmpl.md` | Worker→Lead pack JSON（`{pack_json}`；宿主 PackGate 后） |
 | `retrieval-worklog.tmpl.md` | 检索工作日志投影（`{query}`, `{log_lines}`；源自 run 事件日志的 surface 事件） |
@@ -63,9 +67,9 @@ Filenames such as `codegen-no-output.nudge.md` refer to the **sandbox execution 
 | 路径 | 角色 |
 |------|------|
 | `system/agent-base.md` | 会话公共层（身份 / 用户信道 / BASE） |
-| `system/lead-base.md` | Lead（规划+grounded 合成） |
+| `system/lead-base.md` | Lead 合成窗口（规划 JSON 在 `lead-plan.system.md`） |
 | `system/worker-sandbox.md` | Worker 沙箱精简基座 |
-| `clusters/lead/SKILL.md` | Lead 合成/Brief 细则 |
+| `clusters/lead/SKILL.md` | 作者侧 Lead 细则（`disclose_at: always` 未接入 catalog；运行时 Lead 窗口是 `lead-plan.system.md` + `lead-base.md`） |
 | `workers/{rag,web}/SKILL.md` | 通道 Worker |
 | `pipeline/lead-plan.system.md` | Lead 规划 JSON LLM |
 | `retrieval-summary-detail-*.tmpl.md` / `*-nudge.md` | `{detail}` fragments |

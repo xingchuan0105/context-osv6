@@ -17,7 +17,7 @@ Claim checklist (copy and tick against returns):
 
 - 只覆盖部分主张时，未覆盖侧保持 **未知**，不拿已覆盖侧的叙述填补。
 - 双源（知识库 + 联网）时，两侧证据分源引用；一侧未取回传则该侧未知。
-- 最终答复前，清单上仍为未勾的项对应「回传未覆盖」，而非「语料一定没有」。
+- 装配 pack 前，清单上仍为未勾的项写入 `gaps`（「回传未覆盖」），而非「语料一定没有」。
 
 ## Entity-first 与 dense 种子（原则）
 
@@ -53,19 +53,19 @@ Claim checklist (copy and tick against returns):
 - **金额/编号/表内字面** → `lexical` / `grep`；`dense` 作定位线索。
 - **元数据 Date/Status** → 中英双词并行探测。
 - **同一主张上** dense 叙述与 lexical/grep 精确数字并存时，精确数字侧通常是更硬的回传支撑（叙述侧仍可保留主题定位）。
-- **证据** → 终答主张指向回传 alias；句末 `（#n）` + 末行 `SELECTED: #n`（协议见 skill）。
+- **证据** → 收入 pack 的条目指向本轮 observation / alias；本通道不写用户终答。
 - **多轮工作集** → 检索后输出 `KEEP: #n,#m`（支撑当前主张的命中）；宿主优先注入工作集并折叠更早轮正文（协议见 skill「KEEP」）。
-- **多口径 / 干扰** → 并陈或只 KEEP 支撑主张的 alias；不依赖 chunk 可见面敲除。
+- **多口径 / 干扰** → 各口径 alias 都收入 evidence / KEEP；不依赖 chunk 可见面敲除。
 
 ## 离开检索前的观察条件（终止 checklist）
 
-下列在回传与答复形态上**同时可读出**时，用散文写终答（或交合成）是环境中的常见收束点——不是第二套 host 硬闸：
+下列在回传上**同时可读出**时，停止继续写代码、交宿主装配 pack 是环境中的常见收束点——不是第二套 host 硬闸：
 
-1. 题干拆出的**每个独立主张**均已有覆盖状态：回传已支撑 / 答复中已写明「当前回传未覆盖」/ 冲突已并陈。
+1. Brief 拆出的**每个独立主张**均已有覆盖状态：回传已支撑 / `gaps` 已写明「当前回传未覆盖」。
 2. **且** 下列之一成立：
    - 最近 1–2 次**已换方法或换种子**的检索，未再出现新的高价值 alias；或
-   - 未覆盖侧已在拟写答复中显式落边界（不把未知写成「语料不存在」）。
-3. 若采用了带 alias 的文档命中：拟写终稿**末行**可见 `SELECTED: #…`（编号来自回传）；若无任何可用 alias，正文已表明未覆盖或未采用命中。
+   - 未覆盖侧已在 gaps 中显式落边界（不把未知写成「语料不存在」）。
+3. 采用的文档命中带 alias，写入 evidence；本通道不写用户终答，也不写文末 `SELECTED`。
 
 仍有未试过的实体面 / 英文面 / 结构面时，「新 alias≈0」只描述**已试查询形态**的饱和，不自动等于全库穷尽。
 
@@ -74,23 +74,8 @@ Claim checklist (copy and tick against returns):
 | 现象 | 回传实际含义 | 常见误读 |
 |------|--------------|----------|
 | `dense` 高分只有概念叙述 | 主题相关；目标数字可能仍未知 | 从叙述「推」出未出现数字 |
-| 多数字题只见一个数 | 其余主张仍未知 | 只答一半即结束 |
 | 连续轮次新 alias≈0 | 该查询形态饱和 | 同义重扫却期待新覆盖 |
-| 零轮 `client.*` 即终答意图 | 文档侧均未覆盖 | 常识当库内已检索 |
-| 有 alias 终答无 `SELECTED` 末行 | 主张无引用圈定 | 有 hit 仍不圈 alias；或 SELECTED 夹在正文中间而非末行 |
-| 终答 SELECTED 与 KEEP 全集脱节 | 工作集外 alias 亦可圈，但早期 KEEP 证据更易在复读位 | 只圈最新一轮、丢掉中段已 KEEP 的关键 alias |
+| 零轮 `client.*` 即停止 | 文档侧均未覆盖 | 常识当库内已检索 |
 | `stderr` 非空 | 检索面未更新 | 读成「语料不存在」 |
 
-表通用读法 → **how-to-read-tables**；表路径/多口径 FS → **strategies-tables**；拒答与跨文档边界 → **strategies-grounding**；沙箱写码噪声 → **strategies-codegen** 或 skill 方法表。
-
-## 沙箱 Python 噪声（短）
-
-| 现象 | 含义 |
-|------|------|
-| `graph_search` / `dense_search` / `top_k=` | 契约是 `client.dense` 等且无 `top_k` |
-| 忘记 `await` | 协程未执行 |
-| 有依赖却 `gather` 并行 | 空 doc_ids / 错参 |
-| `import os` 等 | 沙箱禁止 |
-| 只 `print` 大段正文 | 回传窗口被占满 |
-
-更全：`{"skill_request": ["knowledge-base/strategies-codegen"]}`。
+表通用读法 → **how-to-read-tables**；表路径/多口径 FS → **strategies-tables**；拒答与跨文档边界 → **strategies-grounding**。沙箱报错形态见本轮 `[sandbox_error]`；写码 few-shot → `{"skill_request": ["knowledge-base/strategies-codegen"]}`。

@@ -1,7 +1,7 @@
 ---
 name: capability-knowledge-base
 description: "Knowledge-base capability — mount contract when KB is on (Lead+Workers)"
-version: "2.0"
+version: "2.1"
 category: "system-prompt"
 applicable_strategies: [rag]
 ---
@@ -23,9 +23,6 @@ applicable_strategies: [rag]
 
 可引用的文档事实只来自**宿主返回的执行观察 / pack**。回传未出现的内容处于 **未知 / 未覆盖**。
 
-### 引用
-
-- 句级常见 `（#n）`；全文末行 `SELECTED: #n`。  
-- 与联网同挂：知识库 `#n`，网页 `[[web:n]]`。
+本通道不写用户终答，也不写句级 `（#n）` / 文末 `SELECTED`。
 
 方法表、表格读法、策略 spoke 以 **knowledge-base skill / reference** 为准，不在本契约展开。

@@ -154,7 +154,7 @@ pub async fn fetch_lead_briefs(
         .replace("{query}", request.query.trim());
     let messages = vec![
         ChatMessage::system(trim_md(PLAN_SYSTEM)),
-        ChatMessage::user(user),
+        ChatMessage::user(user.clone()),
     ];
     let Ok(response) = llm.complete_json_mode(&messages, Some(temperature)).await else {
         tracing::warn!("lead_plan llm failed; using host fallback briefs");
@@ -197,8 +197,11 @@ pub async fn fetch_lead_briefs(
         raw_preview: response.content.chars().take(300).collect(),
     });
     let repair = PLAN_REPAIR.replace("{parse_error}", &first_err);
+    // Keep the original user turn (plan_obs + coverage_gotcha + query) so
+    // repair still sees the same environment as the first plan call.
     let repair_messages = vec![
         ChatMessage::system(trim_md(PLAN_SYSTEM)),
+        ChatMessage::user(user.clone()),
         ChatMessage::assistant(response.content.as_str()),
         ChatMessage::user(repair),
     ];

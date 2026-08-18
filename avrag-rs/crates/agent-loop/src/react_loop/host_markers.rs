@@ -175,6 +175,16 @@ pub const HOST_OBSERVATION_MARKERS: &[HostMarker] = &[
         emitted_at: "prompts/loop/lead-plan-context.tmpl.md",
     },
     HostMarker {
+        tag: "[coverage_gotcha]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/coverage-gotcha.nudge.md",
+    },
+    HostMarker {
+        tag: "[coverage_gotcha_synth]",
+        forbidden_in_final: true,
+        emitted_at: "prompts/loop/coverage-gotcha-synth.nudge.md",
+    },
+    HostMarker {
         tag: "[evidence_pack]",
         forbidden_in_final: true,
         emitted_at: "prompts/loop/evidence-pack.tmpl.md",

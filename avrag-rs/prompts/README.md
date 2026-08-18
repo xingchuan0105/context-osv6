@@ -21,7 +21,7 @@ Product and code use different short names for the **same** concepts. This is in
 | 联网 | web / internet | `capabilities/web/contract.md` · skill `search` | `mode: search` · `caps.search` | `client.web` / `web_search` fallback tool id |
 | 文档清单 | docscope | `clusters/docscope/SKILL.md` · skill `docscope` | pipeline 注入 `<docscope_metadata>` | profile 阶段 scope 级聚合 |
 | （无） | agent base | `system/agent-base.md` | pure chat + session identity | often first system part |
-| Lead | lead | `system/lead-base.md` · `clusters/lead/SKILL.md` | rag/search/dual plan+synth | assembly when caps mounted |
+| Lead | lead | `system/lead-base.md`（合成）· `pipeline/lead-plan.system.md`（规划） | rag/search/dual plan+synth | `clusters/lead/SKILL.md` 未进 catalog |
 | RAG Worker | rag worker | `system/worker-sandbox.md` · `workers/rag/SKILL.md` | nested short SaC | Worker system parts only |
 | Web Worker | web worker | —（host 多 query 叶子，无 LLM 挂载） | host multi-query leaf | host pack |
 | 写精修 | write refine | `deprecated/.../write-refine-system.md` | `mode: write_refine` | separate product; not SaC chat tree |

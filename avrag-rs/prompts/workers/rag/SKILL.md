@@ -4,7 +4,7 @@ description: "RAG Worker — multi-tool KB retrieve + EvidencePack only; never u
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "2.1"
+version: "2.2"
 ---
 
 ## 角色
