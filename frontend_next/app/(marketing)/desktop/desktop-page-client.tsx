@@ -25,6 +25,15 @@ export function DesktopPageClient() {
           <header className={styles.marketingHeader}>
             <h1 className="app-page-title">{formatUiMessage(locale, "desktop.productTitle")}</h1>
             <p className="app-page-subtitle">{formatUiMessage(locale, "desktop.productSubtitle")}</p>
+            <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px", margin: "0.35rem 0 0" }}>
+              {formatUiMessage(locale, "home.seoPublisher")}
+            </p>
+            <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: "0.2rem 0 0" }}>
+              {formatUiMessage(locale, "home.seoUpdated", { date: "2026-08-18" })}
+            </p>
+            <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: "0.2rem 0 0" }}>
+              {formatUiMessage(locale, "home.seoEvidence")}
+            </p>
           </header>
 
           {/* Two-column: benefits | download + install — less whitespace, aligned CTAs */}

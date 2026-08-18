@@ -45,6 +45,14 @@ export const homeMessages = {
     zh: "会员与可分享名额",
     en: "Membership & share slots",
   },
+  "home.seoSectionDiff": {
+    zh: "核心优势与差异化定位",
+    en: "Core advantages & differentiation",
+  },
+  "home.seoBulletDiff": {
+    zh: "独特优势在于开放连接：与单机笔记或封闭知识库形成显著差异，Context OS 文档入库后即成结构化检索面，可直接通过 MCP / API 开放给外部 Agent 调用，并支持向访客分享免登录公开库（详见选型对比）。",
+    en: "Unique advantage in open connectivity: differing from standalone notes, Context OS turns ingested docs into structured retrieval surfaces accessible to external agents via MCP/API, with shareable guest workspaces (see comparison guide).",
+  },
   "home.seoPublisher": {
     // GEOHub authority heuristic matches author|作者|关于|… (not 主理人 alone).
     zh: "产品：Context OS · 品牌：ContextLM · 作者：邢川",

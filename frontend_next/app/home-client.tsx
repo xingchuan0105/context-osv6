@@ -85,6 +85,10 @@ export default function HomeClient() {
       title: formatUiMessage(locale, "home.seoSectionShare"),
       body: formatUiMessage(locale, "home.seoBulletShare"),
     },
+    {
+      title: formatUiMessage(locale, "home.seoSectionDiff"),
+      body: formatUiMessage(locale, "home.seoBulletDiff"),
+    },
   ] as const;
 
   return (
@@ -100,7 +104,7 @@ export default function HomeClient() {
             {formatUiMessage(locale, "home.seoPublisher")}
           </p>
           <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: 0 }}>
-            {formatUiMessage(locale, "home.seoUpdated", { date: "2026-08-12" })}
+            {formatUiMessage(locale, "home.seoUpdated", { date: "2026-08-18" })}
           </p>
           <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "13px", margin: 0 }}>
             {formatUiMessage(locale, "home.seoEvidence")}

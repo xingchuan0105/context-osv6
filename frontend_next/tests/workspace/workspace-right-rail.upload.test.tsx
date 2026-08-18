@@ -13,6 +13,8 @@ vi.mock("../../lib/ui-preferences", () => ({
 }));
 
 vi.mock("../../lib/workspace/client", () => ({
+  MAX_UPLOAD_FILE_SIZE_BYTES: 100 * 1024 * 1024,
+  resolveUploadMimeType: (file: File) => file.type || "text/plain",
   addWorkspaceSourceUrl: mocks.addWorkspaceSourceUrlMock,
   completeWorkspaceDocumentUpload: mocks.completeWorkspaceDocumentUploadMock,
   createWorkspaceNote: mocks.createWorkspaceNoteMock,
@@ -98,7 +100,7 @@ describe("WorkspaceRightRail upload", () => {
         mime_type: "text/markdown",
       });
     });
-    expect(mocks.uploadWorkspaceDocumentFileMock).toHaveBeenCalledWith("https://upload.example.test/src-2", file);
+    expect(mocks.uploadWorkspaceDocumentFileMock).toHaveBeenCalledWith("https://upload.example.test/src-2", file, "text/markdown");
     expect(mocks.completeWorkspaceDocumentUploadMock).toHaveBeenCalledWith("token-123", "src-2");
     await waitFor(() => {
       expect(mocks.listWorkspaceSourcesMock).toHaveBeenCalledTimes(2);
