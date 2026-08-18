@@ -70,7 +70,15 @@ async fn verify_turnstile(
         ));
     }
 
-    let client = reqwest::Client::new();
+    // Shared client with a hard timeout — per-request Client::new() has no
+    // connect pool reuse and no ceiling on a hung siteverify call.
+    static CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    });
+    let client = &*CLIENT;
     let mut form = vec![
         ("secret", secret.to_string()),
         ("response", token.to_string()),

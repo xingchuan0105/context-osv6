@@ -5,7 +5,7 @@
 
 use common::AppError;
 use contracts::chat::{ChatEvent, ChatRequest, ChatResponse};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 /// Single product entry for all conversation execute paths (POST + SSE).
@@ -43,7 +43,7 @@ impl<'a> ConversationApp<'a> {
         &self,
         req: ChatRequest,
         request_id: String,
-        sender: UnboundedSender<ChatEvent>,
+        sender: Sender<ChatEvent>,
         token: CancellationToken,
     ) -> Result<(), AppError> {
         Self::validate_user_agent_type(&req.agent_type)?;

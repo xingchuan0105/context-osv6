@@ -691,7 +691,7 @@ mod tests {
             objects: state.storage.objects().clone(),
         });
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = mpsc::channel::<ChatEvent>(1024);
         let token = CancellationToken::new();
         let mut request = request_with_mode("chat", vec![]);
         request.session_id = Some(session_id.clone());

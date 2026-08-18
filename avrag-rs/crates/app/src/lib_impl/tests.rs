@@ -402,7 +402,7 @@ mod tests {
             })
             .await
             .unwrap();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1024);
 
         state
             .conversation()
@@ -477,7 +477,7 @@ mod tests {
             })
             .await
             .unwrap();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1024);
 
         state
             .conversation()
@@ -545,7 +545,7 @@ mod tests {
             })
             .await
             .unwrap();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1024);
 
         state
             .conversation()

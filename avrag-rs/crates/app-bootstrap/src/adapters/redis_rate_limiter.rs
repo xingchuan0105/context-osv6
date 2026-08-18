@@ -5,22 +5,32 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RedisRateLimitBackend {
-    client: redis::Client,
+    conn: avrag_cache_redis::SharedConn,
 }
 
 impl RedisRateLimitBackend {
     pub fn new(redis_url: &str) -> anyhow::Result<Self> {
         Ok(Self {
-            client: redis::Client::open(redis_url)?,
+            conn: avrag_cache_redis::SharedConn::from_url(redis_url)?,
         })
     }
 
     pub async fn check(&self, key: &str, limit: u32) -> anyhow::Result<RateLimitDecision> {
-        let window = chrono::Utc::now().timestamp() / 60;
-        let redis_key = format!("rate-limit:{window}:{key}");
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        self.check_window(key, limit, 60).await
+    }
+
+    /// Fixed-window check with an arbitrary window size (e.g. 86400 for daily caps).
+    pub async fn check_window(
+        &self,
+        key: &str,
+        limit: u32,
+        window_secs: u64,
+    ) -> anyhow::Result<RateLimitDecision> {
+        let window = chrono::Utc::now().timestamp() / window_secs.max(1) as i64;
+        let redis_key = format!("rate-limit:{window_secs}:{window}:{key}");
+        let mut conn = self.conn.get().await?;
         let count: u32 = conn.incr(&redis_key, 1_u32).await?;
-        let _: bool = conn.expire(&redis_key, 120).await?;
+        let _: bool = conn.expire(&redis_key, (window_secs.max(1) * 2) as i64).await?;
         let allowed = count <= limit;
         let remaining = limit.saturating_sub(count.min(limit));
 

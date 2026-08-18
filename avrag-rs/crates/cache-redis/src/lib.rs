@@ -4,9 +4,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 mod cache;
+mod conn;
 mod lock;
 
 pub use cache::CacheStore;
+pub use conn::SharedConn;
 pub use lock::{DocumentLock, DocumentLockGuard};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

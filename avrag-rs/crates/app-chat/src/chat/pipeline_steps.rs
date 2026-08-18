@@ -444,7 +444,7 @@ pub(crate) fn merge_activity_counts_into_mode_debug(execution: &mut ChatExecutio
     general.insert("activity_counts".to_string(), counts);
 }
 
-pub(crate) fn emit_terminal_stream_events(
+pub(crate) async fn emit_terminal_stream_events(
     stream_config: Option<&StreamConfig>,
     execution: &ChatExecution,
 ) {
@@ -460,7 +460,7 @@ pub(crate) fn emit_terminal_stream_events(
                     request_id: config.request_id.clone(),
                     message_id: crate::stream_event_message_id(execution.response.message_id),
                     content: chunk,
-                });
+                }).await;
             }
         }
     }
@@ -475,7 +475,7 @@ pub(crate) fn emit_terminal_stream_events(
                 .iter()
                 .filter_map(|citation| serde_json::to_value(citation).ok())
                 .collect(),
-        });
+        }).await;
     }
 
     let _ = config.sender.send(contracts::chat::ChatEvent::Done {
@@ -483,7 +483,7 @@ pub(crate) fn emit_terminal_stream_events(
         session_id: execution.response.session_id.clone(),
         message_id: crate::stream_event_message_id(execution.response.message_id),
         payload: crate::chat_done_payload(&execution.response),
-    });
+    }).await;
 }
 
 #[cfg(test)]

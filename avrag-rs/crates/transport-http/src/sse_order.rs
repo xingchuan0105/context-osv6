@@ -9,14 +9,15 @@
 ///
 /// Returns `Ok(())` when:
 /// - sequence is non-empty
-/// - first event is `start`
+/// - first event is `start`, or the only event is `error` (pre-start failure)
 /// - last event is `done` or `error` (terminal)
 /// - terminal appears exactly once and is last
 pub fn validate_chat_sse_event_order(event_names: &[&str]) -> Result<(), String> {
     if event_names.is_empty() {
         return Err("SSE sequence must not be empty".to_string());
     }
-    if event_names[0] != "start" {
+    let error_only = event_names.len() == 1 && event_names[0] == "error";
+    if event_names[0] != "start" && !error_only {
         return Err(format!(
             "first SSE event must be start, got {:?}",
             event_names[0]
@@ -63,6 +64,14 @@ impl SseEventOrderTracker {
             ));
         }
         if !self.started {
+            // Preflight / session failures emit Error before Start. Dropping
+            // that frame leaves the client with HTTP 200 and an empty body.
+            if event_name == "error" {
+                self.started = true;
+                self.terminal = true;
+                self.names.push(event_name);
+                return Ok(());
+            }
             if event_name != "start" {
                 return Err(format!(
                     "first SSE event must be start, got {event_name:?}"
@@ -108,6 +117,7 @@ mod tests {
         assert!(validate_chat_sse_event_order(&["start", "token", "done"]).is_ok());
         assert!(validate_chat_sse_event_order(&["start", "done"]).is_ok());
         assert!(validate_chat_sse_event_order(&["start", "error"]).is_ok());
+        assert!(validate_chat_sse_event_order(&["error"]).is_ok());
     }
 
     /// S4 P-Stream: missing start / missing done / trailing after done.
@@ -126,6 +136,14 @@ mod tests {
         t.observe("start").unwrap();
         t.observe("token").unwrap();
         t.observe("done").unwrap();
+        t.finish().unwrap();
+        assert!(t.observe("token").is_err());
+    }
+
+    #[test]
+    fn patho_stream_tracker_accepts_error_before_start() {
+        let mut t = SseEventOrderTracker::new();
+        t.observe("error").unwrap();
         t.finish().unwrap();
         assert!(t.observe("token").is_err());
     }

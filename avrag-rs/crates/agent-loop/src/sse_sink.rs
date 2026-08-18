@@ -8,12 +8,16 @@ use contracts::chat::ChatEvent;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 /// Sink that maps `AgentEvent` to `ChatEvent` and forwards them into the
 /// SSE channel used by the HTTP handlers.
+///
+/// The channel is bounded: when the client socket drains slowly, `emit`
+/// awaits capacity — backpressure propagates into the agent loop instead of
+/// piling events into memory.
 pub struct SseSink {
-    sender: UnboundedSender<ChatEvent>,
+    sender: Sender<ChatEvent>,
     request_id: String,
     session_id: String,
     message_id: i64,
@@ -49,7 +53,7 @@ impl Clone for SseSink {
 
 impl SseSink {
     pub fn new(
-        sender: UnboundedSender<ChatEvent>,
+        sender: Sender<ChatEvent>,
         request_id: String,
         session_id: String,
         message_id: i64,
@@ -64,7 +68,7 @@ impl SseSink {
     }
 
     pub fn new_with_agent_type(
-        sender: UnboundedSender<ChatEvent>,
+        sender: Sender<ChatEvent>,
         request_id: String,
         session_id: String,
         message_id: i64,
@@ -142,7 +146,35 @@ impl SseSink {
             self.citations_emitted.store(true, Ordering::SeqCst);
         }
         let chat_event = self.map_event(event);
-        let _ = self.sender.send(chat_event);
+        // Sync callers (tests) only — the production path is async `emit`.
+        // A full bounded channel here drops with a warning rather than blocking
+        // a sync context.
+        if let Err(tokio::sync::mpsc::error::TrySendError::Full(_)) =
+            self.sender.try_send(chat_event)
+        {
+            tracing::warn!(request_id = %self.request_id, "sse sink channel full in sync send; event dropped");
+        }
+    }
+
+    /// Async variant used by `emit`: awaits channel capacity so a slow client
+    /// applies backpressure to the agent loop instead of growing memory.
+    async fn send_async(&self, event: AgentEvent) {
+        if matches!(event, AgentEvent::Done { .. }) && !self.emit_done {
+            return;
+        }
+        if matches!(event, AgentEvent::DebugTrace { .. }) && !self.emit_debug_trace {
+            return;
+        }
+        if matches!(event, AgentEvent::Audit { .. }) {
+            return;
+        }
+        self.record_progress_event(&event);
+        if matches!(&event, AgentEvent::Citations { citations } if !citations.is_empty()) {
+            self.citations_emitted.store(true, Ordering::SeqCst);
+        }
+        let chat_event = self.map_event(event);
+        // Client disconnected (receiver dropped) → send fails; nothing to do.
+        let _ = self.sender.send(chat_event).await;
     }
 
     fn map_event(&self, event: AgentEvent) -> ChatEvent {
@@ -371,7 +403,7 @@ impl SseSink {
         }
     }
 
-    fn ensure_answer_started(&self) -> Result<(), ()> {
+    async fn ensure_answer_started(&self) -> Result<(), ()> {
         if self
             .answer_started
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -384,6 +416,7 @@ impl SseSink {
                     message_id: self.message_id,
                     agent_type: self.agent_type.clone(),
                 })
+                .await
                 .map_err(|_| ())?;
         }
         Ok(())
@@ -394,10 +427,10 @@ impl SseSink {
 impl AgentEventSink for SseSink {
     async fn emit(&self, event: AgentEvent) -> Result<(), ()> {
         if matches!(event, AgentEvent::MessageDelta { .. }) {
-            self.ensure_answer_started()?;
+            self.ensure_answer_started().await?;
             self.message_delta_emitted.store(true, Ordering::SeqCst);
         }
-        self.send(event);
+        self.send_async(event).await;
         Ok(())
     }
 
@@ -415,11 +448,11 @@ mod tests {
     use super::*;
     use crate::events::{AgentEvent, AgentEventSink};
     use contracts::chat::Citation;
-    use tokio::sync::mpsc::unbounded_channel;
+    use tokio::sync::mpsc::channel;
 
     #[test]
     fn test_sse_sink_maps_activity() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 42);
         sink.send(AgentEvent::Activity {
             stage: "planning".to_string(),
@@ -438,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_maps_message_delta() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 7);
         sink.send(AgentEvent::MessageDelta {
             text: "hello".to_string(),
@@ -453,7 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sse_sink_is_agent_event_sink_and_starts_answer_before_first_delta() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 7);
         assert!(!sink.has_message_delta());
 
@@ -484,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_maps_citations() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 1);
         sink.send(AgentEvent::Citations {
             citations: vec![Citation {
@@ -516,7 +549,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_maps_error() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 0);
         sink.send(AgentEvent::Error {
             code: "E404".to_string(),
@@ -532,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_maps_done() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 99);
         sink.send(AgentEvent::Done {
             final_message: Some("done".to_string()),
@@ -565,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_suppresses_debug_trace_by_default() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 0);
         sink.send(AgentEvent::DebugTrace {
             kind: "search.execution".to_string(),
@@ -576,7 +609,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_maps_debug_trace_when_enabled() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink =
             SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 0).with_debug_trace(true);
         sink.send(AgentEvent::DebugTrace {
@@ -592,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_tracks_citations_emitted() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 1);
         assert!(!sink.has_citations_emitted());
 
@@ -628,7 +661,7 @@ mod tests {
 
     #[test]
     fn test_sse_sink_can_suppress_done() {
-        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let (tx, mut rx) = channel::<ChatEvent>(1024);
         let sink =
             SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 99).without_done_event();
         sink.send(AgentEvent::Done {

@@ -25,6 +25,7 @@ run_one() {
     --name "$name" \
     --network host \
     --restart unless-stopped \
+    --ulimit nofile=65536:65536 \
     --env-file "$ENV_FILE" \
     -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
     -v "${OBJ_ROOT}:${OBJ_ROOT}" \
@@ -35,8 +36,44 @@ run_one() {
 }
 
 run_one avrag-api avrag-api
-run_one avrag-worker avrag-worker
+
+# Worker replicas: ingestion/cleanup queues are claim-based (SKIP LOCKED) and
+# replica-safe; periodic side jobs (billing/usage-export/retention/analytics)
+# are not — they stay on replica 1 only (AVRAG_WORKER_SIDE_JOBS=0 elsewhere).
+WORKER_REPLICAS="${AVRAG_WORKER_REPLICAS:-1}"
+# Remove stale replicas left over from a previous larger replica count.
+for stale in $(docker ps -a --format '{{.Names}}' | grep -E '^avrag-worker-[0-9]+$'); do
+  idx="${stale##*-}"
+  if [[ "$idx" -gt "$WORKER_REPLICAS" ]]; then
+    docker rm -f "$stale" >/dev/null 2>&1 || true
+    echo "run-avrag-containers: removed stale replica $stale"
+  fi
+done
+for i in $(seq 1 "$WORKER_REPLICAS"); do
+  wname="avrag-worker"
+  extra_env=()
+  if [[ "$i" -gt 1 ]]; then
+    wname="avrag-worker-$i"
+    extra_env=(-e AVRAG_WORKER_SIDE_JOBS=0)
+  fi
+  docker rm -f "$wname" >/dev/null 2>&1 || true
+  docker run -d \
+    --name "$wname" \
+    --network host \
+    --restart unless-stopped \
+    --ulimit nofile=65536:65536 \
+    --env-file "$ENV_FILE" \
+    "${extra_env[@]}" \
+    -e AVRAG_WORKER_ID="${wname}" \
+    -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
+    -v "${OBJ_ROOT}:${OBJ_ROOT}" \
+    -v "${ENV_FILE}:${ENV_FILE}:ro" \
+    "$RUNTIME_IMAGE" \
+    "${OPT_ROOT}/bin/avrag-worker"
+  echo "run-avrag-containers: started $wname"
+done
 
 sleep 2
 docker ps --filter name=avrag-api --filter name=avrag-worker --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+docker ps --filter "name=avrag-worker-" --format 'table {{.Names}}\t{{.Status}}'
 curl -sS -m 8 -o /dev/null -w "api_health:%{http_code}\n" http://127.0.0.1:8081/health || true

@@ -8,14 +8,32 @@ pub fn pg_pool_options() -> PgPoolOptions {
             .max_connections(25)
             .acquire_timeout(std::time::Duration::from_secs(30));
     } else {
-        options = options.max_connections(10);
+        // Bounded pool with explicit timeouts: slow-request pileups must surface
+        // as acquire errors, not silent unbounded queueing.
+        let max_conn: u32 = std::env::var("AVRAG_PG_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(20);
+        options = options
+            .max_connections(max_conn)
+            .acquire_timeout(std::time::Duration::from_secs(30))
+            .idle_timeout(std::time::Duration::from_secs(300));
     }
     options
 }
 
 impl BootstrapRepository {
     pub async fn connect(database_url: &str) -> Result<Self, PgStorageError> {
-        let pool = pg_pool_options().connect(database_url).await?;
+        use sqlx::ConnectOptions;
+        use sqlx::postgres::PgConnectOptions;
+        use std::str::FromStr;
+        let mut connect_opts = PgConnectOptions::from_str(database_url)?;
+        // Slow-statement log: concurrency forensics need per-statement timing.
+        let connect_opts = connect_opts.log_slow_statements(
+            log::LevelFilter::Warn,
+            std::time::Duration::from_millis(500),
+        );
+        let pool = pg_pool_options().connect_with(connect_opts).await?;
         Ok(Self {
             pool: TenantPgPool::new(pool),
         })

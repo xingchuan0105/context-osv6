@@ -233,7 +233,15 @@ pub(crate) async fn request_context_middleware(
             });
             if let Some(daily_cap) = daily_cap {
                 let day_key = format!("{share_key}:day");
-                let (day_ok, _, _) = check_rate_limit_window(&day_key, daily_cap, 86_400);
+                // Redis daily window when available (cross-replica); memory fallback.
+                let day_ok = if let Some(backend) = state.rate_limit_backend() {
+                    match backend.check_window(&day_key, daily_cap, 86_400).await {
+                        Ok(decision) => decision.allowed,
+                        Err(_) => check_rate_limit_window(&day_key, daily_cap, 86_400).0,
+                    }
+                } else {
+                    check_rate_limit_window(&day_key, daily_cap, 86_400).0
+                };
                 if !day_ok {
                     return (
                         StatusCode::TOO_MANY_REQUESTS,
@@ -292,21 +300,7 @@ pub(crate) async fn request_context_middleware(
     let (allowed, remaining, limit) =
         check_rate_limit_with_fallback(state.rate_limit_backend(), &rate_key, limit_rpm).await;
 
-    let auth = if let Some(request_id) = headers
-        .get(HEADER_REQUEST_ID)
-        .and_then(|value| value.to_str().ok())
-    {
-        auth.with_request_id(request_id.to_string())
-    } else {
-        auth
-    };
-
-    req.extensions_mut()
-        .insert(RequestState(state.with_auth(auth)));
-
-    let is_share_request = share_chat.is_some();
-    let response = next.run(req).await;
-
+    // Pre-execution gate: a rejected request must not burn LLM/DB cost first.
     if !allowed {
         let retry_after = retry_after_seconds_for_window();
         return (
@@ -330,6 +324,21 @@ pub(crate) async fn request_context_middleware(
         )
             .into_response();
     }
+
+    let auth = if let Some(request_id) = headers
+        .get(HEADER_REQUEST_ID)
+        .and_then(|value| value.to_str().ok())
+    {
+        auth.with_request_id(request_id.to_string())
+    } else {
+        auth
+    };
+
+    req.extensions_mut()
+        .insert(RequestState(state.with_auth(auth)));
+
+    let is_share_request = share_chat.is_some();
+    let response = next.run(req).await;
 
     let mut response = response;
     let response_headers = response.headers_mut();

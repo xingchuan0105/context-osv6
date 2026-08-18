@@ -8,21 +8,20 @@ use tracing::warn;
 /// Generic Redis-backed cache store.
 #[derive(Clone)]
 pub struct CacheStore {
-    client: redis::Client,
+    conn: crate::SharedConn,
 }
 
 impl std::fmt::Debug for CacheStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CacheStore")
-            .field("client", &"<redis::Client>")
-            .finish()
+        f.debug_struct("CacheStore").finish_non_exhaustive()
     }
 }
 
 impl CacheStore {
     pub fn new(redis_url: &str) -> Result<Self, redis::RedisError> {
-        let client = redis::Client::open(redis_url)?;
-        Ok(Self { client })
+        Ok(Self {
+            conn: crate::SharedConn::from_url(redis_url)?,
+        })
     }
 
     /// Get a JSON-deserialized value from cache.
@@ -30,7 +29,7 @@ impl CacheStore {
         &self,
         key: &str,
     ) -> Result<Option<T>, redis::RedisError> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.get().await?;
         let raw: Option<String> = conn.get(key).await?;
         match raw {
             Some(json_str) => match serde_json::from_str(&json_str) {
@@ -52,7 +51,7 @@ impl CacheStore {
         value: &T,
         ttl_secs: u64,
     ) -> Result<(), redis::RedisError> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.get().await?;
         let json_str = serde_json::to_string(value).unwrap_or_default();
         let _: () = redis::cmd("SET")
             .arg(key)
@@ -66,7 +65,7 @@ impl CacheStore {
 
     /// Delete a key from cache.
     pub async fn delete(&self, key: &str) -> Result<(), redis::RedisError> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.get().await?;
         let _: () = conn.del(key).await?;
         Ok(())
     }
@@ -75,16 +74,12 @@ impl CacheStore {
 #[async_trait]
 impl CachePort for CacheStore {
     async fn get(&self, key: &str) -> Option<String> {
-        let mut conn = self.client.get_multiplexed_async_connection().await.ok()?;
+        let mut conn = self.conn.get().await.ok()?;
         conn.get(key).await.ok().flatten()
     }
 
     async fn set(&self, key: &str, value: &str, ttl_secs: u64) -> Result<(), String> {
-        let mut conn = self
-            .client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| e.to_string())?;
+        let mut conn = self.conn.get().await.map_err(|e| e.to_string())?;
         redis::cmd("SET")
             .arg(key)
             .arg(value)

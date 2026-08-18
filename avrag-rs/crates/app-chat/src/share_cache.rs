@@ -1,16 +1,33 @@
 //! Share Q&A cache (ADR-0010 §9): exact match + embedding cosine semantic match.
 //!
-//! - **Exact:** normalized whitespace/case query hash (always).
+//! - **Exact:** normalized whitespace/case query hash. L1 = shared Redis (when
+//!   `init_shared_cache` wired at bootstrap), L2 = process-local map.
 //! - **Semantic:** cosine similarity on dense query embeddings when provided
 //!   (from RagRuntime embedding client). Threshold default 0.90.
+//!   Stays process-local: a miss costs one LLM call, and embeddings are not
+//!   pushed to Redis.
 //!
-//! Process-local, TTL. Near-zero platform cost on cache hit.
+//! Process-local layers are TTL-bounded. Near-zero platform cost on cache hit.
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use avrag_rag_core_ports::CachePort;
 use sha2::{Digest, Sha256};
+
+/// Shared L1 exact-match cache (wired once at bootstrap; None = memory-only).
+static SHARED_EXACT: OnceLock<Option<Arc<dyn CachePort>>> = OnceLock::new();
+
+/// Wire the shared Redis cache for share Q&A exact matches. Called once from
+/// bootstrap; safe to skip (memory-only mode, e.g. tests).
+pub fn init_shared_cache(cache: Option<Arc<dyn CachePort>>) {
+    let _ = SHARED_EXACT.set(cache);
+}
+
+fn shared_exact() -> Option<&'static Arc<dyn CachePort>> {
+    SHARED_EXACT.get().and_then(|c| c.as_ref())
+}
 
 #[derive(Clone)]
 struct Entry {
@@ -101,6 +118,13 @@ pub async fn lookup(
     let now = Instant::now();
     let thr = semantic_threshold();
 
+    // L1: shared Redis exact hit (cross-replica).
+    if let Some(cache) = shared_exact() {
+        if let Some(answer) = cache.get(&format!("share-qa:{key}")).await {
+            return Some(answer);
+        }
+    }
+
     {
         let mut exact = EXACT.lock().ok()?;
         if let Some(entry) = exact.get(&key) {
@@ -165,6 +189,12 @@ pub async fn store(
     let qn = normalize_query(query);
     let key = exact_key(share_token, &qn);
     let ttl = Duration::from_secs(ttl_secs().max(30));
+    // L1: shared Redis (cross-replica exact hit).
+    if let Some(cache) = shared_exact() {
+        let _ = cache
+            .set(&format!("share-qa:{key}"), answer, ttl.as_secs())
+            .await;
+    }
     let entry = Entry {
         answer: answer.to_string(),
         embedding,

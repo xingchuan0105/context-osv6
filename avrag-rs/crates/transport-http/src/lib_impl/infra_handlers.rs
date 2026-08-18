@@ -69,11 +69,34 @@ pub(crate) async fn ready_handler(State(state): State<AppState>) -> Response {
     }
 }
 
-pub(crate) async fn metrics_handler() -> Response {
+pub(crate) async fn metrics_handler(State(state): State<AppState>) -> Response {
+    let mut body = telemetry::prometheus::encode_metrics();
+    // Ingestion queue depth by status — scrape-time read so the gauge is fresh.
+    if let Some(pool) = state.postgres_pool() {
+        match sqlx::query("select status, count(*)::bigint from ingestion_tasks group by status")
+            .fetch_all(pool)
+            .await
+        {
+            Ok(rows) => {
+                use sqlx::Row;
+                body.push_str("# TYPE avrag_ingestion_queue_depth gauge\n");
+                for row in rows {
+                    let status: String = row.try_get("status").unwrap_or_default();
+                    let count: i64 = row.try_get("count").unwrap_or(0);
+                    body.push_str(&format!(
+                        "avrag_ingestion_queue_depth{{status=\"{status}\"}} {count}\n"
+                    ));
+                }
+            }
+            Err(error) => {
+                tracing::debug!(%error, "metrics: ingestion queue depth query failed");
+            }
+        }
+    }
     (
         StatusCode::OK,
         [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
-        telemetry::prometheus::encode_metrics(),
+        body,
     )
         .into_response()
 }

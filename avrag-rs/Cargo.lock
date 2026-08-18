@@ -374,6 +374,7 @@ dependencies = [
  "avrag-guardrails",
  "avrag-llm",
  "avrag-rag-core",
+ "avrag-rag-core-ports",
  "avrag-retrieval-data-plane",
  "avrag-search",
  "avrag-storage-pg",
@@ -992,6 +993,7 @@ dependencies = [
  "hex",
  "ingestion",
  "ingestion-types",
+ "log",
  "sea-query",
  "serde",
  "serde_json",
@@ -1642,6 +1644,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "backon"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
+dependencies = [
+ "fastrand",
 ]
 
 [[package]]
@@ -5013,9 +5024,12 @@ version = "0.32.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "014cc767fefab6a3e798ca45112bccad9c6e0e218fbd49720042716c73cfef44"
 dependencies = [
+ "arc-swap",
+ "backon",
  "bytes",
  "cfg-if",
  "combine",
+ "futures-channel",
  "futures-util",
  "itoa",
  "num-bigint",

@@ -7,19 +7,40 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use app_core::NotificationCreateParams;
+use avrag_rag_core_ports::CachePort;
 use common::AppError;
 use uuid::Uuid;
 
 use crate::context::ChatContext;
 
+/// Shared 6h throttle for funds-required notices (wired once at bootstrap).
+static SHARED_THROTTLE: std::sync::OnceLock<Option<std::sync::Arc<dyn CachePort>>> =
+    std::sync::OnceLock::new();
+
+pub fn init_funds_notify_cache(cache: Option<std::sync::Arc<dyn CachePort>>) {
+    let _ = SHARED_THROTTLE.set(cache);
+}
+
 /// Process-local throttle for balance-empty notices (6 hours per owner).
-fn funds_notify_throttled(owner: Uuid) -> bool {
+/// With Redis wired: cross-replica SET NX EX cooldown; memory is the fallback.
+async fn funds_notify_throttled(owner: Uuid) -> bool {
+    const COOLDOWN_SECS: u64 = 6 * 60 * 60;
+    if let Some(Some(cache)) = SHARED_THROTTLE.get() {
+        let key = format!("funds-notify:{owner}");
+        match cache.get(&key).await {
+            Some(_) => return true,
+            None => {
+                let _ = cache.set(&key, "1", COOLDOWN_SECS).await;
+                return false;
+            }
+        }
+    }
     static LAST: OnceLock<Mutex<HashMap<Uuid, Instant>>> = OnceLock::new();
     let map = LAST.get_or_init(|| Mutex::new(HashMap::new()));
     let Ok(mut guard) = map.lock() else {
         return false;
     };
-    const COOLDOWN: Duration = Duration::from_secs(6 * 60 * 60);
+    const COOLDOWN: Duration = Duration::from_secs(COOLDOWN_SECS);
     if let Some(prev) = guard.get(&owner) {
         if prev.elapsed() < COOLDOWN {
             return true;
@@ -30,34 +51,6 @@ fn funds_notify_throttled(owner: Uuid) -> bool {
 }
 
 impl ChatContext {
-    pub(crate) async fn emit_notification(
-        &self,
-        event_type: &str,
-        title: &str,
-        body: &str,
-        data: serde_json::Value,
-    ) -> Result<(), AppError> {
-        let Some(pg) = self.storage.chat_persistence() else {
-            return Ok(());
-        };
-        let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid()) else {
-            return Ok(());
-        };
-        pg.create_notification(
-            &self.auth,
-            NotificationCreateParams {
-                user_id,
-                event_type: event_type.to_string(),
-                title: title.to_string(),
-                body: body.to_string(),
-                data,
-                channels: vec!["in_app".to_string()],
-            },
-        )
-        .await?;
-        Ok(())
-    }
-
     /// ADR-0010 W4: notify the **billable owner** (auth.user_id) when platform funds are empty.
     /// Throttled: process-local 6h cooldown per owner (avoids one spam row per blocked turn).
     pub(crate) async fn emit_funds_required_notification(&self) -> Result<(), AppError> {
@@ -68,7 +61,7 @@ impl ChatContext {
         if owner.is_nil() {
             return Ok(());
         }
-        if funds_notify_throttled(owner) {
+        if funds_notify_throttled(owner).await {
             return Ok(());
         }
         let copy = common::notification_copy::render(

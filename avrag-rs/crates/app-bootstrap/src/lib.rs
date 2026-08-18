@@ -305,6 +305,9 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 .ok()
                 .map(|store| Arc::new(store) as Arc<dyn avrag_rag_core_ports::CachePort>)
         };
+    // Cross-replica share Q&A cache + funds-notify throttle (W4 state out-migration).
+    app_chat::share_cache::init_shared_cache(cache_store.clone());
+    app_chat::chat_private::init_funds_notify_cache(cache_store.clone());
     let search_executor = Some(Arc::new({
         let mut executor = SearchExecutor::new(map_avrag_search_config(&config));
         if let Some(cache) = cache_store.clone() {

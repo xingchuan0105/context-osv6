@@ -25,6 +25,19 @@ async fn main() -> Result<()> {
 }
 
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    // Docker stop sends SIGTERM; ctrl_c covers interactive use.
+    #[cfg(unix)]
+    {
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = sigterm.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
     tracing::info!("shutdown signal received");
 }

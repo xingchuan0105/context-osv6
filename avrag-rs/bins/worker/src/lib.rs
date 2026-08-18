@@ -250,10 +250,36 @@ pub async fn run() -> Result<()> {
             },
         );
 
+        // SIGTERM (docker stop) joins ctrl_c as a shutdown signal; an in-flight
+        // tick always runs to completion before the loop breaks.
+        #[cfg(unix)]
+        let shutdown = async {
+            let mut sigterm =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("install SIGTERM handler");
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {},
+                _ = sigterm.recv() => {},
+            }
+        };
+        #[cfg(not(unix))]
+        let shutdown = async {
+            let _ = tokio::signal::ctrl_c().await;
+        };
+        tokio::pin!(shutdown);
+
+        // Side jobs (billing/outbox/usage-export/retention/analytics/memory) are
+        // NOT claim-based — they must run on exactly one replica. Ingestion and
+        // document-cleanup queues are claim-based (SKIP LOCKED) and replica-safe.
+        let side_jobs = !matches!(
+            std::env::var("AVRAG_WORKER_SIDE_JOBS").as_deref(),
+            Ok("0") | Ok("false") | Ok("no")
+        );
+
         loop {
             tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    info!("worker shutdown signal received");
+                _ = &mut shutdown => {
+                    info!("worker shutdown signal received, finishing current tick then stopping");
                     break;
                 }
                 _ = poll_interval.tick() => {
@@ -277,40 +303,43 @@ pub async fn run() -> Result<()> {
                         Err(error) => info!(error = %error, "worker document cleanup poll failed"),
                     }
 
-                    let billing_store = std::sync::Arc::new(app_bootstrap::PgBillingStoreAdapter::new(
-                        std::sync::Arc::new(cleanup_repo.clone()),
-                    )) as std::sync::Arc<dyn app_core::BillingStorePort>;
-                    if let Err(error) =
-                        avrag_billing::expire_subscriptions(billing_store.clone()).await
-                    {
-                        warn!(error = %error, "billing expire subscriptions job failed");
-                    }
-                    if let Err(error) = avrag_billing::process_outbox(billing_store).await {
-                        warn!(error = %error, "billing process outbox job failed");
-                    }
-
-                    // ADR 0006: usage export jobs + 365-day llm_usage_events retention.
-                    let usage_store: std::sync::Arc<dyn app_core::UsageLimitStorePort> =
-                        std::sync::Arc::new(app_bootstrap::PgUsageLimitStoreAdapter::new(
+                    if side_jobs {
+                        let billing_store = std::sync::Arc::new(app_bootstrap::PgBillingStoreAdapter::new(
                             std::sync::Arc::new(cleanup_repo.clone()),
-                        ));
-                    match usage_store.process_next_usage_export_job().await {
-                        Ok(true) => info!("worker processed usage export job"),
-                        Ok(false) => {}
-                        Err(error) => {
-                            warn!(error = %error, "usage export job failed");
+                        )) as std::sync::Arc<dyn app_core::BillingStorePort>;
+                        if let Err(error) =
+                            avrag_billing::expire_subscriptions(billing_store.clone()).await
+                        {
+                            warn!(error = %error, "billing expire subscriptions job failed");
                         }
-                    }
-                    let cutoff = chrono::Utc::now() - chrono::Duration::days(365);
-                    match usage_store.purge_llm_usage_older_than(cutoff, 5_000).await {
-                        Ok(0) => {}
-                        Ok(n) => info!(deleted = n, "purged llm_usage_events past 365d retention"),
-                        Err(error) => {
-                            warn!(error = %error, "llm_usage retention purge failed");
+                        if let Err(error) = avrag_billing::process_outbox(billing_store).await {
+                            warn!(error = %error, "billing process outbox job failed");
+                        }
+
+                        // ADR 0006: usage export jobs + 365-day llm_usage_events retention.
+                        let usage_store: std::sync::Arc<dyn app_core::UsageLimitStorePort> =
+                            std::sync::Arc::new(app_bootstrap::PgUsageLimitStoreAdapter::new(
+                                std::sync::Arc::new(cleanup_repo.clone()),
+                            ));
+                        match usage_store.process_next_usage_export_job().await {
+                            Ok(true) => info!("worker processed usage export job"),
+                            Ok(false) => {}
+                            Err(error) => {
+                                warn!(error = %error, "usage export job failed");
+                            }
+                        }
+                        let cutoff = chrono::Utc::now() - chrono::Duration::days(365);
+                        match usage_store.purge_llm_usage_older_than(cutoff, 5_000).await {
+                            Ok(0) => {}
+                            Ok(n) => info!(deleted = n, "purged llm_usage_events past 365d retention"),
+                            Err(error) => {
+                                warn!(error = %error, "llm_usage retention purge failed");
+                            }
                         }
                     }
                 }
                 _ = heartbeat_interval.tick() => {
+                    if side_jobs {
                     if let Some(runner) = analytics_job_runner.as_mut()
                         && let Err(error) = runner.maybe_run().await
                     {
@@ -334,6 +363,7 @@ pub async fn run() -> Result<()> {
                     {
                         telemetry::prometheus::record_dependency_failure("orphan_object_cleanup");
                         info!(error = %error, worker_id, "orphan object cleanup job failed");
+                    }
                     }
                     info!(runtime_mode = worker_runtime_mode(&config.database_url), worker_id, "worker heartbeat");
                 }

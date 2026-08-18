@@ -15,7 +15,7 @@ use contracts::documents::CitationLookupRequest;
 use contracts::workspaces::{CreateChatSessionRequest, UpdateChatSessionRequest};
 use contracts::RuntimeExecuteRequest;
 use std::{convert::Infallible, time::Duration};
-use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -185,7 +185,9 @@ fn chat_live_stream_response(
     agent_type: String,
     query_len: usize,
 ) -> Response {
-    let (sender, receiver) = unbounded_channel();
+    // Bounded SSE channel: a slow/stuck client applies backpressure to the
+    // agent loop (emit awaits capacity) instead of growing memory unboundedly.
+    let (sender, receiver) = tokio::sync::mpsc::channel(512);
     let request_id_for_task = request_id.clone();
     let agent_type_for_task = agent_type.clone();
 
@@ -222,11 +224,13 @@ fn chat_live_stream_response(
                     }),
                 )
                 .await;
-            let _ = error_sender.send(ChatEvent::Error {
-                request_id: request_id_for_task,
-                code: error.code().to_string(),
-                message: error.message().to_string(),
-            });
+            let _ = error_sender
+                .send(ChatEvent::Error {
+                    request_id: request_id_for_task,
+                    code: error.code().to_string(),
+                    message: error.message().to_string(),
+                })
+                .await;
         }
     });
 
@@ -236,7 +240,7 @@ fn chat_live_stream_response(
 /// Shared chat SSE framing: every event is gated by [`SseEventOrderTracker`] before flush.
 /// Offline contract: [`validate_chat_sse_event_order`]. Production path must not bypass this helper.
 fn sse_response_from_receiver(
-    mut receiver: UnboundedReceiver<ChatEvent>,
+    mut receiver: Receiver<ChatEvent>,
     surface: &'static str,
     cancel: CancellationToken,
 ) -> Response {

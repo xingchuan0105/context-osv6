@@ -1,5 +1,5 @@
 use common::AppError;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -68,7 +68,7 @@ impl ChatContext {
         &self,
         req: contracts::chat::ChatRequest,
         request_id: String,
-        sender: UnboundedSender<ChatEvent>,
+        sender: Sender<ChatEvent>,
         token: CancellationToken,
     ) -> Result<(), AppError> {
         if req.query.trim().is_empty() {
@@ -97,7 +97,7 @@ impl ChatContext {
         &self,
         req: contracts::chat::ChatRequest,
         request_id: String,
-        sender: UnboundedSender<ChatEvent>,
+        sender: Sender<ChatEvent>,
         token: CancellationToken,
     ) -> Result<(), AppError> {
         if req.query.trim().is_empty() {

@@ -280,7 +280,11 @@ pub fn build_router(state: AppState) -> Router {
     );
 
     let protected_dev_upload = Router::new()
-        .route("/dev-upload/{document_id}", put(super::infra_handlers::dev_upload_handler))
+        .route(
+            "/dev-upload/{document_id}",
+            put(super::infra_handlers::dev_upload_handler)
+                .layer(tower_http::limit::RequestBodyLimitLayer::new(512 * 1024 * 1024)),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::middleware::request_context_middleware,
@@ -301,7 +305,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(axum::middleware::from_fn(crate::middleware::observability_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
-        .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
         .fallback(|| async {
             (
                 StatusCode::NOT_FOUND,

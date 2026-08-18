@@ -38,6 +38,33 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
+
+/// Keep `scripts/with-watchdog.sh` alive while a long HTTP call has no other
+/// stderr. Concurrent `post_rag_chat` / judge can sit in the client for minutes.
+async fn await_with_heartbeat<T>(label: &str, fut: impl std::future::Future<Output = T>) -> T {
+    let started = std::time::Instant::now();
+    eprintln!("  {label}: start");
+    tokio::pin!(fut);
+    let mut tick = tokio::time::interval(Duration::from_secs(30));
+    tick.tick().await;
+    loop {
+        tokio::select! {
+            result = &mut fut => {
+                eprintln!(
+                    "  {label}: done elapsed={:.1}s",
+                    started.elapsed().as_secs_f64()
+                );
+                return result;
+            }
+            _ = tick.tick() => {
+                eprintln!(
+                    "  {label}: still in flight elapsed={:.0}s",
+                    started.elapsed().as_secs_f64()
+                );
+            }
+        }
+    }
+}
 use rag_quality::{
     CitationAccuracyResult, EvaluationMetrics, GoldenDataset, GoldenExample, HallucinationResult,
     PerQueryScorecard, RecallResult, ScorecardSummary, ToolCoverageScore, ToolCoverageSummary,
@@ -738,7 +765,11 @@ impl V2RunCtx {
             avrag_llm::ChatMessage::system(eval_v2::SYSTEM_PROMPT),
             avrag_llm::ChatMessage::user(eval_v2::build_user_prompt(&judge_input)),
         ];
-        let attempt = self.judge_with_retry(&messages, &judge_input).await;
+        let attempt = await_with_heartbeat(
+            &format!("judge q{qnum}"),
+            self.judge_with_retry(&messages, &judge_input),
+        )
+        .await;
         // P-calc-ok (2026-08-06): query-card calculation ⇒ no retrieval
         // evidence required for labeling (see plans/2026-08-06-rerank-style-
         // sticky-and-querycard-calc.md §D.2).
@@ -1625,15 +1656,18 @@ async fn run_single_question(
         .iter()
         .map(|t| (t.query.clone(), t.answer.clone()))
         .collect();
-    let resp = match crate::product_e2e::test_context::post_rag_chat(
-        client,
-        base_url,
-        &example.query,
-        workspace_id,
-        &scope,
-        Some(&caps),
-        if turns.is_empty() { None } else { Some(&turns) },
-        example.client_time.as_deref(),
+    let resp = match await_with_heartbeat(
+        &format!("chat q{}", idx + 1),
+        crate::product_e2e::test_context::post_rag_chat(
+            client,
+            base_url,
+            &example.query,
+            workspace_id,
+            &scope,
+            Some(&caps),
+            if turns.is_empty() { None } else { Some(&turns) },
+            example.client_time.as_deref(),
+        ),
     )
     .await
     {

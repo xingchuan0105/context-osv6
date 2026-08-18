@@ -20,14 +20,17 @@ fn lock_ttl_secs() -> u64 {
 /// Uses `SET key 1 NX EX <ttl>` to atomically acquire a lock with a TTL.
 /// This prevents multiple workers from processing the same document concurrently.
 pub struct DocumentLock {
+    conn: crate::SharedConn,
     client: redis::Client,
     ttl_secs: u64,
 }
 
 impl DocumentLock {
     pub fn new(redis_url: &str) -> Result<Self, redis::RedisError> {
+        let conn = crate::SharedConn::from_url(redis_url)?;
         let client = redis::Client::open(redis_url)?;
         Ok(Self {
+            conn,
             client,
             ttl_secs: lock_ttl_secs(),
         })
@@ -42,7 +45,7 @@ impl DocumentLock {
         &self,
         doc_id: Uuid,
     ) -> Result<Option<DocumentLockGuard>, redis::RedisError> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.get().await?;
         let key = lock_key(doc_id);
         let acquired: Option<String> = redis::cmd("SET")
             .arg(&key)
@@ -54,6 +57,7 @@ impl DocumentLock {
             .await?;
         if acquired.as_deref() == Some("OK") {
             Ok(Some(DocumentLockGuard {
+                conn: self.conn.clone(),
                 client: self.client.clone(),
                 doc_id,
                 released: false,
@@ -66,6 +70,7 @@ impl DocumentLock {
 
 /// RAII guard that releases the document lock on drop.
 pub struct DocumentLockGuard {
+    conn: crate::SharedConn,
     client: redis::Client,
     doc_id: Uuid,
     released: bool,
@@ -78,7 +83,7 @@ impl DocumentLockGuard {
             return;
         }
         let key = lock_key(self.doc_id);
-        let mut conn = match self.client.get_multiplexed_async_connection().await {
+        let mut conn = match self.conn.get().await {
             Ok(conn) => conn,
             Err(e) => {
                 info!(doc_id = %self.doc_id, error = %e, "failed to connect to Redis for lock release");
@@ -103,6 +108,7 @@ impl Drop for DocumentLockGuard {
         let key = lock_key(doc_id);
         // Prefer blocking connection on a detached thread so release still runs
         // when the async runtime is shutting down or the timed future was cancelled.
+        // (Hot paths use the shared ConnectionManager; this is the cold safety net.)
         std::thread::Builder::new()
             .name("redis-doc-lock-release".into())
             .spawn(move || {

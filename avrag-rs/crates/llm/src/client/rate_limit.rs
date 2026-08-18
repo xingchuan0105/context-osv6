@@ -1,6 +1,36 @@
 use super::ChatMessage;
 use crate::ModelProviderConfig;
 
+/// Process-wide shared token buckets keyed by (base_url, model, api_key hash,
+/// limits). Platform clients are built once at bootstrap, but BYOK clients are
+/// rebuilt per request — without this registry each request gets a fresh full
+/// bucket and the RPM/TPM limits never actually throttle.
+static SHARED_LIMITERS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, crate::SharedRateLimiter>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+/// Hard cap on distinct buckets; on overflow the map is cleared (buckets reset
+/// — acceptable for a pathological BYOK cardinality spike).
+const MAX_SHARED_LIMITERS: usize = 4096;
+
+fn shared_limiter(config: &ModelProviderConfig) -> crate::SharedRateLimiter {
+    use std::hash::{Hash, Hasher};
+    let rpm = config.effective_rpm_limit();
+    let tpm = config.effective_tpm_limit();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    config.base_url.hash(&mut hasher);
+    config.model.hash(&mut hasher);
+    config.api_key.hash(&mut hasher);
+    let key = format!("{}:{}:{}", hasher.finish(), rpm, tpm);
+    let mut map = SHARED_LIMITERS.lock().unwrap_or_else(|p| p.into_inner());
+    if map.len() >= MAX_SHARED_LIMITERS {
+        map.clear();
+    }
+    map.entry(key)
+        .or_insert_with(|| std::sync::Arc::new(crate::RateLimiter::new(rpm, tpm)))
+        .clone()
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ClientRateLimit {
     limiter: Option<crate::SharedRateLimiter>,
@@ -9,9 +39,7 @@ pub(crate) struct ClientRateLimit {
 impl ClientRateLimit {
     pub(crate) fn from_config(config: &ModelProviderConfig) -> Self {
         let limiter = if config.is_configured() {
-            let rpm = config.effective_rpm_limit();
-            let tpm = config.effective_tpm_limit();
-            Some(std::sync::Arc::new(crate::RateLimiter::new(rpm, tpm)))
+            Some(shared_limiter(config))
         } else {
             None
         };

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 use uuid::Uuid;
@@ -11,7 +11,7 @@ use contracts::chat::{ChatRequest, ChatResponse};
 
 #[derive(Clone)]
 pub(crate) struct StreamConfig {
-    pub sender: UnboundedSender<contracts::chat::ChatEvent>,
+    pub sender: Sender<contracts::chat::ChatEvent>,
     pub request_id: String,
     pub token: CancellationToken,
 }
@@ -91,7 +91,7 @@ pub(crate) async fn execute_pipeline_stream(
     state: ChatContext,
     request: ChatRequest,
     request_id: String,
-    sender: UnboundedSender<contracts::chat::ChatEvent>,
+    sender: Sender<contracts::chat::ChatEvent>,
     token: CancellationToken,
     lane: PipelineLane,
 ) -> Result<(), AppError> {
@@ -169,7 +169,8 @@ async fn run_pipeline_inner(
                     &request,
                     stream_config.as_ref(),
                     cached,
-                );
+                )
+                .await;
             }
             // Semantic: embed only when exact miss and rag runtime available.
             let embed = async {
@@ -197,7 +198,8 @@ async fn run_pipeline_inner(
                     &request,
                     stream_config.as_ref(),
                     cached,
-                );
+                )
+                .await;
             }
         }
     }
@@ -219,7 +221,7 @@ async fn run_pipeline_inner(
         let _ = config.sender.send(contracts::chat::ChatEvent::Start {
             request_id: config.request_id.clone(),
             session_id: session.id.clone(),
-        });
+        }).await;
         if let Some(guide) =
             crate::external_agent_guide::load_invoke_operation_guide(&request.agent_type)
         {
@@ -228,7 +230,8 @@ async fn run_pipeline_inner(
                 .send(contracts::chat::ChatEvent::OperationGuide {
                     request_id: config.request_id.clone(),
                     guide,
-                });
+                })
+                .await;
         }
     }
 
@@ -288,7 +291,7 @@ async fn run_pipeline_inner(
             .await?;
     }
 
-    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
+    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution).await;
 
     if request.source_type.as_deref() == Some("share") {
         if let Some(token) = request.source_token.as_deref() {
@@ -331,18 +334,12 @@ async fn run_pipeline_inner(
 
     state.record_usage_for_execution(&execution).await?;
 
-    if request.source_type.as_deref() != Some("share") {
-        state
-            .emit_notifications_for_execution(&session, &execution)
-            .await?;
-    }
-
     Ok(crate::external_agent_guide::attach_operation_guide(
         execution.response,
     ))
 }
 
-fn emit_share_cache_hit(
+async fn emit_share_cache_hit(
     session: &contracts::workspaces::ChatSession,
     request: &ChatRequest,
     stream_config: Option<&StreamConfig>,
@@ -372,20 +369,20 @@ fn emit_share_cache_hit(
         let _ = config.sender.send(contracts::chat::ChatEvent::Start {
             request_id: config.request_id.clone(),
             session_id: session.id.clone(),
-        });
+        }).await;
         for chunk in crate::chunk_text_for_stream(&cached) {
             let _ = config.sender.send(contracts::chat::ChatEvent::Token {
                 request_id: config.request_id.clone(),
                 message_id: mid,
                 content: chunk,
-            });
+            }).await;
         }
         let _ = config.sender.send(contracts::chat::ChatEvent::Done {
             request_id: config.request_id.clone(),
             session_id: session.id.clone(),
             message_id: mid,
             payload: crate::chat_done_payload(&response),
-        });
+        }).await;
     }
     Ok(response)
 }
