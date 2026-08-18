@@ -110,8 +110,8 @@ export const helpMessages = {
     en: "If source state looks wrong, reindex it and watch status changes in the right rail.",
   },
   helpItemTroubleshooting1: {
-    zh: "分享页没有数据时，先确认该工作区是否已经启用分享链接。",
-    en: "If share pages are empty, confirm the workspace has sharing enabled first.",
+    zh: "分享页没有数据时，先确认该工作区是否已经启用分享链接。桌面本机库需先「发布到云端」再开分享。",
+    en: "If share pages are empty, confirm sharing is enabled. Desktop local libraries must publish to the cloud first.",
   },
   helpItemTroubleshooting2: {
     zh: "API 调用失败时，先确认密钥仍处于生效状态、没有过期，且命中了正确的 workspace 路径。",

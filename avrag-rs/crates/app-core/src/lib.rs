@@ -21,6 +21,7 @@ pub mod config;
 pub mod desktop_token_store;
 mod config_helpers;
 pub mod document_store;
+pub mod workspace_publish_store;
 pub mod domain_ports;
 pub mod domain_rows;
 pub mod legal_versions;
@@ -111,6 +112,11 @@ pub use desktop_token_store::{
     generate_desktop_token, hash_desktop_token, mint_desktop_token,
 };
 pub use document_store::DocumentStorePort;
+pub use workspace_publish_store::{
+    CreatePublishSessionRequest, CreatePublishSessionResponse, MemoryWorkspacePublishStore,
+    PublishExportListResponse, PublishPartPayload, PublishStatus, PublishStatusResponse,
+    PublishedDocumentUpsert, WorkspacePublishRow, WorkspacePublishStorePort,
+};
 pub use domain_ports::*;
 pub use domain_rows::{
     ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, DocumentDeletionOutcome,

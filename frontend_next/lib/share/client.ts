@@ -1,4 +1,4 @@
-import { ApiError, fetchResponse, request, type ApiEnvelope } from "../http/request";
+import { ApiError, fetchResponse, request as defaultRequest, type ApiEnvelope } from "../http/request";
 import type { UiMessageKey } from "../i18n/messages";
 import {
   parseWorkspaceChatEventStream,
@@ -7,6 +7,19 @@ import {
 
 /** Stable backend code when enabling share exceeds plan slots (ADR-0010). */
 export const SHARE_WORKSPACE_QUOTA_EXCEEDED = "share_workspace_quota_exceeded";
+
+export type ShareRequestFn = typeof defaultRequest;
+
+let shareRequestFn: ShareRequestFn = defaultRequest;
+
+/** Desktop cloud share uses session JWT via `cloud_api_call`; SaaS keeps default. */
+export function setShareRequestOverride(fn: ShareRequestFn | null) {
+  shareRequestFn = fn ?? defaultRequest;
+}
+
+function request<T>(path: string, init: RequestInit = {}, token?: string) {
+  return shareRequestFn<T>(path, init, token);
+}
 
 export type ShareSettings = {
   share_token: string;

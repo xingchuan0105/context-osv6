@@ -216,6 +216,14 @@ pub struct DocumentIndexBatch {
     pub graph_passages: Vec<GraphPassageIndexRecord>,
 }
 
+impl DocumentIndexBatch {
+    /// Rebind owner / workspace for cloud import. Chunk, entity, and relation ids stay put.
+    pub fn rebind_owner(&mut self, owner_user_id: UserId, workspace_id: Uuid) {
+        self.owner_user_id = owner_user_id;
+        self.workspace_id = Some(workspace_id);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextChunkIndexRecord {
     pub chunk_id: Uuid,
@@ -322,6 +330,23 @@ impl PublishFingerprint {
     /// Validate every vector in `batch` against this fingerprint's dims.
     pub fn validate_batch(&self, batch: &DocumentIndexBatch) -> anyhow::Result<()> {
         validate_batch_vector_dims(batch, self.vector_dim, self.multimodal_dim())
+    }
+
+    /// Model id + dims + schema must match for vector import without re-embed.
+    pub fn incompatible_field(&self, other: &Self) -> Option<&'static str> {
+        if self.embedding_model_id != other.embedding_model_id {
+            return Some("embedding_model_id");
+        }
+        if self.vector_dim != other.vector_dim {
+            return Some("vector_dim");
+        }
+        if self.multimodal_dim() != other.multimodal_dim() {
+            return Some("multimodal_vector_dim");
+        }
+        if self.schema_version != other.schema_version {
+            return Some("schema_version");
+        }
+        None
     }
 }
 
@@ -712,6 +737,20 @@ mod tests {
         bad.text_chunks[0].vector = vec![1.0]; // dim 1 != 2
         let err = fp.validate_batch(&bad).unwrap_err();
         assert!(err.to_string().contains("text_chunks[0]"), "{err}");
+
+        let other = PublishFingerprint::new("other-embed", 2);
+        assert_eq!(fp.incompatible_field(&other), Some("embedding_model_id"));
+        let wrong_dim = PublishFingerprint::new("test-embed", 8);
+        assert_eq!(fp.incompatible_field(&wrong_dim), Some("vector_dim"));
+
+        let new_owner = UserId::from(Uuid::from_u128(99));
+        let new_ws = Uuid::from_u128(77);
+        let mut rebound = batch;
+        rebound.rebind_owner(new_owner, new_ws);
+        assert_eq!(rebound.owner_user_id, new_owner);
+        assert_eq!(rebound.workspace_id, Some(new_ws));
+        assert_eq!(rebound.document_id, Uuid::from_u128(2));
+        assert_eq!(rebound.text_chunks[0].chunk_id, Uuid::from_u128(4));
     }
 
     #[test]

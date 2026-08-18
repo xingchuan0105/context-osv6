@@ -25,16 +25,16 @@ export const pricingMessages = {
     en: "Top-up · model wallet",
   },
   pricingTopupBody: {
-    zh: "余额与会员独立。使用平台模型、向量检索，以及分享页访客问答（所有者付费）时从余额扣费。已配置自定义 Provider 时，最终回答走你自己的额度；翻资料与向量检索仍从余额扣费。",
-    en: "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (billed to the workspace owner) debit the wallet. With a custom provider, the final answer uses your quota; retrieval and embeddings still debit the wallet.",
+    zh: "余额与会员独立。使用平台模型、向量检索，以及分享页访客问答（所有者付费）时从余额扣费。已配置自定义 Provider 时，最终回答走你自己的额度；文档索引、检索子代理（Qwen3.7 Flash）与向量检索仍从余额扣费。",
+    en: "Wallet is independent of plan. Platform models, retrieval, and shared guest Q&A (billed to the workspace owner) debit the wallet. With a custom provider, the final answer uses your quota; document indexing, the retrieval worker (Qwen3.7 Flash), and embeddings still debit the wallet.",
   },
   pricingTopupPoint1: {
     zh: "在本页右侧选择套餐包，登录后可直接支付充值",
     en: "Pick a pack on the right; top up here after sign-in",
   },
   pricingTopupPoint2: {
-    zh: "不想用平台模型写回答：可改配自备 Key，减少对话扣费（翻资料仍走平台）",
-    en: "Prefer your own key for answers: configure a provider to cut chat billing (retrieval still uses the platform)",
+    zh: "不想用平台模型写回答：可改配自备 Key，减少对话扣费（文档索引与检索子代理仍走 Qwen3.7 Flash）",
+    en: "Prefer your own key for answers: configure a provider to cut chat billing (indexing and the retrieval worker still use Qwen3.7 Flash)",
   },
   pricingTopupPoint3: {
     zh: "只升级会员不充值：分享名额增加，但平台模型仍需余额或 BYOK",

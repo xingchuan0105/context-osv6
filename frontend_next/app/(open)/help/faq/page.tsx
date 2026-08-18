@@ -101,12 +101,12 @@ export default function HelpFaqPage() {
           <h2 style={h2}>余额充值与会员有何区别？</h2>
           <p style={p}>
             两者独立。余额用于平台模型调用、向量检索，以及分享页上由所有者承担的访客问答（Owner-pays）。可以只充值不升级，也可以两者都要。配置自定义
-            Provider（BYOK）后，最终回答走你自己的模型额度，从而减少平台对话扣费；翻资料仍走平台更快的模型，并从余额扣费。
+            Provider（BYOK）后，最终回答走你自己的模型额度，从而减少平台对话扣费。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理，并从余额扣费。
           </p>
 
           <h2 style={h2}>什么是 BYOK？</h2>
           <p style={p}>
-            BYOK（Bring Your Own Key）即在设置中配置自己的模型 Provider。最终回答走自有额度；翻资料仍用平台更快的模型，等待时间同样会短一截。入口：
+            BYOK（Bring Your Own Key）即在设置中配置自己的模型 Provider。最终回答走自有额度。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。入口：
             <Link href="/settings?tab=providers">设置 · 模型 Provider</Link>
             （需登录）；说明见 <Link href="/pricing">定价页</Link> 相关提示。
           </p>
@@ -121,7 +121,7 @@ export default function HelpFaqPage() {
           <p style={p}>
             桌面客户端按产品叙事为免费使用；本机私有与本机 Agent 场景见{" "}
             <Link href="/desktop">客户端页</Link>
-            。分享上云与可分享名额仍受会员档位约束。
+            。本机库对外分享需先发布到云端（向量导入、不重灌库），可分享名额仍受会员档位约束。
           </p>
 
           <h2 style={h2}>和笔记 AI / 通用 RAG 怎么选？</h2>

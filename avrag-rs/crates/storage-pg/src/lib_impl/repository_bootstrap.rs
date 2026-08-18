@@ -214,6 +214,57 @@ impl BootstrapRepository {
         map_document(row)
     }
 
+    pub async fn upsert_published_document(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+        workspace_id: Uuid,
+        filename: &str,
+        mime_type: &str,
+        chunk_count: usize,
+    ) -> Result<Document, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        ensure_org_and_actor(tx.inner(), context).await?;
+        let object_path = build_object_path(context, workspace_id, document_id, filename);
+        let chunk_count_i32 = i32::try_from(chunk_count).unwrap_or(i32::MAX);
+        let row = sqlx::query(
+            r#"
+            insert into documents (
+                id, owner_user_id, workspace_id, file_name, mime_type, file_size,
+                status, chunk_count, object_path, user_id
+            )
+            values ($1, $2, $3, $4, $5, 0, 'completed', $6, $7, $8)
+            on conflict (id) do update set
+                owner_user_id = excluded.owner_user_id,
+                workspace_id = excluded.workspace_id,
+                file_name = excluded.file_name,
+                mime_type = excluded.mime_type,
+                status = 'completed',
+                chunk_count = excluded.chunk_count,
+                updated_at = now()
+            where documents.owner_user_id = excluded.owner_user_id
+            returning id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
+            "#,
+        )
+        .bind(document_id)
+        .bind(context.user_id().into_uuid())
+        .bind(workspace_id)
+        .bind(filename)
+        .bind(mime_type)
+        .bind(chunk_count_i32)
+        .bind(object_path)
+        .bind(context.actor_id().map(ActorId::into_uuid))
+        .fetch_optional(tx.inner())
+        .await?;
+        tx.commit().await?;
+        let Some(row) = row else {
+            return Err(PgStorageError::NotFound(
+                "published document id belongs to another owner".to_string(),
+            ));
+        };
+        map_document(row)
+    }
+
     pub async fn get_document_task_seed(
         &self,
         context: &AuthContext,

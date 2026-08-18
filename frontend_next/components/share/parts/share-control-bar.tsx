@@ -1,5 +1,6 @@
 "use client";
 
+import type { UiLocale } from "../../../lib/i18n/config";
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import type { VisitorAccessMode } from "../../../lib/share/client";
 import { shareStatusBadgeClass } from "./share-center-ui";
@@ -7,10 +8,35 @@ import badgeStyles from "./share-center-ui.module.css";
 import styles from "./share-control-bar.module.css";
 import { shareValidityLabel, type ShareValidityOption } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
+import type { useDesktopPublishGate } from "./use-desktop-publish-gate";
 
 type ShareCenter = ReturnType<typeof useShareCenter>;
+type DesktopPublishGate = ReturnType<typeof useDesktopPublishGate>;
 
-export function ShareControlBar({ center }: { center: ShareCenter }) {
+function stageLabel(locale: UiLocale, stage: string) {
+  switch (stage) {
+    case "pack":
+      return formatUiMessage(locale, "shareCenter.desktopPublishStagePack");
+    case "upload":
+      return formatUiMessage(locale, "shareCenter.desktopPublishStageUpload");
+    case "metadata":
+      return formatUiMessage(locale, "shareCenter.desktopPublishStageMetadata");
+    case "vectors":
+      return formatUiMessage(locale, "shareCenter.desktopPublishStageVectors");
+    case "done":
+      return formatUiMessage(locale, "shareCenter.desktopPublishStageDone");
+    default:
+      return stage;
+  }
+}
+
+export function ShareControlBar({
+  center,
+  publishGate,
+}: {
+  center: ShareCenter;
+  publishGate?: DesktopPublishGate;
+}) {
   const {
     canUseShareLink,
     expiresAtDraft,
@@ -53,8 +79,67 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
           </span>
         </div>
         <p className={styles.subtitle}>
-          {formatUiMessage(locale, "shareCenter.controlBarSubtitle")}
+          {publishGate?.desktop
+            ? formatUiMessage(locale, "shareCenter.desktopPublishSubtitle")
+            : formatUiMessage(locale, "shareCenter.controlBarSubtitle")}
         </p>
+        {publishGate?.desktop && !publishGate.ready ? (
+          <div className={`app-inline-surface ${styles.panel}`} data-testid="desktop-publish-gate">
+            <p className={styles.subtitle}>
+              {formatUiMessage(locale, "shareCenter.desktopPublishHint")}
+            </p>
+            {publishGate.error ? (
+              <p className="app-notice-banner" data-testid="desktop-publish-error">
+                {publishGate.error}
+              </p>
+            ) : null}
+            {publishGate.progress && (publishGate.publishing || publishGate.status === "publishing") ? (
+              <div className={styles.stack} data-testid="desktop-publish-progress">
+                <span>
+                  {stageLabel(locale, publishGate.progress.stage)}
+                  {publishGate.progress.total > 0
+                    ? ` ${publishGate.progress.current}/${publishGate.progress.total}`
+                    : ""}
+                </span>
+                <div
+                  aria-valuemax={Math.max(publishGate.progress.total, 1)}
+                  aria-valuenow={publishGate.progress.current}
+                  aria-valuemin={0}
+                  role="progressbar"
+                  style={{
+                    height: 4,
+                    background: "hsl(var(--muted))",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.min(
+                        100,
+                        (publishGate.progress.current /
+                          Math.max(publishGate.progress.total, 1)) *
+                          100,
+                      )}%`,
+                      background: "hsl(var(--accent))",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+            <button
+              className="app-button-primary"
+              data-testid="desktop-publish-cta"
+              disabled={publishGate.publishing}
+              type="button"
+              onClick={() => void publishGate.onPublish()}
+            >
+              {publishGate.publishing
+                ? formatUiMessage(locale, "shareCenter.desktopPublishInProgress")
+                : formatUiMessage(locale, "shareCenter.desktopPublishCta")}
+            </button>
+          </div>
+        ) : null}
         {quotaLabel ? (
           <p className={styles.quotaLine} data-testid="share-quota">
             <span className={styles.quotaLabel}>
@@ -82,6 +167,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
             className={`app-button-ghost ${styles.switchTrack}`}
             data-testid="share-switch"
             disabled={
+              Boolean(publishGate?.desktop && !publishGate.ready) ||
               toggleShareMutation.isPending ||
               settingsQuery.isLoading ||
               pendingEnableConfirm

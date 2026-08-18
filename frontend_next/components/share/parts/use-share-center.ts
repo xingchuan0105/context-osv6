@@ -40,11 +40,16 @@ import {
   type ShareValidityOption,
 } from "./share-center-utils";
 
-export function useShareCenter(workspaceId: string) {
+export function useShareCenter(
+  workspaceId: string,
+  options?: { queriesEnabled?: boolean },
+) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
   const queryClient = useQueryClient();
   const workspaceReady = hasWorkspaceId(workspaceId);
+  const queriesEnabled = options?.queriesEnabled ?? true;
+  const canQuery = Boolean(auth.token && workspaceReady && queriesEnabled);
   const invalidWorkspaceMessage =
     formatUiMessage(locale, "shareInvalidWorkspaceId");
   const [actionError, setActionError] = useState("");
@@ -60,27 +65,27 @@ export function useShareCenter(workspaceId: string) {
   const [memberLimitDraft, setMemberLimitDraft] = useState("");
   const settingsQuery = useQuery({
     queryKey: shareKeys.settings(workspaceId, auth.token),
-    enabled: Boolean(auth.token && workspaceReady),
+    enabled: canQuery,
     queryFn: () => getShareSettings(auth.token as string, workspaceId),
   });
   const quotaQuery = useQuery({
     queryKey: shareKeys.quota(auth.token),
-    enabled: Boolean(auth.token),
+    enabled: Boolean(auth.token && queriesEnabled),
     queryFn: () => getShareQuota(auth.token as string),
   });
   const membersQuery = useQuery<MembersResponse>({
     queryKey: shareKeys.members(workspaceId, auth.token),
-    enabled: Boolean(auth.token && workspaceReady),
+    enabled: canQuery,
     queryFn: () => listMembers(auth.token as string, workspaceId),
   });
   const analyticsQuery = useQuery({
     queryKey: shareKeys.analytics(workspaceId, auth.token),
-    enabled: Boolean(auth.token && workspaceReady),
+    enabled: canQuery,
     queryFn: () => getShareAnalytics(auth.token as string, workspaceId),
   });
   const accessLogsQuery = useQuery({
     queryKey: shareKeys.accessLogs(workspaceId, auth.token),
-    enabled: Boolean(auth.token && workspaceReady),
+    enabled: canQuery,
     queryFn: () => getShareAccessLogs(auth.token as string, workspaceId),
   });
   const toggleShareMutation = useMutation({

@@ -13,6 +13,7 @@ pub mod local_product;
 pub mod local_session;
 pub mod local_stack;
 pub mod native_stack;
+pub mod publish;
 pub mod secret_fs;
 pub mod system;
 pub mod win_cmd;

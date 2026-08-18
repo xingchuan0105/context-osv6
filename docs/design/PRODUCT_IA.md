@@ -15,7 +15,7 @@
 | J1 | 建知识库并提问 | 工作区内有来源 + 能对话得到 grounded 回答 |
 | J2 | 配置自己的模型（BYOK） | Provider 可用；对话可走自有额度 |
 | J3 | 用平台模型 / 访客问答不断供 | 余额足够或已 BYOK |
-| J4 | 对外分享知识库 | 分享开启；访客可浏览/提问（Owner-pays） |
+| J4 | 对外分享知识库 | 分享开启；访客可浏览/提问（Owner-pays）。**桌面本机库**：同一完成页，须先「发布到云端」向量平移（不重灌库）后再开云端分享 |
 | J5 | 看分享效果 | 汇总或单库访问趋势 |
 | J6 | 升级可分享名额 | 档位生效，配额提高 |
 | J7 | 本机私有 / 给桌面 Agent 用 | 客户端安装 + 可选 MCP/CLI |
@@ -36,7 +36,7 @@ User
       ├─ Sources / Notes / Chat
       ├─ Share settings + public surface
       └─ Share analytics（对象级）
-Client (desktop) — 同能力本机形态；分享上云仍走 Subscription；模型默认平台 key 走钱包余额（云登录后下发 relay 凭据），BYOK 为登录后高级选项
+Client (desktop) — 同能力本机形态；本机工作区对外分享 = 先 Publish 到云端副本（向量导入、不重解析）再走 Subscription 名额；模型默认平台 key 走钱包余额（云登录后下发 relay 凭据），BYOK 为登录后高级选项
 ```
 
 **禁止**新产品对象绕过 Workspace 成为主 API 真相。
@@ -107,7 +107,7 @@ Client (desktop) — 同能力本机形态；分享上云仍走 Subscription；�
 | 充值余额 | `/pricing#topup` | 升级弹窗充值 CTA、分享转化充值、产品地图、设置账单可链回 |
 | BYOK | `/settings?tab=providers` | pricing 次要链、产品地图、账单提示 |
 | 下载/了解客户端 | `/desktop` | Dashboard 工具栏「客户端」、footer、help、产品地图 |
-| 开分享 | `/dashboard/:id/share` | 工作区内「分享」、转化条 |
+| 开分享 | `/dashboard/:id/share`（桌面：弹窗内先发布到云端，无第二完成页） | 工作区内「分享」、转化条 |
 | 分享数据（汇总） | `/dashboard/analytics` | 顶栏分享组「访问」 |
 | 分享数据（单库） | `/dashboard/:id/share`（页内 insights / 活动） | 汇总下钻、顶栏分享组「访问」、旧 `/analyze` 与 `/share/analytics` |
 | API 密钥管理 | `/dashboard/:id/share`（API 区块；一种分享方法） | 分享弹窗内同一区块 |

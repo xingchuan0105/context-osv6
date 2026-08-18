@@ -25,6 +25,7 @@ import {
   IconTraffic,
 } from "./parts/share-nav-icons";
 import { useShareCenter } from "./parts/use-share-center";
+import { useDesktopPublishGate } from "./parts/use-desktop-publish-gate";
 import styles from "./workspace-share-surface.module.css";
 
 type WorkspaceShareCenterSurfaceProps = {
@@ -56,7 +57,10 @@ export function WorkspaceShareCenterSurface({
 }: WorkspaceShareCenterSurfaceProps) {
   const workspaceId = useAppWorkspaceId(workspaceIdProp);
   const { locale } = useUiPreferences();
-  const center = useShareCenter(workspaceId);
+  const publishGate = useDesktopPublishGate(workspaceId);
+  const center = useShareCenter(publishGate.shareWorkspaceId, {
+    queriesEnabled: publishGate.queriesEnabled,
+  });
   const { actionError, actionMessage, settingsQuery, quotaSummary } = center;
   const [section, setSection] = useState<ShareCenterSection>("controls");
   const quotaForced =
@@ -180,7 +184,7 @@ export function WorkspaceShareCenterSurface({
           <div className={styles.railContent}>
             {section === "controls" ? (
               <section className={`app-surface-card ${styles.controlCard}`}>
-                <ShareControlBar center={center} />
+                <ShareControlBar center={center} publishGate={publishGate} />
               </section>
             ) : null}
             {section === "invite" ? <ShareInvitePanel center={center} /> : null}

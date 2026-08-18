@@ -163,6 +163,14 @@ impl DocumentStorePort for RecordingDocumentStore {
         Err(AppError::internal("not implemented"))
     }
 
+    async fn upsert_published_document(
+        &self,
+        _auth: &AuthContext,
+        _input: app_core::PublishedDocumentUpsert,
+    ) -> Result<Document, AppError> {
+        Err(AppError::internal("not implemented"))
+    }
+
     async fn get_document_task_seed(
         &self,
         _auth: &AuthContext,

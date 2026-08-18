@@ -17,7 +17,8 @@ use commands::api::{api_call, upload_bytes};
 use commands::cache::{get_cache_value, set_cache_value};
 use commands::chat_stream::{chat_cancel, chat_stream};
 use commands::cloud_session::{
-    cloud_gate_bypassed, cloud_login, cloud_logout, cloud_wallet_balance, get_cloud_session,
+    cloud_api_call, cloud_gate_bypassed, cloud_login, cloud_logout, cloud_wallet_balance,
+    get_cloud_session,
 };
 use commands::docker_status::get_docker_status;
 use commands::documents::reindex_local_documents;
@@ -33,6 +34,7 @@ use commands::local_session::{ensure_local_session, get_local_session};
 use commands::local_stack::{
     ensure_local_stack, get_client_runtime_config, get_local_stack_status, stop_local_stack,
 };
+use commands::publish::{get_publish_status, publish_workspace};
 use commands::system::{
     get_app_data_dir, get_app_version, is_tauri_environment, open_data_dir, open_logs_dir,
 };
@@ -210,6 +212,9 @@ pub fn run() {
             get_cloud_session,
             cloud_gate_bypassed,
             cloud_wallet_balance,
+            cloud_api_call,
+            publish_workspace,
+            get_publish_status,
             open_data_dir,
             open_logs_dir,
             reindex_local_documents

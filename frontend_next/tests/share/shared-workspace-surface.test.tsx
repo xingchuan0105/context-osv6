@@ -112,7 +112,7 @@ describe("SharedWorkspaceSurface", () => {
     expect(mocks.getSharedWorkspaceMock).not.toHaveBeenCalled();
   });
 
-  it("renders workspace-like shell with social owner hero, chat, sessions, sources", async () => {
+  it("renders workspace-like shell with title-bar owner card, chat, sessions, sources", async () => {
     mocks.getSharedWorkspaceMock.mockResolvedValue(
       buildPayload({
         owner: {
@@ -132,9 +132,10 @@ describe("SharedWorkspaceSurface", () => {
     expect(screen.getByTestId("share-owner-card")).toBeTruthy();
     expect(screen.getByTestId("share-owner-banner")).toBeTruthy();
     expect(screen.getByTestId("share-owner-avatar")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Shared KB" })).toBeTruthy();
     expect(screen.getByText("Ada Owner")).toBeTruthy();
-    // X-style hero shows the owner bio inline.
     expect(screen.getByText("Building second brains")).toBeTruthy();
+    expect(screen.getByText("Shared description")).toBeTruthy();
     const profileHref = "/shared/u/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     expect(screen.getByTestId("share-owner-avatar").closest("a")).toHaveAttribute(
       "href",

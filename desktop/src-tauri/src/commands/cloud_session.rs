@@ -187,18 +187,31 @@ async fn cloud_http_json(
     body: Option<serde_json::Value>,
     token: Option<&str>,
 ) -> Result<(u16, serde_json::Value), IpcApiError> {
+    cloud_http_json_timeout(method, url, body, token, 30).await
+}
+
+pub(crate) async fn cloud_http_json_timeout(
+    method: &str,
+    url: &str,
+    body: Option<serde_json::Value>,
+    token: Option<&str>,
+    timeout_secs: u64,
+) -> Result<(u16, serde_json::Value), IpcApiError> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| IpcApiError::internal(format!("http client: {e}")))?;
 
-    let mut req = match method {
+    let mut req = match method.to_uppercase().as_str() {
         "GET" => client.get(url),
         "POST" => client.post(url),
-        _ => {
+        "PUT" => client.put(url),
+        "PATCH" => client.patch(url),
+        "DELETE" => client.delete(url),
+        other => {
             return Err(IpcApiError::bad_request(
                 "method_not_allowed",
-                format!("unsupported {method}"),
+                format!("unsupported {other}"),
             ));
         }
     };
@@ -228,6 +241,72 @@ async fn cloud_http_json(
         serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "raw": text }))
     };
     Ok((status, value))
+}
+
+pub(crate) fn require_cloud_session(
+    app: &tauri::AppHandle,
+) -> Result<StoredCloudSession, IpcApiError> {
+    load_session(app).ok_or_else(|| {
+        IpcApiError::new(
+            401,
+            "cloud_session_required",
+            "请先登录云账号后再发布到云端",
+        )
+    })
+}
+
+fn map_cloud_status(status: u16, value: &serde_json::Value, fallback: &str) -> Result<(), IpcApiError> {
+    if status == 401 || status == 403 {
+        return Err(IpcApiError::new(
+            status,
+            "cloud_session_expired",
+            "云登录已过期，请重新登录",
+        ));
+    }
+    if status >= 300 {
+        let code = value
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("upstream_error");
+        return Err(IpcApiError::new(
+            status,
+            code,
+            server_message(value, fallback),
+        ));
+    }
+    Ok(())
+}
+
+/// Session-JWT call to the cloud product API (not the `cos_dt_*` relay token).
+#[tauri::command]
+pub async fn cloud_api_call(
+    app: tauri::AppHandle,
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, IpcApiError> {
+    let session = require_cloud_session(&app)?;
+    let path = if path.starts_with('/') {
+        path
+    } else {
+        format!("/{path}")
+    };
+    let url = format!("{}{path}", session.cloud_base.trim_end_matches('/'));
+    let timeout = if method.eq_ignore_ascii_case("PUT") {
+        180
+    } else {
+        60
+    };
+    let (status, value) = cloud_http_json_timeout(
+        &method,
+        &url,
+        body,
+        Some(&session.session_token),
+        timeout,
+    )
+    .await?;
+    map_cloud_status(status, &value, "cloud API call failed")?;
+    Ok(value)
 }
 
 fn extract_auth_payload(value: &serde_json::Value) -> Option<(String, CloudUser)> {

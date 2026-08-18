@@ -3,6 +3,7 @@ mod support;
 mod infra;
 mod auth;
 mod workspace_docs;
+mod workspace_publish;
 mod chat_prefs;
 mod mcp;
 mod billing;

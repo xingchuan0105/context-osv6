@@ -273,6 +273,54 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(document)
     }
 
+    async fn upsert_published_document(
+        &self,
+        auth: &AuthContext,
+        input: crate::PublishedDocumentUpsert,
+    ) -> Result<Document, AppError> {
+        let now = now_rfc3339();
+        let id = input.document_id.to_string();
+        let mut state = self.state.write().await;
+        let document = if let Some(existing) = state.documents.get_mut(&id) {
+            existing.document.owner_user_id = current_owner_user_id(auth);
+            existing.document.workspace_id = input.workspace_id.to_string();
+            existing.document.file_name = input.filename.clone();
+            existing.document.mime_type = input.mime_type.clone();
+            existing.document.status = DocumentStatus::Completed;
+            existing.document.chunk_count = input.chunk_count;
+            existing.document.updated_at = now;
+            if input.summary.is_some() {
+                existing.summary = input.summary.clone();
+            }
+            existing.document.clone()
+        } else {
+            let document = Document {
+                id: id.clone(),
+                owner_user_id: current_owner_user_id(auth),
+                workspace_id: input.workspace_id.to_string(),
+                owner_id: current_user_id(auth),
+                file_name: input.filename.clone(),
+                mime_type: input.mime_type.clone(),
+                file_size: 0,
+                status: DocumentStatus::Completed,
+                chunk_count: input.chunk_count,
+                created_at: now.clone(),
+                updated_at: now,
+            };
+            state.documents.insert(
+                id,
+                crate::StoredDocument {
+                    document: document.clone(),
+                    content: String::new(),
+                    summary: input.summary,
+                    parsed_items: Vec::new(),
+                },
+            );
+            document
+        };
+        Ok(document)
+    }
+
     async fn get_document_task_seed(
         &self,
         auth: &AuthContext,

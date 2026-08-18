@@ -24,6 +24,7 @@ impl From<AppBootstrapResult> for AppState {
             chat: result.chat,
             postgres: result.postgres,
             desktop_token_store: result.desktop_token_store,
+            publish: result.publish,
             redis_url: result.redis_url,
             rate_limit_backend: result.rate_limit_backend,
             password_reset_service: crate::services::PasswordResetService::from_env(),

@@ -57,6 +57,23 @@ fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
             get(handlers::get_share_quota_handler),
         )
         .route(
+            "/workspaces/publish/sessions",
+            axum::routing::post(handlers::create_publish_session_handler),
+        )
+        .route(
+            "/workspaces/publish/sessions/{upload_id}/parts/{n}",
+            axum::routing::put(handlers::put_publish_part_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
+        )
+        .route(
+            "/workspaces/publish/sessions/{upload_id}/commit",
+            axum::routing::post(handlers::commit_publish_session_handler),
+        )
+        .route(
+            "/workspaces/publish/status",
+            get(handlers::get_publish_status_handler),
+        )
+        .route(
             prefix,
             get(handlers::list_workspaces).post(handlers::create_workspace),
         )
@@ -70,6 +87,14 @@ fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
         .route(
             &format!("{prefix}/{{id}}/documents"),
             axum::routing::post(handlers::create_document_upload_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/publish/export"),
+            get(handlers::export_publish_list_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/publish/export/{{doc_id}}"),
+            get(handlers::export_publish_document_handler),
         )
         .route(
             &format!("{prefix}/{{id}}/sources/url"),

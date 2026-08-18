@@ -30,8 +30,8 @@ export const desktopMessages = {
     en: "Bring your own LLM key; one-click local stack",
   },
   "desktop.feature6": {
-    zh: "可选与云端工作区互通，分享仍走云端档位规则",
-    en: "Optional cloud workspace sync; sharing still follows cloud plan limits",
+    zh: "可选与云端工作区互通。对外分享需先发布到云端（向量导入、不重灌库），仍走云端档位规则",
+    en: "Optional cloud workspace sync. Public sharing requires publish-to-cloud (vector import, no re-ingest) and still follows cloud plan limits",
   },
   "desktop.downloadWindows": {
     zh: "下载 Windows 客户端",
@@ -238,8 +238,8 @@ export const desktopMessages = {
     en: "Relayed through the cloud and debited by usage — no own key needed.",
   },
   "desktop.drawer.modelByokHint": {
-    zh: "优先用您的 Key 写最终回答，不扣平台对话费；翻资料仍走平台更快的模型。未配置时登录即可使用官方托管模型。",
-    en: "Your key writes the final answer with no chat wallet debit; retrieval still uses the faster platform model. Otherwise sign in for official models.",
+    zh: "优先用您的 Key 写最终回答，不扣平台对话费。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。未配置时登录即可使用官方托管模型。",
+    en: "Your key writes the final answer with no chat wallet debit. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker. Otherwise sign in for official models.",
   },
   "desktop.drawer.modelChat": {
     zh: "对话模型",

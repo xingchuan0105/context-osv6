@@ -4,7 +4,7 @@ mod product_apps;
 
 pub use product_apps::{
     AdminApp, AdminOpsApp, AgentApp, BillingApp, ConversationApp, DesktopApp, PrefsApp, ShareApp,
-    WorkspaceApiKeyAuth, WorkspaceApp,
+    WorkspaceApiKeyAuth, WorkspaceApp, WorkspacePublishRuntime,
 };
 mod config_helpers;
 mod domain_row_convert;
@@ -27,7 +27,7 @@ pub use adapters::{
 use adapters::{
     ObjectStorePortAdapter, PgAdminStoreAdapter, PgAuthStoreAdapter, PgBillingQuotaAdapter,
     PgChatPersistenceAdapter, PgDesktopTokenStoreAdapter, PgDocumentStoreAdapter, PgHealthAdapter,
-    PgShareStoreAdapter,
+    PgShareStoreAdapter, PgWorkspacePublishStoreAdapter,
 };
 use app_admin::AdminContext;
 use app_billing::BillingContext;
@@ -43,6 +43,7 @@ use app_documents::DocumentContext;
 use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
 use avrag_rag_core::{RagConfig, RagRuntime, RetrievalDataPlane};
+use avrag_retrieval_data_plane::{PublishFingerprint, RetrievalExportPort};
 use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{BootstrapRepository, ObjectStoreHandle, PgAppRepository, TenantPgPool};
@@ -84,6 +85,8 @@ pub struct AppBootstrapResult {
     pub postgres: Option<Arc<PgAppRepository>>,
     /// Desktop relay token store (W2): PG adapter in postgres mode, memory otherwise.
     pub desktop_token_store: Arc<dyn app_core::DesktopTokenStorePort>,
+    /// Local→cloud workspace publish (B3b).
+    pub publish: crate::WorkspacePublishRuntime,
     pub redis_url: String,
     pub rate_limit_backend: Option<Arc<RedisRateLimitBackend>>,
 }
@@ -261,6 +264,10 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         chat,
         postgres: None,
         desktop_token_store: Arc::new(app_core::MemoryDesktopTokenStore::new()),
+        publish: WorkspacePublishRuntime::memory(PublishFingerprint::new(
+            config.embedding.model.clone(),
+            config.milvus.text_vector_dim,
+        )),
         redis_url: config.redis.url.clone(),
         rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     }
@@ -394,6 +401,13 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     )
     .await;
 
+    let publish_fingerprint = PublishFingerprint::new(
+        config.embedding.model.clone(),
+        config.milvus.text_vector_dim,
+    );
+    let mut retrieval_data_plane: Option<Arc<dyn RetrievalDataPlane>> = None;
+    let mut retrieval_export: Option<Arc<dyn RetrievalExportPort>> = None;
+
     let rag_runtime = if config.enable_rag && pg.is_some() {
         let pg_repo = pg.as_ref().unwrap();
         let embedding = make_embedding_client(
@@ -451,38 +465,43 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                             as Arc<dyn common::ContentStore>,
                     ),
                 ));
-                let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
-                    match config.retrieval_backend {
-                        RetrievalBackend::Milvus => {
-                            let milvus_config = StorageMilvusConfig {
-                                url: config.milvus.url.clone(),
-                                token: Some(config.milvus.token.clone())
-                                    .filter(|token| !token.trim().is_empty()),
-                                database: Some(config.milvus.database.clone())
-                                    .filter(|database| !database.trim().is_empty()),
-                                collection_prefix: config.milvus.collection_prefix.clone(),
-                                text_vector_dim: config.milvus.text_vector_dim,
-                                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
-                                metric_type: config.milvus.metric_type.clone(),
-                            };
-                            Arc::new(MilvusDataPlane::new(milvus_config))
-                        }
-                        RetrievalBackend::Pgvector => {
-                            let pgvector_config = PgvectorConfig {
-                                text_vector_dim: config.milvus.text_vector_dim,
-                                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
-                                hnsw_ef_search: Some(40),
-                            };
-                            Arc::new(PgvectorDataPlane::new(
-                                pg_repo.raw().clone(),
-                                pgvector_config,
-                            ))
-                        }
-                    };
-                data_plane.ensure_schema().await?;
-                Some(Arc::new(RagRuntime::with_data_plane(
-                    rag_config, data_plane,
-                )))
+                match config.retrieval_backend {
+                    RetrievalBackend::Milvus => {
+                        let milvus_config = StorageMilvusConfig {
+                            url: config.milvus.url.clone(),
+                            token: Some(config.milvus.token.clone())
+                                .filter(|token| !token.trim().is_empty()),
+                            database: Some(config.milvus.database.clone())
+                                .filter(|database| !database.trim().is_empty()),
+                            collection_prefix: config.milvus.collection_prefix.clone(),
+                            text_vector_dim: config.milvus.text_vector_dim,
+                            multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                            metric_type: config.milvus.metric_type.clone(),
+                        };
+                        let plane = Arc::new(MilvusDataPlane::new(milvus_config));
+                        plane.ensure_schema().await?;
+                        retrieval_data_plane =
+                            Some(plane.clone() as Arc<dyn RetrievalDataPlane>);
+                        Some(Arc::new(RagRuntime::with_data_plane(rag_config, plane)))
+                    }
+                    RetrievalBackend::Pgvector => {
+                        let pgvector_config = PgvectorConfig {
+                            text_vector_dim: config.milvus.text_vector_dim,
+                            multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                            hnsw_ef_search: Some(40),
+                        };
+                        let plane = Arc::new(PgvectorDataPlane::new(
+                            pg_repo.raw().clone(),
+                            pgvector_config,
+                        ));
+                        plane.ensure_schema().await?;
+                        retrieval_data_plane =
+                            Some(plane.clone() as Arc<dyn RetrievalDataPlane>);
+                        retrieval_export =
+                            Some(plane.clone() as Arc<dyn RetrievalExportPort>);
+                        Some(Arc::new(RagRuntime::with_data_plane(rag_config, plane)))
+                    }
+                }
             }
             None => {
                 tracing::warn!(
@@ -618,6 +637,16 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         Some(repository) => Arc::new(PgDesktopTokenStoreAdapter::new(repository.clone())),
         None => Arc::new(app_core::MemoryDesktopTokenStore::new()),
     };
+    let publish_store: Arc<dyn app_core::WorkspacePublishStorePort> = match pg.as_ref() {
+        Some(repository) => Arc::new(PgWorkspacePublishStoreAdapter::new(repository.clone())),
+        None => Arc::new(app_core::MemoryWorkspacePublishStore::new()),
+    };
+    let publish = WorkspacePublishRuntime {
+        store: publish_store,
+        retrieval_data_plane,
+        retrieval_export,
+        fingerprint: publish_fingerprint,
+    };
 
     Ok(AppBootstrapResult {
         auth,
@@ -631,6 +660,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         chat,
         postgres: pg,
         desktop_token_store,
+        publish,
         redis_url: config.redis.url.clone(),
         rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     })

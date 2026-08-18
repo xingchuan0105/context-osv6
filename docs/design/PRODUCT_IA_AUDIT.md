@@ -141,4 +141,5 @@
 - [x] `/activate`、`/desktop/buy` 退役为重定向到 `/desktop`（无买断结账）
 - [x] 桌面设置「授权」→「关于」：免费客户端 + 链定价
 - [x] Publish B3b 设计门禁：`docs/desktop/2026-08-10-workspace-publish-b3b-design.md`（实现待 0.3.0）
+- [x] Publish B3b 实现：桌面分享弹窗内「发布到云端」+ 分阶段进度；向量平移导入 VPS，不重灌库（2026-08-19）
 

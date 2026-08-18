@@ -149,6 +149,32 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .map_err(map_pg_error)
     }
 
+    async fn upsert_published_document(
+        &self,
+        auth: &AuthContext,
+        input: app_core::PublishedDocumentUpsert,
+    ) -> Result<Document, AppError> {
+        self.repo
+            .bootstrap()
+            .upsert_published_document(
+                auth,
+                input.document_id,
+                input.workspace_id,
+                &input.filename,
+                &input.mime_type,
+                input.chunk_count,
+            )
+            .await
+            .map_err(|error| match error {
+                avrag_storage_pg::PgStorageError::NotFound(message)
+                    if message.contains("another owner") =>
+                {
+                    AppError::conflict("publish_document_conflict", message)
+                }
+                other => map_pg_error(other),
+            })
+    }
+
     async fn get_document_task_seed(
         &self,
         auth: &AuthContext,

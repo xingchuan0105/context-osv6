@@ -85,8 +85,8 @@ export const productGuideMessages = {
     en: "BYOK · custom provider",
   },
   "productGuide.llm.byokBody": {
-    zh: "在设置 → 模型服务商中填入你自己的 API Key（如 DeepSeek / 百炼 / SiliconFlow）。最终回答走你自己的额度；翻资料仍用平台更快的模型，等待时间同样会短一截。",
-    en: "Add your own API keys under Settings → Providers. The final answer uses your quota; retrieval still uses the faster platform model, so wait time drops the same way.",
+    zh: "在设置 → 模型服务商中填入你自己的 API Key（如 DeepSeek / 百炼 / SiliconFlow）。最终回答走你自己的额度。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。",
+    en: "Add your own API keys under Settings → Providers. The final answer uses your quota. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker.",
   },
   "productGuide.llm.platformTitle": {
     zh: "平台代购 · 余额扣费",
@@ -137,8 +137,8 @@ export const productGuideMessages = {
     en: "Desktop client",
   },
   "productGuide.client.body": {
-    zh: "客户端完全免费：数据默认可留在本机，支持 MCP / CLI，可被 Claude Code、Codex 等桌面 Agent 调用。需要上云分享时再使用云端名额。",
-    en: "The client is free: data can stay local, with MCP / CLI for desktop agents (Claude Code, Codex, …). Use cloud share slots only when you publish online.",
+    zh: "客户端完全免费：数据默认可留在本机，支持 MCP / CLI，可被 Claude Code、Codex 等桌面 Agent 调用。对外分享需先发布到云端（向量导入、不重灌库），再使用云端名额。",
+    en: "The client is free: data can stay local, with MCP / CLI for desktop agents (Claude Code, Codex, …). Public sharing requires publish-to-cloud (vector import, no re-ingest), then cloud share slots.",
   },
   "productGuide.client.link": {
     zh: "打开客户端介绍页",

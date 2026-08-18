@@ -202,8 +202,8 @@ export const settingsMessages = {
     en: "Custom provider",
   },
   "settings.billing.byokSubtitle": {
-    zh: "密钥加密存储。自备 Key 只用于最终回答；翻资料走平台更快的模型，向量检索仍从余额扣费。",
-    en: "Keys are encrypted at rest. Your key writes the final answer; retrieval uses the faster platform model, and embeddings still debit your balance.",
+    zh: "密钥加密存储。自备主对话 Key 只用于最终回答。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理；向量检索仍从余额扣费。",
+    en: "Keys are encrypted at rest. Your main-chat key writes the final answer. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker; embeddings still debit your balance.",
   },
   "settings.billing.byokProvider": {
     zh: "Provider",
@@ -686,8 +686,8 @@ export const settingsMessages = {
     en: "Custom providers",
   },
   settingsProviderSubtitle: {
-    zh: "型号固定。每行只填一把 API Key（SiliconFlow 嵌入与重排共用同一把）。",
-    en: "Models are fixed. One API key per row (SiliconFlow embedding and rerank share one key).",
+    zh: "型号固定。Qwen3.7 Flash 作为快速模型，同时用于文档索引和检索子代理。每行只填一把 API Key（SiliconFlow 嵌入与重排共用同一把）。",
+    en: "Models are fixed. Qwen3.7 Flash is the fast model for both document indexing and the retrieval worker. One API key per row (SiliconFlow embedding and rerank share one key).",
   },
   settingsProviderLoading: {
     zh: "加载中…",

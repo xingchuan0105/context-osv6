@@ -70,6 +70,13 @@ pub trait DocumentStorePort: Send + Sync {
         mime_type: &str,
     ) -> Result<Document, AppError>;
 
+    /// Upsert a document row with a caller-supplied id (workspace publish import).
+    async fn upsert_published_document(
+        &self,
+        auth: &AuthContext,
+        input: crate::PublishedDocumentUpsert,
+    ) -> Result<Document, AppError>;
+
     async fn get_document_task_seed(
         &self,
         auth: &AuthContext,

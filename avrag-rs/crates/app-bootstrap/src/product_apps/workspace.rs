@@ -10,6 +10,7 @@ pub struct WorkspaceApp<'a> {
     pub(crate) storage: &'a StorageContext,
     pub(crate) billing: &'a app_billing::BillingContext,
     pub(crate) analytics: &'a AnalyticsServiceCtx,
+    pub(crate) publish: &'a super::WorkspacePublishRuntime,
 }
 
 impl<'a> WorkspaceApp<'a> {

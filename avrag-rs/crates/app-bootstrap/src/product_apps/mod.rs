@@ -18,6 +18,7 @@ mod desktop;
 mod prefs;
 mod share;
 mod workspace;
+mod workspace_publish;
 
 pub use admin::AdminApp;
 pub use admin_ops::AdminOpsApp;
@@ -28,6 +29,7 @@ pub use desktop::DesktopApp;
 pub use prefs::PrefsApp;
 pub use share::ShareApp;
 pub use workspace::WorkspaceApp;
+pub use workspace_publish::WorkspacePublishRuntime;
 
 use contracts::auth_runtime::UserId;
 use uuid::Uuid;
@@ -58,6 +60,7 @@ impl AppState {
             storage: &self.storage,
             billing: &self.billing,
             analytics: &self.analytics,
+            publish: &self.publish,
         }
     }
 

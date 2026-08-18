@@ -294,8 +294,8 @@ export const apiAccessMessages = {
     en: "Main agent LLM",
   },
   "settingsProvider.type.parseLlm": {
-    zh: "文件解析 LLM",
-    en: "File-parse LLM",
+    zh: "文档索引 / 检索子代理",
+    en: "Indexing / retrieval worker",
   },
   "settingsProvider.type.embedRerank": {
     zh: "向量嵌入 / 重排序",

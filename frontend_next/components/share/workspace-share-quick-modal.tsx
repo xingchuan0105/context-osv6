@@ -12,6 +12,7 @@ import { IconApi, IconInvite, IconShareControls } from "./parts/share-nav-icons"
 import { ShareControlBar } from "./parts/share-control-bar";
 import { ShareInvitePanel } from "./parts/share-invite-panel";
 import { useShareCenter } from "./parts/use-share-center";
+import { useDesktopPublishGate } from "./parts/use-desktop-publish-gate";
 
 type WorkspaceShareQuickModalProps = {
   open: boolean;
@@ -29,7 +30,10 @@ function WorkspaceShareQuickModalBody({
   onClose: () => void;
 }) {
   const { locale } = useUiPreferences();
-  const center = useShareCenter(workspaceId);
+  const publishGate = useDesktopPublishGate(workspaceId);
+  const center = useShareCenter(publishGate.shareWorkspaceId, {
+    queriesEnabled: publishGate.queriesEnabled,
+  });
   const { actionError, actionMessage, settingsQuery } = center;
   const [section, setSection] = useState<ShareQuickSection>("controls");
 
@@ -92,7 +96,7 @@ function WorkspaceShareQuickModalBody({
         ) : null}
         {section === "controls" ? (
           <section className="app-surface-card">
-            <ShareControlBar center={center} />
+            <ShareControlBar center={center} publishGate={publishGate} />
           </section>
         ) : null}
         {section === "invite" ? <ShareInvitePanel center={center} /> : null}
