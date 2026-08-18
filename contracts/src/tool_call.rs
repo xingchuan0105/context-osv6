@@ -91,7 +91,13 @@ pub struct RuntimeExecuteResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DenseRetrievalArgs {
+    /// Retrieval queries. Tolerant deserialization: small models sometimes emit
+    /// singular `query` — merged into `queries` at the dispatch site.
+    #[serde(default)]
     pub queries: Vec<String>,
+    /// Singular-alias tolerance input only; never serialized back out.
+    #[serde(default, skip_serializing)]
+    pub query: Option<String>,
     #[serde(default)]
     pub modality: DenseRetrievalModality,
     #[serde(default = "default_top_k")]

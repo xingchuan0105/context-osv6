@@ -167,6 +167,7 @@ impl RuntimeBridge {
                     version: "1.0".to_string(),
                     args: serde_json::to_value(DenseRetrievalArgs {
                         queries: vec![query.to_string()],
+                        query: None,
                         modality: DenseRetrievalModality::Both,
                         top_k: HOST_TOP_K,
                         doc_scope: self.doc_scope.clone(),

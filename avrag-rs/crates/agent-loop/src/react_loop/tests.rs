@@ -47,6 +47,7 @@ fn react_loop_splits_thinking_retrieve_off_synthesis_on() {
 fn fallback_dense_args_roundtrips() {
     let args = serde_json::to_value(contracts::DenseRetrievalArgs {
         queries: vec!["rust".to_string()],
+        query: None,
         modality: contracts::DenseRetrievalModality::Text,
         top_k: 10,
         doc_scope: vec!["doc1".to_string()],

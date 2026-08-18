@@ -44,12 +44,21 @@ pub(crate) fn lexical_args_from_dense(args: &DenseRetrievalArgs) -> serde_json::
 }
 
 pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
-    let args: DenseRetrievalArgs = match serde_json::from_value(args.clone()) {
+    let mut args: DenseRetrievalArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
             return super::error_result("dense_retrieval", format!("invalid args: {e}"));
         }
     };
+    // Singular-alias tolerance: fold `query` into `queries` before validation.
+    if args.queries.is_empty() {
+        if let Some(query) = args.query.take() {
+            let query = query.trim();
+            if !query.is_empty() {
+                args.queries = vec![query.to_string()];
+            }
+        }
+    }
 
     if args.queries.is_empty() {
         return super::error_result("dense_retrieval", "queries must not be empty".to_string());
@@ -388,6 +397,7 @@ mod tests {
     fn lexical_args_from_dense_splits_query_terms() {
         let args = DenseRetrievalArgs {
             queries: vec!["What is antifragility?".to_string()],
+            query: None,
             modality: contracts::DenseRetrievalModality::Text,
             top_k: 5,
             doc_scope: vec!["doc-1".to_string()],
@@ -397,5 +407,28 @@ mod tests {
         assert!(terms.iter().any(|t| t.as_str() == Some("antifragility?")));
         assert_eq!(value["top_k"], 5);
         assert_eq!(value["doc_scope"][0], "doc-1");
+    }
+
+    #[test]
+    fn dense_args_accept_singular_query_alias() {
+        // Small non-thinking models sometimes emit `query` instead of `queries`.
+        let args: DenseRetrievalArgs = serde_json::from_value(serde_json::json!({
+            "query": "antifragility"
+        }))
+        .expect("singular query alias should parse");
+        assert!(args.queries.is_empty());
+        assert_eq!(args.query.as_deref(), Some("antifragility"));
+        // Serialization keeps the canonical shape (alias never leaks back out).
+        let out = serde_json::to_value(&args).unwrap();
+        assert!(out.get("query").is_none());
+    }
+
+    #[test]
+    fn dense_args_still_reject_truly_unknown_fields() {
+        let result: Result<DenseRetrievalArgs, _> = serde_json::from_value(serde_json::json!({
+            "queries": ["a"],
+            "bogus": 1
+        }));
+        assert!(result.is_err());
     }
 }
