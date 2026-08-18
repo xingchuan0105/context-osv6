@@ -12,15 +12,16 @@ mod pg_error;
 mod services;
 
 pub use app_state::{
-    AppState, CostEventRecord, MemoryState, RetrievedContext, StoredDocument, build_docscope_metadata,
-    build_parsed_preview, build_redis_url, build_summary, document_is_deleting_or_deleted,
-    estimate_token_count, infer_mime_type_from_path, is_remote_asset_reference, status_label,
+    build_docscope_metadata, build_parsed_preview, build_redis_url, build_summary,
+    document_is_deleting_or_deleted, estimate_token_count, infer_mime_type_from_path,
+    is_remote_asset_reference, status_label, AppState, CostEventRecord, MemoryState,
+    RetrievedContext, StoredDocument,
 };
 
 pub use adapters::{
-    PgBillingStoreAdapter, PgProviderSecretStoreAdapter, PgReferralStoreAdapter,
-    PgUsageLimitStoreAdapter, PgWalletStoreAdapter, RedisFixedWindowRateLimiter,
-    RedisRateLimitBackend, build_rate_limit_backend,
+    build_rate_limit_backend, PgBillingStoreAdapter, PgProviderSecretStoreAdapter,
+    PgReferralStoreAdapter, PgUsageLimitStoreAdapter, PgWalletStoreAdapter,
+    RedisFixedWindowRateLimiter, RedisRateLimitBackend,
 };
 
 use adapters::{
@@ -297,15 +298,10 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         let profile: Arc<dyn app_core::ProfilePort> = adapter.clone();
         Arc::new(ChatMemory::new(messages, profile))
     });
+    // Chat-path caches stay in-process. Redis is the HTTP rate-limit + ingest
+    // lock store — not one round trip per embed/retrieve/search inside a query.
     let cache_store: Option<Arc<dyn avrag_rag_core_ports::CachePort>> =
-        if config.redis.url.trim().is_empty() {
-            None
-        } else {
-            avrag_cache_redis::CacheStore::new(&config.redis.url)
-                .ok()
-                .map(|store| Arc::new(store) as Arc<dyn avrag_rag_core_ports::CachePort>)
-        };
-    // Cross-replica share Q&A cache + funds-notify throttle (W4 state out-migration).
+        Some(Arc::new(avrag_rag_core_ports::MemoryCache::new()));
     app_chat::share_cache::init_shared_cache(cache_store.clone());
     app_chat::chat_private::init_funds_notify_cache(cache_store.clone());
     let search_executor = Some(Arc::new({
@@ -372,7 +368,9 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let provider_secrets: Option<Arc<dyn app_core::ProviderSecretStorePort>> =
         pg.as_ref().and_then(|repository| {
             match PgProviderSecretStoreAdapter::from_env(repository.clone()) {
-                Ok(adapter) => Some(Arc::new(adapter) as Arc<dyn app_core::ProviderSecretStorePort>),
+                Ok(adapter) => {
+                    Some(Arc::new(adapter) as Arc<dyn app_core::ProviderSecretStorePort>)
+                }
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
@@ -425,20 +423,20 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
 
                 let attach_rag_components = |mut rag_config: RagConfig| {
                     if let Some(p) = planner.clone() {
-                        rag_config =
-                            rag_config.with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
+                        rag_config = rag_config
+                            .with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
                     }
                     if let Some(mm) = mm_embedding.clone() {
                         rag_config = rag_config
                             .with_mm_embedding(mm as Arc<dyn avrag_rag_core_ports::EmbeddingPort>);
                     }
                     if let Some(r) = reranker.clone() {
-                        rag_config =
-                            rag_config.with_reranker(r as Arc<dyn avrag_rag_core_ports::RerankPort>);
+                        rag_config = rag_config
+                            .with_reranker(r as Arc<dyn avrag_rag_core_ports::RerankPort>);
                     }
                     if let Some(mm_r) = mm_reranker.clone() {
-                        rag_config =
-                            rag_config.with_mm_reranker(mm_r as Arc<dyn avrag_rag_core_ports::RerankPort>);
+                        rag_config = rag_config
+                            .with_mm_reranker(mm_r as Arc<dyn avrag_rag_core_ports::RerankPort>);
                     }
                     if let Some(cache) = cache_store.clone() {
                         rag_config = rag_config.with_cache(cache);
@@ -692,7 +690,10 @@ mod app_state_test_support {
             self.chat.billing = billing;
         }
 
-        pub fn test_set_rag_runtime(&mut self, rag_runtime: std::sync::Arc<avrag_rag_core::RagRuntime>) {
+        pub fn test_set_rag_runtime(
+            &mut self,
+            rag_runtime: std::sync::Arc<avrag_rag_core::RagRuntime>,
+        ) {
             self.orchestrator.set_rag_runtime(rag_runtime);
             self.chat.orchestrator = self.orchestrator.clone();
         }

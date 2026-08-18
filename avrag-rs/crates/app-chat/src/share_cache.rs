@@ -1,11 +1,10 @@
 //! Share Q&A cache (ADR-0010 §9): exact match + embedding cosine semantic match.
 //!
-//! - **Exact:** normalized whitespace/case query hash. L1 = shared Redis (when
-//!   `init_shared_cache` wired at bootstrap), L2 = process-local map.
+//! - **Exact:** normalized whitespace/case query hash. Optional `CachePort` L1
+//!   (process `MemoryCache` at bootstrap) plus a process-local map.
 //! - **Semantic:** cosine similarity on dense query embeddings when provided
 //!   (from RagRuntime embedding client). Threshold default 0.90.
-//!   Stays process-local: a miss costs one LLM call, and embeddings are not
-//!   pushed to Redis.
+//!   Stays process-local: a miss costs one LLM call.
 //!
 //! Process-local layers are TTL-bounded. Near-zero platform cost on cache hit.
 
@@ -19,8 +18,8 @@ use sha2::{Digest, Sha256};
 /// Shared L1 exact-match cache (wired once at bootstrap; None = memory-only).
 static SHARED_EXACT: OnceLock<Option<Arc<dyn CachePort>>> = OnceLock::new();
 
-/// Wire the shared Redis cache for share Q&A exact matches. Called once from
-/// bootstrap; safe to skip (memory-only mode, e.g. tests).
+/// Wire the optional CachePort L1 for share Q&A exact matches. Called once
+/// from bootstrap; safe to skip (in-map only, e.g. tests).
 pub fn init_shared_cache(cache: Option<Arc<dyn CachePort>>) {
     let _ = SHARED_EXACT.set(cache);
 }
@@ -118,7 +117,7 @@ pub async fn lookup(
     let now = Instant::now();
     let thr = semantic_threshold();
 
-    // L1: shared Redis exact hit (cross-replica).
+    // Optional CachePort L1 (process MemoryCache at bootstrap).
     if let Some(cache) = shared_exact() {
         if let Some(answer) = cache.get(&format!("share-qa:{key}")).await {
             return Some(answer);
@@ -174,12 +173,7 @@ pub async fn lookup(
 }
 
 /// Store answer with optional embedding for semantic reuse.
-pub async fn store(
-    share_token: &str,
-    query: &str,
-    answer: &str,
-    embedding: Option<Vec<f32>>,
-) {
+pub async fn store(share_token: &str, query: &str, answer: &str, embedding: Option<Vec<f32>>) {
     if !enabled() || share_token.trim().is_empty() || query.trim().is_empty() {
         return;
     }
@@ -189,7 +183,7 @@ pub async fn store(
     let qn = normalize_query(query);
     let key = exact_key(share_token, &qn);
     let ttl = Duration::from_secs(ttl_secs().max(30));
-    // L1: shared Redis (cross-replica exact hit).
+    // Optional CachePort L1 (process MemoryCache at bootstrap).
     if let Some(cache) = shared_exact() {
         let _ = cache
             .set(&format!("share-qa:{key}"), answer, ttl.as_secs())
@@ -238,7 +232,13 @@ mod tests {
     async fn semantic_cosine_hit() {
         let emb_a = vec![1.0, 0.0, 0.0];
         let emb_b = vec![0.99, 0.1, 0.0]; // high cosine with emb_a
-        store("tok-s", "how tall is the tower?", "Eiffel is 330m", Some(emb_a)).await;
+        store(
+            "tok-s",
+            "how tall is the tower?",
+            "Eiffel is 330m",
+            Some(emb_a),
+        )
+        .await;
         let hit = lookup("tok-s", "tower height?", Some(&emb_b)).await;
         assert_eq!(hit.as_deref(), Some("Eiffel is 330m"));
     }

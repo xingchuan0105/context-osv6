@@ -1,7 +1,14 @@
 use app_core::ports::rate_limit::rate_limiter::{RateLimitDecision, RateLimiter};
 use async_trait::async_trait;
-use redis::AsyncCommands;
 use std::sync::Arc;
+
+const INCR_EXPIRE_LUA: &str = r#"
+local n = redis.call('INCR', KEYS[1])
+if n == 1 then
+  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return n
+"#;
 
 #[derive(Clone)]
 pub struct RedisRateLimitBackend {
@@ -29,8 +36,16 @@ impl RedisRateLimitBackend {
         let window = chrono::Utc::now().timestamp() / window_secs.max(1) as i64;
         let redis_key = format!("rate-limit:{window_secs}:{window}:{key}");
         let mut conn = self.conn.get().await?;
-        let count: u32 = conn.incr(&redis_key, 1_u32).await?;
-        let _: bool = conn.expire(&redis_key, (window_secs.max(1) * 2) as i64).await?;
+        // One round trip: INCR and EXPIRE must be atomic (Redis INCR pattern).
+        let ttl = (window_secs.max(1) * 2) as i64;
+        let count: i64 = redis::cmd("EVAL")
+            .arg(INCR_EXPIRE_LUA)
+            .arg(1)
+            .arg(&redis_key)
+            .arg(ttl)
+            .query_async(&mut conn)
+            .await?;
+        let count = u32::try_from(count.max(0)).unwrap_or(u32::MAX);
         let allowed = count <= limit;
         let remaining = limit.saturating_sub(count.min(limit));
 

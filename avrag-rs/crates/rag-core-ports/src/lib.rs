@@ -3,6 +3,7 @@ use async_trait::async_trait;
 pub mod chat_persistence;
 pub mod embedding;
 pub mod llm_types;
+pub mod memory_cache;
 pub mod port_rows;
 
 pub use chat_persistence::{
@@ -14,6 +15,7 @@ pub use embedding::{
     RerankResult,
 };
 pub use llm_types::{LlmUsage, SynthesisOutput};
+pub use memory_cache::MemoryCache;
 pub use port_rows::{
     ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
     NotificationCreateParams, UserProfileRow,

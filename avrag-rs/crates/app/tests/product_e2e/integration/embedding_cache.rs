@@ -1,12 +1,9 @@
 //! Manual E2E gate for embedding cache via the full RAG path.
 //!
 //! **Provider vs app cache:** DashScope `text-embedding-v4` has no provider-level
-//! embedding cache. Production caching lives in Redis (`EmbeddingClient::with_cache`
-//! in `avrag-llm`). This test uses the embedding-cache `TestContext` profile,
-//! which starts a dedicated Redis container for the full RAG path.
-//!
-//! Prefer the unit test `embed_openai_compatible_text_caches_in_redis` in
-//! `avrag-llm/src/embedding.rs`, which asserts same-text → Redis hit → one HTTP call.
+//! embedding cache. Production caching is process-local (`MemoryCache` via
+//! `EmbeddingClient::with_cache`). This test uses the embedding-cache
+//! `TestContext` profile (Redis container is only for ingest/lock, not embeds).
 
 use std::time::Duration;
 

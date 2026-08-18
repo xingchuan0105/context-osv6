@@ -22,7 +22,7 @@ pub fn init_funds_notify_cache(cache: Option<std::sync::Arc<dyn CachePort>>) {
 }
 
 /// Process-local throttle for balance-empty notices (6 hours per owner).
-/// With Redis wired: cross-replica SET NX EX cooldown; memory is the fallback.
+/// `CachePort` (MemoryCache at bootstrap) holds the cooldown; in-map fallback.
 async fn funds_notify_throttled(owner: Uuid) -> bool {
     const COOLDOWN_SECS: u64 = 6 * 60 * 60;
     if let Some(Some(cache)) = SHARED_THROTTLE.get() {
@@ -98,4 +98,3 @@ impl ChatContext {
             .await;
     }
 }
-
