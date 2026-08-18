@@ -29,6 +29,14 @@ fi
 : "${VPS_MAIN_USER:?set VPS_MAIN_USER}"
 : "${VPS_MAIN_PASSWORD:?set VPS_MAIN_PASSWORD}"
 
+# Optional: propagate the platform price rates JSON into the VPS env file.
+# base64 survives ssh/heredoc quoting; the remote side writes it as an
+# unquoted single line (docker --env-file compatible).
+RATES_JSON_B64=""
+if [[ -n "${PLATFORM_OFFICIAL_RATES_JSON:-}" ]]; then
+  RATES_JSON_B64="$(printf '%s' "$PLATFORM_OFFICIAL_RATES_JSON" | base64 -w0)"
+fi
+
 SSH=(sshpass -p "$VPS_MAIN_PASSWORD" ssh -o StrictHostKeyChecking=no "${VPS_MAIN_USER}@${VPS_MAIN_HOST}")
 SCP=(sshpass -p "$VPS_MAIN_PASSWORD" scp -o StrictHostKeyChecking=no)
 
@@ -104,6 +112,17 @@ rsync -a --delete \
   --exclude '.pytest_cache/' \
   "$AVRAG_DIR/scripts/anydoc-extract/" "$STAGE/scripts/anydoc-extract/"
 
+# lit (liteparse PDF CLI, --no-default-features build) + official pdfium lib —
+# baked into avrag-runtime so the worker can parse PDFs. Local build artifacts:
+#   lit:        cargo install liteparse --version 2.10.0 --no-default-features
+#   libpdfium:  ~/.cache/pdfium-rs/chromium_7897/pdfium-linux-x64/lib/libpdfium.so
+LIT_BIN="${LIT_BIN:-$HOME/e2e-vps-cargo/bin/lit}"
+PDFIUM_LIB="${PDFIUM_LIB:-$HOME/.cache/pdfium-rs/chromium_7897/pdfium-linux-x64/lib/libpdfium.so}"
+[[ -x "$LIT_BIN" ]] || die "missing lit binary at $LIT_BIN (set LIT_BIN)"
+[[ -f "$PDFIUM_LIB" ]] || die "missing libpdfium.so at $PDFIUM_LIB (set PDFIUM_LIB)"
+cp -a "$LIT_BIN" "$STAGE/docker/lit"
+cp -a "$PDFIUM_LIB" "$STAGE/docker/libpdfium.so"
+
 cat > "$STAGE/DEPLOY_META.backend.json" <<EOF
 {
   "component": "backend",
@@ -131,6 +150,7 @@ BUILT_AT="$BUILT_AT"
 REV="$REV"
 ASSETS_ONLY="$ASSETS_ONLY"
 NO_RESTART="$NO_RESTART"
+RATES_JSON_B64="$RATES_JSON_B64"
 
 STAGE=/tmp/avrag-backend-stage
 rm -rf "\$STAGE"
@@ -171,15 +191,19 @@ if [[ ! -d "\$STAGE/scripts/anydoc-extract" ]]; then
   exit 1
 fi
 cp -a "\$STAGE/scripts/anydoc-extract" "\$RUNTIME_BUILD/anydoc-extract"
+cp -a "\$STAGE/docker/lit" "\$RUNTIME_BUILD/lit"
+cp -a "\$STAGE/docker/libpdfium.so" "\$RUNTIME_BUILD/libpdfium.so"
 docker build -t avrag-runtime:24.04 "\$RUNTIME_BUILD"
 docker run --rm avrag-runtime:24.04 bash -lc \
-  'command -v markitdown && markitdown -h >/dev/null && command -v anydoc-extract' \
+  'command -v markitdown && markitdown -h >/dev/null && command -v anydoc-extract && command -v lit && ldconfig -p | grep -q libpdfium' \
   || { echo "deploy-backend: ERROR runtime image missing parser CLIs" >&2; exit 1; }
-echo "deploy-backend: runtime image OK (markitdown+anydoc-extract)"
+echo "deploy-backend: runtime image OK (markitdown+anydoc-extract+lit+pdfium)"
 
 # Point env at in-image binaries.
 if [[ -f /etc/avrag-rs/avrag.env ]]; then
+  export RATES_JSON_B64
   python3 - <<'PY'
+import base64, os
 from pathlib import Path
 p = Path("/etc/avrag-rs/avrag.env")
 text = p.read_text()
@@ -187,6 +211,9 @@ updates = {
     "MARKITDOWN_BIN": "markitdown",
     "ANYDOC_BIN": "anydoc-extract",
 }
+rates_b64 = os.environ.get("RATES_JSON_B64", "").strip()
+if rates_b64:
+    updates["PLATFORM_OFFICIAL_RATES_JSON"] = base64.b64decode(rates_b64).decode()
 lines = text.splitlines()
 out = []
 seen = set()

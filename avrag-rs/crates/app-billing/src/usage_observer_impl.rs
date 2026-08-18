@@ -763,6 +763,15 @@ mod tests {
     #[tokio::test]
     async fn recorded_chat_usage_debits_wallet_at_list_price() {
         let _env_guard = ENV_LOCK.lock().unwrap();
+        // Deterministic flat test rate: 1M flash input → 150 list fen.
+        let prev_rates = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+        // SAFETY: serialized by ENV_LOCK; restored before the guard drops.
+        unsafe {
+            std::env::set_var(
+                "PLATFORM_OFFICIAL_RATES_JSON",
+                r#"[{"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#,
+            )
+        };
         let wallet = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         // Seed ¥20 grant.
@@ -804,7 +813,7 @@ mod tests {
         observer.record_chat_for(&tenant, &record).await;
 
         let w = wallet.get_wallet(user_id).await.unwrap().unwrap();
-        // 1M input flash → list 150 fen
+        // 1M input flash → official 100 fen → list 150 fen
         assert_eq!(w.balance_fen, app_core::SIGNUP_GRANT_FEN - 150);
 
         let ledger = wallet.list_ledger(user_id, 10).await.unwrap();
@@ -814,11 +823,27 @@ mod tests {
             .collect();
         assert_eq!(debits.len(), 1);
         assert_eq!(debits[0].amount_fen, -150);
+        // SAFETY: serialized by ENV_LOCK.
+        unsafe {
+            match prev_rates {
+                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
+                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+            }
+        }
     }
 
     #[tokio::test]
     async fn llm_byok_skip_debits_embedding_not_chat() {
         let _env_guard = ENV_LOCK.lock().unwrap();
+        // bge-m3 must be billable for the platform-embedding debit below.
+        let prev_rates = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+        // SAFETY: serialized by ENV_LOCK; restored before the guard drops.
+        unsafe {
+            std::env::set_var(
+                "PLATFORM_OFFICIAL_RATES_JSON",
+                r#"[{"model_contains":"bge-m3","input":7}]"#,
+            )
+        };
         let wallet = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         wallet
@@ -884,6 +909,13 @@ mod tests {
             after < app_core::SIGNUP_GRANT_FEN,
             "platform embedding must still debit under LLM-only BYOK skip, balance={after}"
         );
+        // SAFETY: serialized by ENV_LOCK.
+        unsafe {
+            match prev_rates {
+                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
+                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+            }
+        }
     }
 
     #[tokio::test]

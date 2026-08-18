@@ -802,6 +802,33 @@ impl SseUsageScanner {
 mod tests {
     use super::*;
 
+    /// Serializes `PLATFORM_OFFICIAL_RATES_JSON` mutation across tests.
+    static RATES_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Rates rows covering the platform defaults checked below (reranker +
+    /// deepseek pro); gpt-4o stays unbillable on purpose.
+    const TEST_RATES_JSON: &str = r#"[
+        {"model_contains":"bge-reranker","input":7},
+        {"model_contains":"v4-pro","peak":{"input":900,"cache":30,"output":2700},"off_peak":{"input":450,"cache":15,"output":1350}}
+    ]"#;
+
+    /// Run `f` with [`TEST_RATES_JSON`] configured, restoring the prior env.
+    fn with_test_rates<T>(f: impl FnOnce() -> T) -> T {
+        let _guard = RATES_ENV_LOCK.lock().unwrap();
+        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
+        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", TEST_RATES_JSON) };
+        let out = f();
+        // SAFETY: serialized by RATES_ENV_LOCK.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
+                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+            }
+        }
+        out
+    }
+
     fn deepseek_usage_chunk() -> String {
         concat!(
             "data: {\"id\":\"chatcmpl-1\",\"model\":\"deepseek-v4-pro\",\"choices\":[],",
@@ -881,13 +908,17 @@ mod tests {
 
     #[test]
     fn rerank_model_is_whitelisted_as_embed_tier() {
-        // Default platform rerank pool (SiliconFlow bge-reranker) prices under
-        // the embed-tier whitelist — provider-derived or explicit both match.
-        assert!(
-            avrag_billing::official_rates_for("siliconflow", "Pro/BAAI/bge-reranker-v2-m3")
-                .is_some()
-        );
-        assert!(avrag_billing::official_rates_for("custom", "BAAI/bge-reranker-v2-m3").is_some());
+        with_test_rates(|| {
+            // Default platform rerank pool (SiliconFlow bge-reranker) prices under
+            // the configured embed-tier rates — provider-derived or explicit both match.
+            assert!(
+                avrag_billing::official_rates_for("siliconflow", "Pro/BAAI/bge-reranker-v2-m3")
+                    .is_some()
+            );
+            assert!(
+                avrag_billing::official_rates_for("custom", "BAAI/bge-reranker-v2-m3").is_some()
+            );
+        });
     }
 
     #[test]
@@ -911,22 +942,29 @@ mod tests {
         let upstream = RelayUpstream::from_model_config(&config).expect("configured");
         assert_eq!(upstream.provider, "deepseek");
         assert_eq!(upstream.base_url, "https://api.deepseek.com");
-        // Platform defaults are on the wallet whitelist (deepseek pro / dashscope embed).
-        assert!(avrag_billing::official_rates_for(&upstream.provider, &upstream.model).is_some());
+        with_test_rates(|| {
+            // Platform defaults are billable under the configured rates.
+            assert!(
+                avrag_billing::official_rates_for(&upstream.provider, &upstream.model).is_some()
+            );
+        });
         config.model = " ".to_string();
         assert!(RelayUpstream::from_model_config(&config).is_none());
     }
 
     #[test]
     fn whitelist_refusal_shape_is_config_error() {
-        let upstream = RelayUpstream {
-            base_url: "https://api.openai.com/v1".to_string(),
-            api_key: "sk-test".to_string(),
-            model: "gpt-4o".to_string(),
-            provider: "openai".to_string(),
-            timeout_ms: 1000,
-        };
-        let response = ensure_whitelisted(&upstream, "AGENT_LLM").unwrap_err();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        // gpt-4o matches no configured row — refused even with rates configured.
+        with_test_rates(|| {
+            let upstream = RelayUpstream {
+                base_url: "https://api.openai.com/v1".to_string(),
+                api_key: "sk-test".to_string(),
+                model: "gpt-4o".to_string(),
+                provider: "openai".to_string(),
+                timeout_ms: 1000,
+            };
+            let response = ensure_whitelisted(&upstream, "AGENT_LLM").unwrap_err();
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        });
     }
 }
