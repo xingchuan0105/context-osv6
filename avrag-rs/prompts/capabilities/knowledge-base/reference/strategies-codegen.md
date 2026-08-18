@@ -3,7 +3,7 @@
 按需加载：`{"skill_request": ["knowledge-base/strategies-codegen"]}`。  
 方法签名以 **knowledge-base** skill 为准；失败形态见本轮 `[sandbox_error]`。
 
-本文件只谈 **沙箱写码形态**：一次可执行、少噪声。检索策略（entity-first / 表 / grounding）在对应 spoke。
+本文件只谈 **其余写码噪声**（依赖链、print 占窗）。最小 dense 可执行形态（FS-C1）已在 **knowledge-base skill** 常驻。检索策略（entity-first / 表 / grounding）在对应 spoke。
 
 ## 写码形态（观察）
 
@@ -13,12 +13,6 @@
 下列 few-shot 使用**与评测语料无关的虚构域**，只说明形态。
 
 ## Few-shot
-
-### FS-C1 — 一次可执行 dense（无旧名、无 top_k）
-
-**情境**：要核验虚构实体「北麓茶庄」的注册地字段。  
-**观察**：代码块内为 `hits = await client.dense("北麓茶庄 注册地")`，再 `print` 命中条数与前几条 id/短摘；无 `import os`、无 `top_k=`、无 `dense_search`。  
-**读出**：stderr 空且 tool_trace 出现 `dense_retrieval` Ok 时，说明本轮至少完成了契约内检索。
 
 ### FS-C2 — 依赖链不硬 gather
 

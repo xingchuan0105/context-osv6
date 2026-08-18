@@ -9,7 +9,7 @@ description: >-
 disclose_at: retrieve
 atomic: true
 applicable_modes: [rag]
-version: "6.1"
+version: "6.2"
 ---
 
 ## 证据（硬句）
@@ -32,11 +32,19 @@ version: "6.1"
 | 档案 | `await client.doc_summary(doc_ids=None)` | metadata+summary+sections；非逐字证据正文 |
 | 跨块 | `await client.save(path, data)` / `await client.load(path)` | 仅相对路径 |
 
-无 `top_k`；无独立 `client.graph`。图扩邻由 `dense` 触发，命中与 dense 同 alias 空间。entity-first / 双端种子见 **strategies**。
+无 `top_k`；无独立 `client.graph`。图扩邻由 `dense` 触发，命中与 dense 同 alias 空间。entity-first / 双端种子见 **strategies**。依赖链 / 大段 print 噪声见 **strategies-codegen**（按需）。
 
 **返回形状：** `dense`/`lexical`/`doc_*` → list[dict]（`chunk_id`/`content`/`doc_id`/`score`/`alias`）；`grep` → `{total_hits, matched_by, hits[], chunks[], truncated}`；`struct_catalog` → `{relations[]}`（描述表，不含答案单元格）；`struct_query` → `{ok, columns, rows, row_count, …}`；`fts: true` 时可用 `match_bm25`（细节见 **api-detail**）。
 
-空结果 / 截断 / 失败对照表、最小成功代码形态、回传块格式：见 **api-detail**（首轮或沙箱错误后披露；也可 `{"skill_request":["knowledge-base/api-detail"]}`）。
+空结果 / 截断 / 失败对照表、回传块格式：见 **api-detail**（首轮或沙箱错误后披露；也可 `{"skill_request":["knowledge-base/api-detail"]}`）。
+
+## 写码形态（FS-C1）
+
+虚构域，只说明形态。
+
+**情境**：核验「北麓茶庄」的注册地字段。  
+**观察**：代码块内为 `hits = await client.dense("北麓茶庄 注册地")`，再 `print` 命中条数与前几条 id/短摘；同块未见 `import os`、`top_k=`、`dense_search`。  
+**读出**：stderr 空且宿主 observation 出现 dense Ok 时，本轮至少完成了契约内检索。
 
 ## KEEP（工作集）
 

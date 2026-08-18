@@ -264,10 +264,7 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
 }
 
 /// JSON-level RRF over channel lists (dedupe by chunk_id).
-fn rrf_merge_json_lists(
-    channels: [(&str, Vec<Value>); 3],
-    rrf_k: usize,
-) -> Vec<Value> {
+fn rrf_merge_json_lists(channels: [(&str, Vec<Value>); 3], rrf_k: usize) -> Vec<Value> {
     use std::collections::HashMap;
     let mut scores: HashMap<String, f64> = HashMap::new();
     let mut best: HashMap<String, Value> = HashMap::new();
@@ -347,7 +344,43 @@ fn count_bridge_tool_chunks(result: &ToolResult) -> usize {
     }
 }
 
-/// Resolve stdout text shown to the model after codegen; bridge chunks fill empty stdout.
+/// BASE SDK tools whose Ok `data` is the answer (clock / calc / weather), not retrieval chunks.
+fn is_base_sdk_result(tool: &str) -> bool {
+    matches!(tool, "user_context" | "calculator" | "weather_query")
+}
+
+/// Serialize Ok BASE-tool payloads when the model did not `print` them.
+fn base_tools_observation_stdout(block_bridge: &[ToolResult]) -> Option<String> {
+    let mut parts = Vec::new();
+    for result in block_bridge {
+        if result.status != ToolStatus::Ok || !is_base_sdk_result(&result.tool) {
+            continue;
+        }
+        let Some(data) = &result.data else {
+            continue;
+        };
+        parts.push(format!("{}: {}", result.tool, data));
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+fn fill_empty_stdout(exec_stdout: &str, block_bridge: &[ToolResult]) -> String {
+    let retrieval = bridge_tool_results_to_observation_stdout(block_bridge);
+    let base = base_tools_observation_stdout(block_bridge);
+    match (retrieval, base) {
+        (Some(r), Some(b)) => format!("{r}\n{b}"),
+        (Some(r), None) => r,
+        (None, Some(b)) => b,
+        (None, None) => exec_stdout.to_string(),
+    }
+}
+
+/// Resolve stdout text shown to the model after codegen; bridge chunks and BASE
+/// tool Ok payloads (`user_context` / `calculator` / `weather_query`) fill empty stdout.
 ///
 /// With `GRAPH_L_EVAL_RRF=1`, prefer block-level three-way fused observation over raw prints
 /// so dense∪BM25∪graph is always what the model and exit policy see.
@@ -362,8 +395,7 @@ pub fn codegen_observation_stdout(exec_stdout: &str, block_bridge: &[ToolResult]
     {
         return exec_stdout.to_string();
     }
-    bridge_tool_results_to_observation_stdout(block_bridge)
-        .unwrap_or_else(|| exec_stdout.to_string())
+    fill_empty_stdout(exec_stdout, block_bridge)
 }
 
 #[cfg(test)]
@@ -390,9 +422,7 @@ mod tests {
     }
 
     fn force_l_eval_rrf(on: bool) -> LEvalForceGuard {
-        let serial = L_EVAL_TEST_SERIAL
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let serial = L_EVAL_TEST_SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let prev = L_EVAL_RRF_OVERRIDE.swap(if on { 1 } else { 2 }, Ordering::Relaxed);
         LEvalForceGuard {
             _serial: serial,
@@ -433,6 +463,56 @@ mod tests {
         assert!(crate::react_loop::exit_policy::code_execution_has_evidence(
             &observation
         ));
+    }
+
+    #[test]
+    fn empty_stdout_includes_user_context_ok_payload() {
+        let _force = force_l_eval_rrf(false);
+        let bridge = vec![tr(
+            "user_context",
+            ToolStatus::Ok,
+            Some(serde_json::json!({
+                "geo": {
+                    "city": null,
+                    "confidence": "none",
+                    "country": null,
+                    "reason": "missing_client_ip",
+                    "region": null,
+                    "source": "maxmind_geolite2"
+                },
+                "local_time": "2026-07-19 15:04:05",
+                "timezone": "Asia/Shanghai"
+            })),
+        )];
+        let stdout = codegen_observation_stdout("", &bridge);
+        assert!(stdout.contains("2026-07-19 15:04:05"), "stdout={stdout}");
+        assert!(stdout.contains("user_context"), "stdout={stdout}");
+        assert!(stdout.contains("Asia/Shanghai"), "stdout={stdout}");
+    }
+
+    #[test]
+    fn printed_stdout_wins_over_user_context_bridge() {
+        let _force = force_l_eval_rrf(false);
+        let bridge = vec![tr(
+            "user_context",
+            ToolStatus::Ok,
+            Some(serde_json::json!({"local_time": "2026-07-19 15:04:05"})),
+        )];
+        let stdout = codegen_observation_stdout("already printed\n", &bridge);
+        assert_eq!(stdout, "already printed\n");
+    }
+
+    #[test]
+    fn empty_stdout_includes_calculator_ok_payload() {
+        let _force = force_l_eval_rrf(false);
+        let bridge = vec![tr(
+            "calculator",
+            ToolStatus::Ok,
+            Some(serde_json::json!({"expression": "(1+2)*3", "result": 9.0})),
+        )];
+        let stdout = codegen_observation_stdout("", &bridge);
+        assert!(stdout.contains("calculator"), "stdout={stdout}");
+        assert!(stdout.contains("9"), "stdout={stdout}");
     }
 
     #[test]
@@ -567,7 +647,12 @@ mod tests {
         let stdout = codegen_observation_stdout(r#"{"chunk_id":"from_print"}"#, &bridge);
         let v: serde_json::Value = serde_json::from_str(&stdout).expect("json");
         assert_eq!(v["l_eval_rrf"], true);
-        assert!(v["chunks"].as_array().map(|a| a.len() >= 2).unwrap_or(false));
+        assert!(
+            v["chunks"]
+                .as_array()
+                .map(|a| a.len() >= 2)
+                .unwrap_or(false)
+        );
         assert!(!stdout.contains("from_print"));
     }
 

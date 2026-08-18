@@ -1,7 +1,7 @@
 # 检索策略层（knowledge-base/strategies）
 
 首轮随 knowledge-base 披露的**薄层**：覆盖清单、entity-first 原则、**唯一** spoke 目录（含加载触发）、默认路径、终止观察、短 gotcha。  
-Few-shot 与长 gotcha 只在场景 spoke 中，按需 `skill_request` 加载。
+Few-shot 与长 gotcha 默认在场景 spoke 中，按需 `skill_request` 加载。最小 dense 可执行形态（FS-C1）在 knowledge-base skill 常驻。
 
 ## 多主张覆盖（轻量清单）
 
@@ -42,7 +42,7 @@ Claim checklist (copy and tick against returns):
 | `knowledge-base/strategies-tables` | 表路径、行数/去重、grep vs struct | 表格 / 多少行 / COUNT / 去重 / 管道行 / struct | `["knowledge-base/strategies-tables"]` |
 | `knowledge-base/how-to-read-tables` | 管道表通用读法（薄） | 读 `\| … \|` 行、第一个/表序、total_hits | `["knowledge-base/how-to-read-tables"]` |
 | `knowledge-base/strategies-grounding` | 结构人数≠访谈、跨文档、未覆盖边界 | 调研人数、跨文档联系、半截覆盖、业界对照槽 | `["knowledge-base/strategies-grounding"]` |
-| `knowledge-base/strategies-codegen` | 沙箱方法名 / top_k / await 噪声 | 沙箱报错、错误 API 名、大段 print 占窗 | `["knowledge-base/strategies-codegen"]` |
+| `knowledge-base/strategies-codegen` | 依赖链 gather、大段 print 占窗 | 沙箱报错、catalog→query 并行空回、print 占窗 | `["knowledge-base/strategies-codegen"]` |
 | `knowledge-base/strategies` | 重载本薄层 | 需重新置顶薄层清单时 | `["knowledge-base/strategies"]` |
 
 表类题常 **tables + how-to-read-tables** 一并请求。一次可并请求多个 spoke；环境不默认塞入全部 few-shot。
@@ -78,4 +78,4 @@ Claim checklist (copy and tick against returns):
 | 零轮 `client.*` 即停止 | 文档侧均未覆盖 | 常识当库内已检索 |
 | `stderr` 非空 | 检索面未更新 | 读成「语料不存在」 |
 
-表通用读法 → **how-to-read-tables**；表路径/多口径 FS → **strategies-tables**；拒答与跨文档边界 → **strategies-grounding**。沙箱报错形态见本轮 `[sandbox_error]`；写码 few-shot → `{"skill_request": ["knowledge-base/strategies-codegen"]}`。
+表通用读法 → **how-to-read-tables**；表路径/多口径 FS → **strategies-tables**；拒答与跨文档边界 → **strategies-grounding**。沙箱报错形态见本轮 `[sandbox_error]`。最小 dense 写码形态见 knowledge-base skill（FS-C1）；依赖链 / print 噪声 → `{"skill_request": ["knowledge-base/strategies-codegen"]}`。
