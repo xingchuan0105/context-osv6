@@ -60,6 +60,7 @@ export function WorkspaceShareCenterSurface({
   const publishGate = useDesktopPublishGate(workspaceId);
   const center = useShareCenter(publishGate.shareWorkspaceId, {
     queriesEnabled: publishGate.queriesEnabled,
+    sharePublicOrigin: publishGate.sharePublicOrigin,
   });
   const { actionError, actionMessage, settingsQuery, quotaSummary } = center;
   const [section, setSection] = useState<ShareCenterSection>("controls");

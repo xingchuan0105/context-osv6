@@ -52,10 +52,10 @@ WorkspacePublishBundle v1
 
 | Method | Path | 说明 |
 |--------|------|------|
-| POST | `/api/v1/workspaces/{id}/publish/sessions` | 创建上传会话；返回 `upload_id` + 分片大小 |
-| PUT | `/api/v1/workspaces/{id}/publish/sessions/{upload_id}/parts/{n}` | 分片 body |
-| POST | `/api/v1/workspaces/{id}/publish/sessions/{upload_id}/commit` | 校验指纹 → 导入 |
-| GET | `/api/v1/workspaces/{id}/publish/status` | `never\|publishing\|ready\|dirty\|failed` |
+| POST | `/api/v1/workspaces/publish/sessions` | 创建上传会话（body 含 `local_workspace_id`）；返回 `upload_id` + `cloud_workspace_id` |
+| PUT | `/api/v1/workspaces/publish/sessions/{upload_id}/parts/{n}` | 分片 body：`Content-Encoding: zstd` 的 JSON |
+| POST | `/api/v1/workspaces/publish/sessions/{upload_id}/commit` | 校验指纹 → 导入 |
+| GET | `/api/v1/workspaces/publish/status?local_workspace_id=` | `never\|publishing\|ready\|failed` |
 
 鉴权：Bearer 云用户；写入 `owner_user_id` = 该用户。
 

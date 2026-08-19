@@ -225,9 +225,17 @@ pub(crate) fn build_worker_embedding_client(
     config: &app_core::ModelProviderConfig,
     feature: &str,
     observer: &WorkerUsageObserver,
+    cache: Option<std::sync::Arc<dyn avrag_rag_core_ports::CachePort>>,
+    rate_gate: Option<std::sync::Arc<dyn avrag_llm::EmbedRateGate>>,
 ) -> Option<avrag_llm::EmbeddingClient> {
     config.to_llm_config().map(|cfg| {
         let mut client = avrag_llm::EmbeddingClient::new(cfg).with_feature(feature);
+        if let Some(cache) = cache {
+            client = client.with_cache(cache);
+        }
+        if let Some(gate) = rate_gate {
+            client = client.with_rate_gate(gate);
+        }
         if let Some((obs, tenant)) = observer {
             client = client.with_observer(obs.clone(), tenant.clone());
         }
@@ -240,9 +248,17 @@ pub(crate) fn build_worker_embedding_client_from_secret(
     secret: Option<&app_core::ResolvedProviderSecret>,
     feature: &str,
     observer: &WorkerUsageObserver,
+    cache: Option<std::sync::Arc<dyn avrag_rag_core_ports::CachePort>>,
+    rate_gate: Option<std::sync::Arc<dyn avrag_llm::EmbedRateGate>>,
 ) -> Option<avrag_llm::EmbeddingClient> {
     let cfg = secret?.to_llm_config()?;
     let mut client = avrag_llm::EmbeddingClient::new(cfg).with_feature(feature);
+    if let Some(cache) = cache {
+        client = client.with_cache(cache);
+    }
+    if let Some(gate) = rate_gate {
+        client = client.with_rate_gate(gate);
+    }
     if let Some((obs, tenant)) = observer {
         client = client.with_observer(obs.clone(), tenant.clone());
     }

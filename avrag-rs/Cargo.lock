@@ -353,6 +353,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+ "zstd",
 ]
 
 [[package]]
@@ -1053,6 +1054,7 @@ dependencies = [
  "avrag-billing",
  "avrag-cache-redis",
  "avrag-llm",
+ "avrag-rag-core-ports",
  "avrag-retrieval-data-plane",
  "avrag-storage-milvus",
  "avrag-storage-pg",
@@ -6765,6 +6767,7 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+ "zstd",
 ]
 
 [[package]]

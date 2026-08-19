@@ -19,9 +19,9 @@ pub use app_state::{
 };
 
 pub use adapters::{
-    build_rate_limit_backend, PgBillingStoreAdapter, PgProviderSecretStoreAdapter,
-    PgReferralStoreAdapter, PgUsageLimitStoreAdapter, PgWalletStoreAdapter,
-    RedisFixedWindowRateLimiter, RedisRateLimitBackend,
+    build_embed_rate_gate, build_rate_limit_backend, PgBillingStoreAdapter,
+    PgProviderSecretStoreAdapter, PgReferralStoreAdapter, PgUsageLimitStoreAdapter,
+    PgWalletStoreAdapter, RedisFixedWindowRateLimiter, RedisRateLimitBackend,
 };
 
 use adapters::{
@@ -264,13 +264,19 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         chat,
         postgres: None,
         desktop_token_store: Arc::new(app_core::MemoryDesktopTokenStore::new()),
-        publish: WorkspacePublishRuntime::memory(PublishFingerprint::new(
-            config.embedding.model.clone(),
-            config.milvus.text_vector_dim,
-        )),
+        publish: WorkspacePublishRuntime::memory(publish_fingerprint_from_config(&config)),
         redis_url: config.redis.url.clone(),
         rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     }
+}
+
+fn publish_fingerprint_from_config(config: &AppConfig) -> PublishFingerprint {
+    let mut fingerprint = PublishFingerprint::new(
+        config.embedding.model.clone(),
+        config.milvus.text_vector_dim,
+    );
+    fingerprint.multimodal_vector_dim = Some(config.milvus.multimodal_vector_dim);
+    fingerprint
 }
 
 pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> {
@@ -309,6 +315,17 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     // lock store — not one round trip per embed/retrieve/search inside a query.
     let cache_store: Option<Arc<dyn avrag_rag_core_ports::CachePort>> =
         Some(Arc::new(avrag_rag_core_ports::MemoryCache::new()));
+    let embed_rate_gate = {
+        let (fallback_rpm, fallback_tpm) = config
+            .embedding
+            .to_llm_config()
+            .map(|c| (c.effective_rpm_limit(), c.effective_tpm_limit()))
+            .unwrap_or((60, 1_000_000));
+        Some(build_embed_rate_gate(
+            &config.redis.url,
+            avrag_llm::EmbeddingBudget::from_env(fallback_rpm, fallback_tpm),
+        ))
+    };
     app_chat::share_cache::init_shared_cache(cache_store.clone());
     app_chat::chat_private::init_funds_notify_cache(cache_store.clone());
     let search_executor = Some(Arc::new({
@@ -401,10 +418,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     )
     .await;
 
-    let publish_fingerprint = PublishFingerprint::new(
-        config.embedding.model.clone(),
-        config.milvus.text_vector_dim,
-    );
+    let publish_fingerprint = publish_fingerprint_from_config(&config);
     let mut retrieval_data_plane: Option<Arc<dyn RetrievalDataPlane>> = None;
     let mut retrieval_export: Option<Arc<dyn RetrievalExportPort>> = None;
 
@@ -414,12 +428,14 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             &config.embedding,
             cache_store.clone(),
             embedding_observer.clone(),
+            embed_rate_gate.clone(),
         )
         .or_else(|| {
             embedding_client_from_secret(
                 embedding_secret.as_ref(),
                 cache_store.clone(),
                 embedding_observer.clone(),
+                embed_rate_gate.clone(),
             )
         });
 
@@ -429,6 +445,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                     &config.mm_embedding,
                     cache_store.clone(),
                     embedding_observer.clone(),
+                    embed_rate_gate.clone(),
                 );
                 let planner = make_planner(&config.agent_llm, cache_store.clone());
                 let reranker = make_reranker(&config.rerank)

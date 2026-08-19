@@ -14,6 +14,7 @@ mod pg_referral_store;
 mod pg_wallet_store;
 mod pg_provider_secret_store;
 mod postgres_health;
+mod embed_rate_gate;
 mod redis_rate_limiter;
 
 #[cfg(test)]
@@ -34,6 +35,7 @@ pub use pg_share_store::PgShareStoreAdapter;
 pub use pg_usage_limit_store::PgUsageLimitStoreAdapter;
 pub use pg_wallet_store::PgWalletStoreAdapter;
 pub use postgres_health::PgHealthAdapter;
+pub use embed_rate_gate::build_embed_rate_gate;
 pub use redis_rate_limiter::{
     RedisFixedWindowRateLimiter, RedisRateLimitBackend, build_rate_limit_backend,
 };

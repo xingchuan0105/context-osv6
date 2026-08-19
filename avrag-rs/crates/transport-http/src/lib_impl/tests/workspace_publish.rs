@@ -129,6 +129,97 @@ async fn publish_commit_without_data_plane_is_unavailable() {
         .header(middleware::HEADER_USER_ID, "00000000-0000-0000-0000-000000000002")
         .body(Body::empty())
         .unwrap();
-    let commit_resp = app.oneshot(commit).await.unwrap();
+    let commit_resp = app.clone().oneshot(commit).await.unwrap();
     assert_eq!(commit_resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let status = Request::builder()
+        .uri(format!(
+            "/api/v1/workspaces/publish/status?local_workspace_id={}",
+            Uuid::from_u128(14)
+        ))
+        .method("GET")
+        .header(middleware::HEADER_OWNER_USER_ID, "00000000-0000-0000-0000-000000000001")
+        .header(middleware::HEADER_USER_ID, "00000000-0000-0000-0000-000000000002")
+        .body(Body::empty())
+        .unwrap();
+    let status_resp = app.oneshot(status).await.unwrap();
+    assert_eq!(status_resp.status(), StatusCode::OK);
+    let status_body = to_bytes(status_resp.into_body(), usize::MAX).await.unwrap();
+    let status_payload: serde_json::Value = serde_json::from_slice(&status_body).unwrap();
+    assert_eq!(status_payload["status"], "failed");
+}
+
+fn sample_part_json(fingerprint: PublishFingerprint, document_id: Uuid) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "document_id": document_id,
+        "filename": "a.md",
+        "mime_type": "text/markdown",
+        "status": "completed",
+        "summary": null,
+        "chunk_count": 0,
+        "export": {
+            "manifest": {
+                "fingerprint": fingerprint,
+                "owner_user_id": "00000000-0000-0000-0000-000000000002",
+                "workspace_id": null,
+                "document_id": document_id,
+                "parse_run_id": Uuid::nil(),
+                "doc_version": 1,
+                "text_chunk_count": 0,
+                "multimodal_chunk_count": 0,
+                "entity_count": 0,
+                "relation_count": 0,
+                "graph_passage_count": 0
+            },
+            "batch": {
+                "owner_user_id": "00000000-0000-0000-0000-000000000002",
+                "workspace_id": null,
+                "document_id": document_id,
+                "parse_run_id": Uuid::nil(),
+                "doc_version": 1,
+                "text_chunks": [],
+                "multimodal_chunks": [],
+                "entities": [],
+                "relations": [],
+                "graph_passages": []
+            }
+        }
+    }))
+    .expect("part json")
+}
+
+#[tokio::test]
+async fn publish_part_accepts_zstd_content_encoding() {
+    let state = test_app_state();
+    let app = build_router(state);
+    let local = Uuid::from_u128(15);
+    let create = Request::builder()
+        .uri("/api/v1/workspaces/publish/sessions")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header(middleware::HEADER_OWNER_USER_ID, "00000000-0000-0000-0000-000000000001")
+        .header(middleware::HEADER_USER_ID, "00000000-0000-0000-0000-000000000002")
+        .body(Body::from(session_body(default_fingerprint(), local)))
+        .unwrap();
+    let create_resp = app.clone().oneshot(create).await.unwrap();
+    assert_eq!(create_resp.status(), StatusCode::OK);
+    let create_body = to_bytes(create_resp.into_body(), usize::MAX).await.unwrap();
+    let created: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
+    let upload_id = created["upload_id"].as_str().unwrap();
+
+    let json = sample_part_json(default_fingerprint(), Uuid::from_u128(9));
+    let compressed = zstd::encode_all(&json[..], 3).expect("zstd");
+    let put = Request::builder()
+        .uri(format!(
+            "/api/v1/workspaces/publish/sessions/{upload_id}/parts/0"
+        ))
+        .method("PUT")
+        .header("Content-Type", "application/json")
+        .header("Content-Encoding", "zstd")
+        .header(middleware::HEADER_OWNER_USER_ID, "00000000-0000-0000-0000-000000000001")
+        .header(middleware::HEADER_USER_ID, "00000000-0000-0000-0000-000000000002")
+        .body(Body::from(compressed))
+        .unwrap();
+    let put_resp = app.oneshot(put).await.unwrap();
+    assert_eq!(put_resp.status(), StatusCode::NO_CONTENT);
 }

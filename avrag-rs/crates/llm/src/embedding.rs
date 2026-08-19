@@ -1,4 +1,5 @@
 use crate::ModelProviderConfig;
+use crate::embed_rate_limit::{EmbedLane, EmbedRateGate, EmbedRateRequest};
 use crate::usage_observer::{EmbeddingUsageRecord, TenantContext, UsageObserver};
 use anyhow::Context;
 use serde::Deserialize;
@@ -156,6 +157,7 @@ pub struct EmbeddingClient {
     config: ModelProviderConfig,
     client: reqwest::Client,
     rate_limiter: Option<crate::SharedRateLimiter>,
+    rate_gate: Option<Arc<dyn EmbedRateGate>>,
     cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
     feature: String,
     observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
@@ -188,6 +190,7 @@ impl EmbeddingClient {
             config,
             client,
             rate_limiter,
+            rate_gate: None,
             cache: None,
             feature: "document_embedding".to_string(),
             observer: None,
@@ -196,6 +199,11 @@ impl EmbeddingClient {
 
     pub fn with_cache(mut self, cache: Arc<dyn avrag_rag_core_ports::CachePort>) -> Self {
         self.cache = Some(cache);
+        self
+    }
+
+    pub fn with_rate_gate(mut self, gate: Arc<dyn EmbedRateGate>) -> Self {
+        self.rate_gate = Some(gate);
         self
     }
 
@@ -231,7 +239,15 @@ impl EmbeddingClient {
         texts.iter().map(|t| crate::count_tokens(t)).sum()
     }
 
-    fn check_rate_limit(&self, estimated_tokens: usize) -> anyhow::Result<()> {
+    async fn acquire_embed_permit(&self, estimated_tokens: usize) -> anyhow::Result<()> {
+        if let Some(gate) = &self.rate_gate {
+            return gate
+                .acquire(EmbedRateRequest {
+                    lane: EmbedLane::from_feature(&self.feature),
+                    tokens: estimated_tokens,
+                })
+                .await;
+        }
         if let Some(limiter) = &self.rate_limiter {
             match limiter.check_request(estimated_tokens) {
                 Ok(_) => Ok(()),
@@ -293,7 +309,8 @@ impl EmbeddingClient {
         if !missing_texts.is_empty() {
             let mut missing_offset = 0usize;
             for batch in missing_texts.chunks(TEXT_EMBEDDING_BATCH_SIZE) {
-                self.check_rate_limit(self.estimate_tokens_for_texts(batch))?;
+                self.acquire_embed_permit(self.estimate_tokens_for_texts(batch))
+                    .await?;
                 let batch_vectors = self.embed_openai_compatible_text(batch).await?;
                 anyhow::ensure!(
                     batch_vectors.len() == batch.len(),
@@ -357,7 +374,7 @@ impl EmbeddingClient {
         }
 
         let estimated_tokens = estimate_mm_tokens(input);
-        self.check_rate_limit(estimated_tokens)?;
+        self.acquire_embed_permit(estimated_tokens).await?;
 
         let (vector, actual_tokens_u32) = if self.uses_openai_vl_embedding() {
             self.embed_multimodal_fused_openai_vl(input, effective_dimension)

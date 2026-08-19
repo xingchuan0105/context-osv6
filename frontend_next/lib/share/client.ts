@@ -187,12 +187,16 @@ function mapShareSettings(raw: RawShareSettings): ShareSettings {
   };
 }
 
-export function buildShareUrl(shareToken: string) {
+export function buildShareUrl(shareToken: string, publicOrigin?: string | null) {
   if (!shareToken.trim()) {
     return "";
   }
 
   const relativePath = `/shared/kb/${shareToken}`;
+  const origin = publicOrigin?.trim();
+  if (origin) {
+    return new URL(relativePath, origin).toString();
+  }
 
   if (typeof window === "undefined") {
     return relativePath;

@@ -151,6 +151,8 @@ REV="$REV"
 ASSETS_ONLY="$ASSETS_ONLY"
 NO_RESTART="$NO_RESTART"
 RATES_JSON_B64="$RATES_JSON_B64"
+EMBEDDING_PROVIDER_RPM="${EMBEDDING_PROVIDER_RPM:-}"
+EMBEDDING_PROVIDER_TPM="${EMBEDDING_PROVIDER_TPM:-}"
 
 STAGE=/tmp/avrag-backend-stage
 rm -rf "\$STAGE"
@@ -201,7 +203,7 @@ echo "deploy-backend: runtime image OK (markitdown+anydoc-extract+lit+pdfium)"
 
 # Point env at in-image binaries.
 if [[ -f /etc/avrag-rs/avrag.env ]]; then
-  export RATES_JSON_B64
+  export RATES_JSON_B64 EMBEDDING_PROVIDER_RPM EMBEDDING_PROVIDER_TPM
   python3 - <<'PY'
 import base64, os
 from pathlib import Path
@@ -214,6 +216,12 @@ updates = {
 rates_b64 = os.environ.get("RATES_JSON_B64", "").strip()
 if rates_b64:
     updates["PLATFORM_OFFICIAL_RATES_JSON"] = base64.b64decode(rates_b64).decode()
+rpm = os.environ.get("EMBEDDING_PROVIDER_RPM", "").strip()
+tpm = os.environ.get("EMBEDDING_PROVIDER_TPM", "").strip()
+if rpm:
+    updates["EMBEDDING_PROVIDER_RPM"] = rpm
+if tpm:
+    updates["EMBEDDING_PROVIDER_TPM"] = tpm
 lines = text.splitlines()
 out = []
 seen = set()

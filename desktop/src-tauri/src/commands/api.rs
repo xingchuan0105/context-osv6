@@ -1,8 +1,66 @@
 //! Unified desktop IPC error shape + HTTP proxy to local product API.
 
+use std::io::Read;
+
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 use super::local_product::product_api_base_url;
+
+const LOCAL_API_TIMEOUT_SECS: u64 = 60;
+const PUBLISH_EXPORT_TIMEOUT_SECS: u64 = 180;
+const ZSTD_MAX_DECODE: usize = 128 * 1024 * 1024;
+const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+
+fn is_publish_export_path(path: &str) -> bool {
+    path.contains("/publish/export")
+}
+
+fn looks_like_zstd(bytes: &[u8]) -> bool {
+    bytes.len() >= 4 && bytes[..4] == ZSTD_MAGIC
+}
+
+fn encoding_is_zstd(value: &str) -> bool {
+    value.split(',').any(|part| {
+        part.trim()
+            .split(';')
+            .next()
+            .is_some_and(|token| token.eq_ignore_ascii_case("zstd"))
+    })
+}
+
+fn decode_response_body(encoding: &str, bytes: &[u8]) -> Result<Vec<u8>, IpcApiError> {
+    if encoding_is_zstd(encoding) || looks_like_zstd(bytes) {
+        let mut decoder = zstd::stream::read::Decoder::new(bytes)
+            .map_err(|err| IpcApiError::internal(format!("zstd: {err}")))?;
+        let mut out = Vec::new();
+        let mut buf = [0u8; 32 * 1024];
+        loop {
+            let n = decoder
+                .read(&mut buf)
+                .map_err(|err| IpcApiError::internal(format!("zstd: {err}")))?;
+            if n == 0 {
+                break;
+            }
+            if out.len().saturating_add(n) > ZSTD_MAX_DECODE {
+                return Err(IpcApiError::new(
+                    413,
+                    "publish_export_too_large",
+                    "decompressed publish export exceeds 128MiB",
+                ));
+            }
+            out.extend_from_slice(&buf[..n]);
+        }
+        return Ok(out);
+    }
+    if bytes.len() > ZSTD_MAX_DECODE {
+        return Err(IpcApiError::new(
+            413,
+            "publish_export_too_large",
+            "publish export exceeds 128MiB",
+        ));
+    }
+    Ok(bytes.to_vec())
+}
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 pub struct IpcApiError {
@@ -92,8 +150,14 @@ pub async fn api_call(
     let url = format!("{base}{path}");
     let method = method.to_uppercase();
 
+    let export = is_publish_export_path(&path);
+    let timeout_secs = if export {
+        PUBLISH_EXPORT_TIMEOUT_SECS
+    } else {
+        LOCAL_API_TIMEOUT_SECS
+    };
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| IpcApiError::internal(format!("http client: {e}")))?;
 
@@ -115,6 +179,9 @@ pub async fn api_call(
         req = req.bearer_auth(t);
     }
     req = req.header("Accept", "application/json");
+    if export {
+        req = req.header("Accept-Encoding", "zstd");
+    }
 
     if matches!(method.as_str(), "POST" | "PUT" | "PATCH") {
         if let Some(b) = body {
@@ -135,12 +202,20 @@ pub async fn api_call(
     })?;
 
     let status = resp.status().as_u16();
-    let text = resp
-        .text()
+    let encoding = resp
+        .headers()
+        .get(reqwest::header::CONTENT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let raw = resp
+        .bytes()
         .await
         .map_err(|e| IpcApiError::internal(format!("read body: {e}")))?;
+    let decoded = decode_response_body(&encoding, &raw)?;
+    let text = String::from_utf8_lossy(&decoded);
 
-    if text.trim().is_empty() {
+    if decoded.is_empty() || text.trim().is_empty() {
         if (200..300).contains(&status) {
             return Ok(serde_json::json!({ "ok": true, "status": status }));
         }
@@ -151,7 +226,7 @@ pub async fn api_call(
         ));
     }
 
-    match serde_json::from_str::<serde_json::Value>(&text) {
+    match serde_json::from_slice::<serde_json::Value>(&decoded) {
         Ok(v) => {
             if (200..300).contains(&status) {
                 Ok(v)
@@ -161,15 +236,15 @@ pub async fn api_call(
                     .get("message")
                     .or_else(|| v.get("error"))
                     .and_then(|m| m.as_str())
-                    .unwrap_or(text.as_str());
+                    .unwrap_or(text.as_ref());
                 Err(IpcApiError::new(status, "upstream_error", msg.to_string()))
             }
         }
         Err(_) => {
             if (200..300).contains(&status) {
-                Ok(serde_json::json!({ "raw": text, "status": status }))
+                Ok(serde_json::json!({ "raw": text.as_ref(), "status": status }))
             } else {
-                Err(IpcApiError::new(status, "upstream_error", text))
+                Err(IpcApiError::new(status, "upstream_error", text.into_owned()))
             }
         }
     }
@@ -300,6 +375,22 @@ mod tests {
         assert_eq!(err.status, 500);
         assert_eq!(err.code, "internal_error");
         assert_eq!(err.message, "boom");
+    }
+
+    #[test]
+    fn decode_zstd_publish_export_roundtrip() {
+        let json = br#"{"document_id":"1"}"#;
+        let compressed = zstd::encode_all(&json[..], 3).expect("zstd");
+        let decoded = decode_response_body("zstd", &compressed).expect("decode");
+        assert_eq!(decoded, json);
+    }
+
+    #[test]
+    fn publish_export_path_uses_longer_timeout() {
+        assert!(is_publish_export_path(
+            "/api/v1/workspaces/abc/publish/export/doc-1"
+        ));
+        assert!(!is_publish_export_path("/api/v1/workspaces/abc"));
     }
 
     #[test]

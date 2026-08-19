@@ -80,11 +80,15 @@ pub fn make_embedding_client(
     config: &ModelProviderConfig,
     cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
     usage_observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
+    rate_gate: Option<Arc<dyn avrag_llm::EmbedRateGate>>,
 ) -> Option<Arc<EmbeddingClient>> {
     config.to_llm_config().map(|c| {
         let mut client = EmbeddingClient::new(c);
         if let Some(cache) = cache {
             client = client.with_cache(cache);
+        }
+        if let Some(gate) = rate_gate {
+            client = client.with_rate_gate(gate);
         }
         if let Some((observer, tenant)) = usage_observer {
             client = client.with_observer(observer, tenant);
@@ -136,11 +140,15 @@ pub fn embedding_client_from_secret(
     secret: Option<&app_core::ResolvedProviderSecret>,
     cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
     observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
+    rate_gate: Option<Arc<dyn avrag_llm::EmbedRateGate>>,
 ) -> Option<Arc<EmbeddingClient>> {
     let cfg = secret?.to_llm_config()?;
     let mut client = EmbeddingClient::new(cfg);
     if let Some(cache) = cache {
         client = client.with_cache(cache);
+    }
+    if let Some(gate) = rate_gate {
+        client = client.with_rate_gate(gate);
     }
     if let Some((obs, tenant)) = observer {
         client = client.with_observer(obs, tenant);

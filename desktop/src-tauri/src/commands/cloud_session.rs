@@ -243,6 +243,58 @@ pub(crate) async fn cloud_http_json_timeout(
     Ok((status, value))
 }
 
+pub(crate) async fn cloud_http_bytes(
+    method: &str,
+    url: &str,
+    body: Vec<u8>,
+    content_type: &str,
+    content_encoding: Option<&str>,
+    token: Option<&str>,
+    timeout_secs: u64,
+) -> Result<(u16, serde_json::Value), IpcApiError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| IpcApiError::internal(format!("http client: {e}")))?;
+    let mut req = match method.to_uppercase().as_str() {
+        "PUT" => client.put(url),
+        "POST" => client.post(url),
+        other => {
+            return Err(IpcApiError::bad_request(
+                "method_not_allowed",
+                format!("bytes body unsupported for {other}"),
+            ));
+        }
+    };
+    if let Some(t) = token {
+        req = req.bearer_auth(t);
+    }
+    req = req.header("Content-Type", content_type);
+    if let Some(encoding) = content_encoding {
+        req = req.header("Content-Encoding", encoding);
+    }
+    let resp = req.body(body).send().await.map_err(|e| {
+        if e.is_connect() || e.is_timeout() {
+            IpcApiError::service_unavailable(format!(
+                "云端不可达（{e}）。官方模型（走余额）需要联网登录；请检查网络后重试。"
+            ))
+        } else {
+            IpcApiError::internal(format!("cloud request failed: {e}"))
+        }
+    })?;
+    let status = resp.status().as_u16();
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| IpcApiError::internal(format!("read body: {e}")))?;
+    let value = if text.trim().is_empty() {
+        serde_json::json!({})
+    } else {
+        serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "raw": text }))
+    };
+    Ok((status, value))
+}
+
 pub(crate) fn require_cloud_session(
     app: &tauri::AppHandle,
 ) -> Result<StoredCloudSession, IpcApiError> {
@@ -292,7 +344,9 @@ pub async fn cloud_api_call(
         format!("/{path}")
     };
     let url = format!("{}{path}", session.cloud_base.trim_end_matches('/'));
-    let timeout = if method.eq_ignore_ascii_case("PUT") {
+    let timeout = if path.contains("/publish/") && path.ends_with("/commit") {
+        600
+    } else if method.eq_ignore_ascii_case("PUT") {
         180
     } else {
         60
@@ -303,6 +357,34 @@ pub async fn cloud_api_call(
         body,
         Some(&session.session_token),
         timeout,
+    )
+    .await?;
+    map_cloud_status(status, &value, "cloud API call failed")?;
+    Ok(value)
+}
+
+pub(crate) async fn cloud_put_zstd(
+    app: tauri::AppHandle,
+    path: String,
+    json_body: Vec<u8>,
+) -> Result<serde_json::Value, IpcApiError> {
+    let session = require_cloud_session(&app)?;
+    let path = if path.starts_with('/') {
+        path
+    } else {
+        format!("/{path}")
+    };
+    let url = format!("{}{path}", session.cloud_base.trim_end_matches('/'));
+    let compressed = zstd::encode_all(&json_body[..], 3)
+        .map_err(|e| IpcApiError::internal(format!("zstd compress: {e}")))?;
+    let (status, value) = cloud_http_bytes(
+        "PUT",
+        &url,
+        compressed,
+        "application/json",
+        Some("zstd"),
+        Some(&session.session_token),
+        180,
     )
     .await?;
     map_cloud_status(status, &value, "cloud API call failed")?;

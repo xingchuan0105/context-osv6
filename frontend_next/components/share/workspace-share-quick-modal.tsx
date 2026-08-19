@@ -33,6 +33,7 @@ function WorkspaceShareQuickModalBody({
   const publishGate = useDesktopPublishGate(workspaceId);
   const center = useShareCenter(publishGate.shareWorkspaceId, {
     queriesEnabled: publishGate.queriesEnabled,
+    sharePublicOrigin: publishGate.sharePublicOrigin,
   });
   const { actionError, actionMessage, settingsQuery } = center;
   const [section, setSection] = useState<ShareQuickSection>("controls");

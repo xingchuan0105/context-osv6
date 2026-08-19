@@ -1,6 +1,7 @@
 //! Workspace publish (ADR-0010 B3b): local index export + cloud vector import.
 
 use std::collections::HashSet;
+use std::io::Read;
 use std::sync::Arc;
 
 use app_core::{
@@ -40,11 +41,70 @@ fn part_object_path(upload_id: Uuid, n: u32) -> String {
     format!("publish/{upload_id}/part-{n}.json")
 }
 
+const ZSTD_LEVEL: i32 = 3;
+const ZSTD_MAX_DECODE: usize = 128 * 1024 * 1024;
+const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+
 fn fingerprint_mismatch(field: &str) -> AppError {
     AppError::validation(
         "publish_fingerprint_mismatch",
         format!("embedding fingerprint mismatch ({field}); cloud will not re-embed"),
     )
+}
+
+fn payload_too_large() -> AppError {
+    AppError::Validation {
+        code: "publish_part_too_large",
+        message: "decompressed publish part exceeds 128MiB".into(),
+        http_status: 413,
+    }
+}
+
+fn compress_part_json(json: &[u8]) -> Result<Vec<u8>, AppError> {
+    zstd::encode_all(json, ZSTD_LEVEL)
+        .map_err(|err| AppError::internal(format!("zstd compress publish part: {err}")))
+}
+
+fn looks_like_zstd(bytes: &[u8]) -> bool {
+    bytes.len() >= 4 && bytes[..4] == ZSTD_MAGIC
+}
+
+fn decompress_part_bytes(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
+    let mut decoder = zstd::stream::read::Decoder::new(bytes).map_err(|err| {
+        AppError::validation("publish_part_invalid", format!("zstd: {err}"))
+    })?;
+    let mut out = Vec::new();
+    let mut buf = [0u8; 32 * 1024];
+    loop {
+        let n = decoder.read(&mut buf).map_err(|err| {
+            AppError::validation("publish_part_invalid", format!("zstd: {err}"))
+        })?;
+        if n == 0 {
+            break;
+        }
+        if out.len().saturating_add(n) > ZSTD_MAX_DECODE {
+            return Err(payload_too_large());
+        }
+        out.extend_from_slice(&buf[..n]);
+    }
+    Ok(out)
+}
+
+fn json_from_part_bytes(bytes: &[u8], content_encoding: Option<&str>) -> Result<Vec<u8>, AppError> {
+    let encoding = content_encoding.unwrap_or("").trim().to_ascii_lowercase();
+    if encoding == "zstd" || looks_like_zstd(bytes) {
+        decompress_part_bytes(bytes)
+    } else {
+        if bytes.len() > ZSTD_MAX_DECODE {
+            return Err(payload_too_large());
+        }
+        Ok(bytes.to_vec())
+    }
+}
+
+fn parse_part_payload(json: &[u8]) -> Result<PublishPartPayload, AppError> {
+    serde_json::from_slice(json)
+        .map_err(|err| AppError::validation("publish_part_invalid", err.to_string()))
 }
 
 impl WorkspaceApp<'_> {
@@ -147,8 +207,11 @@ impl WorkspaceApp<'_> {
         &self,
         upload_id: Uuid,
         part_n: u32,
-        payload: PublishPartPayload,
+        body: Vec<u8>,
+        content_encoding: Option<&str>,
     ) -> Result<(), AppError> {
+        let json = json_from_part_bytes(&body, content_encoding)?;
+        let payload = parse_part_payload(&json)?;
         let owner = self.owner_uuid();
         let row = self
             .publish
@@ -186,10 +249,13 @@ impl WorkspaceApp<'_> {
                 "part document_id does not match index batch",
             ));
         }
-        let bytes = serde_json::to_vec(&payload)
-            .map_err(|err| AppError::internal(format!("serialize publish part: {err}")))?;
+        let stored = if looks_like_zstd(&body) {
+            body
+        } else {
+            compress_part_json(&json)?
+        };
         self.object_store()
-            .put(&part_object_path(upload_id, part_n), &bytes)
+            .put(&part_object_path(upload_id, part_n), &stored)
             .await
     }
 
@@ -197,12 +263,6 @@ impl WorkspaceApp<'_> {
         &self,
         upload_id: Uuid,
     ) -> Result<PublishStatusResponse, AppError> {
-        let plane = self.publish.retrieval_data_plane.clone().ok_or_else(|| {
-            AppError::upstream_unavailable("retrieval data plane is not available for publish import")
-        })?;
-        let docs = self.storage.document_store().ok_or_else(|| {
-            AppError::internal("document store is required for publish commit")
-        })?;
         let owner = self.owner_uuid();
         let row = self
             .publish
@@ -210,6 +270,26 @@ impl WorkspaceApp<'_> {
             .get_by_upload(owner, upload_id)
             .await?
             .ok_or_else(|| AppError::not_found("publish_session_not_found", "publish session not found"))?;
+        match self.commit_publish_session_inner(&row).await {
+            Ok(ready) => Ok(ready),
+            Err(error) => {
+                self.fail_publish_session(&row, error.message()).await;
+                Err(error)
+            }
+        }
+    }
+
+    async fn commit_publish_session_inner(
+        &self,
+        row: &WorkspacePublishRow,
+    ) -> Result<PublishStatusResponse, AppError> {
+        let plane = self.publish.retrieval_data_plane.clone().ok_or_else(|| {
+            AppError::upstream_unavailable("retrieval data plane is not available for publish import")
+        })?;
+        let docs = self.storage.document_store().ok_or_else(|| {
+            AppError::internal("document store is required for publish commit")
+        })?;
+        let upload_id = row.upload_id.unwrap_or(row.id);
 
         let mut parts = Vec::new();
         for n in 0..row.expected_parts.max(0) as u32 {
@@ -223,32 +303,17 @@ impl WorkspaceApp<'_> {
                         format!("missing publish part {n}"),
                     )
                 })?;
-            let payload: PublishPartPayload = serde_json::from_slice(&bytes).map_err(|err| {
+            let json = json_from_part_bytes(&bytes, None)?;
+            let payload = parse_part_payload(&json).map_err(|err| {
                 AppError::validation("publish_part_invalid", format!("part {n}: {err}"))
             })?;
             parts.push(payload);
         }
 
         let incoming: HashSet<Uuid> = parts.iter().map(|part| part.document_id).collect();
-        let existing_docs = docs
-            .list_documents(self.auth, Some(row.cloud_workspace_id), None)
-            .await?;
-        for existing in existing_docs {
-            let Ok(id) = Uuid::parse_str(&existing.id) else {
-                continue;
-            };
-            if incoming.contains(&id) {
-                continue;
-            }
-            let _ = plane
-                .delete_document_index(self.auth, id)
-                .await
-                .map_err(|err| tracing::warn!(error = %err, %id, "stale index delete failed"));
-            let _ = docs.delete_document(self.auth, id).await;
-        }
-
         let cloud_ws = row.cloud_workspace_id;
         let owner_user = self.auth.user_id();
+        let mut rebound = Vec::with_capacity(parts.len());
         for payload in &parts {
             if let Some(field) = payload
                 .export
@@ -256,17 +321,6 @@ impl WorkspaceApp<'_> {
                 .fingerprint
                 .incompatible_field(&self.publish.fingerprint)
             {
-                let _ = self
-                    .publish
-                    .store
-                    .mark_status(
-                        owner,
-                        row.local_workspace_id,
-                        PublishStatus::Failed,
-                        Some(&format!("fingerprint mismatch ({field})")),
-                        None,
-                    )
-                    .await;
                 return Err(fingerprint_mismatch(field));
             }
             let mut batch = payload.export.batch.clone();
@@ -277,6 +331,13 @@ impl WorkspaceApp<'_> {
                 .map_err(|err| {
                     AppError::validation("publish_fingerprint_mismatch", err.to_string())
                 })?;
+            rebound.push((payload, batch));
+        }
+
+        // Write incoming docs before deleting stale ones so a mid-commit
+        // failure leaves the previous replica intact (plus any finished
+        // upserts) instead of a hole that live share links would hit.
+        for (payload, batch) in rebound {
             docs.upsert_published_document(
                 self.auth,
                 PublishedDocumentUpsert {
@@ -294,24 +355,61 @@ impl WorkspaceApp<'_> {
             })?;
         }
 
+        let existing_docs = docs
+            .list_documents(self.auth, Some(row.cloud_workspace_id), None)
+            .await?;
+        for existing in existing_docs {
+            let Ok(id) = Uuid::parse_str(&existing.id) else {
+                continue;
+            };
+            if incoming.contains(&id) {
+                continue;
+            }
+            plane.delete_document_index(self.auth, id).await.map_err(|err| {
+                AppError::internal(format!("stale index delete failed for {id}: {err}"))
+            })?;
+            docs.delete_document(self.auth, id).await?;
+        }
+
         let ready = self
             .publish
             .store
             .mark_status(
-                owner,
+                row.owner_user_id,
                 row.local_workspace_id,
                 PublishStatus::Ready,
                 None,
                 Some(Utc::now()),
             )
             .await?;
-        for n in 0..row.expected_parts.max(0) as u32 {
+        self.delete_publish_parts(upload_id, row.expected_parts).await;
+        Ok(status_response(&ready))
+    }
+
+    async fn fail_publish_session(&self, row: &WorkspacePublishRow, message: &str) {
+        let _ = self
+            .publish
+            .store
+            .mark_status(
+                row.owner_user_id,
+                row.local_workspace_id,
+                PublishStatus::Failed,
+                Some(message),
+                None,
+            )
+            .await;
+        if let Some(upload_id) = row.upload_id {
+            self.delete_publish_parts(upload_id, row.expected_parts).await;
+        }
+    }
+
+    async fn delete_publish_parts(&self, upload_id: Uuid, expected_parts: i32) {
+        for n in 0..expected_parts.max(0) as u32 {
             let _ = self
                 .object_store()
                 .delete(&part_object_path(upload_id, n))
                 .await;
         }
-        Ok(status_response(&ready))
     }
 
     pub async fn get_publish_status(

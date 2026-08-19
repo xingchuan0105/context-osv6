@@ -1085,6 +1085,10 @@ export const shareMessages = {
     zh: "尚未发布到云端，分享开关不可用。发布完成后即可创建 app.contextlm.top 的公开链接。",
     en: "Not published yet, so sharing stays off. After publish you can create a public link on app.contextlm.top.",
   },
+  "shareCenter.desktopPublishRetryStatus": {
+    zh: "重试读取发布状态",
+    en: "Retry publish status",
+  },
   "shareCenter.desktopPublishStagePack": {
     zh: "打包",
     en: "Pack",
@@ -1093,13 +1097,17 @@ export const shareMessages = {
     zh: "上传",
     en: "Upload",
   },
+  "shareCenter.desktopPublishStageCommit": {
+    zh: "正在写入云端副本",
+    en: "Writing the cloud replica",
+  },
   "shareCenter.desktopPublishStageMetadata": {
-    zh: "写入元数据",
-    en: "Write metadata",
+    zh: "正在写入云端副本",
+    en: "Writing the cloud replica",
   },
   "shareCenter.desktopPublishStageVectors": {
-    zh: "写入向量",
-    en: "Write vectors",
+    zh: "正在写入云端副本",
+    en: "Writing the cloud replica",
   },
   "shareCenter.desktopPublishStageDone": {
     zh: "完成",

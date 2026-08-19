@@ -60,6 +60,18 @@ impl TokenBucket {
             self.last_refill = now;
         }
     }
+
+    fn wait_ms_for(&mut self, needed: f64) -> u64 {
+        self.refill();
+        if self.tokens >= needed {
+            return 0;
+        }
+        if self.refill_rate <= f64::EPSILON {
+            return u64::MAX;
+        }
+        let deficit = needed - self.tokens;
+        (deficit / self.refill_rate * 1000.0).ceil() as u64
+    }
 }
 
 impl RateLimiter {
@@ -88,6 +100,22 @@ impl RateLimiter {
             rpm.refund(1.0);
             return Err(RateLimitError::TpmExceeded);
         }
+        Ok(estimated_tokens)
+    }
+
+    /// Try to take tokens. `Ok(None)` means wait `ms` then retry (does not fail).
+    pub fn try_acquire_or_wait_ms(&self, estimated_tokens: usize) -> Result<usize, u64> {
+        let mut rpm = self.rpm.lock().unwrap();
+        let mut tpm = self.tpm.lock().unwrap();
+        let needed_tpm = estimated_tokens as f64;
+        let rpm_wait = rpm.wait_ms_for(1.0);
+        let tpm_wait = tpm.wait_ms_for(needed_tpm);
+        let wait_ms = rpm_wait.max(tpm_wait);
+        if wait_ms > 0 {
+            return Err(wait_ms);
+        }
+        let _ = rpm.try_acquire(1.0);
+        let _ = tpm.try_acquire(needed_tpm);
         Ok(estimated_tokens)
     }
 
@@ -181,6 +209,13 @@ mod tests {
         assert!(limiter.check_request(1).is_ok());
         assert!(limiter.check_request(1).is_ok());
         assert_eq!(limiter.check_request(1), Err(RateLimitError::RpmExceeded));
+    }
+
+    #[test]
+    fn try_acquire_or_wait_ms_signals_wait_when_empty() {
+        let limiter = RateLimiter::new(1, 1000);
+        assert!(limiter.try_acquire_or_wait_ms(1).is_ok());
+        assert!(limiter.try_acquire_or_wait_ms(1).is_err());
     }
 
     #[test]

@@ -11,6 +11,7 @@ mod sources;
 
 use anyhow::Result;
 use app_core::AppConfig;
+use app_bootstrap::build_embed_rate_gate;
 use avrag_cache_redis::DocumentLock;
 use avrag_storage_pg::{BootstrapRepository, PgAppRepository, TenantPgPool};
 use ingestion::{
@@ -186,15 +187,32 @@ pub async fn run() -> Result<()> {
                 // Result-level completion cache for deterministic ingestion
                 // calls (summary / section index / triplets). Shares the Redis
                 // connection used for document locks.
-                let completion_cache = {
+                let embed_cache: Option<std::sync::Arc<dyn avrag_rag_core_ports::CachePort>> = {
                     let url = &config.redis.url;
                     if !url.trim().is_empty() {
-                        avrag_cache_redis::CacheStore::new(url).ok().map(|store| {
-                            avrag_llm::CompletionCache::new(std::sync::Arc::new(store))
-                        })
+                        avrag_cache_redis::CacheStore::new(url)
+                            .ok()
+                            .map(|store| {
+                                std::sync::Arc::new(store)
+                                    as std::sync::Arc<dyn avrag_rag_core_ports::CachePort>
+                            })
                     } else {
                         None
                     }
+                };
+                let completion_cache = embed_cache.as_ref().map(|store| {
+                    avrag_llm::CompletionCache::new(store.clone())
+                });
+                let embed_rate_gate = {
+                    let (fallback_rpm, fallback_tpm) = config
+                        .embedding
+                        .to_llm_config()
+                        .map(|c| (c.effective_rpm_limit(), c.effective_tpm_limit()))
+                        .unwrap_or((60, 1_000_000));
+                    Some(build_embed_rate_gate(
+                        &config.redis.url,
+                        avrag_llm::EmbeddingBudget::from_env(fallback_rpm, fallback_tpm),
+                    ))
                 };
                 PgTaskProcessor {
                     storage: StorageDeps {
@@ -217,18 +235,24 @@ pub async fn run() -> Result<()> {
                             &config.embedding,
                             "document_embedding",
                             &usage_observer,
+                            embed_cache.clone(),
+                            embed_rate_gate.clone(),
                         )
                         .or_else(|| {
                             build_worker_embedding_client_from_secret(
                                 embedding_secret.as_ref(),
                                 "document_embedding",
                                 &usage_observer,
+                                embed_cache.clone(),
+                                embed_rate_gate.clone(),
                             )
                         }),
                         mm_embedding_client: build_worker_embedding_client(
                             &config.mm_embedding,
                             "document_embedding_mm",
                             &usage_observer,
+                            embed_cache.clone(),
+                            embed_rate_gate.clone(),
                         ),
                     },
                     llm: LlmDeps {

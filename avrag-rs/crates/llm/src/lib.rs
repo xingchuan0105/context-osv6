@@ -1,5 +1,6 @@
 pub mod client;
 pub mod completion_cache;
+pub mod embed_rate_limit;
 pub mod embedding;
 pub mod planner;
 pub mod protocols;
@@ -17,6 +18,10 @@ pub mod usage_observer;
 
 pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 pub use completion_cache::{CachedCompletion, CompletionCache};
+pub use embed_rate_limit::{
+    EmbedLane, EmbedRateGate, EmbedRateRequest, EmbeddingBudget, LocalEmbedRateGate,
+    embed_wait_timeout_message, shared_local_embed_gate,
+};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
 pub use protocols::{

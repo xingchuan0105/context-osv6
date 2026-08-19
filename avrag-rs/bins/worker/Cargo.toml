@@ -13,6 +13,7 @@ analytics = { path = "../../crates/analytics" }
 app-core = { path = "../../crates/app-core" }
 avrag-cache-redis = { path = "../../crates/cache-redis" }
 avrag-llm = { path = "../../crates/llm" }
+avrag-rag-core-ports = { path = "../../crates/rag-core-ports" }
 avrag-retrieval-data-plane = { path = "../../crates/retrieval-data-plane" }
 avrag-storage-milvus = { path = "../../crates/storage-milvus" }
 avrag-storage-pgvector = { path = "../../crates/storage-pgvector" }

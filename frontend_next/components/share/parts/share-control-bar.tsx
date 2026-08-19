@@ -19,10 +19,10 @@ function stageLabel(locale: UiLocale, stage: string) {
       return formatUiMessage(locale, "shareCenter.desktopPublishStagePack");
     case "upload":
       return formatUiMessage(locale, "shareCenter.desktopPublishStageUpload");
+    case "commit":
     case "metadata":
-      return formatUiMessage(locale, "shareCenter.desktopPublishStageMetadata");
     case "vectors":
-      return formatUiMessage(locale, "shareCenter.desktopPublishStageVectors");
+      return formatUiMessage(locale, "shareCenter.desktopPublishStageCommit");
     case "done":
       return formatUiMessage(locale, "shareCenter.desktopPublishStageDone");
     default:
@@ -93,6 +93,16 @@ export function ShareControlBar({
                 {publishGate.error}
               </p>
             ) : null}
+            {!publishGate.statusKnown ? (
+              <button
+                className="app-button-secondary"
+                data-testid="desktop-publish-retry-status"
+                type="button"
+                onClick={() => void publishGate.onRetryStatus()}
+              >
+                {formatUiMessage(locale, "shareCenter.desktopPublishRetryStatus")}
+              </button>
+            ) : null}
             {publishGate.progress && (publishGate.publishing || publishGate.status === "publishing") ? (
               <div className={styles.stack} data-testid="desktop-publish-progress">
                 <span>
@@ -127,6 +137,7 @@ export function ShareControlBar({
                 </div>
               </div>
             ) : null}
+            {publishGate.statusKnown ? (
             <button
               className="app-button-primary"
               data-testid="desktop-publish-cta"
@@ -138,6 +149,7 @@ export function ShareControlBar({
                 ? formatUiMessage(locale, "shareCenter.desktopPublishInProgress")
                 : formatUiMessage(locale, "shareCenter.desktopPublishCta")}
             </button>
+            ) : null}
           </div>
         ) : null}
         {quotaLabel ? (

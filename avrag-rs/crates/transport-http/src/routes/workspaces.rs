@@ -63,7 +63,7 @@ fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
         .route(
             "/workspaces/publish/sessions/{upload_id}/parts/{n}",
             axum::routing::put(handlers::put_publish_part_handler)
-                .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
+                .layer(axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024)),
         )
         .route(
             "/workspaces/publish/sessions/{upload_id}/commit",

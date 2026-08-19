@@ -74,6 +74,10 @@ describe("share client", () => {
     })).toBe(true);
 
     expect(buildShareUrl("active-token")).toContain("/shared/kb/active-token");
+    expect(buildShareUrl("active-token", "https://app.contextlm.top")).toBe(
+      "https://app.contextlm.top/shared/kb/active-token",
+    );
+    expect(buildShareUrl("active-token", "https://app.contextlm.top")).not.toContain("localhost");
   });
 
   it("aggregates analytics and access logs from the raw backend envelopes", async () => {

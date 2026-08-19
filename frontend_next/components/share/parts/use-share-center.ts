@@ -42,7 +42,7 @@ import {
 
 export function useShareCenter(
   workspaceId: string,
-  options?: { queriesEnabled?: boolean },
+  options?: { queriesEnabled?: boolean; sharePublicOrigin?: string | null },
 ) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
@@ -305,7 +305,10 @@ export function useShareCenter(
     };
   }
 
-  const shareUrl = buildShareUrl(settingsQuery.data?.share_token ?? "");
+  const shareUrl = buildShareUrl(
+    settingsQuery.data?.share_token ?? "",
+    options?.sharePublicOrigin,
+  );
   const shareStatus = resolveShareStatus(settingsQuery.data ?? null);
   const shareStatusText = shareStatusLabel(locale, shareStatus);
   const sevenDaySeries = buildDailyViewsSeries(analyticsQuery.data, 7);

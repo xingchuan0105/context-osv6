@@ -4,7 +4,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use super::api::{api_call, IpcApiError};
-use super::cloud_session::{cloud_api_call, require_cloud_session};
+use super::cloud_session::{cloud_api_call, cloud_put_zstd, require_cloud_session};
 use super::local_session::local_session_token;
 
 const PROGRESS_EVENT: &str = "workspace-publish-progress";
@@ -141,17 +141,17 @@ pub async fn publish_workspace(
             total,
             &format!("正在上传 {doc_id}"),
         );
-        cloud_api_call(
+        let json = serde_json::to_vec(&part)
+            .map_err(|err| IpcApiError::internal(format!("serialize publish part: {err}")))?;
+        cloud_put_zstd(
             app.clone(),
-            "PUT".into(),
             format!("/api/v1/workspaces/publish/sessions/{upload_id}/parts/{idx}"),
-            Some(part),
+            json,
         )
         .await?;
     }
 
-    emit_progress(&app, "metadata", total, total, "正在写入云端元数据");
-    emit_progress(&app, "vectors", total, total, "正在写入云端向量");
+    emit_progress(&app, "commit", total, total, "正在写入云端副本");
     let committed = cloud_api_call(
         app.clone(),
         "POST".into(),

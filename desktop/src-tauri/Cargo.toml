@@ -32,6 +32,7 @@ tauri-plugin-deep-link = "2"
 base64 = "0.22"
 url = "2"
 reqwest = { version = "0.13.4", features = ["json", "stream"] }
+zstd = "0.13"
 # Cloud session path resolution outside command contexts (native_stack
 # client.env injection); same dirs major version tauri 2 already uses.
 dirs = "6"
