@@ -414,6 +414,24 @@ fn write_client_env(rt: &Path, migrations: Option<&Path>, log: &mut String) -> R
         super::secret_fs::restrict_secret_file(&byok_path);
         encoded
     };
+    // Upload PUT HMAC (fail-closed since 2026-08-18). Persist like jwt.secret so
+    // client.env rewrites do not rotate the key under existing signed URLs.
+    let upload_path = rt.join("upload.signing");
+    let upload = if upload_path.is_file() {
+        fs::read_to_string(&upload_path)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    } else {
+        let s = format!(
+            "{:x}{:x}",
+            uuid::Uuid::new_v4().as_u128(),
+            uuid::Uuid::new_v4().as_u128()
+        );
+        fs::write(&upload_path, format!("{s}\n")).map_err(|e| e.to_string())?;
+        super::secret_fs::restrict_secret_file(&upload_path);
+        s
+    };
     let (owner_id, user_id) = local_identity_uuids();
     let mig = migrations
         .map(|p| p.display().to_string())
@@ -494,6 +512,7 @@ AVRAG_PUBLIC_BASE_URL=http://127.0.0.1:18080
 CORS_ALLOWED_ORIGINS=http://tauri.localhost,https://tauri.localhost,http://127.0.0.1:18080,http://localhost:18080,http://localhost:3000,http://127.0.0.1:3000
 AVRAG_OBJECT_ROOT={objects}
 JWT_SECRET={jwt}
+AVRAG_UPLOAD_SIGNING_SECRET={upload}
 BYOK_MASTER_KEY={byok}
 NEXT_PUBLIC_DEV_OWNER_USER_ID={owner_id}
 NEXT_PUBLIC_DEV_USER_ID={user_id}
@@ -507,6 +526,7 @@ AVRAG_EMBEDDING_DIM=1024
 {parsers_env}{relay_env}"#,
         objects = objects.display(),
         jwt = jwt,
+        upload = upload,
         byok = byok,
         owner_id = owner_id,
         user_id = user_id,
@@ -517,6 +537,7 @@ AVRAG_EMBEDDING_DIM=1024
     fs::write(&env_path, body).map_err(|e| e.to_string())?;
     super::secret_fs::restrict_secret_file(&env_path);
     super::secret_fs::restrict_secret_file(&jwt_path);
+    super::secret_fs::restrict_secret_file(&upload_path);
     super::secret_fs::restrict_secret_file(&byok_path);
     fs::write(rt.join("stack.mode"), "native\n").ok();
     append_log(log, format!("wrote {}", env_path.display()));

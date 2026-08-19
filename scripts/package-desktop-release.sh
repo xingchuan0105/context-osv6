@@ -16,11 +16,16 @@ mkdir -p "$STAGE"
 
 # Prefer NSIS setup under any target triple, then portable exe
 find_nsis() {
-  # Prefer Context-OS_* names, then newest mtime under nsis bundle dirs
-  local preferred
-  preferred="$(find "$TAURI_TARGET_BASE" -type f \( -path '*/bundle/nsis/Context-OS-Client*-setup.exe' -o -path '*/bundle/nsis/Context-OS*-setup.exe' \) 2>/dev/null | head -1 || true)"
-  if [[ -n "$preferred" && -f "$preferred" ]]; then
-    echo "$preferred"
+  # Tauri names the setup with a space (`Context-OS Client_${VERSION}_...`).
+  # Never `find | head -1` across leftover 0.3.0/0.2.0 bundles — that shipped
+  # 0.3.0 bytes as 0.3.1 on 2026-08-19.
+  local exact
+  exact="$(find "$TAURI_TARGET_BASE" -type f \( \
+    -path "*/bundle/nsis/Context-OS Client_${VERSION}_x64-setup.exe" -o \
+    -path "*/bundle/nsis/Context-OS-Client_${VERSION}_x64-setup.exe" \
+    \) 2>/dev/null | head -1 || true)"
+  if [[ -n "$exact" && -f "$exact" ]]; then
+    echo "$exact"
     return 0
   fi
   find "$TAURI_TARGET_BASE" -type f -path '*/bundle/nsis/*-setup.exe' -printf '%T@ %p\n' 2>/dev/null \
