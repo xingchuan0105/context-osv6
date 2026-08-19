@@ -28,7 +28,14 @@ fn encoding_is_zstd(value: &str) -> bool {
     })
 }
 
-fn decode_response_body(encoding: &str, bytes: &[u8]) -> Result<Vec<u8>, IpcApiError> {
+fn decode_response_body(
+    export: bool,
+    encoding: &str,
+    bytes: &[u8],
+) -> Result<Vec<u8>, IpcApiError> {
+    if !export {
+        return Ok(bytes.to_vec());
+    }
     if encoding_is_zstd(encoding) || looks_like_zstd(bytes) {
         let mut decoder = zstd::stream::read::Decoder::new(bytes)
             .map_err(|err| IpcApiError::internal(format!("zstd: {err}")))?;
@@ -212,7 +219,7 @@ pub async fn api_call(
         .bytes()
         .await
         .map_err(|e| IpcApiError::internal(format!("read body: {e}")))?;
-    let decoded = decode_response_body(&encoding, &raw)?;
+    let decoded = decode_response_body(export, &encoding, &raw)?;
     let text = String::from_utf8_lossy(&decoded);
 
     if decoded.is_empty() || text.trim().is_empty() {
@@ -381,7 +388,14 @@ mod tests {
     fn decode_zstd_publish_export_roundtrip() {
         let json = br#"{"document_id":"1"}"#;
         let compressed = zstd::encode_all(&json[..], 3).expect("zstd");
-        let decoded = decode_response_body("zstd", &compressed).expect("decode");
+        let decoded = decode_response_body(true, "zstd", &compressed).expect("decode");
+        assert_eq!(decoded, json);
+    }
+
+    #[test]
+    fn non_export_skips_zstd_decode() {
+        let json = br#"{"ok":true}"#;
+        let decoded = decode_response_body(false, "zstd", json).expect("passthrough");
         assert_eq!(decoded, json);
     }
 
