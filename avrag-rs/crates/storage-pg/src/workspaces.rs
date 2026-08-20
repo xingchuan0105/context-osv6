@@ -33,7 +33,7 @@ impl crate::PgAppRepository {
                 exists(select 1 from share_tokens st where st.workspace_id = n.id and st.revoked_at is null) as shared
             from workspaces n
             left join lateral (
-                select count(*) as document_count,
+                select coalesce(sum(cnt), 0) as document_count,
                     jsonb_object_agg(status, cnt) as status_summary
                 from (
                     select status, count(*) as cnt

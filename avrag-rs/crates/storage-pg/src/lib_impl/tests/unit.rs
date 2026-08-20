@@ -1,6 +1,19 @@
 use super::support::*;
 
 #[test]
+fn list_workspaces_sql_sums_documents_not_status_groups() {
+    let src = include_str!("../../workspaces.rs");
+    assert!(
+        src.contains("coalesce(sum(cnt), 0) as document_count"),
+        "dashboard source count must sum per-status document rows, not count(*) of status groups"
+    );
+    assert!(
+        !src.contains("select count(*) as document_count"),
+        "count(*) over grouped statuses would show 1 when every document shares a status"
+    );
+}
+
+#[test]
 fn ingestion_retry_backoff_is_exponential_and_capped() {
     assert_eq!(ingestion_retry_backoff_seconds(0), 30);
     assert_eq!(ingestion_retry_backoff_seconds(1), 30);
