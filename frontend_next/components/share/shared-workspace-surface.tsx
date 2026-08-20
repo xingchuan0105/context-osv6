@@ -30,8 +30,10 @@ import {
   RIGHT_RAIL_MAX_WIDTH,
   RIGHT_RAIL_MIN_WIDTH,
 } from "../../lib/workspace/ui-store";
+import type { WorkspaceCitationRequest } from "../../lib/workspace/model";
 import { AppModal } from "../ui/app-modal";
 import { WorkspaceChatPane } from "../workspace/workspace-chat-pane";
+import { WorkspaceCitationModal } from "../workspace/workspace-citation-modal";
 import { WorkspaceHistoryPane } from "../workspace/workspace-history-pane";
 import { WorkspaceSourcesPane } from "../workspace/workspace-sources-pane";
 import shellStyles from "../workspace/workspace-shell.module.css";
@@ -120,6 +122,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [viewerSourceId, setViewerSourceId] = useState<string | null>(null);
+  const [activeCitation, setActiveCitation] = useState<WorkspaceCitationRequest | null>(null);
   const [activeTab, setActiveTab] = useState<ShareTabId>("chat");
   const composerInsertRef = useRef<((text: string) => boolean) | null>(null);
   const [localSessions, setLocalSessions] = useState<LocalShareSession[]>([]);
@@ -532,9 +535,9 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
           ) : null}
 
           <WorkspaceChatPane
-            key={activeSessionId ?? "new-thread"}
             initialMessages={initialMessages}
             lockedCapabilities={["rag"]}
+            onSelectCitation={setActiveCitation}
             onSessionChange={handleSessionChange}
             onTranscriptChange={handleTranscriptChange}
             registerComposerInsert={registerComposerInsert}
@@ -633,6 +636,15 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
           </div>
         ) : null}
       </AppModal>
+      <WorkspaceCitationModal
+        citationRequest={activeCitation}
+        onClose={() => setActiveCitation(null)}
+        onOpenSource={(sourceId) => {
+          setViewerSourceId(sourceId);
+          setActiveCitation(null);
+        }}
+        workspaceId={workspaceId}
+      />
     </main>
   );
 }

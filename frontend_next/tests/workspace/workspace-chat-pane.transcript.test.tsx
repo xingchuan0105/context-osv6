@@ -191,4 +191,80 @@ describe("WorkspaceChatPane transcript", () => {
       }),
     });
   });
+
+  it("opens inline citations from a streamed done payload with placeholder message_id 0", async () => {
+    const onFocusSource = vi.fn();
+    const onSelectCitation = vi.fn();
+    const user = userEvent.setup();
+
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+    mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
+      expect(request).toMatchObject({
+        workspace_id: "ws-inline-placeholder",
+        session_id: null,
+        agent_type: "rag",
+        capabilities: ["rag"],
+        doc_scope: ["doc-1"],
+        stream: true,
+      });
+
+      await onEvent({
+        event: "done",
+        request_id: "req-inline-placeholder",
+        session_id: "sess-inline-placeholder",
+        message_id: 0,
+        payload: {
+          answer: "Plan updated [[1]]",
+          answer_blocks: [{ type: "text", text: "Plan updated", citations: ["chunk-1"] }],
+          session_id: "sess-inline-placeholder",
+          agent_type: "rag",
+          sources: [],
+          citations: [
+            {
+              citation_id: 1,
+              doc_id: "doc-1",
+              chunk_id: "chunk-1",
+              page: 3,
+              doc_name: "Doc One",
+              score: 0.94,
+              content: "Chunk body from the stream payload",
+            },
+          ],
+          trace: { mode: "rag" },
+          degrade_trace: [],
+        },
+      });
+    });
+
+    render(
+      <WorkspaceChatPane
+        workspaceId="ws-inline-placeholder"
+        sessionId={null}
+        selectedSourceIds={["doc-1"]}
+        onFocusSource={onFocusSource}
+        onSelectCitation={onSelectCitation}
+      />,
+    );
+
+    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    const composer = screen.getByRole("textbox", { name: "工作区对话输入框" });
+    await user.type(composer, "Summarize the plan");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText("Plan updated")).toBeTruthy();
+
+    const inlineCitation = await screen.findByRole("button", { name: "引用 1：Doc One，第 3 页" });
+    await user.click(inlineCitation);
+
+    expect(onFocusSource).not.toHaveBeenCalled();
+    expect(onSelectCitation).toHaveBeenCalledWith({
+      session_id: "sess-inline-placeholder",
+      message_id: 0,
+      citation: expect.objectContaining({
+        citation_id: 1,
+        chunk_id: "chunk-1",
+        content: "Chunk body from the stream payload",
+      }),
+    });
+  });
 });

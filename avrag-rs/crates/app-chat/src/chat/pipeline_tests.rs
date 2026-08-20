@@ -714,10 +714,9 @@ mod tests {
         });
 
         handle.await.unwrap().expect("pipeline must succeed");
-        // Events are drained only after the pipeline fully completes (persist and
-        // usage already ran), so this snapshot proves Done is present but not that
-        // it precedes persist. That ordering is locked by code inspection instead
-        // (see `chat/mod.rs`); this test locks audit → persist via the markers.
+        // Events are drained only after the pipeline fully completes, so this
+        // snapshot cannot prove persist-before-Done by interleaving. Persist
+        // filling `response.message_id` is observable: Done.message_id > 0.
         let mut events = Vec::new();
         while let Ok(event) = rx.try_recv() {
             events.push(event);
@@ -731,10 +730,13 @@ mod tests {
         );
         assert!(matches!(events.first(), Some(ChatEvent::Start { .. })));
         assert!(
-            events
-                .iter()
-                .any(|e| matches!(e, ChatEvent::Done { .. })),
-            "terminal Done event must be streamed by the pipeline itself"
+            events.iter().any(|e| matches!(
+                e,
+                ChatEvent::Done {
+                    message_id, ..
+                } if *message_id > 0
+            )),
+            "Done must carry the persisted message_id, not STREAM_PLACEHOLDER_MESSAGE_ID"
         );
         assert!(
             events

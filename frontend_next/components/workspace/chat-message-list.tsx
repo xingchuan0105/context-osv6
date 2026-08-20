@@ -237,13 +237,12 @@ export function ChatMessageList({
   }
 
   function handleCitationSelect(message: UiChatMessage, citation: Citation) {
-    if (message.sessionId && message.messageId !== null) {
-      onSelectCitation({
-        session_id: message.sessionId,
-        message_id: message.messageId,
-        citation,
-      });
-    }
+    onSelectCitation({
+      session_id: message.sessionId?.trim() || "",
+      // Share / unpersisted stream turns keep placeholder 0 (normalized to null).
+      message_id: message.messageId && message.messageId > 0 ? message.messageId : 0,
+      citation,
+    });
   }
 
   function handleFeedback(messageId: string, rating: "up" | "down") {

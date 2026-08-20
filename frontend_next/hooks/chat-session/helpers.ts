@@ -6,7 +6,7 @@ import {
   type WorkspaceCapability,
 } from "../../lib/workspace/capabilities";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
-import type { AnswerBlock } from "../../lib/workspace/stream";
+import { parseStreamCitations, type AnswerBlock, type Citation } from "../../lib/workspace/stream";
 import { progressSnapshotFromTurnMetadata } from "./progress-i18n";
 import type { ProgressEntry, UiChatMessage } from "./types";
 
@@ -309,6 +309,31 @@ export function hasGuardrailIntervention(guardReport: unknown) {
 
 export function normalizeStreamMessageId(messageId: number) {
   return messageId > 0 ? messageId : null;
+}
+
+/** Done strips `citations[].content`; keep text from the earlier citations SSE event. */
+export function mergeCitationsPreservingContent(
+  payloadCitations: unknown,
+  current: Citation[],
+): Citation[] {
+  const incoming = parseStreamCitations(payloadCitations);
+  if (incoming.length === 0) {
+    return current;
+  }
+  const priorByKey = new Map(
+    current.map((citation) => [citation.chunk_id?.trim() || `id:${citation.citation_id}`, citation]),
+  );
+  return incoming.map((citation) => {
+    const prior = priorByKey.get(citation.chunk_id?.trim() || `id:${citation.citation_id}`);
+    if (!prior) {
+      return citation;
+    }
+    return {
+      ...citation,
+      content: citation.content?.trim() ? citation.content : prior.content,
+      preview: citation.preview?.trim() ? citation.preview : prior.preview,
+    };
+  });
 }
 
 export function getAssistantMessageKey(messageId: number) {

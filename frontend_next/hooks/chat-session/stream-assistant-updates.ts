@@ -13,6 +13,7 @@ import {
   hasGuardrailIntervention,
   normalizeMessageMode,
   normalizeStreamMessageId,
+  mergeCitationsPreservingContent,
   sanitizeAssistantDisplayContent,
 } from "./helpers";
 import type { MessageHistory } from "./use-message-history";
@@ -223,10 +224,12 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
           // Prefer done payload when it carries citations; otherwise keep the
           // earlier `citations` SSE event. Never wipe a non-empty stream list
           // with an empty done array (was blanking RAG/web chips on finalize).
-          citations:
-            payload.citations && payload.citations.length > 0
-              ? parseStreamCitations(payload.citations)
-              : (current?.citations ?? []),
+          // Done also strips `content` to shrink the SSE frame — keep text from
+          // the earlier citations event so share (no lookup) can still open chips.
+          citations: mergeCitationsPreservingContent(
+            payload.citations,
+            current?.citations ?? [],
+          ),
           degradeTrace: payload.degrade_trace ?? [],
           guarded: hasGuardrailIntervention(payload.guard_report),
           messageId: resolvedMessageId ?? current?.messageId ?? null,

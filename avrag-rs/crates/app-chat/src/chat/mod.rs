@@ -2,20 +2,19 @@
 //
 // All chat execution flows through a linear async pipeline:
 //   preflight → resolve_session → Start event → dispatch_agent_mode | run_write_mode
-//   → audit → output_guard → terminal stream events
-//   → persist → usage → attach operation guide.
+//   → audit → output_guard → persist → terminal stream events
+//   → usage → attach operation guide.
 //
 // Notes on the real order (locked by `pipeline_spine_locks_audit_before_persist`):
 // - The audit record is appended right after the agent step, before the output
 //   guard runs.
-// - Terminal stream events (Token / Citations / Done) are emitted by the
-//   pipeline itself before the turn is persisted — not as a final tail stage.
-//   This ordering is guaranteed by code inspection of `run_pipeline`; the spine
-//   test locks audit → persist and Done-presence only, not the position of the
-//   Done event (the event stream is drained only after the pipeline completes).
-// - The audit and terminal-event stages were undocumented in older revisions of
-//   this comment and were the source of an ordering lie; the pipeline test
-//   locks the spine as it is today.
+// - Persist runs before terminal stream events so Done carries the real PG
+//   message_id (citation lookup / frontend chips). Share turns skip persist;
+//   those Done events still use STREAM_PLACEHOLDER_MESSAGE_ID (0).
+//   The spine test locks audit → persist, Done-presence, and Done.message_id > 0
+//   on the persisted (non-share) path. The event stream is drained only after
+//   the pipeline completes, so it cannot prove persist-before-Done by marker
+//   interleaving; message_id > 0 is the observable consequence of that order.
 //
 // Rationale:
 // - Chat orchestration is intrinsically static and linear; an external graph

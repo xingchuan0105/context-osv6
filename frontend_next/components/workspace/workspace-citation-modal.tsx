@@ -79,6 +79,18 @@ export function WorkspaceCitationModal({
       return;
     }
 
+    const hasLocalText =
+      Boolean(citationRequest.citation.content?.trim()) ||
+      Boolean(citationRequest.citation.preview?.trim());
+
+    // Placeholder / unpersisted stream turns cannot be looked up by message_id.
+    if (citationRequest.message_id <= 0) {
+      setDetail(null);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
     let cancelled = false;
     setDetail(null);
     setLoading(true);
@@ -96,7 +108,7 @@ export function WorkspaceCitationModal({
         setDetail(response);
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && !hasLocalText) {
           setError(formatUiMessage(locale, "workspaceCitation.error"));
         }
       })

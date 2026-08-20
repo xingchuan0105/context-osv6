@@ -13,6 +13,8 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use avrag_rag_core_ports::CachePort;
+use contracts::chat::Citation;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Shared L1 exact-match cache (wired once at bootstrap; None = memory-only).
@@ -28,9 +30,16 @@ fn shared_exact() -> Option<&'static Arc<dyn CachePort>> {
     SHARED_EXACT.get().and_then(|c| c.as_ref())
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct CachedShareAnswer {
+    pub answer: String,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
+}
+
 #[derive(Clone)]
 struct Entry {
-    answer: String,
+    payload: CachedShareAnswer,
     embedding: Option<Vec<f32>>,
     expires_at: Instant,
 }
@@ -103,12 +112,26 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
     dot / (na.sqrt() * nb.sqrt())
 }
 
+fn decode_cached(raw: &str) -> CachedShareAnswer {
+    match serde_json::from_str::<CachedShareAnswer>(raw) {
+        Ok(parsed) if !parsed.answer.is_empty() => parsed,
+        _ => CachedShareAnswer {
+            answer: raw.to_string(),
+            citations: Vec::new(),
+        },
+    }
+}
+
+fn encode_cached(payload: &CachedShareAnswer) -> String {
+    serde_json::to_string(payload).unwrap_or_else(|_| payload.answer.clone())
+}
+
 /// Lookup: exact first, then semantic cosine against same share_token entries.
 pub async fn lookup(
     share_token: &str,
     query: &str,
     query_embedding: Option<&[f32]>,
-) -> Option<String> {
+) -> Option<CachedShareAnswer> {
     if !enabled() || share_token.trim().is_empty() || query.trim().is_empty() {
         return None;
     }
@@ -119,8 +142,8 @@ pub async fn lookup(
 
     // Optional CachePort L1 (process MemoryCache at bootstrap).
     if let Some(cache) = shared_exact() {
-        if let Some(answer) = cache.get(&format!("share-qa:{key}")).await {
-            return Some(answer);
+        if let Some(raw) = cache.get(&format!("share-qa:{key}")).await {
+            return Some(decode_cached(&raw));
         }
     }
 
@@ -128,7 +151,7 @@ pub async fn lookup(
         let mut exact = EXACT.lock().ok()?;
         if let Some(entry) = exact.get(&key) {
             if entry.expires_at > now {
-                return Some(entry.answer.clone());
+                return Some(entry.payload.clone());
             }
             exact.remove(&key);
         }
@@ -148,7 +171,7 @@ pub async fn lookup(
         let by = BY_TOKEN.lock().ok()?;
         by.get(share_token.trim()).cloned().unwrap_or_default()
     };
-    let mut best: Option<(f32, String)> = None;
+    let mut best: Option<(f32, CachedShareAnswer)> = None;
     {
         let exact = EXACT.lock().ok()?;
         for k in keys {
@@ -164,16 +187,22 @@ pub async fn lookup(
             let sim = cosine(q_emb, emb);
             if sim >= thr {
                 if best.as_ref().map(|(s, _)| sim > *s).unwrap_or(true) {
-                    best = Some((sim, entry.answer.clone()));
+                    best = Some((sim, entry.payload.clone()));
                 }
             }
         }
     }
-    best.map(|(_, a)| a)
+    best.map(|(_, payload)| payload)
 }
 
 /// Store answer with optional embedding for semantic reuse.
-pub async fn store(share_token: &str, query: &str, answer: &str, embedding: Option<Vec<f32>>) {
+pub async fn store(
+    share_token: &str,
+    query: &str,
+    answer: &str,
+    citations: &[Citation],
+    embedding: Option<Vec<f32>>,
+) {
     if !enabled() || share_token.trim().is_empty() || query.trim().is_empty() {
         return;
     }
@@ -183,14 +212,19 @@ pub async fn store(share_token: &str, query: &str, answer: &str, embedding: Opti
     let qn = normalize_query(query);
     let key = exact_key(share_token, &qn);
     let ttl = Duration::from_secs(ttl_secs().max(30));
+    let payload = CachedShareAnswer {
+        answer: answer.to_string(),
+        citations: citations.to_vec(),
+    };
     // Optional CachePort L1 (process MemoryCache at bootstrap).
     if let Some(cache) = shared_exact() {
+        let encoded = encode_cached(&payload);
         let _ = cache
-            .set(&format!("share-qa:{key}"), answer, ttl.as_secs())
+            .set(&format!("share-qa:{key}"), &encoded, ttl.as_secs())
             .await;
     }
     let entry = Entry {
-        answer: answer.to_string(),
+        payload,
         embedding,
         expires_at: Instant::now() + ttl,
     };
@@ -216,16 +250,45 @@ mod tests {
 
     #[tokio::test]
     async fn exact_roundtrip() {
-        store("tok-a", "What is X?", "answer-x", None).await;
+        store("tok-a", "What is X?", "answer-x", &[], None).await;
+        let hit = lookup("tok-a", "What is X?", None).await;
+        assert_eq!(hit.as_ref().map(|h| h.answer.as_str()), Some("answer-x"));
         assert_eq!(
-            lookup("tok-a", "What is X?", None).await.as_deref(),
-            Some("answer-x")
-        );
-        assert_eq!(
-            lookup("tok-a", "what  is   x?", None).await.as_deref(),
+            lookup("tok-a", "what  is   x?", None)
+                .await
+                .as_ref()
+                .map(|h| h.answer.as_str()),
             Some("answer-x")
         );
         assert!(lookup("tok-b", "What is X?", None).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn exact_roundtrip_keeps_citations() {
+        let citations = vec![Citation {
+            citation_id: 1,
+            doc_id: "doc-1".to_string(),
+            chunk_id: Some("chunk-1".to_string()),
+            page: None,
+            doc_name: "Doc One".to_string(),
+            preview: None,
+            content: Some("chunk body".to_string()),
+            score: 0.9,
+            layer: None,
+            chunk_type: None,
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+            parse_run_id: None,
+        }];
+        store("tok-cite", "What is X?", "answer [[cite:chunk-1]]", &citations, None).await;
+        let hit = lookup("tok-cite", "What is X?", None).await.expect("cached");
+        assert_eq!(hit.answer, "answer [[cite:chunk-1]]");
+        assert_eq!(hit.citations.len(), 1);
+        assert_eq!(hit.citations[0].chunk_id.as_deref(), Some("chunk-1"));
+        assert_eq!(hit.citations[0].content.as_deref(), Some("chunk body"));
     }
 
     #[tokio::test]
@@ -236,11 +299,12 @@ mod tests {
             "tok-s",
             "how tall is the tower?",
             "Eiffel is 330m",
+            &[],
             Some(emb_a),
         )
         .await;
         let hit = lookup("tok-s", "tower height?", Some(&emb_b)).await;
-        assert_eq!(hit.as_deref(), Some("Eiffel is 330m"));
+        assert_eq!(hit.as_ref().map(|h| h.answer.as_str()), Some("Eiffel is 330m"));
     }
 
     #[test]

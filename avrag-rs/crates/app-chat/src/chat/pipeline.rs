@@ -291,7 +291,20 @@ async fn run_pipeline_inner(
             .await?;
     }
 
-    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution).await;
+    // Persist before Done so the stream carries the real PG message_id.
+    // Share turns skip persist; Done still uses STREAM_PLACEHOLDER_MESSAGE_ID (0).
+    if request.source_type.as_deref() != Some("share")
+        && let Some(chat_persistence) = state.chat_persistence()
+    {
+        state
+            .persist_chat_execution(
+                &request,
+                &session,
+                &mut execution,
+                chat_persistence.as_ref(),
+            )
+            .await?;
+    }
 
     if request.source_type.as_deref() == Some("share") {
         if let Some(token) = request.source_token.as_deref() {
@@ -313,24 +326,14 @@ async fn run_pipeline_inner(
                 token,
                 &request.query,
                 &execution.response.answer,
+                &execution.response.citations,
                 embed,
             )
             .await;
         }
     }
 
-    if request.source_type.as_deref() != Some("share")
-        && let Some(chat_persistence) = state.chat_persistence()
-    {
-        state
-            .persist_chat_execution(
-                &request,
-                &session,
-                &mut execution,
-                chat_persistence.as_ref(),
-            )
-            .await?;
-    }
+    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution).await;
 
     state.record_usage_for_execution(&execution).await?;
 
@@ -343,15 +346,15 @@ async fn emit_share_cache_hit(
     session: &contracts::workspaces::ChatSession,
     request: &ChatRequest,
     stream_config: Option<&StreamConfig>,
-    cached: String,
+    cached: crate::share_cache::CachedShareAnswer,
 ) -> Result<ChatResponse, AppError> {
     let response = ChatResponse {
-        answer: cached.clone(),
+        answer: cached.answer.clone(),
         answer_blocks: vec![],
         session_id: session.id.clone(),
         agent_type: request.agent_type.clone(),
         sources: vec![],
-        citations: vec![],
+        citations: cached.citations.clone(),
         trace: contracts::chat::TraceInfo {
             mode: "share_cache".to_string(),
         },
@@ -370,11 +373,22 @@ async fn emit_share_cache_hit(
             request_id: config.request_id.clone(),
             session_id: session.id.clone(),
         }).await;
-        for chunk in crate::chunk_text_for_stream(&cached) {
+        for chunk in crate::chunk_text_for_stream(&cached.answer) {
             let _ = config.sender.send(contracts::chat::ChatEvent::Token {
                 request_id: config.request_id.clone(),
                 message_id: mid,
                 content: chunk,
+            }).await;
+        }
+        if !cached.citations.is_empty() {
+            let _ = config.sender.send(contracts::chat::ChatEvent::Citations {
+                request_id: config.request_id.clone(),
+                message_id: mid,
+                citations: cached
+                    .citations
+                    .iter()
+                    .filter_map(|citation| serde_json::to_value(citation).ok())
+                    .collect(),
             }).await;
         }
         let _ = config.sender.send(contracts::chat::ChatEvent::Done {
