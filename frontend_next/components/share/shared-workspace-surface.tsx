@@ -130,6 +130,8 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   const [historyWidth, setHistoryWidth] = useState(20 * 16);
   const [rightWidth, setRightWidth] = useState(24.5 * 16);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const selectionHydratedRef = useRef(false);
   const turnstileRef = useRef<HTMLDivElement | null>(null);
   const turnstileWidgetId = useRef<string | null>(null);
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
@@ -226,8 +228,45 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   }, []);
 
   const sources = useMemo(() => toWorkspaceSources(payload), [payload]);
-  const selectedSourceIds = useMemo(() => readySourceIds(sources), [sources]);
   const workspaceId = payload?.knowledge_base.id ?? "";
+
+  useEffect(() => {
+    selectionHydratedRef.current = false;
+    setSelectedSourceIds([]);
+  }, [shareToken]);
+
+  useEffect(() => {
+    if (!selectionHydratedRef.current) {
+      if (sources.length === 0) {
+        return;
+      }
+      selectionHydratedRef.current = true;
+      setSelectedSourceIds(readySourceIds(sources));
+      return;
+    }
+
+    const knownIds = new Set(sources.map((source) => source.id));
+    setSelectedSourceIds((current) => {
+      const next = current.filter((id) => knownIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [sources]);
+
+  const handleSelectAllSources = useCallback(() => {
+    setSelectedSourceIds((current) =>
+      current.length === sources.length && sources.length > 0
+        ? []
+        : sources.map((source) => source.id),
+    );
+  }, [sources]);
+
+  const handleSelectedSourceToggle = useCallback((sourceId: string) => {
+    setSelectedSourceIds((current) =>
+      current.includes(sourceId)
+        ? current.filter((id) => id !== sourceId)
+        : [...current, sourceId],
+    );
+  }, []);
   const sessionsAsWorkspace: WorkspaceSession[] = useMemo(
     () => toWorkspaceSessions(localSessions, workspaceId || "shared"),
     [localSessions, workspaceId],
@@ -573,12 +612,13 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
             onDeleteSource={() => undefined}
             onOpenSource={(sourceId) => setViewerSourceId(sourceId)}
             onReindexSource={() => undefined}
-            onSelectAll={() => undefined}
-            onSelectedSourceToggle={() => undefined}
+            onSelectAll={handleSelectAllSources}
+            onSelectedSourceToggle={handleSelectedSourceToggle}
             onUploadFiles={() => undefined}
             onUrlSourceChange={() => undefined}
             polling={false}
             readOnly
+            allowSelection
             selectedSourceIds={selectedSourceIds}
             sources={sources}
             urlSource=""

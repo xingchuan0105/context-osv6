@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -279,5 +279,35 @@ describe("SharedWorkspaceSurface", () => {
     expect(container.querySelector('a[href="/shared/u/owner-1"]')).toBeNull();
     // Owner card itself still renders (name is share-page context, not the profile link).
     expect(screen.getByTestId("share-owner-card")).toBeTruthy();
+  });
+
+  it("lets visitors toggle right-rail source selection without add/delete controls", async () => {
+    mocks.getSharedWorkspaceMock.mockResolvedValue(buildPayload());
+
+    render(<SharedWorkspaceSurface shareToken="share-select" />);
+
+    const rail = await screen.findByTestId("shared-desktop-right-rail");
+    expect(within(rail).getByRole("button", { name: "全选" })).toBeTruthy();
+    expect(within(rail).queryByRole("button", { name: /新建资料|New source/i })).toBeNull();
+
+    const readyToggle = await waitFor(() => {
+      const toggle = within(rail).getByRole("button", { pressed: true });
+      expect(toggle).not.toBeDisabled();
+      return toggle;
+    });
+    fireEvent.click(readyToggle);
+    expect(readyToggle).toHaveAttribute("aria-pressed", "false");
+
+    const processingRow = within(rail)
+      .getAllByTestId("ingestion-status")
+      .find((row) => row.getAttribute("data-status") === "processing");
+    expect(processingRow).toBeTruthy();
+    expect(within(processingRow!).getByRole("button", { pressed: false })).toBeDisabled();
+
+    fireEvent.click(within(rail).getByRole("button", { name: "全选" }));
+    expect(within(rail).getByRole("button", { name: "清除选择" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });

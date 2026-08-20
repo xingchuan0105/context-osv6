@@ -27,10 +27,12 @@ export type WorkspaceSourcesPaneProps = {
   onUrlSourceChange: (value: string) => void;
   error: string;
   /**
-   * Shared/public browse mode: list + open only.
-   * Hides add/upload, multi-select, reindex, and delete.
+   * Shared/public browse mode: hide add/upload, reindex, and delete.
+   * Selection stays available unless `allowSelection` is false.
    */
   readOnly?: boolean;
+  /** Override row/select-all checkboxes. Defaults to `!readOnly`. */
+  allowSelection?: boolean;
 };
 
 const SUPPORTED_UPLOAD_ACCEPT = ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.csv,.json,.toml,.yaml,.yml,.rst";
@@ -88,6 +90,7 @@ export function WorkspaceSourcesPane({
   onUrlSourceChange,
   error,
   readOnly = false,
+  allowSelection,
 }: WorkspaceSourcesPaneProps) {
   const { locale } = useUiPreferences();
   const [showNewSourceDialog, setShowNewSourceDialog] = useState(false);
@@ -96,6 +99,7 @@ export function WorkspaceSourcesPane({
   const [pasteContent, setPasteContent] = useState("");
   const openMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canSelect = allowSelection ?? !readOnly;
   const allSelected = sources.length > 0 && selectedSourceIds.length === sources.length;
   const supportedUploadFormatsLabel =
     locale === "zh-CN" ? SUPPORTED_UPLOAD_FORMATS.join("、") : SUPPORTED_UPLOAD_FORMATS.join(" / ");
@@ -176,52 +180,50 @@ export function WorkspaceSourcesPane({
         </div>
       </div>
 
-      {readOnly ? (
-        error ? (
-          <div className={styles.sectionControls}>
-            <div className={styles.error}>{error}</div>
-          </div>
-        ) : null
-      ) : (
+      {!readOnly || canSelect || error ? (
         <div className={styles.sectionControls}>
-          <button
-            className={`${styles.sectionActionButton} ${styles.sectionActionButtonLight} app-button-create-soft`}
-            type="button"
-            onClick={() => {
-              setActiveDialogTab("upload");
-              setShowNewSourceDialog(true);
-            }}
-          >
-            <svg aria-hidden="true" className={styles.sectionActionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
-            </svg>
-            <span>{formatUiMessage(locale, "workspaceRightRail.newSourceAction")}</span>
-          </button>
-
-          <div className={styles.selectionRow}>
-            <span className={styles.selectionLabel}>{formatUiMessage(locale, "workspaceRightRail.selectAllAction")}</span>
+          {readOnly ? null : (
             <button
-              aria-label={
-                allSelected
-                  ? formatUiMessage(locale, "workspaceRightRail.clearSelectionAction")
-                  : formatUiMessage(locale, "workspaceRightRail.selectAllAction")
-              }
-              aria-pressed={allSelected}
-              className={`${styles.selectionCheckbox}${allSelected ? ` ${styles.selectionCheckboxChecked}` : ""}`}
-              onClick={onSelectAll}
+              className={`${styles.sectionActionButton} ${styles.sectionActionButtonLight} app-button-create-soft`}
               type="button"
+              onClick={() => {
+                setActiveDialogTab("upload");
+                setShowNewSourceDialog(true);
+              }}
             >
-              {allSelected ? (
-                <svg aria-hidden="true" className={styles.selectionCheckboxIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="m6 12.75 4 4 8-9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                </svg>
-              ) : null}
+              <svg aria-hidden="true" className={styles.sectionActionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.8" />
+              </svg>
+              <span>{formatUiMessage(locale, "workspaceRightRail.newSourceAction")}</span>
             </button>
-          </div>
+          )}
+
+          {canSelect ? (
+            <div className={styles.selectionRow}>
+              <span className={styles.selectionLabel}>{formatUiMessage(locale, "workspaceRightRail.selectAllAction")}</span>
+              <button
+                aria-label={
+                  allSelected
+                    ? formatUiMessage(locale, "workspaceRightRail.clearSelectionAction")
+                    : formatUiMessage(locale, "workspaceRightRail.selectAllAction")
+                }
+                aria-pressed={allSelected}
+                className={`${styles.selectionCheckbox}${allSelected ? ` ${styles.selectionCheckboxChecked}` : ""}`}
+                onClick={onSelectAll}
+                type="button"
+              >
+                {allSelected ? (
+                  <svg aria-hidden="true" className={styles.selectionCheckboxIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="m6 12.75 4 4 8-9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                  </svg>
+                ) : null}
+              </button>
+            </div>
+          ) : null}
 
           {error ? <div className={styles.error}>{error}</div> : null}
         </div>
-      )}
+      ) : null}
 
       <div className={styles.sectionScroller}>
         {sources.length === 0 ? (
@@ -273,20 +275,7 @@ export function WorkspaceSourcesPane({
                   title={rowTitle}
                 >
                   <div className={styles.listItemTopRow}>
-                    {readOnly ? (
-                      <span
-                        className={styles.selectionMark}
-                        aria-hidden="true"
-                      >
-                        {processing ? (
-                          <span className={styles.sourceStatusSpinner} />
-                        ) : failed ? (
-                          <svg className={styles.sourceStatusErrorIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 7l10 10M17 7 7 17" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                          </svg>
-                        ) : null}
-                      </span>
-                    ) : (
+                    {canSelect ? (
                       <button
                         aria-pressed={selected}
                         className={styles.sourceToggleButton}
@@ -315,6 +304,19 @@ export function WorkspaceSourcesPane({
                           ) : null}
                         </span>
                       </button>
+                    ) : (
+                      <span
+                        className={styles.selectionMark}
+                        aria-hidden="true"
+                      >
+                        {processing ? (
+                          <span className={styles.sourceStatusSpinner} />
+                        ) : failed ? (
+                          <svg className={styles.sourceStatusErrorIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M7 7l10 10M17 7 7 17" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                          </svg>
+                        ) : null}
+                      </span>
                     )}
 
                     <button
