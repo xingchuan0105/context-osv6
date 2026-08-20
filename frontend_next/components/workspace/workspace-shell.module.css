@@ -807,9 +807,16 @@
     display: block;
   }
 
-  .desktopHistoryRail {
+  .desktopHistoryRail,
+  .desktopRightRail {
     display: flex;
     flex-direction: column;
+  }
+
+  .desktopRightRail > * {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
   }
 }
 

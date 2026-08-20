@@ -72,6 +72,9 @@
   flex-direction: column;
   gap: 0;
   padding: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .paneHeader,
@@ -87,11 +90,13 @@
 }
 
 .railPane .paneHeader {
+  flex-shrink: 0;
   padding: var(--space-lg) var(--space-lg) var(--space-xs);
 }
 
 .sectionControls {
   display: grid;
+  flex-shrink: 0;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg) var(--space-xs);
 }
@@ -101,8 +106,9 @@
   align-content: start;
   gap: var(--space-md);
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   padding: var(--space-xs) var(--space-lg) var(--space-lg);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
