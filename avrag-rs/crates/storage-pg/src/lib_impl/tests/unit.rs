@@ -4,8 +4,8 @@ use super::support::*;
 fn list_workspaces_sql_sums_documents_not_status_groups() {
     let src = include_str!("../../workspaces.rs");
     assert!(
-        src.contains("coalesce(sum(cnt), 0) as document_count"),
-        "dashboard source count must sum per-status document rows, not count(*) of status groups"
+        src.contains("coalesce(sum(cnt), 0)::bigint as document_count"),
+        "dashboard source count must sum per-status document rows as bigint (sum() is numeric)"
     );
     assert!(
         !src.contains("select count(*) as document_count"),
