@@ -141,9 +141,11 @@ impl AssetRepository {
             SELECT asset_id, owner_user_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             FROM document_assets
             WHERE asset_id = $1
+              AND owner_user_id = $2
             "#,
         )
         .bind(asset_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -161,9 +163,11 @@ impl AssetRepository {
             SELECT chunk_id, owner_user_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             FROM document_multimodal_chunks
             WHERE chunk_id = $1
+              AND owner_user_id = $2
             "#,
         )
         .bind(chunk_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -186,9 +190,11 @@ impl AssetRepository {
             select id, document_id, page, content, metadata
             from chunks
             where id = any($1) and chunk_type in ('body', 'table_evidence')
+              and owner_user_id = $2
             "#,
         )
         .bind(chunk_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -214,8 +220,9 @@ impl AssetRepository {
         chunks: &[TableEvidenceChunkRow],
     ) -> Result<usize, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        sqlx::query("DELETE FROM chunks WHERE document_id = $1 AND chunk_type = 'table_evidence'")
+        sqlx::query("DELETE FROM chunks WHERE document_id = $1 AND owner_user_id = $2 AND chunk_type = 'table_evidence'")
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
         let mut inserted = 0usize;
@@ -230,13 +237,16 @@ impl AssetRepository {
                 r#"
                 INSERT INTO chunks (id, owner_user_id, document_id, chunk_type, content, metadata)
                 SELECT $1, d.owner_user_id, d.id, 'table_evidence', $2, $3
-                FROM documents d WHERE d.id = $4
+                FROM documents d
+                WHERE d.id = $4
+                  AND d.owner_user_id = $5
                 "#,
             )
             .bind(c.chunk_id)
             .bind(&c.md)
             .bind(meta)
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
             inserted += res.rows_affected() as usize;
@@ -263,6 +273,7 @@ impl AssetRepository {
                    (metadata->'block_metadata'->>'md_line_end')::bigint   AS md_line_end
             FROM chunks
             WHERE document_id = $1
+              AND owner_user_id = $2
               AND chunk_type = 'body'
               AND metadata->'block_metadata'->>'md_line_start' IS NOT NULL
               AND metadata->'block_metadata'->>'md_line_end' IS NOT NULL
@@ -270,6 +281,7 @@ impl AssetRepository {
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -297,9 +309,11 @@ impl AssetRepository {
             SELECT chunk_id, owner_user_id, workspace_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             FROM document_multimodal_chunks
             WHERE chunk_id = any($1)
+              AND owner_user_id = $2
             "#,
         )
         .bind(chunk_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -326,10 +340,12 @@ impl AssetRepository {
             SELECT asset_id, owner_user_id, workspace_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             FROM document_assets
             WHERE asset_id = any($1)
+              AND owner_user_id = $2
             ORDER BY created_at
             "#,
         )
         .bind(asset_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

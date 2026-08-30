@@ -283,10 +283,9 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let auth = auth_context_from_config(&config);
     let object_store_handle = Arc::new(build_object_store(&config).await?);
     let pg = if let Some(database_url) = config.database_url.as_deref() {
+        // Migrations run exclusively through the `avrag-migrate` binary before
+        // deployment; the runtime pool connects with read/write-only grants.
         let bootstrap = BootstrapRepository::connect(database_url).await?;
-        if config.auto_migrate {
-            bootstrap.migrate().await?;
-        }
         let repository = PgAppRepository {
             pool: TenantPgPool::new(bootstrap.raw().clone()),
         };

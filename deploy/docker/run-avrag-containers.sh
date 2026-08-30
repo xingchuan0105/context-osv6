@@ -30,10 +30,12 @@ run_one() {
     --restart unless-stopped \
     --ulimit nofile=65536:65536 \
     --env-file "$ENV_FILE" \
+    -e NODE_ENV=production \
+    -e E2E_ENABLED=false \
+    -e TRUST_PROXY_AUTH=false \
     -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
     -v "${OBJ_ROOT}:${OBJ_ROOT}" \
     -v "${STRUCT_STORE_ROOT}:${STRUCT_STORE_ROOT}" \
-    -v "${ENV_FILE}:${ENV_FILE}:ro" \
     "$RUNTIME_IMAGE" \
     "${OPT_ROOT}/bin/${bin}"
   echo "run-avrag-containers: started $name"
@@ -68,11 +70,13 @@ for i in $(seq 1 "$WORKER_REPLICAS"); do
     --ulimit nofile=65536:65536 \
     --env-file "$ENV_FILE" \
     "${extra_env[@]}" \
+    -e NODE_ENV=production \
+    -e E2E_ENABLED=false \
+    -e TRUST_PROXY_AUTH=false \
     -e AVRAG_WORKER_ID="${wname}" \
     -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
     -v "${OBJ_ROOT}:${OBJ_ROOT}" \
     -v "${STRUCT_STORE_ROOT}:${STRUCT_STORE_ROOT}" \
-    -v "${ENV_FILE}:${ENV_FILE}:ro" \
     "$RUNTIME_IMAGE" \
     "${OPT_ROOT}/bin/avrag-worker"
   echo "run-avrag-containers: started $wname"

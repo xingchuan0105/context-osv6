@@ -12,11 +12,13 @@ impl ChunkRepository {
             select id, owner_user_id, owner_id, title, description, created_at, updated_at
             from workspaces
             where (title ilike $1 or description ilike $1)
+              and owner_user_id = $2
             order by updated_at desc, created_at desc
             limit 50
             "#,
         )
         .bind(pattern)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -36,12 +38,14 @@ impl ChunkRepository {
                 r#"
                 select id, workspace_id, title, agent_type, pinned, created_at, updated_at
                 from chat_sessions
-                where title ilike $1
+                where owner_user_id = $2
+                  and title ilike $1
                 order by updated_at desc, created_at desc
                 limit 50
                 "#,
             )
             .bind(pattern)
+            .bind(context.user_id().into_uuid())
             .fetch_all(tx.inner())
             .await?
         } else {
@@ -49,20 +53,23 @@ impl ChunkRepository {
                 r#"
                 select distinct s.id, s.workspace_id, s.title, s.agent_type, s.pinned, s.created_at, s.updated_at
                 from chat_sessions s
-                where s.title ilike $1
+                where s.owner_user_id = $3
+                  and (s.title ilike $1
                    or exists (
                        select 1
                        from chat_messages m
                        where m.session_id = s.id
                          and m.role in ('user', 'assistant')
+                         and m.owner_user_id = s.owner_user_id
                          and m.search_vector @@ plainto_tsquery('simple', $2)
-                   )
+                   ))
                 order by s.updated_at desc, s.created_at desc
                 limit 50
                 "#,
             )
             .bind(pattern)
             .bind(&segmented_query)
+            .bind(context.user_id().into_uuid())
             .fetch_all(tx.inner())
             .await?
         };
@@ -91,13 +98,16 @@ impl ChunkRepository {
                    ) as last_error
             from documents d
             join workspaces n on n.id = d.workspace_id
-            where d.file_name ilike $1
+            where d.owner_user_id = $2
+              and n.owner_user_id = d.owner_user_id
+              and d.file_name ilike $1
               and d.status not in ('deleting', 'deleted')
             order by d.updated_at desc, d.created_at desc
             limit 50
             "#,
         )
         .bind(pattern)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

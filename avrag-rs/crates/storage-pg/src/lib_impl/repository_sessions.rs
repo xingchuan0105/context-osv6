@@ -12,10 +12,12 @@ impl SessionRepository {
             select id, workspace_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
             where ($1::uuid is null or workspace_id = $1)
+              and owner_user_id = $2
             order by pinned desc, updated_at desc, created_at desc
             "#,
         )
         .bind(workspace_id)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -32,10 +34,11 @@ impl SessionRepository {
             r#"
             select id, workspace_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
-            where id = $1
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(session_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -56,11 +59,12 @@ impl SessionRepository {
             set title = COALESCE($2, title),
                 pinned = COALESCE($3, pinned),
                 updated_at = now()
-            where id = $1
+            where id = $1 and owner_user_id = $2
             returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
         .bind(session_id)
+        .bind(context.user_id().into_uuid())
         .bind(title)
         .bind(pinned)
         .fetch_optional(tx.inner())
@@ -78,10 +82,16 @@ impl SessionRepository {
     ) -> Result<ChatSession, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
+        // Parent-guarded insert: zero rows when the workspace belongs to
+        // someone else, surfacing as NotFound instead of a cross-tenant child.
         let row = sqlx::query(
             r#"
             insert into chat_sessions (owner_user_id, workspace_id, user_id, title, agent_type)
-            values ($1, $2, $3, $4, $5)
+            select $1::uuid, $2::uuid, $3::uuid, $4, $5
+            where exists (
+                select 1 from workspaces w
+                where w.id = $2::uuid and w.owner_user_id = $1::uuid
+            )
             returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
@@ -90,8 +100,11 @@ impl SessionRepository {
         .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(title)
         .bind(agent_type)
-        .fetch_one(tx.inner())
+        .fetch_optional(tx.inner())
         .await?;
+        let Some(row) = row else {
+            return Err(PgStorageError::NotFound("resource not found".to_string()));
+        };
         tx.commit().await?;
         map_session(row)
     }
@@ -102,8 +115,9 @@ impl SessionRepository {
         session_id: Uuid,
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let result = sqlx::query("delete from chat_sessions where id = $1")
+        let result = sqlx::query("delete from chat_sessions where id = $1 and owner_user_id = $2")
             .bind(session_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
         tx.commit().await?;
@@ -119,13 +133,16 @@ impl SessionRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, turn_metadata, resolved_query, created_at
-            from chat_messages
-            where session_id = $1 and id = $2
+            select m.id, m.session_id, m.role, m.content, m.answer_blocks, m.agent_id, m.agent_name, m.agent_icon, m.citations, m.tool_results, m.turn_metadata, m.resolved_query, m.created_at
+            from chat_messages m
+            join chat_sessions s on s.id = m.session_id
+            where m.session_id = $1 and m.id = $2
+              and s.owner_user_id = $3 and m.owner_user_id = $3
             "#,
         )
         .bind(session_id)
         .bind(message_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -150,20 +167,31 @@ impl SessionRepository {
             turn.user_content,
             turn.user_resolved_query,
         );
-        sqlx::query(
+        // Parent-guarded: the whole turn writes zero rows unless the session
+        // belongs to the caller. Cross-tenant session ids surface as NotFound.
+        let parent_guarded = sqlx::query_scalar::<_, i64>(
             r#"
+            with locked as (
+                select id, owner_user_id from chat_sessions
+                where id = $1 and owner_user_id = $2
+                for update
+            )
             insert into chat_messages (owner_user_id, session_id, role, content, citations, turn_metadata, resolved_query, search_tokens)
-            values ($1, $2, 'user', $3, '[]'::jsonb, $4, $5, $6)
+            select l.owner_user_id, l.id, 'user', $3, '[]'::jsonb, $4, $5, $6 from locked l
+            returning id
             "#,
         )
-        .bind(context.user_id().into_uuid())
         .bind(session_id)
+        .bind(context.user_id().into_uuid())
         .bind(turn.user_content)
         .bind(user_turn_metadata)
         .bind(turn.user_resolved_query)
         .bind(search_tokens)
-        .execute(tx.inner())
+        .fetch_optional(tx.inner())
         .await?;
+        if parent_guarded.is_none() {
+            return Err(PgStorageError::NotFound("resource not found".to_string()));
+        }
 
         let tool_results_value =
             serde_json::to_value(turn.tool_results).unwrap_or_else(|_| json!([]));
@@ -194,8 +222,9 @@ impl SessionRepository {
         .fetch_one(tx.inner())
         .await?;
 
-        sqlx::query("update chat_sessions set updated_at = now() where id = $1")
+        sqlx::query("update chat_sessions set updated_at = now() where id = $1 and owner_user_id = $2")
             .bind(session_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
 

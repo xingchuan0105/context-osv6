@@ -12,7 +12,6 @@ pub struct AppConfig {
     pub owner_user_id: String,
     pub user_id: String,
     pub database_url: Option<String>,
-    pub auto_migrate: bool,
     pub object_root: String,
     pub milvus: MilvusConfig,
     pub embedding: ModelProviderConfig,
@@ -197,7 +196,6 @@ impl Default for AppConfig {
             owner_user_id: default_owner_user_id(),
             user_id: default_user_id(),
             database_url: None,
-            auto_migrate: true,
             object_root: default_object_root(),
             milvus: MilvusConfig {
                 url: "http://127.0.0.1:19530".to_string(),
@@ -407,7 +405,6 @@ impl AppConfig {
         config.owner_user_id = env_string("NEXT_PUBLIC_DEV_OWNER_USER_ID", &config.owner_user_id);
         config.user_id = env_string("NEXT_PUBLIC_DEV_USER_ID", &config.user_id);
         config.database_url = env_optional_string("DATABASE_URL");
-        config.auto_migrate = env_bool("AVRAG_RUN_MIGRATIONS", config.auto_migrate);
         config.object_root = env_string("AVRAG_OBJECT_ROOT", &config.object_root);
 
         config.milvus.url = env_string("MILVUS_URL", &config.milvus.url);

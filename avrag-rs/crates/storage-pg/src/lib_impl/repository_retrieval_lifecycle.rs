@@ -15,11 +15,13 @@ impl DocumentRepository {
             update documents
             set status = $2, updated_at = now()
             where id = $1
+              and owner_user_id = $3
               and status not in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
         .bind(document_status_str(&status))
+        .bind(context.user_id().into_uuid())
         .execute(tx.inner())
         .await?;
         tx.commit().await?;
@@ -32,8 +34,9 @@ impl DocumentRepository {
         document_id: Uuid,
     ) -> Result<Option<DocumentStatus>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let row = sqlx::query("select status from documents where id = $1")
+        let row = sqlx::query("select status from documents where id = $1 and owner_user_id = $2")
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .fetch_optional(tx.inner())
             .await?;
         tx.commit().await?;
@@ -52,8 +55,9 @@ impl DocumentRepository {
         sha256_hex: Option<&str>,
     ) -> Result<DocumentUploadMutationOutcome, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let row = sqlx::query("select status from documents where id = $1 for update")
+        let row = sqlx::query("select status from documents where id = $1 and owner_user_id = $2 for update")
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .fetch_optional(tx.inner())
             .await?;
         let Some(row) = row else {
@@ -75,10 +79,12 @@ impl DocumentRepository {
                 upload_validation_error = null,
                 updated_at = now()
             where id = $1
+              and owner_user_id = $4
             "#,
         )
         .bind(document_id)
         .bind(i64::try_from(size_bytes).unwrap_or(i64::MAX))
+        .bind(context.user_id().into_uuid())
         .bind(sha256_hex)
         .execute(tx.inner())
         .await?;
@@ -117,10 +123,12 @@ impl DocumentRepository {
                 upload_validation_error = $2,
                 updated_at = now()
             where id = $1
+              and owner_user_id = $3
             "#,
         )
         .bind(document_id)
         .bind(validation_error)
+        .bind(context.user_id().into_uuid())
         .execute(tx.inner())
         .await?;
         tx.commit().await?;
@@ -137,10 +145,11 @@ impl DocumentRepository {
             r#"
             select upload_size_bytes, upload_sha256, upload_validated_at, upload_validation_error
             from documents
-            where id = $1
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -171,6 +180,7 @@ impl DocumentRepository {
                 status = coalesce($4, status),
                 updated_at = now()
             where id = $1
+              and owner_user_id = $5
               and status not in ('deleting', 'deleted')
             "#,
         )
@@ -178,6 +188,7 @@ impl DocumentRepository {
         .bind(filename)
         .bind(workspace_id)
         .bind(status_text)
+        .bind(context.user_id().into_uuid())
         .execute(tx.inner())
         .await?;
         tx.commit().await?;
@@ -195,11 +206,12 @@ impl DocumentRepository {
             r#"
             select id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, object_path
             from documents
-            where id = $1
+            where id = $1 and owner_user_id = $2
             for update
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
 
@@ -240,10 +252,11 @@ impl DocumentRepository {
                 deletion_requested_at = coalesce(deletion_requested_at, now()),
                 deletion_error = null,
                 updated_at = now()
-            where id = $1
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .execute(tx.inner())
         .await?;
 
@@ -279,8 +292,9 @@ impl DocumentRepository {
         document_id: Uuid,
     ) -> Result<Option<DocumentStatus>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let row = sqlx::query("select status from documents where id = $1")
+        let row = sqlx::query("select status from documents where id = $1 and owner_user_id = $2")
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .fetch_optional(tx.inner())
             .await?;
         tx.commit().await?;

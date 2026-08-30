@@ -863,6 +863,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "avrag-migrate"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "app-core",
+ "avrag-storage-pg",
+ "dotenvy",
+ "telemetry",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "avrag-rag-core"
 version = "0.1.0"
 dependencies = [
@@ -6744,6 +6757,7 @@ dependencies = [
  "avrag-rag-core",
  "avrag-retrieval-data-plane",
  "avrag-share",
+ "avrag-storage-pg",
  "axum",
  "bcrypt",
  "chrono",

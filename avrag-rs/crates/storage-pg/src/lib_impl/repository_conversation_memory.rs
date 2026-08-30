@@ -136,6 +136,7 @@ impl ConversationMemoryRepository {
                 from chat_messages m
                 join chat_sessions s on s.id = m.session_id
                 where m.owner_user_id = $1
+                  and m.owner_user_id = s.owner_user_id
                   and s.workspace_id = $2
                   and s.user_id = $3
                   and m.role in ('user', 'assistant')
@@ -198,6 +199,7 @@ impl ConversationMemoryRepository {
                 from chat_messages m
                 join chat_sessions s on s.id = m.session_id
                 where m.owner_user_id = $1
+                  and m.owner_user_id = s.owner_user_id
                   and s.workspace_id = $2
                   and s.user_id = $3
                   and m.role in ('user', 'assistant')
@@ -237,7 +239,16 @@ pub fn build_user_message_search_tokens(content: &str, resolved_query: Option<&s
 
 impl ConversationMemoryRepository {
     /// Re-segment `search_tokens` with jieba for all chat messages (post-migrate backfill).
+    ///
+    /// FORCE RLS (migration 0082) applies to the table owner too, so this
+    /// cross-owner maintenance sweep must run under the admin GUC to see all
+    /// rows; only the migrator DSN ever reaches this method.
     pub async fn resegment_chat_message_search_tokens(&self) -> Result<u64, PgStorageError> {
+        // Pool-level maintenance sweep: set the admin GUC on every connection
+        // this pool hands out for the duration of the job.
+        sqlx::query("select set_config('app.current_role', 'super_admin', false)")
+            .execute(self.pool.raw())
+            .await?;
         let rows = sqlx::query(
             r#"
             select id, content, resolved_query, role

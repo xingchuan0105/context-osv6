@@ -51,13 +51,21 @@ fn resolve_database_url() -> String {
 fn pg_bootstrap_config() -> AppConfig {
     let mut config = AppConfig::default();
     config.database_url = Some(resolve_database_url());
-    config.auto_migrate = true;
     // API-key / membership contracts do not need RAG embeddings.
     config.enable_rag = false;
     config
 }
 
 async fn pg_test_app_state() -> Option<AppState> {
+    let state = pg_test_app_state_migrated().await?;
+    Some(state)
+}
+
+async fn pg_test_app_state_migrated() -> Option<AppState> {
+    let database_url = resolve_database_url();
+    // Schema setup is the migrator's job now; tests run it inline first.
+    let repo = avrag_storage_pg::BootstrapRepository::connect(&database_url).await.ok()?;
+    repo.migrate().await.ok()?;
     AppState::bootstrap(pg_bootstrap_config()).await.ok()
 }
 

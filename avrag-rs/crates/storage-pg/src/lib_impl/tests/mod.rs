@@ -12,3 +12,5 @@ mod conversation_search;
 mod table_evidence;
 mod body_chunk_md_lines;
 mod workspaces;
+mod role_guard;
+mod tenant_isolation;

@@ -212,12 +212,14 @@ impl DocumentRepository {
             from documents
             where id = $1
               and owner_user_id = $2
+              and workspace_id = $3
               and status not in ('deleting', 'deleted')
             for update
             "#,
         )
         .bind(document_id)
         .bind(context.user_id().into_uuid())
+        .bind(workspace_id)
         .fetch_optional(tx.inner())
         .await?;
         if guard.is_none() {

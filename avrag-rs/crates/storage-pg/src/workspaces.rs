@@ -39,13 +39,16 @@ impl crate::PgAppRepository {
                     select status, count(*) as cnt
                     from documents d
                     where d.workspace_id = n.id
+                      and d.owner_user_id = n.owner_user_id
                       and d.status not in ('deleting', 'deleted')
                     group by status
                 ) sub
             ) doc_stats on true
+            where n.owner_user_id = $1
             order by n.updated_at desc, n.created_at desc
             "#,
         )
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

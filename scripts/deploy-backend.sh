@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Build avrag-api + avrag-worker and deploy artifacts to VPS.
+# Build avrag-api + avrag-worker + avrag-migrate and deploy artifacts to VPS.
 # Source of truth: local git tree. VPS receives bins/migrations/prompts only.
+# Deploy order: build → upload → run one-shot migration container → swap API/worker.
+# Any migration failure leaves the previous binaries running (no partial deploy).
 #
 # Env (from avrag-rs/.env): VPS_MAIN_HOST, VPS_MAIN_USER, VPS_MAIN_PASSWORD
 # Optional:
@@ -57,19 +59,21 @@ echo "deploy-backend: rev=${RELEASE_ID}"
 
 API_BIN="$AVRAG_DIR/target/release/avrag-api"
 WORKER_BIN="$AVRAG_DIR/target/release/avrag-worker"
+MIGRATE_BIN="$AVRAG_DIR/target/release/avrag-migrate"
 
 if [[ "$ASSETS_ONLY" != "1" ]]; then
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    echo "deploy-backend: cargo build --release -p avrag-api -p avrag-worker"
+    echo "deploy-backend: cargo build --release -p avrag-api -p avrag-worker -p avrag-migrate"
     (
       cd "$AVRAG_DIR"
-      cargo build --release -p avrag-api -p avrag-worker
+      cargo build --release -p avrag-api -p avrag-worker -p avrag-migrate
     )
   else
     echo "deploy-backend: SKIP_BUILD=1 (using existing release bins)"
   fi
   [[ -x "$API_BIN" ]] || die "missing $API_BIN"
   [[ -x "$WORKER_BIN" ]] || die "missing $WORKER_BIN"
+  [[ -x "$MIGRATE_BIN" ]] || die "missing $MIGRATE_BIN"
 fi
 
 [[ -d "$AVRAG_DIR/migrations" ]] || die "missing migrations/"
@@ -81,7 +85,10 @@ mkdir -p "$STAGE/bin" "$STAGE/migrations" "$STAGE/prompts" "$STAGE/modes" "$STAG
 if [[ "$ASSETS_ONLY" != "1" ]]; then
   cp -a "$API_BIN" "$STAGE/bin/avrag-api"
   cp -a "$WORKER_BIN" "$STAGE/bin/avrag-worker"
-  chmod 755 "$STAGE/bin/avrag-api" "$STAGE/bin/avrag-worker"
+  cp -a "$MIGRATE_BIN" "$STAGE/bin/avrag-migrate"
+  chmod 755 "$STAGE/bin/avrag-api" "$STAGE/bin/avrag-worker" "$STAGE/bin/avrag-migrate"
+  # Artifact integrity: SHA256 recorded in DEPLOY_META + verified remotely.
+  ( cd "$STAGE/bin" && sha256sum avrag-api avrag-worker avrag-migrate > sha256sums.txt )
 fi
 
 # migrations: sql only (skip large _backups if present)
@@ -102,7 +109,9 @@ rsync -a --delete \
   "$AVRAG_DIR/modes/" "$STAGE/modes/"
 
 cp -a "$ROOT/deploy/docker/run-avrag-containers.sh" "$STAGE/docker/run-avrag-containers.sh"
-chmod 755 "$STAGE/docker/run-avrag-containers.sh"
+cp -a "$ROOT/deploy/docker/run-avrag-migrate.sh" "$STAGE/docker/run-avrag-migrate.sh"
+cp -a "$ROOT/deploy/docker/maintenance-mode.sh" "$STAGE/docker/maintenance-mode.sh"
+chmod 755 "$STAGE/docker/run-avrag-containers.sh" "$STAGE/docker/run-avrag-migrate.sh" "$STAGE/docker/maintenance-mode.sh"
 cp -a "$ROOT/deploy/docker/avrag-runtime.Dockerfile" "$STAGE/docker/avrag-runtime.Dockerfile"
 
 # anydoc-extract package (baked into avrag-runtime image).
@@ -162,8 +171,11 @@ tar xzf /tmp/avrag-backend-deploy.tgz -C "\$STAGE"
 mkdir -p "\$REMOTE_ROOT/bin" "\$REMOTE_ROOT/migrations" "\$REMOTE_ROOT/prompts" "\$REMOTE_ROOT/modes" "\$REMOTE_ROOT/docker"
 
 if [[ "\$ASSETS_ONLY" != "1" ]]; then
+  # Verify artifact integrity before installing anything.
+  ( cd "\$STAGE/bin" && sha256sum -c sha256sums.txt )
   install -m 755 "\$STAGE/bin/avrag-api" "\$REMOTE_ROOT/bin/avrag-api"
   install -m 755 "\$STAGE/bin/avrag-worker" "\$REMOTE_ROOT/bin/avrag-worker"
+  install -m 755 "\$STAGE/bin/avrag-migrate" "\$REMOTE_ROOT/bin/avrag-migrate"
 fi
 
 # Preserve remote-only noise under migrations/_backups if any
@@ -177,6 +189,8 @@ rsync -a --delete \
   "\$STAGE/modes/" "\$REMOTE_ROOT/modes/"
 
 install -m 755 "\$STAGE/docker/run-avrag-containers.sh" "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
+install -m 755 "\$STAGE/docker/run-avrag-migrate.sh" "\$REMOTE_ROOT/docker/run-avrag-migrate.sh"
+install -m 755 "\$STAGE/docker/maintenance-mode.sh" "\$REMOTE_ROOT/docker/maintenance-mode.sh"
 install -m 644 "\$STAGE/DEPLOY_META.backend.json" "\$REMOTE_ROOT/DEPLOY_META.backend.json"
 
 # Rebuild avrag-runtime so the worker container has parser CLIs (markitdown /
@@ -246,6 +260,10 @@ PY
 fi
 
 if [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" != "1" ]]; then
+  # One-shot migration container BEFORE swapping service containers. Uses the
+  # migration DSN (/etc/avrag-rs/migrate.env), not the runtime env. On failure
+  # old containers keep running — no partial deploy.
+  bash "\$REMOTE_ROOT/docker/run-avrag-migrate.sh"
   bash "\$REMOTE_ROOT/docker/run-avrag-containers.sh"
 elif [[ "\$NO_RESTART" != "1" && "\$ASSETS_ONLY" == "1" ]]; then
   # assets only: restart containers to pick up new migrations/prompts mounts
@@ -261,6 +279,9 @@ META=/opt/avrag-rs/DEPLOYED.txt
   echo "backend_built_at=\$BUILT_AT"
   echo "backend_deployed_at=\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "backend_assets_only=\$ASSETS_ONLY"
+  if [[ "\$ASSETS_ONLY" != "1" && -f "\$REMOTE_ROOT/bin/sha256sums.txt" ]]; then
+    echo "backend_sha256=\$(tr '\\n' ';' < "\$REMOTE_ROOT/bin/sha256sums.txt")"
+  fi
 } >> "\$META"
 tail -n 40 "\$META" > "\$META.tmp" && mv "\$META.tmp" "\$META"
 

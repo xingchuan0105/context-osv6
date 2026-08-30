@@ -15,7 +15,6 @@ pub(crate) struct E2eBootstrapConfig {
     pub owner_user_id: String,
     pub user_id: String,
     pub database_url: String,
-    pub auto_migrate: bool,
     pub object_root: String,
     pub enable_rag: bool,
     pub redis_url: String,
@@ -71,7 +70,6 @@ impl E2eBootstrapConfig {
         config.owner_user_id = self.owner_user_id.clone();
         config.user_id = self.user_id.clone();
         config.database_url = Some(self.database_url.clone());
-        config.auto_migrate = self.auto_migrate;
         config.object_root = self.object_root.clone();
         config.public_base_url = base_url.to_string();
         config.enable_rag = self.enable_rag;
@@ -222,10 +220,6 @@ impl E2eBootstrapConfig {
                 "AVRAG_UPLOAD_SIGNING_SECRET",
                 std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
                     .unwrap_or_else(|_| "e2e-upload-signing-secret".to_string()),
-            )
-            .env(
-                "AVRAG_RUN_MIGRATIONS",
-                if self.auto_migrate { "true" } else { "false" },
             )
             .env("AVRAG_OBJECT_ROOT", &self.object_root)
             .env(

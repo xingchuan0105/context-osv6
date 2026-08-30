@@ -65,10 +65,9 @@ pub async fn run() -> Result<()> {
     );
 
     if let Some(database_url) = database_url {
+        // Migrations run exclusively through the `avrag-migrate` binary; the
+        // worker pool holds no DDL or migration-ledger privileges.
         let bootstrap = BootstrapRepository::connect(&database_url).await?;
-        if config.auto_migrate {
-            bootstrap.migrate().await?;
-        }
         let repo = PgAppRepository {
             pool: TenantPgPool::new(bootstrap.raw().clone()),
         };

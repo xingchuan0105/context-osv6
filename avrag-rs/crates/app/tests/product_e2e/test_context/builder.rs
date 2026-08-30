@@ -489,6 +489,20 @@ impl TestContext {
         }
 
         let run_migrations = pg_url_needs_migration(&pg_url);
+        if run_migrations {
+            // Migrations live only behind the migrator now (no auto-migrate in
+            // app bootstrap); the E2E harness runs them inline, one claimant.
+            let repo = avrag_storage_pg::BootstrapRepository::connect(&pg_url)
+                .await
+                .unwrap_or_else(|error| {
+                    pg_url_release_migration_claim(&pg_url);
+                    panic!("connect e2e migration pool: {error}");
+                });
+            if let Err(error) = repo.migrate().await {
+                pg_url_release_migration_claim(&pg_url);
+                panic!("run e2e migrations: {error}");
+            }
+        }
         let redis = redis_url
             .clone()
             .unwrap_or_else(|| "redis://127.0.0.1:1".to_string());
@@ -509,7 +523,6 @@ impl TestContext {
             owner_user_id: owner_user_id.clone(),
             user_id: user_id.clone(),
             database_url: pg_url.clone(),
-            auto_migrate: run_migrations,
             object_root: object_root.clone(),
             enable_rag,
             redis_url: redis,
@@ -580,7 +593,6 @@ impl TestContext {
         let mut cmd = tokio::process::Command::new(&worker_binary);
         cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();
-        worker_bootstrap.auto_migrate = false;
         let worker_id = smoke_worker_id();
         worker_bootstrap.apply_worker_env(&mut cmd, &base_url, Some(&worker_id));
         cmd.stdout(std::process::Stdio::piped())
@@ -696,7 +708,6 @@ impl TestContext {
             .into_owned();
 
         let mut bootstrap = fixture.worker_bootstrap.clone();
-        bootstrap.auto_migrate = false;
         bootstrap.worker_health_port_file = worker_health_port_file;
 
         let worker_binary = setup::find_worker_binary()
@@ -706,7 +717,6 @@ impl TestContext {
         let mut cmd = tokio::process::Command::new(&worker_binary);
         cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();
-        worker_bootstrap.auto_migrate = false;
         let worker_id = smoke_worker_id();
         worker_bootstrap.apply_worker_env(&mut cmd, &base_url, Some(&worker_id));
         cmd.stdout(std::process::Stdio::piped())
@@ -817,7 +827,6 @@ impl TestContext {
             .into_owned();
 
         let mut bootstrap = fixture.worker_bootstrap.clone();
-        bootstrap.auto_migrate = false;
         bootstrap.worker_health_port_file = worker_health_port_file;
 
         let worker_binary = setup::find_worker_binary()
@@ -827,7 +836,6 @@ impl TestContext {
         let mut cmd = tokio::process::Command::new(&worker_binary);
         cmd.current_dir(WORKSPACE_ROOT);
         let mut worker_bootstrap = bootstrap.clone();
-        worker_bootstrap.auto_migrate = false;
         let worker_id = smoke_worker_id();
         worker_bootstrap.apply_worker_env(&mut cmd, &base_url, Some(&worker_id));
         cmd.stdout(std::process::Stdio::piped())

@@ -1,4 +1,5 @@
 use super::*;
+
 pub fn pg_pool_options() -> PgPoolOptions {
     let mut options = PgPoolOptions::new();
     if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
@@ -22,6 +23,18 @@ pub fn pg_pool_options() -> PgPoolOptions {
     options
 }
 
+#[derive(Debug)]
+struct RuntimeRoleReport {
+    role: String,
+    rolsuper: bool,
+    rolbypassrls: bool,
+    rolcreatedb: bool,
+    rolcreaterole: bool,
+    member_of: Vec<String>,
+    owns_tenant_tables: Vec<String>,
+    rls_missing: Vec<String>,
+}
+
 impl BootstrapRepository {
     pub async fn connect(database_url: &str) -> Result<Self, PgStorageError> {
         use sqlx::ConnectOptions;
@@ -34,11 +47,156 @@ impl BootstrapRepository {
             std::time::Duration::from_millis(500),
         );
         let pool = pg_pool_options().connect_with(connect_opts).await?;
-        Ok(Self {
+        let this = Self {
             pool: TenantPgPool::new(pool),
-        })
+        };
+        // Fail-closed tenant-isolation gate: a superuser or BYPASSRLS role, or
+        // any public tenant table left without FORCED RLS, refuses to come up.
+        // No env escape hatch — provisioning (`avrag_runtime`) is mandatory.
+        verify_runtime_role_safety(this.pool.raw()).await?;
+        Ok(this)
     }
 
+    /// Invariant inputs for [`verify_runtime_role_safety`], from pg_catalog.
+    async fn runtime_role_report(pool: &PgPool) -> Result<RuntimeRoleReport, PgStorageError> {
+        let role_row = sqlx::query(
+            r#"
+            select current_user as role,
+                   (select rolsuper from pg_roles where rolname = current_user) as rolsuper,
+                   (select rolbypassrls from pg_roles where rolname = current_user) as rolbypassrls,
+                   (select rolcreatedb from pg_roles where rolname = current_user) as rolcreatedb,
+                   (select rolcreaterole from pg_roles where rolname = current_user) as rolcreaterole
+            "#,
+        )
+        .fetch_one(pool)
+        .await?;
+        let role: String = role_row.try_get("role")?;
+        let member_of: Vec<String> = sqlx::query_scalar(
+            r#"
+            select g.rolname
+            from pg_auth_members m
+            join pg_roles g on g.oid = m.roleid
+            join pg_roles u on u.oid = m.member
+            where u.rolname = current_user
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+        let owns_tenant_tables: Vec<String> = sqlx::query_scalar(
+            r#"
+            select c.relname
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public'
+              and c.relkind = 'r'
+              and pg_get_userbyid(c.relowner) = current_user
+              and exists (
+                  select 1 from pg_attribute a
+                  where a.attrelid = c.oid and a.attname = 'owner_user_id' and not a.attisdropped
+              )
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+        let rls_missing: Vec<String> = sqlx::query_scalar(
+            r#"
+            select c.relname
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public'
+              and c.relkind = 'r'
+              and exists (
+                  select 1 from pg_attribute a
+                  where a.attrelid = c.oid and a.attname = 'owner_user_id' and not a.attisdropped
+              )
+              and (not c.relrowsecurity or not c.relforcerowsecurity)
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(RuntimeRoleReport {
+            role,
+            rolsuper: role_row.try_get("rolsuper")?,
+            rolbypassrls: role_row.try_get("rolbypassrls")?,
+            rolcreatedb: role_row.try_get("rolcreatedb")?,
+            rolcreaterole: role_row.try_get("rolcreaterole")?,
+            member_of,
+            owns_tenant_tables,
+            rls_missing,
+        })
+    }
+}
+
+/// The migration/owner role (`avrag`) legitimately owns tenant tables. Set
+/// AVRAG_MIGRATION_ROLE_ONLY=true exclusively in the migrator environment;
+/// production API/worker env files never set it, so a leaked owner DSN cannot
+/// boot the API or worker.
+fn role_owning_tables_allowed() -> bool {
+    std::env::var("AVRAG_MIGRATION_ROLE_ONLY")
+        .map(|value| matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ))
+        .unwrap_or(false)
+}
+
+/// Fail-closed tenant-isolation gate for API/worker/migrator pools: a
+/// superuser or BYPASSRLS role, or any public tenant table without FORCED RLS,
+/// refuses to start. No env escape hatch — the `avrag_runtime` role from
+/// db/roles/002_runtime_grants.sql is mandatory in deployed environments.
+async fn verify_runtime_role_safety(pool: &PgPool) -> Result<(), PgStorageError> {
+    let report = match BootstrapRepository::runtime_role_report(pool).await {
+        Ok(report) => report,
+        // Inspection errors (e.g. missing pg_catalog visibility) block startup:
+        // an unverifiable role is treated as unsafe.
+        Err(error) => {
+            tracing::error!(target: "avrag_role_guard", error = %error, "runtime role report unavailable");
+            return Err(PgStorageError::NotFound(format!(
+                "runtime role safety could not be verified: {error}"
+            )));
+        }
+    };
+    let mut problems = Vec::new();
+    if report.rolsuper {
+        problems.push("role is superuser".to_string());
+    }
+    if report.rolbypassrls {
+        problems.push("role bypasses RLS".to_string());
+    }
+    if report.rolcreatedb {
+        problems.push("role can create databases".to_string());
+    }
+    if report.rolcreaterole {
+        problems.push("role can create roles".to_string());
+    }
+    if !report.member_of.is_empty() {
+        problems.push(format!("role is member of: {}", report.member_of.join(", ")));
+    }
+    if !report.owns_tenant_tables.is_empty() && !role_owning_tables_allowed() {
+        problems.push(format!(
+            "runtime role must not own tenant tables: {}",
+            report.owns_tenant_tables.join(", ")
+        ));
+    }
+    if !report.rls_missing.is_empty() {
+        problems.push(format!(
+            "tenant tables without FORCED RLS: {}",
+            report.rls_missing.join(", ")
+        ));
+    }
+    if !problems.is_empty() {
+        tracing::error!(target: "avrag_role_guard", role = %report.role, ?problems, "runtime role safety check failed");
+        return Err(PgStorageError::NotFound(format!(
+            "runtime role '{}' failed safety checks: {}",
+            report.role,
+            problems.join("; ")
+        )));
+    }
+    tracing::info!(target: "avrag_role_guard", role = %report.role, "runtime role safety verified");
+    Ok(())
+}
+
+impl BootstrapRepository {
     pub async fn migrate(&self) -> Result<(), PgStorageError> {
         // Prefer runtime path for packaged/VPS deploys; fall back to crate-relative path in dev.
         let migrations_path = std::env::var("AVRAG_MIGRATIONS_DIR")
@@ -155,13 +313,14 @@ impl BootstrapRepository {
             r#"
             update workspaces
             set title = $2, description = $3, updated_at = now()
-            where id = $1
+            where id = $1 and owner_user_id = $4
             returning id, owner_user_id, owner_id, title, description, created_at, updated_at
             "#,
         )
         .bind(workspace_id)
         .bind(name)
         .bind(description)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -174,8 +333,9 @@ impl BootstrapRepository {
         workspace_id: Uuid,
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let result = sqlx::query("delete from workspaces where id = $1")
+        let result = sqlx::query("delete from workspaces where id = $1 and owner_user_id = $2")
             .bind(workspace_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
         tx.commit().await?;
@@ -193,10 +353,15 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
         let document_id = Uuid::new_v4();
+        // Parent-guarded: zero rows when the workspace belongs to someone else.
         let row = sqlx::query(
             r#"
             insert into documents (id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
-            values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8)
+            select $1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8
+            where exists (
+                select 1 from workspaces w
+                where w.id = $3::uuid and w.owner_user_id = $2::uuid
+            )
             returning id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
@@ -208,8 +373,11 @@ impl BootstrapRepository {
         .bind(i64::try_from(file_size).unwrap_or(i64::MAX))
         .bind(build_object_path(context, workspace_id, document_id, filename))
         .bind(context.actor_id().map(ActorId::into_uuid))
-        .fetch_one(tx.inner())
+        .fetch_optional(tx.inner())
         .await?;
+        let Some(row) = row else {
+            return Err(PgStorageError::NotFound("resource not found".to_string()));
+        };
         tx.commit().await?;
         map_document(row)
     }
@@ -275,10 +443,11 @@ impl BootstrapRepository {
             r#"
             select id, owner_user_id, workspace_id, file_name, mime_type, file_size, object_path, status
             from documents
-            where id = $1
+            where id = $1 and owner_user_id = $2
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -333,8 +502,9 @@ impl BootstrapRepository {
         // 全量重建检索族 chunk（body/summary/profile 等）；**保留 table_evidence**
         // （struct_query 表级证据由表格阶段独立维护——检索重建若把它一并清掉，
         // 表格阶段先跑时证据会被本方法随后擦掉，2026-07-31 本地验收实测）。
-        sqlx::query("delete from chunks where document_id = $1 and chunk_type <> 'table_evidence'")
+        sqlx::query("delete from chunks where document_id = $1 and owner_user_id = $2 and chunk_type <> 'table_evidence'")
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
 
@@ -402,8 +572,24 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
 
-        sqlx::query("delete from document_toc where document_id = $1")
+        // Parent-guarded replacement: zero side effects when the document
+        // belongs to another owner (surfaces via caller's NotFound checks).
+        let guard = sqlx::query_scalar::<_, i64>(
+            "select 1 from documents where id = $1 and owner_user_id = $2 and workspace_id = $3 for update",
+        )
+        .bind(document_id)
+        .bind(context.user_id().into_uuid())
+        .bind(workspace_id)
+        .fetch_optional(tx.inner())
+        .await?;
+        if guard.is_none() {
+            tx.rollback().await?;
+            return Err(PgStorageError::NotFound("document not found".to_string()));
+        }
+
+        sqlx::query("delete from document_toc where document_id = $1 and owner_user_id = $2")
             .bind(document_id)
+            .bind(context.user_id().into_uuid())
             .execute(tx.inner())
             .await?;
 
@@ -449,11 +635,12 @@ impl BootstrapRepository {
             r#"
             select document_id, id, parent_id, title, heading_level, page, chunk_id, rank, overview
             from document_toc
-            where document_id = any($1)
+            where document_id = any($1) and owner_user_id = $2
             order by document_id, rank
             "#,
         )
         .bind(doc_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

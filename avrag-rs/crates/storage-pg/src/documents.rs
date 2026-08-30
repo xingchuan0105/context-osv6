@@ -37,7 +37,8 @@ impl crate::PgAppRepository {
             r#"
             select id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             from documents
-            where ($1::uuid is null or workspace_id = $1)
+            where owner_user_id = $3
+              and ($1::uuid is null or workspace_id = $1)
               and ($2::uuid is null or id = $2)
               and status not in ('deleting', 'deleted')
             order by updated_at desc, created_at desc
@@ -45,6 +46,7 @@ impl crate::PgAppRepository {
         )
         .bind(workspace_id)
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

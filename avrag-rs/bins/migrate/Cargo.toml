@@ -1,0 +1,15 @@
+[package]
+name = "avrag-migrate"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+app-core = { path = "../../crates/app-core" }
+avrag-storage-pg = { path = "../../crates/storage-pg" }
+dotenvy = "0.15"
+telemetry = { path = "../../crates/telemetry" }
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true

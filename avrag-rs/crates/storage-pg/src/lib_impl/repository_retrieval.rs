@@ -48,9 +48,11 @@ impl ChunkRepository {
             select id, document_id, page, content, metadata
             from chunks
             where id = $1 and chunk_type = 'body'
+              and owner_user_id = $2
             "#,
         )
         .bind(chunk_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -77,6 +79,8 @@ impl ChunkRepository {
             from chunks c
             join documents d on d.id = c.document_id
             where d.workspace_id = $1
+              and c.owner_user_id = $4
+              and d.owner_user_id = $4
               and d.status not in ('deleting', 'deleted')
               and c.chunk_type = 'body'
               and c.search_vector @@ plainto_tsquery('simple', $2)
@@ -85,6 +89,7 @@ impl ChunkRepository {
             "#,
         )
         .bind(workspace_id)
+        .bind(context.user_id().into_uuid())
         .bind(query)
         .bind(i64::try_from(limit).unwrap_or(i64::MAX))
         .fetch_all(tx.inner())
@@ -119,15 +124,18 @@ impl ChunkRepository {
                   ts_rank(to_tsvector('simple', c.content), plainto_tsquery('simple', $1)) as rank
                 from chunks c
                 join documents d on d.id = c.document_id
-                where c.document_id = any($2::uuid[])
+                where c.document_id = any($3::uuid[])
+                  and c.owner_user_id = $2
+                  and d.owner_user_id = $2
                   and d.status not in ('deleting', 'deleted')
                   and c.chunk_type = 'body'
                   and to_tsvector('simple', c.content) @@ plainto_tsquery('simple', $1)
                 order by rank desc, c.id
-                limit $3
+                limit $4
                 "#,
             )
             .bind(query)
+            .bind(ctx.user_id().into_uuid())
             .bind(ids)
             .bind(i64::try_from(limit).unwrap_or(i64::MAX))
             .fetch_all(tx.inner())
@@ -145,6 +153,8 @@ impl ChunkRepository {
                 from chunks c
                 join documents d on d.id = c.document_id
                 where c.chunk_type = 'body'
+                  and c.owner_user_id = $3
+                  and d.owner_user_id = $3
                   and d.status not in ('deleting', 'deleted')
                   and to_tsvector('simple', c.content) @@ plainto_tsquery('simple', $1)
                 order by rank desc, c.id
@@ -153,6 +163,7 @@ impl ChunkRepository {
             )
             .bind(query)
             .bind(i64::try_from(limit).unwrap_or(i64::MAX))
+            .bind(ctx.user_id().into_uuid())
             .fetch_all(tx.inner())
             .await?
         };
@@ -173,6 +184,8 @@ impl ChunkRepository {
             from chunks c
             join documents d on d.id = c.document_id
             where c.document_id = $1
+              and c.owner_user_id = $2
+              and d.owner_user_id = $2
               and d.status not in ('deleting', 'deleted')
             order by
               case when c.chunk_type = 'summary' then 1 else 0 end,
@@ -181,6 +194,7 @@ impl ChunkRepository {
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -221,9 +235,11 @@ impl ChunkRepository {
             select id, file_name
             from documents
             where id = any($1)
+              and owner_user_id = $2
             "#,
         )
         .bind(doc_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -250,9 +266,11 @@ impl ChunkRepository {
             select id, file_name, mime_type, file_size, status, chunk_count
             from documents
             where id = any($1)
+              and owner_user_id = $2
             "#,
         )
         .bind(doc_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -291,9 +309,11 @@ impl ChunkRepository {
             select document_id, content
             from chunks
             where document_id = any($1) and chunk_type = 'summary'
+              and owner_user_id = $2
             "#,
         )
         .bind(doc_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -322,11 +342,13 @@ impl ChunkRepository {
             from chunks
             where document_id = any($1)
               and chunk_type in ('profile', 'summary')
+              and owner_user_id = $2
             order by document_id,
                      case chunk_type when 'profile' then 0 else 1 end
             "#,
         )
         .bind(doc_ids)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -357,11 +379,14 @@ impl ChunkRepository {
             join documents d on d.id = c.document_id
             where c.document_id = $1
               and c.chunk_type = 'summary'
+              and c.owner_user_id = $2
+              and d.owner_user_id = $2
               and d.status not in ('deleting', 'deleted')
             limit 1
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         let rows = sqlx::query(
@@ -374,6 +399,8 @@ impl ChunkRepository {
             from chunks c
             join documents d on d.id = c.document_id
             where c.document_id = $1 and c.chunk_type = 'body'
+              and c.owner_user_id = $4
+              and d.owner_user_id = $4
               and d.status not in ('deleting', 'deleted')
             order by cursor_value, c.id
             offset $2
@@ -381,6 +408,7 @@ impl ChunkRepository {
             "#,
         )
         .bind(document_id)
+        .bind(context.user_id().into_uuid())
         .bind(i64::try_from(cursor).unwrap_or(i64::MAX))
         .bind(i64::try_from(limit + 1).unwrap_or(i64::MAX))
         .fetch_all(tx.inner())
@@ -439,11 +467,14 @@ impl ChunkRepository {
             from documents d
             join workspaces n on n.id = d.workspace_id
             where ($1::uuid is null or d.workspace_id = $1)
+              and d.owner_user_id = $2
+              and n.owner_user_id = d.owner_user_id
               and d.status not in ('deleting', 'deleted')
             order by d.updated_at desc, d.created_at desc
             "#,
         )
         .bind(workspace_id)
+        .bind(context.user_id().into_uuid())
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;

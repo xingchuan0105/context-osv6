@@ -40,9 +40,11 @@ fn ensure_test_upload_signing_secret() {
 
 pub(super) async fn pg_test_app_state() -> Option<AppState> {
     let database_url = env::var("DATABASE_URL").ok()?;
+    // Migrations live behind the migrator binary; tests run them inline.
+    let repo = avrag_storage_pg::BootstrapRepository::connect(&database_url).await.ok()?;
+    repo.migrate().await.ok()?;
     let mut config = app_core::AppConfig::default();
     config.database_url = Some(database_url);
-    config.auto_migrate = true;
     AppState::bootstrap(config).await.ok()
 }
 
