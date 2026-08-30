@@ -6,11 +6,12 @@
 # Keeps localhost health checks green (deploy scripts still verify health).
 set -euo pipefail
 
+die() { echo "maintenance-mode: $*" >&2; exit 1; }
+
 STATE_ON='/etc/avrag-rs/maintenance.on'
 SNIPPET='/etc/nginx/snippets/avrag-maintenance.conf'
-VHOST='/etc/nginx/sites-available/app-contextlm.conf'
-
-die() { echo "maintenance-mode: $*" >&2; exit 1; }
+VHOST=$(ls /etc/nginx/sites-available/app-contextlm.conf /etc/nginx/conf.d/app-contextlm.conf 2>/dev/null | head -1 || true)
+[[ -n "$VHOST" ]] || die "app-contextlm.conf not found under sites-available or conf.d"
 
 write_snippet() {
   cat > /var/www/maintenance/index.html <<'HTML'
