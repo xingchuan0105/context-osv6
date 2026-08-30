@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/config.schema.json",
   "productName": "Context-OS Client",
   "mainBinaryName": "Context-OS",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "identifier": "com.contextos.desktop",
   "build": {
     "frontendDist": "../../frontend_next/out",
@@ -41,11 +41,18 @@
       "desktop": {
         "schemes": ["context-os", "avrag-desktop"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJGNzFBMjlFNDdFNDM0ODgKUldTSU5PUkhucUp4THl6WTlrZ0ZmSHA3RkVNUjMwV1NuMjBNaUhBc1d3QTVaZlRvZ2wxWENReW8K",
+      "endpoints": [
+        "https://app.contextlm.top/releases/desktop/updates.json"
+      ]
     }
   },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "publisher": "Context-OS",
     "copyright": "Copyright © Context-OS",
     "category": "Productivity",

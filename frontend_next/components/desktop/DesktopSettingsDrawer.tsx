@@ -15,6 +15,12 @@ import {
 } from "@/lib/desktop/tauri-cloud";
 import { openInBrowser } from "@/lib/desktop/tauri-license";
 import {
+  checkForUpdate,
+  desktopUpdateSupported,
+  downloadAndInstallUpdate,
+  type UpdateState,
+} from "@/lib/desktop/tauri-updater";
+import {
   getAppDataDir,
   getAppVersion,
   getLocalProductStatus,
@@ -43,6 +49,23 @@ function ipcErrorMessage(error: unknown): string {
 /** Fire-and-forget probe: apply the value, or the fallback when the call fails. */
 function probe<T>(call: () => Promise<T>, apply: (value: T) => void, fallback: T) {
   void call().then(apply).catch(() => apply(fallback));
+}
+
+/** 检查更新按钮文案：按更新状态机取对应 i18n key。 */
+function updateLabel(state: UpdateState, t: (key: UiMessageKey) => string): string {
+  switch (state.kind) {
+    case "checking":
+      return t("desktop.drawer.updateChecking");
+    case "upToDate":
+      return t("desktop.drawer.updateUpToDate");
+    case "available":
+      return t("desktop.drawer.updateInstall");
+    case "downloading":
+    case "installing":
+      return t("desktop.drawer.updateWorking");
+    default:
+      return t("desktop.drawer.updateCheck");
+  }
 }
 
 type DrawerSection = "account" | "models" | "data" | "about" | "diagnostics";
@@ -85,6 +108,8 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [error, setError] = useState("");
+  const [updateState, setUpdateState] = useState<UpdateState>({ kind: "idle" });
+  const [updateSupported, setUpdateSupported] = useState(false);
 
   function t(key: UiMessageKey) {
     return formatUiMessage(locale, key);
@@ -134,11 +159,31 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
     probe<LocalStackStatus | null>(getLocalStackStatus, setStack, null);
   }, [open, section, stack]);
 
+  // 更新能力仅在桌面壳内可用（网页构建不加载 updater 插件）。
+  useEffect(() => {
+    if (!open || section !== "about" || updateSupported) return;
+    void desktopUpdateSupported().then(setUpdateSupported);
+  }, [open, section, updateSupported]);
+
   function reopenToGate() {
     // The shell re-mounts into CloudLoginGate, which renders the login card
     // whenever no cloud session exists.
     onClose();
     window.location.reload();
+  }
+
+  /** 关于区按钮：无更新时查新，已发现新版本时下载安装（自动重启）。 */
+  async function handleUpdateButtonClick() {
+    if (updateState.kind === "available") {
+      setUpdateState({ kind: "downloading", progress: 0 });
+      const next = await downloadAndInstallUpdate((progress) =>
+        setUpdateState({ kind: "downloading", progress })
+      );
+      setUpdateState(next);
+      return;
+    }
+    setUpdateState({ kind: "checking" });
+    setUpdateState(await checkForUpdate());
   }
 
   async function handleLogout() {
@@ -385,6 +430,39 @@ export function DesktopSettingsDrawer({ open, onClose }: DesktopSettingsDrawerPr
                 <div className={styles.drawerBlock}>
                   <p className={styles.drawerLabel}>{t("desktop.drawer.version")}</p>
                   <p className={styles.drawerValue}>v{version || "…"}</p>
+                  {updateSupported ? (
+                    <div className="app-button-row">
+                      <button
+                        type="button"
+                        className="app-button-secondary"
+                        disabled={
+                          updateState.kind === "checking" ||
+                          updateState.kind === "downloading" ||
+                          updateState.kind === "installing"
+                        }
+                        onClick={() => void handleUpdateButtonClick()}
+                      >
+                        {updateLabel(updateState, t)}
+                      </button>
+                    </div>
+                  ) : null}
+                  {updateState.kind === "downloading" ? (
+                    <p className={styles.subtitle}>
+                      {formatUiMessage(locale, "desktop.drawer.updateDownloading", {
+                        percent: updateState.progress,
+                      })}
+                    </p>
+                  ) : null}
+                  {updateState.kind === "available" ? (
+                    <p className={styles.subtitle}>
+                      {formatUiMessage(locale, "desktop.drawer.updateAvailableHint", {
+                        version: updateState.version,
+                      })}
+                    </p>
+                  ) : null}
+                  {updateState.kind === "error" ? (
+                    <p className={styles.subtitle}>{updateState.message}</p>
+                  ) : null}
                 </div>
                 <p className={styles.subtitle}>{t("desktop.drawer.aboutFree")}</p>
                 <div className="app-button-row">

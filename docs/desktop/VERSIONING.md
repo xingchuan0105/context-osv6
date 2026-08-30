@@ -29,11 +29,21 @@
 | Windows 便携（无 NSIS 时） | `Context-OS_{version}_x64.exe`（`ALLOW_PORTABLE=1`） |
 | 校验 | `SHA256SUMS`（同目录） |
 | 发现 | 公网 `GET /releases/desktop/latest.json` |
+| 自动更新源 | 公网 `GET /releases/desktop/updates.json`（Tauri updater v1 静态清单，`0.4.0` 起） |
 | 版本化目录 | `/releases/desktop/v{version}/…`（长缓存） |
 | 发版脚本 | `scripts/package-desktop-release.sh`、`scripts/publish-desktop-release.sh` |
 | Runbook | `docs/desktop/RELEASE-AND-DOWNLOAD.md` |
 
 `latest.json` 由打包脚本生成，网页只读该文件渲染「下载 Windows」按钮。
+`updates.json` 是 **Tauri updater 专用**的独立清单（含 minisign 签名，platform key `windows-x86_64`）；
+两者互不兼容，更新签名私钥在 gitignored 的 `desktop/signing/update-key.key`（生成：
+`cd desktop && pnpm tauri signer generate -w signing/update-key.key --password ''`）。
+
+## 自动更新（0.4.0+）
+
+- 客户端启动后不自动打扰；**设置 → 关于 →「检查更新」**：查新 → 发现新版本 → 「下载并安装」→ NSIS 静默升级 + 自动重启。
+- 更新包即 NSIS setup.exe 本体（`createUpdaterArtifacts: true` 产出 `.sig`）。
+- 换更新源 / 换签名密钥 = MINOR 以上变更（密钥换新会让存量客户端拒绝更新包）。
 
 ## 最低兼容云 API（可选连云）
 
@@ -48,6 +58,7 @@ Min cloud API: v1
 | 0.1.x | v1 | 许可/Keygen 叙事时代（已退役） |
 | **0.2.x** | **v1** | **免费客户端**；云端分享名额 + 钱包 + BYOK（ADR-0010） |
 | **0.3.x** | **v1** | 云端登录 + 官方 Key；**0.3.1** 起本机库 Publish 后再分享（ADR-0010 B3b） |
+| **0.4.x** | **v1** | **自动更新**（Tauri updater + minisign 签名，updates.json 静态清单） |
 
 未连云 / 纯本地模式：本表不适用。
 
@@ -67,3 +78,4 @@ Min cloud API: v1
 | 2026-07-14 | 增加网页下载产物命名、`latest.json` 与发版脚本约定 |
 | 2026-08-10 | v0.2.0 矩阵；命名 Context-OS-Client；ADR-0010 免费客户端 |
 | 2026-08-19 | v0.3.1：B3b 本机→云 Publish 打进安装包（0.3.0 已发、无 Publish） |
+| 2026-08-30 | v0.4.0：自动更新上线（updater 插件 + updates.json + minisign 密钥） |

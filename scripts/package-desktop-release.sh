@@ -9,6 +9,9 @@ VERSION="$(node -p "require('$DESKTOP/package.json').version")"
 OUT_ROOT="${DESKTOP_RELEASE_OUT:-$ROOT/dist/desktop-release}"
 STAGE="$OUT_ROOT/v${VERSION}"
 PUBLIC_BASE="${DESKTOP_PUBLIC_BASE:-/releases/desktop}"
+# Absolute origin for the updater manifest: tauri-plugin-updater fetches the
+# artifact URL programmatically; do not rely on root-relative join semantics.
+PUBLIC_ORIGIN="${DESKTOP_PUBLIC_ORIGIN:-https://app.contextlm.top}"
 
 die() { echo "package-desktop-release: $*" >&2; exit 1; }
 
@@ -116,6 +119,35 @@ EOF
 
 # Copy latest into version dir for archival
 cp -f "$OUT_ROOT/latest.json" "$STAGE/latest.json"
+
+# Tauri updater manifest (bundle.createUpdaterArtifacts): the client checks
+# /releases/desktop/updates.json. Signature = content of the minisign .sig file
+# emitted next to the NSIS setup. Separate from latest.json (website download
+# button format). Only produced for NSIS builds.
+if [[ "$FORMAT" == "nsis" ]]; then
+  SIG_SRC="${SRC}.sig"
+  if [[ -f "$SIG_SRC" ]]; then
+    # Signature = full .sig content (multi-line minisign text), JSON-escaped
+    # with newlines preserved — ${UPD_SIG} includes its own surrounding quotes.
+    UPD_SIG="$(python3 -c 'import json,sys; print(json.dumps(open(sys.argv[1], encoding="utf-8").read()))' "$SIG_SRC")"
+    cat > "$OUT_ROOT/updates.json" <<EOF
+{
+  "version": "${VERSION}",
+  "notes": "Context-OS Client ${VERSION}",
+  "pub_date": "${PUBLISHED_AT}",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": ${UPD_SIG},
+      "url": "${PUBLIC_ORIGIN}${REL_URL}"
+    }
+  }
+}
+EOF
+    cp -f "$OUT_ROOT/updates.json" "$STAGE/updates.json"
+  else
+    echo "package-desktop-release: warning: $SIG_SRC missing — updates.json not generated (auto-update broken for this release)" >&2
+  fi
+fi
 
 # Stage product sidecars + runtime layout next to installer (companion pack).
 # Windows NSIS already embeds externalBin when built via build-windows.sh;

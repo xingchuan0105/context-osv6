@@ -137,6 +137,19 @@ if missing and not skip_sidecars:
 PY
 log "tauri extra config: $TAURI_EXTRA_FILE"
 log "tauri build --target $TARGET --bundles nsis (+ sidecars + bundled runtime)"
+
+# Updater (minisign) signing — bundle.createUpdaterArtifacts=true makes every
+# release build require the private key. Key lives in gitignored desktop/signing/.
+# tauri-cli reads TAURI_SIGNING_PRIVATE_KEY (file path or key content).
+UPDATER_KEY="${TAURI_SIGNING_PRIVATE_KEY:-$DESKTOP/signing/update-key.key}"
+if [[ -f "$UPDATER_KEY" ]]; then
+  export TAURI_SIGNING_PRIVATE_KEY="$UPDATER_KEY"
+  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+  log "updater signing key: $UPDATER_KEY"
+else
+  die "updater key missing: $UPDATER_KEY (generate: cd desktop && pnpm tauri signer generate -w signing/update-key.key --password '')"
+fi
+
 (
   cd "$DESKTOP"
   export CI=true

@@ -285,6 +285,34 @@ export const desktopMessages = {
     zh: "客户端免费；云端分享名额与钱包见定价页。",
     en: "The client is free; cloud share slots and wallet are on Pricing.",
   },
+  "desktop.drawer.updateCheck": {
+    zh: "检查更新",
+    en: "Check for updates",
+  },
+  "desktop.drawer.updateChecking": {
+    zh: "检查中…",
+    en: "Checking…",
+  },
+  "desktop.drawer.updateUpToDate": {
+    zh: "已是最新版本",
+    en: "Up to date",
+  },
+  "desktop.drawer.updateInstall": {
+    zh: "下载并安装",
+    en: "Download and install",
+  },
+  "desktop.drawer.updateAvailableHint": {
+    zh: "发现新版本 v{version}，下载后将自动安装并重启。",
+    en: "New version v{version} found; it installs and restarts automatically.",
+  },
+  "desktop.drawer.updateWorking": {
+    zh: "正在更新…",
+    en: "Updating…",
+  },
+  "desktop.drawer.updateDownloading": {
+    zh: "已下载 {percent}%",
+    en: "{percent}% downloaded",
+  },
   "desktop.drawer.diagnosticsHint": {
     zh: "本地运行环境诊断信息（PostgreSQL 向量库、Redis 缓存与核心引擎状态）。",
     en: "Local runtime diagnostics (PostgreSQL vector DB, Redis cache, and core engine status).",
