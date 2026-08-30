@@ -127,8 +127,8 @@ cp -f "$OUT_ROOT/latest.json" "$STAGE/latest.json"
 if [[ "$FORMAT" == "nsis" ]]; then
   SIG_SRC="${SRC}.sig"
   if [[ -f "$SIG_SRC" ]]; then
-    # Signature = full .sig content (multi-line minisign text), JSON-escaped
-    # with newlines preserved — ${UPD_SIG} includes its own surrounding quotes.
+    # .sig content = single-line base64(minisign signature text); the updater
+    # decodes then verifies. Embed verbatim — ${UPD_SIG} includes its own quotes.
     UPD_SIG="$(python3 -c 'import json,sys; print(json.dumps(open(sys.argv[1], encoding="utf-8").read()))' "$SIG_SRC")"
     cat > "$OUT_ROOT/updates.json" <<EOF
 {

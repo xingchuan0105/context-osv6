@@ -40,7 +40,15 @@ export async function desktopUpdateSupported(): Promise<boolean> {
 export async function checkForUpdate(): Promise<UpdateState> {
   pendingUpdate = null;
   if (typeof window === "undefined" || !isTauri()) return { kind: "upToDate" };
-  const { check } = await import("@tauri-apps/plugin-updater");
+  let check: typeof import("@tauri-apps/plugin-updater").check;
+  try {
+    ({ check } = await import("@tauri-apps/plugin-updater"));
+  } catch (error) {
+    return {
+      kind: "error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
   try {
     const update = await check();
     if (!update) return { kind: "upToDate" };
@@ -63,7 +71,15 @@ export async function downloadAndInstallUpdate(
 ): Promise<UpdateState> {
   const update = pendingUpdate;
   if (!update) return { kind: "upToDate" };
-  const { relaunch } = await import("@tauri-apps/plugin-process");
+  let relaunch: typeof import("@tauri-apps/plugin-process").relaunch;
+  try {
+    ({ relaunch } = await import("@tauri-apps/plugin-process"));
+  } catch (error) {
+    return {
+      kind: "error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   let downloaded = 0;
   let contentLength: number | null = null;
