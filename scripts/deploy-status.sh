@@ -82,6 +82,7 @@ if [[ -n "$PGURL" ]]; then
 else
   echo "migrate_env_dsn=not-read (skip DB probes)"
 fi
+REMOTE
 
 echo
 echo "deploy-status: done"
