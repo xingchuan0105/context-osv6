@@ -152,7 +152,7 @@ impl Default for SynthesisOutputConfig {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BudgetConfig {
     /// Primary retrieve cost ceiling: numbered retrieve turns that
-    /// `consumes_iteration_budget` (compile-feedback free). Product rag/dual: 5.
+    /// `consumes_iteration_budget` (compile-feedback free). Product rag/dual: 10.
     pub max_iterations: u8,
     #[serde(default)]
     pub by_user_tier: Option<HashMap<String, u8>>,

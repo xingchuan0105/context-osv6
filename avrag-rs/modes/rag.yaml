@@ -18,12 +18,12 @@ budget:
   # Rounds = primary cost ceiling (each retrieve turn that consumes budget +1).
   # No token wall: omit max_tokens (resolve → 0 = unlimited).
   # Soft pace baseline (not hard stop); over-baseline injects round/baseline observation.
-  max_iterations: 5
+  max_iterations: 10
   baseline_iterations: 2
   by_user_tier:
-    free: 5
-    pro: 5
-    enterprise: 5
+    free: 10
+    pro: 10
+    enterprise: 10
 temperature: 0.4
 loop_exit:
   # Skill-owned grounding intent (prose); structural gates still count Ok returns.

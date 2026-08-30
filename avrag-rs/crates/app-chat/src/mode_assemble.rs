@@ -354,8 +354,8 @@ mod tests {
         assert!(!assembled.config.loop_exit.allow_content_early_stop);
         // Retrieve→synthesis from rag YAML (must survive apply_single_agent_loop_exit).
         assert_retrieve_synthesis_enabled(&assembled.config);
-        // Budget is max(rag 5, search 1) = 5 (rounds-only; chat base not included)
-        assert_eq!(assembled.config.budget.max_iterations, 5);
+        // Budget is max(rag 10, search 10) = 10 (rounds-only; chat base not included)
+        assert_eq!(assembled.config.budget.max_iterations, 10);
         assert_eq!(
             assembled.config.budget.max_tokens, None,
             "dual: no token wall"
@@ -396,7 +396,7 @@ mod tests {
             search: false,
         })
         .expect("assemble rag");
-        assert_eq!(assembled.config.budget.max_iterations, 5);
+        assert_eq!(assembled.config.budget.max_iterations, 10);
         assert_eq!(
             assembled.config.budget.max_tokens, None,
             "rag: rounds-only, no token wall"
@@ -422,7 +422,7 @@ mod tests {
             search: true,
         })
         .expect("assemble search");
-        assert_eq!(assembled.config.budget.max_iterations, 2);
+        assert_eq!(assembled.config.budget.max_iterations, 10);
         assert_eq!(
             assembled.config.budget.max_tokens, None,
             "search: no token wall"
@@ -454,7 +454,10 @@ mod tests {
     fn pure_chat_keeps_chat_budget_and_unified_temp() {
         let assembled = assemble_mode(CapabilitySet::default()).expect("pure chat");
         assert_eq!(assembled.config.budget.max_iterations, 2);
-        assert_eq!(assembled.config.budget.max_tokens, Some(8_000));
+        assert_eq!(
+            assembled.config.budget.max_tokens, None,
+            "pure chat: no token wall"
+        );
         assert_eq!(assembled.config.temperature, Some(0.4));
     }
 

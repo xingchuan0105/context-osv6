@@ -13,12 +13,12 @@ budget:
   # Web Worker host leaf; headroom for Lead synthesis.
   # Dual takes max(rag, search) — see mode_assemble.
   # No token wall (omit max_tokens → unlimited).
-  max_iterations: 2
+  max_iterations: 10
   baseline_iterations: 0
   by_user_tier:
-    free: 2
-    pro: 2
-    enterprise: 2
+    free: 10
+    pro: 10
+    enterprise: 10
 temperature: 0.4
 loop_exit:
   require_evidence: false
