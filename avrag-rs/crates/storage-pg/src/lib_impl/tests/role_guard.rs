@@ -1,6 +1,8 @@
 //! Role-guard live tests: a SUPERUSER or BYPASSRLS login must be refused by
-//! `BootstrapRepository::connect` (fail closed, no env escape). Uses the local
-//! test admin role from DATABASE_URL to provision throwaway roles.
+//! `BootstrapRepository::connect` (fail closed, no env escape). Provisioning
+//! throwaway roles requires CREATEROLE, so the admin pool comes from
+//! `AVRAG_GUARD_ADMIN_URL` (a local admin DSN, e.g. a superuser); the connect
+//! target under test is DATABASE_URL itself.
 use super::support::*;
 
 fn dsn_credentials(database_url: &str) -> String {
@@ -16,7 +18,7 @@ fn dsn_credentials(database_url: &str) -> String {
 }
 
 async fn admin_pool() -> Option<PgPool> {
-    let Ok(database_url) = env::var("DATABASE_URL") else {
+    let Ok(database_url) = env::var("AVRAG_GUARD_ADMIN_URL") else {
         return None;
     };
     if database_url.trim().is_empty() {
@@ -45,7 +47,9 @@ async fn superuser_role_is_refused_at_connect() {
     .await
     .unwrap();
 
-    let database_url = env::var("DATABASE_URL").unwrap();
+    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://avrag:avrag@127.0.0.1:5432/avrag_rs".to_string()
+    });
     let role_url = database_url.replacen(&dsn_credentials(&database_url), &format!("{role}:x"), 1);
     let err = BootstrapRepository::connect(&role_url).await.err();
 
@@ -72,7 +76,9 @@ async fn bypassrls_role_is_refused_at_connect() {
     .await
     .unwrap();
 
-    let database_url = env::var("DATABASE_URL").unwrap();
+    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://avrag:avrag@127.0.0.1:5432/avrag_rs".to_string()
+    });
     let role_url = database_url.replacen(&dsn_credentials(&database_url), &format!("{role}:x"), 1);
     let err = BootstrapRepository::connect(&role_url).await.err();
 

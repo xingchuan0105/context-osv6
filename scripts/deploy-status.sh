@@ -69,6 +69,8 @@ echo "--- isolation invariants (booleans only, no secrets) ---"
 docker exec avrag-api bash -lc 'env | grep -E "^(NODE_ENV|E2E_ENABLED|TRUST_PROXY_AUTH)=" | sort' 2>/dev/null || echo "(env probe unavailable)"
 grep -qE '^E2E_RESET_SECRET=' /etc/avrag-rs/avrag.env && echo "prod_env_e2e_reset_secret=FAIL(present)" || echo "prod_env_e2e_reset_secret=OK(absent)"
 grep -qE '^(E2E_ENABLED=true|TRUST_PROXY_AUTH=true)' /etc/avrag-rs/avrag.env && echo "prod_env_levers=FAIL" || echo "prod_env_levers=OK"
+# The migration-role guard exemption must never leak into the runtime env file.
+grep -qE '^AVRAG_MIGRATION_ROLE_ONLY=' /etc/avrag-rs/avrag.env && echo "prod_env_migration_role_only=FAIL(present)" || echo "prod_env_migration_role_only=OK(absent)"
 [[ -f /etc/avrag-rs/migrate.env ]] && stat -c 'migrate_env_mode=%a' /etc/avrag-rs/migrate.env || echo "migrate_env=missing"
 PGURL=$(grep -oP '^(MIGRATION_DATABASE_URL|DATABASE_URL)=\K.*' /etc/avrag-rs/migrate.env 2>/dev/null | head -1)
 if [[ -n "$PGURL" ]]; then

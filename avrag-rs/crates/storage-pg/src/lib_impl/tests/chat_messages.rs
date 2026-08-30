@@ -5,6 +5,7 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
+    migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };

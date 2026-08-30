@@ -399,12 +399,12 @@ impl ChunkRepository {
             from chunks c
             join documents d on d.id = c.document_id
             where c.document_id = $1 and c.chunk_type = 'body'
-              and c.owner_user_id = $4
-              and d.owner_user_id = $4
+              and c.owner_user_id = $2
+              and d.owner_user_id = $2
               and d.status not in ('deleting', 'deleted')
             order by cursor_value, c.id
-            offset $2
-            limit $3
+            offset $3
+            limit $4
             "#,
         )
         .bind(document_id)

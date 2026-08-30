@@ -2,6 +2,17 @@
 pub(super) use super::super::*;
 pub(super) use std::env;
 
+/// Live-PG tests here connect as the local dev owner role (`avrag`), which
+/// legitimately owns tenant tables on pre-rollout databases — exactly the
+/// migrator context of the startup guard. Privilege-class checks (superuser /
+/// BYPASSRLS / membership) still apply. Every live test calls this before its
+/// first `BootstrapRepository::connect`.
+pub(super) fn migration_role_context() {
+    if std::env::var("AVRAG_MIGRATION_ROLE_ONLY").ok().is_none() {
+        unsafe { std::env::set_var("AVRAG_MIGRATION_ROLE_ONLY", "true") };
+    }
+}
+
 pub(super) async fn insert_test_document_block(
     repo: &PgAppRepository,
     owner_user_id: Uuid,

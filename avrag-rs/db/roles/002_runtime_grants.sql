@@ -7,7 +7,7 @@
 --   avrag_runtime         API/worker DML only  no owns, NOBYPASSRLS, no member-of
 --
 -- Run as a cluster-admin session targeting the app database:
---   psql "$MIGRATION_DATABASE_URL" -f avrag-rs/db/roles/002_runtime_grants.up.sql
+--   psql "$MIGRATION_DATABASE_URL" -f avrag-rs/db/roles/002_runtime_grants.sql
 -- Never run against the runtime DSN (CREATE ROLE requires cluster privilege).
 -- ============================================================================
 --

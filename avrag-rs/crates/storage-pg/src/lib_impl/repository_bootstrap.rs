@@ -40,7 +40,7 @@ impl BootstrapRepository {
         use sqlx::ConnectOptions;
         use sqlx::postgres::PgConnectOptions;
         use std::str::FromStr;
-        let mut connect_opts = PgConnectOptions::from_str(database_url)?;
+        let connect_opts = PgConnectOptions::from_str(database_url)?;
         // Slow-statement log: concurrency forensics need per-statement timing.
         let connect_opts = connect_opts.log_slow_statements(
             log::LevelFilter::Warn,
@@ -127,11 +127,13 @@ impl BootstrapRepository {
     }
 }
 
-/// The migration/owner role (`avrag`) legitimately owns tenant tables. Set
-/// AVRAG_MIGRATION_ROLE_ONLY=true exclusively in the migrator environment;
-/// production API/worker env files never set it, so a leaked owner DSN cannot
-/// boot the API or worker.
-fn role_owning_tables_allowed() -> bool {
+/// The migration/owner role (`avrag`) legitimately owns tenant tables and, on
+/// dev databases created before the role split, still carries createdb and
+/// pre-FORCE-RLS tables. Set AVRAG_MIGRATION_ROLE_ONLY=true exclusively in the
+/// migrator environment (migrate.env, local dev shells, test harnesses) to
+/// exempt environment-class problems; production API/worker env files never
+/// set it, so a leaked owner DSN cannot boot the API or worker.
+fn migration_role_only() -> bool {
     std::env::var("AVRAG_MIGRATION_ROLE_ONLY")
         .map(|value| matches!(
             value.trim().to_ascii_lowercase().as_str(),
@@ -140,10 +142,15 @@ fn role_owning_tables_allowed() -> bool {
         .unwrap_or(false)
 }
 
-/// Fail-closed tenant-isolation gate for API/worker/migrator pools: a
-/// superuser or BYPASSRLS role, or any public tenant table without FORCED RLS,
-/// refuses to start. No env escape hatch — the `avrag_runtime` role from
-/// db/roles/002_runtime_grants.sql is mandatory in deployed environments.
+/// Fail-closed tenant-isolation gate for API/worker pools and (partially) the
+/// migrator: a superuser or BYPASSRLS role, or any role membership, refuses to
+/// start in every context. Environment-class problems (createdb/createrole/
+/// table ownership/missing FORCE RLS) refuse in API/worker contexts; the
+/// migrator context is exempt from those because migrations 0082 and the
+/// provisioning SQL are themselves the fix — refusing would deadlock the
+/// process that must apply it. Gate is `AVRAG_MIGRATION_ROLE_ONLY`, set only
+/// in the migrator environment (migrate.env / local dev / test harnesses);
+/// production API/worker env files never set it.
 async fn verify_runtime_role_safety(pool: &PgPool) -> Result<(), PgStorageError> {
     let report = match BootstrapRepository::runtime_role_report(pool).await {
         Ok(report) => report,
@@ -163,16 +170,34 @@ async fn verify_runtime_role_safety(pool: &PgPool) -> Result<(), PgStorageError>
     if report.rolbypassrls {
         problems.push("role bypasses RLS".to_string());
     }
+    if !report.member_of.is_empty() {
+        problems.push(format!("role is member of: {}", report.member_of.join(", ")));
+    }
+    if !problems.is_empty() {
+        // Privilege-class problems are refused in EVERY context, including the
+        // migrator — no gate may waive superuser or BYPASSRLS.
+        tracing::error!(target: "avrag_role_guard", role = %report.role, ?problems, "runtime role safety check failed (privilege class)");
+        return Err(PgStorageError::NotFound(format!(
+            "runtime role '{}' failed safety checks: {}",
+            report.role,
+            problems.join("; ")
+        )));
+    }
+    // Environment-class problems (createdb/createrole/ownership/missing FORCE
+    // RLS) can exist transiently in migrator/dev contexts — migration 0082 and
+    // the provisioning SQL are what fix them, so refusing there would deadlock
+    // the very process that must apply the fix. All other contexts fail closed.
+    if migration_role_only() {
+        tracing::info!(target: "avrag_role_guard", role = %report.role, "runtime role safety verified (migration-role context)");
+        return Ok(());
+    }
     if report.rolcreatedb {
         problems.push("role can create databases".to_string());
     }
     if report.rolcreaterole {
         problems.push("role can create roles".to_string());
     }
-    if !report.member_of.is_empty() {
-        problems.push(format!("role is member of: {}", report.member_of.join(", ")));
-    }
-    if !report.owns_tenant_tables.is_empty() && !role_owning_tables_allowed() {
+    if !report.owns_tenant_tables.is_empty() {
         problems.push(format!(
             "runtime role must not own tenant tables: {}",
             report.owns_tenant_tables.join(", ")

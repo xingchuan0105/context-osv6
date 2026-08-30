@@ -63,7 +63,13 @@ async fn pg_test_app_state() -> Option<AppState> {
 
 async fn pg_test_app_state_migrated() -> Option<AppState> {
     let database_url = resolve_database_url();
-    // Schema setup is the migrator's job now; tests run it inline first.
+    // Schema setup is the migrator's job now; tests run it inline first, in
+    // the migrator role context (pre-provisioning dev DBs fail environment-class
+    // guard checks otherwise).
+    // same migrator-role context as the migrated path above.
+    unsafe {
+        std::env::set_var("AVRAG_MIGRATION_ROLE_ONLY", "true");
+    }
     let repo = avrag_storage_pg::BootstrapRepository::connect(&database_url).await.ok()?;
     repo.migrate().await.ok()?;
     AppState::bootstrap(pg_bootstrap_config()).await.ok()
@@ -71,6 +77,10 @@ async fn pg_test_app_state_migrated() -> Option<AppState> {
 
 /// Contract tests that assert public error codes must not silent-skip.
 async fn require_pg_app_state() -> AppState {
+    // Same migrator-role context as the migrated path above.
+    unsafe {
+        std::env::set_var("AVRAG_MIGRATION_ROLE_ONLY", "true");
+    }
     AppState::bootstrap(pg_bootstrap_config())
         .await
         .unwrap_or_else(|err| {

@@ -32,8 +32,14 @@ BEGIN
   END LOOP;
 END $$;
 
--- _org_owner_map_mig is a migration-internal scratch table; pin it down too so
--- nothing user-reachable ever reads it through the runtime role (grants in the
--- provisioning SQL simply never cover it).
-ALTER TABLE _org_owner_map_mig ENABLE ROW LEVEL SECURITY;
-ALTER TABLE _org_owner_map_mig FORCE ROW LEVEL SECURITY;
+-- _org_owner_map_mig (when present — fresh dev DBs never had the org remap) is
+-- a migration-internal scratch table; pin it down too so nothing user-reachable
+-- ever reads it through the runtime role (grants in the provisioning SQL simply
+-- never cover it).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = '_org_owner_map_mig') THEN
+    ALTER TABLE public._org_owner_map_mig ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public._org_owner_map_mig FORCE ROW LEVEL SECURITY;
+  END IF;
+END $$;

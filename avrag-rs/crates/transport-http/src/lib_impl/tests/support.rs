@@ -40,7 +40,12 @@ fn ensure_test_upload_signing_secret() {
 
 pub(super) async fn pg_test_app_state() -> Option<AppState> {
     let database_url = env::var("DATABASE_URL").ok()?;
-    // Migrations live behind the migrator binary; tests run them inline.
+    // Migrations live behind the migrator binary; tests run them inline, in
+    // the migrator role context (pre-provisioning dev DBs fail environment-class
+    // guard checks otherwise).
+    unsafe {
+        env::set_var("AVRAG_MIGRATION_ROLE_ONLY", "true");
+    }
     let repo = avrag_storage_pg::BootstrapRepository::connect(&database_url).await.ok()?;
     repo.migrate().await.ok()?;
     let mut config = app_core::AppConfig::default();

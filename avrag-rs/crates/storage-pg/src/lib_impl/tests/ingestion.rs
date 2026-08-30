@@ -7,6 +7,7 @@ async fn claim_next_ingestion_task_sees_cross_owner_queue_under_forced_rls() {
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
+    migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
     let repo = PgAppRepository {
@@ -117,6 +118,7 @@ async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_a
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
+    migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };

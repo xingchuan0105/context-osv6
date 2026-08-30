@@ -18,6 +18,7 @@ async fn dual_tenant_repo() -> Option<PgAppRepository> {
     if database_url.trim().is_empty() {
         return None;
     }
+    migration_role_context();
     let bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     bootstrap.migrate().await.unwrap();
     let repo = PgAppRepository {

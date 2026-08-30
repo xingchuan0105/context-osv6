@@ -5,6 +5,7 @@ async fn list_body_chunk_md_line_ranges_filters_and_parses_when_database_availab
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
+    migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };

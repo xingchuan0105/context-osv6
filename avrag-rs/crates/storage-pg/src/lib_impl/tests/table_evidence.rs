@@ -5,6 +5,7 @@ async fn replace_table_evidence_chunks_idempotent_and_hydratable_when_database_a
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
+    migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
     let repo = PgAppRepository { pool: __bootstrap.pool.clone() };

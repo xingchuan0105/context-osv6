@@ -13,6 +13,14 @@ async fn main() -> Result<()> {
     let _ = dotenvy::dotenv();
     telemetry::init("avrag-migrate")?;
 
+    // Migrator-only context: the owner DSN may still own tenant tables on
+    // pre-rollout databases, so environment-class guard problems are exempt
+    // here (0082 + provisioning SQL are the fix). Privilege-class problems
+    // (superuser/BYPASSRLS/membership) are still refused.
+    unsafe {
+        std::env::set_var("AVRAG_MIGRATION_ROLE_ONLY", "true");
+    }
+
     let database_url = match std::env::var("MIGRATION_DATABASE_URL") {
         Ok(url) if !url.trim().is_empty() => url,
         _ => std::env::var("DATABASE_URL")
