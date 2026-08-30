@@ -1,0 +1,1 @@
+select rolname, rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolbypassrls from pg_roles where rolname like 'avrag%' order by 1;

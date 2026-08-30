@@ -7,7 +7,7 @@ export const dynamic = "force-static";
 
 const LLMS_TXT = `# Context OS
 
-> 可分享的个人知识工作区：文档入库与问答、通过 MCP / API 外接 Agent、会员解锁可分享名额。
+> 可本地部署的个人 AI 知识库：文档入库与问答、答案溯源到原文、通过 MCP / API 外接 Agent、会员解锁可分享名额。
 
 ## Public docs
 

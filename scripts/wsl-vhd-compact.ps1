@@ -87,7 +87,7 @@ if (-not (Get-Command Optimize-VHD -ErrorAction SilentlyContinue)) {
     throw "Optimize-VHD is unavailable. Enable the Hyper-V PowerShell module and retry."
 }
 
-Invoke-WslCommand -Arguments @("--manage", $DistroName, "--set-sparse", "true") -WarnOnly
+Invoke-WslCommand -Arguments @("--manage", $DistroName, "--set-sparse", "true", "--allow-unsafe") -WarnOnly
 Invoke-WslCommand -Arguments @("--shutdown")
 
 if (-not (Test-Path $VhdPath)) {

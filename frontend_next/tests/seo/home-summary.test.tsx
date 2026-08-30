@@ -25,7 +25,7 @@ describe("HomeClient SSR 摘要（GEO 方案 A2）", () => {
 
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]?.textContent).toContain("可分享的个人知识工作区");
+    expect(headings[0]?.textContent).toContain("可本地部署的个人 AI 知识库");
 
     const h2 = screen.getAllByRole("heading", { level: 2 });
     expect(h2.length).toBeGreaterThanOrEqual(3);
@@ -37,7 +37,7 @@ describe("HomeClient SSR 摘要（GEO 方案 A2）", () => {
     expect(screen.getByText(/把知识库接到 Cursor、Claude/)).toBeTruthy();
     expect(screen.getByText(/访客免登录浏览公开库/)).toBeTruthy();
     expect(screen.getByText(/ContextLM/)).toBeTruthy();
-    expect(screen.getByText(/2026-08-18/)).toBeTruthy();
+    expect(screen.getByText(/2026-08-29/)).toBeTruthy();
 
     expect(screen.getByRole("link", { name: "进入应用" }).getAttribute("href")).toBe("/dashboard");
     expect(screen.getByRole("link", { name: "查看定价" }).getAttribute("href")).toBe("/pricing");

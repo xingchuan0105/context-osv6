@@ -2,12 +2,12 @@ import type { UiMessageDescriptor } from "./types";
 
 export const homeMessages = {
   "home.seoTitle": {
-    zh: "Context OS — 可分享的个人知识工作区",
-    en: "Context OS — a shareable personal knowledge workspace",
+    zh: "Context OS — 可本地部署的个人 AI 知识库",
+    en: "Context OS — a locally deployable personal AI knowledge base",
   },
   "home.seoSubtitle": {
-    zh: "把分散的文档变成可检索、可分享、可被 AI 引用的知识工作区：自己问答，也可以把库开放给访客或外接 Agent。",
-    en: "Turn scattered documents into a searchable, shareable, AI-citable knowledge workspace — ask questions yourself, or open a workspace to guests and external agents.",
+    zh: "把分散的文档变成可检索、可分享、可被 AI 引用的个人 AI 知识库：自己问答，也可以把库开放给访客或外接 Agent。",
+    en: "Turn scattered documents into a searchable, shareable, AI-citable personal AI knowledge base — ask questions yourself, or open a workspace to guests and external agents.",
   },
   "home.seoBulletDocs": {
     zh: "文档入库与问答：上传文件或粘贴 URL 即成资料源；提问可按库限定检索范围，回答可溯源到具体文档。",

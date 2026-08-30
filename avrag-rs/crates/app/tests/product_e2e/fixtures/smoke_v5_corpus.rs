@@ -4,7 +4,7 @@
 //! (external Postgres + fixed object-store path + module-scoped infra fixture).
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::OnceCell;
 
@@ -48,6 +48,12 @@ pub struct SmokeV5CorpusState {
     pub user_id: String,
     pub workspace_id: String,
     pub documents: Vec<SmokeV5Document>,
+    /// Wall-clock seconds of the most recent cold ingest (upload→completed),
+    /// timed here because the T7 windowed pipeline no longer persists per-doc
+    /// duration rows (`documents`/`document_parse_runs` stay empty). 0.0 on
+    /// caches written before this field existed.
+    #[serde(default)]
+    pub last_ingest_wall_secs: f64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -227,10 +233,12 @@ async fn ingest_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
         .await
         .expect("create notebook");
     let mut documents = Vec::new();
+    let mut last_ingest_wall_secs = 0.0f64;
 
     for (filename, timeout_secs) in &corpus_entries {
         let timeout_secs = smoke_v5_ingest_timeout_secs(*timeout_secs);
         eprintln!("[smoke_v5] uploading {filename} (timeout={timeout_secs}s) ...");
+        let ingest_started = Instant::now();
         let upload = ctx
             .upload_document_to_notebook(filename, &notebook.id)
             .await
@@ -253,6 +261,7 @@ async fn ingest_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
             "[smoke_v5] {filename} ingested (doc_id={})",
             upload.document_id
         );
+        last_ingest_wall_secs = ingest_started.elapsed().as_secs_f64();
         documents.push(SmokeV5Document {
             filename: (*filename).to_string(),
             document_id: upload.document_id,
@@ -264,6 +273,7 @@ async fn ingest_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
         user_id: DEFAULT_TEST_USER_ID.to_string(),
         workspace_id: notebook.id,
         documents,
+        last_ingest_wall_secs,
     }
 }
 

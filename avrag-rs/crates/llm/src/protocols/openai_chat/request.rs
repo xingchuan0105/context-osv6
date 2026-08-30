@@ -67,6 +67,13 @@ pub fn build_chat_completion_request_body(
                 serde_json::json!(if enable_thinking { "max" } else { "none" });
         } else if base.contains("generativelanguage") || base.contains("googleapis.com") {
             // Gemini OpenAI-compat rejects unknown `enable_thinking` (400 INVALID_ARGUMENT).
+        } else if base.contains("ollama") || base.contains("makora") {
+            // ollama.com / inference.makora.com ignore top-level `enable_thinking`;
+            // reasoning_effort is honored. Without it a thinking model can burn
+            // the whole completion on reasoning and finish with empty content.
+            if !enable_thinking {
+                request_body["reasoning_effort"] = serde_json::json!("none");
+            }
         } else {
             request_body["enable_thinking"] = serde_json::json!(enable_thinking);
         }

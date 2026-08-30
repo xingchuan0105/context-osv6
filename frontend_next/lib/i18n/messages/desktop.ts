@@ -2,8 +2,8 @@ import type { UiMessageDescriptor } from "./types";
 
 export const desktopMessages = {
   "desktop.productTitle": {
-    zh: "本地客户端 · 完全免费",
-    en: "Desktop client · free",
+    zh: "AI 知识库桌面客户端 · 完全免费",
+    en: "AI knowledge base desktop client · free",
   },
   "desktop.productSubtitle": {
     zh: "数据本地私有，开箱即用官方模型或配置自备 Key，可被 Claude / Codex 等桌面 Agent 以 MCP / CLI 调用。完全免费，无需买断许可。",

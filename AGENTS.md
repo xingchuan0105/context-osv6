@@ -169,3 +169,4 @@ Legacy single-brain SaC union and the 2026-08-07 **three-loop verify path** are 
 - `docs/agent/rust-resources.md` — target/cache policy
 - `docs/agent/coding-behavior.md` — original long-form behavior essays (human reference)
 - `docs/engineering/SOLO_DISCIPLINE.md` · `docs/adr/0007-product-apps-composition-root.md`
+- `/home/chuan/asr-filetrans/AGENTS.md`（仓外独立工具，Windows 视图 `Z:\home\chuan\asr-filetrans`）— 百炼 filetrans 会议录音批量转写（说话人分离 + 时间轴 Markdown），凭据零配置、全流程一条命令，用法自包含

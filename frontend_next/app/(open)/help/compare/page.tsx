@@ -5,13 +5,13 @@ import Link from "next/link";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "选型对比 · Context OS",
+  title: "AI 知识库工具对比",
   description:
-    "Context OS 与笔记内置 AI、第二大脑应用、通用 RAG 套件的中立对比：适用场景、分享、外接 Agent，不编造竞品数据。",
+    "个人 AI 知识库怎么选？Context OS 与笔记内置 AI、第二大脑应用、通用 RAG 套件的中立对比：适用场景、分享、外接 Agent，不编造竞品数据。",
   alternates: { canonical: "/help/compare" },
 };
 
-const UPDATED = "2026-08-12";
+const UPDATED = "2026-08-29";
 
 const h2: CSSProperties = {
   fontSize: "1.2rem",
@@ -98,7 +98,7 @@ export default function HelpComparePage() {
             中立选型对照
           </p>
           <h1 className="app-page-title" style={{ margin: 0 }}>
-            Context OS 与其它知识方案怎么选
+            AI 知识库工具对比：Context OS 与其它知识方案怎么选
           </h1>
           <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "14px", margin: 0 }}>
             产品：Context OS · 品牌：ContextLM · 作者：邢川

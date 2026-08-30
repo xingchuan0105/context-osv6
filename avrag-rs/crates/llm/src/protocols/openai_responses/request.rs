@@ -47,7 +47,11 @@ pub fn build_responses_request_body(
         if let Some(previous_id) = previous_response_id {
             request_body["previous_response_id"] = serde_json::json!(previous_id);
         }
-        if config.enable_thinking != Some(true) {
+        if config.enable_thinking == Some(true) {
+            // qwen3.7-flash rejects `high` outright (400: thinking_budget must
+            // be a positive integer ≤131072, sent or not); `medium` reasons.
+            request_body["reasoning"] = serde_json::json!({ "effort": "medium" });
+        } else {
             request_body["reasoning"] = serde_json::json!({ "effort": "none" });
         }
     }
@@ -391,7 +395,7 @@ mod tests {
             &[],
             Some("resp_prev_1"),
         );
-        assert_eq!(body["reasoning"]["effort"], "high");
+        assert_eq!(body["reasoning"]["effort"], "medium");
         assert_eq!(body["previous_response_id"], "resp_prev_1");
     }
 }

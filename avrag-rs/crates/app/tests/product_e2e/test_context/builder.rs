@@ -489,6 +489,12 @@ impl TestContext {
         }
 
         let run_migrations = pg_url_needs_migration(&pg_url);
+        // The E2E harness plays the migrator role end to end (it connects, runs
+        // migrations, then bootstraps the app with the same DSN), so its pool
+        // must use the migrator context of the startup guard.
+        unsafe {
+            std::env::set_var("AVRAG_MIGRATION_ROLE_ONLY", "true");
+        }
         if run_migrations {
             // Migrations live only behind the migrator now (no auto-migrate in
             // app bootstrap); the E2E harness runs them inline, one claimant.

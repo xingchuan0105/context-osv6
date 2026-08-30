@@ -1,0 +1,24 @@
+{
+  "mcp": {
+    "servers": {
+      "semble": {
+        "type": "stdio",
+        "command": "C:\\Windows\\System32\\wsl.exe",
+        "args": ["-e", "/home/chuan/.local/bin/semble"],
+        "timeoutMs": 60000
+      },
+      "code-review-graph": {
+        "type": "stdio",
+        "command": "C:\\Windows\\System32\\wsl.exe",
+        "args": [
+          "-e",
+          "/home/chuan/.local/bin/code-review-graph",
+          "serve",
+          "--repo",
+          "/home/chuan/context-osv6"
+        ],
+        "timeoutMs": 60000
+      }
+    }
+  }
+}

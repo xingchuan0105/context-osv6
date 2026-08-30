@@ -12,5 +12,8 @@ mod window_split;
 mod windowed_llm;
 pub(crate) mod triplet_semantic_lint;
 
+#[cfg(test)]
+mod llm_bench;
+
 pub(crate) use document_pipeline::remove_struct_store_files;
 pub(crate) use processor::{EmbeddingDeps, LlmDeps, MeteringDeps, PgTaskProcessor, StorageDeps};

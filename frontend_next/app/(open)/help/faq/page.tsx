@@ -5,13 +5,13 @@ import Link from "next/link";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "常见问题 · Context OS",
+  title: "常见问题",
   description:
     "Context OS 产品 FAQ：MCP / Agent 接入、工作区密钥边界、可分享名额、BYOK、会员与余额定价。",
   alternates: { canonical: "/help/faq" },
 };
 
-const UPDATED = "2026-08-12";
+const UPDATED = "2026-08-29";
 
 const h2: CSSProperties = {
   fontSize: "1.2rem",
@@ -74,8 +74,32 @@ export default function HelpFaqPage() {
         >
           <h2 style={h2}>Context OS 是什么？</h2>
           <p style={p}>
-            Context OS 是可分享的个人知识工作区：把文档入库后可按库检索问答，也可把库开放给访客或外接
+            Context OS 是可本地部署的个人 AI 知识库：把文档入库后可按库检索问答，也可把库开放给访客或外接
             Agent（MCP / API）。产品名 Context OS，品牌为 ContextLM。
+          </p>
+
+          <h2 style={h2}>AI 知识库是什么？</h2>
+          <p style={p}>
+            AI 知识库指把文档、网页、笔记等资料集中入库后，让模型「先查库、再回答」的系统：提问时先从库中找出最相关的片段，模型基于这些片段作答，因此答案可标注来源、限定在库内事实，而不是凭训练记忆泛泛而谈。Context
+            OS 属于这一类产品：文档入库即成可检索的知识库，支持追问、溯源与外接 Agent 调用。
+          </p>
+
+          <h2 style={h2}>RAG 知识库是什么、怎么搭建？</h2>
+          <p style={p}>
+            RAG（Retrieval-Augmented Generation，检索增强生成）是 AI
+            知识库的底层方法：检索层负责从文档中找出与问题相关的片段，生成层让模型基于这些片段回答，从而减少凭空编造。用
+            Context OS 搭建不需要自己写检索代码：上传文件或粘贴 URL
+            即完成入库，解析、索引与检索编排由系统自动完成；桌面客户端可本机私有使用。把库接入
+            Cursor、Claude 等外接 Agent 的做法见{" "}
+            <Link href="/help/api-access/agents">Agent API 文档</Link>。
+          </p>
+
+          <h2 style={h2}>MCP 工具是什么？</h2>
+          <p style={p}>
+            MCP（Model Context
+            Protocol）是连接 AI 应用与外部数据源、工具的开放协议：MCP 服务器把知识库等资源以统一接口暴露给
+            Claude、Cursor 等 Agent 调用。Context OS 为每个工作区提供 MCP HTTP
+            接入——创建工作区密钥、复制 Agent Pack 即可让外接 Agent 检索该库，具体见下一条。
           </p>
 
           <h2 style={h2}>如何用 MCP / 外接 Agent 接入？</h2>
