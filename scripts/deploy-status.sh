@@ -75,10 +75,10 @@ grep -qE '^AVRAG_MIGRATION_ROLE_ONLY=' /etc/avrag-rs/avrag.env && echo "prod_env
 PGURL=$(grep -oP '^(MIGRATION_DATABASE_URL|DATABASE_URL)=\K.*' /etc/avrag-rs/migrate.env 2>/dev/null | head -1)
 if [[ -n "$PGURL" ]]; then
   PSQL="docker exec avrag-postgres psql -U avrag -d avrag_rs -tA -c"
-  $PGURL "select 'runtime_role_super=' || coalesce((select rolsuper::text from pg_roles where rolname='avrag_runtime'),'absent')" 2>/dev/null || echo "runtime_role=unknown"
-  $PGURL "select 'runtime_role_bypassrls=' || coalesce((select rolbypassrls from pg_roles where rolname='avrag_runtime')::text,'absent')" 2>/dev/null || true
-  $PGURL "select 'tenant_tables_without_forced_rls=' || coalesce((select count(*)::text from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and exists (select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='owner_user_id' and not a.attisdropped) and (not c.relrowsecurity or not c.relforcerowsecurity))::text,'unknown')" 2>/dev/null || true
-  $PGURL "select 'db_roles=' || string_agg(rolname, ',') from pg_roles where rolname like 'avrag%'" 2>/dev/null || true
+  $PSQL "select 'runtime_role_super=' || coalesce((select rolsuper::text from pg_roles where rolname='avrag_runtime'),'absent')" 2>/dev/null || echo "runtime_role=unknown"
+  $PSQL "select 'runtime_role_bypassrls=' || coalesce((select rolbypassrls from pg_roles where rolname='avrag_runtime')::text,'absent')" 2>/dev/null || true
+  $PSQL "select 'tenant_tables_without_forced_rls=' || coalesce((select count(*)::text from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and exists (select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='owner_user_id' and not a.attisdropped) and (not c.relrowsecurity or not c.relforcerowsecurity))::text,'unknown')" 2>/dev/null || true
+  $PSQL "select 'db_roles=' || string_agg(rolname, ',') from pg_roles where rolname like 'avrag%'" 2>/dev/null || true
 else
   echo "migrate_env_dsn=not-read (skip DB probes)"
 fi
