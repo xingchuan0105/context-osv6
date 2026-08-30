@@ -441,6 +441,10 @@ export function WorkspaceSurface({ workspaceId: workspaceIdProp }: { workspaceId
                   setActiveWebSources(request);
                   workspaceUi.setActiveCitation(null);
                 }}
+                onRequestGuideSources={() => {
+                  // Click-to-guide: inert rag chip opens the right rail to select sources.
+                  workspaceUi.setRightRailOpen(true);
+                }}
                 onSelectCitation={(request) => {
                   workspaceUi.setActiveCitation(request);
                 }}

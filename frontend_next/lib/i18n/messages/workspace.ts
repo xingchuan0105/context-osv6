@@ -9,10 +9,6 @@ export const workspaceMessages = {
     zh: "API",
     en: "API",
   },
-  workspaceChatComposerHint: {
-    zh: "Enter 发送，Shift+Enter 换行。",
-    en: "Press Enter to send and Shift+Enter for a newline.",
-  },
   workspaceChatActionAddToNote: {
     zh: "加入笔记",
     en: "Add to note",
@@ -42,16 +38,36 @@ export const workspaceMessages = {
     en: "Workspace chat composer",
   },
   workspaceChatComposerPlaceholder: {
-    zh: "输入问题，可开启知识库 / 网络搜索…",
-    en: "Ask anything — toggle Knowledge Base / Web Search below…",
+    zh: "输入问题…",
+    en: "Ask anything…",
   },
   workspaceChatHeroTitle: {
     zh: "有什么想问的？",
     en: "What would you like to ask?",
   },
   workspaceChatHeroSubtitle: {
-    zh: "直接提问，或开启知识库、网络搜索获取更深入的回答。",
-    en: "Ask directly, or toggle Knowledge Base / Web Search for deeper answers.",
+    zh: "直接提问；选中右侧文档后，回答会检索这些文档。",
+    en: "Ask directly — select documents on the right and answers will search them.",
+  },
+  workspaceChatModeLineChat: {
+    zh: "聊天：回答不检索文档与网络。",
+    en: "Chat: answers do not search documents or the web.",
+  },
+  workspaceChatModeLineRag: {
+    zh: "知识库：回答检索已选文档。",
+    en: "Knowledge base: answers search the selected documents.",
+  },
+  workspaceChatModeLineSearch: {
+    zh: "网络搜索：回答会检索网页。",
+    en: "Web search: answers search the web.",
+  },
+  workspaceChatModeLineBoth: {
+    zh: "知识库 + 网络搜索：回答检索已选文档与网页。",
+    en: "Knowledge base + Web search: answers search selected documents and the web.",
+  },
+  workspaceChatModeLineNoSelection: {
+    zh: "未选择文档：可选择右侧文档后开启知识库检索。",
+    en: "No documents selected — select documents on the right to enable knowledge retrieval.",
   },
   workspaceChatLoadError: {
     zh: "加载工作区对话记录失败。",
@@ -68,10 +84,6 @@ export const workspaceMessages = {
   workspaceChatCapRag: {
     zh: "知识库",
     en: "Knowledge base",
-  },
-  workspaceChatCapRagNeedsSources: {
-    zh: "先在右侧选择要检索的文档，再使用知识库检索。",
-    en: "Select documents in the right rail to enable knowledge retrieval",
   },
   workspaceChatCapSearch: {
     zh: "网络搜索",
@@ -150,8 +162,8 @@ export const workspaceMessages = {
     en: "Back to bottom",
   },
   workspaceEmptyStateModeHint: {
-    zh: "当前：{mode} · 可开启知识库 / 网络搜索",
-    en: "Active: {mode} · toggle Knowledge / Search below",
+    zh: "当前：{mode}",
+    en: "Active: {mode}",
   },
   workspaceNoSessionsMatch: {
     zh: "暂无会话。",

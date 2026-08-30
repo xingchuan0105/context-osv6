@@ -6,20 +6,16 @@ import { useStore } from "zustand/react";
 import { createStore } from "zustand/vanilla";
 
 import type { WorkspaceCitationRequest } from "./model";
-
-/** Derived agent_type / progress label. Prefer `WorkspaceCapability[]` for selection. */
-export type WorkspaceChatMode = "rag" | "search" | "chat" | "write" | "rag+search";
-type WorkspaceChatModeInput = WorkspaceChatMode | "general";
-export type WorkspaceChatModePreference = "auto" | "manual";
-
-export type { WorkspaceCapability } from "./capabilities";
-export {
-  buildClientContext,
-  capabilitiesFromAgentType,
-  deriveAgentTypeLabel,
+import {
   normalizeCapabilities,
-  toggleCapability,
+  type WorkspaceAgentTypeLabel,
+  type WorkspaceCapability,
 } from "./capabilities";
+
+export { buildClientContext, capabilitiesFromAgentType, deriveAgentTypeLabel } from "./capabilities";
+
+/** Progress-card / transcript mode label derived from per-turn capabilities. */
+export type WorkspaceChatMode = WorkspaceAgentTypeLabel | "write";
 
 export type WorkspaceUiState = {
   historyRailOpen: boolean;
@@ -30,8 +26,10 @@ export type WorkspaceUiState = {
   selectedSourceIds: string[];
   focusedSourceId: string | null;
   activeCitation: WorkspaceCitationRequest | null;
-  chatMode: WorkspaceChatMode;
-  chatModePreference: WorkspaceChatModePreference;
+  /** Composer capability chips (rag / search); empty = pure chat. Persisted per workspace. */
+  capabilities: WorkspaceCapability[];
+  /** True once the user toggles a chip manually — disables auto rag attachment. */
+  capabilitiesManual: boolean;
 };
 
 type WorkspaceUiData = {
@@ -51,10 +49,10 @@ type WorkspaceUiStore = WorkspaceUiData & {
   toggleSelectedSourceId: (workspaceId: string, sourceId: string) => void;
   setFocusedSourceId: (workspaceId: string, sourceId: string | null) => void;
   setActiveCitation: (workspaceId: string, citation: WorkspaceCitationRequest | null) => void;
-  setChatMode: (
+  setCapabilities: (
     workspaceId: string,
-    mode: WorkspaceChatModeInput,
-    preference?: WorkspaceChatModePreference,
+    capabilities: readonly WorkspaceCapability[],
+    options?: { manual?: boolean },
   ) => void;
 };
 
@@ -83,8 +81,8 @@ export const DEFAULT_WORKSPACE_UI_STATE: WorkspaceUiState = {
   selectedSourceIds: [],
   focusedSourceId: null,
   activeCitation: null,
-  chatMode: "chat",
-  chatModePreference: "auto",
+  capabilities: [],
+  capabilitiesManual: false,
 };
 
 function normalizeSourceIds(sourceIds: readonly string[]) {
@@ -115,41 +113,6 @@ function clampRightRailWidth(width: number) {
   return Math.min(RIGHT_RAIL_MAX_WIDTH, Math.max(RIGHT_RAIL_MIN_WIDTH, Math.round(width)));
 }
 
-function normalizeChatMode(mode: string | null | undefined): WorkspaceChatMode {
-  if (mode === "general" || mode === "chat") {
-    return "chat";
-  }
-
-  if (mode === "rag" || mode === "search" || mode === "write" || mode === "rag+search") {
-    return mode;
-  }
-
-  return DEFAULT_WORKSPACE_UI_STATE.chatMode;
-}
-
-function normalizeChatModePreference(preference: WorkspaceChatModePreference | undefined) {
-  if (preference === "manual") {
-    return preference;
-  }
-
-  return DEFAULT_WORKSPACE_UI_STATE.chatModePreference;
-}
-
-export function getDefaultWorkspaceChatMode(hasContentSources: boolean) {
-  return hasContentSources ? "rag" : "chat";
-}
-
-export function resolveWorkspaceChatMode(
-  state: Pick<WorkspaceUiState, "chatMode" | "chatModePreference">,
-  hasContentSources: boolean,
-) {
-  if (normalizeChatModePreference(state.chatModePreference) === "manual") {
-    return normalizeChatMode(state.chatMode);
-  }
-
-  return getDefaultWorkspaceChatMode(hasContentSources);
-}
-
 const normalizedWorkspaceUiStateCache = new WeakMap<WorkspaceUiState, WorkspaceUiState>();
 
 function readWorkspaceUiState(workspaces: Record<string, WorkspaceUiState>, workspaceId: string) {
@@ -160,8 +123,6 @@ function readWorkspaceUiState(workspaces: Record<string, WorkspaceUiState>, work
   }
 
   if (
-    current.chatMode === normalizeChatMode(current.chatMode) &&
-    current.chatModePreference === normalizeChatModePreference(current.chatModePreference) &&
     typeof current.historyRailWidth === "number" &&
     typeof current.rightRailWidth === "number" &&
     current.historyRailWidth !== LEGACY_HISTORY_RAIL_DEFAULT_WIDTH &&
@@ -178,8 +139,7 @@ function readWorkspaceUiState(workspaces: Record<string, WorkspaceUiState>, work
   const normalized = {
     ...DEFAULT_WORKSPACE_UI_STATE,
     ...current,
-    chatMode: normalizeChatMode(current.chatMode),
-    chatModePreference: normalizeChatModePreference(current.chatModePreference),
+    capabilities: normalizeCapabilities(current.capabilities),
     historyRailWidth:
       current.historyRailWidth === LEGACY_HISTORY_RAIL_DEFAULT_WIDTH || current.historyRailWidth == null
         ? DEFAULT_WORKSPACE_UI_STATE.historyRailWidth
@@ -324,12 +284,13 @@ export function createWorkspaceUiStore({
               activeCitation: citation,
             })),
           })),
-        setChatMode: (workspaceId, mode, preference = "manual") =>
+        setCapabilities: (workspaceId, capabilities, options) =>
           set((state) => ({
             workspaces: updateWorkspaceUiState(state.workspaces, workspaceId, (current) => ({
               ...current,
-              chatMode: normalizeChatMode(mode),
-              chatModePreference: normalizeChatModePreference(preference),
+              capabilities: normalizeCapabilities(capabilities),
+              // Default to manual: direct chip edits come through here without options.
+              capabilitiesManual: options?.manual ?? true,
             })),
           })),
       }),
@@ -378,8 +339,8 @@ export function useWorkspaceUi(workspaceId: string) {
         workspaceUiStore.getState().setFocusedSourceId(workspaceId, sourceId),
       setActiveCitation: (citation: WorkspaceCitationRequest | null) =>
         workspaceUiStore.getState().setActiveCitation(workspaceId, citation),
-      setChatMode: (mode: WorkspaceChatModeInput, preference?: WorkspaceChatModePreference) =>
-        workspaceUiStore.getState().setChatMode(workspaceId, mode, preference),
+      setCapabilities: (capabilities: readonly WorkspaceCapability[], options?: { manual?: boolean }) =>
+        workspaceUiStore.getState().setCapabilities(workspaceId, capabilities, options),
     }),
     [state, workspaceId],
   );

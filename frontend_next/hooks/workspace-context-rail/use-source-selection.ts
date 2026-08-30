@@ -67,18 +67,18 @@ export function useWorkspaceSourceSelection({
     }
 
     if (pendingUploadedModeSwitchRef.current) {
+      pendingUploadedModeSwitchRef.current = false;
+
       const hasEligibleSelectedSource = nextSelected.some((id) =>
         isWorkspaceSourceDocscopeEligible(currentStatuses.get(id) ?? ""),
       );
 
       if (hasEligibleSelectedSource) {
-        const workspaceUi = getWorkspaceUiState(workspaceId);
-
-        if (workspaceUi.chatModePreference === "manual" && workspaceUi.chatMode !== "chat") {
-          pendingUploadedModeSwitchRef.current = false;
-        } else {
-          workspaceUiStore.getState().setChatMode(workspaceId, "rag", "auto");
-          pendingUploadedModeSwitchRef.current = false;
+        const current = getWorkspaceUiState(workspaceId);
+        if (!current.capabilitiesManual && !current.capabilities.includes("rag")) {
+          workspaceUiStore
+            .getState()
+            .setCapabilities(workspaceId, [...current.capabilities, "rag"], { manual: false });
         }
       }
     }

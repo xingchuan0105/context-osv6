@@ -14,12 +14,33 @@ import {
   toggleCapability,
   type WorkspaceCapability,
 } from "../../lib/workspace/capabilities";
-import { IconSend, IconStop } from "./chat-icons";
+import { IconCheck, IconSend, IconStop } from "./chat-icons";
 import styles from "./workspace-chat.module.css";
 
 const MIN_COMPOSER_TEXTAREA_HEIGHT = 52;
 const AUTO_COMPOSER_TEXTAREA_MAX_HEIGHT = 192;
 const MANUAL_COMPOSER_TEXTAREA_MAX_HEIGHT = 360;
+
+/** Mode line key derived from multiselect chips (2026-08-30 mode-line design). */
+function getModeLineKey(
+  capabilities: WorkspaceCapability[],
+  availableCapabilities?: WorkspaceCapability[],
+): "workspaceChatModeLineBoth" | "workspaceChatModeLineRag" | "workspaceChatModeLineSearch" | "workspaceChatModeLineChat" {
+  const hasRag = capabilities.includes("rag");
+  const hasSearch = capabilities.includes("search");
+  const supports = (cap: WorkspaceCapability) =>
+    !availableCapabilities || availableCapabilities.includes(cap);
+  if (hasRag && hasSearch && supports("search")) {
+    return "workspaceChatModeLineBoth";
+  }
+  if (hasRag) {
+    return "workspaceChatModeLineRag";
+  }
+  if (hasSearch && supports("search")) {
+    return "workspaceChatModeLineSearch";
+  }
+  return "workspaceChatModeLineChat";
+}
 
 const CAPABILITY_TOGGLES: Array<{
   id: WorkspaceCapability;
@@ -39,6 +60,10 @@ type ChatComposerProps = {
   workspaceId: string;
   /** No sources selected: RAG chip disabled + hint (2026-07-18 product rule). */
   ragDisabled?: boolean;
+  /** Selected source count for the knowledge-base badge / mode line. */
+  selectedSourceCount?: number;
+  /** Open the right rail to guide source selection (click-to-guide, 2026-08-30). */
+  onRequestGuideSources?: () => void;
   onSubmit: () => void;
   onStop?: () => void;
   onCapabilitiesChange: (next: WorkspaceCapability[]) => void;
@@ -63,6 +88,8 @@ export function ChatComposer({
   locale,
   workspaceId,
   ragDisabled = false,
+  selectedSourceCount = 0,
+  onRequestGuideSources,
   onSubmit,
   onStop,
   onCapabilitiesChange,
@@ -149,12 +176,22 @@ export function ChatComposer({
         return;
       }
       if (cap === "rag" && ragDisabled) {
+        // Dead-end becomes a path: open the right rail so the user can select
+        // sources instead of a silently inert chip (2026-08-30 foolproofing).
+        onRequestGuideSources?.();
         return;
       }
       onCapabilitiesChange(toggleCapability(capabilities, cap));
       textareaRef.current?.focus();
     },
-    [capabilities, lockCapabilities, onCapabilitiesChange, ragDisabled, textareaRef],
+    [
+      capabilities,
+      lockCapabilities,
+      onCapabilitiesChange,
+      onRequestGuideSources,
+      ragDisabled,
+      textareaRef,
+    ],
   );
 
   function handleComposerResizeStart(event: ReactMouseEvent<HTMLButtonElement>) {
@@ -298,8 +335,11 @@ export function ChatComposer({
             >
               {capabilityToggles.map((cap) => {
                 const pressed = capabilities.includes(cap.id);
-                const disabled =
-                  lockCapabilities || (cap.id === "rag" && ragDisabled);
+                const disabled = lockCapabilities;
+                const badge =
+                  cap.id === "rag" && pressed && selectedSourceCount > 0
+                    ? selectedSourceCount
+                    : null;
                 return (
                   <button
                     key={cap.id}
@@ -308,28 +348,30 @@ export function ChatComposer({
                     data-testid={cap.testId}
                     aria-pressed={pressed}
                     disabled={disabled}
-                    title={
-                      lockCapabilities
-                        ? formatUiMessage(locale, "sharedPublic.ragLockedHint")
-                        : disabled
-                          ? formatUiMessage(locale, "workspaceChatCapRagNeedsSources")
-                          : undefined
-                    }
+                    title={lockCapabilities ? formatUiMessage(locale, "sharedPublic.ragLockedHint") : undefined}
                     onClick={() => handleToggleCapability(cap.id)}
                   >
+                    {pressed && cap.id === "rag" ? (
+                      <IconCheck className={styles.capTagIcon} />
+                    ) : null}
                     {formatUiMessage(locale, cap.labelKey)}
+                    {badge !== null ? (
+                      <span className={styles.capTagBadge} aria-hidden="true">
+                        {badge}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
             </div>
 
-            {ragDisabled && !lockCapabilities ? (
-              <p className={styles.hint} data-testid="workspace-chat-rag-needs-sources">
-                {formatUiMessage(locale, "workspaceChatCapRagNeedsSources")}
-              </p>
-            ) : null}
-
-            <p className={styles.hint}>{formatUiMessage(locale, "workspaceChatComposerHint")}</p>
+            {/* Always-visible mode line (2026-08-30 foolproofing): states what this
+                turn will do, in third person, so the silent pure-chat state is visible. */}
+            <p className={styles.modeLine} data-testid="workspace-chat-mode-line">
+              {ragDisabled && !lockCapabilities
+                ? formatUiMessage(locale, "workspaceChatModeLineNoSelection")
+                : formatUiMessage(locale, getModeLineKey(capabilities, availableCapabilities))}
+            </p>
           </div>
 
           {isStreaming ? (

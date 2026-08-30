@@ -21,10 +21,13 @@ import type {
 } from "../../lib/workspace/model";
 import {
   deriveAgentTypeLabel,
-  loadStoredCapabilities,
-  storeCapabilities,
   type WorkspaceCapability,
 } from "../../lib/workspace/capabilities";
+import {
+  getWorkspaceUiState,
+  useWorkspaceUiState,
+  workspaceUiStore,
+} from "../../lib/workspace/ui-store";
 import { useChatSession } from "../../hooks/use-chat-session";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList } from "./chat-message-list";
@@ -52,6 +55,8 @@ type WorkspaceChatPaneProps = {
   ) => void;
   /** Fixed capabilities; omit to use normal per-workspace toggles. */
   lockedCapabilities?: WorkspaceCapability[];
+  /** Open the right rail (guide users to select sources when rag chip is inert). */
+  onRequestGuideSources?: () => void;
 };
 
 function getCapabilitiesSummaryLabel(
@@ -88,6 +93,7 @@ export function WorkspaceChatPane({
   initialMessages = null,
   onTranscriptChange,
   lockedCapabilities,
+  onRequestGuideSources,
 }: WorkspaceChatPaneProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
@@ -103,21 +109,38 @@ export function WorkspaceChatPane({
     }
     return null;
   }, [isShareMode, lockedCapabilities]);
-  const fixedCapsKey = fixedCaps?.join(",") ?? "";
-  const [capabilities, setCapabilities] = useState<WorkspaceCapability[]>(() =>
-    fixedCaps ? [...fixedCaps] : loadStoredCapabilities(workspaceId),
-  );
+  const storeCapabilities = useWorkspaceUiState(workspaceId, (state) => state.capabilities);
+  const capabilities = fixedCaps ?? storeCapabilities;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingCursorRef = useRef<number | null>(null);
 
-  // Restore per-workspace capability toggles after refresh / workspace switch.
+  // Source selection auto-attaches knowledge retrieval (2026-08-30 foolproofing):
+  // whenever this workspace is first observed with selected sources (user just
+  // picked one, or the pane renders / switches in with a persisted selection)
+  // and the user has not touched the chips manually, rag is on so the next
+  // question is already grounded.
+  const previousSelectionRef = useRef<{ workspaceId: string; count: number } | null>(null);
   useEffect(() => {
-    if (fixedCapsKey) {
-      setCapabilities(fixedCapsKey.split(",") as WorkspaceCapability[]);
+    if (fixedCaps || isShareMode) {
       return;
     }
-    setCapabilities(loadStoredCapabilities(workspaceId));
-  }, [workspaceId, fixedCapsKey]);
+    const previous = previousSelectionRef.current;
+    previousSelectionRef.current = { workspaceId, count: selectedSourceIds.length };
+    if (selectedSourceIds.length === 0) {
+      return;
+    }
+    if (previous !== null && previous.workspaceId === workspaceId && previous.count > 0) {
+      // Selection changed while sources stay selected — chip state already settled.
+      return;
+    }
+    const current = getWorkspaceUiState(workspaceId);
+    if (current.capabilitiesManual || current.capabilities.includes("rag")) {
+      return;
+    }
+    workspaceUiStore
+      .getState()
+      .setCapabilities(workspaceId, [...current.capabilities, "rag"], { manual: false });
+  }, [selectedSourceIds, workspaceId, fixedCaps, isShareMode]);
 
   // RAG requires an explicit source selection: strip it when the selection
   // becomes empty (product rule 2026-07-18 — no implicit whole-workspace scope).
@@ -129,9 +152,11 @@ export function WorkspaceChatPane({
     if (selectedSourceIds.length > 0 || !capabilities.includes("rag")) {
       return;
     }
-    const next = capabilities.filter((cap) => cap !== "rag");
-    setCapabilities(next);
-    storeCapabilities(workspaceId, next);
+    workspaceUiStore.getState().setCapabilities(
+      workspaceId,
+      capabilities.filter((cap) => cap !== "rag"),
+      { manual: false },
+    );
   }, [selectedSourceIds, capabilities, workspaceId, fixedCaps, isShareMode]);
 
   const handleCapabilitiesChange = useCallback(
@@ -139,8 +164,7 @@ export function WorkspaceChatPane({
       if (fixedCaps) {
         return;
       }
-      setCapabilities(next);
-      storeCapabilities(workspaceId, next);
+      workspaceUiStore.getState().setCapabilities(workspaceId, next, { manual: true });
     },
     [workspaceId, fixedCaps],
   );
@@ -317,6 +341,8 @@ export function WorkspaceChatPane({
         locale={locale}
         workspaceId={workspaceId}
         ragDisabled={!isShareMode && selectedSourceIds.length === 0}
+        selectedSourceCount={selectedSourceIds.length}
+        onRequestGuideSources={onRequestGuideSources}
         onSubmit={handleSend}
         onStop={chatSession.stop}
         onCapabilitiesChange={handleCapabilitiesChange}

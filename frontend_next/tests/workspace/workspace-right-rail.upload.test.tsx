@@ -106,12 +106,12 @@ describe("WorkspaceRightRail upload", () => {
       expect(mocks.listWorkspaceSourcesMock).toHaveBeenCalledTimes(2);
     });
     expect(within(screen.getByText("notes.md").closest("li")!).getByRole("button", { pressed: true })).toBeTruthy();
-    expect(getWorkspaceUiState("ws-1").chatMode).toBe("rag");
-    expect(getWorkspaceUiState("ws-1").chatModePreference).toBe("auto");
+    expect(getWorkspaceUiState("ws-1").capabilities).toEqual(["rag"]);
+    expect(getWorkspaceUiState("ws-1").capabilitiesManual).toBe(false);
     expect(screen.queryByRole("dialog", { name: "Add new source" })).toBeNull();
   });
 
-  it("keeps chat mode off rag for queued uploads without ready sources", async () => {
+  it("keeps pure chat for queued uploads without ready sources", async () => {
     const user = userEvent.setup();
 
     mocks.listWorkspaceSourcesMock
@@ -147,8 +147,7 @@ describe("WorkspaceRightRail upload", () => {
     });
 
     expect(within(screen.getByText("notes.md").closest("li")!).getByRole("button", { pressed: true })).toBeTruthy();
-    expect(getWorkspaceUiState("ws-1").chatMode).toBe("chat");
-    expect(getWorkspaceUiState("ws-1").chatModePreference).toBe("manual");
+    expect(getWorkspaceUiState("ws-1").capabilities).toEqual([]);
   });
 
   it("imports pasted text without a title field", async () => {

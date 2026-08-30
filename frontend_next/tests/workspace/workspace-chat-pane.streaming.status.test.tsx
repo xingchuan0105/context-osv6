@@ -236,7 +236,12 @@ describe("WorkspaceChatPane streaming status hints", () => {
       },
     });
 
-    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    // Rag auto-attaches from the selected source at mount (2026-08-30 foolproofing).
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
     await user.type(composer, "方案有哪些主要模块");
     await user.keyboard("{Enter}");
 
@@ -366,7 +371,12 @@ describe("WorkspaceChatPane streaming status hints", () => {
       expect(screen.getByText("第一轮回答内容")).toBeTruthy();
     });
 
-    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    // Rag auto-attaches from the selected source at mount (2026-08-30 foolproofing).
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
     await user.type(composer, "第二轮问题");
     await user.keyboard("{Enter}");
 

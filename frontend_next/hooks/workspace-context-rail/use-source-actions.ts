@@ -145,18 +145,22 @@ export function useWorkspaceSourceActions({
           const hasEligibleSelectedSource = nextSelected.some((id) =>
             isWorkspaceSourceDocscopeEligible(refreshedStatuses.get(id) ?? ""),
           );
-          const workspaceUi = getWorkspaceUiState(workspaceId);
 
           onSelectedSourceIdsChange(nextSelected);
 
           if (hasEligibleSelectedSource) {
-            workspaceUiStore.getState().setChatMode(workspaceId, "rag", "auto");
+            // Upload → auto-attach knowledge retrieval (composer capabilities channel);
+            // pendingUploadedModeSwitchRef lets the selection effect re-assert once
+            // sources finish processing.
+            const current = getWorkspaceUiState(workspaceId);
+            if (!current.capabilitiesManual) {
+              workspaceUiStore
+                .getState()
+                .setCapabilities(workspaceId, [...current.capabilities, "rag"], { manual: false });
+            }
             pendingUploadedModeSwitchRef.current = false;
-          } else if (workspaceUi.chatModePreference === "auto") {
-            workspaceUiStore.getState().setChatMode(workspaceId, "chat", "manual");
-            pendingUploadedModeSwitchRef.current = true;
           } else {
-            pendingUploadedModeSwitchRef.current = false;
+            pendingUploadedModeSwitchRef.current = true;
           }
         }
 

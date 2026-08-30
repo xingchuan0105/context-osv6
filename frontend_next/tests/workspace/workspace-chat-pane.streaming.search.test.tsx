@@ -160,6 +160,17 @@ describe("WorkspaceChatPane streaming search flow", () => {
       onSessionActivity,
       onSessionChange,
     });
+    // Auto-attach turns rag on at mount; turn it off to isolate the web-search path
+    // (this also covers the manual override semantics of 2026-08-30 foolproofing).
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
+    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+      "false",
+    );
     await user.click(composer);
     await user.click(screen.getByTestId("workspace-chat-cap-search"));
     expect(screen.getByTestId("workspace-chat-cap-search").getAttribute("aria-pressed")).toBe(

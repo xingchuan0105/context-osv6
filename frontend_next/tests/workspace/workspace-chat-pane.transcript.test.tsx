@@ -170,7 +170,12 @@ describe("WorkspaceChatPane transcript", () => {
       />,
     );
 
-    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    // Rag auto-attaches from the selected source at mount (2026-08-30 foolproofing).
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
     const composer = screen.getByRole("textbox", { name: "工作区对话输入框" });
     await user.type(composer, "Summarize the plan");
     await user.keyboard("{Enter}");
@@ -246,7 +251,12 @@ describe("WorkspaceChatPane transcript", () => {
       />,
     );
 
-    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    // Rag auto-attaches from the selected source at mount (2026-08-30 foolproofing).
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
     const composer = screen.getByRole("textbox", { name: "工作区对话输入框" });
     await user.type(composer, "Summarize the plan");
     await user.keyboard("{Enter}");

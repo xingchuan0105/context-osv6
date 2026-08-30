@@ -142,8 +142,10 @@ describe("WorkspaceChatPane streaming typewriter", () => {
       await flushChatPaneMicrotasks();
 
       expect(screen.getByText("Instant token")).toBeTruthy();
-      // Progress elapsed clock may keep a 1s interval while the research process card is open.
-      expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
+      // No typewriter timer under reduced motion. The remaining timers are the
+      // 1s progress elapsed clock plus jsdom's 0ms storage-event dispatch
+      // (auto-attach persists capabilities synchronously on mount).
+      expect(vi.getTimerCount()).toBeLessThanOrEqual(2);
 
       await act(async () => {
         releaseDone();

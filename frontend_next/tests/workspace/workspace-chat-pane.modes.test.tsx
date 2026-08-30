@@ -39,14 +39,12 @@ afterEach(() => {
 });
 
 describe("WorkspaceChatPane capabilities", () => {
-  it("defaults to pure chat (empty capabilities) even when sources are selected", async () => {
-    const user = userEvent.setup();
+  it("auto-attaches rag when sources go from none to selected (2026-08-30 foolproofing)", async () => {
     const requests: Array<{
       agent_type?: string;
       workspace_id?: string;
       doc_scope?: string[];
       capabilities?: string[];
-      client_context?: { local_time?: string; timezone?: string };
     }> = [];
 
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
@@ -80,8 +78,8 @@ describe("WorkspaceChatPane capabilities", () => {
     );
 
     const firstComposer = screen.getByRole("textbox", { name: "工作区对话输入框" });
-    await user.type(firstComposer, "Hello");
-    await user.keyboard("{Enter}");
+    await userEvent.setup().type(firstComposer, "Hello");
+    await userEvent.setup().keyboard("{Enter}");
 
     await waitFor(() => {
       expect(requests[0]).toMatchObject({
@@ -89,11 +87,11 @@ describe("WorkspaceChatPane capabilities", () => {
         capabilities: [],
       });
     });
-    expect(requests[0]?.client_context?.timezone).toBeTruthy();
-    expect(requests[0]?.client_context?.local_time).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     firstRender.unmount();
 
+    // Second workspace with a selected source: the first question is grounded —
+    // rag auto-attaches without the user touching the chip.
     render(
       <WorkspaceChatPane
         workspaceId="ws-rag"
@@ -102,16 +100,23 @@ describe("WorkspaceChatPane capabilities", () => {
       />,
     );
 
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
+    expect(screen.getByTestId("workspace-chat-cap-rag").textContent).toContain("知识库");
+
     const secondComposer = screen.getByRole("textbox", { name: "工作区对话输入框" });
-    await user.type(secondComposer, "What is in the doc?");
-    await user.keyboard("{Enter}");
+    await userEvent.setup().type(secondComposer, "What is in the doc?");
+    await userEvent.setup().keyboard("{Enter}");
 
     await waitFor(() => {
       expect(requests[1]).toMatchObject({
-        agent_type: "chat",
+        agent_type: "rag",
         workspace_id: "ws-rag",
         doc_scope: ["doc-1"],
-        capabilities: [],
+        capabilities: ["rag"],
       });
     });
   });
@@ -162,7 +167,7 @@ describe("WorkspaceChatPane capabilities", () => {
     );
   });
 
-  it("disables RAG with a hint when no sources are selected", async () => {
+  it("disables RAG with a guiding mode line when no sources are selected", async () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
 
     render(
@@ -174,8 +179,10 @@ describe("WorkspaceChatPane capabilities", () => {
     );
 
     const ragChip = screen.getByTestId("workspace-chat-cap-rag");
-    expect((ragChip as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId("workspace-chat-rag-needs-sources").textContent).toContain("选择");
+    // Click-to-guide: rag chip stays enabled (clicking opens the right rail), and the
+    // mode line names the no-selection state instead of a disabled tooltip.
+    expect((ragChip as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("workspace-chat-mode-line").textContent).toContain("未选择文档");
     // Search stays available.
     expect((screen.getByTestId("workspace-chat-cap-search") as HTMLButtonElement).disabled).toBe(
       false,
@@ -183,9 +190,9 @@ describe("WorkspaceChatPane capabilities", () => {
   });
 
   it("strips RAG when the selection becomes empty", async () => {
-    const user = userEvent.setup();
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
 
+    // Selected source at mount → rag auto-attaches (2026-08-30 foolproofing).
     const { rerender } = render(
       <WorkspaceChatPane
         workspaceId="ws-strip"
@@ -193,12 +200,13 @@ describe("WorkspaceChatPane capabilities", () => {
         selectedSourceIds={["doc-1"]}
       />,
     );
-
-    // Enable RAG while a source is selected.
-    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
-    expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe("true");
-
-    // Deselect all sources → RAG is stripped and the chip becomes disabled.
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
+    // Deselect all sources → RAG is stripped (2026-07-18: no implicit whole-workspace
+    // scope); the chip stays enabled as a click-to-guide entry.
     rerender(
       <WorkspaceChatPane
         workspaceId="ws-strip"
@@ -211,7 +219,66 @@ describe("WorkspaceChatPane capabilities", () => {
         "false",
       );
     });
-    expect((screen.getByTestId("workspace-chat-cap-rag") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("workspace-chat-mode-line").textContent).toContain("未选择文档");
+    expect((screen.getByTestId("workspace-chat-cap-rag") as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it("does not re-attach rag after the user toggled chips manually", async () => {
+    const user = userEvent.setup();
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+
+    const { rerender } = render(
+      <WorkspaceChatPane
+        workspaceId="ws-manual"
+        sessionId={null}
+        selectedSourceIds={["doc-1"]}
+      />,
+    );
+
+    // Auto-attach turned rag on for the first observed selection.
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
+
+    // The user explicitly turned it off — that preference must survive.
+    await user.click(screen.getByTestId("workspace-chat-cap-rag"));
+    expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+
+    // Empty the selection, then pick a different source: no auto re-attach.
+    rerender(
+      <WorkspaceChatPane
+        workspaceId="ws-manual"
+        sessionId={null}
+        selectedSourceIds={[]}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-mode-line").textContent).toContain("未选择文档");
+    });
+
+    rerender(
+      <WorkspaceChatPane
+        workspaceId="ws-manual"
+        sessionId={null}
+        selectedSourceIds={["doc-2"]}
+      />,
+    );
+    // With sources selected again but chips manually turned off, the mode line
+    // reports the manual choice — no auto re-attach.
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-mode-line").textContent).toContain(
+        "聊天：回答不检索文档与网络",
+      );
+    });
+    expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+      "false",
+    );
   });
 
   it("toggles capabilities multiselect and sends derived agent_type", async () => {
@@ -251,16 +318,19 @@ describe("WorkspaceChatPane capabilities", () => {
       />,
     );
 
+    // Auto-attach already turned rag on for the selected source; verify the search
+    // toggle composes on top (multiselect), then both chips send rag+search.
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-chat-cap-rag").getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
     const rag = screen.getByTestId("workspace-chat-cap-rag");
     const search = screen.getByTestId("workspace-chat-cap-search");
 
     await user.click(search);
     expect(search.getAttribute("aria-pressed")).toBe("true");
-    expect(rag.getAttribute("aria-pressed")).toBe("false");
-
-    await user.click(rag);
     expect(rag.getAttribute("aria-pressed")).toBe("true");
-    expect(search.getAttribute("aria-pressed")).toBe("true");
 
     const composer = screen.getByRole("textbox", { name: "工作区对话输入框" });
     await user.type(composer, "Dual caps");

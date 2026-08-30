@@ -1134,7 +1134,7 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-xxs);
   min-height: 1.75rem;
   padding: var(--space-xxs) var(--space-sm);
   border: 1px solid hsl(var(--border));
@@ -1151,6 +1151,29 @@
     color var(--duration-fast) var(--ease-standard);
 }
 
+.capTag:disabled {
+  cursor: default;
+}
+
+.capTagIcon {
+  flex: none;
+  font-size: 0.9em;
+}
+
+.capTagBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 var(--space-xxs);
+  border-radius: var(--radius-pill);
+  background: hsl(var(--accent-soft));
+  color: hsl(var(--accent-text));
+  font-size: var(--font-size-meta);
+  line-height: 1;
+}
+
 .capTag:hover,
 .capTag:focus-visible {
   border-color: hsl(var(--border-strong));
@@ -1164,13 +1187,6 @@
 }
 
 .capTagPressed {
-  border-color: hsl(var(--border-strong));
-  background: hsl(var(--surface-soft));
-  color: hsl(var(--foreground));
-}
-
-.capTagPressed:hover,
-.capTagPressed:focus-visible {
   border-color: hsl(var(--border-strong));
   background: hsl(var(--surface-soft));
   color: hsl(var(--foreground));
@@ -1215,6 +1231,17 @@
   margin: 0;
   overflow: hidden;
   color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Always-visible composer mode line: third-person statement of what this turn does. */
+.modeLine {
+  margin: 0;
+  overflow: hidden;
+  color: hsl(var(--subtle-foreground));
   font-size: var(--font-size-meta);
   line-height: var(--line-height-meta);
   text-overflow: ellipsis;

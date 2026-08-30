@@ -4,7 +4,6 @@ import {
   DEFAULT_WORKSPACE_UI_STATE,
   WORKSPACE_UI_STORAGE_KEY,
   createWorkspaceUiStore,
-  resolveWorkspaceChatMode,
 } from "../../lib/workspace/ui-store";
 
 describe("workspaceUiStore", () => {
@@ -13,17 +12,17 @@ describe("workspaceUiStore", () => {
 
     store.getState().setHistoryRailOpen("ws-1", false);
     store.getState().setSelectedSourceIds("ws-1", ["src-1", "src-1", "src-2"]);
-    store.getState().setChatMode("ws-2", "search");
+    store.getState().setCapabilities("ws-2", ["search"]);
 
     expect(store.getState().workspaces["ws-1"]).toMatchObject({
       historyRailOpen: false,
       selectedSourceIds: ["src-1", "src-2"],
-      chatMode: DEFAULT_WORKSPACE_UI_STATE.chatMode,
-      chatModePreference: DEFAULT_WORKSPACE_UI_STATE.chatModePreference,
+      capabilities: DEFAULT_WORKSPACE_UI_STATE.capabilities,
+      capabilitiesManual: DEFAULT_WORKSPACE_UI_STATE.capabilitiesManual,
     });
     expect(store.getState().workspaces["ws-2"]).toMatchObject({
-      chatMode: "search",
-      chatModePreference: "manual",
+      capabilities: ["search"],
+      capabilitiesManual: true,
       historyRailOpen: DEFAULT_WORKSPACE_UI_STATE.historyRailOpen,
     });
   });
@@ -46,7 +45,7 @@ describe("workspaceUiStore", () => {
             historyRailWidth: 236,
             rightRailWidth: 360,
             rightRailSplitRatio: 0.8,
-            chatModePreference: "auto",
+            capabilitiesManual: false,
           },
         },
       },
@@ -75,18 +74,28 @@ describe("workspaceUiStore", () => {
     });
   });
 
-  it("resolves auto mode from content availability and preserves manual mode overrides", () => {
-    const store = createWorkspaceUiStore({ name: "workspace-ui-test-chat-mode" });
+  it("auto-attaches rag without flipping manual, and manual overrides persist", () => {
+    const store = createWorkspaceUiStore({ name: "workspace-ui-test-caps" });
 
-    const initial = store.getState().workspaces["ws-1"] ?? DEFAULT_WORKSPACE_UI_STATE;
+    // Auto attach (source 0→N): rag on, still not manual.
+    store.getState().setCapabilities("ws-1", ["rag"], { manual: false });
+    expect(store.getState().workspaces["ws-1"]).toMatchObject({
+      capabilities: ["rag"],
+      capabilitiesManual: false,
+    });
 
-    expect(resolveWorkspaceChatMode(initial, false)).toBe("chat");
-    expect(resolveWorkspaceChatMode(initial, true)).toBe("rag");
+    // User toggles a chip manually → manual, auto attach must never override after this.
+    store.getState().setCapabilities("ws-1", ["search"], { manual: true });
+    expect(store.getState().workspaces["ws-1"]).toMatchObject({
+      capabilities: ["search"],
+      capabilitiesManual: true,
+    });
 
-    store.getState().setChatMode("ws-1", "search");
-
-    const manualState = store.getState().workspaces["ws-1"]!;
-    expect(resolveWorkspaceChatMode(manualState, false)).toBe("search");
-    expect(resolveWorkspaceChatMode(manualState, true)).toBe("search");
+    // Manual update keeps manual flag (default true without explicit options).
+    store.getState().setCapabilities("ws-1", []);
+    expect(store.getState().workspaces["ws-1"]).toMatchObject({
+      capabilities: [],
+      capabilitiesManual: true,
+    });
   });
 });
