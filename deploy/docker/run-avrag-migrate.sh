@@ -17,13 +17,15 @@ docker image inspect "$RUNTIME_IMAGE" >/dev/null 2>&1 || die "missing image $RUN
 
 docker rm -f avrag-migrate >/dev/null 2>&1 || true
 
-# Runs to completion then exits; --rm cleans up. Host network so it reaches PG.
+# The container has no crate tree; the default CARGO_MANIFEST_DIR-derived path
+# does not exist inside avrag-runtime, so pin the mounted migrations directory.
 docker run --rm \
   --name avrag-migrate \
   --network host \
   --ulimit nofile=65536:65536 \
   --env-file "$MIGRATE_ENV_FILE" \
   -e MIGRATION_DATABASE_URL \
+  -e AVRAG_MIGRATIONS_DIR="$OPT_ROOT/migrations" \
   -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
   "$RUNTIME_IMAGE" \
   "${OPT_ROOT}/bin/avrag-migrate"

@@ -36,13 +36,31 @@ BEGIN
   END IF;
 END $$;
 
-SELECT _mig0083_tenant_policy('rag_text_chunks', false, false);
-SELECT _mig0083_tenant_policy('rag_multimodal_chunks', false, false);
-SELECT _mig0083_tenant_policy('rag_kg_entities', false, false);
-SELECT _mig0083_tenant_policy('rag_kg_relations', false, false);
-SELECT _mig0083_tenant_policy('rag_graph_passages', false, false);
-SELECT _mig0083_tenant_policy('provider_secret_audit', false, false);
-SELECT _mig0083_tenant_policy('osv7_share_links', true, true);
+-- Each target may not exist on every deployment (e.g. the rag_* tables are
+-- pgvector-option only; hosts that never ran the osv7->share_tokens rename
+-- lack osv7_share_links). Skip absent tables instead of failing the migration.
+DO $mig0083_targets$
+DECLARE
+  target RECORD;
+BEGIN
+  FOR target IN SELECT * FROM (VALUES
+    ('rag_text_chunks', false, false),
+    ('rag_multimodal_chunks', false, false),
+    ('rag_kg_entities', false, false),
+    ('rag_kg_relations', false, false),
+    ('rag_graph_passages', false, false),
+    ('provider_secret_audit', false, false),
+    ('osv7_share_links', true, true)
+  ) AS t(tbl, owner_is_text, with_share)
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = target.tbl AND c.relkind = 'r'
+    ) THEN
+      PERFORM _mig0083_tenant_policy(target.tbl, target.owner_is_text, target.with_share);
+    END IF;
+  END LOOP;
+END $mig0083_targets$;
 
 DROP FUNCTION _mig0083_tenant_policy(text, boolean, boolean);
 
