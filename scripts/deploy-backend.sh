@@ -212,6 +212,8 @@ text = p.read_text()
 updates = {
     "MARKITDOWN_BIN": "markitdown",
     "ANYDOC_BIN": "anydoc-extract",
+    # Must match STRUCT_STORE_ROOT in run-avrag-containers.sh (rw mount + mkdir).
+    "STRUCT_STORE_DIR": "/data/avrag/struct_store",
 }
 rates_b64 = os.environ.get("RATES_JSON_B64", "").strip()
 if rates_b64:

@@ -8,6 +8,9 @@ RUNTIME_IMAGE="${AVRAG_RUNTIME_IMAGE:-avrag-runtime:24.04}"
 ENV_FILE="${AVRAG_ENV_FILE:-/etc/avrag-rs/avrag.env}"
 OPT_ROOT="${AVRAG_OPT_ROOT:-/opt/avrag-rs}"
 OBJ_ROOT="${AVRAG_OBJECT_ROOT:-/data/avrag/objects}"
+# Struct store (per-doc duckdb tables). Both env-file value (STRUCT_STORE_DIR,
+# written by deploy-backend.sh) and this mount must stay the same path.
+STRUCT_STORE_ROOT="${AVRAG_STRUCT_STORE_ROOT:-/data/avrag/struct_store}"
 
 die() { echo "run-avrag-containers: $*" >&2; exit 1; }
 
@@ -16,7 +19,7 @@ die() { echo "run-avrag-containers: $*" >&2; exit 1; }
 [[ -x "$OPT_ROOT/bin/avrag-worker" ]] || die "missing $OPT_ROOT/bin/avrag-worker"
 docker image inspect "$RUNTIME_IMAGE" >/dev/null 2>&1 || die "missing image $RUNTIME_IMAGE"
 
-mkdir -p "$OBJ_ROOT"
+mkdir -p "$OBJ_ROOT" "$STRUCT_STORE_ROOT"
 
 run_one() {
   local name="$1" bin="$2"
@@ -29,6 +32,7 @@ run_one() {
     --env-file "$ENV_FILE" \
     -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
     -v "${OBJ_ROOT}:${OBJ_ROOT}" \
+    -v "${STRUCT_STORE_ROOT}:${STRUCT_STORE_ROOT}" \
     -v "${ENV_FILE}:${ENV_FILE}:ro" \
     "$RUNTIME_IMAGE" \
     "${OPT_ROOT}/bin/${bin}"
@@ -67,6 +71,7 @@ for i in $(seq 1 "$WORKER_REPLICAS"); do
     -e AVRAG_WORKER_ID="${wname}" \
     -v "${OPT_ROOT}:${OPT_ROOT}:ro" \
     -v "${OBJ_ROOT}:${OBJ_ROOT}" \
+    -v "${STRUCT_STORE_ROOT}:${STRUCT_STORE_ROOT}" \
     -v "${ENV_FILE}:${ENV_FILE}:ro" \
     "$RUNTIME_IMAGE" \
     "${OPT_ROOT}/bin/avrag-worker"
