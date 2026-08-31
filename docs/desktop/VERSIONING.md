@@ -79,3 +79,4 @@ Min cloud API: v1
 | 2026-08-10 | v0.2.0 矩阵；命名 Context-OS-Client；ADR-0010 免费客户端 |
 | 2026-08-19 | v0.3.1：B3b 本机→云 Publish 打进安装包（0.3.0 已发、无 Publish） |
 | 2026-08-30 | v0.4.0：自动更新上线（updater 插件 + updates.json + minisign 密钥） |
+| 2026-08-31 | v0.4.1：修复租户隔离波引入的桌面冷启动/角色守卫/迁移/pgvector RLS 断点；avrag-migrate 进 sidecar 清单 |
