@@ -109,7 +109,7 @@ impl PgvectorDataPlane {
             )
             .bind(owner)
             .bind(ws)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         } else {
             sqlx::query_as::<_, (Uuid,)>(
@@ -129,7 +129,7 @@ impl PgvectorDataPlane {
                 "#,
             )
             .bind(owner)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
         Ok(rows.into_iter().map(|(id,)| id).collect())
@@ -154,7 +154,7 @@ impl PgvectorDataPlane {
             .bind(owner)
             .bind(doc_id)
             .bind(ws)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         } else {
             sqlx::query_as::<_, TextExportRow>(
@@ -168,7 +168,7 @@ impl PgvectorDataPlane {
             )
             .bind(owner)
             .bind(doc_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
         Ok(rows
@@ -210,7 +210,7 @@ impl PgvectorDataPlane {
             .bind(owner)
             .bind(doc_id)
             .bind(ws)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         } else {
             sqlx::query_as::<_, MultimodalExportRow>(
@@ -225,7 +225,7 @@ impl PgvectorDataPlane {
             )
             .bind(owner)
             .bind(doc_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
         Ok(rows
@@ -270,7 +270,7 @@ impl PgvectorDataPlane {
             .bind(owner)
             .bind(doc_id)
             .bind(ws)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         } else {
             sqlx::query_as::<_, EntityExportRow>(
@@ -284,7 +284,7 @@ impl PgvectorDataPlane {
             )
             .bind(owner)
             .bind(doc_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
         Ok(rows
@@ -325,7 +325,7 @@ impl PgvectorDataPlane {
             .bind(owner)
             .bind(doc_id)
             .bind(ws)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         } else {
             sqlx::query_as::<_, RelationExportRow>(
@@ -339,7 +339,7 @@ impl PgvectorDataPlane {
             )
             .bind(owner)
             .bind(doc_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
         Ok(rows
@@ -381,7 +381,7 @@ impl PgvectorDataPlane {
             .bind(owner)
             .bind(doc_id)
             .bind(ws)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         } else {
             sqlx::query_as::<_, PassageExportRow>(
@@ -395,7 +395,7 @@ impl PgvectorDataPlane {
             )
             .bind(owner)
             .bind(doc_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
         Ok(rows

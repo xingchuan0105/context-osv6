@@ -25,9 +25,9 @@ impl PgvectorDataPlane {
         let relation_count = batch.relations.len();
         let graph_passage_count = batch.graph_passages.len();
 
-        let mut tx = self.pool.begin().await?;
-
-        // Phase 0: purge this document across all rag tables.
+        // Phase 0 purges and Phase 1 inserts owner-scoped rows; the forced-RLS
+        // policies (0083) accept both only with app.current_user set to the owner.
+        let mut tx = self.tenant_tx(owner).await?;
         for table in [
             "rag_text_chunks",
             "rag_multimodal_chunks",
@@ -221,7 +221,7 @@ impl PgvectorDataPlane {
         document_id: Uuid,
     ) -> anyhow::Result<()> {
         let owner = *auth.user_id().uuid();
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.tenant_tx(owner).await?;
         for table in [
             "rag_text_chunks",
             "rag_multimodal_chunks",

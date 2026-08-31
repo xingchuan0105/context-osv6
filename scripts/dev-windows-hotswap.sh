@@ -134,8 +134,10 @@ copy_sidecars_into() {
   local dest="$1"
   local api="$DESKTOP/src-tauri/binaries/avrag-api-${TARGET}.exe"
   local worker="$DESKTOP/src-tauri/binaries/avrag-worker-${TARGET}.exe"
+  local migrate="$DESKTOP/src-tauri/binaries/avrag-migrate-${TARGET}.exe"
   [[ -f "$api" ]] && cp -f "$api" "$dest/avrag-api.exe"
   [[ -f "$worker" ]] && cp -f "$worker" "$dest/avrag-worker.exe"
+  [[ -f "$migrate" ]] && cp -f "$migrate" "$dest/avrag-migrate.exe"
   copy_mingw_into "$dest"
   # Python embeddable bundle for the sandbox bridge (staged into
   # runtime/bin/python by stage-desktop-sidecars.sh; the sandbox resolves
@@ -148,12 +150,17 @@ copy_sidecars_into() {
 }
 
 # Agent-loop runtime assets: the sidecars load modes/*.yaml + prompts/*.md at
-# runtime (relative to their CWD = install dir). Ship them next to the exe.
+# runtime (relative to their CWD = install dir). avrag-migrate loads
+# runtime/migrations via AVRAG_MIGRATIONS_DIR — mirror it too, or a stale
+# packaged copy silently skips newer migrations (0082+ RLS hardening).
 copy_runtime_assets() {
   local dest="$1"
   cp -rf "$ROOT/avrag-rs/modes" "$dest/modes"
   cp -rf "$ROOT/avrag-rs/prompts" "$dest/prompts"
-  log "runtime assets: $dest/{modes,prompts}"
+  rm -rf "$dest/runtime/migrations"
+  mkdir -p "$dest/runtime"
+  cp -rf "$ROOT/avrag-rs/migrations" "$dest/runtime/migrations"
+  log "runtime assets: $dest/{modes,prompts,runtime/migrations}"
 }
 
 launch_exe() {

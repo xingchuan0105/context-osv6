@@ -72,6 +72,24 @@ additionally pins `NO_PROXY=app.contextlm.top` because the E2E box's system
 proxy is flaky for the cloud host. `cloud_session.json` is covered by the
 AppData backup/restore, so l3 is re-runnable.
 
+Publish-share acceptance (本地建库 → publish 上云 → 外链分享 → 云端分享页 RAG)
+runs the `publish-share` spec in its own l3 pass. It and `cloud-login` both
+own the login gate, so one playwright pass serves exactly one of them:
+
+```bash
+DESKTOP_E2E_YES=1 \
+  DESKTOP_E2E_GREP=publish-share \
+  DESKTOP_E2E_WIN_FRONTEND='C:\dev\context-osv6\frontend_next' \
+  bash scripts/desktop-e2e/run.sh l3
+```
+
+The spec writes its own probe fixture (no `DESKTOP_E2E_FIXTURE` needed), logs
+in with `DESKTOP_E2E_CLOUD_*`, publishes the workspace via the topbar share
+entry, flips the share switch, asserts the
+`https://app.contextlm.top/shared/kb/<token>` link, then reads the shared-KB
+payload and sends a RAG chat scoped to the share token — the answer must
+contain the probe fact.
+
 Prerequisite for l0/l1/l2/l3: they exercise the **currently installed**
 client — install the fresh bundle first (copy the NSIS setup to a local
 Windows path like `C:\temp` before running `/S`; running it from the `Z:`

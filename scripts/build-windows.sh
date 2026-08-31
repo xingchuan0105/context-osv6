@@ -38,9 +38,11 @@ if [[ "$SKIP_SIDECARS" != "1" ]]; then
     bash "$ROOT/scripts/stage-desktop-sidecars.sh"
   API_BIN="$DESKTOP/src-tauri/binaries/avrag-api-${TARGET}.exe"
   WORKER_BIN="$DESKTOP/src-tauri/binaries/avrag-worker-${TARGET}.exe"
+  MIGRATE_BIN="$DESKTOP/src-tauri/binaries/avrag-migrate-${TARGET}.exe"
   [[ -f "$API_BIN" ]] || die "missing $API_BIN after stage-desktop-sidecars"
   [[ -f "$WORKER_BIN" ]] || die "missing $WORKER_BIN after stage-desktop-sidecars"
-  log "sidecars: $API_BIN + $WORKER_BIN"
+  [[ -f "$MIGRATE_BIN" ]] || die "missing $MIGRATE_BIN after stage-desktop-sidecars"
+  log "sidecars: $API_BIN + $WORKER_BIN + $MIGRATE_BIN"
 else
   log "SKIP_SIDECARS=1 — NSIS will not embed avrag-api/worker"
 fi
@@ -89,7 +91,7 @@ path, skip_sidecars, skip_rt, desktop = sys.argv[1], sys.argv[2] == "1", sys.arg
 src_tauri = desktop / "src-tauri"
 bundle = {}
 if not skip_sidecars:
-    bundle["externalBin"] = ["binaries/avrag-api", "binaries/avrag-worker"]
+    bundle["externalBin"] = ["binaries/avrag-api", "binaries/avrag-worker", "binaries/avrag-migrate"]
 # Map form: source (rel to src-tauri) → install path (next to exe / under resources)
 resources = {
     "../runtime/docker-compose.client.yml": "runtime/docker-compose.client.yml",
@@ -125,7 +127,7 @@ if not skip_rt:
         "../runtime/bundled/windows-x64/redis": "runtime/redis",
         "../runtime/bundled/windows-x64/runtime.version": "runtime/runtime.version",
         "../runtime/bundled/windows-x64/THIRD_PARTY.txt": "runtime/THIRD_PARTY.txt",
-        # migrations for AVRAG_RUN_MIGRATIONS / sqlx on first ensure
+        # migrations for the avrag-migrate sidecar (spawned by the shell before avrag-api)
         "../../avrag-rs/migrations": "runtime/migrations",
     })
 bundle["resources"] = resources

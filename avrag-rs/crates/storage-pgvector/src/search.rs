@@ -40,7 +40,7 @@ impl PgvectorDataPlane {
         .bind(owner)
         .bind(doc_ids)
         .bind(limit)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *self.tenant_tx(owner).await?)
         .await?;
 
         Ok(rows
@@ -104,7 +104,7 @@ impl PgvectorDataPlane {
             .bind(owner)
             .bind(doc_ids)
             .bind(limit)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *self.tenant_tx(owner).await?)
             .await?
         };
 
@@ -149,7 +149,7 @@ impl PgvectorDataPlane {
         query = query.bind(owner);
         query = query.bind(doc_ids);
         query = query.bind(limit);
-        Ok(query.fetch_all(&self.pool).await?)
+        Ok(query.fetch_all(&mut *self.tenant_tx(owner).await?).await?)
     }
 
     pub(crate) async fn search_multimodal_impl(
@@ -181,7 +181,7 @@ impl PgvectorDataPlane {
         .bind(owner)
         .bind(doc_ids)
         .bind(limit)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *self.tenant_tx(owner).await?)
         .await?;
 
         Ok(rows
@@ -207,7 +207,7 @@ impl PgvectorDataPlane {
         )
         .bind(owner)
         .bind(doc_ids)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *self.tenant_tx(owner).await?)
         .await?;
         Ok(count as usize)
     }
@@ -234,7 +234,7 @@ impl PgvectorDataPlane {
         .bind(owner)
         .bind(doc_ids)
         .bind(LIST_QUERY_LIMIT)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *self.tenant_tx(owner).await?)
         .await?;
         Ok(rows
             .into_iter()

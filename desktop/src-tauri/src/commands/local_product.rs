@@ -470,18 +470,6 @@ fn spawn_with_env(
     if !env_pairs.iter().any(|(k, _)| k == "RETRIEVAL_BACKEND") {
         cmd.env("RETRIEVAL_BACKEND", "pgvector");
     }
-    // Native stack writes AVRAG_RUN_MIGRATIONS=true for first boot; honor that
-    // unless an explicit product override is present. This keeps new STATE_HOME
-    // databases migrated before local session/API routes are exercised.
-    cmd.env(
-        "AVRAG_RUN_MIGRATIONS",
-        env_pairs
-            .iter()
-            .find(|(k, _)| k == "AVRAG_RUN_MIGRATIONS_PRODUCT")
-            .or_else(|| env_pairs.iter().find(|(k, _)| k == "AVRAG_RUN_MIGRATIONS"))
-            .map(|(_, v)| v.as_str())
-            .unwrap_or("false"),
-    );
     cmd.stdout(Stdio::from(log));
     cmd.stderr(Stdio::from(log_err));
     cmd.stdin(Stdio::null());
@@ -497,6 +485,51 @@ fn spawn_with_env(
     fs::write(pid_path, format!("{}\n", child.id())).map_err(|e| e.to_string())?;
     // Detach: drop Child without wait so process keeps running.
     std::mem::forget(child);
+    Ok(())
+}
+
+/// Run the bundled `avrag-migrate` sidecar to completion, then re-apply the
+/// runtime DML grants (fresh migration-created tables need them). Migrations
+/// must go through the owner role (`super::native_stack::migration_database_url`)
+/// — the DATABASE_URL role in client.env is the DML-only runtime role and has
+/// no DDL rights. Fails product start on any non-zero exit — an unmigrated or
+/// ungranted database only produces a worse API failure.
+fn run_product_migrations(
+    env_pairs: &[(String, String)],
+    log_dir: &Path,
+    log: &mut String,
+) -> Result<(), String> {
+    let migrate_bin = resolve_product_bin("avrag-migrate").ok_or_else(|| {
+        "avrag-migrate binary not found (expected next to app, or desktop/runtime/bin, or cargo target)"
+            .to_string()
+    })?;
+    let migrate_log = log_dir.join("migrate.log");
+    let out = open_append_log(&migrate_log)?;
+    let out_err = open_append_log(&migrate_log)?;
+    let mut cmd = Command::new(&migrate_bin);
+    // Same cwd rule as spawn_with_env: LoadLibrary finds MinGW DLLs next to the exe.
+    if let Some(dir) = migrate_bin.parent() {
+        cmd.current_dir(dir);
+    }
+    for (k, v) in env_pairs {
+        cmd.env(k, v);
+    }
+    cmd.env("MIGRATION_DATABASE_URL", super::native_stack::migration_database_url());
+    super::win_cmd::hide_console(&mut cmd);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::from(out))
+        .stderr(Stdio::from(out_err));
+    let status = cmd
+        .status()
+        .map_err(|e| format!("spawn {}: {e}", migrate_bin.display()))?;
+    if !status.success() {
+        return Err(format!(
+            "schema migration failed (avrag-migrate {status}) — see {}",
+            migrate_log.display()
+        ));
+    }
+    super::native_stack::apply_runtime_grants(log)?;
+    log.push_str(format!("migrations ok ({})\n", migrate_bin.display()).as_str());
     Ok(())
 }
 
@@ -589,6 +622,11 @@ fn ensure_product_native() -> Result<String, String> {
 
     // Restart if not healthy.
     if !api_healthy() {
+        // Schema migrations are the avrag-migrate sidecar's exclusive job
+        // (storage-pg's role guard and grants leave DDL to it; the API pool
+        // never migrates). sqlx's ledger makes the every-start re-run a
+        // no-op when clean, so version upgrades pick up new migrations.
+        run_product_migrations(&env_pairs, &log_dir, &mut log)?;
         stop_pidfile(&api_pid);
         log.push_str("starting avrag-api\n");
         spawn_with_env(&api_bin, &env_pairs, &api_log, &api_pid, None)?;

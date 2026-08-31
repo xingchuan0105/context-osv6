@@ -167,7 +167,7 @@ impl PgvectorDataPlane {
         .bind(owner)
         .bind(doc_ids)
         .bind(&seeds_lower)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *self.tenant_tx(owner).await?)
         .await?;
         Ok(rows.into_iter().map(|(n,)| n).collect())
     }
@@ -195,7 +195,7 @@ impl PgvectorDataPlane {
         .bind(doc_ids)
         .bind(&dense)
         .bind(limit)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *self.tenant_tx(owner).await?)
         .await?;
         Ok(rows.into_iter().map(|(n,)| n).collect())
     }
@@ -229,7 +229,7 @@ impl PgvectorDataPlane {
         .bind(doc_ids)
         .bind(&boundary_lower)
         .bind(limit)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *self.tenant_tx(owner).await?)
         .await?;
         Ok(rows)
     }

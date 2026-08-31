@@ -1,8 +1,10 @@
 //! Native (no Docker, no bash) data-plane control for desktop.
 //!
-//! Starts host `pg_ctl` + `redis-server` against `desktop/runtime/data/*-native`,
-//! writes `client.env`, optionally runs `sqlx migrate`.
-//! Falls back is handled by `local_stack` (bash script / docker).
+//! Starts host `pg_ctl` + `redis-server` against `desktop/runtime/data/*-native`
+//! and writes `client.env`. Postgres roles are provisioned for storage-pg's
+//! fail-closed runtime role guard; schema migrations run via the bundled
+//! `avrag-migrate` sidecar (spawned by `local_product`). Fallback is handled
+//! by `local_stack` (bash script / docker).
 
 use std::fs;
 use std::net::{TcpStream, ToSocketAddrs};
@@ -13,7 +15,18 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Initdb bootstrap / shell-DDL role (createdb, CREATE EXTENSION, role
+/// management, post-migrate grants). Never used in DATABASE_URL: storage-pg's
+/// fail-closed role guard refuses superuser connections for the API/worker
+/// pools.
+const PG_ADMIN_USER: &str = "avrag_cluster_admin";
+/// Migration / object-owner role: owns every table (migrations run as this
+/// role through the avrag-migrate sidecar), demoted out of the privilege
+/// class (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT).
 const PG_USER: &str = "avrag";
+/// API/worker runtime role: DML only via grants, owns nothing — the role the
+/// product's DATABASE_URL points at (role guard refuses an owning role).
+const PG_RUNTIME_USER: &str = "avrag_runtime";
 const PG_PASS: &str = "avrag";
 const PG_DB: &str = "avrag_client";
 const PG_PORT: u16 = 5433;
@@ -363,7 +376,17 @@ fn flush_ensure_log(state_rt: &Path, log: &str) {
     if let Some(p) = path.parent() {
         let _ = fs::create_dir_all(p);
     }
-    let _ = fs::write(path, log);
+    // Append (never truncate): an ensure pass that failed halfway must not
+    // have its evidence overwritten by the next pass's retry.
+    use std::io::Write as _;
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default();
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "---- ensure pass (unix {secs}) ----");
+        let _ = f.write_all(log.as_bytes());
+    }
 }
 
 /// Deterministic local account identity derived from the machine id.
@@ -502,7 +525,7 @@ CLIENT_REDIS_HOST=127.0.0.1
 CLIENT_REDIS_PORT={REDIS_PORT}
 CLIENT_API_HOST=127.0.0.1
 CLIENT_API_PORT=18080
-DATABASE_URL=postgres://{PG_USER}:{PG_PASS}@127.0.0.1:{PG_PORT}/{PG_DB}
+DATABASE_URL=postgres://{PG_RUNTIME_USER}:{PG_PASS}@127.0.0.1:{PG_PORT}/{PG_DB}
 REDIS_URL=redis://127.0.0.1:{REDIS_PORT}/0
 REDIS_ADDR=127.0.0.1:{REDIS_PORT}
 RETRIEVAL_BACKEND=pgvector
@@ -516,7 +539,6 @@ AVRAG_UPLOAD_SIGNING_SECRET={upload}
 BYOK_MASTER_KEY={byok}
 NEXT_PUBLIC_DEV_OWNER_USER_ID={owner_id}
 NEXT_PUBLIC_DEV_USER_ID={user_id}
-AVRAG_RUN_MIGRATIONS=true
 AVRAG_MIGRATIONS_DIR={mig}
 # RAG availability is derived from whether an embedding client can be built
 # (platform env or SiliconFlow purpose=embedding secret), not this gate.
@@ -530,6 +552,10 @@ AVRAG_EMBEDDING_DIM=1024
         byok = byok,
         owner_id = owner_id,
         user_id = user_id,
+        PG_RUNTIME_USER = PG_RUNTIME_USER,
+        PG_PASS = PG_PASS,
+        PG_PORT = PG_PORT,
+        PG_DB = PG_DB,
         mig = mig,
         parsers_env = parsers_env,
         relay_env = relay_env,
@@ -572,11 +598,13 @@ fn ensure_postgres(pg_bin: &Path, pgdata: &Path, run_dir: &Path, log_file: &Path
     if !pgdata.join("PG_VERSION").is_file() {
         append_log(log, format!("initdb {}", pgdata.display()));
         // initdb can emit a lot of stdout; use null stdio on Windows to avoid pipe stalls.
+        // The bootstrap role is the shell-DDL admin — the runtime role is
+        // created demoted by provision_pg_roles (role guard, storage-pg).
         let mut init = Command::new(&initdb);
         init.arg("-D")
             .arg(pgdata)
             .arg("-U")
-            .arg(PG_USER)
+            .arg(PG_ADMIN_USER)
             .arg("--auth-local=trust")
             .arg("--auth-host=trust")
             .arg("--encoding=UTF8")
@@ -595,7 +623,7 @@ fn ensure_postgres(pg_bin: &Path, pgdata: &Path, run_dir: &Path, log_file: &Path
                     .arg("-D")
                     .arg(pgdata)
                     .arg("-U")
-                    .arg(PG_USER)
+                    .arg(PG_ADMIN_USER)
                     .arg("--auth-local=trust")
                     .arg("--auth-host=trust")
                     .arg("--encoding=UTF8")
@@ -691,15 +719,23 @@ host    all             all             ::1/128                 trust\n"
     // postgres (createdb fails there and the old code still latched the
     // .avrag_inited marker — every later pass then skipped createdb and the
     // API crashed on `database "avrag_client" does not exist`).
+    // Which role exists depends on tree vintage: fresh trees bootstrap
+    // avrag_cluster_admin only, legacy trees only avrag (as superuser). Probe
+    // admin first, fall back to avrag.
     let mut sql_ready = false;
     for _ in 0..60 {
-        let (code, _, _) = run_capture(
-            Command::new(&psql)
-                .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", "postgres", "-tAc"])
-                .arg("SELECT 1"),
-        );
-        if code == 0 {
-            sql_ready = true;
+        for user in [PG_ADMIN_USER, PG_USER] {
+            let (code, _, _) = run_capture(
+                Command::new(&psql)
+                    .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", user, "-d", "postgres", "-tAc"])
+                    .arg("SELECT 1"),
+            );
+            if code == 0 {
+                sql_ready = true;
+                break;
+            }
+        }
+        if sql_ready {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -709,6 +745,9 @@ host    all             all             ::1/128                 trust\n"
         return Err("postgres SQL not ready after TCP open".into());
     }
 
+    // Roles must exist before createdb: the db is created with -O avrag.
+    provision_pg_roles(&pg_bin, log)?;
+
     // Skip psql/createdb after first success — they are CONSOLE exes and flash on Windows.
     let inited = pgdata.join(".avrag_inited");
     if inited.is_file() {
@@ -716,28 +755,32 @@ host    all             all             ::1/128                 trust\n"
         return Ok(());
     }
 
-    // create db
+    // create db (as the shell-DDL admin; owned by the runtime role so its
+    // migrations own every object they create)
     let (code, out, err) = run_capture(
         Command::new(&psql)
-            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", "postgres", "-tAc"])
+            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_ADMIN_USER, "-d", "postgres", "-tAc"])
             .arg(format!("SELECT 1 FROM pg_database WHERE datname='{PG_DB}'")),
     );
     append_log(log, format!("db exists probe code={code} {out}{err}"));
     if !out.contains('1') {
         let (c2, o2, e2) = run_capture(
             Command::new(&createdb)
-                .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, PG_DB]),
+                .args([
+                    "-h", "127.0.0.1",
+                    "-p", &PG_PORT.to_string(),
+                    "-U", PG_ADMIN_USER,
+                    "-O", PG_USER,
+                    PG_DB,
+                ]),
         );
         append_log(log, format!("createdb {c2} {o2}{e2}"));
     }
+    // pgvector is not a trusted extension: only the (cluster-admin) session
+    // may CREATE it; the demoted runtime role cannot.
     let _ = run_capture(
         Command::new(&psql)
-            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", PG_DB, "-c"])
-            .arg(format!("ALTER USER {PG_USER} WITH PASSWORD '{PG_PASS}';")),
-    );
-    let _ = run_capture(
-        Command::new(&psql)
-            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", PG_DB, "-c"])
+            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_ADMIN_USER, "-d", PG_DB, "-c"])
             .arg("CREATE EXTENSION IF NOT EXISTS vector;"),
     );
     // Latch the marker only when the db verifiably exists — a failed createdb
@@ -745,7 +788,7 @@ host    all             all             ::1/128                 trust\n"
     // of every later pass skipping createdb).
     let (_, verify, _) = run_capture(
         Command::new(&psql)
-            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_USER, "-d", "postgres", "-tAc"])
+            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", PG_ADMIN_USER, "-d", "postgres", "-tAc"])
             .arg(format!("SELECT 1 FROM pg_database WHERE datname='{PG_DB}'")),
     );
     if verify.trim() == "1" {
@@ -755,6 +798,175 @@ host    all             all             ::1/128                 trust\n"
         append_log(log, format!("db {PG_DB} still missing after createdb step"));
         Err(format!("createdb {PG_DB} failed"))
     }
+}
+
+/// Idempotent role provisioning for storage-pg's fail-closed runtime role
+/// guard (superuser / BYPASSRLS / role memberships are refused for the
+/// API/worker pools, in every context).
+///
+/// - Fresh trees: initdb bootstrapped [`PG_ADMIN_USER`]; create the demoted
+///   runtime role [`PG_USER`].
+/// - Trees initialized by older shells: `avrag` **is** the initdb bootstrap
+///   superuser — create the admin through it, then demote it in the same
+///   still-privileged session (ALTER on self runs last).
+fn provision_pg_roles(pg_bin: &Path, log: &mut String) -> Result<(), String> {
+    let psql = bin(pg_bin, "psql");
+    // "Can we open a session as this role?" — doubles as existence probe.
+    let can_connect = |user: &str| -> bool {
+        let (code, _, _) = run_capture(
+            Command::new(&psql)
+                .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", user, "-d", "postgres", "-tAc"])
+                .arg("SELECT 1"),
+        );
+        code == 0
+    };
+    let session_user = if can_connect(PG_ADMIN_USER) {
+        PG_ADMIN_USER
+    } else if can_connect(PG_USER) {
+        PG_USER
+    } else {
+        return Err("postgres reachable but neither avrag_cluster_admin nor avrag exists".into());
+    };
+
+    let (code, out, _) = run_capture(
+        Command::new(&psql)
+            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", session_user, "-d", "postgres", "-tAc"])
+            .arg(format!("SELECT 1 FROM pg_roles WHERE rolname='{PG_USER}'")),
+    );
+    let runtime_role_exists = code == 0 && out.contains('1');
+    let (code, out, _) = run_capture(
+        Command::new(&psql)
+            .args(["-h", "127.0.0.1", "-p", &PG_PORT.to_string(), "-U", session_user, "-d", "postgres", "-tAc"])
+            .arg(format!("SELECT 1 FROM pg_roles WHERE rolname='{PG_RUNTIME_USER}'")),
+    );
+    let dml_role_exists = code == 0 && out.contains('1');
+
+    let mut batch = String::new();
+    if session_user == PG_USER {
+        // Legacy repair: the session runs as the initdb superuser `avrag`.
+        batch.push_str(&format!(
+            "CREATE ROLE {PG_ADMIN_USER} LOGIN SUPERUSER PASSWORD '{PG_PASS}';"
+        ));
+    }
+    if runtime_role_exists {
+        // Healthy trees get a no-op; legacy trees drop out of the privilege
+        // class here. Password keeps DATABASE_URL well-formed (local pg_hba
+        // is trust).
+        batch.push_str(&format!(
+            "ALTER ROLE {PG_USER} WITH LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '{PG_PASS}';"
+        ));
+    } else {
+        batch.push_str(&format!(
+            "CREATE ROLE {PG_USER} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '{PG_PASS}';"
+        ));
+    }
+    // The DML-only role the API/worker connect as (mirrors db/roles/
+    // 002_runtime_grants.sql's avrag_runtime; grants are applied per product
+    // start by apply_runtime_grants after migrations).
+    if dml_role_exists {
+        batch.push_str(&format!(
+            "ALTER ROLE {PG_RUNTIME_USER} WITH LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '{PG_PASS}';"
+        ));
+    } else {
+        batch.push_str(&format!(
+            "CREATE ROLE {PG_RUNTIME_USER} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '{PG_PASS}';"
+        ));
+    }
+    let (code, out, err) = run_capture(
+        Command::new(&psql)
+            .args([
+                "-h", "127.0.0.1",
+                "-p", &PG_PORT.to_string(),
+                "-U", session_user,
+                "-d", "postgres",
+                "-v", "ON_ERROR_STOP=1",
+                "-c",
+            ])
+            .arg(batch),
+    );
+    if code != 0 {
+        append_log(log, format!("role provisioning failed: {out}{err}"));
+        return Err("pg role provisioning failed".into());
+    }
+    append_log(log, "pg roles provisioned (avrag_cluster_admin shell-DDL; avrag owner-demoted; avrag_runtime dml-only)");
+    Ok(())
+}
+
+/// Post-migration DML grants for [`PG_RUNTIME_USER`] (run as the shell-DDL
+/// admin, same shape as `db/roles/002_runtime_grants.sql` §4): tables and
+/// sequences get full DML, functions get EXECUTE, and default privileges keep
+/// future migration-created tables readable. Re-run on every product start so
+/// newly migrated tables are covered.
+pub(crate) fn apply_runtime_grants(log: &mut String) -> Result<(), String> {
+    let Some(pg_bin) = find_pg_bin() else {
+        return Err("pg bin not found for runtime grants".into());
+    };
+    let psql = bin(&pg_bin, "psql");
+    let sql = format!(
+        r#"
+DO $$
+DECLARE
+  r RECORD;
+  t text;
+BEGIN
+  FOR r IN
+    SELECT c.relname AS table_name
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+  LOOP
+    t := r.table_name;
+    CONTINUE WHEN t = '_sqlx_migrations';
+    CONTINUE WHEN t LIKE '_org_owner_map%';
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO {PG_RUNTIME_USER}', t);
+  END LOOP;
+  FOR r IN
+    SELECT sequencename FROM pg_sequences WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO {PG_RUNTIME_USER}', r.sequencename);
+  END LOOP;
+  FOR r IN
+    SELECT p.oid::regprocedure AS fn
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.prokind = 'f'
+  LOOP
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO {PG_RUNTIME_USER}', r.fn);
+  END LOOP;
+END $$;
+GRANT USAGE ON SCHEMA public TO {PG_RUNTIME_USER};
+ALTER DEFAULT PRIVILEGES FOR ROLE {PG_USER} IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {PG_RUNTIME_USER};
+ALTER DEFAULT PRIVILEGES FOR ROLE {PG_USER} IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO {PG_RUNTIME_USER};
+ALTER DEFAULT PRIVILEGES FOR ROLE {PG_USER} IN SCHEMA public
+    GRANT USAGE ON TYPES TO {PG_RUNTIME_USER};
+"#
+    );
+    let (code, out, err) = run_capture(
+        Command::new(&psql)
+            .args([
+                "-h", "127.0.0.1",
+                "-p", &PG_PORT.to_string(),
+                "-U", PG_ADMIN_USER,
+                "-d", PG_DB,
+                "-v", "ON_ERROR_STOP=1",
+                "-c",
+            ])
+            .arg(sql),
+    );
+    if code != 0 {
+        append_log(log, format!("runtime grants failed: {out}{err}"));
+        return Err("pg runtime grants failed".into());
+    }
+    append_log(log, "runtime grants applied");
+    Ok(())
+}
+
+/// DSN the avrag-migrate sidecar must migrate through (the owner role, not
+/// the runtime role in client.env's DATABASE_URL — DDL grants stop at avrag).
+pub(crate) fn migration_database_url() -> String {
+    format!("postgres://{PG_USER}:{PG_PASS}@127.0.0.1:{PG_PORT}/{PG_DB}")
 }
 
 fn ensure_redis(redis_bin: &Path, data_dir: &Path, pid_file: &Path, log_file: &Path, log: &mut String) -> Result<(), String> {
@@ -821,37 +1033,6 @@ fn ensure_redis(redis_bin: &Path, data_dir: &Path, pid_file: &Path, log_file: &P
     Ok(())
 }
 
-fn run_migrate(migrations: &Path, log: &mut String) {
-    let url = format!("postgres://{PG_USER}:{PG_PASS}@127.0.0.1:{PG_PORT}/{PG_DB}");
-    let sqlx = which("sqlx").or_else(|| {
-        let home = std::env::var_os("HOME")?;
-        let p = PathBuf::from(home).join(".cargo/bin/sqlx");
-        p.is_file().then_some(p)
-    });
-    let Some(sqlx) = sqlx else {
-        append_log(log, "sqlx not found — skip migrate (install sqlx-cli)");
-        return;
-    };
-    append_log(log, "sqlx migrate run");
-    let (code, out, err) = run_capture(
-        Command::new(sqlx)
-            .arg("migrate")
-            .arg("run")
-            .arg("--source")
-            .arg(migrations)
-            .arg("--database-url")
-            .arg(&url),
-    );
-    append_log(log, out);
-    append_log(log, err);
-    if code != 0 {
-        append_log(
-            log,
-            "migrate non-zero (desktop soft-ok if rag_kg_* already present / pg_bigm missing)",
-        );
-    }
-}
-
 /// Returns true if native tools exist on PATH / known locations.
 pub fn native_tools_available() -> bool {
     find_pg_bin().is_some() && find_redis_server().is_some()
@@ -906,9 +1087,21 @@ pub fn ensure_native() -> NativeEnsureReport {
     append_log(&mut log, format!("bins={}", bins_rt.display()));
     flush_ensure_log(&state_rt, &log);
 
-    // Fast path: both ports open → only refresh client.env (no process spawn).
+    // Fast path: both ports open → provision pg roles (PG may outlive the
+    // shell after a crash, so this cannot live only in ensure_postgres) and
+    // refresh client.env (no process spawn).
     if port_open("127.0.0.1", PG_PORT) && port_open("127.0.0.1", REDIS_PORT) {
         append_log(&mut log, "fast-path: pg+redis already up");
+        if let Some(pg_bin) = find_pg_bin() {
+            if let Err(e) = provision_pg_roles(&pg_bin, &mut log) {
+                flush_ensure_log(&state_rt, &log);
+                return NativeEnsureReport {
+                    ok: false,
+                    message: e,
+                    log,
+                };
+            }
+        }
         let mig = resolve_migrations_dir(&bins_rt, &state_rt);
         if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
             flush_ensure_log(&state_rt, &log);
@@ -968,6 +1161,10 @@ pub fn ensure_native() -> NativeEnsureReport {
         };
     }
     flush_ensure_log(&state_rt, &log);
+    // Cold boots provision inside ensure_postgres (roles must exist before
+    // its createdb -O avrag). When postgres was already listening at entry
+    // (crash-restart tree), ensure_postgres early-returned, so provision here.
+    let pg_was_up = port_open("127.0.0.1", PG_PORT);
     if let Err(e) = ensure_postgres(
         &pg_bin,
         &pgdata,
@@ -983,6 +1180,17 @@ pub fn ensure_native() -> NativeEnsureReport {
         };
     }
 
+    if pg_was_up {
+        if let Err(e) = provision_pg_roles(&pg_bin, &mut log) {
+            flush_ensure_log(&state_rt, &log);
+            return NativeEnsureReport {
+                ok: false,
+                message: e,
+                log,
+            };
+        }
+    }
+
     let mig = resolve_migrations_dir(&bins_rt, &state_rt);
     if let Err(e) = write_client_env(&state_rt, mig.as_deref(), &mut log) {
         flush_ensure_log(&state_rt, &log);
@@ -992,18 +1200,10 @@ pub fn ensure_native() -> NativeEnsureReport {
             log,
         };
     }
-    // sqlx migrate is optional and can hang if a rogue sqlx is on PATH — skip on Windows install.
-    #[cfg(not(windows))]
-    if let Some(ref m) = mig {
-        if m.is_dir() {
-            run_migrate(m, &mut log);
-        }
-    }
-    #[cfg(windows)]
-    {
-        let _ = mig;
-        append_log(&mut log, "skip host sqlx migrate on Windows (API applies migrations)");
-    }
+    // Schema migrations are the bundled avrag-migrate sidecar's job
+    // (local_product spawns it before avrag-api; storage-pg runs them nowhere
+    // else). sqlx-cli on the host was a dev-only shortcut with the same
+    // failure modes — one migration path everywhere now.
 
     let ok = port_open("127.0.0.1", PG_PORT) && port_open("127.0.0.1", REDIS_PORT);
     flush_ensure_log(&state_rt, &log);

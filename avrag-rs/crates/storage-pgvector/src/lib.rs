@@ -48,6 +48,25 @@ impl PgvectorDataPlane {
     pub fn config(&self) -> &PgvectorConfig {
         &self.config
     }
+
+    /// Forced-RLS tenant context for every rag_* statement. Migrations
+    /// 0082/0083 put the rag_* tables behind `tenant_isolation_*` policies
+    /// keyed on `app.current_user`: without the GUC a read returns an empty
+    /// set and a write violates the policy. The data plane is per-owner by
+    /// construction (every statement already filters owner_user_id), so scope
+    /// each statement's transaction to the row owner. `set_config(..., true)`
+    /// is transaction-local — the pooled connection comes back clean.
+    pub(crate) async fn tenant_tx(
+        &self,
+        owner: Uuid,
+    ) -> anyhow::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SELECT set_config('app.current_user', $1, true)")
+            .bind(owner.to_string())
+            .execute(&mut *tx)
+            .await?;
+        Ok(tx)
+    }
 }
 
 #[async_trait]

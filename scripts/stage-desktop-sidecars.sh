@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage avrag-api / avrag-worker / context-os-mcp / context-os into client runtime + Tauri externalBin layout.
+# Stage avrag-api / avrag-worker / avrag-migrate / context-os-mcp / context-os into client runtime + Tauri externalBin layout.
 #
 # Outputs:
 #   desktop/runtime/bin/avrag-api[.exe]
@@ -10,6 +10,7 @@
 #   desktop/runtime/parsers/lit/              # lit.exe + pdfium.dll (windows triple only)
 #   desktop/src-tauri/binaries/avrag-api-<triple>[.exe]
 #   desktop/src-tauri/binaries/avrag-worker-<triple>[.exe]
+#   desktop/src-tauri/binaries/avrag-migrate-<triple>[.exe]
 #
 # Env:
 #   STAGE_TARGET_TRIPLE  default: host (use x86_64-pc-windows-gnu for NSIS)
@@ -95,9 +96,9 @@ ensure_built() {
     return 0
   fi
   if [[ "$BUILD" != "1" ]]; then
-    die "missing $name for triple=$TRIPLE (set STAGE_BUILD=1 to cargo build --release --target $TRIPLE -p avrag-api -p avrag-worker -p context-os)"
+    die "missing $name for triple=$TRIPLE (set STAGE_BUILD=1 to cargo build --release --target $TRIPLE -p avrag-api -p avrag-worker -p avrag-migrate -p context-os)"
   fi
-  log "building release avrag-api + avrag-worker + context-os (target=$TRIPLE, jobs=${CARGO_BUILD_JOBS:-2})…"
+  log "building release avrag-api + avrag-worker + avrag-migrate + context-os (target=$TRIPLE, jobs=${CARGO_BUILD_JOBS:-2})…"
   (
     cd "$AVRAG_DIR"
     export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
@@ -108,9 +109,9 @@ ensure_built() {
     fi
     rustup target add "$TRIPLE" >/dev/null 2>&1 || true
     if [[ "$CROSS" == "1" ]]; then
-      cargo build --release --target "$TRIPLE" -p avrag-api -p avrag-worker -p context-os
+      cargo build --release --target "$TRIPLE" -p avrag-api -p avrag-worker -p avrag-migrate -p context-os
     else
-      cargo build --release -p avrag-api -p avrag-worker -p context-os
+      cargo build --release -p avrag-api -p avrag-worker -p avrag-migrate -p context-os
     fi
   )
   find_built "$name" || die "still missing $name after build (triple=$TRIPLE). Check cross-linker (mingw) and crate windows support."
@@ -118,16 +119,19 @@ ensure_built() {
 
 API_SRC="$(ensure_built avrag-api)"
 WORKER_SRC="$(ensure_built avrag-worker)"
+MIGRATE_SRC="$(ensure_built avrag-migrate)"
 MCP_SRC="$(ensure_built context-os-mcp)"
 CLI_SRC="$(ensure_built context-os)"
 
 api_dest_name="avrag-api"
 worker_dest_name="avrag-worker"
+migrate_dest_name="avrag-migrate"
 mcp_dest_name="context-os-mcp"
 cli_dest_name="context-os"
 if [[ "$IS_WINDOWS_TRIPLE" == "1" ]]; then
   api_dest_name="avrag-api.exe"
   worker_dest_name="avrag-worker.exe"
+  migrate_dest_name="avrag-migrate.exe"
   mcp_dest_name="context-os-mcp.exe"
   cli_dest_name="context-os.exe"
 fi
@@ -136,9 +140,10 @@ fi
 # (overwrites host bins — re-run without STAGE_TARGET_TRIPLE for linux host bins).
 cp -f "$API_SRC" "$RUNTIME_BIN/$api_dest_name"
 cp -f "$WORKER_SRC" "$RUNTIME_BIN/$worker_dest_name"
+cp -f "$MIGRATE_SRC" "$RUNTIME_BIN/$migrate_dest_name"
 cp -f "$MCP_SRC" "$RUNTIME_BIN/$mcp_dest_name"
 cp -f "$CLI_SRC" "$RUNTIME_BIN/$cli_dest_name"
-chmod +x "$RUNTIME_BIN/$api_dest_name" "$RUNTIME_BIN/$worker_dest_name" "$RUNTIME_BIN/$mcp_dest_name" "$RUNTIME_BIN/$cli_dest_name" 2>/dev/null || true
+chmod +x "$RUNTIME_BIN/$api_dest_name" "$RUNTIME_BIN/$worker_dest_name" "$RUNTIME_BIN/$migrate_dest_name" "$RUNTIME_BIN/$mcp_dest_name" "$RUNTIME_BIN/$cli_dest_name" 2>/dev/null || true
 
 # Tauri 2 externalBin: binaries/<name>-<target-triple>[.exe]
 # (context-os-mcp is agent-facing, not launched by Tauri — only runtime/bin.)
@@ -146,10 +151,12 @@ if [[ -n "$TRIPLE" ]]; then
   if [[ "$IS_WINDOWS_TRIPLE" == "1" ]]; then
     cp -f "$API_SRC" "$TAURI_BIN/avrag-api-${TRIPLE}.exe"
     cp -f "$WORKER_SRC" "$TAURI_BIN/avrag-worker-${TRIPLE}.exe"
+    cp -f "$MIGRATE_SRC" "$TAURI_BIN/avrag-migrate-${TRIPLE}.exe"
   else
     cp -f "$API_SRC" "$TAURI_BIN/avrag-api-${TRIPLE}"
     cp -f "$WORKER_SRC" "$TAURI_BIN/avrag-worker-${TRIPLE}"
-    chmod +x "$TAURI_BIN/avrag-api-${TRIPLE}" "$TAURI_BIN/avrag-worker-${TRIPLE}"
+    cp -f "$MIGRATE_SRC" "$TAURI_BIN/avrag-migrate-${TRIPLE}"
+    chmod +x "$TAURI_BIN/avrag-api-${TRIPLE}" "$TAURI_BIN/avrag-worker-${TRIPLE}" "$TAURI_BIN/avrag-migrate-${TRIPLE}"
   fi
   log "tauri externalBin: $TAURI_BIN/avrag-*-${TRIPLE}*"
 fi
@@ -265,7 +272,8 @@ EOF
 log "staged:"
 log "  $RUNTIME_BIN/$api_dest_name  ($(file -b "$RUNTIME_BIN/$api_dest_name" 2>/dev/null | head -c 80 || true))"
 log "  $RUNTIME_BIN/$worker_dest_name"
+log "  $RUNTIME_BIN/$migrate_dest_name"
 log "  $RUNTIME_BIN/$mcp_dest_name"
 log "  $RUNTIME_BIN/$cli_dest_name"
-log "  from api=$API_SRC mcp=$MCP_SRC cli=$CLI_SRC"
+log "  from api=$API_SRC worker=$WORKER_SRC migrate=$MIGRATE_SRC mcp=$MCP_SRC cli=$CLI_SRC"
 log "  triple=${TRIPLE} cross=${CROSS}"
