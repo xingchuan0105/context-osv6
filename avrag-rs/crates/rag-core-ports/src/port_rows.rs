@@ -9,7 +9,7 @@ use uuid::Uuid;
 pub struct DocumentAssetRow {
     pub asset_id: Uuid,
     pub owner_user_id: Uuid,
-    pub workspace_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
     pub page: Option<i32>,
@@ -27,7 +27,7 @@ pub struct DocumentAssetRow {
 pub struct MultimodalChunkRow {
     pub chunk_id: Uuid,
     pub owner_user_id: Uuid,
-    pub workspace_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
     pub asset_id: Option<Uuid>,

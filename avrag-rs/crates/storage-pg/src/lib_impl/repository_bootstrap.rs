@@ -358,13 +358,109 @@ impl BootstrapRepository {
         workspace_id: Uuid,
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
+        let owner_user_id = context.user_id().into_uuid();
+        // Capture the artifacts bound to this workspace before the cascade
+        // removes their bindings (W2e: orphan sweep).
+        let bound_artifacts: Vec<Uuid> = sqlx::query(
+            "select artifact_id from workspace_document_bindings where workspace_id = $1 and owner_user_id = $2",
+        )
+        .bind(workspace_id)
+        .bind(owner_user_id)
+        .fetch_all(tx.inner())
+        .await?
+        .into_iter()
+        .filter_map(|row: PgRow| row.try_get::<Uuid, _>("artifact_id").ok())
+        .collect();
+
         let result = sqlx::query("delete from workspaces where id = $1 and owner_user_id = $2")
             .bind(workspace_id)
-            .bind(context.user_id().into_uuid())
+            .bind(owner_user_id)
             .execute(tx.inner())
             .await?;
+        let deleted = result.rows_affected() > 0;
+        if !deleted {
+            tx.commit().await?;
+            return Ok(false);
+        }
+
+        // Artifacts left with zero bindings of either kind enter the async
+        // full-cleanup flow; anything still session-bound survives untouched.
+        for document_id in bound_artifacts {
+            let orphaned = sqlx::query_scalar::<_, bool>(
+                r#"
+                select not exists (
+                    select 1 from conversation_document_bindings b where b.artifact_id = $1
+                )
+                and not exists (
+                    select 1 from workspace_document_bindings b where b.artifact_id = $1
+                )
+                "#,
+            )
+            .bind(document_id)
+            .fetch_one(tx.inner())
+            .await?;
+            if orphaned {
+                sqlx::query(
+                    r#"
+                    update documents
+                    set status = 'deleting',
+                        deletion_requested_at = coalesce(deletion_requested_at, now()),
+                        deletion_error = null,
+                        updated_at = now()
+                    where id = $1
+                      and owner_user_id = $2
+                      and status not in ('deleting', 'deleted')
+                    "#,
+                )
+                .bind(document_id)
+                .bind(owner_user_id)
+                .execute(tx.inner())
+                .await?;
+                sqlx::query(
+                    r#"
+                    insert into document_cleanup_tasks (
+                        owner_user_id, workspace_id, document_id, requested_by, idempotency_key, payload
+                    )
+                    values ($1, null, $2, $3, $4, $5)
+                    on conflict (idempotency_key) do nothing
+                    "#,
+                )
+                .bind(owner_user_id)
+                .bind(document_id)
+                .bind(context.actor_id().map(ActorId::into_uuid))
+                .bind(format!("document-cleanup:{owner_user_id}:{document_id}"))
+                .bind(serde_json::json!({
+                    "owner_user_id": owner_user_id.to_string(),
+                    "document_id": document_id.to_string(),
+                    "reason": "workspace_delete_orphan",
+                }))
+                .execute(tx.inner())
+                .await?;
+                sqlx::query(
+                    r#"
+                    update ingestion_tasks
+                    set status = 'dead_letter',
+                        dead_lettered_at = coalesce(dead_lettered_at, now()),
+                        last_failed_at = coalesce(last_failed_at, now()),
+                        last_error = coalesce(last_error, 'document deletion requested'),
+                        locked_at = null,
+                        locked_by = null,
+                        lock_token = null,
+                        updated_at = now()
+                    where owner_user_id = $1
+                      and document_id = $2
+                      and status in ('queued', 'processing')
+                      and dead_lettered_at is null
+                    "#,
+                )
+                .bind(owner_user_id)
+                .bind(document_id)
+                .execute(tx.inner())
+                .await?;
+            }
+        }
         tx.commit().await?;
-        Ok(result.rows_affected() > 0)
+        Ok(true)
     }
 
     pub async fn create_document(
@@ -381,13 +477,13 @@ impl BootstrapRepository {
         // Parent-guarded: zero rows when the workspace belongs to someone else.
         let row = sqlx::query(
             r#"
-            insert into documents (id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
-            select $1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8
+            insert into documents (id, owner_user_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
+            select $1, $2, $4, $5, $6, 'pending', 0, $7, $8
             where exists (
                 select 1 from workspaces w
                 where w.id = $3::uuid and w.owner_user_id = $2::uuid
             )
-            returning id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
+            returning id, owner_user_id, $3::uuid as workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
         .bind(document_id)
@@ -403,6 +499,19 @@ impl BootstrapRepository {
         let Some(row) = row else {
             return Err(PgStorageError::NotFound("resource not found".to_string()));
         };
+        // Scope truth lives in the typed binding table, written in the same tx.
+        sqlx::query(
+            r#"
+            insert into workspace_document_bindings (artifact_id, workspace_id, owner_user_id)
+            values ($1, $2, $3)
+            on conflict (workspace_id, artifact_id) do nothing
+            "#,
+        )
+        .bind(document_id)
+        .bind(workspace_id)
+        .bind(context.user_id().into_uuid())
+        .execute(tx.inner())
+        .await?;
         tx.commit().await?;
         map_document(row)
     }
@@ -423,20 +532,19 @@ impl BootstrapRepository {
         let row = sqlx::query(
             r#"
             insert into documents (
-                id, owner_user_id, workspace_id, file_name, mime_type, file_size,
+                id, owner_user_id, file_name, mime_type, file_size,
                 status, chunk_count, object_path, user_id
             )
-            values ($1, $2, $3, $4, $5, 0, 'completed', $6, $7, $8)
+            values ($1, $2, $4, $5, 0, 'completed', $6, $7, $8)
             on conflict (id) do update set
                 owner_user_id = excluded.owner_user_id,
-                workspace_id = excluded.workspace_id,
                 file_name = excluded.file_name,
                 mime_type = excluded.mime_type,
                 status = 'completed',
                 chunk_count = excluded.chunk_count,
                 updated_at = now()
             where documents.owner_user_id = excluded.owner_user_id
-            returning id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
+            returning id, owner_user_id, $3::uuid as workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
         .bind(document_id)
@@ -449,6 +557,18 @@ impl BootstrapRepository {
         .bind(context.actor_id().map(ActorId::into_uuid))
         .fetch_optional(tx.inner())
         .await?;
+        sqlx::query(
+            r#"
+            insert into workspace_document_bindings (artifact_id, workspace_id, owner_user_id)
+            values ($1, $2, $3)
+            on conflict (workspace_id, artifact_id) do nothing
+            "#,
+        )
+        .bind(document_id)
+        .bind(workspace_id)
+        .bind(context.user_id().into_uuid())
+        .execute(tx.inner())
+        .await?;
         tx.commit().await?;
         let Some(row) = row else {
             return Err(PgStorageError::NotFound(
@@ -456,6 +576,137 @@ impl BootstrapRepository {
             ));
         };
         map_document(row)
+    }
+
+    /// Chat-first W2b: artifact + conversation binding in one transaction.
+    /// Parent-guarded on the session so a foreign conversation id yields NotFound.
+    pub async fn create_session_document(
+        &self,
+        context: &AuthContext,
+        conversation_id: Uuid,
+        filename: &str,
+        file_size: u64,
+        mime_type: &str,
+    ) -> Result<Document, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        ensure_org_and_actor(tx.inner(), context).await?;
+        let document_id = Uuid::new_v4();
+        let object_path = format!(
+            "{}/_sessions/{}/{}",
+            context.user_id(),
+            document_id,
+            sanitize_filename(filename)
+        );
+        let row = sqlx::query(
+            r#"
+            insert into documents (id, owner_user_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
+            values ($1, $2, $3, $4, $5, 'pending', 0, $6, $7)
+            returning id, owner_user_id, null::uuid as workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
+            "#,
+        )
+        .bind(document_id)
+        .bind(context.user_id().into_uuid())
+        .bind(filename)
+        .bind(mime_type)
+        .bind(i64::try_from(file_size).unwrap_or(i64::MAX))
+        .bind(object_path)
+        .bind(context.actor_id().map(ActorId::into_uuid))
+        .fetch_optional(tx.inner())
+        .await?;
+        let Some(row) = row else {
+            return Err(PgStorageError::NotFound("resource not found".to_string()));
+        };
+        let inserted = sqlx::query(
+            r#"
+            insert into conversation_document_bindings (artifact_id, conversation_id, owner_user_id)
+            select $1, $2, $3
+            where exists (
+                select 1 from chat_sessions s
+                where s.id = $2 and s.owner_user_id = $3
+            )
+            on conflict (conversation_id, artifact_id) do nothing
+            "#,
+        )
+        .bind(document_id)
+        .bind(conversation_id)
+        .bind(context.user_id().into_uuid())
+        .execute(tx.inner())
+        .await?;
+        if inserted.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Err(PgStorageError::NotFound("session not found".to_string()));
+        }
+        tx.commit().await?;
+        map_document(row)
+    }
+
+    pub async fn list_session_files(
+        &self,
+        context: &AuthContext,
+        conversation_id: Uuid,
+    ) -> Result<Vec<contracts::documents::SessionFileRow>, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let rows = sqlx::query(
+            r#"
+            select b.id as binding_id, d.id as document_id, d.file_name, d.mime_type,
+                   d.file_size, d.status, b.created_at
+            from conversation_document_bindings b
+            join documents d on d.id = b.artifact_id
+            where b.conversation_id = $1
+              and b.owner_user_id = $2
+              and d.status not in ('deleting', 'deleted')
+            order by b.created_at asc, b.id asc
+            "#,
+        )
+        .bind(conversation_id)
+        .bind(context.user_id().into_uuid())
+        .fetch_all(tx.inner())
+        .await?;
+        tx.commit().await?;
+        rows.into_iter()
+            .map(|row: PgRow| {
+                Ok(contracts::documents::SessionFileRow {
+                    binding_id: row.try_get::<Uuid, _>("binding_id")?.to_string(),
+                    document_id: row.try_get::<Uuid, _>("document_id")?.to_string(),
+                    file_name: row.try_get("file_name")?,
+                    mime_type: row.try_get::<Option<String>, _>("mime_type")?
+                        .unwrap_or_else(|| "application/octet-stream".to_string()),
+                    file_size: u64::try_from(row.try_get::<i64, _>("file_size")?)
+                        .unwrap_or_default(),
+                    status: row.try_get("status")?,
+                    created_at: row.try_get::<DateTime<Utc>, _>("created_at")?.to_rfc3339(),
+                })
+            })
+            .collect()
+    }
+
+    pub async fn delete_session_file_binding(
+        &self,
+        context: &AuthContext,
+        conversation_id: Uuid,
+        binding_id: Uuid,
+    ) -> Result<Option<String>, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let row = sqlx::query(
+            r#"
+            delete from conversation_document_bindings
+            where id = $1
+              and conversation_id = $2
+              and owner_user_id = $3
+            returning artifact_id
+            "#,
+        )
+        .bind(binding_id)
+        .bind(conversation_id)
+        .bind(context.user_id().into_uuid())
+        .fetch_optional(tx.inner())
+        .await?;
+        tx.commit().await?;
+        Ok(row.and_then(|row| {
+            row.try_get::<Uuid, _>("artifact_id")
+                .ok()
+                .map(|value| value.to_string())
+        }))
     }
 
     pub async fn get_document_task_seed(
@@ -466,9 +717,16 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, owner_user_id, workspace_id, file_name, mime_type, file_size, object_path, status
-            from documents
-            where id = $1 and owner_user_id = $2
+            select d.id, d.owner_user_id, wb.workspace_id, d.file_name, d.mime_type, d.file_size, d.object_path, d.status
+            from documents d
+            left join lateral (
+                select b.workspace_id
+                from workspace_document_bindings b
+                where b.artifact_id = d.id
+                order by b.created_at asc, b.id asc
+                limit 1
+            ) wb on true
+            where d.id = $1 and d.owner_user_id = $2
             "#,
         )
         .bind(document_id)
@@ -590,7 +848,7 @@ impl BootstrapRepository {
     pub async fn replace_document_toc(
         &self,
         context: &AuthContext,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         document_id: Uuid,
         entries: &[TocEntry],
     ) -> Result<(), PgStorageError> {
@@ -600,11 +858,10 @@ impl BootstrapRepository {
         // Parent-guarded replacement: zero side effects when the document
         // belongs to another owner (surfaces via caller's NotFound checks).
         let guard = sqlx::query_scalar::<_, i64>(
-            "select 1 from documents where id = $1 and owner_user_id = $2 and workspace_id = $3 for update",
+            "select 1 from documents where id = $1 and owner_user_id = $2 for update",
         )
         .bind(document_id)
         .bind(context.user_id().into_uuid())
-        .bind(workspace_id)
         .fetch_optional(tx.inner())
         .await?;
         if guard.is_none() {

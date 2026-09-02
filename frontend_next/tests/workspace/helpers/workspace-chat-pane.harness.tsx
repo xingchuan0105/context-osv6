@@ -4,24 +4,24 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps, ReactElement } from "react";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 
-import { WorkspaceChatPane } from "../../../components/workspace/workspace-chat-pane";
+import { ChatCanvas } from "../../../components/chat/chat-canvas";
 
 import { resetWorkspaceChatPaneMocks } from "./workspace-chat-pane.setup";
 import { workspaceChatPaneMocks } from "../workspace-chat-pane.shared-mocks";
 
 export { workspaceChatPaneMocks };
 
-export type RenderChatPaneOptions = Partial<ComponentProps<typeof WorkspaceChatPane>>;
+export type RenderChatPaneOptions = Partial<ComponentProps<typeof ChatCanvas>>;
 
 export async function renderChatPane(options: RenderChatPaneOptions = {}) {
-  const props: ComponentProps<typeof WorkspaceChatPane> = {
+  const props: ComponentProps<typeof ChatCanvas> = {
     workspaceId: "ws-1",
     sessionId: null,
     selectedSourceIds: [],
     ...options,
   };
 
-  const view = render(<WorkspaceChatPane {...props} />);
+  const view = render(<ChatCanvas {...props} />);
 
   await waitFor(() => {
     expect(screen.getByRole("textbox", { name: "工作区对话输入框" })).toBeTruthy();
@@ -36,14 +36,14 @@ export async function renderChatPane(options: RenderChatPaneOptions = {}) {
 
 /** Sync render for streaming/typewriter scenarios that use fake timers. */
 export function renderStreamingChatPane(options: RenderChatPaneOptions = {}) {
-  const props: ComponentProps<typeof WorkspaceChatPane> = {
+  const props: ComponentProps<typeof ChatCanvas> = {
     workspaceId: "ws-1",
     sessionId: null,
     selectedSourceIds: ["doc-1"],
     ...options,
   };
 
-  const view = render(<WorkspaceChatPane {...props} />);
+  const view = render(<ChatCanvas {...props} />);
 
   return {
     ...view,
@@ -80,12 +80,12 @@ export function rerenderChatPane(
   rerender: (ui: ReactElement) => void,
   options: RenderChatPaneOptions = {},
 ) {
-  const props: ComponentProps<typeof WorkspaceChatPane> = {
+  const props: ComponentProps<typeof ChatCanvas> = {
     workspaceId: "ws-1",
     sessionId: null,
     selectedSourceIds: [],
     ...options,
   };
 
-  rerender(<WorkspaceChatPane {...props} />);
+  rerender(<ChatCanvas {...props} />);
 }

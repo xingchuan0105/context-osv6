@@ -384,6 +384,19 @@ pub(crate) async fn process_document_cleanup_task(
     }
     // struct_store 产物（per-doc duckdb + evidence sidecar）随 doc 生命周期删除；best-effort。
     crate::pipeline::remove_struct_store_files(task.document_id);
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "citation tombstones")
+        .await?;
+    let pruned = repo
+        .chunks()
+        .prune_document_citations_to_tombstones(&context, task.document_id)
+        .await?;
+    if pruned > 0 {
+        info!(
+            document_id = %task.document_id,
+            messages_pruned = pruned,
+            "citation tombstones recorded"
+        );
+    }
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "mark document deleted")
         .await?;
     if !repo
@@ -399,7 +412,7 @@ pub(crate) async fn process_document_cleanup_task(
     info!(
         task_id = %task.task_id,
         owner_user_id = %targets.owner_user_id,
-        workspace_id = %targets.workspace_id,
+        workspace_id = ?targets.workspace_id,
         document_id = %targets.document_id,
         status = ?targets.status,
         "document cleanup succeeded"

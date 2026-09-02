@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "../lib/auth/context";
 import { formatUiMessage } from "../lib/i18n/messages";
@@ -21,14 +21,19 @@ function FullscreenMessage({ message }: { message: string }) {
 
 export function ProtectedRouteGate({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { initialized, isAuthenticated } = useAuth();
   const { locale } = useUiPreferences();
+  const query = searchParams.toString();
+  const currentPath = `${pathname}${query ? `?${query}` : ""}`;
+  const loginHref = `/login?next=${encodeURIComponent(currentPath)}`;
 
   useEffect(() => {
     if (initialized && !isAuthenticated) {
-      router.replace("/login");
+      router.replace(loginHref);
     }
-  }, [initialized, isAuthenticated, router]);
+  }, [initialized, isAuthenticated, loginHref, router]);
 
   if (!initialized) {
     return <FullscreenMessage message={formatUiMessage(locale, "gateCheckingSession")} />;
@@ -53,12 +58,12 @@ export function GuestOnlyGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
-      router.replace("/dashboard");
+      router.replace("/chat");
     }
   }, [initialized, isAuthenticated, router]);
 
   if (isAuthenticated) {
-    return <FullscreenMessage message={formatUiMessage(locale, "gateRedirectingDashboard")} />;
+    return <FullscreenMessage message={formatUiMessage(locale, "gateRedirectingChat")} />;
   }
 
   return <>{children}</>;

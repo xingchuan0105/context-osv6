@@ -27,7 +27,7 @@ vi.mock("../../lib/runtime/transport", () => ({
 
 import { mockReducedMotionPreference, resetWorkspaceChatPaneMocks } from "./helpers/workspace-chat-pane.setup";
 
-import { WorkspaceChatPane } from "../../components/workspace/workspace-chat-pane";
+import { ChatCanvas } from "../../components/chat/chat-canvas";
 import { workspaceUiStore } from "../../lib/workspace/ui-store";
 
 beforeEach(() => {
@@ -88,7 +88,7 @@ describe("WorkspaceChatPane markdown", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-search-markdown"
         sessionId="sess-search-markdown"
         selectedSourceIds={[]}
@@ -174,7 +174,7 @@ describe("WorkspaceChatPane markdown", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-global-markdown"
         sessionId="sess-global-markdown"
         selectedSourceIds={["doc-1"]}
@@ -255,7 +255,7 @@ describe("WorkspaceChatPane markdown", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-web-sources"
         sessionId="sess-web-sources"
         selectedSourceIds={["doc-rag"]}
@@ -312,7 +312,7 @@ describe("WorkspaceChatPane markdown", () => {
     });
 
     const { container } = render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-html-sanitize"
         sessionId="sess-html-sanitize"
         selectedSourceIds={[]}
@@ -343,7 +343,7 @@ describe("WorkspaceChatPane markdown", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-markdown-link"
         sessionId="sess-markdown-link"
         selectedSourceIds={[]}

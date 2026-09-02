@@ -48,7 +48,8 @@ impl DocumentRepository {
 
 pub struct CreateDocumentParseRunParams<'a> {
     pub run_id: Uuid,
-    pub workspace_id: Uuid,
+    /// Nullable workspace lineage of the task; scope truth lives in bindings.
+    pub workspace_id: Option<Uuid>,
     pub document_id: Uuid,
     pub backend_summary: &'a serde_json::Value,
     pub artifact_path: Option<&'a str>,
@@ -98,7 +99,6 @@ impl DocumentRepository {
                 FROM documents d
                 WHERE d.id = $4
                   AND d.owner_user_id = $2
-                  AND d.workspace_id = $3
                   AND d.status NOT IN ('deleting', 'deleted')
                 FOR UPDATE
             )
@@ -162,7 +162,6 @@ impl DocumentRepository {
                   FROM documents d
                   WHERE d.id = pr.document_id
                     AND d.owner_user_id = pr.owner_user_id
-                    AND d.workspace_id = pr.workspace_id
                     AND d.status NOT IN ('deleting', 'deleted')
                   FOR UPDATE
               )
@@ -201,7 +200,7 @@ impl DocumentRepository {
     pub async fn replace_document_blocks(
         &self,
         context: &AuthContext,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         document_id: Uuid,
         blocks: &[StoredDocumentBlock],
     ) -> Result<(), PgStorageError> {
@@ -212,14 +211,12 @@ impl DocumentRepository {
             from documents
             where id = $1
               and owner_user_id = $2
-              and workspace_id = $3
               and status not in ('deleting', 'deleted')
             for update
             "#,
         )
         .bind(document_id)
         .bind(context.user_id().into_uuid())
-        .bind(workspace_id)
         .fetch_optional(tx.inner())
         .await?;
         if guard.is_none() {

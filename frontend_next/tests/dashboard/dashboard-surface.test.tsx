@@ -1,8 +1,9 @@
 import type { ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConversationScopeKind } from "../../lib/contracts/generated";
 import { resetDefaultWorkspaceTitleCounters } from "../../lib/dashboard/default-title";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createDashboardSurfaceMocks());
@@ -167,7 +168,30 @@ beforeEach(() => {
       { id: "ws-3", title: "Gamma", description: "" },
     ],
     sessions: [
-      { id: "sess-9", workspace_id: "ws-3", title: "Gamma 调研会话" },
+      {
+        id: "sess-9",
+        owner_user_id: "owner-1",
+        workspace_id: "ws-3",
+        scope_kind: ConversationScopeKind.Workspace,
+        workspace_name: "Gamma",
+        title: "Gamma 调研会话",
+        agent_type: "chat",
+        model_role: "agent",
+        pinned: false,
+        created_at: "2026-04-14T08:00:00Z",
+        updated_at: "2026-04-15T08:00:00Z",
+      },
+      {
+        id: "personal-9",
+        owner_user_id: "owner-1",
+        scope_kind: ConversationScopeKind.Personal,
+        title: "Gamma 个人对话",
+        agent_type: "chat",
+        model_role: "quick_chat",
+        pinned: false,
+        created_at: "2026-04-14T08:00:00Z",
+        updated_at: "2026-04-15T08:00:00Z",
+      },
     ],
     sources: [
       {
@@ -402,9 +426,18 @@ describe("DashboardSurface", () => {
     // Global search hits sessions / workspaces / sources via the product index.
     const gammaLink = await within(searchDialog).findByRole("link", { name: "Gamma" });
     expect(gammaLink.getAttribute("href")).toBe("/dashboard/ws-3");
-    expect(
-      within(searchDialog).getByRole("link", { name: "Gamma 调研会话" }).getAttribute("href"),
-    ).toBe("/dashboard/ws-3?session=sess-9");
+    const workspaceSessionLink = within(searchDialog).getByRole("link", {
+      name: "Gamma 调研会话",
+    });
+    expect(workspaceSessionLink.getAttribute("href")).toBe(
+      "/dashboard/ws-3?session=sess-9",
+    );
+    expect(within(workspaceSessionLink).getByText("Gamma")).toBeTruthy();
+    const personalSessionLink = within(searchDialog).getByRole("link", {
+      name: "Gamma 个人对话",
+    });
+    expect(personalSessionLink.getAttribute("href")).toBe("/chat/personal-9");
+    expect(within(personalSessionLink).getByText("本对话")).toBeTruthy();
     expect(
       within(searchDialog).getByRole("link", { name: "gamma-report.pdf" }).getAttribute("href"),
     ).toContain("/dashboard/ws-3");
@@ -437,5 +470,51 @@ describe("DashboardSurface", () => {
       expect(mocks.deleteWorkspaceMock).toHaveBeenCalledWith("token-123", "ws-2");
       expect(mocks.updateFavoriteWorkspaceIdsMock).toHaveBeenCalledWith("token-123", []);
     });
+  });
+
+  it("does not submit results from the previous search after the query changes", async () => {
+    const user = userEvent.setup();
+    searchProductIndexMock.mockImplementation((_token: string, query: string) => {
+      if (query === "first") {
+        return Promise.resolve({
+          workspaces: [],
+          sessions: [
+            {
+              id: "stale-session",
+              owner_user_id: "owner-1",
+              scope_kind: ConversationScopeKind.Personal,
+              title: "上一轮结果",
+              agent_type: "chat",
+              model_role: "quick_chat",
+              pinned: false,
+              created_at: "2026-04-14T08:00:00Z",
+              updated_at: "2026-04-15T08:00:00Z",
+            },
+          ],
+          sources: [],
+        });
+      }
+      return new Promise(() => {});
+    });
+
+    renderWithQuery(<DashboardSurface />);
+    await screen.findByRole("grid", { name: "工作区卡片" });
+    await user.click(screen.getByRole("button", { name: "全局搜索" }));
+
+    const searchDialog = screen.getByRole("dialog", { name: "全局搜索" });
+    const input = within(searchDialog).getByLabelText("全局搜索");
+    await user.type(input, "first");
+    expect(
+      await within(searchDialog).findByRole("link", { name: "上一轮结果" }),
+    ).toBeTruthy();
+
+    mocks.pushMock.mockClear();
+    fireEvent.change(input, { target: { value: "second" } });
+    expect(
+      within(searchDialog).queryByRole("link", { name: "上一轮结果" }),
+    ).toBeNull();
+    await user.keyboard("{Enter}");
+
+    expect(mocks.pushMock).not.toHaveBeenCalled();
   });
 });

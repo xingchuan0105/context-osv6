@@ -31,7 +31,7 @@ These replace softer “keep compat / leave dead paths / temporary stopgap” ha
 Authoritative map: **`docs/design/PRODUCT_IA.md`**. Audit notes: `docs/design/PRODUCT_IA_AUDIT.md`. Multi-site **discovery** only: `frontend_next/lib/site-map.ts` (do not treat as in-app IA).
 
 1. **IA before pages.** Before adding/changing global nav, top-bar entries, shells, or monetization entry points in `frontend_next`, update `PRODUCT_IA.md` (Jobs / Sitemap / Canonical / Shell). Do not invent a third way to complete the same user task.
-2. **Canonical routes only.** Membership checkout → `/pricing`; wallet top-up → `/pricing#topup`; BYOK → `/settings?tab=providers`; client → `/desktop`. Other CTAs may deep-link; they must not implement a second checkout path. Upgrade modals are marketing explainers, not payment hosts.
+2. **Canonical routes only.** New/personal conversation and auth completion → `/chat`; Workspace overview → `/dashboard`; membership checkout → `/pricing`; wallet top-up → `/pricing#topup`; BYOK → `/settings?tab=providers`; client → `/desktop`. Other CTAs may deep-link; they must not implement a second completion path. Upgrade modals are marketing explainers, not payment hosts.
 3. **Help ≠ primary nav.** Onboarding / product-map content is a modal or `/help`, opened from weak entries (e.g. top-bar「上手」). Never ship a permanent business sidebar of encyclopedia topics beside the workspace list.
 
 ## Prompts — non-negotiable (`avrag-rs`)
@@ -125,8 +125,8 @@ Legacy single-brain SaC union and the 2026-08-07 **three-loop verify path** are 
 | T4 | No C4: Capability / Skill / Tool stay three layers |
 | T5 | Behavior-preserving slices for the **current** contract; verify with targeted `cargo test -p …` / L1 — not a license for dual APIs or compat shims (see Design principles) |
 | T6 | Solo local trunk; no CI theater |
-| T7 | `workspace` is the sole product truth (never new notebook-primary APIs) |
-| T8 | No product `org`: ownership `user_id`/`owner_user_id`, scope `workspace_id` |
+| T7 | `workspace` is the sole reusable/manageable/shareable persistent-knowledge container; user-owned conversations may have no workspace; never add notebook/global-KB primary APIs |
+| T8 | No product `org`: ownership root is `user_id`/`owner_user_id`; conversation resources may scope by `conversation_id`, and only workspace-bound resources require `workspace_id` |
 
 - Execute only via `state.conversation().execute` / `execute_stream`. Sessions/search/citations via `state.agent()`. Documents/workspaces via `state.workspace()`.
 - Fix failures **toward** `workspace` / `user`, never "align back" to `notebook` / `org`.

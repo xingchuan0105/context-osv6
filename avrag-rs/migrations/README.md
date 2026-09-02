@@ -6,6 +6,8 @@ This directory holds the PostgreSQL schema migrations for the Rust rewrite.
 
 - PostgreSQL remains the authority for permissions, versions, audit, and body storage.
 - Tenant root is **`owner_user_id`** (maps to `users.id`). There is **no** `organizations` table and **no** product `org_id`.
+- `chat_sessions.owner_user_id` is always present; `workspace_id` is nullable for user-owned personal conversations.
+- Owner-global recent conversation queries use `idx_chat_sessions_owner_recent`; Workspace-scoped ordering keeps its existing pinned/recent index.
 - Row-level security uses `current_setting('app.current_user', true)` (not `app.current_org`).
 - Every migration must provide both `up` and `down` scripts.
 - New migrations **must not** reintroduce `org_id`, `organizations`, or `app.current_org`.

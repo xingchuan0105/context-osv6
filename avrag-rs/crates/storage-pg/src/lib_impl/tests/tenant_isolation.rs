@@ -5,6 +5,7 @@
 //! parents, and A's data is bit-identical after every rejection. Skips when
 //! DATABASE_URL is unset (same convention as the other live-PG tests here).
 use super::support::*;
+use contracts::workspaces::ConversationScopeKind;
 
 fn ctx_for(user: UserId) -> AuthContext {
     AuthContext::new(user, contracts::auth_runtime::SubjectKind::User)
@@ -53,10 +54,18 @@ async fn cross_tenant_workspace_document_session_all_denied() {
     let doc_id = Uuid::parse_str(&doc.id).unwrap();
     let session = repo
         .sessions()
-        .create_session(&ctx_a, workspace_id, Some("a-session"), "chat")
+        .create_session(
+            &ctx_a,
+            Some(workspace_id),
+            Some("a-session"),
+            "chat",
+            "agent",
+        )
         .await
         .unwrap();
     let session_id = Uuid::parse_str(&session.id).unwrap();
+    assert_eq!(session.scope_kind, ConversationScopeKind::Workspace);
+    assert_eq!(session.workspace_name.as_deref(), Some("tenant-a-ws"));
     let turn = ChatTurn {
         user_content: "tenant-a question",
         assistant_content: "tenant-a answer",
@@ -84,8 +93,7 @@ async fn cross_tenant_workspace_document_session_all_denied() {
         "B must not read A's workspace"
     );
     assert!(
-        repo
-            .list_documents(&ctx_b, Some(workspace_id), None)
+        repo.list_documents(&ctx_b, Some(workspace_id), None)
             .await
             .unwrap()
             .iter()
@@ -118,7 +126,10 @@ async fn cross_tenant_workspace_document_session_all_denied() {
         "B must not read A's message by ID"
     );
     assert!(
-        repo.list_messages(&ctx_b, session_id).await.unwrap().is_empty(),
+        repo.list_messages(&ctx_b, session_id)
+            .await
+            .unwrap()
+            .is_empty(),
         "B must not list A's messages"
     );
     assert!(
@@ -143,7 +154,13 @@ async fn cross_tenant_workspace_document_session_all_denied() {
     // ---- B writes under A's parents: refused (no child row anywhere) ----
     let child = repo
         .sessions()
-        .create_session(&ctx_b, workspace_id, Some("b-under-a"), "chat")
+        .create_session(
+            &ctx_b,
+            Some(workspace_id),
+            Some("b-under-a"),
+            "chat",
+            "agent",
+        )
         .await;
     assert!(
         child.is_err(),
@@ -168,6 +185,12 @@ async fn cross_tenant_workspace_document_session_all_denied() {
         .await
         .unwrap();
     assert!(!deleted, "B must not delete A's session");
+    let renamed = repo
+        .sessions()
+        .update_session(&ctx_b, session_id, Some("hijacked"), Some(true))
+        .await
+        .unwrap();
+    assert!(renamed.is_none(), "B must not update A's session");
     // Cross-tenant get-by-ID yields nothing.
     let doc_seen_by_b = repo
         .list_documents(&ctx_b, None, Some(doc_id))
@@ -190,6 +213,152 @@ async fn cross_tenant_workspace_document_session_all_denied() {
         .unwrap()
         .expect("A's session survived");
     assert_eq!(sess_after.title.as_deref(), Some("a-session"));
+    assert_eq!(sess_after.scope_kind, ConversationScopeKind::Workspace);
+    assert_eq!(sess_after.workspace_name.as_deref(), Some("tenant-a-ws"));
+    let renamed_session = repo
+        .sessions()
+        .update_session(&ctx_a, session_id, Some("a-session-renamed"), Some(true))
+        .await
+        .unwrap()
+        .expect("A can update their session");
+    assert_eq!(renamed_session.title.as_deref(), Some("a-session-renamed"));
+    assert!(renamed_session.pinned);
+    assert_eq!(
+        renamed_session.workspace_name.as_deref(),
+        Some("tenant-a-ws")
+    );
     let msgs = repo.list_messages(&ctx_a, session_id).await.unwrap();
     assert_eq!(msgs.len(), 2, "A's two messages intact");
+}
+
+#[tokio::test]
+async fn personal_session_is_owner_scoped_without_workspace() {
+    let Some(repo) = dual_tenant_repo().await else {
+        return;
+    };
+    let owner_a = UserId::from(Uuid::new_v4());
+    let owner_b = UserId::from(Uuid::new_v4());
+    let ctx_a = ctx_for(owner_a);
+    let ctx_b = ctx_for(owner_b);
+
+    let session = repo
+        .sessions()
+        .create_session(&ctx_a, None, Some("personal-session"), "chat", "quick_chat")
+        .await
+        .unwrap();
+    let session_id = Uuid::parse_str(&session.id).unwrap();
+
+    assert_eq!(session.owner_user_id, owner_a.to_string());
+    assert_eq!(session.workspace_id, None);
+    assert_eq!(session.scope_kind, ConversationScopeKind::Personal);
+    assert_eq!(session.workspace_name, None);
+    assert_eq!(session.model_role, "quick_chat");
+    assert!(
+        repo.sessions()
+            .get_session(&ctx_b, session_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        repo.sessions()
+            .list_sessions(&ctx_b, None)
+            .await
+            .unwrap()
+            .iter()
+            .all(|candidate| candidate.id != session.id)
+    );
+}
+
+#[tokio::test]
+async fn session_listing_is_recent_globally_and_pinned_first_within_workspace() {
+    let Some(repo) = dual_tenant_repo().await else {
+        return;
+    };
+    let owner = UserId::from(Uuid::new_v4());
+    let ctx = ctx_for(owner);
+    let workspace = repo
+        .bootstrap()
+        .create_workspace(&ctx, "session-ordering-ws", "session ordering")
+        .await
+        .unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
+
+    let pinned_older = repo
+        .sessions()
+        .create_session(
+            &ctx,
+            Some(workspace_id),
+            Some("pinned-older"),
+            "chat",
+            "agent",
+        )
+        .await
+        .unwrap();
+    let recent_unpinned = repo
+        .sessions()
+        .create_session(
+            &ctx,
+            Some(workspace_id),
+            Some("recent-unpinned"),
+            "chat",
+            "agent",
+        )
+        .await
+        .unwrap();
+
+    let pinned_older_id = Uuid::parse_str(&pinned_older.id).unwrap();
+    let recent_unpinned_id = Uuid::parse_str(&recent_unpinned.id).unwrap();
+    let mut tx = repo.raw().begin().await.unwrap();
+    sqlx::query("select set_config('app.current_user', $1, true)")
+        .bind(owner.to_string())
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"
+        update chat_sessions
+        set pinned = case when id = $2 then true else false end,
+            created_at = case
+                when id = $2 then '2026-01-01 00:00:00+00'::timestamptz
+                else '2026-01-02 00:00:00+00'::timestamptz
+            end,
+            updated_at = case
+                when id = $2 then '2026-01-01 00:00:00+00'::timestamptz
+                else '2026-01-02 00:00:00+00'::timestamptz
+            end
+        where owner_user_id = $1 and id in ($2, $3)
+        "#,
+    )
+    .bind(owner.into_uuid())
+    .bind(pinned_older_id)
+    .bind(recent_unpinned_id)
+    .execute(tx.as_mut())
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    let global = repo.sessions().list_sessions(&ctx, None).await.unwrap();
+    assert_eq!(
+        global
+            .iter()
+            .map(|session| session.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![recent_unpinned.id.as_str(), pinned_older.id.as_str()],
+        "global recent ignores pinned status"
+    );
+
+    let workspace_sessions = repo
+        .sessions()
+        .list_sessions(&ctx, Some(workspace_id))
+        .await
+        .unwrap();
+    assert_eq!(
+        workspace_sessions
+            .iter()
+            .map(|session| session.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![pinned_older.id.as_str(), recent_unpinned.id.as_str()],
+        "workspace list keeps pinned sessions first"
+    );
 }

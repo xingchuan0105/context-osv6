@@ -6,14 +6,13 @@ import { ContextOsMark } from "./context-os-mark";
 import { AccountMenu } from "./account-menu";
 import { NotificationBell } from "./notifications/notification-bell";
 import { ShareAccessMenu } from "./share-access-menu";
-import { brandHomeHref } from "./product-chrome-footer";
 import { appNavHref } from "../lib/navigation/nav-config";
 import { type DashboardLocale } from "../lib/dashboard/model";
 import { formatUiMessage } from "../lib/i18n/messages";
 
 /**
  * Global App top bar (PRODUCT_IA §5): brand · 分享组(访问/API/升级) · 通知 ·
- * 账户. No 工作台|设置 wayfinding (brand returns to dashboard, settings lives
+ * 账户. No 工作台|设置 wayfinding (brand starts a personal chat, settings lives
  * in the account menu); no 客户端/升级 capsules. Rendered by the dashboard and
  * every deep tool page (analytics / share center / api-access / usage / help)
  * — deep pages must never ship a bare back link as their only way out.
@@ -26,33 +25,20 @@ export function AppTopBar({
   /** Opens onboarding product map modal (not primary nav). */
   onOpenGuide?: () => void;
 }) {
-  const brandHref = brandHomeHref();
-  const brandIsExternal = /^https?:\/\//i.test(brandHref);
+  const chatHref = appNavHref("chat");
 
   return (
     <header className="dashboard-header">
       <div className="dashboard-brand">
-        {brandIsExternal ? (
-          <a
-            className="dashboard-brand-link"
-            href={brandHref}
-            rel="noopener noreferrer"
-            target="_blank"
-            title={formatUiMessage(locale, "productChrome.brandHome")}
-          >
-            <ContextOsMark size={36} className="dashboard-brand-mark" />
-          </a>
-        ) : (
-          <Link
-            className="dashboard-brand-link"
-            href={brandHref}
-            title={formatUiMessage(locale, "productChrome.brandHome")}
-          >
-            <ContextOsMark size={36} className="dashboard-brand-mark" />
-          </Link>
-        )}
+        <Link
+          className="dashboard-brand-link"
+          href={chatHref}
+          title={formatUiMessage(locale, "chat.newConversation")}
+        >
+          <ContextOsMark size={36} className="dashboard-brand-mark" />
+        </Link>
         <div>
-          <Link className="dashboard-brand-title" href={appNavHref("dashboard")}>
+          <Link className="dashboard-brand-title" href={chatHref}>
             Context-OS
           </Link>
           <div className="dashboard-brand-subtitle">{formatUiMessage(locale, "dashboardBrandSubtitle")}</div>

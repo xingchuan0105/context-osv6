@@ -18,7 +18,7 @@ import { settingsKeys } from "./settings-shared";
 import shared from "./settings-ui-shared.module.css";
 import styles from "./settings-providers-panel.module.css";
 
-type Purpose = "llm" | "embedding" | "rerank";
+type Purpose = "llm" | "embedding" | "rerank" | "quick_chat";
 
 type SlotTarget = {
   purpose: Purpose;
@@ -48,6 +48,15 @@ const FIXED_ROWS = [
     typeKey: "settingsProvider.type.parseLlm" as const,
     modelKey: "settingsProvider.model.bailian" as const,
     targets: [{ purpose: "llm" as Purpose, modelHint: "qwen3.7-flash" }],
+  },
+  {
+    id: "quick_chat",
+    provider: "bailian",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    websiteUrl: "https://bailian.console.aliyun.com/",
+    typeKey: "settingsProvider.type.quickChat" as const,
+    modelKey: "settingsProvider.model.quickChat" as const,
+    targets: [{ purpose: "quick_chat" as Purpose, modelHint: "qwen3.8-flash" }],
   },
   {
     id: "siliconflow",

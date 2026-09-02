@@ -131,6 +131,15 @@ pub struct Citation {
     pub source_locator: Option<serde_json::Value>,
     #[serde(default)]
     pub parse_run_id: Option<String>,
+    /// Which visible scope the cited artifact came from (chat-first W2):
+    /// `session` (conversation file) or `workspace` (workspace material).
+    /// Absent on historical citations recorded before W2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_scope: Option<String>,
+    /// Tombstone marker (W2e): the cited source was deleted; the stored
+    /// citation keeps only irreducible facts and must not be re-resolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub citation_status: Option<String>,
 }
 
 #[derive(TS, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -36,11 +36,14 @@ impl ChunkRepository {
         let rows = if segmented_query.is_empty() {
             sqlx::query(
                 r#"
-                select id, workspace_id, title, agent_type, pinned, created_at, updated_at
-                from chat_sessions
-                where owner_user_id = $2
-                  and title ilike $1
-                order by updated_at desc, created_at desc
+                select s.id, s.owner_user_id, s.workspace_id, w.title as workspace_name,
+                       s.title, s.agent_type, s.model_role, s.pinned, s.created_at, s.updated_at
+                from chat_sessions s
+                left join workspaces w
+                  on w.id = s.workspace_id and w.owner_user_id = s.owner_user_id
+                where s.owner_user_id = $2
+                  and s.title ilike $1
+                order by s.updated_at desc, s.created_at desc
                 limit 50
                 "#,
             )
@@ -51,8 +54,12 @@ impl ChunkRepository {
         } else {
             sqlx::query(
                 r#"
-                select distinct s.id, s.workspace_id, s.title, s.agent_type, s.pinned, s.created_at, s.updated_at
+                select distinct s.id, s.owner_user_id, s.workspace_id,
+                       w.title as workspace_name, s.title, s.agent_type, s.model_role,
+                       s.pinned, s.created_at, s.updated_at
                 from chat_sessions s
+                left join workspaces w
+                  on w.id = s.workspace_id and w.owner_user_id = s.owner_user_id
                 where s.owner_user_id = $3
                   and (s.title ilike $1
                    or exists (
@@ -86,7 +93,7 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select d.id, d.workspace_id, n.title as workspace_name, d.file_name, d.status,
+            select d.id, wb.workspace_id, n.title as workspace_name, d.file_name, d.status,
                    (
                      select t.last_error
                      from ingestion_tasks t
@@ -97,9 +104,11 @@ impl ChunkRepository {
                      limit 1
                    ) as last_error
             from documents d
-            join workspaces n on n.id = d.workspace_id
+            join workspace_document_bindings wb on wb.artifact_id = d.id
+            join workspaces n on n.id = wb.workspace_id
             where d.owner_user_id = $2
               and n.owner_user_id = d.owner_user_id
+              and wb.owner_user_id = d.owner_user_id
               and d.file_name ilike $1
               and d.status not in ('deleting', 'deleted')
             order by d.updated_at desc, d.created_at desc

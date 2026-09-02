@@ -27,7 +27,7 @@ pub enum PgStorageError {
 pub struct DocumentTaskSeed {
     pub document_id: String,
     pub owner_user_id: String,
-    pub workspace_id: String,
+    pub workspace_id: Option<String>,
     pub filename: String,
     pub mime_type: String,
     pub file_size: u64,
@@ -74,7 +74,7 @@ pub enum DocumentCleanupTaskFailureOutcome {
 pub struct DocumentCleanupTask {
     pub task_id: Uuid,
     pub owner_user_id: Uuid,
-    pub workspace_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub document_id: Uuid,
     pub requested_by: Option<Uuid>,
     pub idempotency_key: String,
@@ -87,7 +87,7 @@ pub struct DocumentCleanupTask {
 #[derive(Debug, Clone)]
 pub struct DocumentCleanupTargets {
     pub owner_user_id: Uuid,
-    pub workspace_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub document_id: Uuid,
     pub status: DocumentStatus,
     pub object_path: Option<String>,
@@ -143,7 +143,7 @@ pub fn map_notebook(row: PgRow) -> Result<Workspace, PgStorageError> {
 pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let owner_user_id: Uuid = row.try_get("owner_user_id")?;
-    let workspace_id: Uuid = row.try_get("workspace_id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id")?;
     let file_name: String = row.try_get("file_name")?;
     let mime_type: Option<String> = row.try_get("mime_type")?;
     let file_size: i64 = row.try_get("file_size")?;
@@ -154,7 +154,7 @@ pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     Ok(Document {
         id: id.to_string(),
         owner_user_id: owner_user_id.to_string(),
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id.map(|value| value.to_string()),
         owner_id: String::new(),
         file_name,
         mime_type: mime_type.unwrap_or_default(),
@@ -168,17 +168,28 @@ pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
 
 pub fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
-    let workspace_id: Uuid = row.try_get("workspace_id")?;
+    let owner_user_id: Uuid = row.try_get("owner_user_id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id")?;
+    let workspace_name: Option<String> = row.try_get("workspace_name")?;
     let title: Option<String> = row.try_get("title")?;
     let agent_type: String = row.try_get("agent_type")?;
+    let model_role: String = row.try_get("model_role")?;
     let pinned: bool = row.try_get("pinned").unwrap_or(false);
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
     let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
     Ok(ChatSession {
         id: id.to_string(),
-        workspace_id: workspace_id.to_string(),
+        owner_user_id: owner_user_id.to_string(),
+        scope_kind: if workspace_id.is_some() {
+            contracts::workspaces::ConversationScopeKind::Workspace
+        } else {
+            contracts::workspaces::ConversationScopeKind::Personal
+        },
+        workspace_id: workspace_id.map(|value| value.to_string()),
+        workspace_name,
         title,
         agent_type,
+        model_role,
         pinned,
         created_at: created_at.to_rfc3339(),
         updated_at: updated_at.to_rfc3339(),
@@ -195,8 +206,9 @@ pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     let answer_blocks_value: serde_json::Value =
         row.try_get("answer_blocks").unwrap_or_else(|_| json!([]));
     let answer_blocks = if role == "assistant" {
-        let parsed = serde_json::from_value::<Vec<contracts::chat::AnswerBlock>>(answer_blocks_value)
-            .unwrap_or_default();
+        let parsed =
+            serde_json::from_value::<Vec<contracts::chat::AnswerBlock>>(answer_blocks_value)
+                .unwrap_or_default();
         if parsed.is_empty() {
             common::answer_blocks_from_rendered_answer(&content, &citations)
         } else {
@@ -215,7 +227,9 @@ pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     let turn_metadata_value: serde_json::Value =
         row.try_get("turn_metadata").unwrap_or_else(|_| json!({}));
     let turn_metadata = if turn_metadata_value.is_null()
-        || turn_metadata_value.as_object().is_some_and(|m| m.is_empty())
+        || turn_metadata_value
+            .as_object()
+            .is_some_and(|m| m.is_empty())
     {
         None
     } else {
@@ -311,7 +325,9 @@ pub fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
         preferred_answer_style: row.try_get("preferred_answer_style").ok(),
         frequently_asked_topics,
         custom_preferences: row.try_get("custom_preferences")?,
-        structured_profile: row.try_get("structured_profile").unwrap_or_else(|_| serde_json::json!({})),
+        structured_profile: row
+            .try_get("structured_profile")
+            .unwrap_or_else(|_| serde_json::json!({})),
         inferred_at,
         inference_version: row.try_get("inference_version")?,
     })
@@ -341,7 +357,7 @@ pub fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
 pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
     let document_id: Uuid = row.try_get("id")?;
     let owner_user_id: Uuid = row.try_get("owner_user_id")?;
-    let workspace_id: Uuid = row.try_get("workspace_id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id")?;
     let filename: String = row.try_get("file_name")?;
     let mime_type: Option<String> = row.try_get("mime_type")?;
     let file_size: i64 = row.try_get("file_size")?;
@@ -350,7 +366,7 @@ pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageE
     Ok(DocumentTaskSeed {
         document_id: document_id.to_string(),
         owner_user_id: owner_user_id.to_string(),
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id.map(|value| value.to_string()),
         filename,
         mime_type: mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
         file_size: u64::try_from(file_size).unwrap_or_default(),
@@ -359,7 +375,9 @@ pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageE
     })
 }
 
-pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation, PgStorageError> {
+pub fn map_document_upload_validation(
+    row: PgRow,
+) -> Result<DocumentUploadValidation, PgStorageError> {
     let upload_size_bytes: Option<i64> = row.try_get("upload_size_bytes")?;
     Ok(DocumentUploadValidation {
         upload_size_bytes: upload_size_bytes.and_then(|value| u64::try_from(value).ok()),
@@ -372,7 +390,7 @@ pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValida
 pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     let task_id: Uuid = row.try_get("task_id")?;
     let owner_user_id: Uuid = row.try_get("owner_user_id")?;
-    let workspace_id: Uuid = row.try_get("workspace_id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id")?;
     let document_id: Uuid = row.try_get("document_id")?;
     let kind: String = row.try_get("kind")?;
     let requested_by: Option<Uuid> = row.try_get("requested_by")?;
@@ -383,7 +401,7 @@ pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
         task_id: task_id.to_string(),
         kind: parse_ingestion_kind(&kind),
         owner_user_id: owner_user_id.to_string(),
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id.map(|value| value.to_string()),
         document_id: document_id.to_string(),
         requested_by: requested_by.map(|value| value.to_string()),
         idempotency_key: row.try_get("idempotency_key")?,
@@ -391,7 +409,9 @@ pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
         payload: serde_json::from_value::<IngestionTaskPayload>(payload)?,
         lock_token: lock_token.map(|value| value.to_string()),
         attempt_count: row.try_get("attempt_count").unwrap_or(0),
-        max_attempts: row.try_get("max_attempts").unwrap_or(ingestion_types::DEFAULT_MAX_ATTEMPTS),
+        max_attempts: row
+            .try_get("max_attempts")
+            .unwrap_or(ingestion_types::DEFAULT_MAX_ATTEMPTS),
     })
 }
 

@@ -55,9 +55,12 @@ type ChatComposerProps = {
   draft: string;
   onDraftChange: (draft: string) => void;
   isStreaming: boolean;
+  /** Existing context is unavailable (for example while history is loading). */
+  disabled?: boolean;
   capabilities: WorkspaceCapability[];
   locale: "zh-CN" | "en";
-  workspaceId: string;
+  composerId: string;
+  composerLabel: string;
   /** No sources selected: RAG chip disabled + hint (2026-07-18 product rule). */
   ragDisabled?: boolean;
   /** Selected source count for the knowledge-base badge / mode line. */
@@ -84,9 +87,11 @@ export function ChatComposer({
   draft,
   onDraftChange,
   isStreaming,
+  disabled = false,
   capabilities,
   locale,
-  workspaceId,
+  composerId,
+  composerLabel,
   ragDisabled = false,
   selectedSourceCount = 0,
   onRequestGuideSources,
@@ -295,6 +300,7 @@ export function ChatComposer({
         role="separator"
         tabIndex={0}
         type="button"
+        disabled={disabled || isStreaming}
       >
         <span className={styles.composerResizeGrip} aria-hidden="true" />
       </button>
@@ -306,15 +312,15 @@ export function ChatComposer({
           onSubmit();
         }}
       >
-        <label className={styles.srOnly} htmlFor={`workspace-chat-composer-${workspaceId}`}>
-          {formatUiMessage(locale, "workspaceChatComposerLabel")}
+        <label className={styles.srOnly} htmlFor={`workspace-chat-composer-${composerId}`}>
+          {composerLabel}
         </label>
 
         <textarea
           className={styles.textarea}
           data-testid="workspace-chat-composer"
-          disabled={isStreaming}
-          id={`workspace-chat-composer-${workspaceId}`}
+          disabled={disabled || isStreaming}
+          id={`workspace-chat-composer-${composerId}`}
           onChange={(event) => {
             onDraftChange(event.target.value);
           }}
@@ -335,7 +341,7 @@ export function ChatComposer({
             >
               {capabilityToggles.map((cap) => {
                 const pressed = capabilities.includes(cap.id);
-                const disabled = lockCapabilities;
+                const capabilityDisabled = lockCapabilities || disabled || isStreaming;
                 const badge =
                   cap.id === "rag" && pressed && selectedSourceCount > 0
                     ? selectedSourceCount
@@ -347,7 +353,7 @@ export function ChatComposer({
                     className={`${styles.capTag}${pressed ? ` ${styles.capTagPressed}` : ""}`}
                     data-testid={cap.testId}
                     aria-pressed={pressed}
-                    disabled={disabled}
+                    disabled={capabilityDisabled}
                     title={lockCapabilities ? formatUiMessage(locale, "sharedPublic.ragLockedHint") : undefined}
                     onClick={() => handleToggleCapability(cap.id)}
                   >
@@ -393,7 +399,7 @@ export function ChatComposer({
               aria-label={formatUiMessage(locale, "workspaceSend")}
               className={styles.sendButton}
               data-testid="workspace-chat-send"
-              disabled={draft.trim().length === 0}
+              disabled={disabled || draft.trim().length === 0}
               type="submit"
             >
               <IconSend className={styles.sendIcon} />

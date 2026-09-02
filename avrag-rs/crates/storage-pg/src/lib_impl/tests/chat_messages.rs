@@ -8,7 +8,9 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
     migration_role_context();
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -18,17 +20,20 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_workspace(&ctx, "tool-results-test", "tool results test")
+        .bootstrap()
+        .create_workspace(&ctx, "tool-results-test", "tool results test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
 
     let session = repo
-        .sessions().create_session(
+        .sessions()
+        .create_session(
             &ctx,
-            workspace_id,
+            Some(workspace_id),
             Some("test-session-title"),
             "rag",
+            "agent",
         )
         .await
         .unwrap();
@@ -52,7 +57,8 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
     ];
 
     let message_id = repo
-        .sessions().append_chat_turn(
+        .sessions()
+        .append_chat_turn(
             &ctx,
             session_id,
             &ChatTurn {
@@ -79,13 +85,19 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
 
     assert_eq!(assistant_message.tool_results.len(), 2);
     assert_eq!(assistant_message.tool_results[0].tool, "calculator");
-    assert_eq!(assistant_message.tool_results[0].status, contracts::ToolStatus::Ok);
+    assert_eq!(
+        assistant_message.tool_results[0].status,
+        contracts::ToolStatus::Ok
+    );
     assert_eq!(
         assistant_message.tool_results[0].data.as_ref().unwrap()["result"],
         42.0
     );
     assert_eq!(assistant_message.tool_results[1].tool, "code_interpreter");
-    assert_eq!(assistant_message.tool_results[1].status, contracts::ToolStatus::Error);
+    assert_eq!(
+        assistant_message.tool_results[1].status,
+        contracts::ToolStatus::Error
+    );
     assert_eq!(
         assistant_message.tool_results[1].data.as_ref().unwrap()["error"],
         "SyntaxError"
@@ -99,7 +111,9 @@ async fn chat_message_turn_metadata_roundtrip_when_database_available() {
     };
     let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
     __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo = PgAppRepository {
+        pool: __bootstrap.pool.clone(),
+    };
     repo.bootstrap().migrate().await.unwrap();
 
     let owner_user_id = UserId::from(Uuid::new_v4());
@@ -107,12 +121,20 @@ async fn chat_message_turn_metadata_roundtrip_when_database_available() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let notebook = repo
-        .bootstrap().create_workspace(&ctx, "turn-metadata-test", "turn metadata test")
+        .bootstrap()
+        .create_workspace(&ctx, "turn-metadata-test", "turn metadata test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
     let session = repo
-        .sessions().create_session(&ctx, workspace_id, Some("meta-session"), "rag")
+        .sessions()
+        .create_session(
+            &ctx,
+            Some(workspace_id),
+            Some("meta-session"),
+            "rag",
+            "agent",
+        )
         .await
         .unwrap();
     let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -127,7 +149,8 @@ async fn chat_message_turn_metadata_roundtrip_when_database_available() {
     });
 
     let message_id = repo
-        .sessions().append_chat_turn(
+        .sessions()
+        .append_chat_turn(
             &ctx,
             session_id,
             &ChatTurn {
@@ -165,4 +188,3 @@ async fn chat_message_turn_metadata_roundtrip_when_database_available() {
     );
     assert!(message_id > 0);
 }
-

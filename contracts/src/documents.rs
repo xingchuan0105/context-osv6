@@ -52,7 +52,10 @@ pub struct DocumentStatusResponse {
 pub struct Document {
     pub id: String,
     pub owner_user_id: String,
-    pub workspace_id: String,
+    /// Workspace binding of the artifact when one exists; session-bound
+    /// artifacts (chat-first W2) have none. Binding tables are the scope truth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
     pub owner_id: String,
     pub file_name: String,
     pub mime_type: String,
@@ -125,6 +128,26 @@ pub struct SourceRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcesResponse {
     pub sources: Vec<SourceRow>,
+}
+
+/// One session-bound artifact as seen from its Conversation (chat-first W2).
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionFileRow {
+    pub binding_id: String,
+    pub document_id: String,
+    pub file_name: String,
+    pub mime_type: String,
+    #[typeshare(serialized_as = "number")]
+    pub file_size: u64,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionFilesResponse {
+    pub files: Vec<SessionFileRow>,
 }
 
 #[typeshare]

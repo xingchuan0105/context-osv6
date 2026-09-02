@@ -435,7 +435,7 @@ export async function listProviderSecrets(token: string) {
 export async function upsertProviderSecret(
   token: string,
   body: {
-    purpose: "llm" | "embedding" | "rerank";
+    purpose: "llm" | "embedding" | "rerank" | "quick_chat";
     provider: string;
     api_key: string;
     base_url?: string;

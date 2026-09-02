@@ -31,11 +31,18 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, owner_user_id, workspace_id, status, object_path
-            from documents
-            where id = $1
-              and owner_user_id = $2
-              and status in ('deleting', 'deleted')
+            select d.id, d.owner_user_id, wb.workspace_id, d.status, d.object_path
+            from documents d
+            left join lateral (
+                select b.workspace_id
+                from workspace_document_bindings b
+                where b.artifact_id = d.id
+                order by b.created_at asc, b.id asc
+                limit 1
+            ) wb on true
+            where d.id = $1
+              and d.owner_user_id = $2
+              and d.status in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
@@ -47,21 +54,19 @@ impl ChunkRepository {
             return Ok(None);
         };
         let owner_user_id: Uuid = row.try_get("owner_user_id")?;
-        let workspace_id: Uuid = row.try_get("workspace_id")?;
+        let workspace_id: Option<Uuid> = row.try_get("workspace_id")?;
 
         let asset_rows = sqlx::query(
             r#"
             select storage_path
             from document_assets
             where owner_user_id = $1
-              and workspace_id = $2
-              and document_id = $3
+              and document_id = $2
               and storage_path is not null
             order by created_at asc, asset_id asc
             "#,
         )
         .bind(owner_user_id)
-        .bind(workspace_id)
         .bind(document_id)
         .fetch_all(tx.inner())
         .await?;
@@ -100,7 +105,7 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select owner_user_id, workspace_id
+            select owner_user_id
             from documents
             where id = $1
               and owner_user_id = $2
@@ -117,29 +122,25 @@ impl ChunkRepository {
             return Ok(false);
         };
         let owner_user_id: Uuid = row.try_get("owner_user_id")?;
-        let workspace_id: Uuid = row.try_get("workspace_id")?;
 
         sqlx::query(
-            "delete from document_multimodal_chunks where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_multimodal_chunks where owner_user_id = $1 and document_id = $2",
         )
         .bind(owner_user_id)
-        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         sqlx::query(
-            "delete from document_assets where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_assets where owner_user_id = $1 and document_id = $2",
         )
         .bind(owner_user_id)
-        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         sqlx::query(
-            "delete from document_blocks where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_blocks where owner_user_id = $1 and document_id = $2",
         )
         .bind(owner_user_id)
-        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
@@ -149,15 +150,60 @@ impl ChunkRepository {
             .execute(tx.inner())
             .await?;
         sqlx::query(
-            "delete from document_parse_runs where owner_user_id = $1 and workspace_id = $2 and document_id = $3",
+            "delete from document_parse_runs where owner_user_id = $1 and document_id = $2",
         )
         .bind(owner_user_id)
-        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         tx.commit().await?;
         Ok(true)
+    }
+
+    /// W2e citation tombstones: after a document's content stores are cleaned,
+    /// prune its citations out of historical chat messages. Each stored citation
+    /// keeps only irreducible facts (doc_id, name, page, ids); content-bearing
+    /// keys are removed and `citation_status` marks the source as deleted.
+    pub async fn prune_document_citations_to_tombstones(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<u64, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(tx.inner())
+            .await?;
+        let result = sqlx::query(
+            r#"
+            update chat_messages m
+            set citations = sub.pruned
+            from (
+                select m2.id as message_id,
+                       coalesce(
+                           jsonb_agg(
+                               case
+                                   when c ->> 'doc_id' = $1::text
+                                       then (c - 'content' - 'preview' - 'image_url' - 'asset_id')
+                                            || '{"citation_status": "source_deleted"}'::jsonb
+                                   else c
+                               end
+                               order by ord
+                           ),
+                           '[]'::jsonb
+                       ) as pruned
+                from chat_messages m2
+                cross join lateral jsonb_array_elements(m2.citations) with ordinality as t(c, ord)
+                where m2.citations @> jsonb_build_array(jsonb_build_object('doc_id', $1::text))
+                group by m2.id
+            ) sub
+            where m.id = sub.message_id
+            "#,
+        )
+        .bind(document_id.to_string())
+        .execute(tx.inner())
+        .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected())
     }
 
     pub async fn mark_document_deleted(
@@ -220,7 +266,6 @@ impl ChunkRepository {
 pub async fn insert_document_cleanup_task(
     tx: &mut PgConnection,
     owner_user_id: Uuid,
-    workspace_id: Uuid,
     document_id: Uuid,
     requested_by: Option<Uuid>,
     row: &PgRow,
@@ -233,7 +278,6 @@ pub async fn insert_document_cleanup_task(
     let idempotency_key = format!("document-cleanup:{owner_user_id}:{document_id}");
     let payload = json!({
         "owner_user_id": owner_user_id.to_string(),
-        "workspace_id": workspace_id.to_string(),
         "document_id": document_id.to_string(),
         "file_name": file_name,
         "mime_type": mime_type.unwrap_or_default(),
@@ -247,12 +291,11 @@ pub async fn insert_document_cleanup_task(
         insert into document_cleanup_tasks (
             owner_user_id, workspace_id, document_id, requested_by, idempotency_key, payload
         )
-        values ($1, $2, $3, $4, $5, $6)
+        values ($1, null, $2, $3, $4, $5)
         on conflict (idempotency_key) do nothing
         "#,
     )
     .bind(owner_user_id)
-    .bind(workspace_id)
     .bind(document_id)
     .bind(requested_by)
     .bind(idempotency_key)

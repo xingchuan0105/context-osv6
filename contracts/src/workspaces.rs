@@ -53,13 +53,27 @@ pub struct UpdateWorkspaceRequest {
 }
 
 #[typeshare]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationScopeKind {
+    Personal,
+    Workspace,
+}
+
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatSession {
     pub id: String,
-    pub workspace_id: String,
-    #[serde(default)]
+    pub owner_user_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub scope_kind: ConversationScopeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub agent_type: String,
+    pub model_role: String,
     #[serde(default)]
     pub pinned: bool,
     pub created_at: String,
@@ -75,19 +89,20 @@ pub struct ChatSessionListResponse {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateChatSessionRequest {
-    pub workspace_id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default = "default_rag_agent")]
-    pub agent_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct UpdateChatSessionRequest {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pinned: Option<bool>,
 }
 
@@ -267,8 +282,4 @@ pub struct WorkspaceAnalysisResponse {
     pub notes: WorkspaceAnalysisNotes,
     pub access: WorkspaceAnalysisAccess,
     pub alerts: Vec<WorkspaceAnalysisAlert>,
-}
-
-fn default_rag_agent() -> String {
-    "rag".to_string()
 }

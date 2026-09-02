@@ -132,8 +132,8 @@ fn bundle_with_stable_citation_ids() -> (RetrievalBundle, BackendTrace, Coverage
         parser_backend: None,
         source_locator: None,
         parse_run_id: None,
-            cursor: None,
-            member_chunk_ids: vec![],
+        source_scope: None,
+        citation_status: None,
     };
 
     let bundle = RetrievalBundle {

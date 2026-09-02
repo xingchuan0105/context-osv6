@@ -35,16 +35,17 @@ impl ConversationMemoryRepository {
             .map(|actor| actor.into_uuid())
             .ok_or_else(|| PgStorageError::NotFound("authenticated user required".to_string()))?;
 
-        let recent = self.load_recent_messages(
-            auth,
-            session_id,
-            workspace_id,
-            user_id,
-            scope,
-            RECENT_CANDIDATE_LIMIT,
-            exclude_message_ids,
-        )
-        .await?;
+        let recent = self
+            .load_recent_messages(
+                auth,
+                session_id,
+                workspace_id,
+                user_id,
+                scope,
+                RECENT_CANDIDATE_LIMIT,
+                exclude_message_ids,
+            )
+            .await?;
 
         let segmented_query = segment_for_fts(query);
         let fts = if segmented_query.is_empty() {
@@ -79,7 +80,7 @@ impl ConversationMemoryRepository {
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-    ) -> Result<Uuid, PgStorageError> {
+    ) -> Result<Option<Uuid>, PgStorageError> {
         let mut tx = self.pool.begin(auth).await?;
         let row = sqlx::query(
             r#"
@@ -93,24 +94,22 @@ impl ConversationMemoryRepository {
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
-        let workspace_id = row
-            .and_then(|r| r.try_get::<Uuid, _>("workspace_id").ok())
-            .ok_or_else(|| PgStorageError::NotFound("session not found".to_string()))?;
-        Ok(workspace_id)
+        let row = row.ok_or_else(|| PgStorageError::NotFound("session not found".to_string()))?;
+        Ok(row.try_get("workspace_id")?)
     }
 
     async fn load_recent_messages(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         user_id: Uuid,
         scope: ConversationHistoryScope,
         limit: i64,
         exclude_message_ids: &[i64],
     ) -> Result<Vec<ConversationHistoryHit>, PgStorageError> {
         let mut tx = self.pool.begin(auth).await?;
-        let rows = if scope == ConversationHistoryScope::Session {
+        let rows = if scope == ConversationHistoryScope::Session || workspace_id.is_none() {
             sqlx::query(
                 r#"
                 select m.id as message_id, m.session_id, m.role, m.content, m.created_at
@@ -161,7 +160,7 @@ impl ConversationMemoryRepository {
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         user_id: Uuid,
         scope: ConversationHistoryScope,
         segmented_query: &str,
@@ -169,7 +168,7 @@ impl ConversationMemoryRepository {
         exclude_message_ids: &[i64],
     ) -> Result<Vec<ConversationHistoryHit>, PgStorageError> {
         let mut tx = self.pool.begin(auth).await?;
-        let rows = if scope == ConversationHistoryScope::Session {
+        let rows = if scope == ConversationHistoryScope::Session || workspace_id.is_none() {
             sqlx::query(
                 r#"
                 select m.id as message_id, m.session_id, m.role, m.content, m.created_at,
@@ -223,7 +222,9 @@ impl ConversationMemoryRepository {
     }
 }
 
-pub fn map_history_hit(row: sqlx::postgres::PgRow) -> Result<ConversationHistoryHit, PgStorageError> {
+pub fn map_history_hit(
+    row: sqlx::postgres::PgRow,
+) -> Result<ConversationHistoryHit, PgStorageError> {
     Ok(ConversationHistoryHit {
         message_id: row.try_get("message_id")?,
         session_id: row.try_get("session_id")?,
@@ -244,47 +245,59 @@ impl ConversationMemoryRepository {
     /// cross-owner maintenance sweep must run under the admin GUC to see all
     /// rows; only the migrator DSN ever reaches this method.
     pub async fn resegment_chat_message_search_tokens(&self) -> Result<u64, PgStorageError> {
-        // Pool-level maintenance sweep: set the admin GUC on every connection
-        // this pool hands out for the duration of the job.
-        sqlx::query("select set_config('app.current_role', 'super_admin', false)")
-            .execute(self.pool.raw())
-            .await?;
-        let rows = sqlx::query(
-            r#"
-            select id, content, resolved_query, role
-            from chat_messages
-            where coalesce(content, '') <> ''
-            order by id
-            "#,
-        )
-        .fetch_all(self.pool.raw())
-        .await?;
-
-        let mut updated = 0u64;
-        for row in rows {
-            let id: i64 = row.try_get("id")?;
-            let content: String = row.try_get("content")?;
-            let resolved_query: Option<String> = row.try_get("resolved_query")?;
-            let role: String = row.try_get("role")?;
-            let tokens = if role == "user" {
-                build_user_message_search_tokens(&content, resolved_query.as_deref())
-            } else {
-                build_user_message_search_tokens(&content, None)
-            };
-            let result = sqlx::query(
+        // Maintenance sweep: run on ONE checked-out connection and restore the
+        // admin GUC when done — a session-level set_config left behind would
+        // let every later tenant transaction on this pooled connection bypass
+        // the policy's admin branch (caught by document_bindings RLS test).
+        let mut conn = self.pool.raw().acquire().await?;
+        let sweep = async {
+            sqlx::query("select set_config('app.current_role', 'super_admin', false)")
+                .execute(&mut *conn)
+                .await?;
+            let rows = sqlx::query(
                 r#"
-                update chat_messages
-                set search_tokens = $2
-                where id = $1
-                  and search_tokens is distinct from $2
+                select id, content, resolved_query, role
+                from chat_messages
+                where coalesce(content, '') <> ''
+                order by id
                 "#,
             )
-            .bind(id)
-            .bind(tokens)
-            .execute(self.pool.raw())
+            .fetch_all(&mut *conn)
             .await?;
-            updated += result.rows_affected();
-        }
-        Ok(updated)
+
+            let mut updated = 0u64;
+            for row in rows {
+                let id: i64 = row.try_get("id")?;
+                let content: String = row.try_get("content")?;
+                let resolved_query: Option<String> = row.try_get("resolved_query")?;
+                let role: String = row.try_get("role")?;
+                let tokens = if role == "user" {
+                    build_user_message_search_tokens(&content, resolved_query.as_deref())
+                } else {
+                    build_user_message_search_tokens(&content, None)
+                };
+                let result = sqlx::query(
+                    r#"
+                    update chat_messages
+                    set search_tokens = $2
+                    where id = $1
+                      and search_tokens is distinct from $2
+                    "#,
+                )
+                .bind(id)
+                .bind(tokens)
+                .execute(&mut *conn)
+                .await?;
+                updated += result.rows_affected();
+            }
+            Ok::<u64, PgStorageError>(updated)
+        };
+        let outcome = sweep.await;
+        // '' restores the unset semantics the tenant policies expect
+        // (NULLIF(current_setting('app.current_role', true), '')).
+        let _ = sqlx::query("select set_config('app.current_role', '', false)")
+            .execute(&mut *conn)
+            .await;
+        outcome
     }
 }

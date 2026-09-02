@@ -98,7 +98,7 @@ test.describe("Registration consent enforcement (P0-CON-1)", () => {
     await expect(alert.first()).toBeVisible();
   });
 
-  test("register with consent navigates to /dashboard", async ({ page }) => {
+  test("register with consent navigates to /chat", async ({ page }) => {
     await page.goto("/register");
     const email = `e2e-${Date.now()}@test.local`;
     await page.locator("#register-email").fill(email);
@@ -107,7 +107,7 @@ test.describe("Registration consent enforcement (P0-CON-1)", () => {
     await page.locator("#register-name").fill("Consent E2E");
     await page.locator(".consent-input").check();
     await page.getByRole("button", { name: /创建账号|Create account/i }).click();
-    await page.waitForURL(/\/dashboard$/, { timeout: 15_000 });
+    await page.waitForURL(/\/chat$/, { timeout: 15_000 });
   });
 });
 

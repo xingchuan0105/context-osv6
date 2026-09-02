@@ -28,7 +28,7 @@ async fn delete_document_soft_deletes_and_enqueues_cleanup_once_when_database_av
     let document_id = Uuid::parse_str(&document.id).unwrap();
     let task = ingestion::build_ingest_task(
         owner_user_id.to_string(),
-        notebook.id.clone(),
+        Some(notebook.id.clone()),
         document.id.clone(),
         Some(user_id.to_string()),
         ingestion::IngestDocumentPayload {

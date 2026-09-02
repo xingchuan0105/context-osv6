@@ -134,15 +134,11 @@ impl DocumentScopeValidator for DocumentContext {
                     format!("document scope contains an invalid document id: {document_id}"),
                 )
             })?;
-            let Some(seed) = store.get_document_task_seed(auth, document_uuid).await? else {
-                return Err(AppError::validation(
-                    "invalid_document_scope",
-                    format!("document {document_id} does not exist or is not accessible"),
-                ));
-            };
-            let seed_notebook_uuid = Uuid::parse_str(&seed.workspace_id)
-                .map_err(|_| AppError::internal("document notebook id is invalid"))?;
-            if seed_notebook_uuid != notebook_uuid {
+            // Scope truth is the typed workspace binding, not a column on the artifact.
+            let bound = store
+                .list_documents(auth, Some(notebook_uuid), Some(document_uuid))
+                .await?;
+            if bound.is_empty() {
                 return Err(AppError::validation(
                     "invalid_document_scope",
                     format!("document {document_id} is not in notebook {workspace_id}"),

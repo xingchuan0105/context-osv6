@@ -1,7 +1,6 @@
 use common::AppError;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 use crate::context::ChatContext;
 use agent_loop::events::{AgentEvent, AgentEventSink};
@@ -66,7 +65,7 @@ pub fn chat_done_payload(response: &contracts::chat::ChatResponse) -> serde_json
 impl ChatContext {
     pub async fn execute_chat_stream(
         &self,
-        req: contracts::chat::ChatRequest,
+        mut req: contracts::chat::ChatRequest,
         request_id: String,
         sender: Sender<ChatEvent>,
         token: CancellationToken,
@@ -75,11 +74,7 @@ impl ChatContext {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
-        let workspace_id = req
-            .workspace_id
-            .as_deref()
-            .and_then(|id| Uuid::parse_str(id).ok())
-            .or_else(|| self.auth.workspace_id());
+        let workspace_id = self.resolve_request_workspace(&mut req).await?;
         let state = self.with_owner_pays_auth(workspace_id).await;
         crate::chat::execute_pipeline_stream(
             state,
@@ -107,7 +102,14 @@ impl ChatContext {
         let workspace_id = req
             .workspace_id
             .as_deref()
-            .and_then(|id| Uuid::parse_str(id).ok())
+            .map(|id| {
+                app_core::parse_uuid_or_app_error(
+                    id,
+                    "invalid_workspace_id",
+                    "workspace_id must be a valid UUID",
+                )
+            })
+            .transpose()?
             .or_else(|| self.auth.workspace_id());
         let state = self.with_owner_pays_auth(workspace_id).await;
         crate::chat::execute_pipeline_stream(

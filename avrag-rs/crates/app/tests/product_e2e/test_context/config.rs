@@ -147,6 +147,7 @@ impl E2eBootstrapConfig {
         if let Some(ref url) = self.mock_llm_base_url {
             for llm in [
                 &mut config.agent_llm,
+                &mut config.quick_chat_llm,
                 &mut config.memory_llm,
                 &mut config.ingestion_llm,
                 &mut config.triplet_llm,

@@ -313,4 +313,12 @@ export const apiAccessMessages = {
     zh: "SiliconFlow · BAAI/bge-m3 · BAAI/bge-reranker-v2-m3",
     en: "SiliconFlow · BAAI/bge-m3 · BAAI/bge-reranker-v2-m3",
   },
+  "settingsProvider.type.quickChat": {
+    zh: "Quick Chat 主模型（仅替代主回答；文件解析、检索子代理、向量/重排与联网仍按平台计费）",
+    en: "Quick Chat main model (replaces the primary answer only; parsing, retrieval workers, embedding/rerank and web search stay platform-billed)",
+  },
+  "settingsProvider.model.quickChat": {
+    zh: "百炼 API · Qwen3.8 Flash",
+    en: "Bailian API · Qwen3.8 Flash",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

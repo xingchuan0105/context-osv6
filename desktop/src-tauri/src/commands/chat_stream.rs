@@ -5,8 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use super::api::IpcApiError;
 use super::chat::{
-    chat_event_channel, error_events, parse_chat_request_id, session_id_from_request,
-    LICENSE_REQUIRED,
+    chat_event_channel, parse_chat_request_id, pre_start_error_event, LICENSE_REQUIRED,
 };
 use super::license::{get_license_status, license_allows_chat};
 use super::local_product::product_api_base_url;
@@ -29,7 +28,6 @@ pub async fn chat_stream(
     registry: State<'_, ChatStreamRegistry>,
 ) -> Result<(), IpcApiError> {
     let request_id = parse_chat_request_id(&request).map_err(IpcApiError::from)?;
-    let session_id = session_id_from_request(&request);
     let cancel = registry.register(&request_id);
 
     let license_status = get_license_status(app.clone()).await?;
@@ -41,11 +39,8 @@ pub async fn chat_stream(
             emit_chat_event(app, &request_id, event)?;
             Ok(true)
         };
-        for event in error_events(&request_id, &session_id, LICENSE_REQUIRED) {
-            if !emit_or_stop(&app, &event)? {
-                break;
-            }
-        }
+        let event = pre_start_error_event(&request_id, LICENSE_REQUIRED);
+        let _ = emit_or_stop(&app, &event)?;
         registry.remove(&request_id);
         return Ok(());
     }
@@ -132,13 +127,9 @@ where
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
         let message = upstream_error_message(status.as_u16(), &text);
-        let session_id = session_id_from_request(request);
         let request_id = parse_chat_request_id(request).map_err(IpcApiError::from)?;
-        for event in error_events(&request_id, &session_id, &message) {
-            if !emit(&event)? {
-                return Ok(());
-            }
-        }
+        let event = pre_start_error_event(&request_id, &message);
+        let _ = emit(&event)?;
         return Ok(());
     }
 

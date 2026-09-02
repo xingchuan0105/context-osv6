@@ -522,6 +522,8 @@ mod tests {
         sink.send(AgentEvent::Citations {
             citations: vec![Citation {
                 citation_id: 1,
+                source_scope: None,
+                citation_status: None,
                 doc_id: "d1".to_string(),
                 chunk_id: None,
                 page: None,
@@ -632,6 +634,8 @@ mod tests {
         sink.send(AgentEvent::Citations {
             citations: vec![Citation {
                 citation_id: 1,
+                source_scope: None,
+                citation_status: None,
                 doc_id: "d1".to_string(),
                 chunk_id: Some("chunk-a".to_string()),
                 page: None,

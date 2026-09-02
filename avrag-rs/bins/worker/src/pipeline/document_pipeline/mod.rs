@@ -39,7 +39,7 @@ use struct_stage::{stage_struct_line_map, stage_struct_tables};
 pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) task: &'a IngestionTask,
     pub(crate) context: &'a AuthContext,
-    pub(crate) workspace_id: Uuid,
+    pub(crate) workspace_id: Option<Uuid>,
     pub(crate) document_id: Uuid,
     pub(crate) parse_run_id: Uuid,
     pub(crate) bytes: &'a [u8],

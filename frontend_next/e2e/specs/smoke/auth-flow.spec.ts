@@ -23,8 +23,8 @@ test.describe("Auth Flow", () => {
     // P0-CON-1: 必须勾选同意条款才能注册
     await page.locator(".consent-input").check();
     await page.getByRole("button", { name: /创建账号|Create account/i }).click();
-    // 注册成功后前端自动完成登录并跳转到 dashboard
-    await page.waitForURL(/\/dashboard$/, { timeout: 15_000 });
+    // 注册成功后前端自动完成登录并进入新对话
+    await page.waitForURL(/\/chat$/, { timeout: 15_000 });
   });
 
   test("login page does not submit before hydration", async ({ browser }) => {

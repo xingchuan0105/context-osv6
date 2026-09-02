@@ -9,15 +9,6 @@ pub fn chat_event_channel(request_id: &str) -> String {
     format!("chat://{request_id}")
 }
 
-pub fn session_id_from_request(request: &serde_json::Value) -> String {
-    request
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
-}
-
 pub fn parse_chat_request_id(request: &serde_json::Value) -> Result<String, IpcApiError> {
     request
         .get("request_id")
@@ -27,34 +18,12 @@ pub fn parse_chat_request_id(request: &serde_json::Value) -> Result<String, IpcA
         .ok_or_else(|| IpcApiError::bad_request("invalid_request", "request_id is required"))
 }
 
-pub fn error_events(request_id: &str, session_id: &str, message: &str) -> Vec<ChatEvent> {
-    let message_id: i64 = 1;
-    vec![
-        ChatEvent::Start {
-            request_id: request_id.to_string(),
-            session_id: session_id.to_string(),
-        },
-        ChatEvent::AnswerStart {
-            request_id: request_id.to_string(),
-            session_id: session_id.to_string(),
-            message_id,
-            agent_type: "chat".to_string(),
-        },
-        ChatEvent::Error {
-            request_id: request_id.to_string(),
-            code: "desktop_error".to_string(),
-            message: message.to_string(),
-        },
-        ChatEvent::Done {
-            request_id: request_id.to_string(),
-            session_id: session_id.to_string(),
-            message_id,
-            payload: serde_json::json!({
-                "answer": message,
-                "status": "error",
-            }),
-        },
-    ]
+pub fn pre_start_error_event(request_id: &str, message: &str) -> ChatEvent {
+    ChatEvent::Error {
+        request_id: request_id.to_string(),
+        code: "desktop_error".to_string(),
+        message: message.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -67,9 +36,19 @@ mod tests {
     }
 
     #[test]
-    fn error_events_match_frontend_stream_contract() {
-        let events = error_events("req-ipc", "sess-ipc", "boom");
-        assert_eq!(events.len(), 4);
-        assert!(matches!(events[2], ChatEvent::Error { .. }));
+    fn pre_start_failure_is_one_terminal_error_without_session_id() {
+        let event = pre_start_error_event("req-ipc", "boom");
+        assert_eq!(
+            event,
+            ChatEvent::Error {
+                request_id: "req-ipc".to_string(),
+                code: "desktop_error".to_string(),
+                message: "boom".to_string(),
+            }
+        );
+
+        let wire = serde_json::to_value(event).expect("serialize error event");
+        assert_eq!(wire["event"], "error");
+        assert!(wire.get("session_id").is_none());
     }
 }

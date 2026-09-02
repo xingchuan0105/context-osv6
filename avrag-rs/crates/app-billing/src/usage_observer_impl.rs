@@ -275,6 +275,7 @@ impl PgUsageObserver {
             user_id: tenant.user_id,
             owner_user_id: tenant.owner_user_id,
             feature: Self::map_feature(&record.feature),
+            credential_source: tenant.credential_source.clone(),
             stage: if record.stage.is_empty() {
                 record.feature.clone()
             } else {
@@ -342,6 +343,7 @@ impl PgUsageObserver {
             user_id: tenant.user_id,
             owner_user_id: tenant.owner_user_id,
             feature: Self::map_feature(&record.feature),
+            credential_source: tenant.credential_source.clone(),
             stage: "embedding".to_string(),
             session_id: None,
             document_id: None,
@@ -752,6 +754,7 @@ mod tests {
             owner_user_id: Uuid::nil(),
             user_id: Uuid::nil(),
             skip_wallet_debit: false,
+        credential_source: "official".to_string(),
         };
         let observer = TaskTenantUsageObserver::new(Arc::new(StubUsageLimitStore), tenant);
         assert!(
@@ -794,6 +797,7 @@ mod tests {
             owner_user_id: user_id,
             user_id,
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         };
         let record = ChatUsageRecord {
             prompt_tokens: 1_000_000,
@@ -865,6 +869,7 @@ mod tests {
             owner_user_id: user_id,
             user_id,
             skip_wallet_debit: true,
+        credential_source: "official".to_string(),
         };
         observer
             .record_chat_for(
@@ -942,6 +947,7 @@ mod tests {
             owner_user_id: user_id,
             user_id,
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         };
         observer
             .record_chat_for(
@@ -1002,6 +1008,7 @@ mod tests {
             owner_user_id: user_id,
             user_id,
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         };
         observer
             .record_chat_for(
@@ -1075,6 +1082,7 @@ mod tests {
             owner_user_id: user_id,
             user_id,
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         };
         observer
             .record_chat_for(

@@ -19,6 +19,10 @@ fn agent_request_with_resolved_session(
     if agent_request.session_id.is_none() {
         agent_request.session_id = Some(session.id.clone());
     }
+    agent_request.metadata.insert(
+        "model_role".to_string(),
+        serde_json::Value::String(session.model_role.clone()),
+    );
     agent_request
 }
 
@@ -456,34 +460,43 @@ pub(crate) async fn emit_terminal_stream_events(
         let answer = execution.response.answer.clone();
         if !answer.is_empty() {
             for chunk in crate::chunk_text_for_stream(&answer) {
-                let _ = config.sender.send(contracts::chat::ChatEvent::Token {
-                    request_id: config.request_id.clone(),
-                    message_id: crate::stream_event_message_id(execution.response.message_id),
-                    content: chunk,
-                }).await;
+                let _ = config
+                    .sender
+                    .send(contracts::chat::ChatEvent::Token {
+                        request_id: config.request_id.clone(),
+                        message_id: crate::stream_event_message_id(execution.response.message_id),
+                        content: chunk,
+                    })
+                    .await;
             }
         }
     }
 
     if !execution.citations_emitted && !execution.response.citations.is_empty() {
-        let _ = config.sender.send(contracts::chat::ChatEvent::Citations {
-            request_id: config.request_id.clone(),
-            message_id: crate::stream_event_message_id(execution.response.message_id),
-            citations: execution
-                .response
-                .citations
-                .iter()
-                .filter_map(|citation| serde_json::to_value(citation).ok())
-                .collect(),
-        }).await;
+        let _ = config
+            .sender
+            .send(contracts::chat::ChatEvent::Citations {
+                request_id: config.request_id.clone(),
+                message_id: crate::stream_event_message_id(execution.response.message_id),
+                citations: execution
+                    .response
+                    .citations
+                    .iter()
+                    .filter_map(|citation| serde_json::to_value(citation).ok())
+                    .collect(),
+            })
+            .await;
     }
 
-    let _ = config.sender.send(contracts::chat::ChatEvent::Done {
-        request_id: config.request_id.clone(),
-        session_id: execution.response.session_id.clone(),
-        message_id: crate::stream_event_message_id(execution.response.message_id),
-        payload: crate::chat_done_payload(&execution.response),
-    }).await;
+    let _ = config
+        .sender
+        .send(contracts::chat::ChatEvent::Done {
+            request_id: config.request_id.clone(),
+            session_id: execution.response.session_id.clone(),
+            message_id: crate::stream_event_message_id(execution.response.message_id),
+            payload: crate::chat_done_payload(&execution.response),
+        })
+        .await;
 }
 
 #[cfg(test)]

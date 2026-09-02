@@ -244,6 +244,8 @@ mod tests {
             cards,
             citations: vec![Citation {
                 citation_id: 1,
+                source_scope: None,
+                citation_status: None,
                 doc_id: "doc-1".to_string(),
                 doc_name: "doc.pdf".to_string(),
                 score: 0.9,

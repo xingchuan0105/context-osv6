@@ -1,7 +1,7 @@
 use app_bootstrap::AppState;
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
 };
 
 use crate::handlers;
@@ -16,8 +16,17 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/chat/sessions/{session_id}",
             get(handlers::get_chat_session_handler)
-                .put(handlers::update_chat_session_handler)
+                .patch(handlers::update_chat_session_handler)
                 .delete(handlers::delete_chat_session_handler),
+        )
+        .route(
+            "/chat/sessions/{session_id}/files",
+            get(handlers::list_chat_session_files_handler)
+                .post(handlers::create_chat_session_file_handler),
+        )
+        .route(
+            "/chat/sessions/{session_id}/files/{binding_id}",
+            delete(handlers::delete_chat_session_file_handler),
         )
         .route(
             "/chat/sessions/{session_id}/messages",

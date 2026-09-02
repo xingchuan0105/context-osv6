@@ -67,6 +67,8 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
             let score = item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
             citations.push(Citation {
+                source_scope: None,
+            citation_status: None,
                 citation_id: next_id,
                 doc_id: doc_id.clone(),
                 chunk_id: Some(chunk_id),
@@ -111,6 +113,8 @@ pub fn build_search_citations_from_tool_results(tool_results: &[ToolResult]) -> 
                 .map(|index| index as i64)
                 .unwrap_or(next_id);
             citations.push(Citation {
+                source_scope: None,
+            citation_status: None,
                 citation_id,
                 doc_id: search_result.url.clone(),
                 chunk_id: None,
@@ -325,6 +329,8 @@ mod tests {
     fn sample_citation(id: i64, chunk_id: &str) -> Citation {
         Citation {
             citation_id: id,
+            source_scope: None,
+            citation_status: None,
             doc_id: "doc-1".to_string(),
             chunk_id: Some(chunk_id.to_string()),
             page: None,
@@ -371,6 +377,8 @@ mod tests {
     fn sample_search_citation(id: i64, url: &str) -> Citation {
         Citation {
             citation_id: id,
+            source_scope: None,
+            citation_status: None,
             doc_id: url.to_string(),
             chunk_id: None,
             page: None,

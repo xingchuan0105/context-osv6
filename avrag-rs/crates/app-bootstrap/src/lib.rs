@@ -12,16 +12,16 @@ mod pg_error;
 mod services;
 
 pub use app_state::{
+    AppState, CostEventRecord, MemoryState, RetrievedContext, StoredDocument,
     build_docscope_metadata, build_parsed_preview, build_redis_url, build_summary,
     document_is_deleting_or_deleted, estimate_token_count, infer_mime_type_from_path,
-    is_remote_asset_reference, status_label, AppState, CostEventRecord, MemoryState,
-    RetrievedContext, StoredDocument,
+    is_remote_asset_reference, status_label,
 };
 
 pub use adapters::{
-    build_embed_rate_gate, build_rate_limit_backend, PgBillingStoreAdapter,
-    PgProviderSecretStoreAdapter, PgReferralStoreAdapter, PgUsageLimitStoreAdapter,
-    PgWalletStoreAdapter, RedisFixedWindowRateLimiter, RedisRateLimitBackend,
+    PgBillingStoreAdapter, PgProviderSecretStoreAdapter, PgReferralStoreAdapter,
+    PgUsageLimitStoreAdapter, PgWalletStoreAdapter, RedisFixedWindowRateLimiter,
+    RedisRateLimitBackend, build_embed_rate_gate, build_rate_limit_backend,
 };
 
 use adapters::{
@@ -194,6 +194,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         Some(Arc::new(app_core::MemoryBillingQuotaPort));
     let agent_service = Some(build_unified_agent_service(
         llm_ctx.agent_client().cloned(),
+        make_llm_client(&config.quick_chat_llm, None),
         make_llm_client(&config.retrieve_llm, None),
         search_executor.clone(),
         None,
@@ -369,6 +370,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(uuid::Uuid::nil),
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         }
     };
     let embedding_observer = usage_observer
@@ -496,8 +498,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                         };
                         let plane = Arc::new(MilvusDataPlane::new(milvus_config));
                         plane.ensure_schema().await?;
-                        retrieval_data_plane =
-                            Some(plane.clone() as Arc<dyn RetrievalDataPlane>);
+                        retrieval_data_plane = Some(plane.clone() as Arc<dyn RetrievalDataPlane>);
                         Some(Arc::new(RagRuntime::with_data_plane(rag_config, plane)))
                     }
                     RetrievalBackend::Pgvector => {
@@ -511,10 +512,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                             pgvector_config,
                         ));
                         plane.ensure_schema().await?;
-                        retrieval_data_plane =
-                            Some(plane.clone() as Arc<dyn RetrievalDataPlane>);
-                        retrieval_export =
-                            Some(plane.clone() as Arc<dyn RetrievalExportPort>);
+                        retrieval_data_plane = Some(plane.clone() as Arc<dyn RetrievalDataPlane>);
+                        retrieval_export = Some(plane.clone() as Arc<dyn RetrievalExportPort>);
                         Some(Arc::new(RagRuntime::with_data_plane(rag_config, plane)))
                     }
                 }
@@ -591,6 +590,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         };
     let agent_service = Some(build_unified_agent_service_with_secrets(
         llm_ctx.agent_client().cloned(),
+        make_llm_client(&config.quick_chat_llm, None),
         make_llm_client(&config.retrieve_llm, None),
         search_executor.clone(),
         rag_runtime.clone(),

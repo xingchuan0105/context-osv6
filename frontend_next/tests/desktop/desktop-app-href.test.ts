@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   desktopAppHref,
   mapAppPathForStaticExport,
+  resolveChatSessionIdFromRoute,
   resolveWorkspaceIdFromRoute,
   shouldOpenInSystemBrowser,
 } from "@/lib/runtime/desktop-app-href";
@@ -52,6 +53,19 @@ describe("mapAppPathForStaticExport", () => {
       "/dashboard/_placeholder?ws=abc",
     );
   });
+
+  it("rewrites a personal chat id to the exported placeholder file", () => {
+    expect(mapAppPathForStaticExport("/chat/personal-1")).toBe(
+      "/chat/_placeholder?session=personal-1",
+    );
+    expect(mapAppPathForStaticExport("/chat/personal-1?source=web#answer")).toBe(
+      "/chat/_placeholder?source=web&session=personal-1#answer",
+    );
+    expect(mapAppPathForStaticExport("/chat")).toBe("/chat");
+    expect(mapAppPathForStaticExport("/chat/_placeholder?session=personal-1")).toBe(
+      "/chat/_placeholder?session=personal-1",
+    );
+  });
 });
 
 describe("desktopAppHref", () => {
@@ -71,5 +85,18 @@ describe("resolveWorkspaceIdFromRoute", () => {
       WORKSPACE,
     );
     expect(resolveWorkspaceIdFromRoute("prop-id", "/dashboard/_placeholder", null)).toBe("prop-id");
+  });
+});
+
+describe("resolveChatSessionIdFromRoute", () => {
+  it("prefers the desktop query and otherwise reads a real chat segment", () => {
+    expect(
+      resolveChatSessionIdFromRoute("/chat/_placeholder", "personal-query"),
+    ).toBe("personal-query");
+    expect(resolveChatSessionIdFromRoute("/chat/personal-path", null)).toBe(
+      "personal-path",
+    );
+    expect(resolveChatSessionIdFromRoute("/chat/_placeholder", null)).toBeNull();
+    expect(resolveChatSessionIdFromRoute("/chat", null)).toBeNull();
   });
 });

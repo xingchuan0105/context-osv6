@@ -719,6 +719,8 @@ pub struct MeteringContext {
     pub owner_user_id: Uuid,
     pub feature: BillableFeature,
     pub stage: String,
+    /// Which credential paid for this call: `official` (platform) or `byok`.
+    pub credential_source: String,
     pub session_id: Option<Uuid>,
     pub document_id: Option<Uuid>,
     pub request_id: Option<String>,

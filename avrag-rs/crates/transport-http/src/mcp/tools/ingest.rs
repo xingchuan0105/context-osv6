@@ -116,7 +116,10 @@ pub(crate) async fn document_status(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    if document.workspace_id != workspace_id_str {
+    let document_workspace = document.workspace_id.ok_or_else(|| {
+        AppError::not_found("document_not_found", "document not found")
+    })?;
+    if document_workspace != workspace_id_str {
         return Err(AppError::forbidden(
             "document_workspace_mismatch",
             "document does not belong to the requested workspace",

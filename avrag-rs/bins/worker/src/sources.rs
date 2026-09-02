@@ -210,7 +210,7 @@ impl StateSink for PgStateSink {
                     event_time: chrono::Utc::now(),
                     user_id,
                     session_id: None,
-                    workspace_id: Uuid::parse_str(&task.workspace_id).ok(),
+                    workspace_id: task.workspace_id.as_deref().and_then(|value| Uuid::parse_str(value).ok()),
                     surface: analytics::Surface::Workspace,
                     event_name: analytics::ProductEventName::DocumentUploadFailed,
                     result: analytics::ResultTag::Failure,

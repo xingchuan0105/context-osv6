@@ -19,6 +19,7 @@ const PRIVATE_PATHS = [
   "/admin",
   "/api/",
   "/activate",
+  "/chat",
   "/dashboard",
   "/invite",
   "/reset-password",

@@ -7,8 +7,10 @@ use contracts::documents::DocumentStatus;
 pub struct Document {
     pub id: String,
     pub owner_user_id: String,
-    #[serde(rename = "workspace_id", alias = "workspace_id")]
-    pub workspace_id: String,
+    /// Workspace binding of the artifact when one exists; session-bound
+    /// artifacts (chat-first W2) have none. Binding tables are the scope truth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
     pub owner_id: String,
     pub file_name: String,
     pub mime_type: String,
@@ -35,13 +37,6 @@ pub struct CreateDocumentRequest {
 pub struct UpdateDocumentRequest {
     #[serde(default)]
     pub filename: Option<String>,
-    #[serde(
-        default,
-        rename = "workspace_id",
-        alias = "workspace_id",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub workspace_id: Option<String>,
     #[serde(default)]
     pub status: Option<DocumentStatus>,
 }

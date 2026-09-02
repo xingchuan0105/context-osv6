@@ -11,7 +11,7 @@ use agent_loop::runtime::{Agent, AgentRequest};
 use app::agents::AgentKind;
 use app::agents::unified::UnifiedAgent;
 use avrag_llm::LlmClient;
-use contracts::auth_runtime::{AuthContext, UserId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, SubjectKind, UserId};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -76,6 +76,26 @@ async fn chat_without_llm_returns_error() {
         events
             .iter()
             .any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "llm_unavailable"))
+    );
+}
+
+#[tokio::test]
+async fn quick_chat_does_not_fall_back_to_agent_llm() {
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
+    let sink = CollectingSink::new();
+    let mut req = base_request(AgentKind::Chat);
+    req.metadata.insert(
+        "model_role".to_string(),
+        serde_json::Value::String("quick_chat".to_string()),
+    );
+
+    let result = agent.run(req, &sink).await;
+    let err = result.expect_err("quick_chat must require its dedicated client");
+    assert_eq!(err.message(), "LLM client is not configured");
+    assert!(
+        sink.events().iter().any(
+            |event| matches!(event, AgentEvent::Error { code, .. } if code == "llm_unavailable")
+        )
     );
 }
 
@@ -203,10 +223,10 @@ async fn chat_emits_activity_event() {
 
     let events = sink.events();
     assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, AgentEvent::Activity { stage, .. } if stage == "chat")),
-        "expected Activity event for chat stage"
+        events.iter().any(
+            |e| matches!(e, AgentEvent::Activity { stage, .. } if stage == "accept:understand")
+        ),
+        "expected the current chat-understanding activity event"
     );
 }
 

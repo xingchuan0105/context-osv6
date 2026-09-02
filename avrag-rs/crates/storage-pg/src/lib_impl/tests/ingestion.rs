@@ -40,7 +40,7 @@ async fn claim_next_ingestion_task_sees_cross_owner_queue_under_forced_rls() {
 
     let task = ingestion::build_ingest_task(
         owner_user_id.to_string(),
-        workspace.id.clone(),
+        Some(workspace.id.clone()),
         document.id.clone(),
         Some(owner_uuid.to_string()),
         ingestion::IngestDocumentPayload {
@@ -146,7 +146,7 @@ async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_a
 
     let task = ingestion::build_ingest_task(
         owner_user_id.to_string(),
-        notebook.id.clone(),
+        Some(notebook.id.clone()),
         document.id.clone(),
         Some(user_id.to_string()),
         ingestion::IngestDocumentPayload {
@@ -239,7 +239,7 @@ async fn ingestion_side_effect_guard_requires_current_lease_and_non_deleting_doc
     let document_id = Uuid::parse_str(&document.id).unwrap();
     let task = ingestion::build_ingest_task(
         owner_user_id.to_string(),
-        notebook.id.clone(),
+        Some(notebook.id.clone()),
         document.id.clone(),
         Some(user_id.to_string()),
         ingestion::IngestDocumentPayload {

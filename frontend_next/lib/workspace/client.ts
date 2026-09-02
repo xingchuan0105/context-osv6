@@ -242,7 +242,7 @@ export async function updateWorkspaceSession(
   return request<WorkspaceSession>(
     `/api/v1/chat/sessions/${session_id}`,
     {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(requestBody),
     },
     token,

@@ -1,3 +1,4 @@
+import type { ChatSession } from "../contracts/generated";
 import { request } from "../http/request";
 
 /** GET /api/v1/search — global product index (workspaces, sessions, sources). */
@@ -8,12 +9,7 @@ export type GlobalSearchWorkspace = {
   description?: string;
 };
 
-export type GlobalSearchSession = {
-  id: string;
-  workspace_id: string;
-  title?: string | null;
-  updated_at?: string;
-};
+export type GlobalSearchSession = ChatSession;
 
 export type GlobalSearchSource = {
   id: string;

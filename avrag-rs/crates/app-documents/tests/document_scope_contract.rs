@@ -104,7 +104,7 @@ async fn validate_document_scope_rejects_foreign_workspace_in_memory() {
                 document: common::Document {
                     id: document_id.clone(),
                     owner_user_id: owner_user_id.clone(),
-                    workspace_id: notebook_a.clone(),
+                    workspace_id: Some(notebook_a.clone()),
                     owner_id: user_id.clone(),
                     file_name: "scope.txt".to_string(),
                     mime_type: "text/plain".to_string(),
@@ -119,6 +119,11 @@ async fn validate_document_scope_rejects_foreign_workspace_in_memory() {
                 parsed_items: Vec::new(),
             },
         );
+        state
+            .workspace_document_bindings
+            .entry(document_id.clone())
+            .or_default()
+            .push(notebook_a.clone());
     }
 
     let service = DocumentContext::new();

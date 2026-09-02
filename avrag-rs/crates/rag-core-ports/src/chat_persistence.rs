@@ -53,9 +53,10 @@ pub trait SessionPort: Send + Sync {
     async fn create_session(
         &self,
         auth: &AuthContext,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         title: Option<&str>,
         agent_type: &str,
+        model_role: &str,
     ) -> Result<ChatSession, AppError>;
 
     async fn update_session(
@@ -194,12 +195,7 @@ pub trait ChatSideEffectPort: Send + Sync {
 /// Prefer depending on a focused port (`SessionPort`, `MessagePort`, …) at call
 /// sites. Keep `Arc<dyn ChatPersistencePort>` only where many facets are needed.
 pub trait ChatPersistencePort:
-    SessionPort
-    + MessagePort
-    + ChatCatalogPort
-    + ProfilePort
-    + ChatContentPort
-    + ChatSideEffectPort
+    SessionPort + MessagePort + ChatCatalogPort + ProfilePort + ChatContentPort + ChatSideEffectPort
 {
 }
 

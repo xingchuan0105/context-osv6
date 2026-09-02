@@ -9,6 +9,7 @@ import { AccountMenu } from "../account-menu";
 import { NotificationBell } from "../notifications/notification-bell";
 import { WorkspaceShareQuickModal } from "../share/workspace-share-quick-modal";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { appNavHref } from "../../lib/navigation/nav-config";
 import { isTauri } from "../../lib/runtime/tauri-ipc";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import styles from "./workspace-shell.module.css";
@@ -68,12 +69,12 @@ export function WorkspaceTopBar({
 
   // IA (PRODUCT_IA §5): 分享 is the T0 top-bar action — one capsule, one
   // behavior: opens the share modal directly; 访问/API fold into the modal.
-  // No 工作台|设置 wayfinding (brand returns home, settings lives in the
+  // No 工作台|设置 wayfinding (brand starts a personal chat, settings lives in the
   // account menu), no 客户端 capsule (dashboard toolbar hosts client discovery).
   return (
     <header className={styles.topBar} data-testid="workspace-top-bar" data-marketing-chrome="false">
       <div className={styles.topBarBrand}>
-        <Link className={styles.topBarBrandBlock} href="/dashboard">
+        <Link className={styles.topBarBrandBlock} href={appNavHref("chat")}>
           <ContextOsMark size={32} className={styles.topBarMark} />
           <span className={styles.topBarBrandName}>Context-OS</span>
         </Link>

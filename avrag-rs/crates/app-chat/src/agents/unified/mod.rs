@@ -34,7 +34,7 @@ use uuid::Uuid;
 /// Unified agent that dispatches to Chat / RAG / Search based on `request.kind`.
 pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
-    chat_llm_client: Option<LlmClient>,
+    quick_chat_llm_client: Option<LlmClient>,
     search_llm_client: Option<LlmClient>,
     /// Optional Worker-side retrieve LLM (RETRIEVE_LLM_*). When set, Worker
     /// SaC / retrieval-loop turns use it — including BYOK requests. Lead plan
@@ -51,12 +51,12 @@ pub struct UnifiedAgent {
 impl UnifiedAgent {
     pub fn new(
         llm_client: Option<LlmClient>,
-        chat_llm_client: Option<LlmClient>,
+        quick_chat_llm_client: Option<LlmClient>,
         search_llm_client: Option<LlmClient>,
     ) -> Self {
         Self {
             llm_client,
-            chat_llm_client,
+            quick_chat_llm_client,
             search_llm_client,
             retrieve_llm_client: None,
             rag_runtime: None,
@@ -124,6 +124,40 @@ impl UnifiedAgent {
         }
     }
 
+    /// Independent Quick Chat credential resolution (chat-first W3, design §8.2):
+    /// an active `quick_chat` secret that builds a client routes BYOK with the
+    /// wallet exempt for chat usage; an active but INCOMPLETE secret (or a
+    /// resolution failure) fails closed instead of silently charging the
+    /// official wallet route; no secret at all keeps the official route.
+    async fn resolve_quick_chat_credential(
+        &self,
+        request: &AgentRequest,
+    ) -> Result<QuickChatCredential, AppError> {
+        let Some(secrets) = self.provider_secrets.as_ref() else {
+            return Ok(QuickChatCredential::Official);
+        };
+        let owner = request.auth.user_id().into_uuid();
+        let workspace = request.auth.workspace_id();
+        match secrets
+            .resolve(owner, workspace, ProviderSecretPurpose::QuickChat)
+            .await
+        {
+            Ok(Some(secret)) => {
+                if secret.to_llm_config().is_none() {
+                    return Err(AppError::validation(
+                        "quick_chat_byok_config_invalid",
+                        "Quick Chat BYOK is enabled but the saved configuration is incomplete; fix or revoke it in Settings → Providers.",
+                    ));
+                }
+                Ok(QuickChatCredential::Byok(secret))
+            }
+            Ok(None) => Ok(QuickChatCredential::Official),
+            Err(error) => Err(AppError::internal(format!(
+                "Quick Chat BYOK resolution failed; refusing to fall back to the official wallet route: {error}"
+            ))),
+        }
+    }
+
     fn bind_byok_client(
         client: Option<LlmClient>,
         byok: Option<&app_core::ResolvedProviderSecret>,
@@ -140,12 +174,38 @@ impl UnifiedAgent {
             (c, None) => c,
         }
     }
+
+    fn primary_llm_client(
+        &self,
+        kind: crate::agents::AgentKind,
+        uses_quick_chat: bool,
+    ) -> Option<LlmClient> {
+        if uses_quick_chat {
+            return self.quick_chat_llm_client.clone();
+        }
+        if kind == crate::agents::AgentKind::Search {
+            return self
+                .search_llm_client
+                .clone()
+                .or_else(|| self.llm_client.clone());
+        }
+        self.llm_client.clone()
+    }
 }
 
 /// Build a single-route `LlmClient` from a resolved BYOK secret (ADR-0010 G1).
 /// Reuses `ResolvedProviderSecret::to_llm_config` (OpenAI single-route, no pool).
 fn llm_client_from_secret(secret: &app_core::ResolvedProviderSecret) -> Option<LlmClient> {
     secret.to_llm_config().map(LlmClient::new)
+}
+
+/// Which credential carries the Quick Chat primary model this turn.
+#[derive(Debug, Clone)]
+enum QuickChatCredential {
+    /// Active, complete `quick_chat` BYOK secret (wallet exempt for chat usage).
+    Byok(app_core::ResolvedProviderSecret),
+    /// No quick_chat secret configured — official `QUICK_CHAT_LLM_*` route.
+    Official,
 }
 
 #[async_trait::async_trait]
@@ -190,7 +250,21 @@ impl Agent for UnifiedAgent {
             })
             .await;
 
-        let byok = self.resolve_byok_llm(&request).await;
+        let uses_quick_chat = request
+            .metadata
+            .get("model_role")
+            .and_then(serde_json::Value::as_str)
+            == Some("quick_chat");
+        // Quick Chat resolves its OWN credential purpose — generic LLM BYOK
+        // never substitutes for it (design §8.2).
+        let byok = if uses_quick_chat {
+            match self.resolve_quick_chat_credential(&request).await? {
+                QuickChatCredential::Byok(secret) => Some(secret),
+                QuickChatCredential::Official => None,
+            }
+        } else {
+            self.resolve_byok_llm(&request).await
+        };
         let mut tenant = TenantContext {
             owner_user_id: request.auth.user_id().into_uuid(),
             user_id: request
@@ -199,6 +273,11 @@ impl Agent for UnifiedAgent {
                 .map(|id| id.into_uuid())
                 .unwrap_or_else(Uuid::nil),
             skip_wallet_debit: false,
+            credential_source: if byok.is_some() {
+                "byok".to_string()
+            } else {
+                "official".to_string()
+            },
         };
         if byok.is_some() {
             tenant.skip_wallet_debit = true;
@@ -211,12 +290,8 @@ impl Agent for UnifiedAgent {
                     agent_loop::progress::WorkFact::understand(&request.query),
                 )
                 .await;
-                let llm = Self::bind_byok_client(
-                    self.chat_llm_client
-                        .clone()
-                        .or_else(|| self.llm_client.clone()),
-                    byok.as_ref(),
-                );
+                let platform_client = self.primary_llm_client(request.kind, uses_quick_chat);
+                let llm = Self::bind_byok_client(platform_client, byok.as_ref());
                 self.run_react_mode("chat", llm, byok.is_some(), |lp| lp, request, sink, &tenant)
                     .await
             }
@@ -280,7 +355,8 @@ impl Agent for UnifiedAgent {
                     agent_loop::progress::WorkFact::understand(&request.query),
                 )
                 .await;
-                let llm = Self::bind_byok_client(self.llm_client.clone(), byok.as_ref());
+                let platform_client = self.primary_llm_client(request.kind, uses_quick_chat);
+                let llm = Self::bind_byok_client(platform_client, byok.as_ref());
                 self.run_react_mode(
                     "rag",
                     llm,
@@ -323,12 +399,8 @@ impl Agent for UnifiedAgent {
                     agent_loop::progress::WorkFact::understand(&request.query),
                 )
                 .await;
-                let llm = Self::bind_byok_client(
-                    self.search_llm_client
-                        .clone()
-                        .or_else(|| self.llm_client.clone()),
-                    byok.as_ref(),
-                );
+                let platform_client = self.primary_llm_client(request.kind, uses_quick_chat);
+                let llm = Self::bind_byok_client(platform_client, byok.as_ref());
                 self.run_react_mode(
                     "search",
                     llm,
@@ -422,6 +494,9 @@ impl UnifiedAgent {
         let retrieve_llm = self.retrieve_llm_client.as_ref().map(|client| {
             let mut retrieve_tenant = tenant.clone();
             retrieve_tenant.skip_wallet_debit = false;
+            // Retrieval rounds run on the platform RETRIEVE_LLM even under BYOK
+            // primaries — their usage segments must read `official`.
+            retrieve_tenant.credential_source = "official".to_string();
             let client = client.clone().with_stage(&stage_id).with_request_context(
                 request
                     .session_id
@@ -511,6 +586,37 @@ mod tests {
         assert!(agent.llm_client.is_some());
         assert!(agent.rag_runtime.is_none());
         assert!(agent.search_executor.is_none());
+    }
+
+    #[test]
+    fn quick_chat_primary_client_is_independent_from_capability_kind() {
+        let agent = UnifiedAgent::new(Some(dummy_llm()), None, Some(dummy_llm()));
+
+        assert!(
+            agent
+                .primary_llm_client(crate::agents::AgentKind::Chat, true)
+                .is_none()
+        );
+        assert!(
+            agent
+                .primary_llm_client(crate::agents::AgentKind::Rag, true)
+                .is_none()
+        );
+        assert!(
+            agent
+                .primary_llm_client(crate::agents::AgentKind::Search, true)
+                .is_none()
+        );
+        assert!(
+            agent
+                .primary_llm_client(crate::agents::AgentKind::Chat, false)
+                .is_some()
+        );
+        assert!(
+            agent
+                .primary_llm_client(crate::agents::AgentKind::Search, false)
+                .is_some()
+        );
     }
 
     fn dummy_secret() -> app_core::ResolvedProviderSecret {

@@ -15,6 +15,9 @@ pub enum ProviderSecretPurpose {
     Llm,
     Embedding,
     Rerank,
+    /// Independent Quick Chat credential (chat-first W3). Never borrowed by the
+    /// generic llm purpose and never lent to search/embedding/rerank.
+    QuickChat,
 }
 
 impl ProviderSecretPurpose {
@@ -23,6 +26,7 @@ impl ProviderSecretPurpose {
             Self::Llm => "llm",
             Self::Embedding => "embedding",
             Self::Rerank => "rerank",
+            Self::QuickChat => "quick_chat",
         }
     }
 
@@ -31,7 +35,8 @@ impl ProviderSecretPurpose {
             "llm" => Ok(Self::Llm),
             "embedding" | "embed" => Ok(Self::Embedding),
             "rerank" => Ok(Self::Rerank),
-            _ => Err("purpose must be llm | embedding | rerank"),
+            "quick_chat" | "quickchat" => Ok(Self::QuickChat),
+            _ => Err("purpose must be llm | embedding | rerank | quick_chat"),
         }
     }
 }
@@ -176,6 +181,10 @@ mod tests {
         assert_eq!(
             ProviderSecretPurpose::parse("embed").unwrap(),
             ProviderSecretPurpose::Embedding
+        );
+        assert_eq!(
+            ProviderSecretPurpose::parse("quick_chat").unwrap(),
+            ProviderSecretPurpose::QuickChat
         );
         assert!(ProviderSecretPurpose::parse("other").is_err());
     }

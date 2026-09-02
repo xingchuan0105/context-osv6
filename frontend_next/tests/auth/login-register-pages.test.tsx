@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe("login and register pages", () => {
-  it("submits login successfully and redirects to dashboard", async () => {
+  it("submits login successfully and opens chat", async () => {
     const user = userEvent.setup();
     const payload = {
       token: "token-123",
@@ -100,7 +100,7 @@ describe("login and register pages", () => {
 
     await waitFor(() => {
       expect(mocks.completeAuthMock).toHaveBeenCalledWith(payload);
-      expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard");
+      expect(mocks.replaceMock).toHaveBeenCalledWith("/chat");
     });
   });
 
@@ -124,7 +124,7 @@ describe("login and register pages", () => {
     });
   });
 
-  it("submits registration successfully and redirects to dashboard", async () => {
+  it("submits registration successfully and opens chat", async () => {
     const user = userEvent.setup();
     const payload = {
       token: "token-456",
@@ -164,7 +164,7 @@ describe("login and register pages", () => {
 
     await waitFor(() => {
       expect(mocks.completeAuthMock).toHaveBeenCalledWith(payload);
-      expect(mocks.replaceMock).toHaveBeenCalledWith("/dashboard");
+      expect(mocks.replaceMock).toHaveBeenCalledWith("/chat");
     });
   });
 

@@ -56,8 +56,9 @@ impl IngestionQueueRepository {
         )
         .bind(owner_user_id.into_uuid())
         .bind(
-            Uuid::parse_str(&task.workspace_id)
-                .map_err(|_| PgStorageError::NotFound("invalid notebook id".to_string()))?,
+            task.workspace_id
+                .as_deref()
+                .and_then(|value| Uuid::parse_str(value).ok()),
         )
         .bind(
             Uuid::parse_str(&task.document_id)
@@ -146,8 +147,9 @@ impl IngestionQueueRepository {
         )
         .bind(owner_user_id)
         .bind(
-            Uuid::parse_str(&task.workspace_id)
-                .map_err(|_| PgStorageError::NotFound("invalid notebook id".to_string()))?,
+            task.workspace_id
+                .as_deref()
+                .and_then(|value| Uuid::parse_str(value).ok()),
         )
         .bind(
             Uuid::parse_str(&task.document_id)

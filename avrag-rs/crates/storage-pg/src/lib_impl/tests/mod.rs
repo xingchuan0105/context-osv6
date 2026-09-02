@@ -2,6 +2,7 @@
 mod support;
 mod unit;
 mod document_ir;
+mod document_bindings;
 mod ingestion;
 mod cleanup_delete_soft;
 mod cleanup_task;

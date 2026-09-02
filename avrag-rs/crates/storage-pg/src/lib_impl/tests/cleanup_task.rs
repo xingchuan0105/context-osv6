@@ -67,7 +67,8 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     }
     let claimed = claimed.expect("cleanup task for our document should be claimed");
     assert_eq!(claimed.owner_user_id, owner_user_id.into_uuid());
-    assert_eq!(claimed.workspace_id, workspace_id);
+    // W2a: cleanup tasks are document-keyed; workspace lineage is nullable and unused.
+    assert_eq!(claimed.workspace_id, None);
     assert_eq!(claimed.document_id, document_id);
     let lock_token = claimed.lock_token.expect("claim must return lock token");
     assert!(

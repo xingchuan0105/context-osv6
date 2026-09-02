@@ -8,6 +8,7 @@ mod url_fetch;
 mod url_imports;
 
 pub use document_context::{DocumentContext, DocumentService, PgDocumentScopeValidator};
+pub use documents::ensure_document_upload_allowed;
 pub use helpers::{
     build_docscope_metadata, build_parsed_preview, build_redis_url, build_summary,
     document_is_deleting_or_deleted, infer_mime_type_from_path, is_remote_asset_reference,

@@ -75,13 +75,14 @@ impl SessionPort for PgChatPersistenceAdapter {
     async fn create_session(
         &self,
         auth: &AuthContext,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         title: Option<&str>,
         agent_type: &str,
+        model_role: &str,
     ) -> Result<ChatSession, AppError> {
         self.repo
             .sessions()
-            .create_session(auth, workspace_id, title, agent_type)
+            .create_session(auth, workspace_id, title, agent_type, model_role)
             .await
             .map_err(map_pg_error)
     }

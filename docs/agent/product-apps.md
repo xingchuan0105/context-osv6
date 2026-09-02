@@ -34,12 +34,14 @@ AppState is a **composition root + face factory** (still holds fat infra context
 | T4 | **No C4**: Capability / Skill / Tool stay three layers (ADR-0006 §5a) |
 | T5 | Behavior-preserving slices; daily verify with **L1** (`bash scripts/test-l1.sh` or targeted `cargo test -p …`) |
 | T6 | Solo local trunk; do not expand CI theater for architecture work |
-| T7 | **`workspace` is the sole product truth** replacing `notebook` (see below) |
-| T8 | **No product `org`**: tenant/ownership is **`user_id` / `owner_user_id`**, scope is **`workspace_id`**. Migration in progress — **do not add new org surface area** |
+| T7 | **`workspace` is the sole reusable/manageable/shareable persistent-knowledge container** replacing `notebook`; a user-owned Conversation may have no workspace (see below) |
+| T8 | **No product `org`**: tenant/ownership root is **`user_id` / `owner_user_id`**; Conversation resources may scope by **`conversation_id`**, and only Workspace-bound resources require **`workspace_id`**. Migration in progress — **do not add new org surface area** |
 
-## Workspace supersedes notebook (sole source of truth)
+## Workspace supersedes notebook (sole persistent-knowledge container)
 
 **Canonical product term: `workspace`.** `notebook` is a **legacy alias only** (pre-rename residual). Do **not** reintroduce `notebook` as the primary name.
+
+**Scope boundary:** Conversation is a user-owned interaction object and `workspace_id` may be null. Session-bound files remain visible only to that Conversation and do not form another knowledge base. A file becomes reusable across conversations, manageable as shared material, or shareable only after an explicit Workspace binding is created. Do not add a hidden personal Workspace or a global content library to simulate this boundary.
 
 | Surface | Required |
 |---------|----------|
@@ -54,12 +56,12 @@ AppState is a **composition root + face factory** (still holds fat infra context
 
 ## Org removed as product/tenant concept (sole source of truth)
 
-**Product is B2C personal:** account (`user`) + **`workspace`**. There is **no** team/organization product concept.
+**Product is B2C personal:** account (`user`) + optional **`workspace`** containers. There is **no** team/organization product concept.
 
 | Surface | Required |
 |---------|----------|
 | New API / JSON / MCP tools / tests / error copy | **Never** introduce `org_id`, `OrgId`, `organizations`, `x-org-id`, `app.current_org`, MCP `org.*` |
-| Ownership / RLS / isolation | Prefer **`owner_user_id`** or **`user_id`**; resource scope **`workspace_id`** |
+| Ownership / RLS / isolation | Root ownership is **`owner_user_id`** or **`user_id`**; standalone Conversation/Session resources scope by **`conversation_id`**, Workspace-bound resources by **`workspace_id`** |
 | Auth context (target) | Root = **user**; optional workspace scope — **not** org |
 | Admin | Users / usage only — **no** new Organizations admin features |
 | Existing residual `org_*` in schema/code | **Migrate off** per plan; if a test fails because product still has `org_id` while new code uses owner user: **fix toward user/workspace**, never "align new code back to org" |
@@ -72,7 +74,7 @@ AppState is a **composition root + face factory** (still holds fat infra context
 
 * **Execute path:** handlers/MCP call **`state.conversation().execute` / `execute_stream` only**. No `if agent_type == "write"` in transport; no `state.chat().execute_*` for product execute.
 * **Sessions / search / citations:** `state.agent().…` (not raw `ChatContext` in new production code).
-* **Documents / workspaces:** use `state.workspace()` for documents/workspaces (**not** notebook APIs).
+* **Documents / workspaces:** use `state.workspace()` or its domain services for the shared document pipeline and Workspace operations (**not** notebook APIs). A Session binding may be Conversation-scoped without making document processing Workspace-dependent.
 * **Do not** add new Product App types or pass-through wrappers "for architecture." Deletion test: if removing the type only forces callers to use the inner type, delete it.
 * **Do not** re-register `write_refine_*` on SkillRegistry / ToolCatalog or restore meta side-tables.
 * **Domain depth:** business logic lives in domain crates (`app-chat`, `write-core`, `avrag_share`, …). Product Apps orchestrate; they must not become a second copy of Bound god-objects.

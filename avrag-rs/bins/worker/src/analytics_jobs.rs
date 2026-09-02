@@ -290,7 +290,7 @@ async fn record_storage_snapshots(pool: &PgPool, target_date: NaiveDate) -> Resu
             gen_random_uuid(),
             now(),
             $1::date,
-            n.owner_id,
+            d.owner_user_id::text::uuid,
             null,
             null,
             'storage_snapshot_recorded',
@@ -309,16 +309,15 @@ async fn record_storage_snapshots(pool: &PgPool, target_date: NaiveDate) -> Resu
                 'document_count', count(*)::bigint
             )
         from documents d
-        join workspaces n on n.id = d.workspace_id
-        where n.owner_id is not null
-        group by n.owner_id
+        where d.owner_user_id is not null
+        group by d.owner_user_id
         having not exists (
             select 1
             from cost_events ce
             where ce.event_date = $1
               and ce.event_name = 'storage_snapshot_recorded'
               and ce.source = 'daily_snapshot'
-              and ce.user_id = n.owner_id
+              and ce.user_id = d.owner_user_id
         )
         "#,
     )

@@ -38,7 +38,6 @@ async fn generic_status_update_rejects_deleting_and_deleted_when_database_availa
                 &ctx,
                 document_id,
                 None,
-                None,
                 Some(DocumentStatus::Deleting)
             )
             .await

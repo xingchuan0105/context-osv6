@@ -46,7 +46,7 @@ export default function LoginPage() {
       .catch(() => undefined)
       .finally(() => {
         if (!cancelled) {
-          router.replace("/dashboard");
+          router.replace("/chat");
         }
       });
     return () => {
@@ -85,7 +85,7 @@ export default function LoginPage() {
       flushSync(() => {
         completeAuth(payload);
       });
-      router.replace(nextPath ?? "/dashboard");
+      router.replace(nextPath ?? "/chat");
     } catch (submitError) {
       setError(describeAuthError(loginFailed, submitError, locale));
     } finally {

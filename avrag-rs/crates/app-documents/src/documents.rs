@@ -24,6 +24,90 @@ use crate::helpers::{
     handle_upload_invalid_outcome, handle_upload_queue_outcome, upload_status_conflict_error,
 };
 
+/// Upload admission shared by workspace uploads and chat-first session files:
+/// format allowlist, size caps, wallet balance and storage quotas.
+#[allow(clippy::too_many_arguments)]
+pub async fn ensure_document_upload_allowed(
+    auth: &AuthContext,
+    storage: &StorageContext,
+    billing: &BillingContext,
+    filename: &str,
+    mime_type: &str,
+    file_size: u64,
+) -> Result<(), AppError> {
+    if filename.trim().is_empty() {
+        return Err(AppError::validation(
+            "filename_required",
+            "filename is required",
+        ));
+    }
+    ingestion::parser::ParseRouter::ensure_supported_file_type(filename.trim(), mime_type)
+        .map_err(|error| AppError::validation(error.code(), error.to_string()))?;
+
+    if file_size > storage.max_upload_file_size_bytes() {
+        return Err(AppError::validation(
+            "file_too_large",
+            format!(
+                "file size {} exceeds maximum allowed size of {} bytes",
+                file_size,
+                storage.max_upload_file_size_bytes()
+            ),
+        ));
+    }
+
+    // ADR-0010 §1.1: indexing burns **platform** keys — balance only (no junk-BYOK free pass).
+    billing.ensure_payer_has_wallet_balance(auth).await?;
+
+    let quota = storage.billing_quota().ok_or_else(|| {
+        AppError::internal("billing quota port is required for document uploads")
+    })?;
+    // ADR-0010 §2.2: aggregate retained storage (sum of document sizes for user)
+    // via plan `quota_limits.storage_bytes` hard limit — free/plus/pro set in migrations.
+    // Optional ops override: when PRIVATE_STORAGE_HARD_BYTES is set, treat as absolute
+    // max *additional* check against the single upload only if larger than plan path.
+    if let Ok(hard) = std::env::var("PRIVATE_STORAGE_HARD_BYTES") {
+        if let Ok(hard_bytes) = hard.parse::<i64>() {
+            if (file_size as i64) > hard_bytes {
+                return Err(AppError::validation(
+                    "private_storage_hard_cap",
+                    format!(
+                        "file size {} exceeds PRIVATE_STORAGE_HARD_BYTES={}",
+                        file_size, hard_bytes
+                    ),
+                ));
+            }
+        }
+    }
+    quota
+        .ensure_storage_bytes_quota(auth, file_size as i64)
+        .await?;
+    // ADR-0010 §2.2: chunk_count aggregate (index volume proxy).
+    if let Err(e) = billing.ensure_metric_quota(auth, "chunk_count", 1).await {
+        if e.code() == "quota_exceeded" {
+            return Err(e);
+        }
+        tracing::warn!(error = %e, "chunk_count quota check soft-failed; continuing");
+    }
+    // Retained markdown/text volume (sum of stored chunk body bytes).
+    // Upload projects +file_size as worst-case new retained bytes until parse shrinks it.
+    if let Err(e) = billing
+        .ensure_metric_quota(auth, "retained_content_bytes", file_size as i64)
+        .await
+    {
+        if e.code() == "quota_exceeded" {
+            return Err(AppError::validation(
+                "retained_content_hard_cap",
+                format!(
+                    "retained content (markdown/index text) would exceed plan hard cap; file_size projection={}",
+                    file_size
+                ),
+            ));
+        }
+        tracing::warn!(error = %e, "retained_content_bytes quota check soft-failed; continuing");
+    }
+    Ok(())
+}
+
 impl DocumentContext {
     pub async fn list_documents(
         &self,
@@ -52,82 +136,19 @@ impl DocumentContext {
         workspace_id: &str,
         req: CreateDocumentRequest,
     ) -> Result<CreateDocumentUploadResponse, AppError> {
-        if req.filename.trim().is_empty() {
-            return Err(AppError::validation(
-                "filename_required",
-                "filename is required",
-            ));
-        }
-        ingestion::parser::ParseRouter::ensure_supported_file_type(
-            req.filename.trim(),
+        ensure_document_upload_allowed(
+            auth,
+            storage,
+            billing,
+            &req.filename,
             &req.mime_type,
+            req.file_size,
         )
-        .map_err(|error| AppError::validation(error.code(), error.to_string()))?;
-
-        if req.file_size > storage.max_upload_file_size_bytes() {
-            return Err(AppError::validation(
-                "file_too_large",
-                format!(
-                    "file size {} exceeds maximum allowed size of {} bytes",
-                    req.file_size,
-                    storage.max_upload_file_size_bytes()
-                ),
-            ));
-        }
-
-        // ADR-0010 §1.1: indexing burns **platform** keys — balance only (no junk-BYOK free pass).
-        billing.ensure_payer_has_wallet_balance(auth).await?;
+        .await?;
 
         let store = storage.document_store().ok_or_else(|| {
             AppError::internal("document store is required for document uploads")
         })?;
-        let quota = storage.billing_quota().ok_or_else(|| {
-            AppError::internal("billing quota port is required for document uploads")
-        })?;
-        // ADR-0010 §2.2: aggregate retained storage (sum of document sizes for user)
-        // via plan `quota_limits.storage_bytes` hard limit — free/plus/pro set in migrations.
-        // Optional ops override: when PRIVATE_STORAGE_HARD_BYTES is set, treat as absolute
-        // max *additional* check against the single upload only if larger than plan path.
-        if let Ok(hard) = std::env::var("PRIVATE_STORAGE_HARD_BYTES") {
-            if let Ok(hard_bytes) = hard.parse::<i64>() {
-                if (req.file_size as i64) > hard_bytes {
-                    return Err(AppError::validation(
-                        "private_storage_hard_cap",
-                        format!(
-                            "file size {} exceeds PRIVATE_STORAGE_HARD_BYTES={}",
-                            req.file_size, hard_bytes
-                        ),
-                    ));
-                }
-            }
-        }
-        quota
-            .ensure_storage_bytes_quota(auth, req.file_size as i64)
-            .await?;
-        // ADR-0010 §2.2: chunk_count aggregate (index volume proxy).
-        if let Err(e) = billing.ensure_metric_quota(auth, "chunk_count", 1).await {
-            if e.code() == "quota_exceeded" {
-                return Err(e);
-            }
-            tracing::warn!(error = %e, "chunk_count quota check soft-failed; continuing");
-        }
-        // Retained markdown/text volume (sum of stored chunk body bytes).
-        // Upload projects +file_size as worst-case new retained bytes until parse shrinks it.
-        if let Err(e) = billing
-            .ensure_metric_quota(auth, "retained_content_bytes", req.file_size as i64)
-            .await
-        {
-            if e.code() == "quota_exceeded" {
-                return Err(AppError::validation(
-                    "retained_content_hard_cap",
-                    format!(
-                        "retained content (markdown/index text) would exceed plan hard cap; file_size projection={}",
-                        req.file_size
-                    ),
-                ));
-            }
-            tracing::warn!(error = %e, "retained_content_bytes quota check soft-failed; continuing");
-        }
         let workspace_id =
             parse_uuid_or_app_error(workspace_id, "workspace_not_found", "workspace not found")?;
         if store.get_workspace(auth, workspace_id).await?.is_none() {
@@ -346,7 +367,10 @@ impl DocumentContext {
             )
             .await?;
         let task_inserted = handle_upload_queue_outcome(queue_outcome)?;
-        let workspace_id = Uuid::parse_str(&seed.workspace_id).ok();
+        let workspace_id = seed
+            .workspace_id
+            .as_deref()
+            .and_then(|value| Uuid::parse_str(value).ok());
         let metadata = serde_json::json!({
             "document_id": seed.document_id.clone(),
             "filename": seed.filename.clone(),
@@ -452,21 +476,8 @@ impl DocumentContext {
         })?;
         let document_id =
             parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-        let workspace_id = req
-            .workspace_id
-            .as_deref()
-            .map(|value| {
-                parse_uuid_or_app_error(value, "workspace_not_found", "workspace not found")
-            })
-            .transpose()?;
         let updated = store
-            .update_document(
-                auth,
-                document_id,
-                req.filename.as_deref(),
-                workspace_id,
-                req.status.clone(),
-            )
+            .update_document(auth, document_id, req.filename.as_deref(), req.status.clone())
             .await?;
         if !updated {
             return Err(AppError::not_found(
@@ -525,7 +536,10 @@ impl DocumentContext {
                 "document not found",
             ));
         }
-        let workspace_id = Uuid::parse_str(&seed.workspace_id).ok();
+        let workspace_id = seed
+            .workspace_id
+            .clone()
+            .and_then(|value| Uuid::parse_str(&value).ok());
         let metadata = serde_json::json!({
             "document_id": seed.document_id.clone(),
             "filename": seed.filename.clone(),

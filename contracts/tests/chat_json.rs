@@ -2,6 +2,46 @@ use contracts::chat::{
     AnswerBlock, ChatDonePayload, ChatEvent, ChatRequest, ChatResponse, Citation, DegradeReason,
     DegradeTraceItem, SourceRef, TraceInfo,
 };
+use contracts::workspaces::{ChatSession, ConversationScopeKind};
+
+#[test]
+fn chat_session_serializes_explicit_scope_and_omits_empty_metadata() {
+    let session = ChatSession {
+        id: "session-123".to_string(),
+        owner_user_id: "user-123".to_string(),
+        workspace_id: None,
+        scope_kind: ConversationScopeKind::Personal,
+        workspace_name: None,
+        title: None,
+        agent_type: "chat".to_string(),
+        model_role: "quick_chat".to_string(),
+        pinned: false,
+        created_at: "2026-09-02T00:00:00Z".to_string(),
+        updated_at: "2026-09-02T00:00:00Z".to_string(),
+    };
+
+    let json = serde_json::to_value(&session).expect("session should serialize");
+    assert_eq!(json["scope_kind"], "personal");
+    assert!(json.get("workspace_id").is_none());
+    assert!(json.get("workspace_name").is_none());
+    assert!(json.get("title").is_none());
+
+    let parsed: ChatSession = serde_json::from_value(json).expect("session should deserialize");
+    assert_eq!(parsed.scope_kind, ConversationScopeKind::Personal);
+}
+
+#[test]
+fn create_chat_session_request_omits_optional_defaults() {
+    let request: contracts::workspaces::CreateChatSessionRequest =
+        serde_json::from_value(serde_json::json!({})).expect("minimal request should deserialize");
+    assert_eq!(request.workspace_id, None);
+    assert_eq!(request.title, None);
+    assert_eq!(request.agent_type, None);
+    assert_eq!(
+        serde_json::to_value(request).expect("request should serialize"),
+        serde_json::json!({})
+    );
+}
 
 #[test]
 fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
@@ -188,6 +228,8 @@ fn chat_response_roundtrips_shared_nested_types() {
             page: Some(1),
         }],
         citations: vec![Citation {
+            source_scope: None,
+            citation_status: None,
             citation_id: 1,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("chunk-1".to_string()),
@@ -342,6 +384,8 @@ fn export_golden_fixtures() {
             page: Some(1),
         }],
         citations: vec![Citation {
+            source_scope: None,
+            citation_status: None,
             citation_id: 1,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("chunk-1".to_string()),

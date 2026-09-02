@@ -266,6 +266,8 @@ mod tests {
     #[tokio::test]
     async fn exact_roundtrip_keeps_citations() {
         let citations = vec![Citation {
+            source_scope: None,
+            citation_status: None,
             citation_id: 1,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("chunk-1".to_string()),

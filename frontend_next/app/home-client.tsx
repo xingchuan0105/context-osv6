@@ -23,7 +23,7 @@ function getCookie(name: string): string | null {
 /**
  * App entry router + public SSR summary（GEO/SEO 方案 A2）。
  * 爬虫在无 JS 的 HTML 里即可读到产品价值主张；浏览器/桌面端仍由下面的
- * effect 跳转到 /dashboard 或 /login。根页面是桌面端（Tauri）/web 共用入口，
+ * effect 跳转到 /chat 或 /login。根页面是桌面端（Tauri）/web 共用入口，
  * 冷启动跳转行为必须保持不变。
  */
 export default function HomeClient({ locale: localeProp }: { locale?: UiLocale }) {
@@ -43,10 +43,10 @@ export default function HomeClient({ locale: localeProp }: { locale?: UiLocale }
         // ADR-0010: free client — license status optional; never block on activate.
         await getLicenseStatus().catch(() => undefined);
         if (cancelled) return;
-        router.replace("/dashboard");
+        router.replace("/chat");
       } catch {
         if (!cancelled) {
-          router.replace("/dashboard");
+          router.replace("/chat");
         }
       }
     }
@@ -66,7 +66,7 @@ export default function HomeClient({ locale: localeProp }: { locale?: UiLocale }
           return;
         }
         const hasAuthSession = getCookie(AUTH_SESSION_COOKIE_NAME) === "1";
-        router.replace(hasAuthSession ? "/dashboard" : "/login");
+        router.replace(hasAuthSession ? "/chat" : "/login");
       }, 50);
     };
 
@@ -125,7 +125,7 @@ export default function HomeClient({ locale: localeProp }: { locale?: UiLocale }
         ))}
 
         <div className="app-button-row" style={{ flexWrap: "wrap" }}>
-          <Link className="app-button-primary" href="/dashboard">
+          <Link className="app-button-primary" href="/chat">
             {formatUiMessage(locale, "home.seoCtaEnter")}
           </Link>
           <Link className="app-button-secondary" href="/pricing">

@@ -27,7 +27,7 @@ vi.mock("../../lib/runtime/transport", () => ({
 
 import { mockReducedMotionPreference, resetWorkspaceChatPaneMocks } from "./helpers/workspace-chat-pane.setup";
 
-import { WorkspaceChatPane } from "../../components/workspace/workspace-chat-pane";
+import { ChatCanvas } from "../../components/chat/chat-canvas";
 
 beforeEach(() => {
   resetWorkspaceChatPaneMocks(mocks);
@@ -77,7 +77,7 @@ describe("WorkspaceChatPane transcript", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-1"
         sessionId="sess-1"
         selectedSourceIds={["doc-1"]}
@@ -126,12 +126,12 @@ describe("WorkspaceChatPane transcript", () => {
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
         workspace_id: "ws-inline-rag",
-        session_id: null,
         agent_type: "rag",
         capabilities: ["rag"],
         doc_scope: ["doc-1"],
         stream: true,
       });
+      expect(request).not.toHaveProperty("session_id");
 
       await onEvent({
         event: "done",
@@ -161,7 +161,7 @@ describe("WorkspaceChatPane transcript", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-inline-rag"
         sessionId={null}
         selectedSourceIds={["doc-1"]}
@@ -206,12 +206,12 @@ describe("WorkspaceChatPane transcript", () => {
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
         workspace_id: "ws-inline-placeholder",
-        session_id: null,
         agent_type: "rag",
         capabilities: ["rag"],
         doc_scope: ["doc-1"],
         stream: true,
       });
+      expect(request).not.toHaveProperty("session_id");
 
       await onEvent({
         event: "done",
@@ -242,7 +242,7 @@ describe("WorkspaceChatPane transcript", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         workspaceId="ws-inline-placeholder"
         sessionId={null}
         selectedSourceIds={["doc-1"]}

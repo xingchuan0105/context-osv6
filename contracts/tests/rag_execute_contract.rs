@@ -110,6 +110,8 @@ fn retrieval_bundle_citation_chunks_includes_graph_supported_chunks() {
         }],
         relation_paths: vec![],
         citations: vec![contracts::chat::Citation {
+            source_scope: None,
+            citation_status: None,
             citation_id: 1,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("graph-chunk-1".to_string()),

@@ -5,9 +5,9 @@ export const gateMessages = {
     zh: "正在检查登录状态…",
     en: "Checking your session...",
   },
-  gateRedirectingDashboard: {
-    zh: "正在跳转到工作台…",
-    en: "Redirecting to the dashboard...",
+  gateRedirectingChat: {
+    zh: "正在进入对话…",
+    en: "Opening chat...",
   },
   gateRedirectingLogin: {
     zh: "正在跳转到登录页…",

@@ -1,9 +1,9 @@
 use app_bootstrap::AppState;
-use contracts::auth_runtime::{AuthContext, AuthError, SubjectKind};
 use common::AppError;
 use contracts::agent_permissions::{
     PERM_ADMIN, PERM_INDEX, PERM_QUERY, PERM_WORKSPACE_CREATE, PERM_WORKSPACE_LIST,
 };
+use contracts::auth_runtime::{AuthContext, AuthError, SubjectKind};
 use uuid::Uuid;
 
 pub(crate) fn auth_error_to_app_error(error: AuthError) -> AppError {
@@ -16,13 +16,13 @@ pub(crate) fn auth_error_to_app_error(error: AuthError) -> AppError {
             "workspace_scope_mismatch",
             format!("API key is scoped to workspace {expected}, got {actual}"),
         ),
-        AuthError::MissingWorkspaceScope => {
-            AppError::forbidden("missing_workspace_scope", "workspace API key scope required")
-        }
-        AuthError::CrossTenantAccess => AppError::forbidden(
-            "cross_tenant_access",
-            "resource belongs to another account",
+        AuthError::MissingWorkspaceScope => AppError::forbidden(
+            "missing_workspace_scope",
+            "workspace API key scope required",
         ),
+        AuthError::CrossTenantAccess => {
+            AppError::forbidden("cross_tenant_access", "resource belongs to another account")
+        }
         AuthError::MissingUserScope => AppError::unauthorized("account scope required"),
     }
 }
@@ -136,18 +136,25 @@ pub(crate) fn require_user_admin(auth: &AuthContext) -> Result<(), AppError> {
             "account admin permission required",
         ));
     }
-    auth.ensure_permission(PERM_ADMIN).map_err(|_| {
-        AppError::forbidden("admin_required", "account admin permission required")
-    })
+    auth.ensure_permission(PERM_ADMIN)
+        .map_err(|_| AppError::forbidden("admin_required", "account admin permission required"))
 }
 
 pub(crate) fn authorize_session_notebook(
     auth: &AuthContext,
-    session_workspace_id: &str,
+    session_workspace_id: Option<&str>,
 ) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
+    let session_workspace_id = session_workspace_id
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::validation(
+                "workspace_id_required",
+                "workspace_id is required for workspace API keys",
+            )
+        })?;
     authorize_workspace_notebook_str(auth, query_permission(), session_workspace_id)
 }
 
@@ -160,7 +167,7 @@ pub(crate) async fn authorize_session_access(
         .get_session(session_id)
         .await
         .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
-    authorize_session_notebook(state.auth(), &session.workspace_id)?;
+    authorize_session_notebook(state.auth(), session.workspace_id.as_deref())?;
     Ok(session)
 }
 
@@ -169,13 +176,19 @@ pub(crate) async fn ensure_document_in_workspace(
     document_id: &str,
     workspace_id: &str,
 ) -> Result<(), AppError> {
-    let document = state.workspace()
+    let document = state
+        .workspace()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    if document.workspace_id != workspace_id {
+    // Session-bound artifacts carry no workspace binding; the API-key surface
+    // only reaches workspace documents, so absence is not-found (fail-closed).
+    let document_workspace = document.workspace_id.ok_or_else(|| {
+        AppError::not_found("document_not_found", "document not found")
+    })?;
+    if document_workspace != workspace_id {
         return Err(AppError::forbidden(
             "document_workspace_mismatch",
             "document does not belong to the requested workspace",
@@ -222,13 +235,19 @@ pub(crate) async fn authorize_document_access(
     if !matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let document = state.workspace()
+    let document = state
+        .workspace()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    authorize_workspace_notebook_str(state.auth(), permission, &document.workspace_id)
+    // Session-bound artifacts carry no workspace binding; the API-key surface
+    // only reaches workspace documents, so absence is not-found (fail-closed).
+    let workspace_id = document
+        .workspace_id
+        .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
+    authorize_workspace_notebook_str(state.auth(), permission, &workspace_id)
 }
 
 pub(crate) async fn authorize_document_access_index_or_query(
@@ -238,13 +257,17 @@ pub(crate) async fn authorize_document_access_index_or_query(
     if !matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let document = state.workspace()
+    let document = state
+        .workspace()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    authorize_workspace_index_or_query_str(state.auth(), &document.workspace_id)
+    let workspace_id = document
+        .workspace_id
+        .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
+    authorize_workspace_index_or_query_str(state.auth(), &workspace_id)
 }
 
 pub(crate) fn parse_workspace_id(value: &str) -> Result<Uuid, AppError> {
@@ -360,5 +383,20 @@ mod tests {
             .grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, other).unwrap_err();
         assert_eq!(err.code(), "workspace_scope_mismatch");
+    }
+
+    #[test]
+    fn api_key_cannot_access_personal_session_without_workspace() {
+        let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::ApiKey)
+            .with_workspace_scope(Uuid::new_v4())
+            .grant(PERM_QUERY);
+        let err = authorize_session_notebook(&auth, None).unwrap_err();
+        assert_eq!(err.code(), "workspace_id_required");
+    }
+
+    #[test]
+    fn user_can_access_personal_session_without_workspace() {
+        let auth = AuthContext::new(UserId::from(Uuid::new_v4()), SubjectKind::User);
+        authorize_session_notebook(&auth, None).unwrap();
     }
 }

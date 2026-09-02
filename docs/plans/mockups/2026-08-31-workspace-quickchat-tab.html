@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>已被取代：快聊标签页 · 历史视觉稿（2026-08-31）</title>
+<style>
+  /* ===== tokens（摘自 frontend_next/app/design-tokens.css） ===== */
+  :root, :root[data-theme="light"] {
+    --background: hsl(60 18% 96%);
+    --foreground: hsl(53 12% 13%);
+    --card: hsl(0 0% 100%);
+    --surface-muted: hsl(60 23% 97%);
+    --surface-soft: hsl(48 14% 92%);
+    --body: hsl(45 5% 34%);
+    --muted-foreground: hsl(47 6% 47%);
+    --subtle-foreground: hsl(43 7% 60%);
+    --border: hsl(50 11% 89%);
+    --border-strong: hsl(49 10% 79%);
+    --accent-text: hsl(19 100% 41%);
+    --accent-soft: hsl(22 63% 92%);
+    --cta-bg: hsl(53 12% 13%);
+    --cta-fg: hsl(0 0% 100%);
+    --citation: hsl(48 14% 92%);
+    --thinking: hsl(19 56% 72%);
+    --history-active: hsl(50 11% 88%);
+    --shadow-ring: 0 0 0 3px hsl(19 100% 48% / 0.18);
+  }
+  :root[data-theme="dark"] {
+    --background: hsl(0 0% 4%);
+    --foreground: hsl(0 0% 100%);
+    --card: hsl(0 0% 10%);
+    --surface-muted: hsl(220 10% 11%);
+    --surface-soft: hsl(220 10% 11%);
+    --body: hsl(228 7% 86%);
+    --muted-foreground: hsl(216 4% 51%);
+    --subtle-foreground: hsl(216 4% 51%);
+    --border: hsl(220 8% 14%);
+    --border-strong: hsl(213 8% 23%);
+    --accent-text: hsl(0 0% 100%);
+    --accent-soft: hsl(0 0% 12%);
+    --cta-bg: hsl(0 0% 100%);
+    --cta-fg: hsl(0 0% 4%);
+    --citation: hsl(220 10% 11%);
+    --thinking: hsl(19 56% 72%);
+    --history-active: hsl(220 8% 16%);
+    --shadow-ring: 0 0 0 3px hsl(0 0% 100% / 0.18);
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: var(--background); color: var(--foreground); }
+  body {
+    font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 0.875rem; line-height: 1.5; font-weight: 400;
+    padding: 24px 24px 48px; display: flex; flex-direction: column; align-items: center; gap: 16px;
+    transition: background 160ms cubic-bezier(0.2,0,0,1);
+  }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+  /* ===== 稿件工具条（非产品 UI） ===== */
+  .mock-bar {
+    width: min(1280px, 100%); display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .mock-bar .title { font-size: 0.9375rem; }
+  .mock-bar .title small { color: var(--muted-foreground); font-size: 0.75rem; display: block; }
+  .mock-bar .spacer { flex: 1; }
+  .mock-btn {
+    padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-strong);
+    color: var(--muted-foreground); font-size: 0.75rem;
+  }
+  .mock-btn.on { background: var(--cta-bg); color: var(--cta-fg); border-color: var(--cta-bg); }
+
+  /* ===== 画板：workspace shell ===== */
+  .artboard {
+    width: min(1280px, 100%); height: 820px;
+    background: var(--background); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .topbar {
+    height: 52px; flex: none; display: flex; align-items: center; gap: 16px;
+    padding: 0 20px; border-bottom: 1px solid var(--border);
+  }
+  .brand { font-size: 1rem; letter-spacing: -0.01em; }
+  .ws-name {
+    display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 0.8125rem;
+  }
+  .ws-name .dot { color: var(--subtle-foreground); }
+  .topbar .spacer { flex: 1; }
+  .top-action {
+    padding: 5px 14px; border: 1px solid var(--border-strong); border-radius: 999px;
+    font-size: 0.75rem; color: var(--body);
+  }
+  .avatar {
+    width: 28px; height: 28px; border-radius: 999px; background: var(--surface-soft);
+    border: 1px solid var(--border-strong); display: grid; place-items: center;
+    font-size: 0.6875rem; color: var(--muted-foreground);
+  }
+
+  .shell-body { flex: 1; display: flex; min-height: 0; }
+
+  /* ===== 左：历史栏 ===== */
+  .history {
+    width: 236px; flex: none; background: var(--surface-muted);
+    border-right: 1px solid var(--border); padding: 14px 10px;
+    display: flex; flex-direction: column; gap: 6px; overflow: hidden;
+  }
+  .new-chat {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--cta-bg); color: var(--cta-fg); border-radius: 999px;
+    padding: 8px 0; font-size: 0.8125rem; margin-bottom: 10px;
+  }
+  .hist-label { font-size: 0.6875rem; letter-spacing: 0.1em; color: var(--subtle-foreground); padding: 6px 10px 2px; }
+  .hist-item {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
+    color: var(--body); font-size: 0.8125rem; white-space: nowrap; overflow: hidden;
+  }
+  .hist-item .t { overflow: hidden; text-overflow: ellipsis; }
+  .hist-item.active { background: var(--history-active); color: var(--foreground); }
+  .badge-quick {
+    flex: none; font-size: 0.625rem; padding: 1px 7px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+  }
+
+  /* ===== 中：中心面板 ===== */
+  .center { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  /* 分模式 tab */
+  .pane-tabs {
+    flex: none; display: flex; justify-content: center; padding: 12px 0 4px;
+  }
+  .seg {
+    display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px;
+    background: var(--surface-muted); border: 1px solid var(--border);
+  }
+  .seg button { padding: 6px 18px; border-radius: 999px; font-size: 0.8125rem; color: var(--muted-foreground); }
+  .seg button.on { background: var(--card); color: var(--foreground); border: 1px solid var(--border-strong); padding: 5px 17px; }
+
+  .pane-state { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pane-state.hidden { display: none; }
+
+  /* 空态 */
+  .hero {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 0 32px;
+  }
+  .hero h1 { font-size: 1.5rem; letter-spacing: -0.01em; }
+  .hero p { color: var(--muted-foreground); font-size: 0.875rem; max-width: 460px; text-align: center; }
+  .sugs { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+  .sug {
+    border: 1px solid var(--border-strong); border-radius: 999px; padding: 7px 16px;
+    font-size: 0.8125rem; color: var(--body); background: var(--card);
+  }
+  .hero .backline { margin-top: 22px; font-size: 0.75rem; color: var(--subtle-foreground); }
+  .hero .backline u { cursor: pointer; text-underline-offset: 3px; }
+
+  /* 消息流 */
+  .thread { flex: 1; overflow-y: auto; padding: 20px 40px 12px; display: flex; flex-direction: column; gap: 18px; }
+  .msg { max-width: 720px; }
+  .msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .bubble {
+    padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; white-space: pre-wrap;
+  }
+  .msg.user .bubble { background: var(--surface-soft); }
+  .msg.bot .bubble { background: var(--card); border: 1px solid var(--border); align-self: flex-start; }
+  .msg.bot { align-self: flex-start; width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 8px; }
+
+  .att-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .att {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border: 1px solid var(--border-strong); border-radius: 8px; font-size: 0.75rem;
+    background: var(--card); color: var(--body);
+  }
+  .att .ok { color: var(--accent-text); }
+  .att.parsing { color: var(--muted-foreground); border-style: dashed; }
+
+  /* 思考过程折叠块 */
+  .think { border-left: 2px solid var(--thinking); padding: 4px 0 4px 12px; }
+  .think summary {
+    list-style: none; cursor: pointer; font-size: 0.75rem; color: var(--muted-foreground);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .think summary::before { content: "▸"; transition: transform 120ms; }
+  .think[open] summary::before { transform: rotate(90deg); }
+  .think .body { font-size: 0.75rem; color: var(--muted-foreground); padding: 8px 0 2px; line-height: 1.6; }
+
+  .cite-row { display: flex; gap: 6px; }
+  .cite {
+    font-size: 0.6875rem; padding: 3px 10px; border-radius: 999px;
+    background: var(--citation); color: var(--muted-foreground);
+  }
+
+  /* ===== Composer ===== */
+  .composer-wrap { flex: none; padding: 8px 40px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .tray { display: flex; gap: 6px; }
+  .composer {
+    background: var(--card); border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .composer:focus-within { border-color: var(--border-strong); box-shadow: var(--shadow-ring); }
+  .composer textarea {
+    border: none; outline: none; resize: none; background: transparent; color: var(--foreground);
+    font: inherit; font-size: 0.875rem; min-height: 44px; max-height: 160px; width: 100%;
+  }
+  .composer textarea::placeholder { color: var(--subtle-foreground); }
+  .composer-row { display: flex; align-items: center; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px;
+    border: 1px solid var(--border-strong); border-radius: 999px;
+    font-size: 0.75rem; color: var(--body);
+  }
+  .chip.on { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); }
+  .chip.paper { border-style: dashed; }
+  .composer-row .spacer { flex: 1; }
+  .send {
+    width: 32px; height: 32px; border-radius: 999px; background: var(--cta-bg); color: var(--cta-fg);
+    display: grid; place-items: center; font-size: 0.9375rem;
+  }
+  .mode-line { font-size: 0.6875rem; color: var(--subtle-foreground); text-align: center; }
+
+  /* ===== 注记 ===== */
+  .notes {
+    width: min(1280px, 100%); display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  .note {
+    border: 1px solid var(--border); border-radius: 8px; background: var(--card);
+    padding: 10px 14px; font-size: 0.75rem; color: var(--body);
+  }
+  .note b { display: block; color: var(--foreground); margin-bottom: 2px; }
+</style>
+</head>
+<body>
+<div role="note" style="position:sticky;top:0;z-index:9999;padding:12px 16px;background:#7f1d1d;color:#fff;text-align:center;font:14px/1.5 sans-serif;">
+  SUPERSEDED（2026-09-02）：此 Workspace「快聊」tab 视觉稿仅作历史记录，不得实施。现行方案为 Chat-first `/chat` + 共享 Chat Canvas。
+</div>
+
+<!-- 稿件工具条 -->
+<div class="mock-bar">
+  <div class="title">Workspace · 快聊标签页 视觉稿
+    <small>docs/plans/2026-08-31-workspace-quickchat-tab-design.md · 非产品代码，仅供评审</small>
+  </div>
+  <div class="spacer"></div>
+  <button class="mock-btn on" id="btn-empty" onclick="setState('empty')">空态</button>
+  <button class="mock-btn" id="btn-chat" onclick="setState('chat')">会话中</button>
+  <button class="mock-btn" id="btn-theme" onclick="toggleTheme()">切换暗色</button>
+</div>
+
+<!-- 画板 -->
+<div class="artboard">
+
+  <!-- 顶栏（不变） -->
+  <div class="topbar">
+    <div class="brand">Context OS</div>
+    <div class="ws-name"><span class="dot">/</span><span>产品资料库</span></div>
+    <div class="spacer"></div>
+    <button class="top-action">分享</button>
+    <button class="top-action">通知</button>
+    <div class="avatar">川</div>
+  </div>
+
+  <div class="shell-body">
+
+    <!-- 左：历史栏（快聊会话混排 + 徽标） -->
+    <aside class="history">
+      <button class="new-chat">＋ 新建会话</button>
+      <div class="hist-label">今天</div>
+      <div class="hist-item active"><span class="badge-quick">快聊</span><span class="t">帮我总结这份财报…</span></div>
+      <div class="hist-item"><span class="t">Q3 定价策略讨论</span></div>
+      <div class="hist-item"><span class="badge-quick">快聊</span><span class="t">润色一封英文邮件</span></div>
+      <div class="hist-label">更早</div>
+      <div class="hist-item"><span class="t">竞品对比摘要</span></div>
+      <div class="hist-item"><span class="t">上线清单核对</span></div>
+    </aside>
+
+    <!-- 中：中心面板 -->
+    <main class="center">
+
+      <!-- 分模式 tab -->
+      <div class="pane-tabs">
+        <div class="seg">
+          <button onclick="segHint()">工作区对话</button>
+          <button class="on">快聊</button>
+        </div>
+      </div>
+
+      <!-- 态 1：空态 -->
+      <section class="pane-state" id="state-empty">
+        <div class="hero">
+          <h1>快聊</h1>
+          <p>轻量对话，响应更快。可以直接上传文件，也可以开启深度思考或联网搜索。</p>
+          <div class="sugs">
+            <button class="sug">把这段会议记录整理成行动项</button>
+            <button class="sug">解释一下这段报错日志</button>
+            <button class="sug">帮我润色一封英文邮件</button>
+          </div>
+          <div class="backline">需要基于工作区资料问答？<u>切回工作区对话</u></div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <textarea placeholder="问点什么…">帮我起草一份产品更新的公告，语气轻松一点</textarea>
+            <div class="composer-row">
+              <button class="chip on" onclick="flip(this)">⚡ 深度思考</button>
+              <button class="chip" onclick="flip(this)">🌐 联网搜索</button>
+              <button class="chip paper">📎 上传附件</button>
+              <span class="spacer"></span>
+              <button class="send">↑</button>
+            </div>
+          </div>
+          <div class="mode-line">快聊 · qwen3.8-flash · 官方模型（走余额）</div>
+        </div>
+      </section>
+
+      <!-- 态 2：会话中 -->
+      <section class="pane-state hidden" id="state-chat">
+        <div class="thread">
+          <!-- 用户消息：带附件 -->
+          <div class="msg user">
+            <div class="att-row">
+              <span class="att">📄 Q3财报.pdf <span class="ok">✓</span></span>
+              <span class="att">📄 Q2财报.pdf <span class="ok">✓</span></span>
+            </div>
+            <div class="bubble">对比这两份财报的核心结论，用三点说清变化</div>
+          </div>
+          <!-- 助手消息：思考块 + 回答 + 引用 -->
+          <div class="msg bot">
+            <details class="think" id="think">
+              <summary>已深度思考</summary>
+              <div class="body">用户上传了 Q2、Q3 两份财报，要求对比核心结论。先看收入与利润变化，再看费用结构，最后给出三点归因。表格数据已完成解析，无需额外检索。</div>
+            </details>
+            <div class="bubble">1. 收入环比增长 18%，主要由企业订阅拉动；2. 毛利率提升 2.3 个百分点，云成本优化开始兑现；3. 销售费用率持平，说明增长并非靠投放堆出来。</div>
+            <div class="cite-row">
+              <span class="cite">Q3财报.pdf · P3</span>
+              <span class="cite">Q2财报.pdf · P2</span>
+            </div>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="tray">
+            <span class="att parsing">📄 数据.csv 解析中…</span>
+          </div>
+          <div class="composer">
+            <textarea placeholder="继续问…">第三点展开说说，成本优化具体在哪几个项</textarea>
+            <div class="composer-row">
+              <button class="chip on" onclick="flip(this)">⚡ 深度思考</button>
+              <button class="chip on" onclick="flip(this)">🌐 联网搜索</button>
+              <button class="chip paper">📎 上传附件</button>
+              <span class="spacer"></span>
+              <button class="send">■</button>
+            </div>
+          </div>
+          <div class="mode-line">快聊 · qwen3.8-flash · 官方模型（走余额）</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- 设计要点注记 -->
+<div class="notes">
+  <div class="note"><b>标签页</b>中心面板 segmented control（工作区对话 | 快聊），状态存 ui-store per-workspace；不新增路由、不动全局导航。</div>
+  <div class="note"><b>芯片组</b>深度思考（开关，默认关）· 联网搜索（复用现有 search 能力）· 上传附件；无「知识库」芯片——快聊不走 RAG。</div>
+  <div class="note"><b>附件</b>会话级临时附件：上传→解析文本→注入本轮上下文；不入资料库、不出现在右侧栏；解析中禁止发送，失败可移除。</div>
+  <div class="note"><b>右侧栏</b>快聊模式隐藏资料源/笔记栏，纯 chatbot 观感；切回工作区对话即恢复。</div>
+  <div class="note"><b>历史栏</b>快聊会话与工作区会话混排，徽标区分；点击快聊会话自动切到快聊模式。</div>
+  <div class="note"><b>模型</b>qwen3.8-flash 服务端钉死（chatbot_llm 配置），请求不选型；模式行明示「官方模型（走余额）」。</div>
+</div>
+
+<script>
+  function setState(s) {
+    document.getElementById('state-empty').classList.toggle('hidden', s !== 'empty');
+    document.getElementById('state-chat').classList.toggle('hidden', s !== 'chat');
+    document.getElementById('btn-empty').classList.toggle('on', s === 'empty');
+    document.getElementById('btn-chat').classList.toggle('on', s === 'chat');
+    if (s === 'chat') document.getElementById('think').removeAttribute('open');
+  }
+  function toggleTheme() {
+    const root = document.documentElement;
+    const dark = root.dataset.theme === 'dark';
+    root.dataset.theme = dark ? 'light' : 'dark';
+    document.getElementById('btn-theme').textContent = dark ? '切换暗色' : '切换亮色';
+  }
+  function flip(el) { el.classList.toggle('on'); }
+  function segHint() { alert('视觉稿：切回「工作区对话」= 现有中心面板，右侧资料/笔记栏恢复显示。'); }
+</script>
+</body>
+</html>

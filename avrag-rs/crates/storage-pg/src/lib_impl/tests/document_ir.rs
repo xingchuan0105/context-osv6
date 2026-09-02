@@ -96,7 +96,7 @@ async fn document_ir_projection_deletes_are_tenant_scoped_when_database_availabl
         metadata_json: serde_json::json!({}),
     };
 
-    repo.documents().replace_document_blocks(&ctx, workspace_id, document_id, &[replacement])
+    repo.documents().replace_document_blocks(&ctx, Some(workspace_id), document_id, &[replacement])
         .await
         .unwrap();
 

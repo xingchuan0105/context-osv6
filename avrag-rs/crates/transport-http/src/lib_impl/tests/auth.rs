@@ -17,11 +17,11 @@ async fn workspace_routes_with_auth_headers() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-
 #[tokio::test]
 async fn chat_session_routes_work_with_auth_headers() {
     let state = test_app_state();
-    let notebook = state.workspace()
+    let notebook = state
+        .workspace()
         .create_workspace(CreateWorkspaceRequest {
             name: "Session Test".to_string(),
             description: String::new(),
@@ -50,7 +50,10 @@ async fn chat_session_routes_work_with_auth_headers() {
     let session_id = session["id"].as_str().unwrap().to_string();
 
     let list_req = Request::builder()
-        .uri(format!("/api/v1/chat/sessions?workspace_id={}", notebook.id))
+        .uri(format!(
+            "/api/v1/chat/sessions?workspace_id={}",
+            notebook.id
+        ))
         .method("GET")
         .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
         .header(middleware::HEADER_USER_ID, user_id)
@@ -80,6 +83,53 @@ async fn chat_session_routes_work_with_auth_headers() {
     assert_eq!(messages_resp.status(), StatusCode::OK);
 }
 
+#[tokio::test]
+async fn personal_chat_session_defaults_to_quick_chat_without_workspace() {
+    let app = build_router(test_app_state());
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
+    let user_id = "00000000-0000-0000-0000-000000000002";
+
+    let create_req = Request::builder()
+        .uri("/api/v1/chat/sessions")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
+        .header(middleware::HEADER_USER_ID, user_id)
+        .body(Body::from(r#"{"title":"Personal"}"#))
+        .unwrap();
+    let create_resp = app.oneshot(create_req).await.unwrap();
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let create_body = to_bytes(create_resp.into_body(), usize::MAX).await.unwrap();
+    let session: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
+    assert_eq!(session["owner_user_id"].as_str(), Some(owner_user_id));
+    assert_eq!(session["workspace_id"], serde_json::Value::Null);
+    assert_eq!(session["agent_type"].as_str(), Some("chat"));
+    assert_eq!(session["model_role"].as_str(), Some("quick_chat"));
+}
+
+#[tokio::test]
+async fn listing_sessions_rejects_malformed_workspace_id() {
+    let app = build_router(test_app_state());
+    let owner_user_id = "00000000-0000-0000-0000-000000000001";
+    let user_id = "00000000-0000-0000-0000-000000000002";
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/chat/sessions?workspace_id=not-a-uuid")
+                .method("GET")
+                .header(middleware::HEADER_OWNER_USER_ID, owner_user_id)
+                .header(middleware::HEADER_USER_ID, user_id)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["error"], "invalid_workspace_id");
+}
 
 #[tokio::test]
 async fn change_password_allows_login_with_new_secret_when_database_available() {
@@ -138,7 +188,6 @@ async fn change_password_allows_login_with_new_secret_when_database_available() 
     assert_eq!(login_resp.status(), StatusCode::OK);
 }
 
-
 #[tokio::test]
 async fn local_reregister_resets_password_when_database_available() {
     let Some(state) = pg_test_app_state().await else {
@@ -180,8 +229,7 @@ async fn local_reregister_resets_password_when_database_available() {
     let re_register_body = to_bytes(re_register_resp.into_body(), usize::MAX)
         .await
         .unwrap();
-    let re_register_payload: serde_json::Value =
-        serde_json::from_slice(&re_register_body).unwrap();
+    let re_register_payload: serde_json::Value = serde_json::from_slice(&re_register_body).unwrap();
     assert!(
         re_register_payload["data"]["token"]
             .as_str()
@@ -220,7 +268,6 @@ async fn local_reregister_resets_password_when_database_available() {
         }
     }
 }
-
 
 #[tokio::test]
 async fn register_still_conflicts_for_existing_email_without_local_flag() {
@@ -271,7 +318,6 @@ async fn register_still_conflicts_for_existing_email_without_local_flag() {
         }
     }
 }
-
 
 #[tokio::test]
 async fn login_returns_distinct_codes_for_missing_account_and_wrong_password() {
@@ -331,7 +377,6 @@ async fn login_returns_distinct_codes_for_missing_account_and_wrong_password() {
     );
 }
 
-
 #[tokio::test]
 async fn logout_invalidates_existing_token_when_database_available() {
     let Some(state) = pg_test_app_state().await else {
@@ -375,7 +420,6 @@ async fn logout_invalidates_existing_token_when_database_available() {
     let me_resp = app.oneshot(me_req).await.unwrap();
     assert_eq!(me_resp.status(), StatusCode::UNAUTHORIZED);
 }
-
 
 #[tokio::test]
 async fn password_reset_code_flow_allows_login_with_new_secret_when_database_available() {
@@ -448,7 +492,6 @@ async fn password_reset_code_flow_allows_login_with_new_secret_when_database_ava
     assert_eq!(login_resp.status(), StatusCode::OK);
 }
 
-
 #[tokio::test]
 async fn auth_register_writes_product_event_when_database_available() {
     let Some(state) = pg_test_app_state().await else {
@@ -466,7 +509,6 @@ async fn auth_register_writes_product_event_when_database_available() {
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 }
-
 
 #[tokio::test]
 async fn auth_register_rejects_stale_legal_versions_when_database_available() {
@@ -489,12 +531,8 @@ async fn auth_register_rejects_stale_legal_versions_when_database_available() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(
-        payload["error"].as_str(),
-        Some("invalid_terms_version")
-    );
+    assert_eq!(payload["error"].as_str(), Some("invalid_terms_version"));
 }
-
 
 #[tokio::test]
 async fn auth_register_requires_legal_versions_when_database_available() {
@@ -518,7 +556,6 @@ async fn auth_register_requires_legal_versions_when_database_available() {
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["error"].as_str(), Some("consent_required"));
 }
-
 
 #[tokio::test]
 async fn auth_legal_acceptance_records_payment_context_when_database_available() {
@@ -582,7 +619,6 @@ async fn auth_legal_acceptance_records_payment_context_when_database_available()
     assert_eq!(row.2, app_core::PUBLISHED_PRIVACY_VERSION);
 }
 
-
 #[tokio::test]
 async fn auth_legal_status_needs_re_acceptance_when_acceptance_missing_when_database_available() {
     let Some(state) = pg_test_app_state().await else {
@@ -602,8 +638,7 @@ async fn auth_legal_status_needs_re_acceptance_when_acceptance_missing_when_data
     let register_body_bytes = to_bytes(register_resp.into_body(), usize::MAX)
         .await
         .unwrap();
-    let register_payload: serde_json::Value =
-        serde_json::from_slice(&register_body_bytes).unwrap();
+    let register_payload: serde_json::Value = serde_json::from_slice(&register_body_bytes).unwrap();
     let token = register_payload["data"]["token"]
         .as_str()
         .unwrap()
@@ -630,13 +665,10 @@ async fn auth_legal_status_needs_re_acceptance_when_acceptance_missing_when_data
         .unwrap();
     let status_resp = app.oneshot(status_req).await.unwrap();
     assert_eq!(status_resp.status(), StatusCode::OK);
-    let status_body = to_bytes(status_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let status_body = to_bytes(status_resp.into_body(), usize::MAX).await.unwrap();
     let status_payload: serde_json::Value = serde_json::from_slice(&status_body).unwrap();
     assert_eq!(status_payload["data"]["needs_re_acceptance"], json!(true));
 }
-
 
 #[tokio::test]
 async fn auth_legal_acceptance_records_re_acceptance_context_when_database_available() {
@@ -657,8 +689,7 @@ async fn auth_legal_acceptance_records_re_acceptance_context_when_database_avail
     let register_body_bytes = to_bytes(register_resp.into_body(), usize::MAX)
         .await
         .unwrap();
-    let register_payload: serde_json::Value =
-        serde_json::from_slice(&register_body_bytes).unwrap();
+    let register_payload: serde_json::Value = serde_json::from_slice(&register_body_bytes).unwrap();
     let token = register_payload["data"]["token"]
         .as_str()
         .unwrap()
@@ -699,13 +730,10 @@ async fn auth_legal_acceptance_records_re_acceptance_context_when_database_avail
         .unwrap();
     let status_resp = app.oneshot(status_req).await.unwrap();
     assert_eq!(status_resp.status(), StatusCode::OK);
-    let status_body = to_bytes(status_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let status_body = to_bytes(status_resp.into_body(), usize::MAX).await.unwrap();
     let status_payload: serde_json::Value = serde_json::from_slice(&status_body).unwrap();
     assert_eq!(status_payload["data"]["needs_re_acceptance"], json!(false));
 }
-
 
 #[tokio::test]
 async fn auth_legal_acceptance_rejects_stale_privacy_version_when_database_available() {
@@ -726,8 +754,7 @@ async fn auth_legal_acceptance_rejects_stale_privacy_version_when_database_avail
     let register_body_bytes = to_bytes(register_resp.into_body(), usize::MAX)
         .await
         .unwrap();
-    let register_payload: serde_json::Value =
-        serde_json::from_slice(&register_body_bytes).unwrap();
+    let register_payload: serde_json::Value = serde_json::from_slice(&register_body_bytes).unwrap();
     let token = register_payload["data"]["token"]
         .as_str()
         .unwrap()
@@ -745,16 +772,13 @@ async fn auth_legal_acceptance_rejects_stale_privacy_version_when_database_avail
         .unwrap();
     let legal_resp = app.oneshot(legal_req).await.unwrap();
     assert_eq!(legal_resp.status(), StatusCode::BAD_REQUEST);
-    let legal_body = to_bytes(legal_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let legal_body = to_bytes(legal_resp.into_body(), usize::MAX).await.unwrap();
     let legal_payload: serde_json::Value = serde_json::from_slice(&legal_body).unwrap();
     assert_eq!(
         legal_payload["error"].as_str(),
         Some("invalid_privacy_version")
     );
 }
-
 
 #[tokio::test]
 async fn auth_legal_status_reflects_current_acceptance_when_database_available() {
@@ -789,9 +813,7 @@ async fn auth_legal_status_reflects_current_acceptance_when_database_available()
         .unwrap();
     let status_resp = app.oneshot(status_req).await.unwrap();
     assert_eq!(status_resp.status(), StatusCode::OK);
-    let status_body = to_bytes(status_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let status_body = to_bytes(status_resp.into_body(), usize::MAX).await.unwrap();
     let status_payload: serde_json::Value = serde_json::from_slice(&status_body).unwrap();
     assert_eq!(status_payload["data"]["needs_re_acceptance"], json!(false));
     assert_eq!(
@@ -799,7 +821,6 @@ async fn auth_legal_status_reflects_current_acceptance_when_database_available()
         Some(app_core::PUBLISHED_TERMS_VERSION)
     );
 }
-
 
 #[tokio::test]
 async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
@@ -854,17 +875,36 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
 
     // Mark workspace public + share_enabled so anonymous chat is allowed (ADR-0010).
     let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false), None, None)
+        .update_share_settings(
+            &owner_auth,
+            &workspace_id,
+            Some("public"),
+            Some(false),
+            None,
+            None,
+        )
         .await;
 
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .create_share_token(
+            &owner_auth,
+            &workspace_id,
+            avrag_share::AccessLevel::Read,
+            None,
+        )
         .await
         .expect("share token should create");
 
     // link mode still requires login
     let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .update_share_settings(&owner_auth, &workspace_id, Some("link"), Some(false), None, None)
+        .update_share_settings(
+            &owner_auth,
+            &workspace_id,
+            Some("link"),
+            Some(false),
+            None,
+            None,
+        )
         .await;
     let chat_req_link = Request::builder()
         .uri("/api/v1/chat")
@@ -879,7 +919,14 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
 
     // public allows anonymous (may fail later in pipeline for missing LLM; must not be login_required)
     let _ = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
-        .update_share_settings(&owner_auth, &workspace_id, Some("public"), Some(false), None, None)
+        .update_share_settings(
+            &owner_auth,
+            &workspace_id,
+            Some("public"),
+            Some(false),
+            None,
+            None,
+        )
         .await;
     let chat_req = Request::builder()
         .uri("/api/v1/chat")
@@ -901,7 +948,6 @@ async fn anonymous_share_chat_on_public_workspace_uses_owner_auth_scope() {
     let sessions = state.agent().list_sessions(Some(&workspace_id)).await;
     assert!(sessions.is_empty());
 }
-
 
 #[tokio::test]
 async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_database_available() {
@@ -939,9 +985,7 @@ async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_databas
         .unwrap();
     let shares_resp = app.clone().oneshot(shares_req).await.unwrap();
     assert_eq!(shares_resp.status(), StatusCode::NOT_FOUND);
-    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX).await.unwrap();
     let shares_payload: serde_json::Value = serde_json::from_slice(&shares_body).unwrap();
     assert_eq!(shares_payload["success"].as_bool(), Some(false));
     assert!(shares_payload["error"].is_string());
@@ -967,9 +1011,7 @@ async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_databas
         .unwrap();
     let update_resp = app.clone().oneshot(update_req).await.unwrap();
     assert_eq!(update_resp.status(), StatusCode::OK);
-    let update_body = to_bytes(update_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let update_body = to_bytes(update_resp.into_body(), usize::MAX).await.unwrap();
     let update_payload: serde_json::Value = serde_json::from_slice(&update_body).unwrap();
     assert_eq!(
         update_payload["data"]["user"]["public_profile_enabled"].as_bool(),
@@ -984,9 +1026,7 @@ async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_databas
         .unwrap();
     let shares_resp = app.clone().oneshot(shares_req).await.unwrap();
     assert_eq!(shares_resp.status(), StatusCode::OK);
-    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX).await.unwrap();
     let shares_payload: serde_json::Value = serde_json::from_slice(&shares_body).unwrap();
     assert_eq!(shares_payload["success"].as_bool(), Some(true));
     assert_eq!(
@@ -1028,15 +1068,30 @@ async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_databas
     .with_actor_id(contracts::auth_runtime::ActorId::new(user_id));
     let service = avrag_share::ShareService::new(state.share_store().expect("pg expected"));
     let share_token = service
-        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .create_share_token(
+            &owner_auth,
+            &workspace_id,
+            avrag_share::AccessLevel::Read,
+            None,
+        )
         .await
         .expect("share token should create");
     let second_token = service
-        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .create_share_token(
+            &owner_auth,
+            &workspace_id,
+            avrag_share::AccessLevel::Read,
+            None,
+        )
         .await
         .expect("second token should create");
     let revoked_token = service
-        .create_share_token(&owner_auth, &workspace_id, avrag_share::AccessLevel::Read, None)
+        .create_share_token(
+            &owner_auth,
+            &workspace_id,
+            avrag_share::AccessLevel::Read,
+            None,
+        )
         .await
         .expect("third token should create");
     service
@@ -1052,14 +1107,16 @@ async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_databas
         .unwrap();
     let shares_resp = app.clone().oneshot(shares_req).await.unwrap();
     assert_eq!(shares_resp.status(), StatusCode::OK);
-    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let shares_body = to_bytes(shares_resp.into_body(), usize::MAX).await.unwrap();
     let shares_payload: serde_json::Value = serde_json::from_slice(&shares_body).unwrap();
     let shares = shares_payload["data"]["shares"]
         .as_array()
         .expect("shares array");
-    assert_eq!(shares.len(), 1, "expected one row per workspace: {shares_payload}");
+    assert_eq!(
+        shares.len(),
+        1,
+        "expected one row per workspace: {shares_payload}"
+    );
     let item = &shares[0];
     assert_eq!(item["workspace_id"].as_str(), Some(workspace_id.as_str()));
     assert_eq!(item["title"].as_str(), Some("Public Shares Workspace"));
@@ -1071,9 +1128,11 @@ async fn public_user_shares_requires_opt_in_and_lists_active_shares_when_databas
         listed_token == share_token || listed_token == second_token,
         "listed token must be one of the active tokens"
     );
-    assert_ne!(listed_token, revoked_token, "revoked token must not be listed");
+    assert_ne!(
+        listed_token, revoked_token,
+        "revoked token must not be listed"
+    );
 }
-
 
 #[test]
 fn jwt_roundtrip() {
@@ -1086,17 +1145,12 @@ fn jwt_roundtrip() {
     assert!(!claims.permissions.iter().any(|perm| perm == "admin"));
 }
 
-
 #[test]
 fn jwt_org_admin_includes_admin_permission() {
     let user_id = Uuid::new_v4();
     let owner_user_id = Uuid::new_v4();
-    let token = issue_jwt_for_auth_version(
-        &user_id,
-        &owner_user_id,
-        1,
-        contracts::USER_ROLE_ORG_ADMIN,
-    );
+    let token =
+        issue_jwt_for_auth_version(&user_id, &owner_user_id, 1, contracts::USER_ROLE_ORG_ADMIN);
     let claims = verify_jwt(&token).expect("token should be valid");
     assert!(claims.permissions.iter().any(|perm| perm == "admin"));
 }
@@ -1151,4 +1205,3 @@ fn jwt_agent_mint_capped_by_parent_exp() {
     assert!(agent_claims.exp <= claims.exp);
     assert!(ttl <= chrono::Duration::hours(24) + chrono::Duration::minutes(1));
 }
-

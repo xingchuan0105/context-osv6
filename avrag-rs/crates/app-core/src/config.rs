@@ -19,6 +19,9 @@ pub struct AppConfig {
     pub mm_rerank: ModelProviderConfig,
     pub rerank: ModelProviderConfig,
     pub agent_llm: ModelProviderConfig,
+    /// Dedicated primary-answer model for personal conversations. It is
+    /// resolved independently from `agent_llm` and the active capabilities.
+    pub quick_chat_llm: ModelProviderConfig,
     /// Multi-provider pool for the agent LLM (extra keys + fallbacks); `None`
     /// keeps the single-route behavior.
     pub agent_llm_pool: Option<avrag_llm::LlmPoolConfig>,
@@ -276,6 +279,19 @@ impl Default for AppConfig {
                 rpm_limit: None,
                 tpm_limit: None,
             },
+            quick_chat_llm: ModelProviderConfig {
+                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+                api_key: String::new(),
+                model: "qwen3.8-flash".to_string(),
+                timeout_ms: 30000,
+                temperature: Some(0.2),
+                api_style: Some("openai".to_string()),
+                dimensions: None,
+                enable_thinking: Some(false),
+                enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
             agent_llm_pool: None,
             retrieve_llm: ModelProviderConfig {
                 // Empty = unset; `to_llm_config()` returns None and the loop
@@ -452,6 +468,11 @@ impl AppConfig {
                 .unwrap_or(config.milvus.multimodal_vector_dim),
         );
         config.agent_llm = model_config_from_env("AGENT_LLM", &config.agent_llm, None);
+        config.quick_chat_llm = model_config_from_env(
+            "QUICK_CHAT_LLM",
+            &config.quick_chat_llm,
+            env_optional_string("DASHSCOPE_API_KEY"),
+        );
         config.agent_llm_pool = llm_pool_config_from_env("AGENT_LLM", &config.agent_llm);
         config.retrieve_llm = model_config_from_env("RETRIEVE_LLM", &config.retrieve_llm, None);
         config.memory_llm = model_config_from_env("MEMORY_LLM", &config.memory_llm, None);

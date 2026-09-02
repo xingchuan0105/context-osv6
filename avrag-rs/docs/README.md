@@ -7,7 +7,7 @@
 ## 现行架构基线（2026-08-02）
 
 - **单 agent SaC**（Search as Code）：一条 ReAct 循环从指令到答案；检索全部走沙箱 SDK，经 fd 管道桥（ADR-0009）到宿主；无原生检索 function-calling。设计：根 [`docs/plans/2026-07-30-sac-sdk-single-agent-design.md`](../../docs/plans/2026-07-30-sac-sdk-single-agent-design.md)。orchestrator 多 agent 代码已于 2026-08-01 物理删除（commit `7f2d182d`），权威记录：[`engineering/2026-07-31-sac-orchestrator-isolation.md`](engineering/2026-07-31-sac-orchestrator-isolation.md)。
-- **Product Apps + AppState 组合根**：T1–T8 法则（根 `docs/adr/0007-product-apps-composition-root.md`、`docs/agent/product-apps.md`）；workspace 唯一产品真相，无 org。
+- **Product Apps + AppState 组合根**：T1–T8 法则（根 `docs/adr/0007-product-apps-composition-root.md`、`docs/agent/product-apps.md`）；Workspace 是唯一可复用/管理/分享的持久知识容器，Conversation 可直接归用户且不属于 Workspace；无 org。
 - **计费**：用户级；Creem + Alipay；rolling 窗口 + soft limit。语义参考：[`superpowers/specs/2026-07-05-llm-usage-exit-metering-design.md`](superpowers/specs/2026-07-05-llm-usage-exit-metering-design.md)。
 - **Prompts**：全部 LLM 面向文案在 `../prompts/**/*.md`（CDS，第三人称观察文体）；规则见 `../prompts/README.md`、`../prompts/loop/README.md`。
 - **解析/入库**：按格式分工（2026-08-05）：PDF→liteparse；**Office/ODF/RTF/EPUB/CSV 等（anydoc 非 PDF 全集）→anydoc**（+ pptx 族 hex strip）；文本/代码/tsv/html…→markitdown；图片→PaddleOCR。设计真相：[`plans/2026-08-05-parser-pipeline-anydoc.md`](plans/2026-08-05-parser-pipeline-anydoc.md)（取代 08-02 office-direct 决策；历史：[`plans/2026-08-02-parser-pipeline-direct-readers.md`](plans/2026-08-02-parser-pipeline-direct-readers.md)）。struct query：[`plans/2026-07-31-struct-query-virtual-tables.md`](plans/2026-07-31-struct-query-virtual-tables.md)；运维：[`runbooks/worker-dev.md`](runbooks/worker-dev.md)（实施 anydoc 后同步）。

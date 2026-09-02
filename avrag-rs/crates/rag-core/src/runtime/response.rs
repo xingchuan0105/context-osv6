@@ -202,6 +202,8 @@ impl RagRuntime {
             .enumerate()
             .map(|(index, chunk)| Citation {
                 citation_id: (index + 1) as i64,
+                source_scope: None,
+                citation_status: None,
                 doc_id: chunk.doc_id.to_string(),
                 chunk_id: Some(chunk.chunk_id.to_string()),
                 page: chunk.page.map(|page| page as usize),

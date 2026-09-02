@@ -54,6 +54,8 @@ describe("app nav config", () => {
   });
 
   it("locks PRODUCT_IA §4 canonical destinations", () => {
+    expect(APP_NAV_ENTRIES[0]?.id).toBe("chat");
+    expect(appNavEntry("chat").href).toBe("/chat");
     expect(appNavEntry("pricing").href).toBe("/pricing");
     expect(appNavEntry("topup").href).toBe("/pricing#topup");
     expect(appNavEntry("providers").href).toBe("/settings?tab=providers");

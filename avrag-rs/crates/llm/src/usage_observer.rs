@@ -14,6 +14,8 @@ pub struct TenantContext {
     /// When true, platform wallet is not debited (cloud BYOK used for this request).
     /// Default false: platform proxy path bills the owner wallet.
     pub skip_wallet_debit: bool,
+    /// Credential attribution for usage segments: `official` | `byok`.
+    pub credential_source: String,
 }
 
 impl TenantContext {
@@ -22,7 +24,13 @@ impl TenantContext {
             owner_user_id,
             user_id,
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         }
+    }
+
+    pub fn with_credential_source(mut self, credential_source: &str) -> Self {
+        self.credential_source = credential_source.to_string();
+        self
     }
 
     pub fn with_skip_wallet_debit(mut self, skip: bool) -> Self {
@@ -103,6 +111,7 @@ mod tests {
             owner_user_id: Uuid::from_u128(1),
             user_id: Uuid::from_u128(2),
             skip_wallet_debit: false,
+            credential_source: "official".to_string(),
         };
         let record = ChatUsageRecord {
             prompt_tokens: 10,

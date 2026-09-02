@@ -3,6 +3,7 @@ import type { UiMessageDescriptor } from "./types";
 import { adminMessages } from "./admin";
 import { apiAccessMessages } from "./api-access";
 import { authMessages } from "./auth";
+import { chatMessages } from "./chat";
 import { commandPaletteMessages } from "./command-palette";
 import { commonMessages } from "./common";
 import { dashboardMessages } from "./dashboard";
@@ -26,6 +27,7 @@ export const UI_MESSAGES = {
   ...adminMessages,
   ...apiAccessMessages,
   ...authMessages,
+  ...chatMessages,
   ...commandPaletteMessages,
   ...commonMessages,
   ...dashboardMessages,

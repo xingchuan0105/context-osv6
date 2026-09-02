@@ -256,7 +256,7 @@ describe("workspace client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.test/api/v1/chat/sessions/sess-2",
       expect.objectContaining({
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ title: "Renamed", pinned: true }),
       }),
     );

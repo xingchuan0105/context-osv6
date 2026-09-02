@@ -3,12 +3,12 @@
 本索引是文档体系的入口：告诉你哪些文档是**当前权威**、哪些是**历史记录**。
 维护规则：新增现行参考文档时登记到「当前权威」；带日期戳的计划/审计/复盘属于时间点快照，无需登记，也无需随架构演进更新内容；文档被取代时在文首加 SUPERSEDED 横幅并在「已被取代」一节登记。（索引建立于 2026-08-02 文档体系梳理）
 
-## 现行架构基线（2026-08-11 更新）
+## 现行架构基线（2026-09-02 更新）
 
 - **Agent-lane 现行：Lead + RAG/Web Workers**（显式 `capabilities[]`；Workers 只回 EvidencePack；Lead 合成与覆盖度裁决；无独立 verify 环；host 结构 re-brief≤1；每通道 1 Brief）。设计：`plans/2026-08-11-lead-rag-web-workers-design.md`（W0–W4 + 审查收尾已进 `agent-loop`）
 - **SaC SDK** 下沉为 **RAG Worker** 短程执行引擎（dense/lexical/grep 等仍走沙箱）；2026-07-30 单 agent A2「无 worker」在 agent-lane **被本设计取代**
 - **Product Apps + AppState 组合根**：T1–T8 法则生效。见根 `../AGENTS.md` + `agent/product-apps.md`
-- **workspace 唯一产品真相**，无 org（T7/T8）
+- **Workspace 是唯一可复用、可管理、可分享的持久知识容器**；Conversation 可直接归用户且 `workspace_id` 为空；无 org（T7/T8）
 - **计费**：B2C 用户级；渠道 **Creem + Alipay**（Stripe 已移除）；**现行商业模式见 ADR-0010**（可分享 Workspace 名额 + 代购储值）；旧 token 滚动套餐 / 桌面买断见已取代 ADR-0004
 - **检索桥**：沙箱↔宿主 fd 管道 RPC（`adr/0009-retrieval-bridge.md`）
 - **代码情报工具**：code-review-graph（graphify 已退役，`agent/code-review-graph.md`）
@@ -30,8 +30,9 @@
 | `engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` | 旧 token 套餐用量语义（frozen）；**主商品已由 ADR-0010 翻转**，事件/计量可复用为钱包流水 |
 | `adr/0010-share-service-business-model.md` | **现行商业模式**：可分享 Workspace 订阅、代购×1.5、邀请码、本地 Publish 上云 |
 | `design/STYLE_BASELINE.md` | 现行视觉基线（Slate × Indigo，Canonical） |
-| `design/PRODUCT_IA.md` | **登录后产品信息架构 v1**（Jobs / Sitemap / Canonical / Shell；改导航前必读） |
-| `design/PRODUCT_IA_AUDIT.md` | 产品 IA 审计（入口矩阵、P0/P1、本轮关闭项） |
+| `design/PRODUCT_IA.md` | **登录后产品信息架构 v2 · Chat-first**（Jobs / Sitemap / Canonical / Shell；改导航前必读） |
+| `design/PRODUCT_IA_AUDIT.md` | 产品 IA 审计（Path A 历史基线 + Chat-first v2 增补） |
+| `plans/2026-09-02-chat-first-conversation-workspace-design.md` | **Chat-first 定稿**：普通 Conversation、会话文件、Workspace 升级、quick_chat/BYOK、引用与保留策略；W0–W1 实施交接见 `plans/2026-09-02-chat-first-w0-w1-handoff.md`；**W2 实施编排**（Artifact/Binding、会话级 RAG、Snapshot/Evidence、完整删除）见 `plans/2026-09-02-chat-first-w2-implementation-plan.md` |
 | `desktop/RELEASE-AND-DOWNLOAD.md` | 桌面端构建/签名/发布 runbook（**v0.2+ 免费客户端**） |
 | `desktop/VERSIONING.md` | 桌面 SemVer 与云端 API 兼容矩阵 |
 | `desktop/SUPPORT-AND-SLA.md` | 桌面 vs 云端支持边界 |
@@ -91,6 +92,9 @@
 
 ## 已被取代（文首有 SUPERSEDED 横幅，仅作历史记录）
 
+- Chat-first 定稿取代 Workspace 内「快聊」tab 提案（2026-09-02）：
+  - `plans/2026-08-31-workspace-quickchat-tab-design.md`
+  - `plans/mockups/2026-08-31-workspace-quickchat-tab.html`
 - 商业模式（被 ADR-0010 分享服务取代，2026-08-05）：
   - `adr/0004-desktop-hybrid-business-model.md`（桌面买断 + SaaS token 托管）
   - 主商品意义上的 token 三档：`superpowers/specs/2026-06-07-pricing-tiers-revamp-design.md`（及 plan）；`engineering/DEEPSEEK_STYLE_USAGE_BILLING_DESIGN_2026-07-13.md` 仅保留计量公式参考

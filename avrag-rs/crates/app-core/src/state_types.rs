@@ -8,6 +8,10 @@ use std::collections::BTreeMap;
 pub struct MemoryState {
     pub workspaces: BTreeMap<String, Workspace>,
     pub documents: BTreeMap<String, StoredDocument>,
+    /// Typed binding truth: artifact_id → workspace binding ids (insertion order).
+    pub workspace_document_bindings: BTreeMap<String, Vec<String>>,
+    /// Typed binding truth: conversation_id → artifact ids (chat-first W2).
+    pub conversation_document_bindings: BTreeMap<String, Vec<String>>,
     pub sessions: BTreeMap<String, ChatSession>,
     pub messages: BTreeMap<String, Vec<ChatMessage>>,
     pub user_preferences: BTreeMap<String, UserPreferences>,

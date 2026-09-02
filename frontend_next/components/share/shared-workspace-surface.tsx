@@ -32,7 +32,7 @@ import {
 } from "../../lib/workspace/ui-store";
 import type { WorkspaceCitationRequest } from "../../lib/workspace/model";
 import { AppModal } from "../ui/app-modal";
-import { WorkspaceChatPane } from "../workspace/workspace-chat-pane";
+import { ChatCanvas } from "../chat/chat-canvas";
 import { WorkspaceCitationModal } from "../workspace/workspace-citation-modal";
 import { WorkspaceHistoryPane } from "../workspace/workspace-history-pane";
 import { WorkspaceSourcesPane } from "../workspace/workspace-sources-pane";
@@ -573,7 +573,7 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
             </p>
           ) : null}
 
-          <WorkspaceChatPane
+          <ChatCanvas
             initialMessages={initialMessages}
             lockedCapabilities={["rag"]}
             onSelectCitation={setActiveCitation}

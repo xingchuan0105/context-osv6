@@ -27,7 +27,7 @@ vi.mock("../../lib/runtime/transport", () => ({
 
 import { mockReducedMotionPreference, resetWorkspaceChatPaneMocks } from "./helpers/workspace-chat-pane.setup";
 
-import { WorkspaceChatPane } from "../../components/workspace/workspace-chat-pane";
+import { ChatCanvas } from "../../components/chat/chat-canvas";
 import { workspaceUiStore } from "../../lib/workspace/ui-store";
 
 beforeEach(() => {
@@ -43,7 +43,7 @@ describe("WorkspaceChatPane composer", () => {
   it("renders a draggable composer handle and resizes the textarea", async () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
 
-    render(<WorkspaceChatPane workspaceId="ws-resize" sessionId={null} selectedSourceIds={[]} />);
+    render(<ChatCanvas workspaceId="ws-resize" sessionId={null} selectedSourceIds={[]} />);
 
     const composer = await screen.findByRole("textbox", { name: "工作区对话输入框" });
     const resizeHandle = screen.getByRole("separator", { name: "调整输入框高度" });
@@ -63,7 +63,7 @@ describe("WorkspaceChatPane composer", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         selectedSourceIds={[]}
         sessionId={null}
         workspaceId="ws-capture"
@@ -94,7 +94,7 @@ describe("WorkspaceChatPane composer", () => {
     });
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         selectedSourceIds={[]}
         sessionId={null}
         workspaceId="ws-no-token"
@@ -124,7 +124,7 @@ describe("WorkspaceChatPane composer", () => {
     const registerComposerInsert = vi.fn();
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         registerComposerInsert={registerComposerInsert}
         selectedSourceIds={["doc-1"]}
         sessionId={null}
@@ -151,7 +151,7 @@ describe("WorkspaceChatPane composer", () => {
     const registerComposerInsert = vi.fn();
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         registerComposerInsert={registerComposerInsert}
         selectedSourceIds={[]}
         sessionId={null}
@@ -179,7 +179,7 @@ describe("WorkspaceChatPane composer", () => {
     const registerComposerInsert = vi.fn();
 
     render(
-      <WorkspaceChatPane
+      <ChatCanvas
         registerComposerInsert={registerComposerInsert}
         selectedSourceIds={[]}
         sessionId={null}

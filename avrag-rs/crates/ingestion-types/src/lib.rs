@@ -20,7 +20,11 @@ pub struct IngestionTask {
     pub task_id: String,
     pub kind: IngestionTaskKind,
     pub owner_user_id: String,
-    pub workspace_id: String,
+    /// Workspace lineage of the upload/import that enqueued the task, when it
+    /// went through a workspace surface. Not a scope truth (bindings are);
+    /// session-bound documents enqueue with `None`.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     pub document_id: String,
     pub requested_by: Option<String>,
     pub idempotency_key: String,

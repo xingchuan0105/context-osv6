@@ -250,7 +250,7 @@ fn validates_state_machine_rules() {
 fn ingest_task_defaults_retry_fields() {
     let task = build_ingest_task(
         "org-1",
-        "notebook-1",
+        Some("notebook-1".to_string()),
         "doc-1",
         Some("user-1".to_string()),
         IngestDocumentPayload {
@@ -271,7 +271,7 @@ fn ingest_task_defaults_retry_fields() {
 fn builds_reindex_task_with_deterministic_idempotency_key() {
     let task = build_reindex_task(
         "org-1",
-        "notebook-1",
+        Some("notebook-1".to_string()),
         "doc-1",
         Some("user-1".to_string()),
         ReindexDocumentPayload {
@@ -288,7 +288,7 @@ fn builds_reindex_task_with_deterministic_idempotency_key() {
 fn builds_ingest_url_task_with_url_in_idempotency_key() {
     let task = build_ingest_url_task(
         "org-1",
-        "notebook-1",
+        Some("notebook-1".to_string()),
         "doc-1",
         Some("user-1".to_string()),
         IngestUrlPayload {
@@ -311,7 +311,7 @@ fn builds_ingest_url_task_with_url_in_idempotency_key() {
 async fn worker_runtime_processes_ingest_task() {
     let task = build_ingest_task(
         "org-1",
-        "notebook-1",
+        Some("notebook-1".to_string()),
         "doc-1",
         Some("user-1".to_string()),
         IngestDocumentPayload {
@@ -338,7 +338,7 @@ async fn worker_runtime_processes_ingest_task() {
 async fn worker_runtime_requeues_retryable_failures_without_marking_failed() {
     let task = build_ingest_task(
         "org-1",
-        "notebook-1",
+        Some("notebook-1".to_string()),
         "doc-1",
         Some("user-1".to_string()),
         IngestDocumentPayload {
@@ -388,7 +388,7 @@ async fn patho_lock_document_locked_requeues_without_completed() {
 
     let task = build_ingest_task(
         "owner-1",
-        "workspace-1",
+        Some("workspace-1".to_string()),
         "doc-lock",
         Some("user-1".to_string()),
         IngestDocumentPayload {
@@ -437,7 +437,7 @@ async fn patho_lock_document_locked_requeues_without_completed() {
 async fn worker_runtime_records_success_state_and_audit_before_task_completion() {
     let task = build_ingest_task(
         "org-1",
-        "notebook-1",
+        Some("notebook-1".to_string()),
         "doc-1",
         Some("user-1".to_string()),
         IngestDocumentPayload {

@@ -1,9 +1,9 @@
 /**
  * Desktop static-export href rules.
  *
- * Packaged Tauri serves `frontend_next/out`. Dynamic `/dashboard/:id` pages
- * only exist as `/dashboard/_placeholder.html`. Same-origin `http://tauri.localhost/...`
- * must stay in the webview — it is not a URL the OS browser can open.
+ * Packaged Tauri serves `frontend_next/out`. Dynamic Workspace and Chat pages
+ * only exist as exported `_placeholder.html` files. Same-origin
+ * `http://tauri.localhost/...` must stay in the webview.
  */
 
 import { isTauri } from "./tauri-ipc";
@@ -22,6 +22,10 @@ function stripKnownExt(segment: string): { base: string; suffix: string } {
 
 function isReservedDashboardSegment(base: string): boolean {
   return base === "analytics" || base === "_placeholder" || base.startsWith("__next");
+}
+
+function isReservedChatSegment(base: string): boolean {
+  return base === "_placeholder" || base.startsWith("__next");
 }
 
 /**
@@ -61,6 +65,7 @@ export function shouldOpenInSystemBrowser(href: string, pageHref: string): boole
 /**
  * Rewrite a dynamic app path to the static-export file that actually exists.
  * `/dashboard/{id}` → `/dashboard/_placeholder?ws={id}`
+ * `/chat/{sessionId}` → `/chat/_placeholder?session={sessionId}`
  */
 export function mapAppPathForStaticExport(href: string, pageHref = "http://tauri.localhost/"): string {
   let url: URL;
@@ -75,6 +80,13 @@ export function mapAppPathForStaticExport(href: string, pageHref = "http://tauri
     const { base, suffix } = stripKnownExt(parts[2]);
     if (!isReservedDashboardSegment(base)) {
       url.searchParams.set("ws", base);
+      parts[2] = `_placeholder${suffix}`;
+      url.pathname = parts.join("/") || "/";
+    }
+  } else if (parts[1] === "chat" && parts[2]) {
+    const { base, suffix } = stripKnownExt(parts[2]);
+    if (!isReservedChatSegment(base)) {
+      url.searchParams.set("session", base);
       parts[2] = `_placeholder${suffix}`;
       url.pathname = parts.join("/") || "/";
     }
@@ -107,4 +119,19 @@ export function resolveWorkspaceIdFromRoute(
     return base;
   }
   return propId;
+}
+
+/** Real personal Conversation id for web routes and desktop static placeholders. */
+export function resolveChatSessionIdFromRoute(
+  pathname: string,
+  sessionQuery: string | null | undefined,
+): string | null {
+  const fromQuery = sessionQuery?.trim();
+  if (fromQuery) {
+    return fromQuery;
+  }
+  const match = pathname.match(/^\/chat\/([^/]+)/);
+  const raw = match?.[1] ?? "";
+  const { base } = stripKnownExt(raw);
+  return base && !isReservedChatSegment(base) ? base : null;
 }

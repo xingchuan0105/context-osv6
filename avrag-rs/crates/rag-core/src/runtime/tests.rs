@@ -491,6 +491,8 @@ fn materialize_answer_markup_converts_chunk_placeholders_to_citation_tokens() {
     let citations = vec![
         Citation {
             citation_id: 1,
+            source_scope: None,
+            citation_status: None,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("chunk-a".to_string()),
             page: Some(1),
@@ -509,6 +511,8 @@ fn materialize_answer_markup_converts_chunk_placeholders_to_citation_tokens() {
         },
         Citation {
             citation_id: 2,
+            source_scope: None,
+            citation_status: None,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("chunk-img".to_string()),
             page: Some(2),
@@ -548,6 +552,8 @@ fn extract_referenced_chunk_ids_reads_citation_and_image_tokens() {
 fn ensure_inline_image_placeholder_appends_first_image_when_missing() {
     let citations = vec![Citation {
         citation_id: 2,
+        source_scope: None,
+        citation_status: None,
         doc_id: "doc-1".to_string(),
         chunk_id: Some("chunk-img".to_string()),
         page: Some(2),
@@ -607,6 +613,8 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
             relation_paths: Vec::new(),
             citations: vec![Citation {
                 citation_id: 1,
+                source_scope: None,
+                citation_status: None,
                 doc_id: "doc-1".to_string(),
                 chunk_id: Some("chunk-a".to_string()),
                 page: Some(1),
@@ -711,6 +719,8 @@ async fn build_rag_chat_response_from_bundle_graph_only_non_empty_citations_and_
             relation_paths: Vec::new(),
             citations: vec![Citation {
                 citation_id: 1,
+                source_scope: None,
+                citation_status: None,
                 doc_id: "doc-1".to_string(),
                 chunk_id: Some("graph-chunk-1".to_string()),
                 page: None,

@@ -7,19 +7,42 @@ impl SessionRepository {
         workspace_id: Option<Uuid>,
     ) -> Result<Vec<ChatSession>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let rows = sqlx::query(
-            r#"
-            select id, workspace_id, title, agent_type, pinned, created_at, updated_at
-            from chat_sessions
-            where ($1::uuid is null or workspace_id = $1)
-              and owner_user_id = $2
-            order by pinned desc, updated_at desc, created_at desc
-            "#,
-        )
-        .bind(workspace_id)
-        .bind(context.user_id().into_uuid())
-        .fetch_all(tx.inner())
-        .await?;
+        let owner_user_id = context.user_id().into_uuid();
+        let rows = match workspace_id {
+            None => {
+                sqlx::query(
+                    r#"
+                    select s.id, s.owner_user_id, s.workspace_id, w.title as workspace_name,
+                           s.title, s.agent_type, s.model_role, s.pinned, s.created_at, s.updated_at
+                    from chat_sessions s
+                    left join workspaces w
+                      on w.id = s.workspace_id and w.owner_user_id = s.owner_user_id
+                    where s.owner_user_id = $1
+                    order by s.updated_at desc, s.created_at desc
+                    "#,
+                )
+                .bind(owner_user_id)
+                .fetch_all(tx.inner())
+                .await?
+            }
+            Some(workspace_id) => {
+                sqlx::query(
+                    r#"
+                    select s.id, s.owner_user_id, s.workspace_id, w.title as workspace_name,
+                           s.title, s.agent_type, s.model_role, s.pinned, s.created_at, s.updated_at
+                    from chat_sessions s
+                    left join workspaces w
+                      on w.id = s.workspace_id and w.owner_user_id = s.owner_user_id
+                    where s.workspace_id = $1 and s.owner_user_id = $2
+                    order by s.pinned desc, s.updated_at desc, s.created_at desc
+                    "#,
+                )
+                .bind(workspace_id)
+                .bind(owner_user_id)
+                .fetch_all(tx.inner())
+                .await?
+            }
+        };
         tx.commit().await?;
         rows.into_iter().map(map_session).collect()
     }
@@ -32,9 +55,12 @@ impl SessionRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, workspace_id, title, agent_type, pinned, created_at, updated_at
-            from chat_sessions
-            where id = $1 and owner_user_id = $2
+            select s.id, s.owner_user_id, s.workspace_id, w.title as workspace_name,
+                   s.title, s.agent_type, s.model_role, s.pinned, s.created_at, s.updated_at
+            from chat_sessions s
+            left join workspaces w
+              on w.id = s.workspace_id and w.owner_user_id = s.owner_user_id
+            where s.id = $1 and s.owner_user_id = $2
             "#,
         )
         .bind(session_id)
@@ -55,12 +81,20 @@ impl SessionRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            update chat_sessions
-            set title = COALESCE($2, title),
-                pinned = COALESCE($3, pinned),
-                updated_at = now()
-            where id = $1 and owner_user_id = $2
-            returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
+            with updated as (
+                update chat_sessions
+                set title = COALESCE($3, title),
+                    pinned = COALESCE($4, pinned),
+                    updated_at = now()
+                where id = $1 and owner_user_id = $2
+                returning id, owner_user_id, workspace_id, title, agent_type, model_role,
+                          pinned, created_at, updated_at
+            )
+            select u.id, u.owner_user_id, u.workspace_id, w.title as workspace_name,
+                   u.title, u.agent_type, u.model_role, u.pinned, u.created_at, u.updated_at
+            from updated u
+            left join workspaces w
+              on w.id = u.workspace_id and w.owner_user_id = u.owner_user_id
             "#,
         )
         .bind(session_id)
@@ -76,9 +110,10 @@ impl SessionRepository {
     pub async fn create_session(
         &self,
         context: &AuthContext,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         title: Option<&str>,
         agent_type: &str,
+        model_role: &str,
     ) -> Result<ChatSession, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
@@ -86,13 +121,21 @@ impl SessionRepository {
         // someone else, surfacing as NotFound instead of a cross-tenant child.
         let row = sqlx::query(
             r#"
-            insert into chat_sessions (owner_user_id, workspace_id, user_id, title, agent_type)
-            select $1::uuid, $2::uuid, $3::uuid, $4, $5
-            where exists (
-                select 1 from workspaces w
-                where w.id = $2::uuid and w.owner_user_id = $1::uuid
+            with inserted as (
+                insert into chat_sessions (owner_user_id, workspace_id, user_id, title, agent_type, model_role)
+                select $1::uuid, $2::uuid, $3::uuid, $4, $5, $6
+                where $2::uuid is null or exists (
+                    select 1 from workspaces w
+                    where w.id = $2::uuid and w.owner_user_id = $1::uuid
+                )
+                returning id, owner_user_id, workspace_id, title, agent_type, model_role,
+                          pinned, created_at, updated_at
             )
-            returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
+            select i.id, i.owner_user_id, i.workspace_id, w.title as workspace_name,
+                   i.title, i.agent_type, i.model_role, i.pinned, i.created_at, i.updated_at
+            from inserted i
+            left join workspaces w
+              on w.id = i.workspace_id and w.owner_user_id = i.owner_user_id
             "#,
         )
         .bind(context.user_id().into_uuid())
@@ -100,6 +143,7 @@ impl SessionRepository {
         .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(title)
         .bind(agent_type)
+        .bind(model_role)
         .fetch_optional(tx.inner())
         .await?;
         let Some(row) = row else {
@@ -159,14 +203,9 @@ impl SessionRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let answer_blocks_value =
             serde_json::to_value(turn.assistant_answer_blocks).unwrap_or_else(|_| json!([]));
-        let user_turn_metadata = turn
-            .user_turn_metadata
-            .clone()
-            .unwrap_or_else(|| json!({}));
-        let search_tokens = crate::build_user_message_search_tokens(
-            turn.user_content,
-            turn.user_resolved_query,
-        );
+        let user_turn_metadata = turn.user_turn_metadata.clone().unwrap_or_else(|| json!({}));
+        let search_tokens =
+            crate::build_user_message_search_tokens(turn.user_content, turn.user_resolved_query);
         // Parent-guarded: the whole turn writes zero rows unless the session
         // belongs to the caller. Cross-tenant session ids surface as NotFound.
         let parent_guarded = sqlx::query_scalar::<_, i64>(
@@ -222,11 +261,13 @@ impl SessionRepository {
         .fetch_one(tx.inner())
         .await?;
 
-        sqlx::query("update chat_sessions set updated_at = now() where id = $1 and owner_user_id = $2")
-            .bind(session_id)
-            .bind(context.user_id().into_uuid())
-            .execute(tx.inner())
-            .await?;
+        sqlx::query(
+            "update chat_sessions set updated_at = now() where id = $1 and owner_user_id = $2",
+        )
+        .bind(session_id)
+        .bind(context.user_id().into_uuid())
+        .execute(tx.inner())
+        .await?;
 
         tx.commit().await?;
         Ok(assistant_row.try_get::<i64, _>("id")?)

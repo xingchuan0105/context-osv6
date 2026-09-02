@@ -14,6 +14,7 @@ import type { UiMessageKey } from "../i18n/messages";
  */
 
 export type AppNavId =
+  | "chat"
   | "dashboard"
   | "share-traffic"
   | "settings"
@@ -47,6 +48,13 @@ export type AppNavEntry = {
  * Footer / guide render their own explicit id lists (surface ordering differs).
  */
 export const APP_NAV_ENTRIES: readonly AppNavEntry[] = [
+  {
+    id: "chat",
+    href: "/chat",
+    labelKey: "chat.newConversation",
+    paletteGroup: "nav",
+    paletteKeywords: "chat conversation new quick 对话 聊天 新对话",
+  },
   {
     id: "dashboard",
     href: "/dashboard",

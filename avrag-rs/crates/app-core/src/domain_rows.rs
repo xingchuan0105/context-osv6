@@ -13,7 +13,9 @@ pub use common::IndexedChunk;
 pub struct DocumentTaskSeed {
     pub document_id: String,
     pub owner_user_id: String,
-    pub workspace_id: String,
+    /// Workspace binding of the artifact when one exists (lineage); session
+    /// artifacts are `None`. Scope truth is the typed binding tables.
+    pub workspace_id: Option<String>,
     pub filename: String,
     pub mime_type: String,
     pub file_size: u64,

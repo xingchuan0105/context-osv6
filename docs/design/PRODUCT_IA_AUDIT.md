@@ -1,6 +1,6 @@
-# Product IA 审计 — 2026-08-06（Path A）
+# Product IA 审计 — Path A 历史基线 + Chat-first v2 增补
 
-对照 `PRODUCT_IA.md` v1。状态：`open` / `done` / `wontfix`。
+§1–§7 是 2026-08-06/07 对照 `PRODUCT_IA.md` v1 的历史审计；§8 是 2026-09-02 对照 v2 的增补。状态：`open` / `done` / `wontfix`。历史条目保留当时语境，不据此恢复 dashboard-first IA。
 
 ---
 
@@ -143,3 +143,47 @@
 - [x] Publish B3b 设计门禁：`docs/desktop/2026-08-10-workspace-publish-b3b-design.md`（实现待 0.3.0）
 - [x] Publish B3b 实现：桌面分享弹窗内「发布到云端」+ 分阶段进度；向量平移导入 VPS，不重灌库（2026-08-19）
 
+---
+
+## 8. 增补审计 — 2026-09-02（Chat-first v2）
+
+### 8.1 定稿与当前实现差距
+
+本节记录目标与当前实现状态；W0–W1 已完成不等于 P0 已完成，Chat-first 尚未产品上线。实现权威见 `docs/plans/2026-09-02-chat-first-conversation-workspace-design.md`。
+
+| 项目 | 当前实现（As-Is） | v2 目标 | 状态 |
+|------|------------------|---------|------|
+| 登录默认入口 | 登录/注册完成已进入 `/chat`，首问不建 Workspace | 登录/注册成功进入 `/chat`，首问不建 Workspace | **done（W1）** |
+| Conversation 所有权 | `owner_user_id` 必填，`workspace_id` 已可空 | `owner_user_id` 必填、`workspace_id` 可空 | **done（W0）** |
+| 全局最近 | 用户级最近已混排普通/Workspace Conversation，并返回 canonical 所需 scope | 用户级最近混排普通/Workspace Conversation，并返回正确 canonical | **done（W1）** |
+| Chat Canvas | `/chat` 与 Workspace 已复用共享 Chat Canvas，Shell 承担 rails/context | `/chat` 与 Workspace 复用同一个 `ChatCanvas`，Shell 只负责 rails/context | **done（W1）** |
+| 会话文件 | 无 Session-scope attachment/binding 产品契约 | 复用完整 parse/chunk/index 管线；仅当前 Conversation 可见 | **open** |
+| Workspace 升级 | 无明确 domain operation | move Conversation 与 add file binding 是两个独立、显式、幂等动作 | **open** |
+| Quick Chat 模型 | 官方 quick_chat 配置与 resolver 已完成；设置侧独立 BYOK 尚未实现 | 官方/BYOK 独立 quick_chat，默认 `qwen3.8-flash`；与 ContextScope 解耦 | **partial（official done；BYOK W3 open）** |
+| 联网 | 普通 Conversation 已可独立开启 Web，并复用现有 Search lane | 普通 Conversation 可独立开启 Web，仍由 Lead + Web Worker 执行 | **done（W1）** |
+| 历史真实性 | 前端当前 selection 仍可能承担过多解释 | 发送时写 TurnContextSnapshot；完成后保存实际 Evidence/citation | **open** |
+| 文件保留 | 现有文档清理偏完整删除，无 raw-only 生命周期 | P0 原件与解析成果随会话保留、无 TTL；零 binding 才完整 GC | **open**（决策 done） |
+| 旧「快聊」tab | 08-31 草案与 mockup 曾待评审 | 明确 superseded；默认对话不是 mode/tab/AgentKind | **done（文档）** |
+| IA/T7/T8 | v1 与旧规则为 dashboard/workspace-first | IA v2、user-root Conversation、Workspace 持久知识边界 | **done（文档）** |
+
+### 8.2 Target route / shell 门禁
+
+| Gate | 通过条件 | 当前 |
+|------|----------|------|
+| Route | `/chat`、`/chat/:sessionId` 存在；auth completion 指向 `/chat` | done（W1） |
+| Ownership | 普通 Conversation 的授权不依赖伪造/隐藏 Workspace | done（W0） |
+| Canvas | 普通与 Workspace 对话无两份执行 UI 或两套状态机 | done（W1） |
+| Files | Session 文件不自动进入 Workspace；promotion 不复制、不重解析 | open |
+| Model | 上传、联网、move 不会暗中切换 `model_role` | open |
+| Billing | 每次调用按 credential provenance 计费；quick_chat BYOK 不免平台 Worker/search/parse | open |
+| Citation | 可用范围与实际引用分开；删除源后历史只显示不可还原正文的墓碑事实 | open |
+| Retention | P0 无自动 raw 清理；后续只在真实存储数据支持时另立生命周期 | open |
+
+### 8.3 实施顺序审计
+
+1. **done（W0–W1）**：打通无 Workspace 的文字 DirectAnswer 闭环与全局最近。
+2. **open（W2）**：在同一个工作闭环上增加 Session file binding、RAG Worker、Snapshot/Evidence 与完整删除，不造附件 prompt 旁路。
+3. **open（W3）**：接入独立 quick_chat BYOK、逐调用计费 provenance 与披露，补全 P0。
+4. **open（W4 / P1）**：实现 move Conversation / add Workspace binding 与 Workspace 本会话文件区，保持两动作独立。
+
+当前只有 W0–W1 完成；W2–W3 与 P0 发布门仍未完成，Chat-first 尚未产品上线。W4 保持为后续 P1。

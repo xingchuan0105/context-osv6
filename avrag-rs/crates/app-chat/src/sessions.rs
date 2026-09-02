@@ -1,5 +1,6 @@
 use app_core::parse_uuid_or_app_error;
 use common::{AppError, SourceRow, StatusOnlyResponse};
+use contracts::auth_runtime::SubjectKind;
 use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
 use contracts::workspaces::{
     ChatSession, CreateChatSessionRequest, UpdateChatSessionRequest, Workspace,
@@ -8,6 +9,29 @@ use uuid::Uuid;
 
 use crate::ChatService;
 use crate::context::ChatContext;
+
+fn session_surface(workspace_id: Option<&str>) -> analytics::Surface {
+    if workspace_id.is_some() {
+        analytics::Surface::Workspace
+    } else {
+        analytics::Surface::Chat
+    }
+}
+
+fn session_workspace_uuid(session: &ChatSession) -> Option<Uuid> {
+    session
+        .workspace_id
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok())
+}
+
+fn initial_model_role_for_creation(workspace_id: Option<Uuid>) -> &'static str {
+    if workspace_id.is_some() {
+        "agent"
+    } else {
+        "quick_chat"
+    }
+}
 
 impl ChatContext {
     fn require_chat_persistence(
@@ -45,7 +69,13 @@ impl ChatContext {
         let Ok(pg) = self.require_chat_persistence() else {
             return Vec::new();
         };
-        let notebook_uuid = workspace_id.and_then(|value| Uuid::parse_str(value).ok());
+        let notebook_uuid = match workspace_id {
+            Some(value) => match Uuid::parse_str(value) {
+                Ok(workspace_id) => Some(workspace_id),
+                Err(_) => return Vec::new(),
+            },
+            None => None,
+        };
         pg.list_sessions(&self.auth, notebook_uuid)
             .await
             .unwrap_or_default()
@@ -56,34 +86,54 @@ impl ChatContext {
         req: CreateChatSessionRequest,
     ) -> Result<ChatSession, AppError> {
         let pg = self.require_chat_persistence()?;
-        let workspace_id = parse_uuid_or_app_error(
-            &req.workspace_id,
-            "workspace_not_found",
-            "workspace not found",
-        )?;
-        let notebook = pg.get_workspace(&self.auth, workspace_id).await?;
-        if notebook.is_none() {
-            return Err(AppError::not_found(
-                "workspace_not_found",
-                "workspace not found",
-            ));
-        }
+        let agent_type = req.agent_type.as_deref().unwrap_or("chat");
+        let workspace_id = match req.workspace_id.as_deref() {
+            None => {
+                if matches!(self.auth.subject_kind(), SubjectKind::ApiKey) {
+                    return Err(AppError::validation(
+                        "workspace_id_required",
+                        "workspace_id is required for workspace API keys",
+                    ));
+                }
+                None
+            }
+            Some(workspace_id) => {
+                let workspace_id = parse_uuid_or_app_error(
+                    workspace_id,
+                    "invalid_workspace_id",
+                    "workspace_id must be a valid UUID",
+                )?;
+                let notebook = pg.get_workspace(&self.auth, workspace_id).await?;
+                if notebook.is_none() {
+                    return Err(AppError::not_found(
+                        "workspace_not_found",
+                        "workspace not found",
+                    ));
+                }
+                Some(workspace_id)
+            }
+        };
+        // The creation surface selects the initial default once. The persisted
+        // role is subsequently authoritative and is never recomputed from scope.
+        let model_role = initial_model_role_for_creation(workspace_id);
         let session = pg
             .create_session(
                 &self.auth,
                 workspace_id,
                 req.title.as_deref(),
-                &req.agent_type,
+                agent_type,
+                model_role,
             )
             .await?;
         self.record_product_event_if_available(
             analytics::ProductEventName::SessionCreated,
-            analytics::Surface::Workspace,
+            session_surface(session.workspace_id.as_deref()),
             analytics::ResultTag::Success,
             Uuid::parse_str(&session.id).ok(),
-            Some(workspace_id),
+            session_workspace_uuid(&session),
             serde_json::json!({
-                "agent_type": req.agent_type,
+                "agent_type": agent_type,
+                "model_role": model_role,
             }),
         )
         .await;
@@ -117,10 +167,10 @@ impl ChatContext {
         if renamed {
             self.record_product_event_if_available(
                 analytics::ProductEventName::SessionRenamed,
-                analytics::Surface::Workspace,
+                session_surface(session.workspace_id.as_deref()),
                 analytics::ResultTag::Success,
                 Some(session_id),
-                Uuid::parse_str(&session.workspace_id).ok(),
+                session_workspace_uuid(&session),
                 serde_json::json!({
                     "title": session.title.clone(),
                 }),
@@ -130,10 +180,10 @@ impl ChatContext {
         if pinned == Some(true) {
             self.record_product_event_if_available(
                 analytics::ProductEventName::SessionPinned,
-                analytics::Surface::Workspace,
+                session_surface(session.workspace_id.as_deref()),
                 analytics::ResultTag::Success,
                 Some(session_id),
-                Uuid::parse_str(&session.workspace_id).ok(),
+                session_workspace_uuid(&session),
                 serde_json::json!({}),
             )
             .await;
@@ -151,6 +201,10 @@ impl ChatContext {
         let pg = self.require_chat_persistence()?;
         let session_id =
             parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
+        let session = pg
+            .get_session(&self.auth, session_id)
+            .await?
+            .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
         let deleted = pg.delete_session(&self.auth, session_id).await?;
         if !deleted {
             return Err(AppError::not_found(
@@ -160,10 +214,10 @@ impl ChatContext {
         }
         self.record_product_event_if_available(
             analytics::ProductEventName::SessionDeleted,
-            analytics::Surface::Workspace,
+            session_surface(session.workspace_id.as_deref()),
             analytics::ResultTag::Success,
             Some(session_id),
-            None,
+            session_workspace_uuid(&session),
             serde_json::json!({}),
         )
         .await;
@@ -196,7 +250,14 @@ impl ChatContext {
         let workspace_id = req
             .workspace_id
             .as_deref()
-            .and_then(|id| Uuid::parse_str(id).ok())
+            .map(|id| {
+                parse_uuid_or_app_error(
+                    id,
+                    "invalid_workspace_id",
+                    "workspace_id must be a valid UUID",
+                )
+            })
+            .transpose()?
             .or_else(|| self.auth.workspace_id());
         let state = self.with_owner_pays_auth(workspace_id).await;
         crate::chat::execute_pipeline(state, req, crate::chat::PipelineLane::Write).await

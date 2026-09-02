@@ -119,6 +119,18 @@ mod tests {
     }
 
     #[test]
+    fn app_config_defaults_quick_chat_llm_to_qwen_flash() {
+        let config = AppConfig::default();
+
+        assert_eq!(
+            config.quick_chat_llm.base_url,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+        assert_eq!(config.quick_chat_llm.model, "qwen3.8-flash");
+        assert_eq!(config.quick_chat_llm.enable_thinking, Some(false));
+    }
+
+    #[test]
     fn app_config_defaults_memory_llm_to_deepseek_v4_flash() {
         let config = AppConfig::default();
 
@@ -273,7 +285,6 @@ mod tests {
                 &upload.document_id,
                 UpdateDocumentRequest {
                     filename: None,
-                    workspace_id: None,
                     status: Some(DocumentStatus::Deleting),
                 },
             )
@@ -440,7 +451,7 @@ mod tests {
                     debug: false,
                     language: None,
                     format_hint: None,
-            turnstile_token: None,
+                    turnstile_token: None,
                 },
                 "req-agent-chat".to_string(),
                 tx,
@@ -515,7 +526,7 @@ mod tests {
                     debug: false,
                     language: None,
                     format_hint: None,
-            turnstile_token: None,
+                    turnstile_token: None,
                 },
                 "req-agent-buffered-chat".to_string(),
                 tx,
@@ -583,7 +594,7 @@ mod tests {
                     debug: false,
                     language: None,
                     format_hint: None,
-            turnstile_token: None,
+                    turnstile_token: None,
                 },
                 "req-agent-buffered-search".to_string(),
                 tx,

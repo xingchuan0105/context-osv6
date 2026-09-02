@@ -6,11 +6,6 @@ mod tests {
 
     use app_admin::AdminContext;
     use app_billing::BillingContext;
-    use app_core::{
-        AnalyticsServiceCtx, MemoryState, MemoryStateHandles, ObjectStoreConfig, ObjectStorePort,
-        StorageContext, StorageContextParts, StorageInfra, StorageStores,
-    };
-    use app_documents::DocumentContext;
     use app_core::chat_persistence::{
         AppendChatTurn, ChatCatalogPort, ChatContentPort, ChatPersistencePort, ChatSideEffectPort,
         MessagePort, ProfilePort, SessionPort,
@@ -19,12 +14,17 @@ mod tests {
         ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
         NotificationCreateParams, UserProfileRow,
     };
+    use app_core::{
+        AnalyticsServiceCtx, MemoryState, MemoryStateHandles, ObjectStoreConfig, ObjectStorePort,
+        StorageContext, StorageContextParts, StorageInfra, StorageStores,
+    };
     use app_documents::AuditRecord;
+    use app_documents::DocumentContext;
     use avrag_guardrails::GuardPipeline;
     use common::{AppError, IndexedChunk, SourceRow, SummaryMetadata, new_id, now_rfc3339};
     use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
     use contracts::chat::{ChatEvent, ChatMessage, ChatRequest};
-    use contracts::workspaces::{ChatSession, Workspace};
+    use contracts::workspaces::{ChatSession, ConversationScopeKind, Workspace};
     use tokio::sync::RwLock;
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
@@ -124,42 +124,92 @@ mod tests {
     }
 
     impl RecordingChatPersistence {
-        fn new(inner: Arc<app_core::MemoryChatPersistence>, markers: Arc<Mutex<Vec<String>>>) -> Self {
+        fn new(
+            inner: Arc<app_core::MemoryChatPersistence>,
+            markers: Arc<Mutex<Vec<String>>>,
+        ) -> Self {
             Self { inner, markers }
         }
     }
 
     #[async_trait]
     impl SessionPort for RecordingChatPersistence {
-        async fn search_sessions(&self, auth: &AuthContext, pattern: &str) -> Result<Vec<ChatSession>, AppError> {
+        async fn search_sessions(
+            &self,
+            auth: &AuthContext,
+            pattern: &str,
+        ) -> Result<Vec<ChatSession>, AppError> {
             self.inner.search_sessions(auth, pattern).await
         }
-        async fn list_sessions(&self, auth: &AuthContext, workspace_id: Option<Uuid>) -> Result<Vec<ChatSession>, AppError> {
+        async fn list_sessions(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Option<Uuid>,
+        ) -> Result<Vec<ChatSession>, AppError> {
             self.inner.list_sessions(auth, workspace_id).await
         }
-        async fn get_session(&self, auth: &AuthContext, session_id: Uuid) -> Result<Option<ChatSession>, AppError> {
+        async fn get_session(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+        ) -> Result<Option<ChatSession>, AppError> {
             self.inner.get_session(auth, session_id).await
         }
-        async fn create_session(&self, auth: &AuthContext, workspace_id: Uuid, title: Option<&str>, agent_type: &str) -> Result<ChatSession, AppError> {
-            self.inner.create_session(auth, workspace_id, title, agent_type).await
+        async fn create_session(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Option<Uuid>,
+            title: Option<&str>,
+            agent_type: &str,
+            model_role: &str,
+        ) -> Result<ChatSession, AppError> {
+            self.inner
+                .create_session(auth, workspace_id, title, agent_type, model_role)
+                .await
         }
-        async fn update_session(&self, auth: &AuthContext, session_id: Uuid, title: Option<&str>, pinned: Option<bool>) -> Result<Option<ChatSession>, AppError> {
-            self.inner.update_session(auth, session_id, title, pinned).await
+        async fn update_session(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            title: Option<&str>,
+            pinned: Option<bool>,
+        ) -> Result<Option<ChatSession>, AppError> {
+            self.inner
+                .update_session(auth, session_id, title, pinned)
+                .await
         }
-        async fn delete_session(&self, auth: &AuthContext, session_id: Uuid) -> Result<bool, AppError> {
+        async fn delete_session(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+        ) -> Result<bool, AppError> {
             self.inner.delete_session(auth, session_id).await
         }
     }
 
     #[async_trait]
     impl MessagePort for RecordingChatPersistence {
-        async fn list_messages(&self, auth: &AuthContext, session_id: Uuid) -> Result<Vec<ChatMessage>, AppError> {
+        async fn list_messages(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+        ) -> Result<Vec<ChatMessage>, AppError> {
             self.inner.list_messages(auth, session_id).await
         }
-        async fn get_message(&self, auth: &AuthContext, session_id: Uuid, message_id: i64) -> Result<Option<ChatMessage>, AppError> {
+        async fn get_message(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            message_id: i64,
+        ) -> Result<Option<ChatMessage>, AppError> {
             self.inner.get_message(auth, session_id, message_id).await
         }
-        async fn append_chat_turn(&self, auth: &AuthContext, session_id: Uuid, turn: AppendChatTurn<'_>) -> Result<i64, AppError> {
+        async fn append_chat_turn(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            turn: AppendChatTurn<'_>,
+        ) -> Result<i64, AppError> {
             self.markers.lock().unwrap().push("persist".to_string());
             self.inner.append_chat_turn(auth, session_id, turn).await
         }
@@ -172,56 +222,113 @@ mod tests {
             limit: i64,
             exclude_message_ids: &[i64],
         ) -> Result<Vec<ConversationHistoryHit>, AppError> {
-            self.inner.search_conversation_history(auth, session_id, query, scope, limit, exclude_message_ids).await
+            self.inner
+                .search_conversation_history(
+                    auth,
+                    session_id,
+                    query,
+                    scope,
+                    limit,
+                    exclude_message_ids,
+                )
+                .await
         }
     }
 
     #[async_trait]
     impl ChatCatalogPort for RecordingChatPersistence {
-        async fn search_workspaces(&self, auth: &AuthContext, pattern: &str) -> Result<Vec<Workspace>, AppError> {
+        async fn search_workspaces(
+            &self,
+            auth: &AuthContext,
+            pattern: &str,
+        ) -> Result<Vec<Workspace>, AppError> {
             self.inner.search_workspaces(auth, pattern).await
         }
-        async fn search_sources(&self, auth: &AuthContext, pattern: &str) -> Result<Vec<SourceRow>, AppError> {
+        async fn search_sources(
+            &self,
+            auth: &AuthContext,
+            pattern: &str,
+        ) -> Result<Vec<SourceRow>, AppError> {
             self.inner.search_sources(auth, pattern).await
         }
-        async fn get_workspace(&self, auth: &AuthContext, workspace_id: Uuid) -> Result<Option<Workspace>, AppError> {
+        async fn get_workspace(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+        ) -> Result<Option<Workspace>, AppError> {
             self.inner.get_workspace(auth, workspace_id).await
         }
     }
 
     #[async_trait]
     impl ProfilePort for RecordingChatPersistence {
-        async fn get_user_profile(&self, auth: &AuthContext, user_id: Uuid) -> Result<Option<UserProfileRow>, AppError> {
+        async fn get_user_profile(
+            &self,
+            auth: &AuthContext,
+            user_id: Uuid,
+        ) -> Result<Option<UserProfileRow>, AppError> {
             self.inner.get_user_profile(auth, user_id).await
         }
-        async fn upsert_user_profile(&self, auth: &AuthContext, profile: &UserProfileRow) -> Result<(), AppError> {
+        async fn upsert_user_profile(
+            &self,
+            auth: &AuthContext,
+            profile: &UserProfileRow,
+        ) -> Result<(), AppError> {
             self.inner.upsert_user_profile(auth, profile).await
         }
     }
 
     #[async_trait]
     impl ChatContentPort for RecordingChatPersistence {
-        async fn get_document_asset_by_id(&self, auth: &AuthContext, asset_id: Uuid) -> Result<Option<DocumentAssetRow>, AppError> {
+        async fn get_document_asset_by_id(
+            &self,
+            auth: &AuthContext,
+            asset_id: Uuid,
+        ) -> Result<Option<DocumentAssetRow>, AppError> {
             self.inner.get_document_asset_by_id(auth, asset_id).await
         }
-        async fn get_multimodal_chunk_by_id(&self, auth: &AuthContext, chunk_id: Uuid) -> Result<Option<MultimodalChunkRow>, AppError> {
+        async fn get_multimodal_chunk_by_id(
+            &self,
+            auth: &AuthContext,
+            chunk_id: Uuid,
+        ) -> Result<Option<MultimodalChunkRow>, AppError> {
             self.inner.get_multimodal_chunk_by_id(auth, chunk_id).await
         }
-        async fn get_chunk_by_id(&self, auth: &AuthContext, chunk_id: Uuid) -> Result<Option<IndexedChunk>, AppError> {
+        async fn get_chunk_by_id(
+            &self,
+            auth: &AuthContext,
+            chunk_id: Uuid,
+        ) -> Result<Option<IndexedChunk>, AppError> {
             self.inner.get_chunk_by_id(auth, chunk_id).await
         }
-        async fn get_summary_metadata(&self, auth: &AuthContext, doc_ids: &[Uuid]) -> Result<Vec<SummaryMetadata>, AppError> {
+        async fn get_summary_metadata(
+            &self,
+            auth: &AuthContext,
+            doc_ids: &[Uuid],
+        ) -> Result<Vec<SummaryMetadata>, AppError> {
             self.inner.get_summary_metadata(auth, doc_ids).await
         }
     }
 
     #[async_trait]
     impl ChatSideEffectPort for RecordingChatPersistence {
-        async fn create_notification(&self, auth: &AuthContext, params: NotificationCreateParams) -> Result<(), AppError> {
+        async fn create_notification(
+            &self,
+            auth: &AuthContext,
+            params: NotificationCreateParams,
+        ) -> Result<(), AppError> {
             self.inner.create_notification(auth, params).await
         }
-        async fn record_usage_event(&self, auth: &AuthContext, metric_type: &str, quantity: i64, source: &str) -> Result<(), AppError> {
-            self.inner.record_usage_event(auth, metric_type, quantity, source).await
+        async fn record_usage_event(
+            &self,
+            auth: &AuthContext,
+            metric_type: &str,
+            quantity: i64,
+            source: &str,
+        ) -> Result<(), AppError> {
+            self.inner
+                .record_usage_event(auth, metric_type, quantity, source)
+                .await
         }
         async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
             self.markers.lock().unwrap().push("audit".to_string());
@@ -289,6 +396,149 @@ mod tests {
         }
     }
 
+    /// W2c: the allowed doc set derives from conversation/workspace bindings;
+    /// client doc ids from another session must be dropped, never trusted.
+    #[tokio::test]
+    async fn recompute_allowed_doc_scope_drops_cross_session_documents() {
+        use app_core::{MemoryDocumentStore, StorageContextParts as Parts, StorageStores as Stores};
+        use common::Document;
+
+        let auth = test_auth();
+        let owner = auth.user_id().to_string();
+        let now = now_rfc3339();
+
+        let session_a_id = "11111111-1111-1111-1111-111111111111".to_string();
+        let session_b_id = "22222222-2222-2222-2222-222222222222".to_string();
+        let doc_bound_id = "33333333-3333-3333-3333-333333333333".to_string();
+        let doc_other_id = "44444444-4444-4444-4444-444444444444".to_string();
+
+        let mut memory = MemoryState::default();
+        for session_id in [&session_a_id, &session_b_id] {
+            memory.sessions.insert(
+                session_id.clone(),
+                ChatSession {
+                    id: session_id.clone(),
+                    owner_user_id: owner.clone(),
+                    workspace_id: None,
+                    scope_kind: ConversationScopeKind::Personal,
+                    workspace_name: None,
+                    title: None,
+                    agent_type: "chat".to_string(),
+                    model_role: "quick_chat".to_string(),
+                    pinned: false,
+                    created_at: now.clone(),
+                    updated_at: now.clone(),
+                },
+            );
+        }
+        for document_id in [&doc_bound_id, &doc_other_id] {
+            memory.documents.insert(
+                document_id.clone(),
+                app_core::StoredDocument {
+                    document: Document {
+                        id: document_id.clone(),
+                        owner_user_id: owner.clone(),
+                        workspace_id: None,
+                        owner_id: owner.clone(),
+                        file_name: format!("{document_id}.txt"),
+                        mime_type: "text/plain".to_string(),
+                        file_size: 4,
+                        status: contracts::documents::DocumentStatus::Completed,
+                        chunk_count: 0,
+                        created_at: now.clone(),
+                        updated_at: now.clone(),
+                    },
+                    content: String::new(),
+                    summary: None,
+                    parsed_items: Vec::new(),
+                },
+            );
+        }
+        memory
+            .conversation_document_bindings
+            .entry(session_a_id.clone())
+            .or_default()
+            .push(doc_bound_id.clone());
+        memory
+            .conversation_document_bindings
+            .entry(session_b_id.clone())
+            .or_default()
+            .push(doc_other_id.clone());
+
+        let memory = Arc::new(RwLock::new(memory));
+        let ctx = ChatContext {
+            auth: auth.clone(),
+            storage: StorageContext::from_parts(Parts {
+                infra: StorageInfra {
+                    postgres_health: None,
+                    postgres_configured: false,
+                    uses_memory_adapters: StorageInfra::memory_adapters_flag(true),
+                    max_upload_file_size_bytes: 10 * 1024 * 1024,
+                },
+                stores: Stores {
+                    document_store: Some(Arc::new(MemoryDocumentStore::new(memory.clone()))),
+                    auth_store: None,
+                    admin_store: None,
+                    billing_quota: None,
+                    billing_store: None,
+                    share_store: None,
+                    chat_persistence: None,
+                },
+                memory: MemoryStateHandles {
+                    inner: memory,
+                    api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+                    api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+                },
+                objects: ObjectStoreConfig {
+                    object_store: Arc::new(TestObjectStore),
+                    public_base_url: "http://localhost".to_string(),
+                    object_root: "/tmp/avrag-test".to_string(),
+                    upload_expire_sec: 3600,
+                    download_expire_sec: 3600,
+                },
+            }),
+            llm_ctx: LlmContext::new(None, None),
+            orchestrator: OrchestratorContext::new(
+                Some(Arc::new(UnifiedAgentService::new(Box::new(
+                    PipelineEchoAgent,
+                )))),
+                None,
+                Arc::new(GuardPipeline::new()),
+                None,
+            ),
+            analytics: AnalyticsServiceCtx::new(None),
+            billing: BillingContext::new(None, "shadow".to_string()),
+            admin: AdminContext::new(),
+            documents: DocumentContext::new(),
+        };
+
+        let mut req = ChatRequest {
+            query: "test".to_string(),
+            workspace_id: None,
+            session_id: Some(session_a_id.clone()),
+            agent_type: "rag".to_string(),
+            capabilities: None,
+            client_context: None,
+            client_ip: None,
+            source_type: None,
+            source_token: None,
+            doc_scope: vec![doc_bound_id.clone(), doc_other_id.clone()],
+            messages: vec![],
+            stream: false,
+            debug: false,
+            language: None,
+            format_hint: None,
+            turnstile_token: None,
+        };
+
+        ctx.recompute_allowed_doc_scope(&mut req, None).await.unwrap();
+        assert_eq!(
+            req.doc_scope,
+            vec![doc_bound_id],
+            "only the artifact bound to this conversation may survive"
+        );
+    }
+
     fn request_with_mode(agent_type: &str, doc_scope: Vec<String>) -> ChatRequest {
         ChatRequest {
             query: "test".to_string(),
@@ -314,9 +564,13 @@ mod tests {
         let now = now_rfc3339();
         ChatSession {
             id: "session-1".to_string(),
-            workspace_id: "notebook-1".to_string(),
+            owner_user_id: test_auth().user_id().to_string(),
+            workspace_id: Some("notebook-1".to_string()),
+            scope_kind: ConversationScopeKind::Workspace,
+            workspace_name: Some("Test Workspace".to_string()),
             title: None,
             agent_type: agent_type.to_string(),
+            model_role: "agent".to_string(),
             pinned: false,
             created_at: now.clone(),
             updated_at: now,
@@ -352,9 +606,13 @@ mod tests {
         let now = now_rfc3339();
         let session = ChatSession {
             id: session_id.clone(),
-            workspace_id: workspace_id.clone(),
+            owner_user_id: test_auth().user_id().to_string(),
+            workspace_id: Some(workspace_id.clone()),
+            scope_kind: ConversationScopeKind::Workspace,
+            workspace_name: Some("Test Workspace".to_string()),
             title: None,
             agent_type: "chat".to_string(),
+            model_role: "agent".to_string(),
             pinned: false,
             created_at: now.clone(),
             updated_at: now,
@@ -463,7 +721,12 @@ mod tests {
         let chat_persistence: Arc<dyn app_core::ChatPersistencePort> = chatmem.clone();
 
         state
-            .persist_chat_execution(&request, &session, &mut execution, chat_persistence.as_ref())
+            .persist_chat_execution(
+                &request,
+                &session,
+                &mut execution,
+                chat_persistence.as_ref(),
+            )
             .await
             .unwrap();
 
@@ -564,7 +827,10 @@ mod tests {
             .expect("seeded profile present");
         // dream-v2 gate opened but no LLM -> no write; seeded row untouched.
         assert_eq!(profile.inference_version, "seeded");
-        assert_eq!(profile.structured_profile, serde_json::json!({"seeded": true}));
+        assert_eq!(
+            profile.structured_profile,
+            serde_json::json!({"seeded": true})
+        );
         let general = execution
             .response
             .mode_debug
@@ -647,8 +913,7 @@ mod tests {
     #[tokio::test]
     async fn dream_fires_after_24h_and_merges_delta() {
         let (state, chatmem, calls) = wired_strategy_context().await;
-        seed_profile_inferred_at(&chatmem, chrono::Utc::now() - chrono::Duration::hours(25))
-            .await;
+        seed_profile_inferred_at(&chatmem, chrono::Utc::now() - chrono::Duration::hours(25)).await;
 
         let strategy = FakeProfileDeltaStrategy {
             result: ProfileDelta {
@@ -677,10 +942,13 @@ mod tests {
 
     #[tokio::test]
     async fn pipeline_spine_locks_audit_before_persist() {
-        let (mut state, chatmem, _session, session_id) = test_chat_context_with_profiles();
+        let (mut state, chatmem, session, session_id) = test_chat_context_with_profiles();
 
         let markers: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let recording = Arc::new(RecordingChatPersistence::new(chatmem.clone(), markers.clone()));
+        let recording = Arc::new(RecordingChatPersistence::new(
+            chatmem.clone(),
+            markers.clone(),
+        ));
         state.storage = StorageContext::from_parts(StorageContextParts {
             infra: state.storage.infra().clone(),
             stores: StorageStores {
@@ -695,6 +963,7 @@ mod tests {
         let token = CancellationToken::new();
         let mut request = request_with_mode("chat", vec![]);
         request.session_id = Some(session_id.clone());
+        request.workspace_id = session.workspace_id;
         request.stream = true;
 
         let handle = tokio::spawn({
@@ -739,9 +1008,7 @@ mod tests {
             "Done must carry the persisted message_id, not STREAM_PLACEHOLDER_MESSAGE_ID"
         );
         assert!(
-            events
-                .iter()
-                .all(|e| !matches!(e, ChatEvent::Error { .. })),
+            events.iter().all(|e| !matches!(e, ChatEvent::Error { .. })),
             "no error event expected"
         );
     }
@@ -782,7 +1049,7 @@ mod tests {
         let state = test_chat_context(Some(notebook.clone()));
         let request = request_with_mode("rag", vec![workspace_id.clone()]);
         let mut session = session_for("rag");
-        session.workspace_id = workspace_id;
+        session.workspace_id = Some(workspace_id);
 
         let execution = dispatch_mode(&state, &request, &session, None)
             .await
@@ -911,7 +1178,7 @@ mod tests {
         let mut request = request_with_mode("chat", vec![workspace_id.clone()]);
         request.capabilities = Some(vec!["rag".into(), "search".into()]);
         let mut session = session_for("chat");
-        session.workspace_id = workspace_id;
+        session.workspace_id = Some(workspace_id);
 
         let execution = dispatch_mode(&state, &request, &session, None)
             .await
@@ -953,7 +1220,9 @@ mod tests {
             "workspace capability expected, got {parts:?}"
         );
         assert!(
-            parts.iter().any(|p| p.contains("capabilities/web/contract.md")),
+            parts
+                .iter()
+                .any(|p| p.contains("capabilities/web/contract.md")),
             "web capability expected, got {parts:?}"
         );
         assert!(
@@ -1086,7 +1355,7 @@ mod tests {
         let mut request = request_with_mode("chat", vec![workspace_id.clone()]);
         request.capabilities = Some(vec!["rag".into()]);
         let mut session = session_for("chat");
-        session.workspace_id = workspace_id;
+        session.workspace_id = Some(workspace_id);
 
         let execution = dispatch_mode(&state, &request, &session, None)
             .await

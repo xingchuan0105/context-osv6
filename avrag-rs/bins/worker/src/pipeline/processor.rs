@@ -335,6 +335,7 @@ impl TaskProcessor for PgTaskProcessor {
                     .map(|a| a.into_uuid())
                     .unwrap_or_else(Uuid::nil),
                 skip_wallet_debit: false,
+                credential_source: "official".to_string(),
             };
             obs.rebind(tenant).await;
         }
@@ -431,7 +432,10 @@ impl TaskProcessor for PgTaskProcessor {
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_else(|| object_path.clone())
             };
-            let workspace_id = Uuid::parse_str(&task.workspace_id).unwrap_or_else(|_| Uuid::nil());
+            let workspace_id: Option<Uuid> = task
+                .workspace_id
+                .as_deref()
+                .and_then(|value| Uuid::parse_str(value).ok());
 
             // Security scan: malware (ClamAV) + ZIP-bomb detection.
             if !is_url_task {
@@ -632,7 +636,7 @@ impl TaskProcessor for PgTaskProcessor {
                         event_time: chrono::Utc::now(),
                         user_id,
                         session_id: None,
-                        workspace_id: Uuid::parse_str(&task.workspace_id).ok(),
+                        workspace_id: task.workspace_id.clone().and_then(|value| Uuid::parse_str(&value).ok()),
                         event_name: analytics::CostEventName::EmbeddingUsageMetered,
                         feature: "embedding".to_string(),
                         provider: "worker".to_string(),

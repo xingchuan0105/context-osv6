@@ -167,13 +167,40 @@ impl DocumentStorePort for MemoryDocumentStore {
             return Ok(false);
         }
         state.workspaces.remove(&key);
-        state
-            .documents
-            .retain(|_, stored| stored.document.workspace_id != key);
+        // Binding is the scope truth: drop this workspace's bindings; artifacts
+        // survive unless they end up with zero bindings of either kind (W2e
+        // parity with the PG orphan sweep — memory marks them Deleting inline).
+        let orphaned: Vec<String> = state
+            .workspace_document_bindings
+            .iter()
+            .filter(|(_, bindings)| bindings.contains(&key))
+            .map(|(artifact_id, _)| artifact_id.clone())
+            .collect();
+        for bindings in state.workspace_document_bindings.values_mut() {
+            bindings.retain(|binding| binding != &key);
+        }
+        for artifact_id in orphaned {
+            let still_conversation_bound = state
+                .conversation_document_bindings
+                .values()
+                .any(|ids| ids.contains(&artifact_id));
+            let still_workspace_bound = state
+                .workspace_document_bindings
+                .get(&artifact_id)
+                .is_some_and(|bindings| !bindings.is_empty());
+            if !still_conversation_bound && !still_workspace_bound {
+                if let Some(stored) = state.documents.get_mut(&artifact_id) {
+                    stored.document.status = DocumentStatus::Deleting;
+                    stored.document.updated_at = now_rfc3339();
+                }
+            }
+        }
         let removed_sessions: Vec<String> = state
             .sessions
             .iter()
-            .filter_map(|(id, session)| (session.workspace_id == key).then_some(id.clone()))
+            .filter_map(|(id, session)| {
+                (session.workspace_id.as_deref() == Some(key.as_str())).then_some(id.clone())
+            })
             .collect();
         for session_id in &removed_sessions {
             state.sessions.remove(session_id);
@@ -226,7 +253,13 @@ impl DocumentStorePort for MemoryDocumentStore {
             .filter(|stored| {
                 notebook_filter
                     .as_ref()
-                    .map(|id| stored.document.workspace_id == *id)
+                    .map(|id| {
+                        state
+                            .workspace_document_bindings
+                            .get(&stored.document.id)
+                            .map(|bindings| bindings.contains(id))
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(true)
             })
             .filter(|stored| {
@@ -252,7 +285,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let document = Document {
             id: new_id(),
             owner_user_id: current_owner_user_id(auth),
-            workspace_id: workspace_id.to_string(),
+            workspace_id: Some(workspace_id.to_string()),
             owner_id: current_user_id(auth),
             file_name: filename.to_string(),
             mime_type: mime_type.to_string(),
@@ -270,6 +303,11 @@ impl DocumentStorePort for MemoryDocumentStore {
         };
         let mut state = self.state.write().await;
         state.documents.insert(document.id.clone(), stored);
+        state
+            .workspace_document_bindings
+            .entry(document.id.clone())
+            .or_default()
+            .push(workspace_id.to_string());
         Ok(document)
     }
 
@@ -283,7 +321,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let mut state = self.state.write().await;
         let document = if let Some(existing) = state.documents.get_mut(&id) {
             existing.document.owner_user_id = current_owner_user_id(auth);
-            existing.document.workspace_id = input.workspace_id.to_string();
+            existing.document.workspace_id = Some(input.workspace_id.to_string());
             existing.document.file_name = input.filename.clone();
             existing.document.mime_type = input.mime_type.clone();
             existing.document.status = DocumentStatus::Completed;
@@ -297,7 +335,7 @@ impl DocumentStorePort for MemoryDocumentStore {
             let document = Document {
                 id: id.clone(),
                 owner_user_id: current_owner_user_id(auth),
-                workspace_id: input.workspace_id.to_string(),
+                workspace_id: Some(input.workspace_id.to_string()),
                 owner_id: current_user_id(auth),
                 file_name: input.filename.clone(),
                 mime_type: input.mime_type.clone(),
@@ -321,6 +359,108 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(document)
     }
 
+    async fn create_session_document(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+        filename: &str,
+        file_size: u64,
+        mime_type: &str,
+    ) -> Result<Document, AppError> {
+        let now = now_rfc3339();
+        let document = Document {
+            id: new_id(),
+            owner_user_id: current_owner_user_id(auth),
+            workspace_id: None,
+            owner_id: current_user_id(auth),
+            file_name: filename.to_string(),
+            mime_type: mime_type.to_string(),
+            file_size,
+            status: DocumentStatus::Pending,
+            chunk_count: 0,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let mut state = self.state.write().await;
+        if !state.sessions.contains_key(&conversation_id.to_string()) {
+            return Err(AppError::not_found("session_not_found", "session not found"));
+        }
+        state
+            .workspace_document_bindings
+            .entry(document.id.clone())
+            .or_default();
+        state.documents.insert(
+            document.id.clone(),
+            crate::StoredDocument {
+                document: document.clone(),
+                content: String::new(),
+                summary: None,
+                parsed_items: Vec::new(),
+            },
+        );
+        state
+            .conversation_document_bindings
+            .entry(conversation_id.to_string())
+            .or_default()
+            .push(document.id.clone());
+        Ok(document)
+    }
+
+    async fn list_session_files(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+    ) -> Result<Vec<contracts::documents::SessionFileRow>, AppError> {
+        let state = self.state.read().await;
+        let mut files = Vec::new();
+        let Some(artifact_ids) = state.conversation_document_bindings.get(&conversation_id.to_string()) else {
+            return Ok(files);
+        };
+        for artifact_id in artifact_ids {
+            let Some(stored) = state.documents.get(artifact_id) else {
+                continue;
+            };
+            if !org_matches(auth, &stored.document.owner_user_id) {
+                continue;
+            }
+            if is_deleting_or_deleted(&stored.document.status) {
+                continue;
+            }
+            files.push(contracts::documents::SessionFileRow {
+                binding_id: artifact_id.clone(),
+                document_id: stored.document.id.clone(),
+                file_name: stored.document.file_name.clone(),
+                mime_type: stored.document.mime_type.clone(),
+                file_size: stored.document.file_size,
+                status: stored.document.status.as_str().to_string(),
+                created_at: stored.document.created_at.clone(),
+            });
+        }
+        Ok(files)
+    }
+
+    async fn delete_session_file_binding(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+        binding_id: Uuid,
+    ) -> Result<Option<String>, AppError> {
+        let mut state = self.state.write().await;
+        let Some(artifact_ids) = state
+            .conversation_document_bindings
+            .get_mut(&conversation_id.to_string())
+        else {
+            return Ok(None);
+        };
+        // Memory bindings are keyed by artifact; enforce ownership of the
+        // conversation before removing.
+        let Some(existing) = artifact_ids.iter().position(|id| *id == binding_id.to_string()) else {
+            return Ok(None);
+        };
+        let removed = artifact_ids.remove(existing);
+        Ok(Some(removed))
+    }
+
     async fn get_document_task_seed(
         &self,
         auth: &AuthContext,
@@ -334,14 +474,18 @@ impl DocumentStorePort for MemoryDocumentStore {
             return Ok(None);
         }
         let doc = &stored.document;
+        let bindings = state.workspace_document_bindings.get(&doc.id);
         Ok(Some(DocumentTaskSeed {
             document_id: doc.id.clone(),
             owner_user_id: doc.owner_user_id.clone(),
-            workspace_id: doc.workspace_id.clone(),
+            workspace_id: bindings.and_then(|list| list.first().cloned()),
             filename: doc.file_name.clone(),
             mime_type: doc.mime_type.clone(),
             file_size: doc.file_size,
-            object_path: format!("{}/{}/{}", doc.owner_user_id, doc.workspace_id, doc.id),
+            object_path: match bindings.and_then(|list| list.first().cloned()) {
+                Some(workspace_id) => format!("{}/{}/{}", doc.owner_user_id, workspace_id, doc.id),
+                None => format!("{}/_sessions/{}", doc.owner_user_id, doc.id),
+            },
             status: doc.status.clone(),
         }))
     }
@@ -418,12 +562,43 @@ impl DocumentStorePort for MemoryDocumentStore {
         })
     }
 
+    async fn delete_document_if_unbound(
+        &self,
+        auth: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<bool, AppError> {
+        let mut state = self.state.write().await;
+        let key = document_id.to_string();
+        let has_workspace_binding = state
+            .workspace_document_bindings
+            .get(&key)
+            .is_some_and(|list| !list.is_empty());
+        let has_conversation_binding = state
+            .conversation_document_bindings
+            .values()
+            .any(|ids| ids.contains(&key));
+        let Some(stored) = state.documents.get_mut(&key) else {
+            return Ok(false);
+        };
+        if !org_matches(auth, &stored.document.owner_user_id) {
+            return Ok(false);
+        }
+        if is_deleting_or_deleted(&stored.document.status) {
+            return Ok(false);
+        }
+        if has_workspace_binding || has_conversation_binding {
+            return Ok(false);
+        }
+        stored.document.status = DocumentStatus::Deleting;
+        stored.document.updated_at = now_rfc3339();
+        Ok(true)
+    }
+
     async fn update_document(
         &self,
         auth: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, AppError> {
         let mut state = self.state.write().await;
@@ -438,9 +613,6 @@ impl DocumentStorePort for MemoryDocumentStore {
         }
         if let Some(filename) = filename {
             stored.document.file_name = filename.to_string();
-        }
-        if let Some(workspace_id) = workspace_id {
-            stored.document.workspace_id = workspace_id.to_string();
         }
         if let Some(status) = status {
             stored.document.status = status;

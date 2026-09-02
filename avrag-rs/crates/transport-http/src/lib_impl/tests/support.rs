@@ -48,6 +48,12 @@ pub(super) async fn pg_test_app_state() -> Option<AppState> {
     }
     let repo = avrag_storage_pg::BootstrapRepository::connect(&database_url).await.ok()?;
     repo.migrate().await.ok()?;
+    // Hermetic tests: a dev `.env` that exports real SMTP credentials would
+    // make the password-reset flow attempt a live send and 500 on connect
+    // errors. Force the debug delivery path for this test process.
+    unsafe {
+        env::set_var("EMAIL_PROVIDER", "debug");
+    }
     let mut config = app_core::AppConfig::default();
     config.database_url = Some(database_url);
     AppState::bootstrap(config).await.ok()

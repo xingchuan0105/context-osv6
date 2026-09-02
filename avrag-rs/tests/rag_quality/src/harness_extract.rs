@@ -325,6 +325,8 @@ mod tests {
     fn cited_chunks_round_trip() {
         let citations = vec![Citation {
             citation_id: 1,
+            source_scope: None,
+            citation_status: None,
             doc_id: "d1".to_string(),
             chunk_id: Some("c1".to_string()),
             page: None,

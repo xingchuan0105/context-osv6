@@ -73,11 +73,11 @@ describe("WorkspaceChatPane streaming status hints", () => {
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
         workspace_id: "ws-chat",
-        session_id: null,
         agent_type: "chat",
         doc_scope: [],
         stream: true,
       });
+      expect(request).not.toHaveProperty("session_id");
 
       await onEvent({
         event: "start",
@@ -172,11 +172,11 @@ describe("WorkspaceChatPane streaming status hints", () => {
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
         workspace_id: "ws-rag-progress",
-        session_id: null,
         agent_type: "rag",
         capabilities: ["rag"],
         stream: true,
       });
+      expect(request).not.toHaveProperty("session_id");
 
       await onEvent({
         event: "start",

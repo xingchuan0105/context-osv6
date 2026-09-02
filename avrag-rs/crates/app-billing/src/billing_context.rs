@@ -403,6 +403,7 @@ impl BillingContext {
                 owner_user_id,
                 feature,
                 stage: stage.to_string(),
+                credential_source: "official".to_string(),
                 session_id: None,
                 document_id: None,
                 request_id: auth.request_id().map(|s| s.to_string()),

@@ -29,12 +29,14 @@ import {
   workspaceUiStore,
 } from "../../lib/workspace/ui-store";
 import { useChatSession } from "../../hooks/use-chat-session";
-import { ChatComposer } from "./chat-composer";
-import { ChatMessageList } from "./chat-message-list";
-import styles from "./workspace-chat.module.css";
+import type { UiChatMessage } from "../../hooks/chat-session/types";
+import { ChatComposer } from "../workspace/chat-composer";
+import { ChatMessageList } from "../workspace/chat-message-list";
+import { SessionFileTray } from "./session-file-tray";
+import styles from "../workspace/workspace-chat.module.css";
 
-type WorkspaceChatPaneProps = {
-  workspaceId: string;
+type ChatCanvasProps = {
+  workspaceId: string | null;
   sessionId: string | null;
   selectedSourceIds: string[];
   onSessionActivity?: () => void;
@@ -55,6 +57,12 @@ type WorkspaceChatPaneProps = {
   ) => void;
   /** Fixed capabilities; omit to use normal per-workspace toggles. */
   lockedCapabilities?: WorkspaceCapability[];
+  /** Capability controls available on this surface; personal chat exposes search in W1. */
+  availableCapabilities?: WorkspaceCapability[];
+  /** Explicitly clears an uncommitted/new conversation without remounting the live stream. */
+  resetEpoch?: number;
+  /** Lets the owning shell disable navigation while a turn is in flight. */
+  onStreamingChange?: (isStreaming: boolean) => void;
   /** Open the right rail (guide users to select sources when rag chip is inert). */
   onRequestGuideSources?: () => void;
 };
@@ -78,7 +86,7 @@ function getCapabilitiesCode(capabilities: WorkspaceCapability[]) {
   return deriveAgentTypeLabel(capabilities);
 }
 
-export function WorkspaceChatPane({
+export function ChatCanvas({
   workspaceId,
   sessionId,
   selectedSourceIds,
@@ -93,13 +101,20 @@ export function WorkspaceChatPane({
   initialMessages = null,
   onTranscriptChange,
   lockedCapabilities,
+  availableCapabilities,
+  resetEpoch = 0,
+  onStreamingChange,
   onRequestGuideSources,
-}: WorkspaceChatPaneProps) {
+}: ChatCanvasProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
   const [draft, setDraft] = useState("");
   const [composerClearance, setComposerClearance] = useState<number | null>(null);
+  const [sessionFilesBlocked, setSessionFilesBlocked] = useState(false);
   const isShareMode = Boolean(shareToken?.trim());
+  const isPersonalConversation = workspaceId === null;
+  const uiScopeId = workspaceId ?? `chat:${sessionId ?? "new"}`;
+  const previousUiScopeRef = useRef(uiScopeId);
   const fixedCaps = useMemo<WorkspaceCapability[] | null>(() => {
     if (lockedCapabilities && lockedCapabilities.length > 0) {
       return [...lockedCapabilities];
@@ -109,38 +124,99 @@ export function WorkspaceChatPane({
     }
     return null;
   }, [isShareMode, lockedCapabilities]);
-  const storeCapabilities = useWorkspaceUiState(workspaceId, (state) => state.capabilities);
-  const capabilities = fixedCaps ?? storeCapabilities;
+  const supportsRag = fixedCaps
+    ? fixedCaps.includes("rag")
+    : !availableCapabilities || availableCapabilities.includes("rag");
+  const storeCapabilities = useWorkspaceUiState(uiScopeId, (state) => state.capabilities);
+  const capabilities = useMemo(
+    () =>
+      fixedCaps ??
+      (availableCapabilities
+        ? storeCapabilities.filter((capability) => availableCapabilities.includes(capability))
+        : storeCapabilities),
+    [availableCapabilities, fixedCaps, storeCapabilities],
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingCursorRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const previousScopeId = previousUiScopeRef.current;
+    previousUiScopeRef.current = uiScopeId;
+
+    if (!isPersonalConversation) {
+      return;
+    }
+
+    if (uiScopeId === "chat:new") {
+      workspaceUiStore.getState().resetWorkspace(uiScopeId);
+      return;
+    }
+
+    if (previousScopeId !== "chat:new") {
+      return;
+    }
+
+    const previous = getWorkspaceUiState(previousScopeId);
+    const current = getWorkspaceUiState(uiScopeId);
+    if (!current.capabilitiesManual && current.capabilities.length === 0) {
+      workspaceUiStore
+        .getState()
+        .setCapabilities(uiScopeId, previous.capabilities, {
+          manual: previous.capabilitiesManual,
+        });
+    }
+    workspaceUiStore.getState().resetWorkspace(previousScopeId);
+  }, [isPersonalConversation, resetEpoch, uiScopeId]);
+
+  const restorePersonalCapabilities = useCallback(
+    (messages: UiChatMessage[]) => {
+      if (!isPersonalConversation) {
+        return;
+      }
+      const current = getWorkspaceUiState(uiScopeId);
+      if (current.capabilitiesManual) {
+        return;
+      }
+      const lastAssistant = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant" && !message.pending);
+      const restored = (lastAssistant?.capabilities ?? []).filter(
+        (capability): capability is WorkspaceCapability => capability === "search",
+      );
+      workspaceUiStore
+        .getState()
+        .setCapabilities(uiScopeId, restored, { manual: false });
+    },
+    [isPersonalConversation, uiScopeId],
+  );
 
   // Source selection auto-attaches knowledge retrieval (2026-08-30 foolproofing):
   // whenever this workspace is first observed with selected sources (user just
   // picked one, or the pane renders / switches in with a persisted selection)
   // and the user has not touched the chips manually, rag is on so the next
   // question is already grounded.
-  const previousSelectionRef = useRef<{ workspaceId: string; count: number } | null>(null);
+  const previousSelectionRef = useRef<{ scopeId: string; count: number } | null>(null);
   useEffect(() => {
     if (fixedCaps || isShareMode) {
       return;
     }
     const previous = previousSelectionRef.current;
-    previousSelectionRef.current = { workspaceId, count: selectedSourceIds.length };
+    previousSelectionRef.current = { scopeId: uiScopeId, count: selectedSourceIds.length };
     if (selectedSourceIds.length === 0) {
       return;
     }
-    if (previous !== null && previous.workspaceId === workspaceId && previous.count > 0) {
+    if (previous !== null && previous.scopeId === uiScopeId && previous.count > 0) {
       // Selection changed while sources stay selected — chip state already settled.
       return;
     }
-    const current = getWorkspaceUiState(workspaceId);
+    const current = getWorkspaceUiState(uiScopeId);
     if (current.capabilitiesManual || current.capabilities.includes("rag")) {
       return;
     }
     workspaceUiStore
       .getState()
-      .setCapabilities(workspaceId, [...current.capabilities, "rag"], { manual: false });
-  }, [selectedSourceIds, workspaceId, fixedCaps, isShareMode]);
+      .setCapabilities(uiScopeId, [...current.capabilities, "rag"], { manual: false });
+  }, [selectedSourceIds, uiScopeId, fixedCaps, isShareMode]);
 
   // RAG requires an explicit source selection: strip it when the selection
   // becomes empty (product rule 2026-07-18 — no implicit whole-workspace scope).
@@ -153,20 +229,20 @@ export function WorkspaceChatPane({
       return;
     }
     workspaceUiStore.getState().setCapabilities(
-      workspaceId,
+      uiScopeId,
       capabilities.filter((cap) => cap !== "rag"),
       { manual: false },
     );
-  }, [selectedSourceIds, capabilities, workspaceId, fixedCaps, isShareMode]);
+  }, [selectedSourceIds, capabilities, uiScopeId, fixedCaps, isShareMode]);
 
   const handleCapabilitiesChange = useCallback(
     (next: WorkspaceCapability[]) => {
       if (fixedCaps) {
         return;
       }
-      workspaceUiStore.getState().setCapabilities(workspaceId, next, { manual: true });
+      workspaceUiStore.getState().setCapabilities(uiScopeId, next, { manual: true });
     },
-    [workspaceId, fixedCaps],
+    [uiScopeId, fixedCaps],
   );
 
   const activeModeLabel = getCapabilitiesSummaryLabel(locale, capabilities);
@@ -181,11 +257,27 @@ export function WorkspaceChatPane({
     locale,
     onSessionChange,
     onSessionActivity,
+    onHistoryHydrated: restorePersonalCapabilities,
     shareToken,
     turnstileToken,
     initialMessages,
     onTranscriptChange,
   });
+
+  useEffect(() => {
+    onStreamingChange?.(chatSession.isStreaming);
+  }, [chatSession.isStreaming, onStreamingChange]);
+
+  useEffect(
+    () => () => {
+      onStreamingChange?.(false);
+    },
+    [onStreamingChange],
+  );
+
+  useEffect(() => {
+    setDraft("");
+  }, [resetEpoch, sessionId, uiScopeId]);
 
   // Keep local share transcripts in sync after stream settles.
   useEffect(() => {
@@ -208,7 +300,10 @@ export function WorkspaceChatPane({
         {formatUiMessage(locale, "workspaceChatHeroTitle")}
       </h1>
       <p className={styles.heroSubtitle}>
-        {formatUiMessage(locale, "workspaceChatHeroSubtitle")}
+        {formatUiMessage(
+          locale,
+          isPersonalConversation ? "chat.heroSubtitle" : "workspaceChatHeroSubtitle",
+        )}
       </p>
       <p className={styles.heroModeHint}>
         {formatUiMessage(locale, "workspaceEmptyStateModeHint", {
@@ -250,9 +345,12 @@ export function WorkspaceChatPane({
   );
 
   const handleSend = useCallback(() => {
+    if (sessionFilesBlocked) {
+      return;
+    }
     chatSession.send(draft);
     setDraft("");
-  }, [chatSession, draft]);
+  }, [chatSession, draft, sessionFilesBlocked]);
 
   const insertIntoComposer = useCallback(
     (text: string): boolean => {
@@ -304,8 +402,11 @@ export function WorkspaceChatPane({
     <section
       className={styles.shell}
       style={shellStyle}
-      aria-label={formatUiMessage(locale, "workspaceChatRegionLabel")}
-      data-testid="workspace-chat-pane"
+      aria-label={formatUiMessage(
+        locale,
+        isPersonalConversation ? "chat.regionLabel" : "workspaceChatRegionLabel",
+      )}
+      data-testid="chat-canvas"
       data-active-mode={activeModeCode}
     >
       {/* W5 #18: mode title/chip header removed — composer capability toggles remain. */}
@@ -333,14 +434,33 @@ export function WorkspaceChatPane({
         />
       )}
 
+      {isPersonalConversation && !isShareMode && (
+        <SessionFileTray
+          disabled={chatSession.isStreaming}
+          onBlockedChange={setSessionFilesBlocked}
+          onSessionChange={(id) => onSessionChange?.(id)}
+          sessionId={sessionId}
+          token={auth.token || ""}
+        />
+      )}
+
       <ChatComposer
         draft={draft}
         onDraftChange={setDraft}
         isStreaming={chatSession.isStreaming}
+        disabled={
+          chatSession.isHydrating ||
+          chatSession.historyLoadFailed ||
+          sessionFilesBlocked
+        }
         capabilities={capabilities}
         locale={locale}
-        workspaceId={workspaceId}
-        ragDisabled={!isShareMode && selectedSourceIds.length === 0}
+        composerId={uiScopeId}
+        composerLabel={formatUiMessage(
+          locale,
+          isPersonalConversation ? "chat.composerLabel" : "workspaceChatComposerLabel",
+        )}
+        ragDisabled={supportsRag && !isShareMode && selectedSourceIds.length === 0}
         selectedSourceCount={selectedSourceIds.length}
         onRequestGuideSources={onRequestGuideSources}
         onSubmit={handleSend}
@@ -349,7 +469,7 @@ export function WorkspaceChatPane({
         textareaRef={textareaRef}
         onHeightChange={setComposerClearance}
         hero={composerHero}
-        availableCapabilities={fixedCaps ?? undefined}
+        availableCapabilities={fixedCaps ?? availableCapabilities}
         lockCapabilities={Boolean(fixedCaps)}
       />
     </section>

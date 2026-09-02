@@ -96,14 +96,14 @@ export function MarketingChrome({
           </span>
           {isAuthenticated ? null : (
             <Link
-              href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`}
+              href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.chat)}`}
               className={`app-button-secondary ${styles.navButton}`}
             >
               {formatUiMessage(locale, "marketingChrome.login")}
             </Link>
           )}
           <Link
-            href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.dashboard)}`}
+            href={`${APP_PATHS.login}?next=${encodeURIComponent(APP_PATHS.chat)}`}
             className={`app-button-primary ${styles.navButton}`}
             data-testid="mkt-nav-enter-app"
           >

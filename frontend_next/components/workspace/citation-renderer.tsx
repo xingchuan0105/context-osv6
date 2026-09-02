@@ -482,11 +482,36 @@ export function CitationRenderer({
   function renderCitationButton(citation: Citation, key: string) {
     const citationIndex = findCitationIndex(message.citations, citation);
     const resolvedIndex = citationIndex >= 0 ? citationIndex : 0;
+    if (citation.citation_status === "source_deleted") {
+      // W2e tombstone: the source was deleted; only irreducible facts remain.
+      return (
+        <button
+          aria-label={formatUiMessage(locale, "chat.citationTombstone")}
+          className={styles.inlineCitationButton}
+          data-citation-status="source_deleted"
+          data-testid="workspace-citation-tombstone"
+          disabled
+          key={key}
+          title={formatUiMessage(locale, "chat.citationTombstone")}
+          type="button"
+        >
+          {getCitationDisplayId(citation, resolvedIndex)}
+        </button>
+      );
+    }
     const label = getCitationLabel(citation, resolvedIndex);
     const pageText = getCitationPageText(locale, citation.page);
     const preview = citation.preview?.trim() || citation.content?.trim() || "";
     const url = getCitationUrl(citation);
     let hoverTitle = pageText ? `${label} (${pageText})\n${preview}` : `${label}\n${preview}`;
+    const scopeText = citation.source_scope
+      ? citation.source_scope === "session"
+        ? formatUiMessage(locale, "chat.citationScope.session")
+        : formatUiMessage(locale, "chat.citationScope.workspace")
+      : null;
+    if (scopeText) {
+      hoverTitle += `\n${scopeText}`;
+    }
     if (url) {
       hoverTitle += `\n${url}`;
     }
@@ -495,6 +520,7 @@ export function CitationRenderer({
       <button
         aria-label={getInlineCitationAriaLabel(locale, citation, resolvedIndex)}
         className={styles.inlineCitationButton}
+        data-scope={citation.source_scope ?? undefined}
         data-testid="workspace-citation"
         key={key}
         onClick={() => {

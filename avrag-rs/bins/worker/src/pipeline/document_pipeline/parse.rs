@@ -57,7 +57,7 @@ pub(crate) async fn stage_project_document_ir(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    workspace_id: Uuid,
+    workspace_id: Option<Uuid>,
     document_id: Uuid,
     parse_run_id: Uuid,
     document_ir: &DocumentIr,

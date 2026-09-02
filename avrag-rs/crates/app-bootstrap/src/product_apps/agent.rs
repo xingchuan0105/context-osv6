@@ -3,7 +3,10 @@
 
 use common::{AppError, SourceRow, StatusOnlyResponse};
 use contracts::chat::ChatMessage;
-use contracts::documents::CitationLookupResponse;
+use contracts::documents::{
+    CitationLookupResponse, CreateDocumentRequest, CreateDocumentUploadResponse,
+    SessionFilesResponse,
+};
 use contracts::workspaces::{
     ChatSession, CreateChatSessionRequest, UpdateChatSessionRequest, Workspace,
 };
@@ -54,6 +57,32 @@ impl<'a> AgentApp<'a> {
 
     pub async fn delete_session(&self, session_id: &str) -> Result<StatusOnlyResponse, AppError> {
         self.chat.delete_session(session_id).await
+    }
+
+    /// Chat-first W2b: session-scoped file upload (artifact + conversation binding).
+    pub async fn create_session_file_upload(
+        &self,
+        session_id: &str,
+        req: CreateDocumentRequest,
+    ) -> Result<CreateDocumentUploadResponse, AppError> {
+        self.chat
+            .create_session_file_upload(session_id, req)
+            .await
+    }
+
+    pub async fn list_session_files(
+        &self,
+        session_id: &str,
+    ) -> Result<SessionFilesResponse, AppError> {
+        self.chat.list_session_files(session_id).await
+    }
+
+    pub async fn delete_session_file(
+        &self,
+        session_id: &str,
+        binding_id: &str,
+    ) -> Result<StatusOnlyResponse, AppError> {
+        self.chat.delete_session_file(session_id, binding_id).await
     }
 
     pub async fn list_messages(&self, session_id: &str) -> Result<Vec<ChatMessage>, AppError> {

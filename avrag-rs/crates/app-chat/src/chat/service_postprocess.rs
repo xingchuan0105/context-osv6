@@ -10,6 +10,13 @@ use super::ChatExecution;
 use crate::context::ChatContext;
 use crate::estimate_token_count;
 
+fn session_workspace_uuid(session: &ChatSession) -> Option<Uuid> {
+    session
+        .workspace_id
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok())
+}
+
 impl ChatContext {
     pub(crate) async fn apply_output_guard_to_execution(
         &self,
@@ -23,10 +30,10 @@ impl ChatContext {
             return Ok(());
         }
 
-        let (sanitized_answer, guard_report) = self.orchestrator.guard_pipeline().check_output(
-            &execution.response.answer,
-            Some(trace_id.to_string()),
-        );
+        let (sanitized_answer, guard_report) = self
+            .orchestrator
+            .guard_pipeline()
+            .check_output(&execution.response.answer, Some(trace_id.to_string()));
 
         execution.response.answer = sanitized_answer;
         for item in &guard_report.degrade_trace {
@@ -85,24 +92,84 @@ impl ChatContext {
             answer_blocks = ?execution.response.answer_blocks,
             "persisting assistant answer blocks"
         );
-        let tool_results: Vec<contracts::ToolResult> = execution.response.tool_results.iter().map(|r| {
-            contracts::ToolResult::from(r.clone())
-        }).collect();
+        let tool_results: Vec<contracts::ToolResult> = execution
+            .response
+            .tool_results
+            .iter()
+            .map(|r| contracts::ToolResult::from(r.clone()))
+            .collect();
         // ADR-0010: server-side query normalization removed; no per-turn
         // resolved_query or query_resolution metadata is persisted.
         // Persist capabilities for UI replay (prefer resolved assistant meta; fall back to request).
-        let user_turn_metadata: Option<serde_json::Value> = execution
+        let resolved_capabilities: Option<serde_json::Value> = execution
             .assistant_turn_metadata
             .as_ref()
             .and_then(|m| m.get("capabilities").cloned())
-            .map(|c| serde_json::json!({ "capabilities": c }))
             .or_else(|| {
                 req.capabilities
                     .as_ref()
-                    .map(|c| serde_json::json!({ "capabilities": c }))
+                    .map(|c| serde_json::to_value(c).ok())
+                    .flatten()
             });
+        let web_enabled = execution.mode == "search"
+            || resolved_capabilities.as_ref().is_some_and(|c| {
+                c.as_array().is_some_and(|items| {
+                    items.iter().any(|v| v.as_str() == Some("search"))
+                })
+            });
+        // W2d: freeze what this turn was allowed to use (design §4.4). Written
+        // once with the user row; later moves/deletes never rewrite it.
+        let scope_facts = self
+            .turn_scope_facts(Some(session_uuid), session_workspace_uuid(session))
+            .await
+            .unwrap_or_default();
+        let context_snapshot = serde_json::json!({
+            "workspace_id_at_send": session.workspace_id,
+            "session_binding_artifacts": scope_facts.session_artifacts,
+            "workspace_binding_artifacts": scope_facts.workspace_artifacts,
+            "web_enabled": web_enabled,
+            "model_role": session.model_role,
+            "created_at": now_rfc3339(),
+        });
+        let user_turn_metadata: Option<serde_json::Value> = {
+            let mut meta = serde_json::Map::new();
+            if let Some(caps) = resolved_capabilities {
+                meta.insert("capabilities".to_string(), caps);
+            }
+            meta.insert("context_snapshot".to_string(), context_snapshot);
+            Some(serde_json::Value::Object(meta))
+        };
+        // W2d: what this turn actually used — scope-tagged citations, written
+        // once with the assistant row. Tagging here also flows into the SSE
+        // done payload (persist runs before Done).
+        let mut evidence_segments: Vec<serde_json::Value> = Vec::new();
+        for citation in &mut execution.response.citations {
+            citation.source_scope = scope_facts.scope_of(&citation.doc_id).map(str::to_string);
+            if let Some(scope) = citation.source_scope.clone() {
+                evidence_segments.push(serde_json::json!({
+                    "channel": "rag",
+                    "source_scope": scope,
+                    "artifact_id": citation.doc_id,
+                    "chunk_id": citation.chunk_id,
+                    "page": citation.page,
+                    "asset_id": citation.asset_id,
+                    "parse_version": citation.parse_run_id,
+                }));
+            }
+        }
         let user_resolved_query: Option<&str> = None;
-        let assistant_turn_metadata = execution.assistant_turn_metadata.clone();
+        let mut assistant_turn_metadata = execution.assistant_turn_metadata.clone();
+        {
+            let meta = assistant_turn_metadata
+                .get_or_insert_with(|| serde_json::json!({}));
+            if let Some(obj) = meta.as_object_mut() {
+                obj.insert(
+                    "turn_evidence".to_string(),
+                    serde_json::json!({ "segments": evidence_segments }),
+                );
+            }
+        }
+        execution.assistant_turn_metadata = assistant_turn_metadata.clone();
         // Prefer derived capability label (chat|rag|search|rag+search) over raw request.agent_type.
         let persist_agent_type = execution.response.agent_type.as_str();
         let assistant_message_id = chat_persistence
@@ -165,12 +232,17 @@ impl ChatContext {
             event_name,
             if req.source_type.as_deref() == Some("share") {
                 analytics::Surface::SharedKb
-            } else {
+            } else if session.workspace_id.is_some() {
                 analytics::Surface::Workspace
+            } else {
+                analytics::Surface::Chat
             },
             result,
             Uuid::parse_str(&session.id).ok(),
-            Uuid::parse_str(&session.workspace_id).ok(),
+            session
+                .workspace_id
+                .as_deref()
+                .and_then(|value| Uuid::parse_str(value).ok()),
             metadata,
         )
         .await;
@@ -224,20 +296,19 @@ impl ChatContext {
                 "degrade_count": execution.response.degrade_trace.len(),
             });
             if let Some(debug_metadata) = execution.debug_metadata.as_ref()
-                && let Some(tool_telemetry) = debug_metadata.get("tool_telemetry") {
-                    cost_metadata["tool_telemetry"] = tool_telemetry.clone();
-                }
-            self.record_cost_event_if_available(
-                app_billing::CostEventRecord {
-                    event_name: analytics::CostEventName::LlmUsageMetered,
-                    feature,
-                    session_id: Uuid::parse_str(&execution.response.session_id).ok(),
-                    workspace_id: None,
-                    usage: llm_usage,
-                    source: "pipeline",
-                    metadata: cost_metadata,
-                },
-            )
+                && let Some(tool_telemetry) = debug_metadata.get("tool_telemetry")
+            {
+                cost_metadata["tool_telemetry"] = tool_telemetry.clone();
+            }
+            self.record_cost_event_if_available(app_billing::CostEventRecord {
+                event_name: analytics::CostEventName::LlmUsageMetered,
+                feature,
+                session_id: Uuid::parse_str(&execution.response.session_id).ok(),
+                workspace_id: None,
+                usage: llm_usage,
+                source: "pipeline",
+                metadata: cost_metadata,
+            })
             .await;
         }
 

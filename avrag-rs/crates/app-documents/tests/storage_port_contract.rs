@@ -213,8 +213,43 @@ impl DocumentStorePort for RecordingDocumentStore {
         _auth: &AuthContext,
         _document_id: Uuid,
         _filename: Option<&str>,
-        _workspace_id: Option<Uuid>,
         _status: Option<DocumentStatus>,
+    ) -> Result<bool, AppError> {
+        Ok(false)
+    }
+
+    async fn create_session_document(
+        &self,
+        _auth: &AuthContext,
+        _conversation_id: Uuid,
+        _filename: &str,
+        _file_size: u64,
+        _mime_type: &str,
+    ) -> Result<Document, AppError> {
+        Err(AppError::internal("not used in this contract test"))
+    }
+
+    async fn list_session_files(
+        &self,
+        _auth: &AuthContext,
+        _conversation_id: Uuid,
+    ) -> Result<Vec<contracts::documents::SessionFileRow>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn delete_session_file_binding(
+        &self,
+        _auth: &AuthContext,
+        _conversation_id: Uuid,
+        _binding_id: Uuid,
+    ) -> Result<Option<String>, AppError> {
+        Ok(None)
+    }
+
+    async fn delete_document_if_unbound(
+        &self,
+        _auth: &AuthContext,
+        _document_id: Uuid,
     ) -> Result<bool, AppError> {
         Ok(false)
     }

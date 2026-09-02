@@ -1,7 +1,6 @@
-use app_core::{DocumentTaskSeed, StorageContext, StoredDocument, current_user_id};
+use app_core::{DocumentTaskSeed, StorageContext, current_user_id};
 use contracts::auth_runtime::AuthContext;
 use common::AppError;
-use contracts::documents::DocumentStatus;
 use ingestion::{
     AuditAction, IngestDocumentPayload, ReindexDocumentPayload, ReindexReason, build_ingest_task,
     build_reindex_task, task_audit,
@@ -10,23 +9,6 @@ use ingestion::{
 use crate::document_context::DocumentContext;
 
 impl DocumentContext {
-    pub async fn list_ready_documents_for_chat(
-        &self,
-        storage: &StorageContext,
-        workspace_id: &str,
-        doc_scope: &[String],
-    ) -> Vec<StoredDocument> {
-        let state = storage.inner().read().await;
-        state
-            .documents
-            .values()
-            .filter(|stored| stored.document.workspace_id == workspace_id)
-            .filter(|stored| matches!(stored.document.status, DocumentStatus::Completed))
-            .filter(|stored| doc_scope.is_empty() || doc_scope.contains(&stored.document.id))
-            .cloned()
-            .collect()
-    }
-
     pub async fn enqueue_ingest_task(
         &self,
         auth: &AuthContext,

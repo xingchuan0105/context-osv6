@@ -43,8 +43,8 @@ pub use chat::{
 pub use documents::{
     AnswerContextChunk, CitationLookupRequest, CitationLookupResponse, CreateDocumentRequest,
     CreateDocumentUploadResponse, Document, DocumentContentResponse, DocumentStatus,
-    DocumentStatusResponse, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
-    SourcesResponse,
+    DocumentStatusResponse, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse,
+    SessionFileRow, SessionFilesResponse, SourceRow, SourcesResponse,
 };
 pub use errors::ErrorEnvelope;
 pub use workspaces::{

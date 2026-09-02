@@ -59,46 +59,6 @@ impl ChunkRepository {
         row.map(map_indexed_chunk).transpose()
     }
 
-    pub async fn search_chunks_text(
-        &self,
-        context: &AuthContext,
-        workspace_id: Uuid,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<IndexedChunk>, PgStorageError> {
-        let mut tx = self.pool.begin(context).await?;
-        let rows = sqlx::query(
-            r#"
-            select
-              c.id,
-              c.document_id,
-              c.page,
-              c.content,
-              c.metadata,
-              ts_rank_cd(c.search_vector, plainto_tsquery('simple', $2)) as rank
-            from chunks c
-            join documents d on d.id = c.document_id
-            where d.workspace_id = $1
-              and c.owner_user_id = $4
-              and d.owner_user_id = $4
-              and d.status not in ('deleting', 'deleted')
-              and c.chunk_type = 'body'
-              and c.search_vector @@ plainto_tsquery('simple', $2)
-            order by rank desc, c.id
-            limit $3
-            "#,
-        )
-        .bind(workspace_id)
-        .bind(context.user_id().into_uuid())
-        .bind(query)
-        .bind(i64::try_from(limit).unwrap_or(i64::MAX))
-        .fetch_all(tx.inner())
-        .await?;
-        tx.commit().await?;
-        rows.into_iter().map(map_indexed_chunk).collect()
-    }
-
-    /// BM25-style full-text search on chunks
     pub async fn search_chunks_bm25(
         &self,
         ctx: &AuthContext,
@@ -454,7 +414,7 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select d.id, d.workspace_id, n.title as workspace_name, d.file_name, d.status,
+            select d.id, wb.workspace_id, n.title as workspace_name, d.file_name, d.status,
                    (
                      select t.last_error
                      from ingestion_tasks t
@@ -465,10 +425,12 @@ impl ChunkRepository {
                      limit 1
                    ) as last_error
             from documents d
-            join workspaces n on n.id = d.workspace_id
-            where ($1::uuid is null or d.workspace_id = $1)
+            join workspace_document_bindings wb on wb.artifact_id = d.id
+            join workspaces n on n.id = wb.workspace_id
+            where ($1::uuid is null or wb.workspace_id = $1)
               and d.owner_user_id = $2
               and n.owner_user_id = d.owner_user_id
+              and wb.owner_user_id = d.owner_user_id
               and d.status not in ('deleting', 'deleted')
             order by d.updated_at desc, d.created_at desc
             "#,

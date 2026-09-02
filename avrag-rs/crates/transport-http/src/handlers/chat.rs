@@ -9,11 +9,12 @@ use axum::{
     },
 };
 use common::AppError;
+use contracts::RuntimeExecuteRequest;
+use contracts::auth_runtime::SubjectKind;
 use contracts::chat::ChatEvent;
 use contracts::chat::ChatRequest;
-use contracts::documents::CitationLookupRequest;
+use contracts::documents::{CitationLookupRequest, CreateDocumentRequest, SessionFilesResponse};
 use contracts::workspaces::{CreateChatSessionRequest, UpdateChatSessionRequest};
-use contracts::RuntimeExecuteRequest;
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
@@ -22,12 +23,11 @@ use uuid::Uuid;
 use super::{
     app_error_response, app_error_response_for_agent, error_response, operation_guide_agent_type,
 };
-use crate::middleware::RequestState;
 use crate::auth_guard::{
-    authorize_api_key_query_scoped, authorize_session_access, authorize_workspace_notebook_str,
+    authorize_api_key_query_scoped, authorize_session_access,
     authorize_workspace_query_optional_notebook, forbid_api_key, forbid_workspace_api_key,
-    query_permission,
 };
+use crate::middleware::RequestState;
 
 pub(crate) async fn runtime_execute_handler(
     Extension(RequestState(state)): Extension<RequestState>,
@@ -64,8 +64,31 @@ pub(crate) async fn chat_post_handler(
     } else {
         req.client_ip = None;
     }
-    let should_stream = req.stream || accepts_sse(&headers);
     let source_type = req.source_type.clone();
+    if source_type.as_deref() != Some("share") {
+        if let Some(session_id) = req.session_id.as_deref() {
+            if matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
+                match authorize_session_access(&state, session_id).await {
+                    Ok(session) => req.workspace_id = session.workspace_id,
+                    Err(error) => {
+                        return app_error_response_for_agent(
+                            error,
+                            operation_guide_agent_type(&req.agent_type),
+                        );
+                    }
+                }
+            } else if let Some(session) = state.agent().get_session(session_id).await {
+                req.workspace_id = session.workspace_id;
+            }
+        }
+    }
+    if let Err(error) =
+        authorize_workspace_query_optional_notebook(state.auth(), req.workspace_id.as_deref())
+    {
+        return app_error_response_for_agent(error, operation_guide_agent_type(&req.agent_type));
+    }
+
+    let should_stream = req.stream || accepts_sse(&headers);
     let workspace_id = req
         .workspace_id
         .as_deref()
@@ -74,8 +97,10 @@ pub(crate) async fn chat_post_handler(
     let query_len = req.query.len();
     let surface = if source_type.as_deref() == Some("share") {
         analytics::Surface::SharedKb
-    } else {
+    } else if workspace_id.is_some() {
         analytics::Surface::Workspace
+    } else {
+        analytics::Surface::Chat
     };
     let request_id = state
         .auth()
@@ -89,12 +114,6 @@ pub(crate) async fn chat_post_handler(
         })
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     tracing::Span::current().record("request_id", &request_id);
-
-    if let Err(error) =
-        authorize_workspace_query_optional_notebook(state.auth(), req.workspace_id.as_deref())
-    {
-        return app_error_response_for_agent(error, operation_guide_agent_type(&agent_type));
-    }
 
     let started_event = if source_type.as_deref() == Some("share") {
         analytics::ProductEventName::SharedKbChatStarted
@@ -209,7 +228,6 @@ fn chat_live_stream_response(
             )
             .await
         {
-
             state
                 .record_product_event_if_available(
                     chat_failure_event_name(&agent_type_for_task),
@@ -335,6 +353,7 @@ fn add_sse_headers(response: &mut Response) {
 fn surface_label(surface: analytics::Surface) -> &'static str {
     match surface {
         analytics::Surface::SharedKb => "shared_kb",
+        analytics::Surface::Chat => "chat",
         _ => "workspace",
     }
 }
@@ -391,6 +410,15 @@ pub(crate) async fn list_chat_sessions_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
+    if params
+        .workspace_id()
+        .is_some_and(|value| Uuid::parse_str(value).is_err())
+    {
+        return app_error_response(AppError::validation(
+            "invalid_workspace_id",
+            "workspace_id must be a valid UUID",
+        ));
+    }
     if let Err(error) =
         authorize_workspace_query_optional_notebook(state.auth(), params.workspace_id())
     {
@@ -408,7 +436,7 @@ pub(crate) async fn create_chat_session_handler(
     Json(req): Json<CreateChatSessionRequest>,
 ) -> Response {
     if let Err(error) =
-        authorize_workspace_notebook_str(state.auth(), query_permission(), &req.workspace_id)
+        authorize_workspace_query_optional_notebook(state.auth(), req.workspace_id.as_deref())
     {
         return app_error_response(error);
     }
@@ -438,6 +466,54 @@ pub(crate) async fn update_chat_session_handler(
     }
     match state.agent().update_session(&session_id, req).await {
         Ok(session) => (StatusCode::OK, Json(session)).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
+
+pub(crate) async fn create_chat_session_file_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(session_id): Path<String>,
+    Json(req): Json<CreateDocumentRequest>,
+) -> Response {
+    if let Err(error) = authorize_session_access(&state, &session_id).await {
+        return app_error_response(error);
+    }
+    match state
+        .agent()
+        .create_session_file_upload(&session_id, req)
+        .await
+    {
+        Ok(response) => (StatusCode::CREATED, Json(response)).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
+
+pub(crate) async fn list_chat_session_files_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(session_id): Path<String>,
+) -> Response {
+    if let Err(error) = authorize_session_access(&state, &session_id).await {
+        return app_error_response(error);
+    }
+    match state.agent().list_session_files(&session_id).await {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
+
+pub(crate) async fn delete_chat_session_file_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path((session_id, binding_id)): Path<(String, String)>,
+) -> Response {
+    if let Err(error) = authorize_session_access(&state, &session_id).await {
+        return app_error_response(error);
+    }
+    match state
+        .agent()
+        .delete_session_file(&session_id, &binding_id)
+        .await
+    {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),
     }
 }

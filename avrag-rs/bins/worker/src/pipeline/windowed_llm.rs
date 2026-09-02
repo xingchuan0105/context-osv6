@@ -86,7 +86,7 @@ pub(crate) async fn run_windowed_ps_and_triplets(
     context: &AuthContext,
     task: &IngestionTask,
     document_id: Uuid,
-    workspace_id: Uuid,
+    workspace_id: Option<Uuid>,
     filename: &str,
     doc_title: &str,
     raw_text: &str,

@@ -51,7 +51,7 @@ export type ProgressEntry = {
 
 export type UseChatSessionOptions = {
   token: string;
-  workspaceId: string;
+  workspaceId: string | null;
   sessionId: string | null;
   selectedSourceIds: string[];
   /** Session-only multiselect; empty = pure chat. */
@@ -59,6 +59,8 @@ export type UseChatSessionOptions = {
   locale: "zh-CN" | "en";
   onSessionChange?: (sessionId: string | null) => void;
   onSessionActivity?: () => void;
+  /** Restores surface-owned Composer state from persisted turn snapshots. */
+  onHistoryHydrated?: (messages: UiChatMessage[]) => void;
   /**
    * Shared KB visitor mode: chat via `source_type=share` + `source_token`.
    * Multi-turn history is client-supplied (`messages`) because share chats are not PG-persisted.
@@ -78,6 +80,10 @@ export type UseChatSessionOptions = {
 export type UseChatSessionResult = {
   messages: UiChatMessage[];
   isStreaming: boolean;
+  /** Existing transcript is still loading for the requested session. */
+  isHydrating: boolean;
+  /** The requested transcript could not be loaded; sending would lose prior context. */
+  historyLoadFailed: boolean;
   progress: {
     activities: ProgressEntry[];
     mode: WorkspaceChatMode | null;

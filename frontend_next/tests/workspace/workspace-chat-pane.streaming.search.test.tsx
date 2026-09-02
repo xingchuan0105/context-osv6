@@ -31,11 +31,11 @@ describe("WorkspaceChatPane streaming search flow", () => {
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
         workspace_id: "ws-1",
-        session_id: null,
         agent_type: "search",
         doc_scope: ["doc-1", "doc-2"],
         stream: true,
       });
+      expect(request).not.toHaveProperty("session_id");
 
       await onEvent({
         event: "start",

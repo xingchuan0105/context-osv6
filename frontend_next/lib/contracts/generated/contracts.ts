@@ -197,6 +197,17 @@ export interface Citation {
 	parser_backend?: string;
 	source_locator?: unknown;
 	parse_run_id?: string;
+	/**
+	 * Which visible scope the cited artifact came from (chat-first W2):
+	 * `session` (conversation file) or `workspace` (workspace material).
+	 * Absent on historical citations recorded before W2.
+	 */
+	source_scope?: string;
+	/**
+	 * Tombstone marker (W2e): the cited source was deleted; the stored
+	 * citation keeps only irreducible facts and must not be re-resolved.
+	 */
+	citation_status?: string;
 }
 
 export interface TraceInfo {
@@ -437,11 +448,20 @@ export interface ChatRequest {
 	turnstile_token?: string;
 }
 
+export enum ConversationScopeKind {
+	Personal = "personal",
+	Workspace = "workspace",
+}
+
 export interface ChatSession {
 	id: string;
-	workspace_id: string;
+	owner_user_id: string;
+	workspace_id?: string;
+	scope_kind: ConversationScopeKind;
+	workspace_name?: string;
 	title?: string;
 	agent_type: string;
+	model_role: string;
 	pinned?: boolean;
 	created_at: string;
 	updated_at: string;
@@ -489,9 +509,9 @@ export interface CreateApiKeyResponse {
 }
 
 export interface CreateChatSessionRequest {
-	workspace_id: string;
+	workspace_id?: string;
 	title?: string;
-	agent_type: string;
+	agent_type?: string;
 }
 
 export interface CreateDocumentRequest {
@@ -553,7 +573,11 @@ export interface DegradationStatusResponse {
 export interface Document {
 	id: string;
 	owner_user_id: string;
-	workspace_id: string;
+	/**
+	 * Workspace binding of the artifact when one exists; session-bound
+	 * artifacts (chat-first W2) have none. Binding tables are the scope truth.
+	 */
+	workspace_id?: string;
 	owner_id: string;
 	file_name: string;
 	mime_type: string;
@@ -744,6 +768,21 @@ export interface RegisterRequest {
 export interface SendResetCodeRequest {
 	email: string;
 	lang?: string;
+}
+
+/** One session-bound artifact as seen from its Conversation (chat-first W2). */
+export interface SessionFileRow {
+	binding_id: string;
+	document_id: string;
+	file_name: string;
+	mime_type: string;
+	file_size: number;
+	status: string;
+	created_at: string;
+}
+
+export interface SessionFilesResponse {
+	files: SessionFileRow[];
 }
 
 export interface ShareAnalyticsResponse {

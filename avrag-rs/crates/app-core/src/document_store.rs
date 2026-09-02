@@ -77,6 +77,34 @@ pub trait DocumentStorePort: Send + Sync {
         input: crate::PublishedDocumentUpsert,
     ) -> Result<Document, AppError>;
 
+    /// Create an artifact bound to a Conversation (chat-first W2b). No workspace
+    /// binding is written; the conversation binding is the sole scope.
+    async fn create_session_document(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+        filename: &str,
+        file_size: u64,
+        mime_type: &str,
+    ) -> Result<Document, AppError>;
+
+    /// Files visible to a Conversation via its typed bindings (upload order).
+    async fn list_session_files(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+    ) -> Result<Vec<contracts::documents::SessionFileRow>, AppError>;
+
+    /// Remove one Conversation binding. Returns the binding's artifact id so the
+    /// caller can run zero-binding GC (W2e); `None` when binding/conversation
+    /// was not found for this owner.
+    async fn delete_session_file_binding(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+        binding_id: Uuid,
+    ) -> Result<Option<String>, AppError>;
+
     async fn get_document_task_seed(
         &self,
         auth: &AuthContext,
@@ -111,7 +139,6 @@ pub trait DocumentStorePort: Send + Sync {
         auth: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, AppError>;
 
@@ -120,6 +147,15 @@ pub trait DocumentStorePort: Send + Sync {
         auth: &AuthContext,
         document_id: Uuid,
     ) -> Result<DocumentDeletionOutcome, AppError>;
+
+    /// Full deletion for artifacts with zero bindings of either kind (chat-first
+    /// W2e). Owner-scoped; no-op when any session/workspace binding remains.
+    /// Returns `true` when the artifact entered the async cleanup flow.
+    async fn delete_document_if_unbound(
+        &self,
+        auth: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<bool, AppError>;
 
     async fn get_document_content(
         &self,

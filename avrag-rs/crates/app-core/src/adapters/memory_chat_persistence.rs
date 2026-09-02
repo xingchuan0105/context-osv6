@@ -12,7 +12,7 @@ use common::{AppError, SourceRow, new_id, now_rfc3339};
 use contracts::auth_runtime::AuthContext;
 use contracts::chat::ChatMessage;
 use contracts::documents::DocumentStatus;
-use contracts::workspaces::{ChatSession, Workspace};
+use contracts::workspaces::{ChatSession, ConversationScopeKind, Workspace};
 use ingestion_types::AuditRecord;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -46,12 +46,45 @@ impl MemoryChatPersistence {
         current_owner_user_id(auth)
     }
 
-    fn session_visible(state: &MemoryState, auth: &AuthContext, session: &ChatSession) -> bool {
-        state
-            .workspaces
-            .get(&session.workspace_id)
-            .map(|nb| nb.owner_user_id == Self::owner_user_id(auth))
-            .unwrap_or(false)
+    fn session_visible(auth: &AuthContext, session: &ChatSession) -> bool {
+        session.owner_user_id == Self::owner_user_id(auth)
+    }
+
+    fn session_with_current_scope(state: &MemoryState, session: &ChatSession) -> ChatSession {
+        let mut hydrated = session.clone();
+        hydrated.scope_kind = if session.workspace_id.is_some() {
+            ConversationScopeKind::Workspace
+        } else {
+            ConversationScopeKind::Personal
+        };
+        hydrated.workspace_name = session
+            .workspace_id
+            .as_ref()
+            .and_then(|workspace_id| state.workspaces.get(workspace_id))
+            .map(|workspace| workspace.title.clone());
+        hydrated
+    }
+
+    fn normalize_model_role(model_role: &str) -> Result<String, AppError> {
+        match model_role.trim() {
+            "agent" => Ok("agent".to_string()),
+            "quick_chat" => Ok("quick_chat".to_string()),
+            _ => Err(AppError::validation(
+                "invalid_model_role",
+                "model_role must be agent or quick_chat",
+            )),
+        }
+    }
+
+    fn sort_sessions(sessions: &mut [ChatSession], workspace_scoped: bool) {
+        sessions.sort_by(|left, right| {
+            workspace_scoped
+                .then(|| right.pinned.cmp(&left.pinned))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| right.updated_at.cmp(&left.updated_at))
+                .then_with(|| right.created_at.cmp(&left.created_at))
+                .then_with(|| left.id.cmp(&right.id))
+        });
     }
 
     fn strip_like_pattern(pattern: &str) -> String {
@@ -87,10 +120,10 @@ impl SessionPort for MemoryChatPersistence {
         let q = Self::strip_like_pattern(pattern);
         let state = self.state.read().await;
         let messages = &state.messages;
-        Ok(state
+        let mut sessions = state
             .sessions
             .values()
-            .filter(|session| Self::session_visible(&state, auth, session))
+            .filter(|session| Self::session_visible(auth, session))
             .filter(|session| {
                 if session
                     .title
@@ -105,8 +138,11 @@ impl SessionPort for MemoryChatPersistence {
                         .any(|m| m.content.to_lowercase().contains(&q))
                 })
             })
-            .cloned()
-            .collect())
+            .map(|session| Self::session_with_current_scope(&state, session))
+            .collect::<Vec<_>>();
+        Self::sort_sessions(&mut sessions, false);
+        sessions.truncate(50);
+        Ok(sessions)
     }
 
     async fn list_sessions(
@@ -116,18 +152,20 @@ impl SessionPort for MemoryChatPersistence {
     ) -> Result<Vec<ChatSession>, AppError> {
         let notebook_key = workspace_id.map(|id| id.to_string());
         let state = self.state.read().await;
-        Ok(state
+        let mut sessions = state
             .sessions
             .values()
-            .filter(|session| Self::session_visible(&state, auth, session))
+            .filter(|session| Self::session_visible(auth, session))
             .filter(|session| {
                 notebook_key
                     .as_ref()
-                    .map(|id| session.workspace_id == *id)
+                    .map(|id| session.workspace_id.as_deref() == Some(id.as_str()))
                     .unwrap_or(true)
             })
-            .cloned()
-            .collect())
+            .map(|session| Self::session_with_current_scope(&state, session))
+            .collect::<Vec<_>>();
+        Self::sort_sessions(&mut sessions, workspace_id.is_some());
+        Ok(sessions)
     }
 
     async fn get_session(
@@ -140,34 +178,51 @@ impl SessionPort for MemoryChatPersistence {
         Ok(state
             .sessions
             .get(&key)
-            .filter(|session| Self::session_visible(&state, auth, session))
-            .cloned())
+            .filter(|session| Self::session_visible(auth, session))
+            .map(|session| Self::session_with_current_scope(&state, session)))
     }
 
     async fn create_session(
         &self,
         auth: &AuthContext,
-        workspace_id: Uuid,
+        workspace_id: Option<Uuid>,
         title: Option<&str>,
         agent_type: &str,
+        model_role: &str,
     ) -> Result<ChatSession, AppError> {
-        let notebook_key = workspace_id.to_string();
         let mut state = self.state.write().await;
-        let notebook = state
-            .workspaces
-            .get(&notebook_key)
-            .filter(|nb| nb.owner_user_id == Self::owner_user_id(auth))
-            .cloned()
-            .ok_or_else(|| AppError::not_found("workspace_not_found", "workspace not found"))?;
+        let (workspace_id, workspace_name) = match workspace_id {
+            Some(workspace_id) => {
+                let notebook_key = workspace_id.to_string();
+                let notebook = state
+                    .workspaces
+                    .get(&notebook_key)
+                    .filter(|nb| nb.owner_user_id == Self::owner_user_id(auth))
+                    .cloned()
+                    .ok_or_else(|| {
+                        AppError::not_found("workspace_not_found", "workspace not found")
+                    })?;
+                (Some(notebook.id), Some(notebook.title))
+            }
+            None => (None, None),
+        };
         let now = now_rfc3339();
         let session = ChatSession {
             id: new_id(),
-            workspace_id: notebook.id,
+            owner_user_id: Self::owner_user_id(auth),
+            scope_kind: if workspace_id.is_some() {
+                ConversationScopeKind::Workspace
+            } else {
+                ConversationScopeKind::Personal
+            },
+            workspace_id,
+            workspace_name,
             title: title
                 .map(str::trim)
                 .filter(|t| !t.is_empty())
                 .map(ToOwned::to_owned),
             agent_type: agent_type.to_string(),
+            model_role: Self::normalize_model_role(model_role)?,
             pinned: false,
             created_at: now.clone(),
             updated_at: now,
@@ -188,7 +243,7 @@ impl SessionPort for MemoryChatPersistence {
         let visible = state
             .sessions
             .get(&key)
-            .map(|session| Self::session_visible(&state, auth, session))
+            .map(|session| Self::session_visible(auth, session))
             .unwrap_or(false);
         if !visible {
             return Ok(None);
@@ -213,7 +268,7 @@ impl SessionPort for MemoryChatPersistence {
         let can_delete = state
             .sessions
             .get(&key)
-            .map(|session| Self::session_visible(&state, auth, session))
+            .map(|session| Self::session_visible(auth, session))
             .unwrap_or(false);
         if !can_delete {
             return Ok(false);
@@ -237,7 +292,7 @@ impl MessagePort for MemoryChatPersistence {
             .sessions
             .get(&key)
             .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
-        if !Self::session_visible(&state, auth, session) {
+        if !Self::session_visible(auth, session) {
             return Err(AppError::not_found(
                 "session_not_found",
                 "session not found",
@@ -269,7 +324,7 @@ impl MessagePort for MemoryChatPersistence {
             .get(&key)
             .cloned()
             .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
-        if !Self::session_visible(&state, auth, &session) {
+        if !Self::session_visible(auth, &session) {
             return Err(AppError::not_found(
                 "session_not_found",
                 "session not found",
@@ -342,7 +397,7 @@ impl MessagePort for MemoryChatPersistence {
             .sessions
             .get(&session_key)
             .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
-        if !Self::session_visible(&state, auth, session) {
+        if !Self::session_visible(auth, session) {
             return Err(AppError::not_found(
                 "session_not_found",
                 "session not found",
@@ -351,13 +406,16 @@ impl MessagePort for MemoryChatPersistence {
         let workspace_id = session.workspace_id.clone();
         let session_keys: Vec<String> = match scope {
             ConversationHistoryScope::Session => vec![session_key],
-            ConversationHistoryScope::Workspace => state
-                .sessions
-                .values()
-                .filter(|s| s.workspace_id == workspace_id)
-                .filter(|s| Self::session_visible(&state, auth, s))
-                .map(|s| s.id.clone())
-                .collect(),
+            ConversationHistoryScope::Workspace => match workspace_id {
+                Some(workspace_id) => state
+                    .sessions
+                    .values()
+                    .filter(|s| s.workspace_id.as_deref() == Some(workspace_id.as_str()))
+                    .filter(|s| Self::session_visible(auth, s))
+                    .map(|s| s.id.clone())
+                    .collect(),
+                None => vec![session_key],
+            },
         };
         let exclude: std::collections::HashSet<i64> = exclude_message_ids.iter().copied().collect();
         let mut hits = Vec::new();
@@ -427,7 +485,11 @@ impl ChatCatalogPort for MemoryChatPersistence {
                     && !Self::is_deleting_or_deleted(&stored.document.status)
             })
             .filter_map(|stored| {
-                let notebook = state.workspaces.get(&stored.document.workspace_id)?;
+                // Scope truth is the workspace binding; unbound artifacts have
+                // no workspace surface.
+                let workspace_id =
+                    state.workspace_document_bindings.get(&stored.document.id)?.first()?;
+                let notebook = state.workspaces.get(workspace_id)?;
                 if notebook.owner_user_id != org {
                     return None;
                 }
@@ -571,6 +633,33 @@ mod tests {
         AuthContext::new(UserId::from(org), SubjectKind::User).with_actor_id(ActorId::new(user))
     }
 
+    #[test]
+    fn session_ordering_matches_scope_contract() {
+        let session = |id: &str, pinned: bool, timestamp: &str| ChatSession {
+            id: id.to_string(),
+            owner_user_id: Uuid::nil().to_string(),
+            workspace_id: Some(Uuid::from_u128(10).to_string()),
+            scope_kind: ConversationScopeKind::Workspace,
+            workspace_name: Some("workspace".to_string()),
+            title: Some(id.to_string()),
+            agent_type: "chat".to_string(),
+            model_role: "agent".to_string(),
+            pinned,
+            created_at: timestamp.to_string(),
+            updated_at: timestamp.to_string(),
+        };
+        let pinned_older = session("pinned-older", true, "2026-01-01T00:00:00Z");
+        let recent_unpinned = session("recent-unpinned", false, "2026-01-02T00:00:00Z");
+
+        let mut global = vec![pinned_older.clone(), recent_unpinned.clone()];
+        MemoryChatPersistence::sort_sessions(&mut global, false);
+        assert_eq!(global[0].id, recent_unpinned.id);
+
+        let mut workspace = vec![recent_unpinned, pinned_older.clone()];
+        MemoryChatPersistence::sort_sessions(&mut workspace, true);
+        assert_eq!(workspace[0].id, pinned_older.id);
+    }
+
     #[tokio::test]
     async fn session_round_trip_and_message_append() {
         let state = Arc::new(RwLock::new(MemoryState::default()));
@@ -600,7 +689,7 @@ mod tests {
         let store = MemoryChatPersistence::new(state);
         let a = auth(org, user);
         let session = store
-            .create_session(&a, workspace_id, Some("hello"), "chat")
+            .create_session(&a, Some(workspace_id), Some("hello"), "chat", "agent")
             .await
             .expect("create");
         let session_uuid = Uuid::parse_str(&session.id).unwrap();
@@ -629,6 +718,43 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "user");
         assert_eq!(messages[1].content, "hello there");
+    }
+
+    #[tokio::test]
+    async fn personal_session_is_owner_scoped_without_workspace() {
+        let state = Arc::new(RwLock::new(MemoryState::default()));
+        let owner = Uuid::from_u128(1);
+        let actor = Uuid::from_u128(2);
+        let store = MemoryChatPersistence::new(state);
+        let session = store
+            .create_session(
+                &auth(owner, actor),
+                None,
+                Some("personal"),
+                "chat",
+                "quick_chat",
+            )
+            .await
+            .expect("create personal session");
+
+        assert_eq!(session.owner_user_id, owner.to_string());
+        assert_eq!(session.workspace_id, None);
+        assert_eq!(session.model_role, "quick_chat");
+        assert_eq!(
+            store
+                .list_sessions(&auth(owner, actor), None)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            store
+                .list_sessions(&auth(Uuid::from_u128(99), actor), None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -661,7 +787,7 @@ mod tests {
         let store = MemoryChatPersistence::new(state);
         let a = auth(org, user);
         let session = store
-            .create_session(&a, workspace_id, None, "chat")
+            .create_session(&a, Some(workspace_id), None, "chat", "agent")
             .await
             .unwrap();
         let sid = Uuid::parse_str(&session.id).unwrap();

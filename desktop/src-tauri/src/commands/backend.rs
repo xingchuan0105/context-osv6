@@ -33,7 +33,7 @@ mod tests {
         Document {
             id: "doc-1".to_string(),
             owner_user_id: "user-1".to_string(),
-            workspace_id: "ws-1".to_string(),
+            workspace_id: Some("ws-1".to_string()),
             owner_id: "user-1".to_string(),
             file_name: "report.pdf".to_string(),
             mime_type: "application/pdf".to_string(),

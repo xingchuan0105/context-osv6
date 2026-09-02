@@ -32,7 +32,7 @@ import {
   useWorkspaceUi,
 } from "../../lib/workspace/ui-store";
 import styles from "./workspace-shell.module.css";
-import { WorkspaceChatPane } from "./workspace-chat-pane";
+import { ChatCanvas } from "../chat/chat-canvas";
 import { WorkspaceCitationModal } from "./workspace-citation-modal";
 import { WorkspaceHistoryPane } from "./workspace-history-pane";
 import { WorkspaceRightRail } from "./workspace-right-rail";
@@ -430,7 +430,7 @@ export function WorkspaceSurface({ workspaceId: workspaceIdProp }: { workspaceId
             />
 
             <section className={styles.panePanel}>
-              <WorkspaceChatPane
+              <ChatCanvas
                 onFocusSource={(sourceId) => {
                   workspaceUi.setFocusedSourceId(sourceId);
                   if (sourceId) {

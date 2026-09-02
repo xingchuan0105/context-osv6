@@ -55,21 +55,21 @@ export class DesktopWorkbench {
   }
 
   async waitForChatError(pattern: RegExp, timeout = 30_000) {
-    const alert = this.page.locator('[data-testid="workspace-chat-pane"] [role="alert"]');
+    const alert = this.page.locator('[data-testid="chat-canvas"] [role="alert"]');
     await alert.waitFor({ state: "visible", timeout });
     await expect(alert).toContainText(pattern);
   }
 
   /** Wait for any chat error alert and return its text (for "error but not X" assertions). */
   async waitForAnyChatError(timeout = 30_000): Promise<string> {
-    const alert = this.page.locator('[data-testid="workspace-chat-pane"] [role="alert"]');
+    const alert = this.page.locator('[data-testid="chat-canvas"] [role="alert"]');
     await alert.waitFor({ state: "visible", timeout });
     return (await alert.textContent()) ?? "";
   }
 
   async waitForAssistantMessage(timeout = 120_000) {
     await this.page
-      .locator('[data-testid="workspace-chat-pane"] [data-testid="chat-message"][data-role="assistant"]')
+      .locator('[data-testid="chat-canvas"] [data-testid="chat-message"][data-role="assistant"]')
       .first()
       .waitFor({ state: "visible", timeout });
   }

@@ -3,7 +3,7 @@ use app_documents::{AuditAction, AuditRecord};
 use chrono::Utc;
 use common::{AppError, now_rfc3339};
 use contracts::chat::{ChatRequest, ChatResponse};
-use contracts::workspaces::{ChatSession, CreateChatSessionRequest};
+use contracts::workspaces::{ChatSession, ConversationScopeKind, CreateChatSessionRequest};
 use tracing::info;
 use uuid::Uuid;
 
@@ -13,9 +13,16 @@ use crate::estimate_token_count;
 
 impl ChatContext {
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id))]
-    pub async fn execute_chat_pipeline(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
-        let effective_workspace_id = chat_workspace_id_for_request(self, &req);
+    pub async fn execute_chat_pipeline(
+        &self,
+        mut req: ChatRequest,
+    ) -> Result<ChatResponse, AppError> {
+        let effective_workspace_id = self.resolve_request_workspace(&mut req).await?;
         let state = self.with_owner_pays_auth(effective_workspace_id).await;
+        let client_scope_was_empty = req.doc_scope.is_empty();
+        state
+            .recompute_allowed_doc_scope(&mut req, effective_workspace_id)
+            .await?;
         if state.storage.chat_persistence().is_some()
             && req.agent_type == "rag"
             && req.doc_scope.is_empty()
@@ -26,10 +33,109 @@ impl ChatContext {
                 "Please select at least one document before using RAG.",
             ));
         }
+        if req.agent_type == "rag" && !client_scope_was_empty && req.doc_scope.is_empty() {
+            // The client selected documents, but none survived the binding-derived
+            // allowed set: fail closed instead of silently widening the scope.
+            return Err(AppError::validation(
+                "invalid_doc_scope",
+                "No selected document is available in this conversation's context scope.",
+            ));
+        }
         if req.agent_type == "rag" && !req.doc_scope.is_empty() {
             state.validate_rag_doc_scope(&req.doc_scope).await?;
         }
         execute_pipeline(state, req, PipelineLane::Agent).await
+    }
+
+    /// Server-side ContextScope recomputation (design 2026-09-02 §10.3/§11.2):
+    /// the allowed artifact set derives from the typed bindings of this
+    /// conversation plus its workspace, if any. The client's `doc_scope` is a
+    /// subset selection within that set and can never widen visibility.
+    pub(crate) async fn recompute_allowed_doc_scope(
+        &self,
+        req: &mut ChatRequest,
+        effective_workspace_id: Option<Uuid>,
+    ) -> Result<(), AppError> {
+        let facts = self
+            .turn_scope_facts(
+                req.session_id.as_deref().and_then(|v| Uuid::parse_str(v).ok()),
+                effective_workspace_id,
+            )
+            .await?;
+        if !req.doc_scope.is_empty() {
+            let allowed = facts.allowed_ids();
+            req.doc_scope.retain(|id| allowed.contains(id));
+        }
+        Ok(())
+    }
+
+    /// The binding-derived scope facts of the current turn (W2d snapshot /
+    /// evidence attribution share the same truth as scope enforcement).
+    pub(crate) async fn turn_scope_facts(
+        &self,
+        session_id: Option<Uuid>,
+        effective_workspace_id: Option<Uuid>,
+    ) -> Result<TurnScopeFacts, AppError> {
+        let mut facts = TurnScopeFacts::default();
+        if let Some(session_id) = session_id {
+            if let Some(store) = self.storage.document_store() {
+                for file in store.list_session_files(&self.auth, session_id).await? {
+                    if file.status == "completed" {
+                        facts
+                            .session_artifacts
+                            .push((file.binding_id, file.document_id));
+                    }
+                }
+            }
+        }
+        if let Some(workspace_id) = effective_workspace_id {
+            facts.workspace_artifacts = self
+                .documents
+                .completed_workspace_doc_ids(&self.auth, &self.storage, &workspace_id.to_string())
+                .await?;
+        }
+        Ok(facts)
+    }
+
+    pub(crate) async fn resolve_request_workspace(
+        &self,
+        req: &mut ChatRequest,
+    ) -> Result<Option<Uuid>, AppError> {
+        if req.source_type.as_deref() != Some("share") {
+            if let Some(session_id) = req.session_id.as_deref() {
+                let requested_workspace = chat_workspace_id_for_request(self, req)?;
+                let session = if let Some(session) = self.get_session(session_id).await {
+                    session
+                } else if let Some(workspace_id) = requested_workspace {
+                    let workspace_state = self.with_owner_pays_auth(Some(workspace_id)).await;
+                    let session =
+                        workspace_state
+                            .get_session(session_id)
+                            .await
+                            .ok_or_else(|| {
+                                AppError::not_found("session_not_found", "session not found")
+                            })?;
+                    let session_workspace = session
+                        .workspace_id
+                        .as_deref()
+                        .and_then(|value| Uuid::parse_str(value).ok());
+                    if session_workspace != Some(workspace_id) {
+                        return Err(AppError::not_found(
+                            "session_not_found",
+                            "session not found",
+                        ));
+                    }
+                    session
+                } else {
+                    return Err(AppError::not_found(
+                        "session_not_found",
+                        "session not found",
+                    ));
+                };
+                req.workspace_id = session.workspace_id;
+            }
+        }
+        chat_workspace_id_for_request(self, req)
     }
 
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id, trace_id = tracing::field::Empty))]
@@ -37,7 +143,7 @@ impl ChatContext {
         &self,
         req: &ChatRequest,
     ) -> Result<ChatPreflight, AppError> {
-        let effective_workspace_id = chat_workspace_id_for_request(self, req);
+        let effective_workspace_id = chat_workspace_id_for_request(self, req)?;
         // ADR-0010: share chat may be anonymous when owner set workspace visibility
         // to `public`; auth middleware remaps `user_id` to the share owner.
         let is_share_chat = req.source_type.as_deref() == Some("share");
@@ -87,9 +193,7 @@ impl ChatContext {
         if let Err(error) = self.billing.ensure_payer_can_spend(&self.auth).await {
             if error.code() == "payer_funds_required" {
                 // Throttled soft notify: emit for the billable owner (auth.user_id).
-                let _ = self
-                    .emit_funds_required_notification()
-                    .await;
+                let _ = self.emit_funds_required_notification().await;
             }
             return Err(error);
         }
@@ -179,9 +283,7 @@ impl ChatContext {
         let notebook_uuid = effective_workspace_id;
         if req.source_type.as_deref() == Some("share")
             && req.workspace_id.as_ref().is_some()
-            && req.workspace_id.as_ref().and_then(|id| {
-                parse_uuid_or_app_error(id, "invalid_notebook", "invalid notebook id").ok()
-            }) != self.auth.workspace_id()
+            && effective_workspace_id != self.auth.workspace_id()
         {
             return Err(AppError::validation(
                 "invalid_share_scope",
@@ -306,7 +408,7 @@ impl ChatContext {
         req: &ChatRequest,
     ) -> Result<ChatSession, AppError> {
         if req.source_type.as_deref() == Some("share") {
-            let workspace_id = chat_workspace_id_for_request(self, req)
+            let workspace_id = chat_workspace_id_for_request(self, req)?
                 .map(|value| value.to_string())
                 .ok_or_else(|| {
                     AppError::validation("notebook_required", "workspace_id is required")
@@ -318,9 +420,13 @@ impl ChatContext {
             let now = now_rfc3339();
             return Ok(ChatSession {
                 id: session_id,
-                workspace_id,
+                workspace_id: Some(workspace_id),
+                scope_kind: ConversationScopeKind::Workspace,
+                workspace_name: None,
+                owner_user_id: self.current_owner_user_id(),
                 title: None,
                 agent_type: req.agent_type.clone(),
+                model_role: "agent".to_string(),
                 pinned: false,
                 created_at: now.clone(),
                 updated_at: now,
@@ -334,37 +440,63 @@ impl ChatContext {
                 .ok_or_else(|| AppError::not_found("session_not_found", "session not found"));
         }
 
-        let workspace_id = chat_workspace_id_for_request(self, req)
-            .map(|value| value.to_string())
-            .ok_or_else(|| AppError::validation("notebook_required", "workspace_id is required"))?;
-        if req.source_type.as_deref() == Some("share") {
-            let now = now_rfc3339();
-            return Ok(ChatSession {
-                id: Uuid::new_v4().to_string(),
-                workspace_id,
-                title: None,
-                agent_type: req.agent_type.clone(),
-                pinned: false,
-                created_at: now.clone(),
-                updated_at: now,
-            });
-        }
+        let workspace_id = chat_workspace_id_for_request(self, req)?;
         self.create_session(CreateChatSessionRequest {
-            workspace_id,
+            workspace_id: workspace_id.map(|value| value.to_string()),
             title: None,
-            agent_type: req.agent_type.clone(),
+            agent_type: Some(req.agent_type.clone()),
         })
         .await
     }
 }
 
-fn chat_workspace_id_for_request(state: &ChatContext, req: &ChatRequest) -> Option<Uuid> {
-    req.workspace_id
-        .as_ref()
-        .and_then(|id| parse_uuid_or_app_error(id, "invalid_notebook", "invalid notebook id").ok())
-        .or_else(|| {
-            (req.source_type.as_deref() == Some("share"))
-                .then(|| state.auth.workspace_id())
-                .flatten()
+fn chat_workspace_id_for_request(
+    state: &ChatContext,
+    req: &ChatRequest,
+) -> Result<Option<Uuid>, AppError> {
+    let requested_workspace = req
+        .workspace_id
+        .as_deref()
+        .map(|id| {
+            parse_uuid_or_app_error(
+                id,
+                "invalid_workspace_id",
+                "workspace_id must be a valid UUID",
+            )
         })
+        .transpose()?;
+    Ok(requested_workspace.or_else(|| {
+        (req.source_type.as_deref() == Some("share"))
+            .then(|| state.auth.workspace_id())
+            .flatten()
+    }))
+}
+
+/// Binding-derived scope facts of one turn: which ready artifacts are visible
+/// through the conversation binding vs a workspace binding.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct TurnScopeFacts {
+    /// (binding_id, artifact_id) pairs visible via the conversation binding.
+    pub session_artifacts: Vec<(String, String)>,
+    /// Completed artifact ids visible via the workspace binding.
+    pub workspace_artifacts: Vec<String>,
+}
+
+impl TurnScopeFacts {
+    pub(crate) fn allowed_ids(&self) -> std::collections::HashSet<String> {
+        let mut ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        ids.extend(self.session_artifacts.iter().map(|(_, artifact)| artifact.clone()));
+        ids.extend(self.workspace_artifacts.iter().cloned());
+        ids
+    }
+
+    pub(crate) fn scope_of(&self, artifact_id: &str) -> Option<&'static str> {
+        if self.session_artifacts.iter().any(|(_, artifact)| artifact == artifact_id) {
+            Some("session")
+        } else if self.workspace_artifacts.iter().any(|artifact| artifact == artifact_id) {
+            Some("workspace")
+        } else {
+            None
+        }
+    }
 }

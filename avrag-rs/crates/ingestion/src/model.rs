@@ -57,13 +57,12 @@ impl DocumentStateMachine {
 
 pub fn build_ingest_task(
     owner_user_id: impl Into<String>,
-    workspace_id: impl Into<String>,
+    workspace_id: Option<String>,
     document_id: impl Into<String>,
     requested_by: Option<String>,
     payload: IngestDocumentPayload,
 ) -> IngestionTask {
     let owner_user_id = owner_user_id.into();
-    let workspace_id = workspace_id.into();
     let document_id = document_id.into();
     let idempotency_key = format!("{}:{}:{}", owner_user_id, document_id, payload.object_path);
 
@@ -85,13 +84,12 @@ pub fn build_ingest_task(
 
 pub fn build_ingest_url_task(
     owner_user_id: impl Into<String>,
-    workspace_id: impl Into<String>,
+    workspace_id: Option<String>,
     document_id: impl Into<String>,
     requested_by: Option<String>,
     payload: IngestUrlPayload,
 ) -> IngestionTask {
     let owner_user_id = owner_user_id.into();
-    let workspace_id = workspace_id.into();
     let document_id = document_id.into();
     let idempotency_key = format!("{}:{}:{}", owner_user_id, document_id, payload.url);
 
@@ -113,13 +111,12 @@ pub fn build_ingest_url_task(
 
 pub fn build_reindex_task(
     owner_user_id: impl Into<String>,
-    workspace_id: impl Into<String>,
+    workspace_id: Option<String>,
     document_id: impl Into<String>,
     requested_by: Option<String>,
     payload: ReindexDocumentPayload,
 ) -> IngestionTask {
     let owner_user_id = owner_user_id.into();
-    let workspace_id = workspace_id.into();
     let document_id = document_id.into();
     let idempotency_key = format!(
         "{}:{}:reindex:{}",

@@ -177,6 +177,7 @@ export function useChatStream(
       // Share chats are not PG-sessioned; allocate a stable client session id for multi-turn.
       if (shareToken && !requestSessionId) {
         requestSessionId = crypto.randomUUID();
+        streamingSessionIdRef.current = requestSessionId;
         setActiveSessionId(requestSessionId);
         onSessionChangeRef.current?.(requestSessionId);
       }
@@ -242,8 +243,10 @@ export function useChatStream(
             authToken,
             {
               query: trimmedQuery,
-              workspace_id: workspaceIdRef.current,
-              session_id: requestSessionId,
+              ...(workspaceIdRef.current
+                ? { workspace_id: workspaceIdRef.current }
+                : {}),
+              ...(requestSessionId ? { session_id: requestSessionId } : {}),
               agent_type: agentType,
               capabilities: turnCapabilities,
               client_context: buildClientContext(),

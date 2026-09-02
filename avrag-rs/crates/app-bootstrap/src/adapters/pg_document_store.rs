@@ -231,17 +231,68 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .map(document_upload_queue_outcome)
     }
 
+    async fn delete_document_if_unbound(
+        &self,
+        auth: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<bool, AppError> {
+        self.repo
+            .documents()
+            .delete_document_if_unbound(auth, document_id)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn create_session_document(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+        filename: &str,
+        file_size: u64,
+        mime_type: &str,
+    ) -> Result<Document, AppError> {
+        self.repo
+            .bootstrap()
+            .create_session_document(auth, conversation_id, filename, file_size, mime_type)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn list_session_files(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+    ) -> Result<Vec<contracts::documents::SessionFileRow>, AppError> {
+        self.repo
+            .bootstrap()
+            .list_session_files(auth, conversation_id)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn delete_session_file_binding(
+        &self,
+        auth: &AuthContext,
+        conversation_id: Uuid,
+        binding_id: Uuid,
+    ) -> Result<Option<String>, AppError> {
+        self.repo
+            .bootstrap()
+            .delete_session_file_binding(auth, conversation_id, binding_id)
+            .await
+            .map_err(map_pg_error)
+    }
+
     async fn update_document(
         &self,
         auth: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, AppError> {
         self.repo
             .documents()
-            .update_document(auth, document_id, filename, workspace_id, status)
+            .update_document(auth, document_id, filename, status)
             .await
             .map_err(map_pg_error)
     }

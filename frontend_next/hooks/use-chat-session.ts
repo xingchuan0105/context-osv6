@@ -24,10 +24,22 @@ export type {
 };
 
 export function useChatSession(options: UseChatSessionOptions): UseChatSessionResult {
-  const { token, locale, sessionId, shareToken, initialMessages } = options;
+  const {
+    token,
+    locale,
+    workspaceId,
+    sessionId,
+    shareToken,
+    initialMessages,
+    onHistoryHydrated,
+  } = options;
 
   const [error, setError] = useState("");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId);
+  const [isHydrating, setIsHydrating] = useState(
+    Boolean(sessionId && token && !shareToken),
+  );
+  const [historyLoadFailed, setHistoryLoadFailed] = useState(false);
 
   const messageHistory = useMessageHistory(token, locale);
   const progressTracker = useProgressTracker(locale);
@@ -48,13 +60,13 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     let cancelled = false;
 
     // Backend assigns session_id on stream start for new threads. Parent lifts that
-    // into sessionId — must NOT tear down the in-flight progress card / local transcript.
-    // Only skip when the prop matches the stream's session (or stream has not stamped one yet).
+    // into sessionId — do not tear down the in-flight progress card / local transcript
+    // only when the prop exactly matches the stream that assigned it.
     const streamingSid = chatStream.streamingSessionIdRef.current;
     if (
       chatStream.isStreamingRef.current &&
       sessionId != null &&
-      (streamingSid == null || streamingSid === sessionId)
+      streamingSid === sessionId
     ) {
       setActiveSessionId(sessionId);
       chatStream.streamingSessionIdRef.current = sessionId;
@@ -63,10 +75,16 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       };
     }
 
+    if (chatStream.isStreamingRef.current) {
+      chatStream.stop();
+    }
+
     chatStream.resetStreamingTypewriter();
     setActiveSessionId(sessionId);
     messageHistory.reset();
     setError("");
+    setHistoryLoadFailed(false);
+    setIsHydrating(false);
     progressTracker.hide();
     chatStream.streamingSessionIdRef.current = sessionId;
     chatStream.streamingMessageIdRef.current = null;
@@ -88,6 +106,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     }
 
     const transcriptSessionId = sessionId;
+    setIsHydrating(true);
 
     void (async () => {
       try {
@@ -97,12 +116,24 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
           return;
         }
 
-        messageHistory.setMessages(
-          response.messages.map((message) => mapTranscriptMessage(message, locale)),
+        const hydratedMessages = response.messages.map((message) =>
+          mapTranscriptMessage(message, locale),
         );
+        messageHistory.setMessages(hydratedMessages);
+        onHistoryHydrated?.(hydratedMessages);
       } catch {
         if (!cancelled) {
-          setError(formatUiMessage(locale, "workspaceChatLoadError"));
+          setHistoryLoadFailed(true);
+          setError(
+            formatUiMessage(
+              locale,
+              workspaceId ? "workspaceChatLoadError" : "chat.loadError",
+            ),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHydrating(false);
         }
       }
     })();
@@ -117,13 +148,17 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     // or keys the pane). Do not list initialMessages as a dep — it updates after every
     // local transcript write and would wipe streaming state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, locale, sessionId, shareToken]);
+  }, [token, locale, workspaceId, sessionId, shareToken, onHistoryHydrated]);
 
   const toggleProgressCollapsed = progressTracker.toggleCollapsed;
 
   return {
     messages: messageHistory.messages,
     isStreaming: chatStream.isStreaming,
+    isHydrating:
+      isHydrating ||
+      Boolean(sessionId && !shareToken && activeSessionId !== sessionId),
+    historyLoadFailed,
     progress: progressTracker.progress,
     error: error || null,
     send: chatStream.send,

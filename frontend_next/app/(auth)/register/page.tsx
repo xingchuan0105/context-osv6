@@ -84,7 +84,7 @@ export default function RegisterPage() {
       flushSync(() => {
         completeAuth(payload);
       });
-      router.replace(nextPath ?? "/dashboard");
+      router.replace(nextPath ?? "/chat");
     } catch (submitError) {
       setError(describeAuthError(registerFailed, submitError, locale));
     } finally {

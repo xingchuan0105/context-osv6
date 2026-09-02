@@ -193,6 +193,7 @@ pub(crate) fn worker_system_tenant(config: &AppConfig) -> avrag_llm::TenantConte
         owner_user_id,
         user_id,
         skip_wallet_debit: false,
+        credential_source: "official".to_string(),
     }
 }
 

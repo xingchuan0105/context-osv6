@@ -140,11 +140,14 @@
         });
         let sources_rows = sqlx::query(
             r#"
-            select id, file_name, status
-            from documents
-            where workspace_id = $1
-              and status not in ('deleting', 'deleted')
-            order by updated_at desc, created_at desc
+            select d.id, d.file_name, d.status
+            from documents d
+            where exists (
+                select 1 from workspace_document_bindings b
+                where b.artifact_id = d.id and b.workspace_id = $1
+            )
+              and d.status not in ('deleting', 'deleted')
+            order by d.updated_at desc, d.created_at desc
             "#,
         )
         .bind(workspace_id)
@@ -298,7 +301,10 @@
               w.description,
               w.allow_download,
               (select count(*) from documents d
-               where d.workspace_id = st.workspace_id
+               where exists (
+                   select 1 from workspace_document_bindings b
+                   where b.artifact_id = d.id and b.workspace_id = st.workspace_id
+               )
                  and d.status not in ('deleting', 'deleted')) as source_count
             from share_tokens st
             join workspaces w on w.id = st.workspace_id

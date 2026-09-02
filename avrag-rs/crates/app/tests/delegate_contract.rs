@@ -49,12 +49,13 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
     let session = state
         .agent()
         .create_session(CreateChatSessionRequest {
-            workspace_id: notebook.id,
+            workspace_id: Some(notebook.id),
             title: Some("citation contract".into()),
-            agent_type: "chat".into(),
+            agent_type: Some("chat".into()),
         })
         .await
         .unwrap();
+    assert_eq!(session.model_role, "agent");
 
     // Session exists; missing message id is a 404 on the message, not the session.
     let err = state
@@ -65,6 +66,45 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
 
     assert_eq!(err.code(), "message_not_found");
     assert_eq!(err.http_status(), 404);
+}
+
+#[tokio::test]
+async fn personal_session_has_no_workspace_and_uses_quick_chat_role() {
+    let state = memory_state().await;
+    let session = state
+        .agent()
+        .create_session(CreateChatSessionRequest {
+            workspace_id: None,
+            title: Some("personal contract".into()),
+            agent_type: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(session.workspace_id, None);
+    assert_eq!(session.agent_type, "chat");
+    assert_eq!(session.model_role, "quick_chat");
+    assert_eq!(
+        state.agent().get_session(&session.id).await.unwrap().id,
+        session.id
+    );
+}
+
+#[tokio::test]
+async fn explicit_invalid_workspace_does_not_create_personal_session() {
+    let state = memory_state().await;
+    let err = state
+        .agent()
+        .create_session(CreateChatSessionRequest {
+            workspace_id: Some("not-a-workspace-id".into()),
+            title: None,
+            agent_type: Some("chat".into()),
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), "invalid_workspace_id");
+    assert!(state.agent().list_sessions(None).await.is_empty());
 }
 
 #[tokio::test]
@@ -157,6 +197,71 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
         "expected LLM configuration error, got: {}",
         err.message()
     );
+}
+
+#[tokio::test]
+async fn execute_personal_chat_reaches_quick_chat_provider_resolution() {
+    let state = memory_state().await;
+
+    let err = state
+        .conversation()
+        .execute(contracts::chat::ChatRequest {
+            query: "hello without a workspace".to_string(),
+            workspace_id: None,
+            session_id: None,
+            agent_type: "chat".to_string(),
+            capabilities: Some(Vec::new()),
+            client_context: None,
+            client_ip: None,
+            source_type: None,
+            source_token: None,
+            doc_scope: Vec::new(),
+            messages: Vec::new(),
+            stream: false,
+            debug: false,
+            language: None,
+            format_hint: None,
+            turnstile_token: None,
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), "internal_error");
+    assert!(err.message().to_ascii_lowercase().contains("llm"));
+    let sessions = state.agent().list_sessions(None).await;
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].workspace_id, None);
+    assert_eq!(sessions[0].model_role, "quick_chat");
+}
+
+#[tokio::test]
+async fn execute_chat_rejects_explicit_invalid_workspace() {
+    let state = memory_state().await;
+    let err = state
+        .conversation()
+        .execute(contracts::chat::ChatRequest {
+            query: "hello".to_string(),
+            workspace_id: Some("not-a-workspace-id".to_string()),
+            session_id: None,
+            agent_type: "chat".to_string(),
+            capabilities: Some(Vec::new()),
+            client_context: None,
+            client_ip: None,
+            source_type: None,
+            source_token: None,
+            doc_scope: Vec::new(),
+            messages: Vec::new(),
+            stream: false,
+            debug: false,
+            language: None,
+            format_hint: None,
+            turnstile_token: None,
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), "invalid_workspace_id");
+    assert!(state.agent().list_sessions(None).await.is_empty());
 }
 
 // ---------------------------------------------------------------------------

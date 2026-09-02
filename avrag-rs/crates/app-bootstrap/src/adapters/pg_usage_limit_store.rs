@@ -84,14 +84,16 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
                 owner_user_id, user_id, feature, stage, provider, model,
                 prompt_tokens, completion_tokens, total_tokens, cached_tokens,
                 reasoning_tokens, usage_units, usage_source, usage_kind, billable,
+                credential_source,
                 session_id, document_id, request_id, trace_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             "#,
         )
         .bind(ctx.owner_user_id)
         .bind(ctx.user_id)
         .bind(ctx.feature.as_str())
         .bind(&ctx.stage)
+        .bind(&ctx.credential_source)
         .bind(record.provider)
         .bind(record.model)
         .bind(record.prompt_tokens as i64)

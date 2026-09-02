@@ -161,7 +161,6 @@ impl DocumentRepository {
         context: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, PgStorageError> {
         if matches!(
@@ -176,17 +175,15 @@ impl DocumentRepository {
             r#"
             update documents
             set file_name = coalesce($2, file_name),
-                workspace_id = coalesce($3, workspace_id),
-                status = coalesce($4, status),
+                status = coalesce($3, status),
                 updated_at = now()
             where id = $1
-              and owner_user_id = $5
+              and owner_user_id = $4
               and status not in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
         .bind(filename)
-        .bind(workspace_id)
         .bind(status_text)
         .bind(context.user_id().into_uuid())
         .execute(tx.inner())
@@ -204,7 +201,7 @@ impl DocumentRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            select id, owner_user_id, workspace_id, file_name, mime_type, file_size, status, object_path
+            select id, owner_user_id, file_name, mime_type, file_size, status, object_path
             from documents
             where id = $1 and owner_user_id = $2
             for update
@@ -221,7 +218,6 @@ impl DocumentRepository {
         };
 
         let owner_user_id: Uuid = row.try_get("owner_user_id")?;
-        let workspace_id: Uuid = row.try_get("workspace_id")?;
         let status_text: String = row.try_get("status")?;
         let status = parse_document_status(&status_text);
 
@@ -233,7 +229,6 @@ impl DocumentRepository {
         let task_inserted = insert_document_cleanup_task(
             tx.inner(),
             owner_user_id,
-            workspace_id,
             document_id,
             context.actor_id().map(ActorId::into_uuid),
             &row,
@@ -284,6 +279,49 @@ impl DocumentRepository {
 
         tx.commit().await?;
         Ok(DocumentDeletionOutcome::Queued { task_inserted })
+    }
+
+    /// W2e: soft-delete + enqueue cleanup only when no binding of either kind
+    /// remains. The zero-binding check and the status flip run in one locked
+    /// transaction, so concurrent binding deletes cannot double-enqueue.
+    pub async fn delete_document_if_unbound(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<bool, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let row = sqlx::query(
+            r#"
+            select id
+            from documents
+            where id = $1
+              and owner_user_id = $2
+              and status not in ('deleting', 'deleted')
+              and not exists (
+                  select 1 from conversation_document_bindings b where b.artifact_id = documents.id
+              )
+              and not exists (
+                  select 1 from workspace_document_bindings b where b.artifact_id = documents.id
+              )
+            for update
+            "#,
+        )
+        .bind(document_id)
+        .bind(context.user_id().into_uuid())
+        .fetch_optional(tx.inner())
+        .await?;
+        tx.commit().await?;
+        if row.is_none() {
+            return Ok(false);
+        }
+        // Reuses the full document deletion flow: soft delete + cleanup task +
+        // ingestion dead-letter (worker claims and cleans every store).
+        let outcome = self.delete_document(context, document_id).await?;
+        Ok(matches!(
+            outcome,
+            DocumentDeletionOutcome::Queued { .. }
+                | DocumentDeletionOutcome::AlreadyDeleting { .. }
+        ))
     }
 
     pub async fn get_document_status(

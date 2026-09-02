@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "../../../lib/auth/context";
+import { conversationHref } from "../../../lib/chat/session-url";
+import { ConversationScopeKind } from "../../../lib/contracts/generated";
 import { formatUiMessage, type UiMessageKey } from "../../../lib/i18n/messages";
 import {
   searchProductIndex,
   type GlobalSearchResponse,
 } from "../../../lib/search/client";
 import { useUiPreferences } from "../../../lib/ui-preferences";
+import { desktopAppHref } from "../../../lib/runtime/desktop-app-href";
 import { workspaceSourceHref } from "../../../lib/workspace/session-url";
 
 const SEARCH_MIN_CHARS = 2;
@@ -27,6 +30,11 @@ type SearchRow = {
   /** Secondary line under the title. */
   description: string;
   href: string;
+};
+
+type TaggedSearchHits = {
+  query: string;
+  hits: GlobalSearchResponse;
 };
 
 const GROUP_ORDER: SearchGroup[] = ["sessions", "workspaces", "sources"];
@@ -48,15 +56,16 @@ export function DashboardSearchDialog({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const { locale } = useUiPreferences();
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<GlobalSearchResponse | null>(null);
+  const [searchResult, setSearchResult] = useState<TaggedSearchHits | null>(null);
   const [loading, setLoading] = useState(false);
 
   const trimmed = query.trim();
   const searching = trimmed.length >= SEARCH_MIN_CHARS;
+  const hits = searchResult?.query === trimmed ? searchResult.hits : null;
 
   useEffect(() => {
     if (!searching || !auth.token) {
-      setHits(null);
+      setSearchResult(null);
       setLoading(false);
       return;
     }
@@ -66,12 +75,12 @@ export function DashboardSearchDialog({ onClose }: { onClose: () => void }) {
       void searchProductIndex(auth.token as string, trimmed)
         .then((response) => {
           if (!cancelled) {
-            setHits(response);
+            setSearchResult({ query: trimmed, hits: response });
           }
         })
         .catch(() => {
           if (!cancelled) {
-            setHits(EMPTY_HITS);
+            setSearchResult({ query: trimmed, hits: EMPTY_HITS });
           }
         })
         .finally(() => {
@@ -91,13 +100,18 @@ export function DashboardSearchDialog({ onClose }: { onClose: () => void }) {
     for (const session of hits.sessions.slice(0, 20)) {
       const title =
         session.title?.trim() || formatUiMessage(locale, "commandPalette.sessionUntitled");
+      const workspaceName =
+        session.workspace_name?.trim() || session.workspace_id?.trim() || "";
       rows.push({
         id: `sess-${session.id}`,
         group: "sessions",
         title,
-        meta: "",
+        meta:
+          session.scope_kind === ConversationScopeKind.Workspace
+            ? workspaceName
+            : formatUiMessage(locale, "chat.personalContext"),
         description: "",
-        href: `/dashboard/${session.workspace_id}?session=${encodeURIComponent(session.id)}`,
+        href: conversationHref(session),
       });
     }
     for (const ws of hits.workspaces.slice(0, 20)) {
@@ -130,7 +144,7 @@ export function DashboardSearchDialog({ onClose }: { onClose: () => void }) {
     const first = rows[0];
     if (first) {
       onClose();
-      router.push(first.href);
+      router.push(desktopAppHref(first.href));
     }
   }
 
@@ -195,7 +209,7 @@ export function DashboardSearchDialog({ onClose }: { onClose: () => void }) {
                         <Link
                           aria-label={row.title}
                           className="dashboard-search-link"
-                          href={row.href}
+                          href={desktopAppHref(row.href)}
                           onClick={onClose}
                         >
                           <span className="dashboard-search-link-title">{row.title}</span>

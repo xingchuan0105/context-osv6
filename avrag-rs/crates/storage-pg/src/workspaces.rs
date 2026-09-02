@@ -36,12 +36,14 @@ impl crate::PgAppRepository {
                 select coalesce(sum(cnt), 0)::bigint as document_count,
                     jsonb_object_agg(status, cnt) as status_summary
                 from (
-                    select status, count(*) as cnt
+                    select d.status, count(*) as cnt
                     from documents d
-                    where d.workspace_id = n.id
+                    join workspace_document_bindings b on b.artifact_id = d.id
+                    where b.workspace_id = n.id
+                      and b.owner_user_id = n.owner_user_id
                       and d.owner_user_id = n.owner_user_id
                       and d.status not in ('deleting', 'deleted')
-                    group by status
+                    group by d.status
                 ) sub
             ) doc_stats on true
             where n.owner_user_id = $1
