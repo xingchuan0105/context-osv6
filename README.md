@@ -1,12 +1,12 @@
 # Context-OS
 
-**Workspace-centric knowledge base · RAG · agents**
+**Context OS by ContextLM — workspace-centric knowledge base · RAG · agents**
 
 把文档放进 workspace，用检索与 Agent 答得出、写得出。
 
 | | |
 |--|--|
-| 产品 | [contextlm.top](https://contextlm.top) · [应用](https://app.contextlm.top) · [客户端](https://app.contextlm.top/desktop) |
+| 产品 | [contextlm.top](https://contextlm.top) · [应用](https://app.contextlm.top) · [客户端](https://app.contextlm.top/desktop) · [集成](https://app.contextlm.top/integrations) |
 | 作者 | [@xingchuan0105](https://github.com/xingchuan0105) |
 
 ## What’s in this monorepo

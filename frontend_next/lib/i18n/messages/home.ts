@@ -2,8 +2,8 @@ import type { UiMessageDescriptor } from "./types";
 
 export const homeMessages = {
   "home.seoTitle": {
-    zh: "Context OS — 可本地部署的个人 AI 知识库",
-    en: "Context OS — a locally deployable personal AI knowledge base",
+    zh: "Context OS（ContextLM 旗下）— 可本地部署的个人 AI 知识库",
+    en: "Context OS by ContextLM — a locally deployable personal AI knowledge base",
   },
   "home.seoSubtitle": {
     zh: "把分散的文档变成可检索、可分享、可被 AI 引用的个人 AI 知识库：自己问答，也可以把库开放给访客或外接 Agent。",
@@ -32,6 +32,18 @@ export const homeMessages = {
   "home.seoCtaAgents": {
     zh: "Agent 接入说明",
     en: "Agent access guide",
+  },
+  "home.seoCtaFaq": {
+    zh: "FAQ",
+    en: "FAQ",
+  },
+  "home.seoCtaCompare": {
+    zh: "选型对比",
+    en: "Compare",
+  },
+  "home.seoCtaIntegrations": {
+    zh: "集成承接",
+    en: "Integrations",
   },
   "home.seoSectionDocs": {
     zh: "文档入库与问答",

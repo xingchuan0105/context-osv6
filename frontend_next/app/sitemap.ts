@@ -23,6 +23,25 @@ const PUBLIC_PATHS = [
   "/help/api-access/agents",
   "/help/faq",
   "/help/compare",
+  // 集成承接面（Phase E Slice 2，zh 先行；en 页发布后再补 /en/integrations/*）
+  "/integrations",
+  "/integrations/cursor",
+  "/integrations/claude-desktop",
+  "/integrations/mcp",
+  // 英文公开面（2026-09-01 方案）：与 zh 页一一对应
+  "/en",
+  "/en/pricing",
+  "/en/desktop",
+  "/en/help/faq",
+  "/en/help/compare",
+  "/en/help/api-access",
+  "/en/help/api-access/agents",
+  "/en/legal",
+  "/en/legal/terms",
+  "/en/legal/privacy",
+  "/en/legal/licenses",
+  "/en/legal/licenses/project",
+  "/en/legal/licenses/third-party",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

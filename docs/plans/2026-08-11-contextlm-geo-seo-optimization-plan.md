@@ -701,3 +701,74 @@ App sitemap 当前公开路径（随发版变；以线上 XML 为准）：
 - 百度站长平台：未接（可选，类似 GSC）。  
 - 不保证国内搜索排名或模型引用。  
 - 百度站长操作手册：[`docs/plans/2026-08-12-baidu-ziyuan-checklist.md`](./2026-08-12-baidu-ziyuan-checklist.md)（待人工验证）。  
+
+---
+
+## 19. 英文公开面测量（2026-09-01，Slice 4）
+
+上游：`docs/plans/2026-09-01-contextlm-english-public-surface-plan.md`（策略 A，Slice 1–3 已上线）。
+
+### 19.1 D3 — diagnose 复跑（发布后）
+
+| Brief | Run | 结果 |
+|-------|-----|------|
+| zh（原 5 URL） | `runs/contextlm-2026-09-01/run-c8e56fbe5628` | 60 findings · 0 warning · 0 opportunity |
+| en（新 5 URL） | `runs/contextlm-en-2026-09-01/run-726f7639df44` | 60 findings · 0 warning · 0 opportunity |
+
+站点分（en brief）：
+
+| 维度 | 分数 |
+|------|-----:|
+| Authority | 100 |
+| Discoverability | 100 |
+| Evidence | 100 |
+| Extractability | 88 |
+| Freshness | 100 |
+| Structure | 100 |
+
+页面就绪度（en）：
+
+| 页面 | 就绪度 |
+|------|-----:|
+| `/en`（首页） | 93 |
+| `/en/pricing` | 98 |
+| `/en/help/faq` | 98 |
+| `/en/help/compare` | 100 |
+| `/en/help/api-access/agents` | 100 |
+
+- `/en` 首页 Extractability 偏低（semantic signal=1，与 zh 首页同构，属 app 入口页固有特征），非回归。
+- 结论：英文面与 zh 面同构达标，无 warning / opportunity。
+
+### 19.2 D2 — 英文种子问（人工抽检待录 + 预检）
+
+- 观测 bundle 已就绪：`docs/plans/geo-seo-briefs/observation-bundle-2026-09-en.json`
+  （q1 brand / q2 category / q3 compare，openai + perplexity，observations 待人工填）。
+- `geo-seo-hub measure` 要求 observations 非空，故正式 run 待人工在 ChatGPT / Perplexity
+  匿名会话记录后执行（命令见 runbook D2）。
+
+**预检（web-search 代理，非 ChatGPT/Perplexity，2026-09-01）**：
+
+| query | 本站是否被引用 | 观察 |
+|-------|--------------|------|
+| What is Context OS? | ❌ | 被无关同名项目占据（github ContextOS、deadwater.ai、36kr 等） |
+| How to choose a personal AI knowledge base? | ❌ | 通用指南站，无本站 |
+| What is the difference between Context OS and Notion AI? | ❌ | 无本站 |
+| Context OS contextlm.top … MCP | ❌ | 仅命中本 monorepo GitHub（xingchuan0105/context-osv6），公开站未出现 |
+
+判读（按 runbook，不设排名 KPI）：
+
+1. 品牌名「Context OS」与大量同名项目强冲突，英文面刚上线、索引尚未爬升，属预期基线。
+2. 后续动作：GSC 提交 `/en/*` sitemap 已含；观察 2–4 周索引爬升；下月 D2 人工抽检对比。
+3. 若连续 2 个月无变化 → 回 `diagnose` 单页复检 + 考虑在英文面强化品牌全称
+   「Context OS by ContextLM」与差异化定位（MCP / 可分享名额 / 本地部署）。
+
+---
+
+## 20. 后续：Phase E — 需求承接面（2026-09-02）
+
+Phase A–D 关闭的是「可抓取 + 可信」（技术基线与信任页）。2026-09-02 按外部框架
+（B2B / AI SaaS / B2C 的 URL 流量分布）复审本站：可索引 URL 全部为漏斗底部，
+**需求承接面（TOFU/MOFU）缺位**，且存在 JSON-LD 覆盖缺口（`/` 与 `/en/*`）、
+`/help` 定性未决、help 页 CTA 缺 `/desktop` 等小项。
+
+后续工程与内容切片见：[`2026-09-02-contextlm-demand-surface-seo-plan.md`](./2026-09-02-contextlm-demand-surface-seo-plan.md)。

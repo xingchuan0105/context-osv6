@@ -36,7 +36,7 @@ describe("HomeClient SSR 摘要（GEO 方案 A2）", () => {
     expect(screen.getByText(/回答可溯源到具体文档/)).toBeTruthy();
     expect(screen.getByText(/把知识库接到 Cursor、Claude/)).toBeTruthy();
     expect(screen.getByText(/访客免登录浏览公开库/)).toBeTruthy();
-    expect(screen.getByText(/ContextLM/)).toBeTruthy();
+    expect(screen.getAllByText(/ContextLM/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/2026-08-29/)).toBeTruthy();
 
     expect(screen.getByRole("link", { name: "进入应用" }).getAttribute("href")).toBe("/dashboard");

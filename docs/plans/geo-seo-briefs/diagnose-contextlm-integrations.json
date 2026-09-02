@@ -1,0 +1,18 @@
+{
+  "subject": "Context OS Phase E demand-surface pages (integrations index + cursor / claude-desktop / mcp)",
+  "scope": "site",
+  "target_urls": [
+    "https://app.contextlm.top/integrations",
+    "https://app.contextlm.top/integrations/cursor",
+    "https://app.contextlm.top/integrations/claude-desktop",
+    "https://app.contextlm.top/integrations/mcp"
+  ],
+  "evidence": [],
+  "locale": "zh-CN",
+  "audience": "users searching how to connect a personal knowledge base to Cursor, Claude Desktop, or any MCP client",
+  "goals": [
+    "Verify integration pages are extractable and citation-ready (acceptance: warning=0, readiness >=90, no-JS body >=500 chars)",
+    "Confirm each page anchors facts to the agent API doc and chains CTA to canonical routes (agents / desktop / pricing)",
+    "Confirm sitemap + llms.txt inclusion is visible to crawlers"
+  ]
+}
