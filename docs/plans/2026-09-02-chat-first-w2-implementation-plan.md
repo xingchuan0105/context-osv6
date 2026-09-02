@@ -187,6 +187,24 @@ avrag-billing 63、app-core 41（单线程）、app-chat 88、contracts 全套�
 ### W3 尚未验证（去向）
 - 真实 qwen3.8-flash BYOK 调用契约（§8.5 上线前配置门：价格表、协议/thinking/流式/缓存校验）——staging 波尾验证，与 W2 上传链路端到端合并执行（需估时同意）。
 
+## 10a. P0 真实管线端到端（2026-09-03 凌晨，通过）
+
+本地 dev 栈（`product-dev-up.sh`：API :8080 + worker + MinIO + pgvector PG；`AVRAG_MIGRATION_ROLE_ONLY=true` 入 `.env` 使 role guard 以 migration-role 语境通过——本地 dev 属该语境，`.env.example` 已有注释说明）。旅程脚本（/tmp/p0-journey.sh，HTTP 直驱 127.0.0.1:8080 + psql 断言）：
+
+| 环节 | 结果 |
+|---|---|
+| 注册 → 个人会话（`model_role=quick_chat`） | ✅ |
+| 会话文件 presign → PUT MinIO → complete-upload → worker 解析（14 轮询 ≈28s）→ ready | ✅ |
+| 真实 qwen3.8-flash RAG 轮（官方凭据）：答案正常、`citations[0].source_scope=session` | ✅ |
+| BYOK 接线：保存 quick_chat secret（dashscope compatible-mode）→ 第二轮走 BYOK、`llm_usage_events.credential_source=byok` | ✅ |
+| revoke 自己的 secret → 第三轮自动回官方、`credential_source=official` | ✅ |
+| 删除 binding → files 即空 → artifact `deleting` → cleanup task 恰 1 条 → worker 全量清理至 `deleted`（4 轮询 ≈8s） | ✅ |
+| 墓碑：3 条引用 `citation_status=source_deleted`、content/preview 残留 0 | ✅ |
+
+过程中抓到并修复一个真实缺陷（commit `ba51a984`）：0089 的 `llm_usage_events` INSERT 绑定位次与列序错位——prompt_tokens 收到 model 文本，逐调用用量段全部写入失败（cost_events 轮级聚合掩盖了它）。修复后逐调用 credential 归因实证如上。
+
+尚未跑：L3-thin-llm / DR2 全量四模式回归套件、Playwright journey（需要时另行估时）。dev 栈 tmux session `context-os-dev` 保持运行（frontend :3000 / api :8080）。
+
 ## 10. L1 波门记录（2026-09-02，通过）
 
 `bash scripts/test-l1.sh agent-tools agent-loop app-chat transport-http avrag-storage-pg` → **L1 OK**（文件尺寸门 + 五 crate lib + 前端 tsc；storage-pg 用例静默复用 `.env` 连本地 PG）。门驱动的三项附带修复（均非本波引入，但挡门）：
