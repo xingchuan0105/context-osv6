@@ -17,7 +17,7 @@ SOFT_LIMIT=800
 files=(
   avrag-rs/bins/worker/src/pipeline/document_pipeline/mod.rs
   avrag-rs/crates/rag-core/src/runtime/execute.rs
-  avrag-rs/crates/llm/src/embedding.rs
+  avrag-rs/crates/llm/src/embedding/mod.rs
   avrag-rs/crates/app-chat/src/token_budget/simulate.rs
   avrag-rs/crates/agent-tools/src/capability/registry.rs
   avrag-rs/crates/agent-tools/src/skills/registry.rs
