@@ -1,0 +1,19 @@
+{
+  "subject": "Context OS / contextlm.top English public surface",
+  "scope": "site",
+  "target_urls": [
+    "https://app.contextlm.top/en",
+    "https://app.contextlm.top/en/pricing",
+    "https://app.contextlm.top/en/help/faq",
+    "https://app.contextlm.top/en/help/compare",
+    "https://app.contextlm.top/en/help/api-access/agents"
+  ],
+  "evidence": [],
+  "locale": "en",
+  "audience": "English-speaking product evaluators and technical buyers of AI knowledge workspaces",
+  "goals": [
+    "Improve AI-search citation readiness and extractability of the English public surface",
+    "Clarify product entity and value proposition on English pages",
+    "Strengthen English help and agent documentation for GEO"
+  ]
+}

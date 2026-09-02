@@ -1,6 +1,7 @@
 import LegalLayout from "./LegalLayout";
 
 import type { TocEntry } from "@/lib/legal/render-markdown";
+import type { UiLocale } from "@/lib/i18n/config";
 
 interface LegalDocRendererProps {
   content: string;
@@ -8,6 +9,8 @@ interface LegalDocRendererProps {
   lastUpdated?: string;
   version?: string;
   toc?: TocEntry[];
+  /** SSR 语言覆盖（/en/* 法律页传 "en"）。 */
+  locale?: UiLocale;
 }
 
 export default function LegalDocRenderer({
@@ -16,6 +19,7 @@ export default function LegalDocRenderer({
   lastUpdated,
   version,
   toc,
+  locale,
 }: LegalDocRendererProps) {
   return (
     <LegalLayout
@@ -23,6 +27,7 @@ export default function LegalDocRenderer({
       lastUpdated={lastUpdated}
       version={version}
       toc={toc}
+      locale={locale}
     >
       <div
         className="legal-document"

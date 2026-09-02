@@ -11,15 +11,17 @@ import { MarketingShell } from "@/components/marketing-chrome";
 import { brandHomeHref } from "@/components/product-chrome-footer";
 import { APP_PATHS } from "@/lib/site-map";
 import { formatUiMessage } from "@/lib/i18n/messages";
+import type { UiLocale } from "@/lib/i18n/config";
 import { useUiPreferences } from "@/lib/ui-preferences";
 
-export function DesktopPageClient() {
-  const { locale } = useUiPreferences();
+export function DesktopPageClient({ locale: localeProp }: { locale?: UiLocale }) {
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
   const hub = brandHomeHref();
   const hubExternal = /^https?:\/\//i.test(hub);
 
   return (
-    <MarketingShell active="desktop">
+    <MarketingShell active="desktop" locale={locale}>
       <main className="app-page-shell" style={{ background: "hsl(var(--surface-muted))" }}>
         <div className={styles.marketingPage}>
           <header className={styles.marketingHeader}>

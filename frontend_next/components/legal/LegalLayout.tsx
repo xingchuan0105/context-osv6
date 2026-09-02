@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import type { TocEntry } from "@/lib/legal/render-markdown";
+import type { UiLocale } from "@/lib/i18n/config";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
 
@@ -12,6 +13,8 @@ interface LegalLayoutProps {
   lastUpdated?: string;
   version?: string;
   toc?: TocEntry[];
+  /** SSR 语言覆盖（/en/* 法律页传 "en"）；缺省走 cookie locale。 */
+  locale?: UiLocale;
 }
 
 export default function LegalLayout({
@@ -20,8 +23,10 @@ export default function LegalLayout({
   lastUpdated,
   version,
   toc,
+  locale: localeProp,
 }: LegalLayoutProps) {
-  const { locale } = useUiPreferences();
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
 
   return (
     <div className="legal-layout">

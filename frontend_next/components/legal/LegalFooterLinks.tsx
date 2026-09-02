@@ -3,10 +3,12 @@
 import Link from "next/link";
 
 import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 import { useUiPreferences } from "../../lib/ui-preferences";
 
-export default function LegalFooterLinks() {
-  const { locale } = useUiPreferences();
+export default function LegalFooterLinks({ locale: localeProp }: { locale?: UiLocale }) {
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
   const currentYear = new Date().getFullYear();
 
   return (

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { OrganizationJsonLd } from "../../components/organization-jsonld";
 import { SoftwareApplicationJsonLd } from "../../components/software-application-jsonld";
 
 /**
@@ -9,6 +10,7 @@ import { SoftwareApplicationJsonLd } from "../../components/software-application
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <>
+      <OrganizationJsonLd />
       <SoftwareApplicationJsonLd />
       {children}
     </>

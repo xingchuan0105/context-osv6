@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import LegalFooterLinks from "@/components/legal/LegalFooterLinks";
 import { getLicenseStatus } from "@/lib/desktop/tauri-license";
 import { formatUiMessage } from "@/lib/i18n/messages";
+import type { UiLocale } from "@/lib/i18n/config";
 import { isTauri } from "@/lib/runtime/tauri-ipc";
 import { useUiPreferences } from "@/lib/ui-preferences";
 import { AUTH_SESSION_COOKIE_NAME } from "../lib/auth/server-session";
@@ -25,16 +26,19 @@ function getCookie(name: string): string | null {
  * effect 跳转到 /dashboard 或 /login。根页面是桌面端（Tauri）/web 共用入口，
  * 冷启动跳转行为必须保持不变。
  */
-export default function HomeClient() {
+export default function HomeClient({ locale: localeProp }: { locale?: UiLocale }) {
   const router = useRouter();
-  const { locale } = useUiPreferences();
-  const [label, setLabel] = useState("正在进入 Context-OS…");
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
+  const [label, setLabel] = useState(
+    locale === "en" ? "Entering Context-OS…" : "正在进入 Context-OS…",
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     async function routeDesktop() {
-      setLabel("正在启动客户端…");
+      setLabel(locale === "en" ? "Starting client…" : "正在启动客户端…");
       try {
         // ADR-0010: free client — license status optional; never block on activate.
         await getLicenseStatus().catch(() => undefined);
@@ -131,10 +135,10 @@ export default function HomeClient() {
             {formatUiMessage(locale, "home.seoCtaAgents")}
           </Link>
           <Link className="app-button-secondary" href="/help/faq">
-            FAQ
+            {formatUiMessage(locale, "home.seoCtaFaq")}
           </Link>
           <Link className="app-button-secondary" href="/help/compare">
-            选型对比
+            {formatUiMessage(locale, "home.seoCtaCompare")}
           </Link>
         </div>
 

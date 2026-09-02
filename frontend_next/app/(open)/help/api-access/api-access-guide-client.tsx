@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { formatUiMessage } from "../../../../lib/i18n/messages";
+import type { UiLocale } from "../../../../lib/i18n/config";
 import { useUiPreferences } from "../../../../lib/ui-preferences";
 
 function DocSection({
@@ -37,8 +38,9 @@ function DocSection({
  * 公开版 API 接入说明（GEO/SEO 方案 A3）：未登录即可读，无 App top bar。
  * 密钥创建/撤销仍在登录后的工作区分享中心（/dashboard/:id/share#api）。
  */
-export function ApiAccessGuideClient() {
-  const { locale } = useUiPreferences();
+export function ApiAccessGuideClient({ locale: localeProp }: { locale?: UiLocale }) {
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
 
   return (
     <main className="app-page-shell">
@@ -74,10 +76,13 @@ export function ApiAccessGuideClient() {
                 {formatUiMessage(locale, "helpItemApiAgentDocs")}
               </Link>
               <Link className="app-button-secondary" href="/help/faq">
-                FAQ
+                {formatUiMessage(locale, "home.seoCtaFaq")}
               </Link>
               <Link className="app-button-secondary" href="/help/compare">
-                选型对比
+                {formatUiMessage(locale, "home.seoCtaCompare")}
+              </Link>
+              <Link className="app-button-secondary" href="/integrations">
+                {formatUiMessage(locale, "home.seoCtaIntegrations")}
               </Link>
             </div>
           </div>

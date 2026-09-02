@@ -1,0 +1,31 @@
+{
+  "protocol_version": "1.0.0",
+  "bundle_id": "contextlm-panel-v1",
+  "subject": {
+    "name": "Context OS",
+    "aliases": ["Context OS", "Context-OS", "ContextLM"],
+    "target_source_uris": [
+      "https://contextlm.top/",
+      "https://app.contextlm.top/",
+      "https://app.contextlm.top/help/faq",
+      "https://app.contextlm.top/help/compare"
+    ]
+  },
+  "panel": {
+    "panel_version": "panel-v1",
+    "queries": [
+      { "query_id": "q1", "query_text": "Context OS 是什么？", "intent": "brand" },
+      { "query_id": "q2", "query_text": "个人 AI 知识库怎么选？", "intent": "category" },
+      { "query_id": "q3", "query_text": "Context OS 和 Notion AI 有什么区别？", "intent": "compare" }
+    ],
+    "expected_engines": ["openai", "perplexity"],
+    "expected_timepoints": ["baseline"],
+    "expected_repetitions": 1
+  },
+  "collection": {
+    "collector": "manual",
+    "permission_scope": "manual offline recording; no external platform data",
+    "source_note": "人工在 ChatGPT / Perplexity 匿名会话中记录回答与引用。"
+  },
+  "observations": []
+}

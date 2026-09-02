@@ -40,6 +40,10 @@ echo "    设计文档: avrag-rs/docs/legal-compliance-pages-design-2026-06-13.m
 echo ""
 check_doc "$CONTENT_DIR/terms.mdx" "用户服务协议 (ToS)"
 check_doc "$CONTENT_DIR/privacy.mdx" "隐私政策 (Privacy)"
+
+EN_CONTENT_DIR="$REPO_ROOT/frontend_next/content/legal/en"
+check_doc "$EN_CONTENT_DIR/terms.mdx" "Terms of Service (en)"
+check_doc "$EN_CONTENT_DIR/privacy.mdx" "Privacy Policy (en)"
 echo ""
 
 if [ $EXIT_CODE -ne 0 ]; then

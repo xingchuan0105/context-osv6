@@ -9,7 +9,14 @@ import { renderLegalMarkdown } from '@/lib/legal/render-markdown';
 export const metadata: Metadata = {
   title: '用户服务协议',
   description: 'Context-OS 用户服务协议，了解使用我们服务的条款与条件。',
-  alternates: { canonical: '/legal/terms' },
+  alternates: {
+    canonical: '/legal/terms',
+    languages: {
+      "zh-CN": '/legal/terms',
+      en: '/en/legal/terms',
+      "x-default": '/legal/terms',
+    },
+  },
 };
 
 export default async function TermsPage() {

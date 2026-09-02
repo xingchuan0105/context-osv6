@@ -21,6 +21,7 @@ import { billingApi } from "@/lib/billing/api";
 import { MARKETING_BILLING_PLANS, plansForInterval } from "@/lib/billing/publicPlans";
 import { billingProviderForLocale, planPriceLabelForProvider, type ActiveBillingProvider } from "@/lib/billing/provider";
 import { formatUiMessage } from "@/lib/i18n/messages";
+import type { UiLocale } from "@/lib/i18n/config";
 import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./pricing.module.css";
 
@@ -55,10 +56,11 @@ function formatFenAsYuan(fen: number, locale: string): string {
   }
 }
 
-export function PricingPageClient() {
+export function PricingPageClient({ locale: localeProp }: { locale?: UiLocale }) {
   const auth = useAuth();
   const router = useRouter();
-  const { locale } = useUiPreferences();
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
   const [allPlans, setAllPlans] = useState<BillingPlan[]>(MARKETING_BILLING_PLANS);
   const [interval, setInterval] = useState<BillingInterval>("month");
   const [paymentConsented, setPaymentConsented] = useState(false);

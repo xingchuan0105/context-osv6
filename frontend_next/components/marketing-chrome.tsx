@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { ContextOsMark } from "./context-os-mark";
@@ -14,12 +15,24 @@ import { useUiPreferences, type UiLocale } from "../lib/ui-preferences";
 /**
  * Light top bar for marketing paths (/desktop, /pricing, /legal).
  * Brand lockup is always horizontal (mark + Context-OS).
+ * `locale` 覆盖 SSR 语言（/en/* 页传 "en"）；语言切换按 URL 跳转（/x ↔ /en/x）。
  */
-export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "legal" | "none" }) {
-  const { locale, setLocale } = useUiPreferences();
+export function MarketingChrome({
+  active,
+  locale: localeProp,
+}: {
+  active?: "desktop" | "pricing" | "legal" | "none";
+  locale?: UiLocale;
+}) {
+  const { locale: uiLocale } = useUiPreferences();
+  const locale = localeProp ?? uiLocale;
   const { isAuthenticated } = useAuth();
   const hub = brandHomeHref();
   const hubExternal = /^https?:\/\//i.test(hub);
+  const pathname = usePathname();
+  const isEnPath = pathname === "/en" || pathname.startsWith("/en/");
+  const zhHref = isEnPath ? (pathname === "/en" ? "/" : pathname.slice(3)) : pathname;
+  const enHref = isEnPath ? pathname : pathname === "/" ? "/en" : `/en${pathname}`;
 
   const navLinkClass = (isActive: boolean) =>
     isActive ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink;
@@ -58,21 +71,28 @@ export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "
             {formatUiMessage(locale, "productChrome.legalCenter")}
           </Link>
           <span className={styles.langGroup} role="group" aria-label="Language">
-            {(["zh-CN", "en"] as UiLocale[]).map((code) => (
-              <button
-                key={code}
-                type="button"
-                data-testid={`mkt-lang-${code}`}
-                onClick={() => setLocale(code)}
-                className={
-                  locale === code
-                    ? `${styles.langButton} ${styles.langButtonActive}`
-                    : styles.langButton
-                }
-              >
-                {code === "zh-CN" ? "中文" : "EN"}
-              </button>
-            ))}
+            <Link
+              href={zhHref}
+              data-testid="mkt-lang-zh-CN"
+              className={
+                locale === "zh-CN"
+                  ? `${styles.langButton} ${styles.langButtonActive}`
+                  : styles.langButton
+              }
+            >
+              中文
+            </Link>
+            <Link
+              href={enHref}
+              data-testid="mkt-lang-en"
+              className={
+                locale === "en"
+                  ? `${styles.langButton} ${styles.langButtonActive}`
+                  : styles.langButton
+              }
+            >
+              EN
+            </Link>
           </span>
           {isAuthenticated ? null : (
             <Link
@@ -98,13 +118,15 @@ export function MarketingChrome({ active }: { active?: "desktop" | "pricing" | "
 export function MarketingShell({
   children,
   active = "none",
+  locale,
 }: {
   children: ReactNode;
   active?: "desktop" | "pricing" | "legal" | "none";
+  locale?: UiLocale;
 }) {
   return (
     <div className={styles.shell}>
-      <MarketingChrome active={active} />
+      <MarketingChrome active={active} locale={locale} />
       <div className={styles.shellContent}>{children}</div>
     </div>
   );

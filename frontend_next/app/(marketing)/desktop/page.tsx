@@ -6,7 +6,14 @@ export const metadata: Metadata = {
   title: "AI 知识库桌面客户端 · 免费下载",
   description:
     "Context OS Windows 桌面客户端：免费下载使用，数据留在本机，支持 MCP / CLI 供桌面 Agent 调用。",
-  alternates: { canonical: "/desktop" },
+  alternates: {
+    canonical: "/desktop",
+    languages: {
+      "zh-CN": "/desktop",
+      en: "/en/desktop",
+      "x-default": "/desktop",
+    },
+  },
 };
 
 export default function DesktopProductPage() {

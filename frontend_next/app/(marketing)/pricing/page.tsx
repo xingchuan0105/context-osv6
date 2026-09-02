@@ -9,7 +9,14 @@ export const metadata: Metadata = {
   title: "定价",
   description:
     "Context OS 会员档位与本页充值：免费档即可建仓，升级解锁更多可分享名额。",
-  alternates: { canonical: "/pricing" },
+  alternates: {
+    canonical: "/pricing",
+    languages: {
+      "zh-CN": "/pricing",
+      en: "/en/pricing",
+      "x-default": "/pricing",
+    },
+  },
 };
 
 export default function PricingPage() {
