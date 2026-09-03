@@ -222,8 +222,10 @@ export function ChatCanvas({
   // RAG requires an explicit source selection: strip it when the selection
   // becomes empty (product rule 2026-07-18 — no implicit whole-workspace scope).
   // Shared KB uses whole-workspace RAG by default — never strip.
+  // Personal conversations legitimize RAG via ready session files instead
+  // (server derives their scope from bindings) — never strip there either.
   useEffect(() => {
-    if (fixedCaps || isShareMode) {
+    if (fixedCaps || isShareMode || isPersonalConversation) {
       return;
     }
     if (selectedSourceIds.length > 0 || !capabilities.includes("rag")) {
@@ -234,7 +236,7 @@ export function ChatCanvas({
       capabilities.filter((cap) => cap !== "rag"),
       { manual: false },
     );
-  }, [selectedSourceIds, capabilities, uiScopeId, fixedCaps, isShareMode]);
+  }, [selectedSourceIds, capabilities, uiScopeId, fixedCaps, isShareMode, isPersonalConversation]);
 
   // Session files ready → retrieval joins by default (server derives the doc
   // scope from bindings; this only flips the capability chip like the
@@ -246,7 +248,14 @@ export function ChatCanvas({
     }
     const previous = previousReadyRef.current;
     previousReadyRef.current = { scopeId: uiScopeId, count: sessionReadyFiles };
-    if (sessionReadyFiles === 0 || previous?.scopeId === uiScopeId) {
+    // Attach on the 0→ready transition of this session's files (and when a
+    // ready-file session is first observed); skip no-op re-renders.
+    if (
+      sessionReadyFiles === 0 ||
+      (previous !== null &&
+        previous.scopeId === uiScopeId &&
+        previous.count === sessionReadyFiles)
+    ) {
       return;
     }
     const current = getWorkspaceUiState(uiScopeId);

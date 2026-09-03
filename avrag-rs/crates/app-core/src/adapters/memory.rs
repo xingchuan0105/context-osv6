@@ -433,6 +433,7 @@ impl DocumentStorePort for MemoryDocumentStore {
                 mime_type: stored.document.mime_type.clone(),
                 file_size: stored.document.file_size,
                 status: stored.document.status.as_str().to_string(),
+                parse_version: None,
                 created_at: stored.document.created_at.clone(),
             });
         }

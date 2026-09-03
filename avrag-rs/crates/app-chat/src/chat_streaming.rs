@@ -76,6 +76,10 @@ impl ChatContext {
 
         let workspace_id = self.resolve_request_workspace(&mut req).await?;
         let state = self.with_owner_pays_auth(workspace_id).await;
+        // Review P0-2: the SSE path is the frontend's main chat surface — the
+        // same binding-derived scope enforcement and session-file injection
+        // must apply here as in the non-streaming pipeline.
+        crate::chat::enforce_agent_scope(&state, &mut req, workspace_id).await?;
         crate::chat::execute_pipeline_stream(
             state,
             req,

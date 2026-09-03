@@ -141,6 +141,10 @@ pub struct SessionFileRow {
     #[typeshare(serialized_as = "number")]
     pub file_size: u64,
     pub status: String,
+    /// Latest parse run for this artifact (snapshot version fact); absent
+    /// before the first parse completes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parse_version: Option<String>,
     pub created_at: String,
 }
 

@@ -122,22 +122,23 @@ impl ChatContext {
         // attached to this execution — never re-queried, never silently empty.
         let scope_facts = execution.turn_scope_facts.clone();
         let snapshot_id = uuid::Uuid::new_v4().to_string();
-        let history_boundary = match chat_persistence {
-            persistence => persistence
-                .list_messages(&self.auth, session_uuid)
-                .await
-                .map(|messages| messages.len())
-                .unwrap_or(0),
-        };
         let context_snapshot = serde_json::json!({
             "snapshot_id": snapshot_id,
             "workspace_id_at_send": session.workspace_id,
-            "conversation_history_boundary": { "persisted_messages": history_boundary },
-            "session_binding_artifacts": scope_facts.session_artifacts,
+            "conversation_history_boundary": {
+                "persisted_messages": scope_facts.history_boundary,
+            },
+            "session_binding_versions": scope_facts.session_artifacts,
             "workspace_binding_artifacts": scope_facts.workspace_artifacts,
             "web_enabled": web_enabled,
+            "thinking_enabled": null,
             "model_role": session.model_role,
             "credential_source": execution.response.credential_source,
+            "effective_provider": execution
+                .response
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.provider.clone()),
             "effective_model": execution
                 .response
                 .usage

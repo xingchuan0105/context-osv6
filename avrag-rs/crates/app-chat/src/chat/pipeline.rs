@@ -163,15 +163,24 @@ async fn run_pipeline_inner(
 ) -> Result<ChatResponse, AppError> {
     let session = state.resolve_chat_session(&request).await?;
     // Freeze the binding-derived scope facts BEFORE execution (review fix:
-    // the snapshot must not re-query a mutable view after the answer).
+    // the snapshot must not re-query a mutable view after the answer). The
+    // history boundary is frozen in the same pre-execution step.
     let session_uuid = Uuid::parse_str(&session.id).ok();
     let session_workspace = session
         .workspace_id
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
-    let turn_scope_facts = state
+    let mut turn_scope_facts = state
         .turn_scope_facts(session_uuid, session_workspace)
         .await?;
+    turn_scope_facts.history_boundary = match state.chat_persistence() {
+        Some(persistence) => persistence
+            .list_messages(&state.auth, session_uuid.unwrap_or_default())
+            .await
+            .map(|messages| messages.len())
+            .unwrap_or(0),
+        None => 0,
+    };
 
     // ADR-0010 §9: exact first (no embed), then semantic with embed.
     if request.source_type.as_deref() == Some("share") {

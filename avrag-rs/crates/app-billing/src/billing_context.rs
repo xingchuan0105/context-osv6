@@ -61,11 +61,7 @@ impl BillingContext {
     /// [`Self::ensure_payer_has_wallet_balance`] — never trust `has_active` alone.
     ///
     /// When wallet port is absent (unit tests / memory bootstrap), allow.
-    pub async fn ensure_payer_can_spend(&self, auth: &AuthContext) -> Result<(), AppError> {
-        self.ensure_payer_can_spend_for(auth, ProviderSecretPurpose::Llm).await
-    }
-
-    /// Model-role aware variant (chat-first W3): a `quick_chat` session is
+    /// Model-role aware spend gate (chat-first W3): a `quick_chat` session is
     /// exempt when the payer holds an active **Quick Chat** BYOK config — the
     /// generic `llm` purpose never substitutes for it, and vice versa.
     pub async fn ensure_payer_can_spend_for(
@@ -122,21 +118,6 @@ impl BillingContext {
     /// usage is still charged via the usage observer's `usage_debit`.
     ///
     /// BYOK LLM path: no hold (returns `None`).
-    pub async fn place_usage_hold_for_estimate(
-        &self,
-        auth: &AuthContext,
-        estimated_input_tokens: i64,
-        estimated_output_tokens: i64,
-    ) -> Result<Option<(Uuid, i64)>, AppError> {
-        self.place_usage_hold_for_estimate_for(
-            auth,
-            ProviderSecretPurpose::Llm,
-            estimated_input_tokens,
-            estimated_output_tokens,
-        )
-        .await
-    }
-
     /// Model-role aware hold placement (chat-first W3): quick_chat BYOK exempts
     /// the hold exactly when the resolver will route BYOK (§8.2). Generic `llm`
     /// BYOK never exempts a quick_chat session's hold.
@@ -156,12 +137,27 @@ impl BillingContext {
                 return Ok(None);
             }
         }
-        let provider = std::env::var("AGENT_LLM_PROVIDER")
-            .or_else(|_| std::env::var("LLM_PROVIDER"))
-            .unwrap_or_else(|_| "deepseek".into());
-        let model = std::env::var("AGENT_LLM_MODEL")
-            .or_else(|_| std::env::var("LLM_MODEL"))
-            .unwrap_or_else(|_| "deepseek-v4-flash".into());
+        // Price the hold against the model the official route will actually
+        // call (review P0: quick_chat holds must not estimate AGENT_LLM_*).
+        let (provider, model) = if purpose == ProviderSecretPurpose::QuickChat {
+            (
+                std::env::var("QUICK_CHAT_LLM_PROVIDER")
+                    .or_else(|_| std::env::var("DASHSCOPE_PROVIDER"))
+                    .unwrap_or_else(|_| "dashscope".into()),
+                std::env::var("QUICK_CHAT_LLM_MODEL")
+                    .or_else(|_| std::env::var("DASHSCOPE_MODEL"))
+                    .unwrap_or_else(|_| "qwen3.8-flash".into()),
+            )
+        } else {
+            (
+                std::env::var("AGENT_LLM_PROVIDER")
+                    .or_else(|_| std::env::var("LLM_PROVIDER"))
+                    .unwrap_or_else(|_| "deepseek".into()),
+                std::env::var("AGENT_LLM_MODEL")
+                    .or_else(|_| std::env::var("LLM_MODEL"))
+                    .unwrap_or_else(|_| "deepseek-v4-flash".into()),
+            )
+        };
         let Some(need_fen) = avrag_billing::list_price_fen(
             &provider,
             &model,

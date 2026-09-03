@@ -296,3 +296,21 @@ dev 栈 tmux session `context-os-dev` 保持运行（frontend :3000 / api :8080�
 登记为后续（非阻断）：Snapshot 的 parse/index version 明细（Evidence 的 parse_run_id 已覆盖已引用 chunk）；失败轮次的独立 snapshot 落行（与重试语义耦合，需产品决策）。
 
 回归状态：**L1 OK**；storage-pg 38、app-chat 88、billing 63、contracts 全套、前端 529/2、`cargo check --workspace --tests` 零错、端到端旅程 16/17 通过（唯一 FAIL 为旅程脚本自身 SECID 未按 owner 过滤，产品行为经独立脚本复验为 `byok→official` 正确回退）。
+
+
+## 12. 第二轮审查修复（2026-09-03，P0×2 + P1×2 清零，SSE 主路径实证）
+
+第二轮静态审查指出的问题全部修复：
+
+| 项 | 修复 | 实证 |
+|---|---|---|
+| **P0 首建轮 purpose 错配** | preflight 无 session_id 时按创建入口推导（个人 /chat → QuickChat、workspace → Llm）；hold 估价对 QuickChat purpose 改用 `QUICK_CHAT_LLM_*`（回退 dashscope/qwen3.8-flash），不再按 AGENT_LLM_* 估 | 旅程 2b：无 session 首轮自动建 quick_chat 会话、preflight 通过、usage=official |
+| **P0 SSE 主路径缺 scope** | `enforce_agent_scope`（scope 注入 + docscope_required/invalid_doc_scope/validate 三门）抽为共享助手，`execute_chat_stream` 与非流式入口同调；RAG 判定改按权威 `capabilities[]`（`agent_type.contains("rag")` 仅作兼容标签） | 旅程 7：`stream:true` 且**无 doc_scope** 的 SSE 轮命中会话文件、`source_scope=session`、done 载荷带 snapshot id 与 credential |
+| **P0 前端 0→ready/strip 冲突** | ready-files 效果改为状态迁移判定（0→ready 或首次观察到 ready 会话即挂）；strip 效果对个人会话豁免（个人 RAG 的合法来源是会话文件） | typecheck + Vitest |
+| **P1 边界后取/错误伪装 0** | `conversation_history_boundary`（persisted_messages）在 run_pipeline_inner 执行前与 scope facts 一并冻结；persist 不再查询、不再吞错 | 编译 + 端到端 |
+| **P1 上传竞态孤儿** | `delete_session` / `delete_workspace` 事务内 `LOCK TABLE …_document_bindings IN SHARE ROW EXCLUSIVE MODE` 串行化并发绑定插入；orphan-GC SQL 抽为共享 `sweep_orphaned_artifacts`（review 指出的复制漂移一并消除） | storage-pg 38 |
+| **P2 双 binding Evidence 丢 provenance** | `SessionBindingVersion { binding_id, artifact_id, parse_version }` 结构化；snapshot 记 `session_binding_versions`；`SessionFileRow` 增 parse_version（PG lateral 最新 parse run）；snapshot 增 `effective_provider`、`thinking_enabled`（显式 null，控制未上线的已知未知） | snapshot JSON |
+
+Standards 处理：删除无生产调用方的 `ensure_payer_can_spend` / `place_usage_hold_for_estimate` 旧 delegate 与 `with_credential_source` builder（构造点全部字面量化为枚举）。登记遗留：失败轮独立 snapshot 落行（重试语义需产品决策）、index version 明细。
+
+回归：**L1 OK**（文件门 + 5 crate + tsc）；storage-pg 38、app-chat 88、billing 63、contracts 全套、前端 typecheck + 529/2；端到端旅程 **19/19**（SSE 主路径 stream:true 无 doc_scope 全链 + 首建轮 + BYOK/回退 + GC/墓碑）。

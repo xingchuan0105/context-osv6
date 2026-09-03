@@ -206,6 +206,96 @@ impl ChunkRepository {
         Ok(result.rows_affected())
     }
 
+    /// Shared orphan sweep for scope-owner deletion (review P1-4: one copy of
+    /// the cleanup contract for conversation AND workspace deletion — zero-
+    /// binding artifacts soft-delete + enter the async cleanup queue).
+    pub async fn sweep_orphaned_artifacts(
+        tx: &mut PgConnection,
+        owner_user_id: Uuid,
+        document_ids: &[Uuid],
+        requested_by: Option<Uuid>,
+        reason: &str,
+    ) -> Result<usize, PgStorageError> {
+        let mut swept = 0;
+        for document_id in document_ids {
+            let orphaned = sqlx::query_scalar::<_, bool>(
+                r#"
+                select not exists (
+                    select 1 from conversation_document_bindings b where b.artifact_id = $1
+                )
+                and not exists (
+                    select 1 from workspace_document_bindings b where b.artifact_id = $1
+                )
+                "#,
+            )
+            .bind(document_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            if !orphaned {
+                continue;
+            }
+            sqlx::query(
+                r#"
+                update documents
+                set status = 'deleting',
+                    deletion_requested_at = coalesce(deletion_requested_at, now()),
+                    deletion_error = null,
+                    updated_at = now()
+                where id = $1
+                  and owner_user_id = $2
+                  and status not in ('deleting', 'deleted')
+                "#,
+            )
+            .bind(document_id)
+            .bind(owner_user_id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                r#"
+                insert into document_cleanup_tasks (
+                    owner_user_id, workspace_id, document_id, requested_by, idempotency_key, payload
+                )
+                values ($1, null, $2, $3, $4, $5)
+                on conflict (idempotency_key) do nothing
+                "#,
+            )
+            .bind(owner_user_id)
+            .bind(document_id)
+            .bind(requested_by)
+            .bind(format!("document-cleanup:{owner_user_id}:{document_id}"))
+            .bind(serde_json::json!({
+                "owner_user_id": owner_user_id.to_string(),
+                "document_id": document_id.to_string(),
+                "reason": reason,
+            }))
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                r#"
+                update ingestion_tasks
+                set status = 'dead_letter',
+                    dead_lettered_at = coalesce(dead_lettered_at, now()),
+                    last_failed_at = coalesce(last_failed_at, now()),
+                    last_error = coalesce(last_error, 'document deletion requested'),
+                    locked_at = null,
+                    locked_by = null,
+                    lock_token = null,
+                    updated_at = now()
+                where owner_user_id = $1
+                  and document_id = $2
+                  and status in ('queued', 'processing')
+                  and dead_lettered_at is null
+                "#,
+            )
+            .bind(owner_user_id)
+            .bind(document_id)
+            .execute(&mut *tx)
+            .await?;
+            swept += 1;
+        }
+        Ok(swept)
+    }
+
     /// W2e review fix: `turn_evidence` segments must collapse with the
     /// citations — strip chunk/asset/parse identifiers and mark the source
     /// deleted, keeping the same irreducible facts as the citation tombstone.

@@ -43,4 +43,5 @@ pub(crate) use pipeline::{
 };
 pub use pipeline::{is_reserved_internal_agent_type, is_write_agent_type};
 pub(crate) use pipeline_steps::attach_debug_trace_from_sink;
+pub(crate) use service::enforce_agent_scope;
 pub(crate) use service_modes::{BuildChatExecutionParams, build_chat_execution_from_result};

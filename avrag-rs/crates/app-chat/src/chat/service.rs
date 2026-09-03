@@ -19,31 +19,7 @@ impl ChatContext {
     ) -> Result<ChatResponse, AppError> {
         let effective_workspace_id = self.resolve_request_workspace(&mut req).await?;
         let state = self.with_owner_pays_auth(effective_workspace_id).await;
-        let client_scope_was_empty = req.doc_scope.is_empty();
-        state
-            .recompute_allowed_doc_scope(&mut req, effective_workspace_id)
-            .await?;
-        if state.storage.chat_persistence().is_some()
-            && req.agent_type == "rag"
-            && req.doc_scope.is_empty()
-            && effective_workspace_id.is_none()
-        {
-            return Err(AppError::validation(
-                "docscope_required",
-                "Please select at least one document before using RAG.",
-            ));
-        }
-        if req.agent_type == "rag" && !client_scope_was_empty && req.doc_scope.is_empty() {
-            // The client selected documents, but none survived the binding-derived
-            // allowed set: fail closed instead of silently widening the scope.
-            return Err(AppError::validation(
-                "invalid_doc_scope",
-                "No selected document is available in this conversation's context scope.",
-            ));
-        }
-        if req.agent_type == "rag" && !req.doc_scope.is_empty() {
-            state.validate_rag_doc_scope(&req.doc_scope).await?;
-        }
+        enforce_agent_scope(&state, &mut req, effective_workspace_id).await?;
         execute_pipeline(state, req, PipelineLane::Agent).await
     }
 
@@ -69,10 +45,12 @@ impl ChatContext {
         // Chat-first closure: ready session artifacts join RAG turns by default.
         // The scope is derived server-side from typed bindings — the client can
         // narrow workspace selections but cannot add or hide session files.
-        if req.agent_type == "rag" {
-            for (_, artifact_id) in &facts.session_artifacts {
-                if !req.doc_scope.contains(artifact_id) {
-                    req.doc_scope.push(artifact_id.clone());
+        // `capabilities[]` is the authoritative routing fact (agent_type is a
+        // derived label, e.g. "rag+search").
+        if is_rag_turn(req) {
+            for binding in &facts.session_artifacts {
+                if !req.doc_scope.contains(&binding.artifact_id) {
+                    req.doc_scope.push(binding.artifact_id.clone());
                 }
             }
         }
@@ -96,9 +74,11 @@ impl ChatContext {
             if let Some(store) = self.storage.document_store() {
                 for file in store.list_session_files(&self.auth, session_id).await? {
                     if file.status == "completed" {
-                        facts
-                            .session_artifacts
-                            .push((file.binding_id, file.document_id));
+                        facts.session_artifacts.push(SessionBindingVersion {
+                            binding_id: file.binding_id,
+                            artifact_id: file.document_id,
+                            parse_version: file.parse_version,
+                        });
                     }
                 }
             }
@@ -208,6 +188,9 @@ impl ChatContext {
         // Chat-first W3: consult the session's persisted model_role BEFORE the
         // spend gate — quick_chat sessions are exempt only via an active Quick
         // Chat BYOK config; generic llm BYOK never substitutes (and vice versa).
+        // Without a session, the turn will CREATE one: personal /chat creates
+        // quick_chat, workspace-bound creation creates agent (§4.2) — derive
+        // the same default here.
         let byok_purpose = match req.session_id.as_deref() {
             Some(session_id) => {
                 let model_role = self
@@ -221,7 +204,15 @@ impl ChatContext {
                     app_core::ProviderSecretPurpose::Llm
                 }
             }
-            None => app_core::ProviderSecretPurpose::Llm,
+            None => {
+                let workspace_bound = req.workspace_id.as_deref().is_some()
+                    || self.auth.workspace_id().is_some();
+                if workspace_bound {
+                    app_core::ProviderSecretPurpose::Llm
+                } else {
+                    app_core::ProviderSecretPurpose::QuickChat
+                }
+            }
         };
         if let Err(error) = self
             .billing
@@ -514,22 +505,25 @@ fn chat_workspace_id_for_request(
 /// through the conversation binding vs a workspace binding.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TurnScopeFacts {
-    /// (binding_id, artifact_id) pairs visible via the conversation binding.
-    pub session_artifacts: Vec<(String, String)>,
+    /// Binding + artifact + parse version facts of conversation-bound files.
+    pub session_artifacts: Vec<SessionBindingVersion>,
     /// Completed artifact ids visible via the workspace binding.
     pub workspace_artifacts: Vec<String>,
+    /// Pre-execution count of persisted messages for this conversation
+    /// (the history boundary this turn was built on). Frozen before the run.
+    pub history_boundary: usize,
 }
 
 impl TurnScopeFacts {
     pub(crate) fn allowed_ids(&self) -> std::collections::HashSet<String> {
         let mut ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-        ids.extend(self.session_artifacts.iter().map(|(_, artifact)| artifact.clone()));
+        ids.extend(self.session_artifacts.iter().map(|b| b.artifact_id.clone()));
         ids.extend(self.workspace_artifacts.iter().cloned());
         ids
     }
 
     pub(crate) fn scope_of(&self, artifact_id: &str) -> Option<&'static str> {
-        if self.session_artifacts.iter().any(|(_, artifact)| artifact == artifact_id) {
+        if self.session_artifacts.iter().any(|b| b.artifact_id == artifact_id) {
             Some("session")
         } else if self.workspace_artifacts.iter().any(|artifact| artifact == artifact_id) {
             Some("workspace")
@@ -537,4 +531,59 @@ impl TurnScopeFacts {
             None
         }
     }
+}
+
+/// One conversation binding's version facts (design §4.4 binding+version).
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct SessionBindingVersion {
+    pub binding_id: String,
+    pub artifact_id: String,
+    pub parse_version: Option<String>,
+}
+
+/// Authoritative RAG-turn predicate: `capabilities[]` wins over the derived
+/// `agent_type` label (which may be "chat", "rag", "search" or "rag+search").
+pub(crate) fn is_rag_turn(req: &ChatRequest) -> bool {
+    req.agent_type.contains("rag")
+        || req
+            .capabilities
+            .as_ref()
+            .is_some_and(|caps| caps.iter().any(|cap| cap == "rag"))
+}
+
+/// Server-side ContextScope enforcement shared by BOTH chat entries — the
+/// non-streaming pipeline and the SSE streaming path (review P0-2: session
+/// files must ride the main streaming path too). Injects ready session
+/// artifacts into RAG turns, then applies the structural gates.
+pub(crate) async fn enforce_agent_scope(
+    state: &ChatContext,
+    req: &mut ChatRequest,
+    effective_workspace_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    let client_scope_was_empty = req.doc_scope.is_empty();
+    state
+        .recompute_allowed_doc_scope(req, effective_workspace_id)
+        .await?;
+    if state.storage.chat_persistence().is_some()
+        && is_rag_turn(req)
+        && req.doc_scope.is_empty()
+        && effective_workspace_id.is_none()
+    {
+        return Err(AppError::validation(
+            "docscope_required",
+            "Please select at least one document before using RAG.",
+        ));
+    }
+    if is_rag_turn(req) && !client_scope_was_empty && req.doc_scope.is_empty() {
+        // The client selected documents, but none survived the binding-derived
+        // allowed set: fail closed instead of silently widening the scope.
+        return Err(AppError::validation(
+            "invalid_doc_scope",
+            "No selected document is available in this conversation's context scope.",
+        ));
+    }
+    if is_rag_turn(req) && !req.doc_scope.is_empty() {
+        state.validate_rag_doc_scope(&req.doc_scope).await?;
+    }
+    Ok(())
 }

@@ -785,6 +785,11 @@ export interface SessionFileRow {
 	mime_type: string;
 	file_size: number;
 	status: string;
+	/**
+	 * Latest parse run for this artifact (snapshot version fact); absent
+	 * before the first parse completes.
+	 */
+	parse_version?: string;
 	created_at: string;
 }
 

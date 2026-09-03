@@ -53,10 +53,6 @@ impl TenantContext {
         self.credential_source == CredentialSource::Byok
     }
 
-    pub fn with_credential_source(mut self, credential_source: CredentialSource) -> Self {
-        self.credential_source = credential_source;
-        self
-    }
 }
 
 /// Actual chat-completion usage returned by a provider.

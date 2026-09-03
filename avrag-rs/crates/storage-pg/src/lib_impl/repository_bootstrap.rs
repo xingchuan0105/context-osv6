@@ -359,8 +359,12 @@ impl BootstrapRepository {
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let owner_user_id = context.user_id().into_uuid();
-        // Capture the artifacts bound to this workspace before the cascade
-        // removes their bindings (W2e: orphan sweep).
+        // Serialize against concurrent uploads (review P1-4) and capture the
+        // artifacts bound to this workspace before the FK cascade removes
+        // their bindings (W2e orphan sweep).
+        sqlx::query("lock table workspace_document_bindings in share row exclusive mode")
+            .execute(tx.inner())
+            .await?;
         let bound_artifacts: Vec<Uuid> = sqlx::query(
             "select artifact_id from workspace_document_bindings where workspace_id = $1 and owner_user_id = $2",
         )
@@ -385,80 +389,14 @@ impl BootstrapRepository {
 
         // Artifacts left with zero bindings of either kind enter the async
         // full-cleanup flow; anything still session-bound survives untouched.
-        for document_id in bound_artifacts {
-            let orphaned = sqlx::query_scalar::<_, bool>(
-                r#"
-                select not exists (
-                    select 1 from conversation_document_bindings b where b.artifact_id = $1
-                )
-                and not exists (
-                    select 1 from workspace_document_bindings b where b.artifact_id = $1
-                )
-                "#,
-            )
-            .bind(document_id)
-            .fetch_one(tx.inner())
-            .await?;
-            if orphaned {
-                sqlx::query(
-                    r#"
-                    update documents
-                    set status = 'deleting',
-                        deletion_requested_at = coalesce(deletion_requested_at, now()),
-                        deletion_error = null,
-                        updated_at = now()
-                    where id = $1
-                      and owner_user_id = $2
-                      and status not in ('deleting', 'deleted')
-                    "#,
-                )
-                .bind(document_id)
-                .bind(owner_user_id)
-                .execute(tx.inner())
-                .await?;
-                sqlx::query(
-                    r#"
-                    insert into document_cleanup_tasks (
-                        owner_user_id, workspace_id, document_id, requested_by, idempotency_key, payload
-                    )
-                    values ($1, null, $2, $3, $4, $5)
-                    on conflict (idempotency_key) do nothing
-                    "#,
-                )
-                .bind(owner_user_id)
-                .bind(document_id)
-                .bind(context.actor_id().map(ActorId::into_uuid))
-                .bind(format!("document-cleanup:{owner_user_id}:{document_id}"))
-                .bind(serde_json::json!({
-                    "owner_user_id": owner_user_id.to_string(),
-                    "document_id": document_id.to_string(),
-                    "reason": "workspace_delete_orphan",
-                }))
-                .execute(tx.inner())
-                .await?;
-                sqlx::query(
-                    r#"
-                    update ingestion_tasks
-                    set status = 'dead_letter',
-                        dead_lettered_at = coalesce(dead_lettered_at, now()),
-                        last_failed_at = coalesce(last_failed_at, now()),
-                        last_error = coalesce(last_error, 'document deletion requested'),
-                        locked_at = null,
-                        locked_by = null,
-                        lock_token = null,
-                        updated_at = now()
-                    where owner_user_id = $1
-                      and document_id = $2
-                      and status in ('queued', 'processing')
-                      and dead_lettered_at is null
-                    "#,
-                )
-                .bind(owner_user_id)
-                .bind(document_id)
-                .execute(tx.inner())
-                .await?;
-            }
-        }
+        ChunkRepository::sweep_orphaned_artifacts(
+            tx.inner(),
+            owner_user_id,
+            &bound_artifacts,
+            context.actor_id().map(ActorId::into_uuid),
+            "workspace_delete_orphan",
+        )
+        .await?;
         tx.commit().await?;
         Ok(true)
     }
@@ -578,8 +516,6 @@ impl BootstrapRepository {
         map_document(row)
     }
 
-    /// Chat-first W2b: artifact + conversation binding in one transaction.
-    /// Parent-guarded on the session so a foreign conversation id yields NotFound.
     pub async fn create_session_document(
         &self,
         context: &AuthContext,
@@ -649,9 +585,16 @@ impl BootstrapRepository {
         let rows = sqlx::query(
             r#"
             select b.id as binding_id, d.id as document_id, d.file_name, d.mime_type,
-                   d.file_size, d.status, b.created_at
+                   d.file_size, d.status, pr.run_id as parse_version, b.created_at
             from conversation_document_bindings b
             join documents d on d.id = b.artifact_id
+            left join lateral (
+                select run_id
+                from document_parse_runs pr
+                where pr.document_id = d.id
+                order by pr.created_at desc, pr.run_id desc
+                limit 1
+            ) pr on true
             where b.conversation_id = $1
               and b.owner_user_id = $2
               and d.status not in ('deleting', 'deleted')
@@ -674,6 +617,9 @@ impl BootstrapRepository {
                     file_size: u64::try_from(row.try_get::<i64, _>("file_size")?)
                         .unwrap_or_default(),
                     status: row.try_get("status")?,
+                    parse_version: row
+                        .try_get::<Option<Uuid>, _>("parse_version")?
+                        .map(|value| value.to_string()),
                     created_at: row.try_get::<DateTime<Utc>, _>("created_at")?.to_rfc3339(),
                 })
             })
