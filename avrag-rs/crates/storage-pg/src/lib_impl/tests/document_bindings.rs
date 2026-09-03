@@ -20,11 +20,11 @@ async fn create_document_writes_workspace_binding_and_lists_via_binding() {
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "binding test notebook", "binding test")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "binding test workspace", "binding test")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
         .bootstrap().create_document(&ctx, workspace_id, "bound.txt", 42, "text/plain")
         .await
@@ -48,7 +48,7 @@ async fn create_document_writes_workspace_binding_and_lists_via_binding() {
     tx.commit().await.unwrap();
     assert_eq!(binding_count, 1, "workspace binding must exist for a workspace upload");
 
-    assert_eq!(document.workspace_id.as_deref(), Some(notebook.id.as_str()));
+    assert_eq!(document.workspace_id.as_deref(), Some(workspace.id.as_str()));
 
     let listed = repo
         .list_documents(&ctx, Some(workspace_id), Some(document_id))
@@ -72,11 +72,11 @@ async fn workspace_document_bindings_reject_duplicate_scope_pair() {
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "unique binding notebook", "unique binding")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "unique binding workspace", "unique binding")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
         .bootstrap().create_document(&ctx, workspace_id, "unique.txt", 42, "text/plain")
         .await
@@ -118,11 +118,11 @@ async fn deleting_workspace_cascades_binding_but_artifact_survives_for_gc() {
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "cascade notebook", "cascade")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "cascade workspace", "cascade")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
         .bootstrap().create_document(&ctx, workspace_id, "cascade.txt", 42, "text/plain")
         .await
@@ -195,11 +195,11 @@ async fn conversation_binding_keeps_artifact_when_workspace_binding_is_gone() {
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "dual binding notebook", "dual binding")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "dual binding workspace", "dual binding")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
         .bootstrap().create_document(&ctx, workspace_id, "dual.txt", 42, "text/plain")
         .await
@@ -295,11 +295,11 @@ async fn binding_rows_are_invisible_to_other_owners() {
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "rls binding notebook", "rls binding")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "rls binding workspace", "rls binding")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
         .bootstrap().create_document(&ctx, workspace_id, "rls.txt", 42, "text/plain")
         .await
@@ -523,11 +523,11 @@ async fn workspace_binding_keeps_artifact_out_of_session_delete_gc() {
     let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
-    let notebook = repo
-        .bootstrap().create_workspace(&ctx, "dual gc notebook", "dual gc")
+    let workspace = repo
+        .bootstrap().create_workspace(&ctx, "dual gc workspace", "dual gc")
         .await
         .unwrap();
-    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
     let document = repo
         .bootstrap()
         .create_document(&ctx, workspace_id, "dual-gc.txt", 42, "text/plain")
@@ -672,7 +672,7 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let workspace = repo
-        .bootstrap().create_workspace(&ctx, "sweep notebook", "sweep")
+        .bootstrap().create_workspace(&ctx, "sweep workspace", "sweep")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
@@ -740,13 +740,34 @@ async fn deleting_workspace_sweeps_session_only_artifacts_of_its_sessions() {
     assert_eq!(ws_doc_tasks, 1, "workspace-bound orphan also swept exactly once");
 }
 
-/// Review round-5 T1 (was claimed in §13, actually landed here): a dual-bound
-/// artifact (session + workspace) deleted CONCURRENTLY from both scopes must
-/// not survive as a zombie — the fixed-order dual-table lock serializes the
-/// two deletions, so the second deleter sees the artifact unbound and sweeps
-/// it into the async GC queue.
+/// Review round-5 T1 / round-6+7 Spec-7: a dual-bound artifact (session +
+/// workspace) deleted CONCURRENTLY from both scopes must not survive as a
+/// zombie, under BOTH deterministic winner orders. The barrier is a real
+/// database one: a helper connection takes SHARE ROW EXCLUSIVE on both
+/// binding tables FIRST; both deleter tasks then start (winner task spawned
+/// first → FIFO grant order) and block inside `lock_binding_tables`; the
+/// test waits until `pg_stat_activity` shows BOTH sessions waiting on a
+/// lock, and only then releases the helper lock. The winner therefore runs
+/// its capture window against live bindings and commits; the loser enters
+/// its capture AFTER the winner committed — the exact interleave the
+/// fixed-order dual-table lock must serialize. Serial execution cannot
+/// pass this test: without overlap, `pg_stat_activity` never shows two
+/// waiters and the poll times out.
 #[tokio::test]
 async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() {
+    run_dual_deletion_barrier_race("session_first").await;
+}
+
+/// The workspace-first winner order (review round-6 Spec-7): the workspace
+/// delete is granted the lock first, cascades the session, and commits; the
+/// session delete then runs against the already-cascaded session (legal:
+/// reports false) and still converges.
+#[tokio::test]
+async fn concurrent_deletion_workspace_first_order_sweeps_dual_bound_artifact() {
+    run_dual_deletion_barrier_race("workspace_first").await;
+}
+
+async fn run_dual_deletion_barrier_race(winner: &str) {
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
@@ -797,169 +818,100 @@ async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() 
         tx.commit().await.unwrap();
     }
 
-    // Deterministic race (review round-6 Spec-7): `tokio::join!` alone lets
-    // the two deletions run fully serially, proving nothing. Instead a helper
-    // connection holds SHARE ROW EXCLUSIVE on both binding tables BEFORE the
-    // deletions start, so whichever deletion runs first blocks inside
-    // `lock_binding_tables` while the other one has *also* entered its
-    // capture window once the lock lifts. Both transactions therefore
-    // provably overlap: the first deleter's capture ran before its cascade,
-    // and the second deleter re-captures AFTER the first committed — the
-    // exact interleave the fixed-order dual-table lock must serialize.
-    // Run both winner orders.
-    for winner in ["session_first", "workspace_first"] {
-        // Both scope-owner deletions race; each runs in its own connection.
-        let repo_a = PgAppRepository { pool: __bootstrap.pool.clone() };
-        let repo_b = PgAppRepository { pool: __bootstrap.pool.clone() };
-        let sessions_repo = repo_a.sessions();
-        let bootstrap_repo = repo_b.bootstrap();
-        let (deleted_session, deleted_workspace) = tokio::join!(
-            sessions_repo.delete_session(&ctx, session_id),
-            bootstrap_repo.delete_workspace(&ctx, workspace_id)
-        );
-        // Both deletions must report success — the second sees the scope row
-        // already gone only in its own scope table, not both, so each scope
-        // delete is exactly-once by its own predicate. A scheduling-dependent
-        // false-failure here (the reviewer's `deleted_session` concern) would
-        // mean the workspace cascade had already removed the session before
-        // its own delete ran — with the workspace-first order that is legal,
-        // and the session delete then reports false.
-        let _ = match winner {
-            "session_first" => {
-                assert!(deleted_session.unwrap(), "session delete must succeed when session-first");
-                assert!(deleted_workspace.unwrap());
-            }
-            _ => {
-                // Either order may win the lock race; accept either as long
-                // as no deletion errors out.
-                deleted_session.unwrap();
-                deleted_workspace.unwrap();
-            }
-        };
+    // Barrier connection: holds SHARE ROW EXCLUSIVE on both binding tables.
+    // The deleters block on the FIRST lock statement, before their capture
+    // window — releasing it hands the grant to the FIFO-front deleter.
+    let mut barrier =
+        <sqlx::postgres::PgConnection as sqlx::Connection>::connect(&database_url)
+            .await
+            .unwrap();
+    sqlx::query("begin").execute(&mut barrier).await.unwrap();
+    sqlx::query("lock table conversation_document_bindings in share row exclusive mode")
+        .execute(&mut barrier)
+        .await
+        .unwrap();
+    sqlx::query("lock table workspace_document_bindings in share row exclusive mode")
+        .execute(&mut barrier)
+        .await
+        .unwrap();
 
-        let (binding_rows, status, tasks) = {
+    // Winner-order control: which deleter task is spawned FIRST decides which
+    // connection enters the lock queue first (spawn order → connect order →
+    // FIFO grant order). The barrier poll below refuses to release until both
+    // tasks are queued, so the winner cannot complete serially. `winner` also
+    // selects the post-run assertions below.
+    let session_repo = repo.clone();
+    let workspace_repo = repo.clone();
+    let session_ctx = ctx.clone();
+    let workspace_ctx = ctx.clone();
+    let session_handle = tokio::spawn(async move {
+        session_repo
+            .sessions()
+            .delete_session(&session_ctx, session_id)
+            .await
+    });
+    let workspace_handle = tokio::spawn(async move {
+        workspace_repo
+            .bootstrap()
+            .delete_workspace(&workspace_ctx, workspace_id)
+            .await
+    });
+
+    // TRUE barrier: wait until BOTH deleters are queued on the binding-table
+    // lock (wait_event_type = 'Lock'), so the winner cannot finish serially
+    // before the loser even starts.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let waiting: i64 = {
             let mut tx = repo.raw().begin().await.unwrap();
             sqlx::query("select set_config('app.current_role', 'super_admin', true)")
                 .execute(tx.as_mut())
                 .await
                 .unwrap();
-            let bindings = sqlx::query_scalar::<_, i64>(
-                "select count(*)::bigint
-                 from conversation_document_bindings where artifact_id = $1
-                 union all
-                 select count(*)::bigint
-                 from workspace_document_bindings where artifact_id = $1",
+            let n = sqlx::query_scalar::<_, i64>(
+                "select count(*)::bigint from pg_stat_activity
+                 where datname = current_database()
+                   and wait_event_type = 'Lock'
+                   and pid <> pg_backend_pid()",
             )
-            .bind(document_id)
-            .fetch_all(tx.as_mut())
-            .await
-            .unwrap();
-            let status = sqlx::query_scalar::<_, String>(
-                "select status from documents where id = $1",
-            )
-            .bind(document_id)
-            .fetch_one(tx.as_mut())
-            .await
-            .unwrap();
-            let tasks = sqlx::query_scalar::<_, i64>(
-                "select count(*)::bigint from document_cleanup_tasks where document_id = $1",
-            )
-            .bind(document_id)
             .fetch_one(tx.as_mut())
             .await
             .unwrap();
             tx.commit().await.unwrap();
-            (bindings, status, tasks)
+            n
         };
-        assert_eq!(
-            binding_rows.iter().sum::<i64>(),
-            0,
-            "both binding kinds must be gone after both deletions"
+        if waiting >= 2 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "both deleters must block on the barrier within 30s (serial execution would fail here)"
         );
-        assert_eq!(
-            status, "deleting",
-            "the unbound dual artifact must enter async GC — no orphan leak past the race"
-        );
-        assert_eq!(
-            tasks, 1,
-            "exactly one cleanup task for the orphan (idempotency key dedupes concurrent sweeps)"
-        );
-        break; // single seeded fixture can only race once; the loop documents
-              // both orders — see the second test below for workspace-first.
-    }
-}
-
-/// Review round-6 Spec-7: the workspace-first winner order. The workspace
-/// delete wins the dual-table lock and cascades the session; the session
-/// delete then runs against an already-deleted session. Both paths must
-/// converge: artifact deleting, zero bindings, exactly one cleanup task.
-#[tokio::test]
-async fn concurrent_deletion_workspace_first_order_sweeps_dual_bound_artifact() {
-    let Some(database_url) = env::var("DATABASE_URL").ok() else {
-        return;
-    };
-    migration_role_context();
-    let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
-    __bootstrap.migrate().await.unwrap();
-    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
-    repo.bootstrap().migrate().await.unwrap();
-
-    let owner_user_id = UserId::from(Uuid::new_v4());
-    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
-        .with_actor_id(ActorId::new(Uuid::new_v4()));
-
-    let workspace = repo
-        .bootstrap().create_workspace(&ctx, "dual delete workspace b", "dual delete")
-        .await
-        .unwrap();
-    let workspace_id = Uuid::parse_str(&workspace.id).unwrap();
-    let session = repo
-        .sessions()
-        .create_session(&ctx, Some(workspace_id), Some("dual delete session b"), "chat", "agent")
-        .await
-        .unwrap();
-    let session_id = Uuid::parse_str(&session.id).unwrap();
-    let document = repo
-        .bootstrap()
-        .create_session_document(&ctx, session_id, "dual-b.txt", 42, "text/plain")
-        .await
-        .unwrap();
-    let document_id = Uuid::parse_str(&document.id).unwrap();
-    {
-        let mut tx = repo.raw().begin().await.unwrap();
-        sqlx::query("select set_config('app.current_user', $1, true)")
-            .bind(ctx.user_id().into_uuid().to_string())
-            .execute(tx.as_mut())
-            .await
-            .unwrap();
-        sqlx::query(
-            "insert into workspace_document_bindings (artifact_id, workspace_id, owner_user_id) values ($1, $2, $3)",
-        )
-        .bind(document_id)
-        .bind(workspace_id)
-        .bind(ctx.user_id().into_uuid())
-        .execute(tx.as_mut())
-        .await
-        .unwrap();
-        tx.commit().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 
-    let repo_a = PgAppRepository { pool: __bootstrap.pool.clone() };
-    let repo_b = PgAppRepository { pool: __bootstrap.pool.clone() };
-    let sessions_repo = repo_a.sessions();
-    // Workspace delete spawned first — it acquires the fixed-order lock
-    // first, then cascades the session. The session delete then runs against
-    // the already-cascaded session (legal: reports false).
-    let workspace_ctx = ctx.clone();
-    let workspace_handle = tokio::spawn({
-        let bootstrap_repo = repo_b.bootstrap();
-        async move { bootstrap_repo.delete_workspace(&workspace_ctx, workspace_id).await }
-    });
-    let deleted_workspace = workspace_handle.await.unwrap();
-    let deleted_session = sessions_repo.delete_session(&ctx, session_id).await;
-    assert!(deleted_workspace.unwrap(), "workspace delete must succeed");
-    // Session may or may not still exist depending on cascade timing.
-    let _ = deleted_session;
+    // Release: the FIFO-front deleter completes its whole transaction
+    // (capture → scope delete → cascade → sweep → commit), then the other
+    // enters its capture window against the post-commit state.
+    sqlx::query("commit").execute(&mut barrier).await.unwrap();
+    let deleted_session = session_handle.await.unwrap().unwrap();
+    let deleted_workspace = workspace_handle.await.unwrap().unwrap();
+    match winner {
+        "session_first" => {
+            assert!(
+                deleted_session,
+                "session-first winner must delete its scope row"
+            );
+            assert!(deleted_workspace, "workspace scope row survives the session cascade");
+        }
+        _ => {
+            assert!(
+                deleted_workspace,
+                "workspace-first winner must delete its scope row"
+            );
+            // The session was already cascaded — reporting false is legal.
+        }
+    }
 
     let (binding_rows, status, tasks) = {
         let mut tx = repo.raw().begin().await.unwrap();
@@ -998,14 +950,14 @@ async fn concurrent_deletion_workspace_first_order_sweeps_dual_bound_artifact() 
     assert_eq!(
         binding_rows.iter().sum::<i64>(),
         0,
-        "workspace-first cascade must remove both binding kinds"
+        "both binding kinds must be gone after both deletions"
     );
     assert_eq!(
         status, "deleting",
-        "the dual artifact must enter async GC in the workspace-first order too"
+        "the unbound dual artifact must enter async GC — no orphan leak past the race"
     );
     assert_eq!(
         tasks, 1,
-        "exactly one cleanup task — the sweep is idempotent by key"
+        "exactly one cleanup task for the orphan (idempotency key dedupes concurrent sweeps)"
     );
 }

@@ -62,25 +62,9 @@ impl MemoryDocumentStore {
 /// One zero-binding orphan judgment, shared by every deletion path in this
 /// adapter (workspace delete, per-session cascade, explicit unbound GC):
 /// mark the artifact `Deleting` iff no workspace and no conversation binding
-/// remains. Extracted so the three call sites cannot drift (review round-6
-/// judgement note).
-fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &str) {
-    let still_workspace_bound = state
-        .workspace_document_bindings
-        .iter()
-        .any(|row| row.artifact_id == artifact_id);
-    let still_conversation_bound = state
-        .conversation_document_bindings
-        .iter()
-        .any(|row| row.artifact_id == artifact_id);
-    if still_workspace_bound || still_conversation_bound {
-        return;
-    }
-    if let Some(stored) = state.documents.get_mut(artifact_id) {
-        stored.document.status = DocumentStatus::Deleting;
-        stored.document.updated_at = now_rfc3339();
-    }
-}
+/// remains. The single fact lives on `state_types::mark_artifact_if_unbound`,
+/// shared with `MemoryChatPersistence::delete_session` (review round-7 S3).
+use crate::state_types::mark_artifact_if_unbound;
 
 fn org_matches(auth: &AuthContext, candidate: &str) -> bool {
     candidate == current_owner_user_id(auth)

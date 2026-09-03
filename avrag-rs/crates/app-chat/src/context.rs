@@ -5,7 +5,6 @@ use app_billing::{BillingContext, CostEventRecord};
 use app_core::ChatPersistencePort;
 use app_core::{AnalyticsServiceCtx, StorageContext};
 use app_documents::DocumentContext;
-use common::AppError;
 use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
 use uuid::Uuid;
 
@@ -178,12 +177,6 @@ impl ChatContext {
             record,
         )
         .await;
-    }
-
-    pub async fn validate_rag_doc_scope(&self, doc_scope: &[String]) -> Result<(), AppError> {
-        self.documents
-            .validate_rag_doc_scope(&self.auth, &self.storage, doc_scope)
-            .await
     }
 
     pub fn document_is_deleting_or_deleted(status: &contracts::documents::DocumentStatus) -> bool {

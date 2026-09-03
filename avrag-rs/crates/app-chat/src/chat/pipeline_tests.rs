@@ -1190,6 +1190,10 @@ mod tests {
         inner: app_core::MemoryDocumentStore,
         list_session_files_calls: Arc<Mutex<usize>>,
         completed_workspace_calls: Arc<Mutex<usize>>,
+        /// Live scope-state reads — enforcement must NOT re-read the mutable
+        /// view after the freeze (review round-7 Spec-3); the counter proves
+        /// the zero-recheck contract.
+        scope_state_calls: Arc<Mutex<usize>>,
     }
 
     #[async_trait]
@@ -1236,6 +1240,7 @@ mod tests {
             auth: &AuthContext,
             document_ids: &[Uuid],
         ) -> Result<Vec<app_core::DocumentScopeState>, AppError> {
+            *self.scope_state_calls.lock().unwrap() += 1;
             self.inner.get_document_scope_states(auth, document_ids).await
         }
         async fn list_sources(
@@ -1452,12 +1457,18 @@ mod tests {
             assert!(updated);
         }
 
+        // Captures the FINAL AgentRequest the pipeline hands the agent —
+        // proving the injected session artifact actually reached execution
+        // scope (review round-7 Spec-3: EchoAgent discarded the request).
+        let captured_request: Arc<Mutex<Option<AgentRequest>>> = Arc::new(Mutex::new(None));
         let list_calls = Arc::new(Mutex::new(0usize));
         let workspace_calls = Arc::new(Mutex::new(0usize));
+        let scope_state_calls = Arc::new(Mutex::new(0usize));
         let counting = Arc::new(CountingScopeStore {
             inner: store,
             list_session_files_calls: list_calls.clone(),
             completed_workspace_calls: workspace_calls.clone(),
+            scope_state_calls: scope_state_calls.clone(),
         });
 
         let state = ChatContext {
@@ -1494,7 +1505,9 @@ mod tests {
             llm_ctx: LlmContext::new(None, None),
             orchestrator: OrchestratorContext::new(
                 Some(Arc::new(UnifiedAgentService::new(Box::new(
-                    PipelineEchoAgent,
+                    MetadataCaptureAgent {
+                        last: captured_request.clone(),
+                    },
                 )))),
                 None,
                 Arc::new(GuardPipeline::new()),
@@ -1511,7 +1524,9 @@ mod tests {
         // artifact. Enforcement consumes the SAME frozen facts — the foreign
         // id must be dropped by `allowed_ids()` while the frozen session
         // artifact joins server-side. (Review round-6 Spec-6: a pure-chat
-        // request never consumes the binding facts.)
+        // request never consumes the binding facts; review round-7 Spec-3:
+        // validation is frozen-facts-only — the live scope-state read is
+        // asserted to stay at zero below.)
         let mut request = request_with_mode("rag", vec![]);
         request.capabilities = Some(vec!["rag".into()]);
         request.session_id = Some(session.id.clone());
@@ -1576,6 +1591,24 @@ mod tests {
         assert!(
             snapshot["session_binding_versions"].as_array().unwrap().iter().any(|v| v["artifact_id"] == session_doc.id),
             "session artifact from the frozen facts is the RAG scope"
+        );
+        // Zero live scope-state reads: enforcement validated readiness from
+        // the frozen facts alone — a post-freeze status change cannot fork
+        // execution from the persisted snapshot (review round-7 Spec-3).
+        assert_eq!(
+            *scope_state_calls.lock().unwrap(),
+            0,
+            "enforcement must not re-read live document states after the freeze"
+        );
+        // The executed AgentRequest carries exactly the frozen scope: the
+        // foreign id dropped, the frozen session artifact injected — the
+        // capture agent proves the final execution scope, not just the
+        // snapshot (review round-7 Spec-3).
+        let executed = captured_request.lock().unwrap().clone().expect("agent ran");
+        assert_eq!(
+            executed.doc_scope,
+            vec![workspace_doc.id.clone(), session_doc.id.clone()],
+            "execution scope = frozen workspace selection + frozen session artifact"
         );
         // §10.4: the same frozen snapshot id is surfaced on the response and
         // persisted inside the assistant row's turn payload.

@@ -169,49 +169,63 @@ describe("SessionFileTray delete failure paths (review round-5)", () => {
     expect(state?.capabilities).toContain("rag");
   });
 
-  it("keeps a deleted binding dead even when a poll issued before the delete lands after it", async () => {
+  it("keeps a deleted binding dead when an in-flight poll GET lands after the delete", async () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
-    // Poll 1: the ready row is still server-side (dispatched before delete).
-    // Poll 2+: the binding is gone server-side — returns the row anyway to
-    // emulate a stale GET landing after the delete reconciled.
-    let polls = 0;
-    listChatSessionFilesMock.mockImplementation(async () => {
-      polls += 1;
-      return [readyRow()];
-    });
-    void polls;
-    // DELETE is slow: the window between optimistic removal and delete
-    // completion lets the in-flight poll (poll 2) resolve mid-delete, and the
-    // post-delete reconcile (poll 3) returns the stale row too. With the
-    // old in-flight-only guard (cleared on DELETE success) poll 3 would
-    // resurrect the file.
+    // Start in-flight: a `processing` row is what makes production start the
+    // 2s poll interval (review round-7 Spec-4 — the previous version seeded a
+    // completed row, which never polls, so no in-flight GET existed).
+    // Every GET returns the row for the whole test — server truth never
+    // converges, so the ONLY thing keeping the row dead is the tombstone.
+    listChatSessionFilesMock.mockResolvedValue([
+      readyRow({ binding_id: "bind-1", status: "processing" }),
+    ]);
+    // DELETE is slow: the poll interval fires while the delete is pending,
+    // so a poll GET is dispatched before the delete completes and resolves
+    // after it — the exact stale-GET-late interleave.
     deleteChatSessionFileMock.mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({ status: "deleted" }), 80)),
     );
 
-    render(
-      <ChatCanvas
-        selectedSourceIds={[]}
-        sessionId="sess-race"
-        workspaceId={null}
-      />,
-    );
-    const removeButton = await screen.findByRole("button", { name: "移除" });
-    await userEvent.click(removeButton);
+    vi.useFakeTimers();
+    try {
+      render(
+        <ChatCanvas
+          selectedSourceIds={[]}
+          sessionId="sess-race"
+          workspaceId={null}
+        />,
+      );
+      // Initial GET ran (component mounted with the processing row); the
+      // remove button renders with the row.
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync();
+        await Promise.resolve();
+      });
+      const removeButton = screen.getByRole("button", { name: "移除" });
+      expect(screen.getByText("report.txt")).toBeInTheDocument();
+      const getCallsAfterMount = listChatSessionFilesMock.mock.calls.length;
 
-    // The optimistic removal is synchronous; the stale poll dispatched
-    // before it must not re-add the row.
-    await waitFor(() => {
-      expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
-    });
-    // Wait past DELETE completion + the follow-up refresh: the tombstone
-    // must hold against the stale GET still returning the row.
-    await waitFor(() => {
+      await act(async () => {
+        fireEvent.click(removeButton);
+        // Flush the optimistic removal + the in-flight DELETE promise chain.
+        await vi.advanceTimersByTimeAsync(80);
+      });
       expect(deleteChatSessionFileMock).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    });
-    expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
+      // Optimistic removal + tombstone: the row is gone even though every
+      // GET still returns it.
+      expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
+
+      // The poll interval keeps firing (the GET view still has the row
+      // server-side): every tick is a stale GET landing after the delete —
+      // exactly the resurrect path the tombstone must hold shut.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+        await Promise.resolve();
+      });
+      expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
+      expect(listChatSessionFilesMock.mock.calls.length).toBeGreaterThan(getCallsAfterMount);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -198,25 +198,6 @@ impl RateRow {
         Some(sets[0].into())
     }
 
-    /// Representative rates for whitelist checks: first tier / peak / flat.
-    fn representative(&self) -> Option<OfficialRates> {
-        if let Some(tiers) = &self.tiers {
-            if let Some(tier) = tiers.first() {
-                return Some(
-                    RateSet {
-                        input: tier.input,
-                        cache: tier.cache,
-                        output: tier.output,
-                    }
-                    .into(),
-                );
-            }
-        }
-        if let Some(peak) = &self.peak {
-            return Some((*peak).into());
-        }
-        self.rates(0, Utc::now())
-    }
 }
 
 /// Parse configured rate rows from `PLATFORM_OFFICIAL_RATES_JSON`.
@@ -258,15 +239,24 @@ fn resolve_in(
         .find_map(|r| r.rates(prompt_tokens, at))
 }
 
-/// Whitelist check used by relay / startup validation: representative
-/// configured rates for a provider+model pair (`None` = not billable).
+/// Whitelist check used by relay / startup validation: the FIRST row matching
+/// `provider` + `model` must resolve through the SAME `rate_sets()` resolver
+/// the runtime debits with AND every declared rate set must be billable
+/// (positive finite input, non-negative cache/output). A lone-peak,
+/// zero-price, negative-price or empty-tiers row returns `None`, so a
+/// whitelisted call can never skip its debit (review round-7 P0: the old
+/// `representative()` accepted those shapes while the debit resolved `None`).
 pub fn official_rates_for(provider: &str, model: &str) -> Option<OfficialRates> {
     let p = provider.trim().to_ascii_lowercase();
     let m = model.trim().to_ascii_lowercase();
     configured_rate_rows()
         .iter()
         .filter(|r| r.matches(&p, &m))
-        .find_map(|r| r.representative())
+        .find_map(|r| {
+            r.rate_sets()
+                .filter(|sets| sets.iter().all(RateRow::billable_set))
+                .map(|sets| sets[0].into())
+        })
 }
 
 fn price_from_rates(
@@ -749,5 +739,86 @@ mod price_gate_tests {
             Some(1)
         );
         assert!(rates_present_in(good, "any", "dup"));
+    }
+
+    // ---- Round-7 P0: the whitelist path must consume the SAME resolver ----
+
+    /// Serializes `PLATFORM_OFFICIAL_RATES_JSON` mutation across tests
+    /// (wallet.rs tests own their own lock — process-wide env, so the two
+    /// locks must be taken together when both modules run concurrently).
+    static RATES_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Point `official_rates_for` at `json`, run `f`, restore the prior value.
+    fn with_rates<T>(json: &str, f: impl FnOnce() -> T) -> T {
+        let _guard = RATES_ENV_LOCK.lock().unwrap();
+        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+        // SAFETY: serialized by RATES_ENV_LOCK; restored before unlock.
+        unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", json) };
+        let out = f();
+        // SAFETY: serialized by RATES_ENV_LOCK.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
+                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+            }
+        }
+        out
+    }
+
+    /// The relay whitelist (`ensure_whitelisted`) and the startup warning
+    /// both gate on `official_rates_for`. A model whose row resolves `None`
+    /// at debit time (lone peak) or debits 0 fen (zero price) must NOT be
+    /// whitelisted — otherwise the call proceeds and the usage observer
+    /// fail-opens: call succeeds, wallet untouched (review round-7 P0).
+    #[test]
+    fn whitelist_refuses_unservable_and_non_billable_rows() {
+        let lone_peak = r#"[{"model_contains":"v4-flash",
+            "peak":{"input":300,"cache":10,"output":900}}]"#;
+        let zero = r#"[{"model_contains":"v4-flash","input":0,"output":0}]"#;
+        let negative = r#"[{"model_contains":"v4-flash","input":-20,"output":80}]"#;
+        let hybrid_flat_plus_peak = r#"[{"model_contains":"v4-flash","input":20,
+            "peak":{"input":300,"cache":10,"output":900}}]"#;
+        for bad in [lone_peak, zero, negative, hybrid_flat_plus_peak] {
+            assert_eq!(
+                with_rates(bad, || official_rates_for("deepseek", "v4-flash")),
+                None,
+                "whitelist must refuse: {bad}"
+            );
+        }
+        // A billable row whitelists AND carries the representative rate set
+        // (flat rows → the flat set; peak/off-peak rows → the peak set).
+        let flat = r#"[{"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#;
+        let rates = with_rates(flat, || official_rates_for("deepseek", "v4-flash")).unwrap();
+        assert_eq!(rates.input_fen_per_mtok, 100.0);
+        let peak_off_peak = r#"[{"model_contains":"v4-flash",
+            "peak":{"input":300,"cache":10,"output":900},
+            "off_peak":{"input":150,"cache":5,"output":450}}]"#;
+        let rates = with_rates(peak_off_peak, || official_rates_for("deepseek", "v4-flash"));
+        assert_eq!(rates.unwrap().input_fen_per_mtok, 300.0);
+    }
+
+    /// Every whitelisted pair must be debit-servable: `official_rates_for`
+    /// says Some only when `rates()` (the debit resolver) also says Some for
+    /// the same row. Lone-peak is the round-7 P0 counterexample — it used to
+    /// whitelist while `list_price_fen` resolved `None` at debit time.
+    #[test]
+    fn whitelist_and_runtime_agree_on_debit_servability() {
+        let lone_peak = r#"[{"model_contains":"v4-flash",
+            "peak":{"input":300,"cache":10,"output":900}}]"#;
+        with_rates(lone_peak, || {
+            assert!(official_rates_for("deepseek", "v4-flash").is_none());
+            assert_eq!(
+                list_price_fen("deepseek", "v4-flash", 1000, 1000, 0),
+                None,
+                "runtime cannot debit it either — whitelist must not have passed it"
+            );
+        });
+        let zero = r#"[{"model_contains":"v4-flash","input":0,"output":0}]"#;
+        with_rates(zero, || {
+            assert!(official_rates_for("deepseek", "v4-flash").is_none());
+            // Zero price resolves Some(0) fen at runtime → debit returns
+            // Ok(None) = unbilled call. The whitelist must stop it upstream.
+            assert_eq!(list_price_fen("deepseek", "v4-flash", 1000, 1000, 0), Some(0));
+        });
     }
 }

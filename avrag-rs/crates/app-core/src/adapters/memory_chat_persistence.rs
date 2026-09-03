@@ -276,7 +276,8 @@ impl SessionPort for MemoryChatPersistence {
         state.sessions.remove(&key);
         state.messages.remove(&key);
         // W2e parity with PG: dropping the session's bindings orphans their
-        // artifacts; zero-binding artifacts enter the deletion flow.
+        // artifacts; zero-binding artifacts enter the deletion flow — same
+        // single orphan judgment as the document-store paths (round-7 S3).
         let removed_bindings: Vec<ConversationBindingRow> = state
             .conversation_document_bindings
             .iter()
@@ -287,22 +288,7 @@ impl SessionPort for MemoryChatPersistence {
             .conversation_document_bindings
             .retain(|row| row.conversation_id != key);
         for removed in removed_bindings {
-            let artifact_id = removed.artifact_id;
-            let still_workspace_bound = state
-                .workspace_document_bindings
-                .iter()
-                .any(|row| row.artifact_id == artifact_id);
-            let still_conversation_bound = state
-                .conversation_document_bindings
-                .iter()
-                .any(|row| row.artifact_id == artifact_id);
-            if still_workspace_bound || still_conversation_bound {
-                continue;
-            }
-            if let Some(stored) = state.documents.get_mut(&artifact_id) {
-                stored.document.status = contracts::documents::DocumentStatus::Deleting;
-                stored.document.updated_at = now_rfc3339();
-            }
+            crate::state_types::mark_artifact_if_unbound(&mut state, &removed.artifact_id);
         }
         Ok(true)
     }

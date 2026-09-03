@@ -1,8 +1,32 @@
 use common::{Document, NotificationRow, ParsedPreviewItem};
 use contracts::UserPreferences;
 use contracts::chat::ChatMessage;
+use contracts::documents::DocumentStatus;
 use contracts::workspaces::{ChatSession, Workspace};
 use std::collections::BTreeMap;
+
+/// One zero-binding orphan judgment, THE single fact for every memory-adapter
+/// deletion path (workspace delete, per-session cascade, explicit unbound
+/// GC in `MemoryDocumentStore`, and `MemoryChatPersistence::delete_session`):
+/// mark the artifact `Deleting` iff no workspace and no conversation binding
+/// remains (review round-7 S3: the check had drifted into three copies).
+pub(crate) fn mark_artifact_if_unbound(state: &mut MemoryState, artifact_id: &str) {
+    let still_bound = state
+        .workspace_document_bindings
+        .iter()
+        .any(|row| row.artifact_id == artifact_id)
+        || state
+            .conversation_document_bindings
+            .iter()
+            .any(|row| row.artifact_id == artifact_id);
+    if still_bound {
+        return;
+    }
+    if let Some(stored) = state.documents.get_mut(artifact_id) {
+        stored.document.status = DocumentStatus::Deleting;
+        stored.document.updated_at = common::now_rfc3339();
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct MemoryState {

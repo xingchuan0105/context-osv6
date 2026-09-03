@@ -1,7 +1,4 @@
-use app_core::{
-    DocumentScopeValidator, DocumentStorePort, ObjectStoreConfig, StorageContext,
-    domain_rows::DocumentScopeState,
-};
+use app_core::{DocumentScopeValidator, DocumentStorePort, ObjectStoreConfig, StorageContext};
 use async_trait::async_trait;
 use common::AppError;
 use contracts::auth_runtime::AuthContext;
@@ -23,60 +20,6 @@ fn require_document_store(
 impl DocumentContext {
     pub fn new() -> Self {
         Self
-    }
-
-    pub async fn validate_rag_doc_scope(
-        &self,
-        auth: &AuthContext,
-        storage: &StorageContext,
-        doc_scope: &[String],
-    ) -> Result<(), AppError> {
-        let doc_ids = doc_scope
-            .iter()
-            .map(|id| {
-                Uuid::parse_str(id).map_err(|_| {
-                    AppError::validation(
-                        "invalid_doc_scope",
-                        format!("doc_scope contains an invalid document id: {id}"),
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let unique_doc_ids = doc_ids
-            .iter()
-            .copied()
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        let store = require_document_store(storage)?;
-        let states = store
-            .get_document_scope_states(auth, &unique_doc_ids)
-            .await?;
-        if states.len() != unique_doc_ids.len() {
-            return Err(AppError::validation(
-                "invalid_doc_scope",
-                "doc_scope contains a document that does not exist or is not accessible",
-            ));
-        }
-        if let Some(DocumentScopeState {
-            document_id,
-            status,
-        }) = states
-            .into_iter()
-            .find(|state| !matches!(state.status, DocumentStatus::Completed))
-        {
-            return Err(AppError::validation(
-                "invalid_doc_scope",
-                format!("document {document_id} is not ready for RAG execution: {status:?}"),
-            ));
-        }
-
-        if let Some(workspace_id) = auth.workspace_id() {
-            self.validate_document_scope(auth, storage, &workspace_id.to_string(), doc_scope)
-                .await?;
-        }
-        Ok(())
     }
 
     pub async fn resolve_citation_asset_url(

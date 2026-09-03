@@ -1058,4 +1058,31 @@ mod tests {
             assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         });
     }
+
+    /// Review round-7 P0: the whitelist must share the runtime's shape +
+    /// billable resolver. A row that resolves `None` at debit time (lone
+    /// peak, hybrid flat+lone-peak) or debits 0 fen (zero/negative price)
+    /// used to pass `official_rates_for` (representative first tier / peak)
+    /// → relay allowed the upstream call → UsageObserver fail-opened and the
+    /// call went unbilled. Refusal is the config error, not a runtime skip.
+    #[test]
+    fn whitelist_refuses_lone_peak_zero_and_negative_rate_rows() {
+        let base = r#"[{"model_contains":"v4-flash",<BODY>}]"#;
+        let lone_peak = base.replace(
+            "<BODY>",
+            r#""peak":{"input":300,"cache":10,"output":900}"#,
+        );
+        let hybrid = base.replace(
+            "<BODY>",
+            r#""input":20,"peak":{"input":300,"cache":10,"output":900}"#,
+        );
+        let zero = base.replace("<BODY>", r#""input":0,"output":0"#);
+        let negative = base.replace("<BODY>", r#""input":-20,"output":80"#);
+        for bad in [lone_peak, hybrid, zero, negative] {
+            assert!(
+                avrag_billing::official_rates_for("deepseek", "v4-flash").is_none(),
+                "unbillable/unservable row must not whitelist: {bad}"
+            );
+        }
+    }
 }

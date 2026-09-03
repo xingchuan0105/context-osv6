@@ -153,36 +153,36 @@ export function SessionFileTray({
       if (!picked || picked.length === 0 || disabled || busy) {
         return;
       }
-    setBusy(true);
-    setActionError(false);
-    try {
-      let activeSessionId = sessionId;
-      for (const file of Array.from(picked)) {
-        activeSessionId = await ensureSession();
-        if (!activeSessionId || !token) {
-          return;
+      setBusy(true);
+      setActionError(false);
+      try {
+        let activeSessionId = sessionId;
+        for (const file of Array.from(picked)) {
+          activeSessionId = await ensureSession();
+          if (!activeSessionId || !token) {
+            return;
+          }
+          const upload = await createChatSessionFileUpload(token, activeSessionId, {
+            filename: file.name,
+            file_size: file.size,
+            mime_type: file.type || "application/octet-stream",
+          });
+          const putResponse = await fetch(upload.upload_url, {
+            method: "PUT",
+            body: file,
+          });
+          if (!putResponse.ok) {
+            setActionError(true);
+            return;
+          }
+          await completeChatSessionFileUpload(token, upload.document_id);
         }
-        const upload = await createChatSessionFileUpload(token, activeSessionId, {
-          filename: file.name,
-          file_size: file.size,
-          mime_type: file.type || "application/octet-stream",
-        });
-        const putResponse = await fetch(upload.upload_url, {
-          method: "PUT",
-          body: file,
-        });
-        if (!putResponse.ok) {
-          setActionError(true);
-          return;
+        if (activeSessionId) {
+          await refresh();
         }
-        await completeChatSessionFileUpload(token, upload.document_id);
-      }
-      if (activeSessionId) {
-        await refresh();
-      }
-    } catch {
-      setActionError(true);
-    } finally {
+      } catch {
+        setActionError(true);
+      } finally {
         setBusy(false);
         if (inputRef.current) {
           inputRef.current.value = "";

@@ -595,8 +595,12 @@ pub(crate) async fn enforce_agent_scope(
             "No selected document is available in this conversation's context scope.",
         ));
     }
-    if is_rag_turn(req) && !req.doc_scope.is_empty() {
-        state.validate_rag_doc_scope(&req.doc_scope).await?;
-    }
+    // Ready/ownership validation is FROZEN-FACTS-ONLY (review round-7 Spec-3):
+    // `allowed_ids` already contains only artifacts whose ready state the
+    // freeze observed (session scope filters to completed; workspace scope is
+    // `completed_workspace_binding_versions`), so re-reading live
+    // `get_document_scope_states` here would let a post-freeze deletion flip
+    // enforcement against the persisted snapshot. The single freeze is the
+    // version boundary for both.
     Ok(())
 }
