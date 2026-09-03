@@ -216,9 +216,11 @@ impl PgUsageObserver {
         if platform_keys_relay_mode() {
             return;
         }
-        // LLM-only BYOK sets tenant.skip_wallet_debit — skip **chat** debits only.
+        // LLM-only BYOK (CredentialSource::Byok) skips **chat** debits only.
         // Embeddings still use platform keys and must debit (ADR-0010 acceptance).
-        if tenant.skip_wallet_debit && usage_kind == "chat" {
+        if tenant.credential_source == avrag_llm::CredentialSource::Byok
+            && usage_kind == "chat"
+        {
             return;
         }
         let Some(wallet) = self.wallet.as_ref() else {
@@ -275,7 +277,7 @@ impl PgUsageObserver {
             user_id: tenant.user_id,
             owner_user_id: tenant.owner_user_id,
             feature: Self::map_feature(&record.feature),
-            credential_source: tenant.credential_source.clone(),
+            credential_source: tenant.credential_source.as_str().to_string(),
             stage: if record.stage.is_empty() {
                 record.feature.clone()
             } else {
@@ -343,7 +345,7 @@ impl PgUsageObserver {
             user_id: tenant.user_id,
             owner_user_id: tenant.owner_user_id,
             feature: Self::map_feature(&record.feature),
-            credential_source: tenant.credential_source.clone(),
+            credential_source: tenant.credential_source.as_str().to_string(),
             stage: "embedding".to_string(),
             session_id: None,
             document_id: None,
@@ -753,8 +755,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: Uuid::nil(),
             user_id: Uuid::nil(),
-            skip_wallet_debit: false,
-        credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         };
         let observer = TaskTenantUsageObserver::new(Arc::new(StubUsageLimitStore), tenant);
         assert!(
@@ -796,8 +798,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         };
         let record = ChatUsageRecord {
             prompt_tokens: 1_000_000,
@@ -868,8 +870,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
-            skip_wallet_debit: true,
-        credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         };
         observer
             .record_chat_for(
@@ -946,8 +948,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         };
         observer
             .record_chat_for(
@@ -1007,8 +1009,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         };
         observer
             .record_chat_for(
@@ -1081,8 +1083,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: user_id,
             user_id,
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         };
         observer
             .record_chat_for(

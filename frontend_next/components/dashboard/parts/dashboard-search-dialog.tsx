@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "../../../lib/auth/context";
-import { conversationHref } from "../../../lib/chat/session-url";
+import {
+  conversationHref,
+  conversationScopeLabel,
+  conversationTitle,
+} from "../../../lib/chat/session-url";
 import { ConversationScopeKind } from "../../../lib/contracts/generated";
 import { formatUiMessage, type UiMessageKey } from "../../../lib/i18n/messages";
 import {
@@ -98,18 +102,12 @@ export function DashboardSearchDialog({ onClose }: { onClose: () => void }) {
   const rows: SearchRow[] = [];
   if (hits) {
     for (const session of hits.sessions.slice(0, 20)) {
-      const title =
-        session.title?.trim() || formatUiMessage(locale, "commandPalette.sessionUntitled");
-      const workspaceName =
-        session.workspace_name?.trim() || session.workspace_id?.trim() || "";
+      const title = conversationTitle(locale, session);
       rows.push({
         id: `sess-${session.id}`,
         group: "sessions",
         title,
-        meta:
-          session.scope_kind === ConversationScopeKind.Workspace
-            ? workspaceName
-            : formatUiMessage(locale, "chat.personalContext"),
+        meta: conversationScopeLabel(locale, session),
         description: "",
         href: conversationHref(session),
       });

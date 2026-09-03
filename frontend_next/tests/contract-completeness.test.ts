@@ -16,6 +16,7 @@ const EXPECTED_CHAT_RESPONSE_KEYS = [
   "answer",
   "answer_blocks",
   "citations",
+  "credential_source",
   "degrade_trace",
   "guard_report",
   "message_id",
@@ -24,6 +25,7 @@ const EXPECTED_CHAT_RESPONSE_KEYS = [
   "session_id",
   "sources",
   "tool_results",
+  "turn_context_snapshot_id",
   "trace",
   "usage",
 ] as const satisfies readonly (keyof ChatResponse)[];

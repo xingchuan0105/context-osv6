@@ -334,8 +334,8 @@ impl TaskProcessor for PgTaskProcessor {
                     .actor_id()
                     .map(|a| a.into_uuid())
                     .unwrap_or_else(Uuid::nil),
-                skip_wallet_debit: false,
-                credential_source: "official".to_string(),
+                credential_source: avrag_llm::CredentialSource::Official,
+
             };
             obs.rebind(tenant).await;
         }

@@ -41,12 +41,15 @@ impl ChatContext {
                 tool_results: Vec::new(),
                 usage: None,
                 agent_operation_guide: None,
+                turn_context_snapshot_id: None,
+                credential_source: None,
             },
             llm_usage: None,
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
             assistant_turn_metadata: None,
+            turn_scope_facts: Default::default(),
         })
     }
 
@@ -119,11 +122,14 @@ pub(crate) fn build_chat_execution_from_result(
             }).collect(),
             usage: response_usage,
             agent_operation_guide: None,
+            turn_context_snapshot_id: None,
+            credential_source: agent_result.credential_source.clone(),
         },
         llm_usage,
         debug_metadata: params.debug_metadata,
         tokens_emitted: false,
         citations_emitted: false,
         assistant_turn_metadata: None,
+        turn_scope_facts: Default::default(),
     }
 }

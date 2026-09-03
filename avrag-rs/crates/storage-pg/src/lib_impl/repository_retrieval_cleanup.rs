@@ -206,6 +206,59 @@ impl ChunkRepository {
         Ok(result.rows_affected())
     }
 
+    /// W2e review fix: `turn_evidence` segments must collapse with the
+    /// citations — strip chunk/asset/parse identifiers and mark the source
+    /// deleted, keeping the same irreducible facts as the citation tombstone.
+    pub async fn prune_turn_evidence_to_tombstones(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+    ) -> Result<u64, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(tx.inner())
+            .await?;
+        let result = sqlx::query(
+            r#"
+            update chat_messages m
+            set turn_metadata = jsonb_set(
+                m.turn_metadata,
+                '{turn_evidence,segments}',
+                sub.pruned
+            )
+            from (
+                select m2.id as message_id,
+                       coalesce(
+                           jsonb_agg(
+                               case
+                                   when seg ->> 'artifact_id' = $1::text
+                                       then (seg - 'chunk_id' - 'asset_id' - 'parse_version')
+                                            || '{"citation_status": "source_deleted"}'::jsonb
+                                   else seg
+                               end
+                               order by ord
+                           ),
+                           '[]'::jsonb
+                       ) as pruned
+                from chat_messages m2
+                cross join lateral jsonb_array_elements(
+                    m2.turn_metadata -> 'turn_evidence' -> 'segments'
+                ) with ordinality as t(seg, ord)
+                where m2.turn_metadata ? 'turn_evidence'
+                  and m2.turn_metadata -> 'turn_evidence' -> 'segments'
+                        @> jsonb_build_array(jsonb_build_object('artifact_id', $1::text))
+                group by m2.id
+            ) sub
+            where m.id = sub.message_id
+            "#,
+        )
+        .bind(document_id.to_string())
+        .execute(tx.inner())
+        .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected())
+    }
+
     pub async fn mark_document_deleted(
         &self,
         context: &AuthContext,

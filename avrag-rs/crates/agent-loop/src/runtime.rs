@@ -206,6 +206,13 @@ pub struct AgentRunResult {
     /// Terminal decision of the loop. `None` for legacy single-shot agents.
     #[serde(default)]
     pub final_decision: Option<FinalDecision>,
+    /// Credential attribution of the primary model this run (chat-first W3):
+    /// `official` | `byok`. None when the runner does not track it.
+    #[serde(default)]
+    pub credential_source: Option<String>,
+    /// Model id the primary client actually carried this run (bound config).
+    #[serde(default)]
+    pub effective_model: Option<String>,
 
     // ===== v5 white-box fields (all serde(default) for backward compat) =====
     /// Trace ID for distributed tracing.

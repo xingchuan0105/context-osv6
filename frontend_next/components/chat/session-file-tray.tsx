@@ -44,6 +44,8 @@ type SessionFileTrayProps = {
   onSessionChange?: (sessionId: string) => void;
   /** True while any explicitly attached file has not reached a terminal state. */
   onBlockedChange?: (blocked: boolean) => void;
+  /** Number of ready files — the canvas auto-attaches retrieval on >0. */
+  onReadyCountChange?: (readyCount: number) => void;
 };
 
 /**
@@ -57,6 +59,7 @@ export function SessionFileTray({
   disabled,
   onSessionChange,
   onBlockedChange,
+  onReadyCountChange,
 }: SessionFileTrayProps) {
   const { locale } = useUiPreferences();
   const [files, setFiles] = useState<SessionFileRow[]>([]);
@@ -112,10 +115,15 @@ export function SessionFileTray({
   }, [files, refresh, sessionId, token]);
 
   const blocked = files.some((file) => NON_READY_BLOCKING_STATUSES.has(file.status));
+  const readyCount = files.filter((file) => file.status === "completed").length;
 
   useEffect(() => {
     onBlockedChange?.(blocked);
   }, [blocked, onBlockedChange]);
+
+  useEffect(() => {
+    onReadyCountChange?.(readyCount);
+  }, [readyCount, onReadyCountChange]);
 
   const ensureSession = useCallback(async (): Promise<string | null> => {
     if (sessionId) {

@@ -111,6 +111,7 @@ export function ChatCanvas({
   const [draft, setDraft] = useState("");
   const [composerClearance, setComposerClearance] = useState<number | null>(null);
   const [sessionFilesBlocked, setSessionFilesBlocked] = useState(false);
+  const [sessionReadyFiles, setSessionReadyFiles] = useState(0);
   const isShareMode = Boolean(shareToken?.trim());
   const isPersonalConversation = workspaceId === null;
   const uiScopeId = workspaceId ?? `chat:${sessionId ?? "new"}`;
@@ -234,6 +235,28 @@ export function ChatCanvas({
       { manual: false },
     );
   }, [selectedSourceIds, capabilities, uiScopeId, fixedCaps, isShareMode]);
+
+  // Session files ready → retrieval joins by default (server derives the doc
+  // scope from bindings; this only flips the capability chip like the
+  // workspace source-selection foolproofing above).
+  const previousReadyRef = useRef<{ scopeId: string; count: number } | null>(null);
+  useEffect(() => {
+    if (fixedCaps || isShareMode || !isPersonalConversation) {
+      return;
+    }
+    const previous = previousReadyRef.current;
+    previousReadyRef.current = { scopeId: uiScopeId, count: sessionReadyFiles };
+    if (sessionReadyFiles === 0 || previous?.scopeId === uiScopeId) {
+      return;
+    }
+    const current = getWorkspaceUiState(uiScopeId);
+    if (current.capabilitiesManual || current.capabilities.includes("rag")) {
+      return;
+    }
+    workspaceUiStore
+      .getState()
+      .setCapabilities(uiScopeId, [...current.capabilities, "rag"], { manual: false });
+  }, [sessionReadyFiles, uiScopeId, fixedCaps, isShareMode, isPersonalConversation]);
 
   const handleCapabilitiesChange = useCallback(
     (next: WorkspaceCapability[]) => {
@@ -438,6 +461,7 @@ export function ChatCanvas({
         <SessionFileTray
           disabled={chatSession.isStreaming}
           onBlockedChange={setSessionFilesBlocked}
+          onReadyCountChange={setSessionReadyFiles}
           onSessionChange={(id) => onSessionChange?.(id)}
           sessionId={sessionId}
           token={auth.token || ""}

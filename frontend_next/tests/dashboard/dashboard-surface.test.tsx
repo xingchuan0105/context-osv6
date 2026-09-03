@@ -432,7 +432,10 @@ describe("DashboardSurface", () => {
     expect(workspaceSessionLink.getAttribute("href")).toBe(
       "/dashboard/ws-3?session=sess-9",
     );
-    expect(within(workspaceSessionLink).getByText("Gamma")).toBeTruthy();
+    // Scope meta now uses the shared localized label (chat.workspaceContext).
+    expect(
+      within(workspaceSessionLink).getByText("工作区 · Gamma"),
+    ).toBeTruthy();
     const personalSessionLink = within(searchDialog).getByRole("link", {
       name: "Gamma 个人对话",
     });

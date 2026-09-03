@@ -66,6 +66,16 @@ impl ChatContext {
             let allowed = facts.allowed_ids();
             req.doc_scope.retain(|id| allowed.contains(id));
         }
+        // Chat-first closure: ready session artifacts join RAG turns by default.
+        // The scope is derived server-side from typed bindings — the client can
+        // narrow workspace selections but cannot add or hide session files.
+        if req.agent_type == "rag" {
+            for (_, artifact_id) in &facts.session_artifacts {
+                if !req.doc_scope.contains(artifact_id) {
+                    req.doc_scope.push(artifact_id.clone());
+                }
+            }
+        }
         Ok(())
     }
 
@@ -77,6 +87,11 @@ impl ChatContext {
         effective_workspace_id: Option<Uuid>,
     ) -> Result<TurnScopeFacts, AppError> {
         let mut facts = TurnScopeFacts::default();
+        // No document store wired (bare memory test harnesses) → no file scope;
+        // enforcement falls back to the pre-existing structural gates.
+        if self.storage.document_store().is_none() {
+            return Ok(facts);
+        }
         if let Some(session_id) = session_id {
             if let Some(store) = self.storage.document_store() {
                 for file in store.list_session_files(&self.auth, session_id).await? {
@@ -190,7 +205,29 @@ impl ChatContext {
         // Fail closed **before** LLM (not post-hoc wallet fail-open alone).
         // NOTE: usage_hold is placed only after ALL preflight gates pass (in pipeline),
         // so budget/hard-block rejections never leave a leaked hold.
-        if let Err(error) = self.billing.ensure_payer_can_spend(&self.auth).await {
+        // Chat-first W3: consult the session's persisted model_role BEFORE the
+        // spend gate — quick_chat sessions are exempt only via an active Quick
+        // Chat BYOK config; generic llm BYOK never substitutes (and vice versa).
+        let byok_purpose = match req.session_id.as_deref() {
+            Some(session_id) => {
+                let model_role = self
+                    .get_session(session_id)
+                    .await
+                    .map(|session| session.model_role)
+                    .unwrap_or_else(|| "agent".to_string());
+                if model_role == "quick_chat" {
+                    app_core::ProviderSecretPurpose::QuickChat
+                } else {
+                    app_core::ProviderSecretPurpose::Llm
+                }
+            }
+            None => app_core::ProviderSecretPurpose::Llm,
+        };
+        if let Err(error) = self
+            .billing
+            .ensure_payer_can_spend_for(&self.auth, byok_purpose)
+            .await
+        {
             if error.code() == "payer_funds_required" {
                 // Throttled soft notify: emit for the billable owner (auth.user_id).
                 let _ = self.emit_funds_required_notification().await;
@@ -280,7 +317,7 @@ impl ChatContext {
 
         let trace_id = Uuid::new_v4().to_string();
         tracing::Span::current().record("trace_id", &trace_id);
-        let notebook_uuid = effective_workspace_id;
+        let workspace_uuid = effective_workspace_id;
         if req.source_type.as_deref() == Some("share")
             && req.workspace_id.as_ref().is_some()
             && effective_workspace_id != self.auth.workspace_id()
@@ -296,13 +333,13 @@ impl ChatContext {
             .map(|actor| actor.into_uuid())
             .unwrap_or_else(Uuid::nil);
 
-        let guard_scope = notebook_uuid
+        let guard_scope = workspace_uuid
             .map(|id: Uuid| vec![id.to_string()])
             .unwrap_or_else(|| req.doc_scope.clone());
 
         info!(
             workspace_id = ?req.workspace_id,
-            notebook_uuid = ?notebook_uuid,
+            workspace_uuid = ?workspace_uuid,
             request_doc_scope = ?req.doc_scope,
             guard_scope = ?guard_scope,
             "chat preflight scope inputs"
@@ -313,7 +350,7 @@ impl ChatContext {
             self.auth.user_id().into_uuid(),
             user_uuid,
             &guard_scope,
-            notebook_uuid,
+            workspace_uuid,
             Some(trace_id.clone()),
         );
 
@@ -355,7 +392,7 @@ impl ChatContext {
                     self.auth.user_id().into_uuid(),
                     user_uuid,
                     &guard_scope,
-                    notebook_uuid,
+                    workspace_uuid,
                     Some(trace_id.clone()),
                 );
                 if !msg_guard.passed {
@@ -394,7 +431,8 @@ impl ChatContext {
         Ok(ChatPreflight {
             trace_id,
             user_uuid,
-            notebook_uuid,
+            workspace_uuid,
+            byok_purpose,
             // Hold placed in pipeline after cache miss + all gates (not here).
             usage_hold_id: None,
             usage_hold_fen: None,
@@ -411,7 +449,7 @@ impl ChatContext {
             let workspace_id = chat_workspace_id_for_request(self, req)?
                 .map(|value| value.to_string())
                 .ok_or_else(|| {
-                    AppError::validation("notebook_required", "workspace_id is required")
+                    AppError::validation("workspace_required", "workspace_id is required")
                 })?;
             let session_id = req
                 .session_id
@@ -474,7 +512,7 @@ fn chat_workspace_id_for_request(
 
 /// Binding-derived scope facts of one turn: which ready artifacts are visible
 /// through the conversation binding vs a workspace binding.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TurnScopeFacts {
     /// (binding_id, artifact_id) pairs visible via the conversation binding.
     pub session_artifacts: Vec<(String, String)>,

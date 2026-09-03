@@ -20,7 +20,10 @@ pub(crate) struct StreamConfig {
 pub(crate) struct ChatPreflight {
     pub trace_id: String,
     pub user_uuid: Uuid,
-    pub notebook_uuid: Option<Uuid>,
+    pub workspace_uuid: Option<Uuid>,
+    /// Which BYOK purpose the spend gate / hold placement consulted — derived
+    /// from the session's persisted model_role (quick_chat ↔ QuickChat).
+    pub byok_purpose: app_core::ProviderSecretPurpose,
     /// Wallet hold placed for estimated platform spend (released after turn).
     #[serde(default)]
     pub usage_hold_id: Option<Uuid>,
@@ -49,6 +52,9 @@ pub(crate) struct ChatExecution {
     /// Assistant-row `turn_metadata` (e.g. `{ "progress": { … } }`) for refresh restore.
     #[serde(default)]
     pub assistant_turn_metadata: Option<serde_json::Value>,
+    /// Binding-derived scope facts frozen BEFORE execution (chat-first review
+    /// fix: the snapshot must not re-query a mutable view after the answer).
+    pub turn_scope_facts: super::service::TurnScopeFacts,
 }
 
 /// Which product lane owns this pipeline run (ADR-0007).
@@ -156,6 +162,16 @@ async fn run_pipeline_inner(
     active_hold: &mut Option<(Uuid, i64)>,
 ) -> Result<ChatResponse, AppError> {
     let session = state.resolve_chat_session(&request).await?;
+    // Freeze the binding-derived scope facts BEFORE execution (review fix:
+    // the snapshot must not re-query a mutable view after the answer).
+    let session_uuid = Uuid::parse_str(&session.id).ok();
+    let session_workspace = session
+        .workspace_id
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok());
+    let turn_scope_facts = state
+        .turn_scope_facts(session_uuid, session_workspace)
+        .await?;
 
     // ADR-0010 §9: exact first (no embed), then semantic with embed.
     if request.source_type.as_deref() == Some("share") {
@@ -207,8 +223,9 @@ async fn run_pipeline_inner(
     // All gates passed and cache miss → atomic hold for estimated platform spend.
     if let Some((id, fen)) = state
         .billing
-        .place_usage_hold_for_estimate(
+        .place_usage_hold_for_estimate_for(
             &state.auth,
+            preflight.byok_purpose,
             preflight.estimated_input_tokens,
             1024,
         )
@@ -250,6 +267,9 @@ async fn run_pipeline_inner(
                 .await?
         }
     };
+    // Scope facts are frozen pre-execution (above); attach them here so the
+    // snapshot written with this turn is the send-time view, not a re-query.
+    execution.turn_scope_facts = turn_scope_facts;
 
     let audit_action = match execution.mode.as_str() {
         "search" => AuditAction::SearchRequest,
@@ -366,6 +386,8 @@ async fn emit_share_cache_hit(
         tool_results: vec![],
         usage: None,
         agent_operation_guide: None,
+        turn_context_snapshot_id: None,
+        credential_source: None,
     };
     if let Some(config) = stream_config {
         let mid = crate::stream_event_message_id(None);

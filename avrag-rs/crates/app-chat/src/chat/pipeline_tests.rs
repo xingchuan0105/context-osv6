@@ -691,7 +691,7 @@ mod tests {
                 trace: TraceInfo {
                     mode: "chat".to_string(),
                 },
-                degrade_trace: vec![],
+                degrade_trace: Vec::new(),
                 planner_output: None,
                 mode_debug: Some(ModeDebug {
                     rag: None,
@@ -703,12 +703,15 @@ mod tests {
                 tool_results: vec![],
                 usage: None,
                 agent_operation_guide: None,
+                turn_context_snapshot_id: None,
+                credential_source: None,
             },
             llm_usage: None,
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
             assistant_turn_metadata: None,
+            turn_scope_facts: Default::default(),
         }
     }
 
@@ -1031,7 +1034,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dispatch_rag_with_notebook_docscope_runs_rag_pipeline() {
+    async fn dispatch_rag_with_workspace_docscope_runs_rag_pipeline() {
         let workspace_id = new_id();
         let notebook = Workspace {
             id: workspace_id.clone(),

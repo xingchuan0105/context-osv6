@@ -69,14 +69,14 @@ impl ChatContext {
         let Ok(pg) = self.require_chat_persistence() else {
             return Vec::new();
         };
-        let notebook_uuid = match workspace_id {
+        let workspace_uuid = match workspace_id {
             Some(value) => match Uuid::parse_str(value) {
                 Ok(workspace_id) => Some(workspace_id),
                 Err(_) => return Vec::new(),
             },
             None => None,
         };
-        pg.list_sessions(&self.auth, notebook_uuid)
+        pg.list_sessions(&self.auth, workspace_uuid)
             .await
             .unwrap_or_default()
     }

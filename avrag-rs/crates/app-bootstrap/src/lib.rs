@@ -369,8 +369,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
                 .actor_id()
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(uuid::Uuid::nil),
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: avrag_llm::CredentialSource::Official,
+
         }
     };
     let embedding_observer = usage_observer

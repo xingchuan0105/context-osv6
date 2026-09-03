@@ -397,6 +397,17 @@ pub(crate) async fn process_document_cleanup_task(
             "citation tombstones recorded"
         );
     }
+    let evidence_pruned = repo
+        .chunks()
+        .prune_turn_evidence_to_tombstones(&context, task.document_id)
+        .await?;
+    if evidence_pruned > 0 {
+        info!(
+            document_id = %task.document_id,
+            messages_pruned = evidence_pruned,
+            "turn evidence tombstones recorded"
+        );
+    }
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "mark document deleted")
         .await?;
     if !repo

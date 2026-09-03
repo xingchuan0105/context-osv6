@@ -593,3 +593,61 @@ async fn workspace_binding_keeps_artifact_out_of_session_delete_gc() {
     };
     assert_eq!(status, "pending", "artifact stays untouched while any binding remains");
 }
+
+#[tokio::test]
+async fn deleting_conversation_sweeps_unbound_artifacts_into_cleanup() {
+    let Some(database_url) = env::var("DATABASE_URL").ok() else {
+        return;
+    };
+    migration_role_context();
+    let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+    __bootstrap.migrate().await.unwrap();
+    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    repo.bootstrap().migrate().await.unwrap();
+
+    let owner_user_id = UserId::from(Uuid::new_v4());
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
+        .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+    let session = repo
+        .sessions()
+        .create_session(&ctx, None, Some("gc sweep session"), "chat", "quick_chat")
+        .await
+        .unwrap();
+    let session_id = Uuid::parse_str(&session.id).unwrap();
+    let document = repo
+        .bootstrap()
+        .create_session_document(&ctx, session_id, "sweep.txt", 42, "text/plain")
+        .await
+        .unwrap();
+    let document_id = Uuid::parse_str(&document.id).unwrap();
+
+    let deleted = repo.sessions().delete_session(&ctx, session_id).await.unwrap();
+    assert!(deleted);
+
+    let (status, tasks) = {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        let status = sqlx::query_scalar::<_, String>(
+            "select status from documents where id = $1",
+        )
+        .bind(document_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        let tasks = sqlx::query_scalar::<_, i64>(
+            "select count(*)::bigint from document_cleanup_tasks where document_id = $1",
+        )
+        .bind(document_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        (status, tasks)
+    };
+    assert_eq!(status, "deleting", "orphaned artifact must enter async GC");
+    assert_eq!(tasks, 1, "exactly one cleanup task for the orphan");
+}

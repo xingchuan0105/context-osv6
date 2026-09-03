@@ -147,5 +147,7 @@ pub(super) fn no_chunks_response(
         tool_results: Vec::new(),
         usage: None,
         agent_operation_guide: None,
+        turn_context_snapshot_id: None,
+        credential_source: None,
     }
 }

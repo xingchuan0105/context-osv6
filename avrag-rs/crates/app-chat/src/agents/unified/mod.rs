@@ -25,7 +25,7 @@ use agent_loop::events::{AgentEvent, AgentEventSink};
 use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 
 use app_core::{ChatPersistencePort, ProviderSecretPurpose, ProviderSecretStorePort};
-use avrag_llm::{LlmClient, TenantContext, UsageObserver};
+use avrag_llm::{ CredentialSource, LlmClient, TenantContext, UsageObserver};
 use avrag_search::SearchProvider;
 use common::AppError;
 use std::sync::Arc;
@@ -272,16 +272,12 @@ impl Agent for UnifiedAgent {
                 .actor_id()
                 .map(|id| id.into_uuid())
                 .unwrap_or_else(Uuid::nil),
-            skip_wallet_debit: false,
             credential_source: if byok.is_some() {
-                "byok".to_string()
+                avrag_llm::CredentialSource::Byok
             } else {
-                "official".to_string()
+                avrag_llm::CredentialSource::Official
             },
         };
-        if byok.is_some() {
-            tenant.skip_wallet_debit = true;
-        }
 
         match request.kind {
             crate::agents::AgentKind::Chat => {
@@ -493,10 +489,9 @@ impl UnifiedAgent {
         // overlays Lead / synthesis; retrieval still bills the wallet.
         let retrieve_llm = self.retrieve_llm_client.as_ref().map(|client| {
             let mut retrieve_tenant = tenant.clone();
-            retrieve_tenant.skip_wallet_debit = false;
             // Retrieval rounds run on the platform RETRIEVE_LLM even under BYOK
-            // primaries — their usage segments must read `official`.
-            retrieve_tenant.credential_source = "official".to_string();
+            // primaries — their usage segments must read `official` and debit.
+            retrieve_tenant.credential_source = avrag_llm::CredentialSource::Official;
             let client = client.clone().with_stage(&stage_id).with_request_context(
                 request
                     .session_id
@@ -512,6 +507,7 @@ impl UnifiedAgent {
             Arc::new(client)
         });
 
+        let effective_model = llm.config.model.clone();
         let skill_registry = Arc::new(agent_tools::capability::CapabilityRegistry::standard());
         let base_loop = agent_loop::r#loop::ReActLoop::new(llm, skill_registry)
             .with_chat_persistence(self.chat_persistence.clone());
@@ -522,6 +518,10 @@ impl UnifiedAgent {
         let loop_agent = configure_loop(base_loop);
         let mut result = loop_agent.run(&mode, request, sink).await?;
         result.routing_decision = Some(stage_id);
+        // Chat-first W3 attribution: what the primary client actually carried.
+        // The bound client's config reflects the BYOK overlay when one applied.
+        result.credential_source = Some(tenant.credential_source.as_str().to_string());
+        result.effective_model = Some(effective_model);
         Ok(result)
     }
 }

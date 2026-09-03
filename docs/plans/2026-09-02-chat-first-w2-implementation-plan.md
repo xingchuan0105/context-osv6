@@ -274,3 +274,25 @@ dev 栈 tmux session `context-os-dev` 保持运行（frontend :3000 / api :8080�
 - **工作区删除孤儿清扫**：PG `delete_workspace` 同事务先捕获绑定 artifact、级联删 binding 后逐个判定零 binding → 软删 + 入队 cleanup + dead-letter 在途 ingestion；memory adapter 同语义（inline 标 Deleting）。
 - **引用墓碑**：worker 清理序列新增 `prune_document_citations_to_tombstones`——按 doc_id 重写 `chat_messages.citations` JSONB，剥离 `content/preview/image_url/asset_id` 并置 `citation_status="source_deleted"`，保留文件名/页码/ID 等不可还原事实；前端渲染禁用态墓碑 chip（`data-citation-status`）。
 - 门 E（已通过）：storage-pg 37（新增 GC 幂等、双 binding 保留、工作区级联孤儿清扫用例；W2a 时代「孤儿保持 pending」断言按 W2e 语义升级为 `deleting`）、app-chat 88、delegate 15、api_key 16、app-core 41（单线程）、前端 529/2、`git diff --check` 干净、`code-review-graph update` 完成。
+
+
+## 11. 审查修复波（2026-09-03，发布阻断项清零）
+
+外部审查（`e3af8c09..HEAD` 静态审查，3×P0 + 3×P1 + Standards）全部修复并实测验证：
+
+| 项 | 修复 | 验证 |
+|---|---|---|
+| **P0-1 计费前置用途错配** | `ensure_payer_can_spend_for` / `place_usage_hold_for_estimate_for`（billing_context）：preflight 先解 session 的持久化 `model_role`，quick_chat 会话只认 `QuickChat` BYOK、agent 会话只认 `Llm` BYOK——双向不再错配，官方调用不再出现未预留资金 | 编译 + billing 63 |
+| **P0-2 Session 文件不可检索** | `recompute_allowed_doc_scope` 对 rag 轮**服务端注入** ready 会话 artifacts（设计 §9.1 scope 由 bindings 派生；客户端只能收窄 workspace 选择）；前端 ready 文件自动挂 rag chip（对齐工作区防呆） | 端到端：**不传 doc_scope** 的 RAG 轮命中会话文件，`source_scope=session` |
+| **P0-3 删 Conversation 泄漏** | PG `delete_session` 同事务清扫：捕获绑定 artifacts → FK 级联后零 binding 判定 → 软删 + cleanup task + ingestion dead-letter（与 workspace 删除同契约）；memory 同语义；新增存储用例 | storage-pg 38（新用例过）+ 端到端删除链 |
+| **P1-4 Snapshot 非发送时** | scope facts 在 `run_pipeline_inner` 执行前冻结并挂到 `ChatExecution`；persist 只消费冻结值（删除 re-query 与 `unwrap_or_default`）；snapshot 增 `snapshot_id`、`conversation_history_boundary`（persisted_messages）、`credential_source`、`effective_model` | 端到端响应带 snapshot id |
+| **P1-5 Evidence 未墓碑** | worker 清理序列新增 `prune_turn_evidence_to_tombstones`：按 artifact 重写 `turn_evidence.segments`，剥离 chunk/asset/parse 标识并置 `source_deleted` | 端到端：citations 与 evidence 同步墓碑 |
+| **P1-6 完成事件缺字段** | `ChatResponse` 增 `turn_context_snapshot_id` + `credential_source`（skip-None；persist 先于 SSE Done，live 事件同源携带）；contracts 已再生 + 完整性测试更新 | 端到端响应字段断言 |
+| **P2 notebook_* 命名** | 本波触及文件内 `notebook_uuid/notebook_key/notebook_filter/ChatPreflight.notebook_uuid/notebook_required` 全部更名 workspace_* | 编译 |
+| **P2 credential String×skip bool** | `llm::CredentialSource { Official, Byok }` 枚举收敛：TenantContext 只持枚举，`skips_wallet_debit()` 派生；`run_react_mode` 单点盖章 `credential_source/effective_model` 进 AgentRunResult | 编译 + billing 63 |
+| **P3 label/href 重复** | `lib/chat/session-url.ts` 新增 `conversationTitle/conversationScopeLabel` 单源，Command Palette 与 Dashboard Search 共用（消除 fallback 分叉） | Vitest（dashboard 用例断言更新为本地化标签） |
+| **P3 投机 `with_credential_source(&str)`** | 签名收敛为枚举参数（生产调用方即刻存在且类型安全） | 编译 |
+
+登记为后续（非阻断）：Snapshot 的 parse/index version 明细（Evidence 的 parse_run_id 已覆盖已引用 chunk）；失败轮次的独立 snapshot 落行（与重试语义耦合，需产品决策）。
+
+回归状态：**L1 OK**；storage-pg 38、app-chat 88、billing 63、contracts 全套、前端 529/2、`cargo check --workspace --tests` 零错、端到端旅程 16/17 通过（唯一 FAIL 为旅程脚本自身 SECID 未按 owner 过滤，产品行为经独立脚本复验为 `byok→official` 正确回退）。

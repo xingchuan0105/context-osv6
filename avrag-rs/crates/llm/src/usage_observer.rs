@@ -6,16 +6,35 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+/// Billing credential of the request (chat-first W3). One enum expresses both
+/// the attribution recorded on usage segments and whether the platform wallet
+/// is exempt — the two can no longer drift into contradictory states.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialSource {
+    /// Platform proxy keys; usage debits the owner wallet (unless a global
+    /// relay switch like `AVRAG_PLATFORM_KEYS_RELAY` is on).
+    Official,
+    /// The caller's own key carried the primary model; wallet exempt.
+    Byok,
+}
+
+impl CredentialSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Official => "official",
+            Self::Byok => "byok",
+        }
+    }
+}
+
 /// Tenant identity attached to metered LLM / embedding calls.
 #[derive(Debug, Clone)]
 pub struct TenantContext {
     pub owner_user_id: Uuid,
     pub user_id: Uuid,
-    /// When true, platform wallet is not debited (cloud BYOK used for this request).
-    /// Default false: platform proxy path bills the owner wallet.
-    pub skip_wallet_debit: bool,
-    /// Credential attribution for usage segments: `official` | `byok`.
-    pub credential_source: String,
+    /// Credential attribution + wallet semantics for this request's usage:
+    /// the platform wallet is exempt exactly when this is [`CredentialSource::Byok`].
+    pub credential_source: CredentialSource,
 }
 
 impl TenantContext {
@@ -23,18 +42,19 @@ impl TenantContext {
         Self {
             owner_user_id,
             user_id,
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: CredentialSource::Official,
         }
     }
 
-    pub fn with_credential_source(mut self, credential_source: &str) -> Self {
-        self.credential_source = credential_source.to_string();
-        self
+    /// Platform wallet is exempt exactly when the caller's own key paid.
+    /// (A global platform-keys relay switch may additionally exempt official
+    /// traffic; that policy lives in the observer, not in the tenant state.)
+    pub fn skips_wallet_debit(&self) -> bool {
+        self.credential_source == CredentialSource::Byok
     }
 
-    pub fn with_skip_wallet_debit(mut self, skip: bool) -> Self {
-        self.skip_wallet_debit = skip;
+    pub fn with_credential_source(mut self, credential_source: CredentialSource) -> Self {
+        self.credential_source = credential_source;
         self
     }
 }
@@ -110,8 +130,8 @@ mod tests {
         let tenant = TenantContext {
             owner_user_id: Uuid::from_u128(1),
             user_id: Uuid::from_u128(2),
-            skip_wallet_debit: false,
-            credential_source: "official".to_string(),
+            credential_source: CredentialSource::Official,
+
         };
         let record = ChatUsageRecord {
             prompt_tokens: 10,

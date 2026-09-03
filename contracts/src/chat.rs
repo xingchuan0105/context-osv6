@@ -645,6 +645,13 @@ pub struct ChatResponse {
     /// Per-invocation instructions for external agents (RAG codegen / Search tool schema).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_operation_guide: Option<AgentOperationGuide>,
+    /// Chat-first W2d/W3: id of the frozen TurnContextSnapshot (user row
+    /// turn_metadata). None on legacy rows / share cache hits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_context_snapshot_id: Option<String>,
+    /// Credential attribution of the primary model this turn: official | byok.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_source: Option<String>,
 }
 
 #[typeshare]

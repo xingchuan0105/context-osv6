@@ -111,5 +111,7 @@ pub fn build_run_result(
         verify: None,
         knockout: None,
         ews: None,
+    credential_source: None,
+    effective_model: None,
     }
 }

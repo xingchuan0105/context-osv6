@@ -159,13 +159,110 @@ impl SessionRepository {
         session_id: Uuid,
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
+        let owner_user_id = context.user_id().into_uuid();
+        // Capture the session's bound artifacts before the FK cascade removes
+        // their bindings (W2e orphan sweep — same contract as workspace delete).
+        let bound_artifacts: Vec<Uuid> = sqlx::query(
+            "select artifact_id from conversation_document_bindings where conversation_id = $1 and owner_user_id = $2",
+        )
+        .bind(session_id)
+        .bind(owner_user_id)
+        .fetch_all(tx.inner())
+        .await?
+        .into_iter()
+        .filter_map(|row: PgRow| row.try_get::<Uuid, _>("artifact_id").ok())
+        .collect();
+
         let result = sqlx::query("delete from chat_sessions where id = $1 and owner_user_id = $2")
             .bind(session_id)
-            .bind(context.user_id().into_uuid())
+            .bind(owner_user_id)
             .execute(tx.inner())
             .await?;
+        let deleted = result.rows_affected() > 0;
+        if !deleted {
+            tx.commit().await?;
+            return Ok(false);
+        }
+
+        // Artifacts left with zero bindings of either kind enter the async
+        // full-cleanup flow; anything still workspace-bound survives untouched.
+        for document_id in bound_artifacts {
+            let orphaned = sqlx::query_scalar::<_, bool>(
+                r#"
+                select not exists (
+                    select 1 from conversation_document_bindings b where b.artifact_id = $1
+                )
+                and not exists (
+                    select 1 from workspace_document_bindings b where b.artifact_id = $1
+                )
+                "#,
+            )
+            .bind(document_id)
+            .fetch_one(tx.inner())
+            .await?;
+            if !orphaned {
+                continue;
+            }
+            sqlx::query(
+                r#"
+                update documents
+                set status = 'deleting',
+                    deletion_requested_at = coalesce(deletion_requested_at, now()),
+                    deletion_error = null,
+                    updated_at = now()
+                where id = $1
+                  and owner_user_id = $2
+                  and status not in ('deleting', 'deleted')
+                "#,
+            )
+            .bind(document_id)
+            .bind(owner_user_id)
+            .execute(tx.inner())
+            .await?;
+            sqlx::query(
+                r#"
+                insert into document_cleanup_tasks (
+                    owner_user_id, workspace_id, document_id, requested_by, idempotency_key, payload
+                )
+                values ($1, null, $2, $3, $4, $5)
+                on conflict (idempotency_key) do nothing
+                "#,
+            )
+            .bind(owner_user_id)
+            .bind(document_id)
+            .bind(context.actor_id().map(ActorId::into_uuid))
+            .bind(format!("document-cleanup:{owner_user_id}:{document_id}"))
+            .bind(serde_json::json!({
+                "owner_user_id": owner_user_id.to_string(),
+                "document_id": document_id.to_string(),
+                "reason": "conversation_delete_orphan",
+            }))
+            .execute(tx.inner())
+            .await?;
+            sqlx::query(
+                r#"
+                update ingestion_tasks
+                set status = 'dead_letter',
+                    dead_lettered_at = coalesce(dead_lettered_at, now()),
+                    last_failed_at = coalesce(last_failed_at, now()),
+                    last_error = coalesce(last_error, 'document deletion requested'),
+                    locked_at = null,
+                    locked_by = null,
+                    lock_token = null,
+                    updated_at = now()
+                where owner_user_id = $1
+                  and document_id = $2
+                  and status in ('queued', 'processing')
+                  and dead_lettered_at is null
+                "#,
+            )
+            .bind(owner_user_id)
+            .bind(document_id)
+            .execute(tx.inner())
+            .await?;
+        }
         tx.commit().await?;
-        Ok(result.rows_affected() > 0)
+        Ok(true)
     }
 
     pub async fn get_message(

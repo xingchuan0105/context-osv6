@@ -9,7 +9,11 @@ import {
   sortConversationsByRecent,
   type ConversationSummary,
 } from "../../lib/chat/client";
-import { conversationHref } from "../../lib/chat/session-url";
+import {
+  conversationHref,
+  conversationScopeLabel,
+  conversationTitle,
+} from "../../lib/chat/session-url";
 import { ConversationScopeKind } from "../../lib/contracts/generated";
 import { listWorkspaces, type DashboardWorkspace } from "../../lib/dashboard/client";
 import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
@@ -190,17 +194,10 @@ export function CommandPaletteHost() {
       return [];
     }
     return sessions.slice(0, 20).map((session) => {
-      const title =
-        session.title?.trim() ||
-        formatUiMessage(locale, "commandPalette.sessionUntitled");
+      const title = conversationTitle(locale, session);
+      const contextLabel = conversationScopeLabel(locale, session);
       const workspaceName =
         session.workspace_name?.trim() || session.workspace_id?.trim() || "";
-      const contextLabel =
-        session.scope_kind === ConversationScopeKind.Workspace
-          ? workspaceName
-            ? formatUiMessage(locale, "chat.workspaceContext", { name: workspaceName })
-            : formatUiMessage(locale, "chat.workspaces")
-          : formatUiMessage(locale, "chat.personalContext");
       return {
         id: `sess-${session.id}`,
         group: "sessions" as const,

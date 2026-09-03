@@ -61,7 +61,7 @@ pub use section_index::{
 pub use summary::{SummaryGenerator, parse_summary_text, summary_system_prompt};
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
-pub use usage_observer::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
+pub use usage_observer::{ CredentialSource, ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -62,6 +62,17 @@ impl BillingContext {
     ///
     /// When wallet port is absent (unit tests / memory bootstrap), allow.
     pub async fn ensure_payer_can_spend(&self, auth: &AuthContext) -> Result<(), AppError> {
+        self.ensure_payer_can_spend_for(auth, ProviderSecretPurpose::Llm).await
+    }
+
+    /// Model-role aware variant (chat-first W3): a `quick_chat` session is
+    /// exempt when the payer holds an active **Quick Chat** BYOK config — the
+    /// generic `llm` purpose never substitutes for it, and vice versa.
+    pub async fn ensure_payer_can_spend_for(
+        &self,
+        auth: &AuthContext,
+        purpose: ProviderSecretPurpose,
+    ) -> Result<(), AppError> {
         if self.wallet.is_none() && self.provider_secrets.is_none() {
             return Ok(());
         }
@@ -70,11 +81,7 @@ impl BillingContext {
             return Err(AppError::unauthorized("payer identity missing"));
         }
         if let Some(secrets) = &self.provider_secrets {
-            if secrets
-                .has_active(owner, ProviderSecretPurpose::Llm)
-                .await
-                .unwrap_or(false)
-            {
+            if secrets.has_active(owner, purpose).await.unwrap_or(false) {
                 return Ok(());
             }
         }
@@ -121,16 +128,31 @@ impl BillingContext {
         estimated_input_tokens: i64,
         estimated_output_tokens: i64,
     ) -> Result<Option<(Uuid, i64)>, AppError> {
+        self.place_usage_hold_for_estimate_for(
+            auth,
+            ProviderSecretPurpose::Llm,
+            estimated_input_tokens,
+            estimated_output_tokens,
+        )
+        .await
+    }
+
+    /// Model-role aware hold placement (chat-first W3): quick_chat BYOK exempts
+    /// the hold exactly when the resolver will route BYOK (§8.2). Generic `llm`
+    /// BYOK never exempts a quick_chat session's hold.
+    pub async fn place_usage_hold_for_estimate_for(
+        &self,
+        auth: &AuthContext,
+        purpose: ProviderSecretPurpose,
+        estimated_input_tokens: i64,
+        estimated_output_tokens: i64,
+    ) -> Result<Option<(Uuid, i64)>, AppError> {
         let Some(wallet) = &self.wallet else {
             return Ok(None);
         };
         if let Some(secrets) = &self.provider_secrets {
             let owner = auth.user_id().into_uuid();
-            if secrets
-                .has_active(owner, ProviderSecretPurpose::Llm)
-                .await
-                .unwrap_or(false)
-            {
+            if secrets.has_active(owner, purpose).await.unwrap_or(false) {
                 return Ok(None);
             }
         }

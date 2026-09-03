@@ -379,6 +379,13 @@ export interface ChatResponse {
 	usage?: ChatTokenUsage;
 	/** Per-invocation instructions for external agents (RAG codegen / Search tool schema). */
 	agent_operation_guide?: AgentOperationGuide;
+	/**
+	 * Chat-first W2d/W3: id of the frozen TurnContextSnapshot (user row
+	 * turn_metadata). None on legacy rows / share cache hits.
+	 */
+	turn_context_snapshot_id?: string;
+	/** Credential attribution of the primary model this turn: official | byok. */
+	credential_source?: string;
 }
 
 export interface ChatDonePayload {

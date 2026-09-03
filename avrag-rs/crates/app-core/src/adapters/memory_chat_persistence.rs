@@ -150,14 +150,14 @@ impl SessionPort for MemoryChatPersistence {
         auth: &AuthContext,
         workspace_id: Option<Uuid>,
     ) -> Result<Vec<ChatSession>, AppError> {
-        let notebook_key = workspace_id.map(|id| id.to_string());
+        let workspace_key = workspace_id.map(|id| id.to_string());
         let state = self.state.read().await;
         let mut sessions = state
             .sessions
             .values()
             .filter(|session| Self::session_visible(auth, session))
             .filter(|session| {
-                notebook_key
+                workspace_key
                     .as_ref()
                     .map(|id| session.workspace_id.as_deref() == Some(id.as_str()))
                     .unwrap_or(true)
@@ -193,10 +193,10 @@ impl SessionPort for MemoryChatPersistence {
         let mut state = self.state.write().await;
         let (workspace_id, workspace_name) = match workspace_id {
             Some(workspace_id) => {
-                let notebook_key = workspace_id.to_string();
+                let workspace_key = workspace_id.to_string();
                 let notebook = state
                     .workspaces
-                    .get(&notebook_key)
+                    .get(&workspace_key)
                     .filter(|nb| nb.owner_user_id == Self::owner_user_id(auth))
                     .cloned()
                     .ok_or_else(|| {
@@ -275,6 +275,27 @@ impl SessionPort for MemoryChatPersistence {
         }
         state.sessions.remove(&key);
         state.messages.remove(&key);
+        // W2e parity with PG: dropping the session's bindings orphans their
+        // artifacts; zero-binding artifacts enter the deletion flow.
+        if let Some(artifact_ids) = state.conversation_document_bindings.remove(&key) {
+            for artifact_id in artifact_ids {
+                let still_workspace_bound = state
+                    .workspace_document_bindings
+                    .get(&artifact_id)
+                    .is_some_and(|bindings| !bindings.is_empty());
+                let still_conversation_bound = state
+                    .conversation_document_bindings
+                    .values()
+                    .any(|ids| ids.contains(&artifact_id));
+                if still_workspace_bound || still_conversation_bound {
+                    continue;
+                }
+                if let Some(stored) = state.documents.get_mut(&artifact_id) {
+                    stored.document.status = contracts::documents::DocumentStatus::Deleting;
+                    stored.document.updated_at = now_rfc3339();
+                }
+            }
+        }
         Ok(true)
     }
 }

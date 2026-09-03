@@ -72,11 +72,10 @@ async fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
                 .map(|a| a.into_uuid())
                 .unwrap_or_else(Uuid::nil),
             // LLM-only BYOK: chat debits skip; embeddings still bill if used.
-            skip_wallet_debit: byok.is_some(),
             credential_source: if byok.is_some() {
-                "byok".to_string()
+                avrag_llm::CredentialSource::Byok
             } else {
-                "official".to_string()
+                avrag_llm::CredentialSource::Official
             },
         };
         client = client

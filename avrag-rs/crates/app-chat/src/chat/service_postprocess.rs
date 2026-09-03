@@ -117,18 +117,32 @@ impl ChatContext {
                     items.iter().any(|v| v.as_str() == Some("search"))
                 })
             });
-        // W2d: freeze what this turn was allowed to use (design §4.4). Written
-        // once with the user row; later moves/deletes never rewrite it.
-        let scope_facts = self
-            .turn_scope_facts(Some(session_uuid), session_workspace_uuid(session))
-            .await
-            .unwrap_or_default();
+        // W2d: freeze what this turn was allowed to use (design §4.4). The
+        // facts were captured BEFORE execution (run_pipeline_inner) and are
+        // attached to this execution — never re-queried, never silently empty.
+        let scope_facts = execution.turn_scope_facts.clone();
+        let snapshot_id = uuid::Uuid::new_v4().to_string();
+        let history_boundary = match chat_persistence {
+            persistence => persistence
+                .list_messages(&self.auth, session_uuid)
+                .await
+                .map(|messages| messages.len())
+                .unwrap_or(0),
+        };
         let context_snapshot = serde_json::json!({
+            "snapshot_id": snapshot_id,
             "workspace_id_at_send": session.workspace_id,
+            "conversation_history_boundary": { "persisted_messages": history_boundary },
             "session_binding_artifacts": scope_facts.session_artifacts,
             "workspace_binding_artifacts": scope_facts.workspace_artifacts,
             "web_enabled": web_enabled,
             "model_role": session.model_role,
+            "credential_source": execution.response.credential_source,
+            "effective_model": execution
+                .response
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.model.clone()),
             "created_at": now_rfc3339(),
         });
         let user_turn_metadata: Option<serde_json::Value> = {
@@ -139,6 +153,9 @@ impl ChatContext {
             meta.insert("context_snapshot".to_string(), context_snapshot);
             Some(serde_json::Value::Object(meta))
         };
+        // §10.4: completion surfaces the frozen snapshot id (persist runs
+        // before the SSE done event, so live payloads carry it too).
+        execution.response.turn_context_snapshot_id = Some(snapshot_id);
         // W2d: what this turn actually used — scope-tagged citations, written
         // once with the assistant row. Tagging here also flows into the SSE
         // done payload (persist runs before Done).

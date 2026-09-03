@@ -295,6 +295,8 @@ impl RagRuntime {
             tool_results: Vec::new(),
             usage: None,
             agent_operation_guide: None,
+            turn_context_snapshot_id: None,
+            credential_source: None,
         })
     }
 
@@ -435,6 +437,8 @@ impl RagRuntime {
             tool_results: Vec::new(),
             usage: None,
             agent_operation_guide: None,
+            turn_context_snapshot_id: None,
+            credential_source: None,
         })
     }
 }
