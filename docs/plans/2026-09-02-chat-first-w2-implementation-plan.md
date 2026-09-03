@@ -203,7 +203,21 @@ avrag-billing 63、app-core 41（单线程）、app-chat 88、contracts 全套�
 
 过程中抓到并修复一个真实缺陷（commit `ba51a984`）：0089 的 `llm_usage_events` INSERT 绑定位次与列序错位——prompt_tokens 收到 model 文本，逐调用用量段全部写入失败（cost_events 轮级聚合掩盖了它）。修复后逐调用 credential 归因实证如上。
 
-尚未跑：L3-thin-llm / DR2 全量四模式回归套件、Playwright journey（需要时另行估时）。dev 栈 tmux session `context-os-dev` 保持运行（frontend :3000 / api :8080）。
+dev 栈 tmux session `context-os-dev` 保持运行（frontend :3000 / api :8080）。
+
+## 10b. L3-thin-llm 四模式真实回归（2026-09-03，4 过 5 挂；5 挂均非本波回归，含基线对照证据）
+
+`bash scripts/test-l3-llm.sh`（E2E_MODE=nightly，标准文档冷灌库 + 四模式真实 LLM）。**过**：chat_real、write_real、标准文档灌库/解析链、write 指纹断言等 4 项。**挂 5 项的归因**（三项用 `git worktree` @ `e3af8c09` 波前基线 + 同环境重跑做了决定性对照）：
+
+| 用例 | 现象 | 归因 | 证据 |
+|---|---|---|---|
+| `rag_real::real_llm_rag_document_qa` | `rag fixture expects shared milvus` | 检索后端不适用：fixture 要求 `RETRIEVAL_BACKEND=milvus`（builder.rs:422 `enable_rag && !use_pgvector` 才建 shared milvus），本机 pgvector | builder.rs 代码条件 |
+| `pgvector_channel_probe::milvus_rbf…` | 同上（milvus 前置） | 同上 | 同上 |
+| `pgvector_channel_probe::pgvector_rbf…` | 灌库后 `rag_kg_relations` 0 关系 | 既有：master `parse_triplet_response_*` 5 单测本就失败（`bc039e61` 引入漂移，文件未被本波触碰）。基线对照因新旧 schema 共库不兼容（旧树上传即 500）无法业务断言 | git 证据 + 基线 500 现象 |
+| `search_real::real_llm_search…` | 真实联网答对（东京天气）但 response.citations 为空 | **既有：基线 e3af8c09 同环境重跑复现完全相同的「有答案零引用」**；波内对引用组装仅 Citation 字段增补、`run_lead_workers.rs` 零 diff | 基线对照（/tmp/l3-baseline.log） |
+| `markitdown_reingest` | corpus cache 文件缺失 | 用例间依赖：cache 由同进程先行的灌库用例构建，thin carve/单跑不满足；基线同样缺失即挂 | 基线对照 |
+
+**本波无 L3 级回归**；chat/write 真实模式、灌库解析链全绿。search 零引用与 triplet 抽取两个既有问题已登记（§7 去向），属 Lead+Workers 迁移与 PS+triplet 合并的遗留，建议单独开修。
 
 ## 10. L1 波门记录（2026-09-02，通过）
 
