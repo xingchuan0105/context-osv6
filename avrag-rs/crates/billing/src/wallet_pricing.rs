@@ -110,6 +110,56 @@ impl RateRow {
         prov_ok && model_lower.contains(&self.model_contains.to_ascii_lowercase())
     }
 
+    /// Canonical rate-set selection shared by EVERY consumer — runtime
+    /// debits and the startup gate must resolve structure identically
+    /// (review round-5: the gate had drifted, accepting lone peak/off-peak
+    /// or empty-tiers shapes that `rates()` cannot serve).
+    ///
+    /// `for_startup_gate` validates ALL rate sets the row declares (every
+    /// tier, peak AND off-peak) instead of just the one a request would hit.
+    /// Returns `None` when the shape is unservable or any set is non-billable
+    /// (zero/negative input or negative cache/output → `need_fen <= 0` → the
+    /// hold would be skipped → free-ride).
+    fn canonical_rate_sets(&self, for_startup_gate: bool) -> Option<Vec<RateSet>> {
+        let mut sets: Vec<RateSet> = Vec::new();
+        if let Some(tiers) = &self.tiers {
+            if tiers.is_empty() {
+                return None;
+            }
+            sets.extend(tiers.iter().map(|t| RateSet {
+                input: t.input,
+                cache: t.cache,
+                output: t.output,
+            }));
+            if !for_startup_gate {
+                // Runtime: only the set a debit can actually resolve.
+                return Some(sets);
+            }
+        }
+        match (&self.peak, &self.off_peak) {
+            (Some(peak), Some(off_peak)) => {
+                sets.push(*peak);
+                sets.push(*off_peak);
+            }
+            (None, None) => {}
+            // Lone peak or lone off_peak cannot be served by `rates()`.
+            _ => return None,
+        }
+        if sets.is_empty() {
+            // Flat form.
+            sets.push(RateSet {
+                input: self.input?,
+                cache: self.cache,
+                output: self.output,
+            });
+        }
+        Some(sets)
+    }
+
+    fn billable_set(set: &RateSet) -> bool {
+        set.input.is_finite() && set.input > 0.0 && set.cache >= 0.0 && set.output >= 0.0
+    }
+
     /// Rates for a concrete debit: tier by prompt length, or peak/off-peak by
     /// time, or the flat set. `None` when the row carries no rate shape.
     fn rates(&self, prompt_tokens: u32, at: DateTime<Utc>) -> Option<OfficialRates> {
@@ -137,40 +187,6 @@ impl RateRow {
                 cache_fen_per_mtok: self.cache,
                 output_fen_per_mtok: self.output,
             }
-        })
-    }
-
-    /// Billable-row validation for the startup price gate (review round-4 P0):
-    /// every rate set the row can serve must be non-negative with a strictly
-    /// positive input rate. A zero/negative set would compute `need_fen <= 0`
-    /// → the hold is skipped → the route free-rides, so it is not a price.
-    fn billable(&self) -> bool {
-        let mut sets: Vec<RateSet> = Vec::new();
-        if let Some(tiers) = &self.tiers {
-            sets.extend(tiers.iter().map(|t| RateSet {
-                input: t.input,
-                cache: t.cache,
-                output: t.output,
-            }));
-        }
-        if let Some(peak) = &self.peak {
-            sets.push(*peak);
-        }
-        if let Some(off_peak) = &self.off_peak {
-            sets.push(*off_peak);
-        }
-        if sets.is_empty() {
-            match self.input {
-                Some(input) => sets.push(RateSet {
-                    input,
-                    cache: self.cache,
-                    output: self.output,
-                }),
-                None => return false,
-            }
-        }
-        sets.iter().all(|s| {
-            s.input.is_finite() && s.input > 0.0 && s.cache >= 0.0 && s.output >= 0.0
         })
     }
 
@@ -288,12 +304,13 @@ pub fn list_price_fen(
     )
 }
 
-/// Startup price-gate helper (chat-first W3 §8.5): true when the configured
-/// official rate rows contain a **billable** row for `provider` + `model` —
-/// a row with a zero/negative rate set is not a price and must not pass the
-/// gate (review round-4: `need_fen <= 0` skips the hold, so a non-positive
-/// rate free-rides). Pure — takes the raw rate JSON so callers can gate
-/// without touching the env.
+/// Startup price-gate helper (chat-first W3 §8.5): true when the FIRST row
+/// matching `provider` + `model` — the row runtime resolution would pick — is
+/// servable AND billable (every declared rate set has a positive input and
+/// non-negative cache/output; review round-4 P0: `need_fen <= 0` skips the
+/// hold so a non-positive rate free-rides; review round-5: the gate must pick
+/// the SAME row as `resolve_in`, not "any valid row"). Pure — takes the raw
+/// rate JSON so callers can gate without touching the env.
 pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
     if raw.trim().is_empty() {
         return false;
@@ -305,7 +322,11 @@ pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
     let m = model.trim().to_ascii_lowercase();
     rows.iter()
         .filter(|r| r.matches(&p, &m))
-        .any(|r| r.billable())
+        .find_map(|r| {
+            r.canonical_rate_sets(true)
+                .map(|sets| sets.iter().all(RateRow::billable_set))
+        })
+        .unwrap_or(false)
 }
 
 fn list_price_fen_at(
@@ -605,6 +626,11 @@ mod price_gate_tests {
         let negative_off_peak = r#"[{"model_contains":"v4-flash",
             "peak":{"input":300,"cache":10,"output":900},
             "off_peak":{"input":-150,"cache":5,"output":450}}]"#;
+        // Lone peak/off-peak or empty tiers: shapes the runtime `rates()`
+        // cannot serve — the gate must reject them too (review round-5 S1).
+        let lone_peak = r#"[{"model_contains":"v4-flash",
+            "peak":{"input":300,"cache":10,"output":900}}]"#;
+        let empty_tiers = r#"[{"model_contains":"qwen3.8-flash","tiers":[]}]"#;
         for bad in [
             zero,
             zero_input_positive_output,
@@ -617,17 +643,50 @@ mod price_gate_tests {
                 "non-billable row must fail the gate: {bad}"
             );
         }
-        for bad in [zero_peak, negative_off_peak] {
+        for bad in [zero_peak, negative_off_peak, lone_peak] {
             assert!(
                 !rates_present_in(bad, "deepseek", "v4-flash"),
                 "peak/off-peak row must fail the gate: {bad}"
             );
         }
-        // A well-priced row after the broken one still satisfies the gate —
-        // the operator's fix is a correct row, not removal of the broken one.
-        let repaired = r#"[
-            {"model_contains":"qwen3.8-flash","input":0,"output":80},
+        assert!(!rates_present_in(empty_tiers, "dashscope", "qwen3.8-flash"));
+    }
+
+    /// Review round-5 S1: the gate picks the SAME row runtime resolution
+    /// picks — the first match. A broken row placed before a good row must
+    /// FAIL the gate (boot refuses), not succeed on the later good row.
+    #[test]
+    fn gate_resolves_first_matching_row_like_runtime() {
+        // Runtime `resolve_in` would pick the first (zero) row and fail every
+        // QuickChat hold after a successful boot — so the gate must refuse.
+        let broken_first_rows = r#"[
+            {"model_contains":"qwen3.8-flash","input":0,"output":0},
             {"model_contains":"qwen3.8-flash","input":20,"output":80}]"#;
-        assert!(rates_present_in(repaired, "dashscope", "qwen3.8-flash"));
+        assert!(!rates_present_in(
+            broken_first_rows,
+            "dashscope",
+            "qwen3.8-flash"
+        ));
+
+        // Reverse order: the good row is first — boot allowed.
+        let good_first = r#"[
+            {"model_contains":"qwen3.8-flash","input":20,"output":80},
+            {"model_contains":"qwen3.8-flash","input":0,"output":0}]"#;
+        assert!(rates_present_in(good_first, "dashscope", "qwen3.8-flash"));
+    }
+
+    /// Review round-5 (Spec-8): the matcher is provider-scoped — a row
+    /// carrying a provider clause must not satisfy a different provider.
+    #[test]
+    fn rates_present_in_respects_provider_scope() {
+        let rows = r#"[{"provider":"dashscope","model_contains":"qwen3.8-flash","input":20,"output":80}]"#;
+        assert!(rates_present_in(rows, "dashscope", "qwen3.8-flash"));
+        assert!(
+            !rates_present_in(rows, "deepseek", "qwen3.8-flash"),
+            "wrong provider must not pass"
+        );
+        // Provider-less row stays a wildcard (existing ops rows rely on it).
+        let wildcard = r#"[{"model_contains":"qwen3.8-flash","input":20}]"#;
+        assert!(rates_present_in(wildcard, "any-provider", "qwen3.8-flash"));
     }
 }

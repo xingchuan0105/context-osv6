@@ -325,7 +325,7 @@ Standards 处理：删除无生产调用方的 `ensure_payer_can_spend` / `place
 | **P0-2 会话+工作区并发删除竞态** | 双绑定表按固定顺序 `LOCK TABLE … IN SHARE ROW EXCLUSIVE MODE`（共享 `lock_binding_tables`），capture→cascade 全程持锁 | 编译 + 旅程复跑（并发删除对抗测试见 §14） |
 | **P1-1 capabilities 权威** | `is_rag_turn` 改用规范 `resolve_capabilities(req.capabilities, agent_type)`（空数组 = 纯 chat）；service/streaming 两条入口一致 | `capabilities=[] + agent_type=rag` 反例用例（本提交内） |
 | **P1-2 删最后文件仍挂 RAG** | ready 0→ready 迁移才挂 rag；ready 归零后 strip 按 `capabilitiesManual` 豁免判定收敛 | 前端 strip 对抗测试见 §14 |
-| **P1-3 历史边界 + 单次冻结** | `history_boundary` 并入 `turn_scope_facts` 一次性冻结（persist 查询失败向上传播，不再 `unwrap_or(0)`）；`enforce_agent_scope` 消费同一冻结事实集 | 错误传播对抗测试见 §14 |
+| **P1-3 历史边界 + 单次冻结** | `history_boundary` 并入 `turn_scope_facts` 一次性冻结（persist 查询失败向上传播，不再 `unwrap_or(0)`）；`enforce_agent_scope` 消费同一冻结事实集 | 错误传播 / 单次冻结同源对抗测试见 §15 T1-b/T1-c（§14 提交时未落地） |
 | **P1-4 scope/snapshot provenance** | snapshot 记 `session_binding_versions` + `effective_provider`（执行前捕获）；thinking 显式 null | 旅程 7 snapshot 载荷 |
 
 Standards：删除 `with_credential_source` builder 与无调用方 delegate（§12 已记）。
@@ -344,7 +344,7 @@ Standards：删除 `with_credential_source` builder 与无调用方 delegate（�
 | **P1 删最后文件 refresh 失败路径** | tray 删除**先乐观移除**该行再 DELETE；refresh 失败不再保留僵尸 ready 态（轮询已停，ready 归零后 strip 生效）；DELETE 失败则由 refresh 对账恢复 | 前端 Vitest 2 例：DELETE 成功+refresh 失败 → rag 被 strip；manual 选择保留 |
 | **P1 provider 身份双实现漂移** | `app-core::ModelProviderConfig::provider_name` 删除本地映射，委托 `avrag_llm` 同名实现（未知 URL 统一 `unknown`，启动门与运行时 debit 同一 provider 身份） | app-core parity 测试：4 已知 URL + 未知 URL（此前 `custom` vs `unknown` 漂移点）+ 大小写 |
 | **P1 WorkspaceBindingVersion 双定义 + serde 吞错** | 删除 app-chat 本地重定义，`TurnScopeFacts` 直接复用 `app_core::WorkspaceBindingVersion`；`serde_json` 往返与 `unwrap_or_default()` 吞错一并消除（类型直移） | 编译；scopes_of 测试直接构造 app_core 类型 |
-| **P1 Memory adapter 伪造 binding/version** | `MemoryState` 建 typed binding 行（`WorkspaceBindingRow` / `ConversationBindingRow`：独立 `binding_id` + `parse_version`），create/delete/list 全链路改行走 typed 行；`completed_workspace_binding_versions` 返回真实 binding id 与 parse version | app-chat 契约测试：binding_id ≠ artifact_id、parse_version 透传；全下游（core 41 / chat 90 / documents / app / bootstrap / http）绿 |
+| **P1 Memory adapter 伪造 binding/version** | `MemoryState` 建 typed binding 行（`WorkspaceBindingRow` / `ConversationBindingRow`：独立 `binding_id` + `parse_version`），create/delete/list 全链路改行走 typed 行；`completed_workspace_binding_versions` 返回真实 binding id 与 parse version | §14 提交时仅有编译 + 下游绿；契约断言（binding_id ≠ artifact_id、parse_version 透传）经第五轮指出越界后迁至 app-core 端口级测试，见 §15 S5 |
 | **P1 scopes_of 多值无消费者** | 随双 provenance 修复获得真实消费者（evidence 循环按 scope 集落段） | 同上 |
 
 Standards（P2）：trailing whitespace 清零（`git diff --check` 净）；`list_price_fen` / `rates_present_in` 文档注释错位修正；`bootstrap_contract` 过时的"无端口"断言按 m4-w4d 后现实改为 memory-runtime 契约。
@@ -352,3 +352,25 @@ Standards（P2）：trailing whitespace 清零（`git diff --check` 净）；`li
 遗留（非阻断，仍开放）：Snapshot 的 index/effective retrieval version 明细（§12 已登记）；失败轮独立 snapshot 落行（重试语义需产品决策）。
 
 回归（§14 修改后）：`cargo check --workspace --tests` 零错；billing 65、avrag-billing 65+14 过滤组、app-chat 90、app-core 41+1、app-billing 13、app 20、app-bootstrap 19+1+2、transport-http 88、前端 Vitest **531/2**（含新增 canvas strip 2 例）。
+
+## 15. 第五轮审查修复（2026-09-03，Standards 硬问题清零 + T1 测试全落地）
+
+第五轮静态审查未发现新的免费调用型 P0；5 项 Standards 硬问题（S1–S5）与 8 项 Spec 问题在本轮全部处理：
+
+| 项 | 修复 | 实证 |
+|---|---|---|
+| **S1/Spec-1 启动门与运行时价格判定漂移** | `RateRow::canonical_rate_sets(for_startup_gate)` 成为唯一结构真相：tiers 空即 None、孤立 peak/off-peak 返回 None；`billable()` 删除镜像实现改调同一 resolver；`rates_present_in` 改为**首条匹配行**语义（与运行时一致），`[零价行, 正常行]` 启动即拒 | avrag-billing 16 测试：零/负价各形态拒、lone peak / empty tiers 拒、`gate_resolves_first_matching_row_like_runtime`（`[零,正常]→false`、`[正常,零]→true`）、provider-scope 精确匹配 + 错 provider 反例 + 通配 |
+| **S2 qwen3.8 占位价目** | `.env.example` 撤下明确标注的临时复制行；注释说明必须取得供应商确认的 provider-scoped 价格后才允许加行进生产门 | .env.example 注释；无占位行可满足门 |
+| **S3 前端吞 DELETE/refresh 双失败** | tray 删除失败即回滚该行并 `setUploadError` 告警；`removingRef` 在 DELETE 发出前登记，轮询 refresh 过滤在途删除（乐观删除不再被在途轮询复活） | canvas-session-strip Vitest 4 例：DELETE 成功+refresh 失败 strip；manual 保留；DELETE 失败+refresh 失败回滚 + alert + rag 保留；在途删除不被轮询复活 |
+| **S4 环境变量测试锁私有且不恢复** | app-billing 增 crate 级共享 RAII 守卫 `rates_env_guard::set_rates_env`（单一 Mutex + Drop 恢复调用前值），两个模块（billing_context / usage_observer_impl）全部 env 测试改走它 | app-billing 13 测试绿（current_thread runtime 消除 MutexGuard-across-await 死锁） |
+| **S5 测试越界改 MemoryState 内部** | 越界测试删除，迁 app-core `memory_document_store_contract.rs`：仅经 DocumentStorePort 端口方法证明 binding 行契约（create → set_document_status(Completed) 铸 parse version → versions/list/DELETE/GC） | app-core 3 契约测试绿：binding_id ≠ artifact_id、parse-run- 前缀、pending 排除、session 删绑定、workspace 删除级联 + orphan |
+| **T1-a PG 双绑定并发删除** | `concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact`：`tokio::join!` 并发 `delete_session` × `delete_workspace`，双绑定计数 0、artifact 状态 `deleting`、cleanup 任务落行 | storage-pg（DATABASE_URL live PG）通过 |
+| **T1-b history 错误传播** | `chat_pipeline_propagates_history_read_failure_from_freeze`：`FailingHistoryPersistence` 仅让 `list_messages` 失败，`ChatService::execute` 端到端断言错误携带原始信息上抛、且无 user/assistant 行被写入 | app-chat 测试绿（91 总） |
+| **T1-c 单次冻结同源** | `turn_snapshot_consumes_the_single_frozen_scope_facts`：计数包装 DocumentStorePort，完整轮后断言 `list_session_files` / `completed_workspace_binding_versions` 各恰好 1 次；snapshot 边界=pre-turn 0、双 binding 行带 parse-run- 版本、response.turn_context_snapshot_id = 持久化 snapshot id、evidence segments 为空数组 | app-chat 测试绿 |
+| **P2 memory parse_version 只读** | `set_document_status` → Completed 且此前非 Completed 时铸造 `parse-run-{id}` 写入该 artifact 的两类 binding 行（端口级唯一写通路） | S5 契约测试同一链路验证 |
+| **P2 memory delete_workspace 遗留会话 binding** | 删除 workspace 级联移除其 sessions 的 conversation bindings，并按统一 orphan 规则清扫 session-only artifact → `Deleting` | S5 契约测试第三例验证 |
+| **Spec-8 provider+model 测试名实不符** | `rates_present_in_respects_provider_scope`：provider-scoped 行、**错误 provider 反例**、通配行三例齐备 | avrag-billing 测试绿 |
+
+遗留（非阻断，本轮未处理）：provider_name 仍重复构造 provider config；memory 两条删除路径重复 orphan 判定；binding 行可收拢为数据簇（reviewer 判断项）。
+
+回归（§15 修改后）：avrag-billing 16、app-billing 13、app-core 42（含 3 契约新测）、app-chat 91（含 T1-b/T1-c 新测）、storage-pg document_bindings 含 live PG 并发删除；前端 Vitest 536/2（新增回滚 + 竞态 2 例）；全量验证见 §15 末。

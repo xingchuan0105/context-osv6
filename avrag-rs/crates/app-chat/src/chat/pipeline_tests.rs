@@ -972,6 +972,660 @@ mod tests {
         );
     }
 
+    /// Review round-5 T1-b: a history read failure during the single freeze
+    /// must propagate from the pipeline entry — a failed `list_messages` may
+    /// never masquerade as an empty history (boundary 0) and silently widen
+    /// what the turn may cite. The wrapper delegates everything except
+    /// `MessagePort::list_messages`, which fails like an unreachable PG.
+    struct FailingHistoryPersistence {
+        inner: Arc<app_core::MemoryChatPersistence>,
+    }
+
+    #[async_trait]
+    impl SessionPort for FailingHistoryPersistence {
+        async fn search_sessions(
+            &self,
+            auth: &AuthContext,
+            pattern: &str,
+        ) -> Result<Vec<ChatSession>, AppError> {
+            self.inner.search_sessions(auth, pattern).await
+        }
+        async fn list_sessions(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Option<Uuid>,
+        ) -> Result<Vec<ChatSession>, AppError> {
+            self.inner.list_sessions(auth, workspace_id).await
+        }
+        async fn get_session(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+        ) -> Result<Option<ChatSession>, AppError> {
+            self.inner.get_session(auth, session_id).await
+        }
+        async fn create_session(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Option<Uuid>,
+            title: Option<&str>,
+            agent_type: &str,
+            model_role: &str,
+        ) -> Result<ChatSession, AppError> {
+            self.inner
+                .create_session(auth, workspace_id, title, agent_type, model_role)
+                .await
+        }
+        async fn update_session(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            title: Option<&str>,
+            pinned: Option<bool>,
+        ) -> Result<Option<ChatSession>, AppError> {
+            self.inner.update_session(auth, session_id, title, pinned).await
+        }
+        async fn delete_session(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+        ) -> Result<bool, AppError> {
+            self.inner.delete_session(auth, session_id).await
+        }
+    }
+
+    #[async_trait]
+    impl MessagePort for FailingHistoryPersistence {
+        async fn list_messages(
+            &self,
+            _auth: &AuthContext,
+            _session_id: Uuid,
+        ) -> Result<Vec<ChatMessage>, AppError> {
+            Err(AppError::internal("history read down"))
+        }
+        async fn get_message(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            message_id: i64,
+        ) -> Result<Option<ChatMessage>, AppError> {
+            self.inner.get_message(auth, session_id, message_id).await
+        }
+        async fn append_chat_turn(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            turn: AppendChatTurn<'_>,
+        ) -> Result<i64, AppError> {
+            self.inner.append_chat_turn(auth, session_id, turn).await
+        }
+        async fn search_conversation_history(
+            &self,
+            auth: &AuthContext,
+            session_id: Uuid,
+            query: &str,
+            scope: ConversationHistoryScope,
+            limit: i64,
+            exclude_message_ids: &[i64],
+        ) -> Result<Vec<ConversationHistoryHit>, AppError> {
+            self.inner
+                .search_conversation_history(
+                    auth,
+                    session_id,
+                    query,
+                    scope,
+                    limit,
+                    exclude_message_ids,
+                )
+                .await
+        }
+    }
+
+    #[async_trait]
+    impl ChatCatalogPort for FailingHistoryPersistence {
+        async fn search_workspaces(
+            &self,
+            auth: &AuthContext,
+            pattern: &str,
+        ) -> Result<Vec<Workspace>, AppError> {
+            self.inner.search_workspaces(auth, pattern).await
+        }
+        async fn search_sources(
+            &self,
+            auth: &AuthContext,
+            pattern: &str,
+        ) -> Result<Vec<SourceRow>, AppError> {
+            self.inner.search_sources(auth, pattern).await
+        }
+        async fn get_workspace(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+        ) -> Result<Option<Workspace>, AppError> {
+            self.inner.get_workspace(auth, workspace_id).await
+        }
+    }
+
+    #[async_trait]
+    impl ProfilePort for FailingHistoryPersistence {
+        async fn get_user_profile(
+            &self,
+            auth: &AuthContext,
+            user_id: Uuid,
+        ) -> Result<Option<UserProfileRow>, AppError> {
+            self.inner.get_user_profile(auth, user_id).await
+        }
+        async fn upsert_user_profile(
+            &self,
+            auth: &AuthContext,
+            profile: &UserProfileRow,
+        ) -> Result<(), AppError> {
+            self.inner.upsert_user_profile(auth, profile).await
+        }
+    }
+
+    #[async_trait]
+    impl ChatContentPort for FailingHistoryPersistence {
+        async fn get_document_asset_by_id(
+            &self,
+            auth: &AuthContext,
+            asset_id: Uuid,
+        ) -> Result<Option<DocumentAssetRow>, AppError> {
+            self.inner.get_document_asset_by_id(auth, asset_id).await
+        }
+        async fn get_multimodal_chunk_by_id(
+            &self,
+            auth: &AuthContext,
+            chunk_id: Uuid,
+        ) -> Result<Option<MultimodalChunkRow>, AppError> {
+            self.inner.get_multimodal_chunk_by_id(auth, chunk_id).await
+        }
+        async fn get_chunk_by_id(
+            &self,
+            auth: &AuthContext,
+            chunk_id: Uuid,
+        ) -> Result<Option<IndexedChunk>, AppError> {
+            self.inner.get_chunk_by_id(auth, chunk_id).await
+        }
+        async fn get_summary_metadata(
+            &self,
+            auth: &AuthContext,
+            doc_ids: &[Uuid],
+        ) -> Result<Vec<SummaryMetadata>, AppError> {
+            self.inner.get_summary_metadata(auth, doc_ids).await
+        }
+    }
+
+    #[async_trait]
+    impl ChatSideEffectPort for FailingHistoryPersistence {
+        async fn create_notification(
+            &self,
+            auth: &AuthContext,
+            params: NotificationCreateParams,
+        ) -> Result<(), AppError> {
+            self.inner.create_notification(auth, params).await
+        }
+        async fn record_usage_event(
+            &self,
+            auth: &AuthContext,
+            metric_type: &str,
+            quantity: i64,
+            source: &str,
+        ) -> Result<(), AppError> {
+            self.inner
+                .record_usage_event(auth, metric_type, quantity, source)
+                .await
+        }
+        async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
+            self.inner.append_audit_record(record).await
+        }
+    }
+
+    /// Review round-5 T1-c: enforcement and the persisted snapshot consume the
+    /// SAME frozen TurnScopeFacts — the scope store is queried exactly once per
+    /// method for a whole turn, and the snapshot mirrors that frozen view
+    /// (boundary = pre-turn message count, binding rows keep the port-minted
+    /// parse versions).
+    struct CountingScopeStore {
+        inner: app_core::MemoryDocumentStore,
+        list_session_files_calls: Arc<Mutex<usize>>,
+        completed_workspace_calls: Arc<Mutex<usize>>,
+    }
+
+    #[async_trait]
+    impl app_core::DocumentStorePort for CountingScopeStore {
+        async fn list_workspaces(
+            &self,
+            auth: &AuthContext,
+        ) -> Result<Vec<Workspace>, AppError> {
+            self.inner.list_workspaces(auth).await
+        }
+        async fn get_workspace(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+        ) -> Result<Option<Workspace>, AppError> {
+            self.inner.get_workspace(auth, workspace_id).await
+        }
+        async fn create_workspace(
+            &self,
+            auth: &AuthContext,
+            name: &str,
+            description: &str,
+        ) -> Result<Workspace, AppError> {
+            self.inner.create_workspace(auth, name, description).await
+        }
+        async fn update_workspace(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+            name: Option<&str>,
+            description: Option<&str>,
+        ) -> Result<Option<Workspace>, AppError> {
+            self.inner.update_workspace(auth, workspace_id, name, description).await
+        }
+        async fn delete_workspace(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+        ) -> Result<bool, AppError> {
+            self.inner.delete_workspace(auth, workspace_id).await
+        }
+        async fn get_document_scope_states(
+            &self,
+            auth: &AuthContext,
+            document_ids: &[Uuid],
+        ) -> Result<Vec<app_core::DocumentScopeState>, AppError> {
+            self.inner.get_document_scope_states(auth, document_ids).await
+        }
+        async fn list_sources(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Option<Uuid>,
+        ) -> Result<Vec<SourceRow>, AppError> {
+            self.inner.list_sources(auth, workspace_id).await
+        }
+        async fn list_documents(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Option<Uuid>,
+            document_id: Option<Uuid>,
+        ) -> Result<Vec<common::Document>, AppError> {
+            self.inner.list_documents(auth, workspace_id, document_id).await
+        }
+        async fn create_document(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+            filename: &str,
+            file_size: u64,
+            mime_type: &str,
+        ) -> Result<common::Document, AppError> {
+            self.inner
+                .create_document(auth, workspace_id, filename, file_size, mime_type)
+                .await
+        }
+        async fn upsert_published_document(
+            &self,
+            auth: &AuthContext,
+            input: app_core::PublishedDocumentUpsert,
+        ) -> Result<common::Document, AppError> {
+            self.inner.upsert_published_document(auth, input).await
+        }
+        async fn create_session_document(
+            &self,
+            auth: &AuthContext,
+            conversation_id: Uuid,
+            filename: &str,
+            file_size: u64,
+            mime_type: &str,
+        ) -> Result<common::Document, AppError> {
+            self.inner
+                .create_session_document(auth, conversation_id, filename, file_size, mime_type)
+                .await
+        }
+        async fn completed_workspace_binding_versions(
+            &self,
+            auth: &AuthContext,
+            workspace_id: Uuid,
+        ) -> Result<Vec<app_core::WorkspaceBindingVersion>, AppError> {
+            *self.completed_workspace_calls.lock().unwrap() += 1;
+            self.inner
+                .completed_workspace_binding_versions(auth, workspace_id)
+                .await
+        }
+        async fn list_session_files(
+            &self,
+            auth: &AuthContext,
+            conversation_id: Uuid,
+        ) -> Result<Vec<contracts::documents::SessionFileRow>, AppError> {
+            *self.list_session_files_calls.lock().unwrap() += 1;
+            self.inner.list_session_files(auth, conversation_id).await
+        }
+        async fn delete_session_file_binding(
+            &self,
+            auth: &AuthContext,
+            conversation_id: Uuid,
+            binding_id: Uuid,
+        ) -> Result<Option<String>, AppError> {
+            self.inner
+                .delete_session_file_binding(auth, conversation_id, binding_id)
+                .await
+        }
+        async fn get_document_task_seed(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+        ) -> Result<Option<app_core::DocumentTaskSeed>, AppError> {
+            self.inner.get_document_task_seed(auth, document_id).await
+        }
+        async fn set_document_status(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+            status: contracts::documents::DocumentStatus,
+        ) -> Result<bool, AppError> {
+            self.inner.set_document_status(auth, document_id, status).await
+        }
+        async fn set_document_upload_invalid(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+            detail: &str,
+        ) -> Result<app_core::DocumentUploadMutationOutcome, AppError> {
+            self.inner
+                .set_document_upload_invalid(auth, document_id, detail)
+                .await
+        }
+        async fn queue_validated_document_upload(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+            size_bytes: u64,
+            sha256_hex: Option<&str>,
+            task: &ingestion_types::IngestionTask,
+        ) -> Result<app_core::DocumentUploadQueueOutcome, AppError> {
+            self.inner
+                .queue_validated_document_upload(auth, document_id, size_bytes, sha256_hex, task)
+                .await
+        }
+        async fn update_document(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+            filename: Option<&str>,
+            status: Option<contracts::documents::DocumentStatus>,
+        ) -> Result<bool, AppError> {
+            self.inner
+                .update_document(auth, document_id, filename, status)
+                .await
+        }
+        async fn delete_document(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+        ) -> Result<app_core::DocumentDeletionOutcome, AppError> {
+            self.inner.delete_document(auth, document_id).await
+        }
+        async fn delete_document_if_unbound(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+        ) -> Result<bool, AppError> {
+            self.inner.delete_document_if_unbound(auth, document_id).await
+        }
+        async fn get_document_content(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+        ) -> Result<Option<common::DocumentContentResponse>, AppError> {
+            self.inner.get_document_content(auth, document_id).await
+        }
+        async fn get_parsed_preview(
+            &self,
+            auth: &AuthContext,
+            document_id: Uuid,
+            cursor: Option<&str>,
+            limit: usize,
+        ) -> Result<common::ParsedPreviewResponse, AppError> {
+            self.inner
+                .get_parsed_preview(auth, document_id, cursor, limit)
+                .await
+        }
+        async fn enqueue_ingestion_task(
+            &self,
+            task: &ingestion_types::IngestionTask,
+        ) -> Result<bool, AppError> {
+            self.inner.enqueue_ingestion_task(task).await
+        }
+        async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
+            self.inner.append_audit_record(record).await
+        }
+    }
+
+    #[tokio::test]
+    async fn turn_snapshot_consumes_the_single_frozen_scope_facts() {
+        use app_core::DocumentStorePort;
+
+        let auth = test_auth();
+        let memory = Arc::new(RwLock::new(MemoryState::default()));
+        let store = app_core::MemoryDocumentStore::new(memory.clone());
+        let chatmem: Arc<app_core::MemoryChatPersistence> =
+            Arc::new(app_core::MemoryChatPersistence::new(memory.clone()));
+
+        // Seed through the ports only: workspace-bound artifact + session-bound
+        // artifact, both driven to Completed (mints parse versions on bindings).
+        let workspace = store.create_workspace(&test_auth(), "ws", "").await.unwrap();
+        let workspace_doc = store
+            .create_document(&test_auth(), Uuid::parse_str(&workspace.id).unwrap(), "ws.txt", 4, "text/plain")
+            .await
+            .unwrap();
+        let session = chatmem
+            .create_session(
+                &test_auth(),
+                Some(Uuid::parse_str(&workspace.id).unwrap()),
+                None,
+                "chat",
+                "agent",
+            )
+            .await
+            .unwrap();
+        let session_doc = store
+            .create_session_document(
+                &test_auth(),
+                Uuid::parse_str(&session.id).unwrap(),
+                "session.txt",
+                4,
+                "text/plain",
+            )
+            .await
+            .unwrap();
+        for doc in [&workspace_doc, &session_doc] {
+            let updated = store
+                .set_document_status(
+                    &test_auth(),
+                    Uuid::parse_str(&doc.id).unwrap(),
+                    contracts::documents::DocumentStatus::Completed,
+                )
+                .await
+                .unwrap();
+            assert!(updated);
+        }
+
+        let list_calls = Arc::new(Mutex::new(0usize));
+        let workspace_calls = Arc::new(Mutex::new(0usize));
+        let counting = Arc::new(CountingScopeStore {
+            inner: store,
+            list_session_files_calls: list_calls.clone(),
+            completed_workspace_calls: workspace_calls.clone(),
+        });
+
+        let state = ChatContext {
+            auth: test_auth(),
+            storage: StorageContext::from_parts(StorageContextParts {
+                infra: StorageInfra {
+                    postgres_health: None,
+                    postgres_configured: false,
+                    uses_memory_adapters: StorageInfra::memory_adapters_flag(true),
+                    max_upload_file_size_bytes: 10 * 1024 * 1024,
+                },
+                stores: StorageStores {
+                    document_store: Some(counting),
+                    auth_store: None,
+                    admin_store: None,
+                    billing_quota: None,
+                    billing_store: None,
+                    share_store: None,
+                    chat_persistence: Some(chatmem.clone()),
+                },
+                memory: MemoryStateHandles {
+                    inner: memory,
+                    api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+                    api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+                },
+                objects: ObjectStoreConfig {
+                    object_store: Arc::new(TestObjectStore),
+                    public_base_url: "http://localhost".to_string(),
+                    object_root: "/tmp/avrag-test".to_string(),
+                    upload_expire_sec: 3600,
+                    download_expire_sec: 3600,
+                },
+            }),
+            llm_ctx: LlmContext::new(None, None),
+            orchestrator: OrchestratorContext::new(
+                Some(Arc::new(UnifiedAgentService::new(Box::new(
+                    PipelineEchoAgent,
+                )))),
+                None,
+                Arc::new(GuardPipeline::new()),
+                None,
+            ),
+            analytics: AnalyticsServiceCtx::new(None),
+            billing: BillingContext::new(None, "shadow".to_string()),
+            admin: AdminContext::new(),
+            documents: DocumentContext::new(),
+        };
+
+        let mut request = request_with_mode("chat", vec![]);
+        request.session_id = Some(session.id.clone());
+        request.workspace_id = None;
+
+        let response = crate::ChatService::new(state)
+            .execute(request)
+            .await
+            .expect("personal chat turn must succeed");
+
+        // The freeze queried each scope source exactly once; nothing re-queried
+        // the mutable view for enforcement or for the snapshot.
+        assert_eq!(*list_calls.lock().unwrap(), 1, "list_session_files: frozen once");
+        assert_eq!(
+            *workspace_calls.lock().unwrap(),
+            1,
+            "completed_workspace_binding_versions: frozen once"
+        );
+
+        let session_uuid = Uuid::parse_str(&session.id).unwrap();
+        let messages = chatmem.list_messages(&test_auth(), session_uuid).await.unwrap();
+        assert_eq!(messages.len(), 2, "user + assistant rows persisted");
+        let user_row = &messages[0];
+        let snapshot = user_row
+            .turn_metadata
+            .as_ref()
+            .and_then(|m| m.get("context_snapshot"))
+            .cloned()
+            .expect("context snapshot persisted on the user row");
+
+        // Boundary = the count BEFORE this turn was persisted (frozen at 0).
+        assert_eq!(
+            snapshot["conversation_history_boundary"]["persisted_messages"],
+            serde_json::json!(0),
+            "history boundary must be the pre-turn frozen count, not post-persist"
+        );
+        // The frozen binding facts match the store: one session binding + one
+        // workspace binding, each carrying the parse version minted at
+        // Completed — binding id ≠ artifact id (no fabricated identity).
+        let session_versions = snapshot["session_binding_versions"].as_array().unwrap();
+        assert_eq!(session_versions.len(), 1);
+        assert_eq!(session_versions[0]["artifact_id"], serde_json::json!(session_doc.id));
+        assert_ne!(session_versions[0]["binding_id"], session_doc.id);
+        assert!(
+            session_versions[0]["parse_version"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("parse-run-"),
+            "session binding carries the minted parse version: {session_versions:?}"
+        );
+        let workspace_versions = snapshot["workspace_binding_versions"].as_array().unwrap();
+        assert_eq!(workspace_versions.len(), 1);
+        assert_eq!(
+            workspace_versions[0]["artifact_id"],
+            serde_json::json!(workspace_doc.id)
+        );
+        assert!(
+            workspace_versions[0]["parse_version"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("parse-run-")
+        );
+        // §10.4: the same frozen snapshot id is surfaced on the response and
+        // persisted inside the assistant row's turn payload.
+        let snapshot_id = snapshot["snapshot_id"].as_str().expect("snapshot id present");
+        assert_eq!(
+            response.turn_context_snapshot_id.as_deref(),
+            Some(snapshot_id),
+            "response must surface the persisted snapshot id"
+        );
+        let assistant_meta = messages[1]
+            .turn_metadata
+            .as_ref()
+            .and_then(|m| m.get("turn_evidence"))
+            .cloned()
+            .expect("turn evidence persisted on the assistant row");
+        assert_eq!(assistant_meta["segments"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn chat_pipeline_propagates_history_read_failure_from_freeze() {
+        let (state, chatmem, _session, session_id) = test_chat_context_with_profiles();
+        let failing: Arc<dyn ChatPersistencePort> = Arc::new(FailingHistoryPersistence {
+            inner: chatmem.clone(),
+        });
+        let state = ChatContext {
+            storage: StorageContext::from_parts(StorageContextParts {
+                infra: state.storage.infra().clone(),
+                stores: StorageStores {
+                    chat_persistence: Some(failing.clone()),
+                    ..state.storage.stores().clone()
+                },
+                memory: state.storage.memory().clone(),
+                objects: state.storage.objects().clone(),
+            }),
+            ..state
+        };
+
+        let mut request = request_with_mode("chat", vec![]);
+        request.session_id = Some(session_id.clone());
+        request.workspace_id = None;
+
+        let err = crate::ChatService::new(state.clone())
+            .execute(request)
+            .await
+            .expect_err("history read failure must surface from the freeze, not become boundary 0");
+        assert!(
+            err.to_string().contains("history read down"),
+            "original error must not be swallowed: {err}"
+        );
+        // The failing read happened before any turn was persisted.
+        let persisted = chatmem
+            .list_messages(&test_auth(), Uuid::parse_str(&session_id).unwrap())
+            .await
+            .unwrap();
+        assert!(
+            persisted.is_empty(),
+            "no user/assistant rows may be written by a turn that failed its freeze"
+        );
+    }
+
     #[tokio::test]
     async fn pipeline_spine_locks_audit_before_persist() {
         let (mut state, chatmem, session, session_id) = test_chat_context_with_profiles();
@@ -1476,6 +2130,7 @@ mod tests {
 mod review_round4_tests {
     use crate::chat::service::{SessionBindingVersion, TurnScopeFacts};
     use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
+    use std::collections::BTreeMap;
     use std::sync::Arc;
     use tokio::sync::RwLock;
     use uuid::Uuid;
@@ -1527,71 +2182,5 @@ mod review_round4_tests {
             "workspace provenance must survive without a session binding"
         );
         assert!(facts.scopes_of("doc-unbound").is_empty());
-    }
-
-    /// Review round-4 P1 (memory adapter contract): memory's
-    /// `completed_workspace_binding_versions` must carry its OWN binding id
-    /// (not a copy of artifact_id) and surface the row's parse version —
-    /// the production PG contract exercised by the memory harness.
-    #[tokio::test]
-    async fn memory_workspace_binding_versions_carry_real_ids() {
-        use app_core::{DocumentStorePort, MemoryDocumentStore, MemoryState, WorkspaceBindingRow};
-        use common::Document;
-        use std::collections::BTreeMap;
-
-        let owner = Uuid::new_v4();
-        let auth = auth_for(owner);
-        let workspace = Uuid::new_v4();
-        let mut memory = MemoryState::default();
-        memory.workspaces.insert(
-            workspace.to_string(),
-            contracts::workspaces::Workspace {
-                id: workspace.to_string(),
-                owner_user_id: owner.to_string(),
-                owner_id: owner.to_string(),
-                name: "ws".to_string(),
-                title: "ws".to_string(),
-                description: String::new(),
-                created_at: now_test(),
-                updated_at: now_test(),
-                document_count: 0,
-                status_summary: Default::default(),
-                shared: false,
-            },
-        );
-        let state = Arc::new(RwLock::new(memory));
-        let store = MemoryDocumentStore::new(state.clone());
-        let doc = store
-            .create_document(&auth, workspace, "a.txt", 4, "text/plain")
-            .await
-            .unwrap();
-        {
-            let mut state = state.write().await;
-            let stored = state.documents.get_mut(&doc.id).unwrap();
-            stored.document.status = contracts::documents::DocumentStatus::Completed;
-            let row = state
-                .workspace_document_bindings
-                .iter_mut()
-                .find(|row| row.artifact_id == doc.id)
-                .unwrap();
-            row.parse_version = Some("parse-run-7".to_string());
-        }
-
-        let versions = store
-            .completed_workspace_binding_versions(&auth, workspace)
-            .await
-            .unwrap();
-        assert_eq!(versions.len(), 1);
-        let version = &versions[0];
-        assert_ne!(
-            version.binding_id, version.artifact_id,
-            "binding id must be its own row id, not a copy of artifact_id"
-        );
-        assert_eq!(version.artifact_id, doc.id);
-        assert_eq!(version.parse_version.as_deref(), Some("parse-run-7"));
-    }
-
-    fn now_test() -> String {
-        common::now_rfc3339()
     }
 }

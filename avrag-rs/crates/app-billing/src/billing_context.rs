@@ -505,8 +505,6 @@ mod hold_pricing_tests {
     use std::sync::{Arc, Mutex};
     use uuid::Uuid;
 
-    /// Serializes env mutations of `PLATFORM_OFFICIAL_RATES_JSON` across tests.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct StubWallet {
         holds: Mutex<Vec<i64>>,
@@ -616,51 +614,58 @@ mod hold_pricing_tests {
             .with_provider_secrets(Arc::new(NoSecrets))
     }
 
-    fn set_rates(raw: Option<&str>) {
-        match raw {
-            Some(raw) => unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", raw) },
-            None => unsafe { std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON") },
-        }
-    }
-
     /// Review round-4 P0 (fail-closed QuickChat hold): missing, zero, and
     /// negative price rows all REFUSE the turn — none may pass a free hold.
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn quick_chat_hold_refuses_missing_zero_and_negative_prices() {
-        let _env = ENV_LOCK.lock().unwrap();
         let owner = auth().user_id().into_uuid();
         let ctx = hold_context("dashscope", "qwen3.8-flash");
 
-        set_rates(None);
-        let err = ctx
-            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
-            .await
-            .unwrap_err();
-        assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+        // Each step scopes its own env guard: set → await → drop before the
+        // next step, so the guard never spans unrelated awaits.
+        {
+            let _rates = super::rates_env_guard::set_rates_env(None);
+            let err = ctx
+                .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+        }
 
         // All-zero row: the computed price is 0 → the old path skipped the
         // hold silently (the free-ride the gate must close).
-        set_rates(Some(r#"[{"model_contains":"qwen3.8-flash","input":0,"output":0}]"#));
-        let err = ctx
-            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
-            .await
-            .unwrap_err();
-        assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+        {
+            let _rates = super::rates_env_guard::set_rates_env(Some(
+                r#"[{"model_contains":"qwen3.8-flash","input":0,"output":0}]"#,
+            ));
+            let err = ctx
+                .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+        }
 
-        set_rates(Some(r#"[{"model_contains":"qwen3.8-flash","input":-20,"output":80}]"#));
-        let err = ctx
-            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
-            .await
-            .unwrap_err();
-        assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+        {
+            let _rates = super::rates_env_guard::set_rates_env(Some(
+                r#"[{"model_contains":"qwen3.8-flash","input":-20,"output":80}]"#,
+            ));
+            let err = ctx
+                .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+        }
 
-        set_rates(Some(r#"[{"model_contains":"qwen3.8-flash","input":20,"output":80}]"#));
-        let hold = ctx
-            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
-            .await
-            .unwrap();
-        assert!(hold.is_some(), "a billable row must place a real hold");
-        set_rates(None);
+        {
+            let _rates = super::rates_env_guard::set_rates_env(Some(
+                r#"[{"model_contains":"qwen3.8-flash","input":20,"output":80}]"#,
+            ));
+            let hold = ctx
+                .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+                .await
+                .unwrap();
+            assert!(hold.is_some(), "a billable row must place a real hold");
+        }
         let _ = owner;
     }
 
@@ -676,5 +681,53 @@ mod hold_pricing_tests {
             .await
             .unwrap_err();
         assert_eq!(err.code(), "quick_chat_pricing_unconfigured", "{err}");
+    }
+}
+
+/// Test-only shared RAII guard for `PLATFORM_OFFICIAL_RATES_JSON`.
+///
+/// Every app-billing test module that mutates this process-global env var
+/// must go through [`with_rates_env`] — module-private Mutexes do not
+/// synchronize with each other (review round-5 S4), and the previous value is
+/// restored so parallel tests never observe a stale row.
+#[cfg(test)]
+pub(crate) mod rates_env_guard {
+    use std::sync::{Mutex, MutexGuard};
+
+    static RATES_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Acquire the shared app-billing rates-env lock and set
+    /// `PLATFORM_OFFICIAL_RATES_JSON` (None = removed). The returned guard
+    /// restores the prior value on drop — await async code while holding it.
+    pub fn set_rates_env(raw: Option<&str>) -> RatesEnvGuard {
+        let guard = RATES_ENV_LOCK.lock().unwrap();
+        let prev = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
+        // SAFETY: all app-billing tests mutate the var behind RATES_ENV_LOCK.
+        unsafe {
+            match raw {
+                Some(value) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", value),
+                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+            }
+        }
+        RatesEnvGuard { prev, _lock: guard }
+    }
+
+    /// RAII restore: drops the set value back to what it was before
+    /// [`set_rates_env`].
+    pub struct RatesEnvGuard {
+        prev: Option<std::ffi::OsString>,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl Drop for RatesEnvGuard {
+        fn drop(&mut self) {
+            // SAFETY: the shared lock is still held by `_lock`.
+            unsafe {
+                match self.prev.take() {
+                    Some(value) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", value),
+                    None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
+                }
+            }
+        }
     }
 }

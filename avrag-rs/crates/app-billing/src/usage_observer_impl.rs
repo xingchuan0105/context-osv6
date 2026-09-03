@@ -474,9 +474,13 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use uuid::Uuid;
 
-    /// Serializes tests that mutate/depend on the process-global
-    /// `AVRAG_PLATFORM_KEYS_RELAY` env var (read live under cfg(test)).
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    /// Shared RAII guard for the rates env var — app-billing tests must NOT
+    /// keep module-private env locks; they cannot synchronize with each
+    /// other (review round-5 S4). This module also mutates
+    /// `AVRAG_PLATFORM_KEYS_RELAY`, so the lock guards BOTH process-globals
+    /// together.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 
     #[test]
     fn map_feature_is_deterministic_for_known_tags() {
@@ -768,15 +772,10 @@ mod tests {
     #[tokio::test]
     async fn recorded_chat_usage_debits_wallet_at_list_price() {
         let _env_guard = ENV_LOCK.lock().unwrap();
-        // Deterministic flat test rate: 1M flash input → 150 list fen.
-        let prev_rates = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
-        // SAFETY: serialized by ENV_LOCK; restored before the guard drops.
-        unsafe {
-            std::env::set_var(
-                "PLATFORM_OFFICIAL_RATES_JSON",
-                r#"[{"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#,
-            )
-        };
+        let _rates = crate::billing_context::rates_env_guard::set_rates_env(Some(
+            r#"[{"model_contains":"v4-flash","input":100,"cache":2,"output":200}]"#,
+        ));
+        let _rates_guard = _rates; // hold past awaits, restore on drop
         let wallet = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         // Seed ¥20 grant.
@@ -829,27 +828,15 @@ mod tests {
             .collect();
         assert_eq!(debits.len(), 1);
         assert_eq!(debits[0].amount_fen, -150);
-        // SAFETY: serialized by ENV_LOCK.
-        unsafe {
-            match prev_rates {
-                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
-                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
-            }
-        }
+        // The `_rates` RAII guard restored the env on drop.
     }
 
     #[tokio::test]
     async fn llm_byok_skip_debits_embedding_not_chat() {
         let _env_guard = ENV_LOCK.lock().unwrap();
-        // bge-m3 must be billable for the platform-embedding debit below.
-        let prev_rates = std::env::var_os("PLATFORM_OFFICIAL_RATES_JSON");
-        // SAFETY: serialized by ENV_LOCK; restored before the guard drops.
-        unsafe {
-            std::env::set_var(
-                "PLATFORM_OFFICIAL_RATES_JSON",
-                r#"[{"model_contains":"bge-m3","input":7}]"#,
-            )
-        };
+        let _rates = crate::billing_context::rates_env_guard::set_rates_env(Some(
+            r#"[{"model_contains":"bge-m3","input":7}]"#,
+        ));
         let wallet = Arc::new(MemoryWalletStore::new());
         let user_id = Uuid::new_v4();
         wallet
@@ -916,13 +903,7 @@ mod tests {
             after < app_core::SIGNUP_GRANT_FEN,
             "platform embedding must still debit under LLM-only BYOK skip, balance={after}"
         );
-        // SAFETY: serialized by ENV_LOCK.
-        unsafe {
-            match prev_rates {
-                Some(v) => std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", v),
-                None => std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON"),
-            }
-        }
+        // The `_rates` RAII guard restored the env on drop.
     }
 
     #[tokio::test]

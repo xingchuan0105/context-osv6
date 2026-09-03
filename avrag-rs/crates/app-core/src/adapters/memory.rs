@@ -207,6 +207,35 @@ impl DocumentStorePort for MemoryDocumentStore {
         for session_id in &removed_sessions {
             state.sessions.remove(session_id);
             state.messages.remove(session_id);
+            // Dropping the session drops its conversation bindings too —
+            // leftover rows would keep zero-workspace artifacts alive forever
+            // and block the orphan sweep (review round-5 P2: PG parity).
+            let session_artifacts: Vec<String> = state
+                .conversation_document_bindings
+                .iter()
+                .filter(|row| row.conversation_id == *session_id)
+                .map(|row| row.artifact_id.clone())
+                .collect();
+            state
+                .conversation_document_bindings
+                .retain(|row| row.conversation_id != *session_id);
+            for artifact_id in session_artifacts {
+                let still_workspace_bound = state
+                    .workspace_document_bindings
+                    .iter()
+                    .any(|row| row.artifact_id == artifact_id);
+                let still_conversation_bound = state
+                    .conversation_document_bindings
+                    .iter()
+                    .any(|row| row.artifact_id == artifact_id);
+                if still_workspace_bound || still_conversation_bound {
+                    continue;
+                }
+                if let Some(stored) = state.documents.get_mut(&artifact_id) {
+                    stored.document.status = DocumentStatus::Deleting;
+                    stored.document.updated_at = now_rfc3339();
+                }
+            }
         }
         Ok(true)
     }
@@ -545,8 +574,33 @@ impl DocumentStorePort for MemoryDocumentStore {
         if is_deleting_or_deleted(&stored.document.status) {
             return Ok(false);
         }
+        let was_completed = matches!(stored.document.status, DocumentStatus::Completed);
+        let parse_run = matches!(status, DocumentStatus::Completed)
+            .then(|| format!("parse-run-{}", new_id()));
         stored.document.status = status;
         stored.document.updated_at = now_rfc3339();
+        let artifact_id = stored.document.id.clone();
+        drop(stored);
+        // Parse-version write parity with PG (review round-5): reaching
+        // Completed mints a fresh parse run id on the artifact's bindings.
+        if let Some(parse_run) = parse_run {
+            if !was_completed {
+                for row in state
+                    .workspace_document_bindings
+                    .iter_mut()
+                    .filter(|row| row.artifact_id == artifact_id)
+                {
+                    row.parse_version = Some(parse_run.clone());
+                }
+                for row in state
+                    .conversation_document_bindings
+                    .iter_mut()
+                    .filter(|row| row.artifact_id == artifact_id)
+                {
+                    row.parse_version = Some(parse_run.clone());
+                }
+            }
+        }
         Ok(true)
     }
 

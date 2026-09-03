@@ -67,6 +67,8 @@ export function SessionFileTray({
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Bindings with a delete in flight — polls must not resurrect them. */
+  const removingRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     if (!token || !sessionId) {
@@ -74,7 +76,10 @@ export function SessionFileTray({
     }
     try {
       const next = await listChatSessionFiles(token, sessionId);
-      setFiles(next);
+      // A poll that raced an in-flight delete must not resurrect the removed
+      // binding (review round-5: the earlier optimistic filter could be
+      // overwritten by a stale poll result).
+      setFiles(next.filter((row) => !removingRef.current.has(row.binding_id)));
     } catch {
       // Keep the last known state; the next poll retries.
     }
@@ -198,15 +203,23 @@ export function SessionFileTray({
       if (!token || !sessionId) {
         return;
       }
-      // Optimistic removal first: if DELETE succeeds but the refresh fails,
-      // a stale row would keep reporting ready forever (polling has already
-      // stopped), blocking the auto-RAG strip (review round-4 P1).
+      // Optimistic removal + in-flight guard: polls skip this binding so a
+      // stale poll cannot resurrect it. On DELETE failure the row is rolled
+      // back — swallowing the error would fork UI from server truth when the
+      // reconcile refresh also fails (review round-5 S3).
+      removingRef.current.add(file.binding_id);
       setFiles((prev) => prev.filter((row) => row.binding_id !== file.binding_id));
       try {
         await deleteChatSessionFile(token, sessionId, file.binding_id);
       } catch {
-        // DELETE failed — the refresh below reconciles with the server truth.
+        removingRef.current.delete(file.binding_id);
+        setFiles((prev) =>
+          prev.some((row) => row.binding_id === file.binding_id) ? prev : [file, ...prev],
+        );
+        setUploadError(true);
+        return;
       }
+      removingRef.current.delete(file.binding_id);
       await refresh();
     },
     [refresh, sessionId, token],

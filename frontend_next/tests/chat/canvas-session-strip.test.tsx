@@ -135,3 +135,67 @@ describe("ChatCanvas personal-conversation RAG strip (review round-4)", () => {
     });
   });
 });
+describe("SessionFileTray delete failure paths (review round-5)", () => {
+  it("rolls the row back and surfaces an error when DELETE fails", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+    // Initial load returns the ready row; every later refresh fails.
+    listChatSessionFilesMock
+      .mockResolvedValueOnce([readyRow()])
+      .mockRejectedValue(new Error("refresh failed"));
+    // DELETE fails and the reconcile refresh fails too — the row must be
+    // rolled back, not silently dropped while the binding still exists.
+    deleteChatSessionFileMock.mockRejectedValue(new Error("delete failed"));
+
+    render(
+      <ChatCanvas
+        selectedSourceIds={[]}
+        sessionId="sess-rollback"
+        workspaceId={null}
+      />,
+    );
+    const removeButton = await screen.findByRole("button", { name: "移除" });
+    await userEvent.click(removeButton);
+
+    await waitFor(() => {
+      expect(deleteChatSessionFileMock).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("report.txt")).toBeInTheDocument();
+    });
+    // Upload-failure alert is surfaced instead of a silent fork.
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    // The auto-RAG strip must NOT fire while the binding is in doubt.
+    const state = workspaceUiStore.getState().workspaces["chat:sess-rollback"];
+    expect(state?.capabilities).toContain("rag");
+  });
+
+  it("does not resurrect an in-flight deleted row from a racing poll", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+    let polls = 0;
+    listChatSessionFilesMock.mockImplementation(async () => {
+      polls += 1;
+      // Poll 2 resolves after the optimistic removal: without the in-flight
+      // guard it would write the deleted row back.
+      return polls <= 1 ? [readyRow()] : [];
+    });
+    deleteChatSessionFileMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ status: "deleted" }), 50)),
+    );
+
+    render(
+      <ChatCanvas
+        selectedSourceIds={[]}
+        sessionId="sess-race"
+        workspaceId={null}
+      />,
+    );
+    const removeButton = await screen.findByRole("button", { name: "移除" });
+    await userEvent.click(removeButton);
+
+    // The optimistic removal happens synchronously; the racing poll (already
+    // dispatched with the row still present server-side) must not re-add it.
+    await waitFor(() => {
+      expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
+    });
+  });
+});

@@ -651,3 +651,119 @@ async fn deleting_conversation_sweeps_unbound_artifacts_into_cleanup() {
     assert_eq!(status, "deleting", "orphaned artifact must enter async GC");
     assert_eq!(tasks, 1, "exactly one cleanup task for the orphan");
 }
+
+/// Review round-5 T1 (was claimed in §13, actually landed here): a dual-bound
+/// artifact (session + workspace) deleted CONCURRENTLY from both scopes must
+/// not survive as a zombie — the fixed-order dual-table lock serializes the
+/// two deletions, so the second deleter sees the artifact unbound and sweeps
+/// it into the async GC queue.
+#[tokio::test]
+async fn concurrent_session_and_workspace_deletion_sweeps_dual_bound_artifact() {
+    let Some(database_url) = env::var("DATABASE_URL").ok() else {
+        return;
+    };
+    migration_role_context();
+    let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+    __bootstrap.migrate().await.unwrap();
+    let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+    repo.bootstrap().migrate().await.unwrap();
+
+    let owner_user_id = UserId::from(Uuid::new_v4());
+    let ctx = AuthContext::new(owner_user_id, contracts::auth_runtime::SubjectKind::User)
+        .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+    let notebook = repo
+        .bootstrap().create_workspace(&ctx, "dual delete notebook", "dual delete")
+        .await
+        .unwrap();
+    let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
+    let session = repo
+        .sessions()
+        .create_session(&ctx, Some(workspace_id), Some("dual delete session"), "chat", "agent")
+        .await
+        .unwrap();
+    let session_id = Uuid::parse_str(&session.id).unwrap();
+    let document = repo
+        .bootstrap()
+        .create_session_document(&ctx, session_id, "dual.txt", 42, "text/plain")
+        .await
+        .unwrap();
+    let document_id = Uuid::parse_str(&document.id).unwrap();
+    // Second binding: the artifact is visible through the workspace too.
+    {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_user', $1, true)")
+            .bind(ctx.user_id().into_uuid().to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            "insert into workspace_document_bindings (artifact_id, workspace_id, owner_user_id) values ($1, $2, $3)",
+        )
+        .bind(document_id)
+        .bind(workspace_id)
+        .bind(ctx.user_id().into_uuid())
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    // Both scope-owner deletions race; each runs in its own connection and
+    // both must see a consistent capture→cascade under the dual-table lock.
+    let repo_a = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let repo_b = PgAppRepository { pool: __bootstrap.pool.clone() };
+    let sessions_repo = repo_a.sessions();
+    let bootstrap_repo = repo_b.bootstrap();
+    let (deleted_session, deleted_workspace) = tokio::join!(
+        sessions_repo.delete_session(&ctx, session_id),
+        bootstrap_repo.delete_workspace(&ctx, workspace_id)
+    );
+    assert!(deleted_session.unwrap());
+    assert!(deleted_workspace.unwrap());
+
+    let (binding_rows, status, tasks) = {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        let bindings = sqlx::query_scalar::<_, i64>(
+            "select count(*)::bigint
+             from conversation_document_bindings where artifact_id = $1
+             union all
+             select count(*)::bigint
+             from workspace_document_bindings where artifact_id = $1",
+        )
+        .bind(document_id)
+        .fetch_all(tx.as_mut())
+        .await
+        .unwrap();
+        let status = sqlx::query_scalar::<_, String>(
+            "select status from documents where id = $1",
+        )
+        .bind(document_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        let tasks = sqlx::query_scalar::<_, i64>(
+            "select count(*)::bigint from document_cleanup_tasks where document_id = $1",
+        )
+        .bind(document_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        (bindings, status, tasks)
+    };
+    assert_eq!(
+        binding_rows.iter().sum::<i64>(),
+        0,
+        "both binding kinds must be gone after both deletions"
+    );
+    assert_eq!(
+        status, "deleting",
+        "the unbound dual artifact must enter async GC — no orphan leak past the race"
+    );
+    assert!(tasks >= 1, "a cleanup task must exist for the orphan");
+}
