@@ -45,6 +45,14 @@ pub enum DocumentDeletionOutcome {
     NotFound,
 }
 
+/// Workspace binding version facts (chat-first W2d snapshot §4.4).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceBindingVersion {
+    pub binding_id: String,
+    pub artifact_id: String,
+    pub parse_version: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct DocumentScopeState {
     pub document_id: Uuid,

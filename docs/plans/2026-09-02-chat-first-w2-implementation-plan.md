@@ -314,3 +314,20 @@ dev 栈 tmux session `context-os-dev` 保持运行（frontend :3000 / api :8080�
 Standards 处理：删除无生产调用方的 `ensure_payer_can_spend` / `place_usage_hold_for_estimate` 旧 delegate 与 `with_credential_source` builder（构造点全部字面量化为枚举）。登记遗留：失败轮独立 snapshot 落行（重试语义需产品决策）、index version 明细。
 
 回归：**L1 OK**（文件门 + 5 crate + tsc）；storage-pg 38、app-chat 88、billing 63、contracts 全套、前端 typecheck + 529/2；端到端旅程 **19/19**（SSE 主路径 stream:true 无 doc_scope 全链 + 首建轮 + BYOK/回退 + GC/墓碑）。
+
+## 13. 第三轮审查修复（2026-09-03，P0×2 + P1×4 + Standards 清零）
+
+第三轮静态审查指出的问题全部修复；审查要求的六组对抗测试全部落地。此前 §11/§12 中"persist 不再吞错"等完成表述以本轮实际收敛为准：**历史边界冻结于单次取数、错误向上传播**在本轮才真正闭环（见下表 P1-3）。
+
+| 项 | 修复 | 实证 |
+|---|---|---|
+| **P0-1 QuickChat 计费 fail-open** | 启动价目门：`quick_chat_official_price_gate`（app-bootstrap）要求 `PLATFORM_OFFICIAL_RATES_JSON` 含 official Quick Chat 模型行，缺失即拒绝启动（new_memory panic / bootstrap anyhow）；`rates_present_in` 纯函数 + 测试；hold 估价对 QuickChat purpose 硬失败（`quick_chat_pricing_unconfigured` / `quick_chat_price_unavailable`），不再静默 None | **实证**：缺行时 API 拒绝启动（"official Quick Chat price gate failed … dashscope/qwen3.8-flash"）；补行后启动成功，30 分钟内 `llm_usage_events.credential_source` 落 20 条真实计费记录 |
+| **P0-2 会话+工作区并发删除竞态** | 双绑定表按固定顺序 `LOCK TABLE … IN SHARE ROW EXCLUSIVE MODE`（共享 `lock_binding_tables`），capture→cascade 全程持锁，另一侧绑定无法在孤儿清点后提交 | storage-pg 并发删除用例（双绑定并发删除仅一侧持锁的旧路径已移除） |
+| **P1-1 capabilities 权威** | `is_rag_turn` 改用规范 `resolve_capabilities(req.capabilities, agent_type)`（空数组 = 纯 chat）；service/streaming 两条入口一致，消除双真相源 | `capabilities=[] + agent_type=rag` 反例用例：不再触发 RAG 范围 |
+| **P1-2 删最后文件仍挂 RAG** | 会话 ready 文件 0→ready 迁移才挂 rag；删除导致 ready 归零后 strip 效果按 `capabilitiesManual` 豁免判定收敛 | 前端 Vitest（canvas strip/挂载用例） |
+| **P1-3 历史边界 + 单次冻结** | `history_boundary` 并入 `turn_scope_facts` 一次性冻结（session+persist 均存在时取 `list_messages` 实长，错误向上传播不再 `unwrap_or(0)`）；`enforce_agent_scope` 消费同一冻结事实集，enforcement 与 snapshot 不再两次查询漂移 | app-chat 用例（查询失败向上冒泡；snapshot 与执行同源） |
+| **P1-4 scope/snapshot 同源 provenance** | `scopes_of` 返回双源全部 scope（session 优先、workspace 不丢）；snapshot 记 `session_binding_versions` + `effective_provider`（执行前捕获，非事后 usage 反查）；thinking 显式 null | 旅程 7 snapshot 载荷；contracts 契约字段 |
+
+Standards：删除 `with_credential_source` builder 与无调用方 delegate（§12 已记）；billing 环境变量仅作启动门单一真相，运行期不再二次推导。
+
+回归：**L1 OK**；`cargo check --workspace --tests` 零错；前端 typecheck + Vitest 529/2；端到端旅程 **19/19**（含缺价启动拒绝的 live 正证）。

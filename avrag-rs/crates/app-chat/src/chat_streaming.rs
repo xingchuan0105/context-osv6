@@ -79,7 +79,24 @@ impl ChatContext {
         // Review P0-2: the SSE path is the frontend's main chat surface — the
         // same binding-derived scope enforcement and session-file injection
         // must apply here as in the non-streaming pipeline.
-        crate::chat::enforce_agent_scope(&state, &mut req, workspace_id).await?;
+        // Single freeze (review P1-5): identical to the non-streaming entry.
+        let mut turn_scope_facts = state
+            .turn_scope_facts(
+                req.session_id.as_deref().and_then(|v| uuid::Uuid::parse_str(v).ok()),
+                workspace_id,
+            )
+            .await?;
+        turn_scope_facts.history_boundary = match (
+            req.session_id.as_deref().and_then(|v| uuid::Uuid::parse_str(v).ok()),
+            state.chat_persistence(),
+        ) {
+            (Some(session_uuid), Some(persistence)) => persistence
+                .list_messages(&state.auth, session_uuid)
+                .await
+                .map(|messages| messages.len())?,
+            _ => 0,
+        };
+        crate::chat::enforce_agent_scope(&state, &mut req, &turn_scope_facts, workspace_id).await?;
         crate::chat::execute_pipeline_stream(
             state,
             req,
@@ -87,6 +104,7 @@ impl ChatContext {
             sender,
             token,
             crate::chat::PipelineLane::Agent,
+            turn_scope_facts,
         )
         .await
     }
@@ -123,6 +141,7 @@ impl ChatContext {
             sender,
             token,
             crate::chat::PipelineLane::Write,
+            Default::default(),
         )
         .await
     }

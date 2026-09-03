@@ -129,21 +129,22 @@ impl ChatContext {
                 "persisted_messages": scope_facts.history_boundary,
             },
             "session_binding_versions": scope_facts.session_artifacts,
-            "workspace_binding_artifacts": scope_facts.workspace_artifacts,
+            "workspace_binding_versions": scope_facts.workspace_binding_versions,
             "web_enabled": web_enabled,
             "thinking_enabled": null,
             "model_role": session.model_role,
             "credential_source": execution.response.credential_source,
-            "effective_provider": execution
-                .response
-                .usage
-                .as_ref()
-                .and_then(|usage| usage.provider.clone()),
+            "effective_provider": execution.effective_provider.clone(),
             "effective_model": execution
-                .response
-                .usage
-                .as_ref()
-                .and_then(|usage| usage.model.clone()),
+                .effective_model
+                .clone()
+                .or_else(|| {
+                    execution
+                        .response
+                        .usage
+                        .as_ref()
+                        .and_then(|usage| usage.model.clone())
+                }),
             "created_at": now_rfc3339(),
         });
         let user_turn_metadata: Option<serde_json::Value> = {
@@ -162,7 +163,10 @@ impl ChatContext {
         // done payload (persist runs before Done).
         let mut evidence_segments: Vec<serde_json::Value> = Vec::new();
         for citation in &mut execution.response.citations {
-            citation.source_scope = scope_facts.scope_of(&citation.doc_id).map(str::to_string);
+            citation.source_scope = scope_facts
+                .scopes_of(&citation.doc_id)
+                .first()
+                .map(|scope| scope.to_string());
             if let Some(scope) = citation.source_scope.clone() {
                 evidence_segments.push(serde_json::json!({
                     "channel": "rag",

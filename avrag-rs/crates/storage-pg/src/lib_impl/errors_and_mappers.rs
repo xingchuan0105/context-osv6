@@ -103,6 +103,13 @@ pub struct DocumentUploadValidation {
 }
 
 #[derive(Debug, Clone)]
+pub struct WorkspaceBindingVersion {
+    pub binding_id: String,
+    pub artifact_id: String,
+    pub parse_version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct DocumentScopeState {
     pub document_id: Uuid,
     pub status: DocumentStatus,

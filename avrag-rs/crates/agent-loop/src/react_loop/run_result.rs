@@ -113,5 +113,6 @@ pub fn build_run_result(
         ews: None,
     credential_source: None,
     effective_model: None,
+            effective_provider: None,
     }
 }

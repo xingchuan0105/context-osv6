@@ -1,7 +1,7 @@
 use crate::ports::workspaces::workspace_store::WorkspaceStore;
 use crate::{
     BillingQuotaPort, DocumentStorePort, MemoryState, current_owner_user_id, current_user_id,
-    domain_rows::{
+    domain_rows::{ WorkspaceBindingVersion, 
         DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
         DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
     },
@@ -404,6 +404,34 @@ impl DocumentStorePort for MemoryDocumentStore {
             .or_default()
             .push(document.id.clone());
         Ok(document)
+    }
+
+    async fn completed_workspace_binding_versions(
+        &self,
+        auth: &AuthContext,
+        workspace_id: Uuid,
+    ) -> Result<Vec<WorkspaceBindingVersion>, AppError> {
+        let state = self.state.read().await;
+        let mut versions = Vec::new();
+        for (artifact_id, bindings) in &state.workspace_document_bindings {
+            if !bindings.contains(&workspace_id.to_string()) {
+                continue;
+            }
+            let Some(stored) = state.documents.get(artifact_id) else {
+                continue;
+            };
+            if !org_matches(auth, &stored.document.owner_user_id)
+                || !matches!(stored.document.status, DocumentStatus::Completed)
+            {
+                continue;
+            }
+            versions.push(WorkspaceBindingVersion {
+                binding_id: artifact_id.clone(),
+                artifact_id: artifact_id.clone(),
+                parse_version: None,
+            });
+        }
+        Ok(versions)
     }
 
     async fn list_session_files(

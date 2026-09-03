@@ -49,6 +49,8 @@ impl ChatContext {
             tokens_emitted: false,
             citations_emitted: false,
             assistant_turn_metadata: None,
+            effective_provider: None,
+            effective_model: None,
             turn_scope_facts: Default::default(),
         })
     }
@@ -130,6 +132,8 @@ pub(crate) fn build_chat_execution_from_result(
         tokens_emitted: false,
         citations_emitted: false,
         assistant_turn_metadata: None,
+        effective_provider: agent_result.effective_provider.clone(),
+        effective_model: agent_result.effective_model.clone(),
         turn_scope_facts: Default::default(),
     }
 }

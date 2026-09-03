@@ -238,7 +238,15 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         None,
     );
 
-    let billing = BillingContext::new(None, config.usage_limit.enforcement_phase.clone());
+    // Dev-only memory bootstrap cannot return a boot error; fail loudly and
+    // early the same way the async production path would.
+    quick_chat_official_price_gate(&config)
+        .unwrap_or_else(|error| panic!("boot refused: {error}"));
+    let billing = BillingContext::new(None, config.usage_limit.enforcement_phase.clone())
+        .with_quick_chat_official(
+            config.quick_chat_llm.provider_name(),
+            config.quick_chat_llm.model.clone(),
+        );
     let admin = AdminContext::new();
     let documents = DocumentContext::new();
     let analytics = AnalyticsServiceCtx::new(None);
@@ -278,6 +286,22 @@ fn publish_fingerprint_from_config(config: &AppConfig) -> PublishFingerprint {
     );
     fingerprint.multimodal_vector_dim = Some(config.milvus.multimodal_vector_dim);
     fingerprint
+}
+
+/// Chat-first W3 §8.5 startup gate: the official Quick Chat model must have a
+/// price row in `PLATFORM_OFFICIAL_RATES_JSON`, or the process refuses to
+/// start — an unpriced official route would silently free-ride.
+fn quick_chat_official_price_gate(config: &AppConfig) -> Result<(), String> {
+    let provider = config.quick_chat_llm.provider_name();
+    let model = config.quick_chat_llm.model.clone();
+    let rates = std::env::var("PLATFORM_OFFICIAL_RATES_JSON").unwrap_or_default();
+    if avrag_billing::rates_present_in(&rates, &provider, &model) {
+        Ok(())
+    } else {
+        Err(format!(
+            "official Quick Chat price gate failed: PLATFORM_OFFICIAL_RATES_JSON has no row for {provider}/{model}. Add the official price row before starting (design §8.5 — an unpriced official route would free-ride)."
+        ))
+    }
 }
 
 pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> {
@@ -529,8 +553,13 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         None
     };
 
-    let mut billing =
-        BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
+    quick_chat_official_price_gate(&config).map_err(anyhow::Error::msg)?;
+        let mut billing =
+            BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone())
+                .with_quick_chat_official(
+                    config.quick_chat_llm.provider_name(),
+                    config.quick_chat_llm.model.clone(),
+                );
     if let Some(obs) = usage_observer.clone() {
         billing = billing.with_usage_observer(obs);
     }

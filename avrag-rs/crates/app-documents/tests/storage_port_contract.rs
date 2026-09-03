@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use app_core::{
+use app_core::{ WorkspaceBindingVersion, 
     AnalyticsServiceCtx, DocumentStorePort, MemoryDocumentStore, MemoryState, MemoryStateHandles,
     ObjectStoreConfig, ObjectStorePort, StorageContext, StorageContextParts, StorageInfra,
     StorageStores,
@@ -216,6 +216,14 @@ impl DocumentStorePort for RecordingDocumentStore {
         _status: Option<DocumentStatus>,
     ) -> Result<bool, AppError> {
         Ok(false)
+    }
+
+    async fn completed_workspace_binding_versions(
+        &self,
+        _auth: &AuthContext,
+        _workspace_id: Uuid,
+    ) -> Result<Vec<WorkspaceBindingVersion>, AppError> {
+        Ok(Vec::new())
     }
 
     async fn create_session_document(

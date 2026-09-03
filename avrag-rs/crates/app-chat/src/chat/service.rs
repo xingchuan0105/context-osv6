@@ -19,42 +19,27 @@ impl ChatContext {
     ) -> Result<ChatResponse, AppError> {
         let effective_workspace_id = self.resolve_request_workspace(&mut req).await?;
         let state = self.with_owner_pays_auth(effective_workspace_id).await;
-        enforce_agent_scope(&state, &mut req, effective_workspace_id).await?;
-        execute_pipeline(state, req, PipelineLane::Agent).await
-    }
-
-    /// Server-side ContextScope recomputation (design 2026-09-02 §10.3/§11.2):
-    /// the allowed artifact set derives from the typed bindings of this
-    /// conversation plus its workspace, if any. The client's `doc_scope` is a
-    /// subset selection within that set and can never widen visibility.
-    pub(crate) async fn recompute_allowed_doc_scope(
-        &self,
-        req: &mut ChatRequest,
-        effective_workspace_id: Option<Uuid>,
-    ) -> Result<(), AppError> {
-        let facts = self
+        // Single freeze (review P1-5): scope facts + history boundary are
+        // captured once here, pre-preflight, and threaded through execution.
+        // Enforcement consumes the frozen view; persist reuses the same set.
+        let mut turn_scope_facts = state
             .turn_scope_facts(
                 req.session_id.as_deref().and_then(|v| Uuid::parse_str(v).ok()),
                 effective_workspace_id,
             )
             .await?;
-        if !req.doc_scope.is_empty() {
-            let allowed = facts.allowed_ids();
-            req.doc_scope.retain(|id| allowed.contains(id));
-        }
-        // Chat-first closure: ready session artifacts join RAG turns by default.
-        // The scope is derived server-side from typed bindings — the client can
-        // narrow workspace selections but cannot add or hide session files.
-        // `capabilities[]` is the authoritative routing fact (agent_type is a
-        // derived label, e.g. "rag+search").
-        if is_rag_turn(req) {
-            for binding in &facts.session_artifacts {
-                if !req.doc_scope.contains(&binding.artifact_id) {
-                    req.doc_scope.push(binding.artifact_id.clone());
-                }
-            }
-        }
-        Ok(())
+        turn_scope_facts.history_boundary = match (
+            req.session_id.as_deref().and_then(|v| Uuid::parse_str(v).ok()),
+            state.chat_persistence(),
+        ) {
+            (Some(session_uuid), Some(persistence)) => persistence
+                .list_messages(&state.auth, session_uuid)
+                .await
+                .map(|messages| messages.len())?,
+            _ => 0,
+        };
+        enforce_agent_scope(&state, &mut req, &turn_scope_facts, effective_workspace_id).await?;
+        execute_pipeline(state, req, PipelineLane::Agent, turn_scope_facts).await
     }
 
     /// The binding-derived scope facts of the current turn (W2d snapshot /
@@ -84,10 +69,19 @@ impl ChatContext {
             }
         }
         if let Some(workspace_id) = effective_workspace_id {
-            facts.workspace_artifacts = self
+            let raw = self
                 .documents
-                .completed_workspace_doc_ids(&self.auth, &self.storage, &workspace_id.to_string())
+                .completed_workspace_binding_versions(
+                    &self.auth,
+                    &self.storage,
+                    &workspace_id.to_string(),
+                )
                 .await?;
+            facts.workspace_binding_versions = raw
+                .into_iter()
+                .map(|version| serde_json::from_value(serde_json::to_value(&version).unwrap_or_default()))
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap_or_default();
         }
         Ok(facts)
     }
@@ -504,11 +498,18 @@ fn chat_workspace_id_for_request(
 /// Binding-derived scope facts of one turn: which ready artifacts are visible
 /// through the conversation binding vs a workspace binding.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct WorkspaceBindingVersion {
+    pub binding_id: String,
+    pub artifact_id: String,
+    pub parse_version: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TurnScopeFacts {
     /// Binding + artifact + parse version facts of conversation-bound files.
     pub session_artifacts: Vec<SessionBindingVersion>,
-    /// Completed artifact ids visible via the workspace binding.
-    pub workspace_artifacts: Vec<String>,
+    /// Binding + artifact + parse version facts of workspace-bound files.
+    pub workspace_binding_versions: Vec<WorkspaceBindingVersion>,
     /// Pre-execution count of persisted messages for this conversation
     /// (the history boundary this turn was built on). Frozen before the run.
     pub history_boundary: usize,
@@ -518,18 +519,25 @@ impl TurnScopeFacts {
     pub(crate) fn allowed_ids(&self) -> std::collections::HashSet<String> {
         let mut ids: std::collections::HashSet<String> = std::collections::HashSet::new();
         ids.extend(self.session_artifacts.iter().map(|b| b.artifact_id.clone()));
-        ids.extend(self.workspace_artifacts.iter().cloned());
+        ids.extend(self.workspace_binding_versions.iter().map(|b| b.artifact_id.clone()));
         ids
     }
 
-    pub(crate) fn scope_of(&self, artifact_id: &str) -> Option<&'static str> {
+    /// All visible scopes for an artifact — dual bindings keep BOTH provenances
+    /// (review round-3: session precedence alone loses the workspace view).
+    pub(crate) fn scopes_of(&self, artifact_id: &str) -> Vec<&'static str> {
+        let mut scopes = Vec::new();
         if self.session_artifacts.iter().any(|b| b.artifact_id == artifact_id) {
-            Some("session")
-        } else if self.workspace_artifacts.iter().any(|artifact| artifact == artifact_id) {
-            Some("workspace")
-        } else {
-            None
+            scopes.push("session");
         }
+        if self
+            .workspace_binding_versions
+            .iter()
+            .any(|b| b.artifact_id == artifact_id)
+        {
+            scopes.push("workspace");
+        }
+        scopes
     }
 }
 
@@ -544,11 +552,13 @@ pub(crate) struct SessionBindingVersion {
 /// Authoritative RAG-turn predicate: `capabilities[]` wins over the derived
 /// `agent_type` label (which may be "chat", "rag", "search" or "rag+search").
 pub(crate) fn is_rag_turn(req: &ChatRequest) -> bool {
-    req.agent_type.contains("rag")
-        || req
-            .capabilities
-            .as_ref()
-            .is_some_and(|caps| caps.iter().any(|cap| cap == "rag"))
+    // Canonical resolver (review round-3 P1): when `capabilities` is present it
+    // is authoritative — even empty — and the legacy agent_type label is
+    // ignored, exactly like the execution router.
+    matches!(
+        crate::resolve_capabilities(req.capabilities.as_deref(), &req.agent_type),
+        Ok(set) if set.rag
+    )
 }
 
 /// Server-side ContextScope enforcement shared by BOTH chat entries — the
@@ -558,12 +568,26 @@ pub(crate) fn is_rag_turn(req: &ChatRequest) -> bool {
 pub(crate) async fn enforce_agent_scope(
     state: &ChatContext,
     req: &mut ChatRequest,
+    facts: &TurnScopeFacts,
     effective_workspace_id: Option<Uuid>,
 ) -> Result<(), AppError> {
     let client_scope_was_empty = req.doc_scope.is_empty();
-    state
-        .recompute_allowed_doc_scope(req, effective_workspace_id)
-        .await?;
+    if !req.doc_scope.is_empty() {
+        let allowed = facts.allowed_ids();
+        req.doc_scope.retain(|id| allowed.contains(id));
+    }
+    // Chat-first closure: ready session artifacts join RAG turns by default.
+    // The scope is derived server-side from typed bindings — the client can
+    // narrow workspace selections but cannot add or hide session files.
+    // `capabilities[]` is the authoritative routing fact (agent_type is a
+    // derived label, e.g. "rag+search").
+    if is_rag_turn(req) {
+        for binding in &facts.session_artifacts {
+            if !req.doc_scope.contains(&binding.artifact_id) {
+                req.doc_scope.push(binding.artifact_id.clone());
+            }
+        }
+    }
     if state.storage.chat_persistence().is_some()
         && is_rag_turn(req)
         && req.doc_scope.is_empty()

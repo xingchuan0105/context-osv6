@@ -87,6 +87,22 @@ impl DocumentContext {
         objects.resolve_citation_asset_url(asset).await
     }
 
+    /// Workspace-bound completed artifacts with binding + parse version facts
+    /// (chat-first W2d snapshot; scope truth is the binding tables).
+    pub async fn completed_workspace_binding_versions(
+        &self,
+        auth: &AuthContext,
+        storage: &StorageContext,
+        workspace_id: &str,
+    ) -> Result<Vec<app_core::WorkspaceBindingVersion>, AppError> {
+        let workspace_uuid = Uuid::parse_str(workspace_id)
+            .map_err(|_| AppError::not_found("workspace_not_found", "workspace not found"))?;
+        let store = require_document_store(storage)?;
+        store
+            .completed_workspace_binding_versions(auth, workspace_uuid)
+            .await
+    }
+
     /// Completed document ids in a workspace, used as the RAG enforcement scope.
     ///
     /// Fail-closed: a missing/errored document store surfaces as an error rather than

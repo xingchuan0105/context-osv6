@@ -260,6 +260,12 @@ impl ChatContext {
             .transpose()?
             .or_else(|| self.auth.workspace_id());
         let state = self.with_owner_pays_auth(workspace_id).await;
-        crate::chat::execute_pipeline(state, req, crate::chat::PipelineLane::Write).await
+        crate::chat::execute_pipeline(
+            state,
+            req,
+            crate::chat::PipelineLane::Write,
+            Default::default(),
+        )
+        .await
     }
 }

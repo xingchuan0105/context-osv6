@@ -237,6 +237,19 @@ fn price_from_rates(
 /// - `0` when both token counts are zero.
 /// - `None` when the model matches **no** configured rate row (caller must not
 ///   bill silently).
+/// Startup price-gate helper (chat-first W3 §8.5): true when the configured
+/// official rate rows contain a row matching `provider` + `model`. Pure —
+/// takes the raw rate JSON so callers can gate without touching the env.
+pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
+    if raw.trim().is_empty() {
+        return false;
+    }
+    match serde_json::from_str::<Vec<RateRow>>(raw) {
+        Ok(rows) => resolve_in(&rows, provider, model, 1, Utc::now()).is_some(),
+        Err(_) => false,
+    }
+}
+
 pub fn list_price_fen(
     provider: &str,
     model: &str,
@@ -514,5 +527,21 @@ mod tests {
             usage_debit_idempotency_key_for_request(id, "req-1"),
             "usage_debit:req:00000000-0000-0000-0000-000000000000:req-1"
         );
+    }
+}
+
+#[cfg(test)]
+mod price_gate_tests {
+    use super::*;
+
+    /// Review round-3: the missing-price startup gate relies on exact
+    /// provider+model matching — cover the pure matcher here.
+    #[test]
+    fn rates_present_in_matches_provider_and_model() {
+        let rows = r#"[{"model_contains":"qwen3.8-flash","input":20,"output":80}]"#;
+        assert!(rates_present_in(rows, "dashscope", "qwen3.8-flash"));
+        assert!(!rates_present_in(rows, "dashscope", "qwen3.7-flash"));
+        assert!(!rates_present_in("", "dashscope", "qwen3.8-flash"));
+        assert!(!rates_present_in("not json", "dashscope", "qwen3.8-flash"));
     }
 }

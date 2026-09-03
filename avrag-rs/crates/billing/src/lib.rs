@@ -53,7 +53,7 @@ pub use wallet::{
     handle_list_topup_packs, list_topup_packs, place_usage_hold, release_usage_hold,
     usage_hold_idempotency_key, usage_hold_release_idempotency_key,
 };
-pub use wallet_pricing::{
+pub use wallet_pricing::{ rates_present_in, 
     LIST_PRICE_MULTIPLIER, OfficialRates, list_price_fen, official_rates_for,
     usage_debit_idempotency_key, usage_debit_idempotency_key_for_request,
 };

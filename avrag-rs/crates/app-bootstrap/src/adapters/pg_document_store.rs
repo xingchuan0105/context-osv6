@@ -243,6 +243,28 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .map_err(map_pg_error)
     }
 
+    async fn completed_workspace_binding_versions(
+        &self,
+        auth: &AuthContext,
+        workspace_id: Uuid,
+    ) -> Result<Vec<app_core::WorkspaceBindingVersion>, AppError> {
+        self.repo
+            .bootstrap()
+            .completed_workspace_binding_versions(auth, workspace_id)
+            .await
+            .map(|versions| {
+                versions
+                    .into_iter()
+                    .map(|version| app_core::WorkspaceBindingVersion {
+                        binding_id: version.binding_id,
+                        artifact_id: version.artifact_id,
+                        parse_version: version.parse_version,
+                    })
+                    .collect()
+            })
+            .map_err(map_pg_error)
+    }
+
     async fn create_session_document(
         &self,
         auth: &AuthContext,

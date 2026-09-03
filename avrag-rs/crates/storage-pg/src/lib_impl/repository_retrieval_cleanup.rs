@@ -448,3 +448,19 @@ pub async fn insert_document_cleanup_task(
 
     Ok(result.rows_affected() > 0)
 }
+
+
+/// Review P0-2: scope-owner deletion must serialize against BOTH binding kinds
+/// in a fixed order — locking only the deleting side lets a dual-bound
+/// artifact's other-scope binding commit between capture and cascade and slip
+/// past the orphan sweep. Table-level granularity is accepted: scope-owner
+/// deletion is rare and user-initiated.
+pub(crate) async fn lock_binding_tables(tx: &mut PgConnection) -> Result<(), PgStorageError> {
+    sqlx::query("lock table conversation_document_bindings in share row exclusive mode")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("lock table workspace_document_bindings in share row exclusive mode")
+        .execute(&mut *tx)
+        .await?;
+    Ok(())
+}

@@ -163,8 +163,7 @@ impl SessionRepository {
         // Serialize against concurrent session-file uploads: without this lock
         // a binding committed between capture and cascade would orphan its
         // artifact outside the captured sweep list (review P1-4).
-        sqlx::query("lock table conversation_document_bindings in share row exclusive mode")
-            .execute(tx.inner())
+        crate::lib_impl::repository_retrieval_cleanup::lock_binding_tables(tx.inner())
             .await?;
         // Capture the session's bound artifacts before the FK cascade removes
         // their bindings (W2e orphan sweep — same contract as workspace delete).

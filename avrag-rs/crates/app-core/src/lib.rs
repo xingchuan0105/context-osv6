@@ -118,7 +118,7 @@ pub use workspace_publish_store::{
     PublishedDocumentUpsert, WorkspacePublishRow, WorkspacePublishStorePort,
 };
 pub use domain_ports::*;
-pub use domain_rows::{
+pub use domain_rows::{WorkspaceBindingVersion, 
     ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, DocumentDeletionOutcome,
     DocumentScopeState, DocumentTaskSeed, DocumentUploadMutationOutcome,
     DocumentUploadQueueOutcome, IndexedChunk, MultimodalChunkRow, NotificationCreateParams,

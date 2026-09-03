@@ -54,6 +54,12 @@ pub(crate) struct ChatExecution {
     pub assistant_turn_metadata: Option<serde_json::Value>,
     /// Binding-derived scope facts frozen BEFORE execution (chat-first review
     /// fix: the snapshot must not re-query a mutable view after the answer).
+        /// Effective provider/model of the primary model this run (chat-first W3
+    /// attribution; stamped from the bound client at run_react_mode).
+    pub effective_provider: Option<String>,
+    pub effective_model: Option<String>,
+    /// Binding-derived scope facts frozen BEFORE execution (review fix:
+    // the snapshot must not re-query a mutable view after the answer).
     pub turn_scope_facts: super::service::TurnScopeFacts,
 }
 
@@ -83,13 +89,14 @@ pub(crate) async fn execute_pipeline(
     state: ChatContext,
     request: ChatRequest,
     lane: PipelineLane,
+    turn_scope_facts: crate::chat::service::TurnScopeFacts,
 ) -> Result<ChatResponse, AppError> {
     info!(
         orchestrator = "pipeline",
         lane = ?lane,
         "executing linear pipeline"
     );
-    run_pipeline(state, request, None, lane).await
+    run_pipeline(state, request, None, lane, turn_scope_facts).await
 }
 
 /// Streaming pipeline for either product lane.
@@ -100,6 +107,7 @@ pub(crate) async fn execute_pipeline_stream(
     sender: Sender<contracts::chat::ChatEvent>,
     token: CancellationToken,
     lane: PipelineLane,
+    turn_scope_facts: crate::chat::service::TurnScopeFacts,
 ) -> Result<(), AppError> {
     let stream_config = StreamConfig {
         sender,
@@ -111,7 +119,7 @@ pub(crate) async fn execute_pipeline_stream(
         lane = ?lane,
         "executing streaming linear pipeline"
     );
-    run_pipeline(state, request, Some(stream_config), lane)
+    run_pipeline(state, request, Some(stream_config), lane, turn_scope_facts)
         .await
         .map(|_| ())
 }
@@ -121,6 +129,7 @@ async fn run_pipeline(
     request: ChatRequest,
     stream_config: Option<StreamConfig>,
     lane: PipelineLane,
+    turn_scope_facts: crate::chat::service::TurnScopeFacts,
 ) -> Result<ChatResponse, AppError> {
     match lane {
         PipelineLane::Agent if is_write_agent_type(&request.agent_type) => {
@@ -141,9 +150,16 @@ async fn run_pipeline(
     let preflight = state.execute_chat_preflight(&request).await?;
     // Hold is placed inside after cache miss; always released on return.
     let mut active_hold: Option<(Uuid, i64)> = None;
-    let outcome =
-        run_pipeline_inner(state.clone(), request, stream_config, lane, preflight, &mut active_hold)
-            .await;
+    let outcome = run_pipeline_inner(
+        state.clone(),
+        request,
+        stream_config,
+        lane,
+        preflight,
+        turn_scope_facts,
+        &mut active_hold,
+    )
+    .await;
     if let Some((hold_id, hold_fen)) = active_hold {
         state
             .billing
@@ -159,29 +175,13 @@ async fn run_pipeline_inner(
     stream_config: Option<StreamConfig>,
     lane: PipelineLane,
     preflight: ChatPreflight,
+    turn_scope_facts: crate::chat::service::TurnScopeFacts,
     active_hold: &mut Option<(Uuid, i64)>,
 ) -> Result<ChatResponse, AppError> {
     let session = state.resolve_chat_session(&request).await?;
     // Freeze the binding-derived scope facts BEFORE execution (review fix:
     // the snapshot must not re-query a mutable view after the answer). The
     // history boundary is frozen in the same pre-execution step.
-    let session_uuid = Uuid::parse_str(&session.id).ok();
-    let session_workspace = session
-        .workspace_id
-        .as_deref()
-        .and_then(|value| Uuid::parse_str(value).ok());
-    let mut turn_scope_facts = state
-        .turn_scope_facts(session_uuid, session_workspace)
-        .await?;
-    turn_scope_facts.history_boundary = match state.chat_persistence() {
-        Some(persistence) => persistence
-            .list_messages(&state.auth, session_uuid.unwrap_or_default())
-            .await
-            .map(|messages| messages.len())
-            .unwrap_or(0),
-        None => 0,
-    };
-
     // ADR-0010 §9: exact first (no embed), then semantic with embed.
     if request.source_type.as_deref() == Some("share") {
         if let Some(token) = request.source_token.as_deref() {

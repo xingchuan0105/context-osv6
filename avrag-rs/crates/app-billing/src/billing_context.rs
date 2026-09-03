@@ -20,6 +20,9 @@ pub struct BillingContext {
     wallet: Option<Arc<dyn WalletStorePort>>,
     /// Optional BYOK secrets for protective preflight.
     provider_secrets: Option<Arc<dyn ProviderSecretStorePort>>,
+    /// Official Quick Chat route (provider, model) — threaded from the parsed
+    /// app config at bootstrap; the single source for quick_chat hold pricing.
+    quick_chat_official: Option<(String, String)>,
 }
 
 impl BillingContext {
@@ -33,7 +36,13 @@ impl BillingContext {
             usage_observer: None,
             wallet: None,
             provider_secrets: None,
+            quick_chat_official: None,
         }
+    }
+
+    pub fn with_quick_chat_official(mut self, provider: String, model: String) -> Self {
+        self.quick_chat_official = Some((provider, model));
+        self
     }
 
     pub fn with_usage_observer(mut self, observer: Arc<dyn UsageObserver>) -> Self {
@@ -138,16 +147,16 @@ impl BillingContext {
             }
         }
         // Price the hold against the model the official route will actually
-        // call (review P0: quick_chat holds must not estimate AGENT_LLM_*).
-        let (provider, model) = if purpose == ProviderSecretPurpose::QuickChat {
-            (
-                std::env::var("QUICK_CHAT_LLM_PROVIDER")
-                    .or_else(|_| std::env::var("DASHSCOPE_PROVIDER"))
-                    .unwrap_or_else(|_| "dashscope".into()),
-                std::env::var("QUICK_CHAT_LLM_MODEL")
-                    .or_else(|_| std::env::var("DASHSCOPE_MODEL"))
-                    .unwrap_or_else(|_| "qwen3.8-flash".into()),
-            )
+        // call. QuickChat pricing comes from the parsed app config threaded at
+        // bootstrap — never re-derived from env (review P0-1: single truth).
+        let (provider, model, quick_chat) = if purpose == ProviderSecretPurpose::QuickChat {
+            let (provider, model) = self.quick_chat_official.clone().ok_or_else(|| {
+                AppError::validation(
+                    "quick_chat_pricing_unconfigured",
+                    "Official Quick Chat pricing is not configured; refusing to run without a price (design §8.5).",
+                )
+            })?;
+            (provider, model, true)
         } else {
             (
                 std::env::var("AGENT_LLM_PROVIDER")
@@ -156,6 +165,7 @@ impl BillingContext {
                 std::env::var("AGENT_LLM_MODEL")
                     .or_else(|_| std::env::var("LLM_MODEL"))
                     .unwrap_or_else(|_| "deepseek-v4-flash".into()),
+                false,
             )
         };
         let Some(need_fen) = avrag_billing::list_price_fen(
@@ -165,6 +175,17 @@ impl BillingContext {
             estimated_output_tokens.max(0) as u32,
             0,
         ) else {
+            // Review P0-1: a missing price row must not silently free-ride the
+            // official route. The startup gate refuses to boot without the row;
+            // this per-turn branch is the second line of defense.
+            if quick_chat {
+                return Err(AppError::validation(
+                    "quick_chat_price_unavailable",
+                    format!(
+                        "No official price row for {provider}/{model}; Quick Chat is unavailable until PLATFORM_OFFICIAL_RATES_JSON covers it."
+                    ),
+                ));
+            }
             return Ok(None);
         };
         if need_fen <= 0 {

@@ -87,6 +87,22 @@ pub struct ModelProviderConfig {
 }
 
 impl ModelProviderConfig {
+    /// Stable provider id derived from the base URL (mirrors `avrag_llm`).
+    pub fn provider_name(&self) -> String {
+        let url = self.base_url.to_ascii_lowercase();
+        if url.contains("dashscope") {
+            "dashscope".to_string()
+        } else if url.contains("deepseek") {
+            "deepseek".to_string()
+        } else if url.contains("openai") {
+            "openai".to_string()
+        } else if url.contains("siliconflow") {
+            "siliconflow".to_string()
+        } else {
+            "custom".to_string()
+        }
+    }
+
     pub fn to_llm_config(&self) -> Option<avrag_llm::ModelProviderConfig> {
         if self.api_key.is_empty() || self.base_url.is_empty() {
             return None;

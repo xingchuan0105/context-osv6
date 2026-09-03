@@ -213,6 +213,9 @@ pub struct AgentRunResult {
     /// Model id the primary client actually carried this run (bound config).
     #[serde(default)]
     pub effective_model: Option<String>,
+    /// Provider id the primary client actually carried this run.
+    #[serde(default)]
+    pub effective_provider: Option<String>,
 
     // ===== v5 white-box fields (all serde(default) for backward compat) =====
     /// Trace ID for distributed tracing.

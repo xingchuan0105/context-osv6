@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::domain_rows::{
     DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed, DocumentUploadMutationOutcome,
-    DocumentUploadQueueOutcome,
+    DocumentUploadQueueOutcome, WorkspaceBindingVersion,
 };
 
 #[async_trait]
@@ -89,6 +89,14 @@ pub trait DocumentStorePort: Send + Sync {
     ) -> Result<Document, AppError>;
 
     /// Files visible to a Conversation via its typed bindings (upload order).
+    /// Workspace-bound completed artifacts with binding + parse version facts
+    /// (chat-first W2d snapshot; scope truth is the binding tables).
+    async fn completed_workspace_binding_versions(
+        &self,
+        auth: &AuthContext,
+        workspace_id: Uuid,
+    ) -> Result<Vec<WorkspaceBindingVersion>, AppError>;
+
     async fn list_session_files(
         &self,
         auth: &AuthContext,

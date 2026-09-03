@@ -362,8 +362,7 @@ impl BootstrapRepository {
         // Serialize against concurrent uploads (review P1-4) and capture the
         // artifacts bound to this workspace before the FK cascade removes
         // their bindings (W2e orphan sweep).
-        sqlx::query("lock table workspace_document_bindings in share row exclusive mode")
-            .execute(tx.inner())
+        crate::lib_impl::repository_retrieval_cleanup::lock_binding_tables(tx.inner())
             .await?;
         let bound_artifacts: Vec<Uuid> = sqlx::query(
             "select artifact_id from workspace_document_bindings where workspace_id = $1 and owner_user_id = $2",
@@ -514,6 +513,50 @@ impl BootstrapRepository {
             ));
         };
         map_document(row)
+    }
+
+    /// Chat-first W2d: workspace-bound completed artifacts with binding +
+    /// latest parse version facts (scope truth = the binding tables).
+    pub async fn completed_workspace_binding_versions(
+        &self,
+        context: &AuthContext,
+        workspace_id: Uuid,
+    ) -> Result<Vec<crate::WorkspaceBindingVersion>, PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        let rows = sqlx::query(
+            r#"
+            select b.id as binding_id, b.artifact_id, pr.run_id as parse_version
+            from workspace_document_bindings b
+            join documents d on d.id = b.artifact_id
+            left join lateral (
+                select run_id
+                from document_parse_runs pr
+                where pr.document_id = d.id
+                order by pr.created_at desc, pr.run_id desc
+                limit 1
+            ) pr on true
+            where b.workspace_id = $1
+              and b.owner_user_id = $2
+              and d.status = 'completed'
+            order by b.created_at asc, b.id asc
+            "#,
+        )
+        .bind(workspace_id)
+        .bind(context.user_id().into_uuid())
+        .fetch_all(tx.inner())
+        .await?;
+        tx.commit().await?;
+        rows.into_iter()
+            .map(|row: PgRow| {
+                Ok(crate::WorkspaceBindingVersion {
+                    binding_id: row.try_get::<Uuid, _>("binding_id")?.to_string(),
+                    artifact_id: row.try_get::<Uuid, _>("artifact_id")?.to_string(),
+                    parse_version: row
+                        .try_get::<Option<Uuid>, _>("parse_version")?
+                        .map(|value| value.to_string()),
+                })
+            })
+            .collect()
     }
 
     pub async fn create_session_document(

@@ -508,6 +508,7 @@ impl UnifiedAgent {
         });
 
         let effective_model = llm.config.model.clone();
+        let effective_provider = llm.config.provider_name();
         let skill_registry = Arc::new(agent_tools::capability::CapabilityRegistry::standard());
         let base_loop = agent_loop::r#loop::ReActLoop::new(llm, skill_registry)
             .with_chat_persistence(self.chat_persistence.clone());
@@ -521,7 +522,8 @@ impl UnifiedAgent {
         // Chat-first W3 attribution: what the primary client actually carried.
         // The bound client's config reflects the BYOK overlay when one applied.
         result.credential_source = Some(tenant.credential_source.as_str().to_string());
-        result.effective_model = Some(effective_model);
+        result.effective_model = Some(effective_model.clone());
+        result.effective_provider = Some(effective_provider);
         Ok(result)
     }
 }

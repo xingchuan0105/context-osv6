@@ -531,12 +531,33 @@ mod tests {
             turnstile_token: None,
         };
 
-        ctx.recompute_allowed_doc_scope(&mut req, None).await.unwrap();
+        let facts = ctx
+            .turn_scope_facts(
+                Uuid::parse_str(&session_a_id).ok(),
+                None,
+            )
+            .await
+            .unwrap();
+        crate::chat::enforce_agent_scope(&ctx, &mut req, &facts, None)
+            .await
+            .unwrap();
         assert_eq!(
             req.doc_scope,
             vec![doc_bound_id],
             "only the artifact bound to this conversation may survive"
         );
+        // Review round-3 P1: `capabilities=[]` is authoritative — agent_type
+        // "rag" must NOT enable RAG scope logic when capabilities are provided.
+        assert!(!crate::chat::is_rag_turn(&{
+            let mut r = req.clone();
+            r.capabilities = Some(Vec::new());
+            r
+        }));
+        assert!(crate::chat::is_rag_turn(&{
+            let mut r = req.clone();
+            r.capabilities = Some(vec!["rag".to_string()]);
+            r
+        }));
     }
 
     fn request_with_mode(agent_type: &str, doc_scope: Vec<String>) -> ChatRequest {
@@ -711,6 +732,8 @@ mod tests {
             tokens_emitted: false,
             citations_emitted: false,
             assistant_turn_metadata: None,
+            effective_provider: None,
+            effective_model: None,
             turn_scope_facts: Default::default(),
         }
     }
@@ -980,6 +1003,7 @@ mod tests {
                     tx,
                     token,
                     PipelineLane::Agent,
+                    Default::default(),
                 )
                 .await
             }
