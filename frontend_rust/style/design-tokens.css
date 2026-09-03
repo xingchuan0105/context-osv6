@@ -1,0 +1,539 @@
+/**
+ * Context-OS design tokens — canonical
+ * Spec: docs/design/STYLE_BASELINE.md (Cream × Void, 2026-08-02)
+ * Light palette = Cursor warm cream; Dark palette = xAI near-black monochrome.
+ * Values are HSL channels without hsl() wrapper.
+ * NOTE: canonical source — edit this file, then run sync.sh. Copies (e.g. frontend_next/app/design-tokens.css) will be overwritten.
+ */
+
+:root {
+  /* === Neutrals (light, Cursor warm cream) === */
+  --background: 60 18% 96%;
+  --foreground: 53 12% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 53 12% 13%;
+  --surface-muted: 60 23% 97%;
+  --surface-soft: 48 14% 92%;
+  --surface-elevated: 0 0% 100%;
+  --surface-sunken: 50 11% 89%;
+  --surface-accent-soft: 22 63% 92%;
+  --body: 45 5% 34%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 53 12% 13%;
+
+  --primary: 53 12% 13%;
+  --primary-foreground: 60 18% 96%;
+
+  /* Brand — Cursor Orange (light) / white (dark, xAI monochrome) */
+  --accent: 19 100% 48%;
+  --accent-strong: 19 100% 41%;
+  --accent-text: 19 100% 41%;
+  --accent-soft: 22 63% 92%;
+  --accent-glow: 19 100% 48%;
+  --accent-cta: 19 100% 48%;
+  --accent-cta-hover: 19 100% 41%;
+
+  /* Semantic (status only) */
+  --success: 161 64% 33%;
+  --warning: 38 90% 44%;
+  --warning-foreground: 30 50% 22%;
+  --warning-surface: 40 60% 94%;
+  --warning-border: 38 60% 70%;
+  --info: 205 85% 48%;
+  --destructive: 345 64% 49%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-soft: 345 60% 96%;
+  --destructive-border: 345 50% 80%;
+
+  --secondary: 48 14% 92%;
+  --secondary-foreground: 53 12% 13%;
+  --muted: 48 14% 92%;
+  --muted-foreground: 47 6% 47%;
+  --subtle-foreground: 43 7% 60%;
+
+  --border: 50 11% 89%;
+  --border-strong: 49 10% 79%;
+  --border-whisper: 48 14% 92%;
+  --input: 50 11% 89%;
+  --input-background: 0 0% 100%;
+  --switch-background: 49 10% 79%;
+  --ring: 19 100% 48%;
+  --focus-ring: 19 100% 48%;
+
+  --badge-background: 48 14% 92%;
+  --badge-foreground: 47 6% 47%;
+
+  --sidebar: 60 23% 97%;
+  --sidebar-foreground: 53 12% 13%;
+  --sidebar-primary: 53 12% 13%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 48 14% 92%;
+  --sidebar-accent-foreground: 53 12% 13%;
+  --sidebar-border: 50 11% 89%;
+  --sidebar-ring: 19 100% 48%;
+
+  /* Timeline pastels — agent / tool-call timeline only (§4.5); dark keeps pastel */
+  --timeline-thinking: 19 56% 72%;
+  --timeline-grep: 124 28% 71%;
+  --timeline-read: 214 51% 75%;
+  --timeline-edit: 267 44% 76%;
+  --timeline-done: 35 59% 47%;
+
+  /* Workspace aliases → global tokens (§4.8) */
+  --workspace-shell: var(--background);
+  --workspace-foreground: var(--foreground);
+  --workspace-panel: var(--surface-elevated);
+  --workspace-panel-muted: var(--surface-muted);
+  --workspace-rail: var(--surface-muted);
+  --workspace-rail-strong: var(--surface-soft);
+  --workspace-border: var(--border);
+  --workspace-primary: var(--primary);
+  --workspace-primary-foreground: var(--primary-foreground);
+  --workspace-secondary: var(--secondary);
+  --workspace-secondary-foreground: var(--secondary-foreground);
+  --workspace-muted: var(--muted);
+  --workspace-muted-foreground: var(--muted-foreground);
+  --workspace-accent: var(--accent-soft);
+  --workspace-accent-foreground: var(--accent-text);
+  --workspace-surface: var(--card);
+  --workspace-surface-muted: var(--surface-muted);
+  --workspace-pill: var(--secondary);
+  --workspace-input: var(--input-background);
+  --workspace-input-border: var(--border);
+  --workspace-menu: var(--card);
+  --workspace-menu-hover: var(--surface-soft);
+
+  /* Dashboard aliases */
+  --dashboard-shell: var(--background);
+  --dashboard-foreground: var(--foreground);
+  --dashboard-brand-foreground: var(--foreground);
+  --dashboard-header-border: var(--border);
+  --dashboard-border: var(--border);
+  --dashboard-border-strong: var(--border-strong);
+  --dashboard-surface: var(--card);
+  --dashboard-surface-muted: var(--surface-muted);
+  --dashboard-surface-soft: var(--surface-soft);
+  --dashboard-muted-foreground: var(--muted-foreground);
+  --dashboard-subtle-foreground: var(--subtle-foreground);
+  --dashboard-primary: var(--primary);
+  --dashboard-primary-hover: 53 12% 20%;
+  --dashboard-primary-foreground: var(--primary-foreground);
+  --dashboard-danger: var(--destructive);
+  --dashboard-overlay: 0 0% 0%;
+
+  /* CTA = ink (light) / white (dark); accent reserved for the single primary CTA (§4.6) */
+  --cta-background: 53 12% 13%;
+  --cta-background-hover: 53 12% 20%;
+  --cta-background-active: 53 12% 17%;
+  --cta-foreground: 0 0% 100%;
+
+  /* Radius — 0 / 8px / pill only (§7); buttons are always pill */
+  --radius: 0.5rem;
+  --radius-none: 0;
+  --radius-sm: 0.5rem;
+  --radius-card: 0.5rem;
+  --radius-control: 0.5rem;
+  --radius-button: 999px;
+  --radius-badge: 999px;
+  --radius-pill: 999px;
+
+  /* Spacing — xAI scale, 4px base (§6) */
+  --space-xxs: 0.125rem;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  --space-3xl: 3rem;
+  --space-4xl: 4rem;
+  /* Migration aliases — mapped onto the scale (20px/96px tiers retired) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 3rem;
+  --space-9: 4rem;
+  --space-10: 4rem;
+
+  /* Typography (Inter + JetBrains Mono; weight 400 only) */
+  --font-size-overline: 0.6875rem;
+  --font-size-meta: 0.75rem;
+  --font-size-control: 0.8125rem;
+  --font-size-caption: 0.75rem;
+  --font-size-caption-strong: 0.75rem;
+  --font-size-label: 0.75rem;
+  --font-size-body: 0.875rem;
+  --font-size-body-strong: 0.9375rem;
+  --font-size-body-lg: 1rem;
+  --font-size-section-title: 0.9375rem;
+  --font-size-shell-title: 1.0625rem;
+  --font-size-brand: 1rem;
+  --font-size-title-sm: 1.125rem;
+  --font-size-title: 1.5rem;
+  --font-size-display-xs: 20px;
+  --font-size-display-sm: 32px;
+  --font-size-display-md: 48px;
+  --font-size-display-lg: 72px;
+  --font-size-display-xl: 96px;
+
+  --line-height-overline: 1.4;
+  --line-height-meta: 1.5;
+  --line-height-control: 1.48;
+  --line-height-caption: 1.45;
+  --line-height-label: 1.5;
+  --line-height-body: 1.5;
+  --line-height-body-strong: 1.5;
+  --line-height-body-lg: 1.55;
+  --line-height-section-title: 1.35;
+  --line-height-shell-title: 1.25;
+  --line-height-brand: 1.1;
+  --line-height-title: 1.18;
+  --line-height-display-xs: 1.4;
+  --line-height-display-sm: 1.125;
+  --line-height-display-md: 1;
+  --line-height-display-lg: 1;
+  --line-height-display-xl: 1;
+
+  --font-weight-regular: 400;
+  /* Deprecated weight aliases — pinned to 400 (xAI: hierarchy via size/spacing, not weight) */
+  --font-weight-medium: 400;
+  --font-weight-semibold: 400;
+  --font-weight-bold: 400;
+
+  --letter-spacing-normal: 0;
+  --letter-spacing-overline: 0.1em;
+  --letter-spacing-title: -0.01em;
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-display-xs: 0;
+  --letter-spacing-display-sm: -0.6px;
+  --letter-spacing-display-md: -1.2px;
+  --letter-spacing-display-lg: -1.8px;
+  --letter-spacing-display-xl: -2.4px;
+
+  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+    "Microsoft YaHei", sans-serif;
+  --font-heading: var(--font-body);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Shadows — hairline-only; focus ring is the only shadow token (§8) */
+  --shadow-focus-ring: 0 0 0 3px hsl(var(--focus-ring) / 0.18);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 250ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Z-index scale */
+  --z-base: 1;
+  --z-dropdown: 30;
+  --z-sticky: 40;
+  --z-overlay: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+
+  --app-citation-bg: 48 14% 92%;
+  --app-history-hover: 48 14% 92%;
+  --app-history-active: 50 11% 88%;
+
+  /* Marketing / public-site aliases (dark-friendly sites may override theme) */
+  --cos-bg: hsl(var(--background));
+  --cos-bg-secondary: hsl(var(--surface-muted));
+  --cos-surface: hsl(var(--surface-elevated));
+  --cos-surface-hover: hsl(var(--surface-soft));
+  --cos-text: hsl(var(--foreground));
+  --cos-text-muted: hsl(var(--muted-foreground));
+  --cos-text-subtle: hsl(var(--subtle-foreground));
+  --cos-border: hsl(var(--border));
+  --cos-accent: hsl(var(--accent));
+  --cos-accent-hover: hsl(var(--accent-strong));
+  --cos-accent-bg: hsl(var(--accent-soft));
+  --cos-radius-sm: var(--radius-control);
+  --cos-radius-md: var(--radius-card);
+  --cos-radius-lg: var(--radius-card);
+  --cos-cta-bg: hsl(var(--cta-background));
+  --cos-cta-fg: hsl(var(--cta-foreground));
+  --cos-cta-hover: hsl(var(--cta-background-hover));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
+    --surface-muted: 220 10% 11%;
+    --surface-soft: 220 10% 11%;
+    --surface-elevated: 0 0% 10%;
+    --surface-sunken: 0 0% 2%;
+    --surface-accent-soft: 0 0% 12%;
+    --body: 228 7% 86%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+
+    --accent: 0 0% 100%;
+    --accent-strong: 0 0% 90%;
+    --accent-text: 0 0% 100%;
+    --accent-soft: 0 0% 12%;
+    --accent-glow: 0 0% 100%;
+    --accent-cta: 0 0% 100%;
+    --accent-cta-hover: 0 0% 90%;
+
+    --success: 155 45% 52%;
+    --warning: 38 88% 58%;
+    --warning-foreground: 40 50% 90%;
+    --warning-surface: 32 22% 14%;
+    --warning-border: 34 25% 28%;
+    --info: 205 88% 62%;
+    --destructive: 4 68% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 4 32% 14%;
+    --destructive-border: 4 32% 28%;
+
+    --secondary: 220 10% 11%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 10% 11%;
+    --muted-foreground: 216 4% 51%;
+    --subtle-foreground: 216 4% 51%;
+
+    --border: 220 8% 14%;
+    --border-strong: 213 8% 23%;
+    --border-whisper: 220 8% 9%;
+    --input: 220 8% 14%;
+    --input-background: 220 10% 11%;
+    --switch-background: 220 8% 23%;
+    --ring: 0 0% 100%;
+    --focus-ring: 0 0% 100%;
+
+    --badge-background: 220 10% 11%;
+    --badge-foreground: 216 4% 51%;
+
+    --sidebar: 0 0% 3%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 220 10% 11%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 8% 14%;
+    --sidebar-ring: 0 0% 100%;
+
+    --workspace-shell: var(--background);
+    --workspace-foreground: var(--foreground);
+    --workspace-panel: var(--surface-elevated);
+    --workspace-panel-muted: var(--surface-muted);
+    --workspace-rail: var(--surface-muted);
+    --workspace-rail-strong: var(--surface-soft);
+    --workspace-border: var(--border);
+    --workspace-primary: var(--primary);
+    --workspace-primary-foreground: var(--primary-foreground);
+    --workspace-secondary: var(--secondary);
+    --workspace-secondary-foreground: var(--secondary-foreground);
+    --workspace-muted: var(--muted);
+    --workspace-muted-foreground: var(--muted-foreground);
+    --workspace-accent: var(--accent-soft);
+    --workspace-accent-foreground: var(--accent-text);
+    --workspace-surface: var(--card);
+    --workspace-surface-muted: var(--surface-muted);
+    --workspace-pill: var(--secondary);
+    --workspace-input: var(--input-background);
+    --workspace-input-border: var(--border);
+    --workspace-menu: var(--card);
+    --workspace-menu-hover: var(--surface-soft);
+
+    --dashboard-shell: var(--background);
+    --dashboard-foreground: var(--foreground);
+    --dashboard-brand-foreground: var(--foreground);
+    --dashboard-header-border: var(--border);
+    --dashboard-border: var(--border);
+    --dashboard-border-strong: var(--border-strong);
+    --dashboard-surface: var(--card);
+    --dashboard-surface-muted: var(--surface-muted);
+    --dashboard-surface-soft: var(--surface-soft);
+    --dashboard-muted-foreground: var(--muted-foreground);
+    --dashboard-subtle-foreground: var(--subtle-foreground);
+    --dashboard-primary: var(--primary);
+    --dashboard-primary-hover: 0 0% 82%;
+    --dashboard-primary-foreground: var(--primary-foreground);
+    --dashboard-danger: var(--destructive);
+    --dashboard-overlay: 0 0% 0%;
+
+    --cta-background: 0 0% 100%;
+    --cta-background-hover: 0 0% 82%;
+    --cta-background-active: 0 0% 76%;
+    --cta-foreground: 0 0% 4%;
+
+    --app-citation-bg: 220 10% 11%;
+    --app-history-hover: 220 10% 11%;
+    --app-history-active: 220 8% 16%;
+
+    --cos-bg: hsl(var(--background));
+    --cos-bg-secondary: hsl(220 10% 5%);
+    --cos-surface: hsl(0 0% 100% / 0.03);
+    --cos-surface-hover: hsl(0 0% 100% / 0.06);
+    --cos-text: hsl(var(--foreground));
+    --cos-text-muted: hsl(var(--muted-foreground));
+    --cos-text-subtle: hsl(var(--subtle-foreground));
+    --cos-border: hsl(0 0% 100% / 0.08);
+    --cos-accent: hsl(var(--accent));
+    --cos-accent-hover: hsl(var(--accent-strong));
+    --cos-accent-bg: hsl(var(--accent-soft));
+    --cos-radius-sm: var(--radius-control);
+    --cos-radius-md: var(--radius-card);
+    --cos-radius-lg: var(--radius-card);
+    --cos-cta-bg: hsl(var(--cta-background));
+    --cos-cta-fg: hsl(var(--cta-foreground));
+    --cos-cta-hover: hsl(var(--cta-background-hover));
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: 0 0% 4%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 100%;
+  --surface-muted: 220 10% 11%;
+  --surface-soft: 220 10% 11%;
+  --surface-elevated: 0 0% 10%;
+  --surface-sunken: 0 0% 2%;
+  --surface-accent-soft: 0 0% 12%;
+  --body: 228 7% 86%;
+
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 100%;
+
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 4%;
+
+  --accent: 0 0% 100%;
+  --accent-strong: 0 0% 90%;
+  --accent-text: 0 0% 100%;
+  --accent-soft: 0 0% 12%;
+  --accent-glow: 0 0% 100%;
+  --accent-cta: 0 0% 100%;
+  --accent-cta-hover: 0 0% 90%;
+
+  --success: 155 45% 52%;
+  --warning: 38 88% 58%;
+  --warning-foreground: 40 50% 90%;
+  --warning-surface: 32 22% 14%;
+  --warning-border: 34 25% 28%;
+  --info: 205 88% 62%;
+  --destructive: 4 68% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-soft: 4 32% 14%;
+  --destructive-border: 4 32% 28%;
+
+  --secondary: 220 10% 11%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 10% 11%;
+  --muted-foreground: 216 4% 51%;
+  --subtle-foreground: 216 4% 51%;
+
+  --border: 220 8% 14%;
+  --border-strong: 213 8% 23%;
+  --border-whisper: 220 8% 9%;
+  --input: 220 8% 14%;
+  --input-background: 220 10% 11%;
+  --switch-background: 220 8% 23%;
+  --ring: 0 0% 100%;
+  --focus-ring: 0 0% 100%;
+
+  --badge-background: 220 10% 11%;
+  --badge-foreground: 216 4% 51%;
+
+  --sidebar: 0 0% 3%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 0 0% 100%;
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent: 220 10% 11%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 220 8% 14%;
+  --sidebar-ring: 0 0% 100%;
+
+  --workspace-shell: var(--background);
+  --workspace-foreground: var(--foreground);
+  --workspace-panel: var(--surface-elevated);
+  --workspace-panel-muted: var(--surface-muted);
+  --workspace-rail: var(--surface-muted);
+  --workspace-rail-strong: var(--surface-soft);
+  --workspace-border: var(--border);
+  --workspace-primary: var(--primary);
+  --workspace-primary-foreground: var(--primary-foreground);
+  --workspace-secondary: var(--secondary);
+  --workspace-secondary-foreground: var(--secondary-foreground);
+  --workspace-muted: var(--muted);
+  --workspace-muted-foreground: var(--muted-foreground);
+  --workspace-accent: var(--accent-soft);
+  --workspace-accent-foreground: var(--accent-text);
+  --workspace-surface: var(--card);
+  --workspace-surface-muted: var(--surface-muted);
+  --workspace-pill: var(--secondary);
+  --workspace-input: var(--input-background);
+  --workspace-input-border: var(--border);
+  --workspace-menu: var(--card);
+  --workspace-menu-hover: var(--surface-soft);
+
+  --dashboard-shell: var(--background);
+  --dashboard-foreground: var(--foreground);
+  --dashboard-brand-foreground: var(--foreground);
+  --dashboard-header-border: var(--border);
+  --dashboard-border: var(--border);
+  --dashboard-border-strong: var(--border-strong);
+  --dashboard-surface: var(--card);
+  --dashboard-surface-muted: var(--surface-muted);
+  --dashboard-surface-soft: var(--surface-soft);
+  --dashboard-muted-foreground: var(--muted-foreground);
+  --dashboard-subtle-foreground: var(--subtle-foreground);
+  --dashboard-primary: var(--primary);
+  --dashboard-primary-hover: 0 0% 82%;
+  --dashboard-primary-foreground: var(--primary-foreground);
+  --dashboard-danger: var(--destructive);
+  --dashboard-overlay: 0 0% 0%;
+
+  --cta-background: 0 0% 100%;
+  --cta-background-hover: 0 0% 82%;
+  --cta-background-active: 0 0% 76%;
+  --cta-foreground: 0 0% 4%;
+
+  --app-citation-bg: 220 10% 11%;
+  --app-history-hover: 220 10% 11%;
+  --app-history-active: 220 8% 16%;
+
+  --cos-bg: hsl(var(--background));
+  --cos-bg-secondary: hsl(220 10% 5%);
+  --cos-surface: hsl(0 0% 100% / 0.03);
+  --cos-surface-hover: hsl(0 0% 100% / 0.06);
+  --cos-text: hsl(var(--foreground));
+  --cos-text-muted: hsl(var(--muted-foreground));
+  --cos-text-subtle: hsl(var(--subtle-foreground));
+  --cos-border: hsl(0 0% 100% / 0.08);
+  --cos-accent: hsl(var(--accent));
+  --cos-accent-hover: hsl(var(--accent-strong));
+  --cos-accent-bg: hsl(var(--accent-soft));
+  --cos-radius-sm: var(--radius-control);
+  --cos-radius-md: var(--radius-card);
+  --cos-radius-lg: var(--radius-card);
+  --cos-cta-bg: hsl(var(--cta-background));
+  --cos-cta-fg: hsl(var(--cta-foreground));
+  --cos-cta-hover: hsl(var(--cta-background-hover));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,20 @@
+# Leptos configuration for Context-OS frontend
+[leptos]
+output-name = "web_ui"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "style/design-tokens.css"
+assets-dir = "assets"
+site-addr = "127.0.0.1:3001"
+reload-port = 3002
+browserquery = "defaults"
+bin-package = "web-server"
+lib-package = "web-ui"
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-dev = "dev"
+lib-profile-release = "release"
+bin-features = ["ssr"]
+bin-default-features = false
+bin-profile-dev = "dev"
+bin-profile-release = "release"

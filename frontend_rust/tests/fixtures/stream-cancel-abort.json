@@ -1,0 +1,4 @@
+{"event":"start","request_id":"req-003","session_id":"sess-300"}
+{"event":"answer_start","request_id":"req-003","session_id":"sess-300","message_id":3,"agent_type":"chat"}
+{"event":"token","request_id":"req-003","message_id":3,"content":"正在生成初步构想..."}
+{"event":"error","request_id":"req-003","code":"client_cancelled","message":"User clicked stop"}

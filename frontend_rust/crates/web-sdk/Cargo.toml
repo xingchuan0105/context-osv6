@@ -1,0 +1,16 @@
+[package]
+name = "web-sdk"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+contracts = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+futures-util = { workspace = true }
+tokio-util = { workspace = true }
+async-stream = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true }

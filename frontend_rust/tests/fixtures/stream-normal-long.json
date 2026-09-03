@@ -1,0 +1,9 @@
+{"event":"start","request_id":"req-001","session_id":"sess-100"}
+{"event":"answer_start","request_id":"req-001","session_id":"sess-100","message_id":1,"agent_type":"chat"}
+{"event":"token","request_id":"req-001","message_id":1,"content":"# 系统架构设计方案\n\n"}
+{"event":"token","request_id":"req-001","message_id":1,"content":"本文档详细描述从 Next.js 向 Rust 前端架构演进的技术全景。\n\n"}
+{"event":"token","request_id":"req-001","message_id":1,"content":"## 核心模块分解\n\n"}
+{"event":"token","request_id":"req-001","message_id":1,"content":"- **web-sdk**: 契约客户端与流解码\n- **web-ui**: Leptos 组件与纯状态机\n- **web-server**: Axum SSR 与静态资源托管\n\n"}
+{"event":"token","request_id":"req-001","message_id":1,"content":"这是一段测试长文本，用于评估在持续流式分块输入下，内存占用与渲染帧率的稳定性。"}
+{"event":"citations","request_id":"req-001","message_id":1,"citations":[{"id":"cite-1","title":"架构设计规范","url":"https://contextlm.top/docs"}]}
+{"event":"done","request_id":"req-001","session_id":"sess-100","message_id":1,"payload":{"answer":"# 系统架构设计方案\n\n本文档详细描述从 Next.js 向 Rust 前端架构演进的技术全景。\n\n## 核心模块分解\n\n- **web-sdk**: 契约客户端与流解码\n- **web-ui**: Leptos 组件与纯状态机\n- **web-server**: Axum SSR 与静态资源托管\n\n这是一段测试长文本，用于评估在持续流式分块输入下，内存占用与渲染帧率的稳定性。","answer_blocks":[],"session_id":"sess-100","agent_type":"chat","sources":[],"citations":[],"trace":{"mode":"chat"},"degrade_trace":[]}}

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/web-sdk",
+    "crates/web-ui",
+    "crates/web-server",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+version = "0.1.0"
+
+[workspace.dependencies]
+contracts = { path = "../contracts" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+futures-util = "0.3"
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "sync"] }
+tokio-util = { version = "0.7" }

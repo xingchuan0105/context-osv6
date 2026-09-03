@@ -1,0 +1,8 @@
+{"event":"start","request_id":"req-002","session_id":"sess-200"}
+{"event":"activity","request_id":"req-002","phase":"retrieval","title":"检索工作区资料","detail":"正在检索 3 个绑定文档","counts":{"docs":3},"sources_preview":[{"id":"doc-1","label":"架构白皮书.pdf"}],"timestamp":"2026-09-03T10:00:00Z"}
+{"event":"trace","request_id":"req-002","stage":"dense_search","status":"ok","detail":{"hits":5}}
+{"event":"answer_start","request_id":"req-002","session_id":"sess-200","message_id":2,"agent_type":"rag"}
+{"event":"reasoning_summary_delta","request_id":"req-002","message_id":2,"content":"正在结合检索到的文档事实综合分析回答..."}
+{"event":"token","request_id":"req-002","message_id":2,"content":"基于您上传的《架构白皮书》，工作区已成功挂载。"}
+{"event":"citations","request_id":"req-002","message_id":2,"citations":[{"id":"cite-doc-1","title":"架构白皮书.pdf","page":12}]}
+{"event":"done","request_id":"req-002","session_id":"sess-200","message_id":2,"payload":{"answer":"基于您上传的《架构白皮书》，工作区已成功挂载。","answer_blocks":[],"session_id":"sess-200","agent_type":"rag","sources":[],"citations":[],"trace":{"mode":"rag"},"degrade_trace":[]}}
