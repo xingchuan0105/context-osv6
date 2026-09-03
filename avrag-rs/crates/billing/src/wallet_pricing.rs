@@ -140,6 +140,40 @@ impl RateRow {
         })
     }
 
+    /// Billable-row validation for the startup price gate (review round-4 P0):
+    /// every rate set the row can serve must be non-negative with a strictly
+    /// positive input rate. A zero/negative set would compute `need_fen <= 0`
+    /// → the hold is skipped → the route free-rides, so it is not a price.
+    fn billable(&self) -> bool {
+        let mut sets: Vec<RateSet> = Vec::new();
+        if let Some(tiers) = &self.tiers {
+            sets.extend(tiers.iter().map(|t| RateSet {
+                input: t.input,
+                cache: t.cache,
+                output: t.output,
+            }));
+        }
+        if let Some(peak) = &self.peak {
+            sets.push(*peak);
+        }
+        if let Some(off_peak) = &self.off_peak {
+            sets.push(*off_peak);
+        }
+        if sets.is_empty() {
+            match self.input {
+                Some(input) => sets.push(RateSet {
+                    input,
+                    cache: self.cache,
+                    output: self.output,
+                }),
+                None => return false,
+            }
+        }
+        sets.iter().all(|s| {
+            s.input.is_finite() && s.input > 0.0 && s.cache >= 0.0 && s.output >= 0.0
+        })
+    }
+
     /// Representative rates for whitelist checks: first tier / peak / flat.
     fn representative(&self) -> Option<OfficialRates> {
         if let Some(tiers) = &self.tiers {
@@ -237,19 +271,6 @@ fn price_from_rates(
 /// - `0` when both token counts are zero.
 /// - `None` when the model matches **no** configured rate row (caller must not
 ///   bill silently).
-/// Startup price-gate helper (chat-first W3 §8.5): true when the configured
-/// official rate rows contain a row matching `provider` + `model`. Pure —
-/// takes the raw rate JSON so callers can gate without touching the env.
-pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
-    if raw.trim().is_empty() {
-        return false;
-    }
-    match serde_json::from_str::<Vec<RateRow>>(raw) {
-        Ok(rows) => resolve_in(&rows, provider, model, 1, Utc::now()).is_some(),
-        Err(_) => false,
-    }
-}
-
 pub fn list_price_fen(
     provider: &str,
     model: &str,
@@ -265,6 +286,26 @@ pub fn list_price_fen(
         cached_tokens,
         Utc::now(),
     )
+}
+
+/// Startup price-gate helper (chat-first W3 §8.5): true when the configured
+/// official rate rows contain a **billable** row for `provider` + `model` —
+/// a row with a zero/negative rate set is not a price and must not pass the
+/// gate (review round-4: `need_fen <= 0` skips the hold, so a non-positive
+/// rate free-rides). Pure — takes the raw rate JSON so callers can gate
+/// without touching the env.
+pub fn rates_present_in(raw: &str, provider: &str, model: &str) -> bool {
+    if raw.trim().is_empty() {
+        return false;
+    }
+    let Ok(rows) = serde_json::from_str::<Vec<RateRow>>(raw) else {
+        return false;
+    };
+    let p = provider.trim().to_ascii_lowercase();
+    let m = model.trim().to_ascii_lowercase();
+    rows.iter()
+        .filter(|r| r.matches(&p, &m))
+        .any(|r| r.billable())
 }
 
 fn list_price_fen_at(
@@ -543,5 +584,50 @@ mod price_gate_tests {
         assert!(!rates_present_in(rows, "dashscope", "qwen3.7-flash"));
         assert!(!rates_present_in("", "dashscope", "qwen3.8-flash"));
         assert!(!rates_present_in("not json", "dashscope", "qwen3.8-flash"));
+    }
+
+    /// Review round-4 P0: a matching row with a zero or negative rate set is
+    /// NOT a price — `need_fen <= 0` skips the hold, so the gate must reject
+    /// every rate set the row can serve (flat, any tier, peak, off-peak).
+    #[test]
+    fn rates_present_in_rejects_non_billable_rates() {
+        let zero = r#"[{"model_contains":"qwen3.8-flash","input":0,"output":0}]"#;
+        let zero_input_positive_output = r#"[{"model_contains":"qwen3.8-flash","input":0,"output":80}]"#;
+        let negative = r#"[{"model_contains":"qwen3.8-flash","input":-20,"output":80}]"#;
+        let zero_tier = r#"[{"model_contains":"qwen3.8-flash","tiers":[
+            {"max_prompt_tokens":32000,"input":0,"cache":0,"output":0},
+            {"max_prompt_tokens":256000,"input":60,"cache":12,"output":240}]}]"#;
+        let negative_cache_tier = r#"[{"model_contains":"qwen3.8-flash","tiers":[
+            {"max_prompt_tokens":32000,"input":20,"cache":-4,"output":80}]}]"#;
+        let zero_peak = r#"[{"model_contains":"v4-flash",
+            "peak":{"input":0,"cache":0,"output":0},
+            "off_peak":{"input":150,"cache":5,"output":450}}]"#;
+        let negative_off_peak = r#"[{"model_contains":"v4-flash",
+            "peak":{"input":300,"cache":10,"output":900},
+            "off_peak":{"input":-150,"cache":5,"output":450}}]"#;
+        for bad in [
+            zero,
+            zero_input_positive_output,
+            negative,
+            zero_tier,
+            negative_cache_tier,
+        ] {
+            assert!(
+                !rates_present_in(bad, "dashscope", "qwen3.8-flash"),
+                "non-billable row must fail the gate: {bad}"
+            );
+        }
+        for bad in [zero_peak, negative_off_peak] {
+            assert!(
+                !rates_present_in(bad, "deepseek", "v4-flash"),
+                "peak/off-peak row must fail the gate: {bad}"
+            );
+        }
+        // A well-priced row after the broken one still satisfies the gate —
+        // the operator's fix is a correct row, not removal of the broken one.
+        let repaired = r#"[
+            {"model_contains":"qwen3.8-flash","input":0,"output":80},
+            {"model_contains":"qwen3.8-flash","input":20,"output":80}]"#;
+        assert!(rates_present_in(repaired, "dashscope", "qwen3.8-flash"));
     }
 }

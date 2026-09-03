@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use app_core::{ WorkspaceBindingVersion, 
+use app_core::{ WorkspaceBindingVersion,
     AnalyticsServiceCtx, DocumentStorePort, MemoryDocumentStore, MemoryState, MemoryStateHandles,
     ObjectStoreConfig, ObjectStorePort, StorageContext, StorageContextParts, StorageInfra,
     StorageStores,

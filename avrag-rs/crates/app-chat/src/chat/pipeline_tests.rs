@@ -454,16 +454,22 @@ mod tests {
                 },
             );
         }
-        memory
-            .conversation_document_bindings
-            .entry(session_a_id.clone())
-            .or_default()
-            .push(doc_bound_id.clone());
-        memory
-            .conversation_document_bindings
-            .entry(session_b_id.clone())
-            .or_default()
-            .push(doc_other_id.clone());
+        memory.conversation_document_bindings.push(
+            app_core::ConversationBindingRow {
+                binding_id: format!("bind-a-{}", doc_bound_id),
+                artifact_id: doc_bound_id.clone(),
+                conversation_id: session_a_id.clone(),
+                parse_version: None,
+            },
+        );
+        memory.conversation_document_bindings.push(
+            app_core::ConversationBindingRow {
+                binding_id: format!("bind-b-{}", doc_other_id),
+                artifact_id: doc_other_id.clone(),
+                conversation_id: session_b_id.clone(),
+                parse_version: None,
+            },
+        );
 
         let memory = Arc::new(RwLock::new(memory));
         let ctx = ChatContext {
@@ -1463,5 +1469,129 @@ mod tests {
             err.to_string().contains("boom: llm transport down"),
             "original error must not be wrapped away: {err}"
         );
+    }
+}
+
+#[cfg(test)]
+mod review_round4_tests {
+    use crate::chat::service::{SessionBindingVersion, TurnScopeFacts};
+    use contracts::auth_runtime::{ActorId, AuthContext, SubjectKind, UserId};
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use uuid::Uuid;
+
+    fn auth_for(user_id: Uuid) -> AuthContext {
+        AuthContext::new(UserId::from(user_id), SubjectKind::User)
+            .with_actor_id(ActorId::new(user_id))
+            .with_request_id("review-round4")
+    }
+
+    /// Review round-4 P1 (dual provenance): `scopes_of` must return BOTH
+    /// scopes for a dual-bound artifact — the evidence persistence loop
+    /// emits one segment per scope, so a collapsed vector loses the
+    /// workspace provenance row entirely.
+    #[test]
+    fn scopes_of_keeps_both_provenances_for_dual_binding() {
+        let facts = TurnScopeFacts {
+            session_artifacts: vec![
+                SessionBindingVersion {
+                    binding_id: "sb-1".into(),
+                    artifact_id: "doc-dual".into(),
+                    parse_version: Some("pr-1".into()),
+                },
+                SessionBindingVersion {
+                    binding_id: "sb-2".into(),
+                    artifact_id: "doc-session-only".into(),
+                    parse_version: None,
+                },
+            ],
+            workspace_binding_versions: vec![
+                app_core::WorkspaceBindingVersion {
+                    binding_id: "wb-1".into(),
+                    artifact_id: "doc-dual".into(),
+                    parse_version: Some("pr-1".into()),
+                },
+                app_core::WorkspaceBindingVersion {
+                    binding_id: "wb-2".into(),
+                    artifact_id: "doc-workspace-only".into(),
+                    parse_version: None,
+                },
+            ],
+            history_boundary: 0,
+        };
+        assert_eq!(facts.scopes_of("doc-dual"), vec!["session", "workspace"]);
+        assert_eq!(facts.scopes_of("doc-session-only"), vec!["session"]);
+        assert_eq!(
+            facts.scopes_of("doc-workspace-only"),
+            vec!["workspace"],
+            "workspace provenance must survive without a session binding"
+        );
+        assert!(facts.scopes_of("doc-unbound").is_empty());
+    }
+
+    /// Review round-4 P1 (memory adapter contract): memory's
+    /// `completed_workspace_binding_versions` must carry its OWN binding id
+    /// (not a copy of artifact_id) and surface the row's parse version —
+    /// the production PG contract exercised by the memory harness.
+    #[tokio::test]
+    async fn memory_workspace_binding_versions_carry_real_ids() {
+        use app_core::{DocumentStorePort, MemoryDocumentStore, MemoryState, WorkspaceBindingRow};
+        use common::Document;
+        use std::collections::BTreeMap;
+
+        let owner = Uuid::new_v4();
+        let auth = auth_for(owner);
+        let workspace = Uuid::new_v4();
+        let mut memory = MemoryState::default();
+        memory.workspaces.insert(
+            workspace.to_string(),
+            contracts::workspaces::Workspace {
+                id: workspace.to_string(),
+                owner_user_id: owner.to_string(),
+                owner_id: owner.to_string(),
+                name: "ws".to_string(),
+                title: "ws".to_string(),
+                description: String::new(),
+                created_at: now_test(),
+                updated_at: now_test(),
+                document_count: 0,
+                status_summary: Default::default(),
+                shared: false,
+            },
+        );
+        let state = Arc::new(RwLock::new(memory));
+        let store = MemoryDocumentStore::new(state.clone());
+        let doc = store
+            .create_document(&auth, workspace, "a.txt", 4, "text/plain")
+            .await
+            .unwrap();
+        {
+            let mut state = state.write().await;
+            let stored = state.documents.get_mut(&doc.id).unwrap();
+            stored.document.status = contracts::documents::DocumentStatus::Completed;
+            let row = state
+                .workspace_document_bindings
+                .iter_mut()
+                .find(|row| row.artifact_id == doc.id)
+                .unwrap();
+            row.parse_version = Some("parse-run-7".to_string());
+        }
+
+        let versions = store
+            .completed_workspace_binding_versions(&auth, workspace)
+            .await
+            .unwrap();
+        assert_eq!(versions.len(), 1);
+        let version = &versions[0];
+        assert_ne!(
+            version.binding_id, version.artifact_id,
+            "binding id must be its own row id, not a copy of artifact_id"
+        );
+        assert_eq!(version.artifact_id, doc.id);
+        assert_eq!(version.parse_version.as_deref(), Some("parse-run-7"));
+    }
+
+    fn now_test() -> String {
+        common::now_rfc3339()
     }
 }

@@ -160,14 +160,14 @@ impl ChatContext {
         execution.response.turn_context_snapshot_id = Some(snapshot_id);
         // W2d: what this turn actually used — scope-tagged citations, written
         // once with the assistant row. Tagging here also flows into the SSE
-        // done payload (persist runs before Done).
+        // done payload (persist runs before Done). A dual-bound artifact keeps
+        // one evidence segment per visible scope — collapsing to `.first()`
+        // loses the workspace provenance (review round-4 P1).
         let mut evidence_segments: Vec<serde_json::Value> = Vec::new();
         for citation in &mut execution.response.citations {
-            citation.source_scope = scope_facts
-                .scopes_of(&citation.doc_id)
-                .first()
-                .map(|scope| scope.to_string());
-            if let Some(scope) = citation.source_scope.clone() {
+            let scopes = scope_facts.scopes_of(&citation.doc_id);
+            citation.source_scope = scopes.first().map(|scope| scope.to_string());
+            for scope in scopes {
                 evidence_segments.push(serde_json::json!({
                     "channel": "rag",
                     "source_scope": scope,

@@ -288,10 +288,16 @@ fn publish_fingerprint_from_config(config: &AppConfig) -> PublishFingerprint {
     fingerprint
 }
 
-/// Chat-first W3 §8.5 startup gate: the official Quick Chat model must have a
-/// price row in `PLATFORM_OFFICIAL_RATES_JSON`, or the process refuses to
-/// start — an unpriced official route would silently free-ride.
+/// Chat-first W3 §8.5 startup gate: an **official** Quick Chat route must have
+/// a billable price row in `PLATFORM_OFFICIAL_RATES_JSON`, or the process
+/// refuses to start — an unpriced official route would silently free-ride.
+/// A Quick Chat provider without an api key serves no traffic at all, so it
+/// cannot free-ride and the gate does not apply (default AppConfig stays
+/// bootable; review round-4 P0-2).
 fn quick_chat_official_price_gate(config: &AppConfig) -> Result<(), String> {
+    if config.quick_chat_llm.api_key.is_empty() {
+        return Ok(());
+    }
     let provider = config.quick_chat_llm.provider_name();
     let model = config.quick_chat_llm.model.clone();
     let rates = std::env::var("PLATFORM_OFFICIAL_RATES_JSON").unwrap_or_default();
@@ -299,7 +305,9 @@ fn quick_chat_official_price_gate(config: &AppConfig) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "official Quick Chat price gate failed: PLATFORM_OFFICIAL_RATES_JSON has no row for {provider}/{model}. Add the official price row before starting (design §8.5 — an unpriced official route would free-ride)."
+            "official Quick Chat price gate failed: PLATFORM_OFFICIAL_RATES_JSON has no billable \
+             row for {provider}/{model}. Add the official price row before starting (design §8.5 \
+             — an unpriced official route would free-ride)."
         ))
     }
 }
@@ -772,5 +780,61 @@ mod app_state_test_support {
             self.orchestrator.set_rag_runtime(rag_runtime);
             self.chat.orchestrator = self.orchestrator.clone();
         }
+    }
+}
+
+#[cfg(test)]
+mod price_gate_tests {
+    use super::quick_chat_official_price_gate;
+    use app_core::{AppConfig, ModelProviderConfig};
+
+    /// Review round-4 P0-2: the gate keys on a **configured** official route.
+    /// A provider without an api key serves no traffic and cannot free-ride,
+    /// so the default AppConfig (no key) must stay bootable.
+    #[test]
+    fn gate_passes_when_quick_chat_is_unconfigured() {
+        let mut config = AppConfig::default();
+        config.quick_chat_llm.api_key = String::new();
+        quick_chat_official_price_gate(&config)
+            .expect("unkeyed quick chat must not require a price row");
+    }
+
+    #[test]
+    fn gate_refuses_keyed_route_without_billable_price() {
+        let mut config = AppConfig::default();
+        config.quick_chat_llm = ModelProviderConfig {
+            base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+            api_key: "sk-test".to_string(),
+            model: "qwen3.8-flash".to_string(),
+            timeout_ms: 30000,
+            temperature: Some(0.2),
+            api_style: Some("openai".to_string()),
+            dimensions: None,
+            enable_thinking: Some(false),
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        };
+        unsafe { std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON") };
+        let error = quick_chat_official_price_gate(&config).unwrap_err();
+        assert!(error.contains("qwen3.8-flash"), "{error}");
+
+        // Zero-priced row: parses, but is not a price — still refused.
+        unsafe {
+            std::env::set_var(
+                "PLATFORM_OFFICIAL_RATES_JSON",
+                r#"[{"model_contains":"qwen3.8-flash","input":0}]"#,
+            );
+        };
+        assert!(quick_chat_official_price_gate(&config).is_err());
+
+        unsafe {
+            std::env::set_var(
+                "PLATFORM_OFFICIAL_RATES_JSON",
+                r#"[{"model_contains":"qwen3.8-flash","input":20,"output":80}]"#,
+            );
+        }
+        quick_chat_official_price_gate(&config).expect("billable row must pass");
+        unsafe { std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON") };
     }
 }

@@ -1,7 +1,9 @@
 use crate::ports::workspaces::workspace_store::WorkspaceStore;
 use crate::{
-    BillingQuotaPort, DocumentStorePort, MemoryState, current_owner_user_id, current_user_id,
-    domain_rows::{ WorkspaceBindingVersion, 
+    BillingQuotaPort, ConversationBindingRow, DocumentStorePort, MemoryState, WorkspaceBindingRow,
+    current_owner_user_id, current_user_id,
+    domain_rows::{
+        WorkspaceBindingVersion,
         DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
         DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
     },
@@ -173,21 +175,21 @@ impl DocumentStorePort for MemoryDocumentStore {
         let orphaned: Vec<String> = state
             .workspace_document_bindings
             .iter()
-            .filter(|(_, bindings)| bindings.contains(&key))
-            .map(|(artifact_id, _)| artifact_id.clone())
+            .filter(|row| row.workspace_id == key)
+            .map(|row| row.artifact_id.clone())
             .collect();
-        for bindings in state.workspace_document_bindings.values_mut() {
-            bindings.retain(|binding| binding != &key);
-        }
+        state
+            .workspace_document_bindings
+            .retain(|row| row.workspace_id != key);
         for artifact_id in orphaned {
             let still_conversation_bound = state
                 .conversation_document_bindings
-                .values()
-                .any(|ids| ids.contains(&artifact_id));
+                .iter()
+                .any(|row| row.artifact_id == artifact_id);
             let still_workspace_bound = state
                 .workspace_document_bindings
-                .get(&artifact_id)
-                .is_some_and(|bindings| !bindings.is_empty());
+                .iter()
+                .any(|row| row.artifact_id == artifact_id);
             if !still_conversation_bound && !still_workspace_bound {
                 if let Some(stored) = state.documents.get_mut(&artifact_id) {
                     stored.document.status = DocumentStatus::Deleting;
@@ -256,9 +258,8 @@ impl DocumentStorePort for MemoryDocumentStore {
                     .map(|id| {
                         state
                             .workspace_document_bindings
-                            .get(&stored.document.id)
-                            .map(|bindings| bindings.contains(id))
-                            .unwrap_or(false)
+                            .iter()
+                            .any(|row| row.artifact_id == stored.document.id && row.workspace_id == *id)
                     })
                     .unwrap_or(true)
             })
@@ -303,11 +304,12 @@ impl DocumentStorePort for MemoryDocumentStore {
         };
         let mut state = self.state.write().await;
         state.documents.insert(document.id.clone(), stored);
-        state
-            .workspace_document_bindings
-            .entry(document.id.clone())
-            .or_default()
-            .push(workspace_id.to_string());
+        state.workspace_document_bindings.push(WorkspaceBindingRow {
+            binding_id: new_id(),
+            artifact_id: document.id.clone(),
+            workspace_id: workspace_id.to_string(),
+            parse_version: None,
+        });
         Ok(document)
     }
 
@@ -385,10 +387,6 @@ impl DocumentStorePort for MemoryDocumentStore {
         if !state.sessions.contains_key(&conversation_id.to_string()) {
             return Err(AppError::not_found("session_not_found", "session not found"));
         }
-        state
-            .workspace_document_bindings
-            .entry(document.id.clone())
-            .or_default();
         state.documents.insert(
             document.id.clone(),
             crate::StoredDocument {
@@ -398,11 +396,12 @@ impl DocumentStorePort for MemoryDocumentStore {
                 parsed_items: Vec::new(),
             },
         );
-        state
-            .conversation_document_bindings
-            .entry(conversation_id.to_string())
-            .or_default()
-            .push(document.id.clone());
+        state.conversation_document_bindings.push(ConversationBindingRow {
+            binding_id: new_id(),
+            artifact_id: document.id.clone(),
+            conversation_id: conversation_id.to_string(),
+            parse_version: None,
+        });
         Ok(document)
     }
 
@@ -413,11 +412,11 @@ impl DocumentStorePort for MemoryDocumentStore {
     ) -> Result<Vec<WorkspaceBindingVersion>, AppError> {
         let state = self.state.read().await;
         let mut versions = Vec::new();
-        for (artifact_id, bindings) in &state.workspace_document_bindings {
-            if !bindings.contains(&workspace_id.to_string()) {
+        for row in &state.workspace_document_bindings {
+            if row.workspace_id != workspace_id.to_string() {
                 continue;
             }
-            let Some(stored) = state.documents.get(artifact_id) else {
+            let Some(stored) = state.documents.get(&row.artifact_id) else {
                 continue;
             };
             if !org_matches(auth, &stored.document.owner_user_id)
@@ -426,9 +425,9 @@ impl DocumentStorePort for MemoryDocumentStore {
                 continue;
             }
             versions.push(WorkspaceBindingVersion {
-                binding_id: artifact_id.clone(),
-                artifact_id: artifact_id.clone(),
-                parse_version: None,
+                binding_id: row.binding_id.clone(),
+                artifact_id: row.artifact_id.clone(),
+                parse_version: row.parse_version.clone(),
             });
         }
         Ok(versions)
@@ -441,11 +440,13 @@ impl DocumentStorePort for MemoryDocumentStore {
     ) -> Result<Vec<contracts::documents::SessionFileRow>, AppError> {
         let state = self.state.read().await;
         let mut files = Vec::new();
-        let Some(artifact_ids) = state.conversation_document_bindings.get(&conversation_id.to_string()) else {
-            return Ok(files);
-        };
-        for artifact_id in artifact_ids {
-            let Some(stored) = state.documents.get(artifact_id) else {
+        let rows: Vec<&ConversationBindingRow> = state
+            .conversation_document_bindings
+            .iter()
+            .filter(|row| row.conversation_id == conversation_id.to_string())
+            .collect();
+        for row in rows {
+            let Some(stored) = state.documents.get(&row.artifact_id) else {
                 continue;
             };
             if !org_matches(auth, &stored.document.owner_user_id) {
@@ -455,13 +456,13 @@ impl DocumentStorePort for MemoryDocumentStore {
                 continue;
             }
             files.push(contracts::documents::SessionFileRow {
-                binding_id: artifact_id.clone(),
+                binding_id: row.binding_id.clone(),
                 document_id: stored.document.id.clone(),
                 file_name: stored.document.file_name.clone(),
                 mime_type: stored.document.mime_type.clone(),
                 file_size: stored.document.file_size,
                 status: stored.document.status.as_str().to_string(),
-                parse_version: None,
+                parse_version: row.parse_version.clone(),
                 created_at: stored.document.created_at.clone(),
             });
         }
@@ -475,19 +476,24 @@ impl DocumentStorePort for MemoryDocumentStore {
         binding_id: Uuid,
     ) -> Result<Option<String>, AppError> {
         let mut state = self.state.write().await;
-        let Some(artifact_ids) = state
+        // Enforce ownership of the conversation before removing the binding.
+        if !state
+            .sessions
+            .get(&conversation_id.to_string())
+            .map(|session| org_matches(auth, &session.owner_user_id))
+            .unwrap_or(false)
+        {
+            return Ok(None);
+        }
+        let position = state
             .conversation_document_bindings
-            .get_mut(&conversation_id.to_string())
-        else {
+            .iter()
+            .position(|row| row.binding_id == binding_id.to_string() && row.conversation_id == conversation_id.to_string());
+        let Some(position) = position else {
             return Ok(None);
         };
-        // Memory bindings are keyed by artifact; enforce ownership of the
-        // conversation before removing.
-        let Some(existing) = artifact_ids.iter().position(|id| *id == binding_id.to_string()) else {
-            return Ok(None);
-        };
-        let removed = artifact_ids.remove(existing);
-        Ok(Some(removed))
+        let removed = state.conversation_document_bindings.remove(position);
+        Ok(Some(removed.artifact_id))
     }
 
     async fn get_document_task_seed(
@@ -503,15 +509,19 @@ impl DocumentStorePort for MemoryDocumentStore {
             return Ok(None);
         }
         let doc = &stored.document;
-        let bindings = state.workspace_document_bindings.get(&doc.id);
+        let binding = state
+            .workspace_document_bindings
+            .iter()
+            .find(|row| row.artifact_id == doc.id);
+        let workspace_id = binding.map(|row| row.workspace_id.clone());
         Ok(Some(DocumentTaskSeed {
             document_id: doc.id.clone(),
             owner_user_id: doc.owner_user_id.clone(),
-            workspace_id: bindings.and_then(|list| list.first().cloned()),
+            workspace_id: workspace_id.clone(),
             filename: doc.file_name.clone(),
             mime_type: doc.mime_type.clone(),
             file_size: doc.file_size,
-            object_path: match bindings.and_then(|list| list.first().cloned()) {
+            object_path: match workspace_id {
                 Some(workspace_id) => format!("{}/{}/{}", doc.owner_user_id, workspace_id, doc.id),
                 None => format!("{}/_sessions/{}", doc.owner_user_id, doc.id),
             },
@@ -600,12 +610,12 @@ impl DocumentStorePort for MemoryDocumentStore {
         let key = document_id.to_string();
         let has_workspace_binding = state
             .workspace_document_bindings
-            .get(&key)
-            .is_some_and(|list| !list.is_empty());
+            .iter()
+            .any(|row| row.artifact_id == key);
         let has_conversation_binding = state
             .conversation_document_bindings
-            .values()
-            .any(|ids| ids.contains(&key));
+            .iter()
+            .any(|row| row.artifact_id == key);
         let Some(stored) = state.documents.get_mut(&key) else {
             return Ok(false);
         };

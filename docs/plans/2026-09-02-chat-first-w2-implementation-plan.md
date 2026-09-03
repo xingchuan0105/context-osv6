@@ -315,19 +315,40 @@ Standards 处理：删除无生产调用方的 `ensure_payer_can_spend` / `place
 
 回归：**L1 OK**（文件门 + 5 crate + tsc）；storage-pg 38、app-chat 88、billing 63、contracts 全套、前端 typecheck + 529/2；端到端旅程 **19/19**（SSE 主路径 stream:true 无 doc_scope 全链 + 首建轮 + BYOK/回退 + GC/墓碑）。
 
-## 13. 第三轮审查修复（2026-09-03，P0×2 + P1×4 + Standards 清零）
+## 13. 第三轮审查修复（2026-09-03；对抗测试补齐见 §14）
 
-第三轮静态审查指出的问题全部修复；审查要求的六组对抗测试全部落地。此前 §11/§12 中"persist 不再吞错"等完成表述以本轮实际收敛为准：**历史边界冻结于单次取数、错误向上传播**在本轮才真正闭环（见下表 P1-3）。
+第三轮静态审查指出的 **代码问题** 已实现修复；但 §13 提交时声称"六组对抗测试全部落地"与提交内容不符（第四轮审查指出）——当时提交只含价目 matcher 测试和 `is_rag_turn` 断言，并发删除 / 前端最后文件 / history 错误传播 / 双 provenance / hold 拒绝的对抗测试在 **§14** 补齐。下表"实证"栏仅保留当时确有的证据，其余移入 §14。
 
-| 项 | 修复 | 实证 |
+| 项 | 修复（实现） | 当时实证 |
 |---|---|---|
-| **P0-1 QuickChat 计费 fail-open** | 启动价目门：`quick_chat_official_price_gate`（app-bootstrap）要求 `PLATFORM_OFFICIAL_RATES_JSON` 含 official Quick Chat 模型行，缺失即拒绝启动（new_memory panic / bootstrap anyhow）；`rates_present_in` 纯函数 + 测试；hold 估价对 QuickChat purpose 硬失败（`quick_chat_pricing_unconfigured` / `quick_chat_price_unavailable`），不再静默 None | **实证**：缺行时 API 拒绝启动（"official Quick Chat price gate failed … dashscope/qwen3.8-flash"）；补行后启动成功，30 分钟内 `llm_usage_events.credential_source` 落 20 条真实计费记录 |
-| **P0-2 会话+工作区并发删除竞态** | 双绑定表按固定顺序 `LOCK TABLE … IN SHARE ROW EXCLUSIVE MODE`（共享 `lock_binding_tables`），capture→cascade 全程持锁，另一侧绑定无法在孤儿清点后提交 | storage-pg 并发删除用例（双绑定并发删除仅一侧持锁的旧路径已移除） |
-| **P1-1 capabilities 权威** | `is_rag_turn` 改用规范 `resolve_capabilities(req.capabilities, agent_type)`（空数组 = 纯 chat）；service/streaming 两条入口一致，消除双真相源 | `capabilities=[] + agent_type=rag` 反例用例：不再触发 RAG 范围 |
-| **P1-2 删最后文件仍挂 RAG** | 会话 ready 文件 0→ready 迁移才挂 rag；删除导致 ready 归零后 strip 效果按 `capabilitiesManual` 豁免判定收敛 | 前端 Vitest（canvas strip/挂载用例） |
-| **P1-3 历史边界 + 单次冻结** | `history_boundary` 并入 `turn_scope_facts` 一次性冻结（session+persist 均存在时取 `list_messages` 实长，错误向上传播不再 `unwrap_or(0)`）；`enforce_agent_scope` 消费同一冻结事实集，enforcement 与 snapshot 不再两次查询漂移 | app-chat 用例（查询失败向上冒泡；snapshot 与执行同源） |
-| **P1-4 scope/snapshot 同源 provenance** | `scopes_of` 返回双源全部 scope（session 优先、workspace 不丢）；snapshot 记 `session_binding_versions` + `effective_provider`（执行前捕获，非事后 usage 反查）；thinking 显式 null | 旅程 7 snapshot 载荷；contracts 契约字段 |
+| **P0-1 QuickChat 计费 fail-open** | 启动价目门：`quick_chat_official_price_gate`（app-bootstrap）要求 `PLATFORM_OFFICIAL_RATES_JSON` 含 official Quick Chat 模型行，缺失即拒绝启动；`rates_present_in` 纯函数 + matcher 测试；hold 估价对 QuickChat purpose 硬失败，不再静默 None | **live**：缺行时 API 拒绝启动；补行后启动成功，30 分钟内 `llm_usage_events.credential_source` 落 20 条真实计费记录 |
+| **P0-2 会话+工作区并发删除竞态** | 双绑定表按固定顺序 `LOCK TABLE … IN SHARE ROW EXCLUSIVE MODE`（共享 `lock_binding_tables`），capture→cascade 全程持锁 | 编译 + 旅程复跑（并发删除对抗测试见 §14） |
+| **P1-1 capabilities 权威** | `is_rag_turn` 改用规范 `resolve_capabilities(req.capabilities, agent_type)`（空数组 = 纯 chat）；service/streaming 两条入口一致 | `capabilities=[] + agent_type=rag` 反例用例（本提交内） |
+| **P1-2 删最后文件仍挂 RAG** | ready 0→ready 迁移才挂 rag；ready 归零后 strip 按 `capabilitiesManual` 豁免判定收敛 | 前端 strip 对抗测试见 §14 |
+| **P1-3 历史边界 + 单次冻结** | `history_boundary` 并入 `turn_scope_facts` 一次性冻结（persist 查询失败向上传播，不再 `unwrap_or(0)`）；`enforce_agent_scope` 消费同一冻结事实集 | 错误传播对抗测试见 §14 |
+| **P1-4 scope/snapshot provenance** | snapshot 记 `session_binding_versions` + `effective_provider`（执行前捕获）；thinking 显式 null | 旅程 7 snapshot 载荷 |
 
-Standards：删除 `with_credential_source` builder 与无调用方 delegate（§12 已记）；billing 环境变量仅作启动门单一真相，运行期不再二次推导。
+Standards：删除 `with_credential_source` builder 与无调用方 delegate（§12 已记）。
 
-回归：**L1 OK**；`cargo check --workspace --tests` 零错；前端 typecheck + Vitest 529/2；端到端旅程 **19/19**（含缺价启动拒绝的 live 正证）。
+回归（§13 提交时）：`cargo check --workspace --tests` 零错；前端 typecheck + Vitest 529/2；端到端旅程 19/19。
+
+## 14. 第四轮审查修复（2026-09-03，P0×2 + P1×5 + Standards 清零，测试补齐）
+
+第四轮静态审查（范围 `2a7626a5..50e43983`）指出的问题全部修复。§13 未兑现的对抗测试在本轮全部落地：
+
+| 项 | 修复 | 实证（新增测试） |
+|---|---|---|
+| **P0 零价/负价绕过** | `rates_present_in` 从"能解析出 rate"升级为**整行 billable 校验**（`RateRow::billable`：flat / 每个 tier / peak / off-peak 全部 rate 集合要求 input 有限且 >0、cache/output ≥0）；hold 路径 `need_fen <= 0` 对 QuickChat 改为拒绝（`quick_chat_price_unavailable`），不再静默跳过 | wallet_pricing 对抗测试：flat 零/负价、零价但 output>0、tier 内单档零价/负 cache、peak/off-peak 混合破损行全部拒；修复行（后一条正常）放行。app-billing hold 测试：missing/全零/负价 → `quick_chat_price_unavailable`，正常价 → 真实 hold |
+| **P0 默认配置不可复现启动** | 门改为只管**已配置 api key 的 official 路由**：无 key 的 QuickChat 不服务任何流量、无从 free-ride，门不适用（默认 `AppConfig` 恢复可启动）；`.env.example` 价目表补 `qwen3.8-flash` 行（镜像 qwen3.7 阶梯，注释标注占位待业务确认） | app-bootstrap 门测试：无 key 放行 / 有 key 缺价拒 / 零价行拒 / 有价放行。修复了默认配置击穿 7 个既有测试的回归（app 20、app-bootstrap 全绿） |
+| **P1 双 provenance 塌缩** | evidence 段对每个可见 scope 各落一条（`scopes_of` 全集消费），双绑定不再 `.first()` 丢 workspace | app-chat `scopes_of` 测试：dual→[session,workspace]、单源各自保留、unbound→空 |
+| **P1 删最后文件 refresh 失败路径** | tray 删除**先乐观移除**该行再 DELETE；refresh 失败不再保留僵尸 ready 态（轮询已停，ready 归零后 strip 生效）；DELETE 失败则由 refresh 对账恢复 | 前端 Vitest 2 例：DELETE 成功+refresh 失败 → rag 被 strip；manual 选择保留 |
+| **P1 provider 身份双实现漂移** | `app-core::ModelProviderConfig::provider_name` 删除本地映射，委托 `avrag_llm` 同名实现（未知 URL 统一 `unknown`，启动门与运行时 debit 同一 provider 身份） | app-core parity 测试：4 已知 URL + 未知 URL（此前 `custom` vs `unknown` 漂移点）+ 大小写 |
+| **P1 WorkspaceBindingVersion 双定义 + serde 吞错** | 删除 app-chat 本地重定义，`TurnScopeFacts` 直接复用 `app_core::WorkspaceBindingVersion`；`serde_json` 往返与 `unwrap_or_default()` 吞错一并消除（类型直移） | 编译；scopes_of 测试直接构造 app_core 类型 |
+| **P1 Memory adapter 伪造 binding/version** | `MemoryState` 建 typed binding 行（`WorkspaceBindingRow` / `ConversationBindingRow`：独立 `binding_id` + `parse_version`），create/delete/list 全链路改行走 typed 行；`completed_workspace_binding_versions` 返回真实 binding id 与 parse version | app-chat 契约测试：binding_id ≠ artifact_id、parse_version 透传；全下游（core 41 / chat 90 / documents / app / bootstrap / http）绿 |
+| **P1 scopes_of 多值无消费者** | 随双 provenance 修复获得真实消费者（evidence 循环按 scope 集落段） | 同上 |
+
+Standards（P2）：trailing whitespace 清零（`git diff --check` 净）；`list_price_fen` / `rates_present_in` 文档注释错位修正；`bootstrap_contract` 过时的"无端口"断言按 m4-w4d 后现实改为 memory-runtime 契约。
+
+遗留（非阻断，仍开放）：Snapshot 的 index/effective retrieval version 明细（§12 已登记）；失败轮独立 snapshot 落行（重试语义需产品决策）。
+
+回归（§14 修改后）：`cargo check --workspace --tests` 零错；billing 65、avrag-billing 65+14 过滤组、app-chat 90、app-core 41+1、app-billing 13、app 20、app-bootstrap 19+1+2、transport-http 88、前端 Vitest **531/2**（含新增 canvas strip 2 例）。

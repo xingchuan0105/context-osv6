@@ -198,7 +198,15 @@ export function SessionFileTray({
       if (!token || !sessionId) {
         return;
       }
-      await deleteChatSessionFile(token, sessionId, file.binding_id);
+      // Optimistic removal first: if DELETE succeeds but the refresh fails,
+      // a stale row would keep reporting ready forever (polling has already
+      // stopped), blocking the auto-RAG strip (review round-4 P1).
+      setFiles((prev) => prev.filter((row) => row.binding_id !== file.binding_id));
+      try {
+        await deleteChatSessionFile(token, sessionId, file.binding_id);
+      } catch {
+        // DELETE failed — the refresh below reconciles with the server truth.
+      }
       await refresh();
     },
     [refresh, sessionId, token],

@@ -69,7 +69,7 @@ impl ChatContext {
             }
         }
         if let Some(workspace_id) = effective_workspace_id {
-            let raw = self
+            facts.workspace_binding_versions = self
                 .documents
                 .completed_workspace_binding_versions(
                     &self.auth,
@@ -77,11 +77,6 @@ impl ChatContext {
                     &workspace_id.to_string(),
                 )
                 .await?;
-            facts.workspace_binding_versions = raw
-                .into_iter()
-                .map(|version| serde_json::from_value(serde_json::to_value(&version).unwrap_or_default()))
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap_or_default();
         }
         Ok(facts)
     }
@@ -498,18 +493,12 @@ fn chat_workspace_id_for_request(
 /// Binding-derived scope facts of one turn: which ready artifacts are visible
 /// through the conversation binding vs a workspace binding.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct WorkspaceBindingVersion {
-    pub binding_id: String,
-    pub artifact_id: String,
-    pub parse_version: Option<String>,
-}
-
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct TurnScopeFacts {
     /// Binding + artifact + parse version facts of conversation-bound files.
     pub session_artifacts: Vec<SessionBindingVersion>,
-    /// Binding + artifact + parse version facts of workspace-bound files.
-    pub workspace_binding_versions: Vec<WorkspaceBindingVersion>,
+    /// Binding + artifact + parse version facts of workspace-bound files
+    /// (reuses the port contract type — no local shadow, no serde round-trip).
+    pub workspace_binding_versions: Vec<app_core::WorkspaceBindingVersion>,
     /// Pre-execution count of persisted messages for this conversation
     /// (the history boundary this turn was built on). Frozen before the run.
     pub history_boundary: usize,

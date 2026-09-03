@@ -87,20 +87,25 @@ pub struct ModelProviderConfig {
 }
 
 impl ModelProviderConfig {
-    /// Stable provider id derived from the base URL (mirrors `avrag_llm`).
+    /// Stable provider id derived from the base URL — delegates to the
+    /// `avrag_llm` implementation so the startup price gate and the runtime
+    /// usage/debit attribution derive the SAME provider identity
+    /// (review round-4: two implementations had already drifted on unknown
+    /// URLs, `custom` vs `unknown`).
     pub fn provider_name(&self) -> String {
-        let url = self.base_url.to_ascii_lowercase();
-        if url.contains("dashscope") {
-            "dashscope".to_string()
-        } else if url.contains("deepseek") {
-            "deepseek".to_string()
-        } else if url.contains("openai") {
-            "openai".to_string()
-        } else if url.contains("siliconflow") {
-            "siliconflow".to_string()
-        } else {
-            "custom".to_string()
+        avrag_llm::ModelProviderConfig {
+            base_url: self.base_url.clone(),
+            api_key: String::new(),
+            model: self.model.clone(),
+            timeout_ms: self.timeout_ms,
+            api_style: None,
+            dimensions: self.dimensions,
+            enable_thinking: self.enable_thinking,
+            enable_cache: self.enable_cache,
+            rpm_limit: self.rpm_limit,
+            tpm_limit: self.tpm_limit,
         }
+        .provider_name()
     }
 
     pub fn to_llm_config(&self) -> Option<avrag_llm::ModelProviderConfig> {
@@ -621,5 +626,48 @@ impl AppConfig {
         ));
 
         config
+    }
+}
+
+#[cfg(test)]
+mod provider_identity_tests {
+    use super::ModelProviderConfig;
+
+    fn provider(base_url: &str) -> ModelProviderConfig {
+        ModelProviderConfig {
+            base_url: base_url.to_string(),
+            api_key: "k".to_string(),
+            model: "m".to_string(),
+            timeout_ms: 1000,
+            temperature: None,
+            api_style: None,
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        }
+    }
+
+    /// Review round-4 P1 (single provider identity): app-core must derive the
+    /// SAME provider name as avrag_llm — a provider-scoped rate row may pass
+    /// the startup gate and then fail runtime debit if the two drift.
+    #[test]
+    fn provider_name_matches_avrag_llm_for_all_urls() {
+        for (url, expected) in [
+            ("https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope"),
+            ("https://api.deepseek.com/v1", "deepseek"),
+            ("https://api.openai.com/v1", "openai"),
+            ("https://api.siliconflow.cn/v1", "siliconflow"),
+        ] {
+            assert_eq!(provider(url).provider_name(), expected, "{url}");
+        }
+        // The drift case itself: unknown URLs agree with the runtime crate.
+        assert_eq!(provider("https://llm.example.com/v1").provider_name(), "unknown");
+        assert_eq!(
+            provider("https://DASHSCOPE.aliyuncs.com/v1").provider_name(),
+            "dashscope",
+            "case-insensitive"
+        );
     }
 }

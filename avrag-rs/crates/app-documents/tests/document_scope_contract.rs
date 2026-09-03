@@ -119,11 +119,12 @@ async fn validate_document_scope_rejects_foreign_workspace_in_memory() {
                 parsed_items: Vec::new(),
             },
         );
-        state
-            .workspace_document_bindings
-            .entry(document_id.clone())
-            .or_default()
-            .push(notebook_a.clone());
+        state.workspace_document_bindings.push(app_core::WorkspaceBindingRow {
+            binding_id: format!("bind-{document_id}"),
+            artifact_id: document_id.clone(),
+            workspace_id: notebook_a.clone(),
+            parse_version: None,
+        });
     }
 
     let service = DocumentContext::new();

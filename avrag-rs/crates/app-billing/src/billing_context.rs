@@ -189,6 +189,18 @@ impl BillingContext {
             return Ok(None);
         };
         if need_fen <= 0 {
+            // Review round-4 P0: a zero/negative computed price means the rate
+            // row is non-billable — same failure as a missing row. (A literal
+            // 0-token estimate returns Some(0) before consulting rows, so this
+            // branch is a pricing defect, not a free call.)
+            if quick_chat {
+                return Err(AppError::validation(
+                    "quick_chat_price_unavailable",
+                    format!(
+                        "Official price row for {provider}/{model} is non-billable (price ≤ 0); Quick Chat is unavailable until PLATFORM_OFFICIAL_RATES_JSON is corrected."
+                    ),
+                ));
+            }
             return Ok(None);
         }
         let owner = auth.user_id().into_uuid();
@@ -477,5 +489,192 @@ impl BillingContext {
                 }),
             })
             .await;
+    }
+}
+
+#[cfg(test)]
+mod hold_pricing_tests {
+    use super::BillingContext;
+    use app_core::{
+        ApplyLedgerInput, ApplyLedgerResult, ProviderSecretPurpose, ProviderSecretStorePort,
+        ProviderSecretView, ResolvedProviderSecret, UpsertProviderSecretInput, Wallet,
+        WalletLedgerEntry, WalletStorePort,
+    };
+    use async_trait::async_trait;
+    use common::AppError;
+    use std::sync::{Arc, Mutex};
+    use uuid::Uuid;
+
+    /// Serializes env mutations of `PLATFORM_OFFICIAL_RATES_JSON` across tests.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct StubWallet {
+        holds: Mutex<Vec<i64>>,
+    }
+
+    impl StubWallet {
+        fn new() -> Self {
+            Self { holds: Mutex::new(Vec::new()) }
+        }
+    }
+
+    #[async_trait]
+    impl WalletStorePort for StubWallet {
+        async fn get_wallet(&self, user_id: Uuid) -> Result<Option<Wallet>, AppError> {
+            Ok(Some(Wallet {
+                user_id,
+                balance_fen: 1_000_000,
+                lifetime_paid_topup_fen: 0,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            }))
+        }
+
+        async fn ensure_wallet(&self, user_id: Uuid) -> Result<Wallet, AppError> {
+            self.get_wallet(user_id).await.map(|w| w.unwrap())
+        }
+
+        async fn apply_ledger_entry(
+            &self,
+            input: &ApplyLedgerInput,
+        ) -> Result<ApplyLedgerResult, AppError> {
+            self.holds.lock().unwrap().push(input.amount_fen);
+            Ok(ApplyLedgerResult {
+                wallet: Wallet {
+                    user_id: input.user_id,
+                    balance_fen: 1_000_000 - input.amount_fen,
+                    lifetime_paid_topup_fen: 0,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                },
+                applied: true,
+                ledger_id: Uuid::new_v4(),
+            })
+        }
+
+        async fn list_ledger(
+            &self,
+            _user_id: Uuid,
+            _limit: i64,
+        ) -> Result<Vec<WalletLedgerEntry>, AppError> {
+            Ok(Vec::new())
+        }
+    }
+
+    struct NoSecrets;
+
+    #[async_trait]
+    impl ProviderSecretStorePort for NoSecrets {
+        async fn upsert(
+            &self,
+            _input: &UpsertProviderSecretInput,
+        ) -> Result<ProviderSecretView, AppError> {
+            unimplemented!("not exercised by hold tests")
+        }
+
+        async fn list(
+            &self,
+            _owner: Uuid,
+            _active_only: bool,
+        ) -> Result<Vec<ProviderSecretView>, AppError> {
+            Ok(Vec::new())
+        }
+
+        async fn revoke(&self, _owner: Uuid, _id: Uuid) -> Result<ProviderSecretView, AppError> {
+            unimplemented!("not exercised by hold tests")
+        }
+
+        async fn resolve(
+            &self,
+            _owner: Uuid,
+            _workspace_id: Option<Uuid>,
+            _purpose: ProviderSecretPurpose,
+        ) -> Result<Option<ResolvedProviderSecret>, AppError> {
+            Ok(None)
+        }
+
+        async fn has_active(
+            &self,
+            _owner: Uuid,
+            _purpose: ProviderSecretPurpose,
+        ) -> Result<bool, AppError> {
+            Ok(false)
+        }
+    }
+
+    fn auth() -> contracts::auth_runtime::AuthContext {
+        use contracts::auth_runtime::{ActorId, SubjectKind, UserId};
+        let id = Uuid::new_v4();
+        contracts::auth_runtime::AuthContext::new(UserId::from(id), SubjectKind::User)
+            .with_actor_id(ActorId::new(id))
+    }
+
+    fn hold_context(provider: &str, model: &str) -> BillingContext {
+        BillingContext::new(None, "off".to_string())
+            .with_quick_chat_official(provider.to_string(), model.to_string())
+            .with_wallet(Arc::new(StubWallet::new()))
+            .with_provider_secrets(Arc::new(NoSecrets))
+    }
+
+    fn set_rates(raw: Option<&str>) {
+        match raw {
+            Some(raw) => unsafe { std::env::set_var("PLATFORM_OFFICIAL_RATES_JSON", raw) },
+            None => unsafe { std::env::remove_var("PLATFORM_OFFICIAL_RATES_JSON") },
+        }
+    }
+
+    /// Review round-4 P0 (fail-closed QuickChat hold): missing, zero, and
+    /// negative price rows all REFUSE the turn — none may pass a free hold.
+    #[tokio::test]
+    async fn quick_chat_hold_refuses_missing_zero_and_negative_prices() {
+        let _env = ENV_LOCK.lock().unwrap();
+        let owner = auth().user_id().into_uuid();
+        let ctx = hold_context("dashscope", "qwen3.8-flash");
+
+        set_rates(None);
+        let err = ctx
+            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+
+        // All-zero row: the computed price is 0 → the old path skipped the
+        // hold silently (the free-ride the gate must close).
+        set_rates(Some(r#"[{"model_contains":"qwen3.8-flash","input":0,"output":0}]"#));
+        let err = ctx
+            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+
+        set_rates(Some(r#"[{"model_contains":"qwen3.8-flash","input":-20,"output":80}]"#));
+        let err = ctx
+            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "quick_chat_price_unavailable", "{err}");
+
+        set_rates(Some(r#"[{"model_contains":"qwen3.8-flash","input":20,"output":80}]"#));
+        let hold = ctx
+            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+            .await
+            .unwrap();
+        assert!(hold.is_some(), "a billable row must place a real hold");
+        set_rates(None);
+        let _ = owner;
+    }
+
+    /// Unconfigured quick_chat_official pricing context refuses too — the
+    /// preflight never guesses from env (review round-2 P0 regression guard).
+    #[tokio::test]
+    async fn quick_chat_hold_refuses_unthreaded_pricing() {
+        let ctx = BillingContext::new(None, "off".to_string())
+            .with_wallet(Arc::new(StubWallet::new()))
+            .with_provider_secrets(Arc::new(NoSecrets));
+        let err = ctx
+            .place_usage_hold_for_estimate_for(&auth(), ProviderSecretPurpose::QuickChat, 10_000, 1_000)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "quick_chat_pricing_unconfigured", "{err}");
     }
 }

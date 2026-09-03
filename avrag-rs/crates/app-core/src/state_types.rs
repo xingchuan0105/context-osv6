@@ -8,15 +8,39 @@ use std::collections::BTreeMap;
 pub struct MemoryState {
     pub workspaces: BTreeMap<String, Workspace>,
     pub documents: BTreeMap<String, StoredDocument>,
-    /// Typed binding truth: artifact_id → workspace binding ids (insertion order).
-    pub workspace_document_bindings: BTreeMap<String, Vec<String>>,
-    /// Typed binding truth: conversation_id → artifact ids (chat-first W2).
-    pub conversation_document_bindings: BTreeMap<String, Vec<String>>,
+    /// Typed binding truth: workspace binding rows (chat-first W2). Each row
+    /// carries its own binding id + parse version, mirroring the PG
+    /// `workspace_document_bindings` contract (review round-4: the memory
+    /// adapter must exercise the production contract, not fabricate ids).
+    pub workspace_document_bindings: Vec<WorkspaceBindingRow>,
+    /// Typed binding truth: conversation binding rows (chat-first W2).
+    pub conversation_document_bindings: Vec<ConversationBindingRow>,
     pub sessions: BTreeMap<String, ChatSession>,
     pub messages: BTreeMap<String, Vec<ChatMessage>>,
     pub user_preferences: BTreeMap<String, UserPreferences>,
     pub notifications: Vec<NotificationRow>,
     pub next_message_id: i64,
+}
+
+/// One workspace binding as PG stores it: own binding id, bound artifact +
+/// workspace, and the artifact's latest parse run (version fact).
+#[derive(Debug, Clone)]
+pub struct WorkspaceBindingRow {
+    pub binding_id: String,
+    pub artifact_id: String,
+    pub workspace_id: String,
+    /// Latest completed parse run for the artifact; absent before the first
+    /// parse completes.
+    pub parse_version: Option<String>,
+}
+
+/// One conversation binding: own binding id + bound artifact (chat-first W2).
+#[derive(Debug, Clone)]
+pub struct ConversationBindingRow {
+    pub binding_id: String,
+    pub artifact_id: String,
+    pub conversation_id: String,
+    pub parse_version: Option<String>,
 }
 
 #[derive(Debug, Clone)]

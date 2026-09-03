@@ -118,7 +118,7 @@ pub use workspace_publish_store::{
     PublishedDocumentUpsert, WorkspacePublishRow, WorkspacePublishStorePort,
 };
 pub use domain_ports::*;
-pub use domain_rows::{WorkspaceBindingVersion, 
+pub use domain_rows::{WorkspaceBindingVersion,
     ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, DocumentDeletionOutcome,
     DocumentScopeState, DocumentTaskSeed, DocumentUploadMutationOutcome,
     DocumentUploadQueueOutcome, IndexedChunk, MultimodalChunkRow, NotificationCreateParams,
@@ -135,7 +135,9 @@ pub use share_domain::{
     SharedWorkspaceSnapshot, WorkspaceAccessSnapshot,
 };
 pub use share_store::ShareStorePort;
-pub use state_types::{MemoryState, RetrievedContext, StoredDocument};
+pub use state_types::{
+    ConversationBindingRow, MemoryState, RetrievedContext, StoredDocument, WorkspaceBindingRow,
+};
 pub use storage_context::{
     MemoryStateHandles, ObjectStoreConfig, StorageContext, StorageContextParts, StorageInfra,
     StorageStores,

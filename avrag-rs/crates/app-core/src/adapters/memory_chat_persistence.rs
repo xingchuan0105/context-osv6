@@ -25,7 +25,7 @@ use crate::domain_rows::{
     ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, IndexedChunk,
     MultimodalChunkRow, NotificationCreateParams, UserProfileRow,
 };
-use crate::{MemoryState, current_owner_user_id};
+use crate::{ConversationBindingRow, MemoryState, current_owner_user_id};
 
 /// Memory-backed chat persistence (sessions, messages, catalog, light side-effects).
 #[derive(Clone)]
@@ -277,23 +277,31 @@ impl SessionPort for MemoryChatPersistence {
         state.messages.remove(&key);
         // W2e parity with PG: dropping the session's bindings orphans their
         // artifacts; zero-binding artifacts enter the deletion flow.
-        if let Some(artifact_ids) = state.conversation_document_bindings.remove(&key) {
-            for artifact_id in artifact_ids {
-                let still_workspace_bound = state
-                    .workspace_document_bindings
-                    .get(&artifact_id)
-                    .is_some_and(|bindings| !bindings.is_empty());
-                let still_conversation_bound = state
-                    .conversation_document_bindings
-                    .values()
-                    .any(|ids| ids.contains(&artifact_id));
-                if still_workspace_bound || still_conversation_bound {
-                    continue;
-                }
-                if let Some(stored) = state.documents.get_mut(&artifact_id) {
-                    stored.document.status = contracts::documents::DocumentStatus::Deleting;
-                    stored.document.updated_at = now_rfc3339();
-                }
+        let removed_bindings: Vec<ConversationBindingRow> = state
+            .conversation_document_bindings
+            .iter()
+            .filter(|row| row.conversation_id == key)
+            .cloned()
+            .collect();
+        state
+            .conversation_document_bindings
+            .retain(|row| row.conversation_id != key);
+        for removed in removed_bindings {
+            let artifact_id = removed.artifact_id;
+            let still_workspace_bound = state
+                .workspace_document_bindings
+                .iter()
+                .any(|row| row.artifact_id == artifact_id);
+            let still_conversation_bound = state
+                .conversation_document_bindings
+                .iter()
+                .any(|row| row.artifact_id == artifact_id);
+            if still_workspace_bound || still_conversation_bound {
+                continue;
+            }
+            if let Some(stored) = state.documents.get_mut(&artifact_id) {
+                stored.document.status = contracts::documents::DocumentStatus::Deleting;
+                stored.document.updated_at = now_rfc3339();
             }
         }
         Ok(true)
@@ -508,9 +516,12 @@ impl ChatCatalogPort for MemoryChatPersistence {
             .filter_map(|stored| {
                 // Scope truth is the workspace binding; unbound artifacts have
                 // no workspace surface.
-                let workspace_id =
-                    state.workspace_document_bindings.get(&stored.document.id)?.first()?;
-                let notebook = state.workspaces.get(workspace_id)?;
+                let workspace_id = state
+                    .workspace_document_bindings
+                    .iter()
+                    .find(|row| row.artifact_id == stored.document.id)
+                    .map(|row| row.workspace_id.clone())?;
+                let notebook = state.workspaces.get(&workspace_id)?;
                 if notebook.owner_user_id != org {
                     return None;
                 }
